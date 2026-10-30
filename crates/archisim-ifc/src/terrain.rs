@@ -106,6 +106,29 @@ impl Exporter<'_> {
                     string(&lines)
                 )));
             }
+            // Its edge drawn by hand (E5), «x y;x y;…», and what the plan
+            // shows of it.
+            if let Some(o) = t.outline.as_ref().filter(|o| o.len() >= 3) {
+                let text = o
+                    .iter()
+                    .map(|q| format!("{} {}", real(q.x), real(q.y)))
+                    .collect::<Vec<_>>()
+                    .join(";");
+                props.push(self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('Outline',$,IFCTEXT({}),$)",
+                    string(&text)
+                )));
+            }
+            for (key, on) in [
+                ("ShowHeights", t.show_heights),
+                ("SlopeArrows", t.slope_arrows),
+            ] {
+                if on {
+                    props.push(self.w.add(format!(
+                        "IFCPROPERTYSINGLEVALUE('{key}',$,IFCBOOLEAN(.T.),$)"
+                    )));
+                }
+            }
             self.pset(el, &t.guid, "ArchiSim_Terrain", &props);
             contained.entry(t.level).or_default().push(el);
         }

@@ -41,6 +41,14 @@ pub struct Terrain {
     /// (MQ3, C5): a material and the regions it covers in plan, each an
     /// outline and its holes. Two patches never overlap.
     pub patches: Vec<TerrainPatch>,
+    /// Its edge drawn by hand (E5): the surface stops there, even where it
+    /// goes in (with none, its edge is the hull of its points).
+    pub outline: Option<Vec<Point2>>,
+    /// Heights written beside the survey points in plan (E5: hidden by
+    /// default; the contour lines carry theirs).
+    pub show_heights: bool,
+    /// Slope arrows in plan, downhill, with their gradient (E5).
+    pub slope_arrows: bool,
 }
 
 /// An area of a terrain covered by another material.
@@ -227,9 +235,111 @@ impl Terrain {
             .collect();
     }
 
-    /// The surface's triangles, counter-clockwise in plan, by point index.
+    /// The surface's triangles, counter-clockwise in plan, by point index;
+    /// with an edge drawn by hand, only those inside it.
     pub fn triangles(&self) -> Vec<[usize; 3]> {
-        delaunay(&self.points.iter().map(|p| p.at).collect::<Vec<_>>())
+        let all = delaunay(&self.points.iter().map(|p| p.at).collect::<Vec<_>>());
+        match self.outline.as_deref().filter(|o| o.len() >= 3) {
+            Some(o) => all
+                .into_iter()
+                .filter(|[a, b, c]| {
+                    let m = (self.points[*a].at + self.points[*b].at + self.points[*c].at)
+                        * (1.0 / 3.0);
+                    super::roofs::point_in_polygon(m, o)
+                })
+                .collect(),
+            None => all,
+        }
+    }
+
+    /// Gives the terrain an edge drawn by hand: its points are kept, and
+    /// points are added along the edge (every metre at most) at the height
+    /// of the ground there (or of the nearest point, outside it), so that
+    /// the surface reaches the edge.
+    pub fn set_outline(&mut self, outline: Vec<Point2>) {
+        let before = Terrain {
+            outline: None,
+            ..self.clone()
+        };
+        let mut add = Vec::new();
+        let n = outline.len();
+        for i in 0..n {
+            let (a, b) = (outline[i], outline[(i + 1) % n]);
+            let steps = (a.distance(b) / CONTOUR_POINT_SPACING).ceil().max(1.0) as usize;
+            for k in 0..steps {
+                let q = a + (b - a) * (k as f64 / steps as f64);
+                if self
+                    .points
+                    .iter()
+                    .chain(add.iter())
+                    .any(|p: &SurveyPoint| p.at.approx_eq(q))
+                {
+                    continue;
+                }
+                let z = before.height_at(q).unwrap_or_else(|| {
+                    self.points
+                        .iter()
+                        .min_by(|x, y| x.at.distance(q).total_cmp(&y.at.distance(q)))
+                        .map_or(0.0, |p| p.z)
+                });
+                add.push(SurveyPoint { at: q, z });
+            }
+        }
+        self.points.extend(add);
+        self.outline = Some(outline);
+    }
+
+    /// Slope arrows: on a grid `step` apart over the surface, where the
+    /// ground falls, the point, the downhill direction and the gradient
+    /// (rise over run).
+    pub fn slope_marks(&self, step: f64) -> Vec<(Point2, Vec2, f64)> {
+        let mut out = Vec::new();
+        let tris = self.triangles();
+        if tris.is_empty() || step <= 0.0 {
+            return out;
+        }
+        let (mut lo, mut hi) = (
+            Point2::new(f64::MAX, f64::MAX),
+            Point2::new(f64::MIN, f64::MIN),
+        );
+        for p in &self.points {
+            lo = Point2::new(lo.x.min(p.at.x), lo.y.min(p.at.y));
+            hi = Point2::new(hi.x.max(p.at.x), hi.y.max(p.at.y));
+        }
+        let nx = ((hi.x - lo.x) / step).floor() as i64;
+        let ny = ((hi.y - lo.y) / step).floor() as i64;
+        if nx * ny > 4000 {
+            return out;
+        }
+        for i in 0..=nx {
+            for j in 0..=ny {
+                let q = Point2::new(
+                    lo.x + (i as f64 + 0.5) * step,
+                    lo.y + (j as f64 + 0.5) * step,
+                );
+                for [a, b, c] in &tris {
+                    let (pa, pb, pc) = (self.points[*a], self.points[*b], self.points[*c]);
+                    if barycentric(q, pa.at, pb.at, pc.at).is_none() {
+                        continue;
+                    }
+                    // The plane's gradient.
+                    let (u, v) = (pb.at - pa.at, pc.at - pa.at);
+                    let (du, dv) = (pb.z - pa.z, pc.z - pa.z);
+                    let det = u.x * v.y - u.y * v.x;
+                    if det.abs() < 1e-12 {
+                        break;
+                    }
+                    let gx = (du * v.y - dv * u.y) / det;
+                    let gy = (dv * u.x - du * v.x) / det;
+                    let g = (gx * gx + gy * gy).sqrt();
+                    if g > 0.005 {
+                        out.push((q, Vec2::new(-gx / g, -gy / g), g));
+                    }
+                    break;
+                }
+            }
+        }
+        out
     }
 
     /// Height of the surface at `p`, if it lies over it.
@@ -852,6 +962,9 @@ impl Model {
                 contour: spec.contour,
                 lines: spec.lines,
                 patches: Vec::new(),
+                outline: None,
+                show_heights: false,
+                slope_arrows: false,
             },
         );
         Ok(id)
@@ -1158,5 +1271,59 @@ mod tests {
             .map(|i| Point2::new(i as f64, 2.0 * i as f64))
             .collect();
         assert!(delaunay(&line).is_empty());
+    }
+
+    /// E5: an L-shaped edge drawn by hand keeps the surface out of the
+    /// missing corner; the slope arrows point downhill with the gradient.
+    #[test]
+    fn an_edge_by_hand_and_slope_arrows() {
+        let mut m = Model::new("t");
+        let l = m.add_level("PB", 0.0);
+        let earth = m.add_material("Tierra", "earth", [150, 120, 90], CutPattern::Dots);
+        let points = vec![
+            sp(0.0, 0.0, 0.0),
+            sp(10.0, 0.0, 0.0),
+            sp(10.0, 10.0, 1.0),
+            sp(0.0, 10.0, 1.0),
+        ];
+        let id = m
+            .add_terrain(NewTerrain {
+                level: l,
+                points,
+                material: earth,
+                depth: 2.0,
+                contour: 0.5,
+                lines: Vec::new(),
+            })
+            .unwrap();
+        let ell = vec![
+            Point2::new(0.0, 0.0),
+            Point2::new(10.0, 0.0),
+            Point2::new(10.0, 5.0),
+            Point2::new(5.0, 5.0),
+            Point2::new(5.0, 10.0),
+            Point2::new(0.0, 10.0),
+        ];
+        m.edit_terrain(id, |t| t.set_outline(ell)).unwrap();
+        let t = m.terrain(id).unwrap();
+        assert!(t.height_at(Point2::new(2.0, 8.0)).is_some());
+        assert!(
+            t.height_at(Point2::new(8.0, 8.0)).is_none(),
+            "the corner left out"
+        );
+        // The height along the edge follows the ground: at (5, 5), 0,5.
+        let mid = t
+            .points
+            .iter()
+            .find(|p| p.at.approx_eq(Point2::new(5.0, 5.0)))
+            .unwrap();
+        assert!((mid.z - 0.5).abs() < 1e-9);
+        // Downhill is south, at 10 %.
+        let marks = t.slope_marks(2.0);
+        assert!(!marks.is_empty());
+        for (_, dir, g) in marks {
+            assert!(dir.y < -0.99, "{dir:?}");
+            assert!((g - 0.1).abs() < 1e-9);
+        }
     }
 }

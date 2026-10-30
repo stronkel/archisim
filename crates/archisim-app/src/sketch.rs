@@ -73,6 +73,16 @@ impl Sketch {
             }
             SketchTarget::Terrain(id) => {
                 let t = model.terrain(id)?;
+                // An edge drawn by hand is edited as it is.
+                if let Some(o) = t.outline.clone().filter(|o| o.len() >= 3) {
+                    return Some(Sketch {
+                        target,
+                        loops: vec![o],
+                        slopes: Vec::new(),
+                        terrain: Vec::new(),
+                        edge: None,
+                    });
+                }
                 let ring = t.boundary();
                 let outline = ring.iter().map(|&i| t.points[i].at).collect();
                 let terrain = ring.iter().map(|&i| (Some(i), t.points[i].z)).collect();
@@ -346,6 +356,11 @@ impl Sketch {
                     r.slopes = slopes;
                 })
                 .map_err(SketchError::Model)?;
+            }
+            SketchTarget::Terrain(id) if self.terrain.is_empty() => {
+                // An edge drawn by hand (E5): the terrain takes the new one.
+                m.edit_terrain(id, |t| t.set_outline(outline))
+                    .map_err(SketchError::Model)?;
             }
             SketchTarget::Terrain(id) => {
                 let t = m

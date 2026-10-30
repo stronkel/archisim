@@ -124,6 +124,7 @@ impl ArchiSimApp {
         self.draw_overlays(&ctx, &painter, rect);
         self.temp_edit_ui(&ctx);
         self.sketch_panel(&ctx, rect);
+        self.terrain_z_editor(&ctx, rect);
 
         let icon = match self.tool {
             Tool::Wall

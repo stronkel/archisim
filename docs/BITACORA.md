@@ -6,6 +6,28 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-30 (39) · Terreno, segunda vuelta (E5)
+
+Rama `bloque/e5-terreno` (sobre `main`, v0.75), con pull request. Formato `.archisim` versión 45 (el terreno guarda su borde dibujado y lo que enseña en planta; los ficheros anteriores se abren igual, con las cotas de los puntos ocultas).
+
+**Hecho**
+- Herramienta **Terreno**, con cuatro modos:
+  - **Puntos** y **Línea de nivel**, como antes.
+  - **Contorno**: el borde del terreno como un polígono. Al cerrarlo (clic en el primer vértice, Intro o doble clic) se crea el terreno con ese borde, aunque tenga entrantes (ya no es la envolvente). Si la planta ya tiene terreno, este toma el borde y se le añaden puntos por el borde a la cota del suelo.
+  - **Varita**: un clic en una curva de nivel de un DXF dibujado en la planta la pasa al terreno, a la cota del texto-número más cercano (o a la escrita en la herramienta si no hay ninguno).
+- **Cotas de los puntos ocultas por defecto.** Se encienden en Propiedades → En planta. Con un clic en el número se escribe la cota ahí mismo; Intro la aplica y Esc deja el punto como estaba.
+- **Flechas de pendiente** en planta, hacia donde baja el terreno y con su pendiente en %, también desde Propiedades.
+- **Editar contorno** (E4) edita el borde dibujado; «Quitar el contorno dibujado» vuelve al de siempre.
+- En el IFC, el borde y las dos opciones van en `ArchiSim_Terrain`, y la importación los recupera.
+
+**Pendiente**
+- Cotas de nivel colocadas a mano sobre el terreno: hoy se ve la cota de los puntos y la de las curvas.
+
+**Qué debe probar Antonio**
+1. Proyecto nuevo → Terreno → modo **Contorno**: dibuja una L y ciérrala. Luego, en modo Puntos, da cotas dentro. El terreno no ocupa la esquina que falta (planta y 3D).
+2. Selecciona el terreno de la demo → En planta → enciende **Cotas de los puntos** y **Flechas de pendiente**. Haz clic en un número, escribe 0,50 e Intro.
+3. Importa un DXF topográfico como dibujo en la planta (Archivo → Importar DXF) → Terreno → **Varita** → clic en una curva con su cota escrita al lado.
+
 ## 2026-10-30 (38) · Versión 0.75: carpintería completa, barandillas, E6, E4 y E3 en `main`
 
 Unidos a `main` los PR #103 a #112:
