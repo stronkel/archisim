@@ -751,6 +751,27 @@ impl<'a> Importer<'a> {
         None
     }
 
+    /// The reinforcement ArchiSim wrote on columns, beams, footings and
+    /// slabs (E11). (Its bars, `IfcReinforcingBar`, are not elements of
+    /// their own.)
+    fn read_reinforcements(&mut self) {
+        for (id, ifc) in self.sources.clone() {
+            let Some(text) = self
+                .property_own(ifc, "ArchiSim_Reinforcement", "Reinforcement")
+                .and_then(|v| {
+                    v.as_str()
+                        .or_else(|| v.as_list().first().and_then(|x| x.as_str()))
+                })
+                .map(str::to_string)
+            else {
+                continue;
+            };
+            if let Some(r) = crate::rebar::decode(&text) {
+                let _ = self.model.set_reinforcement(id, Some(r));
+            }
+        }
+    }
+
     /// The `Status` of an element's common property set (phases of a
     /// refurbishment), whatever the set is called.
     fn status_of(&self, element: u64) -> Option<archisim_core::Phase> {
@@ -3010,6 +3031,7 @@ impl<'a> Importer<'a> {
         self.import_plots();
         self.import_roads();
         self.import_services();
+        self.read_reinforcements();
         self.read_parameters();
         self.read_statuses();
         self.count_unsupported();

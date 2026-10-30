@@ -10,6 +10,7 @@
 //! archisim --version
 //! ```
 
+mod armado;
 mod cocina;
 mod colaboracion;
 mod cubiertas;
@@ -114,6 +115,11 @@ Uso:
       planas, ventanas de cubierta, tejas de cada clase, caballetes,
       canalones y bajantes: cubiertas.archisim, cubiertas.ifc, planta de
       cubiertas y axonometría en SVG. Por defecto: ./out
+  archisim armado [carpeta]
+      Hormigón armado: un pórtico de cuatro pilares sobre zapatas, vigas,
+      una zapata corrida y un forjado con hueco, todos con su armado:
+      armado.archisim, armado.ifc (con las barras) y la planta a 1:20 con
+      las barras de los pilares. Por defecto: ./out
   archisim fachadas [carpeta]
       Las fachadas pieza a pieza: un bloque de dos plantas por cada tipo de
       fachada de la plantilla (ladrillo visto a soga, inglés, flamenco y con
@@ -315,6 +321,10 @@ fn main() -> ExitCode {
         Some("escaleras") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
             report(escaleras::write(&dir))
+        }
+        Some("armado") => {
+            let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
+            report(armado::write(&dir))
         }
         Some("fachadas") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));

@@ -189,6 +189,46 @@ pub(crate) fn draw_members(
             MemberView::Below => outline(s, &poly, pens().view, false, k),
             MemberView::Above => outline(s, &poly, pens().view, true, k),
         });
+        // Its reinforcement, at a scale of detail (E11): the bars cut and
+        // the tie.
+        if v == MemberView::Cut && k <= REBAR_K {
+            draw_column_rebar(s, model, c.id.0, k);
+        }
     }
     s.push_str("</g>\n");
+}
+
+/// The finest scale at which a plan draws the bars of a column (metres
+/// per millimetre of paper: 1:25).
+const REBAR_K: f64 = 0.025;
+
+fn draw_column_rebar(s: &mut String, model: &Model, id: u64, k: f64) {
+    for g in archisim_geom::rebar::element_bars(model, id) {
+        match g.role {
+            archisim_geom::rebar::BarRole::Main => {
+                for bar in &g.bars {
+                    let Some(p) = bar.first() else { continue };
+                    let _ = writeln!(
+                        s,
+                        r#"<circle cx="{}" cy="{}" r="{}" fill="{INK}"/>"#,
+                        num(p[0]),
+                        num(-p[1]),
+                        num(g.diameter / 2.0)
+                    );
+                }
+            }
+            archisim_geom::rebar::BarRole::Tie => {
+                if let Some(tie) = g.bars.first() {
+                    let poly: Vec<Point2> = tie.iter().map(|p| Point2::new(p[0], p[1])).collect();
+                    let _ = writeln!(
+                        s,
+                        r#"<path d="{}" fill="none" stroke="{INK}" stroke-width="{}"/>"#,
+                        path(&poly),
+                        num((g.diameter / k).max(pens().thin) * k)
+                    );
+                }
+            }
+            archisim_geom::rebar::BarRole::Mesh => {}
+        }
+    }
 }

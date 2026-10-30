@@ -224,6 +224,10 @@ impl ArchiSimApp {
             Subject::Slab(s) => Some(Element::Slab(s)),
             Subject::Object(o) => Some(Element::Object(o)),
             Subject::Run(r) => Some(Element::Run(r)),
+            Subject::Reinforced(id) => {
+                let m = self.ed.model();
+                archisim_geom::rebar::owner_of(m, id).map(crate::pick::of_solid)
+            }
             Subject::Building | Subject::Level(_) => None,
         };
         if let Some(level) = i.level {

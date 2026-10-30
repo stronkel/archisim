@@ -34,6 +34,7 @@ pub mod index;
 pub mod joins;
 pub mod junctions;
 pub mod pools;
+pub mod rebar;
 pub mod roof_parts;
 pub mod room;
 pub mod sculpt;

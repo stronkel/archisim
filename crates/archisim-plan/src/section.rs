@@ -442,7 +442,7 @@ pub fn section_drawing(model: &Model, sec: &SectionLine) -> SectionDrawing {
     let mut faces: Vec<(f64, Face)> = Vec::new();
     // The pieces of the façades are a 3D matter: the elevations show the
     // plain finish (E9).
-    let all = archisim_geom::solid::without_facade_pieces(|| {
+    let all = archisim_geom::solid::without_detail(|| {
         archisim_geom::solid::without_plants(|| model_solids(model))
     });
     // Objects with drawings of their own for elevations: those (below).
@@ -1229,7 +1229,7 @@ pub fn elevations_around(model: &Model) -> Vec<NewSection> {
     let mut hi = Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY);
     // The building, not the plot.
     let solids = archisim_geom::solid::with_plant_detail(archisim_core::flora::Lod::Medium, || {
-        archisim_geom::solid::without_facade_pieces(|| model_solids(model))
+        archisim_geom::solid::without_detail(|| model_solids(model))
     })
     .into_iter()
     .filter(|s| !matches!(s.owner, archisim_geom::solid::SolidOwner::Terrain(_)));

@@ -38,6 +38,7 @@ mod presentation;
 mod prices;
 mod props;
 mod railings;
+mod rebar;
 mod roofs;
 mod sections;
 mod services;
@@ -72,6 +73,7 @@ pub use plantings::*;
 pub use pools::*;
 pub use prices::*;
 pub use railings::*;
+pub use rebar::*;
 pub use roofs::*;
 pub use sections::*;
 pub use services::*;
@@ -1479,6 +1481,9 @@ pub struct ModelParts {
     pub sheets: Vec<crate::sheets::Sheet>,
     /// Views only for drawing (E7).
     pub draft_views: Vec<DraftView>,
+    /// The reinforcement of columns, beams, footings and slabs (E11), by
+    /// element id.
+    pub reinforcements: Vec<(u64, Reinforcement)>,
     /// Underlays of the levels' plans (E7).
     pub level_underlays: Vec<(LevelId, Vec<Underlay>)>,
     pub viewports: Vec<crate::sheets::Viewport>,
@@ -1587,6 +1592,8 @@ pub struct Model {
     /// existing). Not saved.
     pub draw_phase: Phase,
     pub(crate) draw_layers: BTreeMap<DrawLayerId, DrawLayer>,
+    /// The reinforcement of elements, by their id (E11).
+    pub(crate) reinforcements: BTreeMap<u64, Reinforcement>,
     pub(crate) drafts: BTreeMap<DraftId, Draft>,
     pub(crate) info: crate::sheets::ProjectInfo,
     pub(crate) sheets: BTreeMap<SheetId, crate::sheets::Sheet>,
@@ -1673,6 +1680,7 @@ impl Model {
             info: Default::default(),
             sheets: BTreeMap::new(),
             draft_views: BTreeMap::new(),
+            reinforcements: BTreeMap::new(),
             level_underlays: BTreeMap::new(),
             viewports: BTreeMap::new(),
             rooms: BTreeMap::new(),
@@ -4318,6 +4326,7 @@ impl Model {
             info: self.info.clone(),
             sheets: self.sheets.values().cloned().collect(),
             draft_views: self.draft_views.values().cloned().collect(),
+            reinforcements: self.reinforcements().map(|(id, r)| (id, *r)).collect(),
             level_underlays: self
                 .level_underlays
                 .iter()
@@ -4701,6 +4710,14 @@ impl Model {
         model.restore_phases(parts.phases)?;
         model.restore_disciplines(parts.disciplines)?;
         model.restore_parameters(parts.user_parameters, parts.parameter_values)?;
+        for (id, r) in parts.reinforcements {
+            model
+                .set_reinforcement(id, Some(r))
+                .map_err(|error| RestoreError {
+                    element: format!("reinforcement {id}"),
+                    error,
+                })?;
+        }
 
         // Parameters take ids from the same counter as the elements.
         let params = model.user_params.keys().map(|p| p.0);

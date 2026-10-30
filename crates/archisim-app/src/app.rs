@@ -2603,6 +2603,7 @@ mod priorities_ui;
 mod properties;
 mod props;
 mod railing_ui;
+mod rebar_ui;
 mod render_ui;
 mod revit_keys;
 mod roof_ui;
