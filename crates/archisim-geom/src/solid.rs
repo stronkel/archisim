@@ -3764,16 +3764,28 @@ pub fn run_solids(model: &Model, id: archisim_core::RunId) -> Vec<Solid> {
             })
             .collect()
     };
+    // Each stretch stops where the bend of its elbows starts (E13).
+    let n = r.path.len();
+    let cut = |i: usize| -> f64 {
+        if i == 0 || i + 1 >= n {
+            return 0.0;
+        }
+        elbow_cut(r, i)
+    };
     let tris: Vec<[P3; 3]> = r
         .path
         .windows(2)
         .zip(zs.windows(2))
-        .flat_map(|(w, z)| {
-            sweep_segment(
-                &section,
-                [w[0].x, w[0].y, z0 + z[0]],
-                [w[1].x, w[1].y, z0 + z[1]],
-            )
+        .enumerate()
+        .flat_map(|(i, (w, z))| {
+            let len = w[0].distance(w[1]);
+            let (a, b) = (cut(i).min(len / 2.0), cut(i + 1).min(len / 2.0));
+            let at = |t: f64| {
+                let f = if len > 1e-12 { t / len } else { 0.0 };
+                let p = w[0] + (w[1] - w[0]) * f;
+                [p.x, p.y, z0 + z[0] + (z[1] - z[0]) * f]
+            };
+            sweep_segment(&section, at(a), at(len - b))
         })
         .collect();
     vec![Solid {
@@ -3786,6 +3798,35 @@ pub fn run_solids(model: &Model, id: archisim_core::RunId) -> Vec<Solid> {
 /// The elbows and tees of the pipes and ducts (`Model::run_fittings`):
 /// a sleeve a little wider than the run along each way out of them, with
 /// the colour of its run.
+/// The radius of the bends of a run: one and a half times a pipe's
+/// diameter, a duct's width (E13).
+pub fn bend_radius(r: &archisim_core::ServiceRun) -> f64 {
+    if r.is_duct() {
+        r.width
+    } else {
+        1.5 * r.width
+    }
+}
+
+/// How far back from corner `i` of a run its bend starts, along each
+/// stretch: the radius by the tangent of half the turn.
+fn elbow_cut(r: &archisim_core::ServiceRun, i: usize) -> f64 {
+    if i == 0 || i + 1 >= r.path.len() {
+        return 0.0;
+    }
+    let (Some(a), Some(b)) = (
+        (r.path[i] - r.path[i - 1]).normalized(),
+        (r.path[i + 1] - r.path[i]).normalized(),
+    ) else {
+        return 0.0;
+    };
+    let turn = a.dot(b).clamp(-1.0, 1.0).acos();
+    if !(0.05..=3.0).contains(&turn) {
+        return 0.0;
+    }
+    bend_radius(r) * (turn / 2.0).tan()
+}
+
 pub fn fitting_solids(model: &Model) -> Vec<Solid> {
     let mut out = Vec::new();
     for f in model.run_fittings() {
@@ -3806,6 +3847,58 @@ pub fn fitting_solids(model: &Model) -> Vec<Solid> {
                 })
                 .collect()
         };
+        // An elbow: a bend of its radius from where one stretch stops to
+        // where the next starts, and a sleeve at each end.
+        if f.kind == archisim_core::FittingKind::Elbow {
+            let i = r
+                .path
+                .iter()
+                .position(|p| p.distance(f.position) < 1e-6)
+                .unwrap_or(0);
+            let t = elbow_cut(r, i);
+            if t > 1e-6 {
+                let a = [f.position.x - f.from.x * t, f.position.y - f.from.y * t, z];
+                let b = [f.position.x + f.to.x * t, f.position.y + f.to.y * t, z];
+                let c = [f.position.x, f.position.y, z];
+                let pipe: Vec<(f64, f64)> = section
+                    .iter()
+                    .map(|(x, y)| {
+                        (
+                            x / (1.0 + grow / r.width.max(1e-6)),
+                            *y / (1.0 + grow / r.width.max(1e-6)),
+                        )
+                    })
+                    .collect();
+                let mut tris = Vec::new();
+                let steps = 8;
+                let q = |u: f64| -> P3 {
+                    let v = 1.0 - u;
+                    [
+                        v * v * a[0] + 2.0 * v * u * c[0] + u * u * b[0],
+                        v * v * a[1] + 2.0 * v * u * c[1] + u * u * b[1],
+                        z,
+                    ]
+                };
+                for k in 0..steps {
+                    let (u0, u1) = (k as f64 / steps as f64, (k + 1) as f64 / steps as f64);
+                    tris.extend(sweep_segment(&pipe, q(u0), q(u1)));
+                }
+                let sleeve = (r.width.max(r.height) * 0.4).max(0.015);
+                for (end, d) in [(a, -f.from), (b, f.to)] {
+                    tris.extend(sweep_segment(
+                        &section,
+                        [end[0] - d.x * sleeve * 0.5, end[1] - d.y * sleeve * 0.5, z],
+                        [end[0] + d.x * sleeve * 0.5, end[1] + d.y * sleeve * 0.5, z],
+                    ));
+                }
+                out.push(Solid {
+                    owner: SolidOwner::Run(f.run),
+                    material: archisim_core::MaterialId(0),
+                    triangles: tris,
+                });
+                continue;
+            }
+        }
         let leg = (r.width.max(r.height) * 0.75).max(0.03);
         let mut ways = vec![-f.from, f.to];
         if f.kind == archisim_core::FittingKind::Tee {
@@ -3822,6 +3915,68 @@ pub fn fitting_solids(model: &Model) -> Vec<Solid> {
             triangles: tris,
         });
     }
+    // Where a run ends at a riser or downpipe: a bend from the run into
+    // it, up or down towards the longer part of it (E13).
+    for d in model.devices().filter(|d| d.kind.is_vertical()) {
+        let base = model.level(d.level).map_or(0.0, |l| l.elevation) + d.elevation;
+        let top = base + d.height;
+        for r in model.runs() {
+            if r.is_duct() || r.path.len() < 2 {
+                continue;
+            }
+            let z0 = model.level(r.level).map_or(0.0, |l| l.elevation);
+            let n = r.path.len();
+            for (p, q, z) in [
+                (r.path[0], r.path[1], z0 + r.elevation),
+                (r.path[n - 1], r.path[n - 2], z0 + r.end_elevation()),
+            ] {
+                if p.distance(d.position) > d.width / 2.0 + r.width / 2.0 + 0.02
+                    || z < base - 0.01
+                    || z > top + 0.01
+                {
+                    continue;
+                }
+                let Some(away) = (q - p).normalized() else {
+                    continue;
+                };
+                let rad = bend_radius(r).max(d.width / 2.0);
+                let down = if top - z > z - base { 1.0 } else { -1.0 };
+                let c = [d.position.x, d.position.y, z];
+                let a = [c[0] + away.x * rad, c[1] + away.y * rad, z];
+                let b = [c[0], c[1], z + down * rad];
+                let section: Vec<(f64, f64)> = (0..ROUND_FACETS)
+                    .map(|i| {
+                        let t = i as f64 * std::f64::consts::TAU / ROUND_FACETS as f64;
+                        (
+                            r.width / 2.0 * 1.08 * t.cos(),
+                            r.width / 2.0 * 1.08 * t.sin(),
+                        )
+                    })
+                    .collect();
+                let bez = |u: f64| -> P3 {
+                    let v = 1.0 - u;
+                    [
+                        v * v * a[0] + 2.0 * v * u * c[0] + u * u * b[0],
+                        v * v * a[1] + 2.0 * v * u * c[1] + u * u * b[1],
+                        v * v * a[2] + 2.0 * v * u * c[2] + u * u * b[2],
+                    ]
+                };
+                let mut tris = Vec::new();
+                for k in 0..8 {
+                    tris.extend(sweep_segment(
+                        &section,
+                        bez(k as f64 / 8.0),
+                        bez((k + 1) as f64 / 8.0),
+                    ));
+                }
+                out.push(Solid {
+                    owner: SolidOwner::Run(r.id),
+                    material: archisim_core::MaterialId(0),
+                    triangles: tris,
+                });
+            }
+        }
+    }
     out
 }
 
@@ -3831,7 +3986,7 @@ pub fn device_solids(model: &Model, id: archisim_core::DeviceId) -> Vec<Solid> {
         return Vec::new();
     };
     let z = model.level(d.level).map_or(0.0, |l| l.elevation) + d.elevation;
-    let outline = if d.kind == archisim_core::DeviceKind::Light {
+    let outline = if d.kind == archisim_core::DeviceKind::Light || d.kind.is_vertical() {
         (0..ROUND_FACETS)
             .map(|i| {
                 let a = i as f64 * std::f64::consts::TAU / ROUND_FACETS as f64;
@@ -3929,6 +4084,11 @@ pub fn solid_color(model: &Model, s: &Solid) -> [u8; 3] {
             Some(archisim_core::DeviceKind::Grille | archisim_core::DeviceKind::Diffuser) => {
                 [200, 205, 210]
             }
+            // Risers and downpipes, in the colour of their system.
+            Some(k @ (archisim_core::DeviceKind::Riser | archisim_core::DeviceKind::Downpipe)) => {
+                k.system().map_or([150, 150, 150], |s| s.color())
+            }
+            Some(archisim_core::DeviceKind::Panel) => [210, 214, 220],
             _ => [235, 235, 230],
         },
         _ => model.surface_color(s.material),

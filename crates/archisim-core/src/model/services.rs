@@ -274,10 +274,25 @@ pub enum DeviceKind {
     Grille,
     /// A diffuser of the air, in the ceiling.
     Diffuser,
+    /// A two-way switch («conmutador»).
+    TwoWaySwitch,
+    /// A 25 A socket for the cooker and oven.
+    PowerSocket,
+    /// An aerial socket.
+    TvSocket,
+    /// A data socket (RJ45).
+    DataSocket,
+    /// The distribution board («cuadro general de mando y protección»).
+    Panel,
+    /// A water or heating riser between floors («montante»): its `height`
+    /// is how far it goes up, through the levels.
+    Riser,
+    /// A downpipe of the drainage («bajante»).
+    Downpipe,
 }
 
 impl DeviceKind {
-    pub const ALL: [DeviceKind; 7] = [
+    pub const ALL: [DeviceKind; 14] = [
         DeviceKind::Equipment,
         DeviceKind::Light,
         DeviceKind::Socket,
@@ -285,7 +300,34 @@ impl DeviceKind {
         DeviceKind::Radiator,
         DeviceKind::Grille,
         DeviceKind::Diffuser,
+        DeviceKind::TwoWaySwitch,
+        DeviceKind::PowerSocket,
+        DeviceKind::TvSocket,
+        DeviceKind::DataSocket,
+        DeviceKind::Panel,
+        DeviceKind::Riser,
+        DeviceKind::Downpipe,
     ];
+
+    /// The mechanisms of the electricity and telecommunications.
+    pub fn is_electric(self) -> bool {
+        matches!(
+            self,
+            DeviceKind::Light
+                | DeviceKind::Socket
+                | DeviceKind::Switch
+                | DeviceKind::TwoWaySwitch
+                | DeviceKind::PowerSocket
+                | DeviceKind::TvSocket
+                | DeviceKind::DataSocket
+                | DeviceKind::Panel
+        )
+    }
+
+    /// A pipe up or down between floors.
+    pub fn is_vertical(self) -> bool {
+        matches!(self, DeviceKind::Riser | DeviceKind::Downpipe)
+    }
 
     pub fn code(self) -> &'static str {
         match self {
@@ -296,6 +338,13 @@ impl DeviceKind {
             DeviceKind::Radiator => "radiator",
             DeviceKind::Grille => "grille",
             DeviceKind::Diffuser => "diffuser",
+            DeviceKind::TwoWaySwitch => "two_way_switch",
+            DeviceKind::PowerSocket => "power_socket",
+            DeviceKind::TvSocket => "tv_socket",
+            DeviceKind::DataSocket => "data_socket",
+            DeviceKind::Panel => "panel",
+            DeviceKind::Riser => "riser",
+            DeviceKind::Downpipe => "downpipe",
         }
     }
 
@@ -312,6 +361,13 @@ impl DeviceKind {
             DeviceKind::Radiator => "Radiador",
             DeviceKind::Grille => "Rejilla",
             DeviceKind::Diffuser => "Difusor",
+            DeviceKind::TwoWaySwitch => "Conmutador",
+            DeviceKind::PowerSocket => "Base 25 A (cocina)",
+            DeviceKind::TvSocket => "Toma de TV",
+            DeviceKind::DataSocket => "Toma de datos",
+            DeviceKind::Panel => "Cuadro eléctrico",
+            DeviceKind::Riser => "Montante",
+            DeviceKind::Downpipe => "Bajante",
         }
     }
 
@@ -326,6 +382,14 @@ impl DeviceKind {
             DeviceKind::Radiator => (0.8, 0.1, 0.6, 0.15),
             DeviceKind::Grille => (0.4, 0.05, 0.2, 2.2),
             DeviceKind::Diffuser => (0.6, 0.6, 0.05, 2.6),
+            DeviceKind::TwoWaySwitch => (0.08, 0.04, 0.08, 1.1),
+            DeviceKind::PowerSocket => (0.08, 0.04, 0.08, 0.6),
+            DeviceKind::TvSocket => (0.08, 0.04, 0.08, 0.3),
+            DeviceKind::DataSocket => (0.08, 0.04, 0.08, 0.3),
+            DeviceKind::Panel => (0.4, 0.12, 0.5, 1.6),
+            // A pipe: its diameter and how far it goes up (a storey).
+            DeviceKind::Riser => (0.04, 0.04, 3.0, 0.0),
+            DeviceKind::Downpipe => (0.11, 0.11, 3.0, 0.0),
         }
     }
 
@@ -335,6 +399,8 @@ impl DeviceKind {
             DeviceKind::Radiator => Some(ServiceSystem::Heating),
             DeviceKind::Grille => Some(ServiceSystem::ReturnAir),
             DeviceKind::Diffuser => Some(ServiceSystem::SupplyAir),
+            DeviceKind::Riser => Some(ServiceSystem::ColdWater),
+            DeviceKind::Downpipe => Some(ServiceSystem::Drainage),
             _ => None,
         }
     }
@@ -897,5 +963,118 @@ mod tests {
         assert_eq!(m.run_fittings(), f);
         assert_eq!(m.fitting_counts().len(), 2);
         assert!(m.edit_run(main, |r| r.slope = -0.01).is_err());
+    }
+}
+
+/// A circuit of a dwelling's electrical installation, as the REBT lists
+/// them (ITC-BT-25, tabla 1): its number, what it feeds, its breaker, the
+/// section of its wires and how many points it may feed at most (0: no
+/// limit given).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CircuitSpec {
+    pub number: u8,
+    pub name: &'static str,
+    /// Amperes.
+    pub breaker: u32,
+    /// mm².
+    pub section: f64,
+    pub max_points: u32,
+}
+
+/// The circuits of a dwelling of basic electrification (ITC-BT-25).
+pub const CIRCUITS: [CircuitSpec; 5] = [
+    CircuitSpec {
+        number: 1,
+        name: "Iluminación",
+        breaker: 10,
+        section: 1.5,
+        max_points: 30,
+    },
+    CircuitSpec {
+        number: 2,
+        name: "Tomas de uso general y frigorífico",
+        breaker: 16,
+        section: 2.5,
+        max_points: 20,
+    },
+    CircuitSpec {
+        number: 3,
+        name: "Cocina y horno",
+        breaker: 25,
+        section: 6.0,
+        max_points: 2,
+    },
+    CircuitSpec {
+        number: 4,
+        name: "Lavadora, lavavajillas y termo eléctrico",
+        breaker: 20,
+        section: 4.0,
+        max_points: 3,
+    },
+    CircuitSpec {
+        number: 5,
+        name: "Baño y cuarto de cocina",
+        breaker: 16,
+        section: 2.5,
+        max_points: 6,
+    },
+];
+
+/// The spec of circuit `n` (C1 to C5), if it is one of the REBT's.
+pub fn circuit_spec(n: u8) -> Option<&'static CircuitSpec> {
+    CIRCUITS.iter().find(|c| c.number == n)
+}
+
+impl Model {
+    /// The circuit a mechanism is on: the one given, or the REBT's for its
+    /// kind (lights and switches C1; sockets C2, or C5 in a bathroom or a
+    /// kitchen; the cooker's base C3). `None`: not on a circuit (aerial
+    /// and data sockets, the board, the rest).
+    pub fn device_circuit(&self, id: DeviceId) -> Option<u8> {
+        let d = self.device(id)?;
+        if !d.kind.is_electric() {
+            return None;
+        }
+        if let Some(n) = self.device_circuits.get(&id.0) {
+            return (*n > 0).then_some(*n);
+        }
+        match d.kind {
+            DeviceKind::Light | DeviceKind::Switch | DeviceKind::TwoWaySwitch => Some(1),
+            DeviceKind::PowerSocket => Some(3),
+            DeviceKind::Socket => {
+                let wet = self.rooms_on_level(d.level).any(|r| {
+                    let words = format!("{} {}", r.name, r.usage).to_lowercase();
+                    (words.contains("baño") || words.contains("aseo") || words.contains("cocina"))
+                        && point_in_polygon(d.position, &r.outline)
+                });
+                Some(if wet { 5 } else { 2 })
+            }
+            _ => None,
+        }
+    }
+
+    /// Puts a mechanism on a circuit (`Some(0)`: on none), or back on the
+    /// one of its kind (`None`).
+    pub fn set_device_circuit(&mut self, id: DeviceId, n: Option<u8>) -> Result<(), ModelError> {
+        if self.device(id).is_none() {
+            return Err(ModelError::NotAnObject(format!("aparato {}", id.0)));
+        }
+        match n {
+            Some(n) => {
+                self.device_circuits.insert(id.0, n);
+            }
+            None => {
+                self.device_circuits.remove(&id.0);
+            }
+        }
+        Ok(())
+    }
+
+    /// The circuits given by hand, by device id.
+    pub fn device_circuits(&self) -> impl Iterator<Item = (DeviceId, u8)> + '_ {
+        self.device_circuits
+            .iter()
+            .filter(|(id, _)| self.device(DeviceId(**id)).is_some())
+            .map(|(id, n)| (DeviceId(*id), *n))
     }
 }
