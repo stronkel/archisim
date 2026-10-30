@@ -833,7 +833,7 @@ pub type CatalogueEntry = (&'static str, &'static str, &'static [(&'static str, 
 
 /// The object types of the library (v0.25, more in v0.26), in the order of
 /// the gallery.
-pub const OBJECT_CATALOGUE: [CatalogueEntry; 290] = [
+pub const OBJECT_CATALOGUE: [CatalogueEntry; 292] = [
     ("Mesa de comedor 160×90", "Mesa", &[]),
     ("Silla", "Silla", &[]),
     ("Sofá de 3 plazas", "Sofá", &[]),
@@ -860,6 +860,12 @@ pub const OBJECT_CATALOGUE: [CatalogueEntry; 290] = [
         &[("width", 0.9), ("depth", 1.9)],
     ),
     ("Armario 120", "Armario", &[]),
+    ("Armario empotrado 180", "Armario empotrado", &[]),
+    (
+        "Armario empotrado corredero 240",
+        "Armario empotrado",
+        &[("width", 2.4), ("doors", 3.0)],
+    ),
     ("Estantería 80", "Estantería", &[]),
     (
         "Librería 160",
@@ -1705,6 +1711,7 @@ pub const OBJECT_CATALOGUE: [CatalogueEntry; 290] = [
 /// Choices and materials of the library's types that are not the family's
 /// (the cosy ones): by parameter, a yes/no or a material's name.
 const LOOKS: &[(&str, &[(&str, StudioValue)])] = &[
+    ("Armario empotrado corredero 240", &[("sliding", B(true))]),
     ("Peña 2 m", &[("mat", T("Roca granito"))]),
     (
         "Persona",

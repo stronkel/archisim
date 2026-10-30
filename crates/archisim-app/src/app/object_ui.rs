@@ -198,6 +198,12 @@ impl ArchiSimApp {
         if self.ed.model().type_grows(t.id) {
             self.plant_group(ui, id, &o);
         }
+        if family
+            .as_ref()
+            .is_some_and(|f| f.name == "Armario empotrado")
+        {
+            self.built_in_group(ui, id);
+        }
         group(ui, "object-data", "Objeto", |ui| {
             row(ui, "Giro (°)", "Espacio: +90°", |ui, w| {
                 if let Some(a) =
@@ -989,4 +995,67 @@ pub(super) fn param_slider_row(
         _ => return param_row(ui, salt, p, cur, materials),
     }
     out
+}
+
+impl ArchiSimApp {
+    /// A built-in wardrobe (E10): between partitions, wall face to wall
+    /// face; or in a hole in the wall it stands in.
+    fn built_in_group(&mut self, ui: &mut Ui, id: ObjectId) {
+        let mut fit = false;
+        let mut hole = false;
+        props::group(ui, "built-in", "Empotrado", |ui| {
+            props::note(
+                ui,
+                "Entre tabiques: ocupa de cara a cara de los muros que tiene a los lados. En un hueco de muro: colócalo dentro del muro y abre en él un hueco de su tamaño.",
+            );
+            ui.horizontal_wrapped(|ui| {
+                ui.add_space(4.0);
+                if ui
+                    .button("Encajar entre tabiques")
+                    .on_hover_text("Su ancho, de cara a cara de los muros de los lados")
+                    .clicked()
+                {
+                    fit = true;
+                }
+                if ui
+                    .button("Abrir hueco en el muro")
+                    .on_hover_text(
+                        "Un hueco sin carpintería de su ancho y su alto en el muro donde está",
+                    )
+                    .clicked()
+                {
+                    hole = true;
+                }
+            });
+        });
+        if fit {
+            let Some((Some(left), Some(right))) = self.ed.model().room_between_walls(id) else {
+                self.complain("No hay muros a los dos lados del armario.");
+                return;
+            };
+            let shift = (right - left) / 2.0;
+            let r = self.ed.transact("Encajar armario", |m| {
+                let o = m
+                    .object(id)
+                    .cloned()
+                    .ok_or(archisim_core::ModelError::UnknownObject(id))?;
+                let ux = archisim_core::Point2::new(o.rotation.cos(), o.rotation.sin());
+                m.edit_object(id, |x| x.position = o.position + ux * shift)?;
+                crate::drag::set_object_size(m, id, "width", left + right)
+            });
+            self.report(
+                r,
+                &format!(
+                    "Armario encajado: {} m de ancho.",
+                    format!("{:.2}", left + right).replace('.', ",")
+                ),
+            );
+        }
+        if hole {
+            let r = self.ed.transact("Hueco para el armario", |m| {
+                m.hole_for_object(id).map(|_| ())
+            });
+            self.report(r, "Hueco abierto en el muro.");
+        }
+    }
 }

@@ -6,6 +6,35 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-30 (42) · Armarios empotrados (E10)
+
+Rama `bloque/e10-armarios` (sobre `bloque/e3-perfil`), con pull request. Sin cambios de formato ni de IFC.
+
+**Hecho**
+- Familia **Armario empotrado** (biblioteca → Armarios). Va de suelo a techo, con:
+  - casco y zócalo;
+  - puertas **batientes** (las parejas abren desde el centro) o **correderas** (en dos guías, alternas);
+  - tapajuntas;
+  - interior a elegir: **Baldas**, **Barra y balda** o **Cajones y barra**.
+- Con «Abierto en 3D» se ve por dentro: las batientes giran y las correderas se deslizan.
+- Dos tipos en el catálogo: «Armario empotrado 180» (batiente) y «Armario empotrado corredero 240».
+- Las dos maneras de D25, con la misma familia, desde Propiedades → **Empotrado**:
+  - **Encajar entre tabiques**: el armario toma el ancho de cara a cara de los muros que tiene a los lados y se centra entre ellos (el número de puertas sigue al ancho).
+  - **Abrir hueco en el muro**: colocado dentro de un muro, abre en él un hueco sin carpintería de su ancho y su alto (un tipo «Hueco de armario 180×250» de la familia Hueco).
+- En planta: contorno, barra en discontinua, hojas batientes o las dos guías de las correderas, y tapajuntas.
+- IFC: `IfcFurniture` con su modelo 3D.
+
+**Pendiente**
+- El hueco del muro y el armario no quedan atados: si mueves uno, el otro se queda. D25 pedía una sola familia; aquí es la misma familia con dos acciones.
+- Que la altura se ajuste sola al techo.
+
+**Qué debe probar Antonio**
+1. Dibuja dos tabiques paralelos a 2,10 m y un muro de fondo. Desde la biblioteca, coloca «Armario empotrado 180» contra el fondo, entre los tabiques → Propiedades → Empotrado → **Encajar entre tabiques**. Comprueba que llena el hueco y que pasa a tres puertas si lo ensanchas.
+2. Cambia en su tipo «Puertas correderas», el interior («Cajones y barra») y «Abierto en 3D» a 70. Míralo en 3D.
+3. Coloca otro dentro de un muro grueso → **Abrir hueco en el muro**. Mira el hueco en planta y en 3D.
+
+---
+
 ## 2026-10-30 (41) · Muros, segunda vuelta: el perfil de alzado (E3)
 
 Rama `bloque/e3-perfil` (sobre `bloque/e8-explanaciones`), con pull request. Formato `.archisim` versión 47 (los muros pueden guardar su perfil; los ficheros anteriores se abren igual).

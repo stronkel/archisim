@@ -15,6 +15,7 @@ use crate::ids::*;
 use crate::math::{is_simple_polygon, signed_area, Arc, Point2, Vec2, EPSILON, MIN_BULGE};
 
 mod appearance;
+mod built_in;
 mod concept;
 mod curtain;
 mod disciplines;

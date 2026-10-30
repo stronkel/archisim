@@ -891,6 +891,7 @@ pub const CHOICES: &[(&str, &[&str])] = &[
     ("form", fine::pool::FORMS),
     ("game", &["Fútbol 11", "Fútbol 7"]),
     ("fronts", fine::kitchen::FRONTS),
+    ("interior", &["Baldas", "Barra y balda", "Cajones y barra"]),
     ("pulls", fine::kitchen::PULLS),
     ("stand", fine::kitchen::STANDS),
     ("basin", fine::kitchen::BASINS),
