@@ -70,6 +70,16 @@ pub struct Row {
     pub fields: Vec<Field>,
 }
 
+/// A vision panel through a leaf (hospitals, kitchens, workshops, fire
+/// doors): its glass and its centre `z` above the leaf's bottom.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Vision {
+    /// A square or oblong pane, `w` by `h`.
+    Square { w: f64, h: f64, z: f64 },
+    /// A round porthole of diameter `d`.
+    Round { d: f64, z: f64 },
+}
+
 /// How a leaf is made.
 #[derive(Debug, Clone, PartialEq)]
 pub enum LeafDesign {
@@ -80,6 +90,16 @@ pub enum LeafDesign {
         grooves: usize,
         vertical: bool,
         moulded: Option<Vec<Row>>,
+        vision: Option<Vision>,
+    },
+    /// A steel leaf: two sheets folded round a core, its edge showing as a
+    /// rim, plain or with `embossed` panels pressed into it (two, one over
+    /// the other), with or without a vision panel. `armoured`: a security
+    /// door, thicker, with its sheets on a frame of bolts.
+    Sheet {
+        embossed: bool,
+        vision: Option<Vision>,
+        armoured: bool,
     },
     /// Upright boards, tongued and grooved, on ledges behind.
     Planks { boards: usize },
@@ -110,6 +130,14 @@ pub const DESIGNS: &[&str] = &[
     "Vidriera con junquillos",
     "Lamas",
     "Tablas",
+    "Chapa lisa",
+    "Chapa embutida",
+    "Chapa con ventanilla cuadrada",
+    "Chapa con ojo de buey",
+    "Chapa con mirilla alargada",
+    "Lisa con ventanilla cuadrada",
+    "Lisa con ojo de buey",
+    "Acorazada",
 ];
 
 fn row(weight: f64, fields: &[Field]) -> Row {
@@ -133,11 +161,13 @@ pub fn design(n: usize) -> LeafDesign {
             grooves: 6,
             vertical: false,
             moulded: None,
+            vision: None,
         },
         4 => LeafDesign::Flush {
             grooves: 5,
             vertical: true,
             moulded: None,
+            vision: None,
         },
         5 => framed(vec![row(1.0, &[Raised]), row(1.0, &[Raised])]),
         6 => framed(vec![
@@ -154,16 +184,55 @@ pub fn design(n: usize) -> LeafDesign {
             grooves: 0,
             vertical: false,
             moulded: Some(vec![row(1.0, &[Sunk]), row(1.0, &[Sunk])]),
+            vision: None,
         },
         10 => framed(vec![row(1.0, &[Glass])]),
         11 => framed(vec![row(1.3, &[Glass]), row(1.0, &[Raised])]),
         12 => framed(vec![row(1.0, &[Bars(2, 5)])]),
         13 => framed(vec![row(1.0, &[Louvres])]),
         14 => LeafDesign::Planks { boards: 5 },
+        15..=19 => LeafDesign::Sheet {
+            embossed: n == 16,
+            vision: match n {
+                17 => Some(Vision::Square {
+                    w: 0.3,
+                    h: 0.4,
+                    z: 1.45,
+                }),
+                18 => Some(Vision::Round { d: 0.36, z: 1.5 }),
+                19 => Some(Vision::Square {
+                    w: 0.15,
+                    h: 0.75,
+                    z: 1.35,
+                }),
+                _ => None,
+            },
+            armoured: false,
+        },
+        20 | 21 => LeafDesign::Flush {
+            grooves: 0,
+            vertical: false,
+            moulded: None,
+            vision: Some(if n == 20 {
+                Vision::Square {
+                    w: 0.3,
+                    h: 0.4,
+                    z: 1.45,
+                }
+            } else {
+                Vision::Round { d: 0.36, z: 1.5 }
+            }),
+        },
+        22 => LeafDesign::Sheet {
+            embossed: true,
+            vision: None,
+            armoured: true,
+        },
         _ => LeafDesign::Flush {
             grooves: 0,
             vertical: false,
             moulded: None,
+            vision: None,
         },
     }
 }
@@ -241,6 +310,9 @@ pub const HANDLES: &[&str] = &[
     "Pomo",
     "Tirador de barra",
     "Sin manilla",
+    "Barra antipánico",
+    "Placa de empuje y tirador",
+    "Escudo de seguridad",
 ];
 
 /// The hinges the family offers, by name.
@@ -366,7 +438,14 @@ pub fn door(b: &mut Builder, p: &Params) {
         leaves_at.push((x0 + gap, x1 - gap, hinge_left, true));
     }
     let design = design(l.design);
-    for &(a, c, hinge_at_a, active) in &leaves_at {
+    // Far away (`lod`): the leaves plain, no hardware, the casings flat.
+    let far = p.flag("lod", false);
+    if far {
+        for &(a, c, _, _) in &leaves_at {
+            leaf_plain(b, &design, a, c, floor, top - gap, t);
+        }
+    }
+    for &(a, c, hinge_at_a, active) in leaves_at.iter().filter(|_| !far) {
         leaf(b, &design, a, c, floor, top - gap, t);
         hinges(
             b,
@@ -380,7 +459,15 @@ pub fn door(b: &mut Builder, p: &Params) {
         let edge = if hinge_at_a { c } else { a };
         // Towards the hinges from the free edge.
         let inward = if hinge_at_a { -1.0 } else { 1.0 };
-        if active {
+        if l.handle == 8 {
+            // A panic bar on the side it is pushed from, on every leaf of a
+            // pair (each opens to escape); a lever on the other side of
+            // the active one.
+            panic_bar(b, a, c, inward, t);
+            if active {
+                handle_on(b, 2, edge + inward * 0.065, 1.02, t, inward, &[1.0]);
+            }
+        } else if active {
             handle(b, l.handle, edge + inward * 0.065, 1.02, t, inward);
             if p.flag("peephole", false) {
                 spyhole(b, (a + c) / 2.0, 1.55, t);
@@ -393,6 +480,25 @@ pub fn door(b: &mut Builder, p: &Params) {
                 [edge + 0.0005 * inward.signum(), 0.006, 1.8],
                 0.001,
             );
+        }
+    }
+    for &(a, c, hinge_at_a, _) in leaves_at.iter().filter(|_| !far) {
+        let hinge_x = if hinge_at_a { a } else { c };
+        let inward = if hinge_at_a { -1.0 } else { 1.0 };
+        if p.flag("kick_plate", false) {
+            // A steel plate along the bottom of each face.
+            for side in [1.0, -1.0] {
+                let (ya, yb) = sorted2(side * (t / 2.0 - 0.0005), side * (t / 2.0 + 0.0015));
+                b.rbox(
+                    METAL,
+                    [a + 0.025, ya, floor + 0.01],
+                    [c - 0.025, yb, floor + 0.26],
+                    0.0,
+                );
+            }
+        }
+        if p.flag("closer", false) {
+            closer(b, hinge_x, inward, top, t, p.get("face_pos", fd / 2.0));
         }
     }
     // The stop the leaves close against, on the side away from where they
@@ -411,7 +517,11 @@ pub fn door(b: &mut Builder, p: &Params) {
     }
     // The lining across the reveal to each face that takes a casing, and
     // the casing on it.
-    let profile = casing(l.casing);
+    let profile = if far && l.casing != 2 {
+        casing(3)
+    } else {
+        casing(l.casing)
+    };
     for (face, takes, dir) in [
         (p.get("face_pos", fd / 2.0), p.flag("casing_pos", true), 1.0),
         (
@@ -466,6 +576,69 @@ fn mirror_x(b: &mut Builder) {
     }
 }
 
+/// A leaf as seen from far away: a board, or for a framed one its frame
+/// with each field flat (glass where it has glass).
+pub fn leaf_plain(b: &mut Builder, d: &LeafDesign, a: f64, c: f64, z0: f64, z1: f64, t: f64) {
+    let h2 = t / 2.0;
+    let vision = match d {
+        LeafDesign::Flush { vision, .. } | LeafDesign::Sheet { vision, .. } => *vision,
+        _ => None,
+    };
+    if let Some(v) = vision {
+        let h = hole_of(v, a, c, z0, z1);
+        board(b, LEAF, a, c, z0, z1, -h2, h2, Some(h));
+        b.rbox(GLASS, [h.xa, -0.004, h.za], [h.xc, 0.004, h.zc], 0.0);
+        return;
+    }
+    let LeafDesign::Framed {
+        stile,
+        rail,
+        bottom,
+        rows,
+    } = d
+    else {
+        b.rbox(LEAF, [a, -h2, z0], [c, h2, z1], 0.0);
+        return;
+    };
+    let (stile, rail, bottom) = (
+        stile.min((c - a) / 3.0),
+        rail.min((z1 - z0) / 8.0),
+        bottom.min((z1 - z0) / 6.0),
+    );
+    b.rbox(LEAF, [a, -h2, z0], [a + stile, h2, z1], 0.0);
+    b.rbox(LEAF, [c - stile, -h2, z0], [c, h2, z1], 0.0);
+    b.rbox(
+        LEAF,
+        [a + stile, -h2, z0],
+        [c - stile, h2, z0 + bottom],
+        0.0,
+    );
+    b.rbox(LEAF, [a + stile, -h2, z1 - rail], [c - stile, h2, z1], 0.0);
+    let total: f64 = rows.iter().map(|r| r.weight).sum::<f64>().max(1e-9);
+    let (za, zc) = (z0 + bottom, z1 - rail);
+    let mut zt = zc;
+    for (k, row) in rows.iter().enumerate() {
+        let zb = zt - (zc - za - rail * (rows.len() as f64 - 1.0)) * row.weight / total;
+        if k + 1 < rows.len() {
+            b.rbox(LEAF, [a + stile, -h2, zb - rail], [c - stile, h2, zb], 0.0);
+        }
+        let n = row.fields.len().max(1);
+        let w = (c - a - 2.0 * stile - stile * (n as f64 - 1.0)) / n as f64;
+        for (i, f) in row.fields.iter().enumerate() {
+            let x0 = a + stile + i as f64 * (w + stile);
+            if i > 0 {
+                b.rbox(LEAF, [x0 - stile, -h2, zb], [x0, h2, zt], 0.0);
+            }
+            let (role, k) = match f {
+                Field::Glass | Field::Bars(..) => (GLASS, 0.004),
+                _ => (LEAF, h2 * 0.35),
+            };
+            b.rbox(role, [x0, -k, zb], [x0 + w, k, zt], 0.0);
+        }
+        zt = zb - rail;
+    }
+}
+
 /// A leaf from `a` to `c`, `z0` to `z1`, `t` thick, centred on `y` = 0.
 pub fn leaf(b: &mut Builder, d: &LeafDesign, a: f64, c: f64, z0: f64, z1: f64, t: f64) {
     let h2 = t / 2.0;
@@ -474,8 +647,18 @@ pub fn leaf(b: &mut Builder, d: &LeafDesign, a: f64, c: f64, z0: f64, z1: f64, t
             grooves,
             vertical,
             moulded,
+            vision,
         } => {
-            if *grooves == 0 {
+            if let Some(v) = vision {
+                // A core and its skins round the vision panel's hole.
+                let d = 0.003;
+                let hole = hole_of(*v, a, c, z0, z1);
+                let at = Some(hole);
+                board(b, LEAF, a, c, z0, z1, -h2 + d, h2 - d, at);
+                board(b, LEAF, a, c, z0, z1, h2 - d - 0.0005, h2, at);
+                board(b, LEAF, a, c, z0, z1, -h2, -h2 + d + 0.0005, at);
+                glaze(b, hole, h2);
+            } else if *grooves == 0 {
                 // A core and a skin on each face (the face as one thin
                 // board: a single deep box this size takes the shadow of
                 // its own back in the 3D view).
@@ -541,6 +724,48 @@ pub fn leaf(b: &mut Builder, d: &LeafDesign, a: f64, c: f64, z0: f64, z1: f64, t
                 }
             }
         }
+        LeafDesign::Sheet {
+            embossed,
+            vision,
+            armoured,
+        } => {
+            let hole = vision.map(|v| hole_of(v, a, c, z0, z1));
+            // Two sheets on a core.
+            let d = 0.0015;
+            board(b, LEAF, a, c, z0, z1, -h2 + d, h2 - d, hole);
+            board(b, LEAF, a, c, z0, z1, h2 - d - 0.0005, h2, hole);
+            board(b, LEAF, a, c, z0, z1, -h2, -h2 + d + 0.0005, hole);
+            // The folded edge, a rim round each face.
+            let rim = if *armoured { 0.05 } else { 0.022 };
+            let k = 0.0015;
+            for side in [1.0, -1.0] {
+                let (ya, yb) = sorted2(side * (h2 - 0.0005), side * (h2 + k));
+                b.rbox(LEAF, [a, ya, z0], [a + rim, yb, z1], 0.0);
+                b.rbox(LEAF, [c - rim, ya, z0], [c, yb, z1], 0.0);
+                b.rbox(LEAF, [a + rim, ya, z0], [c - rim, yb, z0 + rim], 0.0);
+                b.rbox(LEAF, [a + rim, ya, z1 - rim], [c - rim, yb, z1], 0.0);
+            }
+            if *embossed {
+                // Two panels pressed out of each face, one over the other
+                // (below the vision panel if there is one).
+                let m = 0.11_f64.min((c - a) * 0.2);
+                let top = hole.map_or(z1 - m, |h| h.za - m * 0.8);
+                let gap = 0.09;
+                let low = z0 + m;
+                if top - low > 2.0 * gap + 0.3 {
+                    let mid = low + (top - low) * 0.42;
+                    for (za, zc) in [(low, mid - gap / 2.0), (mid + gap / 2.0, top)] {
+                        for side in [1.0, -1.0] {
+                            let (ya, yb) = sorted2(side * (h2 - 0.0005), side * (h2 + 0.004));
+                            b.rbox(LEAF, [a + m, ya, za], [c - m, yb, zc], 0.006);
+                        }
+                    }
+                }
+            }
+            if let Some(h) = hole {
+                glaze(b, h, h2 + k);
+            }
+        }
         LeafDesign::Planks { boards } => {
             let n = (*boards).max(2);
             let bw = (c - a) / n as f64;
@@ -604,6 +829,128 @@ pub fn leaf(b: &mut Builder, d: &LeafDesign, a: f64, c: f64, z0: f64, z1: f64, t
                 zt = zb - rail;
             }
         }
+    }
+}
+
+fn sorted2(a: f64, b: f64) -> (f64, f64) {
+    (a.min(b), a.max(b))
+}
+
+/// Where a vision panel's hole is in a leaf from `a` to `c`, `z0` to `z1`:
+/// its box (`round`: the box round its circle).
+#[derive(Debug, Clone, Copy)]
+struct Hole {
+    xa: f64,
+    xc: f64,
+    za: f64,
+    zc: f64,
+    round: bool,
+}
+
+fn hole_of(v: Vision, a: f64, c: f64, z0: f64, z1: f64) -> Hole {
+    let x = (a + c) / 2.0;
+    let room = (c - a) * 0.7;
+    let (w, h, z, round) = match v {
+        Vision::Square { w, h, z } => (w.min(room), h, z, false),
+        Vision::Round { d, z } => (d.min(room), d.min(room), z, true),
+    };
+    let z = (z0 + z).clamp(z0 + h / 2.0 + 0.15, z1 - h / 2.0 - 0.15);
+    Hole {
+        xa: x - w / 2.0,
+        xc: x + w / 2.0,
+        za: z - h / 2.0,
+        zc: z + h / 2.0,
+        round,
+    }
+}
+
+/// A board from `a` to `c`, `z0` to `z1`, `y0` to `y1`, with `hole`
+/// through it (a round one as its square box and the four corners round
+/// the circle).
+#[allow(clippy::too_many_arguments)]
+fn board(
+    b: &mut Builder,
+    role: &'static str,
+    a: f64,
+    c: f64,
+    z0: f64,
+    z1: f64,
+    y0: f64,
+    y1: f64,
+    hole: Option<Hole>,
+) {
+    let Some(h) = hole else {
+        b.rbox(role, [a, y0, z0], [c, y1, z1], 0.0);
+        return;
+    };
+    let o = 0.0005;
+    b.rbox(role, [a, y0, z0], [h.xa + o, y1, z1], 0.0);
+    b.rbox(role, [h.xc - o, y0, z0], [c, y1, z1], 0.0);
+    b.rbox(role, [h.xa, y0, z0], [h.xc, y1, h.za + o], 0.0);
+    b.rbox(role, [h.xa, y0, h.zc - o], [h.xc, y1, z1], 0.0);
+    if !h.round {
+        return;
+    }
+    // The corners between the box and the circle, each a fan from its
+    // corner (it sees the whole quarter of the circle facing it).
+    let (cx, cz) = ((h.xa + h.xc) / 2.0, (h.za + h.zc) / 2.0);
+    let r = (h.xc - h.xa) / 2.0;
+    let n = 10;
+    for (k, corner) in [[h.xc, h.zc], [h.xa, h.zc], [h.xa, h.za], [h.xc, h.za]]
+        .iter()
+        .enumerate()
+    {
+        let a0 = k as f64 * std::f64::consts::FRAC_PI_2;
+        let ring: Vec<[f64; 2]> = (0..=n)
+            .map(|i| {
+                let t = a0 + std::f64::consts::FRAC_PI_2 * i as f64 / n as f64;
+                [cx + r * t.cos(), cz + r * t.sin()]
+            })
+            .collect();
+        let first = b.parts.get(role).map_or(0, |t| t.len());
+        let front: Vec<u32> = ring.iter().map(|q| b.point([q[0], y1, q[1]])).collect();
+        let back: Vec<u32> = ring.iter().map(|q| b.point([q[0], y0, q[1]])).collect();
+        let cf = b.point([corner[0], y1, corner[1]]);
+        let cb = b.point([corner[0], y0, corner[1]]);
+        for i in 0..n {
+            b.tri(role, cf, front[i], front[i + 1]);
+            b.tri(role, cb, back[i + 1], back[i]);
+            // The face of the hole, round.
+            b.quad(role, front[i], back[i], back[i + 1], front[i + 1]);
+        }
+        // Its two straight sides, against the boxes.
+        b.quad(role, cf, cb, back[0], front[0]);
+        b.quad(role, cf, front[n], back[n], cb);
+        orient(b, role, first);
+    }
+}
+
+/// The glass of a vision panel and what holds it: beads round a square
+/// one, a ring on each face round a porthole (`face`: half the leaf).
+fn glaze(b: &mut Builder, h: Hole, face: f64) {
+    let o = 0.001;
+    if h.round {
+        let (cx, cz) = ((h.xa + h.xc) / 2.0, (h.za + h.zc) / 2.0);
+        let r = (h.xc - h.xa) / 2.0;
+        b.cyl(GLASS, [cx, -0.004, cz], [cx, 0.004, cz], r + o);
+        for side in [1.0, -1.0] {
+            let y = side * (face + 0.002);
+            let path: Vec<P3> = (0..=40)
+                .map(|i| {
+                    let t = std::f64::consts::TAU * i as f64 / 40.0;
+                    [cx + (r + 0.008) * t.cos(), y, cz + (r + 0.008) * t.sin()]
+                })
+                .collect();
+            sweep(b, METAL, &path, |_| 0.011, 8, Cap::Flat, Cap::Flat);
+        }
+    } else {
+        b.rbox(
+            GLASS,
+            [h.xa - o, -0.004, h.za - o],
+            [h.xc + o, 0.004, h.zc + o],
+            0.0,
+        );
+        beads(b, h.xa, h.xc, h.za, h.zc, face);
     }
 }
 
@@ -961,11 +1308,72 @@ fn hinges(b: &mut Builder, kind: usize, x: f64, at_a: bool, z0: f64, top: f64, t
 /// The handle of the active leaf at `x`, `z` on both faces (`inward`:
 /// the hinges' side), on a leaf `t` thick.
 fn handle(b: &mut Builder, kind: usize, x: f64, z: f64, t: f64, inward: f64) {
-    for side in [1.0, -1.0] {
+    handle_on(b, kind, x, z, t, inward, &[1.0, -1.0]);
+}
+
+/// [`handle`] on the faces `sides` only (+1: the side it opens to).
+fn handle_on(b: &mut Builder, kind: usize, x: f64, z: f64, t: f64, inward: f64, sides: &[f64]) {
+    for &side in sides {
         let y = side * t / 2.0;
         let at = |dx: f64, dy: f64, dz: f64| -> P3 { [x + dx, y + side * dy, z + dz] };
         match kind {
-            7 => {}
+            7 | 8 => {}
+            9 => {
+                if side < 0.0 {
+                    // A push plate on the side it is pushed from.
+                    let (ya, yb) = sorted2(y, y + side * 0.002);
+                    b.rbox(
+                        METAL,
+                        [x + inward * 0.06 - 0.05, ya, z + 0.05],
+                        [x + inward * 0.06 + 0.05, yb, z + 0.4],
+                        0.004,
+                    );
+                } else {
+                    // A pull handle, upright, on the other.
+                    let (zb, zt) = (z - 0.15, z + 0.15);
+                    for zz in [zb, zt] {
+                        b.cyl(METAL, at(0.0, -0.001, zz - z), at(0.0, 0.06, zz - z), 0.01);
+                    }
+                    b.cyl(
+                        METAL,
+                        at(0.0, 0.06, zb - z - 0.01),
+                        at(0.0, 0.06, zt - z + 0.01),
+                        0.013,
+                    );
+                }
+            }
+            10 => {
+                // A security escutcheon: a long plate with its lever and,
+                // below, the raised guard round the lock's cylinder.
+                let lo = at(-0.035, -0.0005, -0.24);
+                let hi = at(0.035, 0.012, 0.06);
+                let (ya, yb) = sorted2(lo[1], hi[1]);
+                b.rbox(METAL, [lo[0], ya, lo[2]], [hi[0], yb, hi[2]], 0.01);
+                b.cone(
+                    METAL,
+                    at(0.0, 0.011, -0.16),
+                    at(0.0, 0.03, -0.16),
+                    0.028,
+                    0.022,
+                    24,
+                );
+                let path = [
+                    at(0.0, 0.011, 0.0),
+                    at(0.0, 0.05, 0.0),
+                    at(inward * 0.012, 0.062, 0.0),
+                    at(inward * 0.06, 0.064, 0.0),
+                    at(inward * 0.125, 0.056, -0.004),
+                ];
+                sweep(
+                    b,
+                    METAL,
+                    &path,
+                    |s| 0.01 - 0.002 * s,
+                    12,
+                    Cap::Flat,
+                    Cap::Round(0.8),
+                );
+            }
             5 => {
                 // A knob on a rose.
                 rose(b, at(0.0, 0.0, 0.0), side, 0.027);
@@ -1057,6 +1465,71 @@ fn handle(b: &mut Builder, kind: usize, x: f64, z: f64, t: f64, inward: f64) {
             }
         }
     }
+}
+
+/// A panic bar across a leaf from `a` to `c` on the side it is pushed
+/// from (-y): the bar on two brackets, the box of its latch at the free
+/// edge (`inward`: towards the hinges).
+fn panic_bar(b: &mut Builder, a: f64, c: f64, inward: f64, t: f64) {
+    let y = -t / 2.0;
+    let z = 0.98;
+    let (x_free, x_hinge) = if inward < 0.0 { (c, a) } else { (a, c) };
+    let xa = x_free + inward * 0.06;
+    let xc = x_hinge - inward * 0.08;
+    // The latch box at the free edge and the bracket at the hinge side.
+    for (x0, x1) in [
+        sorted2(xa, xa + inward * 0.17),
+        sorted2(xc, xc - inward * 0.06),
+    ] {
+        b.rbox(
+            METAL,
+            [x0, y - 0.075, z - 0.04],
+            [x1, y + 0.0005, z + 0.04],
+            0.008,
+        );
+    }
+    // The bar between them.
+    b.cyl(
+        METAL,
+        [xa + inward * 0.16, y - 0.055, z],
+        [xc - inward * 0.05, y - 0.055, z],
+        0.017,
+    );
+}
+
+/// A door closer on the face the leaf opens to, near its hinges at
+/// `hinge_x` (`inward`: from the free edge towards them): its body on the
+/// leaf by the top and its arm to a shoe on the head of the frame, on the
+/// wall's face at `face`.
+fn closer(b: &mut Builder, hinge_x: f64, inward: f64, top: f64, t: f64, face: f64) {
+    let y = t / 2.0;
+    let out = -inward;
+    let (x0, x1) = sorted2(hinge_x + out * 0.05, hinge_x + out * 0.33);
+    b.rbox(
+        METAL,
+        [x0, y - 0.0005, top - 0.13],
+        [x1, y + 0.055, top - 0.07],
+        0.008,
+    );
+    // The pivot near the hinge end, the arm folded out and up to the shoe.
+    let pivot = [hinge_x + out * 0.09, y + 0.06, top - 0.1];
+    let shoe_y = face.max(y + 0.07);
+    let shoe = [hinge_x + out * 0.28, shoe_y - 0.012, top + 0.035];
+    let elbow = [
+        hinge_x + out * 0.2,
+        (pivot[1] + shoe[1]) / 2.0 + 0.04,
+        top - 0.06,
+    ];
+    b.cyl(METAL, [pivot[0], y + 0.054, pivot[2]], pivot, 0.008);
+    bar(b, METAL, pivot, elbow, 0.014, [0.0, 0.0, 1.0]);
+    bar(b, METAL, elbow, shoe, 0.012, [0.0, 0.0, 1.0]);
+    let (sx0, sx1) = sorted2(shoe[0] - 0.035, shoe[0] + 0.035);
+    b.rbox(
+        METAL,
+        [sx0, shoe_y - 0.02, top + 0.012],
+        [sx1, shoe_y + 0.0005, top + 0.055],
+        0.004,
+    );
 }
 
 /// A round rose on the face at `c`, standing towards `side`.

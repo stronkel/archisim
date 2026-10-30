@@ -2429,6 +2429,13 @@ pub struct OpeningDetail {
 
 /// See [`OpeningDetail`]; `None` for a family that makes none.
 pub fn opening_detail(model: &Model, id: OpeningId) -> Option<OpeningDetail> {
+    opening_detail_with(model, id, false)
+}
+
+/// [`opening_detail`], or with `simple` its plain version for far away:
+/// the frame, the leaves and the glass, without hardware, beads, glazing
+/// bars or scrolls (the generator's `lod`).
+pub fn opening_detail_with(model: &Model, id: OpeningId, simple: bool) -> Option<OpeningDetail> {
     let o = model.opening(id)?;
     let t = model.opening_type(o.opening_type)?;
     model.family_prop(t.family)?;
@@ -2466,9 +2473,11 @@ pub fn opening_detail(model: &Model, id: OpeningId) -> Option<OpeningDetail> {
         &[
             ("face_pos", face_pos),
             ("face_neg", face_neg),
+            ("face_ext", ext),
             ("casing_pos", b(casing_pos)),
             ("casing_neg", b(casing_neg)),
             ("mirror", b(mirror)),
+            ("lod", b(simple)),
         ],
     )?;
     let x_axis = if mirror { [-ax[0], -ax[1]] } else { ax };

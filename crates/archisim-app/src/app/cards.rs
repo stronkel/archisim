@@ -694,10 +694,19 @@ impl super::ArchiSimApp {
         );
         let model = self.ed.model();
         if model.family_prop(ty.family).is_some() {
+            // What goes outside a window, seen from the street.
+            let outside = matches!(
+                key,
+                "grille" | "grille_box" | "outside_shutters" | "shutters_open"
+            );
             let sig = self.picture_signature(false);
-            let k = format!("opt3d:{}:{:?}:{sig}", ty.family.0, ty.values);
+            let k = format!("opt3d:{}:{:?}:{sig}:{outside}", ty.family.0, ty.values);
             let model = self.ed.model();
-            let front = super::thumbs3d::FRONT;
+            let front = if outside {
+                super::thumbs3d::OUTSIDE
+            } else {
+                super::thumbs3d::FRONT
+            };
             return self
                 .thumbs3d
                 .get_seen(ctx, self.gpu.as_ref(), k, front, || {

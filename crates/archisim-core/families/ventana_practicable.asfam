@@ -1,7 +1,7 @@
 family "Ventana practicable"
   category window
   host wall
-  version 8
+  version 9
   description "Ventana de 1 a 4 hojas con montantes; cada hoja fija, practicable, oscilobatiente, abatible, proyectante, basculante o pivotante; con persiana enrollable y capialzado, tarja fija, premarco y vierteaguas si se quieren"
 
 include "piezas"
@@ -22,6 +22,7 @@ type_params
   section "Persiana"
     shutter bool = no label "Persiana enrollable con capialzado"
     box_height length = 0.25 range 0.10..0.60 visible_if shutter label "Capialzado: alto"
+    shutter_down integer = 0 range 0..100 visible_if shutter label "Persiana: bajada (%)"
   section "Tarja"
     transom bool = no label "Tarja fija sobre las hojas"
     transom_height length = 0.40 range 0.10..2.00 visible_if transom label "Tarja: alto"
@@ -35,6 +36,21 @@ type_params
     panel_material material = "Vidrio doble" label "Vidrio"
     subframe_material material = "Acero galvanizado" visible_if subframe label "Premarco"
     sill_material material = "Piedra natural" visible_if sill label "Vierteaguas"
+  section "Modelo 3D"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Contemporáneo" label "Modelo 3D"
+    hardware_material material = "Acero inoxidable" label "Herrajes"
+  section "A tu gusto"
+    window_profile choice("Como la colección", "Aluminio recto", "Aluminio redondeado", "PVC", "Madera", "Madera con moldura", "Acero fino") = "Como la colección" label "Perfil"
+    glazing_bars choice("Como la colección", "Sin cuarterones", "Cuadrícula", "Cuadrícula fina", "Horizontales", "Verticales", "Solo arriba") = "Como la colección" label "Cuarterones"
+    window_handle choice("Como la colección", "Manilla moderna", "Manilla de latón", "Cremona vista", "Falleba de forja", "Sin manilla") = "Como la colección" label "Manilla"
+  section "Por fuera"
+    outside_shutters choice("Sin contraventanas", "Mallorquinas", "De tablas", "De cuarterones") = "Sin contraventanas" label "Contraventanas"
+    shutters_open bool = yes visible_if outside_shutters != "Sin contraventanas" label "Contraventanas abiertas"
+    shutters_material material = "Madera de pino" visible_if outside_shutters != "Sin contraventanas" label "Contraventanas: material"
+    grille choice("Sin reja", "Barrotes", "Barrotes y pletinas", "Cuadrícula", "Forja con volutas") = "Sin reja" label "Reja"
+    grille_box bool = no visible_if grille != "Sin reja" label "Reja de cajón"
+    grille_depth length = 0.18 range 0.08..0.60 visible_if grille != "Sin reja" and grille_box label "Reja: vuelo"
+    grille_material material = "Hierro forjado" visible_if grille != "Sin reja" label "Reja: material"
   section "Representación"
     swing_in_plan bool = no label "Giro de las hojas en planta"
     swing_line linestyle = "dashed" visible_if swing_in_plan label "Giro en planta: tipo de línea"
@@ -82,17 +98,20 @@ require not transom or zl - z0 > 2 * frame_width + 0.20 else "La tarja no deja s
 body
   if subframe
     use subframe(width, height, s, frame_depth, subframe_material, 1)
-  if fl > 0
-    use block(-w / 2, gc0, frame_depth, z0, z1, frame_material)
-  if fr > 0
-    use block(gc1, w / 2, frame_depth, z0, z1, frame_material)
-  use block(gc0, gc1, frame_depth, z0, z0 + frame_width, frame_material)
-  use block(gc0, gc1, frame_depth, z1 - frame_width, z1, frame_material)
-  repeat i in 0..leaves
-    let a = gc0 + i * (gclear + frame_width)
-    if i > 0
-      use block(a - frame_width, a, frame_depth, z0 + frame_width, zl - frame_width, frame_material)
-    use block(a, a + gclear, min(0.024, frame_depth), z0 + frame_width, zl - frame_width, panel_material)
+  # En 3D, el marco, los montantes y las hojas los hace ArchiSim con el
+  # perfil y los herrajes de la colección (generator props:window).
+  if not detailed
+    if fl > 0
+      use block(-w / 2, gc0, frame_depth, z0, z1, frame_material)
+    if fr > 0
+      use block(gc1, w / 2, frame_depth, z0, z1, frame_material)
+    use block(gc0, gc1, frame_depth, z0, z0 + frame_width, frame_material)
+    use block(gc0, gc1, frame_depth, z1 - frame_width, z1, frame_material)
+    repeat i in 0..leaves
+      let a = gc0 + i * (gclear + frame_width)
+      if i > 0
+        use block(a - frame_width, a, frame_depth, z0 + frame_width, zl - frame_width, frame_material)
+      use block(a, a + gclear, min(0.024, frame_depth), z0 + frame_width, zl - frame_width, panel_material)
   if transom
     use transom(-w / 2 + frame_width, w / 2 - frame_width, zl, z1 - frame_width, frame_width, frame_depth, frame_material, panel_material)
   if shutter
@@ -109,6 +128,22 @@ body
 plan 1:50
   if sill_height > 0
     use sill_plan(width, frame_depth, wall_ext, wall_int)
+  let ew = if wall_ext > 0 then 1 else -1
+  if grille != "Sin reja"
+    let gx = width / 2 + 0.06
+    if grille_box
+      line (-gx, wall_ext) to (-gx, wall_ext + ew * grille_depth) pen thin
+      line (-gx, wall_ext + ew * grille_depth) to (gx, wall_ext + ew * grille_depth) pen thin
+      line (gx, wall_ext + ew * grille_depth) to (gx, wall_ext) pen thin
+    else
+      line (-gx, wall_ext + ew * 0.03) to (gx, wall_ext + ew * 0.03) pen thin
+  if outside_shutters != "Sin contraventanas"
+    let sy = wall_ext + ew * 0.02
+    if shutters_open
+      line (-width, sy) to (-width / 2, sy) pen thin
+      line (width / 2, sy) to (width, sy) pen thin
+    else
+      line (-width / 2, sy) to (width / 2, sy) pen thin
   if shutter
     let es = if wall_ext > 0 then 1 else -1
     line (-width / 2, es * (frame_depth / 2 + 0.02)) to (width / 2, es * (frame_depth / 2 + 0.02)) pen thin dashed
@@ -143,6 +178,22 @@ plan 1:50
 plan 1:20
   if sill_height > 0
     use sill_plan(width, frame_depth, wall_ext, wall_int)
+  let ew = if wall_ext > 0 then 1 else -1
+  if grille != "Sin reja"
+    let gx = width / 2 + 0.06
+    if grille_box
+      line (-gx, wall_ext) to (-gx, wall_ext + ew * grille_depth) pen thin
+      line (-gx, wall_ext + ew * grille_depth) to (gx, wall_ext + ew * grille_depth) pen thin
+      line (gx, wall_ext + ew * grille_depth) to (gx, wall_ext) pen thin
+    else
+      line (-gx, wall_ext + ew * 0.03) to (gx, wall_ext + ew * 0.03) pen thin
+  if outside_shutters != "Sin contraventanas"
+    let sy = wall_ext + ew * 0.02
+    if shutters_open
+      line (-width, sy) to (-width / 2, sy) pen thin
+      line (width / 2, sy) to (width, sy) pen thin
+    else
+      line (-width / 2, sy) to (width / 2, sy) pen thin
   if shutter
     let es = if wall_ext > 0 then 1 else -1
     line (-width / 2, es * (frame_depth / 2 + 0.02)) to (width / 2, es * (frame_depth / 2 + 0.02)) pen thin dashed
@@ -198,6 +249,21 @@ plan 1:100
   line (-width / 2 + frame_width, 0) to (width / 2 - frame_width, 0) pen thin
 
 outputs
+  generator = "props:window"
+  w_fw = frame_width
+  w_gc0 = gc0
+  w_gc1 = gc1
+  w_w = w
+  w_z0 = z0
+  w_z1 = z1
+  w_zl = zl
+  w_left = if fl > 0 then 1 else 0
+  w_right = if fr > 0 then 1 else 0
+  w_outside = if opens_to == "exterior" then 1 else -1
+  w_hand_left = if hand == "left" then 1 else 0
+  w_width = width
+  w_height = height
+  w_top = window_height
   opening_width = width
   opening_height = height
   frame_width = frame_width + s
