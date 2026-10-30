@@ -6,6 +6,12 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-30 (43) · Versión 0.76
+
+Las PR #113–#116 unidas a `main`: terreno con contorno a mano, cotas y flechas de pendiente (E5), explanaciones bajo el edificio (E8), perfil de alzado de los muros (E3) y armarios empotrados (E10). Formato `.archisim` versión 47. Qué probar: entradas 39 a 42.
+
+---
+
 ## 2026-10-30 (42) · Armarios empotrados (E10)
 
 Rama `bloque/e10-armarios` (sobre `bloque/e3-perfil`), con pull request. Sin cambios de formato ni de IFC.
