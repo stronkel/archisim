@@ -1,7 +1,7 @@
 family "Puerta corredera empotrada"
   category door
   host wall
-  version 3
+  version 4
   description "Puerta corredera de una hoja que se esconde dentro del muro, en un armazón (cajón) junto al hueco, con cerco"
 
 include "piezas"
@@ -20,7 +20,9 @@ type_params
     model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Contemporáneo" label "Modelo 3D"
     hardware_material material = "Acero inoxidable" label "Herrajes"
   section "A tu gusto"
-    leaf_design choice("Como la colección", "Lisa", "Ranurada", "Ranurada vertical", "Dos cuarterones", "Cuatro cuarterones", "Seis cuarterones", "Plafonada", "Moldura aplicada", "Vidriera", "Media vidriera", "Vidriera con junquillos", "Lamas", "Tablas", "Chapa lisa", "Chapa embutida", "Chapa con ventanilla cuadrada", "Chapa con ojo de buey", "Chapa con mirilla alargada", "Lisa con ventanilla cuadrada", "Lisa con ojo de buey", "Acorazada") = "Como la colección" label "Hoja"
+    leaf_design choice("Como la colección", "Lisa", "Ranurada", "Ranurada vertical", "Dos cuarterones", "Cuatro cuarterones", "Seis cuarterones", "Plafonada", "Moldura aplicada", "Vidriera", "Media vidriera", "Vidriera con junquillos", "Lamas", "Tablas", "Chapa lisa", "Chapa embutida", "Chapa con ventanilla cuadrada", "Chapa con ojo de buey", "Chapa con mirilla alargada", "Lisa con ventanilla cuadrada", "Lisa con ojo de buey", "Acorazada", "Retícula a medida") = "Como la colección" label "Hoja"
+    grid_cols integer = 2 range 1..8 visible_if leaf_design == "Retícula a medida" label "Retícula: vidrios a lo ancho"
+    grid_rows integer = 4 range 1..12 visible_if leaf_design == "Retícula a medida" label "Retícula: vidrios a lo alto"
     casing choice("Como la colección", "Sin tapajuntas", "Plano", "Redondeado", "Moldurado", "Con junquillo") = "Como la colección" label "Tapajuntas"
     slide_pull choice("Como la colección", "Uñero embutido", "Tirador de barra", "Asa de granero", "Sin tirador") = "Como la colección" label "Tirador"
 

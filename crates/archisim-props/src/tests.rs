@@ -834,3 +834,40 @@ fn railings_stand_whole() {
     }
     assert!(bad.is_empty(), "{} loose", bad.len());
 }
+
+/// E6: the handle's height and faces, a door's grid to measure and a
+/// window's glazing bars to measure follow their values.
+#[test]
+fn handles_and_grids_to_measure() {
+    let door = |set: &dyn Fn(&mut Params)| {
+        let mut p = Params::default();
+        p.set("style", 5.0);
+        p.set("leaf_x0", -0.4);
+        p.set("leaf_x1", 0.4);
+        p.set("leaf_top", 2.03);
+        p.set("handle_style", 2.0);
+        set(&mut p);
+        make("door", &p).unwrap()
+    };
+    let metal = |m: &PropMesh| -> Vec<[f32; 3]> {
+        m.parts
+            .iter()
+            .filter(|(r, _)| *r == "hardware_material")
+            .flat_map(|(_, t)| t.iter().flatten().map(|&i| m.positions[i as usize]))
+            .collect()
+    };
+    let both = metal(&door(&|_| {}));
+    let one = metal(&door(&|p| p.set("handle_sides", 2.0)));
+    assert!(!one.is_empty() && one.len() < both.len());
+    let high = metal(&door(&|p| p.set("handle_height", 1.4)));
+    let mean = |v: &[[f32; 3]]| v.iter().map(|p| p[2]).sum::<f32>() / v.len() as f32;
+    assert!(mean(&high) > mean(&both) + 0.1);
+    let plain = door(&|p| p.set("leaf_design", 10.0)).triangle_count();
+    let grid = door(&|p| {
+        p.set("leaf_design", 23.0);
+        p.set("grid_cols", 3.0);
+        p.set("grid_rows", 5.0);
+    })
+    .triangle_count();
+    assert!(grid > plain);
+}

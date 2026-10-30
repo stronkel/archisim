@@ -101,6 +101,11 @@ pub enum Bars {
         w: f64,
         h: f64,
     },
+    /// A grid to measure: `cols` panes across, `rows` up.
+    Panes {
+        cols: usize,
+        rows: usize,
+    },
 }
 
 /// The glazing bars the family offers, by name.
@@ -112,7 +117,20 @@ pub const BARS: &[&str] = &[
     "Horizontales",
     "Verticales",
     "Solo arriba",
+    "A medida",
 ];
+
+/// The bars by their number in [`BARS`], with the values of a grid to
+/// measure (`bar_cols` panes across, `bar_rows` up).
+pub fn bars_of(n: usize, p: &Params) -> Bars {
+    if n == 8 {
+        return Bars::Panes {
+            cols: p.get("bar_cols", 2.0).round().clamp(1.0, 12.0) as usize,
+            rows: p.get("bar_rows", 3.0).round().clamp(1.0, 12.0) as usize,
+        };
+    }
+    bars(n)
+}
 
 /// The bars by their number in [`BARS`].
 pub fn bars(n: usize) -> Bars {
@@ -369,8 +387,14 @@ pub fn window(b: &mut Builder, p: &Params) {
         p.get("leaf_3", 2.0),
         p.get("leaf_4", 2.0),
     ];
-    let bars = if sec.plain { Bars::None } else { bars(l.bars) };
+    let bars = if sec.plain {
+        Bars::None
+    } else {
+        bars_of(l.bars, p)
+    };
     let handle = if sec.plain { 6 } else { l.handle };
+    // Its height over the foot of the sash (0: halfway up).
+    let handle_height = p.get("handle_height", 0.0).max(0.0);
     let (za, zc) = (z0 + fw, zl - fw);
     for (i, &o) in ops.iter().enumerate().take(leaves) {
         let a = gc0 + i as f64 * (clear + fw);
@@ -415,7 +439,18 @@ pub fn window(b: &mut Builder, p: &Params) {
             continue;
         }
         sash(
-            b, &sec, bars, handle, kind, hinge_left, a, c, za, zc, fd, inside,
+            b,
+            &sec,
+            bars,
+            (handle, handle_height),
+            kind,
+            hinge_left,
+            a,
+            c,
+            za,
+            zc,
+            fd,
+            inside,
         );
     }
 
@@ -433,13 +468,14 @@ fn sorted(a: f64, b: f64) -> (f64, f64) {
 }
 
 /// A sash over the clear opening `a`…`c`, `za`…`zc`: its stiles and rails
-/// overlapping the frame, its glass and bars, its handle and hinges.
+/// overlapping the frame, its glass and bars, its handle (its kind and
+/// height over the sash's foot, 0 halfway up) and hinges.
 #[allow(clippy::too_many_arguments)]
 fn sash(
     b: &mut Builder,
     sec: &Section,
     bars: Bars,
-    handle: usize,
+    (handle, handle_height): (usize, f64),
     kind: Op,
     hinge_left: bool,
     a: f64,
@@ -494,7 +530,13 @@ fn sash(
             } else {
                 xa + sw / 2.0
             };
-            (x, (z_a + z_c) / 2.0, true)
+            // At its height over the sash's foot, if given.
+            let z = if handle_height > 0.0 {
+                (z_a + handle_height).min(z_c - 0.1).max(z_a + 0.1)
+            } else {
+                (z_a + z_c) / 2.0
+            };
+            (x, z, true)
         }
     };
     window_handle(b, handle, hx, hz, face, inside, up, z_a, z_c);
@@ -622,6 +664,14 @@ fn pane(
             let nc = count(w, step);
             for i in 1..nc {
                 up(b, xa + w * i as f64 / nc as f64, za, zc);
+            }
+        }
+        Bars::Panes { cols, rows } => {
+            for i in 1..cols {
+                up(b, xa + w * i as f64 / cols as f64, za, zc);
+            }
+            for j in 1..rows {
+                across(b, za + h * j as f64 / rows as f64, xa, xc);
             }
         }
         Bars::Top { w: sw, h: sh } => {
@@ -1239,7 +1289,11 @@ pub fn slider(b: &mut Builder, p: &Params) {
     let (za, zc) = (z0 + fw + rail_h, z1 - fw - 0.004);
     let lap = sec.sash.max(0.03);
     let lw = (c1 - c0 + (leaves as f64 - 1.0) * lap) / leaves as f64;
-    let bars = if far { Bars::None } else { bars(bar_kind) };
+    let bars = if far {
+        Bars::None
+    } else {
+        bars_of(bar_kind, p)
+    };
     let half = (step / 2.0 - 0.003).max(0.008);
     let off = if screen { 1.0 } else { 0.0 };
     for i in 0..leaves {
@@ -1302,7 +1356,13 @@ pub fn slider(b: &mut Builder, p: &Params) {
             c - sw / 2.0
         };
         let face = y + inside * half;
-        slider_handle(b, hand, x, (za + zc) / 2.0, face, inside, sw);
+        let hh = p.get("handle_height", 0.0);
+        let hz = if hh > 0.0 {
+            (za + hh).clamp(za + 0.1, (zc - 0.1).max(za + 0.1))
+        } else {
+            (za + zc) / 2.0
+        };
+        slider_handle(b, hand, x, hz, face, inside, sw);
     }
     if screen && !far {
         // The insect screen: a light frame on the outer track, half the
@@ -1474,7 +1534,7 @@ pub fn sash_window(b: &mut Builder, p: &Params) {
     let sw = sec.sash.min((c1 - c0) / 4.0);
     let rail = sw * 0.8;
     let lift = (p.get("sash_open", 0.0) / 100.0).clamp(0.0, 1.0) * (zm - fw - rail);
-    let bars = if far { Bars::None } else { bars(l.bars) };
+    let bars = if far { Bars::None } else { bars_of(l.bars, p) };
     // (plane, bottom, top): the upper sash outside, the lower inside.
     let lower = (inside * q, fw + lift, zm + rail / 2.0 + lift);
     let upper = (outside * q, zm - rail / 2.0, z1 - fw);

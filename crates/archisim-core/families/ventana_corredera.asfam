@@ -1,7 +1,7 @@
 family "Ventana corredera"
   category window
   host wall
-  version 6
+  version 7
   description "Ventana o balconera corredera de 2 a 4 hojas, con marco, persiana con capialzado, mosquitera, premarco y vierteaguas si se quieren"
 
 include "piezas"
@@ -35,7 +35,10 @@ type_params
   section "A tu gusto"
     slider_profile choice("Como la colección", "Aluminio estándar", "Aluminio con rotura de puente térmico", "PVC", "Madera", "Acero fino", "Minimalista de perfil oculto") = "Como la colección" label "Perfil"
     slider_handle choice("Como la colección", "Uñero", "Manilla embutida", "Maneta de cierre", "Tirador de barra", "Sin tirador") = "Como la colección" label "Cierre"
-    glazing_bars choice("Como la colección", "Sin cuarterones", "Cuadrícula", "Cuadrícula fina", "Horizontales", "Verticales", "Solo arriba") = "Como la colección" label "Cuarterones"
+    handle_height length = 0.00 range 0.00..2.00 label "Manilla: altura (0, centrada)"
+    glazing_bars choice("Como la colección", "Sin cuarterones", "Cuadrícula", "Cuadrícula fina", "Horizontales", "Verticales", "Solo arriba", "A medida") = "Como la colección" label "Cuarterones"
+    bar_cols integer = 2 range 1..12 visible_if glazing_bars == "A medida" label "Cuarterones: vidrios a lo ancho"
+    bar_rows integer = 3 range 1..12 visible_if glazing_bars == "A medida" label "Cuarterones: vidrios a lo alto"
     screen bool = no label "Mosquitera"
   section "Por fuera"
     outside_shutters choice("Sin contraventanas", "Mallorquinas", "De tablas", "De cuarterones") = "Sin contraventanas" label "Contraventanas"

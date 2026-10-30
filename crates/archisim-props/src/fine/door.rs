@@ -138,7 +138,41 @@ pub const DESIGNS: &[&str] = &[
     "Lisa con ventanilla cuadrada",
     "Lisa con ojo de buey",
     "Acorazada",
+    "Retícula a medida",
 ];
+
+/// The sides a door's handle is on (`handle_sides`), by name.
+pub const HANDLE_SIDES: &[&str] = &[
+    "A las dos caras",
+    "Solo del lado al que abre",
+    "Solo del otro lado",
+];
+
+/// The faces of a door's handle from `handle_sides` (+1: the side it
+/// opens to).
+fn handle_faces(p: &Params) -> &'static [f64] {
+    match p.get("handle_sides", 1.0).round() as i32 {
+        2 => &[1.0],
+        3 => &[-1.0],
+        _ => &[1.0, -1.0],
+    }
+}
+
+/// The design of a leaf by its number in [`DESIGNS`], with its values
+/// (a grid to measure: `grid_cols` by `grid_rows` panes of glass).
+pub fn design_of(n: usize, p: &Params) -> LeafDesign {
+    if n == 23 {
+        let cols = p.get("grid_cols", 2.0).round().clamp(1.0, 8.0) as u8;
+        let rows = p.get("grid_rows", 4.0).round().clamp(1.0, 12.0) as u8;
+        return LeafDesign::Framed {
+            stile: 0.11,
+            rail: 0.11,
+            bottom: 0.2,
+            rows: vec![row(1.0, &[Field::Bars(cols, rows)])],
+        };
+    }
+    design(n)
+}
 
 fn row(weight: f64, fields: &[Field]) -> Row {
     Row {
@@ -449,8 +483,11 @@ pub fn door(b: &mut Builder, p: &Params) {
     } else {
         leaves_at.push((x0 + gap, x1 - gap, hinge_left, true));
     }
-    let design = design(l.design);
+    let design = design_of(l.design, p);
     // Far away (`lod`): the leaves plain, no hardware, the casings flat.
+    // The handle: its height over the floor and the faces it is on.
+    let hz = p.get("handle_height", 1.02).clamp(0.3, 2.0);
+    let faces = handle_faces(p);
     let far = p.flag("lod", false);
     if far {
         for &(a, c, _, _) in &leaves_at {
@@ -482,11 +519,11 @@ pub fn door(b: &mut Builder, p: &Params) {
             // the active one.
             panic_bar(b, a, c, inward, t);
             if active {
-                handle_on(b, 2, edge + inward * 0.065, 1.02, t, inward, &[1.0]);
+                handle_on(b, 2, edge + inward * 0.065, hz, t, inward, &[1.0]);
             }
         } else if active {
             let inset = if l.handle == 11 { 0.1 } else { 0.065 };
-            handle(b, l.handle, edge + inward * inset, 1.02, t, inward);
+            handle_on(b, l.handle, edge + inward * inset, hz, t, inward, faces);
             if p.flag("peephole", false) {
                 spyhole(b, (a + c) / 2.0, 1.55, t);
             }
@@ -1680,7 +1717,7 @@ pub fn sliding_door(b: &mut Builder, p: &Params) {
     let open = (p.get("slide_open", 0.0) / 100.0).clamp(0.0, 1.0);
     let face = p.get("face_pos", fd / 2.0);
     let back = p.get("face_neg", -fd / 2.0);
-    let design = design(l.design);
+    let design = design_of(l.design, p);
     let lw = x1 - x0;
     // The lining across the whole reveal, and the casings: on both faces
     // of a pocket door; on the face away from the leaf of one that slides
@@ -1900,9 +1937,10 @@ pub fn folding_door(b: &mut Builder, p: &Params) {
     } else {
         -1.0
     };
+    let hz = p.get("handle_height", 1.02).clamp(0.3, 2.0);
     let open = (p.get("fold_open", 0.0) / 100.0).clamp(0.0, 1.0);
     let angle = open * 1.35;
-    let design = design(l.design);
+    let design = design_of(l.design, p);
     let lw = (x1 - x0) / n as f64;
     let start_x = if s > 0.0 { x0 } else { x1 };
     // The track along the head, the leaves hanging from it.
@@ -1923,7 +1961,7 @@ pub fn folding_door(b: &mut Builder, p: &Params) {
             if i + 1 == n && l.handle != 7 {
                 // The handle by the free edge of the last leaf (its x
                 // grows away from the gathered stack).
-                handle(b, l.handle, c - 0.06, 1.02, t, -1.0);
+                handle_on(b, l.handle, c - 0.06, hz, t, -1.0, handle_faces(p));
             }
         }
         // The leaf's hangers in the track: the joints on the line of the
