@@ -44,6 +44,7 @@
 
 mod accessories;
 mod curtain;
+mod facades;
 mod foundations;
 pub mod import;
 mod members;
@@ -1655,16 +1656,24 @@ impl<'a> Exporter<'a> {
             // the type, when it is not what ArchiSim does anyway.
             let wraps = t.wrap_ends != archisim_core::Wrap::None
                 || t.wrap_inserts != archisim_core::Wrap::inserts_by_default(t.function, &t.layers);
-            let sets = if wraps {
-                let props: Vec<Ref> = [("WrapEnds", t.wrap_ends), ("WrapInserts", t.wrap_inserts)]
-                    .into_iter()
-                    .map(|(name, w)| {
-                        self.w.add(format!(
-                            "IFCPROPERTYSINGLEVALUE('{name}',$,IFCLABEL({}),$)",
-                            string(wrap_name(w))
-                        ))
-                    })
-                    .collect();
+            let sets = if wraps || t.facade.is_some() {
+                let mut props: Vec<Ref> =
+                    [("WrapEnds", t.wrap_ends), ("WrapInserts", t.wrap_inserts)]
+                        .into_iter()
+                        .map(|(name, w)| {
+                            self.w.add(format!(
+                                "IFCPROPERTYSINGLEVALUE('{name}',$,IFCLABEL({}),$)",
+                                string(wrap_name(w))
+                            ))
+                        })
+                        .collect();
+                // Its façade (E9), to read it back.
+                if let Some(f) = &t.facade {
+                    props.push(self.w.add(format!(
+                        "IFCPROPERTYSINGLEVALUE('Facade',$,IFCTEXT({}),$)",
+                        string(&facades::encode_facade(model, f))
+                    )));
+                }
                 let pset = self.w.add(format!(
                     "IFCPROPERTYSET({},$,'ArchiSim_WallType',$,{})",
                     string(derived_guid(&t.guid, "ArchiSim_WallType").as_str()),
@@ -2118,6 +2127,7 @@ impl<'a> Exporter<'a> {
         self.write_curtain_walls(&materials, &storeys, &mut contained);
         self.write_railings(&materials, &storeys, &mut contained);
         self.write_accessories(&materials, &storeys, &mut contained);
+        self.write_facade_parts(&materials, &storeys);
         self.write_roof_parts(&materials, &storeys, &mut contained);
         self.write_objects(&materials, &storeys, &mut contained);
         self.write_worktops(&materials, &storeys, &mut contained);

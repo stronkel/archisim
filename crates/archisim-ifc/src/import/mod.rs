@@ -1739,6 +1739,31 @@ impl<'a> Importer<'a> {
         if let (Some(ends), Some(inserts)) = (wrap_of("WrapEnds"), wrap_of("WrapInserts")) {
             self.model.set_wall_type_wrap(id, ends, inserts)?;
         }
+        // Its façade (E9), if ArchiSim wrote it.
+        let facade_text = (|| -> Option<String> {
+            let t = self.ent(ifc_type?)?;
+            for s in t.arg(5).refs() {
+                let set = self.ent(s)?;
+                if set.kind != "IFCPROPERTYSET" || set.arg(2).as_str() != Some("ArchiSim_WallType")
+                {
+                    continue;
+                }
+                for p in set.arg(4).as_list() {
+                    let p = self.deref(p)?;
+                    if p.arg(0).as_str() == Some("Facade") {
+                        let v = p.arg(2);
+                        return v
+                            .as_str()
+                            .or_else(|| v.as_list().first().and_then(|x| x.as_str()))
+                            .map(str::to_string);
+                    }
+                }
+            }
+            None
+        })();
+        if let Some(f) = facade_text.and_then(|t| crate::facades::decode_facade(&self.model, &t)) {
+            let _ = self.model.set_wall_type_facade(id, Some(f));
+        }
         if let Some(g) = self.type_guid(ifc_type) {
             self.guids.wall_types.push((id, g));
         }

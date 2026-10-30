@@ -21,6 +21,7 @@ mod curtain;
 mod disciplines;
 mod dormers;
 mod draft_views;
+mod facades;
 mod flora;
 mod foundations;
 mod layered_library;
@@ -56,6 +57,7 @@ pub use curtain::*;
 pub use disciplines::*;
 pub use dormers::*;
 pub use draft_views::*;
+pub use facades::*;
 pub use flora::*;
 pub use foundations::*;
 pub use layered_library::*;
@@ -202,6 +204,9 @@ pub struct WallType {
     /// Revit's «Envolver en huecos»: which finish turns into the reveals
     /// of doors and windows, up to the frame (jambs, head and sill).
     pub wrap_inserts: Wrap,
+    /// The bond of its exterior finish and the piece over the slab edges
+    /// (E9): `None`, a plain finish.
+    pub facade: Option<Facade>,
 }
 
 /// Which finish of a wall type wraps (Revit's «Envolver»): the exterior
@@ -2069,6 +2074,7 @@ impl Model {
                 wrap_ends: Wrap::None,
                 layers,
                 sweeps: Vec::new(),
+                facade: None,
             },
         );
         Ok(id)

@@ -201,6 +201,65 @@ impl Item {
     }
 }
 
+/// The pieces of the façades (E9), by wall type and material: bricks,
+/// blocks, panels or slabs, whole and cut, and those over the slab edges.
+fn facade_pieces(model: &Model) -> Vec<Item> {
+    let walls: Vec<_> = model
+        .walls()
+        .filter(|w| model.wall_facade(w.id).is_some() && model.phase(w.id.0) == Phase::New)
+        .collect();
+    if walls.is_empty() {
+        return Vec::new();
+    }
+    let idx = archisim_geom::WallIndex::new(model);
+    let mut items: BTreeMap<(u64, bool, u64), Item> = BTreeMap::new();
+    for w in walls {
+        let solids = archisim_geom::solid::wall_solids_in(&idx, w.id);
+        let Some(layout) = archisim_geom::facade::facade_layout(&idx, w.id, &solids) else {
+            continue;
+        };
+        let Some(t) = model.wall_type(w.wall_type) else {
+            continue;
+        };
+        let level = model
+            .level(w.level)
+            .map_or(String::new(), |l| l.name.clone());
+        for (material, front, whole, cut) in archisim_geom::facade::piece_counts(&layout) {
+            let name = model
+                .material(material)
+                .map_or(String::new(), |m| m.name.clone());
+            let n = items.len();
+            let item = items
+                .entry((t.id.0, front, material.0))
+                .or_insert_with(|| Item {
+                    code: format!("F{:02}", n + 1),
+                    key: format!(
+                        "{}:{}:{}",
+                        if front { "frente" } else { "fachada" },
+                        t.id.0,
+                        material.0
+                    ),
+                    unit: "ud",
+                    summary: if front {
+                        format!("{name}, frente de forjado ({})", t.name)
+                    } else {
+                        format!("{name} ({})", t.name)
+                    },
+                    lines: Vec::new(),
+                });
+            item.lines.push(Measured {
+                comment: format!("Muro {} · {level}: {whole} enteras, {cut} cortadas", w.id.0),
+                units: 1.0,
+                length: 0.0,
+                width: 0.0,
+                height: 0.0,
+                quantity: (whole + cut) as f64,
+            });
+        }
+    }
+    items.into_values().collect()
+}
+
 /// Cut and fill of the terrains' platforms (E8), m³.
 fn earthworks(model: &Model) -> Vec<Item> {
     let mut cut = Vec::new();
@@ -422,6 +481,7 @@ pub fn measurements(model: &Model) -> Vec<(&'static str, &'static str, Vec<Item>
         ("10", "Mobiliario de cocina", kitchen(model)),
         ("11", "Cerrajería y protecciones", outsides(model)),
         ("12", "Movimiento de tierras", earthworks(model)),
+        ("13", "Fachadas: piezas", facade_pieces(model)),
     ];
     chapters.retain(|(_, _, items)| !items.is_empty());
     chapters

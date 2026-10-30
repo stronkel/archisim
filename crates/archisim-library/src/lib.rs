@@ -579,6 +579,8 @@ pub fn add_library(m: &mut Model) -> Result<Library, ModelError> {
     for t in view_templates() {
         m.add_view_template(t)?;
     }
+    // Façades laid piece by piece (E9), last so older ids stay put.
+    facades::add_facade_types(m)?;
     Ok(Library {
         curtain,
         void,
@@ -780,6 +782,7 @@ use StudioValue::{B, C, N, T};
 
 pub mod collections;
 pub mod extended;
+pub mod facades;
 pub mod flora;
 pub mod ground;
 pub mod imported;
@@ -2797,7 +2800,8 @@ mod tests {
         assert_eq!(m.project_name, "Casa");
         assert_eq!(m.levels().len(), 1);
         assert_eq!(m.levels()[0].elevation, 0.0);
-        assert_eq!(m.wall_types().count(), 3);
+        // The three of always and the eight façades laid piece by piece (E9).
+        assert_eq!(m.wall_types().count(), 3 + facades::FACADE_TYPES.len());
         assert_eq!(m.slab_types().count(), 5);
         // With the studio's: 8 doors and 8 windows more.
         assert_eq!(m.opening_types().filter(|t| t.is_door()).count(), 14);

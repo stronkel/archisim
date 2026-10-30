@@ -149,7 +149,9 @@ pub fn axo_drawing(model: &Model, axo: &Axo, focus: DisciplineFocus) -> AxoDrawi
     let ground_z = model.levels().first().map_or(0.0, |l| l.elevation) + 0.02;
     let mut lo = Point2::new(f64::INFINITY, f64::INFINITY);
     let mut hi = Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY);
-    let solids = archisim_geom::solid::without_plants(|| model_solids(model));
+    let solids = archisim_geom::solid::without_facade_pieces(|| {
+        archisim_geom::solid::without_plants(|| model_solids(model))
+    });
     // Objects with their own drawing for elevations, and plants, stand up
     // to the viewer as figures (below), not by their mesh.
     let toward = [-f.toward[0], -f.toward[1]];

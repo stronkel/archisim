@@ -1183,6 +1183,10 @@ fn fill_cut(s: &mut String, mat: &archisim_core::Material, polygon: &[Point2], i
     }
 }
 
+/// The finest scale at which the plan draws the joints of a façade's
+/// pieces (metres per millimetre of paper: 1:25).
+const DETAIL_K: f64 = 0.025;
+
 #[allow(clippy::too_many_arguments)]
 fn draw_layers(
     s: &mut String,
@@ -1341,6 +1345,22 @@ fn draw_layers(
                         line(s, p, q, pens().thin, k);
                     }
                 }
+            }
+        }
+    }
+
+    // The joints of a façade's pieces where the plane cuts them, at a
+    // scale of detail (E9).
+    if k <= DETAIL_K && model.wall_facade(g.wall).is_some() {
+        let z = model
+            .wall(g.wall)
+            .and_then(|w| model.level(w.level))
+            .map_or(0.0, |l| l.elevation)
+            + cut_plane;
+        let (y0, y1) = (tops[0], tops[1]);
+        for piece in pieces {
+            for t in archisim_geom::facade::plan_joints(model, g, piece.from, piece.to, z) {
+                line(s, a + u * t + n * y0, a + u * t + n * y1, pens().thin, k);
             }
         }
     }

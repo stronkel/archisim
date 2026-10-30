@@ -2289,6 +2289,122 @@ pub(crate) struct WallType {
     /// finish, as before.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub wrap_inserts: Option<WrapOf>,
+    /// The bond of its exterior finish and its slab fronts (version 49).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub facade: Option<FacadeOf>,
+}
+
+/// The bond of a façade (version 49).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct CoursingOf {
+    pub system: String,
+    /// Length, height and depth (header face) of the piece; the joint.
+    pub piece: [f64; 3],
+    pub joint: f64,
+    pub bond: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub joint_material: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub accent: Option<u64>,
+    /// `plain`, `headers`, `courses N` or `diamonds N`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pattern: Option<String>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub soldier_heads: bool,
+}
+
+impl CoursingOf {
+    fn out(c: &core::Coursing) -> Self {
+        CoursingOf {
+            system: c.system.key().into(),
+            piece: [c.length, c.height, c.depth],
+            joint: c.joint,
+            bond: c.bond.key().into(),
+            joint_material: c.joint_material.map(|m| m.0),
+            accent: c.accent.map(|m| m.0),
+            pattern: match c.pattern {
+                core::Pattern::Plain => None,
+                core::Pattern::Headers => Some("headers".into()),
+                core::Pattern::Courses(n) => Some(format!("courses {n}")),
+                core::Pattern::Diamonds(n) => Some(format!("diamonds {n}")),
+            },
+            soldier_heads: c.soldier_heads,
+        }
+    }
+
+    fn into_core(self) -> core::Coursing {
+        let pattern = match self
+            .pattern
+            .as_deref()
+            .map(|p| p.split_once(' ').unwrap_or((p, "")))
+        {
+            Some(("headers", _)) => core::Pattern::Headers,
+            Some(("courses", n)) => core::Pattern::Courses(n.parse().unwrap_or(4)),
+            Some(("diamonds", n)) => core::Pattern::Diamonds(n.parse().unwrap_or(3)),
+            _ => core::Pattern::Plain,
+        };
+        core::Coursing {
+            system: core::FacadeSystem::from_key(&self.system).unwrap_or_default(),
+            length: self.piece[0],
+            height: self.piece[1],
+            depth: self.piece[2],
+            joint: self.joint,
+            bond: core::Bond::from_key(&self.bond).unwrap_or_default(),
+            joint_material: self.joint_material.map(core::MaterialId),
+            accent: self.accent.map(core::MaterialId),
+            pattern,
+            soldier_heads: self.soldier_heads,
+        }
+    }
+}
+
+/// The piece over the slab edges (version 49).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct SlabFrontOf {
+    pub coursing: CoursingOf,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub material: Option<u64>,
+    #[serde(default)]
+    pub projection: f64,
+    #[serde(default)]
+    pub over: f64,
+}
+
+/// The façade of a wall type (version 49).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct FacadeOf {
+    pub coursing: CoursingOf,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub slab_front: Option<SlabFrontOf>,
+}
+
+impl FacadeOf {
+    pub(crate) fn out(f: &core::Facade) -> Self {
+        FacadeOf {
+            coursing: CoursingOf::out(&f.coursing),
+            slab_front: f.slab_front.as_ref().map(|s| SlabFrontOf {
+                coursing: CoursingOf::out(&s.coursing),
+                material: s.material.map(|m| m.0),
+                projection: s.projection,
+                over: s.over,
+            }),
+        }
+    }
+
+    pub(crate) fn into_core(self) -> core::Facade {
+        core::Facade {
+            coursing: self.coursing.into_core(),
+            slab_front: self.slab_front.map(|s| core::SlabFront {
+                coursing: s.coursing.into_core(),
+                material: s.material.map(core::MaterialId),
+                projection: s.projection,
+                over: s.over,
+            }),
+        }
+    }
 }
 
 /// Revit's «Envolver» of a wall type (version 41).
@@ -2651,6 +2767,7 @@ impl ProjectFile {
                     wrap_inserts: (t.wrap_inserts
                         != core::Wrap::inserts_by_default(t.function, &t.layers))
                     .then(|| WrapOf::out(t.wrap_inserts)),
+                    facade: t.facade.as_ref().map(FacadeOf::out),
                     name: t.name,
                     function: match t.function {
                         core::WallFunction::Exterior => WallFunction::Exterior,
@@ -3963,6 +4080,7 @@ impl ProjectFile {
                     || core::Wrap::inserts_by_default(function, &layers),
                     WrapOf::into_core,
                 ),
+                facade: t.facade.map(FacadeOf::into_core),
                 layers,
             });
         }

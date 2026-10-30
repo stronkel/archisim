@@ -2570,6 +2570,7 @@ mod curtain_ui;
 mod discipline_ui;
 mod draft_props;
 mod drafting_view_ui;
+mod facade_ui;
 mod foundation_ui;
 mod ghost3d;
 mod glyphs;

@@ -86,6 +86,7 @@ fn gl(p: [f64; 3]) -> [f32; 3] {
 fn element_name(model: &Model, owner: SolidOwner) -> String {
     let what = match owner {
         SolidOwner::Wall(_) => "Muro",
+        SolidOwner::Facade(_) => "Fachada",
         SolidOwner::Slab(_) => "Forjado",
         SolidOwner::Opening(_) => "Carpintería",
         SolidOwner::Column(_) => "Pilar",
@@ -153,7 +154,12 @@ pub fn project_glb(model: &Model) -> Vec<u8> {
             }
             let n = n.map(|v| v / len);
             let part = nodes[at].1.entry(look).or_default();
-            let texture = crate::texture_of(model, material, is_object);
+            // The pieces of a façade are each a brick: no brick texture.
+            let texture = if matches!(s.owner, SolidOwner::Facade(_)) && material == s.material {
+                None
+            } else {
+                crate::texture_of(model, material, is_object)
+            };
             for (k, p) in t.iter().enumerate() {
                 part.pos.push(gl(*p));
                 part.normal.push(gl(n));
