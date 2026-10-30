@@ -6,6 +6,26 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-30 (44) · Galerías visuales en todo (E2)
+
+Rama `bloque/e2-galerias` (sobre `main`, v0.76), con pull request. Sin cambios de formato ni de IFC.
+
+**Hecho**
+- Las opciones de **cómo se dibuja en planta** se eligen en tarjetas **dibujadas en planta**, cada una como quedaría: dibujo en planta (presentación, según el estilo, técnico), copa en presentación, estilo técnico y de presentación, color o relleno de la copa. Antes se dibujaban en 3D, donde todas se veían iguales.
+- Las opciones **de cada ejemplar** (un árbol con su propio dibujo, su copa, su color) también van en tarjetas dibujadas en planta, en Propiedades → «Este objeto». Antes eran listas de texto.
+- En Tipos y materiales, la **trama de corte** de un material se elige en tarjetas que la dibujan sobre su color de corte, y la **textura en 3D** en tarjetas con la muestra del material con cada textura.
+- Todo lo demás ya iba en tarjetas desde las versiones 0.73 y 0.74: el modelo 3D y las opciones de los objetos, las de puertas y ventanas (en alzado o en 3D) y los materiales de cada pieza. Así que ya no quedan listas de texto en las opciones de objetos, árboles, puertas, ventanas ni materiales.
+
+**Pendiente**
+- Las listas de configuración (calidad del 3D, plantillas de vista, órdenes) siguen como desplegables: no son opciones de diseño.
+
+**Qué debe probar Antonio**
+1. Abre la demo, selecciona el olivo → Propiedades → «Este objeto» → **Copa**: cada tarjeta es la copa dibujada en planta. Elige otra y mira la planta.
+2. En el tipo del árbol, **Dibujo en planta** y **Estilo**: también en planta.
+3. Tipos y materiales → un material → **Trama de corte** y **Textura en 3D**: tarjetas con su dibujo.
+
+---
+
 ## 2026-10-30 (43) · Versión 0.76
 
 Las PR #113–#116 unidas a `main`: terreno con contorno a mano, cotas y flechas de pendiente (E5), explanaciones bajo el edificio (E8), perfil de alzado de los muros (E3) y armarios empotrados (E10). Formato `.archisim` versión 47. Qué probar: entradas 39 a 42.

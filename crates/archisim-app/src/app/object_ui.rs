@@ -265,6 +265,32 @@ impl ArchiSimApp {
                                 )
                                 .map(Value::Material)
                             }
+                            // A choice: its options as cards, drawn in plan
+                            // as this object would be (E2).
+                            (ParamKind::Choice(options), Value::Text(now)) => {
+                                let ctx = ui.ctx().clone();
+                                let label = if p.label.is_empty() {
+                                    p.name.clone()
+                                } else {
+                                    p.label.clone()
+                                };
+                                let mut out = None;
+                                super::cards::card_row(ui, &label, |ui, w| {
+                                    let mut thumb = |opt: &str| {
+                                        self.object_instance_option_thumb(
+                                            &ctx, &t, &own, &p.name, opt,
+                                        )
+                                    };
+                                    out = super::cards::option_cards(
+                                        ui,
+                                        w - 8.0,
+                                        options,
+                                        now,
+                                        &mut thumb,
+                                    );
+                                });
+                                out.filter(|x| x != now).map(Value::Text)
+                            }
                             _ => param_row(ui, &salt, p, cur, &materials),
                         };
                         if let Some(v) = v {
