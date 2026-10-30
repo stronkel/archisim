@@ -6,6 +6,21 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-30 (38) · Versión 0.75: carpintería completa, barandillas, E6, E4 y E3 en `main`
+
+Unidos a `main` los PR #103 a #112:
+- Paquete 9 de carpintería:
+  - ventanas con detalle, persiana, contraventanas y rejas;
+  - puertas especiales y correderas;
+  - guillotina, pivotante, plegable y garaje;
+  - arcos y huecos de forma.
+- Barandillas con tipo, también en las escaleras.
+- Diálogo de puertas y ventanas al estilo ArchiCAD (E6, sus tres entregas).
+- Editar contorno en modo boceto (E4).
+- Dividir muros y franjas pintadas (E3, primera parte).
+
+Formato `.archisim` versión 44. Qué probar de cada parte: las entradas 27 a 37.
+
 ## 2026-10-30 (37) · Muros, segunda vuelta, primera parte (E3)
 
 Rama `bloque/e3-muros` (sobre `bloque/e4-contorno`), con pull request. Sin cambios de formato ni de IFC.
