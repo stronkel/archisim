@@ -55,6 +55,7 @@ pub fn anchors_for(kind: &str) -> Anchors {
             | "curtain"
             | "radiator"
             | "ac_unit"
+            | "built_in_wardrobe"
     );
     // (a shower's rain head may hang from the ceiling)
     let ceiling = matches!(kind, "pendant" | "ceiling_light" | "shower");

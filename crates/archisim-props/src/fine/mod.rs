@@ -12,6 +12,7 @@ pub mod armchairs;
 pub mod bath;
 pub mod bedding;
 pub mod bedroom;
+pub mod built_in;
 pub mod chairs;
 pub mod courts;
 pub mod door;
@@ -48,6 +49,7 @@ use soft::{knife_pillow, Soft};
 
 /// The kinds of the workshop and the names of their models.
 pub const KINDS: &[(&str, &[&str])] = &[
+    ("built_in_wardrobe", &["Empotrado"]),
     ("door", &door::COLLECTIONS),
     ("sliding_door", &door::COLLECTIONS),
     ("folding_door", &door::COLLECTIONS),
@@ -576,6 +578,7 @@ fn chairs_around(b: &mut Builder, p: &Params) {
 /// Makes a workshop model, if `kind` is one.
 pub fn make(kind: &str, b: &mut Builder, p: &Params) -> bool {
     match kind {
+        "built_in_wardrobe" => built_in::wardrobe(b, p),
         "door" => door::door(b, p),
         "sliding_door" => door::sliding_door(b, p),
         "folding_door" => door::folding_door(b, p),

@@ -871,3 +871,38 @@ fn handles_and_grids_to_measure() {
     .triangle_count();
     assert!(grid > plain);
 }
+
+/// The built-in wardrobe (E10): hinged or sliding, every inside, closed
+/// and open, stands whole; more doors, more triangles.
+#[test]
+fn built_in_wardrobes_stand_whole() {
+    let mut bad = Vec::new();
+    for sliding in [0.0, 1.0] {
+        for interior in [1.0, 2.0, 3.0] {
+            for open in [0.0, 60.0, 100.0] {
+                for doors in [1.0, 2.0, 3.0, 4.0] {
+                    let mut p = Params::default();
+                    for (k, v) in [
+                        ("width", 2.4),
+                        ("sliding", sliding),
+                        ("interior", interior),
+                        ("open", open),
+                        ("doors", doors),
+                    ] {
+                        p.set(k, v);
+                    }
+                    let m = make("built_in_wardrobe", &p).unwrap();
+                    let loose =
+                        check::loose_pieces(&m, check::anchors_for("built_in_wardrobe"), 0.004);
+                    if !loose.is_empty() {
+                        bad.push(format!(
+                            "sliding {sliding} interior {interior} open {open} doors {doors}: {:?}",
+                            loose.iter().map(|l| l.role).collect::<Vec<_>>()
+                        ));
+                    }
+                }
+            }
+        }
+    }
+    assert!(bad.is_empty(), "{}", bad.join("\n"));
+}

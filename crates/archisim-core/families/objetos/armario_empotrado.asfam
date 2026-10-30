@@ -1,0 +1,58 @@
+family "Armario empotrado"
+  category furniture
+  host none
+  version 1
+  description "Armario empotrado (E10): de suelo a techo entre tabiques o en un hueco de muro, con puertas batientes o correderas, tapajuntas e interior de baldas, barra o cajones"
+  folder "Armarios"
+
+type_params
+  section "Dimensiones"
+    width  length = 1.80 range 0.40..6.00 label "Ancho"
+    depth  length = 0.60 range 0.30..1.20 label "Fondo"
+    height length = 2.50 range 0.80..3.50 label "Altura"
+    doors  integer = 2 range 1..12 label "Puertas"
+  section "Frentes"
+    sliding bool = no label "Puertas correderas"
+    trims   bool = yes label "Tapajuntas"
+    open    integer = 0 range 0..100 label "Abierto en 3D (%)"
+  section "Interior"
+    interior choice("Baldas", "Barra y balda", "Cajones y barra") = "Barra y balda" label "Interior"
+  section "Materiales"
+    frame material = "Lacado blanco" label "Casco"
+    inner material = "Roble claro" label "Interior"
+    front material = "Lacado blanco" label "Puertas"
+    metal material = "Acero inoxidable" label "Barra, guías y tiradores"
+    trim  material = "Lacado blanco" label "Tapajuntas"
+
+body
+  box (-width / 2, 0, 0) to (width / 2, depth, height) material frame
+
+plan 1:50
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+  # La barra o las baldas, en discontinua.
+  line (-width / 2 + 0.05, depth / 2) to (width / 2 - 0.05, depth / 2) pen thin dashed
+  let dw = width / doors
+  if sliding
+    # Dos guías: las hojas alternas, una delante de otra.
+    repeat i in 0..doors
+      let y = if floor(i / 2) * 2 == i then depth - 0.06 else depth - 0.025
+      line (-width / 2 + i * dw - 0.015, y) to (-width / 2 + (i + 1) * dw + 0.015, y) pen cut
+  if not sliding
+    line (-width / 2, depth - 0.02) to (width / 2, depth - 0.02) pen thin
+    repeat i in 1..doors
+      line (-width / 2 + i * dw, depth - 0.02) to (-width / 2 + i * dw, depth) pen thin
+  if trims
+    line (-width / 2 - 0.05, depth) to (width / 2 + 0.05, depth) pen thin
+
+plan 1:100
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+  line (-width / 2, 0) to (width / 2, depth) pen thin
+
+outputs
+  generator = "props:built_in_wardrobe"
+  ifc_class = "IfcFurniture"
+  ifc_type = "SHELF"
+
+# Stretched, a door more when the doors would be too wide.
+stretch
+  doors = if width / doors >= 0.35 and width / doors <= 0.70 then doors else max(1, round(width / 0.55))

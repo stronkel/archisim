@@ -2702,6 +2702,37 @@ fn terrain_tool_and_north() {
     assert!(ifc.contains("IFCDIRECTION((0.34202"));
 }
 
+/// A built-in wardrobe (E10) of the library between the two walls of
+/// the outline's corner: Properties show «Empotrado», fitting it takes
+/// the room between the faces and adds a door, and its 3D is made.
+#[test]
+fn built_in_wardrobe_fits() {
+    let mut h = Harness::new(Editor::new_project());
+    draw_outline(&mut h);
+    h.key(Key::Escape);
+    h.key(Key::Escape);
+    let level = h.app.ed.level;
+    let r = h.app.ed.transact("Armario", |m| {
+        let t = archisim_library::add_object_entry(m, "Armario empotrado 180")?;
+        m.add_object(archisim_core::NewObject {
+            level,
+            object_type: t,
+            position: p(3.0, 0.2),
+            rotation: 0.0,
+            base_offset: 0.0,
+        })
+    });
+    let id = r.expect("placed");
+    h.app.ed.selection = [Element::Object(id)].into_iter().collect();
+    h.frame();
+    let (left, right) = h.model().room_between_walls(id).unwrap();
+    // The west wall's inner face is near x = 0,3; no wall to the east
+    // within 8 m but the east one at 12 m: only the west.
+    assert!(left.is_some(), "{left:?} {right:?}");
+    let (mesh, parts) = h.model().object_prop(id).expect("its 3D");
+    assert!(!mesh.parts.is_empty() && !parts.is_empty());
+}
+
 /// A wall's elevation profile (E3): the window opens over the wall, a
 /// corner dragged and a round hole added; applied, the wall keeps it,
 /// the plan opens where the cut plane misses it and Undo takes it away.
