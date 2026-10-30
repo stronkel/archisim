@@ -224,18 +224,17 @@ impl Exporter<'_> {
             // Railings: one IfcRailing, its bars as a triangulated body
             // (with its own material, so not in the flights' list).
             let mut railing = None;
-            let bars = archisim_geom::solid::railing_bars(model, stair.id);
-            if !bars.is_empty() {
+            let pieces = archisim_geom::solid::railing_pieces(model, stair.id);
+            if !pieces.is_empty() {
                 let guid = derived_guid(&stair.guid, "railings");
-                let tris: Vec<_> = bars.iter().flat_map(|b| b.triangles()).collect();
-                let shape = self.triangulated_shape(&tris, storey_z);
+                let shape = self.styled_shape(&pieces, storey_z);
                 let rpl = self.placement(Some(pl), self.origin, None);
                 let rail = self.w.add(format!(
                     "IFCRAILING({},$,{},$,$,{rpl},{shape},$,.HANDRAIL.)",
                     string(guid.as_str()),
                     string(&format!("{name} · barandilla")),
                 ));
-                let mat = archisim_geom::solid::railing_material(model, stair);
+                let mat = pieces[0].0;
                 if let Some(m) = materials.get(&mat) {
                     self.w.add(format!(
                         "IFCRELASSOCIATESMATERIAL({},$,$,$,({rail}),{m})",
@@ -317,6 +316,12 @@ impl Exporter<'_> {
                     })
                 )),
             ];
+            if let Some(t) = stair.railing_type.and_then(|t| model.object_type(t)) {
+                props.push(self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('RailingType',$,IFCLABEL({}),$)",
+                    string(&t.name)
+                )));
+            }
             let material_name = |m: Option<MaterialId>| {
                 m.and_then(|m| model.material(m))
                     .map_or(String::new(), |m| m.name.clone())
@@ -417,6 +422,48 @@ impl Exporter<'_> {
         let rep = self.w.add(format!(
             "IFCSHAPEREPRESENTATION({},'Body','Tessellation',({body}))",
             self.body_ctx
+        ));
+        self.w
+            .add(format!("IFCPRODUCTDEFINITIONSHAPE($,$,({rep}))"))
+    }
+
+    /// A body of triangles, one face set per material with its colour.
+    fn styled_shape(&mut self, pieces: &[(MaterialId, Vec<[[f64; 3]; 3]>)], storey_z: f64) -> Ref {
+        let mut items = Vec::new();
+        for (material, tris) in pieces {
+            let mut pts: Vec<String> = Vec::new();
+            let mut faces: Vec<String> = Vec::new();
+            for t in tris {
+                let base = pts.len();
+                for p in t {
+                    pts.push(format!(
+                        "({},{},{})",
+                        real(p[0]),
+                        real(p[1]),
+                        real(p[2] - storey_z)
+                    ));
+                }
+                faces.push(format!("({},{},{})", base + 1, base + 2, base + 3));
+            }
+            if faces.is_empty() {
+                continue;
+            }
+            let list3 = self
+                .w
+                .add(format!("IFCCARTESIANPOINTLIST3D(({}),$)", pts.join(",")));
+            let body = self.w.add(format!(
+                "IFCTRIANGULATEDFACESET({list3},$,.T.,({}),$)",
+                faces.join(",")
+            ));
+            if let Some(&style) = self.styles.get(material) {
+                self.w.add(format!("IFCSTYLEDITEM({body},({style}),$)"));
+            }
+            items.push(body);
+        }
+        let rep = self.w.add(format!(
+            "IFCSHAPEREPRESENTATION({},'Body','Tessellation',{})",
+            self.body_ctx,
+            list(&items)
         ));
         self.w
             .add(format!("IFCPRODUCTDEFINITIONSHAPE($,$,({rep}))"))

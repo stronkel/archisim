@@ -163,4 +163,63 @@ mod tests {
         assert_eq!(ed.model().railing(p).unwrap().railing_type, Some(other));
         assert!(ed.model().object_type_users(other) >= 1);
     }
+
+    /// A stair's railings made by a railing type: one run per straight
+    /// flight, sheared to its slope, the handrail 90 cm over the nosings
+    /// and the posts down the side of the stair.
+    #[test]
+    fn stair_railings_take_a_type() {
+        use archisim_core::{NewStair, StairDesign, StairUse, WallTop};
+        let mut ed = Editor::new_project();
+        let level = ed.model().levels()[0].id;
+        let material = ed.model().materials().next().unwrap().id;
+        let id = ed
+            .transact("Escalera", |m| {
+                m.add_stair(NewStair {
+                    level,
+                    path: vec![Point2::new(0.0, 0.0), Point2::new(4.48, 0.0)],
+                    width: 1.0,
+                    going: 0.28,
+                    base_offset: 0.0,
+                    top: WallTop::Unconnected,
+                    height: 2.97,
+                    waist: 0.15,
+                    material,
+                    usage: StairUse::General,
+                    design: StairDesign::default(),
+                })
+            })
+            .unwrap();
+        let plain = archisim_geom::solid::railing_pieces(ed.model(), id);
+        assert_eq!(plain.len(), 1);
+        let t = ed
+            .model()
+            .object_types()
+            .find(|t| t.name == "Barandilla · Clásica")
+            .unwrap()
+            .id;
+        ed.edit_stair("Tipo", id, |s| s.railing_type = Some(t))
+            .unwrap();
+        assert_eq!(ed.model().object_type_users(t), 1);
+        let l = ed.model().stair(id).unwrap().layout();
+        let line = archisim_geom::stairs::typed_railing_line(&l, true);
+        assert_eq!(line.len(), 2, "a straight flight is one run");
+        let pieces = archisim_geom::solid::railing_pieces(ed.model(), id);
+        assert!(pieces.len() >= 2, "posts, rail and infill");
+        let top = pieces
+            .iter()
+            .flat_map(|(_, t)| t.iter().flatten())
+            .map(|p| p[2])
+            .fold(f64::MIN, f64::max);
+        // (The newel at its head, with its knob, a little higher.)
+        let head = line[1].z + archisim_core::RAILING_HEIGHT;
+        assert!(top > head - 0.05 && top < head + 0.2, "{top} {head}");
+        // Nothing of it on the treads: all of it beside the stair (the
+        // newels at the foot and the head may be wider).
+        for (_, tris) in &pieces {
+            for p in tris.iter().flatten().filter(|p| p[0] > 0.1 && p[0] < 4.38) {
+                assert!(p[1] > 0.5 || p[1] < -0.5, "{p:?}");
+            }
+        }
+    }
 }

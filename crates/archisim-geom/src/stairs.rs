@@ -307,12 +307,11 @@ pub fn stair_parts(model: &Model, id: StairId) -> Vec<StairPart> {
         }
         _ => {}
     }
-    let bars = railing_bars(model, id);
-    if !bars.is_empty() {
+    for (material, triangles) in railing_pieces(model, id) {
         out.push(StairPart {
             kind: StairPartKind::Railing,
-            material: railing_material(model, stair),
-            triangles: bars.iter().flat_map(Bar::triangles).collect(),
+            material,
+            triangles,
         });
     }
     out.retain(|p| !p.triangles.is_empty());
@@ -457,6 +456,142 @@ pub fn railing_bars(model: &Model, id: StairId) -> Vec<Bar> {
         bars.extend(rail_bars(&line, z0, h));
     }
     bars
+}
+
+/// A stair's railings as triangles by material: made by its railing
+/// type when it has one ([`typed_railing_pieces`]), otherwise its bars
+/// in the railing material.
+pub fn railing_pieces(model: &Model, id: StairId) -> Vec<(MaterialId, Vec<P3x3>)> {
+    let Some(stair) = model.stair(id) else {
+        return Vec::new();
+    };
+    if stair.railing_type.is_some() {
+        return typed_railing_pieces(model, id);
+    }
+    let bars = railing_bars(model, id);
+    if bars.is_empty() {
+        return Vec::new();
+    }
+    vec![(
+        railing_material(model, stair),
+        bars.iter().flat_map(Bar::triangles).collect(),
+    )]
+}
+
+type P3x3 = [P3; 3];
+
+/// A stair's railings made by its railing type (E12): along each side
+/// that has one, a straight run of the type's generator on each straight
+/// stretch of the line of nosings, sheared to its slope. The line is set
+/// 7 cm outside the side, and the runs reach a riser and 5 cm below it,
+/// so that the posts are fixed to the side of the stair and nothing
+/// stands on the treads; the handrail stays at the code's height over
+/// the nosings.
+pub fn typed_railing_pieces(model: &Model, id: StairId) -> Vec<(MaterialId, Vec<P3x3>)> {
+    let Some(stair) = model.stair(id) else {
+        return Vec::new();
+    };
+    let Some(t) = stair.railing_type else {
+        return Vec::new();
+    };
+    let (left, right) = (stair.railings.left(), stair.railings.right());
+    let z0 = model.level(stair.level).map_or(0.0, |l| l.elevation);
+    let l = stair.layout();
+    let drop = l.riser.max(0.0) + 0.05;
+    let mut by_material: Vec<(MaterialId, Vec<P3x3>)> = Vec::new();
+    for (on, is_left) in [(left, true), (right, false)] {
+        if !on || skip_inner_rail(stair, is_left) {
+            continue;
+        }
+        let line = typed_railing_line(&l, is_left);
+        let n = line.len();
+        if n < 2 {
+            continue;
+        }
+        for i in 0..n - 1 {
+            let (a, b) = (line[i], line[i + 1]);
+            let len = a.p.distance(b.p);
+            let Some(dir) = (b.p - a.p).normalized() else {
+                continue;
+            };
+            let Some((kind, mut params)) = model.stair_railing_params(id, len, i > 0, i + 2 < n)
+            else {
+                return Vec::new();
+            };
+            params.set("height", RAILING_HEIGHT + drop);
+            let Some(mesh) = archisim_core::props::mesh_of(&kind, &params) else {
+                continue;
+            };
+            let slope = (b.z - a.z) / len.max(EPSILON);
+            let side = dir.perp_left();
+            let place = |q: [f32; 3]| -> P3 {
+                let (x, y) = (q[0] as f64, q[1] as f64);
+                let p = a.p + dir * x + side * y;
+                [p.x, p.y, z0 + a.z - drop + q[2] as f64 + slope * x]
+            };
+            for (role, tris) in &mesh.parts {
+                let Some(material) = model.type_role_material(t, role) else {
+                    continue;
+                };
+                let list: Vec<P3x3> = tris
+                    .iter()
+                    .map(|tri| tri.map(|k| place(mesh.positions[k as usize])))
+                    .collect();
+                match by_material.iter_mut().find(|(m, _)| *m == material) {
+                    Some((_, v)) => v.extend(list),
+                    None => by_material.push((material, list)),
+                }
+            }
+        }
+    }
+    by_material
+}
+
+/// The line a typed railing follows: the side's line of nosings, 7 cm
+/// outside, with the points where it neither turns nor changes slope
+/// left out (so that a straight flight is one run).
+pub fn typed_railing_line(l: &StairLayout, left: bool) -> Vec<SidePoint> {
+    let mut side = l.side(left);
+    side.dedup_by(|a, b| a.p.distance(b.p) < 1e-4);
+    if side.len() < 2 {
+        return side;
+    }
+    let pts: Vec<Point2> = side.iter().map(|s| s.p).collect();
+    let outer = offset_path(&pts, if left { 0.07 } else { -0.07 }).unwrap_or(pts);
+    let line: Vec<SidePoint> = side
+        .iter()
+        .zip(outer)
+        .map(|(s, p)| SidePoint { p, ..*s })
+        .collect();
+    // No stretch shorter than 15 cm in plan: round the inner side of
+    // winders, where the line turns on itself and climbs steeply, the
+    // short pieces are taken in one, at their mean slope.
+    let last = line[line.len() - 1];
+    let mut long: Vec<SidePoint> = vec![line[0]];
+    for c in &line[1..line.len() - 1] {
+        if c.p.distance(long[long.len() - 1].p) >= 0.15 && c.p.distance(last.p) >= 0.15 {
+            long.push(*c);
+        }
+    }
+    long.push(last);
+    let line = long;
+    let mut out: Vec<SidePoint> = vec![line[0]];
+    for &c in &line[1..] {
+        if out.len() >= 2 {
+            let (a, b) = (out[out.len() - 2], out[out.len() - 1]);
+            let (ab, bc) = (b.p - a.p, c.p - b.p);
+            let (lab, lbc) = (ab.length(), bc.length());
+            let straight = ab.cross(bc).abs() < 1e-3 * lab * lbc && ab.dot(bc) > 0.0;
+            let same_slope =
+                ((b.z - a.z) / lab.max(EPSILON) - (c.z - b.z) / lbc.max(EPSILON)).abs() < 1e-3;
+            if straight && same_slope {
+                *out.last_mut().unwrap() = c;
+                continue;
+            }
+        }
+        out.push(c);
+    }
+    out
 }
 
 /// Whether the railing on one side of a stair is left out: the inner

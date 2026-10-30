@@ -694,6 +694,10 @@ pub(crate) struct Stair {
     pub usage: StairUse,
     #[serde(default = "both", skip_serializing_if = "is_both")]
     pub railings: Railings,
+    /// The railing type of its railings (version 44); none, the plain
+    /// bars.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub railing_type: Option<u64>,
     /// Form and build (version 33); a stair without it is one of flights
     /// and landings on a concrete slab, as all older ones are.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -3311,6 +3315,7 @@ impl ProjectFile {
                         core::Railings::Right => Railings::Right,
                         core::Railings::Both => Railings::Both,
                     },
+                    railing_type: s.railing_type.map(|t| t.0),
                     design: StairDesign::of(&s.design),
                 })
                 .collect(),
@@ -3784,6 +3789,7 @@ impl ProjectFile {
                             Railings::Right => core::Railings::Right,
                             Railings::Both => core::Railings::Both,
                         },
+                        railing_type: s.railing_type.map(core::ObjectTypeId),
                         design: StairDesign::into_core(s.design.as_ref()),
                     })
                 })

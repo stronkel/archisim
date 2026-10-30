@@ -283,6 +283,20 @@ pub fn build() -> Res<Model> {
             }
         }
     }
+    // Some with a railing type (E12): what their railings are made of.
+    let ids: Vec<archisim_core::StairId> = m.stairs().map(|s| s.id).collect();
+    for (i, name) in [
+        (0, "Barandilla de vidrio con pinzas"),
+        (2, "Barandilla · Contemporáneo"),
+        (3, "Barandilla · Clásica"),
+        (5, "Barandilla · Industrial"),
+        (7, "Barandilla · Nórdico cálido"),
+    ] {
+        let t = m.object_types().find(|t| t.name == name).map(|t| t.id);
+        if let (Some(&id), Some(t)) = (ids.get(i), t) {
+            m.edit_stair(id, |x| x.railing_type = Some(t))?;
+        }
+    }
     Ok(m)
 }
 

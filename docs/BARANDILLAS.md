@@ -24,8 +24,23 @@ El generador (`archisim_props::fine::railing`) hace un tramo recto cada vez; Arc
 
 En el IFC sigue siendo un `IfcRailing` (`GUARDRAIL`) con su cuerpo triangulado, ahora un conjunto de caras por material, y el nombre del tipo en `ArchiSim_Railing`. El fichero `.archisim` guarda el tipo de cada barandilla (versión 43); las barandillas de antes no tienen tipo y se ven igual que siempre.
 
+## Barandillas de escalera
+
+Una escalera puede tomar también un tipo de barandilla (Propiedades de la escalera, «Tipo de barandilla», debajo de «Barandillas»). Sin tipo sigue siendo la de siempre: pasamanos, baranda y barrotes.
+
+Con tipo, en cada lado que lleva barandilla:
+
+- La línea es la de los bordes de las huellas, **7 cm por fuera** del lado de la escalera: los montantes van fijados al canto de la escalera y nada se apoya en los peldaños.
+- Cada tramo recto (un tramo de escalera, una meseta, un lado de meseta) es un tramo del generador, **inclinado** con la pendiente de la escalera: montantes y barrotes siguen verticales, el pasamanos y los paneles se inclinan.
+- El pasamanos queda a **90 cm** sobre los bordes de las huellas (CTE DB-SUA 1); los montantes bajan una tabica y 5 cm por debajo de esa línea, por el canto.
+- En las compensadas y de caracol, los trozos de menos de 15 cm (el lado de dentro de los peldaños compensados) se juntan en uno con su pendiente media.
+
+En el IFC sigue siendo el `IfcRailing` (`HANDRAIL`) de la escalera, ahora con un conjunto de caras por material, y el nombre del tipo va en `ArchiSim_Stair` (`RailingType`); al importar se recupera si el proyecto tiene un tipo con ese nombre. El fichero `.archisim` lo guarda desde la versión 44.
+
+`archisim escaleras out/` pone tipo a cinco de las escaleras (vidrio con pinzas, contemporánea, clásica, industrial y nórdica); sus fotos, con `ARCHISIM_ESCALERAS_OUT=out cargo test -p archisim-app --release -- stair_railing_pictures` tras generar el ejemplo en esa carpeta.
+
 ## Lo que falta
 
-- Las barandillas de las escaleras con tipo (hoy siguen siendo las de la escalera).
+- En las escaleras, el pasamanos de dentro de las compensadas y de caracol va por trozos rectos, no en curva continua.
 - Un taller de balaustres y barrotes a medida (perfil del balaustre dibujado, patrón de barrotes), como el de las hojas de puerta (`docs/CARPINTERIA.md` §4).
 - En planta, los montantes de las barandillas sin postes se dibujan igual que los demás.

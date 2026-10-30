@@ -48,6 +48,15 @@ impl<'a> Importer<'a> {
             Some("right") => archisim_core::Railings::Right,
             _ => archisim_core::Railings::Both,
         };
+        // Its railing type, when the project has one of that name.
+        let railing_type = text("RailingType")
+            .and_then(|n| {
+                self.model
+                    .object_types()
+                    .find(|t| t.name == n)
+                    .map(|t| t.id)
+            })
+            .filter(|t| self.model.is_railing_type(*t));
         let usage = match text("Usage").as_deref() {
             Some("restricted") => StairUse::Restricted,
             _ => StairUse::General,
@@ -182,7 +191,10 @@ impl<'a> Importer<'a> {
                 design,
             })
             .map_err(|e| explain(&e))?;
-        let _ = self.model.edit_stair(sid, |s| s.railings = railings);
+        let _ = self.model.edit_stair(sid, |s| {
+            s.railings = railings;
+            s.railing_type = railing_type;
+        });
         self.stair_ids.insert(id);
         self.report.stairs += 1;
         self.sources.push((sid.0, id));

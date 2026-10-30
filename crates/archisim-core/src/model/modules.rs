@@ -946,6 +946,7 @@ impl Model {
                     (true, Railings::Right) => Railings::Left,
                     (_, r) => r,
                 },
+                railing_type: s.railing_type.and_then(object_type),
                 ..s.clone()
             });
         }
@@ -984,6 +985,7 @@ impl Model {
                 path: path(&r.path),
                 material,
                 glass: r.glass.and_then(mat),
+                railing_type: r.railing_type.and_then(object_type),
                 ..r.clone()
             });
         }

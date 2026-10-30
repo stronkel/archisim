@@ -21,7 +21,9 @@ use crate::{
     ensure_ccw, opening_geometry, wall_geometry_in, Curve, EndCut, Line, WallGeometry, WallIndex,
 };
 
-pub use crate::stairs::{railing_bars, railing_material, stair_parts, stair_solids};
+pub use crate::stairs::{
+    railing_bars, railing_material, railing_pieces, stair_parts, stair_solids,
+};
 
 /// A point in model space: metres, Z up.
 pub type P3 = [f64; 3];

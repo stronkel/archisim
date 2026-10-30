@@ -252,7 +252,7 @@ impl ArchiSimApp {
 
 /// A list of the project's railing types and «Sencilla» (no type); the
 /// one picked, when it changes.
-fn railing_type_choice(
+pub(crate) fn railing_type_choice(
     ui: &mut Ui,
     model: &archisim_core::Model,
     salt: &str,

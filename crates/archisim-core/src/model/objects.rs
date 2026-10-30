@@ -655,8 +655,8 @@ impl Model {
         self.object_types.values()
     }
 
-    /// How many objects use a type.
-    /// How many objects use a type (and railings, for a railing type).
+    /// How many objects use a type (and railings and stairs, for a
+    /// railing type).
     pub fn object_type_users(&self, id: ObjectTypeId) -> usize {
         self.objects
             .values()
@@ -666,6 +666,11 @@ impl Model {
                 .railings
                 .values()
                 .filter(|r| r.railing_type == Some(id))
+                .count()
+            + self
+                .stairs
+                .values()
+                .filter(|s| s.railing_type == Some(id))
                 .count()
     }
 

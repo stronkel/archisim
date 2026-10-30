@@ -162,6 +162,9 @@ pub struct Stair {
     pub usage: StairUse,
     /// Railings along the flights (and round the landings).
     pub railings: Railings,
+    /// The railing type its railings are made with (E12): a type of the
+    /// «Barandilla» family; none, the plain bars and handrail.
+    pub railing_type: Option<ObjectTypeId>,
     /// Its form and build.
     pub design: StairDesign,
 }
@@ -586,6 +589,7 @@ impl Model {
                 material: spec.material,
                 usage: spec.usage,
                 railings: Railings::default(),
+                railing_type: None,
                 design: spec.design,
             },
         );
@@ -605,6 +609,11 @@ impl Model {
             .cloned()
             .ok_or(ModelError::UnknownStair(id))?;
         edit(&mut s);
+        if let Some(t) = s.railing_type {
+            if !self.is_railing_type(t) {
+                return Err(ModelError::UnknownObjectType(t));
+            }
+        }
         s.height = self.validate_stair(&spec_of(&s))?;
         self.stairs.insert(id, s);
         Ok(())

@@ -288,6 +288,7 @@ impl ArchiSimApp {
             material: s.material,
             usage: s.usage,
             railings: archisim_core::Railings::Both,
+            railing_type: None,
             design,
         })
     }
@@ -748,6 +749,20 @@ impl ArchiSimApp {
                 }
             });
         });
+        // What its railings are made of (E12).
+        if s.railings != archisim_core::Railings::None {
+            if let Some(pick) = super::railing_ui::railing_type_choice(
+                ui,
+                self.ed.model(),
+                &format!("stair-railing-type-{}", id.0),
+                s.railing_type,
+            ) {
+                let res = self
+                    .ed
+                    .edit_stair("Tipo de barandilla", id, |s| s.railing_type = pick);
+                self.report(res, "Tipo de barandilla cambiado.");
+            }
+        }
         group(ui, "stair-constraints", "Restricciones", |ui| {
             self.level_row(
                 ui,

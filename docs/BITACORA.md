@@ -6,6 +6,26 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-30 (32) · Barandillas de escalera con tipo (E12, remate)
+
+Rama `bloque/barandillas-escalera` (sobre `bloque/barandillas`), con pull request. Formato `.archisim` versión 44 (las escaleras guardan el tipo de sus barandillas; las de antes se abren igual). Detalle en `docs/BARANDILLAS.md`, «Barandillas de escalera».
+
+**Hecho**
+- La escalera tiene «Tipo de barandilla» en Propiedades, con los mismos tipos que las barandillas sueltas; «Sencilla» es la de siempre.
+- Con tipo, la barandilla va por fuera de la escalera (7 cm), fijada al canto, inclinada con cada tramo y con el pasamanos a 90 cm sobre los bordes de las huellas; en las compensadas y de caracol se juntan los trozos cortos del lado de dentro.
+- 3D, alzados, render, glTF e IFC (un cuerpo por material, y el nombre del tipo en `ArchiSim_Stair`, que la importación recupera).
+- Al copiar un módulo, las barandillas (sueltas y de escalera) llevan el tipo de la copia.
+- `archisim escaleras` pone tipo a cinco escaleras.
+
+**Pendiente**
+- Pasamanos curvo continuo en el lado de dentro de las compensadas y de caracol (hoy va por trozos rectos).
+
+**Qué debe probar Antonio**
+1. `cargo run --release -p archisim-cli -- escaleras out/` y abre `out/escaleras.archisim`: mira en 3D la recta (vidrio con pinzas), la L compensada (contemporánea), la U (clásica, con balaustres torneados), la de caracol (industrial) y la recta de zanca central (nórdica).
+2. Selecciona una escalera, cambia «Tipo de barandilla» y luego «Barandillas» a un solo lado: debe seguir el tipo.
+3. Comprueba en un alzado que el pasamanos va paralelo a la línea de los peldaños.
+4. Exporta el IFC y míralo en otro visor: la barandilla de la escalera sale con sus materiales.
+
 ## 2026-10-30 (31) · Barandillas con tipo (E12)
 
 Rama `bloque/barandillas` (sobre `bloque/arcos`), con pull request. Formato `.archisim` versión 43 (las barandillas guardan su tipo; las de antes se abren igual). Detalle en `docs/BARANDILLAS.md`.
