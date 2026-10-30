@@ -59,6 +59,17 @@ impl<'a> Importer<'a> {
             .and_then(|v| v.as_str())
             .and_then(|n| self.model.materials().find(|m| m.name == n))
             .map(|m| m.id);
+        // Its type, when the project has one of that name.
+        let railing_type = self
+            .property_own(id, PSET, "Type")
+            .and_then(|v| v.as_str())
+            .and_then(|n| {
+                self.model
+                    .object_types()
+                    .find(|t| t.name == n)
+                    .map(|t| t.id)
+            })
+            .filter(|t| self.model.is_railing_type(*t));
         let level = self.level_of(id, 0.0);
         let rid = self
             .model
@@ -70,7 +81,7 @@ impl<'a> Importer<'a> {
                 post_spacing,
                 material,
                 glass,
-                railing_type: None,
+                railing_type,
             })
             .map_err(|e| explain(&e))?;
         self.railing_ids.insert(id);

@@ -26,7 +26,6 @@ impl Exporter<'_> {
             // glass of a plain railing; posts, rail and infill of a typed
             // one).
             let solids = archisim_geom::solid::loose_railing_solids(model, r.id);
-            let main_material = solids.first().map_or(r.material, |s| s.material);
             let mut items = Vec::new();
             for solid in solids {
                 let material = solid.material;
@@ -79,7 +78,7 @@ impl Exporter<'_> {
                 string(&format!("Barandilla {}", r.id.0)),
                 string(&r.id.0.to_string()),
             ));
-            if let Some(m) = materials.get(&main_material) {
+            if let Some(m) = materials.get(&r.material) {
                 self.w.add(format!(
                     "IFCRELASSOCIATESMATERIAL({},$,$,$,({el}),{m})",
                     string(derived_guid(&r.guid, "material").as_str())
