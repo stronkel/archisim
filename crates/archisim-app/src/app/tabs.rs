@@ -4,7 +4,7 @@
 //! `plan_scale`, `cut_plane`, `ed.level`) so that the plan code needs to
 //! know nothing about tabs.
 
-use archisim_core::{LevelId, SectionId, SectionKind, SheetId};
+use archisim_core::{DraftViewId, LevelId, SectionId, SectionKind, SheetId};
 use eframe::egui::{
     self, CornerRadius, FontId, PointerButton, Pos2, Rect, Sense, Stroke, StrokeKind, Ui, Vec2,
 };
@@ -24,6 +24,8 @@ pub enum TabKind {
     Section(SectionId),
     /// A sheet: paper with views placed on it.
     Sheet(SheetId),
+    /// A view only for drawing (E7).
+    Drafting(DraftViewId),
     /// A schedule, or all the measurements.
     Schedule(SchedTab),
 }
@@ -89,6 +91,13 @@ impl ViewTab {
         }
     }
 
+    pub fn drafting(id: DraftViewId) -> Self {
+        Self {
+            kind: TabKind::Drafting(id),
+            ..Self::plan(LevelId(0))
+        }
+    }
+
     pub fn schedule(which: SchedTab) -> Self {
         Self {
             kind: TabKind::Schedule(which),
@@ -112,7 +121,7 @@ impl ArchiSimApp {
                 t.cut_plane = cut;
                 t.style = style;
                 t.fitted = true;
-            } else if matches!(t.kind, TabKind::Sheet(_)) {
+            } else if matches!(t.kind, TabKind::Sheet(_) | TabKind::Drafting(_)) {
                 t.view = view;
                 t.fitted = true;
             }
@@ -174,6 +183,18 @@ impl ArchiSimApp {
                 }
                 self.mode = ViewMode::Sheet(id);
             }
+            TabKind::Drafting(id) => {
+                if !matches!(self.tool, super::Tool::Arrow | super::Tool::Cad) {
+                    self.set_tool(super::Tool::Arrow);
+                }
+                self.end_command(true);
+                self.ed.selection.clear();
+                self.view = tab.view;
+                if !tab.fitted {
+                    self.fit_requested = true;
+                }
+                self.mode = ViewMode::Drafting(id);
+            }
             TabKind::Schedule(_) => {
                 self.set_tool(super::Tool::Arrow);
                 self.end_command(true);
@@ -212,6 +233,7 @@ impl ArchiSimApp {
             TabKind::ThreeD => ViewTab::three_d(),
             TabKind::Section(id) => ViewTab::section(id),
             TabKind::Sheet(id) => ViewTab::sheet(id),
+            TabKind::Drafting(id) => ViewTab::drafting(id),
             TabKind::Schedule(w) => ViewTab::schedule(w),
         };
         self.insert_tab(tab);
@@ -283,6 +305,7 @@ impl ArchiSimApp {
                 TabKind::Plan(l) => !exists(model, l),
                 TabKind::Section(s) => model.section(s).is_none(),
                 TabKind::Sheet(s) => model.sheet(s).is_none(),
+                TabKind::Drafting(d) => model.draft_view(d).is_none(),
                 TabKind::ThreeD | TabKind::Schedule(_) => false,
             })
             .collect();
@@ -326,6 +349,7 @@ impl ArchiSimApp {
             Some(TabKind::ThreeD) => ViewMode::ThreeD,
             Some(TabKind::Section(_)) => ViewMode::Section,
             Some(TabKind::Sheet(s)) => ViewMode::Sheet(s),
+            Some(TabKind::Drafting(d)) => ViewMode::Drafting(d),
             Some(TabKind::Schedule(_)) => ViewMode::Schedule,
             _ => ViewMode::Plan,
         };
@@ -363,6 +387,11 @@ impl ArchiSimApp {
                 .model()
                 .sheet(s)
                 .map_or_else(|| "Plano".into(), |s| format!("{} {}", s.number, s.name)),
+            TabKind::Drafting(d) => self
+                .ed
+                .model()
+                .draft_view(d)
+                .map_or_else(|| "Vista de dibujo".into(), |v| v.name.clone()),
             TabKind::Schedule(SchedTab::Takeoff) => "Mediciones".into(),
             TabKind::Schedule(SchedTab::Kind(k)) => k.label().into(),
         }
@@ -413,6 +442,12 @@ impl ArchiSimApp {
                     .sheet(s)
                     .map(|s| s.size_name())
                     .unwrap_or_default(),
+                TabKind::Drafting(d) => self
+                    .ed
+                    .model()
+                    .draft_view(d)
+                    .map(|v| format!("1:{}", v.scale))
+                    .unwrap_or_default(),
             };
             let note = ui
                 .painter()
@@ -429,6 +464,7 @@ impl ArchiSimApp {
                     TabKind::ThreeD => "Vista 3D · clic con la rueda: cerrar",
                     TabKind::Section(_) => "Sección o alzado · clic con la rueda: cerrar",
                     TabKind::Sheet(_) => "Plano · clic con la rueda: cerrar",
+                    TabKind::Drafting(_) => "Vista de dibujo · clic con la rueda: cerrar",
                     TabKind::Schedule(_) => "Tabla · clic con la rueda: cerrar",
                 });
             if matches!(tab.kind, TabKind::Plan(_)) {
@@ -479,6 +515,7 @@ impl ArchiSimApp {
                     _ => Icon::Section,
                 },
                 TabKind::Sheet(_) => Icon::Sheet,
+                TabKind::Drafting(_) => Icon::Sheet,
                 TabKind::Schedule(_) => Icon::Measure,
             };
             icons::paint(

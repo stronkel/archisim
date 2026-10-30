@@ -343,11 +343,52 @@ impl ArchiSimApp {
     fn nav_sheets(&mut self, ui: &mut Ui) {
         let active = self.tabs.get(self.active_tab).map(|t| t.kind);
         let mut new = false;
+        let mut new_drafting = false;
         let mut presentation = false;
         let mut open = None;
         nav_section(ui, "nav-sheets", "PLANOS", |ui| {
             sub_header(ui, "Planos", Some(("+ Nuevo plano", &mut new)));
             open = self.nav_sheet_rows(ui, active);
+            // Views only for drawing (E7): details, diagrams.
+            sub_header(
+                ui,
+                "Vistas de dibujo",
+                Some(("+ Nueva vista de dibujo", &mut new_drafting)),
+            );
+            let views: Vec<(archisim_core::DraftViewId, String, f64)> = self
+                .ed
+                .model()
+                .draft_views()
+                .iter()
+                .map(|v| (v.id, v.name.clone(), v.scale))
+                .collect();
+            if views.is_empty() {
+                later_row(ui, Icon::Sheet, "Detalles y esquemas, o un DXF de calco");
+            }
+            for (id, name, scale) in &views {
+                let kind = TabKind::Drafting(*id);
+                let r = super::widgets::list_row_draggable(
+                    ui,
+                    Some(Icon::Sheet),
+                    None,
+                    name,
+                    &format!("1:{scale}"),
+                    active == Some(kind),
+                    10.0,
+                )
+                .on_hover_text(
+                    "Abrir la vista de dibujo; arrástrala a un plano para colocarla a su escala",
+                );
+                if r.clicked() {
+                    open = Some(kind);
+                }
+                super::sheet_drop::drag_source(
+                    ui,
+                    &r,
+                    super::sheet_drop::Drop::Drafting(*id),
+                    name,
+                );
+            }
             if ui
                 .small_button("+ Plano de presentación")
                 .on_hover_text("Lámina A3 de la planta activa: título, planta, 3D, sección, superficies y recorrido solar, en el estilo de la vista")
@@ -358,6 +399,9 @@ impl ArchiSimApp {
         });
         if new {
             self.new_sheet();
+        }
+        if new_drafting {
+            self.new_drafting_view();
         }
         if presentation {
             self.new_presentation_sheet();
@@ -880,6 +924,8 @@ fn sub_header(ui: &mut Ui, title: &str, button: Option<(&str, &mut bool)>) {
         "Añadir, renombrar, cambiar la cota o borrar plantas"
     } else if title == "Planos" {
         "Crear un plano (A1 apaisado) y abrirlo"
+    } else if title == "Vistas de dibujo" {
+        "Una vista solo de dibujo (un detalle, un esquema) a 1:20; se coloca en los planos"
     } else {
         "Los cuatro alzados alrededor del edificio (los que falten)"
     };

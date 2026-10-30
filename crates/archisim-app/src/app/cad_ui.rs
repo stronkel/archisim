@@ -572,6 +572,15 @@ impl ArchiSimApp {
                 self.snap_filter,
                 base,
             ),
+            ViewMode::Drafting(d) => crate::snap::snap_view(
+                self.ed.model(),
+                archisim_core::ViewRef::Drafting(d),
+                raw,
+                reach,
+                &extra,
+                self.snap_filter,
+                base,
+            ),
             _ => crate::snap::snap_cad(
                 &self.ed,
                 self.ed.level,

@@ -729,6 +729,10 @@ impl ArchiSimApp {
                 self.sheet_properties(ui, id);
                 return;
             }
+            ViewMode::Drafting(id) => {
+                self.drafting_properties(ui, id);
+                return;
+            }
         }
         self.project_group(ui);
         ui.add_space(8.0);
@@ -821,6 +825,8 @@ impl ArchiSimApp {
         });
         self.phase_view_group(ui);
         self.visibility_group(ui);
+        let underlay_level = self.ed.level;
+        self.level_underlays_group(ui, underlay_level);
         if let Some(l) = level {
             group(ui, "view-level", "Planta", |ui| {
                 row(ui, "Nombre", "", |ui, w| {

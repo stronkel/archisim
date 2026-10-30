@@ -577,6 +577,8 @@ pub struct ArchiSimApp {
     pub presentation: presentation_ui::PresentationUi,
     /// The sheet picture and what it was drawn for.
     sheet_image: Option<(sheet_ui::SheetKey, egui::TextureHandle)>,
+    /// The picture of the view for drawing shown (E7).
+    drafting_image: Option<(drafting_view_ui::DraftingKey, egui::TextureHandle)>,
     /// The view selected on the sheet shown.
     pub sheet_sel: Option<sheet_ui::Placed>,
     /// The view of the sheet under the cursor.
@@ -860,6 +862,7 @@ impl ArchiSimApp {
             show_graphics: false,
             presentation: Default::default(),
             sheet_image: None,
+            drafting_image: None,
             sheet_sel: None,
             sheet_hover: None,
             sheet_drag: None,
@@ -993,7 +996,7 @@ impl ArchiSimApp {
         }
         // Drawing happens in plan (2D drafting also on sheets), and the
         // tools of the model also in the 3D view (R14).
-        let on_sheet = matches!(self.mode, ViewMode::Sheet(_));
+        let on_sheet = matches!(self.mode, ViewMode::Sheet(_) | ViewMode::Drafting(_));
         let in_3d = self.mode == ViewMode::ThreeD && self.tool_in_3d();
         if tool != Tool::Arrow && !(tool == Tool::Cad && on_sheet) && !in_3d {
             self.show_plan();
@@ -1806,10 +1809,10 @@ impl ArchiSimApp {
         self.sync_views(&ctx);
         self.update_title(&ctx);
         self.age_message(ctx.input(|i| i.time));
-        crate::pick::set_scale(if matches!(self.mode, ViewMode::Sheet(_)) {
-            1.0
-        } else {
-            self.plan_scale
+        crate::pick::set_scale(match self.mode {
+            ViewMode::Sheet(_) => 1.0,
+            ViewMode::Drafting(d) => self.ed.model().draft_view(d).map_or(20.0, |v| v.scale),
+            _ => self.plan_scale,
         });
         if self.maquette {
             self.maquette_frame(ui);
@@ -1948,6 +1951,7 @@ impl ArchiSimApp {
                     }
                 }
                 ViewMode::Sheet(s) => self.sheet_view(ui, s),
+                ViewMode::Drafting(d) => self.drafting_view(ui, d),
             }
         });
     }
@@ -2565,6 +2569,7 @@ mod curtain_types_ui;
 mod curtain_ui;
 mod discipline_ui;
 mod draft_props;
+mod drafting_view_ui;
 mod foundation_ui;
 mod ghost3d;
 mod glyphs;

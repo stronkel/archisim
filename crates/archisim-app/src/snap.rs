@@ -578,10 +578,31 @@ pub fn snap_sheet(
     filter: SnapFilter,
     from: Option<Point2>,
 ) -> Snap {
+    snap_view(
+        model,
+        archisim_core::ViewRef::Sheet(sheet),
+        cursor,
+        tolerance,
+        extra,
+        filter,
+        from,
+    )
+}
+
+/// The snaps of a view of drafting alone (a sheet and the outlines of its
+/// views, a view for drawing).
+pub fn snap_view(
+    model: &archisim_core::Model,
+    view: archisim_core::ViewRef,
+    cursor: Point2,
+    tolerance: f64,
+    extra: &[Point2],
+    filter: SnapFilter,
+    from: Option<Point2>,
+) -> Snap {
     let mut points: Vec<(Point2, SnapKind)> =
         extra.iter().map(|p| (*p, SnapKind::Endpoint)).collect();
     let mut curves = Vec::new();
-    let view = archisim_core::ViewRef::Sheet(sheet);
     draft_snaps(
         model,
         view,
@@ -592,7 +613,11 @@ pub fn snap_sheet(
         &mut curves,
     );
     let mut edges = Vec::new();
-    for v in model.viewports_on(sheet) {
+    let sheet = match view {
+        archisim_core::ViewRef::Sheet(s) => Some(s),
+        _ => None,
+    };
+    for v in sheet.into_iter().flat_map(|s| model.viewports_on(s)) {
         let (lo, hi) = archisim_plan::sheet::viewport_rect(model, v);
         let c = [lo, Point2::new(hi.x, lo.y), hi, Point2::new(lo.x, hi.y)];
         outline_snaps(&c, &mut points, &mut edges);

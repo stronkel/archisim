@@ -204,6 +204,11 @@ typed_id!(
     SheetId
 );
 typed_id!(
+    /// Identifies a [`crate::DraftView`] (a view only for drawing: a
+    /// detail, a diagram).
+    DraftViewId
+);
+typed_id!(
     /// Identifies a [`crate::Viewport`] (a view placed on a sheet).
     ViewportId
 );

@@ -497,7 +497,9 @@ impl ArchiSimApp {
 
     pub(super) fn fit_active_view(&mut self) {
         match self.mode {
-            ViewMode::Plan | ViewMode::Section | ViewMode::Sheet(_) => self.fit_requested = true,
+            ViewMode::Plan | ViewMode::Section | ViewMode::Sheet(_) | ViewMode::Drafting(_) => {
+                self.fit_requested = true
+            }
             ViewMode::ThreeD => self.v3d.fit_requested = true,
             ViewMode::Schedule => {}
         }
@@ -531,6 +533,19 @@ impl ArchiSimApp {
                         .map(|s| format!("Papel {} · 1:1", s.size_name()))
                         .unwrap_or_default();
                     ui.label(egui::RichText::new(paper).small().color(p.muted));
+                    ui.separator();
+                    self.drawing_segments(ui);
+                    ui.separator();
+                    self.snap_toggles(ui);
+                }
+                ViewMode::Drafting(id) => {
+                    let scale = self
+                        .ed
+                        .model()
+                        .draft_view(id)
+                        .map(|v| format!("Vista de dibujo · 1:{}", v.scale))
+                        .unwrap_or_default();
+                    ui.label(egui::RichText::new(scale).small().color(p.muted));
                     ui.separator();
                     self.drawing_segments(ui);
                     ui.separator();

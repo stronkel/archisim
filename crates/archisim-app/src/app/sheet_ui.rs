@@ -58,6 +58,7 @@ impl ArchiSimApp {
     pub(super) fn active_view(&self) -> ViewRef {
         match self.mode {
             ViewMode::Sheet(s) => ViewRef::Sheet(s),
+            ViewMode::Drafting(d) => ViewRef::Drafting(d),
             _ => ViewRef::Level(self.ed.level),
         }
     }
@@ -66,6 +67,9 @@ impl ArchiSimApp {
     pub(super) fn active_k(&self) -> f64 {
         match self.mode {
             ViewMode::Sheet(_) => MM,
+            ViewMode::Drafting(d) => {
+                self.ed.model().draft_view(d).map_or(20.0, |v| v.scale) / 1000.0
+            }
             _ => self.plan_scale / 1000.0,
         }
     }
@@ -74,6 +78,9 @@ impl ArchiSimApp {
     pub(super) fn pick_here(&self, p: Point2, reach: f64) -> Option<crate::pick::Element> {
         match self.mode {
             ViewMode::Sheet(s) => crate::pick::pick_on_sheet(self.ed.model(), s, p, reach),
+            ViewMode::Drafting(d) => {
+                crate::pick::pick_drafts(self.ed.model(), ViewRef::Drafting(d), p, reach)
+            }
             _ => crate::pick::pick(&self.ed, self.ed.level, p, reach),
         }
     }
@@ -82,6 +89,9 @@ impl ArchiSimApp {
     pub(super) fn window_here(&self, a: Point2, b: Point2) -> Vec<crate::pick::Element> {
         match self.mode {
             ViewMode::Sheet(s) => crate::pick::in_window_on_sheet(self.ed.model(), s, a, b),
+            ViewMode::Drafting(d) => {
+                crate::pick::in_window_drafts(self.ed.model(), ViewRef::Drafting(d), a, b)
+            }
             _ => crate::pick::in_window(&self.ed, self.ed.level, a, b),
         }
     }

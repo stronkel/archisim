@@ -67,6 +67,8 @@ pub enum ViewMode {
     Section,
     /// A sheet (paper with views on it).
     Sheet(archisim_core::SheetId),
+    /// A view only for drawing (E7).
+    Drafting(archisim_core::DraftViewId),
     /// A schedule or the measurements, as a table.
     Schedule,
 }
@@ -750,6 +752,7 @@ impl ArchiSimApp {
             ViewMode::ThreeD => self.open_view(super::TabKind::ThreeD),
             ViewMode::Section | ViewMode::Schedule => {}
             ViewMode::Sheet(s) => self.open_view(super::TabKind::Sheet(s)),
+            ViewMode::Drafting(d) => self.open_view(super::TabKind::Drafting(d)),
         }
     }
 

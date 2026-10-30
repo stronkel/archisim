@@ -176,6 +176,12 @@ pub(crate) struct ProjectFile {
     pub sheets: Vec<crate::drafting::Sheet>,
     #[serde(default)]
     pub viewports: Vec<crate::drafting::Viewport>,
+    /// Views only for drawing (version 48).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub draft_views: Vec<crate::drafting::DraftView>,
+    /// Underlays of the levels' plans (version 48).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub level_underlays: Vec<crate::drafting::LevelUnderlays>,
     /// Rooms (IfcSpace) and tags of doors, windows, walls and rooms
     /// (version 7).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -3391,6 +3397,8 @@ impl ProjectFile {
             info: crate::drafting::Info::out(&p.info),
             sheets: crate::drafting::sheets_out(&p.sheets),
             viewports: crate::drafting::viewports_out(&p.viewports),
+            draft_views: crate::drafting::draft_views_out(&p.draft_views),
+            level_underlays: crate::drafting::level_underlays_out(&p.level_underlays),
             rooms: crate::rooms::rooms_out(&p.rooms),
             tags: crate::rooms::tags_out(&p.tags),
             tables: crate::drafting::tables_out(&p.tables),
@@ -3896,6 +3904,8 @@ impl ProjectFile {
             info: self.info.map(|i| i.into_core()).unwrap_or_default(),
             sheets: crate::drafting::sheets_in(self.sheets),
             viewports: crate::drafting::viewports_in(self.viewports)?,
+            draft_views: crate::drafting::draft_views_in(self.draft_views)?,
+            level_underlays: crate::drafting::level_underlays_in(self.level_underlays)?,
             rooms: crate::rooms::rooms_in(self.rooms)?,
             tags: crate::rooms::tags_in(self.tags),
             tables: crate::drafting::tables_in(self.tables)?,

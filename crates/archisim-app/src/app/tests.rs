@@ -8098,3 +8098,76 @@ fn plan_choices_show_as_plan_pictures() {
         .object_option_thumb(&ctx, &t, "plan_drawing", "técnico")
         .is_some());
 }
+
+/// E7: a view only for drawing from the navigator; a line drawn in it
+/// with the AutoCAD command, a DXF imported into it, the plan under it
+/// as an underlay, and the view placed on a sheet at its scale.
+#[test]
+fn views_for_drawing() {
+    let mut h = Harness::new(Editor::new_project());
+    h.frame();
+    // A line in the plan, exported as a DXF to import later.
+    h.app.keys_autocad = true;
+    command(&mut h, "l");
+    h.click_at(p(0.0, 0.0));
+    command(&mut h, "@4000,0");
+    h.key(Key::Escape);
+    let dir = std::env::temp_dir().join(format!("archisim-e7-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let dxf = dir.join("detalle.dxf");
+    let options = h.app.plan_export_options(50.0);
+    h.app.ed.export_plan(&dxf, &options).unwrap();
+    let level = h.app.ed.level;
+    h.app.new_drafting_view();
+    h.frame();
+    let dv = h.model().draft_views()[0].id;
+    assert_eq!(h.app.mode, ViewMode::Drafting(dv));
+    assert_eq!(h.app.active_view(), archisim_core::ViewRef::Drafting(dv));
+    assert!((h.app.active_k() - 0.02).abs() < 1e-12, "1:20");
+    // A circle drawn with the command, in the view for drawing.
+    command(&mut h, "c");
+    h.click_at(p(0.5, 0.5));
+    command(&mut h, "200");
+    h.frame();
+    let mine = |h: &Harness| {
+        h.model()
+            .drafts_in(archisim_core::ViewRef::Drafting(dv))
+            .count()
+    };
+    assert_eq!(mine(&h), 1, "{:?}", h.app.message.as_ref().map(|m| &m.text));
+    // The DXF into it.
+    h.app.import_dxf_from(&dxf);
+    assert!(mine(&h) >= 2);
+    // The plan under it.
+    let mut v = h.model().draft_view(dv).unwrap().clone();
+    v.underlays.push(archisim_core::Underlay::of(
+        archisim_core::UnderlaySource::Level(level),
+    ));
+    h.app
+        .ed
+        .transact("Calco", |m| m.set_drafting_view(v))
+        .unwrap();
+    h.frame();
+    // On a sheet, at 1:20.
+    h.app.new_sheet();
+    h.frame();
+    let sheet = h.model().sheets()[0].id;
+    h.app.place_dropped(
+        super::sheet_drop::Drop::Drafting(dv),
+        "Detalle 1",
+        p(0.3, 0.2),
+    );
+    let vp = h
+        .model()
+        .viewports_on(sheet)
+        .next()
+        .expect("placed")
+        .clone();
+    assert_eq!(vp.drafting, Some(dv));
+    assert_eq!(vp.scale, 20.0);
+    // Saved with the project.
+    let back = archisim_file::from_str(&archisim_file::to_string(h.model())).unwrap();
+    assert_eq!(back.draft_views().len(), 1);
+    assert_eq!(back.draft_view(dv).unwrap().underlays.len(), 1);
+    std::fs::remove_dir_all(&dir).ok();
+}
