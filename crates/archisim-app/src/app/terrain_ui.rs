@@ -74,7 +74,7 @@ impl ArchiSimApp {
     /// The point of a terrain nearest to `p`, within `reach`.
     fn terrain_point_at(&self, id: TerrainId, p: Point2, reach: f64) -> Option<usize> {
         let t = self.ed.model().terrain(id)?;
-        t.points
+        t.survey()
             .iter()
             .enumerate()
             .map(|(i, q)| (i, q.at.distance(p)))
@@ -134,7 +134,7 @@ impl ArchiSimApp {
             let r = match self.terrain_point_at(id, p, reach) {
                 Some(i) => self
                     .ed
-                    .edit_terrain("Cota de punto", id, |t| t.points[i].z = z),
+                    .edit_terrain("Cota de punto", id, |t| t.edit_survey(|g| g[i].z = z)),
                 None => self.ed.edit_terrain("Añadir punto al terreno", id, |t| {
                     t.points.push(SurveyPoint { at: p, z })
                 }),
@@ -361,7 +361,7 @@ impl ArchiSimApp {
         // right, 2 mm high or so.
         let k = crate::pick::paper_k();
         let (c, th) = (0.8 * k, archisim_plan::annotate::TEXT_HEIGHT * 0.8 * k);
-        t.points.iter().position(|q| {
+        t.survey().iter().position(|q| {
             let (x0, y0) = (q.at.x + c, q.at.y + c * 0.6 - th * 0.3);
             p.x >= x0 && p.x <= x0 + th * 4.5 && p.y >= y0 && p.y <= y0 + th * 1.6
         })
@@ -409,7 +409,7 @@ impl ArchiSimApp {
                     Some(v) => {
                         let r = self
                             .ed
-                            .edit_terrain("Cota de punto", id, |t| t.points[i].z = v);
+                            .edit_terrain("Cota de punto", id, |t| t.edit_survey(|g| g[i].z = v));
                         self.report(r, &format!("Punto a {}.", height(v)));
                     }
                     None => self.complain("Escribe la cota en metros, p. ej. 12,35."),
@@ -424,7 +424,7 @@ impl ArchiSimApp {
     /// dropped).
     fn terrain_picked(&self) -> Option<(TerrainId, Vec<usize>)> {
         let id = self.selected_terrain()?;
-        let n = self.ed.model().terrain(id)?.points.len();
+        let n = self.ed.model().terrain(id)?.survey().len();
         let pick: Vec<usize> = self
             .terrain_pick
             .iter()
@@ -475,10 +475,12 @@ impl ArchiSimApp {
                     Stroke::new(2.0, TERRAIN_LINE),
                 ));
             }
-            let few = t.points.len() <= 400;
+            let survey = t.survey().len();
+            let few = survey <= 400;
             // Heights only where they do not overlap one already written.
             let mut written: Vec<Pos2> = Vec::new();
-            for (i, p) in t.points.iter().enumerate() {
+            // (The points of its platforms are not survey points.)
+            for (i, p) in t.points.iter().take(survey).enumerate() {
                 let s = self.view.to_screen(rect, p.at);
                 if !rect.expand(20.0).contains(s) {
                     continue;
@@ -663,7 +665,7 @@ impl ArchiSimApp {
                     ui,
                     "Se añade a",
                     "El terreno de esta planta",
-                    &format!("Terreno de {} puntos", t.points.len()),
+                    &format!("Terreno de {} puntos", t.survey().len()),
                 ),
                 None => text_row(
                     ui,
@@ -691,7 +693,7 @@ impl ArchiSimApp {
         super::properties::view_card(
             ui,
             Icon::Terrain,
-            &format!("Terreno de {} puntos", t.points.len()),
+            &format!("Terreno de {} puntos", t.survey().len()),
             "IfcGeographicElement",
         );
         let (lo, hi) = t.range();
@@ -776,10 +778,124 @@ impl ArchiSimApp {
                 &format!("{} … {}", height(lo), height(hi)),
             );
         });
+        self.terrain_pads_group(ui, id, &t);
         self.terrain_pick_group(ui, id, &t);
         group(ui, "terrain-identity", "Datos de identidad", |ui| {
             props::id_row(ui, "GlobalId", &t.guid.to_string());
         });
+    }
+
+    /// Cut and fill of a terrain's platforms, kept while the model does
+    /// not change.
+    pub(super) fn terrain_earthworks(&mut self, id: TerrainId) -> (f64, f64) {
+        let rev = self.ed.revision();
+        if let Some((r, t, v)) = self.earthworks_cache {
+            if r == rev && t == id {
+                return v;
+            }
+        }
+        let v = self
+            .ed
+            .model()
+            .terrain(id)
+            .map_or((0.0, 0.0), |t| t.earthworks());
+        self.earthworks_cache = Some((rev, id, v));
+        v
+    }
+
+    /// Platforms dug or filled into the ground (E8): one click for the
+    /// building's, their heights and banks, and the earthworks.
+    fn terrain_pads_group(&mut self, ui: &mut Ui, id: TerrainId, t: &archisim_core::Terrain) {
+        let (cut, fill) = self.terrain_earthworks(id);
+        let mut change: Option<Vec<archisim_core::TerrainPad>> = None;
+        group(ui, "terrain-pads", "Explanaciones", |ui| {
+            if t.pads.is_empty() {
+                props::note(
+                    ui,
+                    "Plataformas excavadas o rellenas bajo el edificio, con su talud hasta el terreno. «Explanar bajo el edificio» hace una por cada forjado de esta planta y de los sótanos, a su cara inferior, con 50 cm de margen y talud 1:1.",
+                );
+            }
+            for (i, pad) in t.pads.iter().enumerate() {
+                row(
+                    ui,
+                    &format!("Plataforma {} (mm)", i + 1),
+                    "Cota de la plataforma, respecto al ±0,00",
+                    |ui, w| {
+                        if let Some(v) =
+                            length_field(ui, Id::unique(("terrain-pad-z", id.0, i)), pad.z, w - 8.0)
+                        {
+                            let mut pads = t.pads.clone();
+                            pads[i].z = v;
+                            change = Some(pads);
+                        }
+                    },
+                );
+                row(
+                    ui,
+                    "Talud (H:V)",
+                    "Metros en horizontal por cada metro de altura (1 = 45°)",
+                    |ui, w| {
+                        let mut run = 1.0 / pad.slope;
+                        let r = ui.add_sized(
+                            [w - 8.0, 20.0],
+                            egui::DragValue::new(&mut run)
+                                .range(0.25..=10.0)
+                                .speed(0.05)
+                                .custom_formatter(|v, _| format!("{v:.2}").replace('.', ","))
+                                .custom_parser(|t| t.trim().replace(',', ".").parse().ok()),
+                        );
+                        if r.drag_stopped() || (r.changed() && !r.dragged()) {
+                            let mut pads = t.pads.clone();
+                            pads[i].slope = 1.0 / run.max(0.1);
+                            change = Some(pads);
+                        }
+                    },
+                );
+            }
+            if !t.pads.is_empty() {
+                text_row(
+                    ui,
+                    "Desmonte",
+                    "Tierra que se excava",
+                    &format!("{} m³", volume(cut)),
+                );
+                text_row(
+                    ui,
+                    "Terraplén",
+                    "Tierra que se rellena",
+                    &format!("{} m³", volume(fill)),
+                );
+            }
+            ui.horizontal_wrapped(|ui| {
+                ui.add_space(4.0);
+                if ui
+                    .button("Explanar bajo el edificio")
+                    .on_hover_text("Plataformas bajo los forjados de esta planta y de los sótanos")
+                    .clicked()
+                {
+                    change = Some(self.ed.model().building_pads(
+                        id,
+                        archisim_core::PAD_MARGIN,
+                        archisim_core::PAD_SLOPE,
+                    ));
+                }
+                if !t.pads.is_empty() && ui.button("Quitar explanaciones").clicked() {
+                    change = Some(Vec::new());
+                }
+            });
+        });
+        if let Some(pads) = change {
+            let none = pads.is_empty();
+            let n = pads.len();
+            let r = self
+                .ed
+                .edit_terrain("Explanaciones", id, |t| t.set_pads(pads));
+            if none {
+                self.report(r, "Terreno como en el levantamiento.");
+            } else {
+                self.report(r, &format!("Terreno explanado ({n} plataformas)."));
+            }
+        }
     }
 
     /// The points picked in plan: how many, and one height for all.
@@ -790,7 +906,7 @@ impl ArchiSimApp {
                 ui,
                 "Puntos",
                 "Del terreno, y líneas de nivel dibujadas",
-                &format!("{} · {} líneas", t.points.len(), t.lines.len()),
+                &format!("{} · {} líneas", t.survey().len(), t.lines.len()),
             );
             if pick.is_empty() {
                 props::note(
@@ -831,9 +947,11 @@ impl ArchiSimApp {
                         w - 8.0,
                     ) {
                         let r = self.ed.edit_terrain("Cota de puntos", id, |t| {
-                            for &i in &pick {
-                                t.points[i].z = v;
-                            }
+                            t.edit_survey(|g| {
+                                for &i in &pick {
+                                    g[i].z = v;
+                                }
+                            })
                         });
                         self.report(r, &format!("{} punto(s) a {}.", pick.len(), height(v)));
                     }
@@ -905,6 +1023,10 @@ fn parse_number(t: &str) -> Option<f64> {
 }
 
 /// Metres with two decimals and a decimal comma.
+fn volume(v: f64) -> String {
+    format!("{v:.1}").replace('.', ",")
+}
+
 fn metres(v: f64) -> String {
     format!("{v:.2}").replace('.', ",")
 }

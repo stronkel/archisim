@@ -201,6 +201,53 @@ impl Item {
     }
 }
 
+/// Cut and fill of the terrains' platforms (E8), m³.
+fn earthworks(model: &Model) -> Vec<Item> {
+    let mut cut = Vec::new();
+    let mut fill = Vec::new();
+    for t in model.terrains().filter(|t| !t.pads.is_empty()) {
+        let (c, f) = t.earthworks();
+        for (v, list) in [(c, &mut cut), (f, &mut fill)] {
+            if v > 0.0005 {
+                list.push(Measured {
+                    comment: format!("Terreno {} · {} explanaciones", t.id.0, t.pads.len()),
+                    units: 1.0,
+                    length: 0.0,
+                    width: 0.0,
+                    height: 0.0,
+                    quantity: (v * 1000.0).round() / 1000.0,
+                });
+            }
+        }
+    }
+    let mut items = Vec::new();
+    for (lines, code, key, summary) in [
+        (
+            cut,
+            "T01",
+            "tierras:desmonte",
+            "Desmonte (excavación a cielo abierto)",
+        ),
+        (
+            fill,
+            "T02",
+            "tierras:terraplen",
+            "Terraplén (relleno compactado)",
+        ),
+    ] {
+        if !lines.is_empty() {
+            items.push(Item {
+                code: code.into(),
+                key: key.into(),
+                unit: "m3",
+                summary: summary.into(),
+                lines,
+            });
+        }
+    }
+    items
+}
+
 /// The chapters of a budget's measurements: (code, title, items).
 pub fn measurements(model: &Model) -> Vec<(&'static str, &'static str, Vec<Item>)> {
     let level_name = |l: LevelId| model.level(l).map_or(String::new(), |l| l.name.clone());
@@ -374,6 +421,7 @@ pub fn measurements(model: &Model) -> Vec<(&'static str, &'static str, Vec<Item>
         ("09", "Instalaciones", services(model)),
         ("10", "Mobiliario de cocina", kitchen(model)),
         ("11", "Cerrajería y protecciones", outsides(model)),
+        ("12", "Movimiento de tierras", earthworks(model)),
     ];
     chapters.retain(|(_, _, items)| !items.is_empty());
     chapters

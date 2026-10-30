@@ -129,6 +129,46 @@ impl Exporter<'_> {
                     )));
                 }
             }
+            // Its platforms (E8): «z bank:x y,x y,…|…», the ground as
+            // surveyed «x y z;…», and the earthworks.
+            if !t.pads.is_empty() {
+                let text = t
+                    .pads
+                    .iter()
+                    .map(|p| {
+                        let o = p
+                            .outline
+                            .iter()
+                            .map(|q| format!("{} {}", real(q.x), real(q.y)))
+                            .collect::<Vec<_>>()
+                            .join(",");
+                        format!("{} {}:{o}", real(p.z), real(p.slope))
+                    })
+                    .collect::<Vec<_>>()
+                    .join("|");
+                props.push(self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('Pads',$,IFCTEXT({}),$)",
+                    string(&text)
+                )));
+                if let Some(g) = &t.ground {
+                    let text = g
+                        .iter()
+                        .map(|q| format!("{} {} {}", real(q.at.x), real(q.at.y), real(q.z)))
+                        .collect::<Vec<_>>()
+                        .join(";");
+                    props.push(self.w.add(format!(
+                        "IFCPROPERTYSINGLEVALUE('Ground',$,IFCTEXT({}),$)",
+                        string(&text)
+                    )));
+                }
+                let (cut, fill) = t.earthworks();
+                for (key, v) in [("CutVolume", cut), ("FillVolume", fill)] {
+                    props.push(self.w.add(format!(
+                        "IFCPROPERTYSINGLEVALUE('{key}',$,IFCVOLUMEMEASURE({}),$)",
+                        real((v * 1000.0).round() / 1000.0)
+                    )));
+                }
+            }
             self.pset(el, &t.guid, "ArchiSim_Terrain", &props);
             contained.entry(t.level).or_default().push(el);
         }

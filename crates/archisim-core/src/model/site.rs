@@ -49,7 +49,30 @@ pub struct Terrain {
     pub show_heights: bool,
     /// Slope arrows in plan, downhill, with their gradient (E5).
     pub slope_arrows: bool,
+    /// Platforms dug or filled into it (E8: "explanaciones"), under the
+    /// building or by hand. `points` is the ground already graded.
+    pub pads: Vec<TerrainPad>,
+    /// The ground as surveyed, before the platforms (kept while there are
+    /// any, to grade again and to measure cut and fill).
+    pub ground: Option<Vec<SurveyPoint>>,
 }
+
+/// A platform in the ground (E8): flat at `z` inside `outline`, with a
+/// bank ("talud") around it that rises or falls `slope` metres per metre
+/// until it meets the ground.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TerrainPad {
+    /// Counter-clockwise, without repeating the first point.
+    pub outline: Vec<Point2>,
+    pub z: f64,
+    /// Rise over run of the bank (1 = 1:1, 45°; 0.5 = 1:2).
+    pub slope: f64,
+}
+
+/// Bank slope proposed for new platforms (1:1).
+pub const PAD_SLOPE: f64 = 1.0;
+/// Margin around the building proposed for its platforms.
+pub const PAD_MARGIN: f64 = 0.5;
 
 /// An area of a terrain covered by another material.
 #[derive(Debug, Clone, PartialEq)]
@@ -124,11 +147,24 @@ impl Terrain {
             }
         }
         self.points = kept;
+        if let Some(ground) = &mut self.ground {
+            let n = ground.len();
+            *ground = std::mem::take(ground)
+                .into_iter()
+                .enumerate()
+                .filter(|(i, _)| !gone.contains(i) || *i >= n)
+                .map(|(_, p)| p)
+                .collect();
+        }
         self.lines = std::mem::take(&mut self.lines)
             .into_iter()
             .map(|l| l.into_iter().filter_map(|i| map[i]).collect::<Vec<_>>())
             .filter(|l| l.len() >= 2)
             .collect();
+        if !self.pads.is_empty() && self.ground.is_some() {
+            let pads = std::mem::take(&mut self.pads);
+            self.set_pads(pads);
+        }
     }
 
     /// Works the ground with a brush of `radius` at `center`: raises,
@@ -285,8 +321,161 @@ impl Terrain {
                 add.push(SurveyPoint { at: q, z });
             }
         }
-        self.points.extend(add);
+        if let Some(ground) = &mut self.ground {
+            // The platforms' points come after the ground's: keep it so.
+            let n = ground.len();
+            ground.extend(add.iter().copied());
+            let graded: Vec<SurveyPoint> = self.points.drain(n..).collect();
+            self.points.extend(add);
+            self.points.extend(graded);
+        } else {
+            self.points.extend(add);
+        }
         self.outline = Some(outline);
+    }
+
+    /// The ground as surveyed (without the platforms).
+    pub fn survey(&self) -> &[SurveyPoint] {
+        self.ground.as_deref().unwrap_or(&self.points)
+    }
+
+    /// Sets its platforms and grades the ground for them, from the ground
+    /// as surveyed: inside each, flat at its height; around it, a bank
+    /// to the ground. The lower ones go last, so a dig wins over a fill
+    /// where they meet. With none, the survey comes back.
+    ///
+    /// The surveyed points keep their indices (the contour lines drawn
+    /// by hand still name them); the platforms' points go after them.
+    pub fn set_pads(&mut self, pads: Vec<TerrainPad>) {
+        let ground = self.ground.take().unwrap_or_else(|| self.points.clone());
+        let pads: Vec<TerrainPad> = pads
+            .into_iter()
+            .filter(|p| p.outline.len() >= 3 && p.slope > 1e-6)
+            .map(|mut p| {
+                if signed_area(&p.outline) < 0.0 {
+                    p.outline.reverse();
+                }
+                p
+            })
+            .collect();
+        if pads.is_empty() {
+            self.points = ground;
+            self.pads = Vec::new();
+            return;
+        }
+        let mut order: Vec<&TerrainPad> = pads.iter().collect();
+        order.sort_by(|a, b| b.z.total_cmp(&a.z));
+        let mut points = ground.clone();
+        for pad in order {
+            points = grade(&points, pad, self.outline.as_deref());
+        }
+        self.points = points;
+        self.pads = pads;
+        self.ground = Some(ground);
+    }
+
+    /// Changes its surveyed points (heights, places): with platforms, the
+    /// survey kept apart, and the ground is graded again.
+    pub fn edit_survey(&mut self, edit: impl FnOnce(&mut Vec<SurveyPoint>)) {
+        match self.ground.take() {
+            Some(mut ground) if !self.pads.is_empty() => {
+                edit(&mut ground);
+                self.ground = Some(ground);
+                let pads = std::mem::take(&mut self.pads);
+                self.set_pads(pads);
+            }
+            other => {
+                self.ground = other;
+                edit(&mut self.points);
+            }
+        }
+    }
+
+    /// Earthworks for its platforms: the volume dug ("desmonte") and the
+    /// volume filled ("terraplén"), in cubic metres, between the ground
+    /// as surveyed and as graded.
+    pub fn earthworks(&self) -> (f64, f64) {
+        let Some(ground) = &self.ground else {
+            return (0.0, 0.0);
+        };
+        if self.pads.is_empty() {
+            return (0.0, 0.0);
+        }
+        let surveyed = Terrain {
+            points: ground.clone(),
+            pads: Vec::new(),
+            ground: None,
+            ..self.clone()
+        };
+        // Only near the platforms does the ground change.
+        let (mut lo, mut hi) = (
+            Point2::new(f64::MAX, f64::MAX),
+            Point2::new(f64::MIN, f64::MIN),
+        );
+        for p in self.points.iter().skip(ground.len()) {
+            lo = Point2::new(lo.x.min(p.at.x), lo.y.min(p.at.y));
+            hi = Point2::new(hi.x.max(p.at.x), hi.y.max(p.at.y));
+        }
+        for pad in &self.pads {
+            for p in &pad.outline {
+                lo = Point2::new(lo.x.min(p.x), lo.y.min(p.y));
+                hi = Point2::new(hi.x.max(p.x), hi.y.max(p.y));
+            }
+        }
+        if lo.x > hi.x {
+            return (0.0, 0.0);
+        }
+        let area = (hi.x - lo.x) * (hi.y - lo.y);
+        let step = (area / 250_000.0).sqrt().max(EARTHWORKS_STEP);
+        let nx = ((hi.x - lo.x) / step).ceil().max(1.0) as usize;
+        let ny = ((hi.y - lo.y) / step).ceil().max(1.0) as usize;
+        let before = surveyed.sample(lo, step, nx, ny);
+        let after = self.sample(lo, step, nx, ny);
+        let (mut cut, mut fill) = (0.0, 0.0);
+        for (b, a) in before.iter().zip(&after) {
+            if let (Some(b), Some(a)) = (b, a) {
+                let d = a - b;
+                if d < 0.0 {
+                    cut -= d * step * step;
+                } else {
+                    fill += d * step * step;
+                }
+            }
+        }
+        (cut, fill)
+    }
+
+    /// Heights of the surface at the middle of each cell of a grid from
+    /// `lo`, `step` wide, `nx` by `ny` (by rows), where it lies over it.
+    fn sample(&self, lo: Point2, step: f64, nx: usize, ny: usize) -> Vec<Option<f64>> {
+        let mut out = vec![None; nx * ny];
+        for [a, b, c] in self.triangles() {
+            let (pa, pb, pc) = (self.points[a], self.points[b], self.points[c]);
+            let x0 = pa.at.x.min(pb.at.x).min(pc.at.x);
+            let x1 = pa.at.x.max(pb.at.x).max(pc.at.x);
+            let y0 = pa.at.y.min(pb.at.y).min(pc.at.y);
+            let y1 = pa.at.y.max(pb.at.y).max(pc.at.y);
+            let i0 = (((x0 - lo.x) / step - 0.5).ceil().max(0.0)) as usize;
+            let j0 = (((y0 - lo.y) / step - 0.5).ceil().max(0.0)) as usize;
+            let i1 = ((x1 - lo.x) / step - 0.5).floor();
+            let j1 = ((y1 - lo.y) / step - 0.5).floor();
+            if i1 < 0.0 || j1 < 0.0 {
+                continue;
+            }
+            let (i1, j1) = ((i1 as usize).min(nx - 1), (j1 as usize).min(ny - 1));
+            for j in j0..=j1 {
+                for i in i0..=i1 {
+                    let q = Point2::new(
+                        lo.x + (i as f64 + 0.5) * step,
+                        lo.y + (j as f64 + 0.5) * step,
+                    );
+                    if let Some((u, v, w)) = barycentric(q, pa.at, pb.at, pc.at) {
+                        out[j * nx + i] = Some(u * pa.z + v * pb.z + w * pc.z);
+                    }
+                }
+            }
+        }
+        out
     }
 
     /// Slope arrows: on a grid `step` apart over the surface, where the
@@ -473,6 +662,172 @@ pub fn push_line(points: &mut Vec<SurveyPoint>, path: &[Point2], z: f64) -> Vec<
 }
 
 /// Barycentric coordinates of `p` in the triangle `a b c`, if inside.
+/// Grid of the earthworks measure (metres; wider on large sites).
+pub const EARTHWORKS_STEP: f64 = 0.5;
+
+/// Distances from a platform's edge at which its bank gets points.
+const BANK_RINGS: [f64; 12] = [
+    0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 5.5, 7.0, 9.0, 12.0, 16.0, 21.0,
+];
+
+/// `poly` (counter-clockwise) moved out by `d`, with mitred corners (a
+/// sharp one cut at twice `d`).
+pub fn grow_polygon(poly: &[Point2], d: f64) -> Vec<Point2> {
+    let n = poly.len();
+    if d.abs() < 1e-9 || n < 3 {
+        return poly.to_vec();
+    }
+    let normal = |i: usize| {
+        let v = poly[(i + 1) % n] - poly[i];
+        let l = (v.x * v.x + v.y * v.y).sqrt().max(1e-12);
+        Vec2::new(v.y / l, -v.x / l)
+    };
+    (0..n)
+        .map(|i| {
+            let (a, b) = (normal((i + n - 1) % n), normal(i));
+            let m = a + b;
+            let c = (1.0 + a.x * b.x + a.y * b.y) / 2.0;
+            let k = if c > 0.125 { d / (2.0 * c) } else { d * 2.0 };
+            let ml = (m.x * m.x + m.y * m.y).sqrt();
+            if ml < 1e-9 {
+                poly[i] + b * d
+            } else {
+                poly[i] + m * (k * 2.0 * c.sqrt() / ml)
+            }
+        })
+        .collect()
+}
+
+/// Distance from `p` to the edge of `poly`; zero inside it.
+fn distance_out(p: Point2, poly: &[Point2]) -> f64 {
+    if super::roofs::point_in_polygon(p, poly) {
+        return 0.0;
+    }
+    let n = poly.len();
+    (0..n)
+        .map(|i| segment_distance(p, poly[i], poly[(i + 1) % n]))
+        .fold(f64::MAX, f64::min)
+}
+
+fn segment_distance(p: Point2, a: Point2, b: Point2) -> f64 {
+    let ab = b - a;
+    let len2 = ab.x * ab.x + ab.y * ab.y;
+    let t = if len2 < 1e-18 {
+        0.0
+    } else {
+        (((p - a).x * ab.x + (p - a).y * ab.y) / len2).clamp(0.0, 1.0)
+    };
+    p.distance(a + ab * t)
+}
+
+/// The ground `points` graded for one platform: points inside it go to
+/// its height, those around it are held by its bank, and points are added
+/// along its edge and in rings around it (where there is ground) so the
+/// surface follows the platform and its bank.
+fn grade(points: &[SurveyPoint], pad: &TerrainPad, outline: Option<&[Point2]>) -> Vec<SurveyPoint> {
+    let before = Terrain {
+        id: TerrainId(0),
+        guid: GlobalId::new(),
+        level: LevelId(0),
+        points: points.to_vec(),
+        material: MaterialId(0),
+        depth: 1.0,
+        contour: 0.0,
+        lines: Vec::new(),
+        patches: Vec::new(),
+        outline: outline.map(|o| o.to_vec()),
+        show_heights: false,
+        slope_arrows: false,
+        pads: Vec::new(),
+        ground: None,
+    };
+    let held = |q: Point2, z: f64| {
+        let d = distance_out(q, &pad.outline);
+        z.clamp(pad.z - d * pad.slope, pad.z + d * pad.slope)
+    };
+    let mut out: Vec<SurveyPoint> = points
+        .iter()
+        .map(|p| SurveyPoint {
+            at: p.at,
+            z: held(p.at, p.z),
+        })
+        .collect();
+    let edge = &pad.outline;
+    let n = edge.len();
+    // The edge, every metre at most, and its outward directions.
+    let mut samples: Vec<(Point2, Vec<Vec2>)> = Vec::new();
+    let normal = |i: usize| {
+        let d = edge[(i + 1) % n] - edge[i];
+        let l = (d.x * d.x + d.y * d.y).sqrt().max(1e-12);
+        Vec2::new(d.y / l, -d.x / l)
+    };
+    for i in 0..n {
+        let (a, b) = (edge[i], edge[(i + 1) % n]);
+        let (prev, here) = (normal((i + n - 1) % n), normal(i));
+        // A corner that turns outward gets a fan of directions.
+        let turn = prev.x * here.y - prev.y * here.x;
+        let mut dirs = vec![here];
+        if turn > 1e-9 || (prev.x * here.x + prev.y * here.y) < 0.999 {
+            let a0 = prev.y.atan2(prev.x);
+            let mut a1 = here.y.atan2(here.x);
+            while a1 < a0 {
+                a1 += std::f64::consts::TAU;
+            }
+            if a1 - a0 < std::f64::consts::PI {
+                let k = ((a1 - a0) / 0.4).ceil() as usize;
+                dirs = (0..=k)
+                    .map(|j| {
+                        let t = a0 + (a1 - a0) * j as f64 / k as f64;
+                        Vec2::new(t.cos(), t.sin())
+                    })
+                    .collect();
+            }
+        }
+        samples.push((a, dirs));
+        let steps = (a.distance(b) / CONTOUR_POINT_SPACING).ceil().max(1.0) as usize;
+        for k in 1..steps {
+            samples.push((a + (b - a) * (k as f64 / steps as f64), vec![here]));
+        }
+    }
+    let mut added: Vec<SurveyPoint> = Vec::new();
+    let near = |pts: &[SurveyPoint], added: &[SurveyPoint], q: Point2, gap: f64| {
+        pts.iter().chain(added).any(|p| p.at.distance(q) < gap)
+    };
+    for (q, _) in &samples {
+        if before.height_at(*q).is_some() && !near(&out, &added, *q, 0.05) {
+            added.push(SurveyPoint { at: *q, z: pad.z });
+        }
+    }
+    // Points well inside go (the platform is flat); those near its edge
+    // already moved to its height.
+    for ring in BANK_RINGS {
+        let mut any_held = false;
+        for (q, dirs) in &samples {
+            for d in dirs {
+                let r = *q + *d * ring;
+                let real = distance_out(r, &pad.outline);
+                if real < ring * 0.6 {
+                    continue;
+                }
+                let Some(g) = before.height_at(r) else {
+                    continue;
+                };
+                let z = held(r, g);
+                any_held |= (z - g).abs() > 1e-3;
+                let gap = (ring * 0.3).clamp(0.3, 1.2);
+                if !near(&out, &added, r, gap) {
+                    added.push(SurveyPoint { at: r, z });
+                }
+            }
+        }
+        if !any_held {
+            break;
+        }
+    }
+    out.extend(added);
+    out
+}
+
 fn barycentric(p: Point2, a: Point2, b: Point2, c: Point2) -> Option<(f64, f64, f64)> {
     let d = (b - a).cross(c - a);
     if d.abs() < 1e-12 {
@@ -965,6 +1320,8 @@ impl Model {
                 outline: None,
                 show_heights: false,
                 slope_arrows: false,
+                pads: Vec::new(),
+                ground: None,
             },
         );
         Ok(id)
@@ -983,6 +1340,7 @@ impl Model {
             .ok_or(ModelError::UnknownTerrain(id))?;
         edit(&mut t);
         self.validate_terrain(&spec_of(&t))?;
+        check_pads(&t)?;
         self.terrains.insert(id, t);
         Ok(())
     }
@@ -999,6 +1357,43 @@ impl Model {
 
     pub fn terrains(&self) -> impl Iterator<Item = &Terrain> {
         self.terrains.values()
+    }
+
+    /// Platforms for the building on a terrain (E8): one under each slab
+    /// of its level and the ones below it (ground floor and basements),
+    /// widened by `margin`, at the slab's underside, with banks of
+    /// `slope`. Roof slabs are left out.
+    pub fn building_pads(&self, terrain: TerrainId, margin: f64, slope: f64) -> Vec<TerrainPad> {
+        let Some(t) = self.terrains.get(&terrain) else {
+            return Vec::new();
+        };
+        let top = self.levels.get(&t.level).map_or(0.0, |l| l.elevation);
+        let mut pads = Vec::new();
+        for s in self.slabs.values() {
+            let Some(level) = self.levels.get(&s.level) else {
+                continue;
+            };
+            let Some(ty) = self.slab_types.get(&s.slab_type) else {
+                continue;
+            };
+            if level.elevation > top + 0.05 || ty.function == SlabFunction::Roof {
+                continue;
+            }
+            let lowest = s.slope.as_ref().map_or(0.0, |sl| {
+                s.outline.iter().map(|p| sl.rise_at(*p)).fold(0.0, f64::min)
+            });
+            let z = level.elevation + s.top_offset + lowest - ty.thickness();
+            let mut outline = s.outline.clone();
+            if signed_area(&outline) < 0.0 {
+                outline.reverse();
+            }
+            pads.push(TerrainPad {
+                outline: grow_polygon(&outline, margin),
+                z,
+                slope,
+            });
+        }
+        pads
     }
 
     pub fn terrains_on_level(&self, level: LevelId) -> impl Iterator<Item = &Terrain> {
@@ -1032,6 +1427,7 @@ impl Model {
             let name = format!("terrain {} ({})", t.id.0, t.guid);
             claim(t.id.0, Some(&t.guid))
                 .and_then(|_| self.validate_terrain(&spec_of(&t)))
+                .and_then(|_| check_pads(&t))
                 .map_err(|error| RestoreError {
                     element: name,
                     error,
@@ -1040,6 +1436,24 @@ impl Model {
         }
         Ok(())
     }
+}
+
+fn check_pads(t: &Terrain) -> Result<(), ModelError> {
+    for pad in &t.pads {
+        for p in &pad.outline {
+            finite_point(*p, "terrain platform")?;
+        }
+        finite(pad.z, "terrain platform height")?;
+        finite(pad.slope, "terrain platform bank")?;
+        if pad.outline.len() < 3 || pad.slope <= 0.0 {
+            return Err(ModelError::InvalidTerrain);
+        }
+    }
+    for p in t.ground.iter().flatten() {
+        finite_point(p.at, "terrain point")?;
+        finite(p.z, "terrain point height")?;
+    }
+    Ok(())
 }
 
 fn spec_of(t: &Terrain) -> NewTerrain {
@@ -1275,6 +1689,166 @@ mod tests {
 
     /// E5: an L-shaped edge drawn by hand keeps the surface out of the
     /// missing corner; the slope arrows point downhill with the gradient.
+    #[test]
+    fn platforms_dig_and_fill_with_banks() {
+        let mut m = Model::new("t");
+        let l = m.add_level("PB", 0.0);
+        let earth = m.add_material("Tierra", "earth", [150, 120, 90], CutPattern::Dots);
+        let mut points = Vec::new();
+        for i in 0..=8 {
+            for j in 0..=8 {
+                let (x, y) = (i as f64 * 5.0, j as f64 * 5.0);
+                points.push(sp(x, y, y / 10.0));
+            }
+        }
+        let n = points.len();
+        let id = m
+            .add_terrain(NewTerrain {
+                level: l,
+                points,
+                material: earth,
+                depth: 2.0,
+                contour: 0.5,
+                lines: vec![vec![0, 1]],
+            })
+            .unwrap();
+        let square = |x0: f64, y0: f64, s: f64| {
+            vec![
+                Point2::new(x0, y0),
+                Point2::new(x0 + s, y0),
+                Point2::new(x0 + s, y0 + s),
+                Point2::new(x0, y0 + s),
+            ]
+        };
+        // Dug 1 m below the middle of a 10 × 10 m square, ground 1,5–2,5.
+        let dig = TerrainPad {
+            outline: square(15.0, 15.0, 10.0),
+            z: 1.0,
+            slope: 1.0,
+        };
+        m.edit_terrain(id, |t| t.set_pads(vec![dig.clone()]))
+            .unwrap();
+        let t = m.terrain(id).unwrap();
+        assert_eq!(t.survey().len(), n);
+        assert_eq!(
+            t.lines,
+            vec![vec![0, 1]],
+            "the surveyed points keep their place"
+        );
+        for q in [(16.0, 16.0), (20.0, 20.0), (24.5, 24.5)] {
+            let z = t.height_at(Point2::new(q.0, q.1)).unwrap();
+            assert!((z - 1.0).abs() < 1e-6, "{q:?}: {z}");
+        }
+        // North of it, the bank: 1 m out, at most 1 m up.
+        let z = t.height_at(Point2::new(20.0, 26.0)).unwrap();
+        assert!(z <= 2.0 + 1e-6 && z > 1.5, "{z}");
+        // Far away, the ground as it was.
+        let z = t.height_at(Point2::new(20.0, 39.0)).unwrap();
+        assert!((z - 3.9).abs() < 1e-6, "{z}");
+        let (cut, fill) = t.earthworks();
+        // 100 m³ under the square, plus the banks.
+        assert!(cut > 100.0 && cut < 130.0, "{cut}");
+        assert!(fill < 1.0, "{fill}");
+        // A raised one fills.
+        let raise = TerrainPad {
+            outline: square(5.0, 5.0, 5.0),
+            z: 1.5,
+            slope: 0.5,
+        };
+        m.edit_terrain(id, |t| t.set_pads(vec![raise])).unwrap();
+        let (cut, fill) = m.terrain(id).unwrap().earthworks();
+        // Ground 0,5–1,0 under it: 25 × 0,75 = 18,75 m³ and the banks.
+        assert!(fill > 18.0 && fill < 40.0, "{fill}");
+        assert!(cut < 0.5, "{cut}");
+        // A survey point changed: the ground is graded again.
+        m.edit_terrain(id, |t| t.edit_survey(|g| g[0].z = -1.0))
+            .unwrap();
+        let t = m.terrain(id).unwrap();
+        assert_eq!(t.survey()[0].z, -1.0);
+        assert_eq!(t.points[0].z, -1.0);
+        assert!(!t.pads.is_empty());
+        // None: the survey comes back.
+        m.edit_terrain(id, |t| t.set_pads(Vec::new())).unwrap();
+        let t = m.terrain(id).unwrap();
+        assert_eq!(t.points.len(), n);
+        assert!(t.ground.is_none() && t.pads.is_empty());
+        assert_eq!(t.earthworks(), (0.0, 0.0));
+    }
+
+    #[test]
+    fn platforms_under_the_building() {
+        let mut m = Model::new("t");
+        let sotano = m.add_level("Sótano", -3.0);
+        let pb = m.add_level("PB", 0.0);
+        let p1 = m.add_level("P1", 3.0);
+        let earth = m.add_material("Tierra", "earth", [150, 120, 90], CutPattern::Dots);
+        let id = m
+            .add_terrain(NewTerrain {
+                level: pb,
+                points: vec![
+                    sp(-20.0, -20.0, 0.0),
+                    sp(20.0, -20.0, 0.0),
+                    sp(20.0, 20.0, 0.0),
+                    sp(-20.0, 20.0, 0.0),
+                ],
+                material: earth,
+                depth: 2.0,
+                contour: 0.5,
+                lines: Vec::new(),
+            })
+            .unwrap();
+        let ty = m
+            .add_slab_type(
+                "Forjado 30",
+                SlabFunction::Floor,
+                vec![Layer {
+                    material: earth,
+                    thickness: 0.3,
+                    function: LayerFunction::Structure,
+                }],
+            )
+            .unwrap();
+        let sq = vec![
+            Point2::new(0.0, 0.0),
+            Point2::new(10.0, 0.0),
+            Point2::new(10.0, 8.0),
+            Point2::new(0.0, 8.0),
+        ];
+        for l in [sotano, pb, p1] {
+            m.add_slab(NewSlab {
+                slab_type: ty,
+                level: l,
+                outline: sq.clone(),
+                top_offset: 0.0,
+            })
+            .unwrap();
+        }
+        let pads = m.building_pads(id, 0.5, 1.0);
+        assert_eq!(
+            pads.len(),
+            2,
+            "basement and ground floor, not the first floor"
+        );
+        let mut zs: Vec<f64> = pads.iter().map(|p| p.z).collect();
+        zs.sort_by(f64::total_cmp);
+        assert!(
+            (zs[0] + 3.3).abs() < 1e-9 && (zs[1] + 0.3).abs() < 1e-9,
+            "{zs:?}"
+        );
+        let o = &pads[0].outline;
+        assert!(o[0].approx_eq(Point2::new(-0.5, -0.5)), "{o:?}");
+        assert!(o[2].approx_eq(Point2::new(10.5, 8.5)), "{o:?}");
+        m.edit_terrain(id, |t| t.set_pads(pads)).unwrap();
+        let t = m.terrain(id).unwrap();
+        // The dig of the basement wins.
+        let z = t.height_at(Point2::new(5.0, 4.0)).unwrap();
+        assert!((z + 3.3).abs() < 1e-6, "{z}");
+        let (cut, _) = t.earthworks();
+        // 11 × 9 × 3,3 = 326,7 m³, and the banks: 40 m round × 3,3² / 2
+        // = 218 m³, and their corners.
+        assert!(cut > 540.0 && cut < 620.0, "{cut}");
+    }
+
     #[test]
     fn an_edge_by_hand_and_slope_arrows() {
         let mut m = Model::new("t");
