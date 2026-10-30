@@ -6,6 +6,36 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-30 (36) · Editar contorno en modo boceto (E4)
+
+Rama `bloque/e4-contorno` (sobre `bloque/e6-clasificacion`), con pull request. Sin cambios de formato ni de IFC.
+
+**Hecho**
+- Botón **Editar contorno** en Propiedades de un forjado, una cubierta o un terreno. Entra en modo boceto como el de Revit: el contorno (y los huecos del forjado) en magenta sobre la planta, y el modelo no cambia hasta Finalizar.
+- Con el ratón:
+  - se arrastran vértices y aristas (la arista se mueve paralela);
+  - doble clic añade un vértice;
+  - Supr quita el vértice elegido.
+- En la barra de arriba:
+  - **Desfase** de todo el contorno, hacia fuera o hacia dentro;
+  - **Arista en arco**, con la flecha en tanto por ciento de la arista;
+  - **Recortar/alargar a esquina**: se elige una arista y luego la otra;
+  - **Añadir hueco** y **Quitar hueco**, solo en forjados;
+  - **Finalizar** (Intro) y **Cancelar** (Esc).
+- Finalizar es un solo paso de Deshacer. Si el contorno no vale (se cruza o un hueco queda fuera), se queda en el boceto y explica por qué.
+- Cubiertas: cada arista conserva su pendiente; un vértice nuevo parte la arista y las dos mitades toman la misma pendiente.
+- Terreno: los puntos del borde se mueven, se añaden (con la cota interpolada) o se quitan.
+
+**Pendiente**
+- Los arcos se guardan como 16 tramos rectos: el forjado no tiene aún aristas curvas de verdad (haría falta cambiar el formato).
+- Dibujar huecos de forma libre dentro del boceto (hoy se añade un cuadrado de 1 × 1 y se edita).
+
+**Qué debe probar Antonio**
+1. Selecciona el forjado de la cubierta de la demo → **Editar contorno**. Arrastra la arista sur 1 m hacia fuera y pulsa Intro. Luego deshaz con Ctrl+Z.
+2. Otra vez: elige una arista y pulsa **Arista en arco** con 25 %; **Desfase** de 0,20 y Desfasar. Pulsa Esc: no debe cambiar nada.
+3. Recorta una esquina: añade dos vértices con doble clic cerca de una esquina, quita la esquina con Supr, y luego **Recortar/alargar a esquina** sobre las dos aristas.
+4. Haz lo mismo con una cubierta y comprueba en 3D que los faldones siguen bien.
+
 ## 2026-10-30 (35) · Representación, clasificación y propiedades (E6, tercera entrega)
 
 Rama `bloque/e6-clasificacion` (sobre `bloque/e6-hueco`), con pull request. Sin cambios de formato; suben de versión todas las familias de puertas y ventanas. Con esta, E6 queda completo. Detalle en `docs/CARPINTERIA.md` §11.

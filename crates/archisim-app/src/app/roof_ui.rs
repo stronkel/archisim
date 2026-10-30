@@ -275,7 +275,12 @@ impl ArchiSimApp {
             .unwrap_or_default();
         let thickness = model.slab_type(r.roof_type).map_or(0.0, |t| t.thickness());
         props::title(ui, "Cubierta · 1 seleccionada");
+        let sketch = super::sketch_ui::edit_contour_button(ui);
         super::properties::view_card(ui, Icon::Roof, &type_name, "IfcRoof");
+        if sketch {
+            self.start_sketch(crate::sketch::SketchTarget::Roof(id));
+            return;
+        }
         let types = roof_types(model);
         props::note(
             ui,

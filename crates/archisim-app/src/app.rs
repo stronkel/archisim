@@ -499,6 +499,8 @@ pub struct ArchiSimApp {
     hover_grip: Option<Grip>,
     /// A vertex picked with a click (Supr takes it away): `vertex_ui`.
     vertex: Option<Grip>,
+    /// The contour being sketched (E4), instead of the usual clicks.
+    sketch: Option<sketch_ui::SketchState>,
     /// A 3D model being brought in (its dialog): `mesh_ui`.
     pub mesh_import: Option<mesh_ui::MeshImport>,
     /// Moving, copying or stretching the selection with the mouse.
@@ -812,6 +814,7 @@ impl ArchiSimApp {
             tab_pick: None,
             hover_grip: None,
             vertex: None,
+            sketch: None,
             mesh_import: None,
             drag: None,
             drag_preview: None,
@@ -2592,6 +2595,7 @@ mod section_ui;
 mod services_ui;
 mod sheet_drop;
 mod sheet_ui;
+mod sketch_ui;
 mod stair_ui;
 mod start_ui;
 mod structure_ui;
