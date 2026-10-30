@@ -1,7 +1,7 @@
 family "Ventana corredera"
   category window
   host wall
-  version 8
+  version 9
   description "Ventana o balconera corredera de 2 a 4 hojas, con marco, persiana con capialzado, mosquitera, premarco y vierteaguas si se quieren"
 
 include "piezas"
@@ -74,6 +74,11 @@ type_params
     grille_material material = "Hierro forjado" visible_if grille != "Sin reja" label "Reja: material"
   section "Representación"
     opening_lines_in_views bool = no label "Flechas de apertura en alzados y secciones del modelo"
+  section "Representación"
+    plan_frame_fill choice("Blanco", "Color del material") = "Blanco" label "Marco cortado en planta"
+  section "Clasificación"
+    classification_system choice("GuBIMClass", "Uniclass 2015", "OmniClass") = "GuBIMClass" label "Sistema de clasificación"
+    classification text = "" label "Código de clasificación"
 
 let s = if subframe then subframe_width else 0
 let w = width - 2 * s
@@ -141,9 +146,9 @@ plan 1:50
     else
       line (-width / 2, sy) to (width / 2, sy) pen thin
   if subframe
-    use frame_cut_plan(-width / 2, -w / 2, frame_depth)
-    use frame_cut_plan(w / 2, width / 2, frame_depth)
-  use frame_cut_plan(-w / 2, w / 2, frame_depth)
+    use frame_cut_plan_t(-width / 2, -w / 2, frame_depth, plan_frame_fill == "Color del material", frame_material)
+    use frame_cut_plan_t(w / 2, width / 2, frame_depth, plan_frame_fill == "Color del material", frame_material)
+  use frame_cut_plan_t(-w / 2, w / 2, frame_depth, plan_frame_fill == "Color del material", frame_material)
   let c0 = -w / 2 + frame_width
   let c1 = w / 2 - frame_width
   let es = if wall_ext > 0 then 1 else -1
@@ -171,7 +176,7 @@ elevation
     use arrow_lines(m - s * lw * 0.25, m + s * lw * 0.25, zm)
 
 plan 1:100
-  use frame_cut_plan(-width / 2, width / 2, frame_depth)
+  use frame_cut_plan_t(-width / 2, width / 2, frame_depth, plan_frame_fill == "Color del material", frame_material)
   line (-width / 2 + frame_width, 0) to (width / 2 - frame_width, 0) pen thin
 
 outputs

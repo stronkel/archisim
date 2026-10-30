@@ -1,7 +1,7 @@
 family "Puerta pivotante"
   category door
   host wall
-  version 4
+  version 5
   description "Puerta de una hoja que gira sobre un eje vertical separado de la jamba (pivote), como las de entrada de gran formato"
 
 include "piezas"
@@ -32,6 +32,11 @@ type_params
   section "Representación"
     swing_line linestyle = "continuous" label "Línea del giro (planta)"
     opening_lines linestyle = "dashed" label "Líneas de apertura (alzado y sección)"
+  section "Representación"
+    plan_frame_fill choice("Blanco", "Color del material") = "Blanco" label "Marco cortado en planta"
+  section "Clasificación"
+    classification_system choice("GuBIMClass", "Uniclass 2015", "OmniClass") = "GuBIMClass" label "Sistema de clasificación"
+    classification text = "" label "Código de clasificación"
 
 let f = frame_width
 let c0 = -width / 2 + f
@@ -52,8 +57,8 @@ body
 # La hoja abierta a 90° atravesando el hueco por el eje (del lado de la
 # mano), con los dos giros: el del lado corto hacia atrás.
 plan 1:50
-  use frame_cut_plan(-width / 2, c0, frame_depth)
-  use frame_cut_plan(c1, width / 2, frame_depth)
+  use frame_cut_plan_t(-width / 2, c0, frame_depth, plan_frame_fill == "Color del material", frame_material)
+  use frame_cut_plan_t(c1, width / 2, frame_depth, plan_frame_fill == "Color del material", frame_material)
   let s = if hand == "left" then 1 else -1
   let px = if hand == "left" then c0 + pivot else c1 - pivot
   let far = lw - pivot

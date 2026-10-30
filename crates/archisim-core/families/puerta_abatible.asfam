@@ -1,7 +1,7 @@
 family "Puerta abatible"
   category door
   host wall
-  version 12
+  version 13
   description "Puerta abatible de una o dos hojas (iguales o con hoja activa), con cerco, tarja acristalada, fijos laterales y premarco si se quieren"
 
 include "piezas"
@@ -70,6 +70,11 @@ type_params
   section "Representación"
     swing_line linestyle = "continuous" label "Línea del giro (planta)"
     opening_lines linestyle = "dashed" label "Líneas de apertura (alzado y sección)"
+  section "Representación"
+    plan_frame_fill choice("Blanco", "Color del material") = "Blanco" label "Marco cortado en planta"
+  section "Clasificación"
+    classification_system choice("GuBIMClass", "Uniclass 2015", "OmniClass") = "GuBIMClass" label "Sistema de clasificación"
+    classification text = "" label "Código de clasificación"
 
 # Con premarco, el cerco va dentro de él; con tarja, la hoja llega hasta
 # su travesaño.
@@ -137,20 +142,20 @@ body
 plan 1:50
   use wall_hole_plan(width, frame_depth, wall_ext, nib, if surround != "Sin recercado" then surround_width else 0, surround_projection, 0, 0, 0)
   if subframe
-    use frame_cut_plan(-width / 2, -w / 2, frame_depth)
-    use frame_cut_plan(w / 2, width / 2, frame_depth)
+    use frame_cut_plan_t(-width / 2, -w / 2, frame_depth, plan_frame_fill == "Color del material", frame_material)
+    use frame_cut_plan_t(w / 2, width / 2, frame_depth, plan_frame_fill == "Color del material", frame_material)
   if side_left
-    use frame_cut_plan(-w / 2, -w / 2 + frame_width, frame_depth)
-    use frame_cut_plan(c0 - frame_width, c0, frame_depth)
+    use frame_cut_plan_t(-w / 2, -w / 2 + frame_width, frame_depth, plan_frame_fill == "Color del material", frame_material)
+    use frame_cut_plan_t(c0 - frame_width, c0, frame_depth, plan_frame_fill == "Color del material", frame_material)
     line (-w / 2 + frame_width, 0) to (c0 - frame_width, 0) pen thin
   else
-    use frame_cut_plan(-w / 2, c0, frame_depth)
+    use frame_cut_plan_t(-w / 2, c0, frame_depth, plan_frame_fill == "Color del material", frame_material)
   if side_right
-    use frame_cut_plan(w / 2 - frame_width, w / 2, frame_depth)
-    use frame_cut_plan(c1, c1 + frame_width, frame_depth)
+    use frame_cut_plan_t(w / 2 - frame_width, w / 2, frame_depth, plan_frame_fill == "Color del material", frame_material)
+    use frame_cut_plan_t(c1, c1 + frame_width, frame_depth, plan_frame_fill == "Color del material", frame_material)
     line (c1 + frame_width, 0) to (w / 2 - frame_width, 0) pen thin
   else
-    use frame_cut_plan(c1, w / 2, frame_depth)
+    use frame_cut_plan_t(c1, w / 2, frame_depth, plan_frame_fill == "Color del material", frame_material)
   if leaves == 2
     let left = if hand == "left" then active else c1 - c0 - active
     use door_leaf_plan(c0, 1, left, frame_depth, swing_line)
@@ -164,16 +169,16 @@ plan 1:50
 plan 1:20
   use wall_hole_plan(width, frame_depth, wall_ext, nib, if surround != "Sin recercado" then surround_width else 0, surround_projection, 0, 0, 0)
   if subframe
-    use frame_cut_plan(-width / 2, -w / 2, frame_depth)
-    use frame_cut_plan(w / 2, width / 2, frame_depth)
+    use frame_cut_plan_t(-width / 2, -w / 2, frame_depth, plan_frame_fill == "Color del material", frame_material)
+    use frame_cut_plan_t(w / 2, width / 2, frame_depth, plan_frame_fill == "Color del material", frame_material)
   let lt = min(0.04, frame_depth)
   use door_jamb_detail(c0 - frame_width, c0, frame_depth, 1, lt)
   use door_jamb_detail(c1, c1 + frame_width, frame_depth, -1, lt)
   if side_left
-    use frame_cut_plan(-w / 2, -w / 2 + frame_width, frame_depth)
+    use frame_cut_plan_t(-w / 2, -w / 2 + frame_width, frame_depth, plan_frame_fill == "Color del material", frame_material)
     use glass_detail(-w / 2 + frame_width, c0 - frame_width)
   if side_right
-    use frame_cut_plan(w / 2 - frame_width, w / 2, frame_depth)
+    use frame_cut_plan_t(w / 2 - frame_width, w / 2, frame_depth, plan_frame_fill == "Color del material", frame_material)
     use glass_detail(c1 + frame_width, w / 2 - frame_width)
   if leaves == 2
     let left = if hand == "left" then active else c1 - c0 - active

@@ -1,7 +1,7 @@
 family "Ventana practicable"
   category window
   host wall
-  version 11
+  version 12
   description "Ventana de 1 a 4 hojas con montantes; cada hoja fija, practicable, oscilobatiente, abatible, proyectante, basculante o pivotante; con persiana enrollable y capialzado, tarja fija, premarco y vierteaguas si se quieren"
 
 include "piezas"
@@ -83,6 +83,11 @@ type_params
     swing_line linestyle = "dashed" visible_if swing_in_plan label "Giro en planta: tipo de línea"
     opening_lines_in_views bool = no label "Líneas de apertura en alzados y secciones del modelo"
     opening_lines linestyle = "dashed" label "Líneas de apertura: tipo de línea"
+  section "Representación"
+    plan_frame_fill choice("Blanco", "Color del material") = "Blanco" label "Marco cortado en planta"
+  section "Clasificación"
+    classification_system choice("GuBIMClass", "Uniclass 2015", "OmniClass") = "GuBIMClass" label "Sistema de clasificación"
+    classification text = "" label "Código de clasificación"
 
 instance_params
   section "Esquina"
@@ -191,9 +196,9 @@ plan 1:50
     let es = if wall_ext > 0 then 1 else -1
     line (-width / 2, es * (frame_depth / 2 + 0.02)) to (width / 2, es * (frame_depth / 2 + 0.02)) pen thin dashed
   if subframe
-    use frame_cut_plan(-width / 2, -w / 2, frame_depth)
-    use frame_cut_plan(w / 2, width / 2, frame_depth)
-  use frame_cut_plan(-w / 2, w / 2, frame_depth)
+    use frame_cut_plan_t(-width / 2, -w / 2, frame_depth, plan_frame_fill == "Color del material", frame_material)
+    use frame_cut_plan_t(w / 2, width / 2, frame_depth, plan_frame_fill == "Color del material", frame_material)
+  use frame_cut_plan_t(-w / 2, w / 2, frame_depth, plan_frame_fill == "Color del material", frame_material)
   let f = frame_width
   let c0 = gc0
   let c1 = gc1
@@ -242,19 +247,19 @@ plan 1:20
     let es = if wall_ext > 0 then 1 else -1
     line (-width / 2, es * (frame_depth / 2 + 0.02)) to (width / 2, es * (frame_depth / 2 + 0.02)) pen thin dashed
   if subframe
-    use frame_cut_plan(-width / 2, -w / 2, frame_depth)
-    use frame_cut_plan(w / 2, width / 2, frame_depth)
+    use frame_cut_plan_t(-width / 2, -w / 2, frame_depth, plan_frame_fill == "Color del material", frame_material)
+    use frame_cut_plan_t(w / 2, width / 2, frame_depth, plan_frame_fill == "Color del material", frame_material)
   let f = frame_width
   let c0 = gc0
   let c1 = gc1
   if fl > 0
-    use frame_cut_plan(-w / 2, c0, frame_depth)
+    use frame_cut_plan_t(-w / 2, c0, frame_depth, plan_frame_fill == "Color del material", frame_material)
   if fr > 0
-    use frame_cut_plan(c1, w / 2, frame_depth)
+    use frame_cut_plan_t(c1, w / 2, frame_depth, plan_frame_fill == "Color del material", frame_material)
   let clear = gclear
   repeat i in 1..leaves
     let m = c0 + i * (clear + f) - f
-    use frame_cut_plan(m, m + f, frame_depth)
+    use frame_cut_plan_t(m, m + f, frame_depth, plan_frame_fill == "Color del material", frame_material)
   repeat i in 0..leaves
     let a = c0 + i * (clear + f)
     use sash_detail(a, a + clear, frame_depth)
@@ -289,7 +294,7 @@ plan 1:100
   if shutter
     let es = if wall_ext > 0 then 1 else -1
     line (-width / 2, es * (frame_depth / 2 + 0.03)) to (width / 2, es * (frame_depth / 2 + 0.03)) pen thin dashed
-  use frame_cut_plan(-width / 2, width / 2, frame_depth)
+  use frame_cut_plan_t(-width / 2, width / 2, frame_depth, plan_frame_fill == "Color del material", frame_material)
   line (-width / 2 + frame_width, 0) to (width / 2 - frame_width, 0) pen thin
 
 outputs

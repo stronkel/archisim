@@ -1,7 +1,7 @@
 family "Ventana en arco"
   category window
   host wall
-  version 1
+  version 2
   description "Ventana en un hueco de arco (medio punto, rebajado, apuntado o carpanel) u óculo: hojas bajo un fijo en arco, hojas que siguen el arco o fija; vierteaguas y recercado de piedra si se quieren"
 
 include "piezas"
@@ -39,6 +39,11 @@ type_params
     swing_line linestyle = "dashed" visible_if swing_in_plan label "Giro en planta: tipo de línea"
     opening_lines_in_views bool = no label "Líneas de apertura en alzados y secciones del modelo"
     opening_lines linestyle = "dashed" label "Líneas de apertura: tipo de línea"
+  section "Representación"
+    plan_frame_fill choice("Blanco", "Color del material") = "Blanco" label "Marco cortado en planta"
+  section "Clasificación"
+    classification_system choice("GuBIMClass", "Uniclass 2015", "OmniClass") = "GuBIMClass" label "Sistema de clasificación"
+    classification text = "" label "Código de clasificación"
 
 let f = frame_width
 let d = frame_depth
@@ -157,8 +162,8 @@ plan 1:50
     let yo = wall_ext + es * surround_projection
     polygon (-w / 2 - surround_width, wall_ext) (-w / 2, wall_ext) (-w / 2, yo) (-w / 2 - surround_width, yo) pen thin filled
     polygon (w / 2, wall_ext) (w / 2 + surround_width, wall_ext) (w / 2 + surround_width, yo) (w / 2, yo) pen thin filled
-  use frame_cut_plan(-w / 2, -w / 2 + f, d)
-  use frame_cut_plan(w / 2 - f, w / 2, d)
+  use frame_cut_plan_t(-w / 2, -w / 2 + f, d, plan_frame_fill == "Color del material", frame_material)
+  use frame_cut_plan_t(w / 2 - f, w / 2, d, plan_frame_fill == "Color del material", frame_material)
   line (-w / 2 + f, 0) to (w / 2 - f, 0) pen thin
   if swing_in_plan and kind != "Fija"
     let a = -w / 2 + f
@@ -172,7 +177,7 @@ plan 1:50
       use window_leaf_plan(b, -1, b - a, d, swing_line)
 
 plan 1:100
-  use frame_cut_plan(-w / 2, w / 2, d)
+  use frame_cut_plan_t(-w / 2, w / 2, d, plan_frame_fill == "Color del material", frame_material)
 
 # En alzado, las líneas de apertura de cada hoja.
 elevation

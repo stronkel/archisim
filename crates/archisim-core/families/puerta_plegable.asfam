@@ -1,7 +1,7 @@
 family "Puerta plegable"
   category door
   host wall
-  version 5
+  version 6
   description "Puerta plegable (de librillo) de 2 a 8 hojas que se recogen a un lado, con cerco"
 
 include "piezas"
@@ -31,6 +31,11 @@ type_params
     handle_sides choice("A las dos caras", "Solo del lado al que abre", "Solo del otro lado") = "A las dos caras" visible_if handle_style != "Sin manilla" label "Manilla: caras"
   section "Representación"
     opening_lines linestyle = "dashed" label "Líneas de apertura (alzado y sección)"
+  section "Representación"
+    plan_frame_fill choice("Blanco", "Color del material") = "Blanco" label "Marco cortado en planta"
+  section "Clasificación"
+    classification_system choice("GuBIMClass", "Uniclass 2015", "OmniClass") = "GuBIMClass" label "Sistema de clasificación"
+    classification text = "" label "Código de clasificación"
 
 instance_params
   section "Posición"
@@ -56,8 +61,8 @@ body
 plan 1:50
   let c0 = -width / 2 + frame_width
   let c1 = width / 2 - frame_width
-  use frame_cut_plan(-width / 2, c0, frame_depth)
-  use frame_cut_plan(c1, width / 2, frame_depth)
+  use frame_cut_plan_t(-width / 2, c0, frame_depth, plan_frame_fill == "Color del material", frame_material)
+  use frame_cut_plan_t(c1, width / 2, frame_depth, plan_frame_fill == "Color del material", frame_material)
   let s = if hand == "left" then 1 else -1
   let start = if hand == "left" then c0 else c1
   let lw = (c1 - c0) / leaves

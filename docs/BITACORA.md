@@ -6,6 +6,24 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-30 (35) · Representación, clasificación y propiedades (E6, tercera entrega)
+
+Rama `bloque/e6-clasificacion` (sobre `bloque/e6-hueco`), con pull request. Sin cambios de formato; suben de versión todas las familias de puertas y ventanas. Con esta, E6 queda completo. Detalle en `docs/CARPINTERIA.md` §11.
+
+**Hecho**
+- **Representación**: «Marco cortado en planta» blanco o del color de corte del material.
+- **Clasificación**: identidad, clase IFC y código de clasificación (GuBIMClass, Uniclass 2015, OmniClass), exportado como `IfcClassificationReference` del tipo.
+- **Propiedades**: mediciones del tipo (hueco de obra, superficie del hueco, paso libre).
+- La demo clasifica la puerta de entrada.
+
+**Pendiente**
+- Hueco de muro y accesorios en guillotina, correderas de puerta y pivotante; tramas propias del marco en sección.
+
+**Qué debe probar Antonio**
+1. P-01 → Representación → «Marco cortado en planta: Color del material»; mira la planta a 1:50.
+2. P-01 → Clasificación: escribe un código de GuBIMClass, exporta el IFC y míralo en tu visor (clasificación del tipo de puerta).
+3. P-01 → Propiedades: hueco, superficie y paso libre (0,86 m en la demo).
+
 ## 2026-10-30 (34) · Hueco de muro y accesorios (E6, segunda entrega)
 
 Rama `bloque/e6-hueco` (sobre `bloque/e6-hojas`), con pull request. Sin cambios de formato; suben de versión la ventana practicable, la corredera y la puerta abatible. Detalle en `docs/CARPINTERIA.md` §10.
