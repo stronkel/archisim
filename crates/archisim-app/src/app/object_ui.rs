@@ -19,7 +19,12 @@ impl ArchiSimApp {
             .object_settings
             .object_type
             .filter(|t| model.object_type(*t).is_some());
-        let t = valid.or_else(|| model.object_types().next().map(|t| t.id));
+        let t = valid.or_else(|| {
+            model
+                .object_types()
+                .find(|t| !model.is_railing_type(t.id))
+                .map(|t| t.id)
+        });
         self.object_settings.object_type = t;
         t
     }

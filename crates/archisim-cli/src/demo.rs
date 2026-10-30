@@ -593,6 +593,11 @@ pub fn build() -> Result<Document, ModelError> {
             .find(|x| x.category == "steel")
             .map(|x| x.id)
             .ok_or(ModelError::InvalidRailing)?;
+        // Of glass held by clamps between round posts (E12).
+        let railing_type = m
+            .object_types()
+            .find(|t| t.name == "Barandilla de vidrio con pinzas")
+            .map(|t| t.id);
         m.add_railing(archisim_core::NewRailing {
             level: cubierta,
             path: vec![
@@ -608,6 +613,7 @@ pub fn build() -> Result<Document, ModelError> {
             post_spacing: 1.5,
             material: steel,
             glass: None,
+            railing_type,
         })?;
         Ok(())
     })?;

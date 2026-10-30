@@ -70,6 +70,7 @@ impl<'a> Importer<'a> {
                 post_spacing,
                 material,
                 glass,
+                railing_type: None,
             })
             .map_err(|e| explain(&e))?;
         self.railing_ids.insert(id);

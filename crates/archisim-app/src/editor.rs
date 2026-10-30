@@ -43,7 +43,7 @@ pub use curtain::CurtainSettings;
 pub use foundations::{FootingMode, FootingSettings};
 pub use modules::ModuleStatus;
 pub use objects::ObjectSettings;
-pub use railings::RailingSettings;
+pub use railings::{default_railing_type, RailingSettings};
 pub use roofs::{slopes_for, RoofKind, RoofSettings};
 pub use room_tool::{usages_of, RoomSettings, USAGE_SETS};
 pub use stairs::{default_stair_settings, StairSettings};

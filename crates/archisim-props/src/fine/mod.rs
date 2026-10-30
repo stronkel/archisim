@@ -27,6 +27,7 @@ pub mod office;
 pub mod plant;
 pub mod playground;
 pub mod pool;
+pub mod railing;
 pub mod shape;
 pub mod shop;
 pub mod sink;
@@ -51,6 +52,7 @@ pub const KINDS: &[(&str, &[&str])] = &[
     ("sliding_door", &door::COLLECTIONS),
     ("folding_door", &door::COLLECTIONS),
     ("garage_door", &["Único"]),
+    ("railing", &railing::COLLECTIONS),
     ("window", &window::COLLECTIONS),
     ("slider", &window::COLLECTIONS),
     ("sash_window", &window::COLLECTIONS),
@@ -578,6 +580,7 @@ pub fn make(kind: &str, b: &mut Builder, p: &Params) -> bool {
         "sliding_door" => door::sliding_door(b, p),
         "folding_door" => door::folding_door(b, p),
         "garage_door" => door::garage_door(b, p),
+        "railing" => railing::railing_run(b, p),
         "window" => window::window(b, p),
         "slider" => window::slider(b, p),
         "sash_window" => window::sash_window(b, p),

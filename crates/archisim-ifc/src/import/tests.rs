@@ -1053,6 +1053,7 @@ fn glass_railing_round_trip() {
         post_spacing: 1.5,
         material: mats[0],
         glass: Some(mats[1]),
+        railing_type: None,
     })
     .unwrap();
     let ifc = export(&m);

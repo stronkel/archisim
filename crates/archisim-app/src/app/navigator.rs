@@ -551,7 +551,7 @@ impl ArchiSimApp {
         // Objects, by type.
         let objects = m
             .object_types()
-            .filter(|t| m.object_type_users(t.id) > 0)
+            .filter(|t| m.object_type_users(t.id) > 0 && !m.is_railing_type(t.id))
             .map(|t| TypeRow {
                 tab: None,
                 id: t.id.0,

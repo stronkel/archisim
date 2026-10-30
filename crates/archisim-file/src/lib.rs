@@ -48,7 +48,7 @@ use serde_json::Value;
 /// Value of the `format` field.
 pub const FORMAT: &str = "ArchiSim";
 /// File layout written by this version of ArchiSim.
-pub const CURRENT_VERSION: u32 = 42;
+pub const CURRENT_VERSION: u32 = 43;
 /// File name extension, without the dot.
 pub const EXTENSION: &str = "archisim";
 /// Length unit of every number in the file.
@@ -305,7 +305,9 @@ pub fn migrate(value: Value, from: u64) -> Result<Value, FileError> {
             // and inserts (`wrap_ends`, `wrap_inserts`); older types keep
             // the reveals of façades wrapped, as they were drawn. 41 → 42:
             // pools built in the ground (`pools`); older files have none.
-            9..=41 => {
+            // 42 → 43: railings may take a type (`railing_type`); older
+            // railings have none and are drawn as before.
+            9..=42 => {
                 let mut v = if version == 32 {
                     legacy_dormers(value)
                 } else {

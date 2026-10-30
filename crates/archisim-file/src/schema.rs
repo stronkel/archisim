@@ -401,6 +401,9 @@ pub(crate) struct Railing {
     /// Glass panels instead of bars: their material.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub glass: Option<u64>,
+    /// Its type, an object type of the «Barandilla» family (version 43).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub railing_type: Option<u64>,
 }
 
 /// A curtain wall (version 8): its type, line, foot and top (as walls).
@@ -3256,6 +3259,7 @@ impl ProjectFile {
                     post_spacing: r.post_spacing,
                     material: r.material.0,
                     glass: r.glass.map(|g| g.0),
+                    railing_type: r.railing_type.map(|t| t.0),
                 })
                 .collect(),
             curtain_types: p.curtain_types.into_iter().map(curtain_type_out).collect(),
@@ -3713,6 +3717,7 @@ impl ProjectFile {
                         post_spacing: r.post_spacing,
                         material: core::MaterialId(r.material),
                         glass: r.glass.map(core::MaterialId),
+                        railing_type: r.railing_type.map(core::ObjectTypeId),
                     })
                 })
                 .collect::<Result<Vec<_>, FileError>>()?,

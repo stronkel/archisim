@@ -786,3 +786,51 @@ fn pivot_folding_garage_doors_stand_whole() {
     }
     assert!(bad.is_empty(), "{} loose", bad.len());
 }
+
+/// Every railing run — each collection and each choice, free ends and
+/// corners, near and far — stands whole.
+#[test]
+fn railings_stand_whole() {
+    use fine::railing::*;
+    let mut bad = Vec::new();
+    for style in 1..=8 {
+        for (key, n) in [
+            ("rail_post", POSTS.len()),
+            ("rail_top", RAILS.len()),
+            ("rail_infill", INFILLS.len()),
+            ("rail_end", ENDS.len()),
+            ("rail_anchor", ANCHORS.len()),
+        ] {
+            for i in 1..=n {
+                for (len, start, end) in [
+                    (2.7, 0.0, 0.0),
+                    (1.1, 1.0, 1.0),
+                    (4.0, 2.0, 0.0),
+                    (0.6, 0.0, 1.0),
+                ] {
+                    let mut p = Params::default();
+                    p.set("style", style as f64);
+                    p.set(key, i as f64);
+                    p.set("run_len", len);
+                    p.set("height", 1.1);
+                    p.set("post_spacing", 1.4);
+                    p.set("start", start);
+                    p.set("end", end);
+                    p.set("lod", (i % 3 == 0) as i32 as f64);
+                    let m = make("railing", &p).unwrap();
+                    let loose = check::loose_pieces(&m, check::anchors_for("railing"), 0.004);
+                    if let Some(l) = loose.first() {
+                        bad.push(format!(
+                            "colección {style} {key}={i} {len} {start}/{end}: {} a {:.3} ({:?}..{:?})",
+                            l.role, l.gap, l.lo, l.hi
+                        ));
+                    }
+                }
+            }
+        }
+    }
+    for b in bad.iter().take(30) {
+        println!("{b}");
+    }
+    assert!(bad.is_empty(), "{} loose", bad.len());
+}

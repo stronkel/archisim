@@ -547,6 +547,7 @@ pub fn add_library(m: &mut Model) -> Result<Library, ModelError> {
     // Structure (v0.25), added last so older ids stay put.
     let (column, beam) = add_structure_with(m, hormigon)?;
     add_objects(m)?;
+    railings::add_railing_types(m)?;
     let curtain = add_curtain_types(m)?;
     add_studio_types(m)?;
 
@@ -782,6 +783,7 @@ pub mod extended;
 pub mod flora;
 pub mod ground;
 pub mod imported;
+pub mod railings;
 pub mod workshop;
 
 /// Adds the studio's usual door and window types, with the materials they
