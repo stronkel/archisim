@@ -2087,6 +2087,56 @@ fn railing_pictures() {
     pic.save_png(dir.join("todas.png")).unwrap();
 }
 
+/// The stairs with a railing type of `archisim escaleras` (run it first
+/// into the folder of `ARCHISIM_ESCALERAS_OUT`), each from two sides.
+#[test]
+fn stair_railing_pictures() {
+    let Some(dir) = std::env::var_os("ARCHISIM_ESCALERAS_OUT") else {
+        return;
+    };
+    let dir = Path::new(&dir);
+    let Ok(text) = std::fs::read_to_string(dir.join("escaleras.archisim")) else {
+        eprintln!("No escaleras.archisim: run `archisim escaleras` first.");
+        return;
+    };
+    let m = archisim_file::from_str(&text).unwrap();
+    let Some(gpu) = super::gpu_tests::gpu() else {
+        eprintln!("No graphics adapter: stair pictures skipped.");
+        return;
+    };
+    let mut r = Renderer::new(&gpu.0, gpu.2, TextureMode::Full);
+    for s in m.stairs().filter(|s| s.railing_type.is_some()) {
+        let solids = archisim_geom::solid::stair_solids(&m, s.id);
+        let (mut lo, mut hi) = ([f32::MAX; 3], [f32::MIN; 3]);
+        for p in solids.iter().flat_map(|s| s.triangles.iter().flatten()) {
+            for k in 0..3 {
+                lo[k] = lo[k].min(p[k] as f32);
+                hi[k] = hi[k].max(p[k] as f32);
+            }
+        }
+        for (view, yaw) in [("a", -60.0), ("b", 120.0)] {
+            let pic = picture(
+                &mut r,
+                &gpu,
+                &m,
+                |_, _| {
+                    camera(
+                        glam::Vec3::from(lo),
+                        glam::Vec3::from(hi),
+                        1.0,
+                        yaw,
+                        25.0,
+                        1.1,
+                    )
+                },
+                [1000, 1000],
+            );
+            pic.save_png(dir.join(format!("escalera-{}-{view}.png", s.id.0)))
+                .unwrap();
+        }
+    }
+}
+
 /// the other, close to the handle, and from far away (the lighter
 /// version the 3D draws there).
 #[test]

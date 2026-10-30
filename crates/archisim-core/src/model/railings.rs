@@ -341,6 +341,26 @@ impl Model {
         Some((kind, p))
     }
 
+    /// The generator and values of one straight piece of a stair's
+    /// railing with a type: `len` long in plan, at the stair's railing
+    /// height; `start` and `end` 0 at a free end, 1 at a corner.
+    pub fn stair_railing_params(
+        &self,
+        id: StairId,
+        len: f64,
+        start: bool,
+        end: bool,
+    ) -> Option<(String, archisim_props::Params)> {
+        let s = self.stairs.get(&id)?;
+        let (kind, mut p) = self.prop_params(s.railing_type?)?;
+        p.set("run_len", len);
+        p.set("height", super::stairs::RAILING_HEIGHT);
+        p.set("post_spacing", 1.2);
+        p.set("start", if start { 1.0 } else { 0.0 });
+        p.set("end", if end { 1.0 } else { 0.0 });
+        Some((kind, p))
+    }
+
     pub(super) fn restore_railings(
         &mut self,
         list: Vec<Railing>,
