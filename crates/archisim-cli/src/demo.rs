@@ -122,6 +122,19 @@ pub fn build() -> Result<Document, ModelError> {
         let v1h = lib.window_one_leaf;
         let balconera = lib.balcony_door;
         let fija = lib.fixed_window;
+        // The entrance door classified (E6, Clasificación).
+        if let Some(t) = m.opening_type(entrada).cloned() {
+            let mut values = t.values.clone();
+            values.insert(
+                "classification".into(),
+                archisim_core::Value::Text("Ss_25_30_20".into()),
+            );
+            values.insert(
+                "classification_system".into(),
+                archisim_core::Value::Text("Uniclass 2015".into()),
+            );
+            m.edit_family_type(entrada, t.family, values)?;
+        }
 
         // Façade carpentry sits behind the brick leaf, in the cavity.
         let facade = Some(0.13);

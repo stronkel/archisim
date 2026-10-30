@@ -138,10 +138,18 @@ Todo va en el cuerpo de la receta, así que sale en 3D, alzados, secciones, rend
 
 En el taller, una fila más tras la de arcos con siete ejemplos; fotos de su fachada con `ARCHISIM_PUERTAS_OUT` (vista «fachada»).
 
-## 11. Siguiente
+## 11. Representación, clasificación y propiedades (E6, tercera entrega, 30/10/2026)
 
-- Las mismas piezas en las demás familias (guillotina, correderas de puerta, pivotante).
-- E6, tercera: representación (tramas y líneas en planta y sección), clasificación y propiedades.
+En todas las familias de puertas y ventanas:
+
+- **Representación**: «Marco cortado en planta», blanco (como hasta ahora) o del color de corte de su material, junto a las líneas de giro y de apertura que ya estaban.
+- **Clasificación**: identidad (nombre, marca, descripción), clase IFC, resistencia al fuego donde la hay y **código de clasificación** con su sistema (GuBIMClass, Uniclass 2015, OmniClass). En el IFC va como `IfcClassificationReference` del tipo, con su `IfcClassification` (uno por sistema); la demo clasifica la puerta de entrada (Uniclass Ss_25_30_20).
+- **Propiedades**: ejemplares, GlobalId, **mediciones** (hueco de obra, superficie del hueco, que es la que se descuenta del muro, y paso libre en las puertas) y los parámetros del proyecto.
+
+## 12. Siguiente
+
+- Hueco de muro y accesorios en las demás familias (guillotina, correderas de puerta, pivotante).
+- Tramas propias del marco y de la hoja en sección (hoy salen las del material).
 
 - Los recercados de los huecos sin carpintería, y la herradura y el arco lobulado (no son convexos).
 - Los arcos en muros curvos (hoy se quedan rectos en ellos).

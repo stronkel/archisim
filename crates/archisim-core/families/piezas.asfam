@@ -223,6 +223,14 @@ component wall_hole_plan(w, d, we, nib, sw, sp, bk, sl, off)
 component frame_cut_plan(xa, xb, d)
   polygon (xa, -d / 2) (xb, -d / 2) (xb, d / 2) (xa, d / 2) pen frame filled
 
+# El mismo, relleno del color de corte del material «mat» si «tinted»
+# (Representación: «Marco cortado en planta»).
+component frame_cut_plan_t(xa, xb, d, tinted, mat)
+  if tinted
+    polygon (xa, -d / 2) (xb, -d / 2) (xb, d / 2) (xa, d / 2) pen frame tint mat
+  else
+    polygon (xa, -d / 2) (xb, -d / 2) (xb, d / 2) (xa, d / 2) pen frame filled
+
 # Hoja de puerta abierta a 90° (con su grueso) y su giro. «hx» es la
 # bisagra; «dir», 1 si la hoja cierra hacia +x y -1 si hacia -x; «st», el
 # tipo de línea del giro.

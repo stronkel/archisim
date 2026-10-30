@@ -1,7 +1,7 @@
 family "Puerta en arco"
   category door
   host wall
-  version 1
+  version 2
   description "Puerta en un hueco de arco (medio punto, rebajado, apuntado o carpanel): con las hojas siguiendo el arco, o rectangular con fijos laterales y un fijo superior que completa el arco; recercado de piedra si se quiere"
 
 include "piezas"
@@ -41,6 +41,11 @@ type_params
   section "Representación"
     swing_line linestyle = "continuous" label "Línea del giro (planta)"
     opening_lines linestyle = "dashed" label "Líneas de apertura (alzado y sección)"
+  section "Representación"
+    plan_frame_fill choice("Blanco", "Color del material") = "Blanco" label "Marco cortado en planta"
+  section "Clasificación"
+    classification_system choice("GuBIMClass", "Uniclass 2015", "OmniClass") = "GuBIMClass" label "Sistema de clasificación"
+    classification text = "" label "Código de clasificación"
 
 let f = frame_width
 let d = frame_depth
@@ -221,16 +226,16 @@ body
 # montantes cortados, el vidrio de los fijos y la puerta entre ellos. El
 # recercado, por fuera, junto a las jambas.
 plan 1:50
-  use frame_cut_plan(-w / 2, -w / 2 + f, d)
-  use frame_cut_plan(w / 2 - f, w / 2, d)
+  use frame_cut_plan_t(-w / 2, -w / 2 + f, d, plan_frame_fill == "Color del material", frame_material)
+  use frame_cut_plan_t(w / 2 - f, w / 2, d, plan_frame_fill == "Color del material", frame_material)
   if surround != "Sin recercado"
     let es = if wall_ext > 0 then 1 else -1
     let yo = wall_ext + es * surround_projection
     polygon (-w / 2 - surround_width, wall_ext) (-w / 2, wall_ext) (-w / 2, yo) (-w / 2 - surround_width, yo) pen thin filled
     polygon (w / 2, wall_ext) (w / 2 + surround_width, wall_ext) (w / 2 + surround_width, yo) (w / 2, yo) pen thin filled
   if fixed
-    use frame_cut_plan(c0 - f, c0, d)
-    use frame_cut_plan(c1, c1 + f, d)
+    use frame_cut_plan_t(c0 - f, c0, d, plan_frame_fill == "Color del material", frame_material)
+    use frame_cut_plan_t(c1, c1 + f, d, plan_frame_fill == "Color del material", frame_material)
     use glass_detail(-w / 2 + f, c0 - f)
     use glass_detail(c1 + f, w / 2 - f)
   let a = if fixed then c0 else -w / 2 + f
@@ -244,8 +249,8 @@ plan 1:50
     use door_leaf_plan(b, -1, b - a, d, swing_line)
 
 plan 1:100
-  use frame_cut_plan(-w / 2, -w / 2 + f, d)
-  use frame_cut_plan(w / 2 - f, w / 2, d)
+  use frame_cut_plan_t(-w / 2, -w / 2 + f, d, plan_frame_fill == "Color del material", frame_material)
+  use frame_cut_plan_t(w / 2 - f, w / 2, d, plan_frame_fill == "Color del material", frame_material)
   if fixed
     line (-w / 2 + f, 0) to (c0, 0) pen thin
     line (c1, 0) to (w / 2 - f, 0) pen thin

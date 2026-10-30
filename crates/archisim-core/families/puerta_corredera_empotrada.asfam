@@ -1,7 +1,7 @@
 family "Puerta corredera empotrada"
   category door
   host wall
-  version 4
+  version 5
   description "Puerta corredera de una hoja que se esconde dentro del muro, en un armazón (cajón) junto al hueco, con cerco"
 
 include "piezas"
@@ -25,6 +25,11 @@ type_params
     grid_rows integer = 4 range 1..12 visible_if leaf_design == "Retícula a medida" label "Retícula: vidrios a lo alto"
     casing choice("Como la colección", "Sin tapajuntas", "Plano", "Redondeado", "Moldurado", "Con junquillo") = "Como la colección" label "Tapajuntas"
     slide_pull choice("Como la colección", "Uñero embutido", "Tirador de barra", "Asa de granero", "Sin tirador") = "Como la colección" label "Tirador"
+  section "Representación"
+    plan_frame_fill choice("Blanco", "Color del material") = "Blanco" label "Marco cortado en planta"
+  section "Clasificación"
+    classification_system choice("GuBIMClass", "Uniclass 2015", "OmniClass") = "GuBIMClass" label "Sistema de clasificación"
+    classification text = "" label "Código de clasificación"
 
 instance_params
   section "Posición"
@@ -45,8 +50,8 @@ body
 plan 1:50
   let c0 = -width / 2 + frame_width
   let c1 = width / 2 - frame_width
-  use frame_cut_plan(-width / 2, c0, frame_depth)
-  use frame_cut_plan(c1, width / 2, frame_depth)
+  use frame_cut_plan_t(-width / 2, c0, frame_depth, plan_frame_fill == "Color del material", frame_material)
+  use frame_cut_plan_t(c1, width / 2, frame_depth, plan_frame_fill == "Color del material", frame_material)
   let s = if hand == "left" then -1 else 1
   let lw = c1 - c0
   let jamb = if hand == "left" then -width / 2 else width / 2

@@ -193,6 +193,9 @@ struct Exporter<'a> {
     /// The walls and slabs written, by element id: what their
     /// accessories cover.
     hosts: BTreeMap<u64, Ref>,
+    /// The classification systems written (GuBIMClass, Uniclass…), by
+    /// name, each once.
+    classifications: BTreeMap<String, Ref>,
 }
 
 impl<'a> Exporter<'a> {
@@ -210,7 +213,46 @@ impl<'a> Exporter<'a> {
             styles: BTreeMap::new(),
             schema: Schema::default(),
             hosts: BTreeMap::new(),
+            classifications: BTreeMap::new(),
         }
+    }
+
+    /// The classification of a type from its family's `classification`
+    /// and `classification_system` values (E6): an
+    /// `IfcClassificationReference` of its system, if it has a code.
+    fn classify(&mut self, ty: Ref, guid: &GlobalId, values: &archisim_core::Values) {
+        let Some(code) = values
+            .get("classification")
+            .and_then(|v| v.as_text())
+            .map(str::trim)
+            .filter(|c| !c.is_empty())
+        else {
+            return;
+        };
+        let system = values
+            .get("classification_system")
+            .and_then(|v| v.as_text())
+            .unwrap_or("GuBIMClass")
+            .to_string();
+        let cls = match self.classifications.get(&system) {
+            Some(&r) => r,
+            None => {
+                let r = self.w.add(format!(
+                    "IFCCLASSIFICATION($,$,$,{},$,$,$)",
+                    string(&system)
+                ));
+                self.classifications.insert(system, r);
+                r
+            }
+        };
+        let reference = self.w.add(format!(
+            "IFCCLASSIFICATIONREFERENCE($,{},$,{cls},$,$)",
+            string(code)
+        ));
+        self.w.add(format!(
+            "IFCRELASSOCIATESCLASSIFICATION({},$,$,$,({ty}),{reference})",
+            string(derived_guid(guid, "classification").as_str())
+        ));
     }
 
     fn point3(&mut self, x: f64, y: f64, z: f64) -> Ref {
@@ -978,6 +1020,7 @@ impl<'a> Exporter<'a> {
             "IFCRELASSOCIATESMATERIAL({},$,$,$,({ty}),{set})",
             string(derived_guid(&t.guid, "material").as_str())
         ));
+        self.classify(ty, &t.guid, &t.values);
         ty
     }
 

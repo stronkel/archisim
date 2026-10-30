@@ -120,7 +120,7 @@ pub fn opening_tab_of(section: &str) -> OpeningTab {
         | "Por fuera"
         | "Accesorios" => OpeningTab::Accessories,
         "Representación" => OpeningTab::Representation,
-        "Datos" => OpeningTab::Classification,
+        "Datos" | "Clasificación" => OpeningTab::Classification,
         _ => OpeningTab::Leaves,
     }
 }
@@ -1785,6 +1785,31 @@ impl ArchiSimApp {
                         &users.to_string(),
                     );
                     props::id_row(ui, "GlobalId", t.guid.as_str());
+                });
+                // What it measures, for the schedules.
+                let model = self.ed.model();
+                let area = archisim_core::shape::area(&t.shape.polygon(t.width, t.height)).abs();
+                let clear = if door {
+                    model.opening_clear_width(id)
+                } else {
+                    None
+                };
+                props::group(ui, "types-opening-measures", "Mediciones", |ui| {
+                    props::text_row(
+                        ui,
+                        "Hueco de obra",
+                        "Ancho por alto",
+                        &format!("{} × {}", fmt_mm(t.width), fmt_mm(t.height)),
+                    );
+                    props::text_row(
+                        ui,
+                        "Superficie del hueco",
+                        "La que se descuenta del muro",
+                        &format!("{area:.2} m²").replace('.', ","),
+                    );
+                    if let Some(c) = clear {
+                        props::text_row(ui, "Paso libre", "El que comprueba el CTE", &fmt_mm(c));
+                    }
                 });
                 self.type_params_group(ui, id.0);
             }
