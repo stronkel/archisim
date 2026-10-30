@@ -1,0 +1,285 @@
+family "Puerta en arco"
+  category door
+  host wall
+  version 1
+  description "Puerta en un hueco de arco (medio punto, rebajado, apuntado o carpanel): con las hojas siguiendo el arco, o rectangular con fijos laterales y un fijo superior que completa el arco; recercado de piedra si se quiere"
+
+include "piezas"
+
+type_params
+  section "Dimensiones"
+    width  length = 1.40 range 0.60..5.00 label "Hueco de obra: ancho"
+    height length = 2.80 range 1.80..6.00 label "Hueco de obra: alto (a la clave)"
+  section "Arco"
+    arch choice("Medio punto", "Rebajado", "Apuntado", "Carpanel") = "Medio punto" label "Arco"
+    rise length = 0.40 range 0.05..3.00 visible_if arch != "Medio punto" label "Arco: flecha (del arranque a la clave)"
+  section "Composición"
+    layout choice("Hojas en arco", "Puerta con fijos en arco") = "Hojas en arco" label "Composición"
+    leaves integer = 2 range 1..2 label "Nº de hojas"
+    leaf_style choice("Lisa", "Cuarterones", "Vidriera") = "Cuarterones" label "Hoja"
+    arch_glass bool = yes visible_if layout == "Hojas en arco" and leaf_style != "Vidriera" label "Vidrio en el arco de las hojas"
+    bars choice("Sin cuarterones", "Cuarterones") = "Sin cuarterones" label "Cuarterones de los vidrios"
+    door_width length = 0.90 range 0.60..3.00 visible_if layout == "Puerta con fijos en arco" label "Puerta: ancho"
+    door_height length = 2.10 range 1.80..3.00 visible_if layout == "Puerta con fijos en arco" label "Puerta: alto"
+    mullions_up bool = yes visible_if layout == "Puerta con fijos en arco" label "Montantes hasta el arco"
+    side_base length = 0.00 range 0.00..1.20 visible_if layout == "Puerta con fijos en arco" label "Fijos laterales: zócalo ciego"
+  section "Cerco"
+    frame_width length = 0.07 range 0.02..0.30 label "Cerco: anchura vista"
+    frame_depth length = 0.09 range 0.03..0.40 label "Cerco: fondo"
+  section "Recercado"
+    surround choice("Sin recercado", "Plano", "Moldurado", "Con clave e impostas") = "Sin recercado" label "Recercado por fuera"
+    surround_width length = 0.18 range 0.04..0.60 visible_if surround != "Sin recercado" label "Recercado: ancho"
+    surround_projection length = 0.03 range 0.005..0.20 visible_if surround != "Sin recercado" label "Recercado: vuelo"
+  section "Materiales"
+    frame_material material = "Madera de pino" label "Cerco"
+    panel_material material = "Madera de pino" label "Hoja"
+    glass_material material = "Vidrio doble" label "Vidrio"
+    hardware_material material = "Latón" label "Herrajes"
+    surround_material material = "Piedra caliza" visible_if surround != "Sin recercado" label "Recercado"
+  section "Datos"
+    fire_rating choice("—", "EI2 30-C5", "EI2 60-C5", "EI2 90-C5") = "—" label "Resistencia al fuego" ifc "Pset_DoorCommon.FireRating"
+  section "Representación"
+    swing_line linestyle = "continuous" label "Línea del giro (planta)"
+    opening_lines linestyle = "dashed" label "Líneas de apertura (alzado y sección)"
+
+let f = frame_width
+let d = frame_depth
+let w = width
+let h = height
+let lt = min(0.045, d)
+# Relieve de los cuarterones, dentro del fondo del cerco.
+let rp = max(0, min(0.008, (d - lt) / 2))
+# Fondo de los vidrios y de sus cuarterones.
+let gt = min(0.012, d / 2)
+let mt = min(0.016, d / 2)
+let glazed = leaf_style == "Vidriera"
+# Lo que sube el arco sobre su arranque, como lo dibuja ArchiSim.
+let ar = if arch == "Medio punto" then w / 2 else if arch == "Rebajado" then min(rise, w / 2) else if arch == "Apuntado" then max(rise, w / 2) else rise
+let zs = h - ar
+let fixed = layout == "Puerta con fijos en arco"
+let dw = if fixed then door_width else w - 2 * f
+let dh = if fixed then door_height else zs
+let c0 = -dw / 2
+let c1 = dw / 2
+
+require zs >= 1.00 else "El arco arranca a menos de 1 m del suelo: sube el alto o baja la flecha"
+require not fixed or dw + 4 * f + 0.20 < w else "La puerta no deja sitio a los fijos laterales"
+require not fixed or dh + f < h - f - 0.10 else "La puerta no deja sitio al fijo superior"
+
+# Cuarterones de un vidrio de «xa» a «xb» y «za» a «zb», recortados por la
+# forma del hueco metida «k».
+component muntins(a, wd, ht, rs, k, xa, xb, za, zb, md, style, mat)
+  let b = 0.022
+  if style == "Cuarterones"
+    let nx = max(1, round((xb - xa) / 0.32))
+    let nz = max(1, round((zb - za) / 0.36))
+    repeat i in 1..nx
+      let x = xa + (xb - xa) * i / nx
+      outline (a, wd, ht, rs) fill k clip (x - b / 2, za) to (x + b / 2, zb) depth -md to md material mat
+    repeat j in 1..nz
+      let z = za + (zb - za) * j / nz
+      outline (a, wd, ht, rs) fill k clip (xa, z - b / 2) to (xb, z + b / 2) depth -md to md material mat
+
+# Hoja de «xa» a «xb», de «z1» de alto: ciega, con cuarterones en relieve
+# por las dos caras, o vidriera (bastidor y vidrio, con sus cuarterones).
+component arch_leaf(xa, xb, z1, t, rp, style, mat, gmat, bars, md)
+  if style == "Vidriera"
+    let sw = min(0.09, (xb - xa) / 4)
+    box (xa, -t / 2, 0.006) to (xa + sw, t / 2, z1) material mat
+    box (xb - sw, -t / 2, 0.006) to (xb, t / 2, z1) material mat
+    box (xa + sw, -t / 2, 0.006) to (xb - sw, t / 2, 0.17) material mat
+    box (xa + sw, -t / 2, z1 - sw) to (xb - sw, t / 2, z1) material mat
+    box (xa + sw, -md * 0.75, 0.17) to (xb - sw, md * 0.75, z1 - sw) material gmat
+    use muntins("Recto", 1, 1, 0, -10, xa + sw, xb - sw, 0.17, z1 - sw, md, bars, mat)
+  else
+    box (xa, -t / 2, 0.006) to (xb, t / 2, z1) material mat
+  if style == "Cuarterones" and rp > 0
+    let m = min(0.10, (xb - xa) / 5)
+    let za = 0.16
+    let zm = za + (z1 - za - 0.14) * 0.42
+    let zb = zm + 0.10
+    box (xa + m, t / 2, za) to (xb - m, t / 2 + rp, zm) material mat
+    box (xa + m, -t / 2 - rp, za) to (xb - m, -t / 2, zm) material mat
+    box (xa + m, t / 2, zb) to (xb - m, t / 2 + rp, z1 - 0.12) material mat
+    box (xa + m, -t / 2 - rp, zb) to (xb - m, -t / 2, z1 - 0.12) material mat
+
+# Manilla de palanca por las dos caras, a «x», mirando a «dir» (1: hacia +x).
+component lever(x, t, dir, mat)
+  box (x - 0.022, t / 2, 0.90) to (x + 0.022, t / 2 + 0.008, 1.12) material mat
+  box (x - 0.022, -t / 2 - 0.008, 0.90) to (x + 0.022, -t / 2, 1.12) material mat
+  box (x - 0.008, t / 2 + 0.008, 1.03) to (x + 0.008, t / 2 + 0.055, 1.05) material mat
+  box (x - 0.008, -t / 2 - 0.055, 1.03) to (x + 0.008, -t / 2 - 0.008, 1.05) material mat
+  box (min(x, x + dir * 0.13), t / 2 + 0.045, 1.03) to (max(x, x + dir * 0.13), t / 2 + 0.062, 1.05) material mat
+  box (min(x, x + dir * 0.13), -t / 2 - 0.062, 1.03) to (max(x, x + dir * 0.13), -t / 2 - 0.045, 1.05) material mat
+
+body
+  # El cerco sigue el hueco; abierto abajo (sin travesaño en el suelo).
+  outline (arch, w, h, rise) ring 0 to f clip (-w, f) to (w, h + 1) depth -d / 2 to d / 2 material frame_material
+  use block(-w / 2, -w / 2 + f, d, 0, f, frame_material)
+  use block(w / 2 - f, w / 2, d, 0, f, frame_material)
+  if fixed
+    # Montantes a los lados de la puerta, travesaño sobre ella y los
+    # fijos: laterales (con su zócalo) y el de arriba, que completa el arco.
+    let top = if mullions_up then h + 1 else dh
+    outline (arch, w, h, rise) fill f clip (c0 - f, 0) to (c0, top) depth -d / 2 to d / 2 material frame_material
+    outline (arch, w, h, rise) fill f clip (c1, 0) to (c1 + f, top) depth -d / 2 to d / 2 material frame_material
+    outline (arch, w, h, rise) fill f clip (-w, dh) to (w, dh + f) depth -d / 2 to d / 2 material frame_material
+    if side_base > 0
+      outline (arch, w, h, rise) fill f clip (-w, 0) to (c0 - f, side_base) depth -lt / 2 to lt / 2 material panel_material
+      outline (arch, w, h, rise) fill f clip (c1 + f, 0) to (w, side_base) depth -lt / 2 to lt / 2 material panel_material
+    outline (arch, w, h, rise) fill f clip (-w, side_base) to (c0 - f, dh) depth -gt to gt material glass_material
+    outline (arch, w, h, rise) fill f clip (c1 + f, side_base) to (w, dh) depth -gt to gt material glass_material
+    use muntins(arch, w, h, rise, f, -w / 2, c0 - f, side_base, dh, mt, bars, frame_material)
+    use muntins(arch, w, h, rise, f, c1 + f, w / 2, side_base, dh, mt, bars, frame_material)
+    if mullions_up
+      outline (arch, w, h, rise) fill f clip (-w, dh + f) to (c0 - f, h + 1) depth -gt to gt material glass_material
+      outline (arch, w, h, rise) fill f clip (c0, dh + f) to (c1, h + 1) depth -gt to gt material glass_material
+      outline (arch, w, h, rise) fill f clip (c1 + f, dh + f) to (w, h + 1) depth -gt to gt material glass_material
+      use muntins(arch, w, h, rise, f, -w / 2, c0 - f, dh + f, h, mt, bars, frame_material)
+      use muntins(arch, w, h, rise, f, c0, c1, dh + f, h, mt, bars, frame_material)
+      use muntins(arch, w, h, rise, f, c1 + f, w / 2, dh + f, h, mt, bars, frame_material)
+    else
+      outline (arch, w, h, rise) fill f clip (-w, dh + f) to (w, h + 1) depth -gt to gt material glass_material
+      use muntins(arch, w, h, rise, f, -w / 2, w / 2, dh + f, h, mt, bars, frame_material)
+    # La puerta, rectangular, de una o dos hojas.
+    if leaves == 2
+      use arch_leaf(c0 + 0.003, -0.0015, dh - 0.003, lt, rp, leaf_style, panel_material, glass_material, bars, mt)
+      use arch_leaf(0.0015, c1 - 0.003, dh - 0.003, lt, rp, leaf_style, panel_material, glass_material, bars, mt)
+      use lever(if hand == "left" then -0.07 else 0.07, lt, if hand == "left" then -1 else 1, hardware_material)
+    else
+      use arch_leaf(c0 + 0.003, c1 - 0.003, dh - 0.003, lt, rp, leaf_style, panel_material, glass_material, bars, mt)
+      use lever(if hand == "left" then c1 - 0.07 else c0 + 0.07, lt, if hand == "left" then -1 else 1, hardware_material)
+  else
+    # Las hojas siguen el arco: ciegas hasta su arranque y, si se pide,
+    # con vidrio en el arco (con su peinazo y su marco curvo).
+    let g = 0.0015
+    let r = 0.09
+    let up = if arch_glass or glazed then zs else h + 1
+    if glazed
+      if leaves == 2
+        use arch_leaf(-w / 2 + f + 0.003, -g, zs, lt, rp, leaf_style, panel_material, glass_material, bars, mt)
+        use arch_leaf(g, w / 2 - f - 0.003, zs, lt, rp, leaf_style, panel_material, glass_material, bars, mt)
+      else
+        use arch_leaf(-w / 2 + f + 0.003, w / 2 - f - 0.003, zs, lt, rp, leaf_style, panel_material, glass_material, bars, mt)
+    else if leaves == 2
+      outline (arch, w, h, rise) fill f + 0.003 clip (-w, 0.006) to (-g, up) depth -lt / 2 to lt / 2 material panel_material
+      outline (arch, w, h, rise) fill f + 0.003 clip (g, 0.006) to (w, up) depth -lt / 2 to lt / 2 material panel_material
+    else
+      outline (arch, w, h, rise) fill f + 0.003 clip (-w, 0.006) to (w, up) depth -lt / 2 to lt / 2 material panel_material
+    if leaf_style == "Cuarterones" and rp > 0
+      let m = 0.10
+      let za = 0.16
+      let z1 = zs - 0.12
+      let zm = za + (z1 - za) * 0.45
+      repeat k in 0..leaves
+        let xa = if leaves == 2 then (if k == 0 then -w / 2 + f + m else g + m) else -w / 2 + f + m
+        let xb = if leaves == 2 then (if k == 0 then -g - m else w / 2 - f - m) else w / 2 - f - m
+        box (xa, lt / 2, za) to (xb, lt / 2 + rp, zm) material panel_material
+        box (xa, -lt / 2 - rp, za) to (xb, -lt / 2, zm) material panel_material
+        box (xa, lt / 2, zm + 0.10) to (xb, lt / 2 + rp, z1) material panel_material
+        box (xa, -lt / 2 - rp, zm + 0.10) to (xb, -lt / 2, z1) material panel_material
+    if arch_glass or glazed
+      outline (arch, w, h, rise) ring f + 0.003 to f + r clip (-w, zs) to (w, h + 1) depth -lt / 2 to lt / 2 material panel_material
+      outline (arch, w, h, rise) fill f + 0.003 clip (-w, zs) to (w, zs + r) depth -lt / 2 to lt / 2 material panel_material
+      if leaves == 2
+        outline (arch, w, h, rise) fill f + 0.003 clip (-r / 2, zs) to (-g, h + 1) depth -lt / 2 to lt / 2 material panel_material
+        outline (arch, w, h, rise) fill f + 0.003 clip (g, zs) to (r / 2, h + 1) depth -lt / 2 to lt / 2 material panel_material
+        outline (arch, w, h, rise) fill f + r clip (-w, zs + r) to (-r / 2, h + 1) depth -0.008 to 0.008 material glass_material
+        outline (arch, w, h, rise) fill f + r clip (r / 2, zs + r) to (w, h + 1) depth -0.008 to 0.008 material glass_material
+      else
+        outline (arch, w, h, rise) fill f + r clip (-w, zs + r) to (w, h + 1) depth -0.008 to 0.008 material glass_material
+      use muntins(arch, w, h, rise, f + r, -w / 2, w / 2, zs + r, h, mt, bars, panel_material)
+    if leaves == 2
+      use lever(if hand == "left" then -0.07 else 0.07, lt, if hand == "left" then -1 else 1, hardware_material)
+    else
+      use lever(if hand == "left" then c1 - 0.07 else c0 + 0.07, lt, if hand == "left" then -1 else 1, hardware_material)
+  # El recercado por la cara exterior del muro, alrededor del arco.
+  if surround != "Sin recercado"
+    let es = if wall_ext > 0 then 1 else -1
+    let sw = surround_width
+    let p = surround_projection
+    let y0 = min(wall_ext, wall_ext + es * p)
+    let y1 = max(wall_ext, wall_ext + es * p)
+    if surround == "Moldurado"
+      let ya = min(wall_ext, wall_ext + es * p * 0.6)
+      let yb = max(wall_ext, wall_ext + es * p * 0.6)
+      let yc = min(wall_ext, wall_ext + es * p * 0.75)
+      let yd = max(wall_ext, wall_ext + es * p * 0.75)
+      outline (arch, w, h, rise) ring -sw to -sw * 0.65 clip (-w - 1, 0) to (w + 1, h + 1) depth ya to yb material surround_material
+      outline (arch, w, h, rise) ring -sw * 0.65 to -sw * 0.25 clip (-w - 1, 0) to (w + 1, h + 1) depth y0 to y1 material surround_material
+      outline (arch, w, h, rise) ring -sw * 0.25 to 0 clip (-w - 1, 0) to (w + 1, h + 1) depth yc to yd material surround_material
+    else
+      outline (arch, w, h, rise) ring -sw to 0 clip (-w - 1, 0) to (w + 1, h + 1) depth y0 to y1 material surround_material
+    if surround == "Con clave e impostas"
+      let k0 = min(wall_ext, wall_ext + es * (p + 0.015))
+      let k1 = max(wall_ext, wall_ext + es * (p + 0.015))
+      box (-0.08, k0, h - 0.06) to (0.08, k1, h + sw + 0.04) material surround_material
+      box (-w / 2 - sw - 0.05, k0, zs - 0.10) to (-w / 2 + 0.01, k1, zs) material surround_material
+      box (w / 2 - 0.01, k0, zs - 0.10) to (w / 2 + sw + 0.05, k1, zs) material surround_material
+
+# El cerco cortado y las hojas abiertas a 90° con su giro; con fijos, los
+# montantes cortados, el vidrio de los fijos y la puerta entre ellos. El
+# recercado, por fuera, junto a las jambas.
+plan 1:50
+  use frame_cut_plan(-w / 2, -w / 2 + f, d)
+  use frame_cut_plan(w / 2 - f, w / 2, d)
+  if surround != "Sin recercado"
+    let es = if wall_ext > 0 then 1 else -1
+    let yo = wall_ext + es * surround_projection
+    polygon (-w / 2 - surround_width, wall_ext) (-w / 2, wall_ext) (-w / 2, yo) (-w / 2 - surround_width, yo) pen thin filled
+    polygon (w / 2, wall_ext) (w / 2 + surround_width, wall_ext) (w / 2 + surround_width, yo) (w / 2, yo) pen thin filled
+  if fixed
+    use frame_cut_plan(c0 - f, c0, d)
+    use frame_cut_plan(c1, c1 + f, d)
+    use glass_detail(-w / 2 + f, c0 - f)
+    use glass_detail(c1 + f, w / 2 - f)
+  let a = if fixed then c0 else -w / 2 + f
+  let b = if fixed then c1 else w / 2 - f
+  if leaves == 2
+    use door_leaf_plan(a, 1, (b - a) / 2, d, swing_line)
+    use door_leaf_plan(b, -1, (b - a) / 2, d, swing_line)
+  else if hand == "left"
+    use door_leaf_plan(a, 1, b - a, d, swing_line)
+  else
+    use door_leaf_plan(b, -1, b - a, d, swing_line)
+
+plan 1:100
+  use frame_cut_plan(-w / 2, -w / 2 + f, d)
+  use frame_cut_plan(w / 2 - f, w / 2, d)
+  if fixed
+    line (-w / 2 + f, 0) to (c0, 0) pen thin
+    line (c1, 0) to (w / 2 - f, 0) pen thin
+  let a = if fixed then c0 else -w / 2 + f
+  let b = if fixed then c1 else w / 2 - f
+  if leaves == 2
+    use door_leaf_plan_simple(a, 1, (b - a) / 2, d, swing_line)
+    use door_leaf_plan_simple(b, -1, (b - a) / 2, d, swing_line)
+  else if hand == "left"
+    use door_leaf_plan_simple(a, 1, b - a, d, swing_line)
+  else
+    use door_leaf_plan_simple(b, -1, b - a, d, swing_line)
+
+# En alzado, las líneas de apertura de cada hoja hasta el arranque del arco
+# (o hasta lo alto de la puerta, con fijos).
+elevation
+  let a = if fixed then c0 else -w / 2 + f
+  let b = if fixed then c1 else w / 2 - f
+  if leaves == 2
+    use side_hung_lines(a, 0, 0, dh, opening_lines)
+    use side_hung_lines(b, 0, 0, dh, opening_lines)
+  else if hand == "left"
+    use side_hung_lines(a, b, 0, dh, opening_lines)
+  else
+    use side_hung_lines(b, a, 0, dh, opening_lines)
+
+outputs
+  opening_width = width
+  opening_height = height
+  opening_shape = arch
+  opening_rise = rise
+  frame_width = frame_width
+  frame_depth = frame_depth
+  frame_material = frame_material
+  panel_material = panel_material
+  clear_width = if fixed then door_width else w - 2 * f
+  operation = if leaves == 2 then "double_swing" else "single_swing"

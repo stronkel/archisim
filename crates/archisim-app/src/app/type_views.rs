@@ -65,6 +65,21 @@ pub fn paint_drawing(
                 }
                 painter.rect_stroke(r, CornerRadius::ZERO, pen(*p), StrokeKind::Middle);
             }
+            Item::Polygon {
+                points,
+                fill,
+                pen: p,
+            } => {
+                let pts: Vec<Pos2> = points.iter().map(|q| to(*q)).collect();
+                let [cr, cg, cb, ca] = *fill;
+                let fill = if ca > 0 {
+                    Color32::from_rgba_unmultiplied(cr, cg, cb, ca)
+                } else {
+                    Color32::TRANSPARENT
+                };
+                let stroke = p.map_or(Stroke::NONE, pen);
+                painter.add(Shape::convex_polygon(pts, fill, stroke));
+            }
             Item::Line {
                 from,
                 to: end,

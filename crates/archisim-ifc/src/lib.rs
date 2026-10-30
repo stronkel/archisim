@@ -693,6 +693,40 @@ impl<'a> Exporter<'a> {
         Some(solid)
     }
 
+    /// A piece of an opening's shape: its outline in `x` and `z`, extruded
+    /// across from `y0` to `y1`, styled with `material`.
+    fn profile_solid(
+        &mut self,
+        profile: &[[f64; 2]],
+        y0: f64,
+        y1: f64,
+        material: MaterialId,
+    ) -> Option<Ref> {
+        if profile.len() < 3 || y1 - y0 <= EPSILON {
+            return None;
+        }
+        let pts: Vec<Point2> = profile.iter().map(|q| Point2::new(q[0], q[1])).collect();
+        let outline = self.polyline(&pts, true);
+        let profile = self
+            .w
+            .add(format!("IFCARBITRARYCLOSEDPROFILEDEF(.AREA.,$,{outline})"));
+        let at = self.point3(0.0, y1, 0.0);
+        let axis = self.w.add("IFCDIRECTION((0.,-1.,0.))");
+        let xdir = self.w.add("IFCDIRECTION((1.,0.,0.))");
+        let pl = self
+            .w
+            .add(format!("IFCAXIS2PLACEMENT3D({at},{axis},{xdir})"));
+        let solid = self.w.add(format!(
+            "IFCEXTRUDEDAREASOLID({profile},{pl},{},{})",
+            self.z,
+            real(y1 - y0)
+        ));
+        if let Some(&style) = self.styles.get(&material) {
+            self.w.add(format!("IFCSTYLEDITEM({solid},({style}),$)"));
+        }
+        Some(solid)
+    }
+
     /// `ArchiSim_Family` (family name, version and recipe) and
     /// `ArchiSim_FamilyValues` (one property per parameter, if any) for a
     /// type, as property set definitions of the type.
@@ -1025,25 +1059,52 @@ impl<'a> Exporter<'a> {
                 self.placement(Some(wall_pl), loc, None)
             }
         };
-        let outline = self.polyline(
-            &[
-                Point2::new(-w / 2.0, og.interior_offset - m),
-                Point2::new(w / 2.0, og.interior_offset - m),
-                Point2::new(w / 2.0, og.exterior_offset + m),
-                Point2::new(-w / 2.0, og.exterior_offset + m),
-            ],
-            true,
-        );
-        let profile = self
-            .w
-            .add(format!("IFCARBITRARYCLOSEDPROFILEDEF(.AREA.,$,{outline})"));
-        let at = self.point3(0.0, 0.0, -below);
-        let solid_pl = self.w.add(format!("IFCAXIS2PLACEMENT3D({at},$,$)"));
-        let solid = self.w.add(format!(
-            "IFCEXTRUDEDAREASOLID({profile},{solid_pl},{},{})",
-            self.z,
-            real(h + below + above)
-        ));
+        let solid = if og.shape.is_rect() {
+            let outline = self.polyline(
+                &[
+                    Point2::new(-w / 2.0, og.interior_offset - m),
+                    Point2::new(w / 2.0, og.interior_offset - m),
+                    Point2::new(w / 2.0, og.exterior_offset + m),
+                    Point2::new(-w / 2.0, og.exterior_offset + m),
+                ],
+                true,
+            );
+            let profile = self
+                .w
+                .add(format!("IFCARBITRARYCLOSEDPROFILEDEF(.AREA.,$,{outline})"));
+            let at = self.point3(0.0, 0.0, -below);
+            let solid_pl = self.w.add(format!("IFCAXIS2PLACEMENT3D({at},$,$)"));
+            self.w.add(format!(
+                "IFCEXTRUDEDAREASOLID({profile},{solid_pl},{},{})",
+                self.z,
+                real(h + below + above)
+            ))
+        } else {
+            // An arch or an oculus: its outline in the plane of the wall,
+            // through the wall from just outside its exterior face (down
+            // past the floor, as a square one, when it starts there).
+            let pts: Vec<Point2> = og
+                .shape
+                .polygon(w, h)
+                .into_iter()
+                .map(|q| Point2::new(q[0], if q[1] < EPSILON { q[1] - below } else { q[1] }))
+                .collect();
+            let outline = self.polyline(&pts, true);
+            let profile = self
+                .w
+                .add(format!("IFCARBITRARYCLOSEDPROFILEDEF(.AREA.,$,{outline})"));
+            let at = self.point3(0.0, og.exterior_offset + m, 0.0);
+            let axis = self.w.add("IFCDIRECTION((0.,-1.,0.))");
+            let xdir = self.w.add("IFCDIRECTION((1.,0.,0.))");
+            let solid_pl = self
+                .w
+                .add(format!("IFCAXIS2PLACEMENT3D({at},{axis},{xdir})"));
+            self.w.add(format!(
+                "IFCEXTRUDEDAREASOLID({profile},{solid_pl},{},{})",
+                self.z,
+                real(og.exterior_offset - og.interior_offset + 2.0 * m)
+            ))
+        };
         let rep = self.w.add(format!(
             "IFCSHAPEREPRESENTATION({},'Body','SweptSolid',({solid}))",
             self.body_ctx
@@ -1135,11 +1196,17 @@ impl<'a> Exporter<'a> {
             .unwrap_or_default();
         let mut solids = Vec::new();
         for part in &parts {
-            let solid = self.box_solid(
-                [-part.max[0], part.min[1], part.min[2]],
-                [-part.min[0], part.max[1], part.max[2]],
-                MaterialId(part.material),
-            );
+            let solid = match &part.profile {
+                Some(profile) => {
+                    let pts: Vec<[f64; 2]> = profile.iter().map(|q| [-q[0], q[1]]).collect();
+                    self.profile_solid(&pts, part.min[1], part.max[1], MaterialId(part.material))
+                }
+                None => self.box_solid(
+                    [-part.max[0], part.min[1], part.min[2]],
+                    [-part.min[0], part.max[1], part.max[2]],
+                    MaterialId(part.material),
+                ),
+            };
             if let Some(solid) = solid {
                 solids.push(solid);
             }
@@ -1741,8 +1808,10 @@ impl<'a> Exporter<'a> {
                 ) else {
                     continue;
                 };
-                cut_side += og.width() * og.height();
-                cut_volume += removed_area(&geo, &og) * og.height();
+                cut_side += og.face_area();
+                // (An arch or an oculus takes its own shape, not its box.)
+                let fill = og.face_area() / (og.width() * og.height()).max(1e-12);
+                cut_volume += removed_area(&geo, &og) * og.height() * fill;
                 let filling = self.opening(
                     w,
                     pl,

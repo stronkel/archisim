@@ -117,7 +117,7 @@ pub fn parse(source: &str) -> Result<FamilyDef, FamilyError> {
                     ));
                 }
                 let body = statements(&line.children)?;
-                if let Some(bad) = first_where(&body, &|s| matches!(s, Stmt::Box { .. })) {
+                if let Some(bad) = first_where(&body, &|s| s.is_body_piece()) {
                     return Err(syntax(bad, "a plan symbol draws lines, not boxes"));
                 }
                 def.presentation = Some(PlanSymbol {
@@ -142,7 +142,7 @@ pub fn parse(source: &str) -> Result<FamilyDef, FamilyError> {
                     ));
                 }
                 let body = statements(&line.children)?;
-                if let Some(bad) = first_where(&body, &|s| matches!(s, Stmt::Box { .. })) {
+                if let Some(bad) = first_where(&body, &|s| s.is_body_piece()) {
                     return Err(syntax(bad, "a plan symbol draws lines, not boxes"));
                 }
                 def.plans.push(PlanSymbol {
@@ -158,7 +158,7 @@ pub fn parse(source: &str) -> Result<FamilyDef, FamilyError> {
                     return Err(syntax(line.no, "only one «elevation» block is allowed"));
                 }
                 let body = statements(&line.children)?;
-                if let Some(bad) = first_where(&body, &|s| matches!(s, Stmt::Box { .. })) {
+                if let Some(bad) = first_where(&body, &|s| s.is_body_piece()) {
                     return Err(syntax(bad, "an elevation draws lines, not boxes"));
                 }
                 def.elevation = Some(PlanSymbol {
@@ -702,6 +702,51 @@ fn statement(line: &Line) -> Result<Stmt, FamilyError> {
                 line: no,
             }
         }
+        "outline" => {
+            // outline (kind, w, h, rise) ring a to b | fill a
+            //   [clip (x0, z0) to (x1, z1)] depth y0 to y1 material m
+            c.sym("(")?;
+            let kind = c.expr()?;
+            c.sym(",")?;
+            let w = c.expr()?;
+            c.sym(",")?;
+            let h = c.expr()?;
+            c.sym(",")?;
+            let rise = c.expr()?;
+            c.sym(")")?;
+            let (from, to) = if c.peek_ident("ring") {
+                c.keyword("ring")?;
+                let a = c.expr()?;
+                c.keyword("to")?;
+                (a, Some(c.expr()?))
+            } else {
+                c.keyword("fill")?;
+                (c.expr()?, None)
+            };
+            let clip = if c.peek_ident("clip") {
+                c.keyword("clip")?;
+                let lo = c.pair()?;
+                c.keyword("to")?;
+                Some(Box::new((lo, c.pair()?)))
+            } else {
+                None
+            };
+            c.keyword("depth")?;
+            let y0 = c.expr()?;
+            c.keyword("to")?;
+            let y1 = c.expr()?;
+            c.keyword("material")?;
+            let material = c.expr()?;
+            Stmt::Outline {
+                shape: Box::new([kind, w, h, rise]),
+                from,
+                to,
+                clip,
+                depth: [y0, y1],
+                material,
+                line: no,
+            }
+        }
         "use" => {
             let name = c.ident()?;
             c.sym("(")?;
@@ -879,6 +924,7 @@ fn first_where(stmts: &[Stmt], pred: &dyn Fn(&Stmt) -> bool) -> Option<usize> {
 pub(crate) fn stmt_line(s: &Stmt) -> usize {
     match s {
         Stmt::Box { line, .. }
+        | Stmt::Outline { line, .. }
         | Stmt::Use { line, .. }
         | Stmt::Repeat { line, .. }
         | Stmt::If { line, .. }
@@ -933,6 +979,7 @@ fn check_names(def: &FamilyDef) -> Result<(), FamilyError> {
                     walk(def, otherwise, stack)?;
                 }
                 Stmt::Box { .. }
+                | Stmt::Outline { .. }
                 | Stmt::Let { .. }
                 | Stmt::Require(_)
                 | Stmt::Line { .. }

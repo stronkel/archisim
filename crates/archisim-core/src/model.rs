@@ -661,6 +661,9 @@ pub struct OpeningType {
     /// (`IfcWindowPanelOperationEnum`: `SIDEHUNGLEFTHAND`, `FIXEDCASEMENT`…),
     /// from left to right. Empty for doors.
     pub panels: Vec<String>,
+    /// The shape of the rough opening in elevation: a square head, an arch
+    /// or an oculus (its recipe's `opening_shape` and `opening_rise`).
+    pub shape: archisim_family::OpeningShape,
 }
 
 impl OpeningType {
@@ -1265,6 +1268,7 @@ pub(crate) fn polygon_contains(poly: &[Point2], p: Point2) -> bool {
 struct Resolved {
     spec: NewOpeningType,
     panels: Vec<String>,
+    shape: archisim_family::OpeningShape,
 }
 
 fn kind_is_window(kind: OpeningKind) -> bool {
@@ -1291,6 +1295,15 @@ pub fn opening_builtins(opens_to: WallSide, hand: Hand) -> Values {
     v.insert("opens_to".into(), Value::Text(side.into()));
     v.insert("hand".into(), Value::Text(hand.into()));
     v.insert("detailed".into(), Value::Bool(false));
+    // Where the wall's faces are (`y`, towards the side the leaves open
+    // to), until a placed one says: a wall of 30 cm, the frame centred.
+    let (ext, int) = match opens_to {
+        WallSide::Interior => (-0.15, 0.15),
+        WallSide::Exterior => (0.15, -0.15),
+    };
+    v.insert("wall_ext".into(), Value::Number(ext));
+    v.insert("wall_int".into(), Value::Number(int));
+    v.insert("sill_height".into(), Value::Number(0.0));
     v
 }
 
@@ -3105,7 +3118,27 @@ impl Model {
             }
             _ => family::legacy_panels(kind),
         };
-        Ok(Resolved { spec, panels })
+        // The shape of the rough opening: square unless the recipe says.
+        let shape = match ev.outputs.get("opening_shape") {
+            None => archisim_family::OpeningShape::RECT,
+            Some(v) => {
+                let kind = v
+                    .as_text()
+                    .and_then(archisim_family::ShapeKind::from_name)
+                    .ok_or_else(|| not_opening("«opening_shape» is not a shape".into()))?;
+                let rise = ev
+                    .outputs
+                    .get("opening_rise")
+                    .and_then(Value::as_number)
+                    .unwrap_or(0.0);
+                archisim_family::OpeningShape::new(kind, rise)
+            }
+        };
+        Ok(Resolved {
+            spec,
+            panels,
+            shape,
+        })
     }
 
     fn check_mark(&self, mark: &str, except: Option<OpeningTypeId>) -> Result<(), ModelError> {
@@ -3136,7 +3169,11 @@ impl Model {
 
     /// Creates a type of a door or window family.
     pub fn add_family_type(&mut self, spec: NewFamilyType) -> Result<OpeningTypeId, ModelError> {
-        let Resolved { spec: r, panels } = self.resolve_opening_type(spec.family, &spec.values)?;
+        let Resolved {
+            spec: r,
+            panels,
+            shape,
+        } = self.resolve_opening_type(spec.family, &spec.values)?;
         let mark = match spec.mark {
             Some(m) => {
                 self.check_mark(&m, None)?;
@@ -3163,6 +3200,7 @@ impl Model {
                 frame_material: r.frame_material,
                 panel_material: r.panel_material,
                 panels,
+                shape,
             },
         );
         Ok(id)
@@ -3258,7 +3296,11 @@ impl Model {
         family: FamilyId,
         values: Values,
     ) -> Result<(), ModelError> {
-        let Resolved { spec: r, panels } = self.resolve_opening_type(family, &values)?;
+        let Resolved {
+            spec: r,
+            panels,
+            shape,
+        } = self.resolve_opening_type(family, &values)?;
         let previous = self
             .opening_types
             .get(&id)
@@ -3275,6 +3317,7 @@ impl Model {
             frame_material: r.frame_material,
             panel_material: r.panel_material,
             panels,
+            shape,
             ..previous.clone()
         };
         if edited.is_door() != previous.is_door() {
@@ -3371,8 +3414,34 @@ impl Model {
             .get(&t.family)
             .ok_or(ModelError::UnknownFamily(t.family))?;
         fam.def()
-            .evaluate(&t.values, &o.values, &opening_builtins(o.opens_to, o.hand))
+            .evaluate(&t.values, &o.values, &self.placed_builtins(o, t))
             .map_err(ModelError::Family)
+    }
+
+    /// The values the program gives the recipe of a placed door or window:
+    /// how it opens, and where its wall's faces are in the family's axes
+    /// (`wall_ext`, `wall_int`) and its sill.
+    fn placed_builtins(&self, o: &Opening, t: &OpeningType) -> Values {
+        let mut b = opening_builtins(o.opens_to, o.hand);
+        let thickness = self
+            .walls
+            .get(&o.wall)
+            .and_then(|w| self.wall_types.get(&w.wall_type))
+            .map(|wt| wt.thickness());
+        if let Some(th) = thickness {
+            // The frame's middle is `setback + depth / 2` in from the
+            // exterior face; +y points to the side the leaves open to.
+            let ext = o.frame_setback(th, t.frame_depth) + t.frame_depth / 2.0;
+            let int = th - ext;
+            let (e, i) = match o.opens_to {
+                WallSide::Interior => (-ext, int),
+                WallSide::Exterior => (ext, -int),
+            };
+            b.insert("wall_ext".into(), Value::Number(e));
+            b.insert("wall_int".into(), Value::Number(i));
+        }
+        b.insert("sill_height".into(), Value::Number(o.sill));
+        b
     }
 
     /// The family of a placed door or window evaluated for the detailed
@@ -3392,7 +3461,7 @@ impl Model {
             .families
             .get(&t.family)
             .ok_or(ModelError::UnknownFamily(t.family))?;
-        let mut builtins = opening_builtins(o.opens_to, o.hand);
+        let mut builtins = self.placed_builtins(o, t);
         builtins.insert("detailed".into(), Value::Bool(true));
         fam.def()
             .evaluate(&t.values, &o.values, &builtins)
@@ -4311,6 +4380,7 @@ impl Model {
                     frame_material: resolved.spec.frame_material,
                     panel_material: resolved.spec.panel_material,
                     panels: resolved.panels,
+                    shape: resolved.shape,
                     ..ot
                 },
             );

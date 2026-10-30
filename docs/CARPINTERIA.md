@@ -85,7 +85,25 @@ La reja es un dato (`Grille`), como los cuarterones (`Bars`) y las hojas de puer
 - **Abierta en 3D** (parámetro de cada puerta o ventana colocada): cuánto está corrida la puerta corredera o subida la guillotina, solo para el 3D (la planta sigue con su dibujo de siempre).
 - **Lo de fuera como elemento propio**: la reja es un `IfcRailing` con su peso estimado (hierro, 7.850 kg/m³, por el volumen de las barras) en `ArchiSim_OpeningPart` y `Pset_RailingCommon`; las contraventanas, un `IfcShadingDevice` .SHUTTER.; los dos salen en los alzados, las secciones y el render (en su versión sencilla) y en las mediciones, capítulo **11 Cerrajería y protecciones** (reja en kg, contraventanas en m²). Al importar el IFC se reconocen y no se convierten en barandillas sueltas.
 
-## 7. Siguiente
+## 7. Pivotante, plegable y garaje (30/10/2026)
 
-- Las puertas pivotante, plegable y de garaje con el mismo sistema.
+- **Pivotante** (`props:door` con `pivot`): la hoja de la colección girando sobre sus pivotes de suelo y de dintel, sin bisagras; manilla por defecto **tirador largo** (nueva también en la abatible).
+- **Plegable** (`props:folding_door`): las hojas de la colección colgadas de una guía en el dintel, con bisagras entre ellas y la manilla en la última; «Abierta en 3D (%)» las pliega en zigzag hacia el lado al que abre.
+- **Garaje** (`props:garage_door`): **seccional** (paneles, guías por las jambas, carriles bajo el dintel y eje de muelles), **basculante** (una hoja que bascula sobre sus brazos, con los contrapesos en cajas junto a las jambas) y **enrollable** (lamas, guías y tambor). «Acabado de la hoja»: acanalada, lisa, cuarterones, lamas de madera, con ventanas o nervada vertical; puerta peatonal con su manilla; «Abierta en 3D (%)».
+
+## 8. Arcos y huecos de forma (30/10/2026)
+
+El hueco de obra ya no tiene por qué ser rectangular. La receta lo dice con dos salidas, `opening_shape` (Recto, Medio punto, Rebajado, Apuntado, Carpanel u Óculo) y `opening_rise` (la flecha), y ArchiSim recorta el muro con esa forma en el 3D, los alzados, las secciones, el render, el IFC (`IfcOpeningElement` con su perfil en el plano del muro) y las mediciones (se descuenta la forma, no la caja). Encima del arco el muro se rellena capa a capa (`archisim_core::shape`, `solid::infill_prism`).
+
+Las piezas que siguen la forma las hace la instrucción `outline` de las recetas (`docs/FAMILIAS.md`): un anillo entre dos contornos metidos (el cerco, el bastidor de una hoja, un recercado con distancias negativas, fuera del hueco) o el contorno lleno (un vidrio, una hoja), recortados por una caja. Así se componen:
+
+- **Puerta en arco**: «Hojas en arco» (una o dos hojas que siguen el arco; ciegas, con cuarterones o vidrieras, con vidrio en el arco) o **«Puerta con fijos en arco»** (la puerta rectangular en el centro, montantes, fijos laterales con zócalo si se quiere y el fijo superior que completa el arco, como la de la foto de Antonio); cuarterones de los vidrios.
+- **Ventana en arco**: hojas bajo un fijo en arco, hojas que siguen el arco o fija; óculo; cuarterones; vierteaguas.
+- **Recercado por fuera** en las dos: plano, moldurado (tres escalones) o con clave e impostas, del material que se elija (piedra caliza por defecto).
+- **Hueco** (sin carpintería): ahora también de medio punto, rebajado, apuntado, carpanel u óculo.
+
+## 9. Siguiente
+
+- Los recercados de los huecos sin carpintería, y la herradura y el arco lobulado (no son convexos).
+- Los arcos en muros curvos (hoy se quedan rectos en ellos).
 - El taller de carpintería (§4).

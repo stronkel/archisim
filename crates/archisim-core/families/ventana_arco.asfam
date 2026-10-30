@@ -1,0 +1,203 @@
+family "Ventana en arco"
+  category window
+  host wall
+  version 1
+  description "Ventana en un hueco de arco (medio punto, rebajado, apuntado o carpanel) u óculo: hojas bajo un fijo en arco, hojas que siguen el arco o fija; vierteaguas y recercado de piedra si se quieren"
+
+include "piezas"
+
+type_params
+  section "Dimensiones"
+    width  length = 1.00 range 0.30..4.00 label "Hueco de obra: ancho"
+    height length = 1.70 range 0.30..5.00 label "Hueco de obra: alto (a la clave)"
+  section "Arco"
+    arch choice("Medio punto", "Rebajado", "Apuntado", "Carpanel", "Óculo") = "Medio punto" label "Forma"
+    rise length = 0.30 range 0.05..3.00 visible_if arch == "Rebajado" or arch == "Apuntado" or arch == "Carpanel" label "Arco: flecha (del arranque a la clave)"
+  section "Hojas"
+    layout choice("Hojas con fijo en arco", "Hojas en arco", "Fija") = "Hojas con fijo en arco" visible_if arch != "Óculo" label "Composición"
+    leaves integer = 2 range 1..2 visible_if arch != "Óculo" and layout != "Fija" label "Nº de hojas"
+    leaf_op choice("practicable", "oscilobatiente") = "practicable" visible_if arch != "Óculo" and layout != "Fija" label "Funcionamiento"
+    bars choice("Sin cuarterones", "Cuarterones") = "Sin cuarterones" label "Cuarterones"
+  section "Marco"
+    frame_width length = 0.06 range 0.02..0.20 label "Marco: anchura vista"
+    frame_depth length = 0.07 range 0.03..0.30 label "Marco: fondo"
+  section "Vierteaguas"
+    sill bool = no visible_if arch != "Óculo" label "Vierteaguas"
+    sill_depth length = 0.20 range 0.02..1.00 visible_if sill and arch != "Óculo" label "Vierteaguas: vuelo desde el marco"
+  section "Recercado"
+    surround choice("Sin recercado", "Plano", "Moldurado", "Con clave e impostas") = "Sin recercado" label "Recercado por fuera"
+    surround_width length = 0.15 range 0.04..0.60 visible_if surround != "Sin recercado" label "Recercado: ancho"
+    surround_projection length = 0.03 range 0.005..0.20 visible_if surround != "Sin recercado" label "Recercado: vuelo"
+  section "Materiales"
+    frame_material material = "Madera de pino" label "Marco y hojas"
+    panel_material material = "Vidrio doble" label "Vidrio"
+    hardware_material material = "Latón" label "Herrajes"
+    sill_material material = "Piedra natural" visible_if sill label "Vierteaguas"
+    surround_material material = "Piedra caliza" visible_if surround != "Sin recercado" label "Recercado"
+  section "Representación"
+    swing_in_plan bool = no label "Giro de las hojas en planta"
+    swing_line linestyle = "dashed" visible_if swing_in_plan label "Giro en planta: tipo de línea"
+    opening_lines_in_views bool = no label "Líneas de apertura en alzados y secciones del modelo"
+    opening_lines linestyle = "dashed" label "Líneas de apertura: tipo de línea"
+
+let f = frame_width
+let d = frame_depth
+let w = width
+let h = height
+let oculus = arch == "Óculo"
+let kind = if oculus then "Fija" else layout
+let n = if kind == "Fija" then 1 else leaves
+# Lo que sube el arco sobre su arranque, como lo dibuja ArchiSim.
+let ar = if oculus then h / 2 else if arch == "Medio punto" then w / 2 else if arch == "Rebajado" then min(rise, w / 2) else if arch == "Apuntado" then max(rise, w / 2) else rise
+let zs = h - ar
+# Hojas: su perfil visto, su fondo y el del vidrio.
+let sf = 0.055
+let st = min(0.06, d)
+let gt = min(0.012, d / 2)
+# Fondo de los cuarterones, dentro del de las hojas.
+let mt = min(0.016, d / 2)
+
+require 2 * f + 0.10 < w and 2 * f + 0.10 < h else "El marco no deja hueco para el vidrio"
+require kind == "Fija" or (w - 2 * f) / n > 2 * sf + 0.05 else "Las hojas quedan demasiado estrechas"
+require oculus or kind == "Fija" or kind == "Hojas en arco" or zs > 2 * f + 0.25 else "El arco arranca demasiado abajo para poner hojas bajo él"
+
+# Cuarterones de una hoja o un fijo de «xa» a «xb» y «za» a «zb»
+# (recortados por la forma del hueco set in by «k»).
+component muntins(a, wd, ht, rs, k, xa, xb, za, zb, md, style, mat)
+  let b = 0.022
+  if style == "Cuarterones"
+    let nx = max(1, round((xb - xa) / 0.32))
+    let nz = max(1, round((zb - za) / 0.36))
+    repeat i in 1..nx
+      let x = xa + (xb - xa) * i / nx
+      outline (a, wd, ht, rs) fill k clip (x - b / 2, za) to (x + b / 2, zb) depth -md to md material mat
+    repeat j in 1..nz
+      let z = za + (zb - za) * j / nz
+      outline (a, wd, ht, rs) fill k clip (xa, z - b / 2) to (xb, z + b / 2) depth -md to md material mat
+
+body
+  # El marco sigue el hueco.
+  outline (arch, w, h, rise) ring 0 to f depth -d / 2 to d / 2 material frame_material
+  if kind == "Fija"
+    outline (arch, w, h, rise) fill f depth -gt to gt material panel_material
+    use muntins(arch, w, h, rise, f, -w / 2, w / 2, f, h, mt, bars, frame_material)
+  else if kind == "Hojas con fijo en arco"
+    # El travesaño en el arranque y, encima, el fijo que llena el arco.
+    outline (arch, w, h, rise) fill f clip (-w, zs) to (w, zs + f) depth -d / 2 to d / 2 material frame_material
+    outline (arch, w, h, rise) fill f clip (-w, zs + f) to (w, h + 1) depth -gt to gt material panel_material
+    use muntins(arch, w, h, rise, f, -w / 2, w / 2, zs + f, h, mt, bars, frame_material)
+    # Hojas rectangulares bajo el travesaño.
+    let lw = (w - 2 * f) / n
+    repeat i in 0..n
+      let xa = -w / 2 + f + i * lw
+      let xb = xa + lw
+      box (xa, -st / 2, f) to (xa + sf, st / 2, zs) material frame_material
+      box (xb - sf, -st / 2, f) to (xb, st / 2, zs) material frame_material
+      box (xa + sf, -st / 2, f) to (xb - sf, st / 2, f + sf) material frame_material
+      box (xa + sf, -st / 2, zs - sf) to (xb - sf, st / 2, zs) material frame_material
+      box (xa + sf, -gt, f + sf) to (xb - sf, gt, zs - sf) material panel_material
+      use muntins("Recto", w, h, 0, 0, xa + sf, xb - sf, f + sf, zs - sf, mt, bars, frame_material)
+      let left = if 2 * i + 1 == n then hand == "left" else 2 * i + 1 < n
+      let hx = if left then xb - sf / 2 else xa + sf / 2
+      box (hx - 0.01, st / 2, zs * 0.5 - 0.06) to (hx + 0.01, st / 2 + 0.012, zs * 0.5 + 0.06) material hardware_material
+      box (hx - 0.008, st / 2 + 0.012, zs * 0.5 - 0.008) to (hx + 0.008, st / 2 + 0.05, zs * 0.5 + 0.008) material hardware_material
+  else
+    # Hojas que siguen el arco: el perfil por dentro del marco, el
+    # encuentro de las dos en el centro y el vidrio.
+    let k = f + 0.002
+    outline (arch, w, h, rise) ring k to k + sf depth -st / 2 to st / 2 material frame_material
+    if n == 2
+      outline (arch, w, h, rise) fill k clip (-sf, 0) to (sf, h + 1) depth -st / 2 to st / 2 material frame_material
+      outline (arch, w, h, rise) fill k + sf clip (-w, 0) to (-sf, h + 1) depth -gt to gt material panel_material
+      outline (arch, w, h, rise) fill k + sf clip (sf, 0) to (w, h + 1) depth -gt to gt material panel_material
+      use muntins(arch, w, h, rise, k + sf, -w / 2, -sf, k + sf, h, mt, bars, frame_material)
+      use muntins(arch, w, h, rise, k + sf, sf, w / 2, k + sf, h, mt, bars, frame_material)
+    else
+      outline (arch, w, h, rise) fill k + sf depth -gt to gt material panel_material
+      use muntins(arch, w, h, rise, k + sf, -w / 2, w / 2, k + sf, h, mt, bars, frame_material)
+    let hz = min(zs * 0.55, zs - 0.2)
+    let hx = if n == 2 then (if hand == "left" then -sf / 2 else sf / 2) else (if hand == "left" then w / 2 - k - sf / 2 else -w / 2 + k + sf / 2)
+    box (hx - 0.01, st / 2, hz - 0.06) to (hx + 0.01, st / 2 + 0.012, hz + 0.06) material hardware_material
+    box (hx - 0.008, st / 2 + 0.012, hz - 0.008) to (hx + 0.008, st / 2 + 0.05, hz + 0.008) material hardware_material
+  if sill and not oculus
+    let out = if opens_to == "exterior" then 1 else -1
+    use window_sill(w, d, sill_depth, out, sill_material)
+  # El recercado por la cara exterior del muro, alrededor del hueco.
+  if surround != "Sin recercado"
+    let es = if wall_ext > 0 then 1 else -1
+    let sw = surround_width
+    let p = surround_projection
+    let y0 = min(wall_ext, wall_ext + es * p)
+    let y1 = max(wall_ext, wall_ext + es * p)
+    if surround == "Moldurado"
+      let ya = min(wall_ext, wall_ext + es * p * 0.6)
+      let yb = max(wall_ext, wall_ext + es * p * 0.6)
+      let yc = min(wall_ext, wall_ext + es * p * 0.75)
+      let yd = max(wall_ext, wall_ext + es * p * 0.75)
+      outline (arch, w, h, rise) ring -sw to -sw * 0.65 depth ya to yb material surround_material
+      outline (arch, w, h, rise) ring -sw * 0.65 to -sw * 0.25 depth y0 to y1 material surround_material
+      outline (arch, w, h, rise) ring -sw * 0.25 to 0 depth yc to yd material surround_material
+    else
+      outline (arch, w, h, rise) ring -sw to 0 depth y0 to y1 material surround_material
+    if surround == "Con clave e impostas"
+      let k0 = min(wall_ext, wall_ext + es * (p + 0.015))
+      let k1 = max(wall_ext, wall_ext + es * (p + 0.015))
+      box (-0.07, k0, h - 0.05) to (0.07, k1, h + sw + 0.04) material surround_material
+      if not oculus
+        box (-w / 2 - sw - 0.05, k0, zs - 0.09) to (-w / 2 + 0.01, k1, zs) material surround_material
+        box (w / 2 - 0.01, k0, zs - 0.09) to (w / 2 + sw + 0.05, k1, zs) material surround_material
+
+# Marco cortado, línea del vidrio, el giro de las hojas si se pide y el
+# recercado por fuera.
+plan 1:50
+  if sill_height > 0 and sill and not oculus
+    use sill_plan(w, d, wall_ext, wall_int)
+  if surround != "Sin recercado"
+    let es = if wall_ext > 0 then 1 else -1
+    let yo = wall_ext + es * surround_projection
+    polygon (-w / 2 - surround_width, wall_ext) (-w / 2, wall_ext) (-w / 2, yo) (-w / 2 - surround_width, yo) pen thin filled
+    polygon (w / 2, wall_ext) (w / 2 + surround_width, wall_ext) (w / 2 + surround_width, yo) (w / 2, yo) pen thin filled
+  use frame_cut_plan(-w / 2, -w / 2 + f, d)
+  use frame_cut_plan(w / 2 - f, w / 2, d)
+  line (-w / 2 + f, 0) to (w / 2 - f, 0) pen thin
+  if swing_in_plan and kind != "Fija"
+    let a = -w / 2 + f
+    let b = w / 2 - f
+    if n == 2
+      use window_leaf_plan(a, 1, (b - a) / 2, d, swing_line)
+      use window_leaf_plan(b, -1, (b - a) / 2, d, swing_line)
+    else if hand == "left"
+      use window_leaf_plan(a, 1, b - a, d, swing_line)
+    else
+      use window_leaf_plan(b, -1, b - a, d, swing_line)
+
+plan 1:100
+  use frame_cut_plan(-w / 2, w / 2, d)
+
+# En alzado, las líneas de apertura de cada hoja.
+elevation
+  if kind != "Fija"
+    let top = if kind == "Hojas en arco" then h - f else zs
+    let a = -w / 2 + f
+    let b = w / 2 - f
+    if n == 2
+      use leaf_elevation(leaf_op, a, 0, f, top, yes, opening_lines)
+      use leaf_elevation(leaf_op, 0, b, f, top, no, opening_lines)
+    else
+      use leaf_elevation(leaf_op, a, b, f, top, hand == "left", opening_lines)
+
+outputs
+  opening_width = width
+  opening_height = height
+  opening_shape = arch
+  opening_rise = rise
+  frame_width = frame_width
+  frame_depth = frame_depth
+  frame_material = frame_material
+  panel_material = panel_material
+  operation = if kind == "Fija" then "fixed" else if n == 2 then "double_casement" else "single_casement"
+
+ifc
+  panel_count = n
+  panel_1 = if kind == "Fija" then "FIXEDCASEMENT" else if leaf_op == "practicable" then "SIDEHUNGLEFTHAND" else "TILTANDTURNLEFTHAND"
+  panel_2 = if leaf_op == "practicable" then "SIDEHUNGRIGHTHAND" else "TILTANDTURNRIGHTHAND"

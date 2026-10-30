@@ -255,6 +255,193 @@ pub fn prism(poly: &[Point2], z0: f64, z1: f64) -> Vec<[P3; 3]> {
     tris
 }
 
+/// The wall filled back in over an arch (or round an oculus), across one
+/// layer from `y0` to `y1`: its outline in `x` along the wall and `z` up,
+/// each point marked when it is on the shape (not on the box). Faces on
+/// the sides `faces` asks for (at `y0`, at `y1`: those that are faces of
+/// the wall) and along the shape only: along the box it meets the rest of
+/// the wall, which leaves no face there either.
+#[allow(clippy::too_many_arguments)]
+fn infill_prism(
+    poly: &[([f64; 2], bool)],
+    y0: f64,
+    y1: f64,
+    faces: (bool, bool),
+    at: impl Fn(f64, f64, f64) -> P3,
+    n: archisim_core::Vec2,
+) -> Vec<[P3; 3]> {
+    let pts: Vec<Point2> = poly.iter().map(|(q, _)| Point2::new(q[0], q[1])).collect();
+    let ccw = archisim_core::shape::area(&poly.iter().map(|(q, _)| *q).collect::<Vec<_>>()) > 0.0;
+    let world = |q: [f64; 2], y: f64| at(q[0], y, q[1]);
+    let normal = |t: &[P3; 3]| {
+        let (a, b) = (sub3(t[1], t[0]), sub3(t[2], t[0]));
+        [
+            a[1] * b[2] - a[2] * b[1],
+            a[2] * b[0] - a[0] * b[2],
+            a[0] * b[1] - a[1] * b[0],
+        ]
+    };
+    let facing = |t: [P3; 3], want: [f64; 3]| {
+        let m = normal(&t);
+        if m[0] * want[0] + m[1] * want[1] + m[2] * want[2] < 0.0 {
+            [t[0], t[2], t[1]]
+        } else {
+            t
+        }
+    };
+    let mut out = Vec::new();
+    let nn = [n.x, n.y, 0.0];
+    for [i, j, k] in triangulate(&pts) {
+        let (p, q, r) = (poly[i].0, poly[j].0, poly[k].0);
+        // Only on the faces of the wall (between layers, the cells leave
+        // none either).
+        if faces.1 {
+            out.push(facing([world(p, y1), world(q, y1), world(r, y1)], nn));
+        }
+        if faces.0 {
+            out.push(facing(
+                [world(p, y0), world(q, y0), world(r, y0)],
+                [-nn[0], -nn[1], 0.0],
+            ));
+        }
+    }
+    let m = poly.len();
+    for i in 0..m {
+        let ((p, on_p), (q, on_q)) = (poly[i], poly[(i + 1) % m]);
+        if !(on_p && on_q) || (i + 1) % m == 0 {
+            continue;
+        }
+        // Outwards from the outline, in the plane of the wall.
+        let (dx, dz) = (q[0] - p[0], q[1] - p[1]);
+        let (ox, oz) = if ccw { (dz, -dx) } else { (-dz, dx) };
+        let a = world([0.0, 0.0], y0);
+        let ux = sub3(world([1.0, 0.0], y0), a);
+        let want = [ux[0] * ox, ux[1] * ox, oz];
+        let (a0, b0, a1, b1) = (world(p, y0), world(q, y0), world(p, y1), world(q, y1));
+        out.push(facing([a0, b0, b1], want));
+        out.push(facing([a0, b1, a1], want));
+    }
+    out
+}
+
+fn sub3(a: P3, b: P3) -> P3 {
+    [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
+}
+
+/// Convex pieces of one outline (in `x` across an opening and `z` up),
+/// side by side, as one prism from `y0` to `y1`: their faces on both
+/// sides and round the outside of the whole, none between two pieces.
+/// Each point is put in place by `at(x, y, z)`; `det` is the sign of that
+/// placing.
+pub fn profile_group(
+    pieces: &[&Vec<[f64; 2]>],
+    y0: f64,
+    y1: f64,
+    det: f64,
+    at: impl Fn(f64, f64, f64) -> P3,
+) -> Vec<[P3; 3]> {
+    let key = |q: [f64; 2]| ((q[0] * 1e6).round() as i64, (q[1] * 1e6).round() as i64);
+    let ccw: Vec<Vec<[f64; 2]>> = pieces
+        .iter()
+        .filter(|p| p.len() >= 3)
+        .map(|p| {
+            if archisim_core::shape::area(p) < 0.0 {
+                p.iter().rev().copied().collect()
+            } else {
+                p.to_vec()
+            }
+        })
+        .collect();
+    type Edge = ((i64, i64), (i64, i64));
+    let mut count: std::collections::HashMap<Edge, usize> = Default::default();
+    for p in &ccw {
+        for i in 0..p.len() {
+            let (a, b) = (key(p[i]), key(p[(i + 1) % p.len()]));
+            *count
+                .entry(if a <= b { (a, b) } else { (b, a) })
+                .or_default() += 1;
+        }
+    }
+    let (ya, yb) = (y0.min(y1), y0.max(y1));
+    // In the family's axes: (x, y, z); a face looking along `want`.
+    let local = |q: [f64; 2], y: f64| [q[0], y, q[1]];
+    let facing = |t: [P3; 3], want: [f64; 3]| {
+        let (a, b) = (sub3(t[1], t[0]), sub3(t[2], t[0]));
+        let m = [
+            a[1] * b[2] - a[2] * b[1],
+            a[2] * b[0] - a[0] * b[2],
+            a[0] * b[1] - a[1] * b[0],
+        ];
+        if m[0] * want[0] + m[1] * want[1] + m[2] * want[2] < 0.0 {
+            [t[0], t[2], t[1]]
+        } else {
+            t
+        }
+    };
+    let mut out = Vec::new();
+    for p in &ccw {
+        for i in 1..p.len() - 1 {
+            let (q0, q1, q2) = (p[0], p[i], p[i + 1]);
+            out.push(facing(
+                [local(q0, yb), local(q1, yb), local(q2, yb)],
+                [0.0, 1.0, 0.0],
+            ));
+            out.push(facing(
+                [local(q0, ya), local(q1, ya), local(q2, ya)],
+                [0.0, -1.0, 0.0],
+            ));
+        }
+        for i in 0..p.len() {
+            let (q0, q1) = (p[i], p[(i + 1) % p.len()]);
+            let (a, b) = (key(q0), key(q1));
+            if count[&(if a <= b { (a, b) } else { (b, a) })] > 1 {
+                continue;
+            }
+            let want = [q1[1] - q0[1], 0.0, -(q1[0] - q0[0])];
+            let (a0, b0, a1, b1) = (local(q0, ya), local(q1, ya), local(q0, yb), local(q1, yb));
+            out.push(facing([a0, b0, b1], want));
+            out.push(facing([a0, b1, a1], want));
+        }
+    }
+    out.into_iter()
+        .map(|t| {
+            let m = t.map(|p| at(p[0], p[1], p[2]));
+            if det < 0.0 {
+                [m[0], m[2], m[1]]
+            } else {
+                m
+            }
+        })
+        .collect()
+}
+
+/// A prism of the convex `profile` (in `x` across an opening and `z` up)
+/// from `y0` to `y1` across it, each point put in place by `at(x, y, z)`;
+/// `det` is the sign of that placing (negative when it mirrors), so that
+/// the faces still look out.
+pub fn profile_prism(
+    profile: &[[f64; 2]],
+    y0: f64,
+    y1: f64,
+    det: f64,
+    at: impl Fn(f64, f64, f64) -> P3,
+) -> Vec<[P3; 3]> {
+    let poly: Vec<Point2> = profile.iter().map(|q| Point2::new(q[0], q[1])).collect();
+    // Built as a vertical prism of (x, z) along y, which swaps two axes.
+    let flip = det > 0.0;
+    prism(&poly, y0.min(y1), y0.max(y1))
+        .into_iter()
+        .map(|t| {
+            let m = t.map(|p| at(p[0], p[2], p[1]));
+            if flip {
+                [m[0], m[2], m[1]]
+            } else {
+                m
+            }
+        })
+        .collect()
+}
+
 /// A vertical prism with a hole through it (a tube): caps triangulated
 /// round the hole, sides outside and inside.
 pub fn hollow_prism(outer: &[Point2], hole: Option<&[Point2]>, z0: f64, z1: f64) -> Vec<[P3; 3]> {
@@ -384,6 +571,17 @@ fn wall_parts_in(idx: &WallIndex, id: WallId, between: bool) -> Vec<Solid> {
         .filter(|t| *t > EPSILON && *t < len - EPSILON)
         .map(|t| Line::new(a + u * t, n))
         .collect();
+    // An arch or an oculus: a line down its middle too, where the two
+    // halves of the wall filled back in over it meet.
+    for o in openings
+        .iter()
+        .filter(|o| !o.shape.is_rect() && o.corner.is_none())
+    {
+        let t = (o.t0 + o.t1) / 2.0;
+        if t > EPSILON && t < len - EPSILON {
+            inner.push(Line::new(a + u * t, n));
+        }
+    }
     for notch in &g.notches {
         inner.extend(notch.boundaries.iter().copied());
     }
@@ -480,6 +678,14 @@ fn wall_parts_in(idx: &WallIndex, id: WallId, between: bool) -> Vec<Solid> {
     // of a junction share their vertices.
     let mut zs: Vec<f64> = vec![z_base, z_top];
     let mut heights: Vec<(f64, f64)> = openings.iter().map(|o| (o.sill, o.head)).collect();
+    // And a row at the spring of an arch (the middle of an oculus).
+    for o in openings
+        .iter()
+        .filter(|o| !o.shape.is_rect() && o.corner.is_none())
+    {
+        let z = o.sill + o.shape.spring(o.width(), o.height());
+        heights.push((z, z));
+    }
     let mut joined = idx.at_end(wall.level, wall.start);
     joined.extend(idx.at_end(wall.level, wall.end));
     joined.sort_by_key(|w| w.id);
@@ -558,6 +764,29 @@ fn wall_parts_in(idx: &WallIndex, id: WallId, between: bool) -> Vec<Solid> {
             .any(|cut| z > cut.z.0 && z < cut.z.1 && cut.taken.contains(&k) && cut.contains(p));
         !in_opening && !in_notch && !in_slab
     };
+    // A cell of a shaped opening's box the wall partly fills back in (over
+    // an arch's spring, or round an oculus): its neighbours leave no face
+    // towards it (the infill has its own).
+    let filled = |c: usize, r: usize, k: usize| -> bool {
+        if c + 1 >= ncols || r >= rows || k >= layers {
+            return false;
+        }
+        let off = (offsets[k] + offsets[k + 1]) / 2.0;
+        let t = (col_t(c, off, k) + col_t(c + 1, off, k)) / 2.0;
+        let z = (zs[r] + zs[r + 1]) / 2.0;
+        openings.iter().any(|o| {
+            if o.shape.is_rect() || o.corner.is_some() {
+                return false;
+            }
+            let spring = level + o.sill + o.shape.spring(o.width(), o.height());
+            let oculus = o.shape.kind == archisim_core::ShapeKind::Oculus;
+            t > o.t0
+                && t < o.t1
+                && z > level + o.sill
+                && z < level + o.head
+                && (z > spring || oculus)
+        })
+    };
     // The layer whose material a cell takes: its own, or the finish that
     // wraps over it at a free end or in the reveal of a door or window.
     let wrap_into = |k: usize, ext: Option<usize>, int: Option<usize>| -> Option<usize> {
@@ -579,7 +808,9 @@ fn wall_parts_in(idx: &WallIndex, id: WallId, between: bool) -> Vec<Solid> {
                 return o;
             }
         }
-        for o in &openings {
+        // (Not round an arch or an oculus: the wall filled back in over
+        // it keeps its layers.)
+        for o in openings.iter().filter(|o| o.shape.is_rect()) {
             let (t0, t1) = o.cut_span();
             let (sill, head) = (level + o.sill, level + o.head);
             // Exterior finish: the layers outside the frame; interior
@@ -701,9 +932,10 @@ fn wall_parts_in(idx: &WallIndex, id: WallId, between: bool) -> Vec<Solid> {
                     }
                 }
                 // Towards the previous and next column.
-                let open_before = c == 0 && !joined_start || c > 0 && !solid(c - 1, r, k);
-                let open_after =
-                    c + 2 == ncols && !joined_end || c + 2 < ncols && !solid(c + 1, r, k);
+                let open_before =
+                    c == 0 && !joined_start || c > 0 && !solid(c - 1, r, k) && !filled(c - 1, r, k);
+                let open_after = c + 2 == ncols && !joined_end
+                    || c + 2 < ncols && !solid(c + 1, r, k) && !filled(c + 1, r, k);
                 if between {
                     // Where a wrapping finish meets the layer it covers.
                     let before = c > 0 && solid(c - 1, r, k) && owner(c - 1, r, k) != mine;
@@ -738,8 +970,8 @@ fn wall_parts_in(idx: &WallIndex, id: WallId, between: bool) -> Vec<Solid> {
                     }
                 }
                 // Below and above.
-                let open_below = r == 0 || !solid(c, r - 1, k);
-                let open_above = r + 1 == rows || !solid(c, r + 1, k);
+                let open_below = r == 0 || !solid(c, r - 1, k) && !filled(c, r - 1, k);
+                let open_above = r + 1 == rows || !solid(c, r + 1, k) && !filled(c, r + 1, k);
                 for (rr, open) in [(r, open_below), (r + 1, open_above)] {
                     if open {
                         quad(
@@ -752,6 +984,95 @@ fn wall_parts_in(idx: &WallIndex, id: WallId, between: bool) -> Vec<Solid> {
                             ],
                             inside,
                         );
+                    }
+                }
+            }
+        }
+    }
+    // Over an arch (or round an oculus), the wall fills its box back in
+    // between the shape and the box's top and bottom, layer by layer.
+    if !between {
+        for o in &openings {
+            if o.shape.is_rect() || o.corner.is_some() {
+                continue;
+            }
+            let (w, h) = (o.t1 - o.t0, o.head - o.sill);
+            let mid = (o.t0 + o.t1) / 2.0;
+            let z0 = level + o.sill;
+            for (line, edge) in [(o.shape.upper(w, h), h), (o.shape.lower(w, h), 0.0)] {
+                // One piece each side of the middle (the crown touches the
+                // box), the shape's edge closed along the box.
+                let halves = [
+                    line.iter()
+                        .filter(|q| q[0] <= 1e-9)
+                        .copied()
+                        .collect::<Vec<_>>(),
+                    line.iter()
+                        .filter(|q| q[0] >= -1e-9)
+                        .copied()
+                        .collect::<Vec<_>>(),
+                ];
+                for half in halves {
+                    if half.len() < 2 {
+                        continue;
+                    }
+                    let (first, last) = (half[0], half[half.len() - 1]);
+                    for (k, list) in tris.iter_mut().enumerate() {
+                        // The shape's points, then back along the box
+                        // through every corner of the wall's cells on
+                        // it, so that the infill and the cells meet
+                        // point to point.
+                        let off = (offsets[k] + offsets[k + 1]) / 2.0;
+                        let xs: Vec<f64> = (0..ncols).map(|c| col_t(c, off, k) - mid).collect();
+                        let rows_z: Vec<f64> = zs.iter().map(|z| z - z0).collect();
+                        let mut poly: Vec<([f64; 2], bool)> =
+                            half.iter().map(|q| (*q, true)).collect();
+                        let corners = [[last[0], edge], [first[0], edge], first];
+                        let mut from = last;
+                        for to in corners {
+                            // Grid points strictly between `from` and `to`
+                            // (the path runs along x or along z).
+                            let mut along: Vec<[f64; 2]> = if (from[1] - to[1]).abs() < 1e-9 {
+                                xs.iter()
+                                    .filter(|x| (**x - from[0]) * (**x - to[0]) < -1e-12)
+                                    .map(|x| [*x, from[1]])
+                                    .collect()
+                            } else {
+                                rows_z
+                                    .iter()
+                                    .filter(|z| (**z - from[1]) * (**z - to[1]) < -1e-12)
+                                    .map(|z| [from[0], *z])
+                                    .collect()
+                            };
+                            along.sort_by(|a, b| {
+                                let da = (a[0] - from[0]).abs() + (a[1] - from[1]).abs();
+                                let db = (b[0] - from[0]).abs() + (b[1] - from[1]).abs();
+                                da.total_cmp(&db)
+                            });
+                            along.push(to);
+                            for q in along {
+                                let near = |p: &[f64; 2]| {
+                                    (p[0] - q[0]).abs() < 1e-9 && (p[1] - q[1]).abs() < 1e-9
+                                };
+                                if poly.last().is_some_and(|(p, _)| near(p)) || near(&first) {
+                                    continue;
+                                }
+                                poly.push((q, false));
+                            }
+                            from = to;
+                        }
+                        let pts: Vec<[f64; 2]> = poly.iter().map(|(q, _)| *q).collect();
+                        if archisim_core::shape::area(&pts).abs() < 1e-9 {
+                            continue;
+                        }
+                        list.extend(infill_prism(
+                            &poly,
+                            offsets[k + 1],
+                            offsets[k],
+                            (k + 1 == layers, k == 0),
+                            |x, y, z| pt(mid + x, y, z0 + z),
+                            n,
+                        ));
                     }
                 }
             }
@@ -2602,16 +2923,47 @@ fn opening_body_solids(
     };
 
     let mut by_material: Vec<(MaterialId, Vec<[P3; 3]>)> = Vec::new();
+    // The pieces of one `outline` (a frame round an arch, a surround) as
+    // one body: no faces between them.
+    type Group<'a> = ((usize, u64, i64, i64), Vec<&'a Vec<[f64; 2]>>, f64, f64);
+    let mut groups: Vec<Group> = Vec::new();
     for part in &ev.parts {
-        let (ta, tb) = sorted(mid + sx * part.min[0], mid + sx * part.max[0]);
-        let (ya, yb) = sorted(y_mid + sy * part.min[1], y_mid + sy * part.max[1]);
-        let rect = [
-            og.point(ta, ya),
-            og.point(tb, ya),
-            og.point(tb, yb),
-            og.point(ta, yb),
-        ];
-        let tris = prism(&rect, z_sill + part.min[2], z_sill + part.max[2]);
+        if let Some(profile) = &part.profile {
+            let key = (
+                part.line,
+                part.material,
+                (part.min[1] * 1e6).round() as i64,
+                (part.max[1] * 1e6).round() as i64,
+            );
+            match groups.iter_mut().find(|g| g.0 == key) {
+                Some(g) => g.1.push(profile),
+                None => groups.push((key, vec![profile], part.min[1], part.max[1])),
+            }
+        }
+    }
+    for (key, pieces, y0, y1) in &groups {
+        let tris = profile_group(pieces, *y0, *y1, sx * sy, |x, y, z| {
+            let p = og.point(mid + sx * x, y_mid + sy * y);
+            [p.x, p.y, z_sill + z]
+        });
+        let material = MaterialId(key.1);
+        match by_material.iter_mut().find(|(m, _)| *m == material) {
+            Some((_, list)) => list.extend(tris),
+            None => by_material.push((material, tris)),
+        }
+    }
+    for part in ev.parts.iter().filter(|p| p.profile.is_none()) {
+        let tris = {
+            let (ta, tb) = sorted(mid + sx * part.min[0], mid + sx * part.max[0]);
+            let (ya, yb) = sorted(y_mid + sy * part.min[1], y_mid + sy * part.max[1]);
+            let rect = [
+                og.point(ta, ya),
+                og.point(tb, ya),
+                og.point(tb, yb),
+                og.point(ta, yb),
+            ];
+            prism(&rect, z_sill + part.min[2], z_sill + part.max[2])
+        };
         let material = MaterialId(part.material);
         match by_material.iter_mut().find(|(m, _)| *m == material) {
             Some((_, list)) => list.extend(tris),

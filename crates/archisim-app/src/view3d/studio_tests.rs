@@ -2012,14 +2012,26 @@ fn door_pictures() {
     let mut r = Renderer::new(&gpu.0, gpu.2, TextureMode::Full);
     let mut m = archisim_library::new_project("Puertas");
     archisim_library::workshop::place_doors(&mut m, 0.0, 0.0).unwrap();
+    // The project too, with its elevations, to open it or draw them.
+    let mut saved = m.clone();
+    for e in archisim_plan::section::elevations_around(&saved) {
+        saved.add_section(e).unwrap();
+    }
+    std::fs::write(
+        dir.join("puertas.archisim"),
+        archisim_file::to_string(&saved),
+    )
+    .unwrap();
     let size = [1000u32, 1000u32];
     let doors: Vec<_> = m.openings().map(|o| o.id).collect();
     for (n, id) in doors.iter().enumerate() {
         let o = m.opening(*id).unwrap().clone();
         let name = m.opening_type(o.opening_type).unwrap().name.clone();
         // Only some (`ARCHISIM_PUERTAS=texto`), to look at a few.
+        // (several separated by «|»).
         if let Ok(only) = std::env::var("ARCHISIM_PUERTAS") {
-            if !name.to_lowercase().contains(&only.to_lowercase()) {
+            let name = name.to_lowercase();
+            if !only.split('|').any(|o| name.contains(&o.to_lowercase())) {
                 continue;
             }
         }

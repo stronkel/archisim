@@ -263,6 +263,7 @@ pub fn placement<G: Geo + ?Sized>(
             opens_to,
             hand: s.hand,
             corner: None,
+            shape: otype.shape,
         };
         made.push((spec, geometry));
     }
