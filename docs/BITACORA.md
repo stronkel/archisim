@@ -6,6 +6,41 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-30 (41) · Muros, segunda vuelta: el perfil de alzado (E3)
+
+Rama `bloque/e3-perfil` (sobre `bloque/e8-explanaciones`), con pull request. Formato `.archisim` versión 47 (los muros pueden guardar su perfil; los ficheros anteriores se abren igual).
+
+**Hecho**
+- **Perfil en alzado** de un muro recto, como «Editar perfil» de Revit: el contorno del muro visto desde su cara exterior y huecos de cualquier forma. Lo que queda fuera del contorno o dentro de un hueco desaparece del muro: en 3D, en la planta (donde el plano de corte no corta el muro, el muro se abre como sobre una puerta) y en el IFC.
+- En Propiedades del muro, grupo **Perfil en alzado**:
+  - **Hastial**: sube 1,50 m en el centro.
+  - **Inclinado**: el remate baja 1,00 m hacia el final.
+  - **Quitar perfil**.
+  - **Editar perfil…**: abre una ventana con el muro en alzado, sus puertas y ventanas como referencia y el rectángulo original en discontinua. Ahí:
+    - se arrastran los vértices (se ajustan al centímetro y a los bordes del muro);
+    - un doble clic en un lado añade un vértice y un clic derecho lo quita;
+    - el vértice elegido se puede escribir a lo largo y en altura;
+    - se añaden huecos cuadrados o redondos, que se editan igual;
+    - **Aplicar** lo deja en el muro (un paso de Deshacer).
+- Un perfil más alto que el muro lo sube, si su altura es libre: un hastial sobre un muro de 3 m deja el muro a la altura de la cumbrera.
+- El perfil sigue al muro:
+  - si el muro se alarga o acorta, se estira con él;
+  - al **Dividir en dos**, cada parte se lleva su trozo de perfil y de huecos.
+- **IFC**: cada recorte es un `IfcOpeningElement` con su forma que vacía el muro, así que cualquier programa ve el muro recortado. ArchiSim lo lee de vuelta como perfil, no como huecos.
+
+**Pendiente**
+- Editar el perfil sobre la vista de alzado o de sección (hoy es una ventana propia).
+- Perfil en muros curvos.
+- Que las mediciones descuenten lo recortado: hoy el muro se mide por su rectángulo.
+
+**Qué debe probar Antonio**
+1. Abre `out/demo.archisim`. Selecciona la fachada este → Propiedades → Perfil en alzado → **Hastial**. Mira la Vista 3D. Como su altura va atada a la planta de cubierta, se recorta en lo alto; prueba también con un muro de altura libre.
+2. **Editar perfil…** en un muro de altura libre: baja un vértice de arriba, añade un **Hueco redondo**, muévelo y **Aplicar**. Mira la planta (si el plano de corte pasa por el hueco, el muro se abre) y el 3D.
+3. **Dividir en dos** ese muro: cada parte conserva su trozo.
+4. Exporta el IFC y ábrelo en otro programa: el muro recortado con la forma del perfil.
+
+---
+
 ## 2026-10-30 (40) · Terreno que se adapta al edificio (E8)
 
 Rama `bloque/e8-explanaciones` (sobre `bloque/e5-terreno`), con pull request. Formato `.archisim` versión 46 (el terreno guarda sus explanaciones y el levantamiento original; los ficheros anteriores se abren igual, sin explanaciones).

@@ -16,7 +16,8 @@ Checks:
   7. Every room (IfcSpace) is aggregated into a storey, has its common
      property set and base quantities, and its 3D volume matches them.
   5. Every opening voids a wall and is filled by exactly one door or window
-     (a void, "hueco", marked with ArchiSim_Void, by none);
+     (a void, "hueco", marked with ArchiSim_Void, by none; the cuts of a
+     wall's elevation profile, ArchiSim_WallProfilePart, by none either);
      every door and window fills an opening, has a type, a material
      constituent set, its common property set and quantities, and 3D
      geometry. Wall volumes are compared with their net volume, after the
@@ -151,6 +152,11 @@ def main(path: str) -> int:
         if len(voids) != 1 or not voids[0].RelatingBuildingElement.is_a("IfcWall"):
             errors.append(f"{o.Name}: does not void exactly one wall")
         psets = eu.get_psets(o)
+        if "ArchiSim_WallProfilePart" in psets:
+            # The cut of a wall's elevation profile: nothing fills it.
+            if o.HasFillings:
+                errors.append(f"{o.Name}: a wall profile cut with a filling")
+            continue
         expected = 0 if "ArchiSim_Void" in psets else 1
         if len(o.HasFillings) != expected:
             errors.append(f"{o.Name}: has {len(o.HasFillings)} fillings, expected {expected}")

@@ -1028,6 +1028,101 @@ impl<'a> Exporter<'a> {
     /// it. Returns the door or window; a void ("hueco", no door or window)
     /// is the `IfcOpeningElement` alone, with the element's own GUID and
     /// its type in `ArchiSim_Void`.
+    /// The cuts of a wall's elevation profile, as openings through it
+    /// (each with its shape in the plane of the wall), and the profile in
+    /// `ArchiSim_WallProfile`.
+    fn wall_profile(
+        &mut self,
+        wall_ref: Ref,
+        wall_pl: Ref,
+        wall: &archisim_core::Wall,
+        profile: &archisim_core::WallProfile,
+        exterior: f64,
+        interior: f64,
+    ) {
+        let m = 0.05;
+        let reach = (exterior - interior).abs() + 0.5;
+        let cuts = archisim_geom::junctions::wall_profile_cuts(
+            profile,
+            wall.length(),
+            wall.height,
+            m,
+            reach,
+        );
+        for (k, (outer, holes)) in cuts.iter().enumerate() {
+            let outline = self.polyline(outer, true);
+            let profile_def = if holes.is_empty() {
+                self.w
+                    .add(format!("IFCARBITRARYCLOSEDPROFILEDEF(.AREA.,$,{outline})"))
+            } else {
+                let inner: Vec<String> = holes
+                    .iter()
+                    .map(|h| self.polyline(h, true).to_string())
+                    .collect();
+                self.w.add(format!(
+                    "IFCARBITRARYPROFILEDEFWITHVOIDS(.AREA.,$,{outline},({}))",
+                    inner.join(",")
+                ))
+            };
+            let at = self.point3(0.0, exterior + m, 0.0);
+            let axis = self.w.add("IFCDIRECTION((0.,-1.,0.))");
+            let xdir = self.w.add("IFCDIRECTION((1.,0.,0.))");
+            let solid_pl = self
+                .w
+                .add(format!("IFCAXIS2PLACEMENT3D({at},{axis},{xdir})"));
+            let solid = self.w.add(format!(
+                "IFCEXTRUDEDAREASOLID({profile_def},{solid_pl},{},{})",
+                self.z,
+                real(exterior - interior + 2.0 * m)
+            ));
+            let rep = self.w.add(format!(
+                "IFCSHAPEREPRESENTATION({},'Body','SweptSolid',({solid}))",
+                self.body_ctx
+            ));
+            let shape = self
+                .w
+                .add(format!("IFCPRODUCTDEFINITIONSHAPE($,$,({rep}))"));
+            let origin = self.point3(0.0, 0.0, 0.0);
+            let void_pl = self.placement(Some(wall_pl), origin, None);
+            let guid = derived_guid(&wall.guid, &format!("profile {k}"));
+            let void = self.w.add(format!(
+                "IFCOPENINGELEMENT({},$,'Perfil del muro',$,$,{void_pl},{shape},$,.OPENING.)",
+                string(guid.as_str())
+            ));
+            self.w.add(format!(
+                "IFCRELVOIDSELEMENT({},$,$,$,{wall_ref},{void})",
+                string(derived_guid(&wall.guid, &format!("profile voids {k}")).as_str())
+            ));
+            let part = self
+                .w
+                .add("IFCPROPERTYSINGLEVALUE('Profile',$,IFCBOOLEAN(.T.),$)");
+            self.pset(void, &guid, "ArchiSim_WallProfilePart", &[part]);
+        }
+        let ring = |r: &[Point2]| {
+            r.iter()
+                .map(|q| format!("{} {}", real(q.x), real(q.y)))
+                .collect::<Vec<_>>()
+                .join(";")
+        };
+        let mut props = vec![self.w.add(format!(
+            "IFCPROPERTYSINGLEVALUE('Outline',$,IFCTEXT({}),$)",
+            string(&ring(&profile.outline))
+        ))];
+        if !profile.holes.is_empty() {
+            let holes = profile
+                .holes
+                .iter()
+                .map(|h| ring(h))
+                .collect::<Vec<_>>()
+                .join("|");
+            props.push(self.w.add(format!(
+                "IFCPROPERTYSINGLEVALUE('Holes',$,IFCTEXT({}),$)",
+                string(&holes)
+            )));
+        }
+        self.pset(wall_ref, &wall.guid, "ArchiSim_WallProfile", &props);
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn opening(
         &mut self,
@@ -1872,6 +1967,18 @@ impl<'a> Exporter<'a> {
                 }
             }
 
+            // Its elevation profile (E3): what it takes out, as openings
+            // with their shape; the profile itself, to read it back.
+            if let Some(profile) = wall.profile.as_ref().filter(|_| !wall.is_curved()) {
+                self.wall_profile(
+                    w,
+                    pl,
+                    wall,
+                    profile,
+                    geo.exterior_offset,
+                    geo.interior_offset,
+                );
+            }
             if let Some(roof) = model.wall_roof(wall.id).and_then(|r| model.roof(r)) {
                 // What ArchiSim needs to read the trim back: the roof and
                 // the wall's own height (its body goes up to the ridge).
@@ -1903,6 +2010,19 @@ impl<'a> Exporter<'a> {
                     level_z + base,
                 )
             } - slab_lost;
+            // An elevation profile (E3) takes its cuts out: the volume of
+            // what is left, as in 3D.
+            let (cut_side, cut_volume, volume) = match wall.profile.as_ref() {
+                Some(p) if !wall.is_curved() => {
+                    let net: f64 = archisim_geom::solid::wall_solids(model, wall.id)
+                        .iter()
+                        .map(|s| s.volume())
+                        .sum();
+                    let side_left = (p.area() - cut_side).max(0.0);
+                    (side - side_left, volume - net, volume)
+                }
+                _ => (cut_side, cut_volume, volume),
+            };
             self.quantities(
                 w,
                 &wall.guid,

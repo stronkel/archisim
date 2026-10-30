@@ -284,10 +284,14 @@ impl Model {
             ..w.clone()
         };
         second.allow_join = [true, w.allow_join[1]];
+        // Its profile (E3) is split too.
+        let len = w.length();
+        second.profile = w.profile.as_ref().and_then(|p| p.part(t, len));
         let phase = self.phase(id.0);
         if let Some(first) = self.walls.get_mut(&id) {
             first.end = cut;
             first.allow_join = [w.allow_join[0], true];
+            first.profile = w.profile.as_ref().and_then(|p| p.part(0.0, t));
         }
         self.walls.insert(new_id, second);
         self.stamp_phase(new_id.0);

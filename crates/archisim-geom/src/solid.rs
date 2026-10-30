@@ -505,7 +505,252 @@ pub fn wall_inner_faces(idx: &WallIndex, id: WallId) -> Vec<Solid> {
     wall_parts_in(idx, id, true)
 }
 
+use archisim_core::MassMesh;
+
 fn wall_parts_in(idx: &WallIndex, id: WallId, between: bool) -> Vec<Solid> {
+    let parts = wall_parts_plain(idx, id, between);
+    let model = idx.model;
+    let Some(wall) = model.wall(id) else {
+        return parts;
+    };
+    let Some(profile) = wall.profile.as_ref().filter(|_| !wall.is_curved()) else {
+        return parts;
+    };
+    let level = model.level(wall.level).map_or(0.0, |l| l.elevation);
+    let frame = ProfileFrame {
+        origin: wall.start,
+        u: (wall.end - wall.start)
+            .normalized()
+            .unwrap_or(Point2::new(1.0, 0.0)),
+        z0: level + wall.base_offset,
+    };
+    if between {
+        // Faces between layers: those whose middle is in the wall.
+        return parts
+            .into_iter()
+            .map(|mut s| {
+                s.triangles.retain(|t| {
+                    let c = [
+                        (t[0][0] + t[1][0] + t[2][0]) / 3.0,
+                        (t[0][1] + t[1][1] + t[2][1]) / 3.0,
+                        (t[0][2] + t[1][2] + t[2][2]) / 3.0,
+                    ];
+                    frame.inside(profile, c)
+                });
+                s
+            })
+            .filter(|s| !s.triangles.is_empty())
+            .collect();
+    }
+    let Some(wtype) = model.wall_type(wall.wall_type) else {
+        return parts;
+    };
+    let Some(g) = wall_geometry_in(idx, id) else {
+        return parts;
+    };
+    let Some(owner) = parts.first().map(|s| s.owner) else {
+        return parts;
+    };
+    let reach = wtype.thickness() + 2.0;
+    let top = frame.z0 + wall.height.max(profile.top());
+    // Each layer as a closed solid (its band of the wall's outline, up its
+    // height), cut by the profile, its holes and the doors and windows.
+    // (The joins with slabs and roofs are left aside.)
+    let keep = frame.prism(
+        &crate::junctions::profile_with_ends(profile, wall.length(), reach),
+        reach,
+    );
+    let mut cutters: Vec<MassMesh> = profile
+        .holes
+        .iter()
+        .map(|h| frame.prism(h, reach))
+        .collect();
+    for o in idx.openings_in_wall(id) {
+        let (t0, t1) = o.cut_span();
+        let (w, h) = (t1 - t0, o.head - o.sill);
+        let sill = o.sill - wall.base_offset;
+        let poly: Vec<Point2> = if o.shape.is_rect() {
+            vec![
+                Point2::new(t0, sill),
+                Point2::new(t1, sill),
+                Point2::new(t1, sill + h),
+                Point2::new(t0, sill + h),
+            ]
+        } else {
+            o.shape
+                .polygon(w, h)
+                .into_iter()
+                .map(|q| Point2::new(t0 + w / 2.0 + q[0], sill + q[1]))
+                .collect()
+        };
+        cutters.push(frame.prism(&poly, reach));
+    }
+    let n = frame.u.perp_left();
+    let mut out = Vec::new();
+    let mut at = g.exterior_offset;
+    for l in &wtype.layers {
+        let (lo, hi) = (at - l.thickness, at);
+        at = lo;
+        let band = band_of(&g.outline, frame.origin, n, lo, hi);
+        if band.len() < 3 {
+            continue;
+        }
+        let solid = mass_mesh_of(&prism(&band, frame.z0, top));
+        let Some(mut piece) = crate::csg::combine(&solid, &keep, 0.0, 1, crate::csg::Op::Intersect)
+        else {
+            continue;
+        };
+        let mut gone = false;
+        for c in &cutters {
+            match crate::csg::combine(&piece, c, 0.0, 1, crate::csg::Op::Subtract) {
+                Some(p) => piece = p,
+                None => {
+                    gone = true;
+                    break;
+                }
+            }
+        }
+        if gone {
+            continue;
+        }
+        let triangles: Vec<[P3; 3]> = piece
+            .triangles
+            .iter()
+            .map(|t| t.map(|i| piece.positions[i as usize]))
+            .collect();
+        if !triangles.is_empty() {
+            out.push(Solid {
+                owner,
+                material: l.material,
+                triangles,
+            });
+        }
+    }
+    out
+}
+
+/// The part of `outline` between `lo` and `hi` across the line through
+/// `origin` with normal `n`.
+fn band_of(outline: &[Point2], origin: Point2, n: Point2, lo: f64, hi: f64) -> Vec<Point2> {
+    let mut band = outline.to_vec();
+    for (limit, keep_above) in [(lo, true), (hi, false)] {
+        let g = |p: Point2| {
+            let d = (p - origin).dot(n) - limit;
+            if keep_above {
+                d
+            } else {
+                -d
+            }
+        };
+        let m = band.len();
+        let mut next = Vec::new();
+        for i in 0..m {
+            let (p, q) = (band[i], band[(i + 1) % m]);
+            let (gp, gq) = (g(p), g(q));
+            if gp >= -1e-9 {
+                next.push(p);
+            }
+            if (gp > 1e-9 && gq < -1e-9) || (gp < -1e-9 && gq > 1e-9) {
+                next.push(p + (q - p) * (gp / (gp - gq)));
+            }
+        }
+        band = next;
+        if band.len() < 3 {
+            return Vec::new();
+        }
+    }
+    band.dedup_by(|a, b| a.approx_eq(*b));
+    band
+}
+
+/// A wall's axes for its elevation profile: along it from its start, and
+/// up from its base.
+struct ProfileFrame {
+    origin: Point2,
+    u: Point2,
+    z0: f64,
+}
+
+impl ProfileFrame {
+    fn to_profile(&self, p: P3) -> Point2 {
+        let d = Point2::new(p[0], p[1]) - self.origin;
+        Point2::new(d.dot(self.u), p[2] - self.z0)
+    }
+
+    fn inside(&self, profile: &archisim_core::WallProfile, p: P3) -> bool {
+        let q = self.to_profile(p);
+        point_in(q, &profile.outline) && !profile.holes.iter().any(|h| point_in(q, h))
+    }
+
+    /// `poly` (in the profile's axes) as a solid through the wall, `reach`
+    /// to each side of its line.
+    fn prism(&self, poly: &[Point2], reach: f64) -> MassMesh {
+        let n = self.u.perp_left();
+        let world = |q: Point2, w: f64| -> [f64; 3] {
+            let p = self.origin + self.u * q.x + n * w;
+            [p.x, p.y, self.z0 + q.y]
+        };
+        let mut poly = poly.to_vec();
+        if archisim_core::signed_area(&poly) < 0.0 {
+            poly.reverse();
+        }
+        let m = poly.len() as u32;
+        let mut mesh = MassMesh::default();
+        for w in [-reach, reach] {
+            for q in &poly {
+                mesh.positions.push(world(*q, w));
+            }
+        }
+        for [i, j, k] in triangulate(&poly) {
+            let (i, j, k) = (i as u32, j as u32, k as u32);
+            // Outward: at -reach towards -w, at +reach towards +w.
+            mesh.triangles.push([i, j, k]);
+            mesh.triangles.push([m + i, m + k, m + j]);
+            mesh.faces.extend([0, 0]);
+        }
+        for i in 0..m {
+            let j = (i + 1) % m;
+            mesh.triangles.push([i, m + j, j]);
+            mesh.triangles.push([i, m + i, m + j]);
+            mesh.faces.extend([0, 0]);
+        }
+        mesh
+    }
+}
+
+fn point_in(p: Point2, poly: &[Point2]) -> bool {
+    let n = poly.len();
+    let mut inside = false;
+    for i in 0..n {
+        let (a, b) = (poly[i], poly[(i + 1) % n]);
+        if (a.y > p.y) != (b.y > p.y) && p.x < a.x + (p.y - a.y) / (b.y - a.y) * (b.x - a.x) {
+            inside = !inside;
+        }
+    }
+    inside
+}
+
+/// A closed triangle soup as a mesh with shared corners.
+fn mass_mesh_of(triangles: &[[P3; 3]]) -> MassMesh {
+    let mut mesh = MassMesh::default();
+    let mut index: std::collections::HashMap<[i64; 3], u32> = std::collections::HashMap::new();
+    for t in triangles {
+        let ids = t.map(|p| {
+            let key = p.map(|c| (c * 1e7).round() as i64);
+            *index.entry(key).or_insert_with(|| {
+                mesh.positions.push(p);
+                (mesh.positions.len() - 1) as u32
+            })
+        });
+        if ids[0] != ids[1] && ids[1] != ids[2] && ids[0] != ids[2] {
+            mesh.triangles.push(ids);
+            mesh.faces.push(0);
+        }
+    }
+    mesh
+}
+
+fn wall_parts_plain(idx: &WallIndex, id: WallId, between: bool) -> Vec<Solid> {
     let model = idx.model;
     let (Some(wall), Some(g)) = (model.wall(id), wall_geometry_in(idx, id)) else {
         return Vec::new();
@@ -4169,6 +4414,37 @@ mod tests {
             edges.values().all(|n| n % 2 == 0),
             "{:?}",
             edges.values().filter(|n| *n % 2 != 0).count()
+        );
+    }
+
+    /// E3: a wall with a sloping top and a round hole in its profile
+    /// loses that much of its volume.
+    #[test]
+    fn wall_profile_cuts_the_wall() {
+        let (mut m, w) = model();
+        let before: f64 = wall_solids(&m, w).iter().map(Solid::volume).sum();
+        let wall = m.wall(w).unwrap().clone();
+        let (len, h) = (wall.length(), wall.height);
+        let t = m.wall_type(wall.wall_type).unwrap().thickness();
+        let mut p = archisim_core::WallProfile::sloping(len, h, h - 0.3);
+        let hole: Vec<Point2> = (0..24)
+            .map(|i| {
+                let a = i as f64 * std::f64::consts::TAU / 24.0;
+                Point2::new(len * 0.5 + 0.2 * a.cos(), 2.75 + 0.2 * a.sin())
+            })
+            .collect();
+        let hole_area = crate::signed_area(&hole).abs();
+        p.holes.push(hole);
+        m.set_wall_profile(w, Some(p)).unwrap();
+        // (The cut leaves corners on edges, so the skin is not checked
+        // edge by edge; its volume is.)
+        let solids = wall_solids(&m, w);
+        let after: f64 = solids.iter().map(Solid::volume).sum();
+        let expected = (len * 0.3 / 2.0 + hole_area) * t;
+        assert!(
+            ((before - after) - expected).abs() < expected * 0.08,
+            "{} vs {expected}",
+            before - after
         );
     }
 

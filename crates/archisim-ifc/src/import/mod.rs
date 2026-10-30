@@ -127,6 +127,7 @@ fn drop_roof_parts(file: &mut step_read::StepFile) {
                     Some("ArchiSim_RoofPart")
                         | Some("ArchiSim_Worktop")
                         | Some("ArchiSim_OpeningPart")
+                        | Some("ArchiSim_WallProfilePart")
                 )
         })
         .map(|(id, _)| *id)
@@ -141,9 +142,14 @@ fn drop_roof_parts(file: &mut step_read::StepFile) {
         .filter(|e| e.arg(5).as_ref().is_some_and(|s| sets.contains(&s)))
         .flat_map(|e| e.arg(4).refs())
         .collect();
+    let gone: std::collections::HashSet<u64> = parts.iter().copied().collect();
     for id in parts {
         file.entities.remove(&id);
     }
+    // Voids of what went (a wall profile's cuts) go too.
+    file.entities.retain(|_, e| {
+        e.kind != "IFCRELVOIDSELEMENT" || !e.arg(5).as_ref().is_some_and(|v| gone.contains(&v))
+    });
 }
 
 /// Rounds to the micrometre: what the file says, without the noise of the
@@ -1600,6 +1606,10 @@ impl<'a> Importer<'a> {
             match self.model.add_wall(spec) {
                 Ok(wid) => {
                     self.report.walls += 1;
+                    // Its elevation profile (E3), ArchiSim's own.
+                    if let Some(profile) = self.wall_profile_of(c.ifc) {
+                        let _ = self.model.set_wall_profile(wid, Some(profile));
+                    }
                     self.guids.walls.push((wid, c.guid));
                     self.sources.push((wid.0, c.ifc));
                     let length = a.distance(b);
@@ -1620,6 +1630,33 @@ impl<'a> Importer<'a> {
                 Err(e) => self.report.skip("muros", explain(&e)),
             }
         }
+    }
+
+    /// A wall's elevation profile written by ArchiSim: «x z;x z;…» for its
+    /// outline and its holes, these split by «|».
+    fn wall_profile_of(&self, ifc: u64) -> Option<archisim_core::WallProfile> {
+        if !self.own_file {
+            return None;
+        }
+        let len = self.geo.length;
+        let text = |name: &str| {
+            self.property_own(ifc, "ArchiSim_WallProfile", name)
+                .and_then(|v| v.as_str())
+                .map(String::from)
+        };
+        let ring = |t: &str| -> Vec<Point2> {
+            t.split(';')
+                .filter_map(|q| {
+                    let mut it = q.split_whitespace().filter_map(|n| n.parse::<f64>().ok());
+                    Some(Point2::new(snap(it.next()? * len), snap(it.next()? * len)))
+                })
+                .collect()
+        };
+        let outline = ring(&text("Outline")?);
+        let holes = text("Holes")
+            .map(|t| t.split('|').map(ring).filter(|h| h.len() >= 3).collect())
+            .unwrap_or_default();
+        (outline.len() >= 3).then_some(archisim_core::WallProfile { outline, holes })
     }
 
     /// A unique type name: `name`, or `name (2)`, `name (3)`…

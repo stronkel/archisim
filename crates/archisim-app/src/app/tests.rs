@@ -2702,6 +2702,47 @@ fn terrain_tool_and_north() {
     assert!(ifc.contains("IFCDIRECTION((0.34202"));
 }
 
+/// A wall's elevation profile (E3): the window opens over the wall, a
+/// corner dragged and a round hole added; applied, the wall keeps it,
+/// the plan opens where the cut plane misses it and Undo takes it away.
+#[test]
+fn wall_profile_window() {
+    let mut h = Harness::new(Editor::new_project());
+    draw_outline(&mut h);
+    h.key(Key::Escape);
+    h.key(Key::Escape);
+    let w = h.model().walls().next().unwrap().clone();
+    h.app.ed.selection = [Element::Wall(w.id)].into_iter().collect();
+    h.frame();
+    let mut edit = super::wall_profile_ui::ProfileEdit::new(&w);
+    assert_eq!(edit.profile.outline.len(), 4);
+    // The top end corner down to 0,9 m: the wall ends sloping, so a cut
+    // plane at 1,10 m misses its last stretch.
+    edit.move_corner(0, 2, Point2::new(w.length() + 0.004, 0.903), 0.05);
+    assert_eq!(edit.profile.outline[2], Point2::new(w.length(), 0.9));
+    edit.add_hole(true);
+    assert_eq!(edit.profile.holes.len(), 1);
+    edit.insert_corner(0, 3, Point2::new(0.0, 1.5));
+    edit.remove_corner(0, 4);
+    h.app.profile_edit = Some(edit.clone());
+    h.frame();
+    assert!(h.app.profile_edit.is_some(), "the window stays open");
+    let r = h.app.ed.transact("Perfil del muro", |m| {
+        m.set_wall_profile(w.id, Some(edit.profile.clone()))
+    });
+    assert!(r.is_ok(), "{r:?}");
+    let back = h.model().wall(w.id).unwrap();
+    assert_eq!(back.profile.as_ref().unwrap().holes.len(), 1);
+    let level = back.level;
+    let svg = archisim_plan::render_plan(h.model(), level, &archisim_plan::PlanOptions::default());
+    assert!(svg.contains("<path"));
+    // Saved with the project.
+    let again = archisim_file::from_str(&archisim_file::to_string(h.model())).unwrap();
+    assert_eq!(again.wall(w.id).unwrap().profile, back.profile);
+    h.app.ed.undo();
+    assert!(h.model().wall(w.id).unwrap().profile.is_none());
+}
+
 /// Platforms under the building (E8): with a terrain sloping across the
 /// house, «Explanar bajo el edificio» digs one under its ground slab; the
 /// Properties show the cut and fill, and Undo brings the survey back.
