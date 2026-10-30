@@ -217,3 +217,208 @@ impl Model {
         Ok(())
     }
 }
+
+/// The part of a polygon with `x` at least `at` (`keep_after`) or at most
+/// `at`: Sutherland–Hodgman against one vertical line.
+pub(super) fn clip_x(poly: &[Point2], at: f64, keep_after: bool) -> Vec<Point2> {
+    let inside = |p: Point2| if keep_after { p.x >= at } else { p.x <= at };
+    let mut out = Vec::new();
+    let n = poly.len();
+    for i in 0..n {
+        let (a, b) = (poly[i], poly[(i + 1) % n]);
+        let (ia, ib) = (inside(a), inside(b));
+        if ia {
+            out.push(a);
+        }
+        if ia != ib && (b.x - a.x).abs() > 1e-12 {
+            let t = (at - a.x) / (b.x - a.x);
+            out.push(Point2::new(at, a.y + (b.y - a.y) * t));
+        }
+    }
+    out.dedup_by(|a, b| a.approx_eq(*b));
+    out
+}
+
+impl Model {
+    /// Splits a straight wall in two at `t` metres from its start (Revit's
+    /// «Dividir elemento»): the wall keeps the first part and a new wall,
+    /// of the same type, height, constraints and phase, takes the rest
+    /// with its doors and windows (those beyond `t`), its paint and the
+    /// part of its painted zones beyond `t`. The two ends at the cut join
+    /// each other. Returns the new wall.
+    pub fn split_wall(&mut self, id: WallId, t: f64) -> Result<WallId, ModelError> {
+        let w = self
+            .walls
+            .get(&id)
+            .cloned()
+            .ok_or(ModelError::UnknownWall(id))?;
+        if w.bulge != 0.0 {
+            return Err(ModelError::InvalidShape("a curved wall is not split yet"));
+        }
+        let len = w.start.distance(w.end);
+        finite(t, "split point")?;
+        if t < 0.05 || t > len - 0.05 {
+            return Err(ModelError::InvalidShape(
+                "the cut must leave both parts at least 5 cm long",
+            ));
+        }
+        // No door or window across the cut.
+        for o in self.openings.values().filter(|o| o.wall == id) {
+            let width = self
+                .opening_types
+                .get(&o.opening_type)
+                .map_or(0.0, |ot| ot.width);
+            let (a, b) = o.span(width);
+            if a < t && b > t {
+                return Err(ModelError::InvalidShape(
+                    "a door or window is where the wall would be cut",
+                ));
+            }
+        }
+        let cut = w.start + (w.end - w.start) * (t / len);
+        let new_id = WallId(self.take_id());
+        let mut second = Wall {
+            id: new_id,
+            guid: GlobalId::new(),
+            start: cut,
+            ..w.clone()
+        };
+        second.allow_join = [true, w.allow_join[1]];
+        let phase = self.phase(id.0);
+        if let Some(first) = self.walls.get_mut(&id) {
+            first.end = cut;
+            first.allow_join = [w.allow_join[0], true];
+        }
+        self.walls.insert(new_id, second);
+        self.stamp_phase(new_id.0);
+        let _ = self.set_phase(new_id.0, phase);
+        // Doors and windows beyond the cut, to the new wall.
+        for o in self.openings.values_mut().filter(|o| o.wall == id) {
+            if o.along > t {
+                o.wall = new_id;
+                o.along -= t;
+            }
+        }
+        // Paint: the faces as they were; the zones cut at `t`.
+        for side in [FaceSide::Exterior, FaceSide::Interior] {
+            if let Some(m) = self.face_paint(id.0, FaceRef::Wall(side)) {
+                self.set_face_paint(new_id.0, FaceRef::Wall(side), Some(m))?;
+            }
+        }
+        let zones: Vec<PaintZone> = self
+            .paint_zones
+            .iter()
+            .filter(|z| z.wall == id)
+            .cloned()
+            .collect();
+        self.paint_zones.retain(|z| z.wall != id);
+        for z in zones {
+            let before = clip_x(&z.outline, t, false);
+            if before.len() >= 3 {
+                self.paint_zones.push(PaintZone {
+                    outline: before,
+                    ..z.clone()
+                });
+            }
+            let after: Vec<Point2> = clip_x(&z.outline, t, true)
+                .into_iter()
+                .map(|p| Point2::new(p.x - t, p.y))
+                .collect();
+            if after.len() >= 3 {
+                self.paint_zones.push(PaintZone {
+                    wall: new_id,
+                    outline: after,
+                    ..z
+                });
+            }
+        }
+        Ok(new_id)
+    }
+}
+
+#[cfg(test)]
+mod split_tests {
+    use super::*;
+    use crate::{CutPattern, Layer, LayerFunction, NewWall, ReferenceLine, WallFunction};
+
+    /// A wall split in two: the second part takes the windows beyond the
+    /// cut and the part of a painted band beyond it.
+    #[test]
+    fn a_wall_splits_with_its_openings_and_paint() {
+        let mut m = Model::new("t");
+        let l = m.add_level("PB", 0.0);
+        let mat = m.add_material("Ladrillo", "brick", [180, 90, 60], CutPattern::Solid);
+        let paint = m.add_material("Pintura", "paint", [240, 240, 240], CutPattern::Solid);
+        let t = m
+            .add_wall_type(
+                "M",
+                WallFunction::Exterior,
+                vec![Layer {
+                    material: mat,
+                    thickness: 0.2,
+                    function: LayerFunction::Structure,
+                }],
+            )
+            .unwrap();
+        let w = m
+            .add_wall(NewWall {
+                wall_type: t,
+                level: l,
+                start: Point2::new(0.0, 0.0),
+                end: Point2::new(8.0, 0.0),
+                reference: ReferenceLine::Center,
+                height: 3.0,
+                base_offset: 0.0,
+                bulge: 0.0,
+                top: WallTop::Unconnected,
+            })
+            .unwrap();
+        let ot = m
+            .add_opening_type(NewOpeningType {
+                name: "V".into(),
+                kind: OpeningKind::Window(WindowOperation::DoubleCasement),
+                width: 1.0,
+                height: 1.2,
+                frame_width: 0.05,
+                frame_depth: 0.07,
+                frame_material: mat,
+                panel_material: mat,
+            })
+            .unwrap();
+        let place = |along| NewOpening {
+            opening_type: ot,
+            wall: w,
+            along,
+            sill: 0.9,
+            opens_to: WallSide::Interior,
+            hand: Hand::Left,
+            setback: None,
+        };
+        let a = m.add_opening(place(2.0)).unwrap();
+        let b = m.add_opening(place(6.0)).unwrap();
+        m.set_paint_zone(
+            w,
+            FaceSide::Interior,
+            vec![
+                Point2::new(0.0, 0.0),
+                Point2::new(8.0, 0.0),
+                Point2::new(8.0, 1.0),
+                Point2::new(0.0, 1.0),
+            ],
+            Some(paint),
+        )
+        .unwrap();
+        // Not through a window.
+        assert!(m.split_wall(w, 2.2).is_err());
+        let n = m.split_wall(w, 5.0).unwrap();
+        assert_eq!(m.wall(w).unwrap().end, Point2::new(5.0, 0.0));
+        assert_eq!(m.wall(n).unwrap().start, Point2::new(5.0, 0.0));
+        assert_eq!(m.opening(a).unwrap().wall, w);
+        let ob = m.opening(b).unwrap();
+        assert_eq!((ob.wall, ob.along), (n, 1.0));
+        let zones: Vec<_> = m.paint_zones().filter(|z| z.wall == n).collect();
+        assert_eq!(zones.len(), 1);
+        let xmax = zones[0].outline.iter().map(|p| p.x).fold(0.0, f64::max);
+        assert!((xmax - 3.0).abs() < 1e-9);
+    }
+}
