@@ -119,9 +119,28 @@ Nuevo en las recetas:
 - **Cuarterones «A medida»** en las ventanas (practicable, corredera y guillotina): vidrios a lo ancho y a lo alto de cada hoja (`bar_cols`, `bar_rows`).
 - **Manilla: altura** (puertas, 1,02 m desde el suelo; ventanas, desde el pie de la hoja, 0 = centrada) y **Manilla: caras** de las puertas (las dos, solo del lado al que abre o solo del otro).
 
-## 10. Siguiente
+## 10. Hueco de muro y accesorios (E6, segunda entrega, 30/10/2026)
 
-- E6, segunda entrega: hueco de muro (telar, mocheta, dintel, arcos de albañilería) y accesorios (persiana con cajón, vierteaguas, albardilla, parasol de lamas, premarco) en sus pestañas.
+En la ventana practicable, la corredera y la puerta abatible:
+
+**Hueco de muro**
+- **Posición del marco**: centrado en el muro (como hasta ahora), por fuera o por dentro, con su retranqueo desde esa cara. Es el valor del tipo; un hueco colocado con su propio retranqueo lo conserva.
+- **Mocheta**: el muro vuelve por delante del marco en las jambas y el dintel (ancho y material); en planta sale cortada.
+- **Dintel visto** por fuera: de hormigón, piedra o madera (una pieza), de acero (pletina vista y ala), sardinel de ladrillo o **arco rebajado de ladrillo** (de descarga, dovelas con juntas radiales); alto, entrega a cada lado y material.
+- **Recercado** por fuera, como el de los arcos: plano, moldurado o con clave.
+
+**Accesorios** (además de persiana, premarco, vierteaguas, contraventanas y rejas, que ya estaban)
+- **Alféizar** por dentro (ventanas).
+- **Albardilla** sobre el hueco, por encima del dintel o del recercado.
+- **Parasol de lamas** (ventanas): horizontales o verticales, ancho de lama, separación entre lamas y de la fachada; en planta, su contorno.
+
+Todo va en el cuerpo de la receta, así que sale en 3D, alzados, secciones, render e IFC (dentro del `IfcWindow`/`IfcDoor`). Para las dovelas, las recetas tienen una instrucción nueva, `prism (x, z) (x, z) (x, z)… depth y0 to y1 material m`: un contorno convexo en alzado con su fondo (`docs/FAMILIAS.md`). La posición del marco la dicen las salidas `frame_align` (`"centre"`, `"exterior"`, `"interior"`) y `frame_inset`.
+
+En el taller, una fila más tras la de arcos con siete ejemplos; fotos de su fachada con `ARCHISIM_PUERTAS_OUT` (vista «fachada»).
+
+## 11. Siguiente
+
+- Las mismas piezas en las demás familias (guillotina, correderas de puerta, pivotante).
 - E6, tercera: representación (tramas y líneas en planta y sección), clasificación y propiedades.
 
 - Los recercados de los huecos sin carpintería, y la herradura y el arco lobulado (no son convexos).

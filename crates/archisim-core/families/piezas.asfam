@@ -77,6 +77,143 @@ component window_sill(w, d, depth, es, mat)
   let y1 = es * (d / 2 + depth)
   box (-w / 2 - 0.02, min(y0, y1), -0.03) to (w / 2 + 0.02, max(y0, y1), 0) material mat
 
+# ---- Hueco de muro y accesorios (E6) ----------------------------------------
+# Lo que va alrededor de la carpintería, en el hueco del muro y por sus
+# caras. «we» y «wi» son wall_ext y wall_int (las caras del muro, en «y»),
+# «w» × «h» el hueco de obra. Por fuera, las piezas vuelan 5 mm de la
+# fachada para que se vean sobre el muro.
+
+# Mocheta: el muro vuelve «nib» por delante del marco en las jambas y en el
+# dintel, desde la cara exterior del marco («d» de fondo) hasta la fachada.
+component nib_pieces(w, h, d, we, nib, mat)
+  let es = if we > 0 then 1 else -1
+  let y0 = min(es * d / 2, we)
+  let y1 = max(es * d / 2, we)
+  if y1 - y0 > 0.005 and nib > 0
+    box (-w / 2, y0, 0) to (-w / 2 + nib, y1, h) material mat
+    box (w / 2 - nib, y0, 0) to (w / 2, y1, h) material mat
+    box (-w / 2 + nib, y0, h - nib) to (w / 2 - nib, y1, h) material mat
+
+# Recercado por fuera, alrededor del hueco: «kind» como el de los arcos
+# («Plano», «Moldurado», «Con clave»), «sw» de ancho, «p» de vuelo; por
+# debajo solo si «bottom» es 1 (las ventanas).
+component surround_pieces(w, h, we, kind, sw, p, mat, bottom)
+  let es = if we > 0 then 1 else -1
+  let zb = if bottom > 0 then -sw - 0.01 else 0
+  let y0 = min(we, we + es * p)
+  let y1 = max(we, we + es * p)
+  if kind == "Moldurado"
+    let ya = min(we, we + es * p * 0.6)
+    let yb = max(we, we + es * p * 0.6)
+    let yc = min(we, we + es * p * 0.75)
+    let yd = max(we, we + es * p * 0.75)
+    outline ("Recto", w, h, 0) ring -sw to -sw * 0.65 clip (-w - 1, zb) to (w + 1, h + sw + 1) depth ya to yb material mat
+    outline ("Recto", w, h, 0) ring -sw * 0.65 to -sw * 0.25 clip (-w - 1, zb) to (w + 1, h + sw + 1) depth y0 to y1 material mat
+    outline ("Recto", w, h, 0) ring -sw * 0.25 to 0 clip (-w - 1, zb) to (w + 1, h + sw + 1) depth yc to yd material mat
+  else
+    outline ("Recto", w, h, 0) ring -sw to 0 clip (-w - 1, zb) to (w + 1, h + sw + 1) depth y0 to y1 material mat
+  if kind == "Con clave"
+    let k0 = min(we, we + es * (p + 0.015))
+    let k1 = max(we, we + es * (p + 0.015))
+    box (-0.07, k0, h - 0.03) to (0.07, k1, h + sw + 0.04) material mat
+
+# Dintel visto sobre el hueco, por fuera: «kind» 1 una pieza (hormigón,
+# piedra, madera), 2 perfil de acero (pletina vista y ala debajo), 3
+# sardinel de ladrillo, 4 arco rebajado de ladrillo (de descarga), «lh»
+# de alto, «lb» de entrega a cada lado.
+component lintel_pieces(w, h, we, wi, kind, lh, lb, mat)
+  let es = if we > 0 then 1 else -1
+  let ld = min(0.15, abs(we - wi) * 0.6)
+  let yo = we + es * 0.005
+  let ya = min(yo, we - es * ld)
+  let yb = max(yo, we - es * ld)
+  if kind == 1
+    box (-w / 2 - lb, ya, h) to (w / 2 + lb, yb, h + lh) material mat
+  else if kind == 2
+    box (-w / 2 - lb, min(yo, we - es * 0.01), h) to (w / 2 + lb, max(yo, we - es * 0.01), h + lh) material mat
+    box (-w / 2 - lb, ya, h) to (w / 2 + lb, yb, h + 0.008) material mat
+  else if kind == 3
+    let n = max(1, round((w + 2 * lb) / 0.06))
+    let bw = (w + 2 * lb) / n
+    repeat i in 0..n
+      let x = -w / 2 - lb + i * bw
+      box (x + 0.004, ya, h) to (x + bw - 0.004, yb, h + lh) material mat
+  else if kind == 4
+    # Arco rebajado de flecha w / 8 que arranca en las esquinas del
+    # dintel; dovelas de unos 7 cm por el intradós, juntas radiales.
+    let r = w / 8
+    let rr = (w * w / 4 + r * r) / (2 * r)
+    let zc = h + r - rr
+    let n = max(5, round(w / 0.07))
+    let k = (rr + lh) / rr
+    repeat i in 0..n
+      let xa = -w / 2 + i * w / n + 0.003
+      let xb = -w / 2 + (i + 1) * w / n - 0.003
+      let za = zc + sqrt(rr * rr - xa * xa)
+      let zb = zc + sqrt(rr * rr - xb * xb)
+      prism (xa, za) (xb, zb) (xb * k, zc + (zb - zc) * k) (xa * k, zc + (za - zc) * k) depth ya to yb material mat
+
+# Albardilla sobre el hueco (goterón por fuera, a «z»), 5 cm más ancha que
+# el hueco a cada lado y 5 cm de vuelo.
+component head_drip(w, z, we, mat)
+  let es = if we > 0 then 1 else -1
+  prism (-w / 2 - 0.05, z) (w / 2 + 0.05, z) (w / 2 + 0.05, z + 0.03) (-w / 2 - 0.05, z + 0.05) depth min(we - es * 0.02, we + es * 0.05) to max(we - es * 0.02, we + es * 0.05) material mat
+
+# Alféizar por dentro, bajo la ventana: del marco («d» de fondo) a 3 cm
+# más allá de la cara interior del muro, 3 cm de grueso.
+component inner_sill(w, d, wi, mat)
+  let ei = if wi > 0 then 1 else -1
+  let y0 = ei * d / 2
+  let y1 = wi + ei * 0.03
+  box (-w / 2 - 0.02, min(y0, y1), -0.03) to (w / 2 + 0.02, max(y0, y1), 0) material mat
+
+# Parasol de lamas delante del hueco, por fuera: «kind» 1 lamas
+# horizontales, 2 verticales; «sl» de ancho de lama, «gap» entre lamas,
+# «off» de separación de la fachada; dos montantes a los lados.
+component brise(w, h, we, kind, sl, gap, off, mat)
+  let es = if we > 0 then 1 else -1
+  let ya = min(we + es * off, we + es * (off + sl))
+  let yb = max(we + es * off, we + es * (off + sl))
+  let x0 = w / 2 + 0.05
+  box (-x0 - 0.04, ya, 0) to (-x0, yb, h) material mat
+  box (x0, ya, 0) to (x0 + 0.04, yb, h) material mat
+  # Los brazos que lo sujetan a la fachada, arriba y abajo.
+  repeat j in 0..2
+    let z = if j == 0 then 0.05 else h - 0.09
+    box (-x0 - 0.03, min(we, ya), z) to (-x0 - 0.01, max(we, yb), z + 0.04) material mat
+    box (x0 + 0.01, min(we, ya), z) to (x0 + 0.03, max(we, yb), z + 0.04) material mat
+  if kind == 1
+    let n = max(1, floor(h / (gap + 0.015)))
+    repeat i in 0..n
+      let z = (i + 0.5) * h / n
+      box (-x0, ya, z - 0.0075) to (x0, yb, z + 0.0075) material mat
+  else
+    let n = max(1, floor(2 * x0 / (gap + 0.015)))
+    box (-x0, ya, 0) to (x0, yb, 0.03) material mat
+    box (-x0, ya, h - 0.03) to (x0, yb, h) material mat
+    repeat i in 0..n
+      let x = -x0 + (i + 0.5) * 2 * x0 / n
+      box (x - 0.0075, ya, 0.03) to (x + 0.0075, yb, h - 0.03) material mat
+
+# En planta: las mochetas cortadas y el recercado y el parasol por fuera.
+component wall_hole_plan(w, d, we, nib, sw, sp, bk, sl, off)
+  let es = if we > 0 then 1 else -1
+  let fe = es * d / 2
+  if nib > 0 and abs(we - fe) > 0.005
+    polygon (-w / 2, fe) (-w / 2 + nib, fe) (-w / 2 + nib, we) (-w / 2, we) pen cut filled
+    polygon (w / 2 - nib, fe) (w / 2, fe) (w / 2, we) (w / 2 - nib, we) pen cut filled
+  if sw > 0
+    let yo = we + es * sp
+    polygon (-w / 2 - sw, we) (-w / 2, we) (-w / 2, yo) (-w / 2 - sw, yo) pen thin filled
+    polygon (w / 2, we) (w / 2 + sw, we) (w / 2 + sw, yo) (w / 2, yo) pen thin filled
+  if bk > 0
+    let x0 = w / 2 + 0.09
+    let ya = we + es * off
+    let yb = we + es * (off + sl)
+    polygon (-x0, ya) (x0, ya) (x0, yb) (-x0, yb) pen thin
+    line (-x0, we) to (-x0, ya) pen thin
+    line (x0, we) to (x0, ya) pen thin
+
 # ---- Planta ---------------------------------------------------------------
 # En planta, «y» es el eje a través del muro hacia el lado al que abren las
 # hojas; wall_ext y wall_int (los pone el programa) son las caras del muro,

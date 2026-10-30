@@ -747,6 +747,28 @@ fn statement(line: &Line) -> Result<Stmt, FamilyError> {
                 line: no,
             }
         }
+        "prism" => {
+            // prism (x, z) (x, z) (x, z)… depth y0 to y1 material m
+            let mut points = vec![c.pair()?];
+            while c.peek_sym("(") {
+                points.push(c.pair()?);
+            }
+            if points.len() < 3 {
+                return Err(syntax(no, "a prism needs at least three points"));
+            }
+            c.keyword("depth")?;
+            let y0 = c.expr()?;
+            c.keyword("to")?;
+            let y1 = c.expr()?;
+            c.keyword("material")?;
+            let material = c.expr()?;
+            Stmt::Prism {
+                points,
+                depth: [y0, y1],
+                material,
+                line: no,
+            }
+        }
         "use" => {
             let name = c.ident()?;
             c.sym("(")?;
@@ -925,6 +947,7 @@ pub(crate) fn stmt_line(s: &Stmt) -> usize {
     match s {
         Stmt::Box { line, .. }
         | Stmt::Outline { line, .. }
+        | Stmt::Prism { line, .. }
         | Stmt::Use { line, .. }
         | Stmt::Repeat { line, .. }
         | Stmt::If { line, .. }
@@ -980,6 +1003,7 @@ fn check_names(def: &FamilyDef) -> Result<(), FamilyError> {
                 }
                 Stmt::Box { .. }
                 | Stmt::Outline { .. }
+                | Stmt::Prism { .. }
                 | Stmt::Let { .. }
                 | Stmt::Require(_)
                 | Stmt::Line { .. }

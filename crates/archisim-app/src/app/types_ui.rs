@@ -112,10 +112,13 @@ pub const OPENING_TABS: &[(OpeningTab, &str, &str)] = &[
 /// The tab a section of a door or window recipe goes in.
 pub fn opening_tab_of(section: &str) -> OpeningTab {
     match section {
-        "Forma" | "Arco" | "Recercado" | "Esquina" => OpeningTab::WallHole,
-        "Persiana" | "Premarco" | "Premarco y vierteaguas" | "Vierteaguas" | "Por fuera" => {
-            OpeningTab::Accessories
-        }
+        "Forma" | "Arco" | "Recercado" | "Esquina" | "Hueco de muro" => OpeningTab::WallHole,
+        "Persiana"
+        | "Premarco"
+        | "Premarco y vierteaguas"
+        | "Vierteaguas"
+        | "Por fuera"
+        | "Accesorios" => OpeningTab::Accessories,
         "Representación" => OpeningTab::Representation,
         "Datos" => OpeningTab::Classification,
         _ => OpeningTab::Leaves,

@@ -321,6 +321,15 @@ pub enum Stmt {
         material: Expr,
         line: usize,
     },
+    /// A convex outline in elevation (`x`, `z`), from `y0` to `y1` across
+    /// (`prism (x, z) (x, z) (x, z)… depth y0 to y1 material m`): a
+    /// voussoir, a sloped cap, a wedge.
+    Prism {
+        points: Vec<[Expr; 2]>,
+        depth: [Expr; 2],
+        material: Expr,
+        line: usize,
+    },
     /// Places a shared piece.
     Use {
         name: String,
@@ -397,7 +406,10 @@ impl Stmt {
     /// Whether it builds part of the 3D body (it may not appear in a plan
     /// symbol or an elevation).
     pub fn is_body_piece(&self) -> bool {
-        matches!(self, Stmt::Box { .. } | Stmt::Outline { .. })
+        matches!(
+            self,
+            Stmt::Box { .. } | Stmt::Outline { .. } | Stmt::Prism { .. }
+        )
     }
 
     /// Whether it draws in plan (it may not appear in the 3D body).

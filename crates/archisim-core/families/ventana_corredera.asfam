@@ -1,7 +1,7 @@
 family "Ventana corredera"
   category window
   host wall
-  version 7
+  version 8
   description "Ventana o balconera corredera de 2 a 4 hojas, con marco, persiana con capialzado, mosquitera, premarco y vierteaguas si se quieren"
 
 include "piezas"
@@ -29,6 +29,30 @@ type_params
     panel_material material = "Vidrio doble" label "Vidrio"
     subframe_material material = "Acero galvanizado" visible_if subframe label "Premarco"
     sill_material material = "Piedra natural" visible_if sill label "Vierteaguas"
+  section "Hueco de muro"
+    frame_position choice("Centrado en el muro", "Por fuera", "Por dentro") = "Centrado en el muro" label "Posición del marco"
+    frame_inset length = 0.00 range 0.00..0.60 visible_if frame_position != "Centrado en el muro" label "Marco: retranqueo desde la cara"
+    nib length = 0.00 range 0.00..0.20 label "Mocheta: ancho (0, sin mocheta)"
+    nib_material material = "Ladrillo visto" visible_if nib > 0 label "Mocheta"
+    lintel choice("Sin dintel visto", "De hormigón", "De piedra", "De madera", "De acero", "Sardinel de ladrillo", "Arco rebajado de ladrillo") = "Sin dintel visto" label "Dintel visto"
+    lintel_height length = 0.20 range 0.03..0.60 visible_if lintel != "Sin dintel visto" label "Dintel: alto"
+    lintel_bearing length = 0.15 range 0.00..0.50 visible_if lintel != "Sin dintel visto" and lintel != "Arco rebajado de ladrillo" label "Dintel: entrega a cada lado"
+    lintel_material material = "Hormigón armado" visible_if lintel != "Sin dintel visto" label "Dintel"
+  section "Recercado"
+    surround choice("Sin recercado", "Plano", "Moldurado", "Con clave") = "Sin recercado" label "Recercado por fuera"
+    surround_width length = 0.15 range 0.04..0.60 visible_if surround != "Sin recercado" label "Recercado: ancho"
+    surround_projection length = 0.03 range 0.005..0.20 visible_if surround != "Sin recercado" label "Recercado: vuelo"
+    surround_material material = "Piedra caliza" visible_if surround != "Sin recercado" label "Recercado"
+  section "Accesorios"
+    inner_sill bool = no label "Alféizar por dentro"
+    inner_sill_material material = "Madera de pino" visible_if inner_sill label "Alféizar"
+    head_drip bool = no label "Albardilla sobre el hueco"
+    head_drip_material material = "Piedra caliza" visible_if head_drip label "Albardilla"
+    brise choice("Sin parasol", "Lamas horizontales", "Lamas verticales") = "Sin parasol" label "Parasol de lamas"
+    brise_slat length = 0.10 range 0.02..0.40 visible_if brise != "Sin parasol" label "Parasol: ancho de lama"
+    brise_gap length = 0.06 range 0.01..0.40 visible_if brise != "Sin parasol" label "Parasol: separación entre lamas"
+    brise_offset length = 0.12 range 0.02..1.00 visible_if brise != "Sin parasol" label "Parasol: separación de la fachada"
+    brise_material material = "Aluminio lacado" visible_if brise != "Sin parasol" label "Parasol"
   section "Modelo 3D"
     model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Contemporáneo" label "Modelo 3D"
     hardware_material material = "Acero inoxidable" label "Herrajes"
@@ -75,6 +99,21 @@ body
   if sill
     let out = if opens_to == "exterior" then 1 else -1
     use window_sill(width, frame_depth, sill_depth, out, sill_material)
+  # Hueco de muro y accesorios (E6).
+  use nib_pieces(width, height, frame_depth, wall_ext, nib, nib_material)
+  if surround != "Sin recercado"
+    use surround_pieces(width, height, wall_ext, surround, surround_width, surround_projection, surround_material, 1)
+  let lk = if lintel == "Sin dintel visto" then 0 else if lintel == "De acero" then 2 else if lintel == "Sardinel de ladrillo" then 3 else if lintel == "Arco rebajado de ladrillo" then 4 else 1
+  if lk > 0
+    use lintel_pieces(width, height, wall_ext, wall_int, lk, lintel_height, if lk == 4 then 0 else lintel_bearing, lintel_material)
+  if head_drip
+    let zlt = if lk == 4 then width / 8 + lintel_height else if lk > 0 then lintel_height else 0
+    let zs = if surround != "Sin recercado" then surround_width else 0
+    use head_drip(width, height + max(zlt, zs), wall_ext, head_drip_material)
+  if inner_sill
+    use inner_sill(width, frame_depth, wall_int, inner_sill_material)
+  if brise != "Sin parasol"
+    use brise(width, height, wall_ext, if brise == "Lamas horizontales" then 1 else 2, brise_slat, brise_gap, brise_offset, brise_material)
 
 # Marco cortado y las hojas en carriles alternos, solapadas «2 · lap» con
 # la de al lado. La hoja del carril exterior queda en el mismo sitio sea
@@ -82,6 +121,7 @@ body
 plan 1:50
   if sill_height > 0
     use sill_plan(width, frame_depth, wall_ext, wall_int)
+  use wall_hole_plan(width, frame_depth, wall_ext, nib, if surround != "Sin recercado" then surround_width else 0, surround_projection, if brise != "Sin parasol" then 1 else 0, brise_slat, brise_offset)
   let ew = if wall_ext > 0 then 1 else -1
   if shutter
     line (-width / 2, ew * (frame_depth / 2 + 0.02)) to (width / 2, ew * (frame_depth / 2 + 0.02)) pen thin dashed
@@ -135,6 +175,8 @@ plan 1:100
   line (-width / 2 + frame_width, 0) to (width / 2 - frame_width, 0) pen thin
 
 outputs
+  frame_align = if frame_position == "Por fuera" then "exterior" else if frame_position == "Por dentro" then "interior" else "centre"
+  frame_inset = frame_inset
   generator = "props:slider"
   w_fw = frame_width
   w_w = w

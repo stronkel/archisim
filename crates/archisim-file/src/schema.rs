@@ -3976,6 +3976,7 @@ impl ProjectFile {
                 panel_material: core::MaterialId(0),
                 panels: Vec::new(),
                 shape: Default::default(),
+                frame_place: Default::default(),
             });
         }
         for o in self.openings {

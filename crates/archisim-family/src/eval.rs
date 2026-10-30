@@ -729,6 +729,64 @@ impl<'a> Run<'a> {
                         });
                     }
                 }
+                Stmt::Prism {
+                    points,
+                    depth,
+                    material,
+                    line,
+                } => {
+                    self.tick(*line)?;
+                    if self.mode != Mode::Body {
+                        return Err(eval_err(*line, "a plan symbol draws lines, not pieces"));
+                    }
+                    let mut piece = Vec::with_capacity(points.len());
+                    for q in points {
+                        piece.push(self.point(q, env, *line)?);
+                    }
+                    let (y0, y1) = (
+                        self.number(&depth[0], env, *line)?,
+                        self.number(&depth[1], env, *line)?,
+                    );
+                    if y1 < y0 - 1e-9 {
+                        return Err(FamilyError::NegativeSize { line: *line });
+                    }
+                    let material = match self.eval(material, env, *line)? {
+                        Value::Material(m) => m,
+                        other => {
+                            return Err(eval_err(
+                                *line,
+                                format!("a piece needs a material, not a {}", other.kind_name()),
+                            ))
+                        }
+                    };
+                    // Counter-clockwise in elevation, as the shapes are.
+                    let area = crate::shape::area(&piece);
+                    if area.abs() < 1e-9 {
+                        continue;
+                    }
+                    if area < 0.0 {
+                        piece.reverse();
+                    }
+                    if self.parts.len() >= MAX_PARTS {
+                        return Err(FamilyError::TooComplex { line: *line });
+                    }
+                    let (mut lo, mut hi) = ([f64::MAX; 3], [f64::MIN; 3]);
+                    for q in &piece {
+                        lo[0] = lo[0].min(q[0]);
+                        hi[0] = hi[0].max(q[0]);
+                        lo[2] = lo[2].min(q[1]);
+                        hi[2] = hi[2].max(q[1]);
+                    }
+                    lo[1] = y0;
+                    hi[1] = y1.max(y0);
+                    self.parts.push(Part {
+                        material,
+                        min: lo,
+                        max: hi,
+                        line: *line,
+                        profile: Some(piece),
+                    });
+                }
                 Stmt::Use { name, args, line } => {
                     self.tick(*line)?;
                     let comp = self
