@@ -13,6 +13,12 @@ pub struct TerrainSettings {
     pub depth: f64,
     /// Clicks draw a contour line (all its points at `z`), not points.
     pub line: bool,
+    /// Clicks draw the terrain's edge (E5): closed, it makes the terrain
+    /// (its corners at `z`) or gives the level's terrain that edge.
+    pub outline: bool,
+    /// A click on a line of a DXF drawn in the plan makes it a contour line
+    /// (E5), at the height of the nearest text that is a number.
+    pub wand: bool,
 }
 
 impl Default for TerrainSettings {
@@ -22,6 +28,8 @@ impl Default for TerrainSettings {
             contour: 0.5,
             depth: 1.0,
             line: false,
+            outline: false,
+            wand: false,
         }
     }
 }

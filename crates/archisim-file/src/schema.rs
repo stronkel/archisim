@@ -648,6 +648,15 @@ pub(crate) struct Terrain {
     /// Areas painted over it (version 37, optional).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub patches: Vec<TerrainPatch>,
+    /// Its edge drawn by hand, `[x, y]` (version 45, optional).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub outline: Option<Vec<[f64; 2]>>,
+    /// Heights beside the survey points in plan (version 45).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub show_heights: bool,
+    /// Slope arrows in plan (version 45).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub slope_arrows: bool,
 }
 
 /// An area of a terrain painted with another material (version 37): its
@@ -2938,6 +2947,12 @@ impl ProjectFile {
                     depth: t.depth,
                     contour: t.contour,
                     lines: t.lines,
+                    outline: t
+                        .outline
+                        .as_ref()
+                        .map(|o| o.iter().map(|q| [q.x, q.y]).collect()),
+                    show_heights: t.show_heights,
+                    slope_arrows: t.slope_arrows,
                     patches: t
                         .patches
                         .into_iter()
@@ -3633,6 +3648,12 @@ impl ProjectFile {
                         depth: t.depth,
                         contour: t.contour,
                         lines: t.lines.clone(),
+                        outline: t
+                            .outline
+                            .as_ref()
+                            .map(|o| o.iter().map(|q| core::Point2::new(q[0], q[1])).collect()),
+                        show_heights: t.show_heights,
+                        slope_arrows: t.slope_arrows,
                         patches: t
                             .patches
                             .iter()

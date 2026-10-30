@@ -93,6 +93,27 @@ impl ArchiSimApp {
     }
 
     pub(super) fn terrain_click(&mut self, p: Point2) {
+        if self.terrain_settings.wand {
+            self.terrain_wand(p);
+            return;
+        }
+        if self.terrain_settings.outline {
+            // Closed by clicking on its first corner.
+            let reach = self.view.to_metres(REACH);
+            if self.terrain_line.len() >= 3 && self.terrain_line[0].distance(p) <= reach {
+                self.finish_terrain_outline();
+                return;
+            }
+            if self.terrain_line.last().is_some_and(|q| q.approx_eq(p)) {
+                return;
+            }
+            self.terrain_line.push(p);
+            self.say(format!(
+                "Contorno del terreno: {} vértices · clic en el primero, Intro o doble clic: cerrarlo.",
+                self.terrain_line.len()
+            ));
+            return;
+        }
         if self.terrain_settings.line {
             if self.terrain_line.last().is_some_and(|q| q.approx_eq(p)) {
                 return;
@@ -146,7 +167,85 @@ impl ArchiSimApp {
         true
     }
 
+    /// The magic wand on a DXF's contour lines (E5): the line of the
+    /// drawing clicked becomes a contour line of the terrain, at the height
+    /// of the nearest text that reads as a number (or the one written).
+    fn terrain_wand(&mut self, p: Point2) {
+        let reach = self.view.to_metres(REACH);
+        let Some((path, z, read)) = contour_from_drawing(self.ed.model(), self.ed.level, p, reach)
+        else {
+            self.complain("Haz clic sobre una línea del dibujo (una curva de nivel de un DXF).");
+            return;
+        };
+        let z = z.unwrap_or(self.terrain_settings.z);
+        let how = if read {
+            "leída del texto más cercano"
+        } else {
+            "la escrita en la herramienta"
+        };
+        if let Some(id) = self.level_terrain() {
+            let r = self.ed.edit_terrain("Curva de nivel del dibujo", id, |t| {
+                t.add_line(&path, z);
+            });
+            self.report(r, &format!("Curva a {} ({how}).", height(z)));
+            return;
+        }
+        let line = archisim_core::push_line(&mut self.terrain_points, &path, z);
+        self.terrain_lines.push(line);
+        let pts: Vec<Point2> = self.terrain_points.iter().map(|p| p.at).collect();
+        if archisim_core::delaunay(&pts).is_empty() {
+            self.say(format!(
+                "Curva a {} ({how}). Elige otra a otra cota para formar el terreno.",
+                height(z)
+            ));
+            return;
+        }
+        self.finish_terrain();
+    }
+
+    /// Closes the edge being drawn (E5): the level's terrain takes it as
+    /// its edge; with none, a terrain is made with its corners at the
+    /// height written.
+    fn finish_terrain_outline(&mut self) {
+        let path = std::mem::take(&mut self.terrain_line);
+        if path.len() < 3 {
+            self.complain("El contorno necesita al menos tres vértices.");
+            self.terrain_line = path;
+            return;
+        }
+        if !archisim_core::is_simple_polygon(&path) {
+            self.complain("El contorno se cruza consigo mismo.");
+            return;
+        }
+        if let Some(id) = self.level_terrain() {
+            let r = self
+                .ed
+                .edit_terrain("Contorno del terreno", id, |t| t.set_outline(path));
+            self.report(r, "El terreno llega ahora hasta el contorno dibujado.");
+            return;
+        }
+        let z = self.terrain_settings.z;
+        let points: Vec<SurveyPoint> = path.iter().map(|&at| SurveyPoint { at, z }).collect();
+        match self
+            .ed
+            .add_terrain(&self.terrain_settings, points, Vec::new())
+        {
+            Ok(id) => {
+                let _ = self
+                    .ed
+                    .edit_terrain("Contorno del terreno", id, |t| t.set_outline(path));
+                self.ed.selection = [Element::Terrain(id)].into_iter().collect();
+                self.say("Terreno creado con su contorno: dale cotas a sus puntos o dibuja líneas de nivel dentro.");
+            }
+            Err(e) => self.complain(format!("No se puede crear el terreno: {e}.")),
+        }
+    }
+
     pub(super) fn finish_terrain(&mut self) {
+        if self.terrain_settings.outline && !self.terrain_line.is_empty() {
+            self.finish_terrain_outline();
+            return;
+        }
         if !self.terrain_line.is_empty() {
             self.finish_terrain_line();
             return;
@@ -215,6 +314,13 @@ impl ArchiSimApp {
         };
         let p = self.view.to_model(rect, pos);
         let reach = self.view.to_metres(REACH);
+        // On a height written beside a point: type it there (E5).
+        if let Some(i) = self.terrain_height_at(id, p) {
+            let z = self.ed.model().terrain(id).map_or(0.0, |t| t.points[i].z);
+            self.terrain_z_edit = Some((id, i, format!("{z:.2}").replace('.', ",")));
+            self.terrain_pick = vec![i];
+            return true;
+        }
         // A point needs a close click: the points of a line are near each
         // other, and a click on the line between them takes it whole.
         let hit: Vec<usize> = match self.terrain_point_at(id, p, self.view.to_metres(POINT_REACH)) {
@@ -243,6 +349,75 @@ impl ArchiSimApp {
             "{n} punto(s) elegido(s): escribe su cota en Propiedades · Supr: quitarlos · Mayús: añadir más."
         ));
         true
+    }
+
+    /// The point whose written height is at `p` (heights shown only).
+    fn terrain_height_at(&self, id: TerrainId, p: Point2) -> Option<usize> {
+        let t = self.ed.model().terrain(id)?;
+        if !t.show_heights {
+            return None;
+        }
+        // As the plan writes them: a cross of 0,8 mm and the text to its
+        // right, 2 mm high or so.
+        let k = crate::pick::paper_k();
+        let (c, th) = (0.8 * k, archisim_plan::annotate::TEXT_HEIGHT * 0.8 * k);
+        t.points.iter().position(|q| {
+            let (x0, y0) = (q.at.x + c, q.at.y + c * 0.6 - th * 0.3);
+            p.x >= x0 && p.x <= x0 + th * 4.5 && p.y >= y0 && p.y <= y0 + th * 1.6
+        })
+    }
+
+    /// The field where a point's height is typed, over its number.
+    pub(super) fn terrain_z_editor(&mut self, ctx: &egui::Context, rect: Rect) {
+        let Some((id, i, mut text)) = self.terrain_z_edit.clone() else {
+            return;
+        };
+        let Some(q) = self
+            .ed
+            .model()
+            .terrain(id)
+            .and_then(|t| t.points.get(i))
+            .map(|p| p.at)
+        else {
+            self.terrain_z_edit = None;
+            return;
+        };
+        let pos = self.view.to_screen(rect, q) + Vec2::new(8.0, -24.0);
+        let mut done = None;
+        egui::Area::new(egui::Id::unique("terrain-z-edit"))
+            .fixed_pos(pos)
+            .order(egui::Order::Foreground)
+            .show(ctx, |ui| {
+                egui::Frame::popup(ui.style()).show(ui, |ui| {
+                    let r = ui.add(
+                        egui::TextEdit::singleline(&mut text)
+                            .desired_width(70.0)
+                            .hint_text("cota"),
+                    );
+                    r.request_focus();
+                    if ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                        done = Some(true);
+                    } else if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                        done = Some(false);
+                    }
+                });
+            });
+        match done {
+            Some(true) => {
+                self.terrain_z_edit = None;
+                match parse_number(&text) {
+                    Some(v) => {
+                        let r = self
+                            .ed
+                            .edit_terrain("Cota de punto", id, |t| t.points[i].z = v);
+                        self.report(r, &format!("Punto a {}.", height(v)));
+                    }
+                    None => self.complain("Escribe la cota en metros, p. ej. 12,35."),
+                }
+            }
+            Some(false) => self.terrain_z_edit = None,
+            None => self.terrain_z_edit = Some((id, i, text)),
+        }
     }
 
     /// The picked points of the selected terrain, if any (stale picks are
@@ -384,21 +559,50 @@ impl ArchiSimApp {
         props::title(ui, "Herramienta Terreno · lo que vas a crear");
         group(ui, "tool-terrain", "Terreno", |ui| {
             ui.add_space(2.0);
-            let before = self.terrain_settings.line;
+            let before = (
+                self.terrain_settings.line,
+                self.terrain_settings.outline,
+                self.terrain_settings.wand,
+            );
+            let mut mode = match before {
+                (_, _, true) => 3u8,
+                (_, true, _) => 2,
+                (true, _, _) => 1,
+                _ => 0,
+            };
             segmented(
                 ui,
                 "terrain-mode",
-                &mut self.terrain_settings.line,
+                &mut mode,
                 &[
-                    (false, "Puntos", "Un punto por clic, a la cota escrita"),
+                    (0, "Puntos", "Un punto por clic, a la cota escrita"),
                     (
-                        true,
+                        1,
                         "Línea de nivel",
                         "Una línea de varios clics: todos sus puntos a la cota escrita",
                     ),
+                    (
+                        2,
+                        "Contorno",
+                        "El borde del terreno como un polígono: al cerrarlo se hace el terreno (o el de la planta toma ese borde)",
+                    ),
+                    (
+                        3,
+                        "Varita",
+                        "Clic en una curva de nivel de un DXF dibujado en la planta: pasa al terreno a la cota del texto más cercano",
+                    ),
                 ],
             );
-            if before != self.terrain_settings.line {
+            self.terrain_settings.line = mode == 1;
+            self.terrain_settings.outline = mode == 2;
+            self.terrain_settings.wand = mode == 3;
+            if before
+                != (
+                    self.terrain_settings.line,
+                    self.terrain_settings.outline,
+                    self.terrain_settings.wand,
+                )
+            {
                 self.terrain_line.clear();
             }
             ui.add_space(4.0);
@@ -491,6 +695,48 @@ impl ArchiSimApp {
             "IfcGeographicElement",
         );
         let (lo, hi) = t.range();
+        // What the plan shows of it (E5).
+        let (mut heights, mut arrows) = (t.show_heights, t.slope_arrows);
+        group(ui, "terrain-show", "En planta", |ui| {
+            row(
+                ui,
+                "Cotas de los puntos",
+                "Junto a cada punto; con un clic en el número se cambia",
+                |ui, _| {
+                    ui.switch(&mut heights, "");
+                },
+            );
+            row(
+                ui,
+                "Flechas de pendiente",
+                "Hacia donde baja, con su pendiente",
+                |ui, _| {
+                    ui.switch(&mut arrows, "");
+                },
+            );
+        });
+        if (heights, arrows) != (t.show_heights, t.slope_arrows) {
+            let r = self.ed.edit_terrain("Terreno en planta", id, |t| {
+                t.show_heights = heights;
+                t.slope_arrows = arrows;
+            });
+            self.report(r, "Terreno en planta cambiado.");
+        }
+        if t.outline.is_some() {
+            ui.horizontal(|ui| {
+                ui.add_space(4.0);
+                if ui
+                    .button("Quitar el contorno dibujado")
+                    .on_hover_text("El terreno vuelve a llegar hasta sus puntos de fuera")
+                    .clicked()
+                {
+                    let r = self
+                        .ed
+                        .edit_terrain("Quitar contorno", id, |t| t.outline = None);
+                    self.report(r, "Contorno quitado.");
+                }
+            });
+        }
         group(ui, "terrain-data", "Terreno", |ui| {
             row(
                 ui,
@@ -771,6 +1017,53 @@ impl ArchiSimApp {
     }
 }
 
+/// The line of the 2D drawing of a level nearest `p` (within `reach`) as
+/// a contour line: its points, and the height read from the nearest text
+/// that is a number (within 20 m), with whether one was read.
+pub(crate) fn contour_from_drawing(
+    model: &archisim_core::Model,
+    level: archisim_core::LevelId,
+    p: Point2,
+    reach: f64,
+) -> Option<(Vec<Point2>, Option<f64>, bool)> {
+    use archisim_core::{Shape, ViewRef};
+    let mut best: Option<(f64, Vec<Point2>)> = None;
+    for d in model.drafts_in(ViewRef::Level(level)) {
+        if matches!(d.shape, Shape::Text(_)) {
+            continue;
+        }
+        for path in crate::pick::draft_paths(model, d.id) {
+            let dist = path
+                .windows(2)
+                .map(|w| segment_distance(p, w[0], w[1]))
+                .fold(f64::INFINITY, f64::min);
+            if dist <= reach && best.as_ref().is_none_or(|b| dist < b.0) {
+                best = Some((dist, path));
+            }
+        }
+    }
+    let (_, path) = best?;
+    if path.len() < 2 {
+        return None;
+    }
+    let mut z: Option<(f64, f64)> = None;
+    for d in model.drafts_in(ViewRef::Level(level)) {
+        let Shape::Text(t) = &d.shape else { continue };
+        let Some(v) = parse_number(t.content.trim().trim_start_matches('+')) else {
+            continue;
+        };
+        let dist = path
+            .windows(2)
+            .map(|w| segment_distance(t.at, w[0], w[1]))
+            .fold(f64::INFINITY, f64::min);
+        if dist <= 20.0 && z.is_none_or(|b| dist < b.0) {
+            z = Some((dist, v));
+        }
+    }
+    let read = z.is_some();
+    Some((path, z.map(|b| b.1), read))
+}
+
 #[cfg(test)]
 mod georef_tests {
     #[test]
@@ -780,5 +1073,57 @@ mod georef_tests {
         assert_eq!(super::parse_number(" 650,25 "), Some(650.25));
         assert_eq!(super::parse_number("4474270.5"), Some(4_474_270.5));
         assert_eq!(super::parse_number("abc"), None);
+    }
+}
+
+#[cfg(test)]
+mod wand_tests {
+    use archisim_core::{
+        Model, NewDraft, Point2, Polyline, Shape, Text, TextAlign, ViewRef, LAYER_ZERO,
+    };
+
+    /// E5: a polyline of a DXF drawn in the plan, with «+12,50» written
+    /// beside it, is a contour line at 12,50; the far text is not used.
+    #[test]
+    fn the_wand_reads_the_nearest_height() {
+        let mut m = Model::new("t");
+        let l = m.add_level("PB", 0.0);
+        let view = ViewRef::Level(l);
+        let line = Polyline {
+            points: vec![
+                Point2::new(0.0, 0.0),
+                Point2::new(10.0, 2.0),
+                Point2::new(20.0, 0.0),
+            ],
+            bulges: vec![0.0; 3],
+            closed: false,
+            width: 0.0,
+        };
+        m.add_draft(NewDraft::new(view, LAYER_ZERO, Shape::Polyline(line)))
+            .unwrap();
+        for (at, content) in [
+            (Point2::new(10.0, 3.0), "+12,50"),
+            (Point2::new(10.0, 60.0), "99"),
+        ] {
+            m.add_draft(NewDraft::new(
+                view,
+                LAYER_ZERO,
+                Shape::Text(Text {
+                    at,
+                    content: content.into(),
+                    height: 2.0,
+                    angle: 0.0,
+                    align: TextAlign::MiddleLeft,
+                }),
+            ))
+            .unwrap();
+        }
+        let (path, z, read) =
+            super::contour_from_drawing(&m, l, Point2::new(5.0, 1.05), 0.3).unwrap();
+        assert!(read);
+        assert_eq!(z, Some(12.5));
+        assert_eq!(path.len(), 3);
+        // Nowhere near a line: nothing.
+        assert!(super::contour_from_drawing(&m, l, Point2::new(5.0, 30.0), 0.3).is_none());
     }
 }

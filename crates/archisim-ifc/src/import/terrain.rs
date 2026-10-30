@@ -128,6 +128,33 @@ impl<'a> Importer<'a> {
                 lines,
             })
             .map_err(|e| explain(&e))?;
+        // Its edge drawn by hand and what the plan shows (E5).
+        let outline: Option<Vec<archisim_core::Point2>> = self
+            .property_own(id, "ArchiSim_Terrain", "Outline")
+            .and_then(|v| v.as_str())
+            .map(|s| {
+                s.split(';')
+                    .filter_map(|q| {
+                        let mut it = q.split_whitespace().filter_map(|n| n.parse::<f64>().ok());
+                        Some(archisim_core::Point2::new(
+                            snap(it.next()? * len),
+                            snap(it.next()? * len),
+                        ))
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .filter(|o| o.len() >= 3);
+        let flag = |name: &str| {
+            self.property_own(id, "ArchiSim_Terrain", name)
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false)
+        };
+        let (show_heights, slope_arrows) = (flag("ShowHeights"), flag("SlopeArrows"));
+        let _ = self.model.edit_terrain(tid, |t| {
+            t.outline = outline;
+            t.show_heights = show_heights;
+            t.slope_arrows = slope_arrows;
+        });
         self.terrain_ids.insert(id);
         self.report.terrains += 1;
         let e = self.ent(id).ok_or("no existe")?;
