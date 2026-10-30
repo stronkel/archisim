@@ -99,7 +99,7 @@ impl ArchiSimApp {
             });
             row(ui, "", "", |ui, _| {
                 if ui
-                    .button("Pintar la franja")
+                    .button("Pintar franja")
                     .on_hover_text("A todo lo largo del muro, en la cara elegida")
                     .clicked()
                 {
@@ -108,7 +108,7 @@ impl ArchiSimApp {
             });
             row(ui, "", "", |ui, _| {
                 if ui
-                    .button("Pintar caras con el ratón…")
+                    .button("Pintar a mano…")
                     .on_hover_text("La herramienta Pintar: un clic en una cara del muro (en 3D, también en la zona entre aristas dibujadas en ella)")
                     .clicked()
                 {
@@ -123,7 +123,7 @@ impl ArchiSimApp {
             });
             row(ui, "", "", |ui, _| {
                 if ui
-                    .button("Dividir el muro en dos")
+                    .button("Dividir en dos")
                     .on_hover_text("Como «Dividir elemento» de Revit: cada parte puede tener luego su tipo, su altura y su pintura")
                     .clicked()
                 {

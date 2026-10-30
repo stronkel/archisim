@@ -12,9 +12,9 @@ Rama `bloque/e3-muros` (sobre `bloque/e4-contorno`), con pull request. Sin cambi
 
 **Hecho**
 - En Propiedades del muro, un grupo nuevo, **Caras y división**:
-  - **Pintar la franja**: una cara (interior o exterior), desde y hasta qué altura sobre la base, y el material. Sirve para zócalos, arrimaderos o bandas de fachada, a todo lo largo del muro y sin dibujar aristas en Concepto. Es una zona pintada de las de siempre, así que se ve en 3D, render y alzados.
-  - **Dividir el muro en dos** a la distancia que se diga desde su inicio (como «Dividir elemento» de Revit). La segunda parte lleva el tipo, la altura, las restricciones y la fase; las puertas y ventanas que quedan más allá del corte; la pintura de sus caras; y la parte de las zonas pintadas que le toca. Las dos partes se unen en el corte. No corta por una puerta o ventana, ni deja trozos de menos de 5 cm, ni corta muros curvos.
-  - **Pintar caras con el ratón…** abre la herramienta Pintar sin pasar por Concepto. La ficha de Arquitectura ya tiene sus doce herramientas.
+  - **Pintar franja**: una cara (interior o exterior), desde y hasta qué altura sobre la base, y el material. Sirve para zócalos, arrimaderos o bandas de fachada, a todo lo largo del muro y sin dibujar aristas en Concepto. Es una zona pintada de las de siempre, así que se ve en 3D, render y alzados.
+  - **Dividir en dos** a la distancia que se diga desde su inicio (como «Dividir elemento» de Revit). La segunda parte lleva el tipo, la altura, las restricciones y la fase; las puertas y ventanas que quedan más allá del corte; la pintura de sus caras; y la parte de las zonas pintadas que le toca. Las dos partes se unen en el corte. No corta por una puerta o ventana, ni deja trozos de menos de 5 cm, ni corta muros curvos.
+  - **Pintar a mano…** abre la herramienta Pintar sin pasar por Concepto. La ficha de Arquitectura ya tiene sus doce herramientas.
 - La envoltura de la capa de acabado en los extremos ya estaba (v0.73).
 
 **Pendiente** (la segunda parte de E3)
@@ -22,8 +22,8 @@ Rama `bloque/e3-muros` (sobre `bloque/e4-contorno`), con pull request. Sin cambi
 - Dividir muros curvos; dividir con un clic en planta (hoy se escribe la distancia).
 
 **Qué debe probar Antonio**
-1. Selecciona un tabique → Caras y división → franja interior de 0,00 a 1,00 con un azulejo → **Pintar la franja**. Míralo en 3D.
-2. En el mismo muro, **Dividir el muro en dos** a 2,00 m. Cambia el tipo de una de las partes y comprueba que la otra sigue igual y que las ventanas siguen en su sitio.
+1. Selecciona un tabique → Caras y división → franja interior de 0,00 a 1,00 con un azulejo → **Pintar franja**. Míralo en 3D.
+2. En el mismo muro, **Dividir en dos** a 2,00 m. Cambia el tipo de una de las partes y comprueba que la otra sigue igual y que las ventanas siguen en su sitio.
 3. Ctrl+Z deshace la división de una vez.
 
 ## 2026-10-30 (36) · Editar contorno en modo boceto (E4)
