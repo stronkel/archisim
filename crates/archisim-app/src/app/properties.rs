@@ -1691,6 +1691,9 @@ impl ArchiSimApp {
         let thickness = model.slab_type(s.slab_type).map_or(0.0, |t| t.thickness());
         let same_type = self.same_type(Element::Slab(id));
         props::title(ui, "Forjado · 1 seleccionado");
+        if super::sketch_ui::edit_contour_button(ui) {
+            self.start_sketch(crate::sketch::SketchTarget::Slab(id));
+        }
         let items = self.slab_type_items(ui.ctx());
         let mut chosen = None;
         let card = type_card(

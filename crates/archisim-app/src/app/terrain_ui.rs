@@ -481,6 +481,9 @@ impl ArchiSimApp {
             return;
         };
         props::title(ui, "Terreno · 1 seleccionado");
+        if super::sketch_ui::edit_contour_button(ui) {
+            self.start_sketch(crate::sketch::SketchTarget::Terrain(id));
+        }
         super::properties::view_card(
             ui,
             Icon::Terrain,

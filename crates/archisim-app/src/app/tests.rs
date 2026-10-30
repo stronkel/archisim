@@ -7800,3 +7800,55 @@ fn revit_shortcuts_start_tools_at_once() {
     h.app.cycle_keys();
     assert!(h.app.keys_revit);
 }
+
+/// E4: the contour of a slab sketched with the mouse — an edge dragged
+/// parallel, a vertex added with a double click and moved — goes into
+/// the model only on Intro, in one step; Esc leaves it as it was.
+#[test]
+fn a_slab_contour_is_sketched_and_finished() {
+    let mut ed = Editor::new_project();
+    let level = ed.level;
+    let slab_type = ed.model().slab_types().next().unwrap().id;
+    let id = ed
+        .transact("Forjado", |m| {
+            m.add_slab(archisim_core::NewSlab {
+                slab_type,
+                level,
+                outline: vec![
+                    Point2::new(0.0, 0.0),
+                    Point2::new(6.0, 0.0),
+                    Point2::new(6.0, 4.0),
+                    Point2::new(0.0, 4.0),
+                ],
+                top_offset: 0.0,
+            })
+        })
+        .unwrap();
+    let mut h = Harness::new(ed);
+    h.app.fit_requested = true;
+    h.frame();
+    h.app.start_sketch(crate::sketch::SketchTarget::Slab(id));
+    h.frame();
+    // The east edge 1 m further east.
+    h.drag(Point2::new(6.0, 2.0), Point2::new(7.0, 2.0));
+    assert_eq!(h.app.ed.model().slab(id).unwrap().outline.len(), 4);
+    let sketched = &h.app.sketch.as_ref().unwrap().sketch.loops[0];
+    assert!(
+        sketched.iter().any(|p| (p.x - 7.0).abs() < 0.05),
+        "{sketched:?}"
+    );
+    h.key(Key::Enter);
+    assert!(h.app.sketch.is_none());
+    let outline = h.app.ed.model().slab(id).unwrap().outline.clone();
+    assert!(
+        outline.iter().any(|p| (p.x - 7.0).abs() < 0.05),
+        "{outline:?}"
+    );
+    // Esc: nothing changes.
+    h.app.start_sketch(crate::sketch::SketchTarget::Slab(id));
+    h.frame();
+    h.drag(Point2::new(3.0, 4.0), Point2::new(3.0, 6.0));
+    h.key(Key::Escape);
+    assert!(h.app.sketch.is_none());
+    assert_eq!(h.app.ed.model().slab(id).unwrap().outline, outline);
+}
