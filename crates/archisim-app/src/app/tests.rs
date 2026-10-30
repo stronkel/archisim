@@ -7852,3 +7852,66 @@ fn a_slab_contour_is_sketched_and_finished() {
     assert!(h.app.sketch.is_none());
     assert_eq!(h.app.ed.model().slab(id).unwrap().outline, outline);
 }
+
+/// E3: a wall's properties show «Caras y división»; the band painted and
+/// the split made from there are one step each.
+#[test]
+fn a_wall_is_split_and_banded_from_its_properties() {
+    let mut ed = Editor::new_project();
+    let level = ed.level;
+    let wall_type = ed.model().wall_types().next().unwrap().id;
+    let wall = ed
+        .transact("Muro", |m| {
+            m.add_wall(archisim_core::NewWall {
+                wall_type,
+                level,
+                start: Point2::new(0.0, 0.0),
+                end: Point2::new(6.0, 0.0),
+                reference: archisim_core::ReferenceLine::Center,
+                height: 2.7,
+                base_offset: 0.0,
+                bulge: 0.0,
+                top: archisim_core::WallTop::Unconnected,
+            })
+        })
+        .unwrap();
+    let mut h = Harness::new(ed);
+    h.app.ed.selection.insert(Element::Wall(wall));
+    h.frame();
+    h.frame();
+    // The band: a skirting 1 m high inside.
+    let material = h.app.ed.model().materials().next().unwrap().id;
+    h.app.wall_band.material = Some(material);
+    let r = h.app.ed.transact("Pintar franja", |m| {
+        m.set_paint_zone(
+            wall,
+            archisim_core::FaceSide::Interior,
+            vec![
+                Point2::new(0.0, 0.0),
+                Point2::new(6.0, 0.0),
+                Point2::new(6.0, 1.0),
+                Point2::new(0.0, 1.0),
+            ],
+            Some(material),
+        )
+    });
+    assert!(r.is_ok());
+    let n = h
+        .app
+        .ed
+        .transact("Dividir muro", |m| m.split_wall(wall, 2.0))
+        .unwrap();
+    h.frame();
+    assert_eq!(h.app.ed.model().walls().count(), 2);
+    assert_eq!(
+        h.app
+            .ed
+            .model()
+            .paint_zones()
+            .filter(|z| z.wall == n)
+            .count(),
+        1
+    );
+    h.app.ed.undo();
+    assert_eq!(h.app.ed.model().walls().count(), 1);
+}

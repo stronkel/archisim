@@ -1207,6 +1207,7 @@ impl ArchiSimApp {
         if card.select_all {
             self.select_instances(same_type, "muros");
         }
+        self.wall_tools_group(ui, id, &w);
         let above = self.levels_above(w.level);
         group(ui, "wall-constraints", "Restricciones", |ui| {
             self.level_row(
