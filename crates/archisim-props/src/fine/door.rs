@@ -1553,3 +1553,264 @@ fn spyhole(b: &mut Builder, x: f64, z: f64, t: f64) {
         0.007,
     );
 }
+
+/// The guides a sliding door hangs from, by name (`slide_guide`).
+pub const SLIDE_GUIDES: &[&str] = &[
+    "Como la colección",
+    "Carril visto",
+    "Carril con galería",
+    "Carril oculto",
+];
+
+/// The pulls of a sliding door, by name (`slide_pull`).
+pub const SLIDE_PULLS: &[&str] = &[
+    "Como la colección",
+    "Uñero embutido",
+    "Tirador de barra",
+    "Asa de granero",
+    "Sin tirador",
+];
+
+/// Each collection's guide and pull (numbers in the lists above).
+const SLIDE_LOOKS: [(usize, usize); 8] = [
+    (3, 2), // Nórdico cálido: a galería, a recessed pull.
+    (3, 4), // Mediterráneo: a galería, a barn handle.
+    (3, 3), // Años 50: a galería, a pull bar.
+    (4, 2), // Japandi: hidden, a recessed pull.
+    (4, 2), // Contemporáneo: hidden, a recessed pull.
+    (2, 4), // Rústica: a barn rail, a barn handle.
+    (2, 3), // Industrial: a barn rail, a pull bar.
+    (3, 2), // Clásica: a galería, a recessed pull.
+];
+
+/// A sliding door (paquete 9, correderas): over the face of the wall,
+/// hanging from a guide (`pocket` off), or into the wall (`pocket` on);
+/// open `slide_open` per cent towards `slide_dir` (±1), with the leaf,
+/// lining and casings of the hinged door's collection and a sliding
+/// door's pull. The family's outputs: `leaf_x0`, `leaf_x1`, `leaf_top`,
+/// `leaf_t`, `lining_w`, `lining_h`, `pocket`, `slide_dir`.
+pub fn sliding_door(b: &mut Builder, p: &Params) {
+    let l = look(p);
+    let style = (p.style() as usize).clamp(1, 8);
+    let (mut guide, mut pull) = SLIDE_LOOKS[style - 1];
+    let pick = |key: &str| {
+        let n = p.get(key, 1.0).round() as usize;
+        (n >= 2).then_some(n)
+    };
+    if let Some(n) = pick("slide_guide") {
+        guide = n;
+    }
+    if let Some(n) = pick("slide_pull") {
+        pull = n;
+    }
+    let far = p.flag("lod", false);
+    let x0 = p.get("leaf_x0", -0.4);
+    let x1 = p.get("leaf_x1", 0.4);
+    let top = p.get("leaf_top", 2.0);
+    let t = p.get("leaf_t", 0.04).clamp(0.02, 0.06);
+    let w = p.get("lining_w", x1 - x0 + 0.1);
+    let h = p.get("lining_h", top + 0.05);
+    let fw = p.get("frame_width", 0.05);
+    let fd = p.get("frame_depth", 0.07);
+    let pocket = p.flag("pocket", false);
+    let s = if p.get("slide_dir", 1.0) < 0.0 {
+        -1.0
+    } else {
+        1.0
+    };
+    let open = (p.get("slide_open", 0.0) / 100.0).clamp(0.0, 1.0);
+    let face = p.get("face_pos", fd / 2.0);
+    let back = p.get("face_neg", -fd / 2.0);
+    let design = design(l.design);
+    let lw = x1 - x0;
+    // The lining across the whole reveal, and the casings: on both faces
+    // of a pocket door; on the face away from the leaf of one that slides
+    // over the wall (the leaf covers the other).
+    let profile = if far && l.casing != 2 {
+        casing(3)
+    } else {
+        casing(l.casing)
+    };
+    {
+        let (lo, hi) = (back, face);
+        b.rbox(FRAME, [-w / 2.0, lo, 0.0], [-w / 2.0 + fw, hi, h], 0.0);
+        b.rbox(FRAME, [w / 2.0 - fw, lo, 0.0], [w / 2.0, hi, h], 0.0);
+        b.rbox(
+            FRAME,
+            [-w / 2.0 + fw, lo, h - fw],
+            [w / 2.0 - fw, hi, h],
+            0.0,
+        );
+    }
+    if let Some(pr) = &profile {
+        let xi = w / 2.0 - fw + 0.008;
+        let zi = h - fw + 0.008;
+        let path = [[-xi, 0.0], [-xi, zi], [xi, zi], [xi, 0.0]];
+        moulding(b, FRAME, &path, false, back, -1.0, pr);
+        if pocket {
+            moulding(b, FRAME, &path, false, face, 1.0, pr);
+        }
+    }
+    let floor = 0.008;
+    if pocket {
+        // In the plane of the lining, slid into the wall.
+        let shift = s * open * lw;
+        let (a, c) = (x0 + 0.002 + shift, x1 - 0.002 + shift);
+        if far {
+            leaf_plain(b, &design, a, c, floor, top - 0.003, t);
+        } else {
+            leaf(b, &design, a, c, floor, top - 0.003, t);
+        }
+        if !far {
+            // Flush pulls on both faces by the leading edge, and the pull
+            // in its edge.
+            // The edge left out of the wall.
+            let edge = if s > 0.0 { a } else { c };
+            let x = edge + s * 0.05;
+            for side in [1.0, -1.0] {
+                let (ya, yb) = sorted2(side * (t / 2.0 - 0.0005), side * (t / 2.0 + 0.002));
+                b.rbox(METAL, [x - 0.02, ya, 0.95], [x + 0.02, yb, 1.15], 0.006);
+            }
+            let (ea, ec) = sorted2(edge - s * 0.002, edge + s * 0.004);
+            b.rbox(METAL, [ea, -0.008, 0.98], [ec, 0.008, 1.12], 0.002);
+        }
+        if p.flag("mirror", false) {
+            mirror_x(b);
+        }
+        return;
+    }
+    // Over the face of the wall: the leaf a little past the opening on
+    // both sides, off the wall, up past the head.
+    let gap = 0.012;
+    let over = 0.05;
+    let shift = s * open * (lw + over);
+    let (a, c) = (x0 - over + shift, x1 + over + shift);
+    let leaf_top = h + 0.03;
+    let yl = face + gap + t / 2.0;
+    let start = b.mark();
+    if far {
+        leaf_plain(b, &design, a, c, floor, leaf_top, t);
+    } else {
+        leaf(b, &design, a, c, floor, leaf_top, t);
+    }
+    b.transform_from(start, |q| [q[0], q[1] + yl, q[2]]);
+    // The header board over the opening the guide is fixed to, along all
+    // the way the leaf runs.
+    let (ra, rc) = sorted2(x0 - over - s * 0.1, x1 + over + s * (lw + over + 0.1));
+    let zr = leaf_top + 0.05;
+    b.rbox(
+        FRAME,
+        [ra, face - 0.0005, h - 0.03],
+        [rc, face + 0.02, zr + 0.06],
+        0.0,
+    );
+    let yr = face + 0.02;
+    match guide {
+        3 | 4 => {
+            if guide == 3 {
+                // The galería: a box in front of the rail, its ends closed.
+                let yf = yl + t / 2.0 + 0.02;
+                b.rbox(
+                    FRAME,
+                    [ra, yf, leaf_top - 0.01],
+                    [rc, yf + 0.018, zr + 0.06],
+                    0.002,
+                );
+                b.rbox(FRAME, [ra, yr, zr + 0.045], [rc, yf, zr + 0.06], 0.0);
+                for x in [ra, rc - 0.018] {
+                    b.rbox(
+                        FRAME,
+                        [x, yr, leaf_top - 0.01],
+                        [x + 0.018, yf, zr + 0.06],
+                        0.0,
+                    );
+                }
+            } else {
+                // Hidden: a slim profile on the board the leaf runs under.
+                b.rbox(
+                    METAL,
+                    [ra, yr, leaf_top + 0.004],
+                    [rc, yl + t / 2.0 + 0.004, zr],
+                    0.002,
+                );
+            }
+            // The leaf hangs from it (from the galería's top).
+            let up = if guide == 3 { zr + 0.046 } else { zr };
+            for k in [0.15, 0.85] {
+                let x = a + (c - a) * k;
+                b.rbox(
+                    METAL,
+                    [x - 0.02, yl - 0.008, leaf_top - 0.001],
+                    [x + 0.02, yl + 0.008, up],
+                    0.0,
+                );
+            }
+        }
+        _ => {
+            // A barn door's rail: a flat bar on spacers, the leaf on two
+            // straps with wheels.
+            let yb = yr + 0.03;
+            let n = (((rc - ra) / 0.6).ceil() as usize).max(2);
+            for i in 0..=n {
+                let x = ra + 0.04 + (rc - ra - 0.08) * i as f64 / n as f64;
+                b.cyl(METAL, [x, yr - 0.001, zr], [x, yb, zr], 0.011);
+            }
+            b.rbox(
+                METAL,
+                [ra, yb - 0.0005, zr - 0.02],
+                [rc, yb + 0.008, zr + 0.02],
+                0.002,
+            );
+            if !far {
+                for k in [0.18, 0.82] {
+                    let x = a + (c - a) * k;
+                    let wy = yb + 0.022;
+                    b.cyl(
+                        METAL,
+                        [x, yb + 0.008, zr + 0.035],
+                        [x, yb + 0.036, zr + 0.035],
+                        0.042,
+                    );
+                    let (sa, sb) = sorted2(yl + t / 2.0 - 0.0005, wy + 0.006);
+                    b.rbox(
+                        METAL,
+                        [x - 0.02, sa, leaf_top - 0.22],
+                        [x + 0.02, sb, zr + 0.035],
+                        0.003,
+                    );
+                }
+            }
+        }
+    }
+    if !far {
+        // The pull by the edge it closes with, on both faces.
+        let edge = if s > 0.0 { a } else { c };
+        let x = edge + s * 0.08;
+        for side in [1.0, -1.0] {
+            let fy = yl + side * t / 2.0;
+            match pull {
+                5 => {}
+                3 | 4 => {
+                    let (zb, zt) = if pull == 3 {
+                        (0.75, 1.35)
+                    } else {
+                        (0.92, 1.18)
+                    };
+                    let r = if pull == 3 { 0.011 } else { 0.009 };
+                    let o = side * 0.055;
+                    for z in [zb + 0.02, zt - 0.02] {
+                        b.cyl(METAL, [x, fy - side * 0.0005, z], [x, fy + o, z], r * 0.8);
+                    }
+                    b.cyl(METAL, [x, fy + o, zb], [x, fy + o, zt], r);
+                }
+                _ => {
+                    let (ya, yb) = sorted2(fy - side * 0.0005, fy + side * 0.002);
+                    b.rbox(METAL, [x - 0.025, ya, 0.92], [x + 0.025, yb, 1.18], 0.008);
+                }
+            }
+        }
+    }
+    if p.flag("mirror", false) {
+        mirror_x(b);
+    }
+}

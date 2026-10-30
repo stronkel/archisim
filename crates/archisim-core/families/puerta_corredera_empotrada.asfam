@@ -1,7 +1,7 @@
 family "Puerta corredera empotrada"
   category door
   host wall
-  version 2
+  version 3
   description "Puerta corredera de una hoja que se esconde dentro del muro, en un armazón (cajón) junto al hueco, con cerco"
 
 include "piezas"
@@ -16,13 +16,27 @@ type_params
   section "Materiales"
     frame_material material = "Madera de pino" label "Cerco"
     panel_material material = "Madera de pino" label "Hoja"
+  section "Modelo 3D"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Contemporáneo" label "Modelo 3D"
+    hardware_material material = "Acero inoxidable" label "Herrajes"
+  section "A tu gusto"
+    leaf_design choice("Como la colección", "Lisa", "Ranurada", "Ranurada vertical", "Dos cuarterones", "Cuatro cuarterones", "Seis cuarterones", "Plafonada", "Moldura aplicada", "Vidriera", "Media vidriera", "Vidriera con junquillos", "Lamas", "Tablas", "Chapa lisa", "Chapa embutida", "Chapa con ventanilla cuadrada", "Chapa con ojo de buey", "Chapa con mirilla alargada", "Lisa con ventanilla cuadrada", "Lisa con ojo de buey", "Acorazada") = "Como la colección" label "Hoja"
+    casing choice("Como la colección", "Sin tapajuntas", "Plano", "Redondeado", "Moldurado", "Con junquillo") = "Como la colección" label "Tapajuntas"
+    slide_pull choice("Como la colección", "Uñero embutido", "Tirador de barra", "Asa de granero", "Sin tirador") = "Como la colección" label "Tirador"
+
+instance_params
+  section "Posición"
+    slide_open integer = 0 range 0..100 label "Abierta en 3D (%)"
 
 require 2 * frame_width < width and 2 * frame_width < height else "El cerco no deja hueco para la hoja"
 
 # La hoja cerrada, en el plano del cerco; el armazón queda dentro del muro.
 body
-  use door_lining(width, height, frame_width, frame_depth, frame_material)
-  use door_leaf(-width / 2 + frame_width, width / 2 - frame_width, height, frame_width, frame_depth, panel_material)
+  # En 3D, el cerco, los tapajuntas, la hoja y su guía los hace ArchiSim
+  # (generator props:sliding_door).
+  if not detailed
+    use door_lining(width, height, frame_width, frame_depth, frame_material)
+    use door_leaf(-width / 2 + frame_width, width / 2 - frame_width, height, frame_width, frame_depth, panel_material)
 
 # Cerco cortado, la hoja a medio meter en el muro hacia el lado de la mano
 # y el armazón (el cajón dentro del muro) en discontinua.
@@ -58,6 +72,15 @@ plan 1:100
   line (jamb, 0) to (jamb + s * lw, 0) pen thin dashed
 
 outputs
+  generator = "props:sliding_door"
+  leaf_x0 = -width / 2 + frame_width
+  leaf_x1 = width / 2 - frame_width
+  leaf_top = height - frame_width
+  leaf_t = min(0.04, frame_depth)
+  lining_w = width
+  lining_h = height
+  pocket = 1
+  slide_dir = if hand == "left" then -1 else 1
   opening_width = width
   opening_height = height
   frame_width = frame_width

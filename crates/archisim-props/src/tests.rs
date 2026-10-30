@@ -543,3 +543,157 @@ fn windows_stand_whole() {
     println!("most triangles: {most}");
     assert!(bad.is_empty(), "{} loose", bad.len());
 }
+
+/// Every sliding window of every collection, with every profile, handle
+/// and glazing bars, two to four sashes, with and without a screen and a
+/// blind, stands whole.
+#[test]
+fn sliders_stand_whole() {
+    use fine::window::*;
+    let mut bad = Vec::new();
+    let mut most = 0;
+    for style in 1..=8 {
+        for (key, n) in [
+            ("slider_profile", SLIDER_PROFILES.len()),
+            ("slider_handle", SLIDER_HANDLES.len()),
+            ("glazing_bars", BARS.len()),
+        ] {
+            for i in 1..=n {
+                for leaves in [2.0, 3.0, 4.0] {
+                    let mut p = Params::default();
+                    p.set("style", style as f64);
+                    p.set(key, i as f64);
+                    p.set("leaves", leaves);
+                    p.set("frame_depth", 0.07);
+                    p.set("w_fw", 0.06);
+                    p.set("w_w", 1.8);
+                    p.set("w_z0", 0.0);
+                    p.set("w_z1", 1.1);
+                    p.set("w_outside", -1.0);
+                    p.set("w_width", 1.8);
+                    p.set("w_height", 1.35);
+                    p.set("w_top", 1.1);
+                    p.set("screen", if i % 2 == 0 { 1.0 } else { 0.0 });
+                    p.set("shutter", if i % 3 == 0 { 1.0 } else { 0.0 });
+                    p.set("shutter_down", 40.0);
+                    if i % 4 == 0 {
+                        p.set("lod", 1.0);
+                    }
+                    let m = make("slider", &p).unwrap();
+                    most = most.max(m.triangle_count());
+                    let loose = check::loose_pieces(&m, check::anchors_for("slider"), 0.004);
+                    if let Some(l) = loose.first() {
+                        bad.push(format!(
+                            "colección {style} {key}={i} hojas {leaves}: {} a {:.3} ({:?}..{:?})",
+                            l.role, l.gap, l.lo, l.hi
+                        ));
+                    }
+                }
+            }
+        }
+    }
+    for b in &bad {
+        println!("{b}");
+    }
+    println!("most triangles: {most}");
+    assert!(bad.is_empty(), "{} loose", bad.len());
+}
+
+/// Every sliding door — over the wall with each guide and pull, and into
+/// the wall — of every collection and leaf, closed and open, stands whole.
+#[test]
+fn sliding_doors_stand_whole() {
+    use fine::door::*;
+    let mut bad = Vec::new();
+    let mut most = 0;
+    for style in 1..=8 {
+        for (key, n) in [
+            ("leaf_design", DESIGNS.len()),
+            ("slide_guide", SLIDE_GUIDES.len()),
+            ("slide_pull", SLIDE_PULLS.len()),
+            ("casing", CASINGS.len()),
+        ] {
+            for i in 1..=n {
+                for (pocket, open) in [(0.0, 0.0), (0.0, 70.0), (1.0, 0.0), (1.0, 60.0)] {
+                    let mut p = Params::default();
+                    p.set("style", style as f64);
+                    p.set(key, i as f64);
+                    p.set("pocket", pocket);
+                    p.set("slide_open", open);
+                    p.set("slide_dir", if i % 2 == 0 { 1.0 } else { -1.0 });
+                    p.set("leaf_x0", -0.4);
+                    p.set("leaf_x1", 0.4);
+                    p.set("lining_w", 0.9);
+                    p.set("lining_h", 2.05);
+                    p.set("leaf_top", 2.0);
+                    p.set("face_pos", 0.06);
+                    p.set("face_neg", -0.06);
+                    if i % 3 == 0 {
+                        p.set("lod", 1.0);
+                    }
+                    let m = make("sliding_door", &p).unwrap();
+                    most = most.max(m.triangle_count());
+                    let loose = check::loose_pieces(&m, check::anchors_for("sliding_door"), 0.004);
+                    if let Some(l) = loose.first() {
+                        bad.push(format!(
+                            "colección {style} {key}={i} empotrada {pocket} abierta {open}: {} a {:.3} ({:?}..{:?})",
+                            l.role, l.gap, l.lo, l.hi
+                        ));
+                    }
+                }
+            }
+        }
+    }
+    for b in bad.iter().take(20) {
+        println!("{b}");
+    }
+    println!("most triangles: {most}");
+    assert!(bad.is_empty(), "{} loose", bad.len());
+}
+
+/// Every sash window of every collection, profile and bars, closed and
+/// raised, stands whole.
+#[test]
+fn sash_windows_stand_whole() {
+    use fine::window::*;
+    let mut bad = Vec::new();
+    let mut most = 0;
+    for style in 1..=8 {
+        for (key, n) in [
+            ("window_profile", PROFILES.len()),
+            ("glazing_bars", BARS.len()),
+        ] {
+            for i in 1..=n {
+                for open in [0.0, 60.0, 100.0] {
+                    let mut p = Params::default();
+                    p.set("style", style as f64);
+                    p.set(key, i as f64);
+                    p.set("sash_open", open);
+                    p.set("frame_depth", 0.1);
+                    p.set("w_fw", 0.06);
+                    p.set("w_w", 1.0);
+                    p.set("w_z1", 1.5);
+                    p.set("w_zm", 0.75);
+                    p.set("w_outside", -1.0);
+                    if i % 3 == 0 {
+                        p.set("lod", 1.0);
+                    }
+                    let m = make("sash_window", &p).unwrap();
+                    most = most.max(m.triangle_count());
+                    let loose = check::loose_pieces(&m, check::anchors_for("sash_window"), 0.004);
+                    if let Some(l) = loose.first() {
+                        bad.push(format!(
+                            "colección {style} {key}={i} subida {open}: {} a {:.3} ({:?}..{:?})",
+                            l.role, l.gap, l.lo, l.hi
+                        ));
+                    }
+                }
+            }
+        }
+    }
+    for b in bad.iter().take(20) {
+        println!("{b}");
+    }
+    println!("most triangles: {most}");
+    assert!(bad.is_empty(), "{} loose", bad.len());
+}

@@ -1,8 +1,8 @@
 family "Ventana corredera"
   category window
   host wall
-  version 5
-  description "Ventana o balconera corredera de 2 a 4 hojas, con marco, premarco y vierteaguas si se quieren"
+  version 6
+  description "Ventana o balconera corredera de 2 a 4 hojas, con marco, persiana con capialzado, mosquitera, premarco y vierteaguas si se quieren"
 
 include "piezas"
 
@@ -15,6 +15,10 @@ type_params
   section "Marco"
     frame_width length = 0.06 range 0.001..2.00 label "Marco: anchura vista"
     frame_depth length = 0.07 range 0.001..2.00 label "Marco: fondo"
+  section "Persiana"
+    shutter bool = no label "Persiana enrollable con capialzado"
+    box_height length = 0.25 range 0.10..0.60 visible_if shutter label "Capialzado: alto"
+    shutter_down integer = 0 range 0..100 visible_if shutter label "Persiana: bajada (%)"
   section "Premarco y vierteaguas"
     subframe bool = no label "Premarco"
     subframe_width length = 0.03 range 0.005..0.20 visible_if subframe label "Premarco: anchura"
@@ -25,6 +29,22 @@ type_params
     panel_material material = "Vidrio doble" label "Vidrio"
     subframe_material material = "Acero galvanizado" visible_if subframe label "Premarco"
     sill_material material = "Piedra natural" visible_if sill label "Vierteaguas"
+  section "Modelo 3D"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Contemporáneo" label "Modelo 3D"
+    hardware_material material = "Acero inoxidable" label "Herrajes"
+  section "A tu gusto"
+    slider_profile choice("Como la colección", "Aluminio estándar", "Aluminio con rotura de puente térmico", "PVC", "Madera", "Acero fino", "Minimalista de perfil oculto") = "Como la colección" label "Perfil"
+    slider_handle choice("Como la colección", "Uñero", "Manilla embutida", "Maneta de cierre", "Tirador de barra", "Sin tirador") = "Como la colección" label "Cierre"
+    glazing_bars choice("Como la colección", "Sin cuarterones", "Cuadrícula", "Cuadrícula fina", "Horizontales", "Verticales", "Solo arriba") = "Como la colección" label "Cuarterones"
+    screen bool = no label "Mosquitera"
+  section "Por fuera"
+    outside_shutters choice("Sin contraventanas", "Mallorquinas", "De tablas", "De cuarterones") = "Sin contraventanas" label "Contraventanas"
+    shutters_open bool = yes visible_if outside_shutters != "Sin contraventanas" label "Contraventanas abiertas"
+    shutters_material material = "Madera de pino" visible_if outside_shutters != "Sin contraventanas" label "Contraventanas: material"
+    grille choice("Sin reja", "Barrotes", "Barrotes y pletinas", "Cuadrícula", "Forja con volutas") = "Sin reja" label "Reja"
+    grille_box bool = no visible_if grille != "Sin reja" label "Reja de cajón"
+    grille_depth length = 0.18 range 0.08..0.60 visible_if grille != "Sin reja" and grille_box label "Reja: vuelo"
+    grille_material material = "Hierro forjado" visible_if grille != "Sin reja" label "Reja: material"
   section "Representación"
     opening_lines_in_views bool = no label "Flechas de apertura en alzados y secciones del modelo"
 
@@ -33,12 +53,22 @@ let w = width - 2 * s
 
 require 2 * frame_width < w and 2 * frame_width < height - 2 * s else "El marco no deja hueco para el vidrio"
 require (leaves + 1) * frame_width < w else "El marco y los montantes no dejan hueco para el vidrio"
+require not shutter or box_height + 2 * frame_width < height - 2 * s else "El capialzado no deja sitio a la ventana"
+
+# Con persiana, el capialzado ocupa lo alto del hueco, sobre la ventana.
+let window_height = if shutter then height - box_height else height
+let wz1 = if shutter then window_height else height - s
 
 body
   if subframe
     use subframe(width, height, s, frame_depth, subframe_material, 1)
-  use window_frame_z(w, s, height - s, frame_width, frame_depth, frame_material)
-  use glazing_z(w, s + frame_width, height - s - frame_width, frame_width, frame_depth, leaves, frame_material, panel_material)
+  # En 3D, el marco, los carriles y las hojas los hace ArchiSim con el
+  # perfil y los cierres de la colección (generator props:slider).
+  if not detailed
+    use window_frame_z(w, s, wz1, frame_width, frame_depth, frame_material)
+    use glazing_z(w, s + frame_width, wz1 - frame_width, frame_width, frame_depth, leaves, frame_material, panel_material)
+  if shutter
+    use block(-width / 2, width / 2, frame_depth, window_height, height, frame_material)
   if sill
     let out = if opens_to == "exterior" then 1 else -1
     use window_sill(width, frame_depth, sill_depth, out, sill_material)
@@ -49,6 +79,24 @@ body
 plan 1:50
   if sill_height > 0
     use sill_plan(width, frame_depth, wall_ext, wall_int)
+  let ew = if wall_ext > 0 then 1 else -1
+  if shutter
+    line (-width / 2, ew * (frame_depth / 2 + 0.02)) to (width / 2, ew * (frame_depth / 2 + 0.02)) pen thin dashed
+  if grille != "Sin reja"
+    let gx = width / 2 + 0.06
+    if grille_box
+      line (-gx, wall_ext) to (-gx, wall_ext + ew * grille_depth) pen thin
+      line (-gx, wall_ext + ew * grille_depth) to (gx, wall_ext + ew * grille_depth) pen thin
+      line (gx, wall_ext + ew * grille_depth) to (gx, wall_ext) pen thin
+    else
+      line (-gx, wall_ext + ew * 0.03) to (gx, wall_ext + ew * 0.03) pen thin
+  if outside_shutters != "Sin contraventanas"
+    let sy = wall_ext + ew * 0.02
+    if shutters_open
+      line (-width, sy) to (-width / 2, sy) pen thin
+      line (width / 2, sy) to (width, sy) pen thin
+    else
+      line (-width / 2, sy) to (width / 2, sy) pen thin
   if subframe
     use frame_cut_plan(-width / 2, -w / 2, frame_depth)
     use frame_cut_plan(w / 2, width / 2, frame_depth)
@@ -84,6 +132,15 @@ plan 1:100
   line (-width / 2 + frame_width, 0) to (width / 2 - frame_width, 0) pen thin
 
 outputs
+  generator = "props:slider"
+  w_fw = frame_width
+  w_w = w
+  w_z0 = s
+  w_z1 = wz1
+  w_outside = if opens_to == "exterior" then 1 else -1
+  w_width = width
+  w_height = height
+  w_top = window_height
   opening_width = width
   opening_height = height
   frame_width = frame_width + s

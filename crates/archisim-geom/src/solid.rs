@@ -2436,6 +2436,91 @@ pub fn opening_detail(model: &Model, id: OpeningId) -> Option<OpeningDetail> {
 /// the frame, the leaves and the glass, without hardware, beads, glazing
 /// bars or scrolls (the generator's `lod`).
 pub fn opening_detail_with(model: &Model, id: OpeningId, simple: bool) -> Option<OpeningDetail> {
+    opening_detail_of(model, id, simple, 0.0)
+}
+
+/// What goes outside a window, made as an element of its own.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Outside {
+    /// The grille (`IfcRailing`).
+    Grille,
+    /// The shutters (`IfcShadingDevice`).
+    Shutters,
+}
+
+/// What goes outside a window (its grille, its shutters), as solids where
+/// they are, in their plain version (the elevations, the IFC): nothing for
+/// a window without them or a door.
+pub fn opening_outside_solids(model: &Model, id: OpeningId, which: Outside) -> Vec<Solid> {
+    let Some(t) = model
+        .opening(id)
+        .and_then(|o| model.opening_type(o.opening_type))
+    else {
+        return Vec::new();
+    };
+    if !matches!(
+        model.family_prop(t.family).as_deref(),
+        Some("window" | "slider" | "sash_window")
+    ) {
+        return Vec::new();
+    }
+    let only = match which {
+        Outside::Grille => 1.0,
+        Outside::Shutters => 2.0,
+    };
+    let Some(d) = opening_detail_of(model, id, true, only) else {
+        return Vec::new();
+    };
+    let (s, c) = d.rotation.sin_cos();
+    let place = |q: [f32; 3]| -> P3 {
+        let (x, y, z) = (q[0] as f64, q[1] as f64, q[2] as f64);
+        [
+            d.origin[0] + c * x - s * y,
+            d.origin[1] + s * x + c * y,
+            d.origin[2] + z,
+        ]
+    };
+    d.parts
+        .iter()
+        .map(|(material, tris)| Solid {
+            owner: SolidOwner::Opening(id),
+            material: *material,
+            triangles: tris
+                .iter()
+                .map(|t| t.map(|i| place(d.mesh.positions[i as usize])))
+                .collect(),
+        })
+        .filter(|s| !s.triangles.is_empty())
+        .collect()
+}
+
+/// The weight of a window's grille, kg: wrought iron, 7 850 kg/m³, by the
+/// volume of its bars (in their plain version, all closed pieces); 0
+/// without one.
+pub fn grille_weight(model: &Model, id: OpeningId) -> f64 {
+    let volume: f64 = opening_outside_solids(model, id, Outside::Grille)
+        .iter()
+        .map(|s| {
+            s.triangles
+                .iter()
+                .map(|[a, b, c]| {
+                    (a[0] * (b[1] * c[2] - b[2] * c[1]) - a[1] * (b[0] * c[2] - b[2] * c[0])
+                        + a[2] * (b[0] * c[1] - b[1] * c[0]))
+                        / 6.0
+                })
+                .sum::<f64>()
+                .abs()
+        })
+        .sum();
+    (volume * 7850.0 * 10.0).round() / 10.0
+}
+
+fn opening_detail_of(
+    model: &Model,
+    id: OpeningId,
+    simple: bool,
+    only: f64,
+) -> Option<OpeningDetail> {
     let o = model.opening(id)?;
     let t = model.opening_type(o.opening_type)?;
     model.family_prop(t.family)?;
@@ -2478,6 +2563,7 @@ pub fn opening_detail_with(model: &Model, id: OpeningId, simple: bool) -> Option
             ("casing_neg", b(casing_neg)),
             ("mirror", b(mirror)),
             ("lod", b(simple)),
+            ("only", only),
         ],
     )?;
     let x_axis = if mirror { [-ax[0], -ax[1]] } else { ax };
@@ -2784,6 +2870,10 @@ pub fn model_solids_except_detailed(
             out.extend(opening_solids_detailed(model, o.id));
         } else {
             out.extend(opening_solids(model, o.id));
+            // What goes outside a window: its grille and its shutters.
+            for which in [Outside::Grille, Outside::Shutters] {
+                out.extend(opening_outside_solids(model, o.id, which));
+            }
         }
     }
     for c in model.columns() {

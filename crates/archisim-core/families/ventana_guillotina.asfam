@@ -1,7 +1,7 @@
 family "Ventana de guillotina"
   category window
   host wall
-  version 2
+  version 3
   description "Ventana de dos hojas que deslizan en vertical, una delante de la otra: se mueve la de abajo o las dos"
 
 include "piezas"
@@ -23,8 +23,26 @@ type_params
     frame_material material = "Aluminio lacado" label "Marco y hojas"
     panel_material material = "Vidrio doble" label "Vidrio"
     sill_material material = "Piedra natural" visible_if sill label "Vierteaguas"
+  section "Modelo 3D"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Clásica" label "Modelo 3D"
+    hardware_material material = "Latón" label "Herrajes"
+  section "A tu gusto"
+    window_profile choice("Como la colección", "Aluminio recto", "Aluminio redondeado", "PVC", "Madera", "Madera con moldura", "Acero fino") = "Como la colección" label "Perfil"
+    glazing_bars choice("Como la colección", "Sin cuarterones", "Cuadrícula", "Cuadrícula fina", "Horizontales", "Verticales", "Solo arriba") = "Como la colección" label "Cuarterones"
+  section "Por fuera"
+    outside_shutters choice("Sin contraventanas", "Mallorquinas", "De tablas", "De cuarterones") = "Sin contraventanas" label "Contraventanas"
+    shutters_open bool = yes visible_if outside_shutters != "Sin contraventanas" label "Contraventanas abiertas"
+    shutters_material material = "Madera de pino" visible_if outside_shutters != "Sin contraventanas" label "Contraventanas: material"
+    grille choice("Sin reja", "Barrotes", "Barrotes y pletinas", "Cuadrícula", "Forja con volutas") = "Sin reja" label "Reja"
+    grille_box bool = no visible_if grille != "Sin reja" label "Reja de cajón"
+    grille_depth length = 0.18 range 0.08..0.60 visible_if grille != "Sin reja" and grille_box label "Reja: vuelo"
+    grille_material material = "Hierro forjado" visible_if grille != "Sin reja" label "Reja: material"
   section "Representación"
     opening_lines_in_views bool = no label "Flechas de apertura en alzados y secciones del modelo"
+
+instance_params
+  section "Posición"
+    sash_open integer = 0 range 0..100 label "Hoja de abajo subida en 3D (%)"
 
 let f = frame_width
 let c0 = -width / 2 + f
@@ -46,9 +64,12 @@ component sash(xa, xb, za, zb, y, t, r, frame_mat, glass_mat)
   box (xa + r, y - t / 2, za + r) to (xb - r, y + t / 2, zb - r) material glass_mat
 
 body
-  use window_frame(width, height, f, frame_depth, frame_material)
-  use sash(c0, c1, f, zm + r / 2, q, ts, r, frame_material, panel_material)
-  use sash(c0, c1, zm - r / 2, height - f, -q, ts, r, frame_material, panel_material)
+  # En 3D, el marco y las hojas los hace ArchiSim con el perfil y los
+  # herrajes de la colección (generator props:sash_window).
+  if not detailed
+    use window_frame(width, height, f, frame_depth, frame_material)
+    use sash(c0, c1, f, zm + r / 2, q, ts, r, frame_material, panel_material)
+    use sash(c0, c1, zm - r / 2, height - f, -q, ts, r, frame_material, panel_material)
   if sill
     let out = if opens_to == "exterior" then 1 else -1
     use window_sill(width, frame_depth, sill_depth, out, sill_material)
@@ -56,6 +77,22 @@ body
 plan 1:50
   if sill_height > 0
     use sill_plan(width, frame_depth, wall_ext, wall_int)
+  let ew = if wall_ext > 0 then 1 else -1
+  if grille != "Sin reja"
+    let gx = width / 2 + 0.06
+    if grille_box
+      line (-gx, wall_ext) to (-gx, wall_ext + ew * grille_depth) pen thin
+      line (-gx, wall_ext + ew * grille_depth) to (gx, wall_ext + ew * grille_depth) pen thin
+      line (gx, wall_ext + ew * grille_depth) to (gx, wall_ext) pen thin
+    else
+      line (-gx, wall_ext + ew * 0.03) to (gx, wall_ext + ew * 0.03) pen thin
+  if outside_shutters != "Sin contraventanas"
+    let sy = wall_ext + ew * 0.02
+    if shutters_open
+      line (-width, sy) to (-width / 2, sy) pen thin
+      line (width / 2, sy) to (width, sy) pen thin
+    else
+      line (-width / 2, sy) to (width / 2, sy) pen thin
   use frame_cut_plan(-width / 2, c0, frame_depth)
   use frame_cut_plan(c1, width / 2, frame_depth)
   polygon (c0, q - ts) (c1, q - ts) (c1, q + ts) (c0, q + ts) pen thin
@@ -73,6 +110,15 @@ elevation
     use arrow_v_lines(0, zm + (height - f - zm) * 0.75, zm + (height - f - zm) * 0.25)
 
 outputs
+  generator = "props:sash_window"
+  w_fw = f
+  w_w = width
+  w_z1 = height
+  w_zm = zm
+  w_outside = if opens_to == "exterior" then 1 else -1
+  w_width = width
+  w_height = height
+  w_top = height
   opening_width = width
   opening_height = height
   frame_width = frame_width

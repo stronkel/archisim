@@ -539,4 +539,96 @@ impl Exporter<'_> {
             ));
         }
     }
+
+    /// What goes outside each window — its grille (`IfcRailing`, with its
+    /// weight) and its shutters (`IfcShadingDevice` .SHUTTER.) — as
+    /// elements of their own, to be measured and priced; each with
+    /// `ArchiSim_OpeningPart` naming its window, so that importing leaves
+    /// them out (they come back with the window's type).
+    pub(crate) fn write_opening_outsides(
+        &mut self,
+        materials: &BTreeMap<MaterialId, Ref>,
+        storeys: &BTreeMap<LevelId, (Ref, Ref)>,
+        contained: &mut BTreeMap<LevelId, Vec<Ref>>,
+    ) {
+        use archisim_geom::solid::{opening_outside_solids, Outside};
+        let model = self.model;
+        for o in model.openings() {
+            let Some(level) = model.wall(o.wall).map(|w| w.level) else {
+                continue;
+            };
+            let Some(&(_, storey_pl)) = storeys.get(&level) else {
+                continue;
+            };
+            let storey_z = model.level(level).map_or(0.0, |l| l.elevation);
+            for which in [Outside::Grille, Outside::Shutters] {
+                let solids = opening_outside_solids(model, o.id, which);
+                let Some(first) = solids.first().map(|s| s.material) else {
+                    continue;
+                };
+                let refs: Vec<&archisim_geom::solid::Solid> = solids.iter().collect();
+                let Some(shape) = self.solids_shape(&refs, storey_z) else {
+                    continue;
+                };
+                let (key, name, entity, kind) = match which {
+                    Outside::Grille => ("grille", "Reja", "IFCRAILING", ".USERDEFINED."),
+                    Outside::Shutters => (
+                        "shutters",
+                        "Contraventanas",
+                        "IFCSHADINGDEVICE",
+                        ".SHUTTER.",
+                    ),
+                };
+                let guid = derived_guid(&o.guid, key);
+                let pl = self.placement(Some(storey_pl), self.origin, None);
+                let el = self.w.add(format!(
+                    "{entity}({},$,'{name}',$,'{name}',{pl},{shape},$,{kind})",
+                    string(guid.as_str()),
+                ));
+                self.material_of(materials, el, &guid, first);
+                let mut props = vec![
+                    self.w.add(format!(
+                        "IFCPROPERTYSINGLEVALUE('Opening',$,IFCIDENTIFIER({}),$)",
+                        string(o.guid.as_str())
+                    )),
+                    self.w.add(format!(
+                        "IFCPROPERTYSINGLEVALUE('Kind',$,IFCLABEL({}),$)",
+                        string(key)
+                    )),
+                ];
+                if which == Outside::Grille {
+                    props.push(self.w.add(format!(
+                        "IFCPROPERTYSINGLEVALUE('Weight',$,IFCMASSMEASURE({}),$)",
+                        real(archisim_geom::solid::grille_weight(model, o.id))
+                    )));
+                }
+                self.pset(el, &guid, "ArchiSim_OpeningPart", &props);
+                // What every railing says of itself: its height, outside.
+                let (lo, hi) = solids
+                    .iter()
+                    .flat_map(|s| s.triangles.iter().flatten())
+                    .fold((f64::MAX, f64::MIN), |(lo, hi), p| {
+                        (lo.min(p[2]), hi.max(p[2]))
+                    });
+                let common = [
+                    self.w.add(format!(
+                        "IFCPROPERTYSINGLEVALUE('Height',$,IFCPOSITIVELENGTHMEASURE({}),$)",
+                        real(((hi - lo) * 1000.0).round() / 1000.0)
+                    )),
+                    self.w
+                        .add("IFCPROPERTYSINGLEVALUE('IsExternal',$,IFCBOOLEAN(.T.),$)"),
+                ];
+                let common_name = match which {
+                    Outside::Grille => "Pset_RailingCommon",
+                    Outside::Shutters => "Pset_ShadingDeviceCommon",
+                };
+                if which == Outside::Grille {
+                    self.pset(el, &guid, common_name, &common);
+                } else {
+                    self.pset(el, &guid, common_name, &common[1..]);
+                }
+                contained.entry(level).or_default().push(el);
+            }
+        }
+    }
 }

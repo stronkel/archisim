@@ -902,6 +902,8 @@ pub const CHOICES: &[(&str, &[&str])] = &[
     ("casing", fine::door::CASINGS),
     ("handle_style", fine::door::HANDLES),
     ("hinges", fine::door::HINGES),
+    ("slide_guide", fine::door::SLIDE_GUIDES),
+    ("slide_pull", fine::door::SLIDE_PULLS),
     ("leaf_1", fine::window::OPERATIONS),
     ("leaf_2", fine::window::OPERATIONS),
     ("leaf_3", fine::window::OPERATIONS),
@@ -911,6 +913,8 @@ pub const CHOICES: &[(&str, &[&str])] = &[
     ("window_handle", fine::window::HANDLES),
     ("outside_shutters", fine::window::SHUTTERS_KINDS),
     ("grille", fine::window::GRILLES),
+    ("slider_profile", fine::window::SLIDER_PROFILES),
+    ("slider_handle", fine::window::SLIDER_HANDLES),
 ];
 
 /// The number of a value chosen by name (see [`CHOICES`]).

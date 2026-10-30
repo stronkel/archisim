@@ -306,6 +306,9 @@ fn op(n: f64) -> Op {
 /// A window with its frame, sashes, glass and hardware, and what goes
 /// outside it.
 pub fn window(b: &mut Builder, p: &Params) {
+    if outside_only(b, p) {
+        return;
+    }
     let l = look(p);
     // Far away (`lod`): frame, sashes and glass, square, with nothing on
     // them; what goes outside plain.
@@ -1102,5 +1105,457 @@ fn mirror_x(b: &mut Builder) {
         for t in tris.iter_mut() {
             t.swap(1, 2);
         }
+    }
+}
+
+/// The profiles of a sliding window, by name (`slider_profile`).
+pub const SLIDER_PROFILES: &[&str] = &[
+    "Como la colección",
+    "Aluminio estándar",
+    "Aluminio con rotura de puente térmico",
+    "PVC",
+    "Madera",
+    "Acero fino",
+    "Minimalista de perfil oculto",
+];
+
+/// The handles of a sliding window, by name (`slider_handle`).
+pub const SLIDER_HANDLES: &[&str] = &[
+    "Como la colección",
+    "Uñero",
+    "Manilla embutida",
+    "Maneta de cierre",
+    "Tirador de barra",
+    "Sin tirador",
+];
+
+/// How a sliding profile is made: how wide its sash shows, how wide the
+/// frame shows (the minimalist one hides it in the wall), how rounded.
+#[derive(Debug, Clone, Copy)]
+struct SliderSection {
+    sash: f64,
+    frame: f64,
+    round: f64,
+}
+
+fn slider_section(n: usize) -> SliderSection {
+    let s = |sash, frame, round| SliderSection { sash, frame, round };
+    match n {
+        3 => s(0.07, 0.06, 0.004),
+        4 => s(0.075, 0.065, 0.008),
+        5 => s(0.08, 0.07, 0.002),
+        6 => s(0.035, 0.035, 0.0005),
+        7 => s(0.022, 0.012, 0.0005),
+        _ => s(0.055, 0.05, 0.001),
+    }
+}
+
+/// How each collection makes a sliding window: profile, handle and bars
+/// (numbers in [`SLIDER_PROFILES`], [`SLIDER_HANDLES`] and [`BARS`]).
+const SLIDER_LOOKS: [(usize, usize, usize); 8] = [
+    (5, 2, 2), // Nórdico cálido: timber, a recessed pull.
+    (4, 4, 3), // Mediterráneo: PVC, a lever, a grid.
+    (6, 3, 5), // Años 50: slim steel, a flush handle, bars across.
+    (5, 2, 6), // Japandi: timber, a recessed pull, bars up.
+    (7, 2, 2), // Contemporáneo: minimalist, a recessed pull.
+    (5, 4, 3), // Rústica: timber, a lever, a grid.
+    (6, 5, 4), // Industrial: slim steel, a pull bar, a fine grid.
+    (3, 4, 7), // Clásica: thermally broken aluminium, a lever, top panes.
+];
+
+/// A sliding window or balcony door (paquete 9, correderas): the frame
+/// with its tracks, the sashes on alternate tracks overlapping where they
+/// meet, their glass, bars and handles; an insect screen on a track of its
+/// own outside (`screen`), and the blind, shutters and grille of any
+/// window. The family's outputs: `w_fw` (the frame), `w_w`, `w_z0`,
+/// `w_z1`, `leaves`, `w_outside`, and those of what goes outside.
+pub fn slider(b: &mut Builder, p: &Params) {
+    if outside_only(b, p) {
+        return;
+    }
+    let style = (p.style() as usize).clamp(1, 8);
+    let (mut prof, mut hand, mut bar_kind) = SLIDER_LOOKS[style - 1];
+    let pick = |key: &str| {
+        let n = p.get(key, 1.0).round() as usize;
+        (n >= 2).then_some(n)
+    };
+    if let Some(n) = pick("slider_profile") {
+        prof = n;
+    }
+    if let Some(n) = pick("slider_handle") {
+        hand = n;
+    }
+    if let Some(n) = pick("glazing_bars") {
+        bar_kind = n;
+    }
+    let far = p.flag("lod", false);
+    let sec = slider_section(prof);
+    let r = if far { 0.0 } else { sec.round };
+    let fd = p.get("frame_depth", 0.07);
+    let w = p.get("w_w", 1.8);
+    let z0 = p.get("w_z0", 0.0);
+    let z1 = p.get("w_z1", 1.3);
+    let fw = sec.frame.min(p.get("w_fw", 0.06)).max(0.01);
+    let outside = if p.get("w_outside", -1.0) > 0.0 {
+        1.0
+    } else {
+        -1.0
+    };
+    let inside = -outside;
+    let leaves = p.get("leaves", 2.0).round().clamp(2.0, 4.0) as usize;
+    let screen = p.flag("screen", false);
+    // The frame round the opening, its depth split into tracks: two for
+    // the sashes, and one more outside for the screen.
+    let (ya, yb) = (-fd / 2.0, fd / 2.0);
+    b.rbox(FRAME, [-w / 2.0, ya, z0], [-w / 2.0 + fw, yb, z1], r);
+    b.rbox(FRAME, [w / 2.0 - fw, ya, z0], [w / 2.0, yb, z1], r);
+    b.rbox(
+        FRAME,
+        [-w / 2.0 + fw - 0.001, ya, z0],
+        [w / 2.0 - fw + 0.001, yb, z0 + fw],
+        r,
+    );
+    b.rbox(
+        FRAME,
+        [-w / 2.0 + fw - 0.001, ya, z1 - fw],
+        [w / 2.0 - fw + 0.001, yb, z1],
+        r,
+    );
+    let tracks = if screen { 3.0 } else { 2.0 };
+    let step = fd / tracks;
+    // Track `k` (0 the outermost) and its middle.
+    let track = |k: f64| outside * (fd / 2.0 - step * (k + 0.5));
+    let rail_h = 0.012;
+    for k in 0..tracks as usize {
+        let y = track(k as f64);
+        b.rbox(
+            FRAME,
+            [-w / 2.0 + fw, y - 0.003, z0 + fw - 0.001],
+            [w / 2.0 - fw, y + 0.003, z0 + fw + rail_h],
+            0.0,
+        );
+    }
+    let (c0, c1) = (-w / 2.0 + fw, w / 2.0 - fw);
+    let (za, zc) = (z0 + fw + rail_h, z1 - fw - 0.004);
+    let lap = sec.sash.max(0.03);
+    let lw = (c1 - c0 + (leaves as f64 - 1.0) * lap) / leaves as f64;
+    let bars = if far { Bars::None } else { bars(bar_kind) };
+    let half = (step / 2.0 - 0.003).max(0.008);
+    let off = if screen { 1.0 } else { 0.0 };
+    for i in 0..leaves {
+        let a = c0 + i as f64 * (lw - lap);
+        let c = a + lw;
+        // Alternate tracks: the end ones outside, the middle ones inside.
+        let k = if i == 0 || i + 1 == leaves { 0.0 } else { 1.0 };
+        let k = if leaves == 2 { i as f64 } else { k };
+        let y = track(k + off);
+        let (sa, sb) = (y - half, y + half);
+        let sw = sec.sash.min((c - a) / 3.0);
+        b.rbox(FRAME, [a, sa, za], [a + sw, sb, zc], r);
+        b.rbox(FRAME, [c - sw, sa, za], [c, sb, zc], r);
+        b.rbox(
+            FRAME,
+            [a + sw - 0.001, sa, za],
+            [c - sw + 0.001, sb, za + sw],
+            r,
+        );
+        b.rbox(
+            FRAME,
+            [a + sw - 0.001, sa, zc - sw],
+            [c - sw + 0.001, sb, zc],
+            r,
+        );
+        let psec = Section {
+            sash: sw,
+            depth: 2.0 * half,
+            round: r,
+            proud: 0.0,
+            moulded: false,
+            hinges: false,
+            plain: far,
+        };
+        pane(
+            b,
+            &psec,
+            bars,
+            a + sw,
+            c - sw,
+            za + sw,
+            zc - sw,
+            y,
+            2.0 * half * 0.7,
+            inside,
+        );
+        if far {
+            continue;
+        }
+        // Its handle on the stile by the nearer jamb (the middle sashes of
+        // four, on the stile by the middle), on its inside face.
+        let near_left = if leaves == 4 && (i == 1 || i == 2) {
+            i == 2
+        } else {
+            (a + c) / 2.0 < 0.0
+        };
+        let x = if near_left {
+            a + sw / 2.0
+        } else {
+            c - sw / 2.0
+        };
+        let face = y + inside * half;
+        slider_handle(b, hand, x, (za + zc) / 2.0, face, inside, sw);
+    }
+    if screen && !far {
+        // The insect screen: a light frame on the outer track, half the
+        // width, its mesh (as a fine glass).
+        let y = track(0.0);
+        let (sa, sb) = (y - half * 0.6, y + half * 0.6);
+        let (a, c) = (c0, c0 + (c1 - c0) / 2.0 + 0.02);
+        let sw = 0.025;
+        b.rbox(FRAME, [a, sa, za], [a + sw, sb, zc], 0.0);
+        b.rbox(FRAME, [c - sw, sa, za], [c, sb, zc], 0.0);
+        b.rbox(FRAME, [a + sw, sa, za], [c - sw, sb, za + sw], 0.0);
+        b.rbox(FRAME, [a + sw, sa, zc - sw], [c - sw, sb, zc], 0.0);
+        b.rbox(
+            GLASS,
+            [a + sw - 0.0005, y - 0.0008, za + sw - 0.0005],
+            [c - sw + 0.0005, y + 0.0008, zc - sw + 0.0005],
+            0.0,
+        );
+    }
+    let fd_out = fd;
+    shutters_blind(b, p, fd_out, outside, z0);
+    outside_shutters(b, p, outside);
+    grille_outside(b, p, outside);
+    if p.flag("mirror", false) {
+        mirror_x(b);
+    }
+}
+
+/// Only what goes outside (`only`: 1 the grille, 2 the shutters), as an
+/// element of its own; `true` if that was asked.
+fn outside_only(b: &mut Builder, p: &Params) -> bool {
+    let only = p.get("only", 0.0).round() as i32;
+    if only <= 0 {
+        return false;
+    }
+    let outside = if p.get("w_outside", -1.0) > 0.0 {
+        1.0
+    } else {
+        -1.0
+    };
+    if only == 1 {
+        grille_outside(b, p, outside);
+    } else {
+        outside_shutters(b, p, outside);
+    }
+    if p.flag("mirror", false) {
+        mirror_x(b);
+    }
+    true
+}
+
+/// The handle of a sliding sash at `x`, `z` on its inside face `face`:
+/// a recessed pull, a flush handle, a lever lock or a pull bar.
+fn slider_handle(b: &mut Builder, kind: usize, x: f64, z: f64, face: f64, inside: f64, sw: f64) {
+    let (ya, yb) = sorted(face - inside * 0.0005, face + inside * 0.004);
+    match kind {
+        6 => {}
+        2 => {
+            // A recessed pull: a plate with its dark hollow.
+            let wx = (sw * 0.45).min(0.02);
+            b.rbox(METAL, [x - wx, ya, z - 0.07], [x + wx, yb, z + 0.07], 0.006);
+        }
+        3 => {
+            // A flush handle: a long plate, a short lever lying in it.
+            let wx = (sw * 0.4).min(0.018);
+            b.rbox(METAL, [x - wx, ya, z - 0.09], [x + wx, yb, z + 0.09], 0.004);
+            let (la, lb) = sorted(face, face + inside * 0.012);
+            b.rbox(
+                METAL,
+                [x - wx * 0.6, la, z - 0.05],
+                [x + wx * 0.6, lb, z + 0.03],
+                0.004,
+            );
+        }
+        5 => {
+            // A pull bar up the stile, on two posts.
+            for zz in [z - 0.25, z + 0.25] {
+                b.cyl(
+                    METAL,
+                    [x, face - inside * 0.001, zz],
+                    [x, face + inside * 0.05, zz],
+                    0.008,
+                );
+            }
+            b.cyl(
+                METAL,
+                [x, face + inside * 0.05, z - 0.27],
+                [x, face + inside * 0.05, z + 0.27],
+                0.011,
+            );
+        }
+        _ => {
+            // A lever lock: its base and the lever turned down.
+            let wx = (sw * 0.45).min(0.02);
+            b.rbox(METAL, [x - wx, ya, z - 0.05], [x + wx, yb, z + 0.05], 0.004);
+            let p0 = [x, face + inside * 0.004, z + 0.02];
+            let p1 = [x, face + inside * 0.03, z + 0.02];
+            b.cyl(METAL, p0, p1, 0.006);
+            bar(
+                b,
+                METAL,
+                p1,
+                [x, face + inside * 0.03, z - 0.07],
+                0.012,
+                [1.0, 0.0, 0.0],
+            );
+        }
+    }
+}
+
+/// A sash window (guillotina, paquete 9): the frame, the two sashes on
+/// their two planes — the lower towards the side it opens to, raised
+/// `sash_open` per cent of what it can — their glass and bars, the
+/// crescent lock where they meet, the lifts on the lower sash and, on a
+/// timber one, the horns of the upper sash. The family's outputs: `w_fw`,
+/// `w_w`, `w_z1`, `w_zm` (where the sashes meet), `w_outside`, and the
+/// collection's profile, bars and handle as the casement window's.
+pub fn sash_window(b: &mut Builder, p: &Params) {
+    if outside_only(b, p) {
+        return;
+    }
+    let l = look(p);
+    let far = p.flag("lod", false);
+    let mut sec = section(l.profile);
+    if far {
+        sec.round = 0.0;
+        sec.moulded = false;
+        sec.plain = true;
+    }
+    let r = sec.round;
+    let fw = p.get("w_fw", 0.06);
+    let fd = p.get("frame_depth", 0.1);
+    let w = p.get("w_w", 1.0);
+    let z1 = p.get("w_z1", 1.5);
+    let zm = p.get("w_zm", z1 / 2.0).clamp(0.3, z1 - 0.3);
+    let outside = if p.get("w_outside", -1.0) > 0.0 {
+        1.0
+    } else {
+        -1.0
+    };
+    let inside = -outside;
+    let (ya, yb) = (-fd / 2.0, fd / 2.0);
+    b.rbox(FRAME, [-w / 2.0, ya, 0.0], [-w / 2.0 + fw, yb, z1], r);
+    b.rbox(FRAME, [w / 2.0 - fw, ya, 0.0], [w / 2.0, yb, z1], r);
+    b.rbox(
+        FRAME,
+        [-w / 2.0 + fw - 0.001, ya, 0.0],
+        [w / 2.0 - fw + 0.001, yb, fw],
+        r,
+    );
+    b.rbox(
+        FRAME,
+        [-w / 2.0 + fw - 0.001, ya, z1 - fw],
+        [w / 2.0 - fw + 0.001, yb, z1],
+        r,
+    );
+    // The parting bead between the two planes, up the jambs.
+    let (c0, c1) = (-w / 2.0 + fw, w / 2.0 - fw);
+    for x in [c0, c1 - 0.012] {
+        b.rbox(
+            FRAME,
+            [x, -0.006, fw - 0.001],
+            [x + 0.012, 0.006, z1 - fw + 0.001],
+            0.0,
+        );
+    }
+    let q = fd / 4.0;
+    let half = (q - 0.004).max(0.01);
+    let sw = sec.sash.min((c1 - c0) / 4.0);
+    let rail = sw * 0.8;
+    let lift = (p.get("sash_open", 0.0) / 100.0).clamp(0.0, 1.0) * (zm - fw - rail);
+    let bars = if far { Bars::None } else { bars(l.bars) };
+    // (plane, bottom, top): the upper sash outside, the lower inside.
+    let lower = (inside * q, fw + lift, zm + rail / 2.0 + lift);
+    let upper = (outside * q, zm - rail / 2.0, z1 - fw);
+    for (y, za, zc) in [upper, lower] {
+        let (sa, sbb) = (y - half, y + half);
+        b.rbox(FRAME, [c0, sa, za], [c0 + sw, sbb, zc], r);
+        b.rbox(FRAME, [c1 - sw, sa, za], [c1, sbb, zc], r);
+        b.rbox(
+            FRAME,
+            [c0 + sw - 0.001, sa, za],
+            [c1 - sw + 0.001, sbb, za + rail],
+            r,
+        );
+        b.rbox(
+            FRAME,
+            [c0 + sw - 0.001, sa, zc - rail],
+            [c1 - sw + 0.001, sbb, zc],
+            r,
+        );
+        let psec = Section {
+            sash: sw,
+            depth: 2.0 * half,
+            round: r,
+            proud: 0.0,
+            moulded: sec.moulded,
+            hinges: false,
+            plain: far,
+        };
+        pane(
+            b,
+            &psec,
+            bars,
+            c0 + sw,
+            c1 - sw,
+            za + rail,
+            zc - rail,
+            y,
+            2.0 * half * 0.7,
+            inside,
+        );
+    }
+    if !far {
+        let (yl, zlb, zlt) = lower;
+        let face = yl + inside * half;
+        // The crescent lock on the lower sash's top rail, in the middle.
+        let (fa, fb) = sorted(face - inside * 0.0005, face + inside * 0.006);
+        b.rbox(
+            METAL,
+            [-0.03, fa, zlt - rail * 0.8],
+            [0.03, fb, zlt - rail * 0.2],
+            0.004,
+        );
+        if l.handle != 6 {
+            // Two lifts on its bottom rail.
+            for x in [c0 + (c1 - c0) * 0.25, c0 + (c1 - c0) * 0.75] {
+                let (ga, gb) = sorted(face - inside * 0.0005, face + inside * 0.022);
+                b.rbox(
+                    METAL,
+                    [x - 0.03, ga, zlb + rail * 0.3],
+                    [x + 0.03, gb, zlb + rail * 0.7],
+                    0.005,
+                );
+            }
+        }
+        if l.profile >= 5 && l.profile <= 6 {
+            // The horns: the upper sash's stiles run on below its rail.
+            let (yu, zub, _) = upper;
+            for (x0, x1) in [(c0, c0 + sw), (c1 - sw, c1)] {
+                b.rbox(
+                    FRAME,
+                    [x0, yu - half, zub - 0.05],
+                    [x1, yu + half, zub + 0.001],
+                    0.006,
+                );
+            }
+        }
+    }
+    shutters_blind(b, p, fd, outside, 0.0);
+    outside_shutters(b, p, outside);
+    grille_outside(b, p, outside);
+    if p.flag("mirror", false) {
+        mirror_x(b);
     }
 }

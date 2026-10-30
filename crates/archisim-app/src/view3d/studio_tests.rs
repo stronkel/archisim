@@ -2069,8 +2069,16 @@ fn window_pictures() {
     let mut r = Renderer::new(&gpu.0, gpu.2, TextureMode::Full);
     let mut m = archisim_library::new_project("Ventanas");
     archisim_library::workshop::place_windows(&mut m, 0.0, 0.0).unwrap();
-    // The project too, to open it or draw its plan.
-    std::fs::write(dir.join("ventanas.archisim"), archisim_file::to_string(&m)).unwrap();
+    // The project too, with its elevations, to open it or draw them.
+    let mut saved = m.clone();
+    for e in archisim_plan::section::elevations_around(&saved) {
+        saved.add_section(e).unwrap();
+    }
+    std::fs::write(
+        dir.join("ventanas.archisim"),
+        archisim_file::to_string(&saved),
+    )
+    .unwrap();
     let size = [1000u32, 1000u32];
     let windows: Vec<_> = m.openings().map(|o| o.id).collect();
     for (n, id) in windows.iter().enumerate() {

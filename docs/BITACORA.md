@@ -6,6 +6,30 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-29 (29) · Correderas, guillotina, y la reja en el IFC (paquete 9, tercera parte)
+
+Rama `bloque/correderas` (sobre `bloque/ventanas`), con pull request. Sin cambios de formato; el IFC añade la reja (`IfcRailing`) y las contraventanas (`IfcShadingDevice`). Las familias «Ventana corredera», «Ventana de guillotina», «Puerta corredera» y «Puerta corredera empotrada» suben de versión. Detalle en `docs/CARPINTERIA.md` §6.
+
+**Hecho**
+- **Reja y contraventanas como elementos propios**: en el IFC (la reja con su peso estimado), en los alzados, secciones y render, y en las mediciones (capítulo 11, «Cerrajería y protecciones»: reja en kg, contraventanas en m²). Al importar el IFC no se duplican.
+- **Ventana y balconera corredera** con detalle en 3D: carriles, hojas solapadas, perfil (estándar, rotura de puente térmico, PVC, madera, acero fino, minimalista), cierre (uñero, manilla embutida, maneta, tirador de barra), cuarterones, mosquitera, persiana con capialzado, contraventanas y reja.
+- **Puerta corredera sobre el muro** colgada de carril visto de granero, carril con galería o carril oculto, con las hojas y tapajuntas de la abatible y su tirador (uñero, barra, asa de granero); y **empotrada**, que entra en el muro.
+- **Ventana de guillotina**: dos hojas en sus planos, cierre de media luna, asas y, en madera, cuernos.
+- «Abierta en 3D (%)» en cada corredera y guillotina colocada.
+- Taller: ocho correderas, cinco balconeras y variantes (cuatro hojas, minimalista, mosquitera, persiana, reja), tres guillotinas, ocho puertas correderas y dos empotradas.
+
+**Pendiente**
+- Pivotante, plegable y de garaje.
+- La versión de la reja que va al IFC y a los alzados es la sencilla (sin volutas).
+- Los proyectos de antes: Biblioteca → actualizar familias.
+
+**Qué debe probar Antonio**
+1. Una **ventana corredera**: Editar tipo → «A tu gusto»: Perfil (prueba el minimalista), Cierre, Cuarterones y Mosquitera; en «Persiana», actívala y bájala al 50 %.
+2. Una **puerta corredera**: cambia la Guía entre carril visto, con galería y oculto, y el Tirador. Selecciona la puerta colocada y pon «Abierta en 3D» al 70 %.
+3. Una **guillotina** de la colección Clásica, subida al 40 %.
+4. Pon una **reja** a una ventana, exporta el IFC y ábrelo en otro programa: debe salir como barandilla (`IfcRailing`) con su peso en `ArchiSim_OpeningPart`. Mira también Mediciones: capítulo 11.
+5. Mira un **alzado** de una fachada con rejas y contraventanas.
+
 ## 2026-10-29 (28) · Carpintería con detalle: las ventanas y las puertas especiales (paquete 9, segunda parte)
 
 Rama `bloque/ventanas` (sobre `main` v0.74), con pull request. Sin cambios de formato ni de IFC (la familia «Ventana practicable» sube a la versión 9). Diseño en `docs/CARPINTERIA.md` §5.
