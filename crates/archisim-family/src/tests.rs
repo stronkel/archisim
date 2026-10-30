@@ -851,3 +851,30 @@ body
     let bad = src.replace("  chairs = if", "  nothing = 1\n  chairs = if");
     assert!(parse(&bad).is_err());
 }
+
+/// `prism`: a convex outline in elevation across a depth, its points
+/// kept counter-clockwise whichever way they are written (E6: voussoirs,
+/// head drips).
+#[test]
+fn prisms_are_outlines_across_a_depth() {
+    let src = r#"
+family "Dovela"
+  category window
+type_params
+  m material = "Ladrillo"
+body
+  prism (0, 0) (0, 1) (1, 1) (1, 0) depth -0.1 to 0.2 material m
+  prism (2, 0) (3, 0) (3, 2) depth 0 to 0.1 material m
+"#;
+    let def = parse(src).unwrap();
+    let t = values(&[("m", Value::Material(1))]);
+    let ev = def.evaluate(&t, &Values::new(), &Values::new()).unwrap();
+    assert_eq!(ev.parts.len(), 2);
+    let p = &ev.parts[0];
+    assert_eq!((p.min[1], p.max[1]), (-0.1, 0.2));
+    assert!(crate::shape::area(p.profile.as_ref().unwrap()) > 0.0);
+    assert_eq!(ev.parts[1].max, [3.0, 0.1, 2.0]);
+    // Two points are not an outline.
+    let bad = src.replace("(2, 0) (3, 0) (3, 2)", "(2, 0) (3, 0)");
+    assert!(matches!(parse(&bad), Err(FamilyError::Syntax { .. })));
+}

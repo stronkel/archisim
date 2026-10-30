@@ -2988,7 +2988,155 @@ pub fn place_doors(m: &mut Model, x: f64, y: f64) -> Result<f64, ModelError> {
     }
     // Arches and shaped openings, 4 m further north, in a thick façade.
     place_arches(m, x, y + 16.0, facade)?;
+    // What goes round them in the wall and on it (E6), 4 m further.
+    place_wall_holes(m, x, y + 20.0, facade)?;
     Ok(end)
+}
+
+/// Doors and windows with what goes round them in the wall and on its
+/// face (E6): frame position, reveals, lintels, brick arches, surrounds,
+/// head drips, inner sills and sunshades, along a façade at `y`.
+fn place_wall_holes(
+    m: &mut Model,
+    x: f64,
+    y: f64,
+    facade: archisim_core::WallTypeId,
+) -> Result<(), ModelError> {
+    use archisim_core::{Hand, NewFamilyType, NewOpening, WallSide};
+    let level = m.levels()[0].id;
+    let row = m.add_wall(NewWall {
+        wall_type: facade,
+        level,
+        start: Point2::new(x, y),
+        end: Point2::new(x + 34.0, y),
+        reference: ReferenceLine::Center,
+        height: 3.6,
+        base_offset: 0.0,
+        bulge: 0.0,
+        top: WallTop::Unconnected,
+    })?;
+    let t = |s: &str| Value::Text(s.into());
+    let num = Value::Number;
+    let yes = Value::Bool(true);
+    let window = m.system_family("Ventana practicable")?;
+    let slider = m.system_family("Ventana corredera")?;
+    let door = m.system_family("Puerta abatible")?;
+    type Item<'a> = (archisim_core::FamilyId, &'a str, Vec<(&'a str, Value)>);
+    let items: Vec<Item> = vec![
+        (
+            window,
+            "con mocheta y dintel de hormigón",
+            vec![
+                ("nib", num(0.05)),
+                ("lintel", t("De hormigón")),
+                ("frame_position", t("Por dentro")),
+                ("frame_inset", num(0.03)),
+            ],
+        ),
+        (
+            window,
+            "con sardinel de ladrillo y alféizar",
+            vec![
+                ("lintel", t("Sardinel de ladrillo")),
+                ("lintel_height", num(0.24)),
+                ("lintel_material", Value::Text("Ladrillo visto".into())),
+                ("inner_sill", yes.clone()),
+                ("sill", yes.clone()),
+            ],
+        ),
+        (
+            window,
+            "con arco rebajado de ladrillo",
+            vec![
+                ("lintel", t("Arco rebajado de ladrillo")),
+                ("lintel_height", num(0.24)),
+                ("lintel_material", Value::Text("Ladrillo visto".into())),
+                ("sill", yes.clone()),
+            ],
+        ),
+        (
+            window,
+            "con recercado moldurado y albardilla",
+            vec![
+                ("surround", t("Moldurado")),
+                ("head_drip", yes.clone()),
+                ("sill", yes.clone()),
+            ],
+        ),
+        (
+            window,
+            "con dintel de acero y parasol de lamas horizontales",
+            vec![
+                ("lintel", t("De acero")),
+                ("lintel_height", num(0.12)),
+                ("lintel_material", Value::Text("Acero galvanizado".into())),
+                ("brise", t("Lamas horizontales")),
+                ("frame_position", t("Por fuera")),
+                ("frame_inset", num(0.02)),
+            ],
+        ),
+        (
+            slider,
+            "corredera con parasol de lamas verticales",
+            vec![
+                ("width", num(1.8)),
+                ("brise", t("Lamas verticales")),
+                ("brise_slat", num(0.16)),
+                ("brise_gap", num(0.12)),
+            ],
+        ),
+        (
+            door,
+            "con recercado con clave y dintel de piedra",
+            vec![
+                ("width", num(1.0)),
+                ("height", num(2.2)),
+                ("surround", t("Con clave")),
+                ("lintel", t("De piedra")),
+                ("lintel_material", Value::Text("Piedra caliza".into())),
+                ("nib", num(0.04)),
+            ],
+        ),
+    ];
+    let mut along = 1.5;
+    for (family, name, extra) in items {
+        let mut values = m.family_defaults(family, ParamScope::Type)?;
+        for (k, v) in extra {
+            // Materials by name, from the palette or the project.
+            let v = match (k.ends_with("_material"), v) {
+                (true, Value::Text(n)) => match palette_or_project(m, &n) {
+                    Some(id) => Value::Material(id.0),
+                    None => continue,
+                },
+                (_, v) => v,
+            };
+            values.insert(k.into(), v);
+        }
+        let width = values
+            .get("width")
+            .and_then(Value::as_number)
+            .unwrap_or(1.2);
+        let what = if family == door { "Puerta" } else { "Ventana" };
+        let ty = m.add_family_type(NewFamilyType {
+            family,
+            name: format!("{what} {name} (taller)"),
+            mark: None,
+            description: String::new(),
+            values,
+        })?;
+        along += width / 2.0 + 0.4;
+        m.add_opening(NewOpening {
+            opening_type: ty,
+            wall: row,
+            along,
+            sill: if family == door { 0.0 } else { 0.9 },
+            opens_to: WallSide::Interior,
+            hand: Hand::Left,
+            setback: None,
+        })?;
+        along += width / 2.0 + 1.1;
+    }
+    Ok(())
 }
 
 /// Arched doors and windows, an oculus and shaped voids along a façade

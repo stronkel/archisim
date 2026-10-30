@@ -664,6 +664,21 @@ pub struct OpeningType {
     /// The shape of the rough opening in elevation: a square head, an arch
     /// or an oculus (its recipe's `opening_shape` and `opening_rise`).
     pub shape: archisim_family::OpeningShape,
+    /// Where its frame sits in the wall's thickness when a placed one does
+    /// not say (its recipe's `frame_align` and `frame_inset`).
+    pub frame_place: FramePlace,
+}
+
+/// Where a door's or window's frame sits across its wall, by default.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub enum FramePlace {
+    /// In the middle of the wall.
+    #[default]
+    Centre,
+    /// Its exterior face this far in from the wall's exterior face.
+    Exterior(f64),
+    /// Its interior face this far in from the wall's interior face.
+    Interior(f64),
 }
 
 impl OpeningType {
@@ -758,9 +773,17 @@ impl Opening {
         (self.along - width / 2.0, self.along + width / 2.0)
     }
 
-    /// Distance from the wall's exterior face to the frame's exterior face.
-    pub fn frame_setback(&self, wall_thickness: f64, frame_depth: f64) -> f64 {
-        self.setback.unwrap_or((wall_thickness - frame_depth) / 2.0)
+    /// Distance from the wall's exterior face to the frame's exterior face:
+    /// its own, or where its type puts it, kept inside the wall.
+    pub fn frame_setback(&self, wall_thickness: f64, t: &OpeningType) -> f64 {
+        let fd = t.frame_depth;
+        self.setback.unwrap_or(match t.frame_place {
+            FramePlace::Centre => (wall_thickness - fd) / 2.0,
+            FramePlace::Exterior(d) => d.clamp(0.0, (wall_thickness - fd).max(0.0)),
+            FramePlace::Interior(d) => {
+                (wall_thickness - fd - d).clamp(0.0, (wall_thickness - fd).max(0.0))
+            }
+        })
     }
 
     /// For a corner window (its family's instance parameter `corner`:
@@ -1269,6 +1292,7 @@ struct Resolved {
     spec: NewOpeningType,
     panels: Vec<String>,
     shape: archisim_family::OpeningShape,
+    frame_place: FramePlace,
 }
 
 fn kind_is_window(kind: OpeningKind) -> bool {
@@ -3134,10 +3158,24 @@ impl Model {
                 archisim_family::OpeningShape::new(kind, rise)
             }
         };
+        // Where its frame sits in the wall: in the middle unless the
+        // recipe says.
+        let inset = ev
+            .outputs
+            .get("frame_inset")
+            .and_then(Value::as_number)
+            .unwrap_or(0.0)
+            .max(0.0);
+        let frame_place = match ev.outputs.get("frame_align").and_then(Value::as_text) {
+            Some("exterior") => FramePlace::Exterior(inset),
+            Some("interior") => FramePlace::Interior(inset),
+            _ => FramePlace::Centre,
+        };
         Ok(Resolved {
             spec,
             panels,
             shape,
+            frame_place,
         })
     }
 
@@ -3173,6 +3211,7 @@ impl Model {
             spec: r,
             panels,
             shape,
+            frame_place,
         } = self.resolve_opening_type(spec.family, &spec.values)?;
         let mark = match spec.mark {
             Some(m) => {
@@ -3201,6 +3240,7 @@ impl Model {
                 panel_material: r.panel_material,
                 panels,
                 shape,
+                frame_place,
             },
         );
         Ok(id)
@@ -3300,6 +3340,7 @@ impl Model {
             spec: r,
             panels,
             shape,
+            frame_place,
         } = self.resolve_opening_type(family, &values)?;
         let previous = self
             .opening_types
@@ -3318,6 +3359,7 @@ impl Model {
             panel_material: r.panel_material,
             panels,
             shape,
+            frame_place,
             ..previous.clone()
         };
         if edited.is_door() != previous.is_door() {
@@ -3431,7 +3473,7 @@ impl Model {
         if let Some(th) = thickness {
             // The frame's middle is `setback + depth / 2` in from the
             // exterior face; +y points to the side the leaves open to.
-            let ext = o.frame_setback(th, t.frame_depth) + t.frame_depth / 2.0;
+            let ext = o.frame_setback(th, t) + t.frame_depth / 2.0;
             let int = th - ext;
             let (e, i) = match o.opens_to {
                 WallSide::Interior => (-ext, int),
@@ -4381,6 +4423,7 @@ impl Model {
                     panel_material: resolved.spec.panel_material,
                     panels: resolved.panels,
                     shape: resolved.shape,
+                    frame_place: resolved.frame_place,
                     ..ot
                 },
             );
@@ -5955,5 +5998,58 @@ mod slope_tests {
         assert_eq!(back, m);
         m.set_slab_slope(s, None).unwrap();
         assert_eq!(m.slab(s).unwrap().top_range(), (0.0, 0.0));
+    }
+
+    /// E6: a door or window type says where its frame sits in the wall
+    /// (centred, from the exterior face or from the interior one), and a
+    /// placed one without its own setback follows it.
+    #[test]
+    fn types_say_where_their_frame_sits() {
+        let mut m = Model::new("t");
+        let mat = m.add_material("Aluminio", "metal", [90, 90, 90], CutPattern::Solid);
+        let id = m
+            .add_opening_type(NewOpeningType {
+                name: "V".into(),
+                kind: OpeningKind::Window(WindowOperation::DoubleCasement),
+                width: 1.2,
+                height: 1.2,
+                frame_width: 0.06,
+                frame_depth: 0.07,
+                frame_material: mat,
+                panel_material: mat,
+            })
+            .unwrap();
+        let t = m.opening_type(id).unwrap().clone();
+        assert_eq!(t.frame_place, FramePlace::Centre);
+        let o = Opening {
+            id: OpeningId(0),
+            guid: GlobalId::new(),
+            opening_type: id,
+            wall: WallId(0),
+            along: 1.0,
+            sill: 0.9,
+            opens_to: WallSide::Interior,
+            hand: Hand::Left,
+            setback: None,
+            values: Values::new(),
+        };
+        assert!((o.frame_setback(0.3, &t) - 0.115).abs() < 1e-9);
+        for (position, inset, setback) in [("Por fuera", 0.02, 0.02), ("Por dentro", 0.03, 0.2)] {
+            let mut values = t.values.clone();
+            values.insert("frame_position".into(), Value::Text(position.into()));
+            values.insert("frame_inset".into(), Value::Number(inset));
+            m.edit_family_type(id, t.family, values).unwrap();
+            let t = m.opening_type(id).unwrap();
+            assert!(
+                (o.frame_setback(0.3, t) - setback).abs() < 1e-9,
+                "{position}"
+            );
+        }
+        // Its own setback, if it has one, stands.
+        let own = Opening {
+            setback: Some(0.05),
+            ..o
+        };
+        assert_eq!(own.frame_setback(0.3, m.opening_type(id).unwrap()), 0.05);
     }
 }

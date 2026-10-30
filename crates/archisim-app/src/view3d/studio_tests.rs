@@ -2199,19 +2199,23 @@ fn door_pictures() {
         } else {
             1.0
         };
+        // (And the other face whole, with what goes round the opening on
+        // it: lintel, arch, surround, sunshade.)
         for (view, yaw, pitch, zoom, z) in [
             ("abre", -90.0, 4.0, near, 1.1),
             ("cierra", 90.0, 4.0, 1.4, 1.1),
+            ("fachada", 70.0, 8.0, 0.9, 1.6),
             ("manilla", -70.0, 6.0, 3.5, 1.05),
             ("lejos", -75.0, 10.0, 0.15, 1.1),
         ] {
+            let top = if view == "fachada" { 3.4 } else { 2.4 };
             let pic = picture(
                 &mut r,
                 &gpu,
                 m,
                 |_, _| {
                     let lo = glam::Vec3::new(cx - w / 2.0 - 0.3, cy - 0.3, 0.0);
-                    let hi = glam::Vec3::new(cx + w / 2.0 + 0.3, cy + 0.3, 2.4);
+                    let hi = glam::Vec3::new(cx + w / 2.0 + 0.3, cy + 0.3, top);
                     let mut cam = camera(lo, hi, 1.0, yaw, pitch, zoom);
                     cam.target.z = z;
                     cam

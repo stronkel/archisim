@@ -1,7 +1,7 @@
 family "Puerta abatible"
   category door
   host wall
-  version 11
+  version 12
   description "Puerta abatible de una o dos hojas (iguales o con hoja activa), con cerco, tarja acristalada, fijos laterales y premarco si se quieren"
 
 include "piezas"
@@ -33,6 +33,23 @@ type_params
     panel_material material = "Madera de pino" label "Hoja"
     glass_material material = "Vidrio doble" visible_if transom or side_left or side_right label "Vidrio de la tarja y los fijos"
     subframe_material material = "Madera de pino" visible_if subframe label "Premarco"
+  section "Hueco de muro"
+    frame_position choice("Centrado en el muro", "Por fuera", "Por dentro") = "Centrado en el muro" label "Posición del marco"
+    frame_inset length = 0.00 range 0.00..0.60 visible_if frame_position != "Centrado en el muro" label "Marco: retranqueo desde la cara"
+    nib length = 0.00 range 0.00..0.20 label "Mocheta: ancho (0, sin mocheta)"
+    nib_material material = "Ladrillo visto" visible_if nib > 0 label "Mocheta"
+    lintel choice("Sin dintel visto", "De hormigón", "De piedra", "De madera", "De acero", "Sardinel de ladrillo", "Arco rebajado de ladrillo") = "Sin dintel visto" label "Dintel visto"
+    lintel_height length = 0.20 range 0.03..0.60 visible_if lintel != "Sin dintel visto" label "Dintel: alto"
+    lintel_bearing length = 0.15 range 0.00..0.50 visible_if lintel != "Sin dintel visto" and lintel != "Arco rebajado de ladrillo" label "Dintel: entrega a cada lado"
+    lintel_material material = "Hormigón armado" visible_if lintel != "Sin dintel visto" label "Dintel"
+  section "Recercado"
+    surround choice("Sin recercado", "Plano", "Moldurado", "Con clave") = "Sin recercado" label "Recercado por fuera"
+    surround_width length = 0.15 range 0.04..0.60 visible_if surround != "Sin recercado" label "Recercado: ancho"
+    surround_projection length = 0.03 range 0.005..0.20 visible_if surround != "Sin recercado" label "Recercado: vuelo"
+    surround_material material = "Piedra caliza" visible_if surround != "Sin recercado" label "Recercado"
+  section "Accesorios"
+    head_drip bool = no label "Albardilla sobre el hueco"
+    head_drip_material material = "Piedra caliza" visible_if head_drip label "Albardilla"
   section "Modelo 3D"
     model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Contemporáneo" label "Modelo 3D"
     hardware_material material = "Acero inoxidable" label "Herrajes"
@@ -102,11 +119,23 @@ body
       use door_leaf(split, c1, door_height, frame_width, frame_depth, panel_material)
     else
       use door_leaf(c0, c1, door_height, frame_width, frame_depth, panel_material)
+  # Hueco de muro y accesorios (E6).
+  use nib_pieces(width, height, frame_depth, wall_ext, nib, nib_material)
+  if surround != "Sin recercado"
+    use surround_pieces(width, height, wall_ext, surround, surround_width, surround_projection, surround_material, 0)
+  let lk = if lintel == "Sin dintel visto" then 0 else if lintel == "De acero" then 2 else if lintel == "Sardinel de ladrillo" then 3 else if lintel == "Arco rebajado de ladrillo" then 4 else 1
+  if lk > 0
+    use lintel_pieces(width, height, wall_ext, wall_int, lk, lintel_height, if lk == 4 then 0 else lintel_bearing, lintel_material)
+  if head_drip
+    let zlt = if lk == 4 then width / 8 + lintel_height else if lk > 0 then lintel_height else 0
+    let zs = if surround != "Sin recercado" then surround_width else 0
+    use head_drip(width, height + max(zlt, zs), wall_ext, head_drip_material)
 
 # Cerco cortado y hoja abierta a 90° con su giro; con una hoja, las
 # bisagras van donde dice la mano (UNE-EN 12519); con dos desiguales, la
 # activa también.
 plan 1:50
+  use wall_hole_plan(width, frame_depth, wall_ext, nib, if surround != "Sin recercado" then surround_width else 0, surround_projection, 0, 0, 0)
   if subframe
     use frame_cut_plan(-width / 2, -w / 2, frame_depth)
     use frame_cut_plan(w / 2, width / 2, frame_depth)
@@ -133,6 +162,7 @@ plan 1:50
 
 # A 1:20, el cerco con el galce donde cierra la hoja.
 plan 1:20
+  use wall_hole_plan(width, frame_depth, wall_ext, nib, if surround != "Sin recercado" then surround_width else 0, surround_projection, 0, 0, 0)
   if subframe
     use frame_cut_plan(-width / 2, -w / 2, frame_depth)
     use frame_cut_plan(w / 2, width / 2, frame_depth)
@@ -178,6 +208,8 @@ plan 1:100
     use door_leaf_plan_simple(c1, -1, c1 - c0, frame_depth, swing_line)
 
 outputs
+  frame_align = if frame_position == "Por fuera" then "exterior" else if frame_position == "Por dentro" then "interior" else "centre"
+  frame_inset = frame_inset
   opening_width = width
   opening_height = height
   frame_width = frame_width + s

@@ -993,7 +993,7 @@ pub fn opening_geometry(model: &Model, id: OpeningId) -> Option<OpeningGeometry>
     let wall = model.wall(o.wall)?;
     let thickness = model.wall_type(wall.wall_type)?.thickness();
     let (ext, int) = wall.face_offsets(thickness);
-    let setback = o.frame_setback(thickness, otype.frame_depth);
+    let setback = o.frame_setback(thickness, otype);
     let (t0, t1) = o.span(otype.width);
     // In a curved wall, a straight door or window square to the wall at
     // its centre: its frame is the tangent there, with `t` measured as

@@ -6,6 +6,28 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-30 (34) · Hueco de muro y accesorios (E6, segunda entrega)
+
+Rama `bloque/e6-hueco` (sobre `bloque/e6-hojas`), con pull request. Sin cambios de formato; suben de versión la ventana practicable, la corredera y la puerta abatible. Detalle en `docs/CARPINTERIA.md` §10.
+
+**Hecho**
+- Pestaña **Hueco de muro**: posición del marco (centrado, por fuera o por dentro, con retranqueo), mocheta, dintel visto (hormigón, piedra, madera, acero, sardinel de ladrillo, arco rebajado de ladrillo) y recercado (plano, moldurado, con clave).
+- Pestaña **Accesorios**: alféizar por dentro, albardilla sobre el hueco y parasol de lamas horizontales o verticales.
+- 3D, alzados, planta (mocheta cortada, recercado y parasol), render e IFC.
+- Instrucción `prism` en las recetas (contornos convexos en alzado).
+- Taller: fila de siete huecos con todo esto.
+
+**Pendiente**
+- Las mismas piezas en guillotina, correderas de puerta y pivotante.
+- Tercera entrega: tramas y líneas en planta y sección, clasificación y propiedades.
+
+**Qué debe probar Antonio**
+1. Tipos y materiales → Ventanas → una practicable → **Hueco de muro**: pon «Posición del marco: Por fuera» con 2 cm; en planta el marco se va a la fachada en todas las de ese tipo.
+2. Mocheta de 5 cm y «Dintel visto: Arco rebajado de ladrillo»: míralo en 3D y en un alzado.
+3. **Accesorios**: parasol de lamas verticales, cambia el ancho y la separación; alféizar y albardilla.
+4. Puertas → P-01: recercado con clave y dintel de piedra.
+5. Exporta el IFC: sigue validando y el hueco lleva sus piezas.
+
 ## 2026-10-30 (33) · Puertas y ventanas al estilo ArchiCAD, primera entrega (E6)
 
 Rama `bloque/e6-hojas` (sobre `bloque/barandillas-escalera`), con pull request. Sin cambios de formato; suben de versión las familias de puertas y ventanas. Detalle en `docs/CARPINTERIA.md` §9.
