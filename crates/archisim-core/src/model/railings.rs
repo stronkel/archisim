@@ -27,6 +27,11 @@ pub struct Railing {
     pub material: MaterialId,
     /// Glass panels between the posts instead of bars (their material).
     pub glass: Option<MaterialId>,
+    /// Its type (E12): an object type of the «Barandilla» family, which
+    /// says its posts, handrail, infill, end posts, anchors and
+    /// materials. Without one, the plain railing of posts, rails and bars
+    /// (`material`, `glass`).
+    pub railing_type: Option<ObjectTypeId>,
 }
 
 /// Data needed to create a railing.
@@ -39,9 +44,20 @@ pub struct NewRailing {
     pub post_spacing: f64,
     pub material: MaterialId,
     pub glass: Option<MaterialId>,
+    pub railing_type: Option<ObjectTypeId>,
 }
 
-/// What a piece of a railing is.
+/// One straight run of a typed railing: from `start` along `dir` for
+/// `len`, with a free end (`0`) or a corner at each end (at its start, a
+/// corner it draws the post of: `1`; at its end, one it leaves to the
+/// next run: `1`).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RailingRun {
+    pub start: Point2,
+    pub dir: Vec2,
+    pub len: f64,
+    pub start_end: (i32, i32),
+}
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RailingPieceKind {
     Post,
@@ -77,6 +93,24 @@ pub const BALUSTER_SIZE: f64 = 0.016;
 pub const BOTTOM_RAIL: f64 = 0.10;
 
 impl Railing {
+    /// The straight runs a typed railing is made of, one per segment.
+    pub fn runs(&self) -> Vec<RailingRun> {
+        let n = self.path.len();
+        self.path
+            .windows(2)
+            .enumerate()
+            .filter_map(|(i, w)| {
+                let dir = (w[1] - w[0]).normalized()?;
+                Some(RailingRun {
+                    start: w[0],
+                    dir,
+                    len: w[0].distance(w[1]),
+                    start_end: (if i == 0 { 0 } else { 1 }, if i + 2 == n { 0 } else { 1 }),
+                })
+            })
+            .collect()
+    }
+
     pub fn length(&self) -> f64 {
         self.path.windows(2).map(|w| w[0].distance(w[1])).sum()
     }
@@ -190,6 +224,11 @@ impl Model {
         for p in &r.path {
             finite_point(*p, "railing point")?;
         }
+        if let Some(t) = r.railing_type {
+            if !self.is_railing_type(t) {
+                return Err(ModelError::InvalidRailing);
+            }
+        }
         for (v, what) in [
             (r.base_offset, "railing base offset"),
             (r.height, "railing height"),
@@ -222,6 +261,7 @@ impl Model {
                 post_spacing: spec.post_spacing,
                 material: spec.material,
                 glass: spec.glass,
+                railing_type: spec.railing_type,
             },
         );
         self.stamp_phase(id.0);
@@ -263,6 +303,44 @@ impl Model {
         self.railings.values().filter(move |r| r.level == level)
     }
 
+    /// Whether an object type is a railing type (its family's category is
+    /// `railing`).
+    pub fn is_railing_type(&self, t: ObjectTypeId) -> bool {
+        self.object_types
+            .get(&t)
+            .and_then(|t| self.families.get(&t.family))
+            .is_some_and(|f| f.def().category == "railing")
+    }
+
+    /// The railing types of the project, by name.
+    pub fn railing_types(&self) -> Vec<&ObjectType> {
+        let mut v: Vec<&ObjectType> = self
+            .object_types
+            .values()
+            .filter(|t| t.own.is_none() && self.is_railing_type(t.id))
+            .collect();
+        v.sort_by(|a, b| a.name.cmp(&b.name));
+        v
+    }
+
+    /// What ArchiSim makes a run of a typed railing with: the generator
+    /// and its measurements (the type's, the railing's height and post
+    /// spacing, the run's length and ends).
+    pub fn railing_run_params(
+        &self,
+        id: RailingId,
+        run: &RailingRun,
+    ) -> Option<(String, archisim_props::Params)> {
+        let r = self.railings.get(&id)?;
+        let (kind, mut p) = self.prop_params(r.railing_type?)?;
+        p.set("run_len", run.len);
+        p.set("height", r.height);
+        p.set("post_spacing", r.post_spacing);
+        p.set("start", run.start_end.0 as f64);
+        p.set("end", run.start_end.1 as f64);
+        Some((kind, p))
+    }
+
     pub(super) fn restore_railings(
         &mut self,
         list: Vec<Railing>,
@@ -291,6 +369,7 @@ fn spec_of(r: &Railing) -> NewRailing {
         post_spacing: r.post_spacing,
         material: r.material,
         glass: r.glass,
+        railing_type: r.railing_type,
     }
 }
 
@@ -316,6 +395,7 @@ mod tests {
                 post_spacing: 1.5,
                 material: steel,
                 glass: None,
+                railing_type: None,
             })
             .unwrap();
         let r = m.railing(id).unwrap();

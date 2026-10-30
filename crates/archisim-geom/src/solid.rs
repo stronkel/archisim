@@ -2008,11 +2008,62 @@ pub fn solid_vertex_colors(model: &Model, s: &Solid) -> Option<Vec<[[u8; 3]; 3]>
     )
 }
 
+/// Solids of a railing with a type (E12): each of its runs made by the
+/// type's generator, laid along its segment, one solid per material.
+fn typed_railing_solids(
+    model: &Model,
+    id: archisim_core::RailingId,
+    t: archisim_core::ObjectTypeId,
+) -> Vec<Solid> {
+    let Some(r) = model.railing(id) else {
+        return Vec::new();
+    };
+    let z0 = model.level(r.level).map_or(0.0, |l| l.elevation) + r.base_offset;
+    let mut by_material: Vec<(MaterialId, Vec<[P3; 3]>)> = Vec::new();
+    for run in r.runs() {
+        let Some((kind, params)) = model.railing_run_params(id, &run) else {
+            continue;
+        };
+        let Some(mesh) = archisim_core::props::mesh_of(&kind, &params) else {
+            continue;
+        };
+        let n = run.dir.perp_left();
+        let place = |q: [f32; 3]| -> P3 {
+            let p = run.start + run.dir * q[0] as f64 + n * q[1] as f64;
+            [p.x, p.y, z0 + q[2] as f64]
+        };
+        for (role, tris) in &mesh.parts {
+            let Some(material) = model.type_role_material(t, role) else {
+                continue;
+            };
+            let list: Vec<[P3; 3]> = tris
+                .iter()
+                .map(|tri| tri.map(|i| place(mesh.positions[i as usize])))
+                .collect();
+            match by_material.iter_mut().find(|(m, _)| *m == material) {
+                Some((_, v)) => v.extend(list),
+                None => by_material.push((material, list)),
+            }
+        }
+    }
+    by_material
+        .into_iter()
+        .map(|(material, triangles)| Solid {
+            owner: SolidOwner::Railing(id),
+            material,
+            triangles,
+        })
+        .collect()
+}
+
 /// Solids of a loose railing: its bars, each a closed box, as one solid.
 pub fn loose_railing_solids(model: &Model, id: archisim_core::RailingId) -> Vec<Solid> {
     let Some(r) = model.railing(id) else {
         return Vec::new();
     };
+    if let Some(t) = r.railing_type {
+        return typed_railing_solids(model, id, t);
+    }
     let (bars, panels) = loose_railing_parts(model, id);
     let solid = |material, bars: Vec<Bar>| Solid {
         owner: SolidOwner::Railing(id),
@@ -4406,6 +4457,7 @@ mod tests {
                 post_spacing: 1.5,
                 material: steel,
                 glass: None,
+                railing_type: None,
             })
             .unwrap();
         let bars = loose_railing_bars(&m, id);

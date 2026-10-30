@@ -13,8 +13,9 @@ use super::*;
 /// Families whose objects ArchiSim places on a level: furniture, sanitary
 /// ware, kitchen units, the site (vegetation, street furniture, rocks and
 /// other natural things), people
-/// and vehicles.
-pub const OBJECT_CATEGORIES: [&str; 8] = [
+/// and vehicles; and railing types (`railing`), which are not placed as
+/// objects but give their look to railings.
+pub const OBJECT_CATEGORIES: [&str; 9] = [
     "furniture",
     "sanitary",
     "kitchen",
@@ -23,6 +24,7 @@ pub const OBJECT_CATEGORIES: [&str; 8] = [
     "nature",
     "people",
     "vehicle",
+    "railing",
 ];
 
 #[derive(Debug, Clone, PartialEq)]
@@ -654,11 +656,17 @@ impl Model {
     }
 
     /// How many objects use a type.
+    /// How many objects use a type (and railings, for a railing type).
     pub fn object_type_users(&self, id: ObjectTypeId) -> usize {
         self.objects
             .values()
             .filter(|o| o.object_type == id)
             .count()
+            + self
+                .railings
+                .values()
+                .filter(|r| r.railing_type == Some(id))
+                .count()
     }
 
     fn validate_object(&self, o: &NewObject) -> Result<(), ModelError> {
@@ -1050,7 +1058,8 @@ mod tests {
                 "IfcGeographicElement",
                 "IfcBuildingElementProxy",
                 "IfcLightFixture",
-                "IfcVehicle"
+                "IfcVehicle",
+                "IfcRailing"
             ]
             .contains(&ev.outputs["ifc_class"].as_text().unwrap()));
             assert!(!m.family(f).unwrap().def().folder.is_empty(), "{name}");

@@ -351,7 +351,11 @@ impl ArchiSimApp {
         {
             let model = self.ed.model();
             let thumbs = &mut self.thumbs;
-            for t in model.object_types().filter(|t| t.own.is_none()) {
+            // (Railing types are chosen with the railing, not placed.)
+            for t in model
+                .object_types()
+                .filter(|t| t.own.is_none() && !model.is_railing_type(t.id))
+            {
                 let def = model.family(t.family).map(|f| f.def());
                 let (category, folder) = def.map_or(("Mobiliario", String::new()), |d| {
                     (category_name(&d.category), d.folder.clone())
@@ -485,6 +489,9 @@ impl ArchiSimApp {
                 let Some(t) = fo.model.object_type(*id) else {
                     continue;
                 };
+                if fo.model.is_railing_type(*id) {
+                    continue;
+                }
                 if have.contains(guid) || names.contains(&t.name) {
                     continue;
                 }

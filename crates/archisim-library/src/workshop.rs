@@ -2510,7 +2510,45 @@ pub fn project() -> Result<Model, ModelError> {
     // The doors (paquete 9), south of everything.
     place_doors(&mut m, 0.0, -9.0)?;
     place_windows(&mut m, 0.0, -26.0)?;
+    place_railings(&mut m, 0.0, -56.0)?;
     Ok(m)
+}
+
+/// The railings (E12) from `x` along `y`: one of each type of the
+/// template, each an L (3 m and a 1,2 m return) so that its free ends,
+/// its corner and its bays show; 1,10 m high, posts every 1,5 m at most.
+pub fn place_railings(
+    m: &mut Model,
+    x: f64,
+    y: f64,
+) -> Result<Vec<archisim_core::RailingId>, ModelError> {
+    let types = crate::railings::add_railing_types(m)?;
+    let level = m.levels()[0].id;
+    let material = m
+        .materials()
+        .find(|x| x.category == "steel" || x.category == "metal")
+        .or_else(|| m.materials().next())
+        .map(|x| x.id)
+        .ok_or_else(|| ModelError::NotAnObject("material".into()))?;
+    let mut out = Vec::new();
+    for (i, t) in types.into_iter().enumerate() {
+        let x0 = x + i as f64 * 4.5;
+        out.push(m.add_railing(archisim_core::NewRailing {
+            level,
+            path: vec![
+                Point2::new(x0, y + 1.2),
+                Point2::new(x0, y),
+                Point2::new(x0 + 3.0, y),
+            ],
+            base_offset: 0.0,
+            height: 1.1,
+            post_spacing: 1.5,
+            material,
+            glass: None,
+            railing_type: Some(t),
+        })?);
+    }
+    Ok(out)
 }
 
 /// How near two pieces must be to count as touching: closer than this a

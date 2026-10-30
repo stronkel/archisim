@@ -1996,6 +1996,97 @@ fn named_pictures() {
 
 /// The workshop's doors (paquete 9), one by one
 /// (`ARCHISIM_PUERTAS_OUT=carpeta`): from the side they open to, from
+/// The railings of the workshop (E12), one by one
+/// (`ARCHISIM_BARANDILLAS_OUT=carpeta`): three quarters, from the front,
+/// close to the corner and its anchors, and the whole row.
+#[test]
+fn railing_pictures() {
+    let Some(dir) = std::env::var_os("ARCHISIM_BARANDILLAS_OUT") else {
+        return;
+    };
+    let dir = Path::new(&dir);
+    std::fs::create_dir_all(dir).unwrap();
+    let Some(gpu) = super::gpu_tests::gpu() else {
+        eprintln!("No graphics adapter: railing pictures skipped.");
+        return;
+    };
+    let mut r = Renderer::new(&gpu.0, gpu.2, TextureMode::Full);
+    let mut m = archisim_library::new_project("Barandillas");
+    let ids = archisim_library::workshop::place_railings(&mut m, 0.0, 0.0).unwrap();
+    std::fs::write(
+        dir.join("barandillas.archisim"),
+        archisim_file::to_string(&m),
+    )
+    .unwrap();
+    let size = [1000u32, 1000u32];
+    for (n, id) in ids.iter().enumerate() {
+        let rl = m.railing(*id).unwrap().clone();
+        let name = rl
+            .railing_type
+            .and_then(|t| m.object_type(t))
+            .map_or("sencilla".to_string(), |t| t.name.clone());
+        let slug = name
+            .to_lowercase()
+            .replace("barandilla · ", "")
+            .replace("barandilla ", "")
+            .replace(' ', "-");
+        let (x0, y0) = (rl.path[1].x as f32, rl.path[1].y as f32);
+        for (view, lo, hi, yaw, pitch, zoom) in [
+            (
+                "tres-cuartos",
+                [x0 - 0.2, y0 - 0.2, 0.0],
+                [x0 + 3.1, y0 + 1.3, 1.2],
+                -60.0,
+                18.0,
+                1.1,
+            ),
+            (
+                "frente",
+                [x0 + 0.2, y0 - 0.1, 0.0],
+                [x0 + 3.0, y0 + 0.1, 1.2],
+                -90.0,
+                4.0,
+                1.3,
+            ),
+            (
+                "esquina",
+                [x0 - 0.3, y0 - 0.3, 0.0],
+                [x0 + 0.6, y0 + 0.4, 1.2],
+                -45.0,
+                22.0,
+                1.6,
+            ),
+        ] {
+            let pic = picture(
+                &mut r,
+                &gpu,
+                &m,
+                |_, _| {
+                    camera(
+                        glam::Vec3::from(lo),
+                        glam::Vec3::from(hi),
+                        1.0,
+                        yaw,
+                        pitch,
+                        zoom,
+                    )
+                },
+                size,
+            );
+            pic.save_png(dir.join(format!("{:02}-{slug}-{view}.png", n + 1)))
+                .unwrap();
+        }
+    }
+    let pic = picture(
+        &mut r,
+        &gpu,
+        &m,
+        |lo, hi| camera(lo, hi, 2.0, -70.0, 20.0, 1.0),
+        [2000, 1000],
+    );
+    pic.save_png(dir.join("todas.png")).unwrap();
+}
+
 /// the other, close to the handle, and from far away (the lighter
 /// version the 3D draws there).
 #[test]

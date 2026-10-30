@@ -22,16 +22,17 @@ impl Exporter<'_> {
                 continue;
             };
             let storey_z = model.level(r.level).map_or(0.0, |l| l.elevation);
-            // The frame and, apart, the glass, each a face set with its
-            // material's colour.
-            let (frame, glass) = archisim_geom::solid::loose_railing_parts(model, r.id);
+            // Each material a face set with its colour (the frame and the
+            // glass of a plain railing; posts, rail and infill of a typed
+            // one).
+            let solids = archisim_geom::solid::loose_railing_solids(model, r.id);
             let mut items = Vec::new();
-            for (bars, material) in [(frame, Some(r.material)), (glass, r.glass)] {
-                let Some(material) = material else { continue };
+            for solid in solids {
+                let material = solid.material;
                 let mut pts: Vec<String> = Vec::new();
                 let mut faces: Vec<String> = Vec::new();
-                for b in bars {
-                    for t in b.triangles() {
+                {
+                    for t in solid.triangles {
                         let base = pts.len();
                         for p in t {
                             pts.push(format!(
@@ -123,6 +124,12 @@ impl Exporter<'_> {
                 props.push(self.w.add(format!(
                     "IFCPROPERTYSINGLEVALUE('Glass',$,IFCLABEL({}),$)",
                     string(&name.name)
+                )));
+            }
+            if let Some(t) = r.railing_type.and_then(|t| model.object_type(t)) {
+                props.push(self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('Type',$,IFCLABEL({}),$)",
+                    string(&t.name)
                 )));
             }
             self.pset(el, &r.guid, "ArchiSim_Railing", &props);

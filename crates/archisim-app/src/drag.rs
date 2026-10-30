@@ -1691,6 +1691,7 @@ pub(crate) fn copy(
                     post_spacing: r.post_spacing,
                     material: r.material,
                     glass: r.glass,
+                    railing_type: r.railing_type,
                 })?;
                 copies.insert(Element::Railing(new));
             }
@@ -2332,6 +2333,7 @@ mod tests {
                 post_spacing: 1.5,
                 material: al,
                 glass: None,
+                railing_type: None,
             })
             .unwrap();
         let ot = m.object_types().next().unwrap().id;

@@ -6,6 +6,27 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-30 (31) · Barandillas con tipo (E12)
+
+Rama `bloque/barandillas` (sobre `bloque/arcos`), con pull request. Formato `.archisim` versión 43 (las barandillas guardan su tipo; las de antes se abren igual). Detalle en `docs/BARANDILLAS.md`.
+
+**Hecho**
+- **Tipos de barandilla**: familia de sistema «Barandilla» con las ocho colecciones y «A tu gusto»: montantes (cuadrado, redondo, pletina, sin postes), pasamanos (rectangular, redondo, pletina, madera moldurado, sin pasamanos), relleno (barrotes, barrotes y pletina, balaustres torneados, vidrio, vidrio con pinzas, chapa perforada o lisa, lamas, cables, malla, forja con volutas), montante de arranque (más grueso, con bola, pilastra), anclaje (placa, al canto, empotrado) y hueco mayor entre barrotes (10 cm, CTE).
+- La plantilla trae once tipos; las barandillas nuevas toman «Barandilla · Contemporáneo» (o «Sencilla», la de siempre).
+- En Propiedades de la barandilla y de la herramienta: «Tipo de barandilla» y, debajo, los valores del tipo en tarjetas con su 3D.
+- 3D, alzados, render, glTF e IFC (un `IfcRailing` con un cuerpo por material); la barandilla de la cubierta de la demo es ahora de vidrio con pinzas.
+- Taller: fila de las once barandillas en L.
+
+**Pendiente**
+- Barandillas de escalera con tipo; balaustres y barrotes a medida; planta de las barandillas sin postes.
+
+**Qué debe probar Antonio**
+1. Herramienta **Barandilla**: dibuja una en L. En Propiedades, cambia el **Tipo de barandilla** entre las once y míralas en 3D.
+2. En el tipo, cambia **Relleno** (prueba balaustres, forja con volutas, cables y malla), **Pasamanos**, **Montante de arranque** y **Anclaje** «Al canto».
+3. Elige «Sencilla» y comprueba que vuelve la barandilla de antes.
+4. Exporta el IFC de la demo: la barandilla de la cubierta sale como `IfcRailing` de vidrio con pinzas.
+5. Abre un proyecto antiguo con barandillas: deben verse igual que antes.
+
 ## 2026-10-30 (30) · Pivotante, plegable, garaje, y arcos y huecos de forma (paquete 9, cuarta parte)
 
 Rama `bloque/arcos` (sobre `bloque/correderas`), con pull request. Sin cambios de formato. Nuevas familias de sistema «Puerta en arco» y «Ventana en arco»; suben de versión «Puerta abatible», «Puerta pivotante», «Puerta plegable», «Puerta de garaje» y «Hueco». Detalle en `docs/CARPINTERIA.md` §7 y §8; el lenguaje de recetas, en `docs/FAMILIAS.md` (`outline`, `opening_shape`).

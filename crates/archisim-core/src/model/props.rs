@@ -220,6 +220,34 @@ impl Model {
         Some((mesh, roles))
     }
 
+    /// The material a type gives a role of its generator's models (as
+    /// [`Model::type_prop`] does), for models made apart from the type's
+    /// own (a railing's runs).
+    pub fn type_role_material(&self, t: ObjectTypeId, role: &str) -> Option<MaterialId> {
+        let ty = self.object_types.get(&t)?;
+        let mut values = self.family_defaults(ty.family, ParamScope::Type).ok()?;
+        values.extend(ty.values.clone());
+        let material_of = |name: &str| match values.get(name) {
+            Some(Value::Material(m)) if self.materials.contains_key(&MaterialId(*m)) => {
+                Some(MaterialId(*m))
+            }
+            _ => None,
+        };
+        candidates(role)
+            .iter()
+            .find_map(|c| material_of(c))
+            .or_else(|| material_of(role))
+            .or_else(|| {
+                values.iter().find_map(|(_, v)| match v {
+                    Value::Material(m) if self.materials.contains_key(&MaterialId(*m)) => {
+                        Some(MaterialId(*m))
+                    }
+                    _ => None,
+                })
+            })
+            .or_else(|| self.materials.keys().next().copied())
+    }
+
     /// The materials of an object drawn as stuffed fabric (see
     /// `archisim_props::PropMesh::soft`): soft shading, outlined only
     /// where they end. A material also on a hard piece of the same model

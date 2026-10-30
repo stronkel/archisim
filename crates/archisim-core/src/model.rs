@@ -4508,10 +4508,11 @@ impl Model {
         model.restore_stairs(parts.stairs, &mut claim)?;
         model.restore_terrains(parts.terrains, &mut claim)?;
         model.restore_curtain_walls(parts.curtain_types, parts.curtain_walls, &mut claim)?;
-        model.restore_railings(parts.railings, &mut claim)?;
         model.check_type_accessories()?;
         model.restore_meshes(parts.meshes, &mut claim)?;
         model.restore_objects(parts.object_types, parts.objects, &mut claim)?;
+        // (After the object types: a railing may take one as its type.)
+        model.restore_railings(parts.railings, &mut claim)?;
         model.restore_modules(parts.module_sources, parts.modules, &mut claim)?;
         model.restore_masses(parts.masses, &mut claim)?;
         model.restore_edges(parts.edges, &mut claim)?;

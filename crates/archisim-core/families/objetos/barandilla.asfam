@@ -1,0 +1,35 @@
+family "Barandilla"
+  category railing
+  host none
+  version 1
+  description "Tipo de barandilla: montantes, pasamanos, relleno (barrotes, balaustres, vidrio, chapa, lamas, cables, malla o forja), arranque y anclaje; la línea, la altura y la separación de montantes son de cada barandilla"
+  folder "Barandillas"
+
+type_params
+  section "Modelo 3D"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Contemporáneo" label "Modelo 3D"
+  section "A tu gusto"
+    rail_post choice("Como la colección", "Cuadrado", "Redondo", "Pletina", "Sin postes") = "Como la colección" label "Montantes"
+    rail_top choice("Como la colección", "Rectangular", "Redondo", "Pletina", "Madera moldurado", "Sin pasamanos") = "Como la colección" label "Pasamanos"
+    rail_infill choice("Como la colección", "Barrotes", "Barrotes y pletina", "Balaustres torneados", "Vidrio", "Vidrio con pinzas", "Chapa perforada", "Chapa lisa", "Lamas horizontales", "Cables", "Malla", "Forja con volutas") = "Como la colección" label "Relleno"
+    rail_end choice("Como la colección", "Igual que los demás", "Más grueso", "Con bola", "Pilastra") = "Como la colección" label "Montante de arranque"
+    rail_anchor choice("Como la colección", "Placa al suelo", "Al canto", "Empotrado") = "Como la colección" label "Anclaje"
+    bar_gap length = 0.10 range 0.03..0.25 label "Hueco mayor entre barrotes (CTE: 10 cm)"
+  section "Materiales"
+    structure_material material = "Metal negro" label "Montantes y estructura"
+    rail_material material = "Roble claro" label "Pasamanos"
+    infill_material material = "Vidrio claro" label "Relleno (vidrio, chapa, barrotes, balaustres)"
+    hardware_material material = "Acero inoxidable" label "Anclajes y herrajes"
+
+# Una muestra de 1 m para las miniaturas; cada barandilla se hace en su
+# línea con el generador «railing».
+body
+  box (-0.5, 0, 0) to (0.5, 0.04, 1.1) material structure_material
+
+plan 1:50
+  line (-0.5, 0.02) to (0.5, 0.02) pen view
+
+outputs
+  generator = "props:railing"
+  ifc_class = "IfcRailing"
+  ifc_type = "GUARDRAIL"
