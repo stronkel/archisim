@@ -442,6 +442,25 @@ pub(crate) fn drawing(s: &mut String, d: &Drawing, x: f64, y: f64, k: f64) {
                     pen(*p)
                 );
             }
+            Item::Polygon {
+                points,
+                fill,
+                pen: p,
+            } => {
+                let [r, g, b, a] = *fill;
+                let pts: Vec<String> = points
+                    .iter()
+                    .map(|q| format!("{:.2},{:.2}", px(q[0]), py(q[1])))
+                    .collect();
+                let _ = write!(
+                    s,
+                    r#"<polygon points="{}" fill="rgb({r},{g},{b})" fill-opacity="{:.3}" stroke="{}" stroke-width="{}"/>"#,
+                    pts.join(" "),
+                    a as f64 / 255.0,
+                    if p.is_some() { INK } else { "none" },
+                    p.map_or(0.0, pen)
+                );
+            }
             Item::Line {
                 from,
                 to,

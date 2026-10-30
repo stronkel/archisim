@@ -234,7 +234,12 @@ pub fn measurements(model: &Model) -> Vec<(&'static str, &'static str, Vec<Item>
                         length: 0.0,
                         width: ot.width,
                         height: ot.height,
-                        quantity: -ot.width * ot.height,
+                        // An arch or an oculus deducts its own shape.
+                        quantity: -if ot.shape.is_rect() {
+                            ot.width * ot.height
+                        } else {
+                            archisim_core::shape::area(&ot.shape.polygon(ot.width, ot.height)).abs()
+                        },
                     });
                 }
             }

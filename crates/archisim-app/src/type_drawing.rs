@@ -40,6 +40,13 @@ pub enum Item {
         pen: Pen,
         dashed: bool,
     },
+    /// A closed outline (a piece of an arch), filled, and drawn round
+    /// with `pen` if any.
+    Polygon {
+        points: Vec<[f64; 2]>,
+        fill: [u8; 4],
+        pen: Option<Pen>,
+    },
 }
 
 /// A drawing and the region it covers.
@@ -88,6 +95,16 @@ impl Drawing {
             pattern,
             pen,
         });
+    }
+
+    fn polygon(&mut self, points: Vec<[f64; 2]>, fill: [u8; 4], pen: Option<Pen>) {
+        if points.len() < 3 {
+            return;
+        }
+        for p in &points {
+            self.grow(*p);
+        }
+        self.items.push(Item::Polygon { points, fill, pen });
     }
 
     fn line(&mut self, from: [f64; 2], to: [f64; 2], pen: Pen, dashed: bool) {
@@ -159,6 +176,7 @@ struct Body {
     layers: Vec<Layer>,
     width: f64,
     height: f64,
+    shape: archisim_core::OpeningShape,
     door: bool,
     leaves: usize,
     /// The recipe's elevation marks (opening lines), in `x` and `z`.
@@ -182,6 +200,7 @@ fn body(source: &Model, t: &OpeningType) -> Option<Body> {
         layers,
         width: t.width,
         height: t.height,
+        shape: t.shape,
         door: t.is_door(),
         leaves,
         marks,
@@ -206,22 +225,70 @@ pub fn opening_elevation(source: &Model, t: &OpeningType) -> Option<Drawing> {
     if !b.door {
         d.rect([-w, bottom], [w, 0.0], WALL_SEEN, None, Pen::Thin);
     }
+    // Over an arch (or round an oculus) the wall fills the box back in.
+    let shape = b.shape;
+    if !shape.is_rect() {
+        for (line, edge) in [(shape.upper(b.width, h), h), (shape.lower(b.width, h), 0.0)] {
+            for q in line.windows(2) {
+                d.polygon(
+                    vec![q[0], q[1], [q[1][0], edge], [q[0][0], edge]],
+                    WALL_SEEN,
+                    None,
+                );
+            }
+        }
+    }
     // Farthest first: the viewer stands on +y.
     let mut parts = b.parts.clone();
     parts.sort_by(|a, b| a.max[1].total_cmp(&b.max[1]));
+    // The pieces of an arch are drawn whole: filled, and outlined only
+    // where a piece does not meet another of the same recipe line.
+    let mut edges: Vec<([f64; 2], [f64; 2], usize)> = Vec::new();
+    for p in parts.iter().filter(|p| p.profile.is_some()) {
+        let pr = p.profile.as_ref().expect("filtered");
+        for i in 0..pr.len() {
+            edges.push((pr[i], pr[(i + 1) % pr.len()], p.line));
+        }
+    }
+    let near = |a: [f64; 2], b: [f64; 2]| (a[0] - b[0]).abs() < 1e-6 && (a[1] - b[1]).abs() < 1e-6;
     for p in &parts {
-        d.rect(
-            [p.min[0], p.min[2]],
-            [p.max[0], p.max[2]],
-            seen(&b.model, p.material),
-            None,
-            Pen::Medium,
-        );
+        match &p.profile {
+            Some(profile) => {
+                d.polygon(profile.clone(), seen(&b.model, p.material), None);
+                for i in 0..profile.len() {
+                    let (a, c) = (profile[i], profile[(i + 1) % profile.len()]);
+                    let shared = edges
+                        .iter()
+                        .any(|(x, y, l)| *l == p.line && near(*x, c) && near(*y, a));
+                    if !shared {
+                        d.line(a, c, Pen::Medium, false);
+                    }
+                }
+            }
+            None => d.rect(
+                [p.min[0], p.min[2]],
+                [p.max[0], p.max[2]],
+                seen(&b.model, p.material),
+                None,
+                Pen::Medium,
+            ),
+        }
     }
     // The rough opening and, for doors, the floor.
-    d.line([-w, 0.0], [-w, h], Pen::Medium, false);
-    d.line([w, 0.0], [w, h], Pen::Medium, false);
-    d.line([-w, h], [w, h], Pen::Medium, false);
+    if shape.is_rect() {
+        d.line([-w, 0.0], [-w, h], Pen::Medium, false);
+        d.line([w, 0.0], [w, h], Pen::Medium, false);
+        d.line([-w, h], [w, h], Pen::Medium, false);
+    } else {
+        let outline = shape.polygon(b.width, h);
+        for i in 0..outline.len() {
+            let (a, c) = (outline[i], outline[(i + 1) % outline.len()]);
+            // Not along the sill (drawn below).
+            if a[1].abs() > 1e-9 || c[1].abs() > 1e-9 {
+                d.line(a, c, Pen::Medium, false);
+            }
+        }
+    }
     if b.door {
         d.line([x0, 0.0], [x1, 0.0], Pen::Thick, false);
     } else {
@@ -313,7 +380,13 @@ pub fn opening_section(source: &Model, t: &OpeningType) -> Option<Drawing> {
             Pen::Thick,
         );
     };
-    wall_band(&mut d, h, h + SURROUND);
+    // Above the shape where the cut runs (under an arch, its intrados).
+    let top_at_cut = if b.shape.is_rect() {
+        h
+    } else {
+        z_range(&b.shape.polygon(b.width, h), x_cut).map_or(h, |r| r.1)
+    };
+    wall_band(&mut d, top_at_cut, h + SURROUND);
     if b.door {
         let reach = thickness / 2.0 + 0.25;
         d.line([-reach, 0.0], [reach, 0.0], Pen::Thick, false);
@@ -333,7 +406,8 @@ pub fn opening_section(source: &Model, t: &OpeningType) -> Option<Drawing> {
         Pen::Thin,
         false,
     );
-    // Parts beyond the cut (towards the right jamb) seen, then those cut.
+    // Parts beyond the cut (towards the right jamb) seen, then those cut
+    // (a piece of an arch, where the cut crosses it).
     for p in b.parts.iter().filter(|p| p.min[0] > x_cut) {
         d.rect(
             [p.min[1], p.min[2]],
@@ -348,16 +422,46 @@ pub fn opening_section(source: &Model, t: &OpeningType) -> Option<Drawing> {
         .iter()
         .filter(|p| p.min[0] <= x_cut && p.max[0] >= x_cut)
     {
+        let (z0, z1) = match &p.profile {
+            Some(profile) => match z_range(profile, x_cut) {
+                Some(r) => r,
+                None => continue,
+            },
+            None => (p.min[2], p.max[2]),
+        };
         let (fill, pattern) = cut(&b.model, p.material);
         d.rect(
-            [p.min[1], p.min[2]],
-            [p.max[1], p.max[2]],
+            [p.min[1], z0],
+            [p.max[1], z1],
             fill,
             pattern.filter(|_| p.max[1] - p.min[1] > 0.03),
             Pen::Thick,
         );
     }
     Some(d.pad(0.03))
+}
+
+/// The heights a convex outline (in `x` and `z`) covers at `x`.
+fn z_range(poly: &[[f64; 2]], x: f64) -> Option<(f64, f64)> {
+    let mut lo = f64::INFINITY;
+    let mut hi = f64::NEG_INFINITY;
+    for i in 0..poly.len() {
+        let (a, b) = (poly[i], poly[(i + 1) % poly.len()]);
+        let (xa, xb) = (a[0].min(b[0]), a[0].max(b[0]));
+        if x < xa - 1e-12 || x > xb + 1e-12 {
+            continue;
+        }
+        let z = if (b[0] - a[0]).abs() < 1e-12 {
+            lo = lo.min(a[1].min(b[1]));
+            hi = hi.max(a[1].max(b[1]));
+            continue;
+        } else {
+            a[1] + (b[1] - a[1]) * (x - a[0]) / (b[0] - a[0])
+        };
+        lo = lo.min(z);
+        hi = hi.max(z);
+    }
+    (hi > lo).then_some((lo, hi))
 }
 
 /// The layers of a wall type cut vertically (exterior on the left), or of
@@ -568,6 +672,25 @@ impl Drawing {
                         (max[1] - min[1]) * px_per_m,
                         a as f64 / 255.0,
                         pen(*p)
+                    );
+                }
+                Item::Polygon {
+                    points,
+                    fill,
+                    pen: p,
+                } => {
+                    let [r, g, b, a] = *fill;
+                    let pts: Vec<String> = points
+                        .iter()
+                        .map(|q| format!("{:.2},{:.2}", x(q[0]), y(q[1])))
+                        .collect();
+                    let _ = write!(
+                        s,
+                        r#"<polygon points="{}" fill="rgb({r},{g},{b})" fill-opacity="{:.3}" stroke="{}" stroke-width="{}"/>"#,
+                        pts.join(" "),
+                        a as f64 / 255.0,
+                        if p.is_some() { "rgb(30,30,30)" } else { "none" },
+                        p.map_or(0.0, pen)
                     );
                 }
                 Item::Line {

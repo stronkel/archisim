@@ -26,6 +26,11 @@ pub struct Part {
     pub max: [f64; 3],
     /// Recipe line that made it.
     pub line: usize,
+    /// For a piece of an opening's shape (`outline`), its outline in
+    /// elevation: a convex polygon in `x` and `z` (counter-clockwise, x to
+    /// the right, z up) running across from `min[1]` to `max[1]`; `min`
+    /// and `max` are then its box. `None` for a box.
+    pub profile: Option<Vec<[f64; 2]>>,
 }
 
 /// The `tint` of a [`Mark::Polygon`] filled in the colour of the lines (a
@@ -631,7 +636,98 @@ impl<'a> Run<'a> {
                         min: a,
                         max: b,
                         line: *line,
+                        profile: None,
                     });
+                }
+                Stmt::Outline {
+                    shape,
+                    from,
+                    to,
+                    clip,
+                    depth,
+                    material,
+                    line,
+                } => {
+                    self.tick(*line)?;
+                    if self.mode != Mode::Body {
+                        return Err(eval_err(*line, "a plan symbol draws lines, not pieces"));
+                    }
+                    let kind = match self.eval(&shape[0], env, *line)? {
+                        Value::Text(t) => crate::ShapeKind::from_name(&t)
+                            .ok_or_else(|| eval_err(*line, format!("«{t}» is not a shape")))?,
+                        other => {
+                            return Err(eval_err(
+                                *line,
+                                format!("a shape is a name, not a {}", other.kind_name()),
+                            ))
+                        }
+                    };
+                    let w = self.number(&shape[1], env, *line)?;
+                    let h = self.number(&shape[2], env, *line)?;
+                    let rise = self.number(&shape[3], env, *line)?;
+                    if w <= 0.0 || h <= 0.0 {
+                        return Err(FamilyError::NegativeSize { line: *line });
+                    }
+                    let a = self.number(from, env, *line)?;
+                    let b = match to {
+                        Some(e) => Some(self.number(e, env, *line)?),
+                        None => None,
+                    };
+                    let bounds = match clip.as_deref() {
+                        Some((lo, hi)) => {
+                            Some((self.point(lo, env, *line)?, self.point(hi, env, *line)?))
+                        }
+                        None => None,
+                    };
+                    let (y0, y1) = (
+                        self.number(&depth[0], env, *line)?,
+                        self.number(&depth[1], env, *line)?,
+                    );
+                    if y1 < y0 - 1e-9 {
+                        return Err(FamilyError::NegativeSize { line: *line });
+                    }
+                    let material = match self.eval(material, env, *line)? {
+                        Value::Material(m) => m,
+                        other => {
+                            return Err(eval_err(
+                                *line,
+                                format!("a piece needs a material, not a {}", other.kind_name()),
+                            ))
+                        }
+                    };
+                    let outline = crate::OpeningShape::new(kind, rise).polygon(w, h);
+                    let pieces = match b {
+                        Some(b) => crate::shape::band(&outline, a.min(b), a.max(b)),
+                        None => vec![crate::shape::inset(&outline, a)],
+                    };
+                    for piece in pieces {
+                        let piece = match bounds {
+                            Some((lo, hi)) => crate::shape::clip(&piece, lo, hi),
+                            None => piece,
+                        };
+                        if piece.len() < 3 || crate::shape::area(&piece) < 1e-9 {
+                            continue;
+                        }
+                        if self.parts.len() >= MAX_PARTS {
+                            return Err(FamilyError::TooComplex { line: *line });
+                        }
+                        let (mut lo, mut hi) = ([f64::MAX; 3], [f64::MIN; 3]);
+                        for q in &piece {
+                            lo[0] = lo[0].min(q[0]);
+                            hi[0] = hi[0].max(q[0]);
+                            lo[2] = lo[2].min(q[1]);
+                            hi[2] = hi[2].max(q[1]);
+                        }
+                        lo[1] = y0;
+                        hi[1] = y1.max(y0);
+                        self.parts.push(Part {
+                            material,
+                            min: lo,
+                            max: hi,
+                            line: *line,
+                            profile: Some(piece),
+                        });
+                    }
                 }
                 Stmt::Use { name, args, line } => {
                     self.tick(*line)?;

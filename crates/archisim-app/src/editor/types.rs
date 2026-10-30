@@ -517,7 +517,8 @@ mod tests {
                 "Puerta plegable",
                 "Puerta corredera empotrada",
                 "Puerta pivotante",
-                "Puerta de garaje"
+                "Puerta de garaje",
+                "Puerta en arco"
             ]
         );
         // Voids are offered with the windows.

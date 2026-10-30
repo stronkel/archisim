@@ -2012,17 +2012,52 @@ fn door_pictures() {
     let mut r = Renderer::new(&gpu.0, gpu.2, TextureMode::Full);
     let mut m = archisim_library::new_project("Puertas");
     archisim_library::workshop::place_doors(&mut m, 0.0, 0.0).unwrap();
+    // The project too, with its elevations, to open it or draw them.
+    let mut saved = m.clone();
+    for e in archisim_plan::section::elevations_around(&saved) {
+        saved.add_section(e).unwrap();
+    }
+    std::fs::write(
+        dir.join("puertas.archisim"),
+        archisim_file::to_string(&saved),
+    )
+    .unwrap();
     let size = [1000u32, 1000u32];
     let doors: Vec<_> = m.openings().map(|o| o.id).collect();
     for (n, id) in doors.iter().enumerate() {
         let o = m.opening(*id).unwrap().clone();
         let name = m.opening_type(o.opening_type).unwrap().name.clone();
+        // Only some (`ARCHISIM_PUERTAS=texto`), to look at a few.
+        // (several separated by «|»).
+        if let Ok(only) = std::env::var("ARCHISIM_PUERTAS") {
+            let name = name.to_lowercase();
+            if !only.split('|').any(|o| name.contains(&o.to_lowercase())) {
+                continue;
+            }
+        }
         let og = archisim_geom::opening_geometry(&m, *id).unwrap();
+        // Its wall alone, so that the other rows do not stand in the way.
+        let mut alone = m.clone();
+        let others: Vec<_> = alone
+            .walls()
+            .map(|w| w.id)
+            .filter(|w| *w != og.wall)
+            .collect();
+        for w in others {
+            alone.remove_wall(w).unwrap();
+        }
+        let m = &alone;
         let c = og.point((og.t0 + og.t1) / 2.0, 0.0);
         let w = (og.t1 - og.t0) as f32;
         let (cx, cy) = (c.x as f32, c.y as f32);
         // Wide doors closer, or the camera ends up behind the next wall.
-        let near = if w > 1.2 { 1.4 } else { 1.0 };
+        let near = if w > 2.0 {
+            0.75
+        } else if w > 1.2 {
+            1.4
+        } else {
+            1.0
+        };
         for (view, yaw, pitch, zoom, z) in [
             ("abre", -90.0, 4.0, near, 1.1),
             ("cierra", 90.0, 4.0, 1.4, 1.1),
@@ -2032,7 +2067,7 @@ fn door_pictures() {
             let pic = picture(
                 &mut r,
                 &gpu,
-                &m,
+                m,
                 |_, _| {
                     let lo = glam::Vec3::new(cx - w / 2.0 - 0.3, cy - 0.3, 0.0);
                     let hi = glam::Vec3::new(cx + w / 2.0 + 0.3, cy + 0.3, 2.4);

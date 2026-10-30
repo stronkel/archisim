@@ -1,13 +1,16 @@
 family "Hueco"
   category void
   host wall
-  version 1
-  description "Hueco de obra sin carpintería (paso, ventanal sin cerrar, hueco de instalaciones): vacía el muro y no lo rellena"
+  version 2
+  description "Hueco de obra sin carpintería (paso, ventanal sin cerrar, hueco de instalaciones), recto, en arco u óculo: vacía el muro y no lo rellena"
 
 type_params
   section "Dimensiones"
     width  length = 0.90 range 0.05..20.00 label "Hueco de obra: ancho"
     height length = 2.10 range 0.05..20.00 label "Hueco de obra: alto"
+  section "Forma"
+    shape choice("Recto", "Medio punto", "Rebajado", "Apuntado", "Carpanel", "Óculo") = "Recto" label "Forma"
+    rise length = 0.40 range 0.05..10.00 visible_if shape == "Rebajado" or shape == "Apuntado" or shape == "Carpanel" label "Arco: flecha (del arranque a la clave)"
 
 # Sin cerco ni hojas: el muro queda interrumpido con sus mochetas, y
 # nada dentro del hueco.
@@ -20,6 +23,8 @@ plan 1:100
 outputs
   opening_width = width
   opening_height = height
+  opening_shape = shape
+  opening_rise = rise
   frame_width = 0
   frame_depth = 0
   operation = "none"

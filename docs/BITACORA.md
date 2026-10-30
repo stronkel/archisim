@@ -6,6 +6,29 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-30 (30) · Pivotante, plegable, garaje, y arcos y huecos de forma (paquete 9, cuarta parte)
+
+Rama `bloque/arcos` (sobre `bloque/correderas`), con pull request. Sin cambios de formato. Nuevas familias de sistema «Puerta en arco» y «Ventana en arco»; suben de versión «Puerta abatible», «Puerta pivotante», «Puerta plegable», «Puerta de garaje» y «Hueco». Detalle en `docs/CARPINTERIA.md` §7 y §8; el lenguaje de recetas, en `docs/FAMILIAS.md` (`outline`, `opening_shape`).
+
+**Hecho**
+- **Pivotante** con pivotes y tirador largo; **plegable** con guía, bisagras y «Abierta en 3D (%)»; **garaje** seccional (guías, carriles, muelles), basculante (contrapesos) y enrollable (lamas, tambor), con seis acabados, puerta peatonal y «Abierta en 3D (%)».
+- **Huecos de forma**: medio punto, rebajado, apuntado, carpanel y óculo. El muro se recorta con la forma en 3D, alzados, secciones, render e IFC, y las mediciones descuentan la forma.
+- **Puerta en arco**: hojas que siguen el arco, o puerta rectangular con fijos laterales y fijo en arco (la de la foto de Antonio), cuarterones y vidrieras.
+- **Ventana en arco** (con fijo en arco, hojas en arco o fija; óculo) y **recercados** de piedra: plano, moldurado y con clave e impostas.
+- **Hueco** sin carpintería con las mismas formas.
+- Taller: fila de pivotantes, plegables y de garaje, y fila de arcos (con la puerta de la foto).
+
+**Pendiente**
+- Recercado en los huecos sin carpintería; herradura y lobulado; arcos en muros curvos.
+- Las puertas y ventanas en arco no tienen aún modelo de colección (su 3D es el de la receta, sin herrajes finos).
+
+**Qué debe probar Antonio**
+1. Pon una **Puerta en arco** y elige «Puerta con fijos en arco», hoja «Vidriera» y «Cuarterones de los vidrios»: debe parecerse a la de tu foto. Míralo en 3D, en un alzado y en el IFC (el hueco del muro sale en arco).
+2. Cambia el **Arco** a rebajado, apuntado y carpanel, y la **flecha**.
+3. Una **Ventana en arco** con recercado «Con clave e impostas», y un **óculo**.
+4. Un **Hueco** de medio punto entre dos estancias.
+5. Una **puerta de garaje** seccional con ventanas y puerta peatonal, abierta al 50 %; una **plegable** abierta al 40 %; una **pivotante**.
+
 ## 2026-10-29 (29) · Correderas, guillotina, y la reja en el IFC (paquete 9, tercera parte)
 
 Rama `bloque/correderas` (sobre `bloque/ventanas`), con pull request. Sin cambios de formato; el IFC añade la reja (`IfcRailing`) y las contraventanas (`IfcShadingDevice`). Las familias «Ventana corredera», «Ventana de guillotina», «Puerta corredera» y «Puerta corredera empotrada» suben de versión. Detalle en `docs/CARPINTERIA.md` §6.

@@ -12,8 +12,8 @@ use std::fmt;
 use std::sync::Arc;
 
 pub use archisim_family::{
-    Evaluation, FamilyDef, FamilyError, Host, LineStyle, Mark, Param, ParamKind, ParamScope, Part,
-    Pen, Value, Values, INK_TINT, PLAN_BUILTINS,
+    shape, Evaluation, FamilyDef, FamilyError, Host, LineStyle, Mark, OpeningShape, Param,
+    ParamKind, ParamScope, Part, Pen, ShapeKind, Value, Values, INK_TINT, PLAN_BUILTINS,
 };
 
 use crate::ids::FamilyId;
@@ -85,16 +85,18 @@ impl PartialEq for Family {
 pub const SHARED_PIECES: [(&str, &str); 1] = [("piezas", include_str!("../families/piezas.asfam"))];
 
 /// Recipes of the system families, as written (with their `include`s).
-const SYSTEM_SOURCES: [&str; 10] = [
+const SYSTEM_SOURCES: [&str; 12] = [
     include_str!("../families/puerta_abatible.asfam"),
     include_str!("../families/puerta_corredera.asfam"),
     include_str!("../families/puerta_plegable.asfam"),
     include_str!("../families/puerta_corredera_empotrada.asfam"),
     include_str!("../families/puerta_pivotante.asfam"),
     include_str!("../families/puerta_garaje.asfam"),
+    include_str!("../families/puerta_arco.asfam"),
     include_str!("../families/ventana_practicable.asfam"),
     include_str!("../families/ventana_corredera.asfam"),
     include_str!("../families/ventana_guillotina.asfam"),
+    include_str!("../families/ventana_arco.asfam"),
     include_str!("../families/hueco.asfam"),
 ];
 
@@ -246,6 +248,8 @@ pub const FOLDING_DOOR: &str = "Puerta plegable";
 pub const POCKET_DOOR: &str = "Puerta corredera empotrada";
 pub const PIVOT_DOOR: &str = "Puerta pivotante";
 pub const GARAGE_DOOR: &str = "Puerta de garaje";
+pub const ARCH_DOOR: &str = "Puerta en arco";
+pub const ARCH_WINDOW: &str = "Ventana en arco";
 pub const SASH_WINDOW: &str = "Ventana de guillotina";
 pub const CASEMENT_WINDOW: &str = "Ventana practicable";
 pub const SLIDING_WINDOW: &str = "Ventana corredera";
@@ -491,9 +495,11 @@ mod tests {
                 POCKET_DOOR,
                 PIVOT_DOOR,
                 GARAGE_DOOR,
+                ARCH_DOOR,
                 CASEMENT_WINDOW,
                 SLIDING_WINDOW,
                 SASH_WINDOW,
+                ARCH_WINDOW,
                 VOID
             ]
         );
@@ -865,6 +871,12 @@ mod tests {
                                         for p in &ev.parts {
                                             for k in 0..3 {
                                                 assert!(p.min[k] <= p.max[k]);
+                                            }
+                                            // Handles and a stone
+                                            // surround (their own
+                                            // materials) stand out.
+                                            if p.material == 3 {
+                                                continue;
                                             }
                                             // The sill stands out of the
                                             // wall, under the opening.

@@ -308,6 +308,19 @@ pub enum Stmt {
         material: Expr,
         line: usize,
     },
+    /// Pieces of an opening's shape (`outline (kind, w, h, rise)`): the
+    /// band between the outline set in by `from` and by `to` (`ring a to
+    /// b`), or the outline set in by `from` (`fill a`), cut to a box in
+    /// elevation, from `y0` to `y1` across.
+    Outline {
+        shape: Box<[Expr; 4]>,
+        from: Expr,
+        to: Option<Expr>,
+        clip: Option<Box<([Expr; 2], [Expr; 2])>>,
+        depth: [Expr; 2],
+        material: Expr,
+        line: usize,
+    },
     /// Places a shared piece.
     Use {
         name: String,
@@ -381,6 +394,12 @@ pub enum Stmt {
 }
 
 impl Stmt {
+    /// Whether it builds part of the 3D body (it may not appear in a plan
+    /// symbol or an elevation).
+    pub fn is_body_piece(&self) -> bool {
+        matches!(self, Stmt::Box { .. } | Stmt::Outline { .. })
+    }
+
     /// Whether it draws in plan (it may not appear in the 3D body).
     pub fn is_plan_mark(&self) -> bool {
         matches!(

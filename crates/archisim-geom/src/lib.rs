@@ -845,6 +845,9 @@ pub struct OpeningGeometry {
     /// A corner window: it opens the wall through its start (`Some(false)`)
     /// or its end (`Some(true)`), past its jamb there.
     pub corner: Option<bool>,
+    /// The shape of the rough opening in elevation (square, arched, an
+    /// oculus), within its box `t0`..`t1` by `sill`..`head`.
+    pub shape: archisim_core::OpeningShape,
 }
 
 impl OpeningGeometry {
@@ -865,6 +868,17 @@ impl OpeningGeometry {
 
     pub fn height(&self) -> f64 {
         self.head - self.sill
+    }
+
+    /// The area of the opening in elevation: its box, or less under an
+    /// arch or round an oculus.
+    pub fn face_area(&self) -> f64 {
+        let (w, h) = (self.width(), self.height());
+        if self.shape.is_rect() {
+            w * h
+        } else {
+            archisim_core::shape::area(&self.shape.polygon(w, h)).abs()
+        }
     }
 
     /// The plan point at distance `t` along the wall and `offset` across it.
@@ -1011,6 +1025,7 @@ pub fn opening_geometry(model: &Model, id: OpeningId) -> Option<OpeningGeometry>
         opens_to: o.opens_to,
         hand: o.hand,
         corner: o.corner_end(),
+        shape: otype.shape,
     })
 }
 

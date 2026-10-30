@@ -2835,7 +2835,294 @@ pub fn place_doors(m: &mut Model, x: f64, y: f64) -> Result<f64, ModelError> {
         // Room for the leaf to slide beside the opening.
         along += 2.1;
     }
+    // Pivot, folding and garage doors, 4 m further north.
+    let row = wall(m, facade, y + 12.0, x + 26.0)?;
+    let pivot = m.system_family("Puerta pivotante")?;
+    let folding = m.system_family("Puerta plegable")?;
+    let garage = m.system_family("Puerta de garaje")?;
+    type Other<'a> = (
+        archisim_core::FamilyId,
+        &'a str,
+        f64,
+        Vec<(&'a str, Value)>,
+        &'a str,
+        f64,
+    );
+    let others: Vec<Other> = vec![
+        (
+            pivot,
+            "pivotante Contemporáneo",
+            1.2,
+            vec![("model3d", t("Contemporáneo"))],
+            "",
+            0.0,
+        ),
+        (
+            pivot,
+            "pivotante Nórdico de tablas",
+            1.4,
+            vec![
+                ("model3d", t("Nórdico cálido")),
+                ("leaf_design", t("Tablas")),
+            ],
+            "",
+            0.0,
+        ),
+        (
+            folding,
+            "plegable Mediterráneo a medio abrir",
+            1.6,
+            vec![
+                ("model3d", t("Mediterráneo")),
+                ("leaves", Value::Number(4.0)),
+            ],
+            "fold_open",
+            45.0,
+        ),
+        (
+            folding,
+            "plegable Japandi de seis hojas",
+            2.4,
+            vec![("model3d", t("Japandi")), ("leaves", Value::Number(6.0))],
+            "",
+            0.0,
+        ),
+        (garage, "de garaje seccional", 2.5, vec![], "", 0.0),
+        (
+            garage,
+            "de garaje seccional con ventanas y puerta peatonal",
+            3.0,
+            vec![
+                ("garage_look", t("Con ventanas")),
+                ("wicket", Value::Bool(true)),
+                ("panels", Value::Number(5.0)),
+            ],
+            "",
+            0.0,
+        ),
+        (
+            garage,
+            "de garaje basculante a medio abrir",
+            2.5,
+            vec![("kind", t("basculante"))],
+            "garage_open",
+            40.0,
+        ),
+        (
+            garage,
+            "de garaje enrollable",
+            2.5,
+            vec![("kind", t("enrollable"))],
+            "garage_open",
+            30.0,
+        ),
+    ];
+    let mut along = 1.0;
+    for (family, name, width, extra, open_key, open) in others {
+        let mut values = m.family_defaults(family, ParamScope::Type)?;
+        values.insert("width".into(), Value::Number(width));
+        for (k, v) in extra {
+            values.insert(k.into(), v);
+        }
+        let ty = m.add_family_type(NewFamilyType {
+            family,
+            name: format!("Puerta {name} (taller)"),
+            mark: None,
+            description: String::new(),
+            values,
+        })?;
+        along += width / 2.0;
+        let o = m.add_opening(NewOpening {
+            opening_type: ty,
+            wall: row,
+            along,
+            sill: 0.0,
+            opens_to: WallSide::Interior,
+            hand: Hand::Left,
+            setback: None,
+        })?;
+        if open > 0.0 {
+            let mut values = m.opening(o).map(|x| x.values.clone()).unwrap_or_default();
+            values.insert(open_key.into(), Value::Number(open));
+            m.set_opening_values(o, values)?;
+        }
+        along += width / 2.0 + 0.8;
+    }
+    // Arches and shaped openings, 4 m further north, in a thick façade.
+    place_arches(m, x, y + 16.0, facade)?;
     Ok(end)
+}
+
+/// Arched doors and windows, an oculus and shaped voids along a façade
+/// at `y` (the workshop's arches row).
+fn place_arches(
+    m: &mut Model,
+    x: f64,
+    y: f64,
+    facade: archisim_core::WallTypeId,
+) -> Result<(), ModelError> {
+    use archisim_core::{Hand, NewFamilyType, NewOpening, WallSide};
+    let level = m.levels()[0].id;
+    let row = m.add_wall(NewWall {
+        wall_type: facade,
+        level,
+        start: Point2::new(x, y),
+        end: Point2::new(x + 30.0, y),
+        reference: ReferenceLine::Center,
+        height: 4.0,
+        base_offset: 0.0,
+        bulge: 0.0,
+        top: WallTop::Unconnected,
+    })?;
+    let t = |s: &str| Value::Text(s.into());
+    let num = Value::Number;
+    let door = m.system_family("Puerta en arco")?;
+    let window = m.system_family("Ventana en arco")?;
+    let void = m.system_family("Hueco")?;
+    let white = palette_or_project(m, "Lacado blanco");
+    let stone = palette_or_project(m, "Piedra caliza");
+    type Arch<'a> = (archisim_core::FamilyId, &'a str, f64, Vec<(&'a str, Value)>);
+    let mut items: Vec<Arch> = vec![
+        (
+            door,
+            "Puerta en arco con fijos, como la de la foto",
+            2.4,
+            vec![
+                ("width", num(2.4)),
+                ("height", num(3.0)),
+                ("layout", t("Puerta con fijos en arco")),
+                ("leaves", num(1.0)),
+                ("leaf_style", t("Vidriera")),
+                ("bars", t("Cuarterones")),
+                ("door_width", num(0.9)),
+                ("door_height", num(2.2)),
+            ],
+        ),
+        (
+            door,
+            "Puerta en arco de dos hojas con recercado y clave",
+            1.4,
+            vec![
+                ("surround", t("Con clave e impostas")),
+                ("leaf_style", t("Cuarterones")),
+            ],
+        ),
+        (
+            door,
+            "Puerta apuntada de una hoja",
+            1.0,
+            vec![
+                ("width", num(1.0)),
+                ("height", num(2.7)),
+                ("arch", t("Apuntado")),
+                ("rise", num(0.87)),
+                ("leaves", num(1.0)),
+                ("leaf_style", t("Lisa")),
+                ("surround", t("Moldurado")),
+            ],
+        ),
+        (
+            window,
+            "Ventana de medio punto con fijo en arco",
+            1.0,
+            vec![
+                ("bars", t("Cuarterones")),
+                ("surround", t("Plano")),
+                ("sill", Value::Bool(true)),
+            ],
+        ),
+        (
+            window,
+            "Ventana rebajada de hojas en arco",
+            1.2,
+            vec![
+                ("width", num(1.2)),
+                ("height", num(1.5)),
+                ("arch", t("Rebajado")),
+                ("rise", num(0.25)),
+                ("layout", t("Hojas en arco")),
+                ("surround", t("Moldurado")),
+            ],
+        ),
+        (
+            window,
+            "Óculo con recercado y clave",
+            0.8,
+            vec![
+                ("width", num(0.8)),
+                ("height", num(0.8)),
+                ("arch", t("Óculo")),
+                ("bars", t("Cuarterones")),
+                ("surround", t("Con clave e impostas")),
+            ],
+        ),
+        (
+            void,
+            "Hueco de medio punto",
+            1.2,
+            vec![
+                ("width", num(1.2)),
+                ("height", num(2.6)),
+                ("shape", t("Medio punto")),
+            ],
+        ),
+        (
+            void,
+            "Hueco carpanel",
+            2.0,
+            vec![
+                ("width", num(2.0)),
+                ("height", num(2.5)),
+                ("shape", t("Carpanel")),
+                ("rise", num(0.45)),
+            ],
+        ),
+    ];
+    let mut along = 1.2;
+    for (family, name, width, extra) in items.drain(..) {
+        let mut values = m.family_defaults(family, ParamScope::Type)?;
+        for (k, v) in extra {
+            values.insert(k.into(), v);
+        }
+        let photo = name.contains("foto");
+        for (key, id) in [
+            ("frame_material", if photo { white } else { None }),
+            ("panel_material", if photo { white } else { None }),
+            ("surround_material", stone),
+        ] {
+            if let (Some(id), true) = (id, values.contains_key(key)) {
+                values.insert(key.into(), Value::Material(id.0));
+            }
+        }
+        let ty = m.add_family_type(NewFamilyType {
+            family,
+            name: format!("{name} (taller)"),
+            mark: None,
+            description: String::new(),
+            values,
+        })?;
+        along += width / 2.0 + 0.3;
+        let sill = if family == window {
+            if name.contains("Óculo") {
+                1.6
+            } else {
+                0.9
+            }
+        } else {
+            0.0
+        };
+        m.add_opening(NewOpening {
+            opening_type: ty,
+            wall: row,
+            along,
+            sill,
+            opens_to: WallSide::Interior,
+            hand: Hand::Left,
+            setback: None,
+        })?;
+        along += width / 2.0 + 0.9;
+    }
+    Ok(())
 }
 
 /// Places the workshop's windows (paquete 9, segunda parte) from `x`

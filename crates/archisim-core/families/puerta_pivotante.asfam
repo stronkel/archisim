@@ -1,7 +1,7 @@
 family "Puerta pivotante"
   category door
   host wall
-  version 2
+  version 3
   description "Puerta de una hoja que gira sobre un eje vertical separado de la jamba (pivote), como las de entrada de gran formato"
 
 include "piezas"
@@ -18,6 +18,13 @@ type_params
   section "Materiales"
     frame_material material = "Aluminio lacado" label "Cerco"
     panel_material material = "Madera de pino" label "Hoja"
+  section "Modelo 3D"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Contemporáneo" label "Modelo 3D"
+    hardware_material material = "Acero inoxidable" label "Herrajes"
+  section "A tu gusto"
+    leaf_design choice("Como la colección", "Lisa", "Ranurada", "Ranurada vertical", "Dos cuarterones", "Cuatro cuarterones", "Seis cuarterones", "Plafonada", "Moldura aplicada", "Vidriera", "Media vidriera", "Vidriera con junquillos", "Lamas", "Tablas", "Chapa lisa", "Chapa embutida", "Chapa con ventanilla cuadrada", "Chapa con ojo de buey", "Chapa con mirilla alargada", "Lisa con ventanilla cuadrada", "Lisa con ojo de buey", "Acorazada") = "Como la colección" label "Hoja"
+    casing choice("Como la colección", "Sin tapajuntas", "Plano", "Redondeado", "Moldurado", "Con junquillo") = "Como la colección" label "Tapajuntas"
+    handle_style choice("Como la colección", "Palanca con roseta", "Palanca con placa", "Palanca recta", "Pomo", "Tirador de barra", "Sin manilla", "Barra antipánico", "Placa de empuje y tirador", "Escudo de seguridad", "Tirador largo") = "Como la colección" label "Manilla"
   section "Representación"
     swing_line linestyle = "continuous" label "Línea del giro (planta)"
     opening_lines linestyle = "dashed" label "Líneas de apertura (alzado y sección)"
@@ -33,7 +40,10 @@ require pivot < lw / 2 else "El eje tiene que quedar en la mitad de la hoja del 
 
 body
   use door_lining(width, height, f, frame_depth, frame_material)
-  use block(c0, c1, lt, 0, height - f, panel_material)
+  # En 3D con detalle, la hoja, los pivotes y los herrajes los hace el
+  # generador (salidas «leaf_*» y «pivot»).
+  if not detailed
+    use block(c0, c1, lt, 0, height - f, panel_material)
 
 # La hoja abierta a 90° atravesando el hueco por el eje (del lado de la
 # mano), con los dos giros: el del lado corto hacia atrás.
@@ -70,3 +80,11 @@ outputs
   panel_material = panel_material
   clear_width = lw - pivot - lt / 2
   operation = "pivot"
+  generator = "props:door"
+  leaf_x0 = c0
+  leaf_x1 = c1
+  leaf_top = height - f
+  leaf_t = lt
+  lining_w = width
+  lining_h = height
+  hinge_left = if hand == "left" then 1 else 0

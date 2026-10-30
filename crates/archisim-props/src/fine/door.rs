@@ -313,6 +313,7 @@ pub const HANDLES: &[&str] = &[
     "Barra antipánico",
     "Placa de empuje y tirador",
     "Escudo de seguridad",
+    "Tirador largo",
 ];
 
 /// The hinges the family offers, by name.
@@ -422,8 +423,19 @@ pub fn door(b: &mut Builder, p: &Params) {
     let h = p.get("lining_h", top + 0.05);
     let fw = p.get("frame_width", 0.05);
     let fd = p.get("frame_depth", 0.07);
-    let leaves = p.get("leaves", 1.0).round() as i32;
+    // A pivot door: one leaf turning on pins this far from its hinge-side
+    // edge, with no hinges and, unless one is chosen, a long pull.
+    let pivot = p.get("pivot", 0.0).max(0.0);
+    let leaves = if pivot > 0.0 {
+        1
+    } else {
+        p.get("leaves", 1.0).round() as i32
+    };
     let hinge_left = p.flag("hinge_left", true);
+    let mut l = l;
+    if pivot > 0.0 && p.get("handle_style", 1.0).round() < 2.0 {
+        l.handle = 11;
+    }
     // The leaves: one, or two meeting at the split; the hinges at the
     // outer edges, the handle where they meet (on the active one).
     let floor = 0.008;
@@ -447,15 +459,20 @@ pub fn door(b: &mut Builder, p: &Params) {
     }
     for &(a, c, hinge_at_a, active) in leaves_at.iter().filter(|_| !far) {
         leaf(b, &design, a, c, floor, top - gap, t);
-        hinges(
-            b,
-            l.hinges,
-            if hinge_at_a { a } else { c },
-            hinge_at_a,
-            floor,
-            top,
-            t,
-        );
+        if pivot > 0.0 {
+            let x = if hinge_at_a { a + pivot } else { c - pivot };
+            pivot_pins(b, x, floor, top - gap, t);
+        } else {
+            hinges(
+                b,
+                l.hinges,
+                if hinge_at_a { a } else { c },
+                hinge_at_a,
+                floor,
+                top,
+                t,
+            );
+        }
         let edge = if hinge_at_a { c } else { a };
         // Towards the hinges from the free edge.
         let inward = if hinge_at_a { -1.0 } else { 1.0 };
@@ -468,7 +485,8 @@ pub fn door(b: &mut Builder, p: &Params) {
                 handle_on(b, 2, edge + inward * 0.065, 1.02, t, inward, &[1.0]);
             }
         } else if active {
-            handle(b, l.handle, edge + inward * 0.065, 1.02, t, inward);
+            let inset = if l.handle == 11 { 0.1 } else { 0.065 };
+            handle(b, l.handle, edge + inward * inset, 1.02, t, inward);
             if p.flag("peephole", false) {
                 spyhole(b, (a + c) / 2.0, 1.55, t);
             }
@@ -515,8 +533,26 @@ pub fn door(b: &mut Builder, p: &Params) {
             0.002,
         );
     }
-    // The lining across the reveal to each face that takes a casing, and
-    // the casing on it.
+    lining_and_casings(b, p, &l, w, h, fw, fd, far);
+    // Seen as the plan draws it: the hand mirrored when asked.
+    if p.flag("mirror", false) {
+        mirror_x(b);
+    }
+}
+
+/// The lining across the reveal to each face that takes a casing
+/// (`casing_pos`, `casing_neg`), and the collection's casing on it.
+#[allow(clippy::too_many_arguments)]
+fn lining_and_casings(
+    b: &mut Builder,
+    p: &Params,
+    l: &Look,
+    w: f64,
+    h: f64,
+    fw: f64,
+    fd: f64,
+    far: bool,
+) {
     let profile = if far && l.casing != 2 {
         casing(3)
     } else {
@@ -558,10 +594,24 @@ pub fn door(b: &mut Builder, p: &Params) {
             moulding(b, FRAME, &path, false, face, dir, pr);
         }
     }
-    // Seen as the plan draws it: the hand mirrored when asked.
-    if p.flag("mirror", false) {
-        mirror_x(b);
-    }
+}
+
+/// The pins a pivot door turns on: a plate in the floor and a bracket in
+/// the head, both on the axis at `x`.
+fn pivot_pins(b: &mut Builder, x: f64, z0: f64, z1: f64, t: f64) {
+    b.rbox(
+        METAL,
+        [x - 0.03, -t / 2.0, 0.0],
+        [x + 0.03, t / 2.0, z0 + 0.03],
+        0.002,
+    );
+    b.cyl(METAL, [x, 0.0, z1 - 0.03], [x, 0.0, z1 + 0.004], 0.009);
+    b.rbox(
+        METAL,
+        [x - 0.03, -t / 2.0, z1 - 0.04],
+        [x + 0.03, t / 2.0, z1 - 0.02],
+        0.002,
+    );
 }
 
 /// Mirrors the whole model across `x = 0`, keeping its faces turned out.
@@ -1401,6 +1451,15 @@ fn handle_on(b: &mut Builder, kind: usize, x: f64, z: f64, t: f64, inward: f64, 
                 // The escutcheon below.
                 rose(b, at(0.0, 0.0, -0.08), side, 0.016);
             }
+            11 => {
+                // A long pull bar, as on a pivot door: from knee to above
+                // the head.
+                let (zb, zt) = (z - 0.55, z + 0.65);
+                for zz in [zb + 0.08, zt - 0.08] {
+                    b.cyl(METAL, at(0.0, -0.001, zz - z), at(0.0, 0.06, zz - z), 0.01);
+                }
+                b.cyl(METAL, at(0.0, 0.06, zb - z), at(0.0, 0.06, zt - z), 0.016);
+            }
             6 => {
                 // A pull bar on two posts, upright.
                 let (zb, zt) = (z - 0.2, z + 0.2);
@@ -1812,5 +1871,496 @@ pub fn sliding_door(b: &mut Builder, p: &Params) {
     }
     if p.flag("mirror", false) {
         mirror_x(b);
+    }
+}
+
+/// A folding door (de librillo): `leaves` leaves of the collection hung
+/// from a track in the head, hinged to each other, gathering towards the
+/// jamb at `hinge_left` (the hand); open `fold_open` per cent, they fold
+/// in a zigzag towards the side they open to (+y). The family's outputs:
+/// `leaf_x0`, `leaf_x1`, `leaf_top`, `leaf_t`, `lining_w`, `lining_h`.
+pub fn folding_door(b: &mut Builder, p: &Params) {
+    let mut l = look(p);
+    // A folding leaf takes a knob or a pull, not a panic bar or a plate.
+    if l.handle >= 8 {
+        l.handle = 6;
+    }
+    let far = p.flag("lod", false);
+    let x0 = p.get("leaf_x0", -0.8);
+    let x1 = p.get("leaf_x1", 0.8);
+    let top = p.get("leaf_top", 2.0);
+    let t = p.get("leaf_t", 0.03).clamp(0.018, 0.045);
+    let w = p.get("lining_w", x1 - x0 + 0.1);
+    let h = p.get("lining_h", top + 0.05);
+    let fw = p.get("frame_width", 0.05);
+    let fd = p.get("frame_depth", 0.07);
+    let n = p.get("leaves", 4.0).round().clamp(2.0, 8.0) as usize;
+    let s = if p.flag("hinge_left", true) {
+        1.0
+    } else {
+        -1.0
+    };
+    let open = (p.get("fold_open", 0.0) / 100.0).clamp(0.0, 1.0);
+    let angle = open * 1.35;
+    let design = design(l.design);
+    let lw = (x1 - x0) / n as f64;
+    let start_x = if s > 0.0 { x0 } else { x1 };
+    // The track along the head, the leaves hanging from it.
+    let rail = 0.028;
+    b.rbox(METAL, [x0, -0.016, top - rail], [x1, 0.016, top], 0.002);
+    let (z0, z1) = (0.01, top - rail - 0.004);
+    let mut at = [start_x, 0.0];
+    for i in 0..n {
+        let up = if i % 2 == 0 { 1.0 } else { -1.0 };
+        let d = [s * angle.cos(), up * angle.sin()];
+        let perp = [-d[1], d[0]];
+        let mark = b.mark();
+        let (a, c) = (0.0015, lw - 0.0015);
+        if far {
+            leaf_plain(b, &design, a, c, z0, z1, t);
+        } else {
+            leaf(b, &design, a, c, z0, z1, t);
+            if i + 1 == n && l.handle != 7 {
+                // The handle by the free edge of the last leaf (its x
+                // grows away from the gathered stack).
+                handle(b, l.handle, c - 0.06, 1.02, t, -1.0);
+            }
+        }
+        // The leaf's hangers in the track: the joints on the line of the
+        // head (every other one), and the first leaf's pivot.
+        if i % 2 == 0 {
+            b.cyl(
+                METAL,
+                [0.0, 0.0, z1 - 0.01],
+                [0.0, 0.0, top - rail + 0.001],
+                0.008,
+            );
+            b.cyl(METAL, [0.0, 0.0, 0.0], [0.0, 0.0, z0 + 0.02], 0.008);
+        }
+        let o = at;
+        b.transform_from(mark, |q| {
+            [
+                o[0] + d[0] * q[0] + perp[0] * q[1],
+                o[1] + d[1] * q[0] + perp[1] * q[1],
+                q[2],
+            ]
+        });
+        at = [o[0] + d[0] * lw, o[1] + d[1] * lw];
+        if i + 1 < n && !far {
+            // The hinges between this leaf and the next, round the joint.
+            let tall = z1 - z0;
+            for z in [z0 + 0.2, z0 + tall / 2.0, z1 - 0.2] {
+                b.cyl(
+                    METAL,
+                    [at[0], at[1], z - 0.04],
+                    [at[0], at[1], z + 0.04],
+                    t / 2.0 + 0.003,
+                );
+            }
+        }
+    }
+    let _ = (fw, fd);
+    lining_and_casings(b, p, &l, w, h, fw, fd, far);
+    if p.flag("mirror", false) {
+        mirror_x(b);
+    }
+}
+
+/// The looks of a garage door's leaf (`garage_look`).
+pub const GARAGE_LOOKS: &[&str] = &[
+    "Según el funcionamiento",
+    "Acanalada",
+    "Lisa",
+    "Cuarterones",
+    "Lamas de madera",
+    "Con ventanas",
+    "Nervada vertical",
+];
+
+/// A garage door (`garage_kind` 1 sectional, 2 up-and-over, 3 rolling)
+/// between `leaf_x0` and `leaf_x1`, up to `leaf_top`, with its guides,
+/// its look (`garage_look`), a wicket door (`wicket`, `wicket_width`,
+/// `wicket_left`) and open `garage_open` per cent. It hangs on the side
+/// it opens to (+y); the street is at −y.
+pub fn garage_door(b: &mut Builder, p: &Params) {
+    let far = p.flag("lod", false);
+    let kind = p.get("garage_kind", 1.0).round() as i32;
+    let c0 = p.get("leaf_x0", -1.2);
+    let c1 = p.get("leaf_x1", 1.2);
+    let top = p.get("leaf_top", 2.1);
+    let h = p.get("lining_h", top + 0.1);
+    let fd = p.get("frame_depth", 0.1);
+    let face = p.get("face_pos", fd / 2.0).max(fd / 2.0);
+    let open = (p.get("garage_open", 0.0) / 100.0).clamp(0.0, 1.0);
+    let mut look = p.get("garage_look", 1.0).round() as i32;
+    if look < 2 {
+        look = match kind {
+            2 => 7,
+            3 => 2,
+            _ => 2,
+        };
+    }
+    let t = 0.042;
+    let wicket = p.flag("wicket", false) && kind != 3;
+    let ww = p.get("wicket_width", 0.8);
+    let wx = if p.flag("wicket_left", true) {
+        c0 + 0.3
+    } else {
+        c1 - 0.3 - ww
+    };
+    let wz = (top - 0.1).min(2.0);
+    match kind {
+        3 => {
+            // Rolling: the curtain of slats down from the drum, in its
+            // guides, with the bottom bar.
+            let zb = open * (top - 0.15);
+            let slat = 0.077;
+            let (ya, yc) = (-0.009, 0.009);
+            b.rbox(
+                LEAF,
+                [c0 + 0.012, ya, zb + 0.05],
+                [c1 - 0.012, yc, top],
+                0.0,
+            );
+            if !far {
+                let mut z = zb + 0.05 + slat;
+                while z < top - 0.01 {
+                    for side in [1.0, -1.0] {
+                        let (y0, y1) = sorted2(side * 0.009, side * 0.0115);
+                        b.rbox(
+                            LEAF,
+                            [c0 + 0.014, y0, z - 0.004],
+                            [c1 - 0.014, y1, z + 0.004],
+                            0.001,
+                        );
+                    }
+                    z += slat;
+                }
+            }
+            b.rbox(
+                METAL,
+                [c0 + 0.012, -0.016, zb],
+                [c1 - 0.012, 0.016, zb + 0.05],
+                0.004,
+            );
+            for (xa, xc) in [(c0 - 0.03, c0 + 0.03), (c1 - 0.03, c1 + 0.03)] {
+                b.rbox(METAL, [xa, -0.03, 0.0], [xc, -0.012, top], 0.002);
+                b.rbox(METAL, [xa, 0.012, 0.0], [xc, 0.03, top], 0.002);
+                b.rbox(METAL, [xa, -0.03, 0.0], [xa + 0.012, 0.03, top], 0.0);
+            }
+            // The drum's box over the opening, closed on the street side.
+            b.rbox(
+                FRAME,
+                [c0 - 0.03, -fd / 2.0 + 0.005, top],
+                [c1 + 0.03, fd / 2.0, h - 0.005],
+                0.01,
+            );
+            if !far {
+                // A lock in the bottom bar.
+                b.cyl(
+                    METAL,
+                    [0.0, -0.016, zb + 0.025],
+                    [0.0, -0.022, zb + 0.025],
+                    0.012,
+                );
+            }
+        }
+        2 => {
+            // Up-and-over: one leaf that tips up on arms, with its
+            // counterweights in boxes by the jambs, on the inside.
+            let phi = open * std::f64::consts::FRAC_PI_2;
+            let pivot_z = top * 0.62;
+            let lift = open * (top - pivot_z - 0.05);
+            let mark = b.mark();
+            let wk = wicket.then_some(Wicket {
+                x: wx,
+                w: ww,
+                bottom: 0.1,
+                top: wz,
+                handle: 1.0,
+            });
+            // (No row of windows through the wicket door.)
+            let look = if wicket && look == 6 { 2 } else { look };
+            garage_panel(
+                b,
+                look,
+                c0 + 0.008,
+                c1 - 0.008,
+                0.01,
+                top - 0.008,
+                t,
+                far,
+                wk,
+            );
+            if !far && !wicket {
+                // The lock and handle in the middle, on the street side
+                // (lower down when the windows are there).
+                let z = if look == 6 { 0.5 } else { 1.0 };
+                handle_on(b, 4, (c0 + c1) / 2.0, z, t, 1.0, &[-1.0]);
+            }
+            b.transform_from(mark, |q| {
+                let (y, z) = (q[1], q[2] - pivot_z);
+                let (sn, cs) = phi.sin_cos();
+                [q[0], y * cs + z * sn, pivot_z + lift + z * cs - y * sn]
+            });
+            for (xa, xc) in [(c0 - 0.16, c0 - 0.02), (c1 + 0.02, c1 + 0.16)] {
+                b.rbox(FRAME, [xa, face, 0.0], [xc, face + 0.09, top], 0.004);
+            }
+            // The arms from the boxes to the leaf's pivots, and the head
+            // channel the top of the leaf runs in.
+            for x in [c0 - 0.01, c1 + 0.01] {
+                b.cyl(
+                    METAL,
+                    [x, face + 0.045, pivot_z],
+                    [x, 0.0, pivot_z + lift],
+                    0.01,
+                );
+            }
+            for x in [c0 - 0.02, c1 - 0.03] {
+                b.rbox(
+                    METAL,
+                    [x, t / 2.0, top - 0.05],
+                    [x + 0.05, face + 0.6, top - 0.02],
+                    0.002,
+                );
+            }
+        }
+        _ => {
+            // Sectional: the panels up their guides and, once past the
+            // head, flat along the tracks under it.
+            let n = p.get("panels", 4.0).round().clamp(2.0, 10.0) as usize;
+            let gap = 0.008;
+            let ph = (top - gap * (n as f64 - 1.0)) / n as f64;
+            let travel = open * (top - 0.15);
+            let bend = top - 0.08;
+            for i in 0..n {
+                let zb = i as f64 * (ph + gap) + travel;
+                let mark = b.mark();
+                // The windows in the panel second from the top.
+                let lk = match look {
+                    6 if i + 2 == n => 6,
+                    6 => 2,
+                    other => other,
+                };
+                let pb = zb - travel;
+                let wk = wicket.then_some(Wicket {
+                    x: wx,
+                    w: ww,
+                    bottom: 0.1 - pb,
+                    top: wz - pb,
+                    handle: 1.0 - pb,
+                });
+                garage_panel(b, lk, c0 + 0.01, c1 - 0.01, 0.0, ph, t, far, wk);
+                let mid = zb + ph / 2.0;
+                if mid <= bend {
+                    b.transform_from(mark, |q| [q[0], q[1], q[2] + zb]);
+                } else {
+                    // Turned flat, along the tracks into the room.
+                    let along = mid - bend;
+                    b.transform_from(mark, |q| {
+                        [
+                            q[0],
+                            t / 2.0 + along + (q[2] - ph / 2.0),
+                            bend + 0.02 - q[1],
+                        ]
+                    });
+                }
+            }
+            if !far && !wicket {
+                // A grip at the bottom on the street side.
+                b.rbox(
+                    METAL,
+                    [-0.08, -t / 2.0 - 0.025, travel + 0.12],
+                    [0.08, -t / 2.0, travel + 0.15],
+                    0.006,
+                );
+            }
+            // The guides up the jambs and the tracks under the head, and
+            // the spring shaft above the opening on the inside.
+            let reach = face + top * 0.9;
+            for (xa, xc) in [(c0 - 0.02, c0 + 0.03), (c1 - 0.03, c1 + 0.02)] {
+                b.rbox(
+                    METAL,
+                    [xa, t / 2.0, 0.0],
+                    [xc, t / 2.0 + 0.03, bend + 0.06],
+                    0.002,
+                );
+                b.rbox(
+                    METAL,
+                    [xa, t / 2.0, bend + 0.03],
+                    [xc, reach, bend + 0.06],
+                    0.002,
+                );
+            }
+            let ys = face + 0.07;
+            b.cyl(
+                METAL,
+                [c0 - 0.02, ys, bend + 0.16],
+                [c1 + 0.02, ys, bend + 0.16],
+                0.016,
+            );
+            for x in [c0 - 0.02, c1 - 0.03] {
+                b.rbox(
+                    METAL,
+                    [x, ys - 0.03, bend + 0.06],
+                    [x + 0.05, ys + 0.03, bend + 0.2],
+                    0.002,
+                );
+            }
+        }
+    }
+    if p.flag("mirror", false) {
+        mirror_x(b);
+    }
+}
+
+/// A wicket door in a garage door's leaf, in the panel's own heights.
+#[derive(Clone, Copy)]
+struct Wicket {
+    x: f64,
+    w: f64,
+    bottom: f64,
+    top: f64,
+    handle: f64,
+}
+
+/// One panel of a garage door (or its single leaf), from `a` to `c` and
+/// `z0` to `z1`, `t` thick, in the look `look` (numbers of
+/// [`GARAGE_LOOKS`]); the part of a `wicket` in it is outlined, with its
+/// handle.
+#[allow(clippy::too_many_arguments)]
+fn garage_panel(
+    b: &mut Builder,
+    look: i32,
+    a: f64,
+    c: f64,
+    z0: f64,
+    z1: f64,
+    t: f64,
+    far: bool,
+    wicket: Option<Wicket>,
+) {
+    let h2 = t / 2.0;
+    if look == 6 && !far {
+        // A row of windows across the middle of the panel.
+        let n = (((c - a) / 0.62).floor() as usize).max(2);
+        let wide = (c - a) / n as f64;
+        let (wa, wc) = (z0 + (z1 - z0) * 0.28, z1 - (z1 - z0) * 0.28);
+        b.rbox(LEAF, [a, -h2, z0], [c, h2, wa], 0.0);
+        b.rbox(LEAF, [a, -h2, wc], [c, h2, z1], 0.0);
+        for k in 0..n {
+            let x = a + k as f64 * wide;
+            let (xa, xc) = (x + wide * 0.2, x + wide * 0.8);
+            b.rbox(LEAF, [x, -h2, wa], [xa, h2, wc], 0.0);
+            b.rbox(LEAF, [xc, -h2, wa], [x + wide, h2, wc], 0.0);
+            b.rbox(GLASS, [xa, -0.003, wa], [xc, 0.003, wc], 0.0);
+            for side in [1.0, -1.0] {
+                let (y0, y1) = sorted2(side * h2, side * (h2 + 0.004));
+                for (p0, p1) in [
+                    ([xa - 0.012, y0, wa - 0.012], [xc + 0.012, y1, wa]),
+                    ([xa - 0.012, y0, wc], [xc + 0.012, y1, wc + 0.012]),
+                    ([xa - 0.012, y0, wa], [xa, y1, wc]),
+                    ([xc, y0, wa], [xc + 0.012, y1, wc]),
+                ] {
+                    b.rbox(METAL, p0, p1, 0.0);
+                }
+            }
+        }
+    } else {
+        b.rbox(LEAF, [a, -h2, z0], [c, h2, z1], 0.002);
+    }
+    if !far {
+        let ribs = |b: &mut Builder, za: f64, zc: f64| {
+            for side in [1.0, -1.0] {
+                let (y0, y1) = sorted2(side * h2, side * (h2 + 0.003));
+                b.rbox(LEAF, [a + 0.005, y0, za], [c - 0.005, y1, zc], 0.001);
+            }
+        };
+        match look {
+            2 => {
+                // Ribbed: two shallow ribs across each panel.
+                for k in 1..3 {
+                    let z = z0 + (z1 - z0) * k as f64 / 3.0;
+                    ribs(b, z - 0.006, z + 0.006);
+                }
+            }
+            3 => {
+                // Cassettes: raised plates side by side.
+                let n = (((c - a) / 0.55).round() as usize).max(2);
+                let wide = (c - a) / n as f64;
+                for k in 0..n {
+                    let x = a + k as f64 * wide;
+                    for side in [1.0, -1.0] {
+                        let (y0, y1) = sorted2(side * h2, side * (h2 + 0.006));
+                        b.rbox(
+                            LEAF,
+                            [x + 0.06, y0, z0 + 0.06],
+                            [x + wide - 0.06, y1, z1 - 0.06],
+                            0.004,
+                        );
+                    }
+                }
+            }
+            5 => {
+                // Timber boards: a board across every 15 cm.
+                let mut z = z0 + 0.15;
+                while z < z1 - 0.02 {
+                    ribs(b, z - 0.004, z + 0.002);
+                    z += 0.15;
+                }
+            }
+            7 => {
+                // Ribbed upright: ribs every 12 cm.
+                let n = ((c - a) / 0.12).floor() as usize;
+                for k in 1..n {
+                    let x = a + k as f64 * (c - a) / n as f64;
+                    for side in [1.0, -1.0] {
+                        let (y0, y1) = sorted2(side * h2, side * (h2 + 0.008));
+                        b.rbox(
+                            LEAF,
+                            [x - 0.012, y0, z0 + 0.01],
+                            [x + 0.012, y1, z1 - 0.01],
+                            0.002,
+                        );
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    if let Some(k) = wicket {
+        if far {
+            return;
+        }
+        // The wicket's outline on both faces, its hinges and its lever.
+        let (zb, zt) = (k.bottom.max(z0), k.top.min(z1));
+        if zt <= zb {
+            return;
+        }
+        let (x, w) = (k.x, k.w);
+        for side in [1.0, -1.0] {
+            let (y0, y1) = sorted2(side * h2, side * (h2 + 0.007));
+            b.rbox(METAL, [x - 0.02, y0, zb], [x, y1, zt], 0.0);
+            b.rbox(METAL, [x + w, y0, zb], [x + w + 0.02, y1, zt], 0.0);
+            if k.top < z1 {
+                b.rbox(
+                    METAL,
+                    [x - 0.02, y0, zt],
+                    [x + w + 0.02, y1, zt + 0.02],
+                    0.0,
+                );
+            }
+            if k.bottom > z0 {
+                b.rbox(
+                    METAL,
+                    [x - 0.02, y0, zb - 0.02],
+                    [x + w + 0.02, y1, zb],
+                    0.0,
+                );
+            }
+        }
+        if k.handle > z0 + 0.1 && k.handle < z1 - 0.1 {
+            handle(b, 2, x + w - 0.07, k.handle, t, -1.0);
+        }
     }
 }

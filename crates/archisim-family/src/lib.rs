@@ -32,6 +32,7 @@ mod error;
 mod eval;
 mod lexer;
 mod parser;
+pub mod shape;
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -43,6 +44,7 @@ pub use ast::{
 pub use error::FamilyError;
 pub use eval::{Evaluation, Mark, Part, INK_TINT, MAX_PARTS, MAX_REPEAT};
 pub use parser::{catalog_text, expand_includes, parse, without_catalog, BUILTINS, PLAN_BUILTINS};
+pub use shape::{OpeningShape, ShapeKind};
 
 /// A parameter or expression value.
 #[derive(Debug, Clone, PartialEq)]

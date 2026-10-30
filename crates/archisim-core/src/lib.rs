@@ -24,8 +24,8 @@ pub use code::*;
 pub use document::Document;
 pub use drafting::*;
 pub use family::{
-    Evaluation, Family, FamilyDef, FamilyError, LineStyle, Mark, ParamKind, ParamScope, Part, Pen,
-    Value, Values,
+    shape, Evaluation, Family, FamilyDef, FamilyError, LineStyle, Mark, OpeningShape, ParamKind,
+    ParamScope, Part, Pen, ShapeKind, Value, Values,
 };
 pub use georef::*;
 pub use graphics::*;

@@ -697,3 +697,92 @@ fn sash_windows_stand_whole() {
     println!("most triangles: {most}");
     assert!(bad.is_empty(), "{} loose", bad.len());
 }
+
+/// Pivot, folding and garage doors, in every variant, closed and open,
+/// stand whole.
+#[test]
+fn pivot_folding_garage_doors_stand_whole() {
+    use fine::door::*;
+    let mut bad = Vec::new();
+    let mut check = |kind: &str, label: String, p: &Params| {
+        let m = make(kind, p).unwrap();
+        let loose = check::loose_pieces(&m, check::anchors_for(kind), 0.004);
+        if let Some(l) = loose.first() {
+            bad.push(format!(
+                "{kind} {label}: {} a {:.3} ({:?}..{:?})",
+                l.role, l.gap, l.lo, l.hi
+            ));
+        }
+    };
+    for style in 1..=8 {
+        for (key, n) in [
+            ("leaf_design", DESIGNS.len()),
+            ("handle_style", HANDLES.len()),
+        ] {
+            for i in 1..=n {
+                // Pivot.
+                let mut p = Params::default();
+                p.set("style", style as f64);
+                p.set(key, i as f64);
+                p.set("pivot", 0.25);
+                p.set("leaf_x0", -0.56);
+                p.set("leaf_x1", 0.56);
+                p.set("lining_w", 1.2);
+                p.set("lining_h", 2.4);
+                p.set("leaf_top", 2.36);
+                p.set("hinge_left", (i % 2) as f64);
+                p.set("lod", (i % 3 == 0) as i32 as f64);
+                check("door", format!("pivotante {style} {key}={i}"), &p);
+                // Folding.
+                for (leaves, open) in [(2.0, 0.0), (4.0, 40.0), (6.0, 90.0), (3.0, 100.0)] {
+                    let mut p = Params::default();
+                    p.set("style", style as f64);
+                    p.set(key, i as f64);
+                    p.set("leaves", leaves);
+                    p.set("fold_open", open);
+                    p.set("leaf_x0", -0.75);
+                    p.set("leaf_x1", 0.75);
+                    p.set("lining_w", 1.6);
+                    p.set("lining_h", 2.05);
+                    p.set("leaf_top", 2.0);
+                    p.set("hinge_left", (i % 2) as f64);
+                    p.set("lod", (i % 3 == 0) as i32 as f64);
+                    check(
+                        "folding_door",
+                        format!("{style} {key}={i} {leaves} hojas {open}%"),
+                        &p,
+                    );
+                }
+            }
+        }
+    }
+    for kind in 1..=3 {
+        for look in 1..=GARAGE_LOOKS.len() {
+            for (wicket, open) in [(0.0, 0.0), (1.0, 0.0), (0.0, 50.0), (1.0, 100.0)] {
+                let mut p = Params::default();
+                p.set("garage_kind", kind as f64);
+                p.set("garage_look", look as f64);
+                p.set("wicket", wicket);
+                p.set("wicket_left", (look % 2) as f64);
+                p.set("garage_open", open);
+                p.set("panels", 4.0 + (look % 3) as f64);
+                p.set("leaf_x0", -1.17);
+                p.set("leaf_x1", 1.17);
+                p.set("leaf_top", if kind == 3 { 1.95 } else { 2.12 });
+                p.set("lining_h", 2.2);
+                p.set("frame_depth", 0.1);
+                p.set("face_pos", 0.12);
+                p.set("lod", (look % 4 == 0) as i32 as f64);
+                check(
+                    "garage_door",
+                    format!("tipo {kind} acabado {look} peatonal {wicket} {open}%"),
+                    &p,
+                );
+            }
+        }
+    }
+    for b in bad.iter().take(30) {
+        println!("{b}");
+    }
+    assert!(bad.is_empty(), "{} loose", bad.len());
+}

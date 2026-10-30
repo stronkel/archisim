@@ -1,7 +1,7 @@
 family "Puerta plegable"
   category door
   host wall
-  version 3
+  version 4
   description "Puerta plegable (de librillo) de 2 a 8 hojas que se recogen a un lado, con cerco"
 
 include "piezas"
@@ -18,8 +18,19 @@ type_params
   section "Materiales"
     frame_material material = "Madera de pino" label "Cerco"
     panel_material material = "Madera de pino" label "Hoja"
+  section "Modelo 3D"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Contemporáneo" label "Modelo 3D"
+    hardware_material material = "Acero inoxidable" label "Herrajes"
+  section "A tu gusto"
+    leaf_design choice("Como la colección", "Lisa", "Ranurada", "Ranurada vertical", "Dos cuarterones", "Cuatro cuarterones", "Seis cuarterones", "Plafonada", "Moldura aplicada", "Vidriera", "Media vidriera", "Vidriera con junquillos", "Lamas", "Tablas", "Chapa lisa", "Chapa embutida", "Chapa con ventanilla cuadrada", "Chapa con ojo de buey", "Chapa con mirilla alargada", "Lisa con ventanilla cuadrada", "Lisa con ojo de buey", "Acorazada") = "Como la colección" label "Hoja"
+    casing choice("Como la colección", "Sin tapajuntas", "Plano", "Redondeado", "Moldurado", "Con junquillo") = "Como la colección" label "Tapajuntas"
+    handle_style choice("Como la colección", "Palanca con roseta", "Palanca con placa", "Palanca recta", "Pomo", "Tirador de barra", "Sin manilla", "Barra antipánico", "Placa de empuje y tirador", "Escudo de seguridad", "Tirador largo") = "Como la colección" label "Manilla"
   section "Representación"
     opening_lines linestyle = "dashed" label "Líneas de apertura (alzado y sección)"
+
+instance_params
+  section "Posición"
+    fold_open integer = 0 range 0..100 label "Abierta en 3D (%)"
 
 require 2 * frame_width < width and 2 * frame_width < height else "El cerco no deja hueco para las hojas"
 require (width - 2 * frame_width) / leaves >= 0.10 else "Las hojas quedan de menos de 10 cm"
@@ -29,8 +40,11 @@ body
   use door_lining(width, height, frame_width, frame_depth, frame_material)
   let c0 = -width / 2 + frame_width
   let lw = (width - 2 * frame_width) / leaves
-  repeat i in 0..leaves
-    use block(c0 + i * lw, c0 + (i + 1) * lw, min(0.03, frame_depth), 0, height - frame_width, panel_material)
+  # En 3D con detalle, las hojas, la guía y las bisagras las hace el
+  # generador (salidas «leaf_*»).
+  if not detailed
+    repeat i in 0..leaves
+      use block(c0 + i * lw, c0 + (i + 1) * lw, min(0.03, frame_depth), 0, height - frame_width, panel_material)
 
 # Cerco cortado y las hojas a medio plegar, en zigzag hacia el lado al que
 # abre, recogiéndose hacia el lado de la mano (UNE-EN 12519), con una
@@ -95,3 +109,11 @@ outputs
   frame_material = frame_material
   panel_material = panel_material
   operation = "folding"
+  generator = "props:folding_door"
+  leaf_x0 = -width / 2 + frame_width
+  leaf_x1 = width / 2 - frame_width
+  leaf_top = height - frame_width
+  leaf_t = min(0.03, frame_depth)
+  lining_w = width
+  lining_h = height
+  hinge_left = if hand == "left" then 1 else 0
