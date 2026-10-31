@@ -185,8 +185,17 @@ impl Plant {
             .filter(|c| c.kind == ClumpKind::Leaves)
             .map(|c| leaves_wanted(c, foliage, lod))
             .sum();
+        // What the wood and the cores (20 triangles each) already take
+        // comes off the budget: a plant stays under 80 000 triangles near
+        // and 16 000 at middle distance.
+        let cap = match lod {
+            Lod::Full => 78_000.0,
+            _ => 15_000.0,
+        };
+        let used = (m.triangle_count() + clumps.len() * 20) as f64;
+        let budget = leaf_budget(lod).min(((cap - used) / 17.0).max(200.0));
         let leaf_share = if wanted > 0.0 {
-            (leaf_budget(lod) / wanted).min(1.0)
+            (budget / wanted).min(1.0)
         } else {
             1.0
         };
@@ -197,7 +206,7 @@ impl Plant {
             .map(|c| leaves_wanted(c, foliage, lod))
             .sum();
         let flower_share = if wanted > 0.0 {
-            (leaf_budget(lod) * 0.3 / wanted).min(1.0)
+            (budget * 0.3 / wanted).min(1.0)
         } else {
             1.0
         };
@@ -217,13 +226,23 @@ impl Plant {
                     || c.kind == ClumpKind::Leaves
                         && matches!(
                             self.species.foliage,
-                            crate::Foliage::Broad | crate::Foliage::Fine | crate::Foliage::Needles
+                            crate::Foliage::Broad
+                                | crate::Foliage::Fine
+                                | crate::Foliage::Needles
+                                | crate::Foliage::Scales
                         ));
             if leafy {
                 // A smaller core for the airy olive and for flowers.
                 let airy = c.kind == ClumpKind::Flowers || self.species.foliage == Foliage::Fine;
                 let core = Clump {
-                    radius: c.radius * if airy { 0.3 } else { 0.5 },
+                    radius: c.radius
+                        * if airy {
+                            0.3
+                        } else if self.species.foliage == Foliage::Scales {
+                            0.72
+                        } else {
+                            0.5
+                        },
                     ..c.clone()
                 };
                 let share = if c.kind == ClumpKind::Flowers {
@@ -515,6 +534,8 @@ fn leaf_size(c: &Clump, foliage: Foliage, lod: Lod) -> (f64, f64) {
         _ if c.kind != ClumpKind::Leaves => ((r * 0.36).clamp(0.05, 0.15), 0.85),
         Foliage::Broad => ((r * 0.45).clamp(0.09, 0.3), 0.55),
         Foliage::Fine => ((r * 0.48).clamp(0.07, 0.2), 0.26),
+        // A spray of scales (cypress, juniper): a flat narrow fan.
+        Foliage::Scales => ((r * 0.5).clamp(0.1, 0.3), 0.34),
         _ => ((r * 0.42).clamp(0.08, 0.3), 0.06),
     };
     (if lod == Lod::Medium { len * 1.9 } else { len }, ratio)

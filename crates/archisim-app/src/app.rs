@@ -1800,7 +1800,7 @@ impl ArchiSimApp {
         self.ed.select_whole_groups();
         // Sketching, Intro with no command running accepts the sketch
         // (before it can repeat the last command).
-        if self.mode == ViewMode::Plan {
+        if matches!(self.mode, ViewMode::Plan | ViewMode::Drafting(_)) {
             self.sketch_keys(&ctx);
         }
         // Texts are measured and drawn in the project's lettering.
