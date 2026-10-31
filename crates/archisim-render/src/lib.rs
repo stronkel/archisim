@@ -285,9 +285,10 @@ impl Scene {
         let first_zone = solids.len();
         for (i, s) in solids.into_iter().chain(zones).enumerate() {
             let zone = i >= first_zone;
+            // Water is seen through as glass is (the floor of a pool).
             let glass = model
                 .material(s.material)
-                .is_some_and(|m| m.category == "glass");
+                .is_some_and(|m| m.category == "glass" || m.category == "water");
             let base = solid_color(model, &s);
             let per_vertex = solid_vertex_colors(model, &s);
             let (owner, is_object) = match s.owner {

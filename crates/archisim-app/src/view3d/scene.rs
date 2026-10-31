@@ -292,6 +292,8 @@ pub struct Disciplines {
 
 /// How see-through glass is (as in the IFC export).
 const GLASS_ALPHA: f32 = 0.4;
+/// Water lets the floor of a pool be seen through it, a little clouded.
+const WATER_ALPHA: f32 = 0.55;
 /// What is left of the rest of the model around an isolated clash.
 pub const GHOST_ALPHA: f32 = 0.12;
 
@@ -1363,11 +1365,14 @@ fn add_solids(
         let dimmed = !look.shared && model.dimmed(look.disciplines.focus, id);
         let selected = !look.shared && look.selection.contains(&element(solid.owner));
         let ghost = look.isolate && !selected;
-        let is_glass = ghost || mat.is_some_and(|m| m.category == "glass");
+        let is_water = mat.is_some_and(|m| m.category == "water");
+        let is_glass = ghost || is_water || mat.is_some_and(|m| m.category == "glass");
         // Doors and windows win where they touch the reveals.
         let opening = matches!(solid.owner, SolidOwner::Opening(_));
         let alpha = if ghost {
             GHOST_ALPHA
+        } else if is_water {
+            WATER_ALPHA
         } else if is_glass {
             GLASS_ALPHA
         } else {
