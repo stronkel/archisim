@@ -962,6 +962,32 @@ impl Model {
                 (t.apply(c.start), t.apply(c.end))
             };
             placed.push(c.id.0);
+            // Mirrored, the bays run the other way and the doors open
+            // with the other hand.
+            let bays = src
+                .curtain_type(c.curtain_type)
+                .map_or(0, |t| c.bays(&t.design));
+            let doors = c
+                .doors
+                .iter()
+                .filter_map(|d| {
+                    Some(CurtainDoor {
+                        guid: guid(&d.guid),
+                        bay: if mirror {
+                            bays.checked_sub(d.bay + 1)?
+                        } else {
+                            d.bay
+                        },
+                        opening_type: opening_type(d.opening_type)?,
+                        hand: match (mirror, d.hand) {
+                            (true, Hand::Left) => Hand::Right,
+                            (true, Hand::Right) => Hand::Left,
+                            (false, h) => h,
+                        },
+                        opens_to: d.opens_to,
+                    })
+                })
+                .collect();
             parts.curtain_walls.push(CurtainWall {
                 id: CurtainWallId(c.id.0 + base),
                 guid: guid(&c.guid),
@@ -970,6 +996,7 @@ impl Model {
                 start,
                 end,
                 top,
+                doors,
                 ..c.clone()
             });
         }

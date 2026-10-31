@@ -90,10 +90,12 @@ pub fn room_outline(
         } else {
             idx.in_box(level, lo, hi)
         };
-        let walls: Vec<(WallId, Vec<Point2>)> = near
+        let mut walls: Vec<(WallId, Vec<Point2>)> = near
             .iter()
             .filter_map(|w| crate::wall_geometry_in(&idx, w.id).map(|g| (w.id, g.outline)))
             .collect();
+        // Curtain walls close rooms too (Revit's "room bounding").
+        walls.extend(curtain_bounds(model, level, lo, hi));
         let found = room_among(model, &walls, p, contour);
         let well_inside = |poly: &[Point2]| {
             let m = 1.0;
@@ -108,6 +110,31 @@ pub fn room_outline(
             _ => r *= 2.0,
         }
     }
+}
+
+/// The ids curtain walls take among the walls that bound rooms: past every
+/// wall's (no wall has them).
+const CURTAIN_BOUND: u64 = 1 << 62;
+
+/// The outlines of the curtain walls of a level within a box, as walls
+/// that bound rooms.
+fn curtain_bounds(
+    model: &Model,
+    level: LevelId,
+    lo: Point2,
+    hi: Point2,
+) -> Vec<(WallId, Vec<Point2>)> {
+    model
+        .curtain_walls_on_level(level)
+        .filter_map(|c| {
+            let d = model.curtain_design(c.id)?;
+            let outline = c.outline(d);
+            let inside = outline
+                .iter()
+                .any(|q| q.x >= lo.x && q.x <= hi.x && q.y >= lo.y && q.y <= hi.y);
+            inside.then_some((WallId(CURTAIN_BOUND | c.id.0), outline))
+        })
+        .collect()
 }
 
 /// [`room_outline`] among some walls only (their outlines).
@@ -832,5 +859,45 @@ mod tests {
             &ne_axis,
             &[(5.0, 5.0), (11.85, 5.0), (11.85, 8.85), (5.0, 8.85)],
         );
+    }
+
+    /// A room closed by a curtain wall: the wand finds it (Revit's
+    /// curtain walls bound rooms), up to the curtain wall's inner face.
+    #[test]
+    fn curtain_walls_bound_rooms() {
+        use archisim_core::{CurtainDesign, CurtainProfile, NewCurtainWall};
+        let (mut m, lvl) = house();
+        // The east façade goes; a curtain wall closes the room instead.
+        let east = m
+            .walls()
+            .find(|w| w.start.x > 11.0 && w.end.x > 11.0)
+            .unwrap()
+            .id;
+        m.remove_wall(east).unwrap();
+        let al = m.add_material("Acero", "metal", [30, 30, 30], CutPattern::Solid);
+        let glass = m.add_material("Vidrio", "glass", [200, 220, 230], CutPattern::Solid);
+        let frame = CurtainProfile {
+            width: 0.05,
+            depth: 0.1,
+            material: al,
+        };
+        let t = m
+            .add_curtain_type("Acero", CurtainDesign::simple(1.0, 1.5, frame, 0.02, glass))
+            .unwrap();
+        // Before: the room is open to the east.
+        assert!(room_outline(&m, lvl, Point2::new(8.0, 4.0), Contour::InteriorFace).is_err());
+        m.add_curtain_wall(NewCurtainWall {
+            curtain_type: t,
+            level: lvl,
+            start: Point2::new(11.7, 8.7),
+            end: Point2::new(11.7, 0.3),
+            base_offset: 0.0,
+            top: archisim_core::WallTop::Unconnected,
+            height: 3.0,
+        })
+        .unwrap();
+        let room = room_outline(&m, lvl, Point2::new(8.0, 4.0), Contour::InteriorFace).unwrap();
+        let xmax = room.iter().map(|p| p.x).fold(f64::MIN, f64::max);
+        assert!((xmax - 11.65).abs() < 1e-6, "{room:?}");
     }
 }

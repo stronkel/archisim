@@ -332,8 +332,127 @@ impl ArchiSimApp {
                 &sizes(&g.transoms),
             );
         });
+        self.curtain_doors_group(ui, id, &c, &design);
         group(ui, "curtain-identity", "Datos de identidad", |ui| {
             props::id_row(ui, "GlobalId", &c.guid.to_string());
+        });
+    }
+
+    /// The doors of a curtain wall: each in the bottom cell of a bay, of a
+    /// door type of the project, with its hand and the side it opens to;
+    /// add one in a free bay, take one out (its glass comes back).
+    fn curtain_doors_group(
+        &mut self,
+        ui: &mut Ui,
+        id: CurtainWallId,
+        c: &archisim_core::CurtainWall,
+        design: &archisim_core::CurtainDesign,
+    ) {
+        use archisim_core::{CurtainDoor, Hand, OpeningKind, WallSide};
+        let bays = c.bays(design);
+        let door_types: Vec<(archisim_core::OpeningTypeId, String)> = self
+            .ed
+            .model()
+            .opening_types()
+            .filter(|t| matches!(t.kind, OpeningKind::Door(_)))
+            .map(|t| (t.id, t.name.clone()))
+            .collect();
+        if door_types.is_empty() {
+            return;
+        }
+        group(ui, "curtain-doors", "Puertas", |ui| {
+            let bay_names: Vec<(usize, String)> =
+                (0..bays).map(|b| (b, format!("Paño {}", b + 1))).collect();
+            let bay_opts: Vec<(usize, &str)> =
+                bay_names.iter().map(|(b, n)| (*b, n.as_str())).collect();
+            let type_opts: Vec<(archisim_core::OpeningTypeId, &str)> =
+                door_types.iter().map(|(t, n)| (*t, n.as_str())).collect();
+            let mut change: Option<(usize, CurtainDoor)> = None;
+            let mut remove = None;
+            for (i, door) in c.doors.iter().enumerate() {
+                let mut d = door.clone();
+                row(
+                    ui,
+                    &format!("Puerta {}", i + 1),
+                    "El paño que ocupa",
+                    |ui, w| {
+                        d.bay = props::choice(ui, ("cw-door-bay", id.0, i), w, d.bay, &bay_opts);
+                    },
+                );
+                row(ui, "Tipo", "Un tipo de puerta del proyecto", |ui, w| {
+                    d.opening_type =
+                        props::choice(ui, ("cw-door-type", id.0, i), w, d.opening_type, &type_opts);
+                });
+                row(
+                    ui,
+                    "Mano",
+                    "Vista desde el lado hacia el que abre",
+                    |ui, w| {
+                        d.hand = props::choice(
+                            ui,
+                            ("cw-door-hand", id.0, i),
+                            w,
+                            d.hand,
+                            &[(Hand::Left, "Izquierda"), (Hand::Right, "Derecha")],
+                        );
+                    },
+                );
+                row(ui, "Abre hacia", "El lado al que van sus hojas", |ui, w| {
+                    d.opens_to = props::choice(
+                        ui,
+                        ("cw-door-side", id.0, i),
+                        w,
+                        d.opens_to,
+                        &[
+                            (WallSide::Interior, "Interior"),
+                            (WallSide::Exterior, "Exterior"),
+                        ],
+                    );
+                });
+                if d != *door {
+                    change = Some((i, d));
+                }
+                if ui.button("Quitar esta puerta").clicked() {
+                    remove = Some(i);
+                }
+                ui.separator();
+            }
+            let free = (0..bays).find(|b| !c.doors.iter().any(|d| d.bay == *b));
+            if let Some(bay) = free {
+                if ui
+                    .button(format!("Añadir puerta en el paño {}", bay + 1))
+                    .on_hover_text("En la celda de abajo del paño, en lugar de su vidrio")
+                    .clicked()
+                {
+                    let t = door_types[0].0;
+                    let r = self
+                        .ed
+                        .edit_curtain_wall("Puerta en el muro cortina", id, |c| {
+                            c.doors.push(CurtainDoor {
+                                guid: archisim_core::GlobalId::new(),
+                                bay,
+                                opening_type: t,
+                                hand: Hand::Left,
+                                opens_to: WallSide::Interior,
+                            })
+                        });
+                    self.report(r, "Puerta añadida.");
+                }
+            }
+            if let Some((i, d)) = change {
+                let r = self
+                    .ed
+                    .edit_curtain_wall("Puerta del muro cortina", id, |c| c.doors[i] = d);
+                self.report(r, "Puerta cambiada.");
+            }
+            if let Some(i) = remove {
+                let r = self
+                    .ed
+                    .edit_curtain_wall("Quitar puerta del muro cortina", id, |c| {
+                        c.doors.remove(i);
+                    });
+                self.report(r, "Puerta quitada.");
+            }
         });
     }
 }

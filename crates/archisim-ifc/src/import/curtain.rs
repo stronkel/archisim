@@ -244,6 +244,7 @@ impl<'a> Importer<'a> {
         let Some(line) = text("Line") else {
             return Ok(());
         };
+        let doors = text("Doors");
         let len = self.geo.length;
         let number = |name: &str| {
             self.property_own(id, PSET, name)
@@ -306,6 +307,14 @@ impl<'a> Importer<'a> {
                 height,
             })
             .map_err(|e| explain(&e))?;
+        // Its doors: each with its door type, read as any door type.
+        if let Some(doors) = doors {
+            for entry in doors.split(';') {
+                if let Err(why) = self.import_curtain_door(cid, entry) {
+                    self.report.skip("puertas de muro cortina", why);
+                }
+            }
+        }
         self.curtain_ids.insert(id);
         self.report.curtain_walls += 1;
         self.sources.push((cid.0, id));
@@ -313,6 +322,78 @@ impl<'a> Importer<'a> {
         self.guids
             .curtain_walls
             .push((cid, e.arg(0).as_str().unwrap_or("").to_string()));
+        Ok(())
+    }
+
+    /// A door of a curtain wall from its entry in `ArchiSim_CurtainWall`
+    /// ("bay type-guid hand opens-to door-guid").
+    fn import_curtain_door(
+        &mut self,
+        wall: archisim_core::CurtainWallId,
+        entry: &str,
+    ) -> Result<(), String> {
+        use archisim_core::{DoorOperation, Hand, NewOpeningType, OpeningKind, WallSide};
+        let w: Vec<&str> = entry.split_whitespace().collect();
+        let [bay, type_guid, hand, opens, guid] = w[..] else {
+            return Err("puerta ilegible".into());
+        };
+        let bay: usize = bay.parse().map_err(|_| "puerta ilegible")?;
+        let te_id = self
+            .file
+            .of_kind("IFCDOORTYPE")
+            .into_iter()
+            .find(|t| self.ent(*t).and_then(|e| e.arg(0).as_str()) == Some(type_guid))
+            .ok_or("sin su tipo de puerta")?;
+        let te = self.ent(te_id).ok_or("sin su tipo de puerta")?;
+        let type_props: Vec<_> = te
+            .arg(5)
+            .as_list()
+            .iter()
+            .filter_map(|p| self.deref(p))
+            .collect();
+        let name = te.arg(2).as_str().unwrap_or("Puerta").to_string();
+        let family = self.family_data(te, &type_props);
+        let material = self
+            .model
+            .materials()
+            .next()
+            .map(|m| m.id)
+            .ok_or("sin materiales")?;
+        let opening_type = self
+            .opening_type(
+                Some(te_id),
+                &name,
+                family,
+                NewOpeningType {
+                    name: String::new(),
+                    kind: OpeningKind::Door(DoorOperation::SingleSwing),
+                    width: 0.9,
+                    height: 2.1,
+                    frame_width: 0.05,
+                    frame_depth: 0.07,
+                    frame_material: material,
+                    panel_material: material,
+                },
+                &[],
+            )
+            .map_err(|e| explain(&e))?;
+        let hand = if hand == "right" {
+            Hand::Right
+        } else {
+            Hand::Left
+        };
+        let opens_to = if opens == "exterior" {
+            WallSide::Exterior
+        } else {
+            WallSide::Interior
+        };
+        let n = self
+            .model
+            .add_curtain_door(wall, bay, opening_type, hand, opens_to)
+            .map_err(|e| explain(&e))?;
+        if let Some(g) = archisim_core::GlobalId::parse(guid) {
+            let _ = self.model.edit_curtain_door(wall, n, |d| d.guid = g);
+        }
         Ok(())
     }
 }

@@ -439,6 +439,21 @@ pub(crate) struct CurtainWall {
     pub height: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub top: Option<WallTop>,
+    /// Its doors (version 57).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub doors: Vec<CurtainDoor>,
+}
+
+/// A door in a curtain wall (version 57): the bay it takes and the door.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct CurtainDoor {
+    pub guid: String,
+    pub bay: usize,
+    #[serde(rename = "type")]
+    pub opening_type: u64,
+    pub opens_to: Side,
+    pub hand: Hand,
 }
 
 /// How the rest of a curtain wall's length or height is divided.
@@ -3505,6 +3520,23 @@ impl ProjectFile {
                     base_offset: c.base_offset,
                     height: c.height,
                     top: top_out(c.top),
+                    doors: c
+                        .doors
+                        .into_iter()
+                        .map(|d| CurtainDoor {
+                            guid: d.guid.to_string(),
+                            bay: d.bay,
+                            opening_type: d.opening_type.0,
+                            opens_to: match d.opens_to {
+                                core::WallSide::Exterior => Side::Exterior,
+                                core::WallSide::Interior => Side::Interior,
+                            },
+                            hand: match d.hand {
+                                core::Hand::Left => Hand::Left,
+                                core::Hand::Right => Hand::Right,
+                            },
+                        })
+                        .collect(),
                 })
                 .collect(),
             wall_roofs: p
@@ -3939,6 +3971,25 @@ impl ProjectFile {
                         base_offset: c.base_offset,
                         top: top_in(c.top),
                         height: c.height,
+                        doors: c
+                            .doors
+                            .iter()
+                            .map(|d| {
+                                Ok(core::CurtainDoor {
+                                    guid: guid(&format!("curtain door {}", c.id), &d.guid)?,
+                                    bay: d.bay,
+                                    opening_type: core::OpeningTypeId(d.opening_type),
+                                    opens_to: match d.opens_to {
+                                        Side::Exterior => core::WallSide::Exterior,
+                                        Side::Interior => core::WallSide::Interior,
+                                    },
+                                    hand: match d.hand {
+                                        Hand::Left => core::Hand::Left,
+                                        Hand::Right => core::Hand::Right,
+                                    },
+                                })
+                            })
+                            .collect::<Result<Vec<_>, FileError>>()?,
                     })
                 })
                 .collect::<Result<Vec<_>, FileError>>()?,

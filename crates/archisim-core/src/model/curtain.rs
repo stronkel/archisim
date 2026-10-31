@@ -331,6 +331,22 @@ pub struct CurtainWall {
     /// Up to a level, or by `height` (as walls).
     pub top: WallTop,
     pub height: f64,
+    /// Its doors, each in the bottom cell of a bay (Revit's door panel).
+    pub doors: Vec<CurtainDoor>,
+}
+
+/// A door in a curtain wall: a door type of the project in place of the
+/// panel of the bottom cell of a bay, as wide as the bay between its
+/// mullions and as high as the first transom; the frame under it goes (it
+/// has its threshold). IFC: an `IfcDoor` aggregated to the curtain wall.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CurtainDoor {
+    pub guid: GlobalId,
+    /// The bay, from the start of the wall (0 the first).
+    pub bay: usize,
+    pub opening_type: OpeningTypeId,
+    pub hand: Hand,
+    pub opens_to: WallSide,
 }
 
 /// Data needed to create a curtain wall.
@@ -386,6 +402,17 @@ impl CurtainPiece {
     pub fn is_vertical(&self) -> bool {
         self.up.1 - self.up.0 > self.along.1 - self.along.0
     }
+}
+
+/// The least height under the transom that heads a curtain wall's door:
+/// lower rows join into its cell.
+pub const DOOR_HEAD: f64 = 2.0;
+
+/// A cell of a curtain wall in its own frame (see [`CurtainPiece`]).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CurtainCell {
+    pub along: (f64, f64),
+    pub up: (f64, f64),
 }
 
 /// Where the grid lines of a curtain wall are: along it from its start,
@@ -593,8 +620,76 @@ impl CurtainWall {
         curtain_grid(d, self.length(), self.height)
     }
 
+    /// Its pieces, without the panels and the bottom frames where its
+    /// doors are.
     pub fn pieces(&self, d: &CurtainDesign) -> Vec<CurtainPiece> {
-        curtain_pieces(d, self.length(), self.height)
+        let pieces = curtain_pieces(d, self.length(), self.height);
+        if self.doors.is_empty() {
+            return pieces;
+        }
+        let cells: Vec<_> = self
+            .doors
+            .iter()
+            .filter_map(|door| self.door_cell(d, door.bay))
+            .collect();
+        let near = |a: f64, b: f64| (a - b).abs() < 1e-6;
+        pieces
+            .into_iter()
+            .filter(|p| {
+                !cells.iter().any(|c| {
+                    let same_bay = near(p.along.0, c.along.0) && near(p.along.1, c.along.1);
+                    match p.kind {
+                        // The panel of the cell.
+                        CurtainPieceKind::Panel(_) => same_bay && p.up.0 < c.up.1 - 1e-6,
+                        // The frame and cap along its foot.
+                        CurtainPieceKind::Border | CurtainPieceKind::Cap => {
+                            same_bay && p.up.0 < 1e-6 && p.up.1 < c.up.1
+                        }
+                        // The transoms the door goes through.
+                        CurtainPieceKind::Transom => same_bay && p.up.1 < c.up.1 - 1e-6,
+                        _ => false,
+                    }
+                })
+            })
+            .collect()
+    }
+
+    /// How many bays it has.
+    pub fn bays(&self, d: &CurtainDesign) -> usize {
+        self.grid(d).mullions.len().saturating_sub(1)
+    }
+
+    /// The opening a door takes in bay `bay`: between its mullions (or the
+    /// border), from the foot to the first transom; `None` past the last
+    /// bay or for a wall without transoms.
+    pub fn door_cell(&self, d: &CurtainDesign, bay: usize) -> Option<CurtainCell> {
+        let g = self.grid(d);
+        let (ms, ts) = (&g.mullions, &g.transoms);
+        if bay + 1 >= ms.len() || ts.len() < 2 {
+            return None;
+        }
+        let col = |i: usize| band(ms, i, d.border.width, d.mullion.width);
+        let row = |j: usize| band(ts, j, d.border.width, d.transom.width);
+        // Up to the first transom a door fits under (the rows below it
+        // join), else the head of the wall.
+        let top = (1..ts.len())
+            .map(row)
+            .map(|r| r.0)
+            .find(|z| *z >= DOOR_HEAD)
+            .unwrap_or_else(|| row(ts.len() - 1).0);
+        Some(CurtainCell {
+            along: (col(bay).1, col(bay + 1).0),
+            up: (0.0, top),
+        })
+    }
+
+    /// The point of plan `along` from its start and `across` to its left
+    /// (outside).
+    pub fn point_at(&self, along: f64, across: f64) -> Point2 {
+        let u = (self.end - self.start)
+            .normalized()
+            .unwrap_or(Vec2::new(1.0, 0.0));
+        self.start + u * along + u.perp_left() * across
     }
 
     /// A piece's footprint in plan, counter-clockwise.
@@ -792,10 +887,186 @@ impl Model {
                 base_offset: spec.base_offset,
                 top: spec.top,
                 height,
+                doors: Vec::new(),
             },
         );
         self.stamp_phase(id.0);
         Ok(id)
+    }
+
+    /// Checks the doors of a curtain wall: door types of the project, each
+    /// in a bay of its own that has room for it.
+    fn check_curtain_doors(&self, c: &CurtainWall) -> Result<(), ModelError> {
+        if c.doors.is_empty() {
+            return Ok(());
+        }
+        let d = &self
+            .curtain_types
+            .get(&c.curtain_type)
+            .ok_or(ModelError::UnknownCurtainType(c.curtain_type))?
+            .design;
+        let mut seen = std::collections::BTreeSet::new();
+        for door in &c.doors {
+            let t = self
+                .opening_types
+                .get(&door.opening_type)
+                .ok_or(ModelError::UnknownOpeningType(door.opening_type))?;
+            if !matches!(t.kind, OpeningKind::Door(_)) || !seen.insert(door.bay) {
+                return Err(ModelError::InvalidCurtainWall);
+            }
+            let cell = c
+                .door_cell(d, door.bay)
+                .ok_or(ModelError::InvalidCurtainWall)?;
+            if cell.along.1 - cell.along.0 < 0.5 || cell.up.1 - cell.up.0 < 1.8 {
+                return Err(ModelError::InvalidCurtainWall);
+            }
+        }
+        Ok(())
+    }
+
+    /// Puts a door of type `opening_type` in bay `bay` of a curtain wall
+    /// (in place of its bottom panel); its index among the wall's doors.
+    pub fn add_curtain_door(
+        &mut self,
+        id: CurtainWallId,
+        bay: usize,
+        opening_type: OpeningTypeId,
+        hand: Hand,
+        opens_to: WallSide,
+    ) -> Result<usize, ModelError> {
+        let mut c = self
+            .curtain_walls
+            .get(&id)
+            .cloned()
+            .ok_or(ModelError::UnknownCurtainWall(id))?;
+        c.doors.push(CurtainDoor {
+            guid: GlobalId::new(),
+            bay,
+            opening_type,
+            hand,
+            opens_to,
+        });
+        self.check_curtain_doors(&c)?;
+        let n = c.doors.len() - 1;
+        self.curtain_walls.insert(id, c);
+        Ok(n)
+    }
+
+    /// Takes a door out of a curtain wall (its panel comes back).
+    pub fn remove_curtain_door(
+        &mut self,
+        id: CurtainWallId,
+        index: usize,
+    ) -> Result<CurtainDoor, ModelError> {
+        let c = self
+            .curtain_walls
+            .get_mut(&id)
+            .ok_or(ModelError::UnknownCurtainWall(id))?;
+        if index >= c.doors.len() {
+            return Err(ModelError::InvalidCurtainWall);
+        }
+        Ok(c.doors.remove(index))
+    }
+
+    /// Changes a door of a curtain wall (its bay, type, hand or side).
+    pub fn edit_curtain_door(
+        &mut self,
+        id: CurtainWallId,
+        index: usize,
+        edit: impl FnOnce(&mut CurtainDoor),
+    ) -> Result<(), ModelError> {
+        let mut c = self
+            .curtain_walls
+            .get(&id)
+            .cloned()
+            .ok_or(ModelError::UnknownCurtainWall(id))?;
+        edit(
+            c.doors
+                .get_mut(index)
+                .ok_or(ModelError::InvalidCurtainWall)?,
+        );
+        self.check_curtain_doors(&c)?;
+        self.curtain_walls.insert(id, c);
+        Ok(())
+    }
+
+    /// The family of a curtain wall's door evaluated for the size of its
+    /// cell (the cell is its rough opening; the frame of the curtain wall
+    /// stands for its wall: `wall_ext`/`wall_int` are its faces).
+    pub fn evaluate_curtain_door(
+        &self,
+        id: CurtainWallId,
+        index: usize,
+    ) -> Result<(Evaluation, CurtainCell), ModelError> {
+        self.curtain_door_with(id, index, |fam, t, values, instance, builtins| {
+            let mut v = t.values.clone();
+            v.extend(values.clone());
+            fam.evaluate(&v, instance, builtins)
+        })
+    }
+
+    /// The plan symbol of a curtain wall's door at a scale.
+    pub fn curtain_door_plan_symbol(
+        &self,
+        id: CurtainWallId,
+        index: usize,
+        scale: f64,
+    ) -> Result<(Vec<Mark>, CurtainCell), ModelError> {
+        self.curtain_door_with(id, index, |fam, t, values, instance, builtins| {
+            let mut v = t.values.clone();
+            v.extend(values.clone());
+            fam.evaluate_plan(&v, instance, builtins, scale)
+        })
+    }
+
+    #[allow(clippy::type_complexity)]
+    fn curtain_door_with<T>(
+        &self,
+        id: CurtainWallId,
+        index: usize,
+        run: impl FnOnce(
+            &crate::family::FamilyDef,
+            &OpeningType,
+            &Values,
+            &Values,
+            &Values,
+        ) -> Result<T, FamilyError>,
+    ) -> Result<(T, CurtainCell), ModelError> {
+        let c = self
+            .curtain_walls
+            .get(&id)
+            .ok_or(ModelError::UnknownCurtainWall(id))?;
+        let door = c.doors.get(index).ok_or(ModelError::InvalidCurtainWall)?;
+        let d = &self
+            .curtain_types
+            .get(&c.curtain_type)
+            .ok_or(ModelError::UnknownCurtainType(c.curtain_type))?
+            .design;
+        let cell = c
+            .door_cell(d, door.bay)
+            .ok_or(ModelError::InvalidCurtainWall)?;
+        let t = self
+            .opening_types
+            .get(&door.opening_type)
+            .ok_or(ModelError::UnknownOpeningType(door.opening_type))?;
+        let fam = self
+            .families
+            .get(&t.family)
+            .ok_or(ModelError::UnknownFamily(t.family))?;
+        let mut size = Values::new();
+        size.insert("width".into(), Value::Number(cell.along.1 - cell.along.0));
+        size.insert("height".into(), Value::Number(cell.up.1 - cell.up.0));
+        let instance = self.family_defaults(t.family, ParamScope::Instance)?;
+        let mut builtins = opening_builtins(door.opens_to, door.hand);
+        let half = d.frame_depth() / 2.0;
+        let (e, i) = match door.opens_to {
+            WallSide::Interior => (-half, half),
+            WallSide::Exterior => (half, -half),
+        };
+        builtins.insert("wall_ext".into(), Value::Number(e));
+        builtins.insert("wall_int".into(), Value::Number(i));
+        let out = run(fam.def(), t, &size, &instance, &builtins).map_err(ModelError::Family)?;
+        Ok((out, cell))
     }
 
     /// Changes a curtain wall; nothing changes if the result is not valid.
@@ -811,6 +1082,16 @@ impl Model {
             .ok_or(ModelError::UnknownCurtainWall(id))?;
         edit(&mut c);
         c.height = self.validate_curtain(&spec_of(&c))?;
+        // Doors in bays the wall no longer has go.
+        if let Some(d) = self
+            .curtain_types
+            .get(&c.curtain_type)
+            .map(|t| t.design.clone())
+        {
+            let n = c.bays(&d);
+            c.doors.retain(|door| door.bay < n);
+        }
+        self.check_curtain_doors(&c)?;
         self.curtain_walls.insert(id, c);
         Ok(())
     }
@@ -875,6 +1156,7 @@ impl Model {
             claim(c.id.0, Some(&c.guid))
                 .and_then(|_| self.validate_curtain(&spec_of(&c)))
                 .map(|h| c.height = h)
+                .and_then(|_| self.check_curtain_doors(&c))
                 .map_err(|error| RestoreError {
                     element: name,
                     error,
@@ -1110,5 +1392,91 @@ mod tests {
         m.edit_curtain_wall(id, |c| c.curtain_type = copy).unwrap();
         assert_eq!(m.curtain_type_users(t), 0);
         m.remove_curtain_type(t).unwrap();
+    }
+
+    /// A door takes the bottom cell of a bay: its glass and the frame
+    /// under it go, the family is evaluated as wide and high as the cell,
+    /// and bays the wall loses take their doors with them.
+    #[test]
+    fn doors_in_a_curtain_wall() {
+        let mut m = Model::new("t");
+        let pb = m.add_level("PB", 0.0);
+        let (al, glass, _) = materials(&mut m);
+        let mut design = CurtainDesign::simple(1.0, 1.2, profile(0.05, 0.12, al), 0.024, glass);
+        design.rows = CurtainDivision {
+            fixed: vec![2.3],
+            rest: CurtainRest::MaxSpacing(1.2),
+        };
+        let t = m.add_curtain_type("Acero", design.clone()).unwrap();
+        let id = m
+            .add_curtain_wall(NewCurtainWall {
+                curtain_type: t,
+                level: pb,
+                start: Point2::new(0.0, 0.0),
+                end: Point2::new(4.0, 0.0),
+                base_offset: 0.0,
+                top: WallTop::Unconnected,
+                height: 3.0,
+            })
+            .unwrap();
+        let door = m
+            .add_opening_type(NewOpeningType {
+                name: "Puerta".into(),
+                kind: OpeningKind::Door(DoorOperation::SingleSwing),
+                width: 0.9,
+                height: 2.1,
+                frame_width: 0.05,
+                frame_depth: 0.07,
+                frame_material: al,
+                panel_material: glass,
+            })
+            .unwrap();
+        let panels = |m: &Model| {
+            m.curtain_wall_pieces(id)
+                .iter()
+                .filter(|p| matches!(p.kind, CurtainPieceKind::Panel(_)))
+                .count()
+        };
+        let before = panels(&m);
+        assert_eq!(before, 4 * 2);
+        m.add_curtain_door(id, 1, door, Hand::Left, WallSide::Interior)
+            .unwrap();
+        assert_eq!(panels(&m), before - 1);
+        // The cell: between the mullions of bay 1, from the floor to the
+        // transom at 2.30.
+        let (ev, cell) = m.evaluate_curtain_door(id, 0).unwrap();
+        assert!((cell.along.0 - 1.025).abs() < 1e-9, "{cell:?}");
+        assert!((cell.along.1 - 1.975).abs() < 1e-9, "{cell:?}");
+        assert!(
+            cell.up.0 == 0.0 && (cell.up.1 - 2.275).abs() < 1e-9,
+            "{cell:?}"
+        );
+        assert!(!ev.parts.is_empty());
+        // No frame along the floor of that bay (its threshold).
+        assert!(!m.curtain_wall_pieces(id).iter().any(|p| {
+            p.kind == CurtainPieceKind::Border
+                && p.up.0 < 1e-9
+                && p.up.1 < 0.1
+                && (p.along.0 - cell.along.0).abs() < 1e-6
+        }));
+        // One door a bay, a door type, a bay the wall has.
+        assert!(m
+            .add_curtain_door(id, 1, door, Hand::Left, WallSide::Interior)
+            .is_err());
+        assert!(m
+            .add_curtain_door(id, 9, door, Hand::Left, WallSide::Interior)
+            .is_err());
+        // Shorter, the wall has two bays: the door in bay 1 stays, one in
+        // bay 3 goes.
+        m.add_curtain_door(id, 3, door, Hand::Right, WallSide::Exterior)
+            .unwrap();
+        m.edit_curtain_wall(id, |c| c.end = Point2::new(2.0, 0.0))
+            .unwrap();
+        let c = m.curtain_wall(id).unwrap();
+        assert_eq!(c.doors.len(), 1);
+        assert_eq!(c.doors[0].bay, 1);
+        // Out again: its glass comes back.
+        m.remove_curtain_door(id, 0).unwrap();
+        assert_eq!(panels(&m), 2 * 2);
     }
 }

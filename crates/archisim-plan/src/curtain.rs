@@ -5,7 +5,7 @@
 
 use std::fmt::Write as _;
 
-use archisim_core::{CurtainPieceKind, CurtainWall, Model, Point2};
+use archisim_core::{CurtainPieceKind, CurtainWall, Model, Point2, WallSide};
 
 use crate::{fill_cut, num, path, pens, INK};
 
@@ -76,6 +76,19 @@ pub fn draw_curtain_wall(s: &mut String, model: &Model, c: &CurtainWall, cut_pla
                 pens().cut
             };
             outline(s, &poly, weight, false, k);
+        }
+        // Its doors, with their family's symbol at this scale.
+        for (i, door) in c.doors.iter().enumerate() {
+            let Ok((marks, cell)) = model.curtain_door_plan_symbol(c.id, i, k * 1000.0) else {
+                continue;
+            };
+            let mid = (cell.along.0 + cell.along.1) / 2.0;
+            let (sx, sy) = match door.opens_to {
+                WallSide::Exterior => (-1.0, 1.0),
+                WallSide::Interior => (1.0, -1.0),
+            };
+            let world = |p: [f64; 2]| c.point_at(mid + sx * p[0], sy * p[1]);
+            crate::draw_marks(s, model, marks, &world, k);
         }
     } else {
         outline(s, &c.outline(d), pens().view, cut_plane <= z0, k);
