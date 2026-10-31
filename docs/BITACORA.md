@@ -6,6 +6,30 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-31 (51) · E17: detalle en alzado y sección
+
+Rama `bloque/e17-detalle`, con pull request. Formato `.archisim` versión 52 (un calco puede mostrar solo un rectángulo de lo que calca).
+
+**Hecho**
+- **Fachadas en alzados y secciones** a 1:50 o más (1:20, 1:10…): cada pieza de la fachada (ladrillos, bloques, paneles, placas, aplacados) dibujada con sus juntas, con los dinteles a sardinel y el frente de forjado; en sección, las tendeles cruzan la hoja de ladrillo cortada. A 1:100 o menos, como antes (la cara lisa).
+- **Armado en sección** a 1:50 o más: puntos donde la barra cruza el plano de corte (las de pilares y vigas cortados) y líneas de las barras que van a lo largo del corte (longitudinales, cercos, mallas de zapatas y forjados con sus patillas).
+- **Despiece de armaduras** (Archivo → «Despiece de armaduras (PDF)…»): hojas A3 con el cajetín de las de carpinterías. Por elemento (zapatas, pilares, vigas, forjados), cada forma de barra con su **marca**, su **forma dibujada** con la longitud de cada tramo en cm (patillas incluidas, cercos con sus dos lados), diámetro, número, longitud de una y de todas y peso; al final, el acero B 500 S por diámetros. Las barras son las mismas del 3D, las mediciones y el IFC; las de forjado cortadas por un hueco llevan marca propia.
+- **Vista de detalle de una zona de una sección**: en las propiedades de una pestaña de sección o alzado, grupo «Detalle», botón «Vista de detalle de una zona»; dos clics marcan un rectángulo y se crea una vista de dibujo «Detalle de <sección>» a 1:10 con esa zona debajo, en gris, para dibujar encima con las órdenes de AutoCAD. Se coloca en un plano como cualquier vista de dibujo.
+- `archisim fachadas out/` saca además `fachadas-alzado.svg` (alzado sur) y `fachadas-seccion.svg` a 1:50; `archisim armado out/` saca `armado-seccion.svg` a 1:20.
+
+**Pendiente**
+- El despiece no dibuja todavía los radios de doblado (las patillas van a escuadra) ni los solapes.
+- Los valores de las comprobaciones del armado (recubrimientos, cuantías mínimas, separaciones) siguen pendientes de que Antonio los confirme.
+- En sección, la trama de la hoja de ladrillo sigue debajo de las juntas; si molesta a 1:20, se quita cuando hay despiece.
+
+**Qué debe probar Antonio**
+1. `cargo run -p archisim-cli -- fachadas out/` y abre `out/fachadas-alzado.svg` y `out/fachadas-seccion.svg`: aparejos a 1:50, dinteles, frentes de forjado y tendeles en la sección.
+2. `cargo run -p archisim-cli -- armado out/` y abre `out/armado-seccion.svg` (1:20): pilares con sus barras y cercos, viga con sus barras, zapatas con su malla.
+3. Abre `out/armado.archisim` en la aplicación, Archivo → «Despiece de armaduras (PDF)…», y mira las formas, marcas, pesos y el cuadro por diámetros.
+4. En la misma, abre la sección A, en sus propiedades pulsa «Vista de detalle de una zona», marca dos esquinas sobre un nudo pilar–viga: debe abrirse la vista de dibujo con esa zona en gris; dibuja encima con LINEA.
+
+---
+
 ## 2026-10-31 (50) · v0.77: E2, E7, E9, E11, E13 y remates en `main`
 
 Unidos #117 a #122: galerías visuales (E2), vistas de dibujo y calcos (E7), fachadas pieza a pieza (E9), hormigón armado (E11), instalaciones segunda vuelta (E13) y los remates de E15 y E6. Formato `.archisim` versión 51. Lo que hay que probar de cada uno está en sus entradas (44 a 49).

@@ -619,6 +619,57 @@ pub fn tube(points: &[P3], r: f64, out: &mut Vec<[P3; 3]>) {
     }
 }
 
+/// A bar laid flat for the bar schedule: its axis in its own plane, the
+/// first stretch along +x and the first bend towards +y, so equal bars
+/// give equal shapes wherever they are in the element. Stretches shorter
+/// than a millimetre are left out.
+pub fn bar_shape(bar: &[P3]) -> Vec<[f64; 2]> {
+    let mut pts: Vec<P3> = Vec::new();
+    for p in bar {
+        if pts.last().is_none_or(|q| {
+            let d = sub(*p, *q);
+            (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt() > 1e-3
+        }) {
+            pts.push(*p);
+        }
+    }
+    if pts.len() < 2 {
+        return Vec::new();
+    }
+    let Some(u) = unit(sub(pts[1], pts[0])) else {
+        return Vec::new();
+    };
+    // The plane: the first stretch not along the first one.
+    let mut v = None;
+    for w in pts.windows(2).skip(1) {
+        if let Some(d) = unit(sub(w[1], w[0])) {
+            if let Some(n) = unit(cross(u, d)) {
+                v = Some(cross(n, u));
+                break;
+            }
+        }
+    }
+    let v = v.unwrap_or([0.0, 0.0, 0.0]);
+    let o = pts[0];
+    pts.iter()
+        .map(|p| {
+            let d = sub(*p, o);
+            [
+                d[0] * u[0] + d[1] * u[1] + d[2] * u[2],
+                d[0] * v[0] + d[1] * v[1] + d[2] * v[2],
+            ]
+        })
+        .collect()
+}
+
+/// The lengths of the stretches of a flat bar.
+pub fn shape_stretches(shape: &[[f64; 2]]) -> Vec<f64> {
+    shape
+        .windows(2)
+        .map(|w| ((w[1][0] - w[0][0]).powi(2) + (w[1][1] - w[0][1]).powi(2)).sqrt())
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -632,5 +683,27 @@ mod tests {
         assert!(six[4..].iter().all(|(x, _)| x.abs() < 1e-9));
         assert_eq!(rect_bars(0.1, 0.1, 8).len(), 8);
         assert_eq!(spaced_along(1.0, 0.25).len(), 4);
+    }
+
+    #[test]
+    fn bars_lie_flat_whichever_way_they_go() {
+        // A footing bar with its two bent ends, standing in the y–z plane.
+        let bar = vec![
+            [1.0, 0.0, 0.5],
+            [1.0, 0.0, 0.0],
+            [1.0, 1.2, 0.0],
+            [1.0, 1.2, 0.5],
+        ];
+        let s = bar_shape(&bar);
+        let l = shape_stretches(&s);
+        assert_eq!(l.len(), 3);
+        assert!((l[0] - 0.5).abs() < 1e-9 && (l[1] - 1.2).abs() < 1e-9);
+        // First along x, then up y.
+        assert!((s[1][0] - 0.5).abs() < 1e-9 && s[1][1].abs() < 1e-9);
+        assert!(s[2][1] > 1.1);
+        // A straight bar, and repeated points dropped.
+        let s = bar_shape(&[[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 3.0]]);
+        assert_eq!(s.len(), 2);
+        assert!((s[1][0] - 3.0).abs() < 1e-9);
     }
 }

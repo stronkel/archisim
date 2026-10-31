@@ -282,6 +282,10 @@ impl ArchiSimApp {
         } else {
             self.section_hover = None;
         }
+        if self.detail_pick.is_some_and(|(s, _)| s == id) {
+            self.detail_rectangle(&ctx, &response, &painter, rect, id);
+            return;
+        }
         // Selection, as in plan: click an element cut or seen (Shift adds
         // or takes it), click nothing to clear.
         let under = self
@@ -308,6 +312,62 @@ impl ArchiSimApp {
             ctx.set_cursor_icon(egui::CursorIcon::PointingHand);
         }
         self.section_move(&ctx, &response, &painter, rect, id, under);
+    }
+
+    /// The rectangle of a detail (E17): two clicks give its corners and a
+    /// view for drawing is made with that piece of the section under it,
+    /// and opened; Esc leaves it.
+    fn detail_rectangle(
+        &mut self,
+        ctx: &egui::Context,
+        response: &egui::Response,
+        painter: &egui::Painter,
+        rect: Rect,
+        id: SectionId,
+    ) {
+        ctx.set_cursor_icon(egui::CursorIcon::Crosshair);
+        if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+            self.detail_pick = None;
+            return;
+        }
+        let first = self.detail_pick.and_then(|(_, a)| a);
+        if let (Some(a), Some(b)) = (first, self.section_hover) {
+            let quad = [a, Point2::new(b.x, a.y), b, Point2::new(a.x, b.y)];
+            painter.add(Shape::closed_line(
+                self.polygon(rect, &quad),
+                Stroke::new(1.5, ACCENT),
+            ));
+            ctx.request_repaint();
+        }
+        if !response.clicked_by(egui::PointerButton::Primary) {
+            return;
+        }
+        let Some(p) = self.section_hover else {
+            return;
+        };
+        let Some(a) = first else {
+            self.detail_pick = Some((id, Some(p)));
+            return;
+        };
+        if (p.x - a.x).abs() < 0.01 || (p.y - a.y).abs() < 0.01 {
+            return;
+        }
+        self.detail_pick = None;
+        let scale = if self.plan_scale > 20.0 {
+            10.0
+        } else {
+            self.plan_scale.min(10.0)
+        };
+        let r = self.ed.transact("Vista de detalle", |m| {
+            m.add_section_detail(id, a, p, scale)
+        });
+        match r {
+            Ok(v) => {
+                self.open_view(super::tabs::TabKind::Drafting(v));
+                self.say("Detalle creado: la zona de la sección queda debajo, en gris; dibuja encima con las órdenes de AutoCAD.");
+            }
+            Err(e) => self.complain(format!("No se puede: {e}.")),
+        }
     }
 
     /// Moving objects, doors and windows in a section or elevation (E15):
@@ -783,6 +843,21 @@ impl ArchiSimApp {
                     self.report(r, "Profundidad cambiada.");
                 }
             });
+        });
+        group(ui, "section-view-detail", "Detalle", |ui| {
+            let picking = self.detail_pick.is_some_and(|(x, _)| x == s.id);
+            let label = if picking {
+                "Marca dos esquinas… (Esc)"
+            } else {
+                "Vista de detalle de una zona"
+            };
+            if ui
+                .add_sized([ui.available_width(), 24.0], egui::Button::new(label).selected(picking))
+                .on_hover_text("Marca con dos clics un rectángulo de la sección: se hace una vista de dibujo a 1:10 con esa zona debajo, en gris, para dibujar el detalle encima")
+                .clicked()
+            {
+                self.detail_pick = if picking { None } else { Some((s.id, None)) };
+            }
         });
         if let Some(p) = self.section_hover {
             group(ui, "section-view-cursor", "Cursor", |ui| {
