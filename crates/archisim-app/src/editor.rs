@@ -401,7 +401,10 @@ impl Editor {
         }
         let mut whole = BTreeSet::new();
         for g in &touched {
-            let members: Vec<Element> = model.draft_group(*g).map(|d| Element::Draft(d.id)).collect();
+            let members: Vec<Element> = model
+                .draft_group(*g)
+                .map(|d| Element::Draft(d.id))
+                .collect();
             let all = members.iter().all(|m| self.selection.contains(m));
             if all {
                 whole.insert(*g);

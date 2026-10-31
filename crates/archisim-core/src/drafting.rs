@@ -1190,7 +1190,10 @@ impl Model {
             std::collections::BTreeMap::new();
         for (old, new) in pairs {
             if let Some(g) = self.drafts.get(old).and_then(|d| d.group.clone()) {
-                by.entry(g.id).or_insert_with(|| (g.name, Vec::new())).1.push(*new);
+                by.entry(g.id)
+                    .or_insert_with(|| (g.name, Vec::new()))
+                    .1
+                    .push(*new);
             }
         }
         for (name, ids) in by.into_values() {

@@ -24,6 +24,7 @@ const LABEL: f64 = 2.0;
 const BAR_INK: &str = "#1d4f91";
 
 /// Draws the marks of the reinforcement of a level's plan.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn draw_rebar_marks(
     s: &mut String,
     model: &Model,
@@ -55,7 +56,11 @@ pub(crate) fn draw_rebar_marks(
         }
     }
     if structure {
+        // Each beam on the plan of its own level (the floor it carries).
         for (b, _) in crate::members::plan_beams(model, level, cut_plane) {
+            if b.level != level {
+                continue;
+            }
             let poly = crate::members::beam_outline(model, b);
             if !poly.is_empty() && visible(&poly) {
                 beam_label(s, model, b.id.0, b.start, b.end, k);
@@ -100,12 +105,37 @@ fn mesh_marks(s: &mut String, model: &Model, id: u64, k: f64) {
         // The middle bar, or for the second mesh of each direction one a
         // little further on so the two do not overlap.
         let top = g.place.starts_with("superior");
-        let at = if top {
-            (g.bars.len() * 2) / 3
+        // Across the mesh, a quarter of the way in from one side (the top
+        // mesh from the other), clear of what stands in the middle.
+        let mids: Vec<Point2> = g
+            .bars
+            .iter()
+            .map(|b| {
+                let (p, q) = (b[0], b[b.len() - 1]);
+                Point2::new((p[0] + q[0]) / 2.0, (p[1] + q[1]) / 2.0)
+            })
+            .collect();
+        let (a0, b0) = (g.bars[0][0], g.bars[0][g.bars[0].len() - 1]);
+        let along = (Point2::new(b0[0], b0[1]) - Point2::new(a0[0], a0[1]))
+            .normalized()
+            .unwrap_or(Point2::new(1.0, 0.0));
+        let across = |p: Point2| p.x * -along.y + p.y * along.x;
+        let (lo, hi) = mids
+            .iter()
+            .map(|p| across(*p))
+            .fold((f64::MAX, f64::MIN), |(l, h), v| (l.min(v), h.max(v)));
+        let want = if top {
+            hi - (hi - lo) / 4.0
         } else {
-            g.bars.len() / 3
-        }
-        .min(g.bars.len() - 1);
+            lo + (hi - lo) / 4.0
+        };
+        let at = (0..mids.len())
+            .min_by(|i, j| {
+                (across(mids[*i]) - want)
+                    .abs()
+                    .total_cmp(&(across(mids[*j]) - want).abs())
+            })
+            .unwrap_or(0);
         let bar = &g.bars[at];
         let line = abatida(bar);
         if line.len() < 2 {
@@ -135,7 +165,13 @@ fn mesh_marks(s: &mut String, model: &Model, id: u64, k: f64) {
         };
         let d = readable(d);
         let normal = Point2::new(-d.y, d.x);
-        let mid = a + (b - a) * 0.5 + normal * (0.8 * k);
+        // A quarter of the way along, clear of what stands in the middle.
+        let t = match (slab, top) {
+            (false, _) => 0.25,
+            (true, false) => 0.62,
+            (true, true) => 0.38,
+        };
+        let mid = a + (b - a) * t + normal * (0.8 * k);
         let mut text = g.label.clone();
         if top {
             text = format!("sup. {text}");
@@ -170,19 +206,30 @@ fn abatida(bar: &[[f64; 3]]) -> Vec<Point2> {
     let side = Point2::new(-dir.y, dir.x);
     let mut out = vec![flat[0].0];
     let mut cur = flat[0].0;
-    for w in flat.windows(2) {
+    // The first point that is truly where the bar is: the start of its
+    // first stretch in plan.
+    let mut anchor: Option<(usize, Point2)> = None;
+    for (i, w) in flat.windows(2).enumerate() {
         let dp = w[1].0 - w[0].0;
         let dz = w[1].1 - w[0].1;
         if dp.length() < 1e-6 && dz.abs() > 1e-6 {
-            // A leg: turned onto the plane (the side it goes up to).
+            // A leg: turned onto the plane, to the side it goes up to.
             cur = cur + side * dz.abs();
         } else {
+            if anchor.is_none() {
+                anchor = Some((i, w[0].0));
+            }
             cur = cur + dp;
         }
         out.push(cur);
     }
-    // The legs come out at the start: shift it so the bar stays where it
-    // is (the first point is on a leg's end).
+    // Moved so the bar's own stretches stay where they are.
+    if let Some((i, real)) = anchor {
+        let shift = real - out[i];
+        for p in &mut out {
+            *p = *p + shift;
+        }
+    }
     out
 }
 

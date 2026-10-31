@@ -799,9 +799,7 @@ impl ArchiSimApp {
             let Some(id) = selected else { return };
             if ui
                 .button("⧉ Duplicar")
-                .on_hover_text(
-                    "Crea uno nuevo a partir del seleccionado",
-                )
+                .on_hover_text("Crea uno nuevo a partir del seleccionado")
                 .clicked()
             {
                 actions.push(match tab {

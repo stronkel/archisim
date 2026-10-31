@@ -46,7 +46,9 @@ impl ArchiSimApp {
     pub(super) fn start_rebar_pick(&mut self) {
         self.set_tool(super::Tool::Arrow);
         self.rebar_pick = true;
-        self.say("Armado: haz clic en un pilar, una viga, una zapata o un forjado (Esc para terminar).");
+        self.say(
+            "Armado: haz clic en un pilar, una viga, una zapata o un forjado (Esc para terminar).",
+        );
     }
 
     /// A click while placing reinforcement; whether it was used.

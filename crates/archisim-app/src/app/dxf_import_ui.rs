@@ -43,9 +43,9 @@ impl ArchiSimApp {
             .map_err(|e| format!("no se pudo leer el DXF: {e}"))
             .and_then(|b| archisim_export::dxf_read::read(&b));
         match read {
-            Ok(drawing) if drawing.items.is_empty() => {
-                self.complain("No se pudo importar: el DXF no tiene nada que ArchiSim sepa dibujar en 2D.")
-            }
+            Ok(drawing) if drawing.items.is_empty() => self.complain(
+                "No se pudo importar: el DXF no tiene nada que ArchiSim sepa dibujar en 2D.",
+            ),
             Ok(drawing) => {
                 let unit = drawing.likely_unit();
                 self.dxf_import = Some(DxfImport {
@@ -125,13 +125,19 @@ impl ArchiSimApp {
                         });
                 });
                 let said = if imp.drawing.unit_stated {
-                    format!("El fichero dice {}", unit_name(imp.drawing.unit).to_lowercase())
+                    format!(
+                        "El fichero dice {}",
+                        unit_name(imp.drawing.unit).to_lowercase()
+                    )
                 } else {
                     "El fichero no dice sus unidades".to_string()
                 };
                 let guessed = imp.drawing.likely_unit();
                 let note = if (guessed - imp.drawing.unit).abs() > 1e-12 {
-                    format!("{said}; por su tamaño parece dibujado en {}.", unit_name(guessed).to_lowercase())
+                    format!(
+                        "{said}; por su tamaño parece dibujado en {}.",
+                        unit_name(guessed).to_lowercase()
+                    )
                 } else {
                     format!("{said}.")
                 };
@@ -139,9 +145,7 @@ impl ArchiSimApp {
                 if let Some((lo, hi)) = imp.drawing.extent() {
                     let f = imp.unit / imp.drawing.unit;
                     let (w, h) = ((hi.x - lo.x) * f, (hi.y - lo.y) * f);
-                    ui.label(
-                        format!("Medirá {w:.2} × {h:.2} m").replace('.', ","),
-                    );
+                    ui.label(format!("Medirá {w:.2} × {h:.2} m").replace('.', ","));
                 }
                 let blocks = imp
                     .drawing

@@ -1445,7 +1445,16 @@ mod tests {
         assert_eq!(groups.len(), 2);
         let g = *groups.iter().next().unwrap();
         assert_eq!(m.draft_group(g).count(), 2);
-        assert_eq!(m.draft_group(g).next().unwrap().group.as_ref().unwrap().name, "ARBOL");
+        assert_eq!(
+            m.draft_group(g)
+                .next()
+                .unwrap()
+                .group
+                .as_ref()
+                .unwrap()
+                .name,
+            "ARBOL"
+        );
         // A drawing that says millimetres and is a building's size stays.
         let big = "0\nSECTION\n2\nHEADER\n9\n$INSUNITS\n70\n4\n0\nENDSEC\n\
 0\nSECTION\n2\nENTITIES\n0\nLINE\n8\n0\n10\n0\n20\n0\n11\n12000\n21\n0\n0\nENDSEC\n0\nEOF\n";
