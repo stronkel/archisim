@@ -273,7 +273,12 @@ impl ArchiSimApp {
                 at + Point2::new(local.x * c1 - local.y * s1, local.x * s1 + local.y * c1)
             })
             .collect();
-        let d = crate::wall_faces::snap_delta(&self.move_faces, &pts, Point2::new(0.0, 0.0));
+        let mut d = crate::wall_faces::snap_delta(&self.move_faces, &pts, Point2::new(0.0, 0.0));
+        // Not pulled by a wall: its corners, middles and centre to those of
+        // the objects near it (E15).
+        if d.length() < 1e-9 {
+            d = object_points_delta(m, o.id, o.level, &pts);
+        }
         let moved: Vec<Point2> = pts.iter().map(|p| *p + d).collect();
         self.move_clear =
             crate::wall_faces::clearances(&self.move_faces, &moved, Point2::new(c1, s1));
@@ -305,5 +310,99 @@ impl ArchiSimApp {
             let solids = archisim_geom::solid::object_solids(&m, id);
             Some(crate::view3d::scene::Scene::of_solids(&m, solids))
         });
+    }
+}
+
+/// How far to move an object whose box has the points `pts` so that one
+/// of them (or its centre) falls on a corner, the middle of a side or the
+/// centre of the box of another object near it (within 5 cm); none if
+/// none is that near (E15, in 3D).
+fn object_points_delta(
+    m: &archisim_core::Model,
+    own: archisim_core::ObjectId,
+    level: archisim_core::LevelId,
+    pts: &[Point2],
+) -> Point2 {
+    const REACH: f64 = 0.05;
+    if pts.is_empty() {
+        return Point2::new(0.0, 0.0);
+    }
+    let centre = pts.iter().fold(Point2::new(0.0, 0.0), |a, p| a + *p) * (1.0 / pts.len() as f64);
+    let mut mine: Vec<Point2> = pts.to_vec();
+    let n = pts.len();
+    for i in 0..n {
+        mine.push((pts[i] + pts[(i + 1) % n]) * 0.5);
+    }
+    mine.push(centre);
+    let mut best: Option<(f64, Point2)> = None;
+    for o in m.objects_on_level(level) {
+        if o.id == own || o.position.distance(centre) > 6.0 || m.plant_look(o.id).is_some() {
+            continue;
+        }
+        let outline = m.object_outline(o.id);
+        if outline.len() < 3 {
+            continue;
+        }
+        let k = outline.len();
+        let mut theirs: Vec<Point2> = outline.clone();
+        for i in 0..k {
+            theirs.push((outline[i] + outline[(i + 1) % k]) * 0.5);
+        }
+        if let Some(c) = crate::drag::object_middle(m, o.id) {
+            theirs.push(c);
+        }
+        for a in &mine {
+            for b in &theirs {
+                let dist = a.distance(*b);
+                if dist < REACH && best.is_none_or(|(d, _)| dist < d) {
+                    best = Some((dist, *b - *a));
+                }
+            }
+        }
+    }
+    best.map_or(Point2::new(0.0, 0.0), |(_, d)| d)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// E15 in 3D: a dragged object's corner is pulled to the corner of
+    /// one near it.
+    #[test]
+    fn a_moved_object_falls_on_the_corner_of_another() {
+        let mut m = archisim_core::Model::new("x");
+        let level = m.add_level("PB", 0.0);
+        archisim_library::add_library(&mut m).unwrap();
+        let t = m
+            .object_types()
+            .find(|t| !m.type_grows(t.id) && t.name.contains("Mesa"))
+            .map(|t| t.id)
+            .unwrap();
+        let place = |m: &mut archisim_core::Model, x: f64| {
+            m.add_object(archisim_core::NewObject {
+                object_type: t,
+                level,
+                position: Point2::new(x, 0.0),
+                rotation: 0.0,
+                base_offset: 0.0,
+            })
+            .unwrap()
+        };
+        let a = place(&mut m, 0.0);
+        let b = place(&mut m, 3.0);
+        let theirs = m.object_outline(b);
+        let mine = m.object_outline(a);
+        // A's box with its right side 3 cm short of B's left side.
+        let gap = theirs[0].x - mine[1].x - 0.03;
+        let pts: Vec<Point2> = mine.iter().map(|p| *p + Point2::new(gap, 0.0)).collect();
+        let d = object_points_delta(&m, a, level, &pts);
+        assert!((d.x - 0.03).abs() < 1e-6 && d.y.abs() < 1e-6, "{d:?}");
+        // Far from it, nothing.
+        let far: Vec<Point2> = mine.iter().map(|p| *p + Point2::new(0.5, 0.0)).collect();
+        assert_eq!(
+            object_points_delta(&m, a, level, &far),
+            Point2::new(0.0, 0.0)
+        );
     }
 }

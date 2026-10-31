@@ -3008,7 +3008,7 @@ fn place_wall_holes(
         wall_type: facade,
         level,
         start: Point2::new(x, y),
-        end: Point2::new(x + 34.0, y),
+        end: Point2::new(x + 44.0, y),
         reference: ReferenceLine::Center,
         height: 3.6,
         base_offset: 0.0,
@@ -3021,6 +3021,10 @@ fn place_wall_holes(
     let window = m.system_family("Ventana practicable")?;
     let slider = m.system_family("Ventana corredera")?;
     let door = m.system_family("Puerta abatible")?;
+    // The others with their wall hole too (E6, second round).
+    let sash = m.system_family("Ventana de guillotina")?;
+    let sliding = m.system_family("Puerta corredera")?;
+    let pivot = m.system_family("Puerta pivotante")?;
     type Item<'a> = (archisim_core::FamilyId, &'a str, Vec<(&'a str, Value)>);
     let items: Vec<Item> = vec![
         (
@@ -3086,6 +3090,35 @@ fn place_wall_holes(
             ],
         ),
         (
+            sash,
+            "de guillotina con recercado plano y alféizar",
+            vec![
+                ("surround", t("Plano")),
+                ("inner_sill", yes.clone()),
+                ("head_drip", yes.clone()),
+            ],
+        ),
+        (
+            sliding,
+            "corredera con mocheta y dintel de madera",
+            vec![
+                ("width", num(0.9)),
+                ("nib", num(0.05)),
+                ("lintel", t("De madera")),
+                ("lintel_material", Value::Text("Madera de pino".into())),
+            ],
+        ),
+        (
+            pivot,
+            "pivotante con recercado moldurado",
+            vec![
+                ("width", num(1.2)),
+                ("height", num(2.4)),
+                ("surround", t("Moldurado")),
+                ("frame_position", t("Por fuera")),
+            ],
+        ),
+        (
             door,
             "con recercado con clave y dintel de piedra",
             vec![
@@ -3116,7 +3149,8 @@ fn place_wall_holes(
             .get("width")
             .and_then(Value::as_number)
             .unwrap_or(1.2);
-        let what = if family == door { "Puerta" } else { "Ventana" };
+        let is_door = family == door || family == sliding || family == pivot;
+        let what = if is_door { "Puerta" } else { "Ventana" };
         let ty = m.add_family_type(NewFamilyType {
             family,
             name: format!("{what} {name} (taller)"),
@@ -3129,7 +3163,7 @@ fn place_wall_holes(
             opening_type: ty,
             wall: row,
             along,
-            sill: if family == door { 0.0 } else { 0.9 },
+            sill: if is_door { 0.0 } else { 0.9 },
             opens_to: WallSide::Interior,
             hand: Hand::Left,
             setback: None,

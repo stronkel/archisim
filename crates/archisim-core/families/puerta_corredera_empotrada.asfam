@@ -1,7 +1,7 @@
 family "Puerta corredera empotrada"
   category door
   host wall
-  version 5
+  version 6
   description "Puerta corredera de una hoja que se esconde dentro del muro, en un armazón (cajón) junto al hueco, con cerco"
 
 include "piezas"
@@ -16,6 +16,23 @@ type_params
   section "Materiales"
     frame_material material = "Madera de pino" label "Cerco"
     panel_material material = "Madera de pino" label "Hoja"
+  section "Hueco de muro"
+    frame_position choice("Centrado en el muro", "Por fuera", "Por dentro") = "Centrado en el muro" label "Posición del marco"
+    frame_inset length = 0.00 range 0.00..0.60 visible_if frame_position != "Centrado en el muro" label "Marco: retranqueo desde la cara"
+    nib length = 0.00 range 0.00..0.20 label "Mocheta: ancho (0, sin mocheta)"
+    nib_material material = "Ladrillo visto" visible_if nib > 0 label "Mocheta"
+    lintel choice("Sin dintel visto", "De hormigón", "De piedra", "De madera", "De acero", "Sardinel de ladrillo", "Arco rebajado de ladrillo") = "Sin dintel visto" label "Dintel visto"
+    lintel_height length = 0.20 range 0.03..0.60 visible_if lintel != "Sin dintel visto" label "Dintel: alto"
+    lintel_bearing length = 0.15 range 0.00..0.50 visible_if lintel != "Sin dintel visto" and lintel != "Arco rebajado de ladrillo" label "Dintel: entrega a cada lado"
+    lintel_material material = "Hormigón armado" visible_if lintel != "Sin dintel visto" label "Dintel"
+  section "Recercado"
+    surround choice("Sin recercado", "Plano", "Moldurado", "Con clave") = "Sin recercado" label "Recercado por fuera"
+    surround_width length = 0.15 range 0.04..0.60 visible_if surround != "Sin recercado" label "Recercado: ancho"
+    surround_projection length = 0.03 range 0.005..0.20 visible_if surround != "Sin recercado" label "Recercado: vuelo"
+    surround_material material = "Piedra caliza" visible_if surround != "Sin recercado" label "Recercado"
+  section "Accesorios"
+    head_drip bool = no label "Albardilla sobre el hueco"
+    head_drip_material material = "Piedra caliza" visible_if head_drip label "Albardilla"
   section "Modelo 3D"
     model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Contemporáneo" label "Modelo 3D"
     hardware_material material = "Acero inoxidable" label "Herrajes"
@@ -44,10 +61,22 @@ body
   if not detailed
     use door_lining(width, height, frame_width, frame_depth, frame_material)
     use door_leaf(-width / 2 + frame_width, width / 2 - frame_width, height, frame_width, frame_depth, panel_material)
+  # Hueco de muro y accesorios (E6).
+  use nib_pieces(width, height, frame_depth, wall_ext, nib, nib_material)
+  if surround != "Sin recercado"
+    use surround_pieces(width, height, wall_ext, surround, surround_width, surround_projection, surround_material, 0)
+  let lk = if lintel == "Sin dintel visto" then 0 else if lintel == "De acero" then 2 else if lintel == "Sardinel de ladrillo" then 3 else if lintel == "Arco rebajado de ladrillo" then 4 else 1
+  if lk > 0
+    use lintel_pieces(width, height, wall_ext, wall_int, lk, lintel_height, if lk == 4 then 0 else lintel_bearing, lintel_material)
+  if head_drip
+    let zlt = if lk == 4 then width / 8 + lintel_height else if lk > 0 then lintel_height else 0
+    let zs = if surround != "Sin recercado" then surround_width else 0
+    use head_drip(width, height + max(zlt, zs), wall_ext, head_drip_material)
 
 # Cerco cortado, la hoja a medio meter en el muro hacia el lado de la mano
 # y el armazón (el cajón dentro del muro) en discontinua.
 plan 1:50
+  use wall_hole_plan(width, frame_depth, wall_ext, nib, if surround != "Sin recercado" then surround_width else 0, surround_projection, 0, 0, 0)
   let c0 = -width / 2 + frame_width
   let c1 = width / 2 - frame_width
   use frame_cut_plan_t(-width / 2, c0, frame_depth, plan_frame_fill == "Color del material", frame_material)
@@ -79,6 +108,8 @@ plan 1:100
   line (jamb, 0) to (jamb + s * lw, 0) pen thin dashed
 
 outputs
+  frame_align = if frame_position == "Por fuera" then "exterior" else if frame_position == "Por dentro" then "interior" else "centre"
+  frame_inset = frame_inset
   generator = "props:sliding_door"
   leaf_x0 = -width / 2 + frame_width
   leaf_x1 = width / 2 - frame_width
