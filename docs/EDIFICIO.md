@@ -52,7 +52,7 @@ Antonio modeló en su máster de BIM manager un edificio de viviendas en Florenc
   - datos del proyecto, georreferencia (UTM 55 S) y extinción automática.
 - **Entorno:** la calle con aparcamiento y acera, arbolado, la parcela y los edificios vecinos como volúmenes de Concepto.
 
-Comprobación CTE: 245 cumplen, 0 no cumplen y quedaban 4 avisos (el agua de los inodoros de las viviendas D, ya corregida).
+Comprobación CTE: 249 cumplen, 0 no cumplen y 0 avisos. El IFC del edificio valida con IfcOpenShell (169 muros, 117 locales, 895 objetos).
 
 ## Vuelta de velocidad
 
