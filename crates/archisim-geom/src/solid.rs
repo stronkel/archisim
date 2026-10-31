@@ -2050,6 +2050,84 @@ pub fn facade_pieces_wanted() -> bool {
     PIECES.with(|p| p.get())
 }
 
+thread_local! {
+    static COARSE_PROPS: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Runs `f` with the furniture ArchiSim makes simplified for drawings
+/// ([`COARSE_CELL`]): the folds of a cushion or the slats of a chair
+/// are below a tenth of a millimetre at 1:50, and a building full of
+/// furniture has millions of their triangles (Revit's "coarse" detail
+/// level in the views that need no more).
+pub fn with_coarse_props<T>(f: impl FnOnce() -> T) -> T {
+    let old = COARSE_PROPS.with(|c| c.replace(true));
+    let out = f();
+    COARSE_PROPS.with(|c| c.set(old));
+    out
+}
+
+/// The size of the cells the furniture's points are merged in for
+/// drawings (m).
+pub const COARSE_CELL: f64 = 0.03;
+
+/// A furniture model simplified: each of its points moved to the middle
+/// of the points in its cell, with which point each was.
+struct Coarse {
+    _mesh: std::sync::Arc<archisim_core::props::PropMesh>,
+    map: Vec<u32>,
+    positions: Vec<[f32; 3]>,
+}
+
+/// The simplified version of a model, made once (by the model it is of).
+fn coarse_of(mesh: &std::sync::Arc<archisim_core::props::PropMesh>) -> std::sync::Arc<Coarse> {
+    use std::collections::HashMap;
+    use std::sync::{Arc, Mutex, OnceLock};
+    static CACHE: OnceLock<Mutex<HashMap<usize, Arc<Coarse>>>> = OnceLock::new();
+    let key = Arc::as_ptr(mesh) as usize;
+    let cache = CACHE.get_or_init(Default::default);
+    if let Some(c) = cache.lock().ok().and_then(|c| c.get(&key).cloned()) {
+        return c;
+    }
+    let cell = COARSE_CELL as f32;
+    let mut cells: HashMap<[i32; 3], u32> = HashMap::new();
+    let mut sums: Vec<([f64; 3], u32)> = Vec::new();
+    let map: Vec<u32> = mesh
+        .positions
+        .iter()
+        .map(|p| {
+            let k = p.map(|v| (v / cell).floor() as i32);
+            *cells.entry(k).or_insert_with(|| {
+                sums.push(([0.0; 3], 0));
+                (sums.len() - 1) as u32
+            })
+        })
+        .collect();
+    for (p, &c) in mesh.positions.iter().zip(&map) {
+        let s = &mut sums[c as usize];
+        for (sum, v) in s.0.iter_mut().zip(p) {
+            *sum += *v as f64;
+        }
+        s.1 += 1;
+    }
+    let positions = sums
+        .iter()
+        .map(|(s, n)| s.map(|v| (v / *n as f64) as f32))
+        .collect();
+    let c = Arc::new(Coarse {
+        _mesh: mesh.clone(),
+        map,
+        positions,
+    });
+    if let Ok(mut cache) = cache.lock() {
+        // The furniture of a project is a few hundred models at most.
+        if cache.len() > 4096 {
+            cache.clear();
+        }
+        cache.insert(key, c.clone());
+    }
+    c
+}
+
 /// Solids of a plant grown by ArchiSim: one per material, at the level of
 /// detail the views take ([`Model::plant_detail`]), turned and placed.
 /// `None` for an object that is not a plant.
@@ -2090,17 +2168,42 @@ pub fn prop_solids(model: &Model, id: archisim_core::ObjectId) -> Option<Vec<Sol
         let q = o.to_plan(p[0] as f64, p[1] as f64);
         [q.x, q.y, z0 + p[2] as f64]
     };
-    let mut out: Vec<Solid> = parts
-        .iter()
-        .map(|(material, tris)| Solid {
-            owner: SolidOwner::Object(id),
-            material: *material,
-            triangles: tris
-                .iter()
-                .map(|t| t.map(|i| place(mesh.positions[i as usize])))
-                .collect(),
-        })
-        .collect();
+    let mut out: Vec<Solid> = if COARSE_PROPS.with(|c| c.get()) {
+        let c = coarse_of(&mesh);
+        parts
+            .iter()
+            .map(|(material, tris)| {
+                let mut seen = std::collections::HashSet::new();
+                Solid {
+                    owner: SolidOwner::Object(id),
+                    material: *material,
+                    triangles: tris
+                        .iter()
+                        .map(|t| t.map(|i| c.map[i as usize]))
+                        .filter(|t| t[0] != t[1] && t[1] != t[2] && t[2] != t[0])
+                        .filter(|t| {
+                            let mut k = *t;
+                            k.sort_unstable();
+                            seen.insert(k)
+                        })
+                        .map(|t| t.map(|i| place(c.positions[i as usize])))
+                        .collect(),
+                }
+            })
+            .collect()
+    } else {
+        parts
+            .iter()
+            .map(|(material, tris)| Solid {
+                owner: SolidOwner::Object(id),
+                material: *material,
+                triangles: tris
+                    .iter()
+                    .map(|t| t.map(|i| place(mesh.positions[i as usize])))
+                    .collect(),
+            })
+            .collect()
+    };
     // The first module of a worktop run carries the run's worktop.
     if let Some(run) = model.worktop_run_of(id).filter(|r| r.members[0] == id) {
         out.extend(worktop_solids(model, &run, SolidOwner::Object(id)));

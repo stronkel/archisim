@@ -146,11 +146,16 @@ pub fn axo_drawing(model: &Model, axo: &Axo, focus: DisciplineFocus) -> AxoDrawi
         0.9,
     ]);
     let mut faces = Vec::new();
+    // The depths of each face's farthest and nearest points (figures:
+    // none), to leave out what opaque faces hide.
+    let mut spans: Vec<(f64, f64)> = Vec::new();
     let ground_z = model.levels().first().map_or(0.0, |l| l.elevation) + 0.02;
     let mut lo = Point2::new(f64::INFINITY, f64::INFINITY);
     let mut hi = Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY);
     let solids = archisim_geom::solid::without_detail(|| {
-        archisim_geom::solid::without_plants(|| model_solids(model))
+        archisim_geom::solid::with_coarse_props(|| {
+            archisim_geom::solid::without_plants(|| model_solids(model))
+        })
     });
     // Objects with their own drawing for elevations, and plants, stand up
     // to the viewer as figures (below), not by their mesh.
@@ -236,7 +241,9 @@ pub fn axo_drawing(model: &Model, axo: &Axo, focus: DisciplineFocus) -> AxoDrawi
                 lo = Point2::new(lo.x.min(p.x), lo.y.min(p.y));
                 hi = Point2::new(hi.x.max(p.x), hi.y.max(p.y));
             }
-            let depth = (dot(t[0], f.toward) + dot(t[1], f.toward) + dot(t[2], f.toward)) / 3.0;
+            let ds = t.map(|p| dot(p, f.toward));
+            let depth = (ds[0] + ds[1] + ds[2]) / 3.0;
+            spans.push((ds[0].min(ds[1]).min(ds[2]), ds[0].max(ds[1]).max(ds[2])));
             faces.push(Face {
                 pts,
                 depth,
@@ -267,6 +274,7 @@ pub fn axo_drawing(model: &Model, axo: &Axo, focus: DisciplineFocus) -> AxoDrawi
             }
             let middle = [foot[0], foot[1], foot[2] + shown.height / 2.0];
             let base = f.project(foot);
+            spans.push((f64::NAN, f64::NAN));
             faces.push(Face {
                 pts: [base, base, base],
                 depth: dot(middle, f.toward),
@@ -346,6 +354,7 @@ pub fn axo_drawing(model: &Model, axo: &Axo, focus: DisciplineFocus) -> AxoDrawi
         }
         let middle = [foot[0], foot[1], foot[2] + top / 2.0];
         let base = f.project(foot);
+        spans.push((f64::NAN, f64::NAN));
         faces.push(Face {
             pts: [base, base, base],
             depth: dot(middle, f.toward),
@@ -360,6 +369,8 @@ pub fn axo_drawing(model: &Model, axo: &Axo, focus: DisciplineFocus) -> AxoDrawi
         lo = Point2::new(0.0, 0.0);
         hi = Point2::new(5.0, 5.0);
     }
+    let faces = drop_hidden(faces, &spans, lo, hi);
+    let mut faces = faces;
     faces.sort_by(|a, b| a.depth.total_cmp(&b.depth));
     // What lies on the ground goes first, so shadows fall on it and under
     // what stands on it.
@@ -374,6 +385,76 @@ pub fn axo_drawing(model: &Model, axo: &Axo, focus: DisciplineFocus) -> AxoDrawi
         ground,
         shadow_rgb: [40, 40, 46],
     }
+}
+
+/// Spacing of the points of the picture that decide what is hidden (m):
+/// at least this, or as many as [`HIDING_POINTS`] over the picture.
+const HIDING_STEP: f64 = 0.02;
+const HIDING_POINTS: f64 = 6.0e6;
+
+/// The faces less those wholly behind opaque faces (every point of the
+/// picture round them is covered by a face nearer than their nearest
+/// point): the furniture behind the walls and floors of a building, which
+/// a vector picture would otherwise carry triangle by triangle.
+fn drop_hidden(faces: Vec<Face>, spans: &[(f64, f64)], lo: Point2, hi: Point2) -> Vec<Face> {
+    let (w, h) = (hi.x - lo.x, hi.y - lo.y);
+    if !(w > 0.0 && h > 0.0) || faces.len() != spans.len() || faces.len() < 2000 {
+        return faces;
+    }
+    let step = HIDING_STEP.max((w * h / HIDING_POINTS).sqrt());
+    let nx = (w / step).ceil() as usize + 1;
+    let ny = (h / step).ceil() as usize + 1;
+    // The nearest of the farthest points of the faces over each point.
+    let mut front = vec![f64::NEG_INFINITY; nx * ny];
+    let cell = |v: f64, from: f64, n: usize| ((v - from) / step).clamp(0.0, (n - 1) as f64);
+    for (face, &(far, _)) in faces.iter().zip(spans) {
+        if far.is_nan() {
+            continue;
+        }
+        let [a, b, c] = face.pts;
+        let area = (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+        if area.abs() < 1e-12 {
+            continue;
+        }
+        let s = area.signum();
+        let x0 = cell(a.x.min(b.x).min(c.x), lo.x, nx).ceil() as usize;
+        let x1 = cell(a.x.max(b.x).max(c.x), lo.x, nx).floor() as usize;
+        let y0 = cell(a.y.min(b.y).min(c.y), lo.y, ny).ceil() as usize;
+        let y1 = cell(a.y.max(b.y).max(c.y), lo.y, ny).floor() as usize;
+        let side = |p: Point2, q: Point2, r: Point2| {
+            ((q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x)) * s
+        };
+        for j in y0..=y1.max(y0) {
+            for i in x0..=x1.max(x0) {
+                if i > x1 || j > y1 {
+                    continue;
+                }
+                let p = Point2::new(lo.x + i as f64 * step, lo.y + j as f64 * step);
+                if side(a, b, p) >= 0.0 && side(b, c, p) >= 0.0 && side(c, a, p) >= 0.0 {
+                    let v = &mut front[j * nx + i];
+                    *v = v.max(far);
+                }
+            }
+        }
+    }
+    let margin = 2.0 * step;
+    faces
+        .into_iter()
+        .zip(spans)
+        .filter(|(face, &(_, near))| {
+            if near.is_nan() {
+                return true;
+            }
+            let [a, b, c] = face.pts;
+            let i0 = cell(a.x.min(b.x).min(c.x) - margin, lo.x, nx).floor() as usize;
+            let i1 = cell(a.x.max(b.x).max(c.x) + margin, lo.x, nx).ceil() as usize;
+            let j0 = cell(a.y.min(b.y).min(c.y) - margin, lo.y, ny).floor() as usize;
+            let j1 = cell(a.y.max(b.y).max(c.y) + margin, lo.y, ny).ceil() as usize;
+            let limit = near + 0.005;
+            !(j0..=j1).all(|j| (i0..=i1).all(|i| front[j * nx + i] > limit))
+        })
+        .map(|(face, _)| face)
+        .collect()
 }
 
 /// The part of the picture to show whole at a scale, with some air.

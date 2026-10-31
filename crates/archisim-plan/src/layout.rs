@@ -117,8 +117,17 @@ pub fn add_presentation_sheet(
         })?);
     }
     let axo = Axo::default();
-    if let Some(scale) = fitting_scale(axo_area, |s| Some(crate::axo::axo_extent(m, &axo, s))) {
-        let crop = crate::axo::axo_extent(m, &axo, scale);
+    // Each drawing made once, its extent at each scale tried from it.
+    let picture = crate::axo::axo_drawing(m, &axo, Default::default());
+    let axo_extent = |s: f64| {
+        let k = 5.0 * s / 1000.0;
+        (
+            picture.lo - Point2::new(k, k),
+            picture.hi + Point2::new(k, k),
+        )
+    };
+    if let Some(scale) = fitting_scale(axo_area, |s| Some(axo_extent(s))) {
+        let crop = axo_extent(scale);
         views.push(m.add_viewport(NewViewport {
             sheet,
             level,
@@ -138,9 +147,12 @@ pub fn add_presentation_sheet(
         .or(sections.first())
         .map(|(id, _)| *id);
     if let Some(id) = section {
-        if let Some(scale) = fitting_scale(section_area, |s| crate::sheet::section_extent(m, id, s))
-        {
-            let crop = crate::sheet::section_extent(m, id, scale);
+        let drawing = m
+            .section(id)
+            .map(|sec| crate::section::section_drawing(m, sec));
+        let extent = |s: f64| drawing.as_ref().map(|d| crate::sheet::drawing_extent(d, s));
+        if let Some(scale) = fitting_scale(section_area, extent) {
+            let crop = extent(scale);
             views.push(m.add_viewport(NewViewport {
                 sheet,
                 level,

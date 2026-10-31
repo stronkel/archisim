@@ -399,18 +399,17 @@ impl Exporter<'_> {
     /// A body of triangles (model space; heights from the storey).
     pub(crate) fn triangulated_shape(&mut self, tris: &[[[f64; 3]; 3]], storey_z: f64) -> Ref {
         let mut pts: Vec<String> = Vec::new();
+        let mut welded = std::collections::HashMap::new();
         let mut faces: Vec<String> = Vec::new();
         for t in tris {
-            let base = pts.len();
-            for p in t {
-                pts.push(format!(
-                    "({},{},{})",
-                    real(p[0]),
-                    real(p[1]),
-                    real(p[2] - storey_z)
-                ));
-            }
-            faces.push(format!("({},{},{})", base + 1, base + 2, base + 3));
+            let f = t.map(|p| {
+                crate::step::weld(
+                    &mut pts,
+                    &mut welded,
+                    format!("({},{},{})", real(p[0]), real(p[1]), real(p[2] - storey_z)),
+                )
+            });
+            faces.push(format!("({},{},{})", f[0], f[1], f[2]));
         }
         let list3 = self
             .w
@@ -432,18 +431,17 @@ impl Exporter<'_> {
         let mut items = Vec::new();
         for (material, tris) in pieces {
             let mut pts: Vec<String> = Vec::new();
+            let mut welded = std::collections::HashMap::new();
             let mut faces: Vec<String> = Vec::new();
             for t in tris {
-                let base = pts.len();
-                for p in t {
-                    pts.push(format!(
-                        "({},{},{})",
-                        real(p[0]),
-                        real(p[1]),
-                        real(p[2] - storey_z)
-                    ));
-                }
-                faces.push(format!("({},{},{})", base + 1, base + 2, base + 3));
+                let f = t.map(|p| {
+                    crate::step::weld(
+                        &mut pts,
+                        &mut welded,
+                        format!("({},{},{})", real(p[0]), real(p[1]), real(p[2] - storey_z)),
+                    )
+                });
+                faces.push(format!("({},{},{})", f[0], f[1], f[2]));
             }
             if faces.is_empty() {
                 continue;

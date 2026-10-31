@@ -476,8 +476,30 @@ pub fn section_drawing(model: &Model, sec: &SectionLine) -> SectionDrawing {
     let mut faces: Vec<(f64, Face)> = Vec::new();
     // The pieces of the façades are a 3D matter: the elevations show the
     // plain finish (E9).
+    // Objects wholly behind the line or beyond the depth seen are not
+    // made at all: in a section through a building full of furniture
+    // they are most of its triangles.
+    let unseen: std::collections::HashSet<archisim_core::ObjectId> = model
+        .objects()
+        .filter(|ob| {
+            let outline = model.object_outline(ob.id);
+            if outline.is_empty() {
+                return false;
+            }
+            let ds = outline.iter().map(|q| (*q - o).dot(look));
+            let (near, far) = ds.fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), v| {
+                (a.min(v), b.max(v))
+            });
+            far < plane - 0.01 || near > sec.depth + 0.01
+        })
+        .map(|ob| ob.id)
+        .collect();
     let all = archisim_geom::solid::without_detail(|| {
-        archisim_geom::solid::without_plants(|| model_solids(model))
+        archisim_geom::solid::with_coarse_props(|| {
+            archisim_geom::solid::without_plants(|| {
+                archisim_geom::solid::model_solids_except(model, &unseen)
+            })
+        })
     });
     // Objects with drawings of their own for elevations: those (below).
     let customs: std::collections::HashSet<archisim_core::ObjectId> = model
@@ -885,8 +907,18 @@ pub fn section_drawing(model: &Model, sec: &SectionLine) -> SectionDrawing {
     // The bars of the elements cut (E17).
     d.rebar = rebar_detail(model, sec, &d.cuts);
     mark_hidden(&mut faces, lo, hi);
-    faces.sort_by(|a, b| b.0.total_cmp(&a.0));
-    d.faces = faces.into_iter().map(|(_, f)| f).collect();
+    // Far to near. The faces are large: sort their order, not them.
+    let mut order: Vec<(f64, u32)> = faces
+        .iter()
+        .enumerate()
+        .map(|(i, (k, _))| (*k, i as u32))
+        .collect();
+    order.sort_by(|a, b| b.0.total_cmp(&a.0).then(a.1.cmp(&b.1)));
+    let mut slots: Vec<Option<Face>> = faces.into_iter().map(|(_, f)| Some(f)).collect();
+    d.faces = order
+        .into_iter()
+        .filter_map(|(_, i)| slots[i as usize].take())
+        .collect();
     d.levels = model
         .levels()
         .iter()
@@ -1458,19 +1490,50 @@ pub fn draw_markers(s: &mut String, model: &Model, k: f64) {
 /// few metres outside it, looking at it, wide and deep enough to see it
 /// whole. Names that are taken are skipped.
 pub fn elevations_around(model: &Model) -> Vec<NewSection> {
+    // The building, not the plot: its walls, floors, roofs, curtain
+    // walls, columns and stairs (not the furniture, the plants, the
+    // neighbours' masses or the street, nor their 3D).
     let mut lo = Point2::new(f64::INFINITY, f64::INFINITY);
     let mut hi = Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY);
-    // The building, not the plot.
-    let solids = archisim_geom::solid::with_plant_detail(archisim_core::flora::Lod::Medium, || {
-        archisim_geom::solid::without_detail(|| model_solids(model))
-    })
-    .into_iter()
-    .filter(|s| !matches!(s.owner, archisim_geom::solid::SolidOwner::Terrain(_)));
-    for solid in solids {
-        for t in &solid.triangles {
-            for p in t {
-                lo = Point2::new(lo.x.min(p[0]), lo.y.min(p[1]));
-                hi = Point2::new(hi.x.max(p[0]), hi.y.max(p[1]));
+    let mut grow = |q: Point2, r: f64| {
+        lo = Point2::new(lo.x.min(q.x - r), lo.y.min(q.y - r));
+        hi = Point2::new(hi.x.max(q.x + r), hi.y.max(q.y + r));
+    };
+    for w in model.walls() {
+        let t = model.wall_type(w.wall_type).map_or(0.0, |t| t.thickness());
+        grow(w.start, t);
+        grow(w.end, t);
+    }
+    for s in model.slabs() {
+        s.outline.iter().for_each(|q| grow(*q, 0.0));
+    }
+    for r in model.roofs() {
+        r.outline.iter().for_each(|q| grow(*q, r.overhang));
+    }
+    for c in model.curtain_walls() {
+        grow(c.start, 0.1);
+        grow(c.end, 0.1);
+    }
+    for c in model.columns() {
+        grow(c.position, 0.3);
+    }
+    for s in model.stairs() {
+        s.path.iter().for_each(|q| grow(*q, s.width));
+    }
+    if !lo.x.is_finite() {
+        // Nothing built yet: what there is.
+        let solids =
+            archisim_geom::solid::with_plant_detail(archisim_core::flora::Lod::Medium, || {
+                archisim_geom::solid::without_detail(|| model_solids(model))
+            })
+            .into_iter()
+            .filter(|s| !matches!(s.owner, archisim_geom::solid::SolidOwner::Terrain(_)));
+        for solid in solids {
+            for t in &solid.triangles {
+                for p in t {
+                    lo = Point2::new(lo.x.min(p[0]), lo.y.min(p[1]));
+                    hi = Point2::new(hi.x.max(p[0]), hi.y.max(p[1]));
+                }
             }
         }
     }
@@ -1509,6 +1572,23 @@ pub fn elevations_around(model: &Model) -> Vec<NewSection> {
             w + 2.0 * gap,
         ),
     ];
+    // Named by where they face on the compass, not on the sheet: with the
+    // true north turned, the elevation seen from the plan's top may be the
+    // east one.
+    let names = ["Norte", "Este", "Sur", "Oeste"];
+    let north = model.true_north();
+    let all = all.map(|(name, start, end, depth)| {
+        // The side it is seen from, in plan, as an angle clockwise from up.
+        let from = match name {
+            "Norte" => 0.0,
+            "Este" => 90.0,
+            "Sur" => 180.0,
+            _ => 270.0,
+        };
+        let bearing = (from - north.to_degrees()).rem_euclid(360.0);
+        let k = ((bearing / 90.0).round() as usize) % 4;
+        (names[k], start, end, depth)
+    });
     all.into_iter()
         .filter(|(name, ..)| {
             !model

@@ -23,18 +23,17 @@ impl Exporter<'_> {
             return None;
         }
         let mut pts: Vec<String> = Vec::new();
+        let mut welded = std::collections::HashMap::new();
         let mut faces: Vec<String> = Vec::new();
         for tri in triangles {
-            let base = pts.len();
-            for p in tri {
-                pts.push(format!(
-                    "({},{},{})",
-                    real(p[0]),
-                    real(p[1]),
-                    real(p[2] - z0)
-                ));
-            }
-            faces.push(format!("({},{},{})", base + 1, base + 2, base + 3));
+            let f = tri.map(|p| {
+                crate::step::weld(
+                    &mut pts,
+                    &mut welded,
+                    format!("({},{},{})", real(p[0]), real(p[1]), real(p[2] - z0)),
+                )
+            });
+            faces.push(format!("({},{},{})", f[0], f[1], f[2]));
         }
         let list3 = self
             .w

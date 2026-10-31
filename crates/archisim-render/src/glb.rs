@@ -11,7 +11,7 @@
 use std::collections::BTreeMap;
 
 use archisim_core::{MaterialId, Model};
-use archisim_geom::solid::{model_solids, painted_material, solid_vertex_colors, SolidOwner};
+use archisim_geom::solid::{painted_material, solid_vertex_colors, SolidOwner};
 
 use crate::textures;
 
@@ -122,8 +122,50 @@ pub fn project_glb(model: &Model) -> Vec<u8> {
     // Element by element, in the order the solids come.
     let mut nodes: Vec<(String, BTreeMap<Look, Part>)> = Vec::new();
     let mut index: BTreeMap<(String, u64), usize> = BTreeMap::new();
+    // The furniture ArchiSim makes: each model once, placed by every
+    // object of it (as the 3D view does): a building with hundreds of
+    // chairs carries one chair.
+    let mut skip = std::collections::HashSet::new();
+    let mut shared: Vec<(String, BTreeMap<Look, Part>)> = Vec::new();
+    let mut shared_index: BTreeMap<(usize, Vec<MaterialId>), usize> = BTreeMap::new();
+    let mut placed: Vec<(String, usize, [f32; 3], f64)> = Vec::new();
+    for o in model.objects() {
+        let Some(inst) = archisim_geom::solid::object_instance(model, o.id) else {
+            continue;
+        };
+        skip.insert(o.id);
+        let key = (
+            std::sync::Arc::as_ptr(&inst.mesh) as usize,
+            inst.parts.iter().map(|p| p.0).collect::<Vec<_>>(),
+        );
+        let mesh = *shared_index.entry(key).or_insert_with(|| {
+            let name = model
+                .object_type(o.object_type)
+                .map_or_else(|| "Objeto".to_string(), |t| t.name.clone());
+            let mut parts: BTreeMap<Look, Part> = BTreeMap::new();
+            for (material, tris) in &inst.parts {
+                let solid = archisim_geom::solid::Solid {
+                    owner: SolidOwner::Object(o.id),
+                    material: *material,
+                    triangles: tris
+                        .iter()
+                        .map(|t| t.map(|i| inst.mesh.positions[i as usize].map(|c| c as f64)))
+                        .collect(),
+                };
+                add_triangles(model, &solid, false, &mut parts);
+            }
+            shared.push((name, parts));
+            shared.len() - 1
+        });
+        placed.push((
+            element_name(model, SolidOwner::Object(o.id)),
+            mesh,
+            gl(inst.origin),
+            inst.rotation,
+        ));
+    }
     // The painted zones of the faces too, in their own material.
-    let solids = model_solids(model);
+    let solids = archisim_geom::solid::model_solids_except(model, &skip);
     let zones = archisim_geom::solid::face_zone_solids(model, &solids);
     let first_zone = solids.len();
     for (i, s) in solids.into_iter().chain(zones).enumerate() {
@@ -137,13 +179,26 @@ pub fn project_glb(model: &Model) -> Vec<u8> {
             nodes.push((name, BTreeMap::new()));
             nodes.len() - 1
         });
-        let corners = solid_vertex_colors(model, &s);
+        add_triangles(model, &s, zone, &mut nodes[at].1);
+    }
+    write(model, &nodes, &shared, &placed)
+}
+
+/// Adds the triangles of a solid to the parts of a mesh, by look.
+fn add_triangles(
+    model: &Model,
+    s: &archisim_geom::solid::Solid,
+    zone: bool,
+    parts: &mut BTreeMap<Look, Part>,
+) {
+    {
+        let corners = solid_vertex_colors(model, s);
         let is_object = matches!(s.owner, SolidOwner::Object(_));
         for (i, t) in s.triangles.iter().enumerate() {
             let material = if zone {
                 s.material
             } else {
-                painted_material(model, &s, t).unwrap_or(s.material)
+                painted_material(model, s, t).unwrap_or(s.material)
             };
             let vc = corners.as_ref().and_then(|c| c.get(i));
             let look = Look {
@@ -162,7 +217,7 @@ pub fn project_glb(model: &Model) -> Vec<u8> {
                 continue;
             }
             let n = n.map(|v| v / len);
-            let part = nodes[at].1.entry(look).or_default();
+            let part = parts.entry(look).or_default();
             // The pieces of a façade are each a brick: no brick texture.
             let texture = if matches!(s.owner, SolidOwner::Facade(_)) && material == s.material {
                 None
@@ -186,11 +241,17 @@ pub fn project_glb(model: &Model) -> Vec<u8> {
             }
         }
     }
-    write(model, &nodes)
 }
 
-/// Writes the nodes as a `.glb`.
-fn write(model: &Model, nodes: &[(String, BTreeMap<Look, Part>)]) -> Vec<u8> {
+/// Writes the nodes as a `.glb`: the elements each with its own mesh, and
+/// the shared meshes placed (name, mesh, where, turned about the
+/// vertical).
+fn write(
+    model: &Model,
+    nodes: &[(String, BTreeMap<Look, Part>)],
+    shared: &[(String, BTreeMap<Look, Part>)],
+    placed: &[(String, usize, [f32; 3], f64)],
+) -> Vec<u8> {
     use serde_json::json;
     let mut bin: Vec<u8> = Vec::new();
     let pad = |b: &mut Vec<u8>| {
@@ -242,7 +303,10 @@ fn write(model: &Model, nodes: &[(String, BTreeMap<Look, Part>)]) -> Vec<u8> {
         accessors.push(a);
         accessors.len() - 1
     };
-    for (name, parts) in nodes {
+    // Where each shared mesh went (None: empty).
+    let mut shared_mesh: Vec<Option<usize>> = Vec::new();
+    for (k, (name, parts)) in nodes.iter().chain(shared).enumerate() {
+        let is_shared = k >= nodes.len();
         let mut primitives = Vec::new();
         for (look, part) in parts {
             if part.pos.is_empty() {
@@ -317,10 +381,26 @@ fn write(model: &Model, nodes: &[(String, BTreeMap<Look, Part>)]) -> Vec<u8> {
             primitives.push(json!({"attributes": attrs, "indices": indices, "material": mat}));
         }
         if primitives.is_empty() {
+            if is_shared {
+                shared_mesh.push(None);
+            }
             continue;
         }
         meshes.push(json!({"name": name, "primitives": primitives}));
-        gl_nodes.push(json!({"name": name, "mesh": meshes.len() - 1}));
+        if is_shared {
+            shared_mesh.push(Some(meshes.len() - 1));
+        } else {
+            gl_nodes.push(json!({"name": name, "mesh": meshes.len() - 1}));
+        }
+    }
+    for (name, mesh, at, turn) in placed {
+        let Some(Some(mesh)) = shared_mesh.get(*mesh) else {
+            continue;
+        };
+        // A turn about our z is one about glTF's y.
+        let h = (*turn / 2.0) as f32;
+        gl_nodes.push(json!({"name": name, "mesh": mesh, "translation": at,
+            "rotation": [0.0, h.sin(), 0.0, h.cos()]}));
     }
     let scene_nodes: Vec<usize> = (0..gl_nodes.len()).collect();
     let mut doc = json!({

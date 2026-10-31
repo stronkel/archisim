@@ -179,6 +179,29 @@ pub fn measure_project(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     });
     let triangles: usize = solids.iter().map(|s| s.triangles.len()).sum();
     println!("  {:<52} {:>10}", "  triángulos", triangles);
+    // Who has them: the kinds of element, and the object types with most.
+    let mut by_kind: std::collections::BTreeMap<String, usize> = Default::default();
+    let mut by_type: std::collections::HashMap<String, usize> = Default::default();
+    for s in &solids {
+        let kind = format!("{:?}", s.owner);
+        let kind = kind.split('(').next().unwrap_or("").to_string();
+        *by_kind.entry(kind).or_default() += s.triangles.len();
+        if let archisim_geom::solid::SolidOwner::Object(o) = s.owner {
+            let name = flat
+                .object(o)
+                .and_then(|o| flat.object_type(o.object_type))
+                .map_or(String::new(), |t| t.name.clone());
+            *by_type.entry(name).or_default() += s.triangles.len();
+        }
+    }
+    for (k, n) in &by_kind {
+        println!("  {:<52} {:>10}", format!("    {k}"), n);
+    }
+    let mut types: Vec<_> = by_type.into_iter().collect();
+    types.sort_by_key(|t| std::cmp::Reverse(t.1));
+    for (k, n) in types.iter().take(8) {
+        println!("  {:<52} {:>10}", format!("      {k}"), n);
+    }
     let out = std::env::temp_dir().join("archisim-medir.archisim");
     timed("Guardar el proyecto (.archisim)", || {
         archisim_file::save(&m, &out)
@@ -202,6 +225,19 @@ pub fn measure_project(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     timed("Mediciones", || {
         archisim_plan::schedules::measurements(&flat)
     });
+    let axo = archisim_core::Axo::default();
+    let d = timed("Axonometría (vectorial, para los planos)", || {
+        archisim_plan::axo::axo_drawing(&flat, &axo, Default::default())
+    });
+    let crop = archisim_plan::axo::axo_extent(&flat, &axo, 200.0);
+    let svg = timed("  escribirla en SVG", || {
+        archisim_plan::axo::render_axo(&d, crop, 200.0)
+    });
+    println!(
+        "  {:<52} {:>10.1} MB",
+        "  tamaño del SVG",
+        svg.len() as f64 / 1e6
+    );
     measure_views(path)
 }
 

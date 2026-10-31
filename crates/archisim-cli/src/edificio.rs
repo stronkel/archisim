@@ -4,18 +4,23 @@
 //! what is missing ("archisim edificio").
 //!
 //! Five storeys over a brick podium on a plot of 38,5 × 12 m between two
-//! party walls, the street to the west. Ground floor: two tenancies on the
+//! party walls, the street to the south. Ground floor: two tenancies on the
 //! street, the entrance lane with herringbone pavers, toilets, the lift,
 //! the fernery under the lightwell with the stair, bicycle parking and
 //! storage cages. Levels 1 to 4: six one-bedroom flats round a concrete
 //! core (stair, lift and lightwell), with full-height black steel glazing
 //! and balconies with planters at both ends, exposed concrete ceilings,
-//! timber floors and exposed ducts. The roof: a garden to the west and a
-//! glazed winter deck with the laundry to the east.
+//! timber floors and exposed ducts. The roof: a garden on the street side
+//! and a glazed winter deck with the laundry on the lane side.
 //!
-//! Plan axes: x along the plot from the street (west) to the back lane
-//! (east), y across it from the south party wall; true north is +x.
+//! Plan axes: x along the plot from the street (on the plan's left) to the
+//! back lane, y across it from the party wall at the plan's bottom; true
+//! north is +x, so the street front is the south elevation. In the code,
+//! "west", "north"… are the plan's left, top…, as on the drawings.
 //! Heights: ground floor 3,40, the others 3,20.
+
+// Floors are numbered as on the drawings (level k of `lv`).
+#![allow(clippy::needless_range_loop)]
 
 use std::f64::consts::{FRAC_PI_2, PI};
 use std::path::Path;
@@ -1425,7 +1430,7 @@ fn ground_furniture(m: &mut Model, pb: LevelId) -> R {
         obj(m, pb, name, x, yy, 0.0)?;
     }
     let palm = object_type(m, "Palmito")?;
-    let fern = object_type(m, "Árbol tropical")?;
+    let fern = object_type(m, "Mirto")?;
     m.add_planting(archisim_core::NewPlanting {
         name: "Helechera".into(),
         level: pb,
@@ -1647,6 +1652,75 @@ fn services(m: &mut Model, lv: &[LevelId]) -> R {
                 slope: 0.0,
             })?;
         }
+        // Each flat's branch: from its door along the ceiling to the
+        // bathroom and on to the kitchen's sink (and F's washing machine).
+        let branches: [&[(f64, f64)]; 6] = [
+            &[
+                (16.35, 8.4),
+                (12.3, 8.4),
+                (12.3, 10.6),
+                (8.1, 10.6),
+                (8.1, 11.3),
+            ],
+            &[
+                (15.2, 4.75),
+                (11.9, 4.75),
+                (11.9, 6.8),
+                (7.6, 6.8),
+                (7.6, 7.4),
+            ],
+            &[
+                (15.2, 3.45),
+                (14.75, 3.45),
+                (14.75, 2.0),
+                (12.0, 2.0),
+                (12.0, 0.6),
+                (7.6, 0.6),
+            ],
+            &[
+                (25.05, 5.2),
+                (24.6, 5.2),
+                (24.6, 8.3),
+                (22.6, 8.3),
+                (22.6, 8.1),
+                (25.4, 8.1),
+                (25.4, 11.0),
+                (28.1, 11.0),
+            ],
+            &[
+                (26.4, 3.9),
+                (26.4, 6.3),
+                (27.0, 6.3),
+                (27.0, 4.2),
+                (32.4, 4.2),
+                (32.4, 7.0),
+            ],
+            &[
+                (24.9, 2.6),
+                (26.4, 2.6),
+                (26.4, 1.0),
+                (28.0, 1.0),
+                (28.0, 2.6),
+                (31.3, 2.6),
+                (31.3, 0.7),
+            ],
+        ];
+        for path in branches {
+            for (system, d, width) in [
+                (ServiceSystem::ColdWater, 0.0, 0.02),
+                (ServiceSystem::HotWater, 0.06, 0.016),
+            ] {
+                m.add_run(NewRun {
+                    level: l,
+                    system,
+                    path: path.iter().map(|(x, y)| p(*x + d, *y + d)).collect(),
+                    elevation: 2.55,
+                    width,
+                    height: width,
+                    slope: 0.0,
+                })?;
+            }
+        }
         // Downpipes from the balconies.
         for (x, y) in [(WEST_EDGE + 0.1, 4.25), (EAST_EDGE - 0.1, 7.8)] {
             let d = device(
@@ -1682,6 +1756,49 @@ fn services(m: &mut Model, lv: &[LevelId]) -> R {
         p(16.6, 2.0),
         0.0,
     )?;
+    // Water to the toilets and to the café's kitchen; on the roof, to the
+    // laundry.
+    for (system, d, width) in [
+        (ServiceSystem::ColdWater, 0.0, 0.025),
+        (ServiceSystem::HotWater, 0.06, 0.02),
+    ] {
+        for (level, path) in [
+            (
+                pb,
+                vec![
+                    p(16.5, 2.4),
+                    p(16.5, 3.4),
+                    p(13.6, 3.4),
+                    p(13.6, 1.0),
+                    p(12.4, 1.0),
+                ],
+            ),
+            (
+                pb,
+                vec![p(16.5, 3.4), p(16.5, 5.8), p(2.0, 5.8), p(2.0, 11.2)],
+            ),
+            (
+                lv[5],
+                vec![
+                    p(16.5, 1.5),
+                    p(16.5, 2.6),
+                    p(31.0, 2.6),
+                    p(31.0, 11.0),
+                    p(34.6, 11.0),
+                ],
+            ),
+        ] {
+            m.add_run(NewRun {
+                level,
+                system,
+                path: path.into_iter().map(|q| p(q.x + d, q.y + d)).collect(),
+                elevation: 2.6,
+                width,
+                height: width,
+                slope: 0.0,
+            })?;
+        }
+    }
     Ok(())
 }
 
@@ -1700,7 +1817,6 @@ fn room(
     floor: &str,
     ceiling: &str,
 ) -> R {
-    use archisim_core::{FloorFill, HatchPattern, NewRoom};
     use archisim_geom::{room_outline, signed_area, Contour};
     let [x0, y0, x1, y1] = area;
     let label = p((x0 + x1) / 2.0, (y0 + y1) / 2.0);
@@ -1713,6 +1829,26 @@ fn room(
         .filter(|o| signed_area(o).abs() < box_area * 1.25);
     let bounded = found.is_some();
     let outline = found.unwrap_or(given);
+    room_with(
+        m, level, number, name, usage, outline, label, bounded, floor, ceiling,
+    )
+}
+
+/// A room with its outline given.
+#[allow(clippy::too_many_arguments)]
+fn room_with(
+    m: &mut Model,
+    level: LevelId,
+    number: &str,
+    name: &str,
+    usage: &str,
+    outline: Vec<Point2>,
+    label: Point2,
+    bounded: bool,
+    floor: &str,
+    ceiling: &str,
+) -> R {
+    use archisim_core::{FloorFill, HatchPattern, NewRoom};
     let id = m.add_room(NewRoom {
         level,
         number: number.into(),
@@ -1976,13 +2112,26 @@ fn rooms(m: &mut Model, lv: &[LevelId]) -> R {
         for (n, name, usage, a, floor) in flats {
             room(m, l, &r(n), name, usage, a, floor, exposed)?;
         }
-        room(
+        // The common corridor with the stair and the landing to A: open
+        // to each other, one room (the stair takes you down from it).
+        room_with(
             m,
             l,
             &r("Z1"),
+            "Pasillo común y escalera",
             "Pasillo común",
-            "Pasillo común",
-            [15.8, 3.3, 25.8, 4.5],
+            vec![
+                p(15.8, 3.3),
+                p(25.8, 3.3),
+                p(25.8, 4.5),
+                p(21.6, 4.5),
+                p(21.6, 7.1),
+                p(16.9, 7.1),
+                p(16.9, 7.8),
+                p(15.8, 7.8),
+            ],
+            p(23.6, 3.9),
+            false,
             concrete,
             exposed,
         )?;
@@ -2067,13 +2216,13 @@ fn site(m: &mut Model, pb: LevelId) -> R {
     let concept = by(m, "concept").ok_or(ModelError::EmptyType)?;
     for (name, r, h, floors) in [
         (
-            "Colindante norte",
+            "Colindante oeste",
             rect(0.0, PLOT.1, 30.0, 24.0),
             7.0,
             Some(3.5),
         ),
         (
-            "Colindante sur",
+            "Colindante este",
             rect(0.0, -12.0, 38.5, 0.0),
             10.0,
             Some(3.3),
@@ -2231,7 +2380,7 @@ fn documentation(m: &mut Model, lv: &[LevelId]) -> R {
     let find = |m: &Model, t: &str| m.sections().find(|s| s.title() == t).map(|s| s.id);
     for (number, name, titles) in [
         ("A-05", "Secciones", ["Sección A", "Sección B"]),
-        ("A-06", "Alzados", ["Alzado Oeste", "Alzado Este"]),
+        ("A-06", "Alzados", ["Alzado Sur", "Alzado Norte"]),
     ] {
         let sheet = m.add_sheet(NewSheet {
             number: number.into(),

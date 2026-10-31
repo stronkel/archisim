@@ -108,6 +108,22 @@ pub fn boolean(value: bool) -> &'static str {
     }
 }
 
+/// The number (from 1) of a point in a point list, adding it if it is
+/// not there yet: the triangles of a mesh share their corners instead of
+/// writing each corner once per triangle.
+pub(crate) fn weld(
+    pts: &mut Vec<String>,
+    index: &mut std::collections::HashMap<String, usize>,
+    point: String,
+) -> usize {
+    if let Some(&n) = index.get(&point) {
+        return n;
+    }
+    pts.push(point.clone());
+    index.insert(point, pts.len());
+    pts.len()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
