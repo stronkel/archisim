@@ -8,8 +8,8 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use archisim_core::{
-    Hand, LevelId, Model, OpeningKind, OpeningTypeId, Point2, ReferenceLine, SlabFunction,
-    SlabTypeId, WallFunction, WallSide, WallTypeId,
+    Hand, LevelId, Model, OpeningKind, OpeningTypeId, Point2, ReferenceLine, SectionId,
+    SlabFunction, SlabTypeId, WallFunction, WallSide, WallTypeId,
 };
 use archisim_geom::{opening_geometry, room_outline, Contour};
 use eframe::egui::{
@@ -367,6 +367,9 @@ pub struct ArchiSimApp {
     pub section_hover: Option<Point2>,
     /// Objects, doors or windows being moved in a section or elevation.
     pub section_drag: Option<section_ui::SectionDrag>,
+    /// Drawing the rectangle of a detail in a section (E17): the section
+    /// and its first corner.
+    pub detail_pick: Option<(SectionId, Option<Point2>)>,
     pub room_settings: crate::editor::RoomSettings,
     pub roof_settings: crate::editor::RoofSettings,
     pub roof_tool: SlabTool,
@@ -759,6 +762,7 @@ impl ArchiSimApp {
             shared_model: None,
             section_hover: None,
             section_drag: None,
+            detail_pick: None,
             room_settings: Default::default(),
             roof_settings,
             stair_settings,

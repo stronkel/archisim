@@ -920,6 +920,9 @@ pub(crate) struct Underlay {
     pub offset: Xy,
     #[serde(default, skip_serializing_if = "is_zero")]
     pub rotation: f64,
+    /// Only this rectangle of the source (version 52): `[[x, y], [x, y]]`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub crop: Option<[Xy; 2]>,
 }
 
 /// The underlays of a level's plan (version 48).
@@ -948,6 +951,7 @@ impl Underlay {
             opacity: u.opacity,
             offset: xy(u.offset),
             rotation: u.rotation,
+            crop: u.crop.map(|[a, b]| [xy(a), xy(b)]),
         }
     }
 
@@ -969,6 +973,7 @@ impl Underlay {
             opacity: self.opacity,
             offset: pt(self.offset),
             rotation: self.rotation,
+            crop: self.crop.map(|[a, b]| [pt(a), pt(b)]),
         })
     }
 }

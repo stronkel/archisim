@@ -48,7 +48,7 @@ use serde_json::Value;
 /// Value of the `format` field.
 pub const FORMAT: &str = "ArchiSim";
 /// File layout written by this version of ArchiSim.
-pub const CURRENT_VERSION: u32 = 51;
+pub const CURRENT_VERSION: u32 = 52;
 /// File name extension, without the dot.
 pub const EXTENSION: &str = "archisim";
 /// Length unit of every number in the file.
@@ -322,8 +322,10 @@ pub fn migrate(value: Value, from: u64) -> Result<Value, FileError> {
             // (`reinforcements`); older files have none. 50 → 51: more
             // kinds of device (the electrical mechanisms, the board, risers
             // and downpipes) and the circuits of mechanisms
-            // (`device_circuits`); older files have neither.
-            9..=50 => {
+            // (`device_circuits`); older files have neither. 51 → 52:
+            // underlays may show only a rectangle of their source (`crop`);
+            // older ones show it whole.
+            9..=51 => {
                 let mut v = if version == 32 {
                     legacy_dormers(value)
                 } else {
@@ -1564,6 +1566,12 @@ mod tests {
             .unwrap();
             if let Some(sheet) = m.sheets().first().map(|s| s.id) {
                 m.add_drafting_viewport(sheet, dv, Point2::new(0.1, 0.1), None)
+                    .unwrap();
+            }
+            // A detail over a piece of a section (version 52).
+            let sec = m.sections().next().map(|s| s.id);
+            if let Some(sec) = sec {
+                m.add_section_detail(sec, Point2::new(0.5, 2.0), Point2::new(1.5, 3.2), 10.0)
                     .unwrap();
             }
         }

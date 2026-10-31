@@ -43,6 +43,12 @@ pub struct SectionDrawing {
     heights: Vec<(Vec<Point2>, f64)>,
     /// Grid lines it crosses: distance along its line and name.
     grids: Vec<(f64, String)>,
+    /// Lines drawn over the cut at a fine scale: the bed joints of the
+    /// brick cut (E17).
+    fine_lines: Vec<(Point2, Point2)>,
+    /// The bars of the elements cut, at a fine scale (E17): the element,
+    /// the bars cut (centre and radius) and those seen along the cut.
+    rebar: Vec<RebarCut>,
     pub lo: Point2,
     pub hi: Point2,
     pub title: String,
@@ -76,6 +82,9 @@ struct Face {
     far: f64,
     /// Entirely behind opaque faces: not drawn (see [`mark_hidden`]).
     hidden: bool,
+    /// A detail drawn only at a fine scale (the joints of a façade's
+    /// pieces, E17).
+    fine: bool,
 }
 
 /// A plant, a person or a car seen from the side in a section or
@@ -659,6 +668,7 @@ pub fn section_drawing(model: &Model, sec: &SectionLine) -> SectionDrawing {
                         near: span.0,
                         far: if glass { f64::NAN } else { span.1 },
                         hidden: false,
+                        fine: false,
                     },
                 ));
                 // Each edge is painted on its own, a little ahead of where
@@ -678,6 +688,7 @@ pub fn section_drawing(model: &Model, sec: &SectionLine) -> SectionDrawing {
                             near: at,
                             far: f64::NAN,
                             hidden: false,
+                            fine: false,
                         },
                     ));
                 }
@@ -743,6 +754,7 @@ pub fn section_drawing(model: &Model, sec: &SectionLine) -> SectionDrawing {
                 near: f64::NEG_INFINITY,
                 far: f64::NAN,
                 hidden: false,
+                fine: false,
             },
         ));
     }
@@ -788,6 +800,7 @@ pub fn section_drawing(model: &Model, sec: &SectionLine) -> SectionDrawing {
                 near: f64::NEG_INFINITY,
                 far: f64::NAN,
                 hidden: false,
+                fine: false,
             },
         ));
     }
@@ -833,6 +846,7 @@ pub fn section_drawing(model: &Model, sec: &SectionLine) -> SectionDrawing {
                 near: f64::NEG_INFINITY,
                 far: f64::NAN,
                 hidden: false,
+                fine: false,
             },
         ));
     }
@@ -860,10 +874,16 @@ pub fn section_drawing(model: &Model, sec: &SectionLine) -> SectionDrawing {
                     near: da.min(db) - EDGE_LEAD,
                     far: f64::NAN,
                     hidden: false,
+                    fine: false,
                 },
             ));
         }
     }
+    // The joints of the façades seen beyond the cut and the bed joints of
+    // the brick cut (E17).
+    facade_detail(model, sec, &mut faces, &mut d.fine_lines, &d.cuts);
+    // The bars of the elements cut (E17).
+    d.rebar = rebar_detail(model, sec, &d.cuts);
     mark_hidden(&mut faces, lo, hi);
     faces.sort_by(|a, b| b.0.total_cmp(&a.0));
     d.faces = faces.into_iter().map(|(_, f)| f).collect();
@@ -895,6 +915,194 @@ pub fn section_drawing(model: &Model, sec: &SectionLine) -> SectionDrawing {
         .filter(|(x, _)| *x >= d.lo.x - 1e-6 && *x <= d.hi.x + 1e-6)
         .collect();
     d
+}
+
+/// The finest scale (denominator) at which a section draws the joints of
+/// the façades and the bars of the reinforcement (E17).
+/// The bars of an element in a section: the element, the bars cut
+/// (centre and radius) and those seen along the cut (ends and radius).
+type RebarCut = (SolidOwner, Vec<(Point2, f64)>, Vec<(Point2, Point2, f64)>);
+
+pub const FINE_SCALE: f64 = 50.0;
+
+/// The pieces of the façades a section sees, as fine edges at the depth of
+/// each piece, and the bed joints of the brick it cuts.
+fn facade_detail(
+    model: &Model,
+    sec: &SectionLine,
+    faces: &mut Vec<(f64, Face)>,
+    fine_lines: &mut Vec<(Point2, Point2)>,
+    cuts: &[CutPiece],
+) {
+    let (Some(u), Some(look)) = (sec.along(), sec.looks()) else {
+        return;
+    };
+    let o = sec.start;
+    let plane = 1e-5;
+    let to2 = |p: P3| Point2::new(Point2::new(p[0] - o.x, p[1] - o.y).dot(u), p[2]);
+    let depth_of = |p: P3| Point2::new(p[0] - o.x, p[1] - o.y).dot(look);
+    let walls: Vec<_> = model
+        .walls()
+        .filter(|w| model.wall_facade(w.id).is_some())
+        .collect();
+    if walls.is_empty() {
+        return;
+    }
+    let idx = archisim_geom::WallIndex::new(model);
+    for w in walls {
+        let Some(dir) = (w.end - w.start).normalized() else {
+            continue;
+        };
+        let n = dir.perp_left();
+        let facing = n.dot(look) < -0.3;
+        let cut_here = cuts
+            .iter()
+            .any(|c| c.3 == SolidOwner::Wall(w.id) || c.3 == SolidOwner::Facade(w.id));
+        if !facing && !cut_here {
+            continue;
+        }
+        let solids = archisim_geom::solid::wall_solids_in(&idx, w.id);
+        let Some(layout) = archisim_geom::facade::facade_layout(&idx, w.id, &solids) else {
+            continue;
+        };
+        if facing {
+            for p in &layout.pieces {
+                let pts: Vec<P3> = p
+                    .outline
+                    .iter()
+                    .map(|q| layout.point(q.x, q.y, p.out))
+                    .collect();
+                let ds: Vec<f64> = pts.iter().map(|q| depth_of(*q)).collect();
+                let near = ds.iter().copied().fold(f64::INFINITY, f64::min);
+                if near < plane || ds.iter().any(|v| *v > sec.depth) {
+                    continue;
+                }
+                let k = pts.len();
+                let edges: Vec<(Point2, Point2)> = (0..k)
+                    .map(|i| (to2(pts[i]), to2(pts[(i + 1) % k])))
+                    .collect();
+                let at = near - EDGE_LEAD;
+                faces.push((
+                    at,
+                    Face {
+                        owner: SolidOwner::Facade(w.id),
+                        poly: Vec::new(),
+                        fill: [0, 0, 0],
+                        edges,
+                        opening_line: None,
+                        figure: None,
+                        near: at,
+                        far: f64::NAN,
+                        hidden: false,
+                        fine: true,
+                    },
+                ));
+            }
+        }
+        if cut_here {
+            // The courses where the plane cuts the outer leaf: a line across
+            // the cut at each bed joint.
+            let Some(t) = model.wall_type(w.wall_type) else {
+                continue;
+            };
+            let (Some(first), Some(f)) = (t.layers.first(), model.wall_facade(w.id)) else {
+                continue;
+            };
+            let ch = f.coursing.course_height();
+            for (mat, loops, _, owner) in cuts {
+                if *owner != SolidOwner::Wall(w.id) || *mat != first.material {
+                    continue;
+                }
+                for l in loops {
+                    let (mut lo, mut hi) = (
+                        Point2::new(f64::MAX, f64::MAX),
+                        Point2::new(f64::MIN, f64::MIN),
+                    );
+                    for q in l {
+                        lo = Point2::new(lo.x.min(q.x), lo.y.min(q.y));
+                        hi = Point2::new(hi.x.max(q.x), hi.y.max(q.y));
+                    }
+                    // Only a leaf cut across (thin in the drawing).
+                    if hi.x - lo.x > first.thickness * 1.6 {
+                        continue;
+                    }
+                    let mut z = (lo.y / ch).ceil() * ch;
+                    while z < hi.y - 1e-6 {
+                        fine_lines.push((Point2::new(lo.x, z), Point2::new(hi.x, z)));
+                        z += ch;
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// The bars of every element with reinforcement that the section cuts:
+/// those crossing the plane as dots, those along it (within the element,
+/// beyond the cut) as lines.
+#[allow(clippy::type_complexity)]
+fn rebar_detail(
+    model: &Model,
+    sec: &SectionLine,
+    cuts: &[CutPiece],
+) -> Vec<(SolidOwner, Vec<(Point2, f64)>, Vec<(Point2, Point2, f64)>)> {
+    let (Some(u), Some(look)) = (sec.along(), sec.looks()) else {
+        return Vec::new();
+    };
+    let o = sec.start;
+    let plane = 1e-5;
+    let to2 = |p: P3| Point2::new(Point2::new(p[0] - o.x, p[1] - o.y).dot(u), p[2]);
+    let depth_of = |p: P3| Point2::new(p[0] - o.x, p[1] - o.y).dot(look);
+    let mut out = Vec::new();
+    for (id, _) in model.reinforcements() {
+        let Some(owner) = archisim_geom::rebar::owner_of(model, id) else {
+            continue;
+        };
+        if !cuts.iter().any(|c| c.3 == owner) {
+            continue;
+        }
+        // How deep the element reaches beyond the cut.
+        let reach = archisim_geom::solid::without_detail(|| match owner {
+            SolidOwner::Column(c) => archisim_geom::solid::column_solids(model, c),
+            SolidOwner::Beam(b) => archisim_geom::solid::beam_solids(model, b),
+            SolidOwner::Footing(f) => archisim_geom::solid::footing_solids(model, f),
+            SolidOwner::Slab(s) => archisim_geom::solid::slab_solids(model, s),
+            _ => Vec::new(),
+        })
+        .iter()
+        .flat_map(|s| s.triangles.iter().flatten())
+        .map(|p| depth_of(*p))
+        .fold(plane, f64::max);
+        let mut dots = Vec::new();
+        let mut lines = Vec::new();
+        for g in archisim_geom::rebar::element_bars(model, id) {
+            let r = g.diameter / 2.0;
+            for bar in &g.bars {
+                for w in bar.windows(2) {
+                    let (da, db) = (depth_of(w[0]), depth_of(w[1]));
+                    if (da - plane) * (db - plane) < 0.0 {
+                        let k = (plane - da) / (db - da);
+                        let p = [
+                            w[0][0] + (w[1][0] - w[0][0]) * k,
+                            w[0][1] + (w[1][1] - w[0][1]) * k,
+                            w[0][2] + (w[1][2] - w[0][2]) * k,
+                        ];
+                        dots.push((to2(p), r));
+                    } else if da >= plane && db >= plane && da <= reach && db <= reach {
+                        // Along the cut, seen through it.
+                        let (a, b) = (to2(w[0]), to2(w[1]));
+                        if a.distance(b) > 1e-6 && (da - db).abs() < 0.2 * a.distance(b) + 1e-6 {
+                            lines.push((a, b, g.diameter));
+                        }
+                    }
+                }
+            }
+        }
+        if !dots.is_empty() || !lines.is_empty() {
+            out.push((owner, dots, lines));
+        }
+    }
+    out
 }
 
 /// The heights a section dimensions: the floor-to-floor heights of its
@@ -1648,8 +1856,9 @@ fn render_section_inner(model: &Model, d: &SectionDrawing, options: &PlanOptions
     // Hidden faces stay out unless some elements are hidden from the
     // view: what hid them may be among those.
     let all_faces = !options.style.hidden_disciplines.is_empty();
+    let fine = options.scale <= FINE_SCALE + 1e-9;
     for f in &d.faces {
-        if crate::dim::is_hidden(f.owner.id()) || (f.hidden && !all_faces) {
+        if crate::dim::is_hidden(f.owner.id()) || (f.hidden && !all_faces) || (f.fine && !fine) {
             continue;
         }
         if crate::dim::is_dimmed(f.owner.id()) {
@@ -1711,6 +1920,50 @@ fn render_section_inner(model: &Model, d: &SectionDrawing, options: &PlanOptions
         }
         if greyed {
             s.push_str(&crate::dim::grey(&t));
+        }
+    }
+    // The bed joints of the brick cut and the bars, at a fine scale (E17).
+    if fine {
+        let mut joints = String::new();
+        for (a, b) in &d.fine_lines {
+            if visible(&[*a, *b]) {
+                let _ = write!(joints, "M{} L{} ", pt(*a), pt(*b));
+            }
+        }
+        if !joints.is_empty() {
+            let _ = writeln!(
+                s,
+                r#"<path d="{}" fill="none" stroke="{INK}" stroke-width="{}"/>"#,
+                joints.trim_end(),
+                num(pens().thin * k)
+            );
+        }
+        for (owner, dots, lines) in &d.rebar {
+            if crate::dim::is_hidden(owner.id()) {
+                continue;
+            }
+            for (c, r) in dots {
+                if visible(&[*c]) {
+                    let _ = writeln!(
+                        s,
+                        r#"<circle cx="{}" cy="{}" r="{}" fill="{INK}"/>"#,
+                        num(c.x),
+                        num(-c.y),
+                        num(r.max(0.25 * k))
+                    );
+                }
+            }
+            for (a, b, dia) in lines {
+                if visible(&[*a, *b]) {
+                    let _ = writeln!(
+                        s,
+                        r#"<path d="M{} L{}" fill="none" stroke="{INK}" stroke-width="{}" stroke-linecap="round"/>"#,
+                        pt(*a),
+                        pt(*b),
+                        num(dia.max(pens().view * k))
+                    );
+                }
+            }
         }
     }
     s.push_str("</g>\n");

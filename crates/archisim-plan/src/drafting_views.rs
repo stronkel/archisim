@@ -22,6 +22,24 @@ pub fn drafting_extent(model: &Model, id: DraftViewId, k: f64) -> Option<(Point2
             ),
         });
     }
+    // The cropped underlays where they are put.
+    for u in model.draft_view(id).map_or(&[][..], |v| &v.underlays[..]) {
+        let Some([a, b]) = u.crop else { continue };
+        let (c, sn) = (u.rotation.cos(), u.rotation.sin());
+        for p in [a, b, Point2::new(a.x, b.y), Point2::new(b.x, a.y)] {
+            let q = Point2::new(
+                p.x * c - p.y * sn + u.offset.x,
+                p.x * sn + p.y * c + u.offset.y,
+            );
+            out = Some(match out {
+                None => (q, q),
+                Some((lo, hi)) => (
+                    Point2::new(lo.x.min(q.x), lo.y.min(q.y)),
+                    Point2::new(hi.x.max(q.x), hi.y.max(q.y)),
+                ),
+            });
+        }
+    }
     out
 }
 
@@ -111,7 +129,25 @@ pub fn draw_underlays(
             num(-u.offset.y),
             num(-u.rotation.to_degrees())
         );
-        s.push_str(&body);
+        match u.crop {
+            // Only the rectangle (its y down, like the drawing).
+            Some([a, b]) => {
+                let id = format!("underlay-crop-{}", s.len());
+                let (x0, x1) = (a.x.min(b.x), a.x.max(b.x));
+                let (y0, y1) = (a.y.min(b.y), a.y.max(b.y));
+                let _ = writeln!(
+                    s,
+                    r#"<clipPath id="{id}"><rect x="{}" y="{}" width="{}" height="{}"/></clipPath><g clip-path="url(#{id})">"#,
+                    num(x0),
+                    num(-y1),
+                    num(x1 - x0),
+                    num(y1 - y0)
+                );
+                s.push_str(&body);
+                s.push_str("</g>");
+            }
+            None => s.push_str(&body),
+        }
         s.push_str("</g>\n");
     }
 }
@@ -268,5 +304,49 @@ mod tests {
             ),
             r##"<path stroke="#010203" stroke-width="2" fill="none"/>"##
         );
+    }
+
+    #[test]
+    fn a_detail_shows_only_its_piece_of_the_section() {
+        let mut m = Model::new("t");
+        let pb = m.add_level("PB", 0.0);
+        let _ = pb;
+        let sec = m
+            .add_section(archisim_core::NewSection {
+                name: "A".into(),
+                kind: archisim_core::SectionKind::Section,
+                start: Point2::new(0.0, -1.0),
+                end: Point2::new(0.0, 5.0),
+                depth: 2.0,
+            })
+            .unwrap();
+        let d = m
+            .add_section_detail(sec, Point2::new(2.0, 3.5), Point2::new(1.0, 2.5), 10.0)
+            .unwrap();
+        let v = m.draft_view(d).unwrap();
+        assert_eq!(v.name, "Detalle de A");
+        let u = v.underlays[0];
+        assert_eq!(u.crop, Some([Point2::new(1.0, 2.5), Point2::new(2.0, 3.5)]));
+        // Its lower left corner at the origin, and the view round it.
+        assert_eq!(u.offset, Point2::new(-1.0, -2.5));
+        let (lo, hi) = drafting_extent(&m, d, 0.01).unwrap();
+        assert!(lo.distance(Point2::new(0.0, 0.0)) < 1e-9);
+        assert!(hi.distance(Point2::new(1.0, 1.0)) < 1e-9);
+        let o = PlanOptions {
+            scale: 10.0,
+            ..Default::default()
+        };
+        let svg = render_drafting_view(&m, d, &o);
+        assert!(svg.contains("<clipPath id=\"underlay-crop-"));
+        assert!(svg.contains("clip-path=\"url(#underlay-crop-"));
+        // A second one is numbered.
+        let d2 = m
+            .add_section_detail(sec, Point2::new(0.0, 0.0), Point2::new(1.0, 1.0), 10.0)
+            .unwrap();
+        assert_eq!(m.draft_view(d2).unwrap().name, "Detalle de A (2)");
+        // A rectangle with no area is refused.
+        assert!(m
+            .add_section_detail(sec, Point2::new(0.0, 0.0), Point2::new(1.0, 0.0), 10.0)
+            .is_err());
     }
 }

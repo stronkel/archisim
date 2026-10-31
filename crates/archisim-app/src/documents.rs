@@ -25,6 +25,8 @@ pub enum Document {
     CarpentryReport,
     /// The table of areas.
     Areas,
+    /// The bar schedule of the reinforcement (`bar_schedule`).
+    Bars,
 }
 
 impl Document {
@@ -33,6 +35,7 @@ impl Document {
             Document::Carpentry => "Plano de carpinterías",
             Document::CarpentryReport => "Memoria de carpinterías",
             Document::Areas => "Cuadro de superficies",
+            Document::Bars => "Despiece de armaduras",
         }
     }
 
@@ -42,6 +45,7 @@ impl Document {
             Document::Carpentry => "carpinterias",
             Document::CarpentryReport => "memoria-carpinterias",
             Document::Areas => "superficies",
+            Document::Bars => "despiece-armaduras",
         }
     }
 
@@ -51,6 +55,7 @@ impl Document {
             Document::Carpentry => crate::carpentry::carpentry_sheets(model),
             Document::CarpentryReport => carpentry_report_sheets(model),
             Document::Areas => areas_sheets(model),
+            Document::Bars => crate::bar_schedule::bar_schedule_sheets(model),
         }
     }
 }

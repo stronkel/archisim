@@ -43,6 +43,10 @@ pub struct Underlay {
     /// …after being turned this much about its origin (radians,
     /// counter-clockwise).
     pub rotation: f64,
+    /// Only this rectangle of the source shown (its two corners, in the
+    /// source's own metres: a plan's x and y, a section's distance along
+    /// it and height), before it is turned and moved (E17).
+    pub crop: Option<[Point2; 2]>,
 }
 
 impl Underlay {
@@ -54,6 +58,20 @@ impl Underlay {
             opacity: 0.5,
             offset: Point2::new(0.0, 0.0),
             rotation: 0.0,
+            crop: None,
+        }
+    }
+
+    /// Only the rectangle between `a` and `b` of the source, moved so that
+    /// its lower left corner is at the origin (E17: a detail drawn over a
+    /// piece of a section).
+    pub fn cropped(source: UnderlaySource, a: Point2, b: Point2) -> Self {
+        let lo = Point2::new(a.x.min(b.x), a.y.min(b.y));
+        let hi = Point2::new(a.x.max(b.x), a.y.max(b.y));
+        Underlay {
+            crop: Some([lo, hi]),
+            offset: Point2::new(-lo.x, -lo.y),
+            ..Underlay::of(source)
         }
     }
 }
@@ -79,6 +97,37 @@ impl Model {
                 underlays: Vec::new(),
             },
         );
+        Ok(id)
+    }
+
+    /// A new view for drawing over a piece of a section or elevation (E17):
+    /// named after it, at 1:`scale`, with the rectangle between `a` and `b`
+    /// of the section (distance along it, height) under it, its lower left
+    /// corner at the origin.
+    pub fn add_section_detail(
+        &mut self,
+        section: SectionId,
+        a: Point2,
+        b: Point2,
+        scale: f64,
+    ) -> Result<DraftViewId, ModelError> {
+        let name = match self.section(section) {
+            Some(s) => s.name.clone(),
+            None => return Err(ModelError::UnknownSection(section)),
+        };
+        let taken = |n: &str| self.draft_views.values().any(|v| v.name == n);
+        let mut title = format!("Detalle de {name}");
+        let mut k = 2;
+        while taken(&title) {
+            title = format!("Detalle de {name} ({k})");
+            k += 1;
+        }
+        let u = Underlay::cropped(UnderlaySource::Section(section), a, b);
+        self.check_underlay(&u)?;
+        let id = self.add_draft_view(title, scale)?;
+        if let Some(v) = self.draft_views.get_mut(&id) {
+            v.underlays.push(u);
+        }
         Ok(id)
     }
 
@@ -120,6 +169,13 @@ impl Model {
     fn check_underlay(&self, u: &Underlay) -> Result<(), ModelError> {
         finite_point(u.offset, "underlay offset")?;
         finite(u.rotation, "underlay rotation")?;
+        if let Some([a, b]) = u.crop {
+            finite_point(a, "underlay crop")?;
+            finite_point(b, "underlay crop")?;
+            if (b.x - a.x).abs() < 1e-6 || (b.y - a.y).abs() < 1e-6 {
+                return Err(ModelError::InvalidShape("underlay crop"));
+            }
+        }
         finite(u.opacity, "underlay opacity")?;
         if !(0.0..=1.0).contains(&u.opacity) {
             return Err(ModelError::InvalidShape("underlay opacity"));

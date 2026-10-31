@@ -284,6 +284,13 @@ impl ArchiSimApp {
                 self.export_document(crate::documents::Document::Areas);
             }
             if ui
+                .button("Despiece de armaduras (PDF)…")
+                .on_hover_text("Cada barra del armado dibujada con sus medidas: marca, diámetro, número, longitudes y peso por elemento, y el acero por diámetros")
+                .clicked()
+            {
+                self.export_document(crate::documents::Document::Bars);
+            }
+            if ui
                 .button("Exportar mediciones (BC3)…")
                 .on_hover_text("Muros, forjados, carpinterías y acabados de locales, por tipo, para Presto, Arquímedes y otros")
                 .clicked()

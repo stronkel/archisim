@@ -127,6 +127,14 @@ pub fn build() -> Res<Model> {
         ],
     )?;
     m.set_reinforcement(slab.0, Some(Reinforcement::default_for(RebarKind::Slab)))?;
+    // A section along the front row, looking north.
+    m.add_section(archisim_core::NewSection {
+        name: "A".into(),
+        kind: archisim_core::SectionKind::Section,
+        start: Point2::new(-1.5, 0.0),
+        end: Point2::new(sx + 1.5, 0.0),
+        depth: 2.0,
+    })?;
     Ok(m)
 }
 
@@ -140,6 +148,15 @@ pub fn write(dir: &Path) -> Res {
         scale: 20.0,
         ..Default::default()
     };
+    // A section along the front row of columns, at 1:20: the bars cut and
+    // seen (E17).
+    if let Some(sec) = m.sections().find(|s| s.name == "A") {
+        let d = archisim_plan::section::section_drawing(&m, sec);
+        std::fs::write(
+            dir.join("armado-seccion.svg"),
+            archisim_plan::section::render_section(&m, &d, &options),
+        )?;
+    }
     let level = m.levels()[0].id;
     std::fs::write(
         dir.join("armado-planta.svg"),
@@ -169,6 +186,10 @@ pub fn write(dir: &Path) -> Res {
     println!(
         "  Planta a 1:20: {}",
         dir.join("armado-planta.svg").display()
+    );
+    println!(
+        "  Sección A a 1:20: {}",
+        dir.join("armado-seccion.svg").display()
     );
     println!("  IFC: {}", dir.join("armado.ifc").display());
     Ok(())
