@@ -126,7 +126,7 @@ impl ArchiSimApp {
     }
 
     /// The library in the collection chosen.
-    fn collection_library(&mut self, c: &'static Collection) -> &archisim_core::Model {
+    pub(super) fn collection_library(&mut self, c: &'static Collection) -> &archisim_core::Model {
         if let Some(i) = self
             .collection_libraries
             .iter()

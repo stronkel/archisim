@@ -3,8 +3,8 @@
 //! one for plans with hundreds of trees (a few masses and the trunk).
 
 use crate::grow::{
-    add, cross, dist, dot, len, lerp3, mul, norm, perpendicular, sub, Branch, Clump, ClumpKind,
-    Frond, FrondKind, Plant, P3,
+    add, cross, dist, dot, len, lerp3, mul, norm, perpendicular, rotate, sub, Branch, Clump,
+    ClumpKind, Frond, FrondKind, Plant, P3,
 };
 use crate::rng::Rng;
 use crate::{Colors, Foliage, Habit, Rgb};
@@ -177,6 +177,30 @@ impl Plant {
                 merge(&self.clumps, cell, 0.92)
             }
         };
+        // The leaves of the plant shared among its clumps, within its
+        // budget.
+        let foliage = self.species.foliage;
+        let wanted: f64 = clumps
+            .iter()
+            .filter(|c| c.kind == ClumpKind::Leaves)
+            .map(|c| leaves_wanted(c, foliage, lod))
+            .sum();
+        let leaf_share = if wanted > 0.0 {
+            (leaf_budget(lod) / wanted).min(1.0)
+        } else {
+            1.0
+        };
+        // And the florets among the clumps in flower.
+        let wanted: f64 = clumps
+            .iter()
+            .filter(|c| c.kind == ClumpKind::Flowers)
+            .map(|c| leaves_wanted(c, foliage, lod))
+            .sum();
+        let flower_share = if wanted > 0.0 {
+            (leaf_budget(lod) * 0.3 / wanted).min(1.0)
+        } else {
+            1.0
+        };
         for c in &clumps {
             let (part, base) = match c.kind {
                 ClumpKind::Leaves => (Part::Leaves, colors.leaves),
@@ -185,6 +209,49 @@ impl Plant {
             };
             let subdiv = c.radius > self.species.clump * 3.0;
             let color = tinted(base, c.tint, c.light);
+            // Near, the clumps of broad and fine leaves and of needles are
+            // leaves one by one round a darker core that keeps the crown
+            // from being seen through (G5); far, the lumpy masses.
+            let leafy = lod != Lod::Low
+                && (c.kind == ClumpKind::Flowers
+                    || c.kind == ClumpKind::Leaves
+                        && matches!(
+                            self.species.foliage,
+                            crate::Foliage::Broad | crate::Foliage::Fine | crate::Foliage::Needles
+                        ));
+            if leafy {
+                // A smaller core for the airy olive and for flowers.
+                let airy = c.kind == ClumpKind::Flowers || self.species.foliage == Foliage::Fine;
+                let core = Clump {
+                    radius: c.radius * if airy { 0.3 } else { 0.5 },
+                    ..c.clone()
+                };
+                let share = if c.kind == ClumpKind::Flowers {
+                    flower_share
+                } else {
+                    leaf_share
+                };
+                blob(
+                    &mut m,
+                    &core,
+                    part,
+                    shade(color, if airy { 0.78 } else { 0.58 }),
+                    false,
+                );
+                leaves(
+                    &mut m,
+                    c,
+                    part,
+                    color,
+                    self.species.foliage,
+                    lod,
+                    self.species.droop,
+                    (leaves_wanted(c, self.species.foliage, lod) * share)
+                        .round()
+                        .max(3.0) as usize,
+                );
+                continue;
+            }
             blob(&mut m, c, part, color, subdiv);
             // Up close, leaves stand out of the clumps: the crown's edge
             // is ragged, not a row of balls.
@@ -432,6 +499,147 @@ fn blob(m: &mut FloraMesh, c: &Clump, part: Part, color: Rgb, fine: bool) {
                 start + t[2] as u32,
             ],
         );
+    }
+}
+
+/// Length of a leaf and its width against its length.
+fn leaf_size(c: &Clump, foliage: Foliage, lod: Lod) -> (f64, f64) {
+    let r = c.radius;
+    // Flowers: small round florets.
+    let foliage = if c.kind == ClumpKind::Leaves {
+        foliage
+    } else {
+        Foliage::Broad
+    };
+    let (len, ratio) = match foliage {
+        _ if c.kind != ClumpKind::Leaves => ((r * 0.36).clamp(0.05, 0.15), 0.85),
+        Foliage::Broad => ((r * 0.45).clamp(0.09, 0.3), 0.55),
+        Foliage::Fine => ((r * 0.48).clamp(0.07, 0.2), 0.26),
+        _ => ((r * 0.42).clamp(0.08, 0.3), 0.06),
+    };
+    (if lod == Lod::Medium { len * 1.9 } else { len }, ratio)
+}
+
+/// How many leaves cover the shell of a clump one and a half times.
+fn leaves_wanted(c: &Clump, foliage: Foliage, lod: Lod) -> f64 {
+    let r = c.radius;
+    let (len, ratio) = leaf_size(c, foliage, lod);
+    let shell = 4.0 * PI * r * r * c.flat.clamp(0.4, 1.2) * c.stretch.clamp(1.0, 2.0);
+    shell * 1.5 / (len * len * ratio * 0.62)
+}
+
+/// Leaves of a whole plant, at most: near, about 60 000 triangles; far,
+/// about 12 000.
+fn leaf_budget(lod: Lod) -> f64 {
+    match lod {
+        Lod::Full => 4400.0,
+        _ => 900.0,
+    }
+}
+
+/// The leaves of a clump one by one (G5), as the terrace's olive and the
+/// indoor plants have them: each a blade folded along its midrib, wider
+/// past its middle, bent down at the tip, both sides seen, on the shell of
+/// the clump looking out and up. Needles are tufts of thin blades. Far
+/// (`Medium`), fewer and bigger leaves cover the same.
+#[allow(clippy::too_many_arguments)]
+fn leaves(
+    m: &mut FloraMesh,
+    c: &Clump,
+    part: Part,
+    color: Rgb,
+    foliage: Foliage,
+    lod: Lod,
+    droop: f64,
+    n: usize,
+) {
+    let r = c.radius;
+    let (len, ratio) = leaf_size(c, foliage, lod);
+    let mut rng = Rng::new(c.seed ^ 0x1EAF);
+    let ax = norm(c.axis);
+    for _ in 0..n {
+        // Out from the middle, more up than down.
+        let mut d = norm([rng.signed(), rng.signed(), rng.signed() * 0.8 + 0.25]);
+        let mut at = mul(d, r * rng.range(0.7, 1.04));
+        if (c.stretch - 1.0).abs() > 1e-6 {
+            let along = dot(at, ax);
+            at = add(at, mul(ax, along * (c.stretch - 1.0)));
+        }
+        at[2] *= c.flat;
+        let base = add(c.center, at);
+        // The leaf looks out, its tip falling a little (more if the
+        // branches hang).
+        let fall = 0.35 + 0.4 * droop.max(0.0);
+        d = norm(add(d, [rng.signed() * 0.35, rng.signed() * 0.35, -fall]));
+        let l = len * rng.range(0.75, 1.2);
+        let side = rotate(perpendicular(d), d, rng.range(0.0, TAU));
+        // The face of the leaf: across the midrib and the side.
+        let face = norm(cross(d, side));
+        let up = if face[2] < 0.0 { mul(face, -1.0) } else { face };
+        let light = (0.9 + 0.2 * up[2] + 0.12 * c.light).clamp(0.7, 1.25);
+        let tone = shade(color, light * rng.range(0.9, 1.1));
+        let under = shade(tone, 0.82);
+        if c.kind != ClumpKind::Leaves {
+            // A floret: two crossed petals, seen both sides.
+            let w = l * ratio * 0.5;
+            let across = mul(side, w);
+            let along = mul(d, l * 0.5);
+            let p = [
+                add(base, along),
+                add(base, mul(along, -1.0)),
+                add(base, across),
+                add(base, mul(across, -1.0)),
+            ];
+            let lift = add(base, mul(up, l * 0.12));
+            let mid = m.vertex(lift, shade(tone, 1.08));
+            let v: Vec<u32> = p.iter().map(|q| m.vertex(*q, tone)).collect();
+            m.both(part, [v[0], v[2], mid]);
+            m.both(part, [v[1], v[3], mid]);
+            continue;
+        }
+        if matches!(foliage, Foliage::Needles) {
+            // A tuft: five needles fanning from one point.
+            for k in 0..5 {
+                let a = TAU * k as f64 / 5.0 + rng.range(0.0, 0.6);
+                let dir = norm(add(d, mul(rotate(side, d, a), 0.45)));
+                let tip = add(base, mul(dir, l));
+                let w = l * ratio * 0.5;
+                let across = rotate(side, d, a + PI / 2.0);
+                let p = m.vertex(add(base, mul(across, w)), under);
+                let q = m.vertex(add(base, mul(across, -w)), under);
+                let t = m.vertex(tip, shade(tone, 1.08));
+                m.both(part, [p, q, t]);
+            }
+            continue;
+        }
+        let w = l * ratio * 0.5;
+        // The fold of the midrib and the bend of the blade.
+        let fold = w * 0.35;
+        let bend = l * 0.16;
+        let at_t = |t: f64, across: f64| -> P3 {
+            let mid = add(base, mul(d, l * t));
+            let drop = mul(up, -bend * t * t - fold * across.abs() + fold);
+            add(add(mid, mul(side, across)), drop)
+        };
+        // Its outline: widest a little past the middle.
+        let half = |t: f64| w * (PI * t.powf(0.8)).sin().max(0.0);
+        let (t0, t1) = (0.3, 0.68);
+        let b = m.vertex(at_t(0.0, 0.0), under);
+        let m0 = m.vertex(at_t(t0, 0.0), tone);
+        let m1 = m.vertex(at_t(t1, 0.0), tone);
+        let tip = m.vertex(at_t(1.0, 0.0), shade(tone, 1.06));
+        for s in [-1.0, 1.0] {
+            let e0 = m.vertex(at_t(t0, s * half(t0)), shade(tone, 0.95));
+            let e1 = m.vertex(at_t(t1, s * half(t1)), shade(tone, 0.97));
+            let tris = if s > 0.0 {
+                [[b, e0, m0], [m0, e0, e1], [m0, e1, m1], [m1, e1, tip]]
+            } else {
+                [[b, m0, e0], [m0, e1, e0], [m0, m1, e1], [m1, tip, e1]]
+            };
+            for t in tris {
+                m.both(part, t);
+            }
+        }
     }
 }
 

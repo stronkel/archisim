@@ -146,35 +146,13 @@ impl Exporter<'_> {
             let Some(&(_, storey_pl)) = storeys.get(&d.level) else {
                 continue;
             };
-            // A riser or downpipe: round.
-            let outline = if d.kind.is_vertical() {
-                (0..16)
-                    .map(|i| {
-                        let a = std::f64::consts::TAU * i as f64 / 16.0;
-                        d.position + archisim_core::Point2::new(a.cos(), a.sin()) * (d.width / 2.0)
-                    })
-                    .collect()
-            } else {
-                d.outline()
-            };
-            let curve = self.polyline(&outline, true);
-            let profile = self
-                .w
-                .add(format!("IFCARBITRARYCLOSEDPROFILEDEF(.AREA.,$,{curve})"));
-            let o = self.point3(0.0, 0.0, d.elevation);
-            let solid_pl = self.w.add(format!("IFCAXIS2PLACEMENT3D({o},$,$)"));
-            let solid = self.w.add(format!(
-                "IFCEXTRUDEDAREASOLID({profile},{solid_pl},{},{})",
-                self.z,
-                real(d.height)
-            ));
-            let body = self.w.add(format!(
-                "IFCSHAPEREPRESENTATION({},'Body','SweptSolid',({solid}))",
-                self.body_ctx
-            ));
-            let shape = self
-                .w
-                .add(format!("IFCPRODUCTDEFINITIONSHAPE($,$,({body}))"));
+            // Its body: the model the 3D view shows (G4), as triangles.
+            let storey_z = model.level(d.level).map_or(0.0, |l| l.elevation);
+            let tris: Vec<[[f64; 3]; 3]> = archisim_geom::solid::device_solids(model, d.id)
+                .into_iter()
+                .flat_map(|s| s.triangles)
+                .collect();
+            let shape = self.triangulated_shape(&tris, storey_z);
             let pl = self.placement(Some(storey_pl), self.origin, None);
             let (class, predefined) = match d.kind {
                 DeviceKind::Equipment => ("IFCUNITARYEQUIPMENT", "USERDEFINED"),
@@ -236,6 +214,13 @@ impl Exporter<'_> {
             if let Some((_, n)) = model.device_circuits().find(|(x, _)| *x == d.id) {
                 props.push(self.w.add(format!(
                     "IFCPROPERTYSINGLEVALUE('Circuit',$,IFCINTEGER({n}),$)"
+                )));
+            }
+            // A light point's lamp, by its type's name (G4).
+            if let Some(t) = d.fixture.and_then(|t| model.object_type(t)) {
+                props.push(self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('Fixture',$,IFCLABEL({}),$)",
+                    string(&t.name)
                 )));
             }
             self.pset(el, &d.guid, "ArchiSim_Device", &props);

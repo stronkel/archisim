@@ -6,6 +6,44 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-31 (55) · G4 y G5: lámparas en los puntos de luz, instalaciones con detalle y árboles hoja a hoja
+
+Rama `bloque/g4-instalaciones` (sobre `bloque/g3-pintar`), con pull request. Formato `.archisim` versión 55: el punto de luz guarda su lámpara.
+
+**Hecho**
+- **Punto de luz con su lámpara** (G4). En Propiedades del punto de luz hay un grupo «Lámpara» con tarjetas en 3D:
+  - «Empotrable» (el de siempre, ahora con aro y difusor);
+  - las lámparas del proyecto (colgantes, plafones y apliques);
+  - las de cada una de las ocho colecciones: al elegir una, se carga en el proyecto.
+  - El aparato toma el tamaño de la lámpara y mantiene arriba su cota (en el techo).
+  - De noche la pantalla se enciende como la de los objetos.
+  - El IFC la escribe (`ArchiSim_Device.Fixture`) y la lee de vuelta si el proyecto tiene esa lámpara.
+- **Instalaciones con el detalle de los muebles** (G4), modelos en `archisim_props::fine::services`:
+  - interruptor y conmutador con tecla basculante y piloto;
+  - enchufe con su copa, orificios y tomas de tierra; el de 25 A, más grande y con piloto rojo;
+  - toma de TV con sus dos conectores, y de datos con su RJ45 y su tapa;
+  - cuadro con puerta, mirillas ahumadas y fila de automáticos;
+  - radiador de aluminio por elementos, con colectores, llave termostática, detentor, purgador y soportes;
+  - rejilla con lamas inclinadas, difusor de techo con sus anillos, caldera mural con panel y tuberías;
+  - montante de cobre con abrazaderas, y bajante con sus copas y abrazaderas.
+  - En IFC, el cuerpo de cada aparato es ahora ese modelo (triángulos), en lugar de una caja.
+- **Árboles y arbustos hoja a hoja** (G5): de cerca, cada mata de hojas anchas, finas (olivo, romero) o de acículas (pino) es un núcleo pequeño y oscuro con hojas sueltas alrededor: plegadas por el nervio y curvadas, a dos caras. Las flores son florecillas sueltas.
+  - Cada árbol tiene un tope de hojas, unos 80 000 triángulos de cerca. A media distancia lleva menos hojas y más grandes; de lejos sigue como antes.
+  - Ciprés, retama, palmeras, gramíneas y suculentas no cambian.
+- Fotos de los aparatos sin la app: `archisim instalaciones out/` y luego `ARCHISIM_INSTALACIONES_OUT=carpeta cargo test -p archisim-app services_pictures`.
+
+**Pendiente**
+- Poner una lámpara de la Maqueta (un objeto) y que cuente como punto de luz en los circuitos, o al revés: de momento se elige la lámpara desde el punto de luz.
+- Ciprés y retama hoja a hoja (sus escamas y ramitas siguen en masas).
+
+**Qué debe probar Antonio**
+1. `archisim instalaciones out/` y abre `out/instalaciones.archisim`. Selecciona la luz del salón: en Propiedades → Lámpara tiene el «Colgante de comedor».
+2. Elige «Nórdico cálido» y pincha otra lámpara: en 3D (F3) cuelga la nueva. Prueba Empotrable.
+3. Mira de cerca en 3D un enchufe, un interruptor, el cuadro y un radiador.
+4. En Exterior, pon un olivo y un árbol frondoso y acércate en 3D: hojas sueltas, no bolas.
+
+---
+
 ## 2026-10-31 (54) · G3: Pintar y Dividir cara en la barra
 
 Rama `bloque/g3-pintar` (sobre `bloque/g2-boceto`), con pull request. Formato `.archisim` versión 54: caras pintadas de más elementos y zonas de caras.

@@ -1449,11 +1449,8 @@ fn add_solids(
             });
         // A lampshade, a bulb or a flame: it glows at night, and its middle
         // is where the lamp's light comes from.
-        let (glows, reach) = match solid.owner {
-            SolidOwner::Object(o) if !dimmed && !ghost => {
-                let (mats, reach) = archisim_geom::solid::glow_materials(model, o);
-                (mats.contains(&solid.material), reach as f32)
-            }
+        let (glows, reach) = match archisim_geom::solid::solid_glow(model, &solid) {
+            Some(reach) if !dimmed && !ghost => (true, reach as f32),
             _ => (false, 0.0),
         };
         if glows {

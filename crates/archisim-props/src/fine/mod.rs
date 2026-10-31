@@ -29,6 +29,7 @@ pub mod plant;
 pub mod playground;
 pub mod pool;
 pub mod railing;
+pub mod services;
 pub mod shape;
 pub mod shop;
 pub mod sink;
