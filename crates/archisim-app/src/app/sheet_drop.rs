@@ -20,6 +20,8 @@ pub enum Drop {
     Table(ScheduleKind),
     /// An axonometric of the model as the 3D view looks at it.
     ThreeD,
+    /// A view only for drawing (E7), at its own scale.
+    Drafting(archisim_core::DraftViewId),
 }
 
 /// What travels with the pointer: the thing and its name.
@@ -153,6 +155,12 @@ impl ArchiSimApp {
                 .ed
                 .add_table(sheet, kind, self.schedule_level, at)
                 .map(Placed::Table),
+            Drop::Drafting(d) => self
+                .ed
+                .transact("Vista de dibujo en el plano", |m| {
+                    m.add_drafting_viewport(sheet, d, at, None)
+                })
+                .map(Placed::View),
             Drop::View(id) => {
                 let Some(v) = self.ed.model().plan_view(id).cloned() else {
                     return;

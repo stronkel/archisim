@@ -2245,7 +2245,7 @@ fn level_of(
 fn draft_level(model: &Model, id: archisim_core::DraftId) -> Option<archisim_core::LevelId> {
     match model.draft(id)?.view {
         archisim_core::ViewRef::Level(l) => Some(l),
-        archisim_core::ViewRef::Sheet(_) => None,
+        archisim_core::ViewRef::Sheet(_) | archisim_core::ViewRef::Drafting(_) => None,
     }
 }
 

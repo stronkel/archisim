@@ -318,6 +318,7 @@ pub fn explain(e: &ModelError) -> String {
         }
         ModelError::UnknownDrawLayer(_) => "la capa no existe".into(),
         ModelError::UnknownDraft(_) => "el elemento de dibujo ya no existe".into(),
+        ModelError::UnknownDraftView(_) => "la vista de dibujo ya no existe".into(),
         ModelError::UnknownSheet(_) => "el plano ya no existe".into(),
         ModelError::UnknownViewport(_) => "la vista ya no está en el plano".into(),
         ModelError::UnknownRoom(_) => "el local ya no existe".into(),

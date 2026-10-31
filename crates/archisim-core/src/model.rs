@@ -20,6 +20,7 @@ mod concept;
 mod curtain;
 mod disciplines;
 mod dormers;
+mod draft_views;
 mod flora;
 mod foundations;
 mod layered_library;
@@ -54,6 +55,7 @@ pub use concept::*;
 pub use curtain::*;
 pub use disciplines::*;
 pub use dormers::*;
+pub use draft_views::*;
 pub use flora::*;
 pub use foundations::*;
 pub use layered_library::*;
@@ -1074,6 +1076,7 @@ pub enum ModelError {
     UnknownDrawLayer(DrawLayerId),
     UnknownDraft(DraftId),
     UnknownSheet(SheetId),
+    UnknownDraftView(crate::ids::DraftViewId),
     UnknownViewport(ViewportId),
     UnknownRoom(RoomId),
     UnknownPresentationStyle(PresentationStyleId),
@@ -1250,6 +1253,9 @@ impl fmt::Display for ModelError {
             ModelError::UnknownDrawLayer(id) => write!(f, "drawing layer {id} does not exist"),
             ModelError::UnknownDraft(id) => write!(f, "drafting element {id} does not exist"),
             ModelError::UnknownSheet(id) => write!(f, "sheet {id} does not exist"),
+            ModelError::UnknownDraftView(id) => {
+                write!(f, "view for drawing {id} does not exist")
+            }
             ModelError::UnknownViewport(id) => write!(f, "view {id} on a sheet does not exist"),
             ModelError::UnknownRoom(id) => write!(f, "room {id} does not exist"),
             ModelError::UnknownPresentationStyle(id) => {
@@ -1466,6 +1472,10 @@ pub struct ModelParts {
     pub graphics: crate::graphics::GraphicStandard,
     pub info: crate::sheets::ProjectInfo,
     pub sheets: Vec<crate::sheets::Sheet>,
+    /// Views only for drawing (E7).
+    pub draft_views: Vec<DraftView>,
+    /// Underlays of the levels' plans (E7).
+    pub level_underlays: Vec<(LevelId, Vec<Underlay>)>,
     pub viewports: Vec<crate::sheets::Viewport>,
     pub rooms: Vec<crate::rooms::Room>,
     pub tags: Vec<crate::rooms::Tag>,
@@ -1575,6 +1585,10 @@ pub struct Model {
     pub(crate) drafts: BTreeMap<DraftId, Draft>,
     pub(crate) info: crate::sheets::ProjectInfo,
     pub(crate) sheets: BTreeMap<SheetId, crate::sheets::Sheet>,
+    /// Views only for drawing (E7).
+    pub(crate) draft_views: BTreeMap<crate::ids::DraftViewId, DraftView>,
+    /// Underlays of the levels' plans (E7).
+    pub(crate) level_underlays: BTreeMap<LevelId, Vec<Underlay>>,
     pub(crate) viewports: BTreeMap<ViewportId, crate::sheets::Viewport>,
     pub(crate) rooms: BTreeMap<RoomId, crate::rooms::Room>,
     pub(crate) tags: BTreeMap<TagId, crate::rooms::Tag>,
@@ -1653,6 +1667,8 @@ impl Model {
             drafts: BTreeMap::new(),
             info: Default::default(),
             sheets: BTreeMap::new(),
+            draft_views: BTreeMap::new(),
+            level_underlays: BTreeMap::new(),
             viewports: BTreeMap::new(),
             rooms: BTreeMap::new(),
             tags: BTreeMap::new(),
@@ -1801,6 +1817,7 @@ impl Model {
         self.dimensions.retain(|_, d| d.level != id);
         self.elevation_marks.retain(|_, m| m.level != id);
         self.drafts.retain(|_, d| d.view != ViewRef::Level(id));
+        self.drop_underlays_of(UnderlaySource::Level(id));
         self.viewports.retain(|_, v| v.level != id);
         self.rooms.retain(|_, r| r.level != id);
         self.tags.retain(|_, t| t.level != id);
@@ -4294,6 +4311,12 @@ impl Model {
             graphics: self.graphics,
             info: self.info.clone(),
             sheets: self.sheets.values().cloned().collect(),
+            draft_views: self.draft_views.values().cloned().collect(),
+            level_underlays: self
+                .level_underlays
+                .iter()
+                .map(|(l, u)| (*l, u.clone()))
+                .collect(),
             viewports: self.viewports.values().cloned().collect(),
             rooms: self.rooms.values().cloned().collect(),
             tags: self.tags.values().cloned().collect(),
@@ -4545,6 +4568,20 @@ impl Model {
                 .and_then(|_| model.restore_sheet(sh))
                 .map_err(fail(name))?;
         }
+        for v in parts.draft_views {
+            let name = format!("view for drawing {} «{}»", v.id.0, v.name);
+            claim(v.id.0, None)
+                .and_then(|_| model.restore_draft_view(v))
+                .map_err(fail(name))?;
+        }
+        for (l, u) in parts.level_underlays {
+            if !u.is_empty() {
+                model.level_underlays.insert(l, u);
+            }
+        }
+        model
+            .check_restored_underlays()
+            .map_err(fail("underlays".to_string()))?;
         for v in parts.viewports {
             let name = format!("view {} on a sheet", v.id.0);
             claim(v.id.0, None)

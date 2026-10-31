@@ -6,6 +6,37 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-31 (45) · Vistas de dibujo y calcos (E7)
+
+Rama `bloque/e7-vistas-dibujo` (sobre `bloque/e2-galerias`), con pull request. Formato `.archisim` versión 48: el proyecto guarda las vistas de dibujo y los calcos. Los ficheros anteriores se abren igual.
+
+**Hecho**
+- **Vistas de dibujo**: espacios solo de dibujo, como el espacio modelo de AutoCAD, para detalles constructivos y esquemas. Están en el Navegador → Proyecto → Planos → **Vistas de dibujo** → «+ Nueva vista de dibujo» (se crea a 1:20).
+  - Cada una se abre en su pestaña, un lienzo blanco donde se dibuja en metros reales con las órdenes de AutoCAD (LINEA, CIRCULO, EQ, RR…), con sus forzados y el orto (F8).
+  - Archivo → **Importar DXF en la vista** mete un DXF en ella.
+  - En Propiedades (sin nada seleccionado) se cambian su nombre y su escala, o se borra.
+  - **Se colocan en los planos**: arrastra la vista de dibujo del navegador al plano y queda a su escala, con su nombre como título.
+- **Calcos**: debajo de una vista de dibujo o de una planta se puede poner cualquier planta, sección o vista de dibujo, como referencia para dibujar encima. Cada calco tiene:
+  - **color** (todo de un color, o sus colores);
+  - **opacidad**;
+  - **mover X/Y**;
+  - **girar**.
+
+  En una vista de dibujo, en sus Propiedades → Calcos; en una planta, en las Propiedades de la vista → Calcos → «Añadir calco…».
+- Si se borra lo que muestra un calco, el calco desaparece; una vista no puede ser su propio calco.
+
+**Pendiente**
+- Mover y girar el calco con el ratón (hoy con números en Propiedades).
+- Las vistas de dibujo no van al IFC (son dibujo 2D, como en Revit).
+
+**Qué debe probar Antonio**
+1. Navegador → Proyecto → Planos → Vistas de dibujo → **+ Nueva vista de dibujo**. Se abre «Detalle 1»: dibuja con L, C, EQ… y con Archivo → Importar DXF en la vista mete un detalle del estudio.
+2. Propiedades de la vista → Calcos → Añadir calco… → Planta · Planta baja. Ponle color, 30 % de opacidad, muévelo y gíralo.
+3. Crea un plano y arrastra la vista de dibujo desde el navegador hasta él: debe quedar a 1:20, titulada con su nombre. Exporta el PDF de los planos.
+4. En una planta → Propiedades de la vista → Calcos → Añadir calco… → tu vista de dibujo: el detalle se ve debajo de la planta.
+
+---
+
 ## 2026-10-30 (44) · Galerías visuales en todo (E2)
 
 Rama `bloque/e2-galerias` (sobre `main`, v0.76), con pull request. Sin cambios de formato ni de IFC.

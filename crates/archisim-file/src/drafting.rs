@@ -79,6 +79,8 @@ pub(crate) struct DrawLayer {
 pub(crate) enum View {
     Level(u64),
     Sheet(u64),
+    /// A view only for drawing (version 48).
+    Drafting(u64),
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -476,6 +478,7 @@ pub(crate) fn drafts_out(drafts: &[core::Draft]) -> Vec<Draft> {
             view: match d.view {
                 core::ViewRef::Level(l) => View::Level(l.0),
                 core::ViewRef::Sheet(s) => View::Sheet(s.0),
+                core::ViewRef::Drafting(v) => View::Drafting(v.0),
             },
             layer: d.layer.0,
             shape: Shape::out(&d.shape),
@@ -496,6 +499,7 @@ pub(crate) fn drafts_in(drafts: Vec<Draft>) -> Result<Vec<core::Draft>, FileErro
                 view: match d.view {
                     View::Level(l) => core::ViewRef::Level(core::LevelId(l)),
                     View::Sheet(s) => core::ViewRef::Sheet(core::SheetId(s)),
+                    View::Drafting(v) => core::ViewRef::Drafting(core::DraftViewId(v)),
                 },
                 layer: core::DrawLayerId(d.layer),
                 shape: d.shape.into_core(&element)?,
@@ -885,6 +889,145 @@ pub(crate) struct Viewport {
     pub title: String,
     #[serde(default = "yes", skip_serializing_if = "is_true")]
     pub show_title: bool,
+    /// A view only for drawing instead of a plan (version 48).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub drafting: Option<u64>,
+}
+
+/// A view only for drawing (version 48): its name, scale and underlays.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct DraftView {
+    pub id: u64,
+    pub name: String,
+    pub scale: f64,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub underlays: Vec<Underlay>,
+}
+
+/// An underlay (version 48): what it shows (`level`, `section` or
+/// `drafting` and its id), its colour (`#rrggbb`, or none: its own),
+/// opacity, offset `[x, y]` and rotation (radians).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Underlay {
+    pub kind: String,
+    pub of: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+    pub opacity: f64,
+    #[serde(default, skip_serializing_if = "is_origin")]
+    pub offset: Xy,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub rotation: f64,
+}
+
+/// The underlays of a level's plan (version 48).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct LevelUnderlays {
+    pub level: u64,
+    pub underlays: Vec<Underlay>,
+}
+
+fn is_origin(p: &Xy) -> bool {
+    p[0] == 0.0 && p[1] == 0.0
+}
+
+impl Underlay {
+    fn out(u: &core::Underlay) -> Self {
+        let (kind, of) = match u.source {
+            core::UnderlaySource::Level(l) => ("level", l.0),
+            core::UnderlaySource::Section(s) => ("section", s.0),
+            core::UnderlaySource::Drafting(d) => ("drafting", d.0),
+        };
+        Underlay {
+            kind: kind.into(),
+            of,
+            color: u.color.map(hex),
+            opacity: u.opacity,
+            offset: xy(u.offset),
+            rotation: u.rotation,
+        }
+    }
+
+    fn into_core(self, element: &str) -> Result<core::Underlay, FileError> {
+        let source = match self.kind.as_str() {
+            "level" => core::UnderlaySource::Level(core::LevelId(self.of)),
+            "section" => core::UnderlaySource::Section(core::SectionId(self.of)),
+            "drafting" => core::UnderlaySource::Drafting(core::DraftViewId(self.of)),
+            other => {
+                return Err(FileError::Value {
+                    element: element.to_string(),
+                    message: format!("unknown underlay kind «{other}»"),
+                })
+            }
+        };
+        Ok(core::Underlay {
+            source,
+            color: self.color.map(|c| parse_hex(element, &c)).transpose()?,
+            opacity: self.opacity,
+            offset: pt(self.offset),
+            rotation: self.rotation,
+        })
+    }
+}
+
+pub(crate) fn draft_views_out(v: &[core::DraftView]) -> Vec<DraftView> {
+    v.iter()
+        .map(|v| DraftView {
+            id: v.id.0,
+            name: v.name.clone(),
+            scale: v.scale,
+            underlays: v.underlays.iter().map(Underlay::out).collect(),
+        })
+        .collect()
+}
+
+pub(crate) fn draft_views_in(v: Vec<DraftView>) -> Result<Vec<core::DraftView>, FileError> {
+    v.into_iter()
+        .map(|v| {
+            let element = format!("view for drawing {}", v.id);
+            Ok(core::DraftView {
+                id: core::DraftViewId(v.id),
+                name: v.name,
+                scale: v.scale,
+                underlays: v
+                    .underlays
+                    .into_iter()
+                    .map(|u| u.into_core(&element))
+                    .collect::<Result<_, _>>()?,
+            })
+        })
+        .collect()
+}
+
+pub(crate) fn level_underlays_out(
+    v: &[(core::LevelId, Vec<core::Underlay>)],
+) -> Vec<LevelUnderlays> {
+    v.iter()
+        .map(|(l, u)| LevelUnderlays {
+            level: l.0,
+            underlays: u.iter().map(Underlay::out).collect(),
+        })
+        .collect()
+}
+
+pub(crate) fn level_underlays_in(
+    v: Vec<LevelUnderlays>,
+) -> Result<Vec<(core::LevelId, Vec<core::Underlay>)>, FileError> {
+    v.into_iter()
+        .map(|l| {
+            let element = format!("underlays of level {}", l.level);
+            Ok((
+                core::LevelId(l.level),
+                l.underlays
+                    .into_iter()
+                    .map(|u| u.into_core(&element))
+                    .collect::<Result<_, _>>()?,
+            ))
+        })
+        .collect()
 }
 
 pub(crate) fn sheets_out(sheets: &[core::Sheet]) -> Vec<Sheet> {
@@ -935,6 +1078,7 @@ pub(crate) fn viewports_out(v: &[core::Viewport]) -> Vec<Viewport> {
             ceiling: v.ceiling,
             title: v.title.clone(),
             show_title: v.show_title,
+            drafting: v.drafting.map(|d| d.0),
         })
         .collect()
 }
@@ -957,6 +1101,7 @@ pub(crate) fn viewports_in(v: Vec<Viewport>) -> Result<Vec<core::Viewport>, File
                 ceiling: v.ceiling,
                 title: v.title,
                 show_title: v.show_title,
+                drafting: v.drafting.map(core::DraftViewId),
             })
         })
         .collect()

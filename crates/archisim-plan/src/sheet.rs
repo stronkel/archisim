@@ -95,6 +95,17 @@ fn drawing_extent(d: &crate::section::SectionDrawing, scale: f64) -> (Point2, Po
 /// section). A section view placed from the app always has its crop.
 pub fn viewport_crop(model: &Model, v: &Viewport) -> (Point2, Point2) {
     let whole = || match (v.axo, v.section) {
+        _ if v.drafting.is_some() => v.drafting.map(|d| {
+            crate::drafting_views::drafting_region(
+                model,
+                d,
+                &PlanOptions {
+                    scale: v.scale,
+                    margin_mm: 5.0,
+                    ..PlanOptions::default()
+                },
+            )
+        }),
         (Some(a), _) => Some(crate::axo::axo_extent(model, &a, v.scale)),
         (None, Some(s)) => section_extent(model, s, v.scale),
         (None, None) => level_extent(model, v.level, v.scale),
@@ -123,6 +134,9 @@ pub fn viewport_title(model: &Model, v: &Viewport) -> String {
     if v.title.trim().is_empty() {
         if v.axo.is_some() {
             return "VISTA 3D".into();
+        }
+        if let Some(d) = v.drafting.and_then(|d| model.draft_view(d)) {
+            return d.name.to_uppercase();
         }
         match v.section {
             Some(s) => model
@@ -367,6 +381,21 @@ fn draw_view_title(s: &mut String, model: &Model, v: &Viewport) {
 /// The plan, section or elevation of a view, as an SVG fragment placed
 /// and cut on the sheet.
 fn draw_viewport(s: &mut String, model: &Model, v: &Viewport, px_per_mm: Option<f64>) {
+    // A view only for drawing (E7).
+    if let Some(d) = v.drafting {
+        let crop = viewport_crop(model, v);
+        let options = PlanOptions {
+            scale: v.scale,
+            viewport: Some(crop),
+            style: v.style.clone(),
+            px_per_mm,
+            title: false,
+            ..PlanOptions::default()
+        };
+        let svg = crate::drafting_views::render_drafting_view(model, d, &options);
+        place_view_svg(s, &svg, v, crop);
+        return;
+    }
     if let Some(axo) = v.axo {
         let mut d = crate::axo::axo_drawing(model, &axo, v.style.focus);
         if let Some(p) = crate::presentation::style_of(model, &v.style).filter(|p| p.shadows) {

@@ -29,6 +29,7 @@ pub mod concept;
 pub mod curtain;
 pub(crate) mod dim;
 pub mod drafting;
+pub mod drafting_views;
 pub mod grids;
 pub mod layout;
 pub mod lettering;
@@ -103,6 +104,8 @@ pub struct PlanOptions {
     /// level), lights and ducts, doors and windows without their swings,
     /// no furniture, stairs or ground.
     pub ceiling: bool,
+    /// Leave out the underlays (an underlay's own drawing, E7).
+    pub skip_underlays: bool,
 }
 
 /// Width of a hairline on paper, in millimetres, for [`PlanOptions::thin_lines`]
@@ -126,6 +129,7 @@ impl Default for PlanOptions {
             title: true,
             shadows: None,
             ceiling: false,
+            skip_underlays: false,
         }
     }
 }
@@ -613,6 +617,10 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
             num(vb_w),
             num(vb_h)
         );
+    }
+    // Underlays of the plan (E7), under everything.
+    if !options.skip_underlays {
+        drafting_views::draw_underlays(&mut s, model, model.level_underlays(level), options);
     }
 
     s.push_str("<g id=\"slabs\">\n");

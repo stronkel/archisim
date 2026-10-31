@@ -719,9 +719,15 @@ pub fn pick_on_sheet(
     p: Point2,
     tolerance: f64,
 ) -> Option<Element> {
+    pick_drafts(model, ViewRef::Sheet(sheet), p, tolerance)
+}
+
+/// The drafting element of a view (a sheet, a view for drawing) under a
+/// point: its edge first.
+pub fn pick_drafts(model: &Model, view: ViewRef, p: Point2, tolerance: f64) -> Option<Element> {
     let k = paper_k();
     model
-        .drafts_in(ViewRef::Sheet(sheet))
+        .drafts_in(view)
         .filter(|d| model.draft_editable(d))
         .filter_map(|d| {
             let dist = archisim_draft::distance(&d.shape, p, k);
@@ -751,6 +757,11 @@ pub fn in_window_on_sheet(
     a: Point2,
     b: Point2,
 ) -> Vec<Element> {
+    in_window_drafts(model, ViewRef::Sheet(sheet), a, b)
+}
+
+/// The drafting elements of a view a selection window takes.
+pub fn in_window_drafts(model: &Model, view: ViewRef, a: Point2, b: Point2) -> Vec<Element> {
     let crossing = b.x < a.x;
     let (lo, hi) = (
         Point2::new(a.x.min(b.x), a.y.min(b.y)),
@@ -758,7 +769,7 @@ pub fn in_window_on_sheet(
     );
     let k = paper_k();
     model
-        .drafts_in(ViewRef::Sheet(sheet))
+        .drafts_in(view)
         .filter(|d| model.draft_editable(d))
         .filter(|d| {
             if crossing {

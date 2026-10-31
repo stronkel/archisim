@@ -114,6 +114,9 @@ pub struct Viewport {
     /// Title under the view; empty takes the level's name.
     pub title: String,
     pub show_title: bool,
+    /// A view only for drawing instead of a plan (E7). Its crop is in its
+    /// own metres.
+    pub drafting: Option<crate::ids::DraftViewId>,
 }
 
 /// Where an axonometric view looks from: the direction the eye stands in,
@@ -327,8 +330,43 @@ impl Model {
                 ceiling: false,
                 title: String::new(),
                 show_title: true,
+                drafting: None,
             },
         );
+        Ok(id)
+    }
+
+    /// Places a view only for drawing on a sheet (E7), at its own scale
+    /// unless `scale` is given, centred at `centre` (paper metres).
+    pub fn add_drafting_viewport(
+        &mut self,
+        sheet: SheetId,
+        view: crate::ids::DraftViewId,
+        centre: Point2,
+        scale: Option<f64>,
+    ) -> Result<ViewportId, ModelError> {
+        let dv = self
+            .draft_view(view)
+            .ok_or(ModelError::UnknownDraftView(view))?;
+        let scale = scale.unwrap_or(dv.scale);
+        let level = self
+            .levels()
+            .first()
+            .map(|l| l.id)
+            .ok_or(ModelError::LastLevel)?;
+        let id = self.add_viewport(NewViewport {
+            sheet,
+            level,
+            section: None,
+            axo: None,
+            scale,
+            cut_plane: 1.1,
+            crop: None,
+            centre,
+        })?;
+        if let Some(v) = self.viewports.get_mut(&id) {
+            v.drafting = Some(view);
+        }
         Ok(id)
     }
 
@@ -348,6 +386,9 @@ impl Model {
             crop: v.crop,
             centre: v.centre,
         })?;
+        if let Some(d) = v.drafting.filter(|d| self.draft_view(*d).is_none()) {
+            return Err(ModelError::UnknownDraftView(d));
+        }
         self.viewports.insert(v.id, v);
         Ok(())
     }
@@ -387,6 +428,9 @@ impl Model {
             crop: v.crop,
             centre: v.centre,
         })?;
+        if let Some(d) = v.drafting.filter(|d| self.draft_view(*d).is_none()) {
+            return Err(ModelError::UnknownDraftView(d));
+        }
         self.viewports.insert(v.id, v);
         Ok(())
     }

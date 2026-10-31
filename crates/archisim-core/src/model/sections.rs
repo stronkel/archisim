@@ -122,6 +122,7 @@ impl Model {
             .remove(&id)
             .ok_or(ModelError::UnknownSection(id))?;
         self.viewports.retain(|_, v| v.section != Some(id));
+        self.drop_underlays_of(UnderlaySource::Section(id));
         Ok(s)
     }
 

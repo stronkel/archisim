@@ -74,6 +74,8 @@ pub enum ViewRef {
     Level(LevelId),
     /// A drawing sheet (coordinates in paper metres).
     Sheet(crate::ids::SheetId),
+    /// A view only for drawing (E7: a detail, a diagram), in real metres.
+    Drafting(crate::ids::DraftViewId),
 }
 
 /// A polyline of straight and arc segments (AutoCAD "polilínea").
@@ -1108,6 +1110,11 @@ impl Model {
             ViewRef::Sheet(s) => {
                 if self.sheet(s).is_none() {
                     return Err(ModelError::UnknownSheet(s));
+                }
+            }
+            ViewRef::Drafting(v) => {
+                if self.draft_view(v).is_none() {
+                    return Err(ModelError::UnknownDraftView(v));
                 }
             }
         }
