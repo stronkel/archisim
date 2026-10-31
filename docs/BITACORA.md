@@ -6,6 +6,50 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-31 (46) · Fachadas pieza a pieza (E9)
+
+Rama `bloque/e9-fachadas` (sobre `bloque/e7-vistas-dibujo`), con pull request. Formato `.archisim` versión 49: los tipos de muro pueden llevar fachada. Los ficheros anteriores se abren igual, con acabados lisos.
+
+**Hecho**
+- **Fachada de un tipo de muro**: en Tipos y materiales → tipo de muro exterior → grupo **«Fachada: aparejo y despiece»**, todo en tarjetas dibujadas como quedaría la fachada:
+  - **Sistema**: ladrillo cara vista, bloque de hormigón, panel prefabricado, fachada ventilada o aplacado. Cada uno trae su pieza y su junta habituales.
+  - **Aparejo**: a soga, a tizón, inglés, flamenco, palomero o junta continua.
+  - **Pieza**: largo, alto, tizón y junta, en milímetros, y el color de la junta (mortero; en la ventilada, junta abierta oscura).
+  - **Dibujo**: tizones de otro color, hiladas de otro color o rombos, con su segundo material.
+  - **Dinteles a sardinel** sobre puertas y ventanas.
+  - **Frente de forjado**: sin pieza propia, plaquetas o ladrillo a sardinel, con su material y su vuelo.
+- **Cómo se colocan las piezas**:
+  - Hilada a hilada desde la cota 0, así que las hiladas casan entre muros y plantas.
+  - Cada paño entre huecos empieza en la jamba: en las hiladas pares, con media pieza.
+  - Las esquinas con otro muro con fachada se traban: en una hilada llega la soga de un muro y en la otra la del otro.
+  - Se recortan donde la fachada se corta: cubiertas, perfiles de alzado, huecos en arco.
+  - El frente de forjado sale solo donde la fachada pasa por delante del canto de un forjado (el que llega hasta la hoja exterior), sin muros ni niveles especiales.
+- **En 3D y en la imagen realista**, cada pieza es un volumen 6 mm fuera de la cara, con la junta del color del mortero detrás. Se seleccionan con su muro y se recortan con él.
+- **En planta a 1:20 (y hasta 1:25)**: las llagas de la hoja exterior en la hilada del plano de corte.
+- **Mediciones**: capítulo 13 «Fachadas: piezas»: unidades por tipo y material, con enteras y cortadas de cada muro, y el frente de forjado aparte.
+- **IFC**: piezas del muro (`IfcBuildingElementPart`) con su material, una por material y muro; la fachada del tipo se lee de vuelta al importar.
+- **Plantilla**: ocho tipos nuevos: ladrillo visto a soga, inglés, flamenco con tizones oscuros y blanco con rombos; bloque de hormigón; paneles prefabricados; ventilada de placas; aplacado de piedra.
+- `archisim fachadas out/` hace un bloque de dos plantas con cada uno.
+
+**Pendiente**
+- **Alzados y secciones**: siguen enseñando la capa lisa; queda dibujar el despiece en ellos a escala de detalle.
+- Las jambas, el alféizar y el dintel por dentro del hueco no llevan piezas: se ve la capa con su textura.
+- Los muros curvos siguen con el acabado liso.
+- El palomero no deja huecos que atraviesen el muro: los huecos se ven del color de la junta.
+
+**Qué debe probar Antonio**
+1. Ejecuta `archisim fachadas out/` y abre `out/fachadas.archisim`. En 3D, acércate a cada bloque y mira:
+   - el aparejo y las esquinas trabadas;
+   - los dinteles a sardinel sobre las ventanas;
+   - la banda del frente de forjado entre las dos plantas.
+2. Abre Tipos y materiales → «Fachada ladrillo visto a soga 30» → grupo Fachada. Cambia el aparejo a flamenco, el dibujo a rombos y el frente de forjado a ladrillo a sardinel: el 3D lo sigue.
+3. Pon uno de esos tipos a un muro de tu proyecto con forjados: el frente debe salir solo donde el forjado llega a la fachada.
+4. Planta a 1:20: las llagas de la hoja exterior.
+5. Mediciones, capítulo 13: piezas enteras y cortadas por muro.
+6. Exporta el IFC y míralo en otro visor: las piezas son partes de cada muro.
+
+---
+
 ## 2026-10-31 (45) · Vistas de dibujo y calcos (E7)
 
 Rama `bloque/e7-vistas-dibujo` (sobre `bloque/e2-galerias`), con pull request. Formato `.archisim` versión 48: el proyecto guarda las vistas de dibujo y los calcos. Los ficheros anteriores se abren igual.

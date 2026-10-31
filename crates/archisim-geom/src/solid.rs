@@ -55,13 +55,15 @@ pub enum SolidOwner {
     Growth(archisim_core::TerrainId),
     /// A pool built in the ground.
     Pool(archisim_core::PoolId),
+    /// The pieces of a wall's façade (E9): bricks, blocks, panels.
+    Facade(WallId),
 }
 
 impl SolidOwner {
     /// The id of the element.
     pub fn id(self) -> u64 {
         match self {
-            SolidOwner::Wall(x) => x.0,
+            SolidOwner::Wall(x) | SolidOwner::Facade(x) => x.0,
             SolidOwner::Slab(x) => x.0,
             SolidOwner::Opening(x) => x.0,
             SolidOwner::Column(x) => x.0,
@@ -2028,6 +2030,25 @@ pub fn growth_wanted() -> bool {
     !NO_PLANTS.with(|c| c.get()) && PLANT_CAP.with(|c| c.get()).is_none()
 }
 
+thread_local! {
+    static PIECES: std::cell::Cell<bool> = const { std::cell::Cell::new(true) };
+}
+
+/// Runs `f` without the pieces of the façades (E9): their walls show
+/// their plain finish (for drawings at a scale where the bricks would be
+/// a smudge, and for clash detection).
+pub fn without_facade_pieces<T>(f: impl FnOnce() -> T) -> T {
+    let before = PIECES.with(|p| p.replace(false));
+    let out = f();
+    PIECES.with(|p| p.set(before));
+    out
+}
+
+/// Whether [`model_solids`] lays the pieces of the façades.
+pub fn facade_pieces_wanted() -> bool {
+    PIECES.with(|p| p.get())
+}
+
 /// Solids of a plant grown by ArchiSim: one per material, at the level of
 /// detail the views take ([`Model::plant_detail`]), turned and placed.
 /// `None` for an object that is not a plant.
@@ -3489,8 +3510,14 @@ pub fn model_solids_except_detailed(
 ) -> Vec<Solid> {
     let mut out = Vec::new();
     let idx = WallIndex::new(model);
+    let pieces = facade_pieces_wanted();
     for w in model.walls() {
-        out.extend(wall_solids_in(&idx, w.id));
+        let solids = wall_solids_in(&idx, w.id);
+        // The bricks, blocks or panels of its façade (E9).
+        if pieces && crate::facade::has_facade(model, w.id) {
+            out.extend(crate::facade::facade_solids_in(&idx, w.id, &solids));
+        }
+        out.extend(solids);
     }
     for s in model.slabs() {
         out.extend(slab_solids_in(&idx, s.id));
@@ -3919,7 +3946,7 @@ pub fn face_of(
     let c = Point2::new(at[0], at[1]);
     let flat = Point2::new(n[0], n[1]);
     match owner {
-        SolidOwner::Wall(id) => {
+        SolidOwner::Wall(id) | SolidOwner::Facade(id) => {
             if n[2].abs() > 0.5 {
                 return None;
             }
@@ -3968,7 +3995,7 @@ pub fn painted_material(
     tri: &[P3; 3],
 ) -> Option<archisim_core::MaterialId> {
     let element = match s.owner {
-        SolidOwner::Wall(id) => id.0,
+        SolidOwner::Wall(id) | SolidOwner::Facade(id) => id.0,
         _ => return None,
     };
     let u = [
@@ -3992,9 +4019,20 @@ pub fn painted_material(
         (tri[0][2] + tri[1][2] + tri[2][2]) / 3.0,
     ];
     let face = face_of(model, s.owner, c, n)?;
-    model
+    let painted = model
         .face_paint(element, face)
-        .filter(|m| model.material(*m).is_some())
+        .filter(|m| model.material(*m).is_some());
+    if painted.is_some() {
+        return painted;
+    }
+    // The face behind the pieces of a façade shows in the joints: the
+    // mortar's colour.
+    match s.owner {
+        SolidOwner::Wall(w) if crate::facade::on_facade_face(model, w, c, n) => {
+            crate::facade::joint_material(model, w)
+        }
+        _ => None,
+    }
 }
 
 /// How far a painted zone stands off its wall's face, so it is seen over it.
@@ -4053,7 +4091,9 @@ pub fn paint_zone_triangles(model: &Model) -> Vec<(archisim_core::WallId, [P3; 3
 /// Solids of the elements on one level only.
 pub fn level_solids(model: &Model, level: LevelId) -> Vec<Solid> {
     let on_level = |owner: SolidOwner| match owner {
-        SolidOwner::Wall(w) => model.wall(w).is_some_and(|w| w.level == level),
+        SolidOwner::Wall(w) | SolidOwner::Facade(w) => {
+            model.wall(w).is_some_and(|w| w.level == level)
+        }
         SolidOwner::Slab(s) => model.slab(s).is_some_and(|s| s.level == level),
         SolidOwner::Opening(o) => model
             .opening(o)

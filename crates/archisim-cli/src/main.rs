@@ -17,6 +17,7 @@ mod demo;
 mod diseno;
 mod equipo;
 mod escaleras;
+mod fachadas;
 mod figuras;
 mod formas;
 mod grande;
@@ -113,6 +114,12 @@ Uso:
       planas, ventanas de cubierta, tejas de cada clase, caballetes,
       canalones y bajantes: cubiertas.archisim, cubiertas.ifc, planta de
       cubiertas y axonometría en SVG. Por defecto: ./out
+  archisim fachadas [carpeta]
+      Las fachadas pieza a pieza: un bloque de dos plantas por cada tipo de
+      fachada de la plantilla (ladrillo visto a soga, inglés, flamenco y con
+      rombos, bloque, paneles, ventilada y aplacado), con dinteles a
+      sardinel, esquinas trabadas y frentes de forjado: fachadas.archisim y
+      fachadas.ifc, y cuántas piezas lleva. Por defecto: ./out
   archisim formas [carpeta]
       Las formas de Concepto juntas: aristas redondeadas y achaflanadas,
       esfera, cilindro, cono, revolución, uniones, restas, intersecciones,
@@ -308,6 +315,10 @@ fn main() -> ExitCode {
         Some("escaleras") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
             report(escaleras::write(&dir))
+        }
+        Some("fachadas") => {
+            let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
+            report(fachadas::write(&dir))
         }
         Some("cubiertas") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));

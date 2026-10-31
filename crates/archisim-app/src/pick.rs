@@ -663,7 +663,7 @@ pub fn in_window<G: Geo + ?Sized>(geo: &G, level: LevelId, a: Point2, b: Point2)
 pub fn of_solid(owner: archisim_geom::solid::SolidOwner) -> Element {
     use archisim_geom::solid::SolidOwner;
     match owner {
-        SolidOwner::Wall(id) => Element::Wall(id),
+        SolidOwner::Wall(id) | SolidOwner::Facade(id) => Element::Wall(id),
         SolidOwner::Slab(id) => Element::Slab(id),
         SolidOwner::Opening(id) => Element::Opening(id),
         SolidOwner::Column(id) => Element::Column(id),

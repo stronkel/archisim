@@ -208,6 +208,8 @@ pub(super) enum Action {
     WallSweeps(WallTypeId, Vec<archisim_core::WallSweep>),
     /// «Envolver en extremos» and «Envolver en huecos».
     WallWrap(WallTypeId, archisim_core::Wrap, archisim_core::Wrap),
+    /// The façade of a wall type (E9).
+    WallFacade(WallTypeId, Option<archisim_core::Facade>),
     /// The edge of a slab type.
     SlabEdge(SlabTypeId, Option<archisim_core::SlabEdge>),
     DuplicateOpening(OpeningTypeId),
@@ -1528,6 +1530,9 @@ impl ArchiSimApp {
                 },
             );
         });
+        if t.function == WallFunction::Exterior || t.facade.is_some() {
+            self.facade_group(ui, &t, actions);
+        }
         props::group(
             ui,
             "types-wall-sweeps",
@@ -2008,6 +2013,32 @@ impl ArchiSimApp {
                     .ed
                     .transact("Envolver", |m| m.set_wall_type_wrap(id, ends, inserts));
                 self.report(r, "Envolver cambiado: lo siguen todos los muros del tipo.");
+            }
+            Action::WallFacade(id, f) => {
+                let r = self.ed.transact("Fachada del tipo", |m| {
+                    let mut f = f;
+                    // The joints in the colour of mortar (open and dark in
+                    // a ventilated façade) until another is chosen.
+                    if let Some(f) = f.as_mut() {
+                        let joint = if f.coursing.system == archisim_core::FacadeSystem::Ventilated
+                        {
+                            "Junta abierta"
+                        } else {
+                            "Mortero de juntas"
+                        };
+                        if f.coursing.joint_material.is_none() {
+                            f.coursing.joint_material =
+                                archisim_library::facades::facade_material(m, joint);
+                        }
+                        if let Some(s) = f.slab_front.as_mut() {
+                            if s.coursing.joint_material.is_none() {
+                                s.coursing.joint_material = f.coursing.joint_material;
+                            }
+                        }
+                    }
+                    m.set_wall_type_facade(id, f)
+                });
+                self.report(r, "Fachada del tipo cambiada: la siguen todos sus muros.");
             }
             Action::WallSweeps(id, v) => {
                 let r = self

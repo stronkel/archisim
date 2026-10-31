@@ -321,7 +321,9 @@ impl Scene {
                     }
                 }
                 // Its texture, unless its colours come from its vertices.
-                let texture = (opt.textures && !glass && per_vertex.is_none())
+                let piece = matches!(s.owner, archisim_geom::solid::SolidOwner::Facade(_))
+                    && painted.is_none();
+                let texture = (opt.textures && !glass && per_vertex.is_none() && !piece)
                     .then(|| texture_of(model, painted.unwrap_or(s.material), is_object))
                     .flatten();
                 let (tex, scale) = match texture {

@@ -1442,7 +1442,9 @@ fn add_solids(
         // Grass and flowers: their own colours, no contour lines at all
         // (thousands of blades would be drawn as as many).
         let grass = matches!(solid.owner, SolidOwner::Growth(_));
-        let own_tex = if dimmed || ghost || grass {
+        // Each piece of a façade is a brick or a panel: no texture on it.
+        let piece = matches!(solid.owner, SolidOwner::Facade(_));
+        let own_tex = if dimmed || ghost || grass || piece {
             [0.0, 0.0]
         } else {
             texture_of(solid.material)
@@ -1569,7 +1571,9 @@ fn cut_of(
         })
     };
     match solid.owner {
-        SolidOwner::Wall(w) => walls.get(&w).map_or(own(cutaway::WALL), |a| a.cut()),
+        SolidOwner::Wall(w) | SolidOwner::Facade(w) => {
+            walls.get(&w).map_or(own(cutaway::WALL), |a| a.cut())
+        }
         // Doors and windows go with their wall.
         SolidOwner::Opening(o) => model
             .opening(o)

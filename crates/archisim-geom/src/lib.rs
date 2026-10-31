@@ -27,6 +27,7 @@
 pub mod anchors;
 pub mod cover;
 pub mod csg;
+pub mod facade;
 pub mod forms;
 pub mod growth;
 pub mod index;
