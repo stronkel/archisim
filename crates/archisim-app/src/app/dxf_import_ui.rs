@@ -158,7 +158,7 @@ impl ArchiSimApp {
                     ui.add_space(4.0);
                     ui.switch(
                         &mut imp.groups,
-                        &format!("Cada bloque como un grupo ({blocks})"),
+                        format!("Cada bloque como un grupo ({blocks})"),
                     );
                     ui.label(
                         egui::RichText::new(
