@@ -81,8 +81,48 @@ pub struct PaintZone {
     pub material: MaterialId,
 }
 
+/// A zone of a flat face looking up or down (the top or the bottom of a
+/// slab, a footing, a column…), drawn on it with «Dividir cara» (G3): its
+/// outline in plan, and its paint (`None`: only divided, the face's own
+/// paint in sight).
+#[derive(Debug, Clone, PartialEq)]
+pub struct FaceZone {
+    pub element: u64,
+    pub face: FaceRef,
+    pub outline: Vec<Point2>,
+    pub material: Option<MaterialId>,
+}
+
+/// The number of sides by direction the faces of a column, a beam or a
+/// footing are told apart by (every 22,5°).
+pub const MEMBER_SIDES: usize = 16;
+
 impl Model {
+    /// Whether an element has any face painted (to skip the rest quickly).
+    pub fn has_face_paint(&self, element: u64) -> bool {
+        self.face_paints
+            .range((element, FaceRef::Wall(FaceSide::Exterior))..)
+            .next()
+            .is_some_and(|((e, _), _)| *e == element)
+            || self.face_zones.iter().any(|z| z.element == element)
+    }
+
     fn check_face(&self, element: u64, face: FaceRef) -> Result<(), ModelError> {
+        // Slabs, roofs, columns, beams and footings (G3): their top, their
+        // bottom and their sides.
+        if let Some(sides) = self.plain_faces(element) {
+            return match face {
+                FaceRef::Top | FaceRef::Bottom => Ok(()),
+                FaceRef::Side(i) if i < sides => Ok(()),
+                // A roof's edges.
+                FaceRef::Part(n)
+                    if (n as usize) < sides && self.roofs.contains_key(&RoofId(element)) =>
+                {
+                    Ok(())
+                }
+                _ => Err(ModelError::InvalidShape("no such face of the element")),
+            };
+        }
         match face {
             FaceRef::Wall(_) => {
                 if !self.walls.contains_key(&WallId(element)) {
@@ -141,6 +181,99 @@ impl Model {
             .iter()
             .filter(|((e, f), _)| self.check_face(*e, *f).is_ok())
             .map(|((e, f), m)| (*e, *f, *m))
+    }
+
+    /// How many sides an element painted face by face has (a slab's edges,
+    /// a roof's slopes, a member's directions), if it is one of those.
+    fn plain_faces(&self, element: u64) -> Option<usize> {
+        if let Some(s) = self.slabs.get(&SlabId(element)) {
+            return Some(s.outline.len() + s.holes.iter().map(|h| h.len()).sum::<usize>());
+        }
+        if let Some(r) = self.roofs.get(&RoofId(element)) {
+            return Some(r.outline.len());
+        }
+        if self.columns.contains_key(&ColumnId(element))
+            || self.beams.contains_key(&BeamId(element))
+            || self.footings.contains_key(&FootingId(element))
+        {
+            return Some(MEMBER_SIDES);
+        }
+        None
+    }
+
+    /// Divides a flat face looking up or down with a zone (`material`
+    /// `None`: divided, not painted). A zone with the same outline is
+    /// replaced.
+    pub fn set_face_zone(
+        &mut self,
+        element: u64,
+        face: FaceRef,
+        outline: Vec<Point2>,
+        material: Option<MaterialId>,
+    ) -> Result<(), ModelError> {
+        if !matches!(face, FaceRef::Top | FaceRef::Bottom) {
+            return Err(ModelError::InvalidShape(
+                "only faces looking up or down are divided",
+            ));
+        }
+        self.check_face(element, face)?;
+        if outline.len() < 3 || outline.iter().any(|p| !p.x.is_finite() || !p.y.is_finite()) {
+            return Err(ModelError::InvalidShape("a zone needs three corners"));
+        }
+        if let Some(m) = material {
+            if !self.materials.contains_key(&m) {
+                return Err(ModelError::UnknownMaterial(m));
+            }
+        }
+        let same = |z: &FaceZone| {
+            z.element == element
+                && z.face == face
+                && z.outline.len() == outline.len()
+                && z.outline.iter().zip(&outline).all(|(a, b)| a.approx_eq(*b))
+        };
+        match self.face_zones.iter_mut().find(|z| same(z)) {
+            Some(z) => z.material = material,
+            None => self.face_zones.push(FaceZone {
+                element,
+                face,
+                outline,
+                material,
+            }),
+        }
+        Ok(())
+    }
+
+    /// Takes away the zones of a face.
+    pub fn clear_face_zones(&mut self, element: u64, face: FaceRef) {
+        self.face_zones
+            .retain(|z| !(z.element == element && z.face == face));
+    }
+
+    /// The zones of faces, of elements that are there.
+    pub fn face_zones(&self) -> impl Iterator<Item = &FaceZone> {
+        self.face_zones
+            .iter()
+            .filter(|z| self.check_face(z.element, z.face).is_ok())
+    }
+
+    /// The zone of a face a point in plan is in (the last drawn wins).
+    pub fn face_zone_at(&self, element: u64, face: FaceRef, at: Point2) -> Option<&FaceZone> {
+        self.face_zones()
+            .filter(|z| z.element == element && z.face == face)
+            .filter(|z| point_in(&z.outline, at))
+            .last()
+    }
+
+    pub(super) fn restore_face_zones(&mut self, zones: Vec<FaceZone>) -> Result<(), RestoreError> {
+        for z in zones {
+            let e = z.element;
+            self.set_face_zone(z.element, z.face, z.outline, z.material)
+                .map_err(|error| RestoreError {
+                    element: format!("zone of a face of element {e}"),
+                    error,
+                })?;
+        }
+        Ok(())
     }
 
     /// Paints a zone of a wall's face. A zone with the same outline is
@@ -338,6 +471,19 @@ impl Model {
         }
         Ok(new_id)
     }
+}
+
+/// Whether a point is inside a polygon (even–odd).
+fn point_in(poly: &[Point2], p: Point2) -> bool {
+    let mut inside = false;
+    let n = poly.len();
+    for i in 0..n {
+        let (a, b) = (poly[i], poly[(i + 1) % n]);
+        if (a.y > p.y) != (b.y > p.y) && p.x < a.x + (p.y - a.y) / (b.y - a.y) * (b.x - a.x) {
+            inside = !inside;
+        }
+    }
+    inside
 }
 
 #[cfg(test)]

@@ -18,6 +18,9 @@ pub enum SketchTarget {
     Slab(SlabId),
     Roof(RoofId),
     Terrain(TerrainId),
+    /// The zones a face looking up or down is divided in (G3: «Dividir
+    /// cara»): the element and its face.
+    Zones(crate::pick::Element, archisim_core::FaceRef),
 }
 
 /// A contour being edited.
@@ -31,6 +34,9 @@ pub struct Sketch {
     /// A terrain's boundary: the point each vertex was (none: a new one)
     /// and its height.
     terrain: Vec<(Option<usize>, f64)>,
+    /// A face's zones as they were, with their paint (kept by the zones
+    /// drawn again as they were).
+    zones: Vec<(Vec<Point2>, Option<archisim_core::MaterialId>)>,
 }
 
 /// Why a sketch cannot be finished or an operation done.
@@ -89,6 +95,7 @@ impl Sketch {
                         loops: vec![o],
                         slopes: Vec::new(),
                         terrain: Vec::new(),
+                        zones: Vec::new(),
                     });
                 }
                 let ring = t.boundary();
@@ -96,18 +103,34 @@ impl Sketch {
                 let terrain = ring.iter().map(|&i| (Some(i), t.points[i].z)).collect();
                 (vec![outline], Vec::new(), terrain)
             }
+            SketchTarget::Zones(e, face) => {
+                let id = zone_element(e)?;
+                let zones: Vec<_> = model
+                    .face_zones()
+                    .filter(|z| z.element == id && z.face == face)
+                    .map(|z| (z.outline.clone(), z.material))
+                    .collect();
+                return Some(Sketch {
+                    target,
+                    loops: zones.iter().map(|z| z.0.clone()).collect(),
+                    slopes: Vec::new(),
+                    terrain: Vec::new(),
+                    zones,
+                });
+            }
         };
         Some(Sketch {
             target,
             loops,
             slopes,
             terrain,
+            zones: Vec::new(),
         })
     }
 
     /// Whether the sketch can have holes (a slab's).
     pub fn takes_holes(&self) -> bool {
-        matches!(self.target, SketchTarget::Slab(_))
+        matches!(self.target, SketchTarget::Slab(_) | SketchTarget::Zones(..))
     }
 
     /// Puts the sketch into the model: the element's contour as sketched.
@@ -115,6 +138,21 @@ impl Sketch {
     pub fn apply(&self, m: &mut Model) -> Result<(), SketchError> {
         if self.loops.iter().any(|l| l.len() < 3) {
             return Err(SketchError::TooFew);
+        }
+        if let SketchTarget::Zones(e, face) = self.target {
+            let id = zone_element(e).ok_or(SketchError::Empty)?;
+            m.clear_face_zones(id, face);
+            for lp in &self.loops {
+                // A zone drawn as it was keeps its paint.
+                let paint = self
+                    .zones
+                    .iter()
+                    .find(|(o, _)| same_loop(o, lp))
+                    .and_then(|z| z.1);
+                m.set_face_zone(id, face, lp.clone(), paint)
+                    .map_err(SketchError::Model)?;
+            }
+            return Ok(());
         }
         let outline = self.loops[0].clone();
         match self.target {
@@ -147,6 +185,7 @@ impl Sketch {
                 })
                 .map_err(SketchError::Model)?;
             }
+            SketchTarget::Zones(..) => {}
             SketchTarget::Terrain(id) if self.terrain.is_empty() => {
                 // An edge drawn by hand (E5): the terrain takes the new one.
                 m.edit_terrain(id, |t| t.set_outline(outline))
@@ -281,6 +320,11 @@ impl Sketch {
     /// vertex still is, and the new ones take the height of the nearest.
     pub fn with_loops(&self, mut loops: Vec<Vec<Point2>>) -> Result<Sketch, SketchError> {
         loops.sort_by(|a, b| signed_area(b).abs().total_cmp(&signed_area(a).abs()));
+        if matches!(self.target, SketchTarget::Zones(..)) {
+            let mut out = self.clone();
+            out.loops = loops;
+            return Ok(out);
+        }
         if !self.takes_holes() && loops.len() != 1 {
             return Err(SketchError::OneLoop);
         }
@@ -331,8 +375,37 @@ impl Sketch {
             SketchTarget::Slab(id) => crate::pick::Element::Slab(id),
             SketchTarget::Roof(id) => crate::pick::Element::Roof(id),
             SketchTarget::Terrain(id) => crate::pick::Element::Terrain(id),
+            SketchTarget::Zones(e, _) => e,
         }
     }
+}
+
+/// The id of an element whose faces are divided.
+fn zone_element(e: crate::pick::Element) -> Option<u64> {
+    use crate::pick::Element;
+    match e {
+        Element::Slab(id) => Some(id.0),
+        Element::Footing(id) => Some(id.0),
+        Element::Column(id) => Some(id.0),
+        Element::Beam(id) => Some(id.0),
+        Element::Roof(id) => Some(id.0),
+        _ => None,
+    }
+}
+
+/// Whether two loops are the same corners, wherever they start and either
+/// way round.
+fn same_loop(a: &[Point2], b: &[Point2]) -> bool {
+    if a.len() != b.len() || a.is_empty() {
+        return false;
+    }
+    let n = a.len();
+    let Some(k) = b.iter().position(|q| q.distance(a[0]) < JOIN) else {
+        return false;
+    };
+    let fwd = (0..n).all(|i| a[i].distance(b[(k + i) % n]) < JOIN);
+    let back = (0..n).all(|i| a[i].distance(b[(k + n - i) % n]) < JOIN);
+    fwd || back
 }
 
 fn segment_distance(p: Point2, a: Point2, b: Point2) -> f64 {
@@ -451,6 +524,7 @@ mod tests {
             loops: vec![vec![p(0.0, 0.0), p(6.0, 0.0), p(6.0, 4.0), p(0.0, 4.0)]],
             slopes: vec![Some(0.5), None, Some(0.5), None],
             terrain: Vec::new(),
+            zones: Vec::new(),
         };
         // The east edge split in two.
         let r = s

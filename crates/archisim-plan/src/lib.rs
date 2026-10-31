@@ -661,6 +661,25 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
         };
         dim::element(&mut s, slab.id.0, |s| draw_slab(s, model, slab, si, cut, k));
     }
+    // The zones its top is divided in (G3), painted in their colour.
+    if !ceiling {
+        let ids: Vec<u64> = slabs.iter().map(|sl| sl.id.0).collect();
+        for z in model
+            .face_zones()
+            .filter(|z| z.face == archisim_core::FaceRef::Top && ids.contains(&z.element))
+        {
+            let fill = z.material.map_or("none".to_string(), |m| {
+                let [r, g, b] = model.surface_color(m);
+                format!("#{r:02x}{g:02x}{b:02x}")
+            });
+            let _ = writeln!(
+                s,
+                r#"<path class="face-zone" d="{}" fill="{fill}" fill-opacity="0.55" stroke="{INK}" stroke-width="{}"/>"#,
+                path(&z.outline),
+                num(pens().thin * k)
+            );
+        }
+    }
     overrides::close(&mut s);
     if show(archisim_core::Category::Rooms) && !ceiling {
         overrides::group(&mut s, archisim_core::Category::Rooms, |s| {

@@ -15,6 +15,19 @@ const ON_FACE: f64 = 0.03;
 /// How near the border of a face an edge's end meets it, metres.
 const NEAR_BORDER: f64 = 0.15;
 
+/// The solids' owner of an element painted face by face (G3).
+pub(super) fn plain_owner(e: Element) -> Option<archisim_geom::solid::SolidOwner> {
+    use archisim_geom::solid::SolidOwner;
+    match e {
+        Element::Slab(id) => Some(SolidOwner::Slab(id)),
+        Element::Roof(id) => Some(SolidOwner::Roof(id)),
+        Element::Column(id) => Some(SolidOwner::Column(id)),
+        Element::Beam(id) => Some(SolidOwner::Beam(id)),
+        Element::Footing(id) => Some(SolidOwner::Footing(id)),
+        _ => None,
+    }
+}
+
 impl ArchiSimApp {
     /// A click of Pintar at `p` (in plan; in 3D, with the face under the
     /// cursor).
@@ -44,8 +57,29 @@ impl ArchiSimApp {
                     None => self.complain("Esa cara no se puede pintar."),
                 }
             }
+            // G3: a slab, a roof, a column, a beam or a footing.
+            Some((Owner::Model(e), world, n)) if plain_owner(e).is_some() => {
+                let owner = plain_owner(e).unwrap_or(archisim_geom::solid::SolidOwner::Slab(
+                    archisim_core::SlabId(0),
+                ));
+                let face = archisim_geom::solid::face_of(
+                    self.ed.model(),
+                    owner,
+                    [world.x as f64, world.y as f64, world.z as f64],
+                    [n.x as f64, n.y as f64, n.z as f64],
+                );
+                match face {
+                    Some(f) => self.paint_plain(
+                        owner.id(),
+                        f,
+                        Point2::new(world.x as f64, world.y as f64),
+                        material,
+                    ),
+                    None => self.complain("Esa cara no se puede pintar."),
+                }
+            }
             Some(_) if in_3d => {
-                self.complain("Se pintan las caras de los muros y de los volúmenes.");
+                self.complain("Se pintan las caras de muros, forjados, cubiertas, pilares, vigas, zapatas y volúmenes.");
             }
             _ => {
                 // In plan: the top of a volume, or the side of a wall.
@@ -70,11 +104,68 @@ impl ArchiSimApp {
                         let side = self.wall_side(w, p);
                         self.paint_wall(w, side, None, material);
                     }
-                    _ => self.complain(
-                        "Haz clic en la cara de un muro o de un volumen (mejor en 3D) para pintarla.",
-                    ),
+                    // In plan, what looks up: the top of a slab, a
+                    // column, a beam or a footing.
+                    Some(e) if plain_owner(e).is_some() => {
+                        let id = plain_owner(e).map_or(0, |o| o.id());
+                        self.paint_plain(id, FaceRef::Top, p, material);
+                    }
+                    _ => {
+                        // A slab under the click, if nothing else is.
+                        let slab = self
+                            .ed
+                            .model()
+                            .slabs_on_level(self.ed.level)
+                            .find(|s| {
+                                archisim_draft::inside_loops(std::slice::from_ref(&s.outline), p)
+                            })
+                            .map(|s| s.id.0);
+                        match slab {
+                            Some(id) => self.paint_plain(id, FaceRef::Top, p, material),
+                            None => self.complain(
+                                "Haz clic en la cara de un elemento (mejor en 3D) para pintarla.",
+                            ),
+                        }
+                    }
                 }
             }
+        }
+    }
+
+    /// Paints a face of a slab, a roof, a column, a beam or a footing: the
+    /// zone of it the point is in, if the face is divided there.
+    fn paint_plain(
+        &mut self,
+        element: u64,
+        face: FaceRef,
+        at: Point2,
+        material: Option<MaterialId>,
+    ) {
+        let zone = self
+            .ed
+            .model()
+            .face_zone_at(element, face, at)
+            .map(|z| z.outline.clone());
+        match zone {
+            Some(outline) => {
+                let r = self.ed.transact(
+                    if material.is_some() {
+                        "Pintar zona"
+                    } else {
+                        "Quitar pintura"
+                    },
+                    |m| m.set_face_zone(element, face, outline, material),
+                );
+                self.report(
+                    r,
+                    if material.is_some() {
+                        "Zona de la cara pintada."
+                    } else {
+                        "Pintura de la zona quitada."
+                    },
+                );
+            }
+            None => self.paint_face(element, face, material),
         }
     }
 

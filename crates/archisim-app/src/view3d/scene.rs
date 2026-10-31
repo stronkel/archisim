@@ -810,6 +810,19 @@ impl Scene {
         let mut loose = Loose::default();
         let solids = archisim_geom::solid::model_solids_except_detailed(model, &skip, &detailed);
         let anchors = anchors(&solids);
+        // The faces with painted zones (G3): their elements' solids.
+        let zone_solids: Vec<archisim_geom::solid::Solid> = {
+            let ids: std::collections::BTreeSet<u64> = model
+                .face_zones()
+                .filter(|z| z.material.is_some())
+                .map(|z| z.element)
+                .collect();
+            solids
+                .iter()
+                .filter(|s| ids.contains(&s.owner.id()))
+                .cloned()
+                .collect()
+        };
         // The detailed doors and windows are cut as their walls.
         for g in &mut s.groups {
             for (inst, owner) in g.instances.iter_mut().zip(&g.owners) {
@@ -884,6 +897,35 @@ impl Scene {
                 )
             });
             loose.push(Pass::Opaque, v, owner);
+        }
+        // Painted zones of the faces of slabs, footings… (G3), just off them.
+        for (owner, tri, [r, g, b]) in
+            archisim_geom::solid::face_zone_triangles(model, &zone_solids)
+        {
+            if model.hidden_by_discipline(&disciplines.hidden, owner.id()) {
+                continue;
+            }
+            let element = crate::pick::of_solid(owner);
+            let rgb = [srgb_to_linear(r), srgb_to_linear(g), srgb_to_linear(b)];
+            let select = if selection.contains(&element) {
+                1.0
+            } else {
+                0.0
+            };
+            let p = tri.map(|v| Vec3::new(v[0] as f32, v[1] as f32, v[2] as f32));
+            let n = (p[1] - p[0]).cross(p[2] - p[0]).normalize_or_zero();
+            let v = p.map(|v| {
+                Vertex::new(
+                    v,
+                    n,
+                    [rgb[0], rgb[1], rgb[2], 1.0],
+                    -1.0,
+                    [0.0, 0.0],
+                    [cutaway::PLAIN, 0.0, 0.0, 0.0],
+                    select,
+                )
+            });
+            loose.push(Pass::Opaque, v, Owner::Model(element));
         }
         for part in linked {
             let [r, g, b] = part.color;

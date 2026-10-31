@@ -1436,6 +1436,8 @@ pub struct ModelParts {
     /// walls' faces.
     pub face_paints: Vec<(u64, FaceRef, MaterialId)>,
     pub paint_zones: Vec<PaintZone>,
+    /// Zones of the flat faces of other elements (G3).
+    pub face_zones: Vec<FaceZone>,
     /// How materials look in 3D (colour and texture).
     pub appearances: Vec<(MaterialId, Appearance)>,
     /// How views can be presented.
@@ -1570,6 +1572,7 @@ pub struct Model {
     face_paints: BTreeMap<(u64, FaceRef), MaterialId>,
     appearances: BTreeMap<MaterialId, Appearance>,
     paint_zones: Vec<PaintZone>,
+    face_zones: Vec<FaceZone>,
     presentation_styles: BTreeMap<PresentationStyleId, crate::graphics::PresentationStyle>,
     plan_views: BTreeMap<PlanViewId, PlanView>,
     level_styles: BTreeMap<LevelId, crate::graphics::ViewStyle>,
@@ -1659,6 +1662,7 @@ impl Model {
             face_paints: BTreeMap::new(),
             appearances: BTreeMap::new(),
             paint_zones: Vec::new(),
+            face_zones: Vec::new(),
             presentation_styles: BTreeMap::new(),
             plan_views: BTreeMap::new(),
             level_styles: BTreeMap::new(),
@@ -4297,6 +4301,7 @@ impl Model {
             edges: self.edges.values().cloned().collect(),
             face_paints: self.face_paints().collect(),
             paint_zones: self.paint_zones().cloned().collect(),
+            face_zones: self.face_zones().cloned().collect(),
             appearances: self.appearances().collect(),
             presentation_styles: self.presentation_styles.values().cloned().collect(),
             plan_views: self.plan_views.values().cloned().collect(),
@@ -4657,6 +4662,7 @@ impl Model {
         model.restore_masses(parts.masses, &mut claim)?;
         model.restore_edges(parts.edges, &mut claim)?;
         model.restore_paint(parts.face_paints, parts.paint_zones)?;
+        model.restore_face_zones(parts.face_zones)?;
         model.restore_appearances(parts.appearances)?;
         model.restore_presentation_styles(parts.presentation_styles, &mut claim)?;
         model.restore_views(

@@ -8350,3 +8350,129 @@ fn dxf_blocks_as_groups_and_the_rebar_tile() {
     assert!(h.app.ed.selection.contains(&Element::Column(c)));
     assert!(h.app.rebar_pick, "it goes on until Esc");
 }
+
+/// G3: Pintar on a slab's top from the plan, its top divided with a zone
+/// in sketch mode, the zone painted apart; and the faces of a column told
+/// apart in 3D.
+#[test]
+fn faces_of_slabs_are_painted_and_divided() {
+    let mut ed = Editor::new_project();
+    let level = ed.level;
+    let slab_type = ed.model().slab_types().next().unwrap().id;
+    let id = ed
+        .transact("Forjado", |m| {
+            m.add_slab(archisim_core::NewSlab {
+                slab_type,
+                level,
+                outline: vec![p(0.0, 0.0), p(6.0, 0.0), p(6.0, 4.0), p(0.0, 4.0)],
+                top_offset: 0.0,
+            })
+        })
+        .unwrap();
+    let mut h = Harness::new(ed);
+    h.app.fit_requested = true;
+    h.frame();
+    let mats: Vec<_> = h.model().materials().map(|m| m.id).take(2).collect();
+    h.app.concept_pick(super::concept_ui::ConceptPick::Paint);
+    h.app.mass_settings.material = mats[0];
+    h.app.paint_click(p(3.0, 2.0));
+    assert_eq!(
+        h.model().face_paint(id.0, archisim_core::FaceRef::Top),
+        Some(mats[0]),
+        "{:?}",
+        h.app.message.as_ref().map(|m| &m.text)
+    );
+    // Divided: a square drawn on its top in sketch mode.
+    h.app.set_tool(Tool::Arrow);
+    h.app.start_sketch(crate::sketch::SketchTarget::Zones(
+        Element::Slab(id),
+        archisim_core::FaceRef::Top,
+    ));
+    h.frame();
+    assert!(
+        !h.app.ed.hidden().contains(&Element::Slab(id)),
+        "the slab stays in sight"
+    );
+    let layer = h.model().draw_layer_by_name("Boceto").unwrap().id;
+    let view = archisim_core::ViewRef::Level(level);
+    h.app
+        .ed
+        .transact("Líneas", |m| {
+            let c = [p(1.0, 1.0), p(3.0, 1.0), p(3.0, 3.0), p(1.0, 3.0)];
+            for i in 0..4 {
+                m.add_draft(archisim_core::NewDraft::new(
+                    view,
+                    layer,
+                    archisim_core::Shape::Line {
+                        a: c[i],
+                        b: c[(i + 1) % 4],
+                    },
+                ))?;
+            }
+            Ok(())
+        })
+        .unwrap();
+    h.key(Key::Enter);
+    assert!(
+        h.app.sketch.is_none(),
+        "{:?}",
+        h.app.message.as_ref().map(|m| &m.text)
+    );
+    assert_eq!(h.app.ed.undo_label(), Some("Dividir cara"));
+    assert_eq!(h.model().face_zones().count(), 1);
+    // Painted apart: inside the zone, the zone; outside, the whole top.
+    h.app.concept_pick(super::concept_ui::ConceptPick::Paint);
+    h.app.mass_settings.material = mats[1];
+    h.app.paint_click(p(2.0, 2.0));
+    let z = h.model().face_zones().next().unwrap().clone();
+    assert_eq!(z.material, Some(mats[1]));
+    assert_eq!(
+        h.model().face_paint(id.0, archisim_core::FaceRef::Top),
+        Some(mats[0])
+    );
+    // It is drawn in 3D over the top, and in plan.
+    let solids = archisim_geom::solid::model_solids(h.model());
+    let tris = archisim_geom::solid::face_zone_triangles(h.model(), &solids);
+    assert_eq!(tris.len(), 2, "a square in two triangles");
+    for (_, t, _) in &tris {
+        for v in t {
+            assert!(
+                v[0] > 0.99 && v[0] < 3.01 && v[1] > 0.99 && v[1] < 3.01,
+                "{t:?}"
+            );
+        }
+    }
+    let svg = archisim_plan::render_plan(h.model(), level, &archisim_plan::PlanOptions::default());
+    assert!(svg.contains("face-zone"));
+    // Divided again with nothing: the zone goes.
+    h.app.set_tool(Tool::Arrow);
+    h.app.start_sketch(crate::sketch::SketchTarget::Zones(
+        Element::Slab(id),
+        archisim_core::FaceRef::Top,
+    ));
+    h.frame();
+    let lines: Vec<_> = h
+        .model()
+        .drafts_in(view)
+        .filter(|d| d.layer == layer)
+        .map(|d| d.id)
+        .collect();
+    assert_eq!(lines.len(), 4, "the zone comes back as lines");
+    h.app
+        .ed
+        .transact("Borrar", |m| {
+            for l in &lines {
+                m.remove_draft(*l)?;
+            }
+            Ok(())
+        })
+        .unwrap();
+    h.key(Key::Enter);
+    assert_eq!(h.model().face_zones().count(), 0);
+    // A column's sides are told apart by the way they look.
+    use archisim_geom::solid::{face_of, SolidOwner};
+    let col = archisim_core::ColumnId(1);
+    let f = |n: [f64; 3]| face_of(h.model(), SolidOwner::Column(col), [0.0, 0.0, 1.0], n);
+    assert_eq!(f([0.0, 0.0, 1.0]), Some(archisim_core::FaceRef::Top));
+    assert_ne!(f([1.0, 0.0, 0.0]), f([0.0, 1.0, 0.0]));
+}

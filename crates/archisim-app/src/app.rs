@@ -1794,6 +1794,11 @@ impl ArchiSimApp {
         missions_ui::clear_marks(&ctx);
         widgets::note_click(&ctx);
         self.ed.select_whole_groups();
+        // Sketching, Intro with no command running accepts the sketch
+        // (before it can repeat the last command).
+        if self.mode == ViewMode::Plan {
+            self.sketch_keys(&ctx);
+        }
         // Texts are measured and drawn in the project's lettering.
         archisim_draft::font::set_font(self.ed.model().graphics.font);
         self.handle_close(&ctx);

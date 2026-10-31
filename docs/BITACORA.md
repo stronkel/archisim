@@ -6,6 +6,37 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-31 (54) · G3: Pintar y Dividir cara en la barra
+
+Rama `bloque/g3-pintar` (sobre `bloque/g2-boceto`), con pull request. Formato `.archisim` versión 54: caras pintadas de más elementos y zonas de caras.
+
+**Hecho**
+- **Pintar** en la barra de Modificar, siempre a mano, en todas las disciplinas.
+  - Ahora pinta la cara pinchada de muros y volúmenes, y también de **forjados** (cara de arriba, de abajo y el canto de cada arista), **cubiertas** (cada faldón, el sofito y el frente de cada alero), **pilares, vigas y zapatas** (arriba, abajo y cada lado según hacia dónde mira).
+  - Mejor en 3D. En planta pinta la cara de arriba de lo que pinches.
+- **Dividir cara** en la misma barra, con un forjado, una zapata, un pilar o una viga elegidos.
+  - Se abre el modo boceto de G2 sobre su cara de arriba, sin ocultar el elemento.
+  - Cada contorno cerrado que dibujes es una zona. Al volver a dividir, las zonas existentes salen como líneas.
+  - Con Pintar, un clic dentro de una zona pinta solo esa zona; fuera, la cara entera.
+- Las zonas pintadas se ven:
+  - en 3D, sobre la cara;
+  - en planta, con su color.
+  - Sirven para dibujar pavimentos distintos sobre un forjado.
+- Intro acepta el boceto aunque antes se haya usado una orden (ya no la repite).
+
+**Pendiente**
+- Dividir las caras verticales (muros) en modo boceto: para eso hace falta dibujar en alzado. Los muros siguen dividiéndose con aristas en 3D (Concepto).
+- El perfil en alzado del muro en modo boceto, por la misma razón.
+- El render y el glTF todavía no dibujan las zonas, solo la pintura de caras enteras.
+
+**Qué debe probar Antonio**
+1. En 3D, pulsa Pintar, elige un material en Propiedades y pincha la cara de arriba de un forjado, el canto, un faldón de cubierta y un lado de un pilar.
+2. En planta, elige un forjado y pulsa Dividir cara. Dibuja un rectángulo dentro y pulsa Aceptar (o Intro).
+3. Pintar y pincha dentro del rectángulo: en planta se ve la zona coloreada y en 3D también.
+4. Guarda, cierra y abre de nuevo: la pintura y las zonas siguen.
+
+---
+
 ## 2026-10-31 (53) · G2: modo boceto como en Revit
 
 Rama `bloque/g2-boceto` (sobre `bloque/g1-rapidos`), con pull request. Sin cambios de formato.

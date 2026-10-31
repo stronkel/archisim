@@ -1095,6 +1095,29 @@ impl ArchiSimApp {
                 }
                 bar_separator(ui, &p);
             }
+            // Pintar any face, and Dividir cara for the top of one element
+            // (G3).
+            let r = bar_button(ui, Mark::Glyph(Glyph::Paint), "Pintar", false, true, true)
+                .on_hover_text("Pintar (PT) — un material en la cara que pinches de cualquier elemento: muros, forjados, cubiertas, pilares, vigas, zapatas, volúmenes (mejor en 3D). Si la cara está dividida, solo esa zona");
+            if r.clicked() {
+                self.concept_pick(super::concept_ui::ConceptPick::Paint);
+            }
+            let divide = match sel.as_slice() {
+                [e @ (Element::Slab(_) | Element::Footing(_) | Element::Column(_) | Element::Beam(_))] => Some(*e),
+                _ => None,
+            };
+            let r = bar_button(ui, Mark::Glyph(Glyph::DivideFace), "Dividir cara", false, divide.is_some(), true);
+            let r = if divide.is_some() {
+                r.on_hover_text("Dividir cara — dibuja zonas cerradas sobre la cara de arriba, en modo boceto; luego se pinta cada una aparte")
+            } else {
+                r.on_hover_text("Dividir cara — elige antes un forjado, una zapata, un pilar o una viga")
+            };
+            if r.clicked() {
+                if let Some(e) = divide {
+                    self.start_sketch(crate::sketch::SketchTarget::Zones(e, archisim_core::FaceRef::Top));
+                }
+            }
+            bar_separator(ui, &p);
             let mut run = None;
             for (i, group) in [TRANSFORM, GEOMETRY, BUILDING].iter().enumerate() {
                 if i > 0 {
