@@ -815,3 +815,62 @@ fn demo_cut_pictures() {
         pixmap.save_png(dir.join(format!("{name}.png"))).unwrap();
     }
 }
+
+/// The devices of the services, close (G4): each light point, socket,
+/// switch, radiator, board… of `out/instalaciones.archisim` (made with
+/// `archisim instalaciones out/`), seen from the room, one picture each:
+/// `ARCHISIM_INSTALACIONES_OUT=folder`.
+#[test]
+fn services_pictures() {
+    let Some(dir) = std::env::var_os("ARCHISIM_INSTALACIONES_OUT") else {
+        return;
+    };
+    let Some((device, queue, view_formats)) = gpu() else {
+        return;
+    };
+    let path =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../out/instalaciones.archisim");
+    let Ok(m) = archisim_file::open(&path) else {
+        eprintln!("Run `archisim instalaciones out/` first.");
+        return;
+    };
+    let scene = Scene::build(&m, &BTreeSet::new());
+    let size = [700u32, 560u32];
+    let dir = std::path::PathBuf::from(dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut seen = BTreeSet::new();
+    for d in m.devices() {
+        let name = format!(
+            "{}{}",
+            d.kind.code(),
+            if d.fixture.is_some() { "-lampara" } else { "" }
+        );
+        if !seen.insert(name.clone()) {
+            continue;
+        }
+        let z = m.level(d.level).map_or(0.0, |l| l.elevation) + d.elevation;
+        let size_of = d.width.max(d.height.min(1.5)).max(0.12) as f32;
+        let mut camera = Camera {
+            pitch: 0.12,
+            yaw: (d.rotation as f32) + std::f32::consts::FRAC_PI_2 + 0.5,
+            perspective: true,
+            ..Camera::default()
+        };
+        camera.target = glam::Vec3::new(
+            d.position.x as f32,
+            d.position.y as f32,
+            (z + d.height.min(1.5) / 2.0) as f32,
+        );
+        camera.distance = size_of * 3.2;
+        let mut r = Renderer::new(&device, view_formats, super::render::TextureMode::Full);
+        r.set_scene(&device, &scene);
+        r.render(&device, &queue, &camera, size, 1);
+        let (w, h, px) = r.read_pixels(&device, &queue).unwrap();
+        let pixmap = resvg::tiny_skia::Pixmap::from_vec(
+            px,
+            resvg::tiny_skia::IntSize::from_wh(w, h).unwrap(),
+        )
+        .unwrap();
+        pixmap.save_png(dir.join(format!("{name}.png"))).unwrap();
+    }
+}

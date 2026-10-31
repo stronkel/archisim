@@ -689,12 +689,11 @@ impl ArchiSimApp {
         }
         let source = self.fixture_source.filter(|i| *i < COLLECTIONS.len());
         // The cards: (name, its picture, what a click does, on).
-        let mut cards: Vec<(String, Option<super::thumbs::Thumb>, Pick, bool)> = vec![(
-            "Empotrable".into(),
-            None,
-            Pick::Downlight,
-            now.is_none(),
-        )];
+        let mut cards: Vec<(String, Option<super::thumbs::Thumb>, Pick, bool)> =
+            vec![("Empotrable".into(), None, Pick::Downlight, now.is_none())];
+        if let Some(i) = source {
+            self.collection_library(&COLLECTIONS[i]);
+        }
         self.thumbs3d.begin();
         let gpu = self.gpu.as_ref();
         match source {
@@ -713,7 +712,6 @@ impl ArchiSimApp {
             }
             Some(i) => {
                 let c = &COLLECTIONS[i];
-                self.collection_library(c);
                 let lib = &self
                     .collection_libraries
                     .iter()
@@ -728,12 +726,11 @@ impl ArchiSimApp {
                     let Some(ty) = lib.object_types().find(|t| t.name == variant) else {
                         continue;
                     };
-                    let thumb = self.thumbs3d.get(
-                        &ctx,
-                        gpu,
-                        format!("c:{}:{name}", c.name),
-                        || crate::type_preview::object_model(lib, ty),
-                    );
+                    let thumb =
+                        self.thumbs3d
+                            .get(&ctx, gpu, format!("c:{}:{name}", c.name), || {
+                                crate::type_preview::object_model(lib, ty)
+                            });
                     let on = current.as_deref() == Some(variant.as_str());
                     cards.push((name.to_string(), thumb, Pick::Collected(name, i), on));
                 }
@@ -797,7 +794,10 @@ impl ArchiSimApp {
                             painter.image(
                                 t.tex,
                                 egui::Rect::from_center_size(pic.center(), size),
-                                egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
+                                egui::Rect::from_min_max(
+                                    egui::pos2(0.0, 0.0),
+                                    egui::pos2(1.0, 1.0),
+                                ),
                                 egui::Color32::WHITE,
                             );
                         }
@@ -810,10 +810,16 @@ impl ArchiSimApp {
                         }
                         None => {}
                     }
+                    // A long name, cut to the card.
+                    let shown = if name.chars().count() > 15 {
+                        format!("{}…", name.chars().take(14).collect::<String>())
+                    } else {
+                        name.clone()
+                    };
                     painter.text(
                         egui::pos2(rect.center().x, rect.max.y - 14.0),
                         egui::Align2::CENTER_CENTER,
-                        name.clone(),
+                        shown,
                         egui::FontId::proportional(10.5),
                         p.text,
                     );
@@ -830,7 +836,8 @@ impl ArchiSimApp {
         let fixture = match pick {
             Pick::Downlight => None,
             Pick::Project(t) => Some(t),
-            Pick::Collected(name, i) => match self.ed.collection_object_type(name, &COLLECTIONS[i]) {
+            Pick::Collected(name, i) => match self.ed.collection_object_type(name, &COLLECTIONS[i])
+            {
                 Ok(t) => Some(t),
                 Err(e) => {
                     self.complain(format!("No se puede cargar «{name}»: {e}."));

@@ -17,7 +17,7 @@
 //! boiler's enamel, `pipe` a pipe (the colour of its system), `shade` what
 //! glows of a light, `red` a pilot.
 
-use crate::build::{Builder, P3, ROUND};
+use crate::build::{Builder, ROUND};
 use crate::PropMesh;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock};
@@ -449,7 +449,14 @@ fn radiator(b: &mut Builder, w: f64, d: f64, h: f64) {
         0.011,
         ROUND,
     );
-    b.cone("body", [xl, ym, zv], [xl, ym, zv + 0.05], 0.014, 0.013, ROUND);
+    b.cone(
+        "body",
+        [xl, ym, zv],
+        [xl, ym, zv + 0.05],
+        0.014,
+        0.013,
+        ROUND,
+    );
     b.cone(
         "body",
         [xl, ym, zv + 0.05],
@@ -489,10 +496,30 @@ fn grille(b: &mut Builder, w: f64, d: f64, h: f64) {
     let t = d.min(0.03);
     let f = 0.022;
     // The frame: four bars mitred at the corners.
-    b.rbox("plate", [-w / 2.0, back, 0.0], [w / 2.0, back + t, f], 0.002);
-    b.rbox("plate", [-w / 2.0, back, h - f], [w / 2.0, back + t, h], 0.002);
-    b.rbox("plate", [-w / 2.0, back, f], [-w / 2.0 + f, back + t, h - f], 0.002);
-    b.rbox("plate", [w / 2.0 - f, back, f], [w / 2.0, back + t, h - f], 0.002);
+    b.rbox(
+        "plate",
+        [-w / 2.0, back, 0.0],
+        [w / 2.0, back + t, f],
+        0.002,
+    );
+    b.rbox(
+        "plate",
+        [-w / 2.0, back, h - f],
+        [w / 2.0, back + t, h],
+        0.002,
+    );
+    b.rbox(
+        "plate",
+        [-w / 2.0, back, f],
+        [-w / 2.0 + f, back + t, h - f],
+        0.002,
+    );
+    b.rbox(
+        "plate",
+        [w / 2.0 - f, back, f],
+        [w / 2.0, back + t, h - f],
+        0.002,
+    );
     // The dark of the duct behind.
     b.rbox(
         "dark",
@@ -598,12 +625,7 @@ fn boiler(b: &mut Builder, w: f64, d: f64, h: f64) {
     let back = -d / 2.0;
     let pipes = (h * 0.12).clamp(0.0, 0.12);
     let z0 = pipes;
-    b.rbox(
-        "body",
-        [-w / 2.0, back, z0],
-        [w / 2.0, d / 2.0, h],
-        0.025,
-    );
+    b.rbox("body", [-w / 2.0, back, z0], [w / 2.0, d / 2.0, h], 0.025);
     // The control panel along the bottom of the front.
     let ph = ((h - z0) * 0.14).clamp(0.05, 0.12);
     b.rbox(

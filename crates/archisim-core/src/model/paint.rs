@@ -473,7 +473,6 @@ impl Model {
     }
 }
 
-
 /// Whether a point is inside a polygon (even–odd).
 fn point_in(poly: &[Point2], p: Point2) -> bool {
     let mut inside = false;

@@ -4020,7 +4020,10 @@ pub fn device_solids(model: &Model, id: archisim_core::DeviceId) -> Vec<Solid> {
                 .map(|(material, tris)| Solid {
                     owner: SolidOwner::Device(id),
                     material: *material,
-                    triangles: tris.iter().map(|t| [at(t[0]), at(t[1]), at(t[2])]).collect(),
+                    triangles: tris
+                        .iter()
+                        .map(|t| [at(t[0]), at(t[1]), at(t[2])])
+                        .collect(),
                 })
                 .collect();
         }
@@ -4046,7 +4049,10 @@ pub fn device_solids(model: &Model, id: archisim_core::DeviceId) -> Vec<Solid> {
                 Some(Solid {
                     owner: SolidOwner::Device(id),
                     material: archisim_core::MaterialId(DEVICE_ROLE_BASE + k as u64),
-                    triangles: tris.iter().map(|t| [at(t[0]), at(t[1]), at(t[2])]).collect(),
+                    triangles: tris
+                        .iter()
+                        .map(|t| [at(t[0]), at(t[1]), at(t[2])])
+                        .collect(),
                 })
             })
             .collect();
@@ -4076,17 +4082,17 @@ pub const DEVICE_ROLE_BASE: u64 = u64::MAX - 63;
 
 /// The colour of a role of a device's own model.
 fn device_role_color(d: &archisim_core::ServiceDevice, role: usize) -> [u8; 3] {
-    match archisim_core::props::fine::services::ROLES.get(role).copied() {
+    match archisim_core::props::fine::services::ROLES
+        .get(role)
+        .copied()
+    {
         Some("plate") => [243, 243, 239],
         Some("key") => [250, 250, 247],
         Some("metal") => [178, 181, 186],
         Some("dark") => [48, 48, 52],
         Some("glass") => [96, 104, 112],
         Some("body") => [238, 238, 234],
-        Some("pipe") => d
-            .kind
-            .system()
-            .map_or([170, 140, 110], |s| s.color()),
+        Some("pipe") => d.kind.system().map_or([170, 140, 110], |s| s.color()),
         Some("shade") => [255, 244, 214],
         Some("red") => [205, 50, 45],
         _ => [235, 235, 230],

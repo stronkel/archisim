@@ -188,10 +188,10 @@ pub fn build() -> Res<Model> {
         slope: 0.02,
     })?;
     // The living room's light point takes the dining pendant (G4).
-    let pendant = m
-        .fixture_types()
-        .into_iter()
-        .find(|t| m.object_type(*t).is_some_and(|x| x.name == "Colgante de comedor"));
+    let pendant = m.fixture_types().into_iter().find(|t| {
+        m.object_type(*t)
+            .is_some_and(|x| x.name == "Colgante de comedor")
+    });
     let living = m
         .devices()
         .find(|d| d.kind == K::Light && d.position.distance(Point2::new(5.6, 3.0)) < 1e-6)
@@ -258,7 +258,10 @@ mod tests {
             .devices()
             .find(|d| d.fixture.is_some())
             .expect("a light point with its lamp");
-        assert!((lamp.elevation + lamp.height - 2.7).abs() < 1e-6, "{lamp:?}");
+        assert!(
+            (lamp.elevation + lamp.height - 2.7).abs() < 1e-6,
+            "{lamp:?}"
+        );
         assert!(archisim_geom::solid::device_solids(&m, lamp.id)
             .iter()
             .any(|s| archisim_geom::solid::solid_glow(&m, s).is_some()));
