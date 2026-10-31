@@ -46,6 +46,24 @@ fn paint_picture(ui: &Ui, r: Rect, t: Option<Thumb>) {
     }
 }
 
+/// Whether a family's choice is about how it is drawn in plan (a tree's
+/// drawing, canopy, colour in presentation…): its cards are drawn in
+/// plan, not in 3D (E2).
+pub(super) fn plan_choice(name: &str) -> bool {
+    matches!(
+        name,
+        "plan_drawing"
+            | "drawing"
+            | "tech_style"
+            | "style"
+            | "style_own"
+            | "look"
+            | "look_own"
+            | "shape"
+            | "shape_own"
+    )
+}
+
 /// "practicable" → "Practicable" (the recipes write some options in
 /// lower case).
 fn capitalized(s: &str) -> String {
@@ -355,6 +373,63 @@ impl Swatches {
     }
 }
 
+impl Swatches {
+    /// A picture made once by `build`, kept under `key`.
+    pub(super) fn image(
+        &mut self,
+        ctx: &egui::Context,
+        key: &str,
+        build: impl FnOnce() -> ColorImage,
+    ) -> TextureId {
+        if let Some(t) = self.cache.get(key) {
+            return t.id();
+        }
+        let tex = ctx.load_texture(format!("swatch:{key}"), build(), TextureOptions::LINEAR);
+        let id = tex.id();
+        self.cache.insert(key.to_string(), tex);
+        id
+    }
+}
+
+/// A material's cut pattern drawn over its cut colour: what a wall or
+/// slab of it looks like cut (E2).
+pub fn pattern_image(p: archisim_core::CutPattern, rgb: [u8; 3]) -> ColorImage {
+    use archisim_core::CutPattern as C;
+    let n = SWATCH_PX;
+    let fill = match p {
+        C::Empty => Color32::WHITE,
+        _ => Color32::from_rgb(rgb[0], rgb[1], rgb[2]),
+    };
+    let ink = Color32::from_gray(40);
+    let mut pixels = vec![fill; n * n];
+    for j in 0..n {
+        for i in 0..n {
+            let (x, y) = (i as i64, j as i64);
+            let on = match p {
+                C::Solid => false,
+                C::Diagonal => (x + y).rem_euclid(10) == 0,
+                C::Cross => (x + y).rem_euclid(10) == 0 || (x - y).rem_euclid(10) == 0,
+                C::Insulation => {
+                    // A zigzag every 16 rows.
+                    let k = y.rem_euclid(16);
+                    let t = x.rem_euclid(16);
+                    let z = if t < 8 { t } else { 16 - t };
+                    (k - 4 - z).abs() == 0
+                }
+                C::Dots => x.rem_euclid(6) == 2 && y.rem_euclid(6) == 2,
+                C::Empty => {
+                    (x == 0 || y == 0 || x == n as i64 - 1 || y == n as i64 - 1)
+                        && (x + y).rem_euclid(8) < 4
+                }
+            };
+            if on {
+                pixels[j * n + i] = ink;
+            }
+        }
+    }
+    ColorImage::new([n, n], pixels)
+}
+
 /// A square of `rgb` with its texture, 40 cm a side.
 pub fn swatch_image(rgb: [u8; 3], texture: Option<(TextureKind, f64)>) -> ColorImage {
     let base = rgb.map(|v| v as f64 / 255.0);
@@ -656,7 +731,8 @@ impl super::ArchiSimApp {
         }
     }
 
-    /// The picture of an object type with `key` set to `option`, in 3D.
+    /// The picture of an object type with `key` set to `option`: in 3D,
+    /// or in plan for a choice of how it is drawn in plan (E2).
     pub(super) fn object_option_thumb(
         &mut self,
         ctx: &egui::Context,
@@ -669,11 +745,40 @@ impl super::ArchiSimApp {
             key.to_string(),
             archisim_core::Value::Text(option.to_string()),
         );
+        if plan_choice(key) {
+            let k = format!("opt-plan:{}:{:?}", ty.family.0, ty.values);
+            let model = self.ed.model();
+            return self.thumbs.get(ctx, k, || {
+                crate::type_preview::object_model_with(model, &ty, Some(Default::default()))
+            });
+        }
         let sig = self.picture_signature(false);
         let k = format!("opt:{}:{:?}:{sig}", ty.family.0, ty.values);
         let model = self.ed.model();
         self.thumbs3d.get(ctx, self.gpu.as_ref(), k, || {
             crate::type_preview::object_model(model, &ty)
+        })
+    }
+
+    /// The picture in plan of an object with its own value `key` set to
+    /// `option` (its type's values for the rest).
+    pub(super) fn object_instance_option_thumb(
+        &mut self,
+        ctx: &egui::Context,
+        t: &archisim_core::ObjectType,
+        own: &archisim_core::Values,
+        key: &str,
+        option: &str,
+    ) -> Option<Thumb> {
+        let mut own = own.clone();
+        own.insert(
+            key.to_string(),
+            archisim_core::Value::Text(option.to_string()),
+        );
+        let k = format!("opt-own:{}:{:?}:{:?}", t.family.0, t.values, own);
+        let model = self.ed.model();
+        self.thumbs.get(ctx, k, || {
+            crate::type_preview::object_model_with(model, t, Some(own))
         })
     }
 
@@ -786,6 +891,29 @@ impl super::ArchiSimApp {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// E2: the cut patterns are drawn, each its own picture.
+    #[test]
+    fn cut_patterns_are_drawn() {
+        use archisim_core::CutPattern as C;
+        let pics: Vec<ColorImage> = [
+            C::Solid,
+            C::Diagonal,
+            C::Cross,
+            C::Insulation,
+            C::Dots,
+            C::Empty,
+        ]
+        .iter()
+        .map(|p| pattern_image(*p, [200, 120, 90]))
+        .collect();
+        for (i, a) in pics.iter().enumerate() {
+            for b in &pics[i + 1..] {
+                assert_ne!(a.pixels, b.pixels);
+            }
+        }
+        assert!(plan_choice("shape_own") && !plan_choice("model3d"));
+    }
 
     /// A wood's swatch shows its grain: not all of one colour.
     #[test]

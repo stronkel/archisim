@@ -1254,17 +1254,40 @@ impl ArchiSimApp {
                     }
                 },
             );
-            props::row(ui, "Trama de corte", "", |ui, w| {
-                let mut pat = mat.cut_pattern;
-                ComboBox::from_id_salt(("mat-pat", id.0))
-                    .width(w - 8.0)
-                    .selected_text(pattern_name(pat))
-                    .show_ui(ui, |ui| {
-                        for p in PATTERNS {
-                            ui.selectable_value(&mut pat, p, pattern_name(p));
-                        }
-                    });
-                if pat != mat.cut_pattern {
+            // The cut patterns as cards, each drawn over its cut colour
+            // (E2).
+            {
+                let names: Vec<String> = PATTERNS
+                    .iter()
+                    .map(|p| pattern_name(*p).to_string())
+                    .collect();
+                let ctx = ui.ctx().clone();
+                let rgb = mat.cut_color;
+                let swatches = &mut self.swatches;
+                let mut picked = None;
+                super::cards::card_row(ui, "Trama de corte", |ui, w| {
+                    let mut thumb = |o: &str| {
+                        let p = PATTERNS.iter().copied().find(|p| pattern_name(*p) == o)?;
+                        let key = format!("pat:{p:?}:{rgb:?}");
+                        let tex =
+                            swatches.image(&ctx, &key, || super::cards::pattern_image(p, rgb));
+                        Some(super::thumbs::Thumb {
+                            tex,
+                            size: Vec2::splat(64.0),
+                        })
+                    };
+                    picked = super::cards::option_cards(
+                        ui,
+                        w - 8.0,
+                        &names,
+                        pattern_name(mat.cut_pattern),
+                        &mut thumb,
+                    );
+                });
+                if let Some(pat) = picked
+                    .and_then(|o| PATTERNS.iter().copied().find(|p| pattern_name(*p) == o))
+                    .filter(|p| *p != mat.cut_pattern)
+                {
                     actions.push(Action::EditMaterial(
                         id,
                         mat.name.clone(),
@@ -1273,7 +1296,7 @@ impl ArchiSimApp {
                         pat,
                     ));
                 }
-            });
+            }
             props::row(
                 ui,
                 "Prioridad de intersección",
@@ -1330,29 +1353,61 @@ impl ArchiSimApp {
                     }
                 },
             );
-            props::row(
-                ui,
-                "Textura",
-                "Dibujada en sus caras en la vista 3D",
-                |ui, w| {
-                    let mut t = a.texture;
-                    ComboBox::from_id_salt(("mat-tex", id.0))
-                        .width(w - 8.0)
-                        .selected_text(t.map_or("Ninguna", |k| k.label()))
-                        .show_ui(ui, |ui| {
-                            ui.selectable_value(&mut t, None, "Ninguna");
-                            for k in archisim_core::TextureKind::ALL {
-                                ui.selectable_value(&mut t, Some(k), k.label());
-                            }
-                        });
+            // The textures as cards, each a swatch of this material (E2).
+            {
+                let mut names: Vec<String> = vec!["Ninguna".into()];
+                names.extend(
+                    archisim_core::TextureKind::ALL
+                        .iter()
+                        .map(|k| k.label().to_string()),
+                );
+                let ctx = ui.ctx().clone();
+                let rgb = a.color.unwrap_or(mat.cut_color);
+                let swatches = &mut self.swatches;
+                let mut picked = None;
+                super::cards::card_row(ui, "Textura en 3D", |ui, w| {
+                    let mut thumb = |o: &str| {
+                        let kind = archisim_core::TextureKind::ALL
+                            .iter()
+                            .copied()
+                            .find(|k| k.label() == o);
+                        let card = super::cards::MatCard {
+                            pick: super::cards::MatPick::Project(id.0),
+                            name: o.to_string(),
+                            rgb,
+                            texture: kind.map(|k| {
+                                let mut b = a;
+                                b.texture = Some(k);
+                                b.scale = None;
+                                (k, b.texture_scale())
+                            }),
+                        };
+                        Some(super::thumbs::Thumb {
+                            tex: swatches.get(&ctx, &card),
+                            size: Vec2::splat(64.0),
+                        })
+                    };
+                    picked = super::cards::option_cards(
+                        ui,
+                        w - 8.0,
+                        &names,
+                        a.texture.map_or("Ninguna", |k| k.label()),
+                        &mut thumb,
+                    );
+                });
+                if let Some(o) = picked {
+                    let t = archisim_core::TextureKind::ALL
+                        .iter()
+                        .copied()
+                        .find(|k| k.label() == o);
                     if t != a.texture {
                         let mut b = a;
                         b.texture = t;
                         b.scale = None;
                         actions.push(Action::Appearance(id, b));
                     }
-                },
-            );
+                }
+            }
             if a.texture.is_some() {
                 props::row(
                     ui,

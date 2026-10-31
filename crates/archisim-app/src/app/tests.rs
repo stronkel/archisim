@@ -8043,3 +8043,58 @@ fn a_wall_is_split_and_banded_from_its_properties() {
     h.app.ed.undo();
     assert_eq!(h.app.ed.model().walls().count(), 1);
 }
+
+/// E2: a tree's own choices of how it is drawn in plan show as cards
+/// drawn in plan, one picture each; its type's too.
+#[test]
+fn plan_choices_show_as_plan_pictures() {
+    let mut h = Harness::new(Editor::new_project());
+    let level = h.app.ed.level;
+    let id = h
+        .app
+        .ed
+        .transact("Árbol", |m| {
+            let t = archisim_library::add_object_entry(m, "Árbol en flor 5 m")?;
+            m.add_object(archisim_core::NewObject {
+                level,
+                object_type: t,
+                position: p(2.0, 2.0),
+                rotation: 0.0,
+                base_offset: 0.0,
+            })
+        })
+        .unwrap();
+    h.app.ed.selection = [Element::Object(id)].into_iter().collect();
+    h.frame();
+    h.frame();
+    let o = h.model().object(id).unwrap().clone();
+    let t = h.model().object_type(o.object_type).unwrap().clone();
+    let own = h.model().object_values(id);
+    let family = h.model().family(t.family).unwrap().def().clone();
+    let shape = family
+        .params_of(archisim_core::family::ParamScope::Instance)
+        .find(|p| p.name == "shape_own" || p.name == "style_own")
+        .expect("a choice of the canopy")
+        .clone();
+    let archisim_core::ParamKind::Choice(options) = &shape.kind else {
+        panic!("a choice");
+    };
+    let ctx = h.ctx.clone();
+    let pics: Vec<_> = options
+        .iter()
+        .take(4)
+        .map(|o| {
+            h.app
+                .object_instance_option_thumb(&ctx, &t, &own, &shape.name, o)
+                .expect("drawn")
+                .tex
+        })
+        .collect();
+    let distinct: std::collections::BTreeSet<_> = pics.iter().map(|t| format!("{t:?}")).collect();
+    assert_eq!(distinct.len(), pics.len(), "one picture each");
+    // The type's drawing in plan as cards drawn in plan too.
+    assert!(h
+        .app
+        .object_option_thumb(&ctx, &t, "plan_drawing", "técnico")
+        .is_some());
+}

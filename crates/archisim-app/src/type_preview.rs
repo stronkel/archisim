@@ -196,6 +196,17 @@ pub fn opening_model_3d(source: &Model, t: &OpeningType) -> Option<(Model, Level
 /// A model with one object of type `t` at the origin, unturned: its plan
 /// symbol as the plan draws it.
 pub fn object_model(source: &Model, t: &archisim_core::ObjectType) -> Option<(Model, LevelId)> {
+    object_model_with(source, t, None)
+}
+
+/// [`object_model`] with the object's own values `own` (how a tree is
+/// drawn in plan…): with them, its drawing is not made the presentation
+/// one, so the choices of plan drawing show as they are (E2).
+pub fn object_model_with(
+    source: &Model,
+    t: &archisim_core::ObjectType,
+    own: Option<archisim_core::Values>,
+) -> Option<(Model, LevelId)> {
     let mut m = Model::new("preview");
     let level = m.add_level("preview", 0.0);
     let mut copied: std::collections::HashMap<u64, MaterialId> = Default::default();
@@ -243,7 +254,11 @@ pub fn object_model(source: &Model, t: &archisim_core::ObjectType) -> Option<(Mo
             .params_of(archisim_core::family::ParamScope::Instance)
             .any(|p| p.name == "drawing")
     });
-    if presented && has_choice {
+    if let Some(own) = own {
+        if !own.is_empty() {
+            let _ = m.set_object_values(id, own);
+        }
+    } else if presented && has_choice {
         let mut v = archisim_core::Values::new();
         v.insert(
             "drawing".into(),
