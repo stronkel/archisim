@@ -186,6 +186,7 @@ impl Exporter<'_> {
                 c.height,
                 area,
             );
+            self.hosts.insert(c.id.0, el);
             contained.entry(c.level).or_default().push(el);
             by_type.entry(c.member_type).or_default().push(el);
         }
@@ -241,6 +242,7 @@ impl Exporter<'_> {
                 length,
                 t.profile.area(),
             );
+            self.hosts.insert(b.id.0, el);
             contained.entry(b.level).or_default().push(el);
             by_type.entry(b.member_type).or_default().push(el);
         }

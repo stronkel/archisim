@@ -64,6 +64,7 @@ impl Exporter<'_> {
                 string(f.kind_name()),
                 string(&f.id.0.to_string()),
             ));
+            self.hosts.insert(f.id.0, el);
             if let Some(m) = materials.get(&f.material) {
                 self.w.add(format!(
                     "IFCRELASSOCIATESMATERIAL({},$,$,$,({el}),{m})",

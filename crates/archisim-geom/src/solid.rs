@@ -2034,17 +2034,18 @@ thread_local! {
     static PIECES: std::cell::Cell<bool> = const { std::cell::Cell::new(true) };
 }
 
-/// Runs `f` without the pieces of the façades (E9): their walls show
-/// their plain finish (for drawings at a scale where the bricks would be
-/// a smudge, and for clash detection).
-pub fn without_facade_pieces<T>(f: impl FnOnce() -> T) -> T {
+/// Runs `f` without the pieces of the façades (E9) and the bars of the
+/// reinforcement (E11): walls show their plain finish and concrete its
+/// outside (for drawings at a scale where they would be a smudge, and for
+/// clash detection).
+pub fn without_detail<T>(f: impl FnOnce() -> T) -> T {
     let before = PIECES.with(|p| p.replace(false));
     let out = f();
     PIECES.with(|p| p.set(before));
     out
 }
 
-/// Whether [`model_solids`] lays the pieces of the façades.
+/// Whether [`model_solids`] lays the pieces of the façades and the bars.
 pub fn facade_pieces_wanted() -> bool {
     PIECES.with(|p| p.get())
 }
@@ -3594,6 +3595,12 @@ pub fn model_solids_except_detailed(
     }
     for f in model.footings() {
         out.extend(footing_solids(model, f.id));
+    }
+    // The bars of the reinforcement (E11).
+    if pieces {
+        for (id, _) in model.reinforcements() {
+            out.extend(crate::rebar::rebar_solids(model, id));
+        }
     }
     for p in model.pools() {
         out.extend(crate::pools::pool_solids(model, p.id));

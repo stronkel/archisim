@@ -22,6 +22,7 @@ pub mod evacuation;
 pub mod occupancy;
 pub mod region;
 pub mod services;
+pub mod structure;
 pub mod surfaces;
 
 use archisim_core::{
@@ -53,16 +54,19 @@ pub enum Section {
     StairsAndRamps,
     /// DB-HS 4 and HS 5: water supply and drainage.
     Services,
+    /// Código Estructural: the reinforcement (E11).
+    Structure,
     /// Floor areas.
     Areas,
 }
 
 impl Section {
-    pub const ALL: [Section; 5] = [
+    pub const ALL: [Section; 6] = [
         Section::Evacuation,
         Section::Accessibility,
         Section::StairsAndRamps,
         Section::Services,
+        Section::Structure,
         Section::Areas,
     ];
 
@@ -72,6 +76,7 @@ impl Section {
             Section::Accessibility => "Accesibilidad (DB-SUA 9)",
             Section::StairsAndRamps => "Escaleras y rampas (DB-SUA 1)",
             Section::Services => "Agua y saneamiento (DB-HS 4 y HS 5)",
+            Section::Structure => "Armado (Código Estructural)",
             Section::Areas => "Superficies",
         }
     }
@@ -90,6 +95,8 @@ pub enum Subject {
     Object(ObjectId),
     /// A pipe.
     Run(RunId),
+    /// A column, beam, footing or slab with reinforcement (by its id).
+    Reinforced(u64),
 }
 
 /// One result.
@@ -265,6 +272,7 @@ pub fn subject_name(model: &Model, s: Subject) -> String {
             .run(r)
             .map(|r| format!("{} {} ({})", r.system.name(), r.size_text(), r.id.0))
             .unwrap_or_default(),
+        Subject::Reinforced(id) => structure::element_name(model, id),
     }
 }
 
@@ -293,6 +301,7 @@ pub fn check(model: &Model) -> Report {
     access::check(model, &mut report);
     access::stairs_and_ramps(model, &mut report);
     services::check(model, &mut report);
+    structure::check(model, &mut report);
     report
 }
 

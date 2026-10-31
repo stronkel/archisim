@@ -182,6 +182,10 @@ pub(crate) struct ProjectFile {
     /// Underlays of the levels' plans (version 48).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub level_underlays: Vec<crate::drafting::LevelUnderlays>,
+    /// The reinforcement of columns, beams, footings and slabs (version
+    /// 50).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reinforcements: Vec<ReinforcementOf>,
     /// Rooms (IfcSpace) and tags of doors, windows, walls and rooms
     /// (version 7).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -3515,6 +3519,11 @@ impl ProjectFile {
             sheets: crate::drafting::sheets_out(&p.sheets),
             viewports: crate::drafting::viewports_out(&p.viewports),
             draft_views: crate::drafting::draft_views_out(&p.draft_views),
+            reinforcements: p
+                .reinforcements
+                .iter()
+                .map(|(id, r)| ReinforcementOf::out(*id, r))
+                .collect(),
             level_underlays: crate::drafting::level_underlays_out(&p.level_underlays),
             rooms: crate::rooms::rooms_out(&p.rooms),
             tags: crate::rooms::tags_out(&p.tags),
@@ -4022,6 +4031,11 @@ impl ProjectFile {
             sheets: crate::drafting::sheets_in(self.sheets),
             viewports: crate::drafting::viewports_in(self.viewports)?,
             draft_views: crate::drafting::draft_views_in(self.draft_views)?,
+            reinforcements: self
+                .reinforcements
+                .into_iter()
+                .map(ReinforcementOf::into_core)
+                .collect(),
             level_underlays: crate::drafting::level_underlays_in(self.level_underlays)?,
             rooms: crate::rooms::rooms_in(self.rooms)?,
             tags: crate::rooms::tags_in(self.tags),
@@ -4724,5 +4738,122 @@ mod tests {
         assert_eq!(parse_hex("#E8C4B"), None);
         assert_eq!(parse_hex("#GGC4B2"), None);
         assert_eq!(parse_hex("#ÁÁÁ"), None);
+    }
+}
+
+/// The reinforcement of an element (version 50): `kind` `column`, `beam`,
+/// `footing` or `slab`; bars as `[count, diameter]`, spaced bars as
+/// `[diameter, spacing]` (metres).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ReinforcementOf {
+    pub element: u64,
+    pub kind: String,
+    pub cover: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bars: Option<[f64; 2]>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ties: Option<[f64; 2]>,
+    /// Ties closer at the ends: `[spacing, length]`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dense: Option<[f64; 2]>,
+    /// A beam's bottom and top bars.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bottom_bars: Option<[f64; 2]>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub top_bars: Option<[f64; 2]>,
+    /// A footing's or slab's meshes: `[[d, s], [d, s]]`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bottom_mesh: Option<[[f64; 2]; 2]>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub top_mesh: Option<[[f64; 2]; 2]>,
+}
+
+impl ReinforcementOf {
+    fn out(element: u64, r: &core::Reinforcement) -> Self {
+        let counted = |c: &core::Counted| [c.count as f64, c.diameter];
+        let spaced = |s: &core::Spaced| [s.diameter, s.spacing];
+        let mesh = |m: &[core::Spaced; 2]| [spaced(&m[0]), spaced(&m[1])];
+        let mut out = ReinforcementOf {
+            element,
+            kind: String::new(),
+            cover: r.cover(),
+            bars: None,
+            ties: None,
+            dense: None,
+            bottom_bars: None,
+            top_bars: None,
+            bottom_mesh: None,
+            top_mesh: None,
+        };
+        match r {
+            core::Reinforcement::Column {
+                bars, ties, dense, ..
+            } => {
+                out.kind = "column".into();
+                out.bars = Some(counted(bars));
+                out.ties = Some(spaced(ties));
+                out.dense = dense.map(|(s, l)| [s, l]);
+            }
+            core::Reinforcement::Beam {
+                bottom,
+                top,
+                stirrups,
+                ..
+            } => {
+                out.kind = "beam".into();
+                out.bottom_bars = Some(counted(bottom));
+                out.top_bars = Some(counted(top));
+                out.ties = Some(spaced(stirrups));
+            }
+            core::Reinforcement::Footing { bottom, top, .. }
+            | core::Reinforcement::Slab { bottom, top, .. } => {
+                out.kind = if matches!(r, core::Reinforcement::Footing { .. }) {
+                    "footing".into()
+                } else {
+                    "slab".into()
+                };
+                out.bottom_mesh = Some(mesh(bottom));
+                out.top_mesh = top.as_ref().map(mesh);
+            }
+        }
+        out
+    }
+
+    fn into_core(self) -> (u64, core::Reinforcement) {
+        let counted = |c: Option<[f64; 2]>| {
+            let c = c.unwrap_or([1.0, 0.012]);
+            core::Counted::new(c[0].max(0.0).round() as u32, c[1])
+        };
+        let spaced = |s: [f64; 2]| core::Spaced::new(s[0], s[1]);
+        let mesh = |m: [[f64; 2]; 2]| [spaced(m[0]), spaced(m[1])];
+        let ties = spaced(self.ties.unwrap_or([0.008, 0.15]));
+        let bottom = mesh(self.bottom_mesh.unwrap_or([[0.012, 0.2]; 2]));
+        let top = self.top_mesh.map(mesh);
+        let r = match self.kind.as_str() {
+            "column" => core::Reinforcement::Column {
+                cover: self.cover,
+                bars: counted(self.bars),
+                ties,
+                dense: self.dense.map(|d| (d[0], d[1])),
+            },
+            "beam" => core::Reinforcement::Beam {
+                cover: self.cover,
+                bottom: counted(self.bottom_bars),
+                top: counted(self.top_bars),
+                stirrups: ties,
+            },
+            "footing" => core::Reinforcement::Footing {
+                cover: self.cover,
+                bottom,
+                top,
+            },
+            _ => core::Reinforcement::Slab {
+                cover: self.cover,
+                bottom,
+                top,
+            },
+        };
+        (self.element, r)
     }
 }

@@ -305,7 +305,7 @@ impl ArchiSimApp {
             }
         }
         // Project elements: through their solids.
-        for solid in archisim_geom::solid::without_facade_pieces(|| {
+        for solid in archisim_geom::solid::without_detail(|| {
             archisim_geom::solid::model_solids(self.ed.model())
         }) {
             let el = crate::pick::of_solid(solid.owner);

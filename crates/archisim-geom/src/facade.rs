@@ -453,7 +453,7 @@ fn corner_turns(
 
 /// The stretches of the segment `a`–`b` inside a polygon (and not in its
 /// holes), as fractions of its length.
-fn segment_inside(
+pub(crate) fn segment_inside(
     a: Point2,
     b: Point2,
     outline: &[Point2],

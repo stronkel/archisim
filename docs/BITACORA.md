@@ -6,6 +6,53 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-31 (47) · Hormigón armado (E11)
+
+Rama `bloque/e11-armado` (sobre `bloque/e9-fachadas`), con pull request. Formato `.archisim` versión 50: el proyecto guarda el armado. Los ficheros anteriores se abren igual, sin armado. Según D26, ArchiSim **dibuja y comprueba** el armado; **no calcula** la estructura.
+
+**Hecho**
+- **Armado** de pilares y vigas de hormigón (rectangulares o circulares), zapatas aisladas y corridas, y forjados horizontales: en Propiedades → **«Armado (hormigón armado)»** → «Lleva armado», escrito como en un plano:
+  - **pilares**: recubrimiento, barras (número y Ø), cercos (Ø y separación) y, si se quiere, cercos más juntos en los dos extremos;
+  - **vigas**: inferior y superior (número y Ø) y estribos;
+  - **zapatas y forjados**: malla inferior en x y en y (Ø y separación) y, si se quiere, superior.
+
+  Sale con valores habituales que ya cumplen (4Ø16 con cercos Ø8 c/15, Ø12 c/20 en zapatas, Ø10 c/20 en forjados…).
+- **Las barras se colocan solas** dentro del hormigón, con su recubrimiento:
+  - **pilares**: primero las esquinas, luego los lados más largos;
+  - **vigas**: estribos repartidos;
+  - **zapatas**: mallas con patillas;
+  - **forjados**: mallas en la capa de estructura (no en el solado), cortadas en los bordes y en los huecos.
+- **3D**: las barras en gris acero; se ven con la caja de sección.
+- **Planta a 1:20 (hasta 1:25)**: las barras y el cerco de los pilares cortados.
+- **Mediciones**, capítulo 14 «Acero en barras»: kg por diámetro. Cada línea es un grupo de barras de un elemento («Pilar 12 · cercos Ø8 c/15 (20 de 1,05 m)»).
+- **Comprobación del armado** (Código Estructural, solo lo que no necesita cálculo): recubrimientos, diámetros mínimos, número y separación de barras, cuantías geométricas mínimas (y máxima en pilares) y diámetro y separación de cercos y estribos. Aparece:
+  - en Propiedades («Comprobación del armado»: qué no cumple);
+  - en la ventana de comprobación, sección «Armado (Código Estructural)».
+- **IFC**:
+  - cada grupo de barras es un `IfcReinforcingBar` (barras como sólidos de barrido), parte de su elemento;
+  - lo escrito va en el elemento y se lee al importar.
+- `archisim armado out/`: un pórtico con zapatas, vigas, zapata corrida y forjado con hueco, todo armado (708 kg, 102 comprobaciones que cumplen).
+
+**Pendiente**
+- **Decisión para Antonio**: confirmar los valores de las comprobaciones:
+  - recubrimiento de 25 mm en interior y de 50 mm en cimentación con hormigón de limpieza;
+  - cuantías mínimas de 4 ‰ en pilares, 2,8 ‰ en vigas, 1,8 ‰ en losas y 0,9 ‰ en zapatas;
+  - separaciones máximas.
+- La **sección** con las barras cortadas y el **despiece dibujado** (formas de doblado, marcas de barra).
+- Esperas y solapes entre plantas, y refuerzos sobre apoyos.
+- Pasar el **modelo analítico** a un programa de cálculo.
+- Al copiar un elemento, su armado no se copia.
+
+**Qué debe probar Antonio**
+1. Ejecuta `archisim armado out/` y abre `out/armado.archisim`.
+2. Vista 3D → Caja de sección. Baja la tapa hasta cortar los pilares y el forjado: deben verse las barras, los cercos y las mallas.
+3. Selecciona un pilar → Propiedades → Armado: cambia a 6Ø12 y los cercos a c/30. «Comprobación del armado» debe decir qué no cumple, y la ventana de comprobación también.
+4. Planta baja a 1:20: acércate a un pilar y mira sus barras y su cerco.
+5. Mediciones, capítulo 14: kg por diámetro, con el despiece de cada elemento.
+6. Exporta el IFC y míralo en otro visor: las barras son armaduras de su pilar, viga, zapata o forjado.
+
+---
+
 ## 2026-10-31 (46) · Fachadas pieza a pieza (E9)
 
 Rama `bloque/e9-fachadas` (sobre `bloque/e7-vistas-dibujo`), con pull request. Formato `.archisim` versión 49: los tipos de muro pueden llevar fachada. Los ficheros anteriores se abren igual, con acabados lisos.

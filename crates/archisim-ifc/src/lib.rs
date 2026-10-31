@@ -51,6 +51,7 @@ mod members;
 mod objects;
 mod pools;
 mod railings;
+mod rebar;
 mod roof_parts;
 mod roofs;
 mod services;
@@ -2133,6 +2134,7 @@ impl<'a> Exporter<'a> {
         self.write_worktops(&materials, &storeys, &mut contained);
         self.write_opening_outsides(&materials, &storeys, &mut contained);
         self.write_footings(&materials, &storeys, &mut contained);
+        self.write_rebar(&materials, &storeys);
         self.write_pools(&materials, &storeys, &mut contained);
         self.write_grids(&storeys, &mut contained);
         self.write_urban(&materials, site, site_pl);

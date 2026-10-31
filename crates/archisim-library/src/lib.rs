@@ -581,6 +581,8 @@ pub fn add_library(m: &mut Model) -> Result<Library, ModelError> {
     }
     // Façades laid piece by piece (E9), last so older ids stay put.
     facades::add_facade_types(m)?;
+    // The steel of the reinforcement (E11).
+    rebar_material(m);
     Ok(Library {
         curtain,
         void,
@@ -2292,6 +2294,14 @@ pub const COZY_PALETTE: &[(&str, &str, [u8; 3])] = &[
     // The lamps of the collections (paquete 4).
     ("Papel de arroz", "other", [246, 240, 226]),
 ];
+
+/// The steel of the reinforcement (E11): the project's, or added.
+pub fn rebar_material(m: &mut Model) -> MaterialId {
+    match m.rebar_material() {
+        Some(id) => id,
+        None => material_named(m, "Acero B500S", "steel", [92, 96, 104], CutPattern::Solid),
+    }
+}
 
 /// A material of the cosy palette, added to the project if it has none of
 /// that name.

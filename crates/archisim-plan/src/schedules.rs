@@ -201,6 +201,63 @@ impl Item {
     }
 }
 
+/// The steel of the reinforcement (E11), kg by diameter: each element's
+/// groups of bars (their count and the length of each) as its lines.
+fn rebar(model: &Model) -> Vec<Item> {
+    let mut items: BTreeMap<i64, Item> = BTreeMap::new();
+    for (id, _) in model.reinforcements() {
+        if model.phase(id) != Phase::New {
+            continue;
+        }
+        let name = archisim_cte_name(model, id);
+        for g in archisim_geom::rebar::element_bars(model, id) {
+            if g.bars.is_empty() {
+                continue;
+            }
+            let mm = (g.diameter * 1000.0).round() as i64;
+            let item = items.entry(mm).or_insert_with(|| Item {
+                code: format!("A{mm:02}"),
+                key: format!("acero:{mm}"),
+                unit: "kg",
+                summary: format!("Acero B500S en barras de Ø{mm} mm"),
+                lines: Vec::new(),
+            });
+            let n = g.bars.len();
+            let each = g.length() / n as f64;
+            item.lines.push(Measured {
+                comment: format!(
+                    "{name} · {} {} ({n} de {} m)",
+                    g.place,
+                    g.label,
+                    dec(each, 2)
+                ),
+                units: n as f64,
+                length: each,
+                width: 0.0,
+                height: 0.0,
+                quantity: (g.weight() * 100.0).round() / 100.0,
+            });
+        }
+    }
+    items.into_values().collect()
+}
+
+/// The name of an element with reinforcement.
+fn archisim_cte_name(model: &Model, id: u64) -> String {
+    use archisim_core::{BeamId, ColumnId, FootingId, SlabId};
+    if model.column(ColumnId(id)).is_some() {
+        format!("Pilar {id}")
+    } else if model.beam(BeamId(id)).is_some() {
+        format!("Viga {id}")
+    } else if let Some(f) = model.footing(FootingId(id)) {
+        format!("{} {id}", f.kind_name())
+    } else if model.slab(SlabId(id)).is_some() {
+        format!("Forjado {id}")
+    } else {
+        format!("Elemento {id}")
+    }
+}
+
 /// The pieces of the façades (E9), by wall type and material: bricks,
 /// blocks, panels or slabs, whole and cut, and those over the slab edges.
 fn facade_pieces(model: &Model) -> Vec<Item> {
@@ -482,6 +539,7 @@ pub fn measurements(model: &Model) -> Vec<(&'static str, &'static str, Vec<Item>
         ("11", "Cerrajería y protecciones", outsides(model)),
         ("12", "Movimiento de tierras", earthworks(model)),
         ("13", "Fachadas: piezas", facade_pieces(model)),
+        ("14", "Acero en barras", rebar(model)),
     ];
     chapters.retain(|(_, _, items)| !items.is_empty());
     chapters
