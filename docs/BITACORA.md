@@ -6,6 +6,38 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-31 (52) · G1: arreglos rápidos de la lista del 31/10
+
+Rama `bloque/g1-rapidos` (sobre `bloque/e17-detalle`), con pull request. Formato `.archisim` versión 53 (los elementos de dibujo pueden ir en un grupo).
+
+Lista de Antonio del 31/10 (antes de la velocidad), repartida en cinco bloques:
+- G1, arreglos rápidos (este);
+- G2, modo boceto como en Revit;
+- G3, Pintar y Dividir cara en la barra;
+- G4, luminarias e instalaciones con detalle;
+- G5, vegetación hoja a hoja.
+
+**Hecho**
+- **Importar DXF**: antes de entrar, una ventana con las unidades del dibujo y el tamaño que tendrá. ArchiSim las supone por el tamaño: un DXF que dice milímetros (o nada) y mide unos centímetros está dibujado en metros, como muchos. Por eso las copas de árbol salían diminutas y con líneas gordas.
+- **Bloques como grupos**: cada bloque colocado del DXF entra como un grupo. Un clic elige el bloque entero; Mayús y clic lo quita. Clic derecho → Desagrupar, o Agrupar varias líneas elegidas. Al copiar un grupo, la copia es un grupo propio.
+- **Líneas finas** en las vistas de dibujo (barra inferior).
+- **Sin marcas comerciales** en la aplicación. Las teclas se llaman ahora «Dos letras», «Órdenes» y «Una letra». Sin aviso al crear una vista de dibujo ni un detalle.
+- **Armado**:
+  - ficha «Armado» en Estructura: clic en un pilar, una viga, una zapata o un forjado y se arma con lo habitual; queda elegido para cambiar sus barras en Propiedades. Sigue hasta Esc.
+  - en planta a 1:50 o más:
+    - las barras y el cerco de los pilares cortados, con su rótulo;
+    - una barra de cada malla de zapatas y forjados con sus patillas abatidas, la superior a trazos, y su rótulo («Ø12 c/20», «sup.», «inf.»);
+    - el rótulo de cada viga a lo largo de ella, en la planta del forjado que lleva.
+- `archisim armado out/` saca también `armado-planta-0-50.svg` y `armado-planta-1-50.svg`.
+
+**Qué debe probar Antonio**
+1. Abre una vista de dibujo, Archivo → Importar DXF y elige el DXF de árboles del estudio. La ventana debe decir metros y un tamaño razonable; al importar, las copas a su tamaño y con líneas finas. Un clic en una copa la elige entera.
+2. Pulsa el interruptor «Líneas finas» de la barra inferior en esa vista.
+3. `cargo run -p archisim-cli -- armado out/` y abre `out/armado-planta-0-50.svg` y `out/armado-planta-1-50.svg`.
+4. En un proyecto con pilares, Estructura → Armado y haz clic en uno: se arma y Propiedades enseña sus barras.
+
+---
+
 ## 2026-10-31 (51) · E17: detalle en alzado y sección
 
 Rama `bloque/e17-detalle`, con pull request. Formato `.archisim` versión 52 (un calco puede mostrar solo un rectángulo de lo que calca).

@@ -289,3 +289,13 @@ Antonio la entregó mientras otra conversación sigue con los modelos de alta ca
 | E16 | **Envolver capas y cortes macizos en 3D** (pedido el 26/10/2026) | «Envolver en extremos» del tipo de muro (Ninguno / Exterior / Interior / Ambos) en los extremos libres y en las jambas de puertas y ventanas, en planta, 3D e IFC; en 3D, lo cortado (caja de sección, muros recortados) se ve macizo, con sus capas o con un color liso a elegir (blanco, negro…), no hueco | M | hecho (v0.73, rama `bloque/e16-envolver`, sobre `bloque/e14-modificar`) |
 
 **Orden propuesto** (a confirmar por Antonio): E1 → E14 y E15 (pedidos después) → E2 → E3 → E4 → E5 → E6 → E7 → E8 → E12 → E9 → E13 → E10 → E11. E2 primero porque toca a todo lo demás; E9 después de E3 y E6 porque necesita el emparchado y los huecos rematados.
+
+## 11. Lista de Antonio del 31/10/2026 (antes de la vuelta de velocidad)
+
+| Bloque | Qué | Estado |
+|---|---|---|
+| G1 | Arreglos rápidos:<br>• líneas finas en vistas de dibujo;<br>• DXF con sus unidades y bloques agrupados;<br>• sin marcas comerciales en el programa;<br>• ficha Armado en Estructura y armado legible en planta a 1:50 | ✅ rama `bloque/g1-rapidos` |
+| G2 | Modo boceto como en Revit para contornos (forjado, cubierta, terreno, perfil de muro):<br>• «Editar contorno» en la barra de Modificar;<br>• dibujar con línea, rectángulo, arco, polígono y círculo;<br>• recortar, alargar, partir, borrar;<br>• Aceptar o Cancelar | Pendiente |
+| G3 | Pintar y Dividir cara en la barra superior, para cualquier cara de cualquier elemento; Dividir cara con el modo boceto de G2 | Pendiente |
+| G4 | Luminarias con el modelo de las lámparas de colección; mecanismos, cuadros, radiadores, rejillas, montantes… con el detalle de los muebles | Pendiente |
+| G5 | Vegetación de la biblioteca (árboles, arbustos, palmeras) hoja a hoja, como el olivo y las plantas de interior, con su versión de lejos | Pendiente |
