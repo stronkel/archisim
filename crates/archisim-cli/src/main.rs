@@ -22,6 +22,7 @@ mod fachadas;
 mod figuras;
 mod formas;
 mod grande;
+mod instalaciones;
 mod modelos;
 mod muestrario;
 mod taller;
@@ -120,6 +121,13 @@ Uso:
       una zapata corrida y un forjado con hueco, todos con su armado:
       armado.archisim, armado.ifc (con las barras) y la planta a 1:20 con
       las barras de los pilares. Por defecto: ./out
+  archisim instalaciones [carpeta]
+      Instalaciones, segunda vuelta: una casa de dos plantas con los
+      mecanismos eléctricos (luces, interruptores, conmutadores, enchufes,
+      base de 25 A, tomas de TV y datos, cuadro) y sus circuitos del REBT,
+      tuberías con codos de su radio, un montante y una bajante entre las
+      dos plantas: instalaciones.archisim, instalaciones.ifc y las plantas
+      en SVG. Por defecto: ./out
   archisim fachadas [carpeta]
       Las fachadas pieza a pieza: un bloque de dos plantas por cada tipo de
       fachada de la plantilla (ladrillo visto a soga, inglés, flamenco y con
@@ -325,6 +333,10 @@ fn main() -> ExitCode {
         Some("armado") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
             report(armado::write(&dir))
+        }
+        Some("instalaciones") => {
+            let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
+            report(instalaciones::write(&dir))
         }
         Some("fachadas") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));

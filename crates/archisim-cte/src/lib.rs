@@ -18,6 +18,7 @@
 //! building; on other floors the exits are the stairs.
 
 pub mod access;
+pub mod electrical;
 pub mod evacuation;
 pub mod occupancy;
 pub mod region;
@@ -56,16 +57,19 @@ pub enum Section {
     Services,
     /// Código Estructural: the reinforcement (E11).
     Structure,
+    /// REBT, ITC-BT-25: the circuits of the dwellings (E13).
+    Electrical,
     /// Floor areas.
     Areas,
 }
 
 impl Section {
-    pub const ALL: [Section; 6] = [
+    pub const ALL: [Section; 7] = [
         Section::Evacuation,
         Section::Accessibility,
         Section::StairsAndRamps,
         Section::Services,
+        Section::Electrical,
         Section::Structure,
         Section::Areas,
     ];
@@ -77,6 +81,7 @@ impl Section {
             Section::StairsAndRamps => "Escaleras y rampas (DB-SUA 1)",
             Section::Services => "Agua y saneamiento (DB-HS 4 y HS 5)",
             Section::Structure => "Armado (Código Estructural)",
+            Section::Electrical => "Electricidad (REBT, ITC-BT-25)",
             Section::Areas => "Superficies",
         }
     }
@@ -302,6 +307,7 @@ pub fn check(model: &Model) -> Report {
     access::stairs_and_ramps(model, &mut report);
     services::check(model, &mut report);
     structure::check(model, &mut report);
+    electrical::check(model, &mut report);
     report
 }
 

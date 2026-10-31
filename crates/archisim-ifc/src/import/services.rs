@@ -7,7 +7,10 @@ use archisim_core::{DeviceKind, NewDevice, NewRun, Point2, ServiceSystem};
 use super::{explain, snap, Importer};
 
 const RUN_CLASSES: [&str; 2] = ["IFCPIPESEGMENT", "IFCDUCTSEGMENT"];
-const DEVICE_CLASSES: [&str; 6] = [
+const DEVICE_CLASSES: [&str; 8] = [
+    "IFCELECTRICDISTRIBUTIONBOARD",
+    // Risers and downpipes (with `ArchiSim_Device`, not `ArchiSim_Run`).
+    "IFCPIPESEGMENT",
     "IFCUNITARYEQUIPMENT",
     "IFCLIGHTFIXTURE",
     "IFCOUTLET",
@@ -153,6 +156,11 @@ impl<'a> Importer<'a> {
             height: snap(num(self, "Height", h)),
         };
         let did = self.model.add_device(spec).map_err(|e| explain(&e))?;
+        if let Some(n) = self.run_num(id, "ArchiSim_Device", "Circuit") {
+            let _ = self
+                .model
+                .set_device_circuit(did, Some(n.clamp(0.0, 255.0) as u8));
+        }
         self.report.services += 1;
         self.sources.push((did.0, id));
         self.guids

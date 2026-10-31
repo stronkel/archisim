@@ -36,7 +36,17 @@ pub fn draw_services(
     walls: &[&[Point2]],
 ) {
     let runs: Vec<_> = model.runs_on_level(level).collect();
-    let devices: Vec<_> = model.devices_on_level(level).collect();
+    let mut devices: Vec<_> = model.devices_on_level(level).collect();
+    // Risers and downpipes of the levels below that pass through this one.
+    let elevation = model.level(level).map_or(0.0, |l| l.elevation);
+    devices.extend(model.devices().filter(|d| {
+        d.level != level
+            && d.kind.is_vertical()
+            && model.level(d.level).is_some_and(|l| {
+                let bottom = l.elevation + d.elevation;
+                bottom < elevation + 1.0 && bottom + d.height > elevation + 1.0
+            })
+    }));
     if runs.is_empty() && devices.is_empty() {
         return;
     }
@@ -201,14 +211,75 @@ pub fn draw_services(
             hex(r.system.color())
         );
     }
-    for d in devices {
+    // The circuits: each mechanism's number, and a line joining those of
+    // a circuit, nearest first, from the board if there is one (E13).
+    draw_circuits(s, model, &devices, k);
+    for d in &devices {
         let o = d.outline();
         if !visible(&o) {
             continue;
         }
         crate::dim::element(s, d.id.0, |s| draw_device(s, d, k));
+        if let Some(n) = model.device_circuit(d.id) {
+            let h = 1.6 * k;
+            let at = d.position + Point2::new((2.0 * k).max(d.width / 2.0) + 0.6 * k, 0.4 * k);
+            let _ = writeln!(
+                s,
+                r#"<path d="{}" {}/>"#,
+                text_path(&format!("C{n}"), at, Point2::new(1.0, 0.0), h, Align::Left),
+                crate::lettering::paint(h, CIRCUIT_INK)
+            );
+        }
     }
     s.push_str("</g>\n");
+}
+
+/// The colour of the circuits in plan.
+const CIRCUIT_INK: &str = "#b0302a";
+
+/// A line through the mechanisms of each circuit of a level: from the
+/// board (or the first), always to the nearest not yet joined, drawn as a
+/// curve as an electrician sketches it.
+fn draw_circuits(s: &mut String, model: &Model, devices: &[&archisim_core::ServiceDevice], k: f64) {
+    let board = devices
+        .iter()
+        .find(|d| d.kind == DeviceKind::Panel)
+        .map(|d| d.position);
+    let mut by: std::collections::BTreeMap<u8, Vec<Point2>> = Default::default();
+    for d in devices {
+        if let Some(n) = model.device_circuit(d.id) {
+            by.entry(n).or_default().push(d.position);
+        }
+    }
+    for points in by.values() {
+        let mut left = points.clone();
+        let mut at = match board {
+            Some(b) => b,
+            None => left.remove(0),
+        };
+        let mut d = String::new();
+        let _ = write!(d, "M{}", pt(at));
+        while !left.is_empty() {
+            let (i, _) = left
+                .iter()
+                .enumerate()
+                .min_by(|a, b| at.distance(*a.1).total_cmp(&at.distance(*b.1)))
+                .expect("not empty");
+            let next = left.remove(i);
+            // A gentle bow to the left of the way.
+            let mid = at + (next - at) * 0.5;
+            let bow = (next - at).perp_left() * 0.08;
+            let _ = write!(d, " Q{} {}", pt(mid + bow), pt(next));
+            at = next;
+        }
+        let _ = writeln!(
+            s,
+            r#"<path d="{d}" fill="none" stroke="{CIRCUIT_INK}" stroke-width="{}" stroke-dasharray="{} {}"/>"#,
+            num(pens().thin * k),
+            num(2.0 * k),
+            num(1.0 * k)
+        );
+    }
 }
 
 fn draw_device(s: &mut String, d: &archisim_core::ServiceDevice, k: f64) {
@@ -262,6 +333,112 @@ fn draw_device(s: &mut String, d: &archisim_core::ServiceDevice, k: f64) {
         DeviceKind::Switch => {
             circle(s, c, r * 0.6, "white");
             line(s, rot(r * 0.4, r * 0.4), rot(r * 1.2, r * 1.2));
+            line(s, rot(r * 1.2, r * 1.2), rot(r * 1.45, r * 0.95));
+        }
+        DeviceKind::TwoWaySwitch => {
+            // Its arm both ways, each with its tick.
+            circle(s, c, r * 0.6, "white");
+            line(s, rot(r * 0.4, r * 0.4), rot(r * 1.2, r * 1.2));
+            line(s, rot(r * 1.2, r * 1.2), rot(r * 1.45, r * 0.95));
+            line(s, rot(-r * 0.4, -r * 0.4), rot(-r * 1.2, -r * 1.2));
+            line(s, rot(-r * 1.2, -r * 1.2), rot(-r * 1.45, -r * 0.95));
+        }
+        DeviceKind::PowerSocket => {
+            // The socket, filled: a power base.
+            let arc: Vec<Point2> = (0..=12)
+                .map(|i| {
+                    let a = std::f64::consts::PI * i as f64 / 12.0;
+                    rot(r * a.cos(), r * a.sin())
+                })
+                .collect();
+            let _ = writeln!(
+                s,
+                r#"<path d="{} Z" fill="{ink}" stroke="{ink}" stroke-width="{w}"/>"#,
+                path(&arc).trim_end_matches('Z').trim_end()
+            );
+            line(s, rot(-r * 1.2, 0.0), rot(r * 1.2, 0.0));
+        }
+        DeviceKind::TvSocket | DeviceKind::DataSocket => {
+            let text = if d.kind == DeviceKind::TvSocket {
+                "TV"
+            } else {
+                "TD"
+            };
+            circle(s, c, r * 0.8, "white");
+            let h = r * 0.7;
+            let _ = writeln!(
+                s,
+                r#"<path d="{}" {}/>"#,
+                text_path(
+                    text,
+                    c - Point2::new(0.0, h / 2.0),
+                    Point2::new(1.0, 0.0),
+                    h,
+                    Align::Centre
+                ),
+                crate::lettering::paint(h, ink)
+            );
+        }
+        DeviceKind::Panel => {
+            // The board: its box, half filled.
+            let o = d.outline();
+            let _ = writeln!(
+                s,
+                r#"<path d="{}" fill="white" stroke="{ink}" stroke-width="{}"/>"#,
+                path(&o),
+                num(pens().cut * k)
+            );
+            let half = vec![o[0], o[1], o[2]];
+            let _ = writeln!(
+                s,
+                r#"<path d="{}" fill="{ink}" stroke="none"/>"#,
+                path(&half)
+            );
+        }
+        DeviceKind::Riser | DeviceKind::Downpipe => {
+            // The pipe, cut, in the colour of its system, with its name
+            // and size.
+            let colour = hex(d.kind.system().map_or([90, 90, 90], |s| s.color()));
+            let rr = (d.width / 2.0).max(1.0 * k);
+            let _ = writeln!(
+                s,
+                r#"<circle cx="{}" cy="{}" r="{}" fill="white" stroke="{colour}" stroke-width="{}"/>"#,
+                num(c.x),
+                num(-c.y),
+                num(rr),
+                num(pens().cut * k)
+            );
+            let q = rr * std::f64::consts::FRAC_1_SQRT_2;
+            let _ = writeln!(
+                s,
+                r#"<path d="M{} L{} M{} L{}" stroke="{colour}" stroke-width="{w}"/>"#,
+                pt(c + Point2::new(-q, -q)),
+                pt(c + Point2::new(q, q)),
+                pt(c + Point2::new(-q, q)),
+                pt(c + Point2::new(q, -q))
+            );
+            let h = 1.8 * k;
+            let text = format!(
+                "{} Ø{}",
+                if d.kind == DeviceKind::Riser {
+                    "M"
+                } else {
+                    "B"
+                },
+                (d.width * 1000.0).round() as i64
+            );
+            let _ = writeln!(
+                s,
+                r#"<path d="{}" {}/>"#,
+                text_path(
+                    &text,
+                    c + Point2::new(rr + 0.8 * k, -rr - h),
+                    Point2::new(1.0, 0.0),
+                    h,
+                    Align::Left
+                ),
+                crate::lettering::paint(h, &colour)
+            );
         }
         DeviceKind::Radiator | DeviceKind::Grille | DeviceKind::Diffuser => {
             let o = d.outline();

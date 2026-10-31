@@ -585,8 +585,64 @@ impl ArchiSimApp {
                     DeviceKind::Switch => "IfcSwitchingDevice",
                     DeviceKind::Radiator => "IfcSpaceHeater",
                     DeviceKind::Grille | DeviceKind::Diffuser => "IfcAirTerminal",
+                    DeviceKind::TwoWaySwitch => "IfcSwitchingDevice",
+                    DeviceKind::PowerSocket | DeviceKind::TvSocket | DeviceKind::DataSocket => {
+                        "IfcOutlet"
+                    }
+                    DeviceKind::Panel => "IfcElectricDistributionBoard",
+                    DeviceKind::Riser | DeviceKind::Downpipe => "IfcPipeSegment",
                 },
             );
         });
+        // The circuit of a mechanism (E13).
+        if d.kind.is_electric() && d.kind != DeviceKind::Panel {
+            group(ui, "dev-circuit", "Circuito (REBT, ITC-BT-25)", |ui| {
+                let given = self
+                    .ed
+                    .model()
+                    .device_circuits()
+                    .find(|(x, _)| *x == id)
+                    .map(|(_, n)| n);
+                let now = self.ed.model().device_circuit(id);
+                let names: Vec<String> = archisim_core::CIRCUITS
+                    .iter()
+                    .map(|c| format!("C{} · {}", c.number, c.name))
+                    .collect();
+                let mut options: Vec<(Option<u8>, &str)> = vec![(None, "El de su clase")];
+                options.extend(
+                    archisim_core::CIRCUITS
+                        .iter()
+                        .zip(&names)
+                        .map(|(c, n)| (Some(c.number), n.as_str())),
+                );
+                options.push((Some(0), "Ninguno"));
+                row(
+                    ui,
+                    "Circuito",
+                    "Por defecto, el que le toca por su clase y el local donde está",
+                    |ui, w| {
+                        let v = super::props::choice(ui, ("dev-circuit", id), w, given, &options);
+                        if v != given {
+                            let res = self
+                                .ed
+                                .transact("Circuito", |m| m.set_device_circuit(id, v));
+                            self.report(res, "Circuito cambiado.");
+                        }
+                    },
+                );
+                if let Some(c) = now.and_then(archisim_core::circuit_spec) {
+                    text_row(
+                        ui,
+                        "Protección",
+                        "",
+                        &format!(
+                            "{} A · {} mm²",
+                            c.breaker,
+                            format!("{}", c.section).replace('.', ",")
+                        ),
+                    );
+                }
+            });
+        }
     }
 }

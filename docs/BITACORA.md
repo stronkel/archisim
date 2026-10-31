@@ -6,6 +6,56 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-31 (48) · Instalaciones, segunda vuelta (E13)
+
+Rama `bloque/e13-instalaciones` (sobre `bloque/e11-armado`), con pull request. Formato `.archisim` versión 51: hay más clases de aparato y circuitos dados a mano. Los ficheros anteriores se abren igual.
+
+**Hecho**
+- **Mecanismos eléctricos** con su símbolo de planta:
+  - interruptor y **conmutador**;
+  - enchufe y **base de 25 A** de la cocina;
+  - **tomas de TV y de datos**;
+  - **cuadro eléctrico**.
+
+  Se colocan con las fichas Enchufe, Interruptor y Cuadro de Instalaciones; la clase concreta se elige en «Tipo».
+- **Circuitos del REBT** (ITC-BT-25, tabla 1), solos:
+  - C1 luces e interruptores;
+  - C2 enchufes;
+  - C5 los enchufes de baños, aseos y cocinas (por el local donde están);
+  - C3 la base de 25 A.
+
+  En Propiedades del aparato → «Circuito» se cambia (C4 para la lavadora, por ejemplo), con su magnetotérmico y su sección.
+- **En planta**:
+  - el número de circuito junto a cada mecanismo («C2»);
+  - una línea discontinua que une los de cada circuito desde el cuadro.
+- **Comprobación**, sección «Electricidad (REBT, ITC-BT-25)»: puntos de cada circuito por planta contra los máximos de la tabla (30 en C1, 20 en C2, 2 en C3, 3 en C4, 6 en C5).
+- **Montantes y bajantes**:
+  - tubería vertical entre plantas (fichas Montante y Bajante), con la altura que suben;
+  - se dibujan en todas las plantas que cruzan («M Ø40», «B Ø110»);
+  - los tramos que acaban en ellos llevan su curva hacia arriba o hacia abajo.
+- **Codos con su radio**: 1,5 veces el diámetro en tuberías y el ancho en conductos. El tramo se corta donde empieza la curva.
+- **IFC**:
+  - cuadro como `IfcElectricDistributionBoard`;
+  - tomas de TV y datos como `IfcOutlet`;
+  - montantes y bajantes como `IfcPipeSegment`;
+  - el circuito dado a mano se lee de vuelta.
+- `archisim instalaciones out/`: una casa de dos plantas con todo esto.
+
+**Pendiente**
+- Esquema unifilar del cuadro.
+- Curvas en los conductos de aire (siguen con codo de inglete).
+- Los montantes no se unen todavía con tes a las tuberías que pasan por su lado.
+
+**Qué debe probar Antonio**
+1. `archisim instalaciones out/` y abre `out/instalaciones.archisim`:
+   - en Planta baja mira los símbolos y los circuitos;
+   - en 3D, los codos curvos y la bajante con la curva del desagüe del baño.
+2. Pon un enchufe en un local llamado «Baño»: debe salir C5. Cámbialo a C4 en sus propiedades.
+3. Pon 21 enchufes en una planta, en C2: la comprobación debe avisar.
+4. Exporta el IFC y míralo en otro visor: cuadro, tomas, montante y bajante con su clase.
+
+---
+
 ## 2026-10-31 (47) · Hormigón armado (E11)
 
 Rama `bloque/e11-armado` (sobre `bloque/e9-fachadas`), con pull request. Formato `.archisim` versión 50: el proyecto guarda el armado. Los ficheros anteriores se abren igual, sin armado. Según D26, ArchiSim **dibuja y comprueba** el armado; **no calcula** la estructura.

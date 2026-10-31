@@ -146,7 +146,17 @@ impl Exporter<'_> {
             let Some(&(_, storey_pl)) = storeys.get(&d.level) else {
                 continue;
             };
-            let outline = d.outline();
+            // A riser or downpipe: round.
+            let outline = if d.kind.is_vertical() {
+                (0..16)
+                    .map(|i| {
+                        let a = std::f64::consts::TAU * i as f64 / 16.0;
+                        d.position + archisim_core::Point2::new(a.cos(), a.sin()) * (d.width / 2.0)
+                    })
+                    .collect()
+            } else {
+                d.outline()
+            };
             let curve = self.polyline(&outline, true);
             let profile = self
                 .w
@@ -174,6 +184,12 @@ impl Exporter<'_> {
                 DeviceKind::Radiator => ("IFCSPACEHEATER", "RADIATOR"),
                 DeviceKind::Grille => ("IFCAIRTERMINAL", "GRILLE"),
                 DeviceKind::Diffuser => ("IFCAIRTERMINAL", "DIFFUSER"),
+                DeviceKind::TwoWaySwitch => ("IFCSWITCHINGDEVICE", "TOGGLESWITCH"),
+                DeviceKind::PowerSocket => ("IFCOUTLET", "POWEROUTLET"),
+                DeviceKind::TvSocket => ("IFCOUTLET", "AUDIOVISUALOUTLET"),
+                DeviceKind::DataSocket => ("IFCOUTLET", "DATAOUTLET"),
+                DeviceKind::Panel => ("IFCELECTRICDISTRIBUTIONBOARD", "DISTRIBUTIONBOARD"),
+                DeviceKind::Riser | DeviceKind::Downpipe => ("IFCPIPESEGMENT", "RIGIDSEGMENT"),
             };
             let object_type = if predefined == "USERDEFINED" {
                 string(d.kind.name())
@@ -215,11 +231,18 @@ impl Exporter<'_> {
                     real(d.height)
                 )),
             ];
+            let mut props = props;
+            // Its circuit, when given by hand (E13).
+            if let Some((_, n)) = model.device_circuits().find(|(x, _)| *x == d.id) {
+                props.push(self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('Circuit',$,IFCINTEGER({n}),$)"
+                )));
+            }
             self.pset(el, &d.guid, "ArchiSim_Device", &props);
             contained.entry(d.level).or_default().push(el);
             match d.kind {
                 DeviceKind::Light => lighting.push(el),
-                DeviceKind::Socket | DeviceKind::Switch => electrical.push(el),
+                k if k.is_electric() => electrical.push(el),
                 DeviceKind::Equipment => {}
                 k => {
                     if let Some(s) = k.system() {

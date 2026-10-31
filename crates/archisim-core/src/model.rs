@@ -1484,6 +1484,8 @@ pub struct ModelParts {
     /// The reinforcement of columns, beams, footings and slabs (E11), by
     /// element id.
     pub reinforcements: Vec<(u64, Reinforcement)>,
+    /// The circuits of mechanisms given by hand (E13).
+    pub device_circuits: Vec<(DeviceId, u8)>,
     /// Underlays of the levels' plans (E7).
     pub level_underlays: Vec<(LevelId, Vec<Underlay>)>,
     pub viewports: Vec<crate::sheets::Viewport>,
@@ -1594,6 +1596,8 @@ pub struct Model {
     pub(crate) draw_layers: BTreeMap<DrawLayerId, DrawLayer>,
     /// The reinforcement of elements, by their id (E11).
     pub(crate) reinforcements: BTreeMap<u64, Reinforcement>,
+    /// The circuit of a mechanism given by hand (E13), by its id.
+    pub(crate) device_circuits: BTreeMap<u64, u8>,
     pub(crate) drafts: BTreeMap<DraftId, Draft>,
     pub(crate) info: crate::sheets::ProjectInfo,
     pub(crate) sheets: BTreeMap<SheetId, crate::sheets::Sheet>,
@@ -1681,6 +1685,7 @@ impl Model {
             sheets: BTreeMap::new(),
             draft_views: BTreeMap::new(),
             reinforcements: BTreeMap::new(),
+            device_circuits: BTreeMap::new(),
             level_underlays: BTreeMap::new(),
             viewports: BTreeMap::new(),
             rooms: BTreeMap::new(),
@@ -4327,6 +4332,7 @@ impl Model {
             sheets: self.sheets.values().cloned().collect(),
             draft_views: self.draft_views.values().cloned().collect(),
             reinforcements: self.reinforcements().map(|(id, r)| (id, *r)).collect(),
+            device_circuits: self.device_circuits().collect(),
             level_underlays: self
                 .level_underlays
                 .iter()
@@ -4710,6 +4716,14 @@ impl Model {
         model.restore_phases(parts.phases)?;
         model.restore_disciplines(parts.disciplines)?;
         model.restore_parameters(parts.user_parameters, parts.parameter_values)?;
+        for (id, n) in parts.device_circuits {
+            model
+                .set_device_circuit(id, Some(n))
+                .map_err(|error| RestoreError {
+                    element: format!("circuit of device {}", id.0),
+                    error,
+                })?;
+        }
         for (id, r) in parts.reinforcements {
             model
                 .set_reinforcement(id, Some(r))

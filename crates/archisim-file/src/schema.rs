@@ -186,6 +186,10 @@ pub(crate) struct ProjectFile {
     /// 50).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub reinforcements: Vec<ReinforcementOf>,
+    /// The circuits of electrical mechanisms given by hand, `[device,
+    /// circuit]` (version 51; 0: on none).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub device_circuits: Vec<[u64; 2]>,
     /// Rooms (IfcSpace) and tags of doors, windows, walls and rooms
     /// (version 7).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -3524,6 +3528,11 @@ impl ProjectFile {
                 .iter()
                 .map(|(id, r)| ReinforcementOf::out(*id, r))
                 .collect(),
+            device_circuits: p
+                .device_circuits
+                .iter()
+                .map(|(d, n)| [d.0, u64::from(*n)])
+                .collect(),
             level_underlays: crate::drafting::level_underlays_out(&p.level_underlays),
             rooms: crate::rooms::rooms_out(&p.rooms),
             tags: crate::rooms::tags_out(&p.tags),
@@ -4035,6 +4044,11 @@ impl ProjectFile {
                 .reinforcements
                 .into_iter()
                 .map(ReinforcementOf::into_core)
+                .collect(),
+            device_circuits: self
+                .device_circuits
+                .into_iter()
+                .map(|[d, n]| (core::DeviceId(d), n.min(255) as u8))
                 .collect(),
             level_underlays: crate::drafting::level_underlays_in(self.level_underlays)?,
             rooms: crate::rooms::rooms_in(self.rooms)?,
