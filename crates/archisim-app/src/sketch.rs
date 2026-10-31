@@ -43,6 +43,9 @@ pub struct Sketch {
     /// A face's zones as they were, with their paint (kept by the zones
     /// drawn again as they were).
     zones: Vec<(Vec<Point2>, Option<archisim_core::MaterialId>)>,
+    /// A face standing up (a side of a column or a beam, a slab's edge):
+    /// sketched in its own elevation.
+    elevated: bool,
 }
 
 /// Why a sketch cannot be finished or an operation done.
@@ -102,6 +105,7 @@ impl Sketch {
                         slopes: Vec::new(),
                         terrain: Vec::new(),
                         zones: Vec::new(),
+                        elevated: false,
                     });
                 }
                 let ring = t.boundary();
@@ -122,6 +126,7 @@ impl Sketch {
                     slopes: Vec::new(),
                     terrain: Vec::new(),
                     zones,
+                    elevated: true,
                 });
             }
             SketchTarget::WallProfile(w) => {
@@ -149,15 +154,18 @@ impl Sketch {
                     slopes: Vec::new(),
                     terrain: Vec::new(),
                     zones,
+                    elevated: !model.zone_in_plan(id, face),
                 });
             }
         };
+        let elevated = matches!(target, SketchTarget::WallProfile(_));
         Some(Sketch {
             target,
             loops,
             slopes,
             terrain,
             zones: Vec::new(),
+            elevated,
         })
     }
 
@@ -175,10 +183,7 @@ impl Sketch {
     /// Whether it is drawn in elevation, on a view of its own: a wall's
     /// face or profile.
     pub fn in_elevation(&self) -> bool {
-        matches!(
-            self.target,
-            SketchTarget::WallFace(..) | SketchTarget::WallProfile(_)
-        )
+        self.elevated
     }
 
     /// Whether its loops are zones, any number of them, none needed.
@@ -620,6 +625,7 @@ mod tests {
             slopes: vec![Some(0.5), None, Some(0.5), None],
             terrain: Vec::new(),
             zones: Vec::new(),
+            elevated: false,
         };
         // The east edge split in two.
         let r = s

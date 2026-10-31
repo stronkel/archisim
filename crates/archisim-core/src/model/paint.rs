@@ -44,6 +44,10 @@ pub enum FaceRef {
     Side(usize),
     /// A face of a solid made by joining or cutting volumes, by number.
     Part(u32),
+    /// Every piece of an element in one material, by the material's id:
+    /// the treads of a stair, the posts of a railing, the mullions of a
+    /// curtain wall (Pintar on what is made of pieces).
+    Material(u64),
 }
 
 impl FaceRef {
@@ -55,6 +59,7 @@ impl FaceRef {
             FaceRef::Bottom => "bottom".into(),
             FaceRef::Side(i) => format!("side {i}"),
             FaceRef::Part(n) => format!("part {n}"),
+            FaceRef::Material(m) => format!("material {m}"),
         }
     }
 
@@ -62,6 +67,11 @@ impl FaceRef {
         match c {
             "top" => Some(FaceRef::Top),
             "bottom" => Some(FaceRef::Bottom),
+            _ if c.starts_with("material ") => c["material ".len()..]
+                .trim()
+                .parse()
+                .ok()
+                .map(FaceRef::Material),
             _ => match (c.strip_prefix("side "), c.strip_prefix("part ")) {
                 (Some(i), _) => i.trim().parse().ok().map(FaceRef::Side),
                 (_, Some(n)) => n.trim().parse().ok().map(FaceRef::Part),
@@ -81,10 +91,11 @@ pub struct PaintZone {
     pub material: MaterialId,
 }
 
-/// A zone of a flat face looking up or down (the top or the bottom of a
-/// slab, a footing, a column…), drawn on it with «Dividir cara» (G3): its
-/// outline in plan, and its paint (`None`: only divided, the face's own
-/// paint in sight).
+/// A zone of a flat face (the top or the bottom of a slab, a footing, a
+/// column…; a roof's slope; a side of a column, a beam or a footing, a
+/// slab's edge), drawn on it with «Dividir cara» (G3): its outline (in
+/// plan, or in the face's own elevation: see [`Model::zone_in_plan`]),
+/// and its paint (`None`: only divided, the face's own paint in sight).
 #[derive(Debug, Clone, PartialEq)]
 pub struct FaceZone {
     pub element: u64,
@@ -108,6 +119,18 @@ impl Model {
     }
 
     fn check_face(&self, element: u64, face: FaceRef) -> Result<(), ModelError> {
+        // Stairs, railings and curtain walls: their pieces by material.
+        let pieces = self.stairs.contains_key(&StairId(element))
+            || self.railings.contains_key(&RailingId(element))
+            || self.curtain_walls.contains_key(&CurtainWallId(element));
+        if pieces || matches!(face, FaceRef::Material(_)) {
+            return match face {
+                FaceRef::Material(m) if pieces && self.materials.contains_key(&MaterialId(m)) => {
+                    Ok(())
+                }
+                _ => Err(ModelError::InvalidShape("no such face of the element")),
+            };
+        }
         // Slabs, roofs, columns, beams and footings (G3): their top, their
         // bottom and their sides.
         if let Some(sides) = self.plain_faces(element) {
@@ -124,6 +147,9 @@ impl Model {
             };
         }
         match face {
+            FaceRef::Material(_) => {
+                return Err(ModelError::InvalidShape("no such face of the element"))
+            }
             FaceRef::Wall(_) => {
                 if !self.walls.contains_key(&WallId(element)) {
                     return Err(ModelError::UnknownWall(WallId(element)));
@@ -211,9 +237,13 @@ impl Model {
         outline: Vec<Point2>,
         material: Option<MaterialId>,
     ) -> Result<(), ModelError> {
-        if !matches!(face, FaceRef::Top | FaceRef::Bottom) {
+        if !matches!(
+            face,
+            FaceRef::Top | FaceRef::Bottom | FaceRef::Side(_) | FaceRef::Part(_)
+        ) || self.plain_faces(element).is_none()
+        {
             return Err(ModelError::InvalidShape(
-                "only faces looking up or down are divided",
+                "only the faces of slabs, roofs, columns, beams and footings are divided",
             ));
         }
         self.check_face(element, face)?;
@@ -241,6 +271,28 @@ impl Model {
             }),
         }
         Ok(())
+    }
+
+    /// Whether the zones of a face are drawn in plan (a face looking up or
+    /// down, or a roof's slope); else they are in the face's own
+    /// elevation: metres along it and up from the element's level.
+    pub fn zone_in_plan(&self, element: u64, face: FaceRef) -> bool {
+        match face {
+            FaceRef::Top | FaceRef::Bottom => true,
+            FaceRef::Side(_) => self.roofs.contains_key(&RoofId(element)),
+            _ => false,
+        }
+    }
+
+    /// The level of an element whose faces are divided.
+    pub fn plain_level(&self, element: u64) -> Option<LevelId> {
+        self.slabs
+            .get(&SlabId(element))
+            .map(|x| x.level)
+            .or_else(|| self.roofs.get(&RoofId(element)).map(|x| x.level))
+            .or_else(|| self.columns.get(&ColumnId(element)).map(|x| x.level))
+            .or_else(|| self.beams.get(&BeamId(element)).map(|x| x.level))
+            .or_else(|| self.footings.get(&FootingId(element)).map(|x| x.level))
     }
 
     /// Takes away the zones of a face.
