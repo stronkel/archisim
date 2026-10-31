@@ -433,6 +433,17 @@ pub(crate) struct Draft {
     pub weight: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub line: Option<String>,
+    /// Its group (version 53): number and name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub group: Option<DraftGroup>,
+}
+
+/// A group of drafting elements (version 53).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct DraftGroup {
+    pub id: u64,
+    pub name: String,
 }
 
 pub(crate) fn layers_out(layers: &[core::DrawLayer]) -> Vec<DrawLayer> {
@@ -485,6 +496,10 @@ pub(crate) fn drafts_out(drafts: &[core::Draft]) -> Vec<Draft> {
             color: d.color.map(hex),
             weight: d.weight,
             line: d.line.map(|l| l.code().to_string()),
+            group: d.group.as_ref().map(|g| DraftGroup {
+                id: g.id,
+                name: g.name.clone(),
+            }),
         })
         .collect()
 }
@@ -506,6 +521,10 @@ pub(crate) fn drafts_in(drafts: Vec<Draft>) -> Result<Vec<core::Draft>, FileErro
                 color: d.color.map(|c| parse_hex(&element, &c)).transpose()?,
                 weight: d.weight,
                 line: d.line.map(|l| line_style(&element, &l)).transpose()?,
+                group: d.group.map(|g| core::DraftGroup {
+                    id: g.id,
+                    name: g.name,
+                }),
             })
         })
         .collect()

@@ -10,7 +10,7 @@ use super::widgets::SwitchExt;
 use super::{props, ArchiSimApp};
 use crate::pick::Element;
 
-fn element_id(e: Element) -> Option<u64> {
+pub(super) fn element_id(e: Element) -> Option<u64> {
     match e {
         Element::Column(id) => Some(id.0),
         Element::Beam(id) => Some(id.0),
@@ -40,6 +40,48 @@ fn diameter_choice(ui: &mut Ui, salt: (u64, &str), w: f32, now: f64) -> f64 {
 }
 
 impl ArchiSimApp {
+    /// The tile «Armado» of Estructura: each click on a column, beam,
+    /// footing or slab gives it the usual reinforcement (if it has none)
+    /// and selects it, so Propiedades shows its bars to change; Esc ends.
+    pub(super) fn start_rebar_pick(&mut self) {
+        self.set_tool(super::Tool::Arrow);
+        self.rebar_pick = true;
+        self.say("Armado: haz clic en un pilar, una viga, una zapata o un forjado (Esc para terminar).");
+    }
+
+    /// A click while placing reinforcement; whether it was used.
+    pub(super) fn rebar_click(&mut self, e: Option<Element>) -> bool {
+        let Some(id) = e.and_then(element_id) else {
+            self.complain("Eso no se arma: elige un pilar, una viga, una zapata o un forjado.");
+            return true;
+        };
+        let m = self.ed.model();
+        let Some(kind) = m.rebar_kind(id) else {
+            return false;
+        };
+        if m.reinforcement(id).is_none() {
+            let r = self.ed.transact("Armado", |m| {
+                archisim_library::rebar_material(m);
+                m.set_reinforcement(id, Some(Reinforcement::default_for(kind)))
+            });
+            if let Err(e) = r {
+                self.complain(format!("No se puede: {e}."));
+                return true;
+            }
+        }
+        if let Some(e) = e {
+            self.ed.selection = [e].into_iter().collect();
+        }
+        let summary = self
+            .ed
+            .model()
+            .reinforcement(id)
+            .map(|r| r.summary())
+            .unwrap_or_default();
+        self.say(format!("Armado: {summary}. Cámbialo en Propiedades."));
+        true
+    }
+
     /// The group «Armado» of a column, beam, footing or slab.
     pub(super) fn rebar_group(&mut self, ui: &mut Ui, e: Element) {
         let Some(id) = element_id(e) else {

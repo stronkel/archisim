@@ -3744,6 +3744,7 @@ fn dxf_out_and_back_in_and_pdf_of_the_sheets() {
     h.frame();
     let sheet = h.model().sheets()[0].id;
     h.app.import_dxf_from(&dxf);
+    h.app.confirm_dxf_import();
     // The line; the north arrow of the plan comes on its own layer.
     let on_sheet: Vec<_> = h
         .model()
@@ -8143,6 +8144,7 @@ fn views_for_drawing() {
     assert_eq!(mine(&h), 1, "{:?}", h.app.message.as_ref().map(|m| &m.text));
     // The DXF into it.
     h.app.import_dxf_from(&dxf);
+    h.app.confirm_dxf_import();
     assert!(mine(&h) >= 2);
     // The plan under it.
     let mut v = h.model().draft_view(dv).unwrap().clone();

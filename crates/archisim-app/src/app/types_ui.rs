@@ -800,7 +800,7 @@ impl ArchiSimApp {
             if ui
                 .button("⧉ Duplicar")
                 .on_hover_text(
-                    "Crea uno nuevo a partir del seleccionado (como «Duplicar» en Revit)",
+                    "Crea uno nuevo a partir del seleccionado",
                 )
                 .clicked()
             {
@@ -1323,7 +1323,7 @@ impl ArchiSimApp {
                 ui.add_space(4.0);
                 if ui
                     .small_button("Ver todas las prioridades…")
-                    .on_hover_text("Una barra por material, como en ArchiCAD")
+                    .on_hover_text("Una barra por material")
                     .clicked()
                 {
                     actions.push(Action::ShowPriorities);

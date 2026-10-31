@@ -364,7 +364,6 @@ impl ArchiSimApp {
         match r {
             Ok(v) => {
                 self.open_view(super::tabs::TabKind::Drafting(v));
-                self.say("Detalle creado: la zona de la sección queda debajo, en gris; dibuja encima con las órdenes de AutoCAD.");
             }
             Err(e) => self.complain(format!("No se puede: {e}.")),
         }

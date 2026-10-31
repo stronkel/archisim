@@ -324,7 +324,7 @@ impl ArchiSimApp {
             row(
                 ui,
                 "Planta de referencia",
-                "Una viga dibujada en esta planta suele llevar el forjado de la de encima (como en Revit): su cara superior queda a la cota de esa planta",
+                "Una viga dibujada en esta planta suele llevar el forjado de la de encima: su cara superior queda a la cota de esa planta",
                 |ui, w| {
                     self.beam_settings.level_above = choice(
                         ui,

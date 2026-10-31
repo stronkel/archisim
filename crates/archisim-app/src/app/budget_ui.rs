@@ -156,7 +156,7 @@ impl ArchiSimApp {
             if ui
                 .button("Abrir banco BC3…")
                 .on_hover_text(
-                    "Un banco de precios en BC3 (los de las comunidades autónomas, el de tu estudio, uno exportado de Presto) para elegir de él la partida de cada tipo",
+                    "Un banco de precios en BC3 (los de las comunidades autónomas, el de tu estudio, uno exportado de tu programa de presupuestos) para elegir de él la partida de cada tipo",
                 )
                 .clicked()
             {

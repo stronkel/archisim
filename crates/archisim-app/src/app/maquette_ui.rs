@@ -273,7 +273,7 @@ impl ArchiSimApp {
             (
                 true,
                 "Maqueta",
-                "El 3D a pantalla con un catálogo, como Los Sims (F4)",
+                "El 3D a pantalla completa con un catálogo (F4)",
             ),
             (
                 false,
@@ -477,7 +477,7 @@ impl ArchiSimApp {
                 ui.separator();
                 if ui
                     .button("Captura grande…")
-                    .on_hover_text("Guarda la vista tal cual en una imagen de 3840 píxeles de ancho (PNG), para un render con IA, D5 o Twinmotion")
+                    .on_hover_text("Guarda la vista tal cual en una imagen de 3840 píxeles de ancho (PNG), para un render con IA o con otro programa")
                     .clicked()
                 {
                     ui.close();

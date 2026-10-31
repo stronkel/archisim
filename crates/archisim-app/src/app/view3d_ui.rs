@@ -1211,7 +1211,7 @@ impl ArchiSimApp {
                 }
                 if ui
                     .button("Selección")
-                    .on_hover_text("La caja alrededor de lo seleccionado (como «Caja de selección» de Revit)")
+                    .on_hover_text("La caja alrededor de lo seleccionado")
                     .clicked()
                 {
                     match self.v3d.bounds_of(&self.ed.selection) {

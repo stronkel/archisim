@@ -1519,6 +1519,7 @@ pub(crate) fn copy(
     d: Point2,
 ) -> Result<BTreeSet<Element>, ModelError> {
     let mut copies = BTreeSet::new();
+    let mut draft_copies = Vec::new();
     let copied_walls: Vec<WallId> = selection
         .iter()
         .filter_map(|e| match e {
@@ -1575,6 +1576,7 @@ pub(crate) fn copy(
                     weight: dr.weight,
                     line: dr.line,
                 })?;
+                draft_copies.push((*id, new));
                 copies.insert(Element::Draft(new));
             }
             Element::Wall(id) => {
@@ -1972,6 +1974,7 @@ pub(crate) fn copy(
             }
         }
     }
+    model.regroup_copies(&draft_copies)?;
     Ok(copies)
 }
 

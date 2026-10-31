@@ -928,6 +928,7 @@ impl ArchiSimApp {
                 Tool::Arrow => {
                     self.window_start = None;
                     self.ed.selection.clear();
+                    self.rebar_pick = false;
                 }
             }
         }
@@ -1006,6 +1007,13 @@ impl ArchiSimApp {
                     }
                 }
             }
+        }
+        if self.rebar_pick && self.tool == Tool::Arrow {
+            if response.clicked_by(PointerButton::Primary) {
+                let e = self.hover;
+                self.rebar_click(e);
+            }
+            return;
         }
         match self.tool {
             Tool::Cad => self.cad_clicks(ctx, response, rect),

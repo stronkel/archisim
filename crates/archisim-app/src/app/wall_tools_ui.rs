@@ -124,7 +124,7 @@ impl ArchiSimApp {
             row(ui, "", "", |ui, _| {
                 if ui
                     .button("Dividir en dos")
-                    .on_hover_text("Como «Dividir elemento» de Revit: cada parte puede tener luego su tipo, su altura y su pintura")
+                    .on_hover_text("Lo parte en dos: cada parte puede tener luego su tipo, su altura y su pintura")
                     .clicked()
                 {
                     split = true;

@@ -9,6 +9,7 @@ use eframe::egui::{self, Color32, Pos2, Rect, TextureHandle, TextureOptions};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Glyph {
+    Rebar,
     Edge,
     PushPull,
     DivideFace,
@@ -196,6 +197,9 @@ impl Glyph {
             }
             Glyph::BearingWall => {
                 r##"<path d="M2 7h16M2 13h16"/><path d="M2 7l6 6M6 7l6 6M10 7l6 6M14 7l4 4M2 11l2 2" stroke-width="0.8"/>"##
+            }
+            Glyph::Rebar => {
+                r##"<rect x="4" y="4" width="12" height="12"/><rect x="6.5" y="6.5" width="7" height="7" stroke-width="0.9"/><circle cx="7.5" cy="7.5" r="0.9"/><circle cx="12.5" cy="7.5" r="0.9"/><circle cx="7.5" cy="12.5" r="0.9"/><circle cx="12.5" cy="12.5" r="0.9"/>"##
             }
             Glyph::Footing => {
                 r##"<rect x="3" y="11" width="14" height="5"/><rect x="8" y="3" width="4" height="8"/>"##

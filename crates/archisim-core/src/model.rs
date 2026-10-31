@@ -4735,7 +4735,19 @@ impl Model {
 
         // Parameters take ids from the same counter as the elements.
         let params = model.user_params.keys().map(|p| p.0);
-        model.next_id = ids.iter().copied().chain(params).max().map_or(1, |m| m + 1);
+        // So do the groups of drafting elements.
+        let groups: Vec<u64> = model
+            .drafts
+            .values()
+            .filter_map(|d| d.group.as_ref().map(|g| g.id))
+            .collect();
+        model.next_id = ids
+            .iter()
+            .copied()
+            .chain(params)
+            .chain(groups)
+            .max()
+            .map_or(1, |m| m + 1);
         model.top_id = model.next_id - 1;
         Ok(model)
     }

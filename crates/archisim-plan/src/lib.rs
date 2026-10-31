@@ -39,6 +39,7 @@ pub mod phases;
 pub mod pools;
 pub mod presentation;
 pub mod railings;
+pub mod rebar;
 pub mod roofs;
 pub mod rooms;
 pub mod schedules;
@@ -874,6 +875,18 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
             members::draw_members(s, model, level, options.cut_plane, k, &poly_visible)
         });
     }
+    // The reinforcement marked, at 1:50 or more (G1).
+    rebar::draw_rebar_marks(
+        &mut s,
+        model,
+        level,
+        options.cut_plane,
+        k,
+        &poly_visible,
+        show(archisim_core::Category::Foundations),
+        show(archisim_core::Category::Structure),
+        show(archisim_core::Category::Slabs),
+    );
     overrides::open(&mut s, archisim_core::Category::CurtainWalls);
     s.push_str("<g id=\"curtain-walls\">\n");
     for c in model

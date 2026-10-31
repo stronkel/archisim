@@ -142,6 +142,8 @@ pub enum Pick {
     SlabHole,
     /// The slab tool with the raft foundation type.
     Raft,
+    /// Clicks that arm columns, beams, footings and slabs.
+    Rebar,
     /// An action, not a tool: it opens or makes something.
     Action(Action),
     /// A 2D drafting or editing command (AutoCAD's), by its name.
@@ -200,7 +202,7 @@ const fn tile(
     }
 }
 
-const TEAM_LATER: &str = "el trabajo en equipo (4.6, carpeta compartida en Google Drive)";
+const TEAM_LATER: &str = "el trabajo en equipo (4.6, carpeta compartida en la nube)";
 
 const CONCEPT: &[Tile] = &[
     tile(
@@ -208,7 +210,7 @@ const CONCEPT: &[Tile] = &[
         Glyph::Edge,
         "Arista",
         "",
-        "Líneas del modelo (no del dibujo), como en SketchUp: quedan abiertas, y al cerrar un contorno se hace una cara. Rectángulo y círculo, en la barra superior",
+        "Líneas del modelo (no del dibujo): quedan abiertas, y al cerrar un contorno se hace una cara. Rectángulo y círculo, en la barra superior",
     ),
     tile(
         Pick::Concept(super::concept_ui::ConceptPick::Push),
@@ -413,6 +415,13 @@ const STRUCTURE: &[Tile] = &[
         "Zapatas aisladas bajo pilares y corridas bajo muros",
     ),
     tile(Pick::Raft, Glyph::Raft, "Losa", "", "Losa de cimentación"),
+    tile(
+        Pick::Rebar,
+        Glyph::Rebar,
+        "Armado",
+        "",
+        "Clic en un pilar, una viga, una zapata o un forjado para armarlo; sus barras, en Propiedades",
+    ),
     tile(
         Pick::SlabHole,
         Glyph::Opening,
@@ -920,7 +929,7 @@ pub const ORDERS: &[Order] = &[
         "SIMETRIA",
         Icon::Mirror,
         "SI",
-        "Simetría de AutoCAD: dos puntos del eje y si se borra el original",
+        "Simetría: dos puntos del eje y si se borra el original",
     ),
     order(
         EDIT,
@@ -968,7 +977,7 @@ pub const ORDERS: &[Order] = &[
         "ALINEACARA",
         Icon::Move,
         "ALC",
-        "Como Alinear de Revit: la línea de referencia y después la cara que se lleva a ella",
+        "Alinear: la línea de referencia y después la cara que se lleva a ella",
     ),
     order(
         EDIT,
@@ -976,7 +985,7 @@ pub const ORDERS: &[Order] = &[
         "ESQUINA",
         Icon::Trim,
         "ESQ",
-        "Recortar/extender dos muros para formar esquina (TR de Revit)",
+        "Recortar/extender dos muros para formar esquina (TR)",
     ),
     order(
         EDIT,
@@ -1141,6 +1150,7 @@ impl ArchiSimApp {
             Pick::Tool(Tool::Dimension) => Some(self.tool == Tool::Dimension && !level_marks),
             Pick::Tool(Tool::Slab) => Some(self.tool == Tool::Slab && !holes && !raft),
             Pick::Raft => Some(self.tool == Tool::Slab && !holes && raft),
+            Pick::Rebar => Some(self.tool == Tool::Arrow && self.rebar_pick),
             Pick::Concept(c) => Some(self.concept_picked(c)),
             Pick::Device(k) => Some(self.tool == Tool::Device && self.service_settings.device == k),
             Pick::Objects(s) => Some(self.tool == Tool::Object && self.object_scope == Some(s)),
@@ -1229,6 +1239,7 @@ impl ArchiSimApp {
                     "El proyecto no tiene un tipo de losa de cimentación: crea un tipo de forjado «Losa de cimentación…» en Tipos y materiales.",
                 ),
             },
+            Pick::Rebar => self.start_rebar_pick(),
             Pick::Action(a) => self.act(a),
             Pick::Concept(c) => self.concept_pick(c),
             Pick::Device(k) => self.device_pick(k),
