@@ -1768,6 +1768,57 @@ fn services(m: &mut Model, lv: &[LevelId]) -> R {
             let _ = d;
         }
     }
+    // Fire protection of the common corridor of each floor (DB-SI 4, H3):
+    // an extinguisher and an emergency light on the wall of the core,
+    // facing the corridor, and the exit sign over the stair.
+    let face = 3.2 + 0.125;
+    for &l in &lv[1..=4] {
+        let (w, d, h, z) = DeviceKind::Extinguisher.defaults();
+        m.add_device(NewDevice {
+            level: l,
+            kind: DeviceKind::Extinguisher,
+            name: "Extintor 21A-113B".into(),
+            position: p(21.2, face + d / 2.0),
+            rotation: 0.0,
+            elevation: z,
+            width: w,
+            depth: d,
+            height: h,
+        })?;
+        for (kind, x, name) in [
+            (DeviceKind::EmergencyLight, 23.4, "Alumbrado de emergencia"),
+            (DeviceKind::ExitSign, 20.0, "Señal de salida"),
+        ] {
+            let (w, d, h, z) = kind.defaults();
+            m.add_device(NewDevice {
+                level: l,
+                kind,
+                name: name.into(),
+                position: p(x, face + d / 2.0),
+                rotation: 0.0,
+                elevation: z,
+                width: w,
+                depth: d,
+                height: h,
+            })?;
+        }
+    }
+    // On the deck's roof, three rows of solar panels looking south.
+    for y in [3.0, 6.0, 9.0] {
+        let (_, d, h, _) = DeviceKind::SolarPanel.defaults();
+        let w = 4.0 * archisim_core::SOLAR_MODULE;
+        m.add_device(NewDevice {
+            level: lv[6],
+            kind: DeviceKind::SolarPanel,
+            name: "Placas fotovoltaicas".into(),
+            position: p(28.5, y),
+            rotation: PI,
+            elevation: 0.0,
+            width: w,
+            depth: d,
+            height: h,
+        })?;
+    }
     // Common areas: lights in the corridor of the ground floor and in the
     // fernery, the general board.
     let pb = lv[0];

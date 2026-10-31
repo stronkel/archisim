@@ -418,3 +418,73 @@ fn sanitary_pipes_by_hs4_and_hs5() {
     assert_eq!(of(Subject::Run(flat), "HS 5, 3.3.1.1"), [Status::Fails]);
     assert!(r.to_text(&m).contains("Agua y saneamiento"));
 }
+
+fn fire_device(m: &mut Model, level: LevelId, kind: DeviceKind, x: f64, y: f64) {
+    let (width, depth, height, elevation) = kind.defaults();
+    m.add_device(NewDevice {
+        level,
+        kind,
+        name: kind.name().into(),
+        position: Point2::new(x, y),
+        rotation: 0.0,
+        elevation,
+        width,
+        depth,
+        height,
+    })
+    .unwrap();
+}
+
+/// DB-SI 4: no extinguisher fails the level; one at the west end leaves
+/// the far office out of reach; a second one at the east end covers it.
+/// Sprinklers declared need sprinklers drawn, enough for each room.
+#[test]
+fn extinguishers_and_sprinklers_by_si4() {
+    let Office { mut m, level, .. } = office();
+    let fire = |r: &Report| -> Vec<Item> {
+        r.items
+            .iter()
+            .filter(|i| i.section == Section::Fire)
+            .cloned()
+            .collect()
+    };
+    let r = check(&m);
+    assert!(fire(&r)
+        .iter()
+        .any(|i| i.subject == Subject::Level(level) && i.status == Status::Fails));
+    fire_device(&mut m, level, DeviceKind::Extinguisher, 1.0, 5.8);
+    let far = |r: &Report| {
+        fire(r)
+            .into_iter()
+            .filter(|i| i.rule == "SI 4, tabla 1.1" && i.text.starts_with("Extintor"))
+            .map(|i| i.status)
+            .collect::<Vec<_>>()
+    };
+    assert!(far(&check(&m)).contains(&Status::Fails));
+    fire_device(&mut m, level, DeviceKind::Extinguisher, 23.0, 5.8);
+    let s = far(&check(&m));
+    assert!(
+        s.len() == 4 && s.iter().all(|x| *x == Status::Passes),
+        "{s:?}"
+    );
+    // Sprinklers declared, none drawn.
+    let mut c = m.code_settings();
+    c.sprinklers = true;
+    m.set_code_settings(c);
+    assert!(fire(&check(&m))
+        .iter()
+        .any(|i| i.text.contains("extinción automática") && i.status == Status::Fails));
+    // One in the first office (31 m²): two are needed.
+    fire_device(&mut m, level, DeviceKind::Sprinkler, 4.0, 2.0);
+    let counts = |r: &Report| {
+        fire(r)
+            .into_iter()
+            .filter(|i| i.text.starts_with("Rociadores en") && i.required.starts_with('≥'))
+            .map(|i| i.status)
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(counts(&check(&m)), [Status::Fails]);
+    fire_device(&mut m, level, DeviceKind::Sprinkler, 2.0, 2.0);
+    fire_device(&mut m, level, DeviceKind::Sprinkler, 6.0, 2.0);
+    assert_eq!(counts(&check(&m)), [Status::Passes]);
+}

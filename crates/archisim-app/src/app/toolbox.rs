@@ -530,6 +530,55 @@ const SERVICES: &[Tile] = &[
         "",
         "Difusores de impulsión, en techo",
     ),
+    tile(
+        Pick::Device(archisim_core::DeviceKind::Sprinkler),
+        Glyph::Fixture,
+        "Rociador",
+        "",
+        "Rociadores bajo el techo; su red, con Tubería en «Protección contra incendios»",
+    ),
+    tile(
+        Pick::Device(archisim_core::DeviceKind::HoseReel),
+        Glyph::Fixture,
+        "BIE",
+        "",
+        "Bocas de incendio equipadas, en pared",
+    ),
+    tile(
+        Pick::Device(archisim_core::DeviceKind::Extinguisher),
+        Glyph::Fixture,
+        "Extintor",
+        "",
+        "Extintores portátiles, en pared",
+    ),
+    tile(
+        Pick::Device(archisim_core::DeviceKind::SmokeDetector),
+        Glyph::Light,
+        "Detección",
+        "",
+        "Detectores de humo; en su tipo, pulsadores y sirenas",
+    ),
+    tile(
+        Pick::Device(archisim_core::DeviceKind::EmergencyLight),
+        Glyph::Light,
+        "Emergencia",
+        "",
+        "Alumbrado de emergencia; en su tipo, señales de salida",
+    ),
+    tile(
+        Pick::Device(archisim_core::DeviceKind::Valve),
+        Glyph::Pipe,
+        "Llave de paso",
+        "",
+        "Llaves de paso; en su tipo, contadores, depósitos, grupos de presión y termos",
+    ),
+    tile(
+        Pick::Device(archisim_core::DeviceKind::SolarPanel),
+        Glyph::Fixture,
+        "Placas solares",
+        "",
+        "Placas fotovoltaicas en fila; en su tipo, captadores térmicos",
+    ),
 ];
 
 const SITE: &[Tile] = &[

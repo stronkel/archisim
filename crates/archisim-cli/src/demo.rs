@@ -595,6 +595,50 @@ pub fn build() -> Result<Document, ModelError> {
             Point2::new(11.4, 0.6),
             PI,
         )?;
+        // H3: the stop valve where the cold water comes in, an
+        // extinguisher by the door, a smoke detector and an emergency
+        // light in the hall.
+        place(
+            m,
+            DeviceKind::Valve,
+            "Llave de paso",
+            Point2::new(12.0 - inner - 0.05, 1.3),
+            PI / 2.0,
+        )?;
+        place(
+            m,
+            DeviceKind::Extinguisher,
+            "Extintor",
+            Point2::new(inner + 0.09, 1.4),
+            -PI / 2.0,
+        )?;
+        place(
+            m,
+            DeviceKind::SmokeDetector,
+            "Detector",
+            Point2::new(5.5, 4.5),
+            0.0,
+        )?;
+        place(
+            m,
+            DeviceKind::EmergencyLight,
+            "Emergencia",
+            Point2::new(inner + 0.03, 3.0),
+            -PI / 2.0,
+        )?;
+        // A row of solar panels on the flat roof, looking south.
+        let (width, depth, height, _) = DeviceKind::SolarPanel.defaults();
+        m.add_device(NewDevice {
+            level: cubierta,
+            kind: DeviceKind::SolarPanel,
+            name: "Placas solares".into(),
+            position: Point2::new(6.0, 5.5),
+            rotation: PI,
+            elevation: 0.0,
+            width,
+            depth,
+            height,
+        })?;
         Ok(())
     })?;
 
