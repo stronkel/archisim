@@ -6,6 +6,33 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-31 (53) · G2: modo boceto como en Revit
+
+Rama `bloque/g2-boceto` (sobre `bloque/g1-rapidos`), con pull request. Sin cambios de formato.
+
+**Hecho**
+- **Editar contorno** de forjados, cubiertas y terreno, desde la barra de Modificar (primer botón cuando hay uno elegido) o desde Propiedades.
+- Al entrar, el elemento se oculta y su contorno vuelve como **líneas sueltas en magenta**, una por arista, en la capa «Boceto». Una barra arriba del dibujo trae las herramientas:
+  - para dibujar: línea, rectángulo, polígono, arco y círculo;
+  - para modificar: esquina (recortar o alargar dos líneas hasta que se encuentren), recortar, alargar, partir, desfase, mover, copiar y borrar;
+  - Aceptar (Intro) y Cancelar.
+- Valen también las órdenes escritas, los forzados y las cotas temporales de siempre.
+- **Aceptar**: las líneas tienen que cerrar contornos. En un forjado, el mayor es su borde y los de dentro sus huecos; una cubierta o un terreno, un solo contorno. Los arcos entran como tramos cortos. Si quedan extremos sueltos, no se acepta y salen marcados con un círculo rojo.
+- Al aceptar, el elemento toma el contorno, las líneas desaparecen y todo queda en **un solo paso de Deshacer**. Cancelar deja el proyecto y el historial como estaban.
+- La cubierta guarda la pendiente de cada faldón que sigue sobre su arista, y los faldones nuevos toman la del más cercano. El terreno guarda la cota de los puntos que siguen en su sitio, y los nuevos toman la del más cercano.
+
+**Pendiente**
+- El perfil en alzado del muro sigue con su ventana propia; pasarlo al mismo modo boceto (en el alzado) va con G3, que usa este modo en las caras.
+
+**Qué debe probar Antonio**
+1. En una planta, elige un forjado. En la barra de Modificar, «Editar contorno».
+2. Borra una línea y pulsa Aceptar: debe quejarse y marcar los dos extremos sueltos.
+3. Dibuja con Línea, o usa Esquina, Recortar y Alargar, hasta cerrar el contorno, y Aceptar. Ctrl+Z lo deshace de una vez.
+4. Dibuja un rectángulo dentro del forjado y Aceptar: queda como hueco.
+5. Lo mismo con una cubierta: mira que los faldones conservan su pendiente.
+
+---
+
 ## 2026-10-31 (52) · G1: arreglos rápidos de la lista del 31/10
 
 Rama `bloque/g1-rapidos` (sobre `bloque/e17-detalle`), con pull request. Formato `.archisim` versión 53 (los elementos de dibujo pueden ir en un grupo).

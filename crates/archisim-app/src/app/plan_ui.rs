@@ -47,15 +47,13 @@ impl ArchiSimApp {
         // Keys go to the plan unless a field is being typed in (a temporary
         // dimension's too: egui lets go of the focus on Esc before the plan
         // sees it).
-        if self.sketch.is_some() {
-            // Sketching a contour: its own clicks and keys.
-            self.sketch_input(&ctx, &response, rect);
-        } else {
-            if !crate::app::typing_in_text(&ctx) && self.temp_edit.is_none() {
-                self.keyboard_in_view(&ctx);
-            }
-            self.clicks(&ctx, &response, rect);
+        // Sketching a contour, the usual tools draw its lines; Intro
+        // accepts it.
+        self.sketch_keys(&ctx);
+        if !crate::app::typing_in_text(&ctx) && self.temp_edit.is_none() {
+            self.keyboard_in_view(&ctx);
         }
+        self.clicks(&ctx, &response, rect);
 
         // Paper, grid, the plan itself, then what is being done on top.
         painter.rect_filled(rect, CornerRadius::ZERO, PAPER);
@@ -67,19 +65,13 @@ impl ArchiSimApp {
         self.draw_links_in_plan(&painter, rect);
         self.draw_team(&painter, rect);
         self.draw_origin(&painter, rect);
-        // While sketching a contour, its lines instead of the selection's.
-        if self.sketch.is_some() {
-            self.draw_sketch(&painter, rect);
-        } else {
-            self.draw_selection(&painter, rect);
-        }
+        self.draw_selection(&painter, rect);
+        self.draw_sketch(&painter, rect);
         self.draw_cte_route(&painter, rect);
         self.draw_temp_dims(&painter, rect);
         self.draw_anchor_drag(&painter, rect);
         self.draw_flip_controls(&painter, rect);
-        if self.sketch.is_none() {
-            self.draw_hotspots(&painter, rect);
-        }
+        self.draw_hotspots(&painter, rect);
         self.draw_wall_preview(&painter, rect);
         self.draw_slab_preview(&painter, rect);
         self.draw_opening_preview(&painter, rect);

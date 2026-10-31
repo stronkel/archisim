@@ -7936,9 +7936,11 @@ fn revit_shortcuts_start_tools_at_once() {
     assert!(h.app.keys_revit);
 }
 
-/// E4: the contour of a slab sketched with the mouse — an edge dragged
-/// parallel, a vertex added with a double click and moved — goes into
-/// the model only on Intro, in one step; Esc leaves it as it was.
+/// G2: the contour of a slab in sketch mode, as Revit's: the slab hides
+/// and its edges come back as loose lines on the layer «Boceto»; lines
+/// taken away and drawn go into the slab only on Intro (Aceptar), in one
+/// step that can be undone; open lines are refused with their ends
+/// marked; Cancelar leaves everything as it was.
 #[test]
 fn a_slab_contour_is_sketched_and_finished() {
     let mut ed = Editor::new_project();
@@ -7962,30 +7964,91 @@ fn a_slab_contour_is_sketched_and_finished() {
     let mut h = Harness::new(ed);
     h.app.fit_requested = true;
     h.frame();
+    let before_label = h.app.ed.undo_label().map(str::to_string);
     h.app.start_sketch(crate::sketch::SketchTarget::Slab(id));
     h.frame();
-    // The east edge 1 m further east.
-    h.drag(Point2::new(6.0, 2.0), Point2::new(7.0, 2.0));
-    assert_eq!(h.app.ed.model().slab(id).unwrap().outline.len(), 4);
-    let sketched = &h.app.sketch.as_ref().unwrap().sketch.loops[0];
-    assert!(
-        sketched.iter().any(|p| (p.x - 7.0).abs() < 0.05),
-        "{sketched:?}"
-    );
+    let view = archisim_core::ViewRef::Level(level);
+    let lines = |h: &Harness| -> Vec<archisim_core::Draft> {
+        let layer = h.model().draw_layer_by_name("Boceto").map(|l| l.id);
+        h.model()
+            .drafts_in(view)
+            .filter(|d| Some(d.layer) == layer)
+            .cloned()
+            .collect()
+    };
+    assert_eq!(lines(&h).len(), 4);
+    assert!(h.app.ed.hidden().contains(&Element::Slab(id)));
+    // The east edge taken away: open, refused, its ends marked.
+    let east = lines(&h)
+        .into_iter()
+        .find(|d| match d.shape {
+            archisim_core::Shape::Line { a, b } => a.x > 5.9 && b.x > 5.9,
+            _ => false,
+        })
+        .unwrap()
+        .id;
+    h.app
+        .ed
+        .transact("Borrar", |m| m.remove_draft(east).map(|_| ()))
+        .unwrap();
     h.key(Key::Enter);
-    assert!(h.app.sketch.is_none());
+    assert!(h.app.sketch.is_some());
+    assert_eq!(h.app.sketch.as_ref().unwrap().open_ends.len(), 2);
+    // A bump 1 m further east, drawn as three lines.
+    let layer = h.model().draw_layer_by_name("Boceto").unwrap().id;
+    h.app
+        .ed
+        .transact("Líneas", |m| {
+            for (a, b) in [
+                ((6.0, 0.0), (7.0, 0.0)),
+                ((7.0, 0.0), (7.0, 4.0)),
+                ((7.0, 4.0), (6.0, 4.0)),
+            ] {
+                m.add_draft(archisim_core::NewDraft::new(
+                    view,
+                    layer,
+                    archisim_core::Shape::Line {
+                        a: Point2::new(a.0, a.1),
+                        b: Point2::new(b.0, b.1),
+                    },
+                ))?;
+            }
+            Ok(())
+        })
+        .unwrap();
+    assert_eq!(h.app.ed.model().slab(id).unwrap().outline.len(), 4);
+    h.key(Key::Enter);
+    assert!(
+        h.app.sketch.is_none(),
+        "{:?}",
+        h.app.message.as_ref().map(|m| &m.text)
+    );
     let outline = h.app.ed.model().slab(id).unwrap().outline.clone();
     assert!(
-        outline.iter().any(|p| (p.x - 7.0).abs() < 0.05),
+        outline.iter().any(|p| (p.x - 7.0).abs() < 1e-6),
         "{outline:?}"
     );
-    // Esc: nothing changes.
+    assert!(lines(&h).is_empty(), "the sketch lines go");
+    assert!(!h.app.ed.hidden().contains(&Element::Slab(id)));
+    // One step: undone, the slab and nothing else as before.
+    assert_eq!(h.app.ed.undo_label(), Some("Editar contorno"));
+    h.app.ed.undo();
+    assert_eq!(h.app.ed.model().slab(id).unwrap().outline.len(), 4);
+    assert_eq!(h.app.ed.undo_label().map(str::to_string), before_label);
+    h.app.ed.redo();
+    // Cancelar: nothing changes, not even the history.
     h.app.start_sketch(crate::sketch::SketchTarget::Slab(id));
     h.frame();
-    h.drag(Point2::new(3.0, 4.0), Point2::new(3.0, 6.0));
-    h.key(Key::Escape);
+    let any = lines(&h)[0].id;
+    h.app
+        .ed
+        .transact("Borrar", |m| m.remove_draft(any).map(|_| ()))
+        .unwrap();
+    h.app.cancel_sketch();
     assert!(h.app.sketch.is_none());
     assert_eq!(h.app.ed.model().slab(id).unwrap().outline, outline);
+    assert!(lines(&h).is_empty());
+    assert_eq!(h.app.ed.undo_label(), Some("Editar contorno"));
 }
 
 /// E3: a wall's properties show «Caras y división»; the band painted and

@@ -233,6 +233,17 @@ impl Editor {
         }
     }
 
+    /// Shows elements hidden again.
+    pub fn unhide(&mut self, items: impl IntoIterator<Item = Element>) {
+        let before = self.hidden.len();
+        for e in items {
+            self.hidden.remove(&e);
+        }
+        if self.hidden.len() != before {
+            self.revision += 1;
+        }
+    }
+
     /// Shows again everything hidden.
     pub fn show_all(&mut self) {
         if !self.hidden.is_empty() {

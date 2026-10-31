@@ -1,40 +1,45 @@
-//! The sketch mode of a slab's, a roof's or a terrain's contour (E4): its
-//! lines drawn over the plan in magenta, their vertices and edges dragged,
-//! a double click adds a vertex, Supr takes the picked one away, and a
-//! bar at the top of the plan offsets the outline, turns the picked edge
-//! into an arc, trims or extends two edges to their corner, adds or takes
-//! away a slab's holes, and finishes (Intro) or cancels (Esc). The logic
-//! is in `crate::sketch`.
+//! The sketch mode of a slab's, a roof's or a terrain's contour, as
+//! Revit's «Editar contorno» (G2): the element hides and its contour comes
+//! back as loose magenta lines on a layer of their own («Boceto»), one per
+//! edge. They are drawn and edited with the usual drawing commands — line,
+//! rectangle, arc, circle, polygon; trim, extend, corner, split, offset,
+//! move, delete — from the sketch bar at the top of the plan, and nothing
+//! of the element changes until Aceptar: then the lines must close into
+//! contours (a slab's largest is its outline and the rest its holes), the
+//! element takes them, the lines go, and the whole edit is one step that
+//! can be undone. Cancelar puts everything back as it was.
+//!
+//! The logic of the contours is in `crate::sketch`.
 
-use archisim_core::{ModelError, Point2};
+use archisim_core::{
+    DrawLayer, DrawLayerId, LineStyle, ModelError, NewDraft, Point2, Shape, ViewRef,
+};
 
 use super::*;
-use crate::sketch::{Sketch, SketchError, SketchTarget};
+use crate::sketch::{loops_from_segs, Sketch, SketchError, SketchTarget};
 
-/// The sketch being edited and what the mouse is doing with it.
+/// The sketch being edited.
 pub(crate) struct SketchState {
+    /// The element's contour when it started (for what it keeps: a roof's
+    /// slopes, a terrain's heights).
     pub sketch: Sketch,
-    /// What is being dragged: a vertex, or an edge from where it was
-    /// taken.
-    drag: Option<SketchDrag>,
-    /// The vertex picked (Supr takes it away).
-    vertex: Option<(usize, usize)>,
-    /// How far the outline is offset (m; negative, inwards).
-    offset: f64,
-    /// How far the arc bulges, as a fraction of its chord.
-    bulge: f64,
-    /// Waiting for the second edge of a corner.
-    corner: bool,
-}
-
-#[derive(Debug, Clone, Copy)]
-enum SketchDrag {
-    Vertex(usize, usize),
-    Edge(usize, usize, Point2),
+    /// The undo step before it started: Cancelar goes back to it, Aceptar
+    /// joins everything after it into one step.
+    mark: usize,
+    /// The layer of the sketch lines and the plan they are drawn on.
+    layer: DrawLayerId,
+    view: ViewRef,
+    /// The drawing settings before (the sketch draws on its layer, by
+    /// layer).
+    settings: crate::cad::CadSettings,
+    /// Where the lines were left open at the last Aceptar.
+    pub open_ends: Vec<Point2>,
 }
 
 /// The colour of a sketch, as Revit's.
 const SKETCH: Color32 = Color32::from_rgb(196, 30, 150);
+/// The sketch layer's name.
+pub const SKETCH_LAYER: &str = "Boceto";
 
 fn sketch_error(e: SketchError) -> ModelError {
     match e {
@@ -43,38 +48,147 @@ fn sketch_error(e: SketchError) -> ModelError {
     }
 }
 
+/// The tools of the sketch bar: label, command and what it does.
+const SKETCH_TOOLS: &[(&str, &str, &str)] = &[
+    ("Línea", "LINEA", "Líneas sueltas, una tras otra"),
+    ("Rectángulo", "RECTANG", "Cuatro líneas por dos esquinas"),
+    ("Polígono", "POLIGONO", "Polígono regular"),
+    ("Arco", "ARCO", "Arco por tres puntos"),
+    ("Círculo", "CIRCULO", "Círculo por centro y radio"),
+];
+
+const SKETCH_EDITS: &[(&str, &str, &str)] = &[
+    (
+        "Esquina",
+        "EMPALME",
+        "Recortar o alargar dos líneas hasta que formen esquina (con radio 0)",
+    ),
+    ("Recortar", "RECORTA", "Quitar el trozo de línea hasta otra"),
+    ("Alargar", "ALARGA", "Alargar una línea hasta otra"),
+    ("Partir", "PARTEPUNTO", "Partir una línea en un punto"),
+    ("Desfase", "EQUIDIST", "Una línea paralela a una distancia"),
+    ("Mover", "DESPLAZA", "Mover las líneas elegidas"),
+    ("Copiar", "COPIA", "Copiar las líneas elegidas"),
+    ("Borrar", "BORRA", "Borrar las líneas elegidas"),
+];
+
 impl ArchiSimApp {
-    /// Starts editing the contour of an element.
+    /// Starts editing the contour of an element: it hides, and its edges
+    /// come back as sketch lines.
     pub(super) fn start_sketch(&mut self, target: SketchTarget) {
         let Some(sketch) = Sketch::of(self.ed.model(), target) else {
             return;
         };
+        if self.sketch.is_some() {
+            self.finish_sketch();
+            if self.sketch.is_some() {
+                return;
+            }
+        }
+        self.end_command(false);
+        if self.mode != ViewMode::Plan {
+            self.show_plan();
+        }
+        let view = ViewRef::Level(self.ed.level);
+        let mark = self.ed.undo_mark();
+        let loops = sketch.loops.clone();
+        let r = self.ed.transact("Boceto", |m| {
+            let layer = match m.draw_layer_by_name(SKETCH_LAYER) {
+                Some(l) => l.id,
+                None => m.add_draw_layer(DrawLayer::new(
+                    SKETCH_LAYER,
+                    [196, 30, 150],
+                    0.35,
+                    LineStyle::Continuous,
+                ))?,
+            };
+            for lp in &loops {
+                let n = lp.len();
+                for i in 0..n {
+                    m.add_draft(NewDraft::new(
+                        view,
+                        layer,
+                        Shape::Line {
+                            a: lp[i],
+                            b: lp[(i + 1) % n],
+                        },
+                    ))?;
+                }
+            }
+            Ok(layer)
+        });
+        let layer = match r {
+            Ok(l) => l,
+            Err(e) => {
+                self.complain(format!("No se puede: {e}."));
+                return;
+            }
+        };
+        self.ed.hide([sketch.element()]);
+        self.ed.selection.clear();
+        let settings = self.cad_settings.clone();
+        self.cad_settings.layer = layer;
+        self.cad_settings.color = None;
+        self.cad_settings.weight = None;
+        self.cad_settings.line = None;
         self.tool = Tool::Arrow;
         self.drag = None;
         self.sketch = Some(SketchState {
             sketch,
-            drag: None,
-            vertex: None,
-            offset: 0.1,
-            bulge: 0.15,
-            corner: false,
+            mark,
+            layer,
+            view,
+            settings,
+            open_ends: Vec::new(),
         });
-        self.say(
-            "Editar contorno: arrastre vértices y aristas; doble clic añade un vértice, Supr quita el elegido. Intro termina, Esc cancela.",
-        );
+    }
+
+    /// The sketch lines now, as segments.
+    fn sketch_segs(&self, st: &SketchState) -> Vec<archisim_draft::Seg> {
+        self.ed
+            .model()
+            .drafts_in(st.view)
+            .filter(|d| d.layer == st.layer)
+            .flat_map(|d| archisim_draft::shape_segs(&d.shape))
+            .collect()
     }
 
     /// Puts the sketch into the model, in one step that can be undone.
     pub(super) fn finish_sketch(&mut self) {
-        let Some(st) = self.sketch.take() else {
+        self.end_command(true);
+        let Some(mut st) = self.sketch.take() else {
             return;
         };
-        let sketch = st.sketch.clone();
-        let r = self
-            .ed
-            .transact("Editar contorno", |m| sketch.apply(m).map_err(sketch_error));
+        let segs = self.sketch_segs(&st);
+        let sketch = match loops_from_segs(&segs).and_then(|l| st.sketch.with_loops(l)) {
+            Ok(s) => s,
+            Err(e) => {
+                if let SketchError::Open(at) = &e {
+                    st.open_ends = at.clone();
+                }
+                self.sketch = Some(st);
+                self.complain(format!("No se puede aceptar: {e}."));
+                return;
+            }
+        };
+        let (layer, view) = (st.layer, st.view);
+        let r = self.ed.transact("Editar contorno", |m| {
+            let lines: Vec<_> = m
+                .drafts_in(view)
+                .filter(|d| d.layer == layer)
+                .map(|d| d.id)
+                .collect();
+            for id in lines {
+                m.remove_draft(id)?;
+            }
+            sketch.apply(m).map_err(sketch_error)
+        });
         match r {
-            Ok(()) => self.say("Contorno cambiado."),
+            Ok(()) => {
+                self.ed.join_since(st.mark, "Editar contorno");
+                self.leave_sketch(st);
+                self.say("Contorno cambiado.");
+            }
             Err(e) => {
                 // Still in the sketch, to put it right.
                 self.sketch = Some(st);
@@ -83,153 +197,52 @@ impl ArchiSimApp {
         }
     }
 
+    /// Leaves everything as it was before the sketch.
     pub(super) fn cancel_sketch(&mut self) {
-        if self.sketch.take().is_some() {
-            self.say("Contorno sin cambios.");
+        self.end_command(false);
+        let Some(st) = self.sketch.take() else {
+            return;
+        };
+        while self.ed.undo_mark() > st.mark {
+            if self.ed.undo().is_none() {
+                break;
+            }
+        }
+        self.leave_sketch(st);
+        self.say("Contorno sin cambios.");
+    }
+
+    fn leave_sketch(&mut self, st: SketchState) {
+        self.ed.unhide([st.sketch.element()]);
+        self.ed.selection = [st.sketch.element()].into_iter().collect();
+        self.cad_settings = st.settings;
+        self.tool = Tool::Arrow;
+    }
+
+    /// Keys while sketching: Intro accepts when no command is running.
+    pub(super) fn sketch_keys(&mut self, ctx: &egui::Context) {
+        if self.sketch.is_none() || self.cad.is_some() || crate::app::typing_in_text(ctx) {
+            return;
+        }
+        if ctx.input(|i| i.key_pressed(egui::Key::Enter)) {
+            self.finish_sketch();
         }
     }
 
-    /// The mouse and keys while sketching (instead of the usual ones).
-    pub(super) fn sketch_input(
-        &mut self,
-        ctx: &egui::Context,
-        response: &egui::Response,
-        rect: Rect,
-    ) {
-        let reach = self.view.to_metres(REACH);
-        let at = self.cursor.map(|c| c.point);
-        let typing = crate::app::typing_in_text(ctx);
-        let (enter, esc, del) = ctx.input(|i| {
-            (
-                i.key_pressed(egui::Key::Enter),
-                i.key_pressed(egui::Key::Escape),
-                i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace),
-            )
-        });
-        if !typing {
-            if enter {
-                self.finish_sketch();
-                return;
-            }
-            if esc {
-                self.cancel_sketch();
-                return;
-            }
-        }
-        let Some(st) = self.sketch.as_mut() else {
-            return;
-        };
-        if del && !typing {
-            if let Some((l, i)) = st.vertex.take() {
-                if let Err(e) = st.sketch.remove_vertex(l, i) {
-                    let msg = format!("No se puede: {e}.");
-                    self.complain(msg);
-                }
-                return;
-            }
-        }
-        let Some(at) = at else {
-            return;
-        };
-        if response.double_clicked_by(PointerButton::Primary) {
-            if let Some((l, i)) = st.sketch.edge_near(at, reach) {
-                let k = st.sketch.insert_vertex(l, i, at);
-                st.vertex = k.map(|k| (l, k));
-            }
-            return;
-        }
-        if response.drag_started_by(PointerButton::Primary) {
-            // What is under where the button went down, not where the
-            // pointer is once it has moved enough to be a drag.
-            let from = ctx
-                .input(|i| i.pointer.press_origin())
-                .map_or(at, |p| self.view.to_model(rect, p));
-            let at = from;
-            st.drag = if let Some((l, i)) = st.sketch.vertex_near(at, reach) {
-                st.vertex = Some((l, i));
-                Some(SketchDrag::Vertex(l, i))
-            } else if let Some((l, i)) = st.sketch.edge_near(at, reach) {
-                st.sketch.edge = Some((l, i));
-                Some(SketchDrag::Edge(l, i, at))
-            } else {
-                None
-            };
-        }
-        if response.dragged_by(PointerButton::Primary) {
-            match st.drag {
-                Some(SketchDrag::Vertex(l, i)) => st.sketch.move_vertex(l, i, at),
-                Some(SketchDrag::Edge(l, i, from)) => {
-                    st.sketch.move_edge(l, i, at - from);
-                    st.drag = Some(SketchDrag::Edge(l, i, at));
-                }
-                None => {}
-            }
-        }
-        if response.drag_stopped() {
-            st.drag = None;
-        }
-        if response.clicked_by(PointerButton::Primary) {
-            if let Some(v) = st.sketch.vertex_near(at, reach) {
-                st.vertex = Some(v);
-                return;
-            }
-            st.vertex = None;
-            let picked = st.sketch.edge_near(at, reach);
-            match (st.corner, st.sketch.edge, picked) {
-                (true, Some((l, i)), Some((l2, j))) if l == l2 => {
-                    st.corner = false;
-                    match st.sketch.corner(l, i, j) {
-                        Ok(()) => st.sketch.edge = None,
-                        Err(e) => {
-                            let msg = format!("No se puede: {e}.");
-                            self.complain(msg);
-                        }
-                    }
-                }
-                _ => {
-                    st.corner = false;
-                    st.sketch.edge = picked;
-                }
-            }
-        }
-    }
-
-    /// The sketch over the plan.
+    /// What the sketch adds over the plan: the ends left open, in red.
     pub(super) fn draw_sketch(&self, painter: &egui::Painter, rect: Rect) {
         let Some(st) = self.sketch.as_ref() else {
             return;
         };
-        let s = &st.sketch;
-        for (l, lp) in s.loops.iter().enumerate() {
-            let n = lp.len();
-            for i in 0..n {
-                let (a, b) = (
-                    self.view.to_screen(rect, lp[i]),
-                    self.view.to_screen(rect, lp[(i + 1) % n]),
-                );
-                let picked = s.edge == Some((l, i));
-                let w = if picked { 3.5 } else { 2.0 };
-                let c = if picked { ACCENT } else { SKETCH };
-                painter.line_segment([a, b], Stroke::new(w, c));
-            }
-            for (i, p) in lp.iter().enumerate() {
-                let q = self.view.to_screen(rect, *p);
-                let r = Rect::from_center_size(q, Vec2::splat(7.0));
-                let on = st.vertex == Some((l, i));
-                painter.rect_filled(r, CornerRadius::ZERO, if on { ACCENT } else { PAPER });
-                painter.rect_stroke(
-                    r,
-                    CornerRadius::ZERO,
-                    Stroke::new(1.5, SKETCH),
-                    StrokeKind::Inside,
-                );
-            }
+        for p in &st.open_ends {
+            let c = self.view.to_screen(rect, *p);
+            painter.circle_stroke(c, 7.0, Stroke::new(2.0, Color32::from_rgb(220, 40, 40)));
         }
     }
 
     /// The bar of the sketch, at the top of the plan.
     pub(super) fn sketch_panel(&mut self, ctx: &egui::Context, rect: Rect) {
-        let Some(st) = self.sketch.as_mut() else {
+        let Some(st) = self.sketch.as_ref() else {
             return;
         };
         let what = match st.sketch.target {
@@ -237,111 +250,77 @@ impl ArchiSimApp {
             SketchTarget::Roof(_) => "de la cubierta",
             SketchTarget::Terrain(_) => "del terreno",
         };
+        let holes = st.sketch.takes_holes();
+        let running = self.cad.as_ref().map(|c| c.name());
+        let mut start: Option<&'static str> = None;
         let mut finish = false;
         let mut cancel = false;
-        let mut problem: Option<String> = None;
         egui::Area::new(egui::Id::unique("sketch-bar"))
-            .fixed_pos(rect.left_top() + Vec2::new(10.0, 44.0))
+            .fixed_pos(rect.left_top() + Vec2::new(10.0, 10.0))
             .order(egui::Order::Foreground)
             .show(ctx, |ui| {
                 egui::Frame::popup(ui.style()).show(ui, |ui| {
                     ui.set_max_width(rect.width() - 40.0);
                     ui.horizontal_wrapped(|ui| {
-                        ui.label(egui::RichText::new(format!("Editar contorno {what}")).strong());
-                        ui.separator();
-                        ui.label("Desfase");
-                        ui.add(
-                            egui::DragValue::new(&mut st.offset)
-                                .speed(0.01)
-                                .range(-5.0..=5.0)
-                                .suffix(" m"),
+                        ui.label(
+                            egui::RichText::new(format!("Modo boceto · contorno {what}"))
+                                .strong()
+                                .color(SKETCH),
                         );
-                        if ui
-                            .button("Desfasar")
-                            .on_hover_text("Todo el contorno, hacia fuera (negativo: hacia dentro)")
-                            .clicked()
-                        {
-                            if let Err(e) = st.sketch.offset(st.offset) {
-                                problem = Some(e.to_string());
+                        ui.separator();
+                        ui.label(egui::RichText::new("Dibujar").small().weak());
+                        for (label, cmd, hint) in SKETCH_TOOLS {
+                            let on = running == Some(*cmd);
+                            if ui.selectable_label(on, *label).on_hover_text(*hint).clicked() {
+                                start = Some(cmd);
                             }
                         }
                         ui.separator();
-                        let edge = st.sketch.edge;
-                        ui.label("Arco");
-                        ui.add(
-                            egui::DragValue::new(&mut st.bulge)
-                                .speed(0.01)
-                                .range(-0.5..=0.5)
-                                .custom_formatter(|v, _| format!("{:.0} %", v * 100.0))
-                                .custom_parser(|t| {
-                                    t.trim_end_matches('%')
-                                        .trim()
-                                        .replace(',', ".")
-                                        .parse::<f64>()
-                                        .ok()
-                                        .map(|v| v / 100.0)
-                                }),
-                        )
-                        .on_hover_text("Flecha del arco, en tanto por ciento de la arista (negativo: hacia dentro)");
-                        if ui
-                            .add_enabled(edge.is_some(), egui::Button::new("Arista en arco"))
-                            .on_disabled_hover_text("Elija antes una arista")
-                            .clicked()
-                        {
-                            if let Some((l, i)) = edge {
-                                if st.sketch.arc_edge(l, i, st.bulge, 16).is_none() {
-                                    problem = Some("esa arista no puede ser un arco".into());
-                                }
-                            }
-                        }
-                        if ui
-                            .add_enabled(edge.is_some(), egui::Button::new("Recortar/alargar a esquina"))
-                            .on_hover_text("Elija después la otra arista: las dos se recortan o alargan hasta encontrarse")
-                            .on_disabled_hover_text("Elija antes una arista")
-                            .clicked()
-                        {
-                            st.corner = true;
-                        }
-                        if st.sketch.takes_holes() {
-                            ui.separator();
-                            if ui.button("Añadir hueco").clicked() {
-                                let c = centroid(&st.sketch.loops[0]);
-                                st.sketch.add_hole(c, 1.0, 1.0);
-                            }
-                            let hole = edge.map(|e| e.0).filter(|&l| l > 0);
-                            if ui
-                                .add_enabled(hole.is_some(), egui::Button::new("Quitar hueco"))
-                                .on_disabled_hover_text("Elija antes una arista del hueco")
-                                .clicked()
-                            {
-                                if let Some(l) = hole {
-                                    st.sketch.remove_hole(l);
-                                }
+                        ui.label(egui::RichText::new("Modificar").small().weak());
+                        for (label, cmd, hint) in SKETCH_EDITS {
+                            let on = running == Some(*cmd);
+                            if ui.selectable_label(on, *label).on_hover_text(*hint).clicked() {
+                                start = Some(cmd);
                             }
                         }
                         ui.separator();
                         if ui
-                            .add(egui::Button::new(egui::RichText::new("✔ Finalizar").strong()))
-                            .on_hover_text("Intro")
+                            .add(
+                                egui::Button::new(
+                                    egui::RichText::new("✔ Aceptar").strong().color(Color32::WHITE),
+                                )
+                                .fill(Color32::from_rgb(46, 125, 50)),
+                            )
+                            .on_hover_text("Intro: el elemento toma el contorno dibujado")
                             .clicked()
                         {
                             finish = true;
                         }
-                        if ui.button("✖ Cancelar").on_hover_text("Esc").clicked() {
+                        if ui
+                            .button("✖ Cancelar")
+                            .on_hover_text("Deja el elemento como estaba")
+                            .clicked()
+                        {
                             cancel = true;
                         }
                     });
-                    if st.corner {
-                        ui.label(
-                            egui::RichText::new("Elija la otra arista de la esquina.")
-                                .color(SKETCH)
-                                .size(11.5),
-                        );
-                    }
+                    let note = if holes {
+                        "Las líneas tienen que cerrar contornos: el mayor es el borde del forjado y los de dentro, sus huecos."
+                    } else {
+                        "Las líneas tienen que cerrar un solo contorno."
+                    };
+                    ui.label(egui::RichText::new(note).size(11.0).weak());
                 });
             });
-        if let Some(p) = problem {
-            self.complain(format!("No se puede: {p}."));
+        if let Some(cmd) = start {
+            if cmd == "EMPALME" {
+                // A corner, as Revit's «Recortar/Extender a esquina».
+                self.cad_settings.fillet_radius = 0.0;
+            }
+            if let Some(st) = self.sketch.as_mut() {
+                st.open_ends.clear();
+            }
+            self.start_command(cmd);
         }
         if finish {
             self.finish_sketch();
@@ -351,19 +330,12 @@ impl ArchiSimApp {
     }
 }
 
-/// The middle of a polygon (its vertices' mean).
-fn centroid(lp: &[Point2]) -> Point2 {
-    let n = lp.len().max(1) as f64;
-    let (x, y) = lp.iter().fold((0.0, 0.0), |a, p| (a.0 + p.x, a.1 + p.y));
-    Point2::new(x / n, y / n)
-}
-
 /// The button that starts editing an element's contour.
 pub(super) fn edit_contour_button(ui: &mut Ui) -> bool {
     ui.add_space(4.0);
     ui.button("✏ Editar contorno")
         .on_hover_text(
-            "Modo boceto: mueva vértices y aristas, desfase el contorno, arcos y esquinas; Finalizar o Cancelar",
+            "Modo boceto: el contorno en líneas sueltas para dibujar, recortar, alargar o borrar; Aceptar o Cancelar",
         )
         .clicked()
 }
