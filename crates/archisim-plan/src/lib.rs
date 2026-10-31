@@ -723,6 +723,23 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
         let (lo, hi) = bounds(&roof.eaves());
         if visible(lo, hi) {
             dim::element(&mut s, roof.id.0, |s| roofs::draw_roof(s, roof, k));
+            // The zones its slopes (or a flat roof's top) are divided in.
+            for z in model.face_zones().filter(|z| {
+                z.element == roof.id.0
+                    && z.face != archisim_core::FaceRef::Bottom
+                    && model.zone_in_plan(z.element, z.face)
+            }) {
+                let fill = z.material.map_or("none".to_string(), |m| {
+                    let [r, g, b] = model.surface_color(m);
+                    format!("#{r:02x}{g:02x}{b:02x}")
+                });
+                let _ = writeln!(
+                    s,
+                    r#"<path class="face-zone" d="{}" fill="{fill}" fill-opacity="0.55" stroke="{INK}" stroke-width="{}"/>"#,
+                    path(&z.outline),
+                    num(pens().thin * k)
+                );
+            }
         }
     }
     overrides::close(&mut s);

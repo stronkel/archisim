@@ -47,6 +47,39 @@ pub fn draw_services(
                 bottom < elevation + 1.0 && bottom + d.height > elevation + 1.0
             })
     }));
+    // The lamps placed as objects are light points too (C1): drawn with
+    // the light's symbol and joined to their circuit.
+    let lamps: Vec<archisim_core::ServiceDevice> = model
+        .lamp_points()
+        .into_iter()
+        .filter(|(_, l)| *l == level)
+        .filter_map(|(o, _)| {
+            let ob = model.object(o)?;
+            Some(archisim_core::ServiceDevice {
+                id: archisim_core::DeviceId(o.0),
+                guid: ob.guid.clone(),
+                level,
+                kind: DeviceKind::Light,
+                name: String::new(),
+                position: ob.position,
+                rotation: 0.0,
+                elevation: ob.base_offset,
+                width: 0.3,
+                depth: 0.3,
+                height: 0.1,
+                fixture: None,
+            })
+        })
+        .collect();
+    let lamp_ids: Vec<archisim_core::DeviceId> = lamps.iter().map(|d| d.id).collect();
+    devices.extend(lamps.iter());
+    let circuit = |d: &archisim_core::ServiceDevice| {
+        if lamp_ids.contains(&d.id) {
+            Some(1)
+        } else {
+            model.device_circuit(d.id)
+        }
+    };
     if runs.is_empty() && devices.is_empty() {
         return;
     }
@@ -213,14 +246,14 @@ pub fn draw_services(
     }
     // The circuits: each mechanism's number, and a line joining those of
     // a circuit, nearest first, from the board if there is one (E13).
-    draw_circuits(s, model, &devices, k);
+    draw_circuits(s, &devices, &circuit, k);
     for d in &devices {
         let o = d.outline();
         if !visible(&o) {
             continue;
         }
         crate::dim::element(s, d.id.0, |s| draw_device(s, d, k));
-        if let Some(n) = model.device_circuit(d.id) {
+        if let Some(n) = circuit(d) {
             let h = 1.6 * k;
             let at = d.position + Point2::new((2.0 * k).max(d.width / 2.0) + 0.6 * k, 0.4 * k);
             let _ = writeln!(
@@ -240,14 +273,19 @@ const CIRCUIT_INK: &str = "#b0302a";
 /// A line through the mechanisms of each circuit of a level: from the
 /// board (or the first), always to the nearest not yet joined, drawn as a
 /// curve as an electrician sketches it.
-fn draw_circuits(s: &mut String, model: &Model, devices: &[&archisim_core::ServiceDevice], k: f64) {
+fn draw_circuits(
+    s: &mut String,
+    devices: &[&archisim_core::ServiceDevice],
+    circuit: &dyn Fn(&archisim_core::ServiceDevice) -> Option<u8>,
+    k: f64,
+) {
     let board = devices
         .iter()
         .find(|d| d.kind == DeviceKind::Panel)
         .map(|d| d.position);
     let mut by: std::collections::BTreeMap<u8, Vec<Point2>> = Default::default();
     for d in devices {
-        if let Some(n) = model.device_circuit(d.id) {
+        if let Some(n) = circuit(d) {
             by.entry(n).or_default().push(d.position);
         }
     }

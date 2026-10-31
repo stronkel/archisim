@@ -60,6 +60,23 @@ fn wall_references(m: &archisim_core::Model, target: SketchTarget) -> Vec<Vec<Po
     let (w, up) = match target {
         SketchTarget::WallFace(w, _) => (w, 0.0),
         SketchTarget::WallProfile(w) => (w, 1.0),
+        // A face standing up: its outline seen from outside.
+        SketchTarget::Zones(e, face) => {
+            let Some(id) = super::paint_ui::plain_owner(e).map(|o| o.id()) else {
+                return Vec::new();
+            };
+            return archisim_geom::solid::face_frame(m, id, face, None)
+                .and_then(|f| f.extent())
+                .map(|(lo, hi)| {
+                    vec![vec![
+                        lo,
+                        Point2::new(hi.x, lo.y),
+                        hi,
+                        Point2::new(lo.x, hi.y),
+                    ]]
+                })
+                .unwrap_or_default();
+        }
         _ => return Vec::new(),
     };
     let Some(wall) = m.wall(w) else {
@@ -171,6 +188,7 @@ impl ArchiSimApp {
                 }
             ),
             SketchTarget::WallProfile(w) => format!("Boceto · perfil del muro {}", w.0),
+            SketchTarget::Zones(..) => "Boceto · cara".to_string(),
             _ => String::new(),
         };
         let references = wall_references(self.ed.model(), sketch.target);
@@ -407,7 +425,12 @@ impl ArchiSimApp {
             SketchTarget::Slab(_) => "contorno del forjado",
             SketchTarget::Roof(_) => "contorno de la cubierta",
             SketchTarget::Terrain(_) => "contorno del terreno",
-            SketchTarget::Zones(..) => "dividir la cara de arriba",
+            SketchTarget::Zones(_, archisim_core::FaceRef::Top) => "dividir la cara de arriba",
+            SketchTarget::Zones(_, archisim_core::FaceRef::Bottom) => "dividir la cara de abajo",
+            SketchTarget::Zones(..) if st.elevation.is_some() => {
+                "dividir la cara (vista desde fuera)"
+            }
+            SketchTarget::Zones(..) => "dividir el faldón",
             SketchTarget::WallFace(_, archisim_core::FaceSide::Exterior) => {
                 "dividir la cara exterior del muro (vista desde fuera)"
             }

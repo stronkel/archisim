@@ -199,6 +199,16 @@ impl Plant {
         } else {
             1.0
         };
+        // Broom and samphire: so many stems over the plant at most.
+        let leaf_clumps = clumps
+            .iter()
+            .filter(|c| c.kind == ClumpKind::Leaves)
+            .count()
+            .max(1) as f64;
+        let stems_each = match lod {
+            Lod::Full => 1100.0,
+            _ => 220.0,
+        } / leaf_clumps;
         // And the florets among the clumps in flower.
         let wanted: f64 = clumps
             .iter()
@@ -231,6 +241,17 @@ impl Plant {
                                 | crate::Foliage::Needles
                                 | crate::Foliage::Scales
                         ));
+            // Broom's green twigs and samphire's jointed stems (G5).
+            if lod != Lod::Low
+                && c.kind == ClumpKind::Leaves
+                && matches!(
+                    self.species.foliage,
+                    crate::Foliage::Broom | crate::Foliage::Succulent
+                )
+            {
+                stems(&mut m, c, color, self.species.foliage, lod, stems_each);
+                continue;
+            }
             if leafy {
                 // A smaller core for the airy olive and for flowers.
                 let airy = c.kind == ClumpKind::Flowers || self.species.foliage == Foliage::Fine;
@@ -664,6 +685,55 @@ fn leaves(
     }
 }
 
+/// A clump of a leafless plant as its stems (G5): broom's thin green
+/// twigs, springing up and out, or samphire's fleshy jointed stems, each
+/// joint a little swollen.
+fn stems(m: &mut FloraMesh, c: &Clump, color: Rgb, foliage: Foliage, lod: Lod, each: f64) {
+    let mut rng = Rng::new(c.seed ^ 0x57E5);
+    let r = c.radius;
+    let succulent = foliage == Foliage::Succulent;
+    let count = match (lod, succulent) {
+        (Lod::Full, false) => 6,
+        (Lod::Full, true) => 6,
+        (_, false) => 2,
+        (_, true) => 2,
+    }
+    .min({
+        // A share of the plant's stems: a fraction is a chance.
+        let whole = each.floor();
+        whole as usize + usize::from(rng.f() < each - whole)
+    });
+    for _ in 0..count {
+        let d = norm([rng.signed() * 0.6, rng.signed() * 0.6, 0.6 + rng.f() * 0.6]);
+        let base = add(c.center, mul([rng.signed(), rng.signed(), -0.6], r * 0.4));
+        let length = r * rng.range(0.9, 1.5);
+        let bend = [rng.signed() * 0.25, rng.signed() * 0.25, -0.15];
+        let joints = if succulent { 5 } else { 4 };
+        let mut points = Vec::new();
+        let mut radii = Vec::new();
+        for k in 0..=joints {
+            let t = k as f64 / joints as f64;
+            let dir = norm(add(d, mul(bend, t)));
+            points.push(add(base, mul(dir, length * t)));
+            let thick = if succulent {
+                // Swollen between the joints, pinched at them.
+                r * 0.06 * if k % 2 == 0 { 0.8 } else { 1.15 } * (1.0 - 0.4 * t)
+            } else {
+                r * 0.018 * (1.0 - 0.6 * t)
+            };
+            radii.push(thick.max(0.002));
+        }
+        let twig = Branch {
+            points,
+            radii,
+            level: 3,
+            green: true,
+        };
+        let tone = shade(color, rng.range(0.85, 1.12));
+        tube(m, &twig, if succulent { 5 } else { 3 }, tone, false);
+    }
+}
+
 /// Leaves standing out of a clump: thin pointed blades, both sides seen.
 fn fringe(m: &mut FloraMesh, c: &Clump, part: Part, color: Rgb, foliage: Foliage) {
     let (count, length, width) = match foliage {
@@ -721,6 +791,68 @@ fn frond(m: &mut FloraMesh, f: &Frond, colors: &Colors, lod: Lod) {
     match f.kind {
         FrondKind::Pinnate => {
             let rib = shade(color, 1.1);
+            if lod == Lod::Full {
+                // The rachis itself, thin and stiff.
+                let pick: Vec<usize> = (0..n).step_by(2).chain([n - 1]).collect();
+                let mut pick = pick;
+                pick.dedup();
+                let stalk = Branch {
+                    points: pick.iter().map(|&i| f.rachis[i]).collect(),
+                    radii: pick
+                        .iter()
+                        .map(|&i| f.width * 0.05 * (1.0 - i as f64 / n as f64).max(0.15))
+                        .collect(),
+                    level: 3,
+                    green: true,
+                };
+                tube(m, &stalk, 3, shade(colors.leaves, 0.75), false);
+                // Leaflets one by one (G5): narrow blades folded along
+                // their midrib, pointing forwards and drooping at the tip,
+                // two at each node and each side, a little apart.
+                let mut rng = Rng::new((f.width * 1e6) as u64 ^ n as u64);
+                for i in 1..n {
+                    let s = i as f64 / (n - 1) as f64;
+                    let w = f.width * (PI * s.powf(0.75)).sin().max(0.0).powf(0.6);
+                    if w < f.width * 0.08 {
+                        continue;
+                    }
+                    let down = norm(cross(sides[i], dirs[i]));
+                    for half in [0.0, 0.5] {
+                        let j = (i as f64 - half).max(0.0);
+                        let base = lerp3(
+                            f.rachis[j.floor() as usize],
+                            f.rachis[j.ceil() as usize],
+                            j.fract(),
+                        );
+                        for sign in [-1.0, 1.0] {
+                            let out = norm(add(
+                                mul(sides[i], sign),
+                                mul(dirs[i], 0.55 + rng.range(-0.1, 0.1)),
+                            ));
+                            let l = w * rng.range(0.92, 1.12);
+                            let droop = mul(down, l * (0.25 + rng.range(0.0, 0.15)));
+                            let tip = add(add(base, mul(out, l)), droop);
+                            let mid = add(add(base, mul(out, l * 0.5)), mul(droop, 0.3));
+                            let across = norm(cross(out, down));
+                            let bw = l * 0.06;
+                            // Folded into a V: the edges a little down.
+                            let fold = mul(down, bw * 0.6);
+                            let ib = m.vertex(base, rib);
+                            let im = m.vertex(mid, color);
+                            let il =
+                                m.vertex(add(add(mid, mul(across, bw)), fold), shade(color, 0.92));
+                            let ir =
+                                m.vertex(add(add(mid, mul(across, -bw)), fold), shade(color, 0.86));
+                            let it = m.vertex(tip, shade(color, 1.06));
+                            m.both(Part::Leaves, [ib, il, im]);
+                            m.both(Part::Leaves, [ib, im, ir]);
+                            m.both(Part::Leaves, [im, il, it]);
+                            m.both(Part::Leaves, [im, it, ir]);
+                        }
+                    }
+                }
+                return;
+            }
             let step = match lod {
                 Lod::Full => 1,
                 Lod::Medium => 3,
@@ -741,22 +873,6 @@ fn frond(m: &mut FloraMesh, f: &Frond, colors: &Colors, lod: Lod) {
                     let ib = m.vertex(b, rib);
                     let it = m.vertex(tip, color);
                     m.both(Part::Leaves, [ia, ib, it]);
-                    if lod == Lod::Full {
-                        // A second, shorter leaflet between, for a fuller
-                        // feather.
-                        let mid = lerp3(a, b, 0.5);
-                        let tip2 = add(
-                            add(
-                                lerp3(b, f.rachis[(j + 1).min(n - 1)], 0.5),
-                                mul(sides[j], sign * w * 0.85),
-                            ),
-                            fold,
-                        );
-                        let im = m.vertex(mid, rib);
-                        let ib2 = m.vertex(b, rib);
-                        let it2 = m.vertex(tip2, shade(color, 0.92));
-                        m.both(Part::Leaves, [im, ib2, it2]);
-                    }
                 }
                 i = j;
             }
@@ -799,6 +915,19 @@ fn frond(m: &mut FloraMesh, f: &Frond, colors: &Colors, lod: Lod) {
                 if let Some(p) = prev {
                     m.both(Part::Leaves, [center, p, ie]);
                 }
+                // Near, each rib ends in a split finger hanging past the
+                // fan (G5).
+                if lod == Lod::Full && k % 2 == 0 && k > 0 && k < segs {
+                    let out = norm(add(mul(d, a.cos()), mul(s, a.sin())));
+                    let fl = f.width * 0.45;
+                    let tip = add(add(e, mul(out, fl)), mul(up, -fl * 0.7));
+                    let side = norm(cross(out, up));
+                    let wf = f.width * 0.04;
+                    let i1 = m.vertex(add(e, mul(side, wf)), color);
+                    let i2 = m.vertex(add(e, mul(side, -wf)), shade(color, 0.9));
+                    let it = m.vertex(tip, shade(color, 1.05));
+                    m.both(Part::Leaves, [i1, i2, it]);
+                }
                 prev = Some(ie);
             }
         }
@@ -814,13 +943,32 @@ fn frond(m: &mut FloraMesh, f: &Frond, colors: &Colors, lod: Lod) {
                 let s = i as f64 / (n - 1) as f64;
                 let w = f.width * (1.0 - s).powf(0.8);
                 let p = f.rachis[i];
-                let l = m.vertex(add(p, mul(sides[i], w)), color);
-                let r = m.vertex(add(p, mul(sides[i], -w)), shade(color, 0.9));
-                if let Some((pl, pr)) = prev {
-                    m.both(Part::Leaves, [pl, pr, r]);
-                    m.both(Part::Leaves, [pl, r, l]);
+                if lod == Lod::Full {
+                    // Near: folded along its midrib (G5).
+                    let up = norm(cross(sides[i], dirs[i]));
+                    let ridge = add(p, mul(up, w * 0.35));
+                    let l = m.vertex(add(p, mul(sides[i], w)), color);
+                    let c = m.vertex(ridge, shade(color, 1.08));
+                    let r = m.vertex(add(p, mul(sides[i], -w)), shade(color, 0.88));
+                    if let Some((pl, pr)) = prev {
+                        // The previous station's three corners are pl,
+                        // pl + 1 (the ridge) and pr.
+                        let pc = pl + 1;
+                        m.both(Part::Leaves, [pl, pc, c]);
+                        m.both(Part::Leaves, [pl, c, l]);
+                        m.both(Part::Leaves, [pc, pr, r]);
+                        m.both(Part::Leaves, [pc, r, c]);
+                    }
+                    prev = Some((l, r));
+                } else {
+                    let l = m.vertex(add(p, mul(sides[i], w)), color);
+                    let r = m.vertex(add(p, mul(sides[i], -w)), shade(color, 0.9));
+                    if let Some((pl, pr)) = prev {
+                        m.both(Part::Leaves, [pl, pr, r]);
+                        m.both(Part::Leaves, [pl, r, l]);
+                    }
+                    prev = Some((l, r));
                 }
-                prev = Some((l, r));
                 if i == n - 1 {
                     break;
                 }
@@ -850,6 +998,32 @@ fn frond(m: &mut FloraMesh, f: &Frond, colors: &Colors, lod: Lod) {
             }
             let a = rings[0];
             m.tri(Part::Leaves, [a, a + 2, a + 1]);
+            // Near: the teeth along its edges and the dark spine at its
+            // tip (G5).
+            if lod == Lod::Full {
+                let spine = [70, 50, 35];
+                for i in (2..n - 1).step_by(2) {
+                    let s = i as f64 / (n - 1) as f64;
+                    let w = f.width * (1.0 - s).powf(0.7);
+                    for sign in [-1.0, 1.0] {
+                        let edge = add(f.rachis[i], mul(sides[i], sign * w));
+                        let out = add(
+                            edge,
+                            add(mul(sides[i], sign * w * 0.18), mul(dirs[i], w * 0.12)),
+                        );
+                        let i0 = m.vertex(edge, spine);
+                        let i1 = m.vertex(add(edge, mul(dirs[i], w * 0.12)), spine);
+                        let i2 = m.vertex(out, spine);
+                        m.both(Part::Bark, [i0, i1, i2]);
+                    }
+                }
+                let tip = f.rachis[n - 1];
+                let w = f.width * 0.08;
+                let i0 = m.vertex(add(tip, mul(sides[n - 1], w)), spine);
+                let i1 = m.vertex(add(tip, mul(sides[n - 1], -w)), spine);
+                let i2 = m.vertex(add(tip, mul(dirs[n - 1], f.width * 0.5)), spine);
+                m.both(Part::Bark, [i0, i1, i2]);
+            }
         }
     }
 }

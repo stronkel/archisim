@@ -6,6 +6,47 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-31 (57) · Huecos de G3–G5 cerrados
+
+Rama `bloque/g7-huecos` (sobre `bloque/g6-remates`), con pull request. Formato `.archisim` versión 56: pintura de piezas por material.
+
+**Hecho**
+- **Dividir cara en todas las caras.**
+  - El botón abre un menú según el elemento:
+    - forjados, pilares, vigas y zapatas: cara de arriba y cara de abajo, en planta;
+    - cubierta: intradós;
+    - muros: cara exterior e interior;
+    - en todos: «otra cara (pinchándola en 3D)».
+  - Con esta última, el siguiente clic en 3D elige la cara: un faldón de cubierta (se dibuja en planta), un lado de un pilar, de una viga o de una zapata, o el canto de un forjado.
+  - Las caras que están de pie se dibujan en alzado, vistas desde fuera, en una vista propia con el contorno de la cara de referencia.
+  - Cada zona se pinta con Pintar pinchando dentro de ella en 3D. Los faldones divididos se ven en la planta de la cubierta.
+- **Pintar escaleras, barandillas y muros cortina**, en 3D: se pintan todas las piezas del mismo material que la que pinchas. Por ejemplo, todas las huellas, todos los montantes o todos los paneles.
+- **Lámparas puestas como objeto = puntos de luz completos.**
+  - En el plano de instalaciones salen con el símbolo de punto de luz, su «C1» y la línea del circuito.
+  - En el IFC van en el sistema «Alumbrado».
+- **Tuberías y conductos con detalle:**
+  - tuberías: abrazadera cada 1,5 m y manguito de unión cada 3 m;
+  - conductos: brida cada 1,2 m y en sus extremos.
+- **Vegetación que faltaba, de cerca:**
+  - palmeras datileras: folíolo a folíolo, plegados y caídos, con su raquis;
+  - palmitos: abanicos con sus puntas colgando;
+  - gramíneas: hojas plegadas por el nervio;
+  - pitas: dientes en los bordes y espina en la punta;
+  - retama: tallos verdes finos;
+  - salicornia: tallos carnosos articulados.
+
+**Pendiente**
+- Pintar no llega a las piezas de los muebles de Técnica (siguen con la barra del objeto de la Maqueta).
+
+**Qué debe probar Antonio**
+1. En 3D, elige un pilar → Dividir cara → «Otra cara» y pincha un lado. Dibuja un rectángulo de 1 m de alto, Aceptar. Luego Pintar dentro: solo se pinta esa franja.
+2. Elige una cubierta inclinada → Dividir cara → «Un faldón…» y pincha un faldón. Dibuja una zona y píntala: se ve en 3D y en la planta de la cubierta.
+3. En 3D, Pintar sobre una huella de una escalera: cambian todas las huellas.
+4. Pon un colgante desde la Maqueta y mira el plano de instalaciones: sale como punto de luz C1.
+5. En Exterior, mira de cerca una palmera, un palmito, una pita y una retama.
+
+---
+
 ## 2026-10-31 (56) · Remates de G2–G5: muros en alzado, zonas en el render, lámparas que cuentan y cipreses
 
 Rama `bloque/g6-remates` (sobre `bloque/g4-instalaciones`), con pull request. Sin cambios de formato.
