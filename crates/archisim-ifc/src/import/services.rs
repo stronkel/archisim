@@ -161,6 +161,18 @@ impl<'a> Importer<'a> {
                 .model
                 .set_device_circuit(did, Some(n.clamp(0.0, 255.0) as u8));
         }
+        // Its lamp, when the project has a lamp of that name.
+        if let Some(t) = self
+            .run_text(id, "ArchiSim_Device", "Fixture")
+            .and_then(|n| {
+                self.model
+                    .fixture_types()
+                    .into_iter()
+                    .find(|t| self.model.object_type(*t).is_some_and(|x| x.name == n))
+            })
+        {
+            let _ = self.model.set_device_fixture(did, Some(t));
+        }
         self.report.services += 1;
         self.sources.push((did.0, id));
         self.guids

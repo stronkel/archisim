@@ -3,8 +3,8 @@
 //! one for plans with hundreds of trees (a few masses and the trunk).
 
 use crate::grow::{
-    add, cross, dist, dot, len, lerp3, mul, norm, perpendicular, sub, Branch, Clump, ClumpKind,
-    Frond, FrondKind, Plant, P3,
+    add, cross, dist, dot, len, lerp3, mul, norm, perpendicular, rotate, sub, Branch, Clump,
+    ClumpKind, Frond, FrondKind, Plant, P3,
 };
 use crate::rng::Rng;
 use crate::{Colors, Foliage, Habit, Rgb};
@@ -185,6 +185,24 @@ impl Plant {
             };
             let subdiv = c.radius > self.species.clump * 3.0;
             let color = tinted(base, c.tint, c.light);
+            // Near, the clumps of broad and fine leaves and of needles are
+            // leaves one by one round a darker core that keeps the crown
+            // from being seen through (G5); far, the lumpy masses.
+            let leafy = c.kind == ClumpKind::Leaves
+                && lod != Lod::Low
+                && matches!(
+                    self.species.foliage,
+                    crate::Foliage::Broad | crate::Foliage::Fine | crate::Foliage::Needles
+                );
+            if leafy {
+                let core = Clump {
+                    radius: c.radius * 0.62,
+                    ..c.clone()
+                };
+                blob(&mut m, &core, part, shade(color, 0.72), false);
+                leaves(&mut m, c, part, color, self.species.foliage, lod, self.species.droop);
+                continue;
+            }
             blob(&mut m, c, part, color, subdiv);
             // Up close, leaves stand out of the clumps: the crown's edge
             // is ragged, not a row of balls.
@@ -432,6 +450,108 @@ fn blob(m: &mut FloraMesh, c: &Clump, part: Part, color: Rgb, fine: bool) {
                 start + t[2] as u32,
             ],
         );
+    }
+}
+
+/// The leaves of a clump one by one (G5), as the terrace's olive and the
+/// indoor plants have them: each a blade folded along its midrib, wider
+/// past its middle, bent down at the tip, both sides seen, on the shell of
+/// the clump looking out and up. Needles are tufts of thin blades. Far
+/// (`Medium`), fewer and bigger leaves cover the same.
+fn leaves(
+    m: &mut FloraMesh,
+    c: &Clump,
+    part: Part,
+    color: Rgb,
+    foliage: Foliage,
+    lod: Lod,
+    droop: f64,
+) {
+    let r = c.radius;
+    // Length and width of a leaf (against its length), and how many on
+    // a clump: enough for the shell, one and a half times over.
+    let (mut len, ratio) = match foliage {
+        Foliage::Broad => ((r * 0.34).clamp(0.07, 0.24), 0.55),
+        Foliage::Fine => ((r * 0.26).clamp(0.05, 0.16), 0.24),
+        _ => ((r * 0.42).clamp(0.08, 0.3), 0.06),
+    };
+    if lod == Lod::Medium {
+        len *= 1.7;
+    }
+    let shell = 4.0 * PI * r * r * c.flat.clamp(0.4, 1.2) * c.stretch.clamp(1.0, 2.0);
+    let leaf_area = len * len * ratio * 0.62;
+    let (lo, hi) = match lod {
+        Lod::Full => (24.0, 150.0),
+        _ => (8.0, 34.0),
+    };
+    let n = (shell * 1.5 / leaf_area).clamp(lo, hi) as usize;
+    let mut rng = Rng::new(c.seed ^ 0x1EAF);
+    let ax = norm(c.axis);
+    for _ in 0..n {
+        // Out from the middle, more up than down.
+        let mut d = norm([rng.signed(), rng.signed(), rng.signed() * 0.8 + 0.25]);
+        let mut at = mul(d, r * rng.range(0.6, 0.98));
+        if (c.stretch - 1.0).abs() > 1e-6 {
+            let along = dot(at, ax);
+            at = add(at, mul(ax, along * (c.stretch - 1.0)));
+        }
+        at[2] *= c.flat;
+        let base = add(c.center, at);
+        // The leaf looks out, its tip falling a little (more if the
+        // branches hang).
+        let fall = 0.35 + 0.4 * droop.max(0.0);
+        d = norm(add(d, [rng.signed() * 0.35, rng.signed() * 0.35, -fall]));
+        let l = len * rng.range(0.75, 1.2);
+        let side = rotate(perpendicular(d), d, rng.range(0.0, TAU));
+        // The face of the leaf: across the midrib and the side.
+        let face = norm(cross(d, side));
+        let up = if face[2] < 0.0 { mul(face, -1.0) } else { face };
+        let light = (0.9 + 0.2 * up[2] + 0.12 * c.light).clamp(0.7, 1.25);
+        let tone = shade(color, light * rng.range(0.9, 1.1));
+        let under = shade(tone, 0.82);
+        if matches!(foliage, Foliage::Needles) {
+            // A tuft: five needles fanning from one point.
+            for k in 0..5 {
+                let a = TAU * k as f64 / 5.0 + rng.range(0.0, 0.6);
+                let dir = norm(add(d, mul(rotate(side, d, a), 0.45)));
+                let tip = add(base, mul(dir, l));
+                let w = l * ratio * 0.5;
+                let across = rotate(side, d, a + PI / 2.0);
+                let p = m.vertex(add(base, mul(across, w)), under);
+                let q = m.vertex(add(base, mul(across, -w)), under);
+                let t = m.vertex(tip, shade(tone, 1.08));
+                m.both(part, [p, q, t]);
+            }
+            continue;
+        }
+        let w = l * ratio * 0.5;
+        // The fold of the midrib and the bend of the blade.
+        let fold = w * 0.35;
+        let bend = l * 0.16;
+        let at_t = |t: f64, across: f64| -> P3 {
+            let mid = add(base, mul(d, l * t));
+            let drop = mul(up, -bend * t * t + fold * across.abs() * -1.0 + fold);
+            add(add(mid, mul(side, across)), drop)
+        };
+        // Its outline: widest a little past the middle.
+        let half = |t: f64| w * (PI * t.powf(0.8)).sin().max(0.0);
+        let (t0, t1) = (0.3, 0.68);
+        let b = m.vertex(at_t(0.0, 0.0), under);
+        let m0 = m.vertex(at_t(t0, 0.0), tone);
+        let m1 = m.vertex(at_t(t1, 0.0), tone);
+        let tip = m.vertex(at_t(1.0, 0.0), shade(tone, 1.06));
+        for s in [-1.0, 1.0] {
+            let e0 = m.vertex(at_t(t0, s * half(t0)), shade(tone, 0.95));
+            let e1 = m.vertex(at_t(t1, s * half(t1)), shade(tone, 0.97));
+            let tris = if s > 0.0 {
+                [[b, e0, m0], [m0, e0, e1], [m0, e1, m1], [m1, e1, tip]]
+            } else {
+                [[b, m0, e0], [m0, e1, e0], [m0, m1, e1], [m1, tip, e1]]
+            };
+            for t in tris {
+                m.both(part, t);
+            }
+        }
     }
 }
 

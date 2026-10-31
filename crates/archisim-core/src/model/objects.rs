@@ -672,6 +672,11 @@ impl Model {
                 .values()
                 .filter(|s| s.railing_type == Some(id))
                 .count()
+            + self
+                .devices
+                .values()
+                .filter(|d| d.fixture == Some(id))
+                .count()
     }
 
     fn validate_object(&self, o: &NewObject) -> Result<(), ModelError> {
