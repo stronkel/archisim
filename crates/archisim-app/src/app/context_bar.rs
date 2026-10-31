@@ -1073,6 +1073,28 @@ impl ArchiSimApp {
                 TRANSFORM.iter().chain(GEOMETRY).chain(BUILDING).map(|o| o.name),
                 ui.available_width() - 11.0,
             );
+            // One slab, roof or terrain: its contour in sketch mode (G2).
+            let contour = match sel.as_slice() {
+                [Element::Slab(id)] => Some(crate::sketch::SketchTarget::Slab(*id)),
+                [Element::Roof(id)] => Some(crate::sketch::SketchTarget::Roof(*id)),
+                [Element::Terrain(id)] => Some(crate::sketch::SketchTarget::Terrain(*id)),
+                _ => None,
+            };
+            if let Some(target) = contour {
+                let r = bar_button(
+                    ui,
+                    Mark::Glyph(Glyph::EditContour),
+                    "Editar contorno",
+                    false,
+                    true,
+                    true,
+                )
+                .on_hover_text("Modo boceto: su contorno en líneas sueltas para dibujar, recortar, alargar o borrar; Aceptar o Cancelar");
+                if r.clicked() {
+                    self.start_sketch(target);
+                }
+                bar_separator(ui, &p);
+            }
             let mut run = None;
             for (i, group) in [TRANSFORM, GEOMETRY, BUILDING].iter().enumerate() {
                 if i > 0 {
