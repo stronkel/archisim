@@ -3986,6 +3986,77 @@ pub fn device_solids(model: &Model, id: archisim_core::DeviceId) -> Vec<Solid> {
         return Vec::new();
     };
     let z = model.level(d.level).map_or(0.0, |l| l.elevation) + d.elevation;
+    let (c, s) = (d.rotation.cos(), d.rotation.sin());
+    let place = |p: [f64; 3]| -> P3 {
+        [
+            d.position.x + p[0] * c - p[1] * s,
+            d.position.y + p[0] * s + p[1] * c,
+            z + p[2],
+        ]
+    };
+    // A light point with its fitting: the lamp, centred in the box, its
+    // bottom on the box's (its top on the ceiling).
+    if let Some((mesh, parts)) = d.fixture.and_then(|t| model.type_prop(t)) {
+        let mut lo = [f64::MAX; 3];
+        let mut hi = [f64::MIN; 3];
+        for p in &mesh.positions {
+            for k in 0..3 {
+                lo[k] = lo[k].min(p[k] as f64);
+                hi[k] = hi[k].max(p[k] as f64);
+            }
+        }
+        if lo[0] < hi[0] {
+            let mid = [(lo[0] + hi[0]) / 2.0, (lo[1] + hi[1]) / 2.0, lo[2]];
+            let at = |i: u32| {
+                let p = mesh.positions[i as usize];
+                place([
+                    p[0] as f64 - mid[0],
+                    p[1] as f64 - mid[1],
+                    p[2] as f64 - mid[2],
+                ])
+            };
+            return parts
+                .iter()
+                .map(|(material, tris)| Solid {
+                    owner: SolidOwner::Device(id),
+                    material: *material,
+                    triangles: tris
+                        .iter()
+                        .map(|t| [at(t[0]), at(t[1]), at(t[2])])
+                        .collect(),
+                })
+                .collect();
+        }
+    }
+    // Its own model, with the detail of the other pieces (G4).
+    if let Some(mesh) = archisim_core::props::fine::services::device_model(
+        d.kind.code(),
+        d.width,
+        d.depth,
+        d.height,
+    ) {
+        let at = |i: u32| {
+            let p = mesh.positions[i as usize];
+            place([p[0] as f64, p[1] as f64, p[2] as f64])
+        };
+        return mesh
+            .parts
+            .iter()
+            .filter_map(|(role, tris)| {
+                let k = archisim_core::props::fine::services::ROLES
+                    .iter()
+                    .position(|r| r == role)?;
+                Some(Solid {
+                    owner: SolidOwner::Device(id),
+                    material: archisim_core::MaterialId(DEVICE_ROLE_BASE + k as u64),
+                    triangles: tris
+                        .iter()
+                        .map(|t| [at(t[0]), at(t[1]), at(t[2])])
+                        .collect(),
+                })
+            })
+            .collect();
+    }
     let outline = if d.kind == archisim_core::DeviceKind::Light || d.kind.is_vertical() {
         (0..ROUND_FACETS)
             .map(|i| {
@@ -4003,6 +4074,31 @@ pub fn device_solids(model: &Model, id: archisim_core::DeviceId) -> Vec<Solid> {
     }]
 }
 
+/// The pieces of a device's own model are not of a material of the
+/// project: each role of `archisim_props::fine::services::ROLES` is
+/// marked with this number plus its place, and [`solid_color`] gives its
+/// colour.
+pub const DEVICE_ROLE_BASE: u64 = u64::MAX - 63;
+
+/// The colour of a role of a device's own model.
+fn device_role_color(d: &archisim_core::ServiceDevice, role: usize) -> [u8; 3] {
+    match archisim_core::props::fine::services::ROLES
+        .get(role)
+        .copied()
+    {
+        Some("plate") => [243, 243, 239],
+        Some("key") => [250, 250, 247],
+        Some("metal") => [178, 181, 186],
+        Some("dark") => [48, 48, 52],
+        Some("glass") => [96, 104, 112],
+        Some("body") => [238, 238, 234],
+        Some("pipe") => d.kind.system().map_or([170, 140, 110], |s| s.color()),
+        Some("shade") => [255, 244, 214],
+        Some("red") => [205, 50, 45],
+        _ => [235, 235, 230],
+    }
+}
+
 /// How far a lamp's light reaches at night, metres; a streetlight's.
 pub const LAMP_REACH: f64 = 4.5;
 pub const STREET_REACH: f64 = 11.0;
@@ -4014,11 +4110,42 @@ pub fn glow_materials(
     model: &Model,
     o: archisim_core::ObjectId,
 ) -> (Vec<archisim_core::MaterialId>, f64) {
+    match model.object(o) {
+        Some(ob) => type_glow_materials(model, ob.object_type),
+        None => (Vec::new(), 0.0),
+    }
+}
+
+/// Whether a solid glows at night, and how far its light reaches: a
+/// lampshade or a bulb of an object or of a light point's lamp, or the
+/// lens of a downlight.
+pub fn solid_glow(model: &Model, s: &Solid) -> Option<f64> {
+    match s.owner {
+        SolidOwner::Object(o) => {
+            let (mats, reach) = glow_materials(model, o);
+            mats.contains(&s.material).then_some(reach)
+        }
+        SolidOwner::Device(id) => {
+            let d = model.device(id)?;
+            if s.material.0 >= DEVICE_ROLE_BASE {
+                let role = archisim_core::props::fine::services::ROLES
+                    .get((s.material.0 - DEVICE_ROLE_BASE) as usize)?;
+                return (*role == "shade").then_some(LAMP_REACH);
+            }
+            let (mats, reach) = type_glow_materials(model, d.fixture?);
+            mats.contains(&s.material).then_some(reach)
+        }
+        _ => None,
+    }
+}
+
+/// [`glow_materials`] of a type of object.
+pub fn type_glow_materials(
+    model: &Model,
+    t: archisim_core::ObjectTypeId,
+) -> (Vec<archisim_core::MaterialId>, f64) {
     let none = (Vec::new(), 0.0);
-    let Some(t) = model
-        .object(o)
-        .and_then(|ob| model.object_type(ob.object_type))
-    else {
+    let Some(t) = model.object_type(t) else {
         return none;
     };
     let Some(kind) = model.family_prop(t.family) else {
@@ -4078,6 +4205,19 @@ pub fn texture_of(
 pub fn solid_color(model: &Model, s: &Solid) -> [u8; 3] {
     match s.owner {
         SolidOwner::Run(id) => model.run(id).map_or([150, 150, 150], |r| r.system.color()),
+        // A piece of a device's own model, or of its lamp.
+        SolidOwner::Device(id)
+            if s.material.0 >= DEVICE_ROLE_BASE && model.device(id).is_some() =>
+        {
+            let d = model.device(id).expect("checked");
+            device_role_color(d, (s.material.0 - DEVICE_ROLE_BASE) as usize)
+        }
+        SolidOwner::Device(id)
+            if model.device(id).is_some_and(|d| d.fixture.is_some())
+                && model.material(s.material).is_some() =>
+        {
+            model.surface_color(s.material)
+        }
         SolidOwner::Device(id) => match model.device(id).map(|d| d.kind) {
             Some(archisim_core::DeviceKind::Light) => [250, 230, 150],
             Some(archisim_core::DeviceKind::Radiator) => [245, 245, 240],

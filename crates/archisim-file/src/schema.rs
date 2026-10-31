@@ -1038,6 +1038,9 @@ pub(crate) struct Device {
     pub width: f64,
     pub depth: f64,
     pub height: f64,
+    /// The type of a light point's fitting (version 55).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fixture: Option<u64>,
 }
 
 /// A plot (version 19).
@@ -3431,6 +3434,7 @@ impl ProjectFile {
                     width: d.width,
                     depth: d.depth,
                     height: d.height,
+                    fixture: d.fixture.map(|t| t.0),
                 })
                 .collect(),
             module_sources: p
@@ -4534,6 +4538,7 @@ impl ProjectFile {
                 width: d.width,
                 depth: d.depth,
                 height: d.height,
+                fixture: d.fixture.map(core::ObjectTypeId),
             });
         }
         for x in self.plantings {

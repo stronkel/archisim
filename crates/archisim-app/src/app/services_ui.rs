@@ -248,6 +248,7 @@ impl ArchiSimApp {
                     width: w,
                     depth: d,
                     height: 0.0,
+                    fixture: None,
                 };
                 painter.add(Shape::closed_line(
                     self.polygon(rect, &ghost.outline()),
@@ -573,6 +574,10 @@ impl ArchiSimApp {
                 }
             });
         });
+        // A light point's lamp (G4).
+        if d.kind == DeviceKind::Light {
+            self.fixture_group(ui, id, d.fixture);
+        }
         group(ui, "dev-identity", "Datos de identidad", |ui| {
             text_row(
                 ui,
@@ -644,5 +649,206 @@ impl ArchiSimApp {
                 }
             });
         }
+    }
+}
+
+/// The lamps of the collections a light point can take: the pieces of the
+/// catalogue whose family is a pendant, a ceiling light or a wall light.
+fn collection_lamps(lib: &archisim_core::Model) -> Vec<&'static str> {
+    archisim_library::OBJECT_CATALOGUE
+        .iter()
+        .map(|(name, _, _)| *name)
+        .filter(|name| {
+            lib.object_types().any(|t| {
+                t.name == *name
+                    && lib.family_prop(t.family).is_some_and(|k| {
+                        matches!(k.as_str(), "pendant" | "ceiling_light" | "wall_light")
+                    })
+            })
+        })
+        .collect()
+}
+
+impl ArchiSimApp {
+    /// The lamp of a light point, chosen on cards drawn in 3D: the
+    /// project's lamps or those of a collection, or the downlight.
+    fn fixture_group(
+        &mut self,
+        ui: &mut Ui,
+        id: DeviceId,
+        now: Option<archisim_core::ObjectTypeId>,
+    ) {
+        use archisim_library::collections::{self, COLLECTIONS};
+        let ctx = ui.ctx().clone();
+        let p = super::theme::Palette::current(ui.ctx());
+        let mut pick: Option<Pick> = None;
+        enum Pick {
+            Downlight,
+            Project(archisim_core::ObjectTypeId),
+            Collected(&'static str, usize),
+        }
+        let source = self.fixture_source.filter(|i| *i < COLLECTIONS.len());
+        // The cards: (name, its picture, what a click does, on).
+        let mut cards: Vec<(String, Option<super::thumbs::Thumb>, Pick, bool)> =
+            vec![("Empotrable".into(), None, Pick::Downlight, now.is_none())];
+        if let Some(i) = source {
+            self.collection_library(&COLLECTIONS[i]);
+        }
+        self.thumbs3d.begin();
+        let gpu = self.gpu.as_ref();
+        match source {
+            None => {
+                let model = self.ed.model();
+                for t in model.fixture_types() {
+                    let Some(ty) = model.object_type(t) else {
+                        continue;
+                    };
+                    let key = format!("p:{}:{:?}", ty.family.0, ty.values);
+                    let thumb = self.thumbs3d.get(&ctx, gpu, key, || {
+                        crate::type_preview::object_model(model, ty)
+                    });
+                    cards.push((ty.name.clone(), thumb, Pick::Project(t), now == Some(t)));
+                }
+            }
+            Some(i) => {
+                let c = &COLLECTIONS[i];
+                let lib = &self
+                    .collection_libraries
+                    .iter()
+                    .find(|(n, _)| *n == c.name)
+                    .expect("just made")
+                    .1;
+                let current = now
+                    .and_then(|t| self.ed.model().object_type(t))
+                    .map(|t| t.name.clone());
+                for name in collection_lamps(lib) {
+                    let variant = collections::variant_name(name, c);
+                    let Some(ty) = lib.object_types().find(|t| t.name == variant) else {
+                        continue;
+                    };
+                    let thumb =
+                        self.thumbs3d
+                            .get(&ctx, gpu, format!("c:{}:{name}", c.name), || {
+                                crate::type_preview::object_model(lib, ty)
+                            });
+                    let on = current.as_deref() == Some(variant.as_str());
+                    cards.push((name.to_string(), thumb, Pick::Collected(name, i), on));
+                }
+            }
+        }
+        if self.thumbs3d.pending {
+            ctx.request_repaint();
+        }
+        group(ui, "dev-fixture", "Lámpara", |ui| {
+            ui.label(
+                egui::RichText::new(
+                    "La pieza que se ve en 3D en este punto de luz: un empotrable o una lámpara.",
+                )
+                .small()
+                .color(p.muted),
+            );
+            ui.horizontal_wrapped(|ui| {
+                let chip = |ui: &mut Ui, text: &str, on: bool| {
+                    ui.add(egui::Button::new(egui::RichText::new(text).small()).selected(on))
+                        .clicked()
+                };
+                if chip(ui, "Del proyecto", source.is_none()) {
+                    self.fixture_source = None;
+                }
+                for (i, c) in COLLECTIONS.iter().enumerate() {
+                    if chip(ui, c.name, source == Some(i)) {
+                        self.fixture_source = Some(i);
+                    }
+                }
+            });
+            ui.add_space(4.0);
+            let card = egui::vec2(86.0, 104.0);
+            ui.horizontal_wrapped(|ui| {
+                ui.spacing_mut().item_spacing = egui::vec2(6.0, 6.0);
+                for (name, thumb, act, on) in cards.drain(..) {
+                    let (rect, resp) = ui.allocate_exact_size(card, egui::Sense::click());
+                    let painter = ui.painter_at(rect);
+                    let fill = if on {
+                        p.accent_soft
+                    } else if resp.hovered() {
+                        p.raised
+                    } else {
+                        p.ground
+                    };
+                    painter.rect_filled(rect, 6.0, fill);
+                    if on {
+                        painter.rect_stroke(
+                            rect,
+                            6.0,
+                            egui::Stroke::new(1.5, p.accent),
+                            egui::StrokeKind::Inside,
+                        );
+                    }
+                    let pic = egui::Rect::from_min_size(
+                        rect.min + egui::vec2(4.0, 4.0),
+                        egui::vec2(card.x - 8.0, card.x - 8.0),
+                    );
+                    match thumb {
+                        Some(t) => {
+                            let size = t.fit(pic.size());
+                            painter.image(
+                                t.tex,
+                                egui::Rect::from_center_size(pic.center(), size),
+                                egui::Rect::from_min_max(
+                                    egui::pos2(0.0, 0.0),
+                                    egui::pos2(1.0, 1.0),
+                                ),
+                                egui::Color32::WHITE,
+                            );
+                        }
+                        None if matches!(act, Pick::Downlight) => {
+                            // The downlight seen from below: its ring and lens.
+                            let c = pic.center();
+                            painter.circle_filled(c, 22.0, egui::Color32::from_rgb(235, 235, 230));
+                            painter.circle_stroke(c, 22.0, egui::Stroke::new(1.0, p.muted));
+                            painter.circle_filled(c, 15.0, egui::Color32::from_rgb(255, 238, 190));
+                        }
+                        None => {}
+                    }
+                    // A long name, cut to the card.
+                    let shown = if name.chars().count() > 15 {
+                        format!("{}…", name.chars().take(14).collect::<String>())
+                    } else {
+                        name.clone()
+                    };
+                    painter.text(
+                        egui::pos2(rect.center().x, rect.max.y - 14.0),
+                        egui::Align2::CENTER_CENTER,
+                        shown,
+                        egui::FontId::proportional(10.5),
+                        p.text,
+                    );
+                    if resp.on_hover_text(&name).clicked() && !on {
+                        pick = Some(act);
+                    }
+                }
+            });
+        });
+        let Some(pick) = pick else {
+            return;
+        };
+        let mark = self.ed.undo_mark();
+        let fixture = match pick {
+            Pick::Downlight => None,
+            Pick::Project(t) => Some(t),
+            Pick::Collected(name, i) => match self.ed.collection_object_type(name, &COLLECTIONS[i])
+            {
+                Ok(t) => Some(t),
+                Err(e) => {
+                    self.complain(format!("No se puede cargar «{name}»: {e}."));
+                    return;
+                }
+            },
+        };
+        let res = self
+            .ed
+            .transact("Lámpara", |m| m.set_device_fixture(id, fixture));
+        self.ed.join_since(mark, "Lámpara del punto de luz");
+        self.report(res, "Lámpara cambiada.");
     }
 }

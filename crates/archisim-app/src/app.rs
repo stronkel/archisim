@@ -477,6 +477,9 @@ pub struct ArchiSimApp {
     /// The library in each collection, for the catalog's pictures (made
     /// the first time one is chosen).
     pub collection_libraries: Vec<(&'static str, archisim_core::Model)>,
+    /// Where the lamps of a light point come from in its properties:
+    /// `None` the project's, `Some(i)` the collection `i` (G4).
+    pub fixture_source: Option<usize>,
     /// Every species of plants of the library, for the gallery.
     pub flora_library: Option<std::sync::Arc<archisim_core::Model>>,
     /// The object types of the library folder (the studio's and the
@@ -821,6 +824,7 @@ impl ArchiSimApp {
             object_library: None,
             collection: None,
             collection_libraries: Vec::new(),
+            fixture_source: None,
             flora_library: None,
             folder_objects: None,
             priorities_all: false,

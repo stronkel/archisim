@@ -422,6 +422,10 @@ pub struct ServiceDevice {
     pub width: f64,
     pub depth: f64,
     pub height: f64,
+    /// A light point's fitting (G4): a lamp of the collections (a type of
+    /// the pendant, ceiling light or wall light families), drawn in 3D in
+    /// its place instead of the downlight; `None`, the downlight.
+    pub fixture: Option<ObjectTypeId>,
 }
 
 /// Data needed to place a device.
@@ -594,6 +598,7 @@ impl Model {
                 width: spec.width,
                 depth: spec.depth,
                 height: spec.height,
+                fixture: None,
             },
         );
         Ok(id)
@@ -623,6 +628,64 @@ impl Model {
         })?;
         self.devices.insert(id, d);
         Ok(())
+    }
+
+    /// The lamps a light point can take as its fitting (G4): the types
+    /// of the pendant, ceiling light and wall light families, by name.
+    pub fn fixture_types(&self) -> Vec<ObjectTypeId> {
+        let mut out: Vec<&ObjectType> = self
+            .object_types
+            .values()
+            .filter(|t| t.own.is_none())
+            .filter(|t| {
+                self.family_prop(t.family).is_some_and(|k| {
+                    matches!(k.as_str(), "pendant" | "ceiling_light" | "wall_light")
+                })
+            })
+            .collect();
+        out.sort_by(|a, b| a.name.cmp(&b.name));
+        out.into_iter().map(|t| t.id).collect()
+    }
+
+    /// Gives a light point its fitting (or the downlight, `None`): its box
+    /// becomes the lamp's, its top where it was (on the ceiling).
+    pub fn set_device_fixture(
+        &mut self,
+        id: DeviceId,
+        fixture: Option<ObjectTypeId>,
+    ) -> Result<(), ModelError> {
+        if let Some(t) = fixture {
+            if !self.object_types.contains_key(&t) {
+                return Err(ModelError::UnknownObjectType(t));
+            }
+        }
+        let size = match fixture {
+            Some(t) => self.type_prop(t).and_then(|(mesh, _)| {
+                let mut lo = [f64::MAX; 3];
+                let mut hi = [f64::MIN; 3];
+                for p in &mesh.positions {
+                    for k in 0..3 {
+                        lo[k] = lo[k].min(p[k] as f64);
+                        hi[k] = hi[k].max(p[k] as f64);
+                    }
+                }
+                (lo[0] < hi[0]).then_some([hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]])
+            }),
+            None => {
+                let (w, d, h, _) = DeviceKind::Light.defaults();
+                Some([w, d, h])
+            }
+        };
+        self.edit_device(id, |d| {
+            d.fixture = fixture;
+            if let Some([w, dd, h]) = size {
+                let top = d.elevation + d.height;
+                d.width = w.max(0.02);
+                d.depth = dd.max(0.02);
+                d.height = h.max(0.02);
+                d.elevation = top - d.height;
+            }
+        })
     }
 
     pub fn remove_device(&mut self, id: DeviceId) -> Result<ServiceDevice, ModelError> {

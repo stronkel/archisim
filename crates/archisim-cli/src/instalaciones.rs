@@ -187,6 +187,18 @@ pub fn build() -> Res<Model> {
         height: 0.09,
         slope: 0.02,
     })?;
+    // The living room's light point takes the dining pendant (G4).
+    let pendant = m.fixture_types().into_iter().find(|t| {
+        m.object_type(*t)
+            .is_some_and(|x| x.name == "Colgante de comedor")
+    });
+    let living = m
+        .devices()
+        .find(|d| d.kind == K::Light && d.position.distance(Point2::new(5.6, 3.0)) < 1e-6)
+        .map(|d| d.id);
+    if let (Some(t), Some(d)) = (pendant, living) {
+        m.set_device_fixture(d, Some(t))?;
+    }
     Ok(m)
 }
 
@@ -241,6 +253,18 @@ mod tests {
             m.device_circuit(d.id)
         };
         assert_eq!(circuit_of(DeviceKind::Light, 1.8, 3.0), Some(1));
+        // The living room's light hangs a pendant, its top on the ceiling.
+        let lamp = m
+            .devices()
+            .find(|d| d.fixture.is_some())
+            .expect("a light point with its lamp");
+        assert!(
+            (lamp.elevation + lamp.height - 2.7).abs() < 1e-6,
+            "{lamp:?}"
+        );
+        assert!(archisim_geom::solid::device_solids(&m, lamp.id)
+            .iter()
+            .any(|s| archisim_geom::solid::solid_glow(&m, s).is_some()));
         // A socket in the kitchen: C5; in the living room: C2.
         assert_eq!(circuit_of(DeviceKind::Socket, 0.4, 1.5), Some(5));
         assert_eq!(circuit_of(DeviceKind::Socket, 4.5, 0.4), Some(2));

@@ -288,13 +288,7 @@ impl Scene {
                 archisim_geom::solid::SolidOwner::Object(o) => (o.0 | 1 << 63, true),
                 _ => (0, false),
             };
-            let glow = match s.owner {
-                archisim_geom::solid::SolidOwner::Object(o) => {
-                    let (mats, reach) = archisim_geom::solid::glow_materials(model, o);
-                    mats.contains(&s.material).then_some(reach)
-                }
-                _ => None,
-            };
+            let glow = archisim_geom::solid::solid_glow(model, &s);
             for (i, t) in s.triangles.iter().enumerate() {
                 let painted = archisim_geom::solid::painted_material(model, &s, t);
                 let rgb = per_vertex

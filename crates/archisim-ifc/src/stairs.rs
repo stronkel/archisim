@@ -397,7 +397,7 @@ impl Exporter<'_> {
     }
 
     /// A body of triangles (model space; heights from the storey).
-    fn triangulated_shape(&mut self, tris: &[[[f64; 3]; 3]], storey_z: f64) -> Ref {
+    pub(crate) fn triangulated_shape(&mut self, tris: &[[[f64; 3]; 3]], storey_z: f64) -> Ref {
         let mut pts: Vec<String> = Vec::new();
         let mut faces: Vec<String> = Vec::new();
         for t in tris {
