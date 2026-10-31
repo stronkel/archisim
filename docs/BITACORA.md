@@ -6,6 +6,12 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-31 (50) · v0.77: E2, E7, E9, E11, E13 y remates en `main`
+
+Unidos #117 a #122: galerías visuales (E2), vistas de dibujo y calcos (E7), fachadas pieza a pieza (E9), hormigón armado (E11), instalaciones segunda vuelta (E13) y los remates de E15 y E6. Formato `.archisim` versión 51. Lo que hay que probar de cada uno está en sus entradas (44 a 49).
+
+---
+
 ## 2026-10-31 (49) · Remates: anclajes en 3D y en alzado (E15) y hueco de muro en más carpinterías (E6)
 
 Rama `bloque/remates-e15-e6` (sobre `bloque/e13-instalaciones`), con pull request. Sin cambios de formato.
