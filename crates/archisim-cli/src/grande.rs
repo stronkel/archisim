@@ -160,6 +160,51 @@ pub fn measure_views(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+/// Measures the jobs on a project of its own (`archisim medir proyecto
+/// <fichero>`): open and save it, its 3D, the IFC both ways, the code
+/// check, and then every view as `measure_views` does.
+pub fn measure_project(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let m = timed("Abrir el proyecto", || archisim_file::open(path))?;
+    println!(
+        "  {} muros, {} forjados, {} huecos, {} objetos, {} locales",
+        m.walls().count(),
+        m.slabs().count(),
+        m.openings().count(),
+        m.objects().count(),
+        m.rooms().count()
+    );
+    let flat = timed("Modelo con los módulos desplegados", || m.flattened())?;
+    let solids = timed("Sólidos 3D de todo el modelo", || {
+        archisim_geom::solid::model_solids(&flat)
+    });
+    let triangles: usize = solids.iter().map(|s| s.triangles.len()).sum();
+    println!("  {:<52} {:>10}", "  triángulos", triangles);
+    let out = std::env::temp_dir().join("archisim-medir.archisim");
+    timed("Guardar el proyecto (.archisim)", || {
+        archisim_file::save(&m, &out)
+    })?;
+    let ifc = timed("Exportar el IFC", || {
+        export_ifc(
+            &flat,
+            &ExportOptions {
+                timestamp: Some("2026-10-18T12:00:00".into()),
+                ..Default::default()
+            },
+        )
+    });
+    println!(
+        "  {:<52} {:>10.1} MB",
+        "  tamaño del IFC",
+        ifc.len() as f64 / 1e6
+    );
+    timed("Importar el IFC", || import_ifc(&ifc))?;
+    timed("Comprobación CTE", || archisim_cte::check(&flat));
+    timed("Mediciones", || {
+        archisim_plan::schedules::measurements(&flat)
+    });
+    measure_views(path)
+}
+
 /// Builds the grid, measures every job and leaves the files in `dir`
 /// (grande.archisim and grande.ifc, to open them in the application).
 pub fn measure(n: usize, dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
