@@ -101,6 +101,21 @@ pub fn build() -> Res<Model> {
             })?;
         }
     }
+    // The south elevation of the first block, and a section through it.
+    m.add_section(archisim_core::NewSection {
+        name: "Sur".into(),
+        kind: archisim_core::SectionKind::Elevation,
+        start: Point2::new(-1.0, -3.0),
+        end: Point2::new(W + 1.0, -3.0),
+        depth: 5.0,
+    })?;
+    m.add_section(archisim_core::NewSection {
+        name: "F".into(),
+        kind: archisim_core::SectionKind::Section,
+        start: Point2::new(2.2, -1.0),
+        end: Point2::new(2.2, D + 1.0),
+        depth: 3.0,
+    })?;
     Ok(m)
 }
 
@@ -130,6 +145,24 @@ pub fn write(dir: &Path) -> Res {
         archisim_library::facades::FACADE_TYPES.len()
     );
     println!("  Proyecto: {}", project.display());
+    // The south elevation and a section at 1:50, with the joints (E17).
+    let options = archisim_plan::PlanOptions {
+        scale: 50.0,
+        ..Default::default()
+    };
+    for (name, file) in [
+        ("Sur", "fachadas-alzado.svg"),
+        ("F", "fachadas-seccion.svg"),
+    ] {
+        if let Some(sec) = m.sections().find(|s| s.name == name) {
+            let d = archisim_plan::section::section_drawing(&m, sec);
+            std::fs::write(
+                dir.join(file),
+                archisim_plan::section::render_section(&m, &d, &options),
+            )?;
+            println!("  {name} a 1:50: {}", dir.join(file).display());
+        }
+    }
     println!("  IFC: {}", dir.join("fachadas.ifc").display());
     Ok(())
 }
