@@ -370,6 +370,10 @@ pub struct ArchiSimApp {
     /// Drawing the rectangle of a detail in a section (E17): the section
     /// and its first corner.
     pub detail_pick: Option<(SectionId, Option<Point2>)>,
+    /// A DXF read, waiting for its unit and how its blocks come in.
+    pub dxf_import: Option<dxf_import_ui::DxfImport>,
+    /// The tile «Armado»: clicks arm what they hit.
+    pub rebar_pick: bool,
     pub room_settings: crate::editor::RoomSettings,
     pub roof_settings: crate::editor::RoofSettings,
     pub roof_tool: SlabTool,
@@ -763,6 +767,8 @@ impl ArchiSimApp {
             section_hover: None,
             section_drag: None,
             detail_pick: None,
+            dxf_import: None,
+            rebar_pick: false,
             room_settings: Default::default(),
             roof_settings,
             stair_settings,
@@ -965,6 +971,7 @@ impl ArchiSimApp {
     }
 
     fn set_tool(&mut self, tool: Tool) {
+        self.rebar_pick = false;
         if tool != Tool::Cad && self.cad.is_some() {
             // Another tool ends the command (keeping what it drew).
             self.end_command(true);
@@ -1380,7 +1387,7 @@ impl ArchiSimApp {
         let mut d = rfd::FileDialog::new()
             .set_title(format!("Exportar planta 1:{scale}"))
             .add_filter("PDF (para imprimir)", &["pdf"])
-            .add_filter("DXF (para AutoCAD y otros CAD)", &["dxf"])
+            .add_filter("DXF (para otros programas de CAD)", &["dxf"])
             .add_filter("SVG", &["svg"])
             .set_file_name(format!(
                 "{} - {} 1-{scale}.pdf",
@@ -1414,7 +1421,7 @@ impl ArchiSimApp {
         let mut d = rfd::FileDialog::new()
             .set_title(format!("Exportar {title} 1:{scale}"))
             .add_filter("PDF (para imprimir)", &["pdf"])
-            .add_filter("DXF (para AutoCAD y otros CAD)", &["dxf"])
+            .add_filter("DXF (para otros programas de CAD)", &["dxf"])
             .add_filter("SVG", &["svg"])
             .set_file_name(format!("{} - {title} 1-{scale}.pdf", self.file_name_stem()));
         if let Some(dir) = self.start_dir() {
@@ -1466,7 +1473,7 @@ impl ArchiSimApp {
             .add_filter("PDF (para imprimir)", &["pdf"]);
         if !all {
             d = d
-                .add_filter("DXF (para AutoCAD y otros CAD)", &["dxf"])
+                .add_filter("DXF (para otros programas de CAD)", &["dxf"])
                 .add_filter("SVG", &["svg"])
                 .add_filter("PNG (imagen a 200 ppp)", &["png"]);
         }
@@ -1499,18 +1506,13 @@ impl ArchiSimApp {
         }
     }
 
+    /// Reads a DXF and asks how to bring it in (its unit, its blocks):
+    /// see `dxf_import_ui`.
     pub(crate) fn import_dxf_from(&mut self, path: &Path) {
         if self.mode == ViewMode::ThreeD {
             self.show_plan();
         }
-        let (view, k) = (self.active_view(), self.active_k());
-        match self.ed.import_dxf(path, view, k) {
-            Ok(r) => {
-                self.say(r.describe());
-                self.fit_requested = true;
-            }
-            Err(e) => self.complain(format!("No se pudo importar: {e}.")),
-        }
+        self.open_dxf_import(path);
     }
 
     // ---- Commands ------------------------------------------------------------
@@ -1791,6 +1793,7 @@ impl ArchiSimApp {
         }
         missions_ui::clear_marks(&ctx);
         widgets::note_click(&ctx);
+        self.ed.select_whole_groups();
         // Texts are measured and drawn in the project's lettering.
         archisim_draft::font::set_font(self.ed.model().graphics.font);
         self.handle_close(&ctx);
@@ -2312,6 +2315,7 @@ impl ArchiSimApp {
         self.types_dialog(ctx);
         self.library_dialog(ctx);
         self.mesh_import_dialog(ctx);
+        self.dxf_import_dialog(ctx);
         self.params_dialog(ctx);
         self.cte_dialog(ctx);
         self.coord_dialog(ctx);
@@ -2356,7 +2360,7 @@ const MOUSE_KEYS: &[(&str, &str)] = &[
     ("Arrastrar rueda / botón derecho", "Encuadre"),
     ("Doble clic rueda · Inicio", "Ajustar a la ventana"),
     (
-        "M · F · P · V · C · N (teclas de ArchiCAD)",
+        "M · F · P · V · C · N (teclas de una letra)",
         "Muro · Forjado · Puerta · Ventana · Cota · Cota de nivel",
     ),
     ("Ctrl+Tab", "Siguiente pestaña de vista"),
@@ -2577,6 +2581,7 @@ mod curtain_ui;
 mod discipline_ui;
 mod draft_props;
 mod drafting_view_ui;
+mod dxf_import_ui;
 mod facade_ui;
 mod foundation_ui;
 mod ghost3d;

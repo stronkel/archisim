@@ -55,6 +55,9 @@ pub enum MenuAct {
         start: bool,
         allow: bool,
     },
+    /// The drafting elements selected in one group, or out of theirs.
+    Group,
+    Ungroup,
 }
 
 impl ContextMenu {
@@ -193,6 +196,25 @@ impl ArchiSimApp {
                                 allow: !allowed,
                             });
                         }
+                    }
+                }
+                // Drafting: group what is selected, or take it apart.
+                if matches!(e, Element::Draft(_)) {
+                    let drafts: Vec<_> = self
+                        .ed
+                        .selection
+                        .iter()
+                        .filter_map(|x| match x {
+                            Element::Draft(d) => model.draft(*d),
+                            _ => None,
+                        })
+                        .collect();
+                    let grouped = drafts.iter().any(|d| d.group.is_some());
+                    if drafts.len() > 1 && item(ui, "Agrupar", "", true) {
+                        act = Some(MenuAct::Group);
+                    }
+                    if grouped && item(ui, "Desagrupar", "", true) {
+                        act = Some(MenuAct::Ungroup);
                     }
                 }
                 let typed = crate::pick::type_of(model, e).is_some();
@@ -390,6 +412,37 @@ impl ArchiSimApp {
                 }
             }
             MenuAct::Delete => self.delete_pub(),
+            MenuAct::Group | MenuAct::Ungroup => {
+                let ids: Vec<archisim_core::DraftId> = self
+                    .ed
+                    .selection
+                    .iter()
+                    .filter_map(|x| match x {
+                        Element::Draft(d) => Some(*d),
+                        _ => None,
+                    })
+                    .collect();
+                let r = if act == MenuAct::Group {
+                    self.ed
+                        .transact("Agrupar", |m| m.group_drafts(&ids, "Grupo").map(|_| ()))
+                } else {
+                    self.ed.transact("Desagrupar", |m| m.ungroup_drafts(&ids))
+                };
+                match r {
+                    Ok(()) => {
+                        if act == MenuAct::Ungroup {
+                            // Its lines stay selected, each on its own.
+                            self.ed.selection.clear();
+                        }
+                        self.say(if act == MenuAct::Group {
+                            "Agrupado: un clic elige el grupo entero."
+                        } else {
+                            "Desagrupado: cada línea va ya por su cuenta."
+                        })
+                    }
+                    Err(e) => self.complain(format!("No se puede: {e}.")),
+                }
+            }
             MenuAct::WallJoin { wall, start, allow } => {
                 let label = if allow {
                     "Permitir unión"

@@ -122,6 +122,9 @@ pub struct Editor {
     /// What is hidden in the views for now (right click → Ocultar or
     /// Aislar); not saved with the project.
     hidden: BTreeSet<Element>,
+    /// The groups of drafting elements wholly selected after the last
+    /// [`Editor::select_whole_groups`].
+    whole_groups: BTreeSet<u64>,
     /// In a shared project, what the person has reserved: edits to
     /// anything else are refused.
     pub team: Option<crate::team::Guard>,
@@ -152,6 +155,7 @@ impl Editor {
             geo: Default::default(),
             flat: Default::default(),
             hidden: BTreeSet::new(),
+            whole_groups: BTreeSet::new(),
             level,
             selection: BTreeSet::new(),
             team: None,
@@ -382,30 +386,58 @@ impl Editor {
         std::fs::write(path, bytes).map_err(|e| format!("no se pudo escribir el plano: {e}"))
     }
 
-    /// Brings a DXF drawing into a view as 2D drafting, `k` metres per
-    /// paper millimetre of the view (texts keep their size on paper).
-    pub fn import_dxf(
+    /// Groups of drafting elements are picked whole: a member selected
+    /// brings the rest; a member taken out of a group wholly selected (Shift
+    /// and click) takes the rest out.
+    pub fn select_whole_groups(&mut self) {
+        let model = self.doc.model();
+        let group_of = |e: &Element| match e {
+            Element::Draft(d) => model.draft(*d).and_then(|d| d.group.as_ref()).map(|g| g.id),
+            _ => None,
+        };
+        let touched: BTreeSet<u64> = self.selection.iter().filter_map(group_of).collect();
+        if touched.is_empty() && self.whole_groups.is_empty() {
+            return;
+        }
+        let mut whole = BTreeSet::new();
+        for g in &touched {
+            let members: Vec<Element> = model
+                .draft_group(*g)
+                .map(|d| Element::Draft(d.id))
+                .collect();
+            let all = members.iter().all(|m| self.selection.contains(m));
+            if all {
+                whole.insert(*g);
+            } else if self.whole_groups.contains(g) {
+                for m in &members {
+                    self.selection.remove(m);
+                }
+            } else {
+                self.selection.extend(members);
+                whole.insert(*g);
+            }
+        }
+        self.whole_groups = whole;
+    }
+
+    /// Brings a DXF drawing already read (in the unit chosen, its blocks
+    /// as groups or not) into a view as 2D drafting.
+    pub fn import_dxf_drawing(
         &mut self,
-        path: &Path,
+        drawing: &archisim_export::dxf_read::Drawing,
+        name: &str,
         view: archisim_core::ViewRef,
         k: f64,
     ) -> EditResult<archisim_export::dxf_read::Report> {
-        let bytes = std::fs::read(path).map_err(|e| format!("no se pudo leer el DXF: {e}"))?;
-        let drawing = archisim_export::dxf_read::read(&bytes)?;
         if drawing.items.is_empty() {
             return Err("el DXF no tiene nada que ArchiSim sepa dibujar en 2D".into());
         }
-        let label = format!(
-            "Importar DXF «{}»",
-            path.file_name()
-                .map(|n| n.to_string_lossy())
-                .unwrap_or_default()
-        );
+        let label = format!("Importar DXF «{name}»");
         self.transact(&label, |m| {
             archisim_export::dxf_read::add_to(
                 m,
                 view,
-                &drawing,
+                drawing,
                 archisim_core::Vec2::new(0.0, 0.0),
                 k,
             )

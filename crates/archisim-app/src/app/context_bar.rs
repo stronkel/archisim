@@ -98,7 +98,7 @@ const TRANSFORM: &[Order] = &[
         mark: Mark::Icon(Icon::Mirror),
         name: "Reflejar",
         key: "MM",
-        hint: "Como Reflejar de Revit: pincha una línea como eje (cara o eje de muro, eje, línea) y sale la copia reflejada; D: dibujar el eje con dos puntos (DM); C: mover en vez de copiar. Las puertas y ventanas cambian de mano",
+        hint: "Reflejar: pincha una línea como eje (cara o eje de muro, eje, línea) y sale la copia reflejada; D: dibujar el eje con dos puntos (DM); C: mover en vez de copiar. Las puertas y ventanas cambian de mano",
     },
     Order {
         command: "ESCALA",
@@ -169,14 +169,14 @@ const BUILDING: &[Order] = &[
         mark: Mark::Glyph(Glyph::Align),
         name: "Alinear caras",
         key: "ALC",
-        hint: "Como Alinear de Revit: la línea de referencia (cara o eje de muro, eje, línea…) y después la cara del elemento que se lleva a ella",
+        hint: "Alinear: la línea de referencia (cara o eje de muro, eje, línea…) y después la cara del elemento que se lleva a ella",
     },
     Order {
         command: "ESQUINA",
         mark: Mark::Icon(Icon::Trim),
         name: "Esquina",
         key: "ESQ",
-        hint: "Recortar/extender para formar esquina (TR de Revit): dos muros, por la parte que se queda",
+        hint: "Recortar/extender para formar esquina (TR): dos muros, por la parte que se queda",
     },
     Order {
         command: "LIMITE1",

@@ -101,6 +101,13 @@ pub fn render_drafting_view(model: &Model, id: DraftViewId, options: &PlanOption
         None,
     );
     s.push_str("</g>\n</svg>\n");
+    if options.thin_lines {
+        // One pixel on screen, a hairline on paper.
+        let mm = options
+            .px_per_mm
+            .map_or(crate::HAIRLINE_MM, |px| 1.0 / px.max(1e-6));
+        return crate::hairlines(&s, mm * k);
+    }
     s
 }
 

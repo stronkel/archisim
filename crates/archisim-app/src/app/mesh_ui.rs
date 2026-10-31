@@ -633,14 +633,14 @@ impl ArchiSimApp {
                             egui::ComboBox::from_id_salt("mesh-up")
                                 .selected_text(match imp.up {
                                     Up::Auto => "Lo que diga el fichero",
-                                    Up::Y => "Eje Y (Blender, glTF, Maya)",
-                                    Up::Z => "Eje Z (SketchUp, 3ds Max)",
+                                    Up::Y => "Eje Y (glTF y la mayoría de programas de animación)",
+                                    Up::Z => "Eje Z (programas de arquitectura y modelado)",
                                 })
                                 .show_ui(ui, |ui| {
                                     for (u, n) in [
                                         (Up::Auto, "Lo que diga el fichero"),
-                                        (Up::Y, "Eje Y (Blender, glTF, Maya)"),
-                                        (Up::Z, "Eje Z (SketchUp, 3ds Max)"),
+                                        (Up::Y, "Eje Y (glTF y la mayoría de programas de animación)"),
+                                        (Up::Z, "Eje Z (programas de arquitectura y modelado)"),
                                     ] {
                                         reread |= ui.selectable_value(&mut imp.up, u, n).changed();
                                     }

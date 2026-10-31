@@ -162,6 +162,18 @@ pub fn write(dir: &Path) -> Res {
         dir.join("armado-planta.svg"),
         archisim_plan::render_plan(&m, level, &options),
     )?;
+    // Both plans at 1:50: the bars of the footings and the slab and the
+    // labels of beams and columns (G1).
+    let fifty = archisim_plan::PlanOptions {
+        scale: 50.0,
+        ..Default::default()
+    };
+    for (i, l) in m.levels().iter().enumerate() {
+        std::fs::write(
+            dir.join(format!("armado-planta-{i}-50.svg")),
+            archisim_plan::render_plan(&m, l.id, &fifty),
+        )?;
+    }
     let mut kg = 0.0;
     let mut bars = 0;
     for (id, _) in m.reinforcements() {
