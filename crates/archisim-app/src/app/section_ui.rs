@@ -307,6 +307,168 @@ impl ArchiSimApp {
         if under.is_some() {
             ctx.set_cursor_icon(egui::CursorIcon::PointingHand);
         }
+        self.section_move(&ctx, &response, &painter, rect, id, under);
+    }
+
+    /// Moving objects, doors and windows in a section or elevation (E15):
+    /// dragged along the section and up or down, a corner, the middle of a
+    /// side or the centre of their box pulled to those of what is drawn
+    /// and to the levels; on release, objects move and rise, doors and
+    /// windows slide along their wall and change their sill.
+    fn section_move(
+        &mut self,
+        ctx: &egui::Context,
+        response: &egui::Response,
+        painter: &egui::Painter,
+        rect: Rect,
+        id: SectionId,
+        under: Option<Element>,
+    ) {
+        let movable = |e: &Element| matches!(e, Element::Object(_) | Element::Opening(_));
+        if response.drag_started_by(egui::PointerButton::Primary) {
+            if let (Some(p), Some(e)) = (self.section_hover, under.filter(movable)) {
+                if !self.ed.selection.contains(&e) {
+                    self.ed.selection = [e].into_iter().collect();
+                }
+                let elements: Vec<Element> =
+                    self.ed.selection.iter().copied().filter(movable).collect();
+                if let Some(cache) = self.section_cache.as_ref() {
+                    let owners: Vec<_> = elements
+                        .iter()
+                        .filter_map(|e| crate::pick::solid_of(*e))
+                        .collect();
+                    let mut lo = Point2::new(f64::MAX, f64::MAX);
+                    let mut hi = Point2::new(f64::MIN, f64::MIN);
+                    for o in &owners {
+                        let (cut, faces) = cache.drawing.shape_of(*o);
+                        for q in cut.iter().chain(&faces).flatten() {
+                            lo = Point2::new(lo.x.min(q.x), lo.y.min(q.y));
+                            hi = Point2::new(hi.x.max(q.x), hi.y.max(q.y));
+                        }
+                    }
+                    if lo.x <= hi.x {
+                        let c = (lo + hi) * 0.5;
+                        let own = vec![
+                            lo,
+                            Point2::new(hi.x, lo.y),
+                            hi,
+                            Point2::new(lo.x, hi.y),
+                            Point2::new(c.x, lo.y),
+                            Point2::new(c.x, hi.y),
+                            Point2::new(lo.x, c.y),
+                            Point2::new(hi.x, c.y),
+                            c,
+                        ];
+                        self.section_drag = Some(SectionDrag {
+                            section: id,
+                            start: p,
+                            delta: Point2::new(0.0, 0.0),
+                            elements,
+                            own,
+                            targets: cache.drawing.points_except(&owners),
+                            levels: cache.drawing.level_heights(),
+                            snapped: None,
+                        });
+                    }
+                }
+            }
+        }
+        let Some(mut drag) = self.section_drag.take() else {
+            return;
+        };
+        if drag.section != id {
+            return;
+        }
+        if response.dragged_by(egui::PointerButton::Primary) {
+            if let Some(p) = self.section_hover {
+                let raw = p - drag.start;
+                let tol = 10.0 / self.view.zoom.max(1e-9);
+                drag.delta = raw;
+                drag.snapped = None;
+                // The nearest pair of one of its points and a point drawn.
+                let mut best: Option<(f64, Point2, Point2)> = None;
+                for a in &drag.own {
+                    let moved = *a + raw;
+                    for b in &drag.targets {
+                        let d = moved.distance(*b);
+                        if d < tol && best.is_none_or(|(x, _, _)| d < x) {
+                            best = Some((d, *b - *a, *b));
+                        }
+                    }
+                }
+                if let Some((_, d, at)) = best {
+                    drag.delta = d;
+                    drag.snapped = Some(at);
+                } else {
+                    // Or its top or bottom on a level.
+                    for a in &drag.own[..4] {
+                        for z in &drag.levels {
+                            if (a.y + raw.y - z).abs() < tol {
+                                drag.delta = Point2::new(raw.x, z - a.y);
+                            }
+                        }
+                    }
+                }
+            }
+            // Its outline where it would go.
+            let [lo, _, hi, ..] = [drag.own[0], drag.own[1], drag.own[2]];
+            let quad = [
+                lo + drag.delta,
+                Point2::new(hi.x, lo.y) + drag.delta,
+                hi + drag.delta,
+                Point2::new(lo.x, hi.y) + drag.delta,
+            ];
+            painter.add(Shape::closed_line(
+                self.polygon(rect, &quad),
+                Stroke::new(1.5, ACCENT),
+            ));
+            if let Some(at) = drag.snapped {
+                let c = self.view.to_screen(rect, at);
+                painter.circle_stroke(c, 5.0, Stroke::new(1.5, ACCENT));
+            }
+            ctx.request_repaint();
+        }
+        if response.drag_stopped() {
+            let d = drag.delta;
+            if d.length() > 1e-6 {
+                let along = self.ed.model().section(id).and_then(|s| s.along());
+                let elements = drag.elements.clone();
+                let r = self.ed.transact("Mover en la sección", |m| {
+                    let Some(u) = along else {
+                        return Ok(());
+                    };
+                    for e in &elements {
+                        match e {
+                            Element::Object(o) => m.edit_object(*o, |x| {
+                                x.position = x.position + u * d.x;
+                                x.base_offset += d.y;
+                            })?,
+                            Element::Opening(o) => {
+                                let Some(op) = m.opening(*o).cloned() else {
+                                    continue;
+                                };
+                                let w = m
+                                    .wall(op.wall)
+                                    .and_then(|w| (w.end - w.start).normalized())
+                                    .unwrap_or(u);
+                                let k = w.dot(u);
+                                let along = if k.abs() > 0.3 {
+                                    op.along + d.x * k
+                                } else {
+                                    op.along
+                                };
+                                m.move_opening(*o, along, op.sill + d.y)?;
+                            }
+                            _ => {}
+                        }
+                    }
+                    Ok(())
+                });
+                self.report(r.map_err(|e| e.to_string()), "Movido.");
+            }
+            return;
+        }
+        self.section_drag = Some(drag);
     }
 
     /// The selected elements over the section drawing, and the one under
@@ -633,4 +795,20 @@ impl ArchiSimApp {
             });
         }
     }
+}
+
+/// A move in a section or elevation, while the mouse is held (E15).
+#[derive(Debug, Clone)]
+pub struct SectionDrag {
+    section: SectionId,
+    start: Point2,
+    delta: Point2,
+    elements: Vec<Element>,
+    /// The corners, middles of the sides and centre of the box of what
+    /// moves, in the drawing.
+    own: Vec<Point2>,
+    /// The points drawn, to pull to.
+    targets: Vec<Point2>,
+    levels: Vec<f64>,
+    snapped: Option<Point2>,
 }

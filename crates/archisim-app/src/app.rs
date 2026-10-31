@@ -365,6 +365,8 @@ pub struct ArchiSimApp {
     shared_model: Option<(u64, std::sync::Arc<archisim_core::Model>)>,
     /// Where the pointer is over the section shown (along, height).
     pub section_hover: Option<Point2>,
+    /// Objects, doors or windows being moved in a section or elevation.
+    pub section_drag: Option<section_ui::SectionDrag>,
     pub room_settings: crate::editor::RoomSettings,
     pub roof_settings: crate::editor::RoofSettings,
     pub roof_tool: SlabTool,
@@ -756,6 +758,7 @@ impl ArchiSimApp {
             sheet_pending: None,
             shared_model: None,
             section_hover: None,
+            section_drag: None,
             room_settings: Default::default(),
             roof_settings,
             stair_settings,

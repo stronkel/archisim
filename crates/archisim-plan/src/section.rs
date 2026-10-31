@@ -214,6 +214,31 @@ impl SectionDrawing {
         self.cuts.iter().any(|c| c.3 == me) || self.faces.iter().any(|f| f.owner == me)
     }
 
+    /// The corners of everything drawn but the elements in `skip`, to
+    /// snap to (E15: move from an exact point in a section or an
+    /// elevation).
+    pub fn points_except(&self, skip: &[SolidOwner]) -> Vec<Point2> {
+        let mut out: Vec<Point2> = Vec::new();
+        for (_, loops, _, owner) in &self.cuts {
+            if !skip.contains(owner) {
+                out.extend(loops.iter().flatten().copied());
+            }
+        }
+        for f in self
+            .faces
+            .iter()
+            .filter(|f| !f.hidden && !skip.contains(&f.owner))
+        {
+            out.extend(f.poly.iter().copied());
+        }
+        out
+    }
+
+    /// The heights of the levels drawn.
+    pub fn level_heights(&self) -> Vec<f64> {
+        self.levels.iter().map(|(_, z)| *z).collect()
+    }
+
     /// What an element looks like in the section, to highlight it: the
     /// loops of its cut, and its faces seen beyond (pieces of polygons).
     pub fn shape_of(&self, owner: SolidOwner) -> (Vec<Vec<Point2>>, Vec<Vec<Point2>>) {

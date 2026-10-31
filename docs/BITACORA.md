@@ -6,6 +6,37 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-31 (49) · Remates: anclajes en 3D y en alzado (E15) y hueco de muro en más carpinterías (E6)
+
+Rama `bloque/remates-e15-e6` (sobre `bloque/e13-instalaciones`), con pull request. Sin cambios de formato.
+
+**Hecho**
+- **Mover en alzado y sección** (E15): en una pestaña de alzado o sección, arrastra un objeto, una puerta o una ventana.
+  - Se mueve a lo largo de la sección y en altura.
+  - Sus esquinas, los medios de sus lados y su centro se pegan a las esquinas de lo dibujado (con un círculo donde se pega) y a las líneas de las plantas.
+  - Al soltar, un objeto cambia su sitio y su altura sobre la planta; una puerta o ventana, su posición en el muro y su antepecho.
+- **Mover en 3D** (E15): el mueble que arrastras, si no lo ha pegado una pared, se pega por sus esquinas, medios y centro a los de los muebles de al lado (a menos de 5 cm).
+- **Hueco de muro y accesorios** (E6) ya también en la **ventana de guillotina**, las **puertas correderas** (normal y empotrada) y la **puerta pivotante**, como en la practicable:
+  - posición del marco y su retranqueo;
+  - mocheta;
+  - dintel visto;
+  - recercado;
+  - albardilla;
+  - en la guillotina, además, alféizar por dentro y parasol de lamas.
+
+  En el taller (`archisim taller out/`) hay un ejemplo de cada una en la fila de huecos de muro.
+
+**Pendiente**
+- En alzado y sección todavía no se mueven muros, pilares ni otros elementos, ni hay copiar ni simetría.
+
+**Qué debe probar Antonio**
+1. Abre la demo → Alzado Sur. Arrastra una ventana hacia arriba hasta que su dintel se pegue a la línea de la planta o a otra ventana; suelta. En planta y en 3D debe estar con su nuevo antepecho.
+2. En un alzado, arrastra un objeto (una farola, un coche) por su esquina hasta la de otro.
+3. En 3D, arrastra una mesa junto a otra: debe pegarse arista con arista.
+4. Tipos y materiales → una ventana de guillotina → pestaña del hueco: ponle recercado moldurado, dintel de ladrillo y albardilla. Haz lo mismo con una puerta corredera y una pivotante.
+
+---
+
 ## 2026-10-31 (48) · Instalaciones, segunda vuelta (E13)
 
 Rama `bloque/e13-instalaciones` (sobre `bloque/e11-armado`), con pull request. Formato `.archisim` versión 51: hay más clases de aparato y circuitos dados a mano. Los ficheros anteriores se abren igual.
