@@ -94,8 +94,11 @@ pub fn room_outline(
             .iter()
             .filter_map(|w| crate::wall_geometry_in(&idx, w.id).map(|g| (w.id, g.outline)))
             .collect();
-        // Curtain walls close rooms too (Revit's "room bounding").
-        walls.extend(curtain_bounds(model, level, lo, hi));
+        // Curtain walls close rooms too (Revit's "room bounding"); the
+        // building's outline is the walls'.
+        if contour == Contour::InteriorFace {
+            walls.extend(curtain_bounds(model, level, lo, hi));
+        }
         let found = room_among(model, &walls, p, contour);
         let well_inside = |poly: &[Point2]| {
             let m = 1.0;
