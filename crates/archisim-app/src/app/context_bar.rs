@@ -1109,38 +1109,81 @@ impl ArchiSimApp {
                 self.concept_pick(super::concept_ui::ConceptPick::Paint);
             }
             let divide = match sel.as_slice() {
-                [e @ (Element::Slab(_) | Element::Footing(_) | Element::Column(_) | Element::Beam(_) | Element::Wall(_))] => Some(*e),
+                [e @ (Element::Slab(_) | Element::Footing(_) | Element::Column(_) | Element::Beam(_) | Element::Roof(_) | Element::Wall(_))] => Some(*e),
                 _ => None,
             };
             let r = bar_button(ui, Mark::Glyph(Glyph::DivideFace), "Dividir cara", false, divide.is_some(), true);
             let r = if divide.is_some() {
-                r.on_hover_text("Dividir cara — dibuja zonas cerradas sobre la cara de arriba (o, en un muro, sobre una de sus caras en alzado), en modo boceto; luego se pinta cada una aparte")
+                r.on_hover_text("Dividir cara — dibuja zonas cerradas sobre una cara, en modo boceto (en planta las de arriba y abajo; en alzado los lados y las caras de los muros); luego se pinta cada una aparte")
             } else {
-                r.on_hover_text("Dividir cara — elige antes un muro, un forjado, una zapata, un pilar o una viga")
+                r.on_hover_text("Dividir cara — elige antes un muro, un forjado, una cubierta, una zapata, un pilar o una viga")
             };
-            match divide {
-                // A wall: which side, in a small menu.
-                Some(Element::Wall(w)) => {
-                    let mut side = None;
-                    egui::Popup::menu(&r)
-                        .close_behavior(egui::PopupCloseBehavior::CloseOnClick)
-                        .show(|ui| {
-                            ui.set_min_width(170.0);
-                            if ui.button("Cara exterior").clicked() {
-                                side = Some(archisim_core::FaceSide::Exterior);
+            // Which face: a small menu; «otra cara» is picked in 3D.
+            let mut chosen: Option<crate::sketch::SketchTarget> = None;
+            let mut pick_in_3d = false;
+            if let Some(e) = divide {
+                egui::Popup::menu(&r)
+                    .close_behavior(egui::PopupCloseBehavior::CloseOnClick)
+                    .show(|ui| {
+                        ui.set_min_width(190.0);
+                        match e {
+                            Element::Wall(w) => {
+                                if ui.button("Cara exterior").clicked() {
+                                    chosen = Some(crate::sketch::SketchTarget::WallFace(
+                                        w,
+                                        archisim_core::FaceSide::Exterior,
+                                    ));
+                                }
+                                if ui.button("Cara interior").clicked() {
+                                    chosen = Some(crate::sketch::SketchTarget::WallFace(
+                                        w,
+                                        archisim_core::FaceSide::Interior,
+                                    ));
+                                }
                             }
-                            if ui.button("Cara interior").clicked() {
-                                side = Some(archisim_core::FaceSide::Interior);
+                            Element::Roof(_) => {
+                                if ui.button("Cara de abajo (intradós)").clicked() {
+                                    chosen = Some(crate::sketch::SketchTarget::Zones(
+                                        e,
+                                        archisim_core::FaceRef::Bottom,
+                                    ));
+                                }
                             }
-                        });
-                    if let Some(side) = side {
-                        self.start_sketch(crate::sketch::SketchTarget::WallFace(w, side));
-                    }
+                            _ => {
+                                if ui.button("Cara de arriba").clicked() {
+                                    chosen = Some(crate::sketch::SketchTarget::Zones(
+                                        e,
+                                        archisim_core::FaceRef::Top,
+                                    ));
+                                }
+                                if ui.button("Cara de abajo").clicked() {
+                                    chosen = Some(crate::sketch::SketchTarget::Zones(
+                                        e,
+                                        archisim_core::FaceRef::Bottom,
+                                    ));
+                                }
+                            }
+                        }
+                        let other = if matches!(e, Element::Roof(_)) {
+                            "Un faldón o un frente (pinchándolo en 3D)…"
+                        } else {
+                            "Otra cara (pinchándola en 3D)…"
+                        };
+                        if ui.button(other).clicked() {
+                            pick_in_3d = true;
+                        }
+                    });
+            }
+            if let Some(t) = chosen {
+                self.start_sketch(t);
+            }
+            if pick_in_3d {
+                self.concept_pick(super::concept_ui::ConceptPick::Paint);
+                self.divide_face_pick = true;
+                if self.mode != super::ViewMode::ThreeD {
+                    self.open_view(super::tabs::TabKind::ThreeD);
                 }
-                Some(e) if r.clicked() => {
-                    self.start_sketch(crate::sketch::SketchTarget::Zones(e, archisim_core::FaceRef::Top));
-                }
-                _ => {}
+                self.say("Pincha en 3D la cara que quieres dividir.");
             }
             bar_separator(ui, &p);
             let mut run = None;

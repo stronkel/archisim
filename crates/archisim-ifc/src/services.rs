@@ -242,6 +242,17 @@ impl Exporter<'_> {
             .into_iter()
             .map(|(s, els)| (s.name().to_string(), s.ifc_system(), els))
             .collect();
+        // The lamps placed as objects (already written as light
+        // fixtures) belong to the lighting too.
+        let lamps = model.lamp_points();
+        if !lamps.is_empty() {
+            let written = self.w.by_guid();
+            for (o, _) in lamps {
+                if let Some(r) = model.object(o).and_then(|ob| written.get(ob.guid.as_str())) {
+                    lighting.push(*r);
+                }
+            }
+        }
         if !lighting.is_empty() {
             systems.push(("Alumbrado".into(), "LIGHTING", lighting));
         }

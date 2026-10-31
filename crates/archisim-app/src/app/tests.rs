@@ -8599,3 +8599,131 @@ fn wall_faces_and_profiles_are_sketched_in_elevation() {
     assert!((wall.height - 3.5).abs() < 1e-9);
     assert!(matches!(h.app.mode, ViewMode::Plan));
 }
+
+/// A side of a column divided in its own elevation (a face standing up):
+/// the zone sketched there is painted on that side in 3D, a hair out of
+/// it. And the treads of a stair are painted all at once, by material.
+#[test]
+fn sides_of_columns_are_divided_and_stairs_painted() {
+    let mut ed = Editor::new_project();
+    let level = ed.level;
+    let ty = ed.model().member_types().next().unwrap().id;
+    let c = ed
+        .transact("Pilar", |m| {
+            m.add_column(archisim_core::NewColumn {
+                member_type: ty,
+                level,
+                position: p(2.0, 2.0),
+                rotation: 0.0,
+                base_offset: 0.0,
+                top: archisim_core::WallTop::Unconnected,
+                height: 3.0,
+            })
+        })
+        .unwrap();
+    let mut h = Harness::new(ed);
+    h.frame();
+    // A side of it, standing up.
+    let side = (0..archisim_core::MEMBER_SIDES)
+        .map(archisim_core::FaceRef::Side)
+        .find(|f| archisim_geom::solid::face_frame(h.model(), c.0, *f, None).is_some())
+        .expect("a side");
+    let frame = archisim_geom::solid::face_frame(h.model(), c.0, side, None).unwrap();
+    assert!(frame.vertical.is_some());
+    let (lo, hi) = frame.extent().unwrap();
+    assert!((hi.y - lo.y - 3.0).abs() < 0.05, "{lo:?} {hi:?}");
+    h.app
+        .start_sketch(crate::sketch::SketchTarget::Zones(Element::Column(c), side));
+    h.frame();
+    let ViewMode::Drafting(v) = h.app.mode else {
+        panic!("a side is sketched in elevation");
+    };
+    let layer = h.model().draw_layer_by_name("Boceto").unwrap().id;
+    let (x0, x1) = (lo.x + 0.02, hi.x - 0.02);
+    let q = [p(x0, 0.0), p(x1, 0.0), p(x1, 1.0), p(x0, 1.0)];
+    h.app
+        .ed
+        .transact("Zócalo", |m| {
+            for i in 0..4 {
+                m.add_draft(archisim_core::NewDraft::new(
+                    archisim_core::ViewRef::Drafting(v),
+                    layer,
+                    archisim_core::Shape::Line {
+                        a: q[i],
+                        b: q[(i + 1) % 4],
+                    },
+                ))?;
+            }
+            Ok(())
+        })
+        .unwrap();
+    h.key(Key::Enter);
+    assert!(
+        h.app.sketch.is_none(),
+        "{:?}",
+        h.app.message.as_ref().map(|m| &m.text)
+    );
+    let z = h.model().face_zones().next().unwrap().clone();
+    assert_eq!(z.face, side);
+    let mat = h.model().materials().next().unwrap().id;
+    h.app
+        .ed
+        .transact("Pintar", |m| {
+            m.set_face_zone(c.0, side, z.outline.clone(), Some(mat))
+        })
+        .unwrap();
+    let solids = archisim_geom::solid::model_solids(h.model());
+    let zones = archisim_geom::solid::face_zone_solids(h.model(), &solids);
+    let tris: Vec<_> = zones.iter().flat_map(|s| s.triangles.iter()).collect();
+    assert!(!tris.is_empty());
+    // On the side, below 1 m.
+    for t in &tris {
+        for p in t.iter() {
+            assert!(p[2] <= 1.0 + 1e-6 && p[2] >= -1e-6, "{p:?}");
+            let q = frame.to_face(*p);
+            assert!(q.x >= lo.x - 0.01 && q.x <= hi.x + 0.01, "{q:?}");
+        }
+    }
+    // A stair's pieces of one material, painted all at once.
+    let mut st = crate::editor::default_stair_settings(h.model());
+    st.preset = archisim_core::StairPreset::Straight;
+    let (path, design) = st
+        .preset_on(
+            h.model(),
+            level,
+            p(6.0, 0.0),
+            archisim_core::Vec2::new(0.0, 1.0),
+        )
+        .unwrap();
+    let s = h
+        .app
+        .ed
+        .transact("Escalera", |m| {
+            m.add_stair(archisim_core::NewStair {
+                level,
+                path,
+                width: st.width,
+                going: st.going,
+                base_offset: 0.0,
+                top: archisim_core::WallTop::Unconnected,
+                height: st.height,
+                waist: st.waist,
+                material: st.material,
+                usage: archisim_core::StairUse::Restricted,
+                design,
+            })
+        })
+        .unwrap();
+    let solids =
+        archisim_geom::solid::piece_solids(h.model(), archisim_geom::solid::SolidOwner::Stair(s));
+    let piece = solids[0].material;
+    h.app
+        .ed
+        .transact("Pintar", |m| {
+            m.set_face_paint(s.0, archisim_core::FaceRef::Material(piece.0), Some(mat))
+        })
+        .unwrap();
+    let painted =
+        archisim_geom::solid::painted_material(h.model(), &solids[0], &solids[0].triangles[0]);
+    assert_eq!(painted, Some(mat));
+}

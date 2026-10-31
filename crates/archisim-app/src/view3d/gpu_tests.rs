@@ -873,4 +873,40 @@ fn services_pictures() {
         .unwrap();
         pixmap.save_png(dir.join(format!("{name}.png"))).unwrap();
     }
+    // And a pipe and a duct of each system, close.
+    let mut seen = BTreeSet::new();
+    for r in m.runs() {
+        if !seen.insert(r.system.name()) {
+            continue;
+        }
+        let Some(w) = r
+            .path
+            .windows(2)
+            .max_by(|a, b| a[0].distance(a[1]).total_cmp(&b[0].distance(b[1])))
+        else {
+            continue;
+        };
+        let mid = w[0] + (w[1] - w[0]) * 0.5;
+        let z = m.level(r.level).map_or(0.0, |l| l.elevation) + r.elevation;
+        let mut camera = Camera {
+            pitch: 0.35,
+            yaw: 0.7,
+            perspective: true,
+            ..Camera::default()
+        };
+        camera.target = glam::Vec3::new(mid.x as f32, mid.y as f32, z as f32);
+        camera.distance = 2.2;
+        let mut r3 = Renderer::new(&device, view_formats, super::render::TextureMode::Full);
+        r3.set_scene(&device, &scene);
+        r3.render(&device, &queue, &camera, size, 1);
+        let (w, h, px) = r3.read_pixels(&device, &queue).unwrap();
+        let pixmap = resvg::tiny_skia::Pixmap::from_vec(
+            px,
+            resvg::tiny_skia::IntSize::from_wh(w, h).unwrap(),
+        )
+        .unwrap();
+        pixmap
+            .save_png(dir.join(format!("tramo-{}.png", r.system.name())))
+            .unwrap();
+    }
 }

@@ -43,6 +43,11 @@ impl ArchiSimApp {
             Some((Owner::Model(Element::Wall(w)), world, n)) => {
                 let probe = p + archisim_core::Vec2::new(n.x as f64, n.y as f64) * 0.05;
                 let side = self.wall_side(w, probe);
+                if self.divide_face_pick {
+                    self.divide_face_pick = false;
+                    self.start_sketch(crate::sketch::SketchTarget::WallFace(w, side));
+                    return;
+                }
                 self.paint_wall(w, side, Some(world), material);
             }
             Some((Owner::Model(Element::Mass(id)), world, n)) => {
@@ -68,18 +73,53 @@ impl ArchiSimApp {
                     [world.x as f64, world.y as f64, world.z as f64],
                     [n.x as f64, n.y as f64, n.z as f64],
                 );
+                let at = [world.x as f64, world.y as f64, world.z as f64];
+                // «Dividir cara» on the face clicked, if that was asked.
+                if self.divide_face_pick {
+                    self.divide_face_pick = false;
+                    match face {
+                        Some(f) => self.start_sketch(crate::sketch::SketchTarget::Zones(e, f)),
+                        None => self.complain("Esa cara no se puede dividir."),
+                    }
+                    return;
+                }
                 match face {
-                    Some(f) => self.paint_plain(
-                        owner.id(),
-                        f,
-                        Point2::new(world.x as f64, world.y as f64),
-                        material,
-                    ),
+                    Some(f) => {
+                        // Where on the face: in plan, or along a face that
+                        // stands up.
+                        let p =
+                            archisim_geom::solid::face_frame(self.ed.model(), owner.id(), f, None)
+                                .map_or(Point2::new(at[0], at[1]), |fr| fr.to_face(at));
+                        self.paint_plain(owner.id(), f, p, material)
+                    }
                     None => self.complain("Esa cara no se puede pintar."),
                 }
             }
+            // A stair, a railing or a curtain wall: every piece of the
+            // material clicked (all the treads, all the posts…).
+            Some((
+                Owner::Model(
+                    e @ (Element::Stair(_) | Element::Railing(_) | Element::CurtainWall(_)),
+                ),
+                world,
+                _,
+            )) => {
+                use archisim_geom::solid::SolidOwner;
+                let owner = match e {
+                    Element::Stair(id) => SolidOwner::Stair(id),
+                    Element::Railing(id) => SolidOwner::Railing(id),
+                    Element::CurtainWall(id) => SolidOwner::CurtainWall(id),
+                    _ => return,
+                };
+                let solids = archisim_geom::solid::piece_solids(self.ed.model(), owner);
+                let at = [world.x as f64, world.y as f64, world.z as f64];
+                match archisim_geom::solid::material_at(&solids, at) {
+                    Some(m) => self.paint_pieces(owner.id(), m, material),
+                    None => self.complain("Esa pieza no se puede pintar."),
+                }
+            }
             Some(_) if in_3d => {
-                self.complain("Se pintan las caras de muros, forjados, cubiertas, pilares, vigas, zapatas y volúmenes.");
+                self.complain("Se pintan las caras de muros, forjados, cubiertas, pilares, vigas, zapatas, volúmenes, escaleras, barandillas y muros cortina.");
             }
             _ => {
                 // In plan: the top of a volume, or the side of a wall.
@@ -184,6 +224,32 @@ impl ArchiSimApp {
                 "Cara pintada."
             } else {
                 "Pintura quitada: se ve el material del elemento."
+            },
+        );
+    }
+
+    /// Paints every piece of an element in one material (the treads of a
+    /// stair, the posts of a railing, the panels of a curtain wall).
+    fn paint_pieces(&mut self, element: u64, piece: MaterialId, material: Option<MaterialId>) {
+        let name = self
+            .ed
+            .model()
+            .material(piece)
+            .map_or(String::new(), |m| m.name.clone());
+        let r = self.ed.transact(
+            if material.is_some() {
+                "Pintar piezas"
+            } else {
+                "Quitar pintura"
+            },
+            |m| m.set_face_paint(element, FaceRef::Material(piece.0), material),
+        );
+        self.report(
+            r,
+            &if material.is_some() {
+                format!("Pintadas las piezas de «{name}» del elemento.")
+            } else {
+                format!("Las piezas de «{name}» vuelven a su material.")
             },
         );
     }

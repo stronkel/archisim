@@ -3785,7 +3785,43 @@ pub fn run_solids(model: &Model, id: archisim_core::RunId) -> Vec<Solid> {
                 let p = w[0] + (w[1] - w[0]) * f;
                 [p.x, p.y, z0 + z[0] + (z[1] - z[0]) * f]
             };
-            sweep_segment(&section, at(a), at(len - b))
+            let mut out = sweep_segment(&section, at(a), at(len - b));
+            // Its details (G4): a duct's flanges each 1.2 m, a pipe's
+            // couplings each 3 m and its clamps each 1.5 m between them.
+            let (step, wide, long) = if r.is_duct() {
+                (1.2, 1.08, 0.03)
+            } else {
+                (1.5, 1.22, 0.02)
+            };
+            let collar = |k: f64, l: f64, t: f64| -> Vec<[P3; 3]> {
+                let ring: Vec<(f64, f64)> = section.iter().map(|(x, y)| (x * k, y * k)).collect();
+                sweep_segment(&ring, at(t - l / 2.0), at(t + l / 2.0))
+            };
+            let (from, to) = (a + 0.1, len - b - 0.1);
+            let mut t = a + step;
+            let mut i_step = 1;
+            while t < to {
+                if t > from {
+                    let coupling = !r.is_duct() && i_step % 2 == 0;
+                    if coupling {
+                        out.extend(collar(1.12, 0.06, t));
+                    } else {
+                        out.extend(collar(wide, long, t));
+                    }
+                }
+                t += step;
+                i_step += 1;
+            }
+            // The ends of a duct: a flange each.
+            if r.is_duct() && len - a - b > 0.2 {
+                if i == 0 {
+                    out.extend(collar(wide, long, a + long / 2.0));
+                }
+                if i + 2 == n {
+                    out.extend(collar(wide, long, len - b - long / 2.0));
+                }
+            }
+            out
         })
         .collect();
     vec![Solid {
@@ -4079,6 +4115,56 @@ pub fn device_solids(model: &Model, id: archisim_core::DeviceId) -> Vec<Solid> {
 /// marked with this number plus its place, and [`solid_color`] gives its
 /// colour.
 pub const DEVICE_ROLE_BASE: u64 = u64::MAX - 63;
+
+/// The solids of a stair, a railing or a curtain wall (what Pintar
+/// paints by the material of its pieces).
+pub fn piece_solids(model: &Model, owner: SolidOwner) -> Vec<Solid> {
+    match owner {
+        SolidOwner::Stair(id) => crate::stairs::stair_solids(model, id),
+        SolidOwner::Railing(id) => loose_railing_solids(model, id),
+        SolidOwner::CurtainWall(id) => curtain_wall_solids(model, id),
+        _ => Vec::new(),
+    }
+}
+
+/// The material of the piece of a solid nearest a point on it (the one
+/// clicked).
+pub fn material_at(solids: &[Solid], at: P3) -> Option<archisim_core::MaterialId> {
+    let dist = |t: &[P3; 3]| -> f64 {
+        // To the triangle: its plane if the point falls on it, else its
+        // nearest corner.
+        let u = [t[1][0] - t[0][0], t[1][1] - t[0][1], t[1][2] - t[0][2]];
+        let v = [t[2][0] - t[0][0], t[2][1] - t[0][1], t[2][2] - t[0][2]];
+        let w = [at[0] - t[0][0], at[1] - t[0][1], at[2] - t[0][2]];
+        let d = |a: [f64; 3], b: [f64; 3]| a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+        let (uu, uv, vv, wu, wv) = (d(u, u), d(u, v), d(v, v), d(w, u), d(w, v));
+        let den = uu * vv - uv * uv;
+        if den.abs() > 1e-18 {
+            let a = (vv * wu - uv * wv) / den;
+            let b = (uu * wv - uv * wu) / den;
+            if a >= -1e-3 && b >= -1e-3 && a + b <= 1.0 + 1e-3 {
+                let p = [
+                    t[0][0] + u[0] * a + v[0] * b,
+                    t[0][1] + u[1] * a + v[1] * b,
+                    t[0][2] + u[2] * a + v[2] * b,
+                ];
+                let e = [at[0] - p[0], at[1] - p[1], at[2] - p[2]];
+                return d(e, e).sqrt();
+            }
+        }
+        t.iter()
+            .map(|p| {
+                let e = [at[0] - p[0], at[1] - p[1], at[2] - p[2]];
+                d(e, e).sqrt()
+            })
+            .fold(f64::MAX, f64::min)
+    };
+    solids
+        .iter()
+        .flat_map(|s| s.triangles.iter().map(move |t| (s.material, t)))
+        .min_by(|a, b| dist(a.1).total_cmp(&dist(b.1)))
+        .map(|(m, _)| m)
+}
 
 /// The colour of a role of a device's own model.
 fn device_role_color(d: &archisim_core::ServiceDevice, role: usize) -> [u8; 3] {
@@ -4380,6 +4466,16 @@ pub fn painted_material(
     tri: &[P3; 3],
 ) -> Option<archisim_core::MaterialId> {
     let element = match s.owner {
+        // What is made of pieces: by the material of each.
+        SolidOwner::Stair(_) | SolidOwner::Railing(_) | SolidOwner::CurtainWall(_) => {
+            let e = s.owner.id();
+            if !model.has_face_paint(e) {
+                return None;
+            }
+            return model
+                .face_paint(e, archisim_core::FaceRef::Material(s.material.0))
+                .filter(|m| model.material(*m).is_some());
+        }
         SolidOwner::Wall(id) | SolidOwner::Facade(id) => id.0,
         SolidOwner::Slab(_)
         | SolidOwner::Roof(_)
@@ -4542,15 +4638,11 @@ fn face_zone_pieces(
     model: &Model,
     solids: &[Solid],
 ) -> Vec<(SolidOwner, [P3; 3], archisim_core::MaterialId)> {
-    use archisim_core::FaceRef;
     let mut out = Vec::new();
     let zones: Vec<_> = model
         .face_zones()
         .filter(|z| z.material.is_some())
         .collect();
-    if zones.is_empty() {
-        return out;
-    }
     for z in zones {
         let Some(owner) = plain_owner(model, z.element) else {
             continue;
@@ -4558,72 +4650,30 @@ fn face_zone_pieces(
         let Some(m) = z.material.filter(|m| model.material(*m).is_some()) else {
             continue;
         };
-        let up = z.face == FaceRef::Top;
-        // The element's triangles of that face.
-        let face: Vec<&[P3; 3]> = solids
-            .iter()
-            .filter(|s| s.owner == owner)
-            .flat_map(|s| s.triangles.iter())
-            .filter(|t| {
-                let u = [t[1][0] - t[0][0], t[1][1] - t[0][1], t[1][2] - t[0][2]];
-                let v = [t[2][0] - t[0][0], t[2][1] - t[0][1], t[2][2] - t[0][2]];
-                let nz = u[0] * v[1] - u[1] * v[0];
-                let len = ((u[1] * v[2] - u[2] * v[1]).powi(2)
-                    + (u[2] * v[0] - u[0] * v[2]).powi(2)
-                    + nz * nz)
-                    .sqrt()
-                    .max(1e-12);
-                if up {
-                    nz / len > 0.7
-                } else {
-                    nz / len < -0.7
-                }
-            })
-            .collect();
-        if face.is_empty() {
+        let Some(frame) = face_frame(model, z.element, z.face, Some(solids)) else {
             continue;
-        }
-        let fallback = face.iter().flat_map(|t| t.iter().map(|p| p[2])).fold(
-            if up { f64::MIN } else { f64::MAX },
-            |a, b| {
-                if up {
-                    a.max(b)
-                } else {
-                    a.min(b)
-                }
-            },
-        );
-        let height = |p: Point2| -> f64 {
-            for t in &face {
-                let (a, b, c) = (t[0], t[1], t[2]);
-                let den = (b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1]);
-                if den.abs() < 1e-12 {
-                    continue;
-                }
-                let l1 = ((b[1] - c[1]) * (p.x - c[0]) + (c[0] - b[0]) * (p.y - c[1])) / den;
-                let l2 = ((c[1] - a[1]) * (p.x - c[0]) + (a[0] - c[0]) * (p.y - c[1])) / den;
-                let l3 = 1.0 - l1 - l2;
-                if l1 >= -1e-6 && l2 >= -1e-6 && l3 >= -1e-6 {
-                    return l1 * a[2] + l2 * b[2] + l3 * c[2];
-                }
-            }
-            fallback
         };
-        let off = if up { ZONE_OFFSET } else { -ZONE_OFFSET };
         // Counter-clockwise, as the triangulation wants it.
         let mut outline = z.outline.clone();
         if archisim_core::signed_area(&outline) < 0.0 {
             outline.reverse();
         }
         for [a, b, c] in triangulate(&outline) {
-            let at = |i: usize| {
-                let p = outline[i];
-                [p.x, p.y, height(p) + off]
-            };
-            let (pa, pb, pc) = (at(a), at(b), at(c));
+            let (pa, pb, pc) = (
+                frame.from_face(outline[a]),
+                frame.from_face(outline[b]),
+                frame.from_face(outline[c]),
+            );
             // Facing the way the face looks.
-            let nz = (pb[0] - pa[0]) * (pc[1] - pa[1]) - (pb[1] - pa[1]) * (pc[0] - pa[0]);
-            let tri = if (nz > 0.0) == up {
+            let u = [pb[0] - pa[0], pb[1] - pa[1], pb[2] - pa[2]];
+            let v = [pc[0] - pa[0], pc[1] - pa[1], pc[2] - pa[2]];
+            let nn = [
+                u[1] * v[2] - u[2] * v[1],
+                u[2] * v[0] - u[0] * v[2],
+                u[0] * v[1] - u[1] * v[0],
+            ];
+            let dot = nn[0] * frame.normal[0] + nn[1] * frame.normal[1] + nn[2] * frame.normal[2];
+            let tri = if dot >= 0.0 {
                 [pa, pb, pc]
             } else {
                 [pa, pc, pb]
@@ -4632,6 +4682,179 @@ fn face_zone_pieces(
         }
     }
     out
+}
+
+/// A flat face of an element as «Dividir cara» draws on it (G3): its
+/// triangles, the way it looks, and, for a face standing up, its own
+/// axes in elevation.
+#[derive(Debug, Clone)]
+pub struct FaceFrame {
+    pub triangles: Vec<[P3; 3]>,
+    /// Unit, outwards.
+    pub normal: P3,
+    /// A face standing up: the corner its `x` starts from (in plan), the
+    /// direction along it (left to right seen from outside) and the height
+    /// of the element's level, its `y = 0`.
+    pub vertical: Option<(Point2, Point2, f64)>,
+}
+
+impl FaceFrame {
+    /// A point of the face in its coordinates: in plan, or along it and
+    /// up from the level.
+    pub fn to_face(&self, p: P3) -> Point2 {
+        match self.vertical {
+            Some((o, u, z0)) => Point2::new((p[0] - o.x) * u.x + (p[1] - o.y) * u.y, p[2] - z0),
+            None => Point2::new(p[0], p[1]),
+        }
+    }
+
+    /// The point of the face (a hair out of it) at its coordinates.
+    pub fn from_face(&self, q: Point2) -> P3 {
+        let n = self.normal;
+        match self.vertical {
+            Some((o, u, z0)) => [
+                o.x + u.x * q.x + n[0] * ZONE_OFFSET,
+                o.y + u.y * q.x + n[1] * ZONE_OFFSET,
+                z0 + q.y + n[2] * ZONE_OFFSET,
+            ],
+            None => {
+                // On the face over that point of the plan.
+                let mut z = None;
+                for t in &self.triangles {
+                    let (a, b, c) = (t[0], t[1], t[2]);
+                    let den = (b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1]);
+                    if den.abs() < 1e-12 {
+                        continue;
+                    }
+                    let l1 = ((b[1] - c[1]) * (q.x - c[0]) + (c[0] - b[0]) * (q.y - c[1])) / den;
+                    let l2 = ((c[1] - a[1]) * (q.x - c[0]) + (a[0] - c[0]) * (q.y - c[1])) / den;
+                    let l3 = 1.0 - l1 - l2;
+                    if l1 >= -1e-6 && l2 >= -1e-6 && l3 >= -1e-6 {
+                        z = Some(l1 * a[2] + l2 * b[2] + l3 * c[2]);
+                        break;
+                    }
+                }
+                let z = z.unwrap_or_else(|| {
+                    // Off the face: the height of its nearest corner.
+                    self.triangles
+                        .iter()
+                        .flat_map(|t| t.iter())
+                        .min_by(|a, b| {
+                            let d = |p: &&P3| (p[0] - q.x).powi(2) + (p[1] - q.y).powi(2);
+                            d(a).total_cmp(&d(b))
+                        })
+                        .map_or(0.0, |p| p[2])
+                });
+                [
+                    q.x + n[0] * ZONE_OFFSET,
+                    q.y + n[1] * ZONE_OFFSET,
+                    z + n[2] * ZONE_OFFSET,
+                ]
+            }
+        }
+    }
+
+    /// Its outline in its own coordinates, as a box (what a sketch in
+    /// elevation shows as reference).
+    pub fn extent(&self) -> Option<(Point2, Point2)> {
+        let pts: Vec<Point2> = self
+            .triangles
+            .iter()
+            .flat_map(|t| t.iter())
+            .map(|p| self.to_face(*p))
+            .collect();
+        let lo = pts.iter().fold(Point2::new(f64::MAX, f64::MAX), |a, p| {
+            Point2::new(a.x.min(p.x), a.y.min(p.y))
+        });
+        let hi = pts.iter().fold(Point2::new(f64::MIN, f64::MIN), |a, p| {
+            Point2::new(a.x.max(p.x), a.y.max(p.y))
+        });
+        (lo.x <= hi.x).then_some((lo, hi))
+    }
+}
+
+/// The solids of an element whose faces are painted and divided.
+fn plain_solids(model: &Model, owner: SolidOwner) -> Vec<Solid> {
+    match owner {
+        SolidOwner::Slab(id) => slab_solids(model, id),
+        SolidOwner::Roof(id) => roof_solids(model, id),
+        SolidOwner::Column(id) => column_solids(model, id),
+        SolidOwner::Beam(id) => beam_solids(model, id),
+        SolidOwner::Footing(id) => footing_solids(model, id),
+        _ => Vec::new(),
+    }
+}
+
+/// The frame of a face of a slab, a roof, a column, a beam or a footing
+/// (from `solids`, if given, or the element's own).
+pub fn face_frame(
+    model: &Model,
+    element: u64,
+    face: archisim_core::FaceRef,
+    solids: Option<&[Solid]>,
+) -> Option<FaceFrame> {
+    let owner = plain_owner(model, element)?;
+    let own;
+    let solids = match solids {
+        Some(s) => s,
+        None => {
+            own = plain_solids(model, owner);
+            &own[..]
+        }
+    };
+    let mut triangles = Vec::new();
+    let mut normal = [0.0f64; 3];
+    for t in solids
+        .iter()
+        .filter(|s| s.owner == owner)
+        .flat_map(|s| s.triangles.iter())
+    {
+        let u = [t[1][0] - t[0][0], t[1][1] - t[0][1], t[1][2] - t[0][2]];
+        let v = [t[2][0] - t[0][0], t[2][1] - t[0][1], t[2][2] - t[0][2]];
+        let n = [
+            u[1] * v[2] - u[2] * v[1],
+            u[2] * v[0] - u[0] * v[2],
+            u[0] * v[1] - u[1] * v[0],
+        ];
+        let c = [
+            (t[0][0] + t[1][0] + t[2][0]) / 3.0,
+            (t[0][1] + t[1][1] + t[2][1]) / 3.0,
+            (t[0][2] + t[1][2] + t[2][2]) / 3.0,
+        ];
+        if face_of(model, owner, c, n) == Some(face) {
+            triangles.push(*t);
+            for k in 0..3 {
+                normal[k] += n[k];
+            }
+        }
+    }
+    let len = (normal[0].powi(2) + normal[1].powi(2) + normal[2].powi(2)).sqrt();
+    if triangles.is_empty() || len < 1e-12 {
+        return None;
+    }
+    let normal = normal.map(|v| v / len);
+    let in_plan = model.zone_in_plan(element, face) || normal[2].abs() > 0.6;
+    let vertical = if in_plan {
+        None
+    } else {
+        let h = (normal[0].powi(2) + normal[1].powi(2)).sqrt().max(1e-12);
+        let u = Point2::new(-normal[1] / h, normal[0] / h);
+        let o = triangles
+            .iter()
+            .flat_map(|t| t.iter())
+            .min_by(|a, b| (a[0] * u.x + a[1] * u.y).total_cmp(&(b[0] * u.x + b[1] * u.y)))
+            .map(|p| Point2::new(p[0], p[1]))?;
+        let z0 = model
+            .plain_level(element)
+            .and_then(|l| model.level(l))
+            .map_or(0.0, |l| l.elevation);
+        Some((o, u, z0))
+    };
+    Some(FaceFrame {
+        triangles,
+        normal,
+        vertical,
+    })
 }
 
 /// Solids of the elements on one level only.

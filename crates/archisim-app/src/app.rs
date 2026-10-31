@@ -480,6 +480,8 @@ pub struct ArchiSimApp {
     /// Where the lamps of a light point come from in its properties:
     /// `None` the project's, `Some(i)` the collection `i` (G4).
     pub fixture_source: Option<usize>,
+    /// «Dividir cara» in 3D: the next click on a face divides it.
+    pub divide_face_pick: bool,
     /// Every species of plants of the library, for the gallery.
     pub flora_library: Option<std::sync::Arc<archisim_core::Model>>,
     /// The object types of the library folder (the studio's and the
@@ -825,6 +827,7 @@ impl ArchiSimApp {
             collection: None,
             collection_libraries: Vec::new(),
             fixture_source: None,
+            divide_face_pick: false,
             flora_library: None,
             folder_objects: None,
             priorities_all: false,
