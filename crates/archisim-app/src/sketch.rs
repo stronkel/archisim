@@ -222,13 +222,10 @@ pub fn loops_from_segs(segs: &[archisim_draft::Seg]) -> Result<Vec<Vec<Point2>>,
             .filter(|&j| j != k && j / 2 != k / 2 && ends[j].distance(ends[k]) < JOIN)
             .collect()
     };
-    let mut bad = Vec::new();
-    for k in 0..ends.len() {
-        let n = partner(k).len();
-        if n != 1 {
-            bad.push(ends[k]);
-        }
-    }
+    let bad: Vec<Point2> = (0..ends.len())
+        .filter(|&k| partner(k).len() != 1)
+        .map(|k| ends[k])
+        .collect();
     if !bad.is_empty() {
         return Err(SketchError::Open(bad));
     }
@@ -243,7 +240,7 @@ pub fn loops_from_segs(segs: &[archisim_draft::Seg]) -> Result<Vec<Vec<Point2>>,
         loop {
             used[i] = true;
             let s = if forward {
-                (*open[i]).clone()
+                *open[i]
             } else {
                 open[i].reversed()
             };
