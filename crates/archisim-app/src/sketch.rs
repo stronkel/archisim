@@ -21,6 +21,12 @@ pub enum SketchTarget {
     /// The zones a face looking up or down is divided in (G3: «Dividir
     /// cara»): the element and its face.
     Zones(crate::pick::Element, archisim_core::FaceRef),
+    /// The zones a side of a wall is divided in, drawn in elevation (its
+    /// coordinates: along the wall from its start, up from the level).
+    WallFace(archisim_core::WallId, archisim_core::FaceSide),
+    /// A wall's profile in elevation, as Revit's «Editar perfil»
+    /// (coordinates along the wall from its start, up from its base).
+    WallProfile(archisim_core::WallId),
 }
 
 /// A contour being edited.
@@ -103,6 +109,33 @@ impl Sketch {
                 let terrain = ring.iter().map(|&i| (Some(i), t.points[i].z)).collect();
                 (vec![outline], Vec::new(), terrain)
             }
+            SketchTarget::WallFace(w, side) => {
+                model.wall(w)?;
+                let zones: Vec<_> = model
+                    .paint_zones()
+                    .filter(|z| z.wall == w && z.side == side)
+                    .map(|z| (z.outline.clone(), Some(z.material)))
+                    .collect();
+                return Some(Sketch {
+                    target,
+                    loops: zones.iter().map(|z| z.0.clone()).collect(),
+                    slopes: Vec::new(),
+                    terrain: Vec::new(),
+                    zones,
+                });
+            }
+            SketchTarget::WallProfile(w) => {
+                let wall = model.wall(w)?;
+                if wall.is_curved() {
+                    return None;
+                }
+                let p = wall.profile.clone().unwrap_or_else(|| {
+                    archisim_core::WallProfile::rectangle(wall.length(), wall.height)
+                });
+                let mut loops = vec![p.outline];
+                loops.extend(p.holes);
+                (loops, Vec::new(), Vec::new())
+            }
             SketchTarget::Zones(e, face) => {
                 let id = zone_element(e)?;
                 let zones: Vec<_> = model
@@ -130,7 +163,30 @@ impl Sketch {
 
     /// Whether the sketch can have holes (a slab's).
     pub fn takes_holes(&self) -> bool {
-        matches!(self.target, SketchTarget::Slab(_) | SketchTarget::Zones(..))
+        matches!(
+            self.target,
+            SketchTarget::Slab(_)
+                | SketchTarget::Zones(..)
+                | SketchTarget::WallFace(..)
+                | SketchTarget::WallProfile(_)
+        )
+    }
+
+    /// Whether it is drawn in elevation, on a view of its own: a wall's
+    /// face or profile.
+    pub fn in_elevation(&self) -> bool {
+        matches!(
+            self.target,
+            SketchTarget::WallFace(..) | SketchTarget::WallProfile(_)
+        )
+    }
+
+    /// Whether its loops are zones, any number of them, none needed.
+    pub fn is_zones(&self) -> bool {
+        matches!(
+            self.target,
+            SketchTarget::Zones(..) | SketchTarget::WallFace(..)
+        )
     }
 
     /// Puts the sketch into the model: the element's contour as sketched.
@@ -138,6 +194,41 @@ impl Sketch {
     pub fn apply(&self, m: &mut Model) -> Result<(), SketchError> {
         if self.loops.iter().any(|l| l.len() < 3) {
             return Err(SketchError::TooFew);
+        }
+        if let SketchTarget::WallFace(w, side) = self.target {
+            // A new zone shows what the face shows until it is painted.
+            let shown = m
+                .face_paint(w.0, archisim_core::FaceRef::Wall(side))
+                .or_else(|| {
+                    let wall = m.wall(w)?;
+                    let t = m.wall_type(wall.wall_type)?;
+                    match side {
+                        archisim_core::FaceSide::Exterior => t.layers.first(),
+                        archisim_core::FaceSide::Interior => t.layers.last(),
+                    }
+                    .map(|l| l.material)
+                });
+            m.clear_paint_zones(w, side);
+            for lp in &self.loops {
+                let paint = self
+                    .zones
+                    .iter()
+                    .find(|(o, _)| same_loop(o, lp))
+                    .and_then(|z| z.1)
+                    .or(shown);
+                m.set_paint_zone(w, side, lp.clone(), paint)
+                    .map_err(SketchError::Model)?;
+            }
+            return Ok(());
+        }
+        if let SketchTarget::WallProfile(w) = self.target {
+            let profile = archisim_core::WallProfile {
+                outline: self.loops[0].clone(),
+                holes: self.loops[1..].to_vec(),
+            };
+            m.set_wall_profile(w, Some(profile))
+                .map_err(SketchError::Model)?;
+            return Ok(());
         }
         if let SketchTarget::Zones(e, face) = self.target {
             let id = zone_element(e).ok_or(SketchError::Empty)?;
@@ -185,7 +276,8 @@ impl Sketch {
                 })
                 .map_err(SketchError::Model)?;
             }
-            SketchTarget::Zones(..) => {}
+            SketchTarget::Zones(..) | SketchTarget::WallFace(..) | SketchTarget::WallProfile(_) => {
+            }
             SketchTarget::Terrain(id) if self.terrain.is_empty() => {
                 // An edge drawn by hand (E5): the terrain takes the new one.
                 m.edit_terrain(id, |t| t.set_outline(outline))
@@ -320,7 +412,7 @@ impl Sketch {
     /// vertex still is, and the new ones take the height of the nearest.
     pub fn with_loops(&self, mut loops: Vec<Vec<Point2>>) -> Result<Sketch, SketchError> {
         loops.sort_by(|a, b| signed_area(b).abs().total_cmp(&signed_area(a).abs()));
-        if matches!(self.target, SketchTarget::Zones(..)) {
+        if self.is_zones() {
             let mut out = self.clone();
             out.loops = loops;
             return Ok(out);
@@ -376,6 +468,9 @@ impl Sketch {
             SketchTarget::Roof(id) => crate::pick::Element::Roof(id),
             SketchTarget::Terrain(id) => crate::pick::Element::Terrain(id),
             SketchTarget::Zones(e, _) => e,
+            SketchTarget::WallFace(w, _) | SketchTarget::WallProfile(w) => {
+                crate::pick::Element::Wall(w)
+            }
         }
     }
 }

@@ -278,7 +278,13 @@ impl Scene {
         let (mut lo, mut hi) = ([f64::MAX; 3], [f64::MIN; 3]);
         let mut tiles: Vec<Option<std::sync::Arc<textures::Tile>>> = vec![None; 32];
         let mut lamps: std::collections::BTreeMap<u64, (V3, f64, f64)> = Default::default();
-        for s in model_solids(model) {
+        // The painted zones of the faces go over their faces as they are,
+        // without the face's own paint.
+        let solids = model_solids(model);
+        let zones = archisim_geom::solid::face_zone_solids(model, &solids);
+        let first_zone = solids.len();
+        for (i, s) in solids.into_iter().chain(zones).enumerate() {
+            let zone = i >= first_zone;
             let glass = model
                 .material(s.material)
                 .is_some_and(|m| m.category == "glass");
@@ -300,7 +306,7 @@ impl Scene {
                         };
                         [avg(0), avg(1), avg(2)]
                     })
-                    .or_else(|| painted_color(model, &s, t))
+                    .or_else(|| (!zone).then(|| painted_color(model, &s, t)).flatten())
                     .unwrap_or(base);
                 let e1 = sub(t[1], t[0]);
                 let e2 = sub(t[2], t[0]);

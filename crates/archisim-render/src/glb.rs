@@ -122,7 +122,12 @@ pub fn project_glb(model: &Model) -> Vec<u8> {
     // Element by element, in the order the solids come.
     let mut nodes: Vec<(String, BTreeMap<Look, Part>)> = Vec::new();
     let mut index: BTreeMap<(String, u64), usize> = BTreeMap::new();
-    for s in model_solids(model) {
+    // The painted zones of the faces too, in their own material.
+    let solids = model_solids(model);
+    let zones = archisim_geom::solid::face_zone_solids(model, &solids);
+    let first_zone = solids.len();
+    for (i, s) in solids.into_iter().chain(zones).enumerate() {
+        let zone = i >= first_zone;
         let name = element_name(model, s.owner);
         let key = (
             format!("{:?}", std::mem::discriminant(&s.owner)),
@@ -135,7 +140,11 @@ pub fn project_glb(model: &Model) -> Vec<u8> {
         let corners = solid_vertex_colors(model, &s);
         let is_object = matches!(s.owner, SolidOwner::Object(_));
         for (i, t) in s.triangles.iter().enumerate() {
-            let material = painted_material(model, &s, t).unwrap_or(s.material);
+            let material = if zone {
+                s.material
+            } else {
+                painted_material(model, &s, t).unwrap_or(s.material)
+            };
             let vc = corners.as_ref().and_then(|c| c.get(i));
             let look = Look {
                 material,

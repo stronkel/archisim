@@ -291,6 +291,17 @@ impl ArchiSimApp {
         let len = wall.length();
         let (lo, hi) = (wall.base_offset, wall.base_offset + wall.height);
         // The edges on that face, in its own coordinates.
+        // A zone drawn with «Dividir cara» (or painted before) under it.
+        if let Some(p) = self.on_wall_face(w, (Point2::new(at.x as f64, at.y as f64), at.z as f64))
+        {
+            if let Some(z) = model
+                .paint_zones()
+                .filter(|z| z.wall == w && z.side == side)
+                .find(|z| archisim_core::point_in_polygon(p, &z.outline))
+            {
+                return Some(z.outline.clone());
+            }
+        }
         let mut segs: Vec<Seg> = Vec::new();
         let lies_on_face = |p: Point2| -> bool {
             let off = match wall.arc() {
