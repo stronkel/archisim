@@ -6,6 +6,50 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-31 (58) · El edificio de Florence Street y vuelta de velocidad
+
+Rama `bloque/edificio` (sobre `bloque/g7-huecos`), con pull request. Sin cambios de formato.
+
+**Hecho**
+- **`archisim edificio`**: el edificio de viviendas del máster de Antonio rehecho entero con ArchiSim (`crates/archisim-cli/src/edificio.rs`, descrito en `docs/EDIFICIO.md`).
+  - Zócalo de ladrillo con café, oficina, helechera, bicicletas y trasteros.
+  - 24 viviendas en cuatro plantas, alrededor de un núcleo de hormigón con escalera y patio.
+  - Cubierta con jardín y pabellón de invierno.
+  - Estructura, instalaciones, 117 locales, secciones, alzados, siete planos y entorno.
+  - CTE: 0 incumplimientos.
+- **`archisim medir proyecto <fichero>`**: mide un proyecto cualquiera (abrir, 3D con los triángulos por clase de elemento, IFC en los dos sentidos, CTE, mediciones, axonometría, secciones y plantas). Además, `ARCHISIM_MEDIR_PROYECTO` lleva la prueba de la escena 3D a ese proyecto.
+- **Vuelta de velocidad** (tabla de antes y después en `docs/EDIFICIO.md`):
+  - montar el edificio con sus planos: 146 s → 13 s;
+  - secciones: 4–5 s → 0,6–0,9 s;
+  - alzados: 11 s → 3 s;
+  - axonometría de los planos: 768 MB → 69 MB;
+  - IFC: 158 MB → 79 MB;
+  - glTF: 663 MB → 179 MB.
+  - Cómo:
+    - las secciones no fabrican los muebles que no ven;
+    - en los dibujos, los muebles van simplificados a celdas de 3 cm (`solid::with_coarse_props`);
+    - la axonometría quita lo tapado (`axo::drop_hidden`);
+    - el plano de presentación calcula cada dibujo una vez;
+    - las mallas del IFC comparten vértices (`step::weld`);
+    - el glTF escribe cada mueble una vez y lo coloca en cada objeto;
+    - el PDF reutiliza los planos ya dibujados.
+- **Alzados automáticos** medidos sobre el edificio (no sobre sus muebles ni sus vecinos) y nombrados por el norte verdadero.
+
+**Pendiente**
+- La lista de lo que falta, en `docs/EDIFICIO.md`. Lo primero:
+  - puertas en muros cortina;
+  - muros cortina que cierran locales;
+  - protección contra incendios;
+  - ascensor;
+  - placas solares;
+  - trepadoras en fachada.
+- Los planos con alzados de fachadas de vidrio siguen pesados: el DXF del A-06 pesa 147 MB y el PDF tarda 32 s.
+
+**Qué debe probar Antonio**
+- `cargo run --release -p archisim-cli -- edificio out/`
+- Abrir `out/edificio.archisim` en la aplicación, `out/edificio.ifc` en un visor y `out/edificio-planos.pdf`.
+- Decir si se parece al edificio del máster y por qué hueco seguimos.
+
 ## 2026-10-31 (57) · Huecos de G3–G5 cerrados
 
 Rama `bloque/g7-huecos` (sobre `bloque/g6-remates`), con pull request. Formato `.archisim` versión 56: pintura de piezas por material.

@@ -24,19 +24,18 @@ impl Exporter<'_> {
             let z0 = model.level(t.level).map_or(0.0, |l| l.elevation);
             let solids = archisim_geom::solid::terrain_solids(model, t.id);
             let mut pts: Vec<String> = Vec::new();
+            let mut welded = std::collections::HashMap::new();
             let mut faces: Vec<String> = Vec::new();
             // The ground only: the areas painted over it are not part of it.
             for tri in solids.iter().take(1).flat_map(|s| s.triangles.iter()) {
-                let base = pts.len();
-                for p in tri {
-                    pts.push(format!(
-                        "({},{},{})",
-                        real(p[0]),
-                        real(p[1]),
-                        real(p[2] - z0)
-                    ));
-                }
-                faces.push(format!("({},{},{})", base + 1, base + 2, base + 3));
+                let f = tri.map(|p| {
+                    crate::step::weld(
+                        &mut pts,
+                        &mut welded,
+                        format!("({},{},{})", real(p[0]), real(p[1]), real(p[2] - z0)),
+                    )
+                });
+                faces.push(format!("({},{},{})", f[0], f[1], f[2]));
             }
             if faces.is_empty() {
                 continue;

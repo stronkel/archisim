@@ -16,6 +16,7 @@ mod colaboracion;
 mod cubiertas;
 mod demo;
 mod diseno;
+mod edificio;
 mod equipo;
 mod escaleras;
 mod fachadas;
@@ -121,6 +122,12 @@ Uso:
       una zapata corrida y un forjado con hueco, todos con su armado:
       armado.archisim, armado.ifc (con las barras) y la planta a 1:20 con
       las barras de los pilares. Por defecto: ./out
+  archisim edificio [carpeta]
+      Un edificio de viviendas entero (el de Florence Street del máster
+      BIM): cinco plantas sobre un zócalo de ladrillo, 24 viviendas,
+      núcleo de hormigón, helechera, bicicletas y cubierta con jardín y
+      pabellón: edificio.archisim, edificio.ifc, plantas, planos y
+      comprobación CTE. Por defecto: ./out
   archisim instalaciones [carpeta]
       Instalaciones, segunda vuelta: una casa de dos plantas con los
       mecanismos eléctricos (luces, interruptores, conmutadores, enchufes,
@@ -159,11 +166,12 @@ Uso:
       Escribe el informe en pantalla y, si se da, en CSV.
 
   archisim medir [n] [carpeta]
-  archisim medir vistas proyecto.archisim   lo que tarda cada alzado y planta en pantalla
       Repite la vivienda de prueba en una rejilla de n × n (20 por defecto:
       400 viviendas, 2800 muros) y mide cuánto tarda cada trabajo: planta,
       3D, varita mágica, guardar y abrir, exportar e importar el IFC. Deja
       grande.archisim y grande.ifc en la carpeta (./out por defecto).
+  archisim medir vistas proyecto.archisim   lo que tarda cada alzado y planta en pantalla
+  archisim medir proyecto proyecto.archisim  abrir, 3D, IFC, CTE, mediciones y vistas de un proyecto
 
   archisim png <dibujo.svg> [imagen.png] [ppp]
       Convierte una planta o un plano en SVG en una imagen PNG, a 200
@@ -334,6 +342,10 @@ fn main() -> ExitCode {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
             report(armado::write(&dir))
         }
+        Some("edificio") => {
+            let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
+            report(edificio::write(&dir))
+        }
         Some("instalaciones") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
             report(instalaciones::write(&dir))
@@ -374,6 +386,14 @@ fn main() -> ExitCode {
                 ExitCode::FAILURE
             }
         },
+        Some("medir") if args.get(1).map(String::as_str) == Some("proyecto") => {
+            let path = PathBuf::from(
+                args.get(2)
+                    .map(String::as_str)
+                    .unwrap_or("out/edificio.archisim"),
+            );
+            report(grande::measure_project(&path))
+        }
         Some("medir") if args.get(1).map(String::as_str) == Some("vistas") => {
             let path = PathBuf::from(
                 args.get(2)
@@ -758,6 +778,8 @@ fn export_all(model: &Model, dir: &Path, stem: &str) -> Result<(), Box<dyn std::
         std::fs::write(&path, render_plan(model, v.level, &options))?;
         println!("  Vista «{}»: {}", v.name, path.display());
     }
+    // Each sheet drawn once: its SVG also makes the PDF (below).
+    let mut sheet_svgs: Vec<(String, String)> = Vec::new();
     for sheet in model.sheets() {
         let path = dir.join(format!("{stem}-plano-{}.svg", slug(&sheet.number)));
         let svg = archisim_plan::sheet::render_sheet(
@@ -765,7 +787,8 @@ fn export_all(model: &Model, dir: &Path, stem: &str) -> Result<(), Box<dyn std::
             sheet.id,
             &archisim_plan::sheet::SheetOptions::default(),
         );
-        std::fs::write(&path, svg)?;
+        std::fs::write(&path, &svg)?;
+        sheet_svgs.push((svg, format!("{} {}", sheet.number, sheet.name)));
         println!(
             "  Plano {} «{}» ({}): {}",
             sheet.number,
@@ -776,8 +799,8 @@ fn export_all(model: &Model, dir: &Path, stem: &str) -> Result<(), Box<dyn std::
         if sheet.presentation.is_some() {
             // Presentation boards also as an image, for screens and the web.
             let png = dir.join(format!("{stem}-plano-{}.png", slug(&sheet.number)));
-            let svg = std::fs::read_to_string(&path)?;
-            std::fs::write(&png, archisim_export::png::png(&svg, 200.0)?)?;
+            let svg = &sheet_svgs[sheet_svgs.len() - 1].0;
+            std::fs::write(&png, archisim_export::png::png(svg, 200.0)?)?;
             println!(
                 "  Plano {} en PNG (200 ppp): {}",
                 sheet.number,
@@ -831,7 +854,14 @@ fn export_all(model: &Model, dir: &Path, stem: &str) -> Result<(), Box<dyn std::
     }
     if !model.sheets().is_empty() {
         let pdf = dir.join(format!("{stem}-planos.pdf"));
-        std::fs::write(&pdf, sheets_pdf(model)?)?;
+        let pages: Vec<archisim_export::pdf::Page> = sheet_svgs
+            .iter()
+            .map(|(svg, title)| archisim_export::pdf::Page { svg, title })
+            .collect();
+        std::fs::write(
+            &pdf,
+            archisim_export::pdf::pdf(&pages, &model.project_name)?,
+        )?;
         println!("  Planos en PDF: {}", pdf.display());
     }
     for sec in model.sections() {
@@ -849,25 +879,6 @@ fn export_all(model: &Model, dir: &Path, stem: &str) -> Result<(), Box<dyn std::
         println!("  {} 1:100: {}", sec.title(), path.display());
     }
     Ok(())
-}
-
-/// Every sheet of the project, a page each, in order.
-fn sheets_pdf(model: &Model) -> Result<Vec<u8>, String> {
-    let svgs: Vec<(String, String)> = model
-        .sheets()
-        .iter()
-        .map(|s| {
-            (
-                archisim_plan::sheet::render_sheet(model, s.id, &Default::default()),
-                format!("{} {}", s.number, s.name),
-            )
-        })
-        .collect();
-    let pages: Vec<archisim_export::pdf::Page> = svgs
-        .iter()
-        .map(|(svg, title)| archisim_export::pdf::Page { svg, title })
-        .collect();
-    archisim_export::pdf::pdf(&pages, &model.project_name)
 }
 
 /// A file-name friendly version of a level name: "Planta 1ª" → "planta-1a".

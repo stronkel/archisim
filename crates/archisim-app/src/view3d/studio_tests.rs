@@ -373,10 +373,18 @@ fn scene_benchmark() {
     let Some(gpu) = super::gpu_tests::gpu() else {
         return;
     };
-    for (name, m) in [
-        ("colecciones", collections_project(0)),
-        ("repetido", collections_project(3)),
-    ] {
+    // `ARCHISIM_MEDIR_PROYECTO=fichero.archisim`: that project instead.
+    let projects = match std::env::var("ARCHISIM_MEDIR_PROYECTO") {
+        Ok(p) => vec![(
+            "proyecto",
+            archisim_file::open(Path::new(&p)).expect("proyecto"),
+        )],
+        Err(_) => vec![
+            ("colecciones", collections_project(0)),
+            ("repetido", collections_project(3)),
+        ],
+    };
+    for (name, m) in projects {
         let t = std::time::Instant::now();
         let scene = Scene::build(&m, &BTreeSet::new());
         let build = t.elapsed();

@@ -30,19 +30,23 @@ impl Exporter<'_> {
             for solid in solids {
                 let material = solid.material;
                 let mut pts: Vec<String> = Vec::new();
+                let mut welded = std::collections::HashMap::new();
                 let mut faces: Vec<String> = Vec::new();
                 {
                     for t in solid.triangles {
-                        let base = pts.len();
-                        for p in t {
-                            pts.push(format!(
-                                "({},{},{})",
-                                real(p[0]),
-                                real(p[1]),
-                                real(p[2] - storey_z)
-                            ));
-                        }
-                        faces.push(format!("({},{},{})", base + 1, base + 2, base + 3));
+                        let f = t.map(|p| {
+                            crate::step::weld(
+                                &mut pts,
+                                &mut welded,
+                                format!(
+                                    "({},{},{})",
+                                    real(p[0]),
+                                    real(p[1]),
+                                    real(p[2] - storey_z)
+                                ),
+                            )
+                        });
+                        faces.push(format!("({},{},{})", f[0], f[1], f[2]));
                     }
                 }
                 if faces.is_empty() {

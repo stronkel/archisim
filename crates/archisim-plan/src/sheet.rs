@@ -82,7 +82,7 @@ pub fn section_extent(model: &Model, section: SectionId, scale: f64) -> Option<(
     Some(drawing_extent(&d, scale))
 }
 
-fn drawing_extent(d: &crate::section::SectionDrawing, scale: f64) -> (Point2, Point2) {
+pub(crate) fn drawing_extent(d: &crate::section::SectionDrawing, scale: f64) -> (Point2, Point2) {
     let k = scale / 1000.0;
     let m = 5.0 * k;
     (

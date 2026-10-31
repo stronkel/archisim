@@ -160,6 +160,87 @@ pub fn measure_views(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+/// Measures the jobs on a project of its own (`archisim medir proyecto
+/// <fichero>`): open and save it, its 3D, the IFC both ways, the code
+/// check, and then every view as `measure_views` does.
+pub fn measure_project(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let m = timed("Abrir el proyecto", || archisim_file::open(path))?;
+    println!(
+        "  {} muros, {} forjados, {} huecos, {} objetos, {} locales",
+        m.walls().count(),
+        m.slabs().count(),
+        m.openings().count(),
+        m.objects().count(),
+        m.rooms().count()
+    );
+    let flat = timed("Modelo con los módulos desplegados", || m.flattened())?;
+    let solids = timed("Sólidos 3D de todo el modelo", || {
+        archisim_geom::solid::model_solids(&flat)
+    });
+    let triangles: usize = solids.iter().map(|s| s.triangles.len()).sum();
+    println!("  {:<52} {:>10}", "  triángulos", triangles);
+    // Who has them: the kinds of element, and the object types with most.
+    let mut by_kind: std::collections::BTreeMap<String, usize> = Default::default();
+    let mut by_type: std::collections::HashMap<String, usize> = Default::default();
+    for s in &solids {
+        let kind = format!("{:?}", s.owner);
+        let kind = kind.split('(').next().unwrap_or("").to_string();
+        *by_kind.entry(kind).or_default() += s.triangles.len();
+        if let archisim_geom::solid::SolidOwner::Object(o) = s.owner {
+            let name = flat
+                .object(o)
+                .and_then(|o| flat.object_type(o.object_type))
+                .map_or(String::new(), |t| t.name.clone());
+            *by_type.entry(name).or_default() += s.triangles.len();
+        }
+    }
+    for (k, n) in &by_kind {
+        println!("  {:<52} {:>10}", format!("    {k}"), n);
+    }
+    let mut types: Vec<_> = by_type.into_iter().collect();
+    types.sort_by_key(|t| std::cmp::Reverse(t.1));
+    for (k, n) in types.iter().take(8) {
+        println!("  {:<52} {:>10}", format!("      {k}"), n);
+    }
+    let out = std::env::temp_dir().join("archisim-medir.archisim");
+    timed("Guardar el proyecto (.archisim)", || {
+        archisim_file::save(&m, &out)
+    })?;
+    let ifc = timed("Exportar el IFC", || {
+        export_ifc(
+            &flat,
+            &ExportOptions {
+                timestamp: Some("2026-10-18T12:00:00".into()),
+                ..Default::default()
+            },
+        )
+    });
+    println!(
+        "  {:<52} {:>10.1} MB",
+        "  tamaño del IFC",
+        ifc.len() as f64 / 1e6
+    );
+    timed("Importar el IFC", || import_ifc(&ifc))?;
+    timed("Comprobación CTE", || archisim_cte::check(&flat));
+    timed("Mediciones", || {
+        archisim_plan::schedules::measurements(&flat)
+    });
+    let axo = archisim_core::Axo::default();
+    let d = timed("Axonometría (vectorial, para los planos)", || {
+        archisim_plan::axo::axo_drawing(&flat, &axo, Default::default())
+    });
+    let crop = archisim_plan::axo::axo_extent(&flat, &axo, 200.0);
+    let svg = timed("  escribirla en SVG", || {
+        archisim_plan::axo::render_axo(&d, crop, 200.0)
+    });
+    println!(
+        "  {:<52} {:>10.1} MB",
+        "  tamaño del SVG",
+        svg.len() as f64 / 1e6
+    );
+    measure_views(path)
+}
+
 /// Builds the grid, measures every job and leaves the files in `dir`
 /// (grande.archisim and grande.ifc, to open them in the application).
 pub fn measure(n: usize, dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
