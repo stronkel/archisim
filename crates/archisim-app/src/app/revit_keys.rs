@@ -240,9 +240,9 @@ impl ArchiSimApp {
             .default_size([620.0, 560.0])
             .show(ctx, |ui| {
                 ui.label(if self.keys_revit {
-                    "Teclas como Revit: escribe las dos letras y la herramienta empieza, sin Intro. Para escribir las órdenes de AutoCAD (LINEA, REC…) con Intro, Vista → Teclas: AutoCAD."
+                    "Teclas de dos letras: escribe las dos letras y la herramienta empieza, sin Intro. Para escribir las órdenes de dibujo (LINEA, REC…) con Intro, Vista → Teclas: Órdenes."
                 } else {
-                    "Las teclas de Revit están apagadas: actívalas en Vista → Teclas: Revit."
+                    "Las teclas de dos letras están apagadas: actívalas en Vista → Teclas: Dos letras."
                 });
                 ui.add_space(6.0);
                 egui::ScrollArea::vertical().show(ui, |ui| {

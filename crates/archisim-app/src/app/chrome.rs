@@ -197,7 +197,7 @@ impl ArchiSimApp {
             }
             if ui
                 .button("Importar modelo 3D (OBJ, glTF, DAE)…")
-                .on_hover_text("Un modelo de SketchUp, Blender o un fabricante, como tipo de objeto: con sus materiales y texturas, y su contorno en planta")
+                .on_hover_text("Un modelo 3D de otro programa o de un fabricante, como tipo de objeto: con sus materiales y texturas, y su contorno en planta")
                 .clicked()
             {
                 self.pick_mesh();
@@ -220,7 +220,7 @@ impl ArchiSimApp {
                 self.export_ifc(archisim_ifc::Schema::Ifc4);
             }
             if ui
-                .button("Exportar modelo 3D (glTF) para D5, Twinmotion, Blender…")
+                .button("Exportar modelo 3D (glTF) para programas de render…")
                 .on_hover_text("El proyecto entero en un .glb: un objeto por elemento, y los materiales con su nombre, su color y su textura")
                 .clicked()
             {
@@ -292,7 +292,7 @@ impl ArchiSimApp {
             }
             if ui
                 .button("Exportar mediciones (BC3)…")
-                .on_hover_text("Muros, forjados, carpinterías y acabados de locales, por tipo, para Presto, Arquímedes y otros")
+                .on_hover_text("Muros, forjados, carpinterías y acabados de locales, por tipo, para los programas de presupuestos")
                 .clicked()
             {
                 self.export_bc3();
@@ -417,11 +417,11 @@ impl ArchiSimApp {
                 } else {
                     2
                 };
-                ui.selectable_value(&mut style, 0, "Revit")
-                    .on_hover_text("Dos letras y la herramienta empieza, como en Revit: WA muro, DR puerta, MV mover, MM reflejar, AL alinear, TR esquina… (KS: la lista)");
-                ui.selectable_value(&mut style, 1, "AutoCAD")
+                ui.selectable_value(&mut style, 0, "Dos letras")
+                    .on_hover_text("Dos letras y la herramienta empieza: WA muro, DR puerta, MV mover, MM reflejar, AL alinear, TR esquina… (KS: la lista)");
+                ui.selectable_value(&mut style, 1, "Órdenes")
                     .on_hover_text("Se escribe la orden y se pulsa Intro (L, PL, REC…)");
-                ui.selectable_value(&mut style, 2, "ArchiCAD")
+                ui.selectable_value(&mut style, 2, "Una letra")
                     .on_hover_text("M, F, P, V, C y N cambian de herramienta al momento");
                 self.keys_revit = style == 0;
                 self.keys_autocad = style == 1 || (style == 0 && self.keys_autocad);
@@ -554,6 +554,8 @@ impl ArchiSimApp {
                         .unwrap_or_default();
                     ui.label(egui::RichText::new(scale).small().color(p.muted));
                     ui.separator();
+                    self.thin_lines_chip(ui);
+                    ui.separator();
                     self.drawing_segments(ui);
                     ui.separator();
                     self.snap_toggles(ui);
@@ -593,7 +595,7 @@ impl ArchiSimApp {
                         ui,
                         &mut on,
                         "Caja de sección",
-                        "Recorta el modelo con una caja, como en Revit: arrastra las flechas azules de sus caras para ver interiores o una sección en perspectiva. Medidas exactas en Propiedades",
+                        "Recorta el modelo con una caja: arrastra las flechas azules de sus caras para ver interiores o una sección en perspectiva. Medidas exactas en Propiedades",
                     );
                     if on != self.v3d.section.is_some() {
                         self.v3d.toggle_section();

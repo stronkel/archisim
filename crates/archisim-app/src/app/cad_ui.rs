@@ -725,13 +725,13 @@ impl ArchiSimApp {
             );
             ui.ctx().request_repaint_after(std::time::Duration::from_millis(500));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                // Revit → AutoCAD → ArchiCAD → Revit.
+                // Two letters → typed commands → one letter → two letters.
                 let (label, hint) = if self.keys_revit {
-                    ("Teclas: Revit", "Dos letras y la herramienta empieza (WA muro, MV mover, MM reflejar…; KS: la lista). Clic: teclas de AutoCAD")
+                    ("Teclas: Dos letras", "Dos letras y la herramienta empieza (WA muro, MV mover, MM reflejar…; KS: la lista). Clic: órdenes escritas")
                 } else if self.keys_autocad {
-                    ("Teclas: AutoCAD", "Escribe la orden y pulsa Intro o Espacio (L, PL, M de muro…). Clic: teclas de ArchiCAD")
+                    ("Teclas: Órdenes", "Escribe la orden y pulsa Intro o Espacio (L, PL, M de muro…). Clic: teclas de una letra")
                 } else {
-                    ("Teclas: ArchiCAD", "M, F, P, V, C y N cambian de herramienta al momento. Clic: teclas de Revit")
+                    ("Teclas: Una letra", "M, F, P, V, C y N cambian de herramienta al momento. Clic: teclas de dos letras")
                 };
                 if ui.small_button(label).on_hover_text(hint).clicked() {
                     self.cycle_keys();

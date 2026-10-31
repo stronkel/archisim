@@ -78,7 +78,7 @@ impl ArchiSimApp {
         if self.team.is_none() {
             if ui
                 .button("Compartir en equipo…")
-                .on_hover_text("Pone el proyecto en una carpeta compartida (Google Drive, un NAS) para trabajar en él varias personas a la vez")
+                .on_hover_text("Pone el proyecto en una carpeta compartida (en la nube o en un NAS) para trabajar en él varias personas a la vez")
                 .clicked()
             {
                 self.team_ui.dialog = Some(TeamDialog {
@@ -512,7 +512,7 @@ impl ArchiSimApp {
             ui.set_width(420.0);
             if d.share {
                 ui.heading("Compartir en equipo");
-                ui.label("El proyecto se copia en una carpeta que todos veáis: una carpeta de Google Drive sincronizada en el ordenador, de Dropbox o de un NAS. Cada persona trabaja en su copia y publica sus cambios; nadie toca lo que otro ha reservado.");
+                ui.label("El proyecto se copia en una carpeta que todos veáis: una carpeta en la nube sincronizada en el ordenador o la de un NAS. Cada persona trabaja en su copia y publica sus cambios; nadie toca lo que otro ha reservado.");
             } else {
                 ui.heading("Abrir proyecto de equipo");
                 if !d.members.is_empty() {
@@ -847,7 +847,7 @@ impl ArchiSimApp {
             ui.switch(&mut team.show_cursors, "Ver los cursores de los demás");
             ui.label(
                 egui::RichText::new(
-                    "Con Google Drive, lo de los demás llega con unos segundos de retraso.",
+                    "En una carpeta en la nube, lo de los demás llega con unos segundos de retraso.",
                 )
                 .small()
                 .color(p.muted),

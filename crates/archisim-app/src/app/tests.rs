@@ -3744,6 +3744,7 @@ fn dxf_out_and_back_in_and_pdf_of_the_sheets() {
     h.frame();
     let sheet = h.model().sheets()[0].id;
     h.app.import_dxf_from(&dxf);
+    h.app.confirm_dxf_import();
     // The line; the north arrow of the plan comes on its own layer.
     let on_sheet: Vec<_> = h
         .model()
@@ -8143,6 +8144,7 @@ fn views_for_drawing() {
     assert_eq!(mine(&h), 1, "{:?}", h.app.message.as_ref().map(|m| &m.text));
     // The DXF into it.
     h.app.import_dxf_from(&dxf);
+    h.app.confirm_dxf_import();
     assert!(mine(&h) >= 2);
     // The plan under it.
     let mut v = h.model().draft_view(dv).unwrap().clone();
@@ -8176,4 +8178,112 @@ fn views_for_drawing() {
     assert_eq!(back.draft_views().len(), 1);
     assert_eq!(back.draft_view(dv).unwrap().underlays.len(), 1);
     std::fs::remove_dir_all(&dir).ok();
+}
+
+/// G1: a DXF of trees drawn in metres that says nothing of its units comes
+/// in at its real size, each block a group picked whole; and the tile
+/// «Armado» arms a column with one click.
+#[test]
+fn dxf_blocks_as_groups_and_the_rebar_tile() {
+    let mut h = Harness::new(Editor::new_project());
+    h.frame();
+    let dir = std::env::temp_dir().join(format!("archisim-g1-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let dxf = dir.join("arboles.dxf");
+    std::fs::write(
+        &dxf,
+        "0\nSECTION\n2\nBLOCKS\n\
+0\nBLOCK\n2\nARBOL\n10\n0\n20\n0\n\
+0\nCIRCLE\n8\n0\n10\n0\n20\n0\n40\n2.5\n\
+0\nCIRCLE\n8\n0\n10\n0\n20\n0\n40\n0.2\n\
+0\nENDBLK\n0\nENDSEC\n\
+0\nSECTION\n2\nENTITIES\n\
+0\nINSERT\n8\nARBOLES\n2\nARBOL\n10\n0\n20\n0\n\
+0\nINSERT\n8\nARBOLES\n2\nARBOL\n10\n8\n20\n0\n\
+0\nENDSEC\n0\nEOF\n",
+    )
+    .unwrap();
+    h.app.new_drafting_view();
+    h.frame();
+    let dv = h.model().draft_views()[0].id;
+    h.app.import_dxf_from(&dxf);
+    // It waits, guessing metres.
+    assert_eq!(h.app.dxf_import.as_ref().map(|i| i.unit), Some(1.0));
+    h.frame();
+    h.app.confirm_dxf_import();
+    let drafts: Vec<_> = h
+        .model()
+        .drafts_in(archisim_core::ViewRef::Drafting(dv))
+        .cloned()
+        .collect();
+    assert_eq!(drafts.len(), 4);
+    let big = drafts
+        .iter()
+        .find(|d| matches!(d.shape, archisim_core::Shape::Circle { radius, .. } if (radius - 2.5).abs() < 1e-9))
+        .expect("a crown 2.5 m across");
+    let group = big.group.as_ref().expect("in a group").id;
+    // A click on one circle picks its whole tree.
+    h.app.ed.selection = [Element::Draft(big.id)].into_iter().collect();
+    h.frame();
+    let members: Vec<_> = h
+        .model()
+        .draft_group(group)
+        .map(|d| Element::Draft(d.id))
+        .collect();
+    assert_eq!(members.len(), 2);
+    assert!(members.iter().all(|m| h.app.ed.selection.contains(m)));
+    assert_eq!(h.app.ed.selection.len(), 2, "only its own tree");
+    // Copied, the copy is a tree of its own.
+    let sel = h.app.ed.selection.clone();
+    h.app
+        .ed
+        .transact("Copiar", |m| {
+            crate::xform::transform(
+                m,
+                &sel,
+                &archisim_draft::Transform::translate(archisim_core::Vec2::new(0.0, 10.0)),
+                true,
+            )
+            .map(|_| ())
+        })
+        .unwrap();
+    let groups: std::collections::BTreeSet<u64> = h
+        .model()
+        .drafts()
+        .filter_map(|d| d.group.as_ref().map(|g| g.id))
+        .collect();
+    assert_eq!(groups.len(), 3);
+    std::fs::remove_dir_all(&dir).ok();
+
+    // The tile «Armado».
+    let mut h = Harness::new(Editor::new_project());
+    h.frame();
+    let level = h.app.ed.level;
+    let ty = h.model().member_types().next().unwrap().id;
+    let c = h
+        .app
+        .ed
+        .transact("Pilar", |m| {
+            m.add_column(archisim_core::NewColumn {
+                member_type: ty,
+                level,
+                position: p(2.0, 2.0),
+                rotation: 0.0,
+                base_offset: 0.0,
+                top: archisim_core::WallTop::Unconnected,
+                height: 3.0,
+            })
+        })
+        .unwrap();
+    h.app.start_rebar_pick();
+    h.frame();
+    h.click_at(p(2.0, 2.0));
+    h.frame();
+    assert!(
+        h.model().reinforcement(c.0).is_some(),
+        "{:?}",
+        h.app.message.as_ref().map(|m| &m.text)
+    );
+    assert!(h.app.ed.selection.contains(&Element::Column(c)));
+    assert!(h.app.rebar_pick, "it goes on until Esc");
 }

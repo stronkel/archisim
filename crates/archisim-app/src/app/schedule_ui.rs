@@ -114,7 +114,7 @@ impl ArchiSimApp {
             if ui
                 .button("Exportar BC3…")
                 .on_hover_text(
-                    "Presupuesto FIEBDC-3 (Presto, Arquímedes…) de todo el proyecto, con las partidas y precios asignados",
+                    "Presupuesto FIEBDC-3 de todo el proyecto, con las partidas y precios asignados",
                 )
                 .clicked()
             {
@@ -208,7 +208,7 @@ impl ArchiSimApp {
     pub(super) fn export_bc3(&mut self) {
         let mut d = rfd::FileDialog::new()
             .set_title("Exportar mediciones (BC3)")
-            .add_filter("BC3 (FIEBDC-3: Presto, Arquímedes…)", &["bc3"])
+            .add_filter("BC3 (FIEBDC-3)", &["bc3"])
             .set_file_name(format!("{}.bc3", self.file_name_stem()));
         if let Some(dir) = self.start_dir() {
             d = d.set_directory(dir);

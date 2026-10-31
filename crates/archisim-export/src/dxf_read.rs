@@ -22,6 +22,56 @@ pub struct Drawing {
     /// The drawing's unit, in metres (from `$INSUNITS`; millimetres if it
     /// does not say).
     pub unit: f64,
+    /// Whether the file says its unit (`$INSUNITS` other than 0).
+    pub unit_stated: bool,
+}
+
+impl Drawing {
+    /// Its extent, in metres: lower left and upper right corners.
+    pub fn extent(&self) -> Option<(Point2, Point2)> {
+        let mut out: Option<(Point2, Point2)> = None;
+        for it in &self.items {
+            let (a, b) = archisim_draft::bounds(&it.shape, 0.0);
+            out = Some(match out {
+                None => (a, b),
+                Some((lo, hi)) => (
+                    Point2::new(lo.x.min(a.x), lo.y.min(a.y)),
+                    Point2::new(hi.x.max(b.x), hi.y.max(b.y)),
+                ),
+            });
+        }
+        out
+    }
+
+    /// The drawing in another unit (metres per drawing unit): every shape
+    /// scaled about the origin.
+    pub fn in_unit(&self, unit: f64) -> Drawing {
+        let f = unit / self.unit;
+        let t = Transform::scale(Point2::new(0.0, 0.0), f);
+        let mut d = self.clone();
+        d.unit = unit;
+        for it in &mut d.items {
+            it.shape = transform_shape(&it.shape, &t);
+        }
+        d
+    }
+
+    /// The unit the drawing is most likely drawn in, metres per unit: the
+    /// one it says, unless it is millimetres (or nothing) and the whole
+    /// drawing would then be a few centimetres across — then it is drawn
+    /// in metres, as many are.
+    pub fn likely_unit(&self) -> f64 {
+        let Some((lo, hi)) = self.extent() else {
+            return self.unit;
+        };
+        let raw = (hi.x - lo.x).max(hi.y - lo.y) / self.unit;
+        let mm = (self.unit - 0.001).abs() < 1e-12;
+        if mm && (raw < 100.0 || (!self.unit_stated && raw < 500.0)) {
+            1.0
+        } else {
+            self.unit
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -43,12 +93,17 @@ pub struct ItemDef {
     pub color: Option<Rgb>,
     pub weight: Option<f64>,
     pub line: Option<LineStyle>,
+    /// The block placed it came from (its number among the drawing's
+    /// placed blocks, and the block's name), to keep it as a group.
+    pub block: Option<(usize, String)>,
 }
 
 /// What a DXF brought in.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Report {
     pub elements: usize,
+    /// Blocks kept as groups.
+    pub groups: usize,
     pub layers_new: usize,
     pub skipped: BTreeMap<String, usize>,
 }
@@ -60,6 +115,9 @@ impl Report {
             "{} elementos de dibujo importados, {} capas nuevas.",
             self.elements, self.layers_new
         );
+        if self.groups > 0 {
+            s.push_str(&format!(" {} bloques, cada uno agrupado.", self.groups));
+        }
         if !self.skipped.is_empty() {
             let parts: Vec<String> = self
                 .skipped
@@ -180,7 +238,9 @@ pub fn read_with_blocks(bytes: &[u8]) -> Result<(Drawing, Vec<Placed>), String> 
     let unit = d.unit;
     let mut out = Vec::new();
     let mut skipped = BTreeMap::new();
+    let mut inserts = 0;
     for e in &entities {
+        let first = out.len();
         convert(
             e,
             &blocks,
@@ -190,6 +250,14 @@ pub fn read_with_blocks(bytes: &[u8]) -> Result<(Drawing, Vec<Placed>), String> 
             &mut out,
             &mut skipped,
         );
+        // A block placed, of more than one element: kept together.
+        if e.kind == "INSERT" && out.len() > first + 1 {
+            let name = decode(e.get(2).unwrap_or(""));
+            for it in &mut out[first..] {
+                it.block = Some((inserts, name.clone()));
+            }
+            inserts += 1;
+        }
     }
     d.items = out;
     d.skipped = skipped;
@@ -224,7 +292,9 @@ pub fn read_with_blocks(bytes: &[u8]) -> Result<(Drawing, Vec<Placed>), String> 
 fn header(sec: &[(i32, String)], d: &mut Drawing) {
     for w in sec.windows(2) {
         if w[0] == (9, "$INSUNITS".into()) {
-            d.unit = match w[1].1.trim().parse::<i32>().unwrap_or(4) {
+            let code = w[1].1.trim().parse::<i32>().unwrap_or(0);
+            d.unit_stated = code != 0;
+            d.unit = match code {
                 1 => 0.0254,
                 2 => 0.3048,
                 5 => 0.01,
@@ -672,6 +742,7 @@ fn convert(
         color,
         weight,
         line,
+        block: None,
     });
 }
 
@@ -1132,6 +1203,7 @@ pub fn add_to(
         .map(|l| (l.name.as_str(), l))
         .collect();
     let move_by = Transform::translate(offset);
+    let mut groups: BTreeMap<usize, (String, Vec<archisim_core::DraftId>)> = BTreeMap::new();
     for item in &drawing.items {
         let id = match ids.get(&item.layer) {
             Some(id) => *id,
@@ -1169,8 +1241,21 @@ pub fn add_to(
         d.color = item.color;
         d.weight = item.weight;
         d.line = item.line;
-        model.add_draft(d)?;
+        let id = model.add_draft(d)?;
+        if let Some((n, name)) = &item.block {
+            groups
+                .entry(*n)
+                .or_insert_with(|| (name.clone(), Vec::new()))
+                .1
+                .push(id);
+        }
         report.elements += 1;
+    }
+    for (name, ids) in groups.into_values() {
+        if ids.len() > 1 {
+            model.group_drafts(&ids, &name)?;
+            report.groups += 1;
+        }
     }
     Ok(report)
 }
@@ -1321,5 +1406,60 @@ mod tests {
             };
             assert!(close, "{:?} vs {:?}", a.shape, b.shape);
         }
+    }
+
+    #[test]
+    fn blocks_stay_together_and_metres_are_guessed() {
+        // A library of two trees drawn in metres, with no unit said: each
+        // tree a block of two circles, placed twice.
+        let dxf = "0\nSECTION\n2\nBLOCKS\n\
+0\nBLOCK\n2\nARBOL\n10\n0\n20\n0\n\
+0\nCIRCLE\n8\n0\n10\n0\n20\n0\n40\n2.5\n\
+0\nCIRCLE\n8\n0\n10\n0\n20\n0\n40\n0.2\n\
+0\nENDBLK\n0\nENDSEC\n\
+0\nSECTION\n2\nENTITIES\n\
+0\nINSERT\n8\nARBOLES\n2\nARBOL\n10\n0\n20\n0\n\
+0\nINSERT\n8\nARBOLES\n2\nARBOL\n10\n8\n20\n0\n\
+0\nLINE\n8\nSUELO\n10\n-3\n20\n-3\n11\n11\n21\n-3\n\
+0\nENDSEC\n0\nEOF\n";
+        let d = read(dxf.as_bytes()).unwrap();
+        assert!(!d.unit_stated);
+        assert_eq!(d.unit, 0.001);
+        // 14 units across: millimetres would make it 14 mm wide.
+        assert_eq!(d.likely_unit(), 1.0);
+        let d = d.in_unit(1.0);
+        let (lo, hi) = d.extent().unwrap();
+        assert!((hi.x - lo.x - 14.0).abs() < 1e-9, "{lo:?} {hi:?}");
+        // The two trees, each a block of two elements; the line on its own.
+        assert_eq!(d.items[0].block, Some((0, "ARBOL".into())));
+        assert_eq!(d.items[2].block, Some((1, "ARBOL".into())));
+        assert_eq!(d.items[4].block, None);
+        let mut m = Model::new("t");
+        let l = m.add_level("PB", 0.0);
+        let r = add_to(&mut m, ViewRef::Level(l), &d, Vec2::new(0.0, 0.0), 0.05).unwrap();
+        assert_eq!(r.groups, 2);
+        let groups: std::collections::BTreeSet<u64> = m
+            .drafts()
+            .filter_map(|x| x.group.as_ref().map(|g| g.id))
+            .collect();
+        assert_eq!(groups.len(), 2);
+        let g = *groups.iter().next().unwrap();
+        assert_eq!(m.draft_group(g).count(), 2);
+        assert_eq!(
+            m.draft_group(g)
+                .next()
+                .unwrap()
+                .group
+                .as_ref()
+                .unwrap()
+                .name,
+            "ARBOL"
+        );
+        // A drawing that says millimetres and is a building's size stays.
+        let big = "0\nSECTION\n2\nHEADER\n9\n$INSUNITS\n70\n4\n0\nENDSEC\n\
+0\nSECTION\n2\nENTITIES\n0\nLINE\n8\n0\n10\n0\n20\n0\n11\n12000\n21\n0\n0\nENDSEC\n0\nEOF\n";
+        let d = read(big.as_bytes()).unwrap();
+        assert!(d.unit_stated);
+        assert_eq!(d.likely_unit(), 0.001);
     }
 }

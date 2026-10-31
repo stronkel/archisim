@@ -19,6 +19,7 @@ pub struct DraftingKey {
     lo: Point2,
     hi: Point2,
     size: [usize; 2],
+    thin: bool,
 }
 
 impl ArchiSimApp {
@@ -255,6 +256,7 @@ impl ArchiSimApp {
             lo,
             hi,
             size,
+            thin: self.thin_lines,
         };
         if self.drafting_image.as_ref().map(|p| &p.0) != Some(&key) {
             let px_per_m = size[0] as f64 / (hi.x - lo.x).max(1e-9);
@@ -266,6 +268,7 @@ impl ArchiSimApp {
                     viewport: Some((lo, hi)),
                     px_per_mm: Some(px_per_m * scale / 1000.0),
                     title: false,
+                    thin_lines: self.thin_lines,
                     ..Default::default()
                 },
             );
@@ -301,7 +304,6 @@ impl ArchiSimApp {
         match r {
             Ok(id) => {
                 self.open_view(super::tabs::TabKind::Drafting(id));
-                self.say("Vista de dibujo creada: dibuja con las órdenes de AutoCAD o importa un DXF (Archivo).");
             }
             Err(e) => self.complain(format!("No se puede: {e}.")),
         }

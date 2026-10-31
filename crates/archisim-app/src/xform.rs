@@ -37,6 +37,7 @@ pub fn transform(
     let mirror = t.is_mirror();
     let f = t.factor();
     let mut out = transform_phase_2(model, selection, t, copy)?;
+    let mut copied: Vec<(archisim_core::DraftId, archisim_core::DraftId)> = Vec::new();
     for e in selection {
         match *e {
             Element::Draft(id) => {
@@ -51,6 +52,7 @@ pub fn transform(
                         weight: d.weight,
                         line: d.line,
                     })?;
+                    copied.push((id, new));
                     out.insert(Element::Draft(new));
                 } else {
                     model.set_draft_shape(id, shape)?;
@@ -348,6 +350,7 @@ pub fn transform(
             }
         }
     }
+    model.regroup_copies(&copied)?;
     Ok(out)
 }
 

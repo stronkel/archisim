@@ -662,7 +662,7 @@ impl ArchiSimApp {
         let Some(issues) = &self.coord.issues else {
             ui.label(
                 RichText::new(
-                    "Abre un fichero BCF de Revit, ArchiCAD, Solibri o BIMcollab, o pasa aquí las \
+                    "Abre un fichero BCF de otro programa, o pasa aquí las \
                      interferencias o los requisitos incumplidos.",
                 )
                 .weak(),

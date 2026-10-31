@@ -199,8 +199,8 @@ pub(crate) fn draw_members(
 }
 
 /// The finest scale at which a plan draws the bars of a column (metres
-/// per millimetre of paper: 1:25).
-const REBAR_K: f64 = 0.025;
+/// per millimetre of paper: 1:50).
+const REBAR_K: f64 = 0.05;
 
 fn draw_column_rebar(s: &mut String, model: &Model, id: u64, k: f64) {
     for g in archisim_geom::rebar::element_bars(model, id) {
@@ -213,7 +213,7 @@ fn draw_column_rebar(s: &mut String, model: &Model, id: u64, k: f64) {
                         r#"<circle cx="{}" cy="{}" r="{}" fill="{INK}"/>"#,
                         num(p[0]),
                         num(-p[1]),
-                        num(g.diameter / 2.0)
+                        num((g.diameter / 2.0).max(0.35 * k))
                     );
                 }
             }

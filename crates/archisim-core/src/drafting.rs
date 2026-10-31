@@ -743,6 +743,17 @@ pub struct Draft {
     pub color: Option<Rgb>,
     pub weight: Option<f64>,
     pub line: Option<LineStyle>,
+    /// The group it belongs to (a block brought in from a DXF, or
+    /// elements grouped by hand): picked, moved and copied together.
+    pub group: Option<DraftGroup>,
+}
+
+/// A group of drafting elements: its number (shared by its elements) and
+/// its name (the block's, for one from a DXF).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DraftGroup {
+    pub id: u64,
+    pub name: String,
 }
 
 /// Data needed to create a drafting element.
@@ -1148,9 +1159,67 @@ impl Model {
                 color: spec.color,
                 weight: spec.weight,
                 line: spec.line,
+                group: None,
             },
         );
         Ok(id)
+    }
+
+    /// Puts drafting elements in one new group called `name`, out of the
+    /// groups they were in; returns its number.
+    pub fn group_drafts(&mut self, ids: &[DraftId], name: &str) -> Result<u64, ModelError> {
+        if let Some(id) = ids.iter().find(|i| !self.drafts.contains_key(i)) {
+            return Err(ModelError::UnknownDraft(*id));
+        }
+        let g = self.take_id();
+        for id in ids {
+            if let Some(d) = self.drafts.get_mut(id) {
+                d.group = Some(DraftGroup {
+                    id: g,
+                    name: name.to_string(),
+                });
+            }
+        }
+        Ok(g)
+    }
+
+    /// Groups copies as their originals were: `pairs` are (original,
+    /// copy); the copies of each group make a new group of the same name.
+    pub fn regroup_copies(&mut self, pairs: &[(DraftId, DraftId)]) -> Result<(), ModelError> {
+        let mut by: std::collections::BTreeMap<u64, (String, Vec<DraftId>)> =
+            std::collections::BTreeMap::new();
+        for (old, new) in pairs {
+            if let Some(g) = self.drafts.get(old).and_then(|d| d.group.clone()) {
+                by.entry(g.id)
+                    .or_insert_with(|| (g.name, Vec::new()))
+                    .1
+                    .push(*new);
+            }
+        }
+        for (name, ids) in by.into_values() {
+            self.group_drafts(&ids, &name)?;
+        }
+        Ok(())
+    }
+
+    /// Takes drafting elements out of their groups.
+    pub fn ungroup_drafts(&mut self, ids: &[DraftId]) -> Result<(), ModelError> {
+        if let Some(id) = ids.iter().find(|i| !self.drafts.contains_key(i)) {
+            return Err(ModelError::UnknownDraft(*id));
+        }
+        for id in ids {
+            if let Some(d) = self.drafts.get_mut(id) {
+                d.group = None;
+            }
+        }
+        Ok(())
+    }
+
+    /// The elements of a group.
+    pub fn draft_group(&self, group: u64) -> impl Iterator<Item = &Draft> {
+        self.drafts
+            .values()
+            .filter(move |d| d.group.as_ref().is_some_and(|g| g.id == group))
     }
 
     /// Replaces a drafting element's geometry.
