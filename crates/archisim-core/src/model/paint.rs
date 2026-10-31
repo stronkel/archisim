@@ -473,6 +473,20 @@ impl Model {
     }
 }
 
+
+/// Whether a point is inside a polygon (even–odd).
+fn point_in(poly: &[Point2], p: Point2) -> bool {
+    let mut inside = false;
+    let n = poly.len();
+    for i in 0..n {
+        let (a, b) = (poly[i], poly[(i + 1) % n]);
+        if (a.y > p.y) != (b.y > p.y) && p.x < a.x + (p.y - a.y) / (b.y - a.y) * (b.x - a.x) {
+            inside = !inside;
+        }
+    }
+    inside
+}
+
 #[cfg(test)]
 mod split_tests {
     use super::*;
@@ -558,17 +572,4 @@ mod split_tests {
         let xmax = zones[0].outline.iter().map(|p| p.x).fold(0.0, f64::max);
         assert!((xmax - 3.0).abs() < 1e-9);
     }
-}
-
-/// Whether a point is inside a polygon (even–odd).
-fn point_in(poly: &[Point2], p: Point2) -> bool {
-    let mut inside = false;
-    let n = poly.len();
-    for i in 0..n {
-        let (a, b) = (poly[i], poly[(i + 1) % n]);
-        if (a.y > p.y) != (b.y > p.y) && p.x < a.x + (p.y - a.y) / (b.y - a.y) * (b.x - a.x) {
-            inside = !inside;
-        }
-    }
-    inside
 }
