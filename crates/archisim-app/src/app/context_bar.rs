@@ -1078,6 +1078,12 @@ impl ArchiSimApp {
                 [Element::Slab(id)] => Some(crate::sketch::SketchTarget::Slab(*id)),
                 [Element::Roof(id)] => Some(crate::sketch::SketchTarget::Roof(*id)),
                 [Element::Terrain(id)] => Some(crate::sketch::SketchTarget::Terrain(*id)),
+                // A wall: its profile in elevation (Revit's «Editar perfil»).
+                [Element::Wall(id)]
+                    if self.ed.model().wall(*id).is_some_and(|w| !w.is_curved()) =>
+                {
+                    Some(crate::sketch::SketchTarget::WallProfile(*id))
+                }
                 _ => None,
             };
             if let Some(target) = contour {
@@ -1103,19 +1109,38 @@ impl ArchiSimApp {
                 self.concept_pick(super::concept_ui::ConceptPick::Paint);
             }
             let divide = match sel.as_slice() {
-                [e @ (Element::Slab(_) | Element::Footing(_) | Element::Column(_) | Element::Beam(_))] => Some(*e),
+                [e @ (Element::Slab(_) | Element::Footing(_) | Element::Column(_) | Element::Beam(_) | Element::Wall(_))] => Some(*e),
                 _ => None,
             };
             let r = bar_button(ui, Mark::Glyph(Glyph::DivideFace), "Dividir cara", false, divide.is_some(), true);
             let r = if divide.is_some() {
-                r.on_hover_text("Dividir cara — dibuja zonas cerradas sobre la cara de arriba, en modo boceto; luego se pinta cada una aparte")
+                r.on_hover_text("Dividir cara — dibuja zonas cerradas sobre la cara de arriba (o, en un muro, sobre una de sus caras en alzado), en modo boceto; luego se pinta cada una aparte")
             } else {
-                r.on_hover_text("Dividir cara — elige antes un forjado, una zapata, un pilar o una viga")
+                r.on_hover_text("Dividir cara — elige antes un muro, un forjado, una zapata, un pilar o una viga")
             };
-            if r.clicked() {
-                if let Some(e) = divide {
+            match divide {
+                // A wall: which side, in a small menu.
+                Some(Element::Wall(w)) => {
+                    let mut side = None;
+                    egui::Popup::menu(&r)
+                        .close_behavior(egui::PopupCloseBehavior::CloseOnClick)
+                        .show(|ui| {
+                            ui.set_min_width(170.0);
+                            if ui.button("Cara exterior").clicked() {
+                                side = Some(archisim_core::FaceSide::Exterior);
+                            }
+                            if ui.button("Cara interior").clicked() {
+                                side = Some(archisim_core::FaceSide::Interior);
+                            }
+                        });
+                    if let Some(side) = side {
+                        self.start_sketch(crate::sketch::SketchTarget::WallFace(w, side));
+                    }
+                }
+                Some(e) if r.clicked() => {
                     self.start_sketch(crate::sketch::SketchTarget::Zones(e, archisim_core::FaceRef::Top));
                 }
+                _ => {}
             }
             bar_separator(ui, &p);
             let mut run = None;

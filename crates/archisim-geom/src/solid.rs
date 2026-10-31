@@ -4509,6 +4509,39 @@ fn plain_owner(model: &Model, id: u64) -> Option<SolidOwner> {
 /// just off the face, with their element and colour. The height of each
 /// corner is the face's under it.
 pub fn face_zone_triangles(model: &Model, solids: &[Solid]) -> Vec<(SolidOwner, [P3; 3], [u8; 3])> {
+    face_zone_pieces(model, solids)
+        .into_iter()
+        .map(|(o, t, m)| (o, t, model.surface_color(m)))
+        .collect()
+}
+
+/// The painted zones of the faces as solids of their element, one per
+/// element and material, a hair over the face: what the rendered pictures
+/// and the `.glb` add to [`model_solids`] (the 3D view draws them with
+/// [`face_zone_triangles`]). Their material is the zone's: no face paint
+/// applies to them.
+pub fn face_zone_solids(model: &Model, solids: &[Solid]) -> Vec<Solid> {
+    let mut out: Vec<Solid> = Vec::new();
+    for (owner, tri, material) in face_zone_pieces(model, solids) {
+        match out
+            .iter_mut()
+            .find(|s| s.owner == owner && s.material == material)
+        {
+            Some(s) => s.triangles.push(tri),
+            None => out.push(Solid {
+                owner,
+                material,
+                triangles: vec![tri],
+            }),
+        }
+    }
+    out
+}
+
+fn face_zone_pieces(
+    model: &Model,
+    solids: &[Solid],
+) -> Vec<(SolidOwner, [P3; 3], archisim_core::MaterialId)> {
     use archisim_core::FaceRef;
     let mut out = Vec::new();
     let zones: Vec<_> = model
@@ -4525,7 +4558,6 @@ pub fn face_zone_triangles(model: &Model, solids: &[Solid]) -> Vec<(SolidOwner, 
         let Some(m) = z.material.filter(|m| model.material(*m).is_some()) else {
             continue;
         };
-        let colour = model.surface_color(m);
         let up = z.face == FaceRef::Top;
         // The element's triangles of that face.
         let face: Vec<&[P3; 3]> = solids
@@ -4596,7 +4628,7 @@ pub fn face_zone_triangles(model: &Model, solids: &[Solid]) -> Vec<(SolidOwner, 
             } else {
                 [pa, pc, pb]
             };
-            out.push((owner, tri, colour));
+            out.push((owner, tri, m));
         }
     }
     out

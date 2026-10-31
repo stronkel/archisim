@@ -34,6 +34,67 @@ pub(crate) struct SketchState {
     settings: crate::cad::CadSettings,
     /// Where the lines were left open at the last Aceptar.
     pub open_ends: Vec<Point2>,
+    /// A wall's sketch is drawn in elevation on a view of its own, made
+    /// for it and taken away at the end, with the face and its openings
+    /// as reference lines on a grey layer.
+    elevation: Option<(archisim_core::DraftViewId, DrawLayerId)>,
+    /// The exterior face is seen from outside: its start on the right
+    /// (`x` drawn as the wall's length minus `x`).
+    mirror: Option<f64>,
+}
+
+/// The layer of the reference lines of a sketch in elevation.
+pub const SKETCH_REFERENCE_LAYER: &str = "Boceto · referencia";
+
+/// A point of a wall's sketch as drawn, or back (the same mirror).
+fn mirrored(mirror: Option<f64>, p: Point2) -> Point2 {
+    match mirror {
+        Some(len) => Point2::new(len - p.x, p.y),
+        None => p,
+    }
+}
+
+/// The reference lines of a wall's sketch in elevation: the face's
+/// border and its doors and windows, in the sketch's coordinates.
+fn wall_references(m: &archisim_core::Model, target: SketchTarget) -> Vec<Vec<Point2>> {
+    let (w, up) = match target {
+        SketchTarget::WallFace(w, _) => (w, 0.0),
+        SketchTarget::WallProfile(w) => (w, 1.0),
+        _ => return Vec::new(),
+    };
+    let Some(wall) = m.wall(w) else {
+        return Vec::new();
+    };
+    // The face measures from the level, the profile from the wall's base.
+    let base = wall.base_offset * (1.0 - up);
+    let mut out = Vec::new();
+    if up == 0.0 {
+        let p = wall
+            .profile
+            .clone()
+            .unwrap_or_else(|| archisim_core::WallProfile::rectangle(wall.length(), wall.height));
+        out.push(
+            p.outline
+                .iter()
+                .map(|q| Point2::new(q.x, q.y + base))
+                .collect(),
+        );
+    }
+    for o in m.openings().filter(|o| o.wall == w) {
+        if let Some(g) = archisim_geom::opening_geometry(m, o.id) {
+            let (z0, z1) = (
+                g.sill - wall.base_offset * up,
+                g.head - wall.base_offset * up,
+            );
+            out.push(vec![
+                Point2::new(g.t0, z0),
+                Point2::new(g.t1, z0),
+                Point2::new(g.t1, z1),
+                Point2::new(g.t0, z1),
+            ]);
+        }
+    }
+    out
 }
 
 /// The colour of a sketch, as Revit's.
@@ -86,12 +147,36 @@ impl ArchiSimApp {
             }
         }
         self.end_command(false);
-        if self.mode != ViewMode::Plan {
+        let in_elevation = sketch.in_elevation();
+        if self.mode != ViewMode::Plan && !in_elevation {
             self.show_plan();
         }
-        let view = ViewRef::Level(self.ed.level);
+        // The exterior side of a wall is seen from outside.
+        let mirror = match sketch.target {
+            SketchTarget::WallFace(w, archisim_core::FaceSide::Exterior) => {
+                self.ed.model().wall(w).map(|w| w.length())
+            }
+            _ => None,
+        };
+        let title = match sketch.target {
+            SketchTarget::WallFace(w, side) => format!(
+                "Boceto · {} · cara {}",
+                self.ed
+                    .model()
+                    .wall(w)
+                    .map_or("muro".into(), |w| format!("muro {}", w.id.0)),
+                match side {
+                    archisim_core::FaceSide::Exterior => "exterior",
+                    archisim_core::FaceSide::Interior => "interior",
+                }
+            ),
+            SketchTarget::WallProfile(w) => format!("Boceto · perfil del muro {}", w.0),
+            _ => String::new(),
+        };
+        let references = wall_references(self.ed.model(), sketch.target);
         let mark = self.ed.undo_mark();
         let loops = sketch.loops.clone();
+        let level_view = ViewRef::Level(self.ed.level);
         let r = self.ed.transact("Boceto", |m| {
             let layer = match m.draw_layer_by_name(SKETCH_LAYER) {
                 Some(l) => l.id,
@@ -102,6 +187,36 @@ impl ArchiSimApp {
                     LineStyle::Continuous,
                 ))?,
             };
+            // In elevation: a view of its own with the references.
+            let elevation = if in_elevation {
+                let v = m.add_draft_view(title.clone(), 50.0)?;
+                let grey = match m.draw_layer_by_name(SKETCH_REFERENCE_LAYER) {
+                    Some(l) => l.id,
+                    None => m.add_draw_layer(DrawLayer::new(
+                        SKETCH_REFERENCE_LAYER,
+                        [150, 150, 150],
+                        0.18,
+                        LineStyle::Continuous,
+                    ))?,
+                };
+                for lp in &references {
+                    let n = lp.len();
+                    for i in 0..n {
+                        m.add_draft(NewDraft::new(
+                            ViewRef::Drafting(v),
+                            grey,
+                            Shape::Line {
+                                a: mirrored(mirror, lp[i]),
+                                b: mirrored(mirror, lp[(i + 1) % n]),
+                            },
+                        ))?;
+                    }
+                }
+                Some((v, grey))
+            } else {
+                None
+            };
+            let view = elevation.map_or(level_view, |(v, _)| ViewRef::Drafting(v));
             for lp in &loops {
                 let n = lp.len();
                 for i in 0..n {
@@ -109,25 +224,29 @@ impl ArchiSimApp {
                         view,
                         layer,
                         Shape::Line {
-                            a: lp[i],
-                            b: lp[(i + 1) % n],
+                            a: mirrored(mirror, lp[i]),
+                            b: mirrored(mirror, lp[(i + 1) % n]),
                         },
                     ))?;
                 }
             }
-            Ok(layer)
+            Ok((layer, elevation))
         });
-        let layer = match r {
+        let (layer, elevation) = match r {
             Ok(l) => l,
             Err(e) => {
                 self.complain(format!("No se puede: {e}."));
                 return;
             }
         };
+        let view = elevation.map_or(level_view, |(v, _)| ViewRef::Drafting(v));
+        if let Some((v, _)) = elevation {
+            self.open_view(super::tabs::TabKind::Drafting(v));
+            self.fit_requested = true;
+        }
         // A contour is redrawn without its element; a face is divided
-        // over it.
-        let zones = matches!(sketch.target, SketchTarget::Zones(..));
-        if !zones {
+        // over it, and an elevation drawn elsewhere.
+        if !sketch.is_zones() && !in_elevation {
             self.ed.hide([sketch.element()]);
         }
         self.ed.selection.clear();
@@ -145,6 +264,8 @@ impl ArchiSimApp {
             view,
             settings,
             open_ends: Vec::new(),
+            elevation,
+            mirror,
         });
     }
 
@@ -165,12 +286,17 @@ impl ArchiSimApp {
             return;
         };
         let segs = self.sketch_segs(&st);
-        let zones = matches!(st.sketch.target, SketchTarget::Zones(..));
+        let zones = st.sketch.is_zones();
+        let mirror = st.mirror;
         let loops = if zones && segs.is_empty() {
             // Every zone taken away.
             Ok(Vec::new())
         } else {
-            loops_from_segs(&segs)
+            loops_from_segs(&segs).map(|ls| {
+                ls.into_iter()
+                    .map(|l| l.into_iter().map(|p| mirrored(mirror, p)).collect())
+                    .collect()
+            })
         };
         let sketch = match loops.and_then(|l| st.sketch.with_loops(l)) {
             Ok(s) => s,
@@ -183,32 +309,36 @@ impl ArchiSimApp {
                 return;
             }
         };
-        let (layer, view) = (st.layer, st.view);
+        let (layer, view, elevation) = (st.layer, st.view, st.elevation);
         let r = self.ed.transact("Editar contorno", |m| {
             let lines: Vec<_> = m
                 .drafts_in(view)
-                .filter(|d| d.layer == layer)
+                .filter(|d| d.layer == layer || elevation.is_some_and(|(_, g)| d.layer == g))
                 .map(|d| d.id)
                 .collect();
             for id in lines {
                 m.remove_draft(id)?;
             }
+            if let Some((v, _)) = elevation {
+                m.remove_draft_view(v)?;
+            }
             sketch.apply(m).map_err(sketch_error)
         });
         match r {
             Ok(()) => {
-                let label = if zones {
-                    "Dividir cara"
-                } else {
-                    "Editar contorno"
+                let label = match st.sketch.target {
+                    SketchTarget::WallProfile(_) => "Editar perfil",
+                    _ if zones => "Dividir cara",
+                    _ => "Editar contorno",
                 };
                 self.ed.join_since(st.mark, label);
+                let said = match st.sketch.target {
+                    SketchTarget::WallProfile(_) => "Perfil del muro cambiado.",
+                    _ if zones => "Cara dividida: pinta cada zona con Pintar.",
+                    _ => "Contorno cambiado.",
+                };
                 self.leave_sketch(st);
-                self.say(if zones {
-                    "Cara dividida: pinta cada zona con Pintar."
-                } else {
-                    "Contorno cambiado."
-                });
+                self.say(said);
             }
             Err(e) => {
                 // Still in the sketch, to put it right.
@@ -234,6 +364,13 @@ impl ArchiSimApp {
     }
 
     fn leave_sketch(&mut self, st: SketchState) {
+        if st.elevation.is_some() {
+            // Its view is gone: back to where the wall was chosen.
+            self.sync_tabs();
+            if !matches!(self.mode, ViewMode::Plan | ViewMode::ThreeD) {
+                self.show_plan();
+            }
+        }
         self.ed.unhide([st.sketch.element()]);
         self.ed.selection = [st.sketch.element()].into_iter().collect();
         self.cad_settings = st.settings;
@@ -271,8 +408,14 @@ impl ArchiSimApp {
             SketchTarget::Roof(_) => "contorno de la cubierta",
             SketchTarget::Terrain(_) => "contorno del terreno",
             SketchTarget::Zones(..) => "dividir la cara de arriba",
+            SketchTarget::WallFace(_, archisim_core::FaceSide::Exterior) => {
+                "dividir la cara exterior del muro (vista desde fuera)"
+            }
+            SketchTarget::WallFace(..) => "dividir la cara interior del muro",
+            SketchTarget::WallProfile(_) => "perfil del muro en alzado",
         };
-        let zones = matches!(st.sketch.target, SketchTarget::Zones(..));
+        let zones = st.sketch.is_zones();
+        let profile = matches!(st.sketch.target, SketchTarget::WallProfile(_));
         let holes = st.sketch.takes_holes();
         let running = self.cad.as_ref().map(|c| c.name());
         let mut start: Option<&'static str> = None;
@@ -327,7 +470,9 @@ impl ArchiSimApp {
                             cancel = true;
                         }
                     });
-                    let note = if zones {
+                    let note = if profile {
+                        "Las líneas tienen que cerrar contornos: el mayor es el muro en alzado y los de dentro, sus huecos. En gris, sus puertas y ventanas."
+                    } else if zones {
                         "Cada contorno cerrado que dibujes sobre la cara es una zona que se pinta aparte (Pintar)."
                     } else if holes {
                         "Las líneas tienen que cerrar contornos: el mayor es el borde del forjado y los de dentro, sus huecos."

@@ -110,6 +110,9 @@ impl ArchiSimApp {
             painter.line_segment([p - Vec2::new(0.0, 10.0), p + Vec2::new(0.0, 10.0)], s);
         }
         self.draw_overlays(&ctx, &painter, rect);
+        // A wall's sketch in elevation is drawn here.
+        self.draw_sketch(&painter, rect);
+        self.sketch_panel(&ctx, rect);
         if response.hovered() {
             ctx.set_cursor_icon(if self.tool == Tool::Cad {
                 CursorIcon::Crosshair

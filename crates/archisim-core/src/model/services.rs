@@ -647,6 +647,31 @@ impl Model {
         out.into_iter().map(|t| t.id).collect()
     }
 
+    /// The lamps placed as objects that are light points of the lighting
+    /// circuit (C1): pendants, ceiling lights and wall lights not already
+    /// drawn as a light point (one within 30 cm on their level).
+    pub fn lamp_points(&self) -> Vec<(ObjectId, LevelId)> {
+        self.objects
+            .values()
+            .filter(|o| {
+                self.object_types
+                    .get(&o.object_type)
+                    .and_then(|t| self.family_prop(t.family))
+                    .is_some_and(|k| {
+                        matches!(k.as_str(), "pendant" | "ceiling_light" | "wall_light")
+                    })
+            })
+            .filter(|o| {
+                !self.devices.values().any(|d| {
+                    d.kind == DeviceKind::Light
+                        && d.level == o.level
+                        && d.position.distance(o.position) < 0.3
+                })
+            })
+            .map(|o| (o.id, o.level))
+            .collect()
+    }
+
     /// Gives a light point its fitting (or the downlight, `None`): its box
     /// becomes the lamp's, its top where it was (on the ceiling).
     pub fn set_device_fixture(

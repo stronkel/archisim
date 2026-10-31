@@ -1,7 +1,8 @@
 //! The circuits of a dwelling (REBT, ITC-BT-25, tabla 1), on the
 //! mechanisms drawn (E13): how many points each circuit feeds on each
 //! level against the most it may, with its breaker and its wires. The
-//! switches are not points; a light, a socket or a base is one.
+//! switches are not points; a light, a socket or a base is one, and so
+//! is a pendant, a ceiling light or a wall light placed as an object.
 
 use std::collections::BTreeMap;
 
@@ -19,6 +20,10 @@ pub fn check(model: &Model, report: &mut Report) {
         if let Some(n) = model.device_circuit(d.id) {
             *points.entry((d.level, n)).or_default() += 1;
         }
+    }
+    // The lamps placed as objects (from the Maqueta) are points of C1.
+    for (_, level) in model.lamp_points() {
+        *points.entry((level, 1)).or_default() += 1;
     }
     for ((level, n), count) in points {
         let Some(c) = circuit_spec(n) else {

@@ -265,6 +265,22 @@ mod tests {
         assert!(archisim_geom::solid::device_solids(&m, lamp.id)
             .iter()
             .any(|s| archisim_geom::solid::solid_glow(&m, s).is_some()));
+        // A pendant placed as an object counts as a point of C1, unless a
+        // light point is already under it.
+        let mut with_lamp = m.clone();
+        let level = lamp.level;
+        for (x, y) in [(3.0, 1.0), (5.6, 3.0)] {
+            with_lamp
+                .add_object(archisim_core::NewObject {
+                    level,
+                    object_type: lamp.fixture.unwrap(),
+                    position: Point2::new(x, y),
+                    rotation: 0.0,
+                    base_offset: 1.9,
+                })
+                .unwrap();
+        }
+        assert_eq!(with_lamp.lamp_points().len(), 1);
         // A socket in the kitchen: C5; in the living room: C2.
         assert_eq!(circuit_of(DeviceKind::Socket, 0.4, 1.5), Some(5));
         assert_eq!(circuit_of(DeviceKind::Socket, 4.5, 0.4), Some(2));

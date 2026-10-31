@@ -8476,3 +8476,126 @@ fn faces_of_slabs_are_painted_and_divided() {
     assert_eq!(f([0.0, 0.0, 1.0]), Some(archisim_core::FaceRef::Top));
     assert_ne!(f([1.0, 0.0, 0.0]), f([0.0, 1.0, 0.0]));
 }
+
+/// A wall's side divided and its profile edited in elevation (sketch mode
+/// on a view of its own, G2/G3): the lines drawn there become zones of the
+/// face, which Pintar paints apart, and the wall's profile.
+#[test]
+fn wall_faces_and_profiles_are_sketched_in_elevation() {
+    let mut ed = Editor::new_project();
+    let level = ed.level;
+    let wt = ed.model().wall_types().next().unwrap().id;
+    let w = ed
+        .transact("Muro", |m| {
+            m.add_wall(archisim_core::NewWall {
+                wall_type: wt,
+                level,
+                start: Point2::new(0.0, 0.0),
+                end: Point2::new(4.0, 0.0),
+                reference: archisim_core::ReferenceLine::Center,
+                height: 2.5,
+                base_offset: 0.0,
+                bulge: 0.0,
+                top: archisim_core::WallTop::Unconnected,
+            })
+        })
+        .unwrap();
+    let mut h = Harness::new(ed);
+    h.frame();
+    let draw = |h: &mut Harness, c: [Point2; 4]| {
+        let layer = h.model().draw_layer_by_name("Boceto").unwrap().id;
+        let ViewMode::Drafting(v) = h.app.mode else {
+            panic!("the sketch is drawn on a view of its own");
+        };
+        h.app
+            .ed
+            .transact("Líneas", |m| {
+                for i in 0..4 {
+                    m.add_draft(archisim_core::NewDraft::new(
+                        archisim_core::ViewRef::Drafting(v),
+                        layer,
+                        archisim_core::Shape::Line {
+                            a: c[i],
+                            b: c[(i + 1) % 4],
+                        },
+                    ))?;
+                }
+                Ok(())
+            })
+            .unwrap();
+    };
+    // The exterior side: a band at the bottom, drawn as seen from outside
+    // (the wall's start on the right).
+    h.app.start_sketch(crate::sketch::SketchTarget::WallFace(
+        w,
+        archisim_core::FaceSide::Exterior,
+    ));
+    h.frame();
+    assert!(h
+        .model()
+        .draw_layer_by_name("Boceto · referencia")
+        .is_some());
+    draw(&mut h, [p(0.0, 0.0), p(1.0, 0.0), p(1.0, 1.0), p(0.0, 1.0)]);
+    h.key(Key::Enter);
+    assert!(
+        h.app.sketch.is_none(),
+        "{:?}",
+        h.app.message.as_ref().map(|m| &m.text)
+    );
+    assert_eq!(h.app.ed.undo_label(), Some("Dividir cara"));
+    assert!(h.model().draft_views().is_empty(), "its view is gone");
+    let z = h.model().paint_zones().next().unwrap().clone();
+    // Mirrored back: from 3 to 4 m along the wall.
+    let xs: Vec<f64> = z.outline.iter().map(|q| q.x).collect();
+    assert!(xs.iter().all(|x| *x > 2.99 && *x < 4.01), "{:?}", z.outline);
+    // Its profile: a gable drawn over it.
+    h.app
+        .start_sketch(crate::sketch::SketchTarget::WallProfile(w));
+    h.frame();
+    let layer = h.model().draw_layer_by_name("Boceto").unwrap().id;
+    let ViewMode::Drafting(v) = h.app.mode else {
+        panic!("in elevation");
+    };
+    h.app
+        .ed
+        .transact("Hastial", |m| {
+            let old: Vec<_> = m
+                .drafts_in(archisim_core::ViewRef::Drafting(v))
+                .filter(|d| d.layer == layer)
+                .map(|d| d.id)
+                .collect();
+            for id in old {
+                m.remove_draft(id)?;
+            }
+            let c = [
+                p(0.0, 0.0),
+                p(4.0, 0.0),
+                p(4.0, 2.5),
+                p(2.0, 3.5),
+                p(0.0, 2.5),
+            ];
+            for i in 0..5 {
+                m.add_draft(archisim_core::NewDraft::new(
+                    archisim_core::ViewRef::Drafting(v),
+                    layer,
+                    archisim_core::Shape::Line {
+                        a: c[i],
+                        b: c[(i + 1) % 5],
+                    },
+                ))?;
+            }
+            Ok(())
+        })
+        .unwrap();
+    h.key(Key::Enter);
+    assert!(
+        h.app.sketch.is_none(),
+        "{:?}",
+        h.app.message.as_ref().map(|m| &m.text)
+    );
+    assert_eq!(h.app.ed.undo_label(), Some("Editar perfil"));
+    let wall = h.model().wall(w).unwrap();
+    assert!(wall.profile.is_some());
+    assert!((wall.height - 3.5).abs() < 1e-9);
+    assert!(matches!(h.app.mode, ViewMode::Plan));
+}

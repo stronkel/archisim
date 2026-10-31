@@ -6,6 +6,35 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-31 (56) · Remates de G2–G5: muros en alzado, zonas en el render, lámparas que cuentan y cipreses
+
+Rama `bloque/g6-remates` (sobre `bloque/g4-instalaciones`), con pull request. Sin cambios de formato.
+
+**Hecho**
+- **Dividir cara de un muro**, en modo boceto y en alzado. Con un muro elegido, Dividir cara pregunta qué cara: exterior o interior.
+  - Se abre una vista de dibujo propia con la cara del muro (la exterior vista desde fuera) y sus puertas y ventanas en gris como referencia.
+  - Las zonas se dibujan con las órdenes de siempre. Al aceptar, cada contorno cerrado es una zona de la fachada, que toma el acabado que se veía.
+  - Con Pintar, un clic dentro de la zona pinta solo esa zona.
+  - La vista del boceto desaparece y se vuelve a la planta. Todo es un solo paso de Deshacer.
+- **Editar contorno de un muro** = su perfil en alzado, como el «Editar perfil» de Revit, con las mismas herramientas.
+  - El contorno mayor es el muro y los de dentro son huecos. Un hastial sube el muro hasta su punta.
+- **Las zonas pintadas de las caras** (G3) salen ya en la imagen realista y en el modelo 3D exportado (glTF), con su material.
+- **Lámparas puestas como objeto** (colgantes, plafones y apliques de la Maqueta): cuentan como puntos de luz del circuito C1 en la comprobación del REBT. No cuentan si ya hay un punto de luz debajo, a menos de 30 cm.
+- **Ciprés y enebros hoja a hoja**: ramitas de escamas planas alrededor de un núcleo denso.
+  - Cada planta tiene un tope de triángulos que descuenta ya la madera: unos 78 000 de cerca y 15 000 a media distancia.
+
+**Pendiente**
+- La retama sigue con sus ramitas verdes (ya son tallos, no masas).
+- Las zonas de una cara de muro se pintan en 3D; en planta no se ven, porque la cara está de canto.
+
+**Qué debe probar Antonio**
+1. En planta, elige un muro de fachada (Tab si hay un eje encima) → Dividir cara → Cara exterior. Dibuja con Rectángulo un zócalo de 80 cm a lo largo y pulsa Aceptar.
+2. En 3D, Pintar con un material y pincha en el zócalo: solo se pinta el zócalo.
+3. Con el muro elegido, Editar contorno: dibuja un hastial (borra la línea de arriba y une las esquinas con un vértice más alto) y Aceptar.
+4. Pon un colgante como objeto en un local y mira la comprobación del CTE (circuitos): C1 tiene un punto más.
+
+---
+
 ## 2026-10-31 (55) · G4 y G5: lámparas en los puntos de luz, instalaciones con detalle y árboles hoja a hoja
 
 Rama `bloque/g4-instalaciones` (sobre `bloque/g3-pintar`), con pull request. Formato `.archisim` versión 55: el punto de luz guarda su lámpara.
