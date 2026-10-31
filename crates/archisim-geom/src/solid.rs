@@ -4143,8 +4143,86 @@ pub fn face_of(
             let base = model.level(m.level).map_or(0.0, |l| l.elevation) + m.base_offset;
             crate::forms::face_at(m, [at[0], at[1], at[2] - base], n).map(|f| m.face_ref(f))
         }
+        // G3: the top, the bottom and each edge's side of a slab.
+        SolidOwner::Slab(id) => {
+            let sl = model.slab(id)?;
+            if n[2] > 0.7 {
+                return Some(FaceRef::Top);
+            }
+            if n[2] < -0.7 {
+                return Some(FaceRef::Bottom);
+            }
+            let mut edges = Vec::new();
+            for lp in std::iter::once(&sl.outline).chain(sl.holes.iter()) {
+                let k = lp.len();
+                for i in 0..k {
+                    edges.push((lp[i], lp[(i + 1) % k]));
+                }
+            }
+            nearest_edge(&edges, c).map(FaceRef::Side)
+        }
+        // A roof: each slope by the edge it falls to, its soffit, and the
+        // fascia on each edge.
+        SolidOwner::Roof(id) => {
+            let r = model.roof(id)?;
+            let k = r.outline.len();
+            let edges: Vec<(Point2, Point2)> = (0..k)
+                .map(|i| (r.outline[i], r.outline[(i + 1) % k]))
+                .collect();
+            if n[2] < -0.7 {
+                return Some(FaceRef::Bottom);
+            }
+            if n[2] > 0.97 {
+                return Some(FaceRef::Top);
+            }
+            if n[2] > 0.1 {
+                // The edge whose outward side the slope looks to.
+                let h = flat.normalized()?;
+                let best = (0..k).max_by(|&a, &b| {
+                    let out = |i: usize| {
+                        let (p, q) = edges[i];
+                        let d = q - p;
+                        Point2::new(d.y, -d.x)
+                            .normalized()
+                            .map_or(-2.0, |o| o.x * h.x + o.y * h.y)
+                    };
+                    out(a).total_cmp(&out(b))
+                })?;
+                return Some(FaceRef::Side(best));
+            }
+            nearest_edge(&edges, c).map(|i| FaceRef::Part(i as u32))
+        }
+        // Columns, beams and footings: top, bottom and their sides by the
+        // way they look (every 22,5°).
+        SolidOwner::Column(_) | SolidOwner::Beam(_) | SolidOwner::Footing(_) => {
+            if n[2] > 0.7 {
+                return Some(FaceRef::Top);
+            }
+            if n[2] < -0.7 {
+                return Some(FaceRef::Bottom);
+            }
+            let k = archisim_core::MEMBER_SIDES as f64;
+            let a = flat.y.atan2(flat.x).rem_euclid(std::f64::consts::TAU);
+            let i =
+                ((a / std::f64::consts::TAU * k).round() as usize) % archisim_core::MEMBER_SIDES;
+            Some(FaceRef::Side(i))
+        }
         _ => None,
     }
+}
+
+/// The edge nearest a point.
+fn nearest_edge(edges: &[(Point2, Point2)], c: Point2) -> Option<usize> {
+    let d = |(a, b): (Point2, Point2)| {
+        let ab = b - a;
+        let l2 = ab.dot(ab);
+        if l2 < 1e-18 {
+            return c.distance(a);
+        }
+        let t = ((c - a).dot(ab) / l2).clamp(0.0, 1.0);
+        c.distance(a + ab * t)
+    };
+    (0..edges.len()).min_by(|&i, &j| d(edges[i]).total_cmp(&d(edges[j])))
 }
 
 /// The paint on a triangle of a wall or a volume: the colour of the
@@ -4163,6 +4241,18 @@ pub fn painted_material(
 ) -> Option<archisim_core::MaterialId> {
     let element = match s.owner {
         SolidOwner::Wall(id) | SolidOwner::Facade(id) => id.0,
+        SolidOwner::Slab(_)
+        | SolidOwner::Roof(_)
+        | SolidOwner::Column(_)
+        | SolidOwner::Beam(_)
+        | SolidOwner::Footing(_) => {
+            let e = s.owner.id();
+            // Most are not painted: nothing to work out.
+            if !model.has_face_paint(e) {
+                return None;
+            }
+            e
+        }
         _ => return None,
     };
     let u = [
@@ -4186,6 +4276,7 @@ pub fn painted_material(
         (tri[0][2] + tri[1][2] + tri[2][2]) / 3.0,
     ];
     let face = face_of(model, s.owner, c, n)?;
+    // (The zones of a face are drawn over it: `face_zone_triangles`.)
     let painted = model
         .face_paint(element, face)
         .filter(|m| model.material(*m).is_some());
@@ -4250,6 +4341,122 @@ pub fn paint_zone_triangles(model: &Model) -> Vec<(archisim_core::WallId, [P3; 3
                 [pa, pb, pc]
             };
             out.push((z.wall, tri, colour));
+        }
+    }
+    out
+}
+
+/// The owner of an element's solids, by its id (the elements whose faces
+/// are painted face by face).
+fn plain_owner(model: &Model, id: u64) -> Option<SolidOwner> {
+    use archisim_core::{BeamId, ColumnId, FootingId, RoofId, SlabId};
+    if model.slab(SlabId(id)).is_some() {
+        Some(SolidOwner::Slab(SlabId(id)))
+    } else if model.roof(RoofId(id)).is_some() {
+        Some(SolidOwner::Roof(RoofId(id)))
+    } else if model.column(ColumnId(id)).is_some() {
+        Some(SolidOwner::Column(ColumnId(id)))
+    } else if model.beam(BeamId(id)).is_some() {
+        Some(SolidOwner::Beam(BeamId(id)))
+    } else if model.footing(FootingId(id)).is_some() {
+        Some(SolidOwner::Footing(FootingId(id)))
+    } else {
+        None
+    }
+}
+
+/// The triangles of the painted zones of faces looking up or down (G3),
+/// just off the face, with their element and colour. The height of each
+/// corner is the face's under it.
+pub fn face_zone_triangles(model: &Model, solids: &[Solid]) -> Vec<(SolidOwner, [P3; 3], [u8; 3])> {
+    use archisim_core::FaceRef;
+    let mut out = Vec::new();
+    let zones: Vec<_> = model
+        .face_zones()
+        .filter(|z| z.material.is_some())
+        .collect();
+    if zones.is_empty() {
+        return out;
+    }
+    for z in zones {
+        let Some(owner) = plain_owner(model, z.element) else {
+            continue;
+        };
+        let Some(m) = z.material.filter(|m| model.material(*m).is_some()) else {
+            continue;
+        };
+        let colour = model.surface_color(m);
+        let up = z.face == FaceRef::Top;
+        // The element's triangles of that face.
+        let face: Vec<&[P3; 3]> = solids
+            .iter()
+            .filter(|s| s.owner == owner)
+            .flat_map(|s| s.triangles.iter())
+            .filter(|t| {
+                let u = [t[1][0] - t[0][0], t[1][1] - t[0][1], t[1][2] - t[0][2]];
+                let v = [t[2][0] - t[0][0], t[2][1] - t[0][1], t[2][2] - t[0][2]];
+                let nz = u[0] * v[1] - u[1] * v[0];
+                let len = ((u[1] * v[2] - u[2] * v[1]).powi(2)
+                    + (u[2] * v[0] - u[0] * v[2]).powi(2)
+                    + nz * nz)
+                    .sqrt()
+                    .max(1e-12);
+                if up {
+                    nz / len > 0.7
+                } else {
+                    nz / len < -0.7
+                }
+            })
+            .collect();
+        if face.is_empty() {
+            continue;
+        }
+        let fallback = face.iter().flat_map(|t| t.iter().map(|p| p[2])).fold(
+            if up { f64::MIN } else { f64::MAX },
+            |a, b| {
+                if up {
+                    a.max(b)
+                } else {
+                    a.min(b)
+                }
+            },
+        );
+        let height = |p: Point2| -> f64 {
+            for t in &face {
+                let (a, b, c) = (t[0], t[1], t[2]);
+                let den = (b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1]);
+                if den.abs() < 1e-12 {
+                    continue;
+                }
+                let l1 = ((b[1] - c[1]) * (p.x - c[0]) + (c[0] - b[0]) * (p.y - c[1])) / den;
+                let l2 = ((c[1] - a[1]) * (p.x - c[0]) + (a[0] - c[0]) * (p.y - c[1])) / den;
+                let l3 = 1.0 - l1 - l2;
+                if l1 >= -1e-6 && l2 >= -1e-6 && l3 >= -1e-6 {
+                    return l1 * a[2] + l2 * b[2] + l3 * c[2];
+                }
+            }
+            fallback
+        };
+        let off = if up { ZONE_OFFSET } else { -ZONE_OFFSET };
+        // Counter-clockwise, as the triangulation wants it.
+        let mut outline = z.outline.clone();
+        if archisim_core::signed_area(&outline) < 0.0 {
+            outline.reverse();
+        }
+        for [a, b, c] in triangulate(&outline) {
+            let at = |i: usize| {
+                let p = outline[i];
+                [p.x, p.y, height(p) + off]
+            };
+            let (pa, pb, pc) = (at(a), at(b), at(c));
+            // Facing the way the face looks.
+            let nz = (pb[0] - pa[0]) * (pc[1] - pa[1]) - (pb[1] - pa[1]) * (pc[0] - pa[0]);
+            let tri = if (nz > 0.0) == up {
+                [pa, pb, pc]
+            } else {
+                [pa, pc, pb]
+            };
+            out.push((owner, tri, colour));
         }
     }
     out
