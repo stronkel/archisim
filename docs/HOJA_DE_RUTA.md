@@ -296,6 +296,6 @@ Antonio la entregó mientras otra conversación sigue con los modelos de alta ca
 |---|---|---|
 | G1 | Arreglos rápidos:<br>• líneas finas en vistas de dibujo;<br>• DXF con sus unidades y bloques agrupados;<br>• sin marcas comerciales en el programa;<br>• ficha Armado en Estructura y armado legible en planta a 1:50 | ✅ rama `bloque/g1-rapidos` |
 | G2 | Modo boceto como en Revit para contornos (forjado, cubierta, terreno, perfil de muro):<br>• «Editar contorno» en la barra de Modificar;<br>• dibujar con línea, rectángulo, arco, polígono y círculo;<br>• recortar, alargar, partir, borrar;<br>• Aceptar o Cancelar | ✅ rama `bloque/g2-boceto` (forjado, cubierta y terreno; el perfil de muro con G3) |
-| G3 | Pintar y Dividir cara en la barra superior, para cualquier cara de cualquier elemento; Dividir cara con el modo boceto de G2 | Pendiente |
+| G3 | Pintar y Dividir cara en la barra superior, para cualquier cara de cualquier elemento; Dividir cara con el modo boceto de G2 | ✅ rama `bloque/g3-pintar` (caras horizontales; los muros, cuando se pueda dibujar en alzado) |
 | G4 | Luminarias con el modelo de las lámparas de colección; mecanismos, cuadros, radiadores, rejillas, montantes… con el detalle de los muebles | Pendiente |
 | G5 | Vegetación de la biblioteca (árboles, arbustos, palmeras) hoja a hoja, como el olivo y las plantas de interior, con su versión de lejos | Pendiente |

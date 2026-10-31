@@ -124,7 +124,12 @@ impl ArchiSimApp {
                 return;
             }
         };
-        self.ed.hide([sketch.element()]);
+        // A contour is redrawn without its element; a face is divided
+        // over it.
+        let zones = matches!(sketch.target, SketchTarget::Zones(..));
+        if !zones {
+            self.ed.hide([sketch.element()]);
+        }
         self.ed.selection.clear();
         let settings = self.cad_settings.clone();
         self.cad_settings.layer = layer;
@@ -160,7 +165,14 @@ impl ArchiSimApp {
             return;
         };
         let segs = self.sketch_segs(&st);
-        let sketch = match loops_from_segs(&segs).and_then(|l| st.sketch.with_loops(l)) {
+        let zones = matches!(st.sketch.target, SketchTarget::Zones(..));
+        let loops = if zones && segs.is_empty() {
+            // Every zone taken away.
+            Ok(Vec::new())
+        } else {
+            loops_from_segs(&segs)
+        };
+        let sketch = match loops.and_then(|l| st.sketch.with_loops(l)) {
             Ok(s) => s,
             Err(e) => {
                 if let SketchError::Open(at) = &e {
@@ -185,9 +197,18 @@ impl ArchiSimApp {
         });
         match r {
             Ok(()) => {
-                self.ed.join_since(st.mark, "Editar contorno");
+                let label = if zones {
+                    "Dividir cara"
+                } else {
+                    "Editar contorno"
+                };
+                self.ed.join_since(st.mark, label);
                 self.leave_sketch(st);
-                self.say("Contorno cambiado.");
+                self.say(if zones {
+                    "Cara dividida: pinta cada zona con Pintar."
+                } else {
+                    "Contorno cambiado."
+                });
             }
             Err(e) => {
                 // Still in the sketch, to put it right.
@@ -224,7 +245,7 @@ impl ArchiSimApp {
         if self.sketch.is_none() || self.cad.is_some() || crate::app::typing_in_text(ctx) {
             return;
         }
-        if ctx.input(|i| i.key_pressed(egui::Key::Enter)) {
+        if ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Enter)) {
             self.finish_sketch();
         }
     }
@@ -246,10 +267,12 @@ impl ArchiSimApp {
             return;
         };
         let what = match st.sketch.target {
-            SketchTarget::Slab(_) => "del forjado",
-            SketchTarget::Roof(_) => "de la cubierta",
-            SketchTarget::Terrain(_) => "del terreno",
+            SketchTarget::Slab(_) => "contorno del forjado",
+            SketchTarget::Roof(_) => "contorno de la cubierta",
+            SketchTarget::Terrain(_) => "contorno del terreno",
+            SketchTarget::Zones(..) => "dividir la cara de arriba",
         };
+        let zones = matches!(st.sketch.target, SketchTarget::Zones(..));
         let holes = st.sketch.takes_holes();
         let running = self.cad.as_ref().map(|c| c.name());
         let mut start: Option<&'static str> = None;
@@ -263,7 +286,7 @@ impl ArchiSimApp {
                     ui.set_max_width(rect.width() - 40.0);
                     ui.horizontal_wrapped(|ui| {
                         ui.label(
-                            egui::RichText::new(format!("Modo boceto · contorno {what}"))
+                            egui::RichText::new(format!("Modo boceto · {what}"))
                                 .strong()
                                 .color(SKETCH),
                         );
@@ -304,7 +327,9 @@ impl ArchiSimApp {
                             cancel = true;
                         }
                     });
-                    let note = if holes {
+                    let note = if zones {
+                        "Cada contorno cerrado que dibujes sobre la cara es una zona que se pinta aparte (Pintar)."
+                    } else if holes {
                         "Las líneas tienen que cerrar contornos: el mayor es el borde del forjado y los de dentro, sus huecos."
                     } else {
                         "Las líneas tienen que cerrar un solo contorno."

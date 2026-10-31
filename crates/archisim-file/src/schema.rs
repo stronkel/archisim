@@ -117,6 +117,10 @@ pub(crate) struct ProjectFile {
     /// Painted zones of walls' faces (version 21).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub paint_zones: Vec<PaintZoneOf>,
+    /// Zones of the faces looking up or down of slabs, footings… (version
+    /// 54): element, face, outline in plan and paint.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub face_zones: Vec<FaceZoneOf>,
     /// How materials look in 3D: colour and texture (version 26).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub appearances: Vec<AppearanceOf>,
@@ -1147,6 +1151,17 @@ pub(crate) struct PaintZoneOf {
     pub side: String,
     pub outline: Vec<Xy>,
     pub material: u64,
+}
+
+/// A zone of a face looking up or down (version 54).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct FaceZoneOf {
+    pub element: u64,
+    pub face: String,
+    pub outline: Vec<Xy>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub material: Option<u64>,
 }
 
 /// How a material looks in 3D (version 26).
@@ -3249,6 +3264,16 @@ impl ProjectFile {
                     material: z.material.0,
                 })
                 .collect(),
+            face_zones: p
+                .face_zones
+                .iter()
+                .map(|z| FaceZoneOf {
+                    element: z.element,
+                    face: z.face.code(),
+                    outline: z.outline.iter().copied().map(xy).collect(),
+                    material: z.material.map(|m| m.0),
+                })
+                .collect(),
             edges: p
                 .edges
                 .iter()
@@ -3922,6 +3947,7 @@ impl ProjectFile {
             edges: Vec::new(),
             face_paints: Vec::new(),
             paint_zones: Vec::new(),
+            face_zones: Vec::new(),
             appearances: Vec::new(),
             presentation_styles: Vec::new(),
             prices: self.prices.into_iter().map(PriceOf::into_core).collect(),
@@ -4381,6 +4407,18 @@ impl ProjectFile {
                 side,
                 outline: z.outline.into_iter().map(pt).collect(),
                 material: core::MaterialId(z.material),
+            });
+        }
+        for z in self.face_zones {
+            let face = core::FaceRef::from_code(&z.face).ok_or_else(|| FileError::Value {
+                element: format!("zone of element {}", z.element),
+                message: format!("unknown face «{}»", z.face),
+            })?;
+            parts.face_zones.push(core::FaceZone {
+                element: z.element,
+                face,
+                outline: z.outline.into_iter().map(pt).collect(),
+                material: z.material.map(core::MaterialId),
             });
         }
         for e in self.edges {
