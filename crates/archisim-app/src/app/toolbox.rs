@@ -345,7 +345,7 @@ const ARCHITECTURE: &[Tile] = &[
         Pick::Tool(Tool::Elevator),
         Glyph::Stair,
         "Ascensor",
-        "",
+        "AS",
         "Ascensor completo: hueco con foso y huida, puertas de piso en cada planta, cabina; abre los huecos de los forjados",
     ),
     tile(
@@ -375,13 +375,6 @@ const ARCHITECTURE: &[Tile] = &[
         "Local",
         "Z",
         "Locales (IfcSpace): clic dentro de un recinto (superficie útil), polígono o rectángulo; número, nombre y uso",
-    ),
-    tile(
-        Pick::Tool(Tool::Grid),
-        Glyph::Grid,
-        "Ejes",
-        "X",
-        "Ejes de replanteo con su numeración",
     ),
 ];
 

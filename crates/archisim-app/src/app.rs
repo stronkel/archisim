@@ -205,6 +205,7 @@ impl Tool {
             "q" => Some(Tool::RefPlane),
             "pi" => Some(Tool::Brush),
             "ps" => Some(Tool::Pool),
+            "as" => Some(Tool::Elevator),
             _ => None,
         }
     }

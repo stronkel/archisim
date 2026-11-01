@@ -8743,7 +8743,9 @@ fn lifts_are_placed() {
     let p1 = h
         .app
         .ed
-        .transact("Planta", |m| Ok::<_, archisim_core::ModelError>(m.add_level("P1", 3.2)))
+        .transact("Planta", |m| {
+            Ok::<_, archisim_core::ModelError>(m.add_level("P1", 3.2))
+        })
         .unwrap();
     h.app.pick(Pick::Tool(Tool::Elevator));
     assert_eq!(h.app.tool, Tool::Elevator);
