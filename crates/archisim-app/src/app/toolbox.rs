@@ -569,6 +569,13 @@ const SITE: &[Tile] = &[
         "Glorieta o plaza donde se encuentran las calles: clic en el cruce; las calles se recortan en su círculo",
     ),
     tile(
+        Pick::Tool(Tool::Marking),
+        Glyph::Marking,
+        "Marca vial",
+        "MV",
+        "Pasos de peatones, líneas, flechas, STOP, cebreados y plazas pintadas (Norma 8.2-IC)",
+    ),
+    tile(
         Pick::Objects(super::object_gallery::ObjectScope::Vegetation),
         Glyph::Tree,
         "Vegetación",

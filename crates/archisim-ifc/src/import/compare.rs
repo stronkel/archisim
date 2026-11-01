@@ -509,6 +509,30 @@ pub fn differences(a: &Model, b: &Model) -> Vec<String> {
             diff(format!("vial {}: {:?} / {:?}", s.guid, s, t));
         }
     }
+    if a.markings().count() != b.markings().count() {
+        diff(format!(
+            "número de marcas viales: {} / {}",
+            a.markings().count(),
+            b.markings().count()
+        ));
+    }
+    for s in a.markings() {
+        let Some(t) = b.markings().find(|t| t.guid == s.guid) else {
+            diff(format!("marca vial {} falta", s.guid));
+            continue;
+        };
+        let same = s.kind == t.kind
+            && s.path.len() == t.path.len()
+            && s.path
+                .iter()
+                .zip(&t.path)
+                .all(|(p, q)| p.distance(*q) <= TOL)
+            && close(s.width, t.width)
+            && close(s.depth, t.depth);
+        if !same {
+            diff(format!("marca vial {}: {:?} / {:?}", s.guid, s, t));
+        }
+    }
     for s in a.roundabouts() {
         let Some(t) = b.roundabouts().find(|t| t.guid == s.guid) else {
             diff(format!("glorieta {} falta", s.guid));

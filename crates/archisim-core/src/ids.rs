@@ -67,6 +67,10 @@ typed_id!(
     RoundaboutId
 );
 typed_id!(
+    /// Identifies a [`crate::Marking`] (a road marking).
+    MarkingId
+);
+typed_id!(
     /// Identifies a [`crate::Pool`] (a pool built in the ground).
     PoolId
 );

@@ -239,6 +239,48 @@ pub fn build() -> Res<Model> {
         kerb_material: stone,
         island_material: stone,
     })?;
+    // Road markings at will (U4): crossings with their lowered kerbs on
+    // the Calle Real and the Calle Nueva, a raised crossing, give-way lines
+    // and triangles at the roundabout, a «STOP», arrows, «BUS», a hatched
+    // island and bays for disabled people and for loading.
+    m.edit_road(real, |r| {
+        r.section.crossings = vec![archisim_core::Crossing {
+            at: 115.0,
+            width: 4.0,
+        }];
+    })?;
+    m.edit_road(nueva, |r| {
+        r.section.crossings = vec![archisim_core::Crossing {
+            at: 15.0,
+            width: 4.0,
+        }];
+    })?;
+    use archisim_core::MarkingKind as K;
+    let marks: Vec<(K, Vec<Point2>)> = vec![
+        (K::RaisedCrossing, vec![p(32.0, 57.15), p(32.0, 62.85)]),
+        (K::GiveWayLine, vec![p(-3.0, 24.5), p(0.0, 24.5)]),
+        (K::GiveWay, vec![p(-1.5, 31.0), p(-1.5, 30.0)]),
+        (K::GiveWayLine, vec![p(0.0, -24.5), p(3.0, -24.5)]),
+        (K::GiveWay, vec![p(1.5, -31.0), p(1.5, -30.0)]),
+        (K::StopLine, vec![p(53.0, 60.6), p(53.0, 57.2)]),
+        (K::Stop, vec![p(46.0, 58.9), p(47.0, 58.9)]),
+        (K::ArrowStraight, vec![p(1.5, -45.0), p(1.5, -44.0)]),
+        (K::ArrowStraightRight, vec![p(1.5, -38.0), p(1.5, -37.0)]),
+        (K::Bus, vec![p(-75.0, -5.5), p(-74.0, -5.5)]),
+        (
+            K::Chevrons,
+            vec![p(0.0, -72.0), p(1.4, -62.0), p(-1.4, -62.0)],
+        ),
+        (
+            K::DisabledBay,
+            vec![p(40.0, 60.7), p(45.0, 60.7), p(45.0, 62.8), p(40.0, 62.8)],
+        ),
+        (K::LoadingBay, vec![p(14.0, 62.8), p(22.0, 62.8)]),
+    ];
+    for (kind, path) in marks {
+        let material = m.marking_material(kind.colour());
+        m.add_marking(archisim_core::NewMarking::usual(pb, kind, path, material))?;
+    }
     // A house on the block between them.
     let corners = [p(15.0, 15.0), p(35.0, 15.0), p(35.0, 28.0), p(15.0, 28.0)];
     let base = ground(p(25.0, 20.0));
@@ -450,6 +492,13 @@ mod tests {
         assert_eq!(arms, vec![2, 3, 3, 3, 4], "{arms:?}");
         // The crossing is a roundabout and the L a square.
         assert_eq!(js.iter().filter(|j| j.ring.is_some()).count(), 2);
+        // Its markings, and the crossings' lowered kerbs.
+        assert_eq!(m.markings().count(), 13);
+        let real = m.roads().find(|r| r.name == "Calle Real").unwrap();
+        assert!(real
+            .pieces()
+            .iter()
+            .any(|p| p.lowered == archisim_core::Lowered::Flush));
         assert_eq!(m.roads().filter(|r| r.sloped()).count(), 2);
         assert_eq!(m.roads().filter(|r| !r.changes.is_empty()).count(), 3);
         let nueva = m.roads().find(|r| r.name == "Calle Nueva").unwrap();

@@ -77,6 +77,7 @@ impl ArchiSimApp {
         self.draw_module_preview(&painter, rect);
         self.draw_concept_preview(&painter, rect);
         self.draw_urban_preview(&painter, rect);
+        self.draw_marking_preview(&painter, rect);
         self.draw_pool_preview(&painter, rect);
         self.draw_planting_preview(&painter, rect);
         self.draw_services_preview(&painter, rect);
@@ -146,6 +147,7 @@ impl ArchiSimApp {
             | Tool::Brush
             | Tool::Road
             | Tool::Roundabout
+            | Tool::Marking
             | Tool::Planting
             | Tool::Pipe
             | Tool::Duct
@@ -473,6 +475,7 @@ impl ArchiSimApp {
             | Tool::Pool
             | Tool::Road
             | Tool::Roundabout
+            | Tool::Marking
             | Tool::Planting
             | Tool::Pipe
             | Tool::Duct
@@ -486,6 +489,7 @@ impl ArchiSimApp {
                     Tool::Planting => self.planting_points.clone(),
                     Tool::Pipe | Tool::Duct => self.run_points.clone(),
                     Tool::Device | Tool::Elevator | Tool::Roundabout => Vec::new(),
+                    Tool::Marking => self.marking_points.clone(),
                     Tool::TeamZone => self.team_ui.zone_start.into_iter().collect(),
                     _ => self.concept_points(),
                 };
@@ -499,6 +503,7 @@ impl ArchiSimApp {
                     Tool::Planting => self.planting_points.last().copied(),
                     Tool::Pipe | Tool::Duct => self.run_points.last().copied(),
                     Tool::Device | Tool::Elevator | Tool::TeamZone | Tool::Roundabout => None,
+                    Tool::Marking => self.marking_points.last().copied(),
                     _ => self.concept_anchor(),
                 };
                 if let Some(a) = anchor {
@@ -667,6 +672,7 @@ impl ArchiSimApp {
                 Tool::Plot => self.plot_tool.backspace(),
                 Tool::Pool => self.pool_tool.backspace(),
                 Tool::Road => self.road_points.pop().is_some(),
+                Tool::Marking => self.marking_points.pop().is_some(),
                 Tool::Planting => self.planting_points.pop().is_some(),
                 Tool::Pipe | Tool::Duct => self.run_points.pop().is_some(),
                 _ => false,
@@ -772,6 +778,7 @@ impl ArchiSimApp {
                     SlabOutcome::Nothing => {}
                 },
                 Tool::Road => self.finish_road(),
+                Tool::Marking => self.finish_marking(),
                 Tool::Planting => self.finish_planting(false),
                 Tool::Pipe | Tool::Duct => self.finish_run(),
                 Tool::Railing => {
@@ -855,6 +862,11 @@ impl ArchiSimApp {
                     }
                 }
                 Tool::Roundabout => self.set_tool(Tool::Arrow),
+                Tool::Marking => {
+                    if self.marking_points.pop().is_none() {
+                        self.set_tool(Tool::Arrow);
+                    }
+                }
                 Tool::Planting => {
                     if self.planting_points.pop().is_none() {
                         self.set_tool(Tool::Arrow);
@@ -1207,6 +1219,17 @@ impl ArchiSimApp {
                 } else if response.clicked_by(PointerButton::Primary) {
                     if let Some(c) = self.cursor {
                         self.planting_click(c.point);
+                    }
+                }
+            }
+            Tool::Marking => {
+                if response.double_clicked_by(PointerButton::Primary)
+                    || response.clicked_by(PointerButton::Secondary)
+                {
+                    self.finish_marking();
+                } else if response.clicked_by(PointerButton::Primary) {
+                    if let Some(c) = self.cursor {
+                        self.marking_click(c.point);
                     }
                 }
             }

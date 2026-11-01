@@ -156,6 +156,9 @@ pub(crate) struct ProjectFile {
     /// Roundabouts and squares (version 64).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub roundabouts: Vec<RoundaboutOf>,
+    /// Road markings (version 65).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub markings: Vec<MarkingOf>,
     /// Plantings: plants along a line or over an area (version 25).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub plantings: Vec<PlantingOf>,
@@ -1062,6 +1065,25 @@ pub(crate) struct Device {
     /// The type of a light point's fitting (version 55).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fixture: Option<u64>,
+}
+
+/// A road marking (version 65).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct MarkingOf {
+    pub id: u64,
+    pub guid: String,
+    pub level: u64,
+    pub kind: String,
+    pub path: Vec<Xy>,
+    pub width: f64,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub dash: f64,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub gap: f64,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub depth: f64,
+    pub material: u64,
 }
 
 /// A roundabout or a square where streets meet (version 64).
@@ -3516,6 +3538,22 @@ impl ProjectFile {
                     base_offset: x.base_offset,
                 })
                 .collect(),
+            markings: p
+                .markings
+                .iter()
+                .map(|m| MarkingOf {
+                    id: m.id.0,
+                    guid: m.guid.to_string(),
+                    level: m.level.0,
+                    kind: m.kind.code().to_string(),
+                    path: m.path.iter().copied().map(xy).collect(),
+                    width: m.width,
+                    dash: m.dash,
+                    gap: m.gap,
+                    depth: m.depth,
+                    material: m.material.0,
+                })
+                .collect(),
             roundabouts: p
                 .roundabouts
                 .iter()
@@ -4200,6 +4238,7 @@ impl ProjectFile {
             plots: Vec::new(),
             roads: Vec::new(),
             roundabouts: Vec::new(),
+            markings: Vec::new(),
             plantings: Vec::new(),
             pools: Vec::new(),
             elevators: Vec::new(),
@@ -4913,6 +4952,24 @@ impl ProjectFile {
                 pavement: core::MaterialId(r.pavement),
                 kerb_material: core::MaterialId(r.kerb_material),
                 sidewalk_material: core::MaterialId(r.sidewalk_material),
+            });
+        }
+        for x in self.markings {
+            let element = format!("marking {}", x.id);
+            parts.markings.push(core::Marking {
+                id: core::MarkingId(x.id),
+                guid: guid(&element, &x.guid)?,
+                level: core::LevelId(x.level),
+                kind: core::MarkingKind::from_code(&x.kind).ok_or_else(|| FileError::Value {
+                    element: element.clone(),
+                    message: format!("«{}» is not a road marking", x.kind),
+                })?,
+                path: x.path.into_iter().map(pt).collect(),
+                width: x.width,
+                dash: x.dash,
+                gap: x.gap,
+                depth: x.depth,
+                material: core::MaterialId(x.material),
             });
         }
         for c in self.roundabouts {

@@ -57,6 +57,8 @@ pub enum Element {
     Road(archisim_core::RoadId),
     /// A roundabout or square, picked inside its circle.
     Roundabout(archisim_core::RoundaboutId),
+    /// A road marking, picked on its paint or along its path.
+    Marking(archisim_core::MarkingId),
     /// A pool built in the ground, picked inside its coping.
     Pool(archisim_core::PoolId),
     /// A lift, picked inside its shaft on any level it crosses.
@@ -158,6 +160,7 @@ pub fn outline<G: Geo + ?Sized>(geo: &G, element: Element) -> Option<Vec<Point2>
         Element::Plot(id) => model.plot(id).map(|p| p.outline.clone()),
         Element::Road(id) => model.road(id).map(|r| r.outline()),
         Element::Roundabout(id) => model.roundabout(id).map(|r| r.outline()),
+        Element::Marking(id) => model.marking(id).map(marking_outline),
         Element::Pool(id) => model.pool(id).map(|p| p.coping_outline()),
         Element::Elevator(id) => model.elevator(id).map(|e| e.outside()),
         Element::Planting(id) => model.planting(id).map(|p| {
@@ -461,6 +464,11 @@ pub fn elements_on_level(model: &Model, level: LevelId) -> Vec<Element> {
     );
     v.extend(
         model
+            .markings_on_level(level)
+            .map(|m| Element::Marking(m.id)),
+    );
+    v.extend(
+        model
             .plantings_on_level(level)
             .map(|p| Element::Planting(p.id)),
     );
@@ -516,6 +524,7 @@ pub fn type_of(model: &Model, e: Element) -> Option<TypeOf> {
         | Element::Plot(_)
         | Element::Road(_)
         | Element::Roundabout(_)
+        | Element::Marking(_)
         | Element::Pool(_)
         | Element::Elevator(_)
         | Element::Planting(_)
@@ -586,6 +595,7 @@ pub fn pick_all<G: Geo + ?Sized>(
         Element::Mass(_) => 2,
         Element::Road(_) => 5,
         Element::Roundabout(_) => 4,
+        Element::Marking(_) => 3,
         // In the ground, as a slab.
         Element::Pool(_) => 4,
         // Over the slabs it goes through.
@@ -699,6 +709,7 @@ pub fn of_solid(owner: archisim_geom::solid::SolidOwner) -> Element {
         SolidOwner::Footing(id) => Element::Footing(id),
         SolidOwner::Mass(id) => Element::Mass(id),
         SolidOwner::Road(id) => Element::Road(id),
+        SolidOwner::Marking(id) => Element::Marking(id),
         SolidOwner::Pool(id) => Element::Pool(id),
         SolidOwner::Elevator(id) => Element::Elevator(id),
         SolidOwner::Run(id) => Element::Run(id),
@@ -726,6 +737,7 @@ pub fn solid_of(e: Element) -> Option<archisim_geom::solid::SolidOwner> {
         Element::Footing(id) => SolidOwner::Footing(id),
         Element::Mass(id) => SolidOwner::Mass(id),
         Element::Road(id) => SolidOwner::Road(id),
+        Element::Marking(id) => SolidOwner::Marking(id),
         Element::Pool(id) => SolidOwner::Pool(id),
         Element::Elevator(id) => SolidOwner::Elevator(id),
         Element::Run(id) => SolidOwner::Run(id),
@@ -827,6 +839,31 @@ fn polygon_touches(poly: &[Point2], lo: Point2, hi: Point2) -> bool {
             !archisim_draft::intersect(&e, &r).is_empty()
         })
     })
+}
+
+/// What a road marking is picked by: the box round its paint (a line,
+/// a strip half a metre wide along its path).
+fn marking_outline(m: &archisim_core::Marking) -> Vec<Point2> {
+    match m.kind.place() {
+        archisim_core::MarkingPlace::Area => m.path.clone(),
+        archisim_core::MarkingPlace::Line => archisim_core::strip(&m.path, -0.4, 0.4),
+        _ => {
+            let pts: Vec<Point2> = m.shapes().into_iter().flatten().collect();
+            let (lo, hi) = pts.iter().fold(
+                (
+                    Point2::new(f64::MAX, f64::MAX),
+                    Point2::new(f64::MIN, f64::MIN),
+                ),
+                |(lo, hi), p| {
+                    (
+                        Point2::new(lo.x.min(p.x), lo.y.min(p.y)),
+                        Point2::new(hi.x.max(p.x), hi.y.max(p.y)),
+                    )
+                },
+            );
+            vec![lo, Point2::new(hi.x, lo.y), hi, Point2::new(lo.x, hi.y)]
+        }
+    }
 }
 
 #[cfg(test)]

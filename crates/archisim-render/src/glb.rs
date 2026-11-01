@@ -112,6 +112,7 @@ fn element_name(model: &Model, owner: SolidOwner) -> String {
         SolidOwner::Elevator(_) => "Ascensor",
         SolidOwner::Mass(_) => "Volumen",
         SolidOwner::Road(_) => "Vial",
+        SolidOwner::Marking(_) => "Marca vial",
         SolidOwner::Run(_) => "Tubería",
         SolidOwner::Device(_) => "Aparato",
     };

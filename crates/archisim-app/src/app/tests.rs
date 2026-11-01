@@ -8991,3 +8991,63 @@ fn a_roundabout_on_a_crossing() {
     let now = h.model().roundabout(c.id).unwrap().centre;
     assert!(now.distance(p(5.0, 0.0)) < 1e-6, "{now:?}");
 }
+
+/// Road markings with the tool (U4): a zebra across a road becomes the
+/// road's crossing (with its lowered kerbs), an arrow turns with its
+/// lane, a dashed line is drawn by its points; markings can be picked.
+#[test]
+fn markings_with_the_tool() {
+    let mut h = Harness::new(Editor::new_project());
+    let canvas = h.app.canvas;
+    h.app
+        .view
+        .fit_exact(canvas, p(-30.0, -30.0), p(30.0, 30.0), 0.0);
+    h.app.set_discipline(super::toolbox::Discipline::Site);
+    h.type_text("w");
+    h.click_at(p(-25.0, 0.0));
+    h.click_at(p(25.0, 0.0));
+    h.key(Key::Enter);
+    h.key(Key::Escape);
+    let road = h.model().roads().next().unwrap().id;
+    h.app.set_tool(Tool::Marking);
+    h.app.marking_settings =
+        super::marking_ui::MarkingSettings::of(archisim_core::MarkingKind::Zebra);
+    h.frame();
+    h.click_at(p(10.0, -4.0));
+    h.click_at(p(10.0, 4.0));
+    let r = h.model().road(road).unwrap();
+    assert_eq!(r.section.crossings.len(), 1);
+    assert!(
+        (r.section.crossings[0].at - 35.0).abs() < 0.5,
+        "{:?}",
+        r.section.crossings
+    );
+    assert!(r
+        .pieces()
+        .iter()
+        .any(|p| p.lowered == archisim_core::Lowered::Flush));
+    assert_eq!(h.model().markings().count(), 0);
+    // An arrow in the lane to the right of the axis goes forward.
+    h.app.marking_settings =
+        super::marking_ui::MarkingSettings::of(archisim_core::MarkingKind::ArrowStraight);
+    h.frame();
+    h.click_at(p(-10.0, -1.5));
+    let a = h.model().markings().next().unwrap().clone();
+    assert!((a.path[1] - a.path[0]).x > 0.9, "{:?}", a.path);
+    // On the other side, back.
+    h.click_at(p(-10.0, 1.5));
+    let b = h.model().markings().last().unwrap().clone();
+    assert!((b.path[1] - b.path[0]).x < -0.9, "{:?}", b.path);
+    // A dashed line by its points.
+    h.app.marking_settings =
+        super::marking_ui::MarkingSettings::of(archisim_core::MarkingKind::Dashed);
+    h.frame();
+    h.click_at(p(-20.0, 2.0));
+    h.click_at(p(0.0, 2.0));
+    h.key(Key::Enter);
+    assert_eq!(h.model().markings().count(), 3);
+    let line = h.model().markings().last().unwrap().clone();
+    assert_eq!(line.kind, archisim_core::MarkingKind::Dashed);
+    h.app.ed.selection = [Element::Marking(line.id)].into_iter().collect();
+    h.frame();
+}

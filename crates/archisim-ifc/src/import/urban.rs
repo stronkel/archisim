@@ -306,4 +306,76 @@ impl<'a> Importer<'a> {
         }
         Ok(())
     }
+
+    /// Road markings (U4), from their `ArchiSim_Marking` set.
+    pub(super) fn import_markings(&mut self) {
+        for id in self.file.of_kind("IFCBUILDINGELEMENTPROXY") {
+            if self.property_own(id, "ArchiSim_Marking", "Kind").is_none() {
+                continue;
+            }
+            if let Err(why) = self.import_marking(id) {
+                self.report.skip("marcas viales", why);
+            }
+            self.road_ids.insert(id);
+        }
+    }
+
+    fn import_marking(&mut self, id: u64) -> Result<(), String> {
+        let text = |s: &Self, key: &str| {
+            s.property_own(id, "ArchiSim_Marking", key)
+                .and_then(|v| v.as_str())
+                .map(str::to_string)
+        };
+        let kind = text(self, "Kind")
+            .and_then(|k| archisim_core::MarkingKind::from_code(&k))
+            .ok_or("clase desconocida")?;
+        let path: Vec<Point2> = text(self, "Path")
+            .unwrap_or_default()
+            .split(';')
+            .filter_map(|p| {
+                let (x, y) = p.split_once(',')?;
+                Some(Point2::new(
+                    snap(x.trim().parse().ok()?),
+                    snap(y.trim().parse().ok()?),
+                ))
+            })
+            .collect();
+        let v: Vec<f64> = text(self, "Sizes")
+            .unwrap_or_default()
+            .split_whitespace()
+            .filter_map(|x| x.parse().ok())
+            .collect();
+        if v.len() != 4 {
+            return Err("medidas no válidas".into());
+        }
+        let level = self.level_by_guid(id, "ArchiSim_Marking", 0.0);
+        let material = match text(self, "Paint")
+            .and_then(|n| self.model.materials().find(|m| m.name == n).map(|m| m.id))
+        {
+            Some(m) => m,
+            None => self.model.marking_material(kind.colour()),
+        };
+        let mid = self
+            .model
+            .add_marking(archisim_core::NewMarking {
+                level,
+                kind,
+                path,
+                width: v[0],
+                dash: v[1],
+                gap: v[2],
+                depth: v[3],
+                material,
+            })
+            .map_err(|e| explain(&e))?;
+        self.report.markings += 1;
+        self.sources.push((mid.0, id));
+        if let Some(g) = self
+            .ent(id)
+            .and_then(|e| e.arg(0).as_str().map(str::to_string))
+        {
+            self.guids.markings.push((mid, g));
+        }
+        Ok(())
+    }
 }

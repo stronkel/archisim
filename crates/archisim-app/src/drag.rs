@@ -472,6 +472,7 @@ pub fn hotspots(model: &Model, selection: &BTreeSet<Element>) -> Vec<Hotspot> {
             | Element::Mass(_)
             | Element::Plot(_)
             | Element::Roundabout(_)
+            | Element::Marking(_)
             | Element::Planting(_)
             | Element::Run(_)
             | Element::Edge(_)
@@ -1328,6 +1329,9 @@ pub(crate) fn move_selection(
             Element::Roundabout(id) => {
                 model.edit_roundabout(*id, |x| x.centre = x.centre + d)?;
             }
+            Element::Marking(id) => {
+                model.edit_marking(*id, |x| x.path.iter_mut().for_each(|p| *p = *p + d))?;
+            }
             Element::Planting(id) => {
                 model.edit_planting(*id, |x| x.path.iter_mut().for_each(|p| *p = *p + d))?;
             }
@@ -1874,6 +1878,23 @@ pub(crate) fn copy(
                 })?;
                 copies.insert(Element::Roundabout(new));
             }
+            Element::Marking(id) => {
+                let x = model
+                    .marking(*id)
+                    .ok_or(ModelError::UnknownElement(id.0))?
+                    .clone();
+                let new = model.add_marking(archisim_core::NewMarking {
+                    level: x.level,
+                    kind: x.kind,
+                    path: x.path.iter().map(|p| *p + d).collect(),
+                    width: x.width,
+                    dash: x.dash,
+                    gap: x.gap,
+                    depth: x.depth,
+                    material: x.material,
+                })?;
+                copies.insert(Element::Marking(new));
+            }
             Element::Pool(id) => {
                 let x = model
                     .pool(*id)
@@ -2204,6 +2225,7 @@ pub(crate) fn exists(model: &Model, e: Element) -> bool {
         Element::Elevator(id) => model.elevator(id).is_some(),
         Element::Road(id) => model.road(id).is_some(),
         Element::Roundabout(id) => model.roundabout(id).is_some(),
+        Element::Marking(id) => model.marking(id).is_some(),
         Element::Planting(id) => model.planting(id).is_some(),
         Element::Run(id) => model.run(id).is_some(),
         Element::Edge(id) => model.edge(id).is_some(),
@@ -2284,6 +2306,7 @@ fn level_of(
             Element::Elevator(id) => model.elevator(*id).map(|e| e.level),
             Element::Road(id) => model.road(*id).map(|r| r.level),
             Element::Roundabout(id) => model.roundabout(*id).map(|r| r.level),
+            Element::Marking(id) => model.marking(*id).map(|r| r.level),
             Element::Planting(id) => model.planting(*id).map(|r| r.level),
             Element::Run(id) => model.run(*id).map(|r| r.level),
             Element::Edge(id) => model.edge(*id).map(|e| e.level),
