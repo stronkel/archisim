@@ -128,9 +128,14 @@ pub fn dressed_solids(model: &Model, m: &Mass) -> Vec<Solid> {
         None => out.add(mat.wall, prism(&poly, z0, top)),
     }
 
-    // The façades.
+    // The façades; the shops and the big door on those to the street.
     let longest_free = (0..n)
         .filter(|i| !party(*i))
+        .max_by(|a, b| sides[*a].len.total_cmp(&sides[*b].len));
+    let street = model.street_sides(m.id);
+    let on_street = |i: usize| street.get(i).copied().unwrap_or(false);
+    let door_side = (0..n)
+        .filter(|i| on_street(*i))
         .max_by(|a, b| sides[*a].len.total_cmp(&sides[*b].len));
     for (i, side) in sides.iter().enumerate() {
         if party(i) {
@@ -144,7 +149,7 @@ pub fn dressed_solids(model: &Model, m: &Mass) -> Vec<Solid> {
             side,
             (z0, top, fh, floors),
             (prev_party, next_party),
-            longest_free == Some(i),
+            (on_street(i), door_side == Some(i)),
         );
     }
     // Courtyard façades: windows looking in.
@@ -173,7 +178,7 @@ pub fn dressed_solids(model: &Model, m: &Mass) -> Vec<Solid> {
                 &side,
                 (z0, top, fh, floors),
                 (true, true),
-                false,
+                (false, false),
             );
         }
     }
@@ -208,7 +213,7 @@ fn facade(
     side: &Side,
     (z0, top, fh, floors): (f64, f64, f64, usize),
     (prev_party, next_party): (bool, bool),
-    main: bool,
+    (street, main): (bool, bool),
 ) {
     let mat = d.materials;
     let len = side.len;
@@ -255,7 +260,7 @@ fn facade(
     let bays = window_axes(len, d.bay, d.window_width);
     for f in 0..floors {
         let floor = z0 + f as f64 * fh;
-        if f == 0 && d.shop {
+        if f == 0 && d.shop && street {
             if d.style == BuildingStyle::Warehouse {
                 if main {
                     // The big door, in the middle.

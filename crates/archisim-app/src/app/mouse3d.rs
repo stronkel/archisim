@@ -21,6 +21,13 @@ pub enum Drag3d {
     Move { from: Point2, to: Point2, z: f64 },
     /// A selection window, between two points of the screen.
     Window { start: Pos2, now: Pos2 },
+    /// A decal slid over the plane of its face (U8): where it was grabbed
+    /// and where that point is now, absolute.
+    Decal {
+        id: archisim_core::DecalId,
+        from: [f64; 3],
+        to: [f64; 3],
+    },
 }
 
 impl ArchiSimApp {
@@ -51,6 +58,12 @@ impl ArchiSimApp {
             let shift = ctx.input(|i| i.modifiers.shift || i.modifiers.command);
             let hit = origin.and_then(|p| self.element_at_3d(rect, p));
             self.drag3d = match (origin, hit) {
+                (_, Some((Element::Decal(id), at)))
+                    if self.ed.selection.contains(&Element::Decal(id)) =>
+                {
+                    let p = [at.x as f64, at.y as f64, at.z as f64];
+                    Some(Drag3d::Decal { id, from: p, to: p })
+                }
                 (_, Some((e, at))) if self.ed.selection.contains(&e) => {
                     if !self.ed.selection.contains(&e) {
                         if !shift {
@@ -84,6 +97,11 @@ impl ArchiSimApp {
                             .map_or(to, |p| self.near_walls(from, self.moved_to(from, p))),
                     },
                     Drag3d::Window { start, .. } => Drag3d::Window { start, now: pos },
+                    Drag3d::Decal { id, from, to } => Drag3d::Decal {
+                        id,
+                        from,
+                        to: self.on_decal_plane(rect, pos, id, from).unwrap_or(to),
+                    },
                 });
                 if let Some(Drag3d::Move { from, to, .. }) = self.drag3d {
                     self.move_preview_3d(from, to);
@@ -112,6 +130,29 @@ impl ArchiSimApp {
                         Ok(label) => self.say(format!("{label}: {dist}.")),
                         Err(e) => self.complain(format!("No se puede: {e}.")),
                     }
+                }
+                Drag3d::Decal { id, from, to } => {
+                    // To the centimetre (along the face: off it stays 0).
+                    let mut d = [to[0] - from[0], to[1] - from[1], to[2] - from[2]]
+                        .map(|v| (v * 100.0).round() / 100.0);
+                    // Kept on the face's plane.
+                    if let Some(n) = self.ed.model().decal(id).map(|x| x.normal) {
+                        let off = d[0] * n[0] + d[1] * n[1] + d[2] * n[2];
+                        for k in 0..3 {
+                            d[k] -= n[k] * off;
+                        }
+                    }
+                    if d.iter().all(|v| v.abs() < 1e-4) {
+                        return;
+                    }
+                    let r = self.ed.transact("Mover la pegatina", |m| {
+                        m.edit_decal(id, |x| {
+                            for (c, v) in x.centre.iter_mut().zip(d) {
+                                *c += v;
+                            }
+                        })
+                    });
+                    self.report(r, "Pegatina movida sobre su cara.");
                 }
                 Drag3d::Window { start, now } => {
                     let shift = ctx.input(|i| i.modifiers.shift || i.modifiers.command);
@@ -248,6 +289,31 @@ impl ArchiSimApp {
         (t > 0.0).then(|| Point2::new(o.x + d.x * t, o.y + d.y * t))
     }
 
+    /// Where the cursor's ray meets the plane of a decal's face (through
+    /// `on`, a point of it), absolute.
+    fn on_decal_plane(
+        &self,
+        rect: Rect,
+        pos: Pos2,
+        id: archisim_core::DecalId,
+        on: [f64; 3],
+    ) -> Option<[f64; 3]> {
+        let n = self.ed.model().decal(id)?.normal;
+        let n = glam::DVec3::new(n[0], n[1], n[2]);
+        let local = pos - rect.min;
+        let ray = self.v3d.camera.ray(
+            glam::Vec2::new(local.x, local.y),
+            glam::Vec2::new(rect.width(), rect.height()),
+        );
+        let (o, d) = (ray.origin.as_dvec3(), ray.dir.as_dvec3());
+        let den = d.dot(n);
+        if den.abs() < 1e-9 {
+            return None;
+        }
+        let t = (glam::DVec3::from_array(on) - o).dot(n) / den;
+        (t > 0.0).then(|| (o + d * t).to_array())
+    }
+
     /// Where a move from `from` ends with the cursor at `p`: to the
     /// centimetre, or to the ground grid's step when it is on.
     fn moved_to(&self, from: Point2, p: Point2) -> Point2 {
@@ -333,6 +399,44 @@ impl ArchiSimApp {
                         painter,
                         b,
                         format!("Mover {}", crate::units::fmt_len(from.distance(to))),
+                        ACCENT,
+                    );
+                }
+            }
+            Some(Drag3d::Decal { id, from, to }) => {
+                // Its outline where it would go.
+                let Some(dec) = self.ed.model().decal(id) else {
+                    return;
+                };
+                let base = self
+                    .ed
+                    .model()
+                    .level(dec.level)
+                    .map_or(0.0, |l| l.elevation);
+                let size = glam::Vec2::new(rect.width(), rect.height());
+                let shift = [to[0] - from[0], to[1] - from[1], to[2] - from[2]];
+                let pts: Vec<Pos2> = dec
+                    .corners(base)
+                    .iter()
+                    .filter_map(|c| {
+                        let p = glam::Vec3::new(
+                            (c[0] + shift[0]) as f32,
+                            (c[1] + shift[1]) as f32,
+                            (c[2] + shift[2]) as f32,
+                        );
+                        self.v3d
+                            .camera
+                            .project_to_screen(p, size)
+                            .map(|s| Pos2::new(rect.min.x + s.x, rect.min.y + s.y))
+                    })
+                    .collect();
+                if pts.len() == 4 {
+                    painter.add(egui::Shape::closed_line(pts.clone(), Stroke::new(1.5, ACCENT)));
+                    let dist = (shift[0].powi(2) + shift[1].powi(2) + shift[2].powi(2)).sqrt();
+                    super::handles::tag(
+                        painter,
+                        pts[2],
+                        format!("Mover {}", crate::units::fmt_len(dist)),
                         ACCENT,
                     );
                 }

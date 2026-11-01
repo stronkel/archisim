@@ -9213,4 +9213,14 @@ fn a_decal_on_a_wall() {
     // In 3D, its squares with the picture's colour.
     let colours = archisim_geom::decals::decal_colors(h.model(), d.id).unwrap();
     assert!(colours.iter().all(|c| c[0] == [200, 20, 20]));
+    // The wall moves 3 m north: the decal goes with it.
+    let wall = h.model().walls().next().unwrap().id;
+    let r = h
+        .app
+        .ed
+        .transact("Mover", |m| m.move_wall(wall, p(0.0, 3.0), p(10.0, 3.0)));
+    assert!(r.is_ok());
+    let moved = h.model().decal(d.id).unwrap();
+    assert!((moved.centre[1] - d.centre[1] - 3.0).abs() < 1e-9);
+    assert_eq!(moved.host, d.host);
 }
