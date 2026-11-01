@@ -271,6 +271,38 @@ pub fn build() -> Result<Document, ModelError> {
         Ok(())
     })?;
 
+    // A climber on the west façade and the north one a green wall (H5).
+    doc.transact("Trepadora y fachada vegetal", |m| {
+        use archisim_core::{FaceRef, FaceSide, NewObject, ParamScope, Value};
+        let f = m.system_family("Trepadora")?;
+        let mut values = m.family_defaults(f, ParamScope::Type)?;
+        values.insert("width".into(), Value::Number(3.0));
+        values.insert("height".into(), Value::Number(2.6));
+        values.insert("plant".into(), Value::Text("Buganvilla".into()));
+        let t = m.add_object_type("Buganvilla en cables", f, values)?;
+        m.add_object(NewObject {
+            level: pb,
+            object_type: t,
+            position: Point2::new(0.0, 6.0),
+            rotation: std::f64::consts::FRAC_PI_2,
+            base_offset: 0.0,
+        })?;
+        let green = archisim_library::ground::green_wall_material(
+            m,
+            &archisim_library::ground::GREEN_WALLS[0],
+        );
+        let north = m
+            .walls()
+            .find(|w| {
+                w.level == pb && (w.start.y - 9.0).abs() < 1e-6 && (w.end.y - 9.0).abs() < 1e-6
+            })
+            .map(|w| w.id);
+        if let Some(w) = north {
+            m.set_face_paint(w.0, FaceRef::Wall(FaceSide::Exterior), Some(green))?;
+        }
+        Ok(())
+    })?;
+
     // Setting-out grids and the foundations (v0.36): strip footings under
     // the façade walls, pads under the porch columns and a tie beam
     // between them, their tops under the ground slab.
@@ -1558,8 +1590,8 @@ mod tests {
         assert_eq!(m.railings().count(), 1);
         // Twenty of the library (four of them the cosy pieces of the
         // living room), eight cypresses of a planting and one brought
-        // from SketchUp.
-        assert_eq!(m.objects().count(), 31);
+        // from SketchUp, and the climber on the west façade (H5).
+        assert_eq!(m.objects().count(), 32);
         assert_eq!(m.plantings().count(), 1);
         assert_eq!(
             m.objects().filter(|o| m.type_grows(o.object_type)).count(),

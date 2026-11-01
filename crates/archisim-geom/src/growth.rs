@@ -403,6 +403,146 @@ fn grow(
     mesh
 }
 
+// ---- Green walls (H5) -------------------------------------------------------
+
+/// Leaves per m² of a green wall at most, and its leaf's length.
+const GREEN_LEAVES_MAX: f64 = 700.0;
+const GREEN_LEAF: f64 = 0.07;
+
+/// The leaves of a green wall: on the faces of a wall (`solids`, its
+/// layers) whose material — painted or of the layer — is a plant's that
+/// grows (a «Fachada vegetal»), small leaves standing out of
+/// the face in their thousands, the same each time, in that material.
+/// They belong to the wall's façade (`SolidOwner::Facade`), so sections
+/// and elevations leave them out as they do the bricks.
+pub fn green_wall_solids(
+    model: &Model,
+    wall: archisim_core::WallId,
+    solids: &[Solid],
+) -> Vec<Solid> {
+    let mut by_material: std::collections::BTreeMap<archisim_core::MaterialId, Vec<[P3; 3]>> =
+        Default::default();
+    for s in solids {
+        for tri in &s.triangles {
+            let u = [
+                tri[1][0] - tri[0][0],
+                tri[1][1] - tri[0][1],
+                tri[1][2] - tri[0][2],
+            ];
+            let v = [
+                tri[2][0] - tri[0][0],
+                tri[2][1] - tri[0][1],
+                tri[2][2] - tri[0][2],
+            ];
+            let n = [
+                u[1] * v[2] - u[2] * v[1],
+                u[2] * v[0] - u[0] * v[2],
+                u[0] * v[1] - u[1] * v[0],
+            ];
+            let len = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt();
+            // Faces that stand up, big enough to grow on.
+            if len < 1e-9 || (n[2] / len).abs() > 0.2 || len / 2.0 < 0.01 {
+                continue;
+            }
+            let m = crate::solid::painted_material(model, s, tri).unwrap_or(s.material);
+            let a = model.appearance(m);
+            let Some(g) = a.growth else {
+                continue;
+            };
+            if model.material(m).is_none_or(|x| x.category != "vegetation") {
+                continue;
+            }
+            let normal = [n[0] / len, n[1] / len, n[2] / len];
+            let area = len / 2.0;
+            let density = g.density.clamp(10.0, GREEN_LEAVES_MAX);
+            let depth = g.height.clamp(0.02, 0.4);
+            // The same each time: seeded by where the triangle is.
+            let mut h = DefaultHasher::new();
+            for p in tri {
+                for c in p {
+                    ((c * 1000.0).round() as i64).hash(&mut h);
+                }
+            }
+            let mut seed = h.finish() | 1;
+            let mut rnd = move || {
+                seed ^= seed << 13;
+                seed ^= seed >> 7;
+                seed ^= seed << 17;
+                (seed >> 11) as f64 / (1u64 << 53) as f64
+            };
+            let count = (area * density) as usize + usize::from(rnd() < (area * density).fract());
+            let out = by_material.entry(m).or_default();
+            for _ in 0..count {
+                // A point of the triangle.
+                let (mut a1, mut b1) = (rnd(), rnd());
+                if a1 + b1 > 1.0 {
+                    a1 = 1.0 - a1;
+                    b1 = 1.0 - b1;
+                }
+                let off = depth * (0.15 + 0.85 * rnd());
+                let c = [
+                    tri[0][0] + u[0] * a1 + v[0] * b1 + normal[0] * off,
+                    tri[0][1] + u[1] * a1 + v[1] * b1 + normal[1] * off,
+                    tri[0][2] + u[2] * a1 + v[2] * b1 + normal[2] * off,
+                ];
+                // A leaf: a rhombus turned at random in the face's plane,
+                // tilted out of it.
+                let ang = rnd() * std::f64::consts::TAU;
+                let side = [normal[1], -normal[0], 0.0];
+                let up = [0.0, 0.0, 1.0];
+                let d = [
+                    side[0] * ang.cos() + up[0] * ang.sin(),
+                    side[1] * ang.cos() + up[1] * ang.sin(),
+                    ang.sin(),
+                ];
+                let tilt = 0.3 + 0.5 * rnd();
+                let along = [
+                    d[0] * (1.0 - tilt) + normal[0] * tilt,
+                    d[1] * (1.0 - tilt) + normal[1] * tilt,
+                    d[2] * (1.0 - tilt) + normal[2] * tilt,
+                ];
+                let w = [
+                    along[1] * normal[2] - along[2] * normal[1],
+                    along[2] * normal[0] - along[0] * normal[2],
+                    along[0] * normal[1] - along[1] * normal[0],
+                ];
+                let l = GREEN_LEAF * (0.7 + 0.6 * rnd());
+                let half = l * 0.35;
+                let tip = [
+                    c[0] + along[0] * l,
+                    c[1] + along[1] * l,
+                    c[2] + along[2] * l,
+                ];
+                let mid = [
+                    c[0] + along[0] * l * 0.4,
+                    c[1] + along[1] * l * 0.4,
+                    c[2] + along[2] * l * 0.4,
+                ];
+                let left = [
+                    mid[0] + w[0] * half,
+                    mid[1] + w[1] * half,
+                    mid[2] + w[2] * half,
+                ];
+                let right = [
+                    mid[0] - w[0] * half,
+                    mid[1] - w[1] * half,
+                    mid[2] - w[2] * half,
+                ];
+                out.push([c, left, tip]);
+                out.push([c, tip, right]);
+            }
+        }
+    }
+    by_material
+        .into_iter()
+        .map(|(material, triangles)| Solid {
+            owner: SolidOwner::Facade(wall),
+            material,
+            triangles,
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -513,5 +653,75 @@ mod tests {
         let s = &growth_solids(&m, t)[0];
         // 16 m² × 400 would be 6 400 tufts; still under the cap.
         assert!(s.triangles.len() <= MAX_TUFTS * 6 + 600);
+    }
+
+    /// A wall painted with a green finish grows leaves out of that face,
+    /// and only there; unpainted, none.
+    #[test]
+    fn green_walls_grow_leaves() {
+        let mut m = Model::new("t");
+        let l = m.add_level("PB", 0.0);
+        let mat = m.add_material(
+            "Revoco",
+            "plaster",
+            [230, 228, 220],
+            archisim_core::CutPattern::Solid,
+        );
+        let wt = m
+            .add_wall_type(
+                "Muro",
+                archisim_core::WallFunction::Exterior,
+                vec![archisim_core::Layer {
+                    material: mat,
+                    thickness: 0.2,
+                    function: archisim_core::LayerFunction::Structure,
+                }],
+            )
+            .unwrap();
+        let w = m
+            .add_wall(archisim_core::NewWall {
+                wall_type: wt,
+                level: l,
+                start: Point2::new(0.0, 0.0),
+                end: Point2::new(4.0, 0.0),
+                bulge: 0.0,
+                reference: archisim_core::ReferenceLine::Center,
+                height: 3.0,
+                base_offset: 0.0,
+                top: archisim_core::WallTop::Unconnected,
+            })
+            .unwrap();
+        let solids = crate::solid::wall_solids(&m, w);
+        assert!(green_wall_solids(&m, w, &solids).is_empty());
+        let green = m.add_material(
+            "Hiedra",
+            "vegetation",
+            [52, 88, 44],
+            archisim_core::CutPattern::Solid,
+        );
+        m.set_appearance(
+            green,
+            archisim_core::Appearance {
+                growth: Some(Growth::grass(0.12, 400.0)),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        m.set_face_paint(
+            w.0,
+            archisim_core::FaceRef::Wall(archisim_core::FaceSide::Exterior),
+            Some(green),
+        )
+        .unwrap();
+        let solids = crate::solid::wall_solids(&m, w);
+        let leaves = green_wall_solids(&m, w, &solids);
+        assert_eq!(leaves.len(), 1);
+        let n = leaves[0].triangles.len();
+        // 12 m² at 400 a m², two triangles each.
+        assert!((8000..11000).contains(&n), "{n}");
+        // All on the exterior side (the left of the wall, +y), out of it.
+        assert!(leaves[0].triangles.iter().flatten().all(|p| p[1] > 0.09));
+        // The same each time.
+        assert_eq!(leaves, green_wall_solids(&m, w, &solids));
     }
 }

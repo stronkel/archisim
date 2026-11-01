@@ -1,0 +1,38 @@
+family "Trepadora"
+  category site
+  host none
+  version 1
+  description "Planta trepadora sobre un paño de muro, con su soporte (cables, malla o celosía); el punto de inserción es el centro de su base contra la cara del muro y la planta crece hacia delante"
+  folder "Vegetación"
+
+type_params
+  section "Dimensiones"
+    width  length = 2.00 range 0.40..12.00 label "Ancho del paño"
+    height length = 2.50 range 0.50..12.00 label "Altura"
+    cover  number = 0.80 range 0.10..1.00 label "Cuánto cubre (0,1 a 1)"
+  section "Planta"
+    plant   choice("Hiedra", "Parra virgen", "Jazmín estrellado", "Buganvilla", "Glicinia") = "Hiedra" label "Especie"
+    support choice("Cables de acero", "Malla de acero", "Celosía de madera", "Sin soporte") = "Cables de acero" label "Soporte"
+    variant integer = 1 range 1..999 label "Variación"
+  section "Materiales"
+    vine      material = "Copa oscura" label "Hojas"
+    vine2     material = "Copa clara" label "Hojas claras"
+    vine_stem material = "Corteza" label "Tallos"
+    bracts    material = "Copa en flor" label "Flores"
+    frame     material = "Acero inoxidable" label "Soporte"
+  section "Modelo 3D"
+    model3d choice("Trepadora") = "Trepadora" label "Modelo 3D"
+
+body
+  box (-width / 2, 0, 0) to (width / 2, 0.2, height) material vine
+
+plan 1:50
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, 0.2) (-width / 2, 0.2) pen thin
+  repeat i in 0..8
+    let x = -width / 2 + width * (i + 0.5) / 8
+    arc center (x, 0.1) from (x + 0.09, 0.1) to (x - 0.09, 0.1) pen thin
+
+outputs
+  generator = "props:wall_climber"
+  ifc_class = "IfcGeographicElement"
+  ifc_type = "VEGETATION"

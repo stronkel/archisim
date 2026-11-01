@@ -1420,6 +1420,8 @@ fn add_solids(
                 .entry(o)
                 .or_insert_with(|| model.object_fine_materials(o))
                 .contains(&solid.material),
+            // The leaves of a green wall (H5).
+            SolidOwner::Facade(_) => model.appearance(solid.material).growth.is_some(),
             _ => false,
         };
         let smooth: Option<HashMap<[i64; 3], Vec3>> = (soft || fabric).then(|| {

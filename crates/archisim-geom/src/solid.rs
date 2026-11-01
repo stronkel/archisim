@@ -3691,6 +3691,10 @@ pub fn model_solids_except_detailed(
         if pieces && crate::facade::has_facade(model, w.id) {
             out.extend(crate::facade::facade_solids_in(&idx, w.id, &solids));
         }
+        // The leaves of its green faces (H5).
+        if pieces && growth_wanted() {
+            out.extend(crate::growth::green_wall_solids(model, w.id, &solids));
+        }
         out.extend(solids);
     }
     for s in model.slabs() {
