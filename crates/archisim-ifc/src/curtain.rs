@@ -309,9 +309,8 @@ impl Exporter<'_> {
                         "IFCPROPERTYSINGLEVALUE('Reference',$,IFCIDENTIFIER({}),$)",
                         string(reference)
                     )),
-                    self.w.add(
-                        "IFCPROPERTYSINGLEVALUE('IsExternal',$,IFCBOOLEAN(.T.),$)".to_string(),
-                    ),
+                    self.w
+                        .add("IFCPROPERTYSINGLEVALUE('IsExternal',$,IFCBOOLEAN(.T.),$)"),
                 ];
                 self.pset(e, &door.guid, "Pset_DoorCommon", &common);
                 let (w, h) = (cell.along.1 - cell.along.0, cell.up.1 - cell.up.0);
