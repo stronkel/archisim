@@ -583,6 +583,10 @@ pub fn add_library(m: &mut Model) -> Result<Library, ModelError> {
     facades::add_facade_types(m)?;
     // The steel of the reinforcement (E11).
     rebar_material(m);
+    // Green walls (H5): finishes whose leaves grow out of the face.
+    for g in &ground::GREEN_WALLS {
+        ground::green_wall_material(m, g);
+    }
     Ok(Library {
         curtain,
         void,

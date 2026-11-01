@@ -243,6 +243,59 @@ pub fn cover_material(m: &mut Model, c: &GroundCover) -> MaterialId {
     id
 }
 
+/// A green wall (H5): a finish for a wall's face, painted or as the outer
+/// layer of its type, whose leaves stand out of the face in 3D, `depth`
+/// out at most and `leaves` of them per m².
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GreenWall {
+    pub name: &'static str,
+    pub rgb: [u8; 3],
+    pub depth: f64,
+    pub leaves: f64,
+}
+
+/// The green walls of the template.
+pub const GREEN_WALLS: [GreenWall; 3] = [
+    GreenWall {
+        name: "Fachada vegetal · hiedra",
+        rgb: [52, 88, 44],
+        depth: 0.12,
+        leaves: 450.0,
+    },
+    GreenWall {
+        name: "Fachada vegetal · jardín vertical",
+        rgb: [86, 128, 60],
+        depth: 0.2,
+        leaves: 600.0,
+    },
+    GreenWall {
+        name: "Fachada vegetal · parra virgen en otoño",
+        rgb: [158, 58, 38],
+        depth: 0.15,
+        leaves: 350.0,
+    },
+];
+
+/// The material of a green wall, made once: a plant's (category
+/// «vegetation») that grows; `Growth::height` is how far its leaves stand
+/// out of the face.
+pub fn green_wall_material(m: &mut Model, g: &GreenWall) -> MaterialId {
+    if let Some(x) = m.materials().find(|x| x.name == g.name) {
+        return x.id;
+    }
+    let id = m.add_material(g.name, "vegetation", g.rgb, CutPattern::Solid);
+    let _ = m.set_appearance(
+        id,
+        Appearance {
+            color: None,
+            texture: None,
+            scale: None,
+            growth: Some(Growth::grass(g.depth, g.leaves)),
+        },
+    );
+    id
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

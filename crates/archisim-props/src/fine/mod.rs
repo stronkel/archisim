@@ -14,6 +14,7 @@ pub mod bedding;
 pub mod bedroom;
 pub mod built_in;
 pub mod chairs;
+pub mod climbers;
 pub mod courts;
 pub mod door;
 pub mod garden_plants;

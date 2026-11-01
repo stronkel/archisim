@@ -6,6 +6,31 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-01 (62) · H5: trepadoras y fachadas vegetales
+
+Rama `bloque/h5-trepadoras` (encima de H4), con pull request. Sin cambios de formato.
+
+**Hecho**
+- **Trepadora** (Objetos → Vegetación): una planta sobre un paño de muro, de ancho y alto dados, con su soporte. Detalle en `docs/VEGETACION.md` §6 bis.
+  - Soportes: cables de acero con sus anclajes, malla de acero sobre separadores, celosía de madera a 45° o ninguno.
+  - Especies: hiedra, parra virgen, jazmín estrellado, buganvilla y glicinia.
+  - Los tallos salen del suelo y se abren hacia arriba y a los lados, con hojas y flores; «Cuánto cubre» y «Variación».
+  - Planta propia, 3D sin líneas de contorno en las hojas, e IFC `IfcGeographicElement` VEGETATION.
+- **Fachada vegetal**: tres acabados nuevos en la plantilla, «Fachada vegetal · hiedra», «… jardín vertical» y «… parra virgen en otoño».
+  - Pintados en una cara de muro (o como capa exterior de un tipo de muro), le salen hojas en 3D, en el render y en el glTF: unas 450 por m², siempre las mismas.
+  - Las hojas son de la fachada: no salen en secciones ni alzados, como los ladrillos.
+- La demo lleva una buganvilla en cables en la fachada oeste y la fachada norte vestida de hiedra. Fotos con `ARCHISIM_TREPADORAS_OUT=carpeta cargo test -p archisim-app climber_pictures`, tras `archisim demo out/`.
+
+**Pendiente**
+- Las hojas de la fachada vegetal son del color de su material, todas iguales; se podría variar el tono.
+
+**Qué debe probar Antonio**
+- Abrir la demo en 3D y mirar la fachada norte (hiedra) y la oeste (buganvilla en cables).
+- Colocar una Trepadora desde Objetos → Vegetación contra un muro. En sus propiedades de tipo, cambiar especie, soporte y «Cuánto cubre».
+- Pintar con Pintar la cara de un muro con «Fachada vegetal · jardín vertical».
+
+---
+
 ## 2026-11-01 (61) · H4: ascensores
 
 Rama `bloque/h4-ascensores` (encima de H3), con pull request. Formato `.archisim` versión 59 (los ascensores).

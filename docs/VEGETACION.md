@@ -129,6 +129,18 @@ Urbanismo → **Vivero** (o «Vivero…» en las propiedades de una planta): la 
 
 Lo que se cambia es la especie: cambian todas sus plantas del proyecto.
 
+## 6 bis. Trepadoras y fachadas vegetales (H5)
+
+Dos maneras de vestir un muro de verde, según lo que se quiera contar:
+
+- **Trepadora** (Objetos → Vegetación): una planta sobre un paño de muro, de ancho y alto dados, con su soporte. Se coloca con el punto de inserción en la cara del muro, como un mueble contra la pared.
+  - Soportes: cables de acero verticales cada 50 cm con sus anclajes, malla de acero de 30 cm sobre separadores, celosía de madera a 45° con su marco, o ninguno (las que se agarran solas, como la hiedra).
+  - Especies: hiedra, parra virgen, jazmín estrellado (flor blanca), buganvilla (brácteas) y glicinia (racimos colgantes).
+  - Los tallos salen del suelo y se abren hacia arriba y a los lados; «Cuánto cubre» dice cuántos tallos y hojas lleva; «Variación» la cambia sin cambiar la especie.
+  - Hojas, tallos, flores y soporte llevan cada uno su material. En IFC es un `IfcGeographicElement` VEGETATION.
+- **Fachada vegetal**: un acabado. Los materiales «Fachada vegetal · hiedra», «… jardín vertical» y «… parra virgen en otoño» de la plantilla tienen en 3D, hojas que salen de la cara: miles, siempre las mismas. Se pintan sobre la cara de un muro (Pintar, o una franja con Dividir cara) o se ponen como capa exterior de un tipo de muro. Las hojas son de la fachada, como los ladrillos de E9: no salen en secciones ni alzados.
+  - Lo que sobresalen y cuántas hay por m² son el «alto» y la «densidad» del crecimiento del material, en el diálogo de materiales.
+
 ## 7. Pendiente
 
 - Tiradores en 3D para el alto y el ancho (en planta ya está: el tirador del borde de la copa cambia el ancho y, con Ctrl, también el alto).

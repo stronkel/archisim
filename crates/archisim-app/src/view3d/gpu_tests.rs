@@ -910,3 +910,64 @@ fn services_pictures() {
             .unwrap();
     }
 }
+
+/// Pictures of the demo's climber and green wall (H5), from outside:
+/// `ARCHISIM_TREPADORAS_OUT=carpeta` after `archisim demo out/`.
+#[test]
+fn climber_pictures() {
+    let Some(dir) = std::env::var_os("ARCHISIM_TREPADORAS_OUT") else {
+        return;
+    };
+    let Some((device, queue, view_formats)) = gpu() else {
+        return;
+    };
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../out/demo.archisim");
+    let Ok(m) = archisim_file::open(&path) else {
+        eprintln!("Run `archisim demo out/` first.");
+        return;
+    };
+    let scene = Scene::build(&m, &BTreeSet::new());
+    let dir = std::path::PathBuf::from(dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    // The climber on the west façade, the green wall on the north one, and
+    // the green wall close.
+    for (name, target, yaw, distance) in [
+        (
+            "trepadora",
+            [-0.2_f32, 6.0, 1.4],
+            std::f32::consts::PI,
+            6.5_f32,
+        ),
+        (
+            "fachada-vegetal",
+            [6.0, 9.2, 1.5],
+            std::f32::consts::FRAC_PI_2,
+            13.0,
+        ),
+        (
+            "fachada-vegetal-cerca",
+            [6.0, 9.2, 1.5],
+            std::f32::consts::FRAC_PI_2 + 0.5,
+            2.5,
+        ),
+    ] {
+        let mut camera = Camera {
+            pitch: 0.1,
+            yaw,
+            perspective: true,
+            ..Camera::default()
+        };
+        camera.target = glam::Vec3::from(target);
+        camera.distance = distance;
+        let mut r = Renderer::new(&device, view_formats, super::render::TextureMode::Full);
+        r.set_scene(&device, &scene);
+        r.render(&device, &queue, &camera, [900, 650], 1);
+        let (w, h, px) = r.read_pixels(&device, &queue).unwrap();
+        let pixmap = resvg::tiny_skia::Pixmap::from_vec(
+            px,
+            resvg::tiny_skia::IntSize::from_wh(w, h).unwrap(),
+        )
+        .unwrap();
+        pixmap.save_png(dir.join(format!("{name}.png"))).unwrap();
+    }
+}

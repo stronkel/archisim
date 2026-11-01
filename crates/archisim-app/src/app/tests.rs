@@ -4938,7 +4938,14 @@ fn faces_are_painted() {
     draw_outline(&mut h);
     h.key(Key::Escape);
     h.key(Key::Escape);
-    let brick = h.model().materials().last().unwrap().id;
+    // (Not a green wall's, whose leaves would stand in front of the face.)
+    let brick = h
+        .model()
+        .materials()
+        .filter(|m| m.category != "vegetation")
+        .last()
+        .unwrap()
+        .id;
     h.app.mass_settings.material = brick;
     h.app.pick(Pick::Concept(ConceptPick::Paint));
     // In plan: the west wall, clicked just east of its line.
