@@ -2351,6 +2351,8 @@ fn site(m: &mut Model, pb: LevelId) -> R {
         },
         top_offset: -0.17,
         profile: Vec::new(),
+
+        changes: Vec::new(),
         pavement: asphalt,
         kerb_material: kerb,
         sidewalk_material: paving,

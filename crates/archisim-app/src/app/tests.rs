@@ -4674,6 +4674,27 @@ fn roads_cross_and_climb() {
     assert!(h.model().road(id).unwrap().sloped());
     h.app.ed.selection = [Element::Road(id)].into_iter().collect();
     h.frame();
+    // A change of section along it (U2): the sidewalks widen from 40 m.
+    let r = h.app.ed.transact("Cambio", |m| {
+        m.edit_road(id, |r| {
+            let mut wide = r.section.strips.clone();
+            for x in wide
+                .iter_mut()
+                .filter(|x| x.band == archisim_core::RoadBand::Sidewalk)
+            {
+                x.width = 4.0;
+            }
+            r.changes = vec![archisim_core::SectionChange {
+                at: 40.0,
+                transition: 8.0,
+                strips: wide,
+            }];
+        })
+    });
+    assert!(r.is_ok(), "{r:?}");
+    let road = h.model().road(id).unwrap().clone();
+    assert!(road.section_at(50.0).width() > road.section_at(10.0).width() + 2.9);
+    h.frame();
 }
 
 fn road_id(h: &Harness) -> archisim_core::RoadId {

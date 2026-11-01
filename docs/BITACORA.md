@@ -6,6 +6,29 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-01 (67) · U2, primera parte: cambios de sección a lo largo de la calle
+
+Rama `bloque/u2-secciones` (encima de U1), con pull request. Formato `.archisim` versión 62.
+
+**Hecho**
+- **Cambios de sección**: desde una distancia del inicio del eje, la calle pasa a otra sección, con una transición.
+  - Si las dos secciones tienen las mismas franjas en el mismo orden, sus anchos cambian poco a poco a lo largo de la transición: una acera que se ensancha, un aparcamiento que se estrecha.
+  - Si no, el cambio es de golpe en la mitad de la transición: por ejemplo, una calle que pasa a plataforma única.
+  - Las marcas viales, las plazas de aparcamiento y los cruces usan la sección del punto donde están.
+- En Propiedades del vial, grupo «Cambios de sección»: desde, transición, tipo de vía de partida y franjas una a una; «Añadir cambio de sección».
+- IFC: los cambios en `ArchiSim_Road.Changes`, leídos al importar.
+- `archisim calles out/`: la Calle Real ensancha sus aceras al sur de la avenida y la Calle del Agua pasa a plataforma única arriba.
+
+**Pendiente (resto de U2)**
+- Editar a mano el contorno del bordillo y de la acera en modo boceto, como el forjado.
+- Aceras que siguen la línea de fachada de las parcelas.
+
+**Qué debe probar Antonio**
+- `archisim calles out/` y abrir `out/calles.archisim`: mirar en planta y en 3D la transición de la Calle Real y el cambio de la Calle del Agua.
+- Con un vial seleccionado, «Cambios de sección» → «Añadir cambio de sección», cambiar el ancho de una acera y la transición.
+
+---
+
 ## 2026-11-01 (66) · U1: rasante y cruces de las calles
 
 Rama `bloque/u1-rasante-cruces`, con pull request. Formato `.archisim` versión 61 (la rasante de los viales y el radio de sus esquinas; los proyectos antiguos se abren con calles horizontales y esquinas de 4 m).

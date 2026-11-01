@@ -179,7 +179,7 @@ fn meeting_points(roads: &[&Road]) -> Vec<(Point2, Vec<(usize, f64)>)> {
                 let lx = length(&x.axis);
                 for (end, sx) in [(x.axis[0], 0.0), (x.axis[x.axis.len() - 1], lx)] {
                     let (sy, d) = nearest_on(y, end);
-                    if d <= y.section.width() / 2.0 + 0.5 && d > 1e-6 {
+                    if d <= y.section_at(sy).width() / 2.0 + 0.5 && d > 1e-6 {
                         // Its distance as if its axis went on to the
                         // other's axis.
                         let (p, _) = along(&y.axis, sy);
@@ -197,10 +197,11 @@ fn meeting_points(roads: &[&Road]) -> Vec<(Point2, Vec<(usize, f64)>)> {
 /// How far a road's carriageway (lanes, parking, bike lanes) reaches to
 /// each side of its axis (left, right), the kerbs beside it and its whole
 /// half-widths.
-fn reach(r: &Road) -> (f64, f64, f64, f64, f64) {
-    let offs = r.section.band_offsets();
+fn reach(r: &Road, at: f64) -> (f64, f64, f64, f64, f64) {
+    let sec = r.section_at(at);
+    let offs = sec.band_offsets();
     let traffic: Vec<&(RoadBand, f64, f64)> = offs.iter().filter(|o| o.0.traffic()).collect();
-    let half = r.section.width() / 2.0;
+    let half = sec.width() / 2.0;
     let (left, right) = if traffic.is_empty() {
         (half, half)
     } else {
@@ -314,7 +315,7 @@ pub fn junctions(model: &Model, level: LevelId) -> Vec<Junction> {
             let r = roads[i];
             let len = length(&r.axis);
             let (_, u) = along(&r.axis, s.clamp(0.0, len));
-            let (kl, kr, wl, wr, half) = reach(r);
+            let (kl, kr, wl, wr, half) = reach(r, s.clamp(0.0, len));
             for forward in [true, false] {
                 let room = if forward { len - s } else { s };
                 if room <= SAME {
@@ -506,6 +507,8 @@ mod tests {
                 section: RoadSection::default(),
                 top_offset: 0.0,
                 profile: Vec::new(),
+
+                changes: Vec::new(),
                 pavement: asphalt,
                 kerb_material: stone,
                 sidewalk_material: stone,

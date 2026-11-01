@@ -401,6 +401,8 @@ pub fn import_carto(
                             section,
                             top_offset: top,
                             profile: Vec::new(),
+
+                            changes: Vec::new(),
                             pavement,
                             kerb_material: kerb,
                             sidewalk_material: sidewalk,

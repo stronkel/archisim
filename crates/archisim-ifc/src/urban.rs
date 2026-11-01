@@ -253,6 +253,12 @@ impl Exporter<'_> {
                         "IFCPROPERTYSINGLEVALUE('Section',$,IFCTEXT({}),$)",
                         string(&s.encode())
                     )));
+                    if !r.changes.is_empty() {
+                        props.push(self.w.add(format!(
+                            "IFCPROPERTYSINGLEVALUE('Changes',$,IFCTEXT({}),$)",
+                            string(&r.encode_changes())
+                        )));
+                    }
                     if !r.profile.is_empty() {
                         props.push(self.w.add(format!(
                             "IFCPROPERTYSINGLEVALUE('Profile',$,IFCTEXT({}),$)",

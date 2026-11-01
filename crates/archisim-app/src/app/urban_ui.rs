@@ -492,6 +492,8 @@ impl ArchiSimApp {
                 section: s.section.clone(),
                 top_offset: s.top_offset,
                 profile: Vec::new(),
+
+                changes: Vec::new(),
                 pavement: s.pavement,
                 kerb_material: s.kerb,
                 sidewalk_material: s.sidewalk,
@@ -815,6 +817,7 @@ impl ArchiSimApp {
                 self.report(res, "Sección cambiada.");
             }
         });
+        self.road_changes_group(ui, id);
         self.road_profile_group(ui, id);
         group(ui, "road-figures", "Mediciones", |ui| {
             text_row(ui, "Longitud del eje (m)", "", &comma(r.length(), 2));
@@ -1058,6 +1061,121 @@ impl ArchiSimApp {
                     .ed
                     .transact("Rasante del vial", |m| m.edit_road(id, |x| x.profile = out));
                 self.report(res, "Rasante cambiada.");
+            }
+        });
+    }
+}
+
+impl ArchiSimApp {
+    /// Where the road's strips change along it («Cambios de sección», U2):
+    /// from a distance, with a transition, other strips — of a street type
+    /// or changed one by one.
+    fn road_changes_group(&mut self, ui: &mut Ui, id: RoadId) {
+        let Some(r) = self.ed.model().road(id).cloned() else {
+            return;
+        };
+        group(ui, "road-changes", "Cambios de sección", |ui| {
+            props::note(
+                ui,
+                "Desde una distancia del inicio del eje, la calle pasa a otra sección. Con las mismas franjas, sus anchos cambian poco a poco a lo largo de la transición; si no, cambia de golpe en su mitad.",
+            );
+            let mut out = r.changes.clone();
+            out.sort_by(|a, b| a.at.total_cmp(&b.at));
+            let before = out.clone();
+            let mut drop = None;
+            for (i, c) in before.iter().enumerate() {
+                ui.separator();
+                ui.horizontal(|ui| {
+                    ui.label("Desde");
+                    if let Some(v) = length_field(ui, Id::unique(("chg-at", id, i)), c.at, 60.0) {
+                        out[i].at = v.clamp(0.0, r.length());
+                    }
+                    ui.label("transición");
+                    if let Some(v) =
+                        length_field(ui, Id::unique(("chg-tr", id, i)), c.transition, 50.0)
+                    {
+                        out[i].transition = v.max(0.0);
+                    }
+                    if ui
+                        .small_button("✕")
+                        .on_hover_text("Quitar el cambio")
+                        .clicked()
+                    {
+                        drop = Some(i);
+                    }
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Tipo");
+                    ComboBox::from_id_salt(Id::unique(("chg-preset", id, i)))
+                        .width(ui.available_width() - 8.0)
+                        .truncate()
+                        .selected_text(format!(
+                            "{} franjas · {}",
+                            c.strips.len(),
+                            fmt_mm(c.strips.iter().map(|x| x.width).sum())
+                        ))
+                        .show_ui(ui, |ui| {
+                            for (name, p) in archisim_core::road_presets() {
+                                if ui.selectable_label(false, name).clicked() {
+                                    out[i].strips = p.strips.clone();
+                                }
+                            }
+                        });
+                });
+                let mut remove = None;
+                for (k, st) in c.strips.iter().enumerate() {
+                    ui.horizontal(|ui| {
+                        let w = ui.available_width();
+                        let b = band_combo(
+                            ui,
+                            Id::unique(("chg-band", id, i, k)),
+                            st.band,
+                            (w * 0.45).max(80.0),
+                        );
+                        if b != st.band {
+                            out[i].strips[k].band = b;
+                        }
+                        if let Some(v) = length_field(
+                            ui,
+                            Id::unique(("chg-w", id, i, k)),
+                            st.width,
+                            (w * 0.3).max(50.0),
+                        ) {
+                            if v > 0.0 {
+                                out[i].strips[k].width = v;
+                            }
+                        }
+                        if c.strips.len() > 1 && ui.small_button("✕").clicked() {
+                            remove = Some(k);
+                        }
+                    });
+                }
+                if let Some(k) = remove {
+                    out[i].strips.remove(k);
+                }
+            }
+            if let Some(i) = drop {
+                out.remove(i);
+            }
+            if ui
+                .button("Añadir cambio de sección")
+                .on_hover_text(
+                    "A mitad de la calle, con la sección que tiene allí; cámbiala después",
+                )
+                .clicked()
+            {
+                let at = (r.length() / 2.0).round();
+                out.push(archisim_core::SectionChange {
+                    at,
+                    transition: 10.0,
+                    strips: r.strips_at(at),
+                });
+            }
+            if out != before {
+                let res = self.ed.transact("Cambios de sección", |m| {
+                    m.edit_road(id, |x| x.changes = out)
+                });
+                self.report(res, "Cambios de sección guardados.");
             }
         });
     }

@@ -338,6 +338,8 @@ pub fn transform(
                         section: x.section,
                         top_offset: x.top_offset,
                         profile: x.profile.clone(),
+
+                        changes: x.changes.clone(),
                         pavement: x.pavement,
                         kerb_material: x.kerb_material,
                         sidewalk_material: x.sidewalk_material,

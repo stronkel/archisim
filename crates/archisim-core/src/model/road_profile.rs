@@ -247,6 +247,7 @@ mod tests {
             section: RoadSection::default(),
             top_offset: 0.5,
             profile,
+            changes: Vec::new(),
             pavement: MaterialId(0),
             kerb_material: MaterialId(0),
             sidewalk_material: MaterialId(0),

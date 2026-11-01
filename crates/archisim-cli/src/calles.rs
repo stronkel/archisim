@@ -83,6 +83,8 @@ pub fn build() -> Res<Model> {
             section: sec,
             top_offset: top,
             profile: Vec::new(),
+
+            changes: Vec::new(),
             pavement: asphalt,
             kerb_material: stone,
             sidewalk_material: paving,
@@ -134,13 +136,46 @@ pub fn build() -> Res<Model> {
         ground(p(-35.0, 55.0)),
     )?;
     // The streets that climb follow the hill.
-    for id in climbing {
+    for &id in &climbing {
         let profile = m
             .road_profile_from_terrain(id, 20.0)
             .ok_or("sin terreno bajo la calle")?;
         m.edit_road(id, |r| r.profile = profile)?;
     }
     let _ = avenue;
+    // Where the sections change (U2): the Calle Real widens its sidewalks
+    // south of the avenue, over 10 m; the Calle del Agua becomes a
+    // single-level street at the top.
+    let real = climbing[0];
+    let wide: Vec<archisim_core::RoadStrip> = m
+        .road(real)
+        .ok_or("sin calle")?
+        .section
+        .strips
+        .iter()
+        .map(|x| match x.band {
+            archisim_core::RoadBand::Sidewalk => archisim_core::strip_of(x.band, 4.5),
+            archisim_core::RoadBand::Parking => archisim_core::strip_of(x.band, 1.0),
+            _ => *x,
+        })
+        .collect();
+    m.edit_road(real, |r| {
+        // From the start (the south end) up to 40 m wide, then back.
+        r.changes = vec![archisim_core::SectionChange {
+            at: 40.0,
+            transition: 10.0,
+            strips: r.section.strips.clone(),
+        }];
+        r.section.strips = wide;
+    })?;
+    let single = preset("Calle de plataforma única").strips;
+    m.edit_road(climbing[1], |r| {
+        r.changes = vec![archisim_core::SectionChange {
+            at: 75.0,
+            transition: 6.0,
+            strips: single,
+        }];
+    })?;
     // A house on the block between them.
     let corners = [p(15.0, 15.0), p(35.0, 15.0), p(35.0, 28.0), p(15.0, 28.0)];
     let base = ground(p(25.0, 20.0));
@@ -230,5 +265,6 @@ mod tests {
         arms.sort_unstable();
         assert_eq!(arms, vec![2, 3, 3, 3, 4], "{arms:?}");
         assert_eq!(m.roads().filter(|r| r.sloped()).count(), 2);
+        assert_eq!(m.roads().filter(|r| !r.changes.is_empty()).count(), 2);
     }
 }

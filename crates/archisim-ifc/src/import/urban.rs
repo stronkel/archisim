@@ -198,6 +198,10 @@ impl<'a> Importer<'a> {
                 profile: text(self, "Profile")
                     .and_then(|t| archisim_core::Road::decode_profile(&t))
                     .unwrap_or_default(),
+
+                changes: text(self, "Changes")
+                    .and_then(|t| archisim_core::Road::decode_changes(&t))
+                    .unwrap_or_default(),
                 pavement,
                 kerb_material,
                 sidewalk_material,
