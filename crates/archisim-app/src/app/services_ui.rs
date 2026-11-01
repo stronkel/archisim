@@ -94,6 +94,13 @@ fn system_combo(ui: &mut Ui, id: Id, ducts: bool, value: ServiceSystem, w: f32) 
             for s in list {
                 ui.selectable_value(&mut v, *s, s.name());
             }
+            if !ducts {
+                // The networks under the street (U5).
+                ui.separator();
+                for s in ServiceSystem::URBAN {
+                    ui.selectable_value(&mut v, s, s.name());
+                }
+            }
         });
     v
 }
@@ -158,7 +165,7 @@ fn kind_combo(ui: &mut Ui, id: Id, value: DeviceKind, w: f32) -> DeviceKind {
         .show_ui(ui, |ui| {
             // The kinds of its own family: fire protection, water,
             // solar, or the rest.
-            let family = |k: DeviceKind| (k.is_fire(), k.is_water(), k.is_solar());
+            let family = |k: DeviceKind| (k.is_fire(), k.is_water(), k.is_solar(), k.is_urban());
             for k in DeviceKind::ALL
                 .into_iter()
                 .filter(|k| family(*k) == family(value))
@@ -170,6 +177,69 @@ fn kind_combo(ui: &mut Ui, id: Id, value: DeviceKind, w: f32) -> DeviceKind {
 }
 
 impl ArchiSimApp {
+    /// A run of a network under the street (U5): its manholes, its
+    /// connections to the plots beside it and its longitudinal profile.
+    fn network_group(&mut self, ui: &mut Ui, id: RunId) {
+        let Some(r) = self.ed.model().run(id).cloned() else {
+            return;
+        };
+        group(ui, "run-network", "Red urbana", |ui| {
+            props::note(
+                ui,
+                "Bajo la calle: la profundidad es la altura del eje, negativa, sobre la planta.",
+            );
+            ui.horizontal_wrapped(|ui| {
+                if r.system.falls()
+                    && ui
+                        .button("Pozos de registro")
+                        .on_hover_text("En los extremos, en cada quiebro y a no más de 40 m")
+                        .clicked()
+                {
+                    let mut n = 0;
+                    let res = self.ed.transact("Pozos de registro", |m| {
+                        n = m.add_manholes(id)?.len();
+                        Ok(())
+                    });
+                    self.report(res, &format!("{n} pozos de registro."));
+                }
+                if ui
+                    .button("Acometidas a las parcelas")
+                    .on_hover_text("Una arqueta en el frente de cada parcela a menos de 25 m y su tubería hasta la red, a escuadra")
+                    .clicked()
+                {
+                    let mut n = 0;
+                    let res = self.ed.transact("Acometidas", |m| {
+                        n = m.connect_plots(id)?.len();
+                        Ok(())
+                    });
+                    self.report(res, &format!("{n} acometidas."));
+                }
+                if ui
+                    .button("Perfil longitudinal…")
+                    .on_hover_text("Guarda el perfil (H 1:500, V 1:50) con su guitarra de cotas, como SVG")
+                    .clicked()
+                {
+                    match archisim_plan::profile::run_profile_svg(self.ed.model(), id) {
+                        Some(svg) => {
+                            let file = rfd::FileDialog::new()
+                                .set_title("Guardar el perfil longitudinal")
+                                .set_file_name(format!("perfil-{}.svg", r.system.code()))
+                                .add_filter("SVG", &["svg"])
+                                .save_file();
+                            if let Some(path) = file {
+                                match std::fs::write(&path, svg) {
+                                    Ok(()) => self.say(format!("Perfil guardado en {}.", path.display())),
+                                    Err(e) => self.complain(format!("No se puede guardar el perfil: {e}.")),
+                                }
+                            }
+                        }
+                        None => self.complain("La tubería es demasiado corta para su perfil."),
+                    }
+                }
+            });
+        });
+    }
+
     // ---- Pipes and ducts ----------------------------------------------------
 
     pub(super) fn run_click(&mut self, p: Point2) {
@@ -198,7 +268,7 @@ impl ArchiSimApp {
             },
             width: if duct { s.duct_width } else { s.pipe_size },
             height: if duct { s.duct_height } else { s.pipe_size },
-            slope: if !duct && s.pipe_system == ServiceSystem::Drainage {
+            slope: if !duct && s.pipe_system.falls() {
                 s.drain_slope
             } else {
                 0.0
@@ -230,13 +300,19 @@ impl ArchiSimApp {
     pub(super) fn device_click(&mut self, p: Point2) {
         let s = self.service_settings;
         let (w, d, h, _) = s.device.defaults();
+        // The urban ones stand on the street or go down from it (U5).
+        let elevation = if s.device.is_urban() {
+            self.ed.model().surface_at(self.ed.level, p) + s.device_elevation
+        } else {
+            s.device_elevation
+        };
         let spec = NewDevice {
             level: self.ed.level,
             kind: s.device,
             name: s.device.name().to_string(),
             position: p,
             rotation: s.device_rotation,
-            elevation: s.device_elevation,
+            elevation,
             width: w,
             depth: d,
             height: h,
@@ -252,6 +328,19 @@ impl ArchiSimApp {
             }
             Err(e) => self.complain(format!("No se puede colocar: {e}.")),
         }
+    }
+
+    /// Takes the pipe tool for a network under the street (U5).
+    pub(super) fn network_pick(&mut self) {
+        if !self.service_settings.pipe_system.is_urban() {
+            let sys = ServiceSystem::Sewer;
+            let (d, depth) = sys.urban_defaults();
+            self.service_settings.pipe_system = sys;
+            self.service_settings.pipe_size = d;
+            self.service_settings.pipe_elevation = -depth;
+            self.service_settings.drain_slope = 0.01;
+        }
+        self.set_tool(Tool::Pipe);
     }
 
     /// Takes the device tool with a kind of device.
@@ -367,8 +456,16 @@ impl ArchiSimApp {
             props::title(ui, "Herramienta Tubería · lo que vas a dibujar");
             group(ui, "tool-pipe", "Tubería", |ui| {
                 row(ui, "Sistema", "", |ui, w| {
+                    let before = s.pipe_system;
                     s.pipe_system =
                         system_combo(ui, Id::unique("tool-pipe-sys"), false, s.pipe_system, w);
+                    // A network under the street takes its usual pipe and
+                    // depth (U5).
+                    if s.pipe_system != before && s.pipe_system.is_urban() {
+                        let (d, depth) = s.pipe_system.urban_defaults();
+                        s.pipe_size = d;
+                        s.pipe_elevation = -depth;
+                    }
                 });
                 row(ui, "Diámetro (mm)", "Exterior", |ui, w| {
                     if let Some(v) =
@@ -389,7 +486,7 @@ impl ArchiSimApp {
                         }
                     },
                 );
-                if s.pipe_system == ServiceSystem::Drainage {
+                if s.pipe_system.falls() {
                     row(
                         ui,
                         "Pendiente (%)",
@@ -450,6 +547,9 @@ impl ArchiSimApp {
                 if duct { "o" } else { "a" }
             ),
         );
+        if r.system.is_urban() {
+            self.network_group(ui, id);
+        }
         group(ui, "run-data", "Instalación", |ui| {
             row(ui, "Sistema", "", |ui, w| {
                 let n = system_combo(ui, Id::unique(("run-sys", id)), duct, r.system, w);

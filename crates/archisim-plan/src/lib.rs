@@ -39,6 +39,7 @@ pub mod overrides;
 pub mod phases;
 pub mod pools;
 pub mod presentation;
+pub mod profile;
 pub mod railings;
 pub mod rebar;
 pub mod roofs;

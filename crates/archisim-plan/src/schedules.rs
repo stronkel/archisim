@@ -1109,6 +1109,37 @@ fn services(model: &Model) -> Vec<Item> {
             lines,
         })
         .collect();
+    // The trenches of the networks under the street (U5): the pipe's
+    // width and 40 cm, from 10 cm under it up to the street, m³.
+    let mut trenches: BTreeMap<archisim_core::ServiceSystem, Vec<Measured>> = BTreeMap::new();
+    for r in model.runs().filter(|r| new(r.id.0) && r.system.is_urban()) {
+        let prof = model.run_profile(r.id);
+        if prof.len() < 2 {
+            continue;
+        }
+        let depth = prof.iter().map(|p| p.ground - p.invert + 0.1).sum::<f64>() / prof.len() as f64;
+        let (len, width) = (r.length(), r.width + 0.4);
+        trenches.entry(r.system).or_default().push(Measured {
+            comment: format!("Zanja de la tubería {} · {}", r.id.0, level_name(r.level)),
+            units: 1.0,
+            length: len,
+            width,
+            height: depth.max(0.0),
+            quantity: len * width * depth.max(0.0),
+        });
+    }
+    items.extend(
+        trenches
+            .into_iter()
+            .enumerate()
+            .map(|(i, (system, lines))| Item {
+                code: format!("Z{:02}", i + 1),
+                key: format!("zanja:{}", system.code()),
+                unit: "m³",
+                summary: format!("Excavación en zanja · {}", system.name()),
+                lines,
+            }),
+    );
     // Elbows and tees, by units: they follow from the paths.
     let mut fittings: BTreeMap<
         (

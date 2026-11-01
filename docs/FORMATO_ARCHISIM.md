@@ -1,4 +1,4 @@
-# Formato de proyecto `.archisim` (versión 65)
+# Formato de proyecto `.archisim` (versión 66)
 
 El proyecto de ArchiSim se guarda en un único fichero de texto JSON con extensión `.archisim`. Es el equivalente al `.pln` de ArchiCAD o al `.rvt` de Revit, pero legible con cualquier editor de texto y comparable entre versiones (Git, diff).
 
@@ -122,3 +122,5 @@ Ejemplo de tipo:
 ## Editar a mano
 
 Se puede, con cuidado: cambiar una altura, un nombre, mover una ventana, cambiar el tipo de un muro o un valor de un tipo de puerta. La receta de una familia también se puede retocar, pero entonces conviene subir su `version` (en la receta y en el campo `version`, que deben coincidir). Al abrir, ArchiSim avisa si algo no cuadra (por ejemplo, una ventana que pisa otra o un campo mal escrito, con su línea y columna). No dupliques elementos copiando y pegando sin cambiar su `id` y su `guid`: se rechazan por repetidos.
+
+- Versión 66 (U5): las tuberías pueden ser de las redes urbanas (`system`: `sewer`, `stormwater`, `water_main`, `power_low`, `power_medium`, `street_lighting`, `telecom`, `gas`) y hay aparatos urbanos (`kind`: `manhole`, `gully`, `hydrant`, `chamber`, `transformer`, `main_fuse_box`, `street_light`). La estructura no cambia.

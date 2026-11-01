@@ -23,6 +23,17 @@ pub enum ServiceSystem {
     ExhaustAir,
     /// The water of the fire protection: sprinklers and hose reels (H3).
     FireProtection,
+    /// The networks under the street (U5): the sewer, the stormwater, the
+    /// water main, low and medium voltage, street lighting,
+    /// telecommunications and gas.
+    Sewer,
+    Stormwater,
+    WaterMain,
+    PowerLow,
+    PowerMedium,
+    StreetLighting,
+    Telecom,
+    Gas,
 }
 
 impl ServiceSystem {
@@ -39,8 +50,60 @@ impl ServiceSystem {
         ServiceSystem::ExhaustAir,
     ];
 
+    /// The networks under the street (U5).
+    pub const URBAN: [ServiceSystem; 8] = [
+        ServiceSystem::Sewer,
+        ServiceSystem::Stormwater,
+        ServiceSystem::WaterMain,
+        ServiceSystem::PowerLow,
+        ServiceSystem::PowerMedium,
+        ServiceSystem::StreetLighting,
+        ServiceSystem::Telecom,
+        ServiceSystem::Gas,
+    ];
+
     pub fn is_duct(self) -> bool {
         Self::DUCTS.contains(&self)
+    }
+
+    /// A network under the street.
+    pub fn is_urban(self) -> bool {
+        Self::URBAN.contains(&self)
+    }
+
+    /// Cables in conduits (electricity, lighting, telecommunications).
+    pub fn is_cable(self) -> bool {
+        matches!(
+            self,
+            ServiceSystem::PowerLow
+                | ServiceSystem::PowerMedium
+                | ServiceSystem::StreetLighting
+                | ServiceSystem::Telecom
+        )
+    }
+
+    /// Water that runs by gravity, with its slope.
+    pub fn falls(self) -> bool {
+        matches!(
+            self,
+            ServiceSystem::Drainage | ServiceSystem::Sewer | ServiceSystem::Stormwater
+        )
+    }
+
+    /// An urban network's usual pipe (diameter) and depth of its axis
+    /// under the street, metres.
+    pub fn urban_defaults(self) -> (f64, f64) {
+        match self {
+            ServiceSystem::Sewer => (0.315, 1.8),
+            ServiceSystem::Stormwater => (0.4, 1.5),
+            ServiceSystem::WaterMain => (0.11, 1.0),
+            ServiceSystem::PowerLow => (0.16, 0.7),
+            ServiceSystem::PowerMedium => (0.16, 1.0),
+            ServiceSystem::StreetLighting => (0.09, 0.6),
+            ServiceSystem::Telecom => (0.11, 0.6),
+            ServiceSystem::Gas => (0.09, 0.8),
+            _ => (0.1, 1.0),
+        }
     }
 
     pub fn code(self) -> &'static str {
@@ -53,6 +116,14 @@ impl ServiceSystem {
             ServiceSystem::ReturnAir => "return_air",
             ServiceSystem::ExhaustAir => "exhaust_air",
             ServiceSystem::FireProtection => "fire_protection",
+            ServiceSystem::Sewer => "sewer",
+            ServiceSystem::Stormwater => "stormwater",
+            ServiceSystem::WaterMain => "water_main",
+            ServiceSystem::PowerLow => "power_low",
+            ServiceSystem::PowerMedium => "power_medium",
+            ServiceSystem::StreetLighting => "street_lighting",
+            ServiceSystem::Telecom => "telecom",
+            ServiceSystem::Gas => "gas",
         }
     }
 
@@ -60,6 +131,7 @@ impl ServiceSystem {
         Self::PIPES
             .into_iter()
             .chain(Self::DUCTS)
+            .chain(Self::URBAN)
             .find(|s| s.code() == c)
     }
 
@@ -73,6 +145,14 @@ impl ServiceSystem {
             ServiceSystem::ReturnAir => "Retorno",
             ServiceSystem::ExhaustAir => "Extracción",
             ServiceSystem::FireProtection => "Protección contra incendios",
+            ServiceSystem::Sewer => "Saneamiento (red urbana)",
+            ServiceSystem::Stormwater => "Pluviales",
+            ServiceSystem::WaterMain => "Abastecimiento",
+            ServiceSystem::PowerLow => "Baja tensión",
+            ServiceSystem::PowerMedium => "Media tensión",
+            ServiceSystem::StreetLighting => "Alumbrado público",
+            ServiceSystem::Telecom => "Telecomunicaciones",
+            ServiceSystem::Gas => "Gas",
         }
     }
 
@@ -87,6 +167,14 @@ impl ServiceSystem {
             ServiceSystem::ReturnAir => [80, 160, 90],
             ServiceSystem::ExhaustAir => [130, 130, 130],
             ServiceSystem::FireProtection => [200, 20, 40],
+            ServiceSystem::Sewer => [110, 70, 40],
+            ServiceSystem::Stormwater => [40, 150, 150],
+            ServiceSystem::WaterMain => [20, 80, 200],
+            ServiceSystem::PowerLow => [230, 170, 0],
+            ServiceSystem::PowerMedium => [210, 60, 20],
+            ServiceSystem::StreetLighting => [190, 150, 30],
+            ServiceSystem::Telecom => [40, 160, 70],
+            ServiceSystem::Gas => [235, 200, 30],
         }
     }
 
@@ -100,6 +188,13 @@ impl ServiceSystem {
             ServiceSystem::SupplyAir | ServiceSystem::ReturnAir => "VENTILATION",
             ServiceSystem::ExhaustAir => "EXHAUST",
             ServiceSystem::FireProtection => "FIREPROTECTION",
+            ServiceSystem::Sewer => "SEWAGE",
+            ServiceSystem::Stormwater => "STORMWATER",
+            ServiceSystem::WaterMain => "WATERSUPPLY",
+            ServiceSystem::PowerLow | ServiceSystem::PowerMedium => "ELECTRICAL",
+            ServiceSystem::StreetLighting => "LIGHTING",
+            ServiceSystem::Telecom => "COMMUNICATION",
+            ServiceSystem::Gas => "GAS",
         }
     }
 }
@@ -328,10 +423,27 @@ pub enum DeviceKind {
     SolarPanel,
     /// A row of solar thermal collectors, the same way.
     SolarCollector,
+    /// Under the street (U5): a manhole of the sewer («pozo de registro»),
+    /// from its bottom up to the street.
+    Manhole,
+    /// A gully («imbornal») at the kerb.
+    Gully,
+    /// A fire hydrant on the sidewalk.
+    Hydrant,
+    /// A chamber («arqueta»): of a valve, of a building's connection, of
+    /// the cables.
+    Chamber,
+    /// A transformer centre («centro de transformación»).
+    Transformer,
+    /// A building's main protection box («caja general de protección»), on
+    /// its façade.
+    MainFuseBox,
+    /// A street light («farola»).
+    StreetLight,
 }
 
 impl DeviceKind {
-    pub const ALL: [DeviceKind; 29] = [
+    pub const ALL: [DeviceKind; 36] = [
         DeviceKind::Equipment,
         DeviceKind::Light,
         DeviceKind::Socket,
@@ -361,6 +473,13 @@ impl DeviceKind {
         DeviceKind::WaterHeater,
         DeviceKind::SolarPanel,
         DeviceKind::SolarCollector,
+        DeviceKind::Manhole,
+        DeviceKind::Gully,
+        DeviceKind::Hydrant,
+        DeviceKind::Chamber,
+        DeviceKind::Transformer,
+        DeviceKind::MainFuseBox,
+        DeviceKind::StreetLight,
     ];
 
     /// The mechanisms of the electricity and telecommunications.
@@ -414,6 +533,13 @@ impl DeviceKind {
             DeviceKind::WaterHeater => "water_heater",
             DeviceKind::SolarPanel => "solar_panel",
             DeviceKind::SolarCollector => "solar_collector",
+            DeviceKind::Manhole => "manhole",
+            DeviceKind::Gully => "gully",
+            DeviceKind::Hydrant => "hydrant",
+            DeviceKind::Chamber => "chamber",
+            DeviceKind::Transformer => "transformer",
+            DeviceKind::MainFuseBox => "main_fuse_box",
+            DeviceKind::StreetLight => "street_light",
         }
     }
 
@@ -452,6 +578,13 @@ impl DeviceKind {
             DeviceKind::WaterHeater => "Termo",
             DeviceKind::SolarPanel => "Placas solares",
             DeviceKind::SolarCollector => "Captadores solares",
+            DeviceKind::Manhole => "Pozo de registro",
+            DeviceKind::Gully => "Imbornal",
+            DeviceKind::Hydrant => "Hidrante",
+            DeviceKind::Chamber => "Arqueta",
+            DeviceKind::Transformer => "Centro de transformación",
+            DeviceKind::MainFuseBox => "Caja general de protección",
+            DeviceKind::StreetLight => "Farola",
         }
     }
 
@@ -489,6 +622,15 @@ impl DeviceKind {
             DeviceKind::WaterHeater => (0.45, 0.45, 0.9, 1.3),
             DeviceKind::SolarPanel => (3.4, 1.6, 0.9, 0.0),
             DeviceKind::SolarCollector => (2.2, 1.7, 1.0, 0.0),
+            // Under the street: their top at the street, the height their
+            // depth (set from the network they are on).
+            DeviceKind::Manhole => (1.2, 1.2, 2.0, -2.0),
+            DeviceKind::Gully => (0.6, 0.3, 0.8, -0.8),
+            DeviceKind::Hydrant => (0.35, 0.35, 0.9, 0.0),
+            DeviceKind::Chamber => (0.6, 0.6, 0.8, -0.8),
+            DeviceKind::Transformer => (3.0, 2.5, 2.8, 0.0),
+            DeviceKind::MainFuseBox => (0.5, 0.25, 0.7, 0.8),
+            DeviceKind::StreetLight => (0.3, 0.3, 6.0, 0.0),
         }
     }
 
@@ -523,6 +665,13 @@ impl DeviceKind {
             DeviceKind::WaterHeater => ("IFCBOILER", "WATER"),
             DeviceKind::SolarPanel => ("IFCSOLARDEVICE", "SOLARPANEL"),
             DeviceKind::SolarCollector => ("IFCSOLARDEVICE", "SOLARCOLLECTOR"),
+            DeviceKind::Manhole => ("IFCDISTRIBUTIONCHAMBERELEMENT", "MANHOLE"),
+            DeviceKind::Gully => ("IFCWASTETERMINAL", "GULLYSUMP"),
+            DeviceKind::Hydrant => ("IFCFIRESUPPRESSIONTERMINAL", "FIREHYDRANT"),
+            DeviceKind::Chamber => ("IFCDISTRIBUTIONCHAMBERELEMENT", "INSPECTIONCHAMBER"),
+            DeviceKind::Transformer => ("IFCTRANSFORMER", "VOLTAGE"),
+            DeviceKind::MainFuseBox => ("IFCPROTECTIVEDEVICE", "FUSEDISCONNECTOR"),
+            DeviceKind::StreetLight => ("IFCLIGHTFIXTURE", "DIRECTIONSOURCE"),
         }
     }
 
@@ -554,6 +703,20 @@ impl DeviceKind {
         )
     }
 
+    /// Under the street or on it, of the urban networks (U5).
+    pub fn is_urban(self) -> bool {
+        matches!(
+            self,
+            DeviceKind::Manhole
+                | DeviceKind::Gully
+                | DeviceKind::Hydrant
+                | DeviceKind::Chamber
+                | DeviceKind::Transformer
+                | DeviceKind::MainFuseBox
+                | DeviceKind::StreetLight
+        )
+    }
+
     /// The solar panels and collectors, whose box is their row.
     pub fn is_solar(self) -> bool {
         matches!(self, DeviceKind::SolarPanel | DeviceKind::SolarCollector)
@@ -575,6 +738,11 @@ impl DeviceKind {
             DeviceKind::Pump => Some(ServiceSystem::ColdWater),
             DeviceKind::WaterHeater => Some(ServiceSystem::HotWater),
             DeviceKind::SolarCollector => Some(ServiceSystem::HotWater),
+            DeviceKind::Manhole => Some(ServiceSystem::Sewer),
+            DeviceKind::Gully => Some(ServiceSystem::Stormwater),
+            DeviceKind::Hydrant => Some(ServiceSystem::WaterMain),
+            DeviceKind::Transformer | DeviceKind::MainFuseBox => Some(ServiceSystem::PowerLow),
+            DeviceKind::StreetLight => Some(ServiceSystem::StreetLighting),
             _ => None,
         }
     }

@@ -536,6 +536,15 @@ fn draw_device(s: &mut String, d: &archisim_core::ServiceDevice, k: f64) {
         | DeviceKind::SolarCollector) => {
             fire_water_symbol(s, d, kind, r, ink, k);
         }
+        kind @ (DeviceKind::Manhole
+        | DeviceKind::Gully
+        | DeviceKind::Hydrant
+        | DeviceKind::Chamber
+        | DeviceKind::Transformer
+        | DeviceKind::MainFuseBox
+        | DeviceKind::StreetLight) => {
+            urban_symbol(s, d, kind, r, ink, k);
+        }
         DeviceKind::Equipment => {
             let o = d.outline();
             let _ = writeln!(
@@ -572,6 +581,114 @@ const EXIT_INK: &str = "#14915a";
 /// solar panels (H3): the fire's in red as UNE 23032 draws them, with a
 /// letter where a shape alone would not say what they are; the water's in
 /// the colour of their system; the panels as their row of modules.
+/// The symbols of the urban networks' devices (U5), at their real size
+/// (but never smaller than a symbol).
+fn urban_symbol(
+    s: &mut String,
+    d: &archisim_core::ServiceDevice,
+    kind: DeviceKind,
+    r: f64,
+    ink: &str,
+    k: f64,
+) {
+    let c = d.position;
+    let w = num(pens().view * k);
+    let system = hex(kind.system().map_or([90, 90, 90], |s| s.color()));
+    let poly = |s: &mut String, pts: &[Point2], fill: &str, stroke: &str| {
+        let _ = writeln!(
+            s,
+            r#"<path d="{}" fill="{fill}" stroke="{stroke}" stroke-width="{w}" stroke-linejoin="round"/>"#,
+            path(pts)
+        );
+    };
+    let disc = |radius: f64| -> Vec<Point2> {
+        (0..32)
+            .map(|i| {
+                let a = std::f64::consts::TAU * i as f64 / 32.0;
+                c + Point2::new(radius * a.cos(), radius * a.sin())
+            })
+            .collect()
+    };
+    let letter = |s: &mut String, text: &str, h: f64, colour: &str| {
+        let _ = writeln!(
+            s,
+            r#"<path d="{}" {}/>"#,
+            text_path(
+                text,
+                c - Point2::new(0.0, h / 2.0),
+                Point2::new(1.0, 0.0),
+                h,
+                Align::Centre
+            ),
+            crate::lettering::paint(h, colour)
+        );
+    };
+    let line = |s: &mut String, a: Point2, b: Point2| {
+        let _ = writeln!(
+            s,
+            r#"<path d="M{} L{}" fill="none" stroke="{system}" stroke-width="{w}"/>"#,
+            pt(a),
+            pt(b)
+        );
+    };
+    let size = (d.width.max(d.depth) / 2.0).max(r);
+    match kind {
+        DeviceKind::Manhole => {
+            // Its cover: a circle with a cross.
+            poly(s, &disc(size), "white", ink);
+            poly(s, &disc(size * 0.55), "white", &system);
+            line(
+                s,
+                c + Point2::new(-size * 0.55, 0.0),
+                c + Point2::new(size * 0.55, 0.0),
+            );
+            line(
+                s,
+                c + Point2::new(0.0, -size * 0.55),
+                c + Point2::new(0.0, size * 0.55),
+            );
+        }
+        DeviceKind::Gully => {
+            let o = d.outline();
+            poly(s, &o, "white", ink);
+            // Its grating's slots.
+            let (a, b) = (o[0], o[1]);
+            let (dd, e) = (o[3], o[2]);
+            for i in 1..5 {
+                let t = i as f64 / 5.0;
+                line(s, a + (b - a) * t, dd + (e - dd) * t);
+            }
+        }
+        DeviceKind::Hydrant => {
+            poly(s, &disc(size), "#ffe2e2", "#c81e1e");
+            letter(s, "H", size * 1.1, "#c81e1e");
+        }
+        DeviceKind::Chamber => {
+            let o = d.outline();
+            poly(s, &o, "white", ink);
+            line(s, o[0], o[2]);
+            line(s, o[1], o[3]);
+        }
+        DeviceKind::Transformer => {
+            poly(s, &d.outline(), "#fff1e6", ink);
+            letter(s, "CT", size * 0.5, &system);
+        }
+        DeviceKind::MainFuseBox => {
+            poly(s, &d.outline(), "white", ink);
+            letter(s, "CGP", size * 0.5, &system);
+        }
+        DeviceKind::StreetLight => {
+            poly(s, &disc(size.max(0.25)), "#fff7d6", ink);
+            for i in 0..8 {
+                let a = std::f64::consts::TAU * i as f64 / 8.0;
+                let u = Point2::new(a.cos(), a.sin());
+                line(s, c + u * (size * 1.3), c + u * (size * 2.0));
+            }
+        }
+        _ => {}
+    }
+}
+
 fn fire_water_symbol(
     s: &mut String,
     d: &archisim_core::ServiceDevice,

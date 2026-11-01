@@ -152,6 +152,8 @@ pub enum Pick {
     Concept(super::concept_ui::ConceptPick),
     /// The device tool with a kind of device.
     Device(archisim_core::DeviceKind),
+    /// The pipe tool for the networks under the street (U5).
+    Network,
     /// The object tool with only part of the library (vegetation, street
     /// furniture).
     Objects(super::object_gallery::ObjectScope),
@@ -574,6 +576,20 @@ const SITE: &[Tile] = &[
         "Marca vial",
         "MV",
         "Pasos de peatones, líneas, flechas, STOP, cebreados y plazas pintadas (Norma 8.2-IC)",
+    ),
+    tile(
+        Pick::Network,
+        Glyph::Network,
+        "Redes",
+        "",
+        "Redes bajo la calle: saneamiento, pluviales, abastecimiento, baja y media tensión, alumbrado, telecomunicaciones y gas; pozos, acometidas y perfil longitudinal",
+    ),
+    tile(
+        Pick::Device(archisim_core::DeviceKind::Manhole),
+        Glyph::Manhole,
+        "Pozo y arqueta",
+        "",
+        "Pozos de registro, arquetas, imbornales, hidrantes, farolas, centros de transformación y cajas generales de protección",
     ),
     tile(
         Pick::Objects(super::object_gallery::ObjectScope::Vegetation),
@@ -1167,6 +1183,9 @@ impl ArchiSimApp {
             Pick::Rebar => Some(self.tool == Tool::Arrow && self.rebar_pick),
             Pick::Concept(c) => Some(self.concept_picked(c)),
             Pick::Device(k) => Some(self.tool == Tool::Device && self.service_settings.device == k),
+            Pick::Network => {
+                Some(self.tool == Tool::Pipe && self.service_settings.pipe_system.is_urban())
+            }
             Pick::Objects(s) => Some(self.tool == Tool::Object && self.object_scope == Some(s)),
             Pick::Tool(Tool::Object) => {
                 Some(self.tool == Tool::Object && self.object_scope.is_none())
@@ -1257,6 +1276,7 @@ impl ArchiSimApp {
             Pick::Action(a) => self.act(a),
             Pick::Concept(c) => self.concept_pick(c),
             Pick::Device(k) => self.device_pick(k),
+            Pick::Network => self.network_pick(),
             Pick::Objects(scope) => self.objects_pick(scope),
             Pick::Command(name) => self.start_command(name),
             Pick::Later(what) => self.say(format!("Esta herramienta llegará con {what}.")),

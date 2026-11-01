@@ -281,6 +281,69 @@ pub fn build() -> Res<Model> {
         let material = m.marking_material(kind.colour());
         m.add_marking(archisim_core::NewMarking::usual(pb, kind, path, material))?;
     }
+    // The networks under the street (U5): the sewer down the Calle Real
+    // with its manholes and its connections, the water main, the street
+    // lighting, low voltage and telecommunications along the Calle Nueva,
+    // with hydrants, street lights and a gully.
+    use archisim_core::{DeviceKind as D, ServiceSystem as S};
+    let top_real = |m: &Model, y: f64| -> f64 {
+        m.road(real)
+            .map_or(0.0, |r| r.top_at(r.station_of(p(0.0, y))))
+    };
+    let (north, south) = (top_real(&m, 90.0), top_real(&m, -70.0));
+    let sewer = m.add_run(archisim_core::NewRun {
+        level: pb,
+        system: S::Sewer,
+        path: vec![p(3.0, 90.0), p(3.0, -70.0)],
+        elevation: north - 2.2,
+        width: 0.315,
+        height: 0.315,
+        slope: (north - south) / 160.0,
+    })?;
+    m.add_manholes(sewer)?;
+    m.connect_plots(sewer)?;
+    let top_nueva = m.road(nueva).map_or(0.0, |r| r.top_offset);
+    for (system, y) in [
+        (S::WaterMain, 64.0),
+        (S::StreetLighting, 64.6),
+        (S::PowerLow, 56.0),
+        (S::Telecom, 55.4),
+    ] {
+        let (d, depth) = system.urban_defaults();
+        let run = m.add_run(archisim_core::NewRun {
+            level: pb,
+            system,
+            path: vec![p(9.0, y), p(51.0, y)],
+            elevation: top_nueva - depth,
+            width: d,
+            height: d,
+            slope: 0.0,
+        })?;
+        if system == S::WaterMain || system == S::PowerLow {
+            m.connect_plots(run)?;
+        }
+    }
+    let device = |m: &mut Model, kind: D, at: Point2| -> Res {
+        let (w, d, h, z) = kind.defaults();
+        let surface = m.surface_at(pb, at);
+        m.add_device(archisim_core::NewDevice {
+            level: pb,
+            kind,
+            name: kind.name().into(),
+            position: at,
+            rotation: 0.0,
+            elevation: surface + z,
+            width: w,
+            depth: d,
+            height: h,
+        })?;
+        Ok(())
+    };
+    device(&mut m, D::Hydrant, p(25.0, 65.6))?;
+    for x in [14.0, 32.0, 50.0] {
+        device(&mut m, D::StreetLight, p(x, 64.6))?;
+    }
+    device(&mut m, D::Gully, p(3.3, 70.0))?;
     // A house on the block between them.
     let corners = [p(15.0, 15.0), p(35.0, 15.0), p(35.0, 28.0), p(15.0, 28.0)];
     let base = ground(p(25.0, 20.0));
@@ -325,6 +388,15 @@ pub fn write(dir: &Path) -> Res {
         dir.join("calles-planta.svg"),
         archisim_plan::render_plan(&m, pb, &options),
     )?;
+    // The sewer's longitudinal profile (U5).
+    if let Some(sewer) = m
+        .runs()
+        .find(|r| r.system == archisim_core::ServiceSystem::Sewer && r.length() > 50.0)
+    {
+        if let Some(svg) = archisim_plan::profile::run_profile_svg(&m, sewer.id) {
+            std::fs::write(dir.join("calles-perfil-saneamiento.svg"), svg)?;
+        }
+    }
     let junctions = archisim_geom::crossroads::junctions(&m, pb);
     println!(
         "Calles: {} viales, {} cruces ({}).",
@@ -494,6 +566,11 @@ mod tests {
         assert_eq!(js.iter().filter(|j| j.ring.is_some()).count(), 2);
         // Its markings, and the crossings' lowered kerbs.
         assert_eq!(m.markings().count(), 13);
+        // Its networks: manholes, connections and the street lights.
+        let count = |k: archisim_core::DeviceKind| m.devices().filter(|d| d.kind == k).count();
+        assert!(count(archisim_core::DeviceKind::Manhole) >= 5);
+        assert!(count(archisim_core::DeviceKind::Chamber) >= 4);
+        assert_eq!(count(archisim_core::DeviceKind::StreetLight), 3);
         let real = m.roads().find(|r| r.name == "Calle Real").unwrap();
         assert!(real
             .pieces()
