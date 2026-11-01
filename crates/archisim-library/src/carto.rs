@@ -11,8 +11,8 @@
 
 use archisim_carto::{asc, catastro, osm, FileKind};
 use archisim_core::{
-    signed_area, Georeference, LevelId, MassShape, MaterialId, Model, ModelError, NewMass,
-    NewObject, NewPlot, NewRoad, NewTerrain, Point2, RoadSection, SurveyPoint,
+    signed_area, BuildingStyle, Georeference, LevelId, MassShape, MaterialId, Model, ModelError,
+    NewMass, NewObject, NewPlot, NewRoad, NewTerrain, Point2, RoadSection, SurveyPoint,
 };
 
 /// What to bring and how far.
@@ -34,7 +34,198 @@ pub struct CartoOptions {
     /// Put the project's origin at the middle of what the files bring,
     /// even if the project is already georeferenced (it is moved there).
     pub recentre: bool,
+    /// Dress the buildings in the style that suits them (U7); off, plain
+    /// masses by floors.
+    pub styles: bool,
+    /// The kind of place, for the styles; none: each building's by how
+    /// built up its surroundings are.
+    pub zone: Option<Zone>,
 }
+
+/// The kind of place a building stands in, for its style.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Zone {
+    /// Old town: houses between party walls, narrow streets.
+    OldTown,
+    /// «Ensanche»: blocks round courtyards.
+    Ensanche,
+    /// Outskirts: blocks standing free, houses with gardens.
+    Outskirts,
+    /// Industrial estate.
+    Industrial,
+}
+
+impl Zone {
+    pub const ALL: [Zone; 4] = [
+        Zone::OldTown,
+        Zone::Ensanche,
+        Zone::Outskirts,
+        Zone::Industrial,
+    ];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Zone::OldTown => "Casco histórico",
+            Zone::Ensanche => "Ensanche",
+            Zone::Outskirts => "Periferia",
+            Zone::Industrial => "Polígono industrial",
+        }
+    }
+}
+
+/// What a building is used for, as the cadastre or OpenStreetMap say.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BuildingUse {
+    Housing,
+    Industry,
+    Office,
+    Retail,
+    Public,
+    Hotel,
+    /// Not said.
+    Unknown,
+}
+
+impl BuildingUse {
+    /// From the cadastre's `currentUse` (`1_residential`, `3_industrial`,
+    /// `4_1_office`…).
+    pub fn of_cadastre(code: &str) -> BuildingUse {
+        let c = code.to_ascii_lowercase();
+        if c.contains("residential") {
+            BuildingUse::Housing
+        } else if c.contains("industrial") || c.contains("agricult") {
+            BuildingUse::Industry
+        } else if c.contains("office") {
+            BuildingUse::Office
+        } else if c.contains("retail") || c.contains("commerc") {
+            BuildingUse::Retail
+        } else if c.contains("public") {
+            BuildingUse::Public
+        } else {
+            BuildingUse::Unknown
+        }
+    }
+
+    /// From OpenStreetMap's `building` (and `amenity`, `tourism`) tags.
+    pub fn of_osm(building: &str, amenity: Option<&str>, tourism: Option<&str>) -> BuildingUse {
+        if tourism.is_some_and(|t| matches!(t, "hotel" | "hostel" | "apartment")) {
+            return BuildingUse::Hotel;
+        }
+        if amenity.is_some_and(|a| {
+            matches!(
+                a,
+                "school"
+                    | "college"
+                    | "university"
+                    | "hospital"
+                    | "clinic"
+                    | "townhall"
+                    | "library"
+                    | "community_centre"
+                    | "police"
+                    | "fire_station"
+            )
+        }) {
+            return BuildingUse::Public;
+        }
+        match building {
+            "house" | "detached" | "semidetached_house" | "terrace" | "residential"
+            | "apartments" | "bungalow" | "farm" | "dormitory" => BuildingUse::Housing,
+            "industrial" | "warehouse" | "factory" | "manufacture" | "barn" | "hangar"
+            | "storage_tank" => BuildingUse::Industry,
+            "office" | "commercial" => BuildingUse::Office,
+            "retail" | "supermarket" | "kiosk" => BuildingUse::Retail,
+            "school" | "university" | "college" | "hospital" | "civic" | "public"
+            | "government" | "sports_hall" | "sports_centre" | "church" | "kindergarten"
+            | "stadium" => BuildingUse::Public,
+            "hotel" => BuildingUse::Hotel,
+            _ => BuildingUse::Unknown,
+        }
+    }
+}
+
+/// The style that suits a building: by its use, its floors, its
+/// footprint, how many of its sides are party walls, and the zone.
+pub fn style_for(
+    use_: BuildingUse,
+    floors: u32,
+    footprint: f64,
+    party: usize,
+    zone: Zone,
+) -> BuildingStyle {
+    match use_ {
+        BuildingUse::Industry => return BuildingStyle::Warehouse,
+        BuildingUse::Public => return BuildingStyle::Facility,
+        BuildingUse::Hotel => return BuildingStyle::CoastalHotel,
+        BuildingUse::Office if floors >= 4 => return BuildingStyle::Offices,
+        BuildingUse::Office | BuildingUse::Retail => {
+            return if floors <= 1 && footprint > 600.0 {
+                BuildingStyle::Warehouse
+            } else {
+                BuildingStyle::ShopAndFlats
+            }
+        }
+        _ => {}
+    }
+    if zone == Zone::Industrial && use_ == BuildingUse::Unknown {
+        return BuildingStyle::Warehouse;
+    }
+    match floors {
+        0..=2 => {
+            if footprint > 300.0 && party == 0 {
+                if zone == Zone::Outskirts {
+                    BuildingStyle::Facility
+                } else {
+                    BuildingStyle::Courtyard
+                }
+            } else if party >= 2 || (party == 1 && zone == Zone::OldTown) {
+                match zone {
+                    Zone::OldTown => BuildingStyle::Andalusian,
+                    _ => BuildingStyle::Terraced,
+                }
+            } else if party == 1 {
+                BuildingStyle::SemiDetached
+            } else {
+                BuildingStyle::Detached
+            }
+        }
+        3 => match zone {
+            Zone::OldTown => BuildingStyle::HistoricCentre,
+            Zone::Ensanche => BuildingStyle::ShopAndFlats,
+            _ if party == 0 => BuildingStyle::Block1960s,
+            _ => BuildingStyle::ShopAndFlats,
+        },
+        4..=6 => match zone {
+            Zone::OldTown => BuildingStyle::HistoricCentre,
+            Zone::Ensanche => BuildingStyle::Ensanche,
+            _ => BuildingStyle::Block1960s,
+        },
+        _ => {
+            if zone == Zone::Ensanche && floors <= 8 {
+                BuildingStyle::Ensanche
+            } else {
+                BuildingStyle::Block1960s
+            }
+        }
+    }
+}
+
+/// How built up the ground round a point is (the share covered by
+/// buildings within `ZONE_RADIUS`), and the zone it makes.
+pub fn zone_of(coverage: f64, industrial_share: f64) -> Zone {
+    if industrial_share > 0.5 {
+        Zone::Industrial
+    } else if coverage > 0.45 {
+        Zone::OldTown
+    } else if coverage > 0.28 {
+        Zone::Ensanche
+    } else {
+        Zone::Outskirts
+    }
+}
+
+/// The radius of the surroundings that say a building's zone.
+pub const ZONE_RADIUS: f64 = 60.0;
 
 impl Default for CartoOptions {
     fn default() -> Self {
@@ -49,6 +240,8 @@ impl Default for CartoOptions {
             floor_height: 3.0,
             skip_own: true,
             recentre: false,
+            styles: true,
+            zone: None,
         }
     }
 }
@@ -225,7 +418,20 @@ pub fn import_carto(
 
     // Buildings: the cadastre's, or OpenStreetMap's when there is none.
     let concept = material(m, "Volumen de concepto", "concept", [222, 222, 214]);
-    let mut buildings: Vec<(String, Vec<Point2>, u32)> = Vec::new();
+    let mut buildings: Vec<(String, Vec<Point2>, u32, BuildingUse)> = Vec::new();
+    // The uses of the buildings, by reference (their parts carry none).
+    let uses: std::collections::HashMap<String, BuildingUse> = read
+        .cadastre
+        .iter()
+        .flat_map(|c| &c.features)
+        .filter(|f| f.kind == catastro::FeatureKind::Building && !f.current_use.is_empty())
+        .map(|f| {
+            (
+                f.reference.clone(),
+                BuildingUse::of_cadastre(&f.current_use),
+            )
+        })
+        .collect();
     // The cadastre gives the floors per part of a building (its
     // «buildingpart» file); the buildings alone, without floors, only
     // when there are no parts.
@@ -247,7 +453,15 @@ pub fn import_carto(
             for poly in &f.polygons {
                 let outline = plan_ring(&poly.outer, &frame);
                 let floors = f.floors_above.unwrap_or(2).max(1);
-                buildings.push((name_of("Edificio", &f.reference), outline, floors));
+                let own = BuildingUse::of_cadastre(&f.current_use);
+                let use_ = if own != BuildingUse::Unknown {
+                    own
+                } else {
+                    // A part's reference is its building's and «_partN».
+                    let base = f.reference.split('_').next().unwrap_or_default();
+                    uses.get(base).copied().unwrap_or(BuildingUse::Unknown)
+                };
+                buildings.push((name_of("Edificio", &f.reference), outline, floors, use_));
             }
         }
     }
@@ -267,16 +481,23 @@ pub fn import_carto(
                     .tag("building:levels")
                     .and_then(|v| v.parse::<f64>().ok())
                     .map_or(2, |v| v.round().max(1.0) as u32);
+                let use_ = BuildingUse::of_osm(
+                    w.tag("building").unwrap_or(""),
+                    w.tag("amenity"),
+                    w.tag("tourism"),
+                );
                 buildings.push((
                     name_of("Edificio", w.tag("name").unwrap_or("")),
                     outline,
                     floors,
+                    use_,
                 ));
             }
         }
     }
     if opts.buildings {
-        for (name, mut outline, floors) in buildings {
+        let mut made: Vec<(archisim_core::MassId, u32, BuildingUse)> = Vec::new();
+        for (name, mut outline, floors, use_) in buildings {
             dedup_ring(&mut outline);
             if outline.len() < 3 || signed_area(&outline).abs() < 4.0 {
                 continue;
@@ -294,7 +515,7 @@ pub fn import_carto(
                 continue;
             }
             let fh = opts.floor_height.max(2.0);
-            m.add_mass(NewMass {
+            let id = m.add_mass(NewMass {
                 name,
                 level,
                 shape: MassShape::Prism(outline),
@@ -303,7 +524,11 @@ pub fn import_carto(
                 floor_height: Some(fh),
                 material: concept,
             })?;
+            made.push((id, floors, use_));
             report.buildings += 1;
+        }
+        if opts.styles {
+            dress_brought(m, &made, opts.zone, &mut report)?;
         }
     }
 
@@ -859,6 +1084,58 @@ fn nearest_z(points: &[SurveyPoint], p: Point2) -> Option<f64> {
     Some(z / w)
 }
 
+/// Gives each building brought the style that suits it (U7), once they
+/// are all there (so that their party walls are known).
+fn dress_brought(
+    m: &mut Model,
+    made: &[(archisim_core::MassId, u32, BuildingUse)],
+    zone: Option<Zone>,
+    report: &mut CartoReport,
+) -> Result<(), ModelError> {
+    let shapes: Vec<(Point2, f64, bool)> = made
+        .iter()
+        .filter_map(|(id, _, u)| match &m.mass(*id)?.shape {
+            MassShape::Prism(p) => Some((
+                centre_of(p),
+                signed_area(p).abs(),
+                *u == BuildingUse::Industry,
+            )),
+            _ => None,
+        })
+        .collect();
+    let area = std::f64::consts::PI * ZONE_RADIUS * ZONE_RADIUS;
+    let mut by_style: std::collections::BTreeMap<BuildingStyle, Vec<archisim_core::MassId>> =
+        Default::default();
+    for (i, (id, floors, use_)) in made.iter().enumerate() {
+        let Some(&(c, footprint, _)) = shapes.get(i) else {
+            continue;
+        };
+        let near: Vec<&(Point2, f64, bool)> = shapes
+            .iter()
+            .filter(|(q, ..)| q.distance(c) <= ZONE_RADIUS)
+            .collect();
+        let coverage = near.iter().map(|x| x.1).sum::<f64>() / area;
+        let industrial = near.iter().filter(|x| x.2).count() as f64 / near.len().max(1) as f64;
+        let zone = zone.unwrap_or_else(|| zone_of(coverage, industrial));
+        let party = m.party_sides(*id).iter().filter(|p| **p).count();
+        let style = style_for(*use_, *floors, footprint, party, zone);
+        by_style.entry(style).or_default().push(*id);
+    }
+    for (style, ids) in &by_style {
+        m.restyle_masses(ids, *style)?;
+    }
+    if !by_style.is_empty() {
+        let list: Vec<String> = by_style
+            .iter()
+            .map(|(s, ids)| format!("{} {}", ids.len(), s.name().to_lowercase()))
+            .collect();
+        report
+            .notes
+            .push(format!("Estilos de los edificios: {}", list.join(", ")));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -917,6 +1194,66 @@ mod tests {
         let c = centre_of(p);
         assert!((c.x - 40.0).abs() < 1.0 && (c.y - 7.5).abs() < 1.0, "{p:?}");
         assert!((signed_area(p).abs() - 300.0).abs() < 1e-6);
+        // Each with the style that suits it, its floors kept.
+        assert!(m.masses().all(|x| x.dress.is_some()), "{:?}", r.notes);
+        assert_eq!(m.masses().find(|x| x.id == tall.id).unwrap().floors(), 3);
+        assert!(r.notes.iter().any(|n| n.starts_with("Estilos")));
+        // Without styles, plain masses; in an industrial estate, warehouses.
+        let mut plain = project();
+        let opts = CartoOptions {
+            styles: false,
+            ..CartoOptions::default()
+        };
+        import_carto(&mut plain, &[("a.gml".into(), GML.into())], &opts).unwrap();
+        assert!(plain.masses().all(|x| x.dress.is_none()));
+        let mut estate = project();
+        let opts = CartoOptions {
+            zone: Some(Zone::Industrial),
+            ..CartoOptions::default()
+        };
+        import_carto(&mut estate, &[("a.gml".into(), GML.into())], &opts).unwrap();
+        assert!(estate
+            .masses()
+            .all(|x| x.dress.unwrap().style == BuildingStyle::Warehouse));
+    }
+
+    #[test]
+    fn styles_by_use_floors_and_zone() {
+        use BuildingStyle as S;
+        let h = BuildingUse::Housing;
+        // Old town: houses between party walls, the taller ones with
+        // balconies.
+        assert_eq!(style_for(h, 2, 90.0, 2, Zone::OldTown), S::Andalusian);
+        assert_eq!(style_for(h, 4, 200.0, 2, Zone::OldTown), S::HistoricCentre);
+        // Ensanche blocks, 1960s blocks out of the centre.
+        assert_eq!(style_for(h, 6, 600.0, 2, Zone::Ensanche), S::Ensanche);
+        assert_eq!(style_for(h, 8, 400.0, 0, Zone::Outskirts), S::Block1960s);
+        // Houses out of the centre: free, semi-detached or in a row.
+        assert_eq!(style_for(h, 2, 120.0, 0, Zone::Outskirts), S::Detached);
+        assert_eq!(style_for(h, 2, 90.0, 1, Zone::Outskirts), S::SemiDetached);
+        assert_eq!(style_for(h, 2, 70.0, 2, Zone::Outskirts), S::Terraced);
+        // By their use.
+        let u = |c: &str| BuildingUse::of_cadastre(c);
+        assert_eq!(
+            style_for(u("3_industrial"), 1, 900.0, 0, Zone::Outskirts),
+            S::Warehouse
+        );
+        assert_eq!(
+            style_for(u("4_1_office"), 7, 900.0, 0, Zone::Ensanche),
+            S::Offices
+        );
+        assert_eq!(
+            style_for(u("4_3_publicServices"), 2, 900.0, 0, Zone::Ensanche),
+            S::Facility
+        );
+        let o = BuildingUse::of_osm("yes", Some("school"), None);
+        assert_eq!(o, BuildingUse::Public);
+        assert_eq!(
+            BuildingUse::of_osm("yes", None, Some("hotel")),
+            BuildingUse::Hotel
+        );
+        assert_eq!(zone_of(0.6, 0.0), Zone::OldTown);
+        assert_eq!(zone_of(0.1, 0.8), Zone::Industrial);
     }
 
     #[test]

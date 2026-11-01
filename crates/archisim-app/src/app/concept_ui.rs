@@ -1361,8 +1361,15 @@ impl ArchiSimApp {
                 }
             });
         });
-        self.mass_form_group(ui, &m);
-        self.sculpt_groups(ui, &m);
+        let dressable = matches!(m.shape, MassShape::Prism(_)) && m.building.is_none();
+        if m.dress.is_some() {
+            // A building of the surroundings: its style first, no edges
+            // to round nor twists.
+            self.env_building_group(ui, &[id]);
+        } else {
+            self.mass_form_group(ui, &m);
+            self.sculpt_groups(ui, &m);
+        }
         group(ui, "mass-figures", "Superficies", |ui| {
             text_row(ui, "Huella (m²)", "", &comma(f.footprint, 2));
             text_row(
@@ -1409,6 +1416,9 @@ impl ArchiSimApp {
                     self.convert_masses(&[id]);
                 }
             });
+        }
+        if dressable && m.dress.is_none() && m.floor_height.is_some() {
+            self.env_building_group(ui, &[id]);
         }
     }
 

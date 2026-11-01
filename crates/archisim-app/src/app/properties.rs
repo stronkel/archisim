@@ -79,15 +79,7 @@ impl ArchiSimApp {
             [Element::Grid(id)] => self.grid_properties(ui, *id),
             [Element::RefPlane(id)] => self.ref_plane_properties(ui, *id),
             [Element::Module(id)] => self.module_properties(ui, *id),
-            [Element::Mass(id)] => {
-                self.mass_properties(ui, *id);
-                let dressable = self.ed.model().mass(*id).is_some_and(|m| {
-                    matches!(m.shape, archisim_core::MassShape::Prism(_)) && m.building.is_none()
-                });
-                if dressable {
-                    self.env_building_group(ui, &[*id]);
-                }
-            }
+            [Element::Mass(id)] => self.mass_properties(ui, *id),
             list if list.len() > 1 && list.iter().all(|e| matches!(e, Element::Mass(_))) => {
                 let ids: Vec<archisim_core::MassId> = list
                     .iter()
