@@ -4450,7 +4450,8 @@ fn plots_and_roads_are_drawn() {
     h.key(Key::Enter);
     let road = h.model().roads().next().unwrap();
     assert!((road.length() - 50.0).abs() < 1e-6);
-    assert_eq!(road.bands().len(), 7);
+    // Sidewalk, kerb, parking, two lanes, parking, kerb, sidewalk (H6).
+    assert_eq!(road.bands().len(), 8);
     h.frame();
     // A mass on the plot: its figures use the plot's area; one that
     // reaches the boundary leaves the setback.
@@ -4538,6 +4539,56 @@ fn pools_are_drawn_and_dig_the_ground() {
     let area = h.model().pool(pool.id).unwrap().area();
     assert!((area - 34.0).abs() < 1e-6, "{area}");
     // The plan draws it.
+    h.frame();
+}
+
+/// Streets by type (H6): an avenue with planting strips, parking in
+/// battery, build-outs and a crossing; trees planted in its strips.
+#[test]
+fn streets_by_type_with_trees() {
+    use archisim_core::{Buildout, Crossing, ParkingMode, RoadBand};
+    let mut h = Harness::new(Editor::new_project());
+    let mut sec = archisim_core::road_presets()
+        .into_iter()
+        .find(|(n, _)| n.contains("Avenida"))
+        .map(|(_, s)| s)
+        .expect("an avenue preset");
+    assert!(sec.strips.iter().any(|s| s.band == RoadBand::Planting));
+    sec.parking = ParkingMode::Battery;
+    sec.crossings.push(Crossing {
+        at: 20.0,
+        width: 4.0,
+    });
+    sec.buildouts.push(Buildout {
+        left: true,
+        from: 16.0,
+        to: 24.0,
+    });
+    h.app.road_settings.section = sec;
+    let canvas = h.app.canvas;
+    h.app
+        .view
+        .fit_exact(canvas, p(-10.0, -30.0), p(70.0, 30.0), 0.0);
+    h.app.set_discipline(super::toolbox::Discipline::Site);
+    h.type_text("w");
+    assert_eq!(h.app.tool, Tool::Road);
+    h.click_at(p(0.0, 0.0));
+    h.click_at(p(60.0, 0.0));
+    h.key(Key::Enter);
+    let id = road_id(&h);
+    let r = h.model().road(id).unwrap().clone();
+    assert_eq!(r.section.crossings.len(), 1);
+    h.app.ed.selection = [Element::Road(id)].into_iter().collect();
+    h.frame();
+    let n = h
+        .app
+        .ed
+        .transact("Árboles", |m| {
+            super::urban_ui::plant_road_trees(m, id, "Naranjo")
+        })
+        .unwrap();
+    assert!(n >= 1, "{n}");
+    assert!(h.model().plantings().count() >= 1);
     h.frame();
 }
 

@@ -151,15 +151,27 @@ impl<'a> Importer<'a> {
                 ))
             })
             .collect();
-        let d = RoadSection::default();
-        let section = RoadSection {
-            carriageway: num(self, "Carriageway", d.carriageway),
-            parking: num(self, "Parking", d.parking),
-            kerb: num(self, "Kerb", d.kerb),
-            sidewalk: num(self, "Sidewalk", d.sidewalk),
-            kerb_height: num(self, "KerbHeight", d.kerb_height),
-            depth: num(self, "Depth", d.depth),
+        // Its strips (H6); or the four widths of before.
+        let mut section = match text(self, "Section").and_then(|t| RoadSection::decode(&t)) {
+            Some(s) => s,
+            None => {
+                let d = (6.0, 2.2, 0.15, 2.5);
+                RoadSection::classic(
+                    num(self, "Carriageway", d.0),
+                    num(self, "Parking", d.1),
+                    num(self, "Kerb", d.2),
+                    num(self, "Sidewalk", d.3),
+                )
+            }
         };
+        section.kerb_height = num(self, "KerbHeight", section.kerb_height);
+        section.depth = num(self, "Depth", section.depth);
+        let named = |s: &Self, key: &str| {
+            text(s, key).and_then(|n| s.model.materials().find(|m| m.name == n).map(|m| m.id))
+        };
+        section.planting = named(self, "PlantingMaterial");
+        section.bike = named(self, "BikeMaterial");
+        section.markings = named(self, "MarkingMaterial");
         let top_offset = num(self, "TopOffset", 0.0);
         let level = self.level_by_guid(id, "ArchiSim_Road", 0.0);
         let fallback = self.single_material(id);
@@ -192,7 +204,7 @@ impl<'a> Importer<'a> {
         self.sources.push((rid.0, id));
         // Its pieces are not loose elements.
         if let Some(g) = archisim_core::GlobalId::parse(&guid) {
-            let pieces: Vec<String> = (0..16)
+            let pieces: Vec<String> = (0..512)
                 .map(|i| crate::derived_guid(&g, &format!("band {i}")).to_string())
                 .collect();
             for kind in ["IFCPAVEMENT", "IFCKERB", "IFCBUILDINGELEMENTPROXY"] {

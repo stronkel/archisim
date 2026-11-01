@@ -3857,33 +3857,52 @@ pub fn mass_solids(model: &Model, id: archisim_core::MassId) -> Vec<Solid> {
 }
 
 /// The solids of a road: its pavement from the carriageway's top down
-/// its depth, and the kerbs and sidewalks standing their height over it.
+/// its depth, the kerbs standing their height over it, the sidewalks,
+/// planting strips and medians on top of their fill (H6), and its road
+/// markings a few millimetres over the carriageway when the road has their
+/// material.
 pub fn road_solids(model: &Model, id: archisim_core::RoadId) -> Vec<Solid> {
     use archisim_core::RoadBand;
     let Some(r) = model.road(id) else {
         return Vec::new();
     };
     let top = model.level(r.level).map_or(0.0, |l| l.elevation) + r.top_offset;
-    let s = r.section;
-    r.bands()
+    let s = &r.section;
+    let kh = if s.single_level { 0.0 } else { s.kerb_height };
+    let mut out: Vec<Solid> = r
+        .pieces()
         .into_iter()
-        .map(|(band, outline)| {
-            let (material, z0, z1) = match band {
-                RoadBand::Carriageway | RoadBand::Parking => (r.pavement, top - s.depth, top),
-                RoadBand::Kerb => (r.kerb_material, top - s.depth, top + s.kerb_height),
-                RoadBand::Sidewalk => (
-                    r.sidewalk_material,
-                    top + s.kerb_height - 0.2,
-                    top + s.kerb_height,
-                ),
+        .map(|p| {
+            let (z0, z1) = match (p.band, p.raised) {
+                (RoadBand::Kerb, true) => (top - s.depth, top + kh),
+                (_, true) => (top + kh - 0.2, top + kh),
+                _ => (top - s.depth, top),
             };
             Solid {
                 owner: SolidOwner::Road(id),
-                material,
-                triangles: prism(&outline, z0, z1),
+                material: p.material,
+                triangles: prism(&p.outline, z0, z1),
             }
         })
-        .collect()
+        .collect();
+    if let Some(m) = s.markings {
+        let mut tris = Vec::new();
+        for poly in r.markings() {
+            let mut poly = poly;
+            if archisim_core::signed_area(&poly) < 0.0 {
+                poly.reverse();
+            }
+            tris.extend(prism(&poly, top, top + 0.004));
+        }
+        if !tris.is_empty() {
+            out.push(Solid {
+                owner: SolidOwner::Road(id),
+                material: m,
+                triangles: tris,
+            });
+        }
+    }
+    out
 }
 
 /// A cross-section (counter-clockwise, `x` across to the left, `y` up)

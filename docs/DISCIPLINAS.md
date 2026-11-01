@@ -45,7 +45,7 @@ Lo que rodea al edificio y lo que se urbaniza, sin mezclarse con el edificio:
 |---|---|---|
 | **Terreno** | Superficie desde puntos o curvas de nivel (topográfico importado en DXF o CSV); explanaciones con su desmonte y terraplén | `IfcGeographicElement` (`TERRAIN`), `IfcEarthworksCut` / `IfcEarthworksFill` |
 | **Parcela** ✅ (20/10/2026) | Lindes, superficie, retranqueos; la orientación real del norte (2.12) | `IfcSite` |
-| **Vial** ✅ (20/10/2026, tramos rectos) | Por un eje y una **sección tipo**: calzada, aparcamiento, bordillo, acera, alcorque; con su firme por capas (como un multicapa) | `IfcAlignment`, `IfcRoad`, `IfcCourse`, `IfcPavement`, `IfcKerb` |
+| **Vial** ✅ (20/10/2026, tramos rectos; por tipos el 01/11/2026, H6) | Por un eje y una **sección tipo** elegida de una lista (calle de un sentido, de doble sentido, con aparcamiento en línea o en batería, plataforma única, avenida con mediana arbolada, con carril bici…) y cambiada franja a franja: carriles, aparcamiento (en línea, batería o espiga), bordillo, acera, carril bici, alcorques y mediana; orejas en el acerado y pasos de peatones a lo largo del eje; marcas viales; árboles en los alcorques con un botón | `IfcAlignment`, `IfcRoad`, `IfcCourse`, `IfcPavement`, `IfcKerb` |
 | **Paisajismo** | Árboles y arbustos (objetos de la librería), zonas verdes, pavimentos exteriores | `IfcGeographicElement` |
 | **Mobiliario urbano** | Bancos, farolas, papeleras (librería) | `IfcFurnishingElement` / `IfcLamp` |
 

@@ -2321,17 +2321,33 @@ fn site(m: &mut Model, pb: LevelId) -> R {
         [96, 96, 100],
         archisim_core::CutPattern::Solid,
     );
+    let paint = m.add_material(
+        "Pintura vial blanca",
+        "paint",
+        [244, 244, 238],
+        archisim_core::CutPattern::Solid,
+    );
     m.add_road(NewRoad {
         name: "Florence Street".into(),
         level: pb,
         axis: vec![p(-6.5, -30.0), p(-6.5, 42.0)],
-        section: RoadSection {
-            carriageway: 7.0,
-            parking: 2.2,
-            kerb: 0.15,
-            sidewalk: 2.8,
-            kerb_height: 0.15,
-            depth: 0.4,
+        section: {
+            // A zebra crossing by the café, the sidewalks widened over the
+            // parking on both sides of it, and the road markings (H6).
+            let mut s = RoadSection::classic(7.0, 2.2, 0.15, 2.8);
+            s.crossings.push(archisim_core::Crossing {
+                at: 25.0,
+                width: 4.0,
+            });
+            for left in [true, false] {
+                s.buildouts.push(archisim_core::Buildout {
+                    left,
+                    from: 20.0,
+                    to: 30.0,
+                });
+            }
+            s.markings = Some(paint);
+            s
         },
         top_offset: -0.17,
         pavement: asphalt,

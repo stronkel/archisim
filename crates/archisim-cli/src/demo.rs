@@ -1532,17 +1532,26 @@ pub fn masterplan(house: &std::path::Path) -> Result<Model, Box<dyn std::error::
         [96, 96, 100],
         archisim_core::CutPattern::Solid,
     );
+    let paint = m.add_material(
+        "Pintura vial blanca",
+        "paint",
+        [244, 244, 238],
+        archisim_core::CutPattern::Solid,
+    );
     m.add_road(archisim_core::NewRoad {
         name: "Calle de la Huerta".into(),
         level,
         axis: vec![Point2::new(-12.0, -7.5), Point2::new(52.0, -7.5)],
-        section: archisim_core::RoadSection {
-            carriageway: 6.0,
-            parking: 0.0,
-            kerb: 0.15,
-            sidewalk: 1.5,
-            kerb_height: 0.15,
-            depth: 0.4,
+        section: {
+            // Its lanes painted, and a zebra crossing in front of the
+            // house (H6).
+            let mut s = archisim_core::RoadSection::classic(6.0, 0.0, 0.15, 1.5);
+            s.crossings.push(archisim_core::Crossing {
+                at: 18.0,
+                width: 4.0,
+            });
+            s.markings = Some(paint);
+            s
         },
         top_offset: -0.3,
         pavement: asphalt,
