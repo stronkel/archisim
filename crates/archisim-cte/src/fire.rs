@@ -251,12 +251,14 @@ pub fn check(model: &Model, report: &mut Report) {
             },
         );
     }
+    // Sprinklers declared (they lengthen the evacuation routes, SI 3)
+    // and none drawn: a warning, the drawing may leave them out.
     if settings.sprinklers && !has(DeviceKind::Sprinkler) {
         building(
             report,
-            Status::Fails,
+            Status::Warning,
             "SI 4, tabla 1.1",
-            "El edificio se declara con extinción automática y no hay rociadores dibujados".into(),
+            "El edificio se declara con extinción automática (alarga los recorridos de evacuación) y no hay rociadores dibujados".into(),
             "0".into(),
             "rociadores".into(),
         );
@@ -371,10 +373,14 @@ pub fn check(model: &Model, report: &mut Report) {
         ] {
             let pts = at(kind);
             if pts.is_empty() {
-                if kind == DeviceKind::Sprinkler && settings.sprinklers && !lv.rooms.is_empty() {
+                if kind == DeviceKind::Sprinkler
+                    && settings.sprinklers
+                    && has(DeviceKind::Sprinkler)
+                    && !lv.rooms.is_empty()
+                {
                     item(
                         report,
-                        Status::Fails,
+                        Status::Warning,
                         Subject::Level(level),
                         level,
                         "SI 4, tabla 1.1",

@@ -473,7 +473,7 @@ fn extinguishers_and_sprinklers_by_si4() {
     m.set_code_settings(c);
     assert!(fire(&check(&m))
         .iter()
-        .any(|i| i.text.contains("extinción automática") && i.status == Status::Fails));
+        .any(|i| i.text.contains("extinción automática") && i.status == Status::Warning));
     // One in the first office (31 m²): two are needed.
     fire_device(&mut m, level, DeviceKind::Sprinkler, 4.0, 2.0);
     let counts = |r: &Report| {
