@@ -1128,6 +1128,9 @@ pub(crate) struct ElevatorOf {
     pub material: Option<u64>,
 }
 
+/// A change of a road's section: `[at, transition, [[band, width]…]]`.
+pub(crate) type ChangeOf = (f64, f64, Vec<(String, f64)>);
+
 /// A road (version 19): its axis and cross-section.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -1172,6 +1175,10 @@ pub(crate) struct Road {
     /// Its longitudinal profile (version 61): `[at, z, curve]`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub profile: Vec<(f64, f64, f64)>,
+    /// Where its strips change along it (version 62): `[at, transition,
+    /// [[band, width]…]]`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub changes: Vec<ChangeOf>,
     pub kerb_height: f64,
     pub depth: f64,
     #[serde(default, skip_serializing_if = "is_zero")]
@@ -3522,6 +3529,20 @@ impl ProjectFile {
                     corner_radius: ((r.section.corner_radius - core::CORNER_RADIUS).abs() > 1e-9)
                         .then_some(r.section.corner_radius),
                     profile: r.profile.iter().map(|p| (p.at, p.z, p.curve)).collect(),
+                    changes: r
+                        .changes
+                        .iter()
+                        .map(|c| {
+                            (
+                                c.at,
+                                c.transition,
+                                c.strips
+                                    .iter()
+                                    .map(|x| (x.band.code().to_string(), x.width))
+                                    .collect(),
+                            )
+                        })
+                        .collect(),
                     kerb_height: r.section.kerb_height,
                     depth: r.section.depth,
                     top_offset: r.top_offset,
@@ -4818,6 +4839,29 @@ impl ProjectFile {
                     .iter()
                     .map(|&(at, z, curve)| core::ProfilePoint { at, z, curve })
                     .collect(),
+                changes: {
+                    let mut out = Vec::new();
+                    for (at, transition, strips) in &r.changes {
+                        let mut list = Vec::new();
+                        for (band, width) in strips {
+                            list.push(core::RoadStrip {
+                                band: core::RoadBand::from_code(band).ok_or_else(|| {
+                                    FileError::Value {
+                                        element: element.clone(),
+                                        message: format!("«{band}» is not a band of a road"),
+                                    }
+                                })?,
+                                width: *width,
+                            });
+                        }
+                        out.push(core::SectionChange {
+                            at: *at,
+                            transition: *transition,
+                            strips: list,
+                        });
+                    }
+                    out
+                },
                 pavement: core::MaterialId(r.pavement),
                 kerb_material: core::MaterialId(r.kerb_material),
                 sidewalk_material: core::MaterialId(r.sidewalk_material),

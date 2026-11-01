@@ -3,7 +3,8 @@
 //! climbs the hill (a crossing), a one-way street that ends on the avenue
 //! (a T), a street between the two at the top (two T's) and two
 //! pedestrian streets that meet at a corner (an L). The streets that
-//! climb follow the terrain («rasante»). To see the corners, the kerbs
+//! climb follow the terrain («rasante»); the Calle Nueva's sidewalks
+//! reach the façade line of its plots. To see the corners, the kerbs
 //! and the grades in plan, in 3D and in the IFC (with its alignments).
 
 use std::path::Path;
@@ -83,6 +84,8 @@ pub fn build() -> Res<Model> {
             section: sec,
             top_offset: top,
             profile: Vec::new(),
+
+            changes: Vec::new(),
             pavement: asphalt,
             kerb_material: stone,
             sidewalk_material: paving,
@@ -112,13 +115,39 @@ pub fn build() -> Res<Model> {
             0.0,
         )?,
     ];
-    road(
+    let nueva = road(
         &mut m,
         "Calle Nueva",
         preset("Calle de un sentido con aparcamiento"),
         vec![p(0.0, 60.0), p(60.0, 60.0)],
         ground(p(30.0, 60.0)),
     )?;
+    // Plots along the Calle Nueva, with a façade line that steps back,
+    // and its sidewalks taken out to them (U2).
+    for (name, outline) in [
+        (
+            "Parcela 1",
+            vec![p(9.0, 67.0), p(30.0, 67.0), p(30.0, 90.0), p(9.0, 90.0)],
+        ),
+        (
+            "Parcela 2",
+            vec![p(30.0, 68.5), p(51.0, 68.5), p(51.0, 90.0), p(30.0, 90.0)],
+        ),
+        (
+            "Parcela 3",
+            vec![p(9.0, 33.0), p(51.0, 33.0), p(51.0, 53.0), p(9.0, 53.0)],
+        ),
+    ] {
+        m.add_plot(archisim_core::NewPlot {
+            name: name.into(),
+            level: pb,
+            outline,
+            setback: 3.0,
+            reference: String::new(),
+        })?;
+    }
+    let to_plots = m.sidewalks_to_plots(nueva).ok_or("sin parcelas")?;
+    m.edit_road(nueva, |r| r.changes = to_plots)?;
     road(
         &mut m,
         "Calle de la Plaza",
@@ -134,13 +163,46 @@ pub fn build() -> Res<Model> {
         ground(p(-35.0, 55.0)),
     )?;
     // The streets that climb follow the hill.
-    for id in climbing {
+    for &id in &climbing {
         let profile = m
             .road_profile_from_terrain(id, 20.0)
             .ok_or("sin terreno bajo la calle")?;
         m.edit_road(id, |r| r.profile = profile)?;
     }
     let _ = avenue;
+    // Where the sections change (U2): the Calle Real widens its sidewalks
+    // south of the avenue, over 10 m; the Calle del Agua becomes a
+    // single-level street at the top.
+    let real = climbing[0];
+    let wide: Vec<archisim_core::RoadStrip> = m
+        .road(real)
+        .ok_or("sin calle")?
+        .section
+        .strips
+        .iter()
+        .map(|x| match x.band {
+            archisim_core::RoadBand::Sidewalk => archisim_core::strip_of(x.band, 4.5),
+            archisim_core::RoadBand::Parking => archisim_core::strip_of(x.band, 1.0),
+            _ => *x,
+        })
+        .collect();
+    m.edit_road(real, |r| {
+        // From the start (the south end) up to 40 m wide, then back.
+        r.changes = vec![archisim_core::SectionChange {
+            at: 40.0,
+            transition: 10.0,
+            strips: r.section.strips.clone(),
+        }];
+        r.section.strips = wide;
+    })?;
+    let single = preset("Calle de plataforma única").strips;
+    m.edit_road(climbing[1], |r| {
+        r.changes = vec![archisim_core::SectionChange {
+            at: 75.0,
+            transition: 6.0,
+            strips: single,
+        }];
+    })?;
     // A house on the block between them.
     let corners = [p(15.0, 15.0), p(35.0, 15.0), p(35.0, 28.0), p(15.0, 28.0)];
     let base = ground(p(25.0, 20.0));
@@ -219,8 +281,9 @@ pub fn write(dir: &Path) -> Res {
 
 #[cfg(test)]
 mod tests {
-    /// The sample's streets meet in a crossing, three T's and an L, and
-    /// the two that climb have a profile.
+    /// The sample's streets meet in a crossing, three T's and an L, the
+    /// two that climb have a profile and the Calle Nueva's sidewalks reach
+    /// its plots.
     #[test]
     fn streets_meet_every_way() {
         let m = super::build().unwrap();
@@ -230,5 +293,9 @@ mod tests {
         arms.sort_unstable();
         assert_eq!(arms, vec![2, 3, 3, 3, 4], "{arms:?}");
         assert_eq!(m.roads().filter(|r| r.sloped()).count(), 2);
+        assert_eq!(m.roads().filter(|r| !r.changes.is_empty()).count(), 3);
+        let nueva = m.roads().find(|r| r.name == "Calle Nueva").unwrap();
+        let (l, r) = nueva.extent_at(40.0);
+        assert!((l - 8.5).abs() < 0.01 && (r - 7.0).abs() < 0.01, "{l} {r}");
     }
 }

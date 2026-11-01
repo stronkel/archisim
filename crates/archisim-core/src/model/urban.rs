@@ -572,6 +572,8 @@ pub struct Road {
     pub top_offset: f64,
     /// Its longitudinal profile («rasante», U1; `road_profile`): none, level.
     pub profile: Vec<ProfilePoint>,
+    /// Where its strips change along it (U2; `road_changes`).
+    pub changes: Vec<SectionChange>,
     /// Of the carriageway and parking, of the kerbs and of the sidewalks.
     pub pavement: MaterialId,
     pub kerb_material: MaterialId,
@@ -587,6 +589,7 @@ pub struct NewRoad {
     pub section: RoadSection,
     pub top_offset: f64,
     pub profile: Vec<ProfilePoint>,
+    pub changes: Vec<SectionChange>,
     pub pavement: MaterialId,
     pub kerb_material: MaterialId,
     pub sidewalk_material: MaterialId,
@@ -628,6 +631,7 @@ impl Road {
         if by_profile {
             cuts.extend(self.profile_cuts());
         }
+        cuts.extend(self.change_cuts().into_iter().map(|c| c.clamp(0.0, len)));
         cuts.sort_by(f64::total_cmp);
         cuts.dedup_by(|a, b| (*a - *b).abs() < 1e-6);
         let mut out = Vec::new();
@@ -649,7 +653,25 @@ impl Road {
                 .iter()
                 .any(|b| !b.left && b.from <= mid && b.to >= mid);
             let path = sub_path(&self.axis, s0, s1);
-            for (band, a, b) in s.band_offsets() {
+            // The strips at each end of the stretch (they change along a
+            // transition, U2) and at each point of its path.
+            let tiny = ((s1 - s0) * 1e-6).min(1e-6);
+            let (o0, o1) = (self.offsets_at(s0 + tiny), self.offsets_at(s1 - tiny));
+            let o1 = if o1.len() == o0.len() { o1 } else { o0.clone() };
+            let fracs: Vec<f64> = {
+                let total: f64 = path.windows(2).map(|w| w[0].distance(w[1])).sum();
+                let mut acc = 0.0;
+                let mut f = vec![0.0];
+                for w in path.windows(2) {
+                    acc += w[0].distance(w[1]);
+                    f.push(if total > EPSILON { acc / total } else { 0.0 });
+                }
+                f
+            };
+            for (i, &(band, a, b)) in o0.iter().enumerate() {
+                let (a1, b1) = (o1[i].1, o1[i].2);
+                let along_a: Vec<f64> = fracs.iter().map(|t| a + (a1 - a) * t).collect();
+                let along_b: Vec<f64> = fracs.iter().map(|t| b + (b1 - b) * t).collect();
                 let left = a + b > 0.0;
                 let band =
                     if band == RoadBand::Parking && ((left && out_left) || (!left && out_right)) {
@@ -657,8 +679,12 @@ impl Road {
                     } else {
                         band
                     };
-                let outline = strip(&path, a, b);
-                if outline.len() < 3 {
+                let outline = if (a1 - a).abs() < 1e-9 && (b1 - b).abs() < 1e-9 {
+                    strip(&path, a, b)
+                } else {
+                    super::road_changes::strip_by(&path, &along_a, &along_b)
+                };
+                if outline.len() < 3 || signed_area(&outline).abs() < 1e-9 {
                     continue;
                 }
                 let material = match band {
@@ -710,19 +736,20 @@ impl Road {
     fn all_markings(&self) -> Vec<Vec<Point2>> {
         let s = &self.section;
         let len = self.length();
-        let offs = s.band_offsets();
         let mut out = Vec::new();
         let line = 0.1;
-        // Between two lanes: dashes of 3 m every 8 m.
-        for w in offs.windows(2) {
-            if w[0].0 == RoadBand::Carriageway && w[1].0 == RoadBand::Carriageway {
-                let d = w[0].1;
-                let mut t = 1.0;
-                while t + 3.0 <= len - 1.0 {
+        // Between two lanes: dashes of 3 m every 8 m (where the section is,
+        // U2).
+        let mut t = 1.0;
+        while t + 3.0 <= len - 1.0 {
+            let here = self.offsets_at(t + 1.5);
+            for w in here.windows(2) {
+                if w[0].0 == RoadBand::Carriageway && w[1].0 == RoadBand::Carriageway {
+                    let d = w[0].1;
                     out.push(quad(&self.axis, t, t + 3.0, d - line / 2.0, d + line / 2.0));
-                    t += 8.0;
                 }
             }
+            t += 8.0;
         }
         // The bays.
         let widened = |left: bool, t: f64| {
@@ -735,14 +762,14 @@ impl Road {
                 .iter()
                 .any(|c| (t - c.at).abs() <= c.width / 2.0 + 0.5)
         };
-        for &(band, a, b) in &offs {
-            if band != RoadBand::Parking {
-                continue;
-            }
-            let left = a + b > 0.0;
-            let bay = s.parking.bay();
-            let mut t = bay;
-            while t < len - 0.5 {
+        let bay = s.parking.bay();
+        let mut t = bay;
+        while t < len - 0.5 {
+            for (band, a, b) in self.offsets_at(t) {
+                if band != RoadBand::Parking || b - a < 0.8 {
+                    continue;
+                }
+                let left = a + b > 0.0;
                 if !widened(left, t) && !crossing(t) {
                     let (p, u) = along(&self.axis, t);
                     let n = u.perp_left();
@@ -756,8 +783,8 @@ impl Road {
                     let w = u * (line / 2.0);
                     out.push(vec![p0 - w, p0 + w, p1 + w, p1 - w]);
                 }
-                t += bay;
             }
+            t += bay;
         }
         // Zebra crossings over the traffic strips: bars along the road,
         // 0,5 m wide every metre.
@@ -766,7 +793,7 @@ impl Road {
             if s0 < 0.0 || s1 > len {
                 continue;
             }
-            for &(band, a, b) in &offs {
+            for (band, a, b) in self.offsets_at(c.at) {
                 if !band.traffic() || band == RoadBand::Parking {
                     continue;
                 }
@@ -782,8 +809,33 @@ impl Road {
 
     /// Its outline: the whole width along the axis.
     pub fn outline(&self) -> Vec<Point2> {
-        let w = self.section.width() / 2.0;
-        strip(&self.axis, -w, w)
+        if self.changes.is_empty() {
+            let w = self.section.width() / 2.0;
+            return strip(&self.axis, -w, w);
+        }
+        // Its width changing along it (U2): the axis with a point at each
+        // change too.
+        let len = self.length();
+        let mut at: Vec<f64> = self.change_cuts();
+        let mut s = 0.0;
+        for w in self.axis.windows(2) {
+            at.push(s);
+            s += w[0].distance(w[1]);
+        }
+        at.push(len);
+        at.retain(|x| *x >= 0.0 && *x <= len);
+        at.sort_by(f64::total_cmp);
+        at.dedup_by(|a, b| (*a - *b).abs() < 1e-6);
+        let path: Vec<Point2> = at.iter().map(|x| along(&self.axis, *x).0).collect();
+        let (mut left, mut right) = (Vec::new(), Vec::new());
+        for x in &at {
+            let tiny = 1e-6;
+            let (l0, r0) = self.extent_at((x - tiny).max(0.0));
+            let (l1, r1) = self.extent_at((x + tiny).min(len));
+            left.push(l0.max(l1));
+            right.push(-r0.max(r1));
+        }
+        super::road_changes::strip_by(&path, &right, &left)
     }
 
     pub fn length(&self) -> f64 {
@@ -981,6 +1033,22 @@ impl Model {
         if s.corner_radius < 0.0 {
             return Err(ModelError::NonPositive("corner radius"));
         }
+        for c in &r.changes {
+            finite(c.at, "section change")?;
+            finite(c.transition, "transition")?;
+            if c.transition < 0.0 {
+                return Err(ModelError::NonPositive("transition"));
+            }
+            if c.strips.is_empty() {
+                return Err(ModelError::InvalidShape("a change of section needs strips"));
+            }
+            for x in &c.strips {
+                finite(x.width, "road strip width")?;
+                if x.width <= EPSILON {
+                    return Err(ModelError::NonPositive("road strip width"));
+                }
+            }
+        }
         for p in &r.profile {
             finite(p.at, "profile point")?;
             finite(p.z, "profile height")?;
@@ -1006,6 +1074,7 @@ impl Model {
                 section: spec.section,
                 top_offset: spec.top_offset,
                 profile: spec.profile,
+                changes: spec.changes,
                 pavement: spec.pavement,
                 kerb_material: spec.kerb_material,
                 sidewalk_material: spec.sidewalk_material,
@@ -1032,6 +1101,7 @@ impl Model {
             section: r.section.clone(),
             top_offset: r.top_offset,
             profile: r.profile.clone(),
+            changes: r.changes.clone(),
             pavement: r.pavement,
             kerb_material: r.kerb_material,
             sidewalk_material: r.sidewalk_material,
@@ -1096,6 +1166,7 @@ impl Model {
                 section: r.section.clone(),
                 top_offset: r.top_offset,
                 profile: r.profile.clone(),
+                changes: r.changes.clone(),
                 pavement: r.pavement,
                 kerb_material: r.kerb_material,
                 sidewalk_material: r.sidewalk_material,
@@ -1175,6 +1246,8 @@ mod tests {
                 section: RoadSection::default(),
                 top_offset: 0.0,
                 profile: Vec::new(),
+
+                changes: Vec::new(),
                 pavement: mat,
                 kerb_material: mat,
                 sidewalk_material: mat,
