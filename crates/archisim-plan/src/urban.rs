@@ -97,7 +97,9 @@ pub fn draw_roads(
     k: f64,
     visible: &dyn Fn(&[Point2]) -> bool,
 ) {
-    if model.roads_on_level(level).next().is_none() {
+    if model.roads_on_level(level).next().is_none()
+        && model.markings_on_level(level).next().is_none()
+    {
         return;
     }
     s.push_str("<g id=\"roads\">\n");
@@ -166,6 +168,14 @@ pub fn draw_roads(
                     RoadBand::Ditch => ("#c7d3b5", pens().view),
                     RoadBand::TreePits => ("#f1eee6", pens().view),
                     RoadBand::BikePath => ("#ead2c8", pens().view),
+                };
+                // Lowered at a crossing (U4): the kerb flush with the road
+                // and the sidewalk with tactile paving.
+                let (fill, width) = match p.lowered {
+                    archisim_core::Lowered::No => (fill, width),
+                    _ if p.band == RoadBand::Kerb => ("#ffffff", pens().view),
+                    archisim_core::Lowered::Flush => ("#e2bf8f", pens().view),
+                    archisim_core::Lowered::Ramp { .. } => ("#ecdcc2", pens().view),
                 };
                 let _ = writeln!(
                     s,
@@ -297,6 +307,58 @@ pub fn draw_roads(
                         crate::lettering::paint(h, INK)
                     );
                 }
+            }
+        });
+    }
+    // The road markings at will (U4), over the roads.
+    for m in model.markings_on_level(level) {
+        let shapes = m.shapes();
+        if !shapes.iter().any(|x| visible(x)) {
+            continue;
+        }
+        let rgb = model
+            .material(m.material)
+            .map_or([245, 245, 240], |x| x.cut_color);
+        let colour = format!("#{:02x}{:02x}{:02x}", rgb[0], rgb[1], rgb[2]);
+        crate::dim::element(s, m.id.0, |s| {
+            if let Some((plateau, ramps)) = m.raised_plateau() {
+                let _ = writeln!(
+                    s,
+                    r##"<path d="{}" fill="#d6d6d6" stroke="{INK}" stroke-width="{}"/>"##,
+                    path(&plateau),
+                    num(pens().view * k)
+                );
+                for r in ramps {
+                    let _ = writeln!(
+                        s,
+                        r##"<path d="{}" fill="#c8c8c8" stroke="{INK}" stroke-width="{}" stroke-dasharray="{} {}"/>"##,
+                        path(&r),
+                        num(pens().thin * k),
+                        num(0.3 * k),
+                        num(0.3 * k)
+                    );
+                }
+            }
+            let fill = m.fill();
+            if let Some(f) = &fill {
+                let _ = writeln!(
+                    s,
+                    r#"<path d="{}" fill="{colour}" stroke="none"/>"#,
+                    path(f)
+                );
+            }
+            let paint = if fill.is_some() {
+                "#f5f5f0".to_string()
+            } else {
+                colour.clone()
+            };
+            for x in &shapes {
+                let _ = writeln!(
+                    s,
+                    r#"<path d="{}" fill="{paint}" stroke="{INK}" stroke-width="{}"/>"#,
+                    path(x),
+                    num(pens().thin * k * 0.5)
+                );
             }
         });
     }

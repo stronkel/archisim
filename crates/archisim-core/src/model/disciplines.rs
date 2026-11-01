@@ -170,6 +170,7 @@ impl Model {
             || self.plots.contains_key(&PlotId(id))
             || self.roads.contains_key(&RoadId(id))
             || self.roundabouts.contains_key(&RoundaboutId(id))
+            || self.markings.contains_key(&MarkingId(id))
         {
             return Some(Site);
         }

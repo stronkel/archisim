@@ -19,9 +19,22 @@ use crate::step::{list, real, string, Ref};
 use crate::{derived_guid, Exporter, Schema};
 
 /// A piece of a road for IFC: its band, outline and material, how far it
-/// reaches under and over the carriageway, and, for a junction's piece,
-/// its top over the road's.
-type Part = (RoadBand, Vec<Point2>, MaterialId, f64, f64, Option<f64>);
+/// reaches under and over the carriageway, and how high it is.
+type Part = (RoadBand, Vec<Point2>, MaterialId, f64, f64, Height);
+
+/// How high a piece of a road is.
+#[derive(Clone)]
+enum Height {
+    /// On the road, following its profile.
+    Road,
+    /// On the road, lowered at a crossing (U4): its piece.
+    Lowered(archisim_core::RoadPiece),
+    /// A junction's piece, its top over the road's.
+    Fixed(f64),
+    /// A junction's piece following the roads that meet there (U4): the
+    /// index of the junction.
+    Junction(usize),
+}
 
 impl Exporter<'_> {
     pub(crate) fn write_urban(
@@ -129,11 +142,28 @@ impl Exporter<'_> {
                         (_, true) => (kh - 0.2, kh),
                         _ => (-s.depth, 0.0),
                     };
-                    (p.band, p.outline, p.material, z0, z1, None)
+                    let h = if p.lowered == archisim_core::Lowered::No {
+                        Height::Road
+                    } else {
+                        Height::Lowered(p.clone())
+                    };
+                    (p.band, p.outline, p.material, z0, z1, h)
                 })
                 .collect();
-            for j in junctions.iter().filter(|j| j.owner == r.id) {
-                let up = j.top - r.top_offset;
+            for (ji, j) in junctions
+                .iter()
+                .enumerate()
+                .filter(|(_, j)| j.owner == r.id)
+            {
+                let draped = j.ring.is_none()
+                    && j.arms
+                        .iter()
+                        .any(|a| model.road(a.road).is_some_and(|x| x.sloped()));
+                let up = if draped {
+                    Height::Junction(ji)
+                } else {
+                    Height::Fixed(j.top - r.top_offset)
+                };
                 let jk = j.kerb_height;
                 parts.push((
                     RoadBand::Carriageway,
@@ -141,7 +171,7 @@ impl Exporter<'_> {
                     j.pavement,
                     -j.depth,
                     0.0,
-                    Some(up),
+                    up.clone(),
                 ));
                 for k in &j.kerbs {
                     parts.push((
@@ -150,7 +180,7 @@ impl Exporter<'_> {
                         j.kerb_material,
                         -j.depth,
                         jk,
-                        Some(up),
+                        up.clone(),
                     ));
                 }
                 for w in &j.sidewalks {
@@ -160,30 +190,60 @@ impl Exporter<'_> {
                         j.sidewalk_material,
                         jk - 0.2,
                         jk,
-                        Some(up),
+                        up.clone(),
                     ));
                 }
                 // A roundabout's island and apron (U3).
                 for p in &j.parts {
-                    parts.push((p.band, p.outline.clone(), p.material, p.z0, p.z1, Some(up)));
+                    parts.push((
+                        p.band,
+                        p.outline.clone(),
+                        p.material,
+                        p.z0,
+                        p.z1,
+                        up.clone(),
+                    ));
                 }
             }
             let sloped = r.sloped();
-            for (i, (band, outline, material, z0, z1, fixed)) in parts.into_iter().enumerate() {
-                let shape = if sloped && fixed.is_none() {
+            for (i, (band, outline, material, z0, z1, height)) in parts.into_iter().enumerate() {
+                let follow = match height {
+                    Height::Road => sloped,
+                    Height::Junction(_) | Height::Lowered(_) => true,
+                    Height::Fixed(_) => false,
+                };
+                let shape = if follow {
                     // Following the profile: a body of triangles, heights
                     // from the road's placement.
                     let base = elevation(r.level) + r.top_offset;
                     let tris = archisim_geom::solid::draped_prism(&outline, |q| {
-                        let t = base + r.top_under(q) - r.top_offset;
-                        (t + z0, t + z1)
+                        let top = match &height {
+                            Height::Junction(ji) => junctions[*ji].top_under(model, q),
+                            _ => r.top_under(q),
+                        };
+                        let t = elevation(r.level) + top;
+                        match &height {
+                            Height::Lowered(p) => {
+                                let up = p.top_at(r.station_of(q), kh);
+                                let under = if p.band == RoadBand::Kerb {
+                                    z0
+                                } else {
+                                    up - 0.2
+                                };
+                                (t + under, t + up)
+                            }
+                            _ => (t + z0, t + z1),
+                        }
                     });
                     if tris.is_empty() {
                         continue;
                     }
                     self.triangulated_shape(&tris, base)
                 } else {
-                    let up = fixed.unwrap_or(0.0);
+                    let up = match height {
+                        Height::Fixed(u) => u,
+                        _ => 0.0,
+                    };
                     let curve = self.polyline(&outline, true);
                     let profile = self
                         .w
@@ -358,6 +418,63 @@ impl Exporter<'_> {
                 }
             }
             self.pset(el, &c.guid, "ArchiSim_Roundabout", &props);
+            on_site.push(el);
+        }
+        // Road markings at will (U4): their paint as triangles over the
+        // pavement, and what they are to read them back.
+        for m in model.markings() {
+            let base = elevation(m.level);
+            let tris: Vec<[[f64; 3]; 3]> = archisim_geom::solid::marking_solids(model, m.id)
+                .into_iter()
+                .flat_map(|x| x.triangles)
+                .collect();
+            if tris.is_empty() {
+                continue;
+            }
+            let loc = self.point3(0.0, 0.0, base);
+            let pl = self.placement(Some(site_pl), loc, None);
+            let shape = self.triangulated_shape(&tris, base);
+            let el = self.w.add(format!(
+                "IFCBUILDINGELEMENTPROXY({},$,{},$,'MARKING',{pl},{shape},$,.USERDEFINED.)",
+                string(m.guid.as_str()),
+                string(m.kind.name())
+            ));
+            if let Some(x) = materials.get(&m.material) {
+                self.w.add(format!(
+                    "IFCRELASSOCIATESMATERIAL({},$,$,$,({el}),{x})",
+                    string(derived_guid(&m.guid, "material").as_str())
+                ));
+            }
+            let path: Vec<String> = m
+                .path
+                .iter()
+                .map(|p| format!("{},{}", real(p.x), real(p.y)))
+                .collect();
+            let mut props = vec![
+                self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('Kind',$,IFCIDENTIFIER({}),$)",
+                    string(m.kind.code())
+                )),
+                self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('Path',$,IFCTEXT({}),$)",
+                    string(&path.join(";"))
+                )),
+                self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('Sizes',$,IFCTEXT({}),$)",
+                    string(&m.encode())
+                )),
+                self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('Level',$,IFCIDENTIFIER({}),$)",
+                    string(&level_guid(m.level))
+                )),
+            ];
+            if let Some(x) = model.material(m.material) {
+                props.push(self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('Paint',$,IFCLABEL({}),$)",
+                    string(&x.name)
+                )));
+            }
+            self.pset(el, &m.guid, "ArchiSim_Marking", &props);
             on_site.push(el);
         }
         if !roads.is_empty() {

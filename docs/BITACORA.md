@@ -6,6 +6,52 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-01 (71) · U4: marcas viales y pasos de peatones a voluntad
+
+Rama `bloque/u4-marcas`, con pull request. Formato `.archisim` versión 65: marcas viales. El PR #141 (glorietas y plazas) ya está unido a `main`.
+
+**Hecho**
+- **Herramienta Marca vial** (Exterior). Las clases, según la Norma 8.2-IC, se eligen en tarjetas que enseñan cada marca pintada sobre asfalto:
+  - **Líneas** (por puntos; Intro o doble clic para terminar):
+    - continua y discontinua;
+    - continua doble;
+    - continua con discontinua;
+    - de borde;
+    - de detención;
+    - de ceda el paso.
+  - **Pasos de peatones** (dos clics, de un lado a otro de la calle):
+    - Cebra: si cruza un vial, pasa a ser un paso de esa calle, que se mueve con ella y rebaja sus bordillos.
+    - Con semáforo.
+    - Sobreelevado: meseta de 12 cm con sus rampas.
+  - **Flechas y símbolos** (un clic): de frente, izquierda, derecha y combinadas; «STOP»; triángulo de ceda el paso; «BUS». Se giran solas según el sentido del carril donde caen; en el carril a la derecha del eje, hacia delante.
+  - **Cebreados y plazas** (por esquinas): cebreado; plaza de movilidad reducida, azul con borde blanco; plaza de motos con divisiones cada metro.
+  - **Carga y descarga:** zigzag amarillo a lo largo de la línea dibujada.
+  - **Pintura:** blanca, amarilla o azul, como materiales «Pintura vial …». Se ajustan el ancho de línea, el trazo y el vano, y el ancho del paso.
+- **Rebajes de bordillo en los pasos de peatones de las calles.** Bajo el paso, el bordillo y la acera de al lado bajan a 2 cm sobre la calzada, con rampas de 1,20 m a cada lado. En planta, el pavimento táctil va en color.
+- **Cruces en pendiente:** la placa, los bordillos y las aceras del cruce siguen ahora la rasante de las calles que se encuentran, en 3D y en el IFC.
+- IFC: cada marca va como `IfcBuildingElementProxy` (`MARKING`) con su pintura en triángulos y `ArchiSim_Marking`, y se lee al importar. Los rebajes van en las piezas del vial.
+- `archisim calles out/` ahora tiene:
+  - pasos con rebajes en la Calle Real y en la Calle Nueva;
+  - un paso sobreelevado;
+  - ceda el paso con su triángulo en las entradas de la glorieta;
+  - STOP con su línea al final de la Calle Nueva;
+  - flechas, «BUS» y un cebreado;
+  - una plaza de movilidad reducida y una de carga y descarga.
+
+**Pendiente**
+- Abrir la mediana en los cruces para los giros.
+- Los pasos sobreelevados y con semáforo no rebajan el bordillo. Solo lo hace la cebra que pertenece a una calle.
+
+**Qué debe probar Antonio**
+- `archisim calles out/` y abrir `out/calles.archisim`: ver las marcas en planta y en 3D y los rebajes de los pasos.
+- Exterior → Marca vial:
+  - Cebra de un lado a otro de una calle: comprobar que la calle tiene su paso y sus rebajes.
+  - Una flecha en cada carril.
+  - Una línea discontinua.
+  - Una plaza de movilidad reducida.
+
+---
+
 ## 2026-11-01 (70) · U3, segunda parte: glorietas y plazas
 
 Rama `bloque/u3-rotondas`, con pull request. Formato `.archisim` versión 64: glorietas y plazas. Los ficheros anteriores no tienen ninguna.

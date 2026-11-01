@@ -87,6 +87,36 @@ pub struct JunctionPart {
     pub z1: f64,
 }
 
+impl Junction {
+    /// The height of its pavement at `p`, over the level: a roundabout's
+    /// own, or that of the nearest of the roads that meet there (so that
+    /// its plate follows them when they climb, U4).
+    pub fn top_under(&self, model: &Model, p: Point2) -> f64 {
+        if self.ring.is_some() {
+            return self.top;
+        }
+        let mut best: Option<(f64, f64)> = None;
+        for a in &self.arms {
+            let Some(r) = model.road(a.road) else {
+                continue;
+            };
+            if !r.sloped() {
+                continue;
+            }
+            // How far from the arm's line, and the road's height there.
+            let off = (p - a.origin).cross(a.dir).abs();
+            let h = r.top_under(p);
+            if best.is_none_or(|(d, _)| off < d) {
+                best = Some((off, h));
+            }
+        }
+        match best {
+            Some((_, h)) => h,
+            None => self.top,
+        }
+    }
+}
+
 /// Points closer than this are one junction.
 const SAME: f64 = 1.0;
 /// Segments of the arc of a corner.

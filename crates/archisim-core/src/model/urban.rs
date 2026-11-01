@@ -469,6 +469,42 @@ pub struct RoadPiece {
     pub outline: Vec<Point2>,
     pub raised: bool,
     pub material: MaterialId,
+    /// Lowered for a pedestrian crossing (U4: «rebaje»).
+    pub lowered: Lowered,
+}
+
+/// Whether a piece of kerb or sidewalk is lowered for a crossing.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Lowered {
+    No,
+    /// Down to the carriageway (2 cm over it), across the crossing.
+    Flush,
+    /// A ramp from the carriageway at `from` along the axis up to the
+    /// sidewalk at `to`.
+    Ramp {
+        from: f64,
+        to: f64,
+    },
+}
+
+/// How long the ramps of a lowered kerb are, along the road.
+pub const KERB_RAMP: f64 = 1.2;
+/// How high a lowered kerb stands over the carriageway.
+pub const LOWERED_KERB: f64 = 0.02;
+
+impl RoadPiece {
+    /// How far its top stands over the carriageway at `s` along the
+    /// axis, its full height being `kerb` (a lowered piece less).
+    pub fn top_at(&self, s: f64, kerb: f64) -> f64 {
+        match self.lowered {
+            Lowered::No => kerb,
+            Lowered::Flush => LOWERED_KERB.min(kerb),
+            Lowered::Ramp { from, to } => {
+                let t = ((s - from) / (to - from)).clamp(0.0, 1.0);
+                LOWERED_KERB.min(kerb) + (kerb - LOWERED_KERB.min(kerb)) * t
+            }
+        }
+    }
 }
 
 /// The point at `s` along a path.
@@ -595,6 +631,18 @@ impl Road {
             cuts.push(a.clamp(0.0, len));
             cuts.push(b.clamp(0.0, len));
         }
+        // The lowered kerbs of the crossings and their ramps (U4).
+        for c in &s.crossings {
+            let h = c.width / 2.0;
+            for x in [
+                c.at - h - KERB_RAMP,
+                c.at - h,
+                c.at + h,
+                c.at + h + KERB_RAMP,
+            ] {
+                cuts.push(x.clamp(0.0, len));
+            }
+        }
         if by_profile {
             cuts.extend(self.profile_cuts());
         }
@@ -635,6 +683,41 @@ impl Road {
                 }
                 f
             };
+            // The kerbs and the sidewalk beside them are lowered at the
+            // crossings (U4): their strips here.
+            let lowered_strips: Vec<usize> = (0..o0.len())
+                .filter(|&i| {
+                    let (band, a, b) = o0[i];
+                    if band == RoadBand::Kerb {
+                        return true;
+                    }
+                    if !band.walk() {
+                        return false;
+                    }
+                    // Next to a kerb, on the inside.
+                    let left = a + b > 0.0;
+                    let inner = if left { i + 1 } else { i.wrapping_sub(1) };
+                    o0.get(inner).is_some_and(|x| x.0 == RoadBand::Kerb)
+                })
+                .collect();
+            let lowering = s.crossings.iter().find_map(|c| {
+                let h = c.width / 2.0;
+                if (c.at - h..=c.at + h).contains(&mid) {
+                    Some(Lowered::Flush)
+                } else if (c.at - h - KERB_RAMP..c.at - h).contains(&mid) {
+                    Some(Lowered::Ramp {
+                        from: c.at - h,
+                        to: c.at - h - KERB_RAMP,
+                    })
+                } else if (c.at + h..c.at + h + KERB_RAMP).contains(&mid) && mid > c.at + h {
+                    Some(Lowered::Ramp {
+                        from: c.at + h,
+                        to: c.at + h + KERB_RAMP,
+                    })
+                } else {
+                    None
+                }
+            });
             for (i, &(band, a, b)) in o0.iter().enumerate() {
                 let (a1, b1) = (o1[i].1, o1[i].2);
                 let along_a: Vec<f64> = fracs.iter().map(|t| a + (a1 - a) * t).collect();
@@ -668,12 +751,17 @@ impl Road {
                         s.planting.unwrap_or(self.sidewalk_material)
                     }
                 };
+                let lowered = match lowering {
+                    Some(l) if s.raised(band) && lowered_strips.contains(&i) => l,
+                    _ => Lowered::No,
+                };
                 out.push(RoadPiece {
                     band,
                     span: (s0, s1),
                     raised: s.raised(band),
                     outline,
                     material,
+                    lowered,
                 });
             }
         }

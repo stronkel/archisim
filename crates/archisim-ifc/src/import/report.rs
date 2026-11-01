@@ -35,6 +35,7 @@ pub struct ImportReport {
     pub plots: usize,
     pub roads: usize,
     pub roundabouts: usize,
+    pub markings: usize,
     /// Pools written by ArchiSim (`IfcElementAssembly` «Piscina»).
     pub pools: usize,
     /// Lifts written by ArchiSim (`IfcTransportElement` with `ArchiSim_Elevator`).
@@ -193,6 +194,9 @@ impl ImportReport {
         }
         if self.roads > 0 {
             members.push_str(&format!(", {} viales", self.roads));
+        }
+        if self.markings > 0 {
+            members.push_str(&format!(", {} marcas viales", self.markings));
         }
         if self.roundabouts > 0 {
             members.push_str(&format!(", {} glorietas o plazas", self.roundabouts));

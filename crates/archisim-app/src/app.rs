@@ -113,6 +113,8 @@ pub enum Tool {
     Road,
     /// Roundabouts and squares, by their centre (U3).
     Roundabout,
+    /// Road markings (U4).
+    Marking,
     /// Plants along a line or over an area.
     Planting,
     /// The Exterior brushes: shape the ground, paint lawn or gravel,
@@ -165,6 +167,7 @@ impl Tool {
                 | Tool::Pool
                 | Tool::Road
                 | Tool::Roundabout
+                | Tool::Marking
                 | Tool::Planting
                 | Tool::Pipe
                 | Tool::Duct
@@ -210,6 +213,7 @@ impl Tool {
             "ps" => Some(Tool::Pool),
             "as" => Some(Tool::Elevator),
             "gl" => Some(Tool::Roundabout),
+            "mv" => Some(Tool::Marking),
             _ => None,
         }
     }
@@ -350,6 +354,8 @@ pub struct ArchiSimApp {
     pub road_points: Vec<Point2>,
     pub road_settings: urban_ui::RoadSettings,
     pub roundabout_settings: roundabout_ui::RoundaboutSettings,
+    pub marking_settings: marking_ui::MarkingSettings,
+    pub marking_points: Vec<Point2>,
     /// The line of the planting being drawn and what the tool plants.
     pub planting_points: Vec<Point2>,
     pub planting_settings: planting_ui::PlantingSettings,
@@ -771,6 +777,8 @@ impl ArchiSimApp {
             road_points: Vec::new(),
             road_settings,
             roundabout_settings: Default::default(),
+            marking_settings: Default::default(),
+            marking_points: Vec::new(),
             planting_points: Vec::new(),
             planting_settings: Default::default(),
             run_points: Vec::new(),
@@ -1011,6 +1019,7 @@ impl ArchiSimApp {
             self.pool_tool.finish();
             self.pool_tool.finish();
             self.road_points.clear();
+            self.marking_points.clear();
             self.planting_points.clear();
             self.draw_method = Default::default();
             self.spline_points.clear();
@@ -2630,6 +2639,7 @@ mod icons;
 mod levels_ui;
 mod library_ui;
 mod maquette_ui;
+mod marking_ui;
 mod mass_grips3d;
 mod mesh_ui;
 mod methods_ui;

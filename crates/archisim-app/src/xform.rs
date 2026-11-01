@@ -200,6 +200,29 @@ pub fn transform(
             | Element::Grid(_)
             | Element::RefPlane(_)
             | Element::Module(_) => {}
+            Element::Marking(id) => {
+                let x = model
+                    .marking(id)
+                    .ok_or(ModelError::UnknownElement(id.0))?
+                    .clone();
+                let path: Vec<_> = x.path.iter().map(|p| t.apply(*p)).collect();
+                if copy {
+                    let new = model.add_marking(archisim_core::NewMarking {
+                        level: x.level,
+                        kind: x.kind,
+                        path,
+                        width: x.width,
+                        dash: x.dash,
+                        gap: x.gap,
+                        depth: x.depth,
+                        material: x.material,
+                    })?;
+                    out.insert(Element::Marking(new));
+                } else {
+                    model.edit_marking(id, |m| m.path = path)?;
+                    out.insert(*e);
+                }
+            }
             Element::Roundabout(id) => {
                 let x = model
                     .roundabout(id)

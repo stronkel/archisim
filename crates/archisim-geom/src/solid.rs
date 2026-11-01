@@ -48,6 +48,8 @@ pub enum SolidOwner {
     /// A volume of the concept phase.
     Mass(archisim_core::MassId),
     Road(archisim_core::RoadId),
+    /// A road marking (U4).
+    Marking(archisim_core::MarkingId),
     /// A pipe or duct.
     Run(archisim_core::RunId),
     Device(archisim_core::DeviceId),
@@ -83,6 +85,7 @@ impl SolidOwner {
             SolidOwner::Elevator(x) => x.0,
             SolidOwner::Mass(x) => x.0,
             SolidOwner::Road(x) => x.0,
+            SolidOwner::Marking(x) => x.0,
             SolidOwner::Run(x) => x.0,
             SolidOwner::Device(x) => x.0,
         }
@@ -3849,6 +3852,9 @@ pub fn model_solids_except_detailed(
     for l in model.levels() {
         out.extend(level_road_solids(model, l.id));
     }
+    for m in model.markings() {
+        out.extend(marking_solids(model, m.id));
+    }
     for r in model.runs() {
         out.extend(run_solids(model, r.id));
     }
@@ -3962,12 +3968,24 @@ pub fn road_solids_with(
                 (RoadBand::Ditch, _) => (-0.3 - 0.2, -0.3),
                 _ => (-s.depth, 0.0),
             };
+            let lowered = p.lowered != archisim_core::Lowered::No;
             Solid {
                 owner: SolidOwner::Road(id),
                 material: p.material,
                 triangles: draped_prism(&p.outline, |q| {
                     let top = base + r.top_under(q);
-                    (top + d0, top + d1)
+                    if lowered {
+                        // A lowered kerb or sidewalk at a crossing (U4).
+                        let up = p.top_at(r.station_of(q), kh);
+                        let under = if p.band == RoadBand::Kerb {
+                            -s.depth
+                        } else {
+                            up - 0.2
+                        };
+                        (top + under, top + up)
+                    } else {
+                        (top + d0, top + d1)
+                    }
                 }),
             }
         })
@@ -4027,25 +4045,33 @@ pub fn road_solids_with(
         });
     }
     for j in junctions.iter().filter(|j| j.owner == id) {
-        let top = base + j.top;
+        // Its pieces follow the roads that meet there (U4): each point at
+        // the height of the nearest of them.
         let kh = j.kerb_height;
+        let at = |q: Point2| base + j.top_under(model, q);
+        let draped = |poly: &[Point2], z0: f64, z1: f64| {
+            draped_prism(poly, |q| {
+                let t = at(q);
+                (t + z0, t + z1)
+            })
+        };
         out.push(Solid {
             owner: SolidOwner::Road(id),
             material: j.pavement,
-            triangles: prism(&j.plate, top - j.depth, top),
+            triangles: draped(&j.plate, -j.depth, 0.0),
         });
         for k in &j.kerbs {
             out.push(Solid {
                 owner: SolidOwner::Road(id),
                 material: j.kerb_material,
-                triangles: prism(k, top - j.depth, top + kh),
+                triangles: draped(k, -j.depth, kh),
             });
         }
         for w in &j.sidewalks {
             out.push(Solid {
                 owner: SolidOwner::Road(id),
                 material: j.sidewalk_material,
-                triangles: prism(w, top + kh - 0.2, top + kh),
+                triangles: draped(w, kh - 0.2, kh),
             });
         }
         // A roundabout's island and apron (U3).
@@ -4053,10 +4079,98 @@ pub fn road_solids_with(
             out.push(Solid {
                 owner: SolidOwner::Road(id),
                 material: p.material,
-                triangles: prism(&p.outline, top + p.z0, top + p.z1),
+                triangles: draped(&p.outline, p.z0, p.z1),
             });
         }
     }
+    out
+}
+
+/// A road marking's paint, a few millimetres over the pavement under it,
+/// and a raised crossing's plateau and ramps (U4).
+pub fn marking_solids(model: &Model, id: archisim_core::MarkingId) -> Vec<Solid> {
+    let Some(m) = model.marking(id) else {
+        return Vec::new();
+    };
+    let base = model.level(m.level).map_or(0.0, |l| l.elevation);
+    let top = |q: Point2| base + model.pavement_top_at(m.level, q);
+    let mut out = Vec::new();
+    // On a raised crossing the paint goes on the plateau.
+    let lift = if m.kind == archisim_core::MarkingKind::RaisedCrossing {
+        archisim_core::PLATEAU
+    } else {
+        0.0
+    };
+    if let Some((plateau, ramps)) = m.raised_plateau() {
+        let road = model
+            .roads_on_level(m.level)
+            .min_by(|a, b| {
+                let d = |r: &archisim_core::Road| {
+                    r.axis_at(r.station_of(m.path[0])).0.distance(m.path[0])
+                };
+                d(a).total_cmp(&d(b))
+            })
+            .map(|r| r.pavement);
+        let material = road.unwrap_or(m.material);
+        out.push(Solid {
+            owner: SolidOwner::Marking(id),
+            material,
+            triangles: draped_prism(&plateau, |q| (top(q) - 0.05, top(q) + lift)),
+        });
+        // Each ramp from the carriageway up to the plateau.
+        for (k, r) in ramps.iter().enumerate() {
+            let (a, b) = (m.path[0], m.path[m.path.len() - 1]);
+            let Some(v) = (b - a).normalized() else {
+                continue;
+            };
+            let along = v.perp_left() * -1.0;
+            let edge = m.depth.max(0.5) / 2.0 + 0.3;
+            let tris = draped_prism(r, |q| {
+                let off = (q - a).dot(along).abs();
+                let t = ((edge + archisim_core::RAMP - off) / archisim_core::RAMP).clamp(0.0, 1.0);
+                (top(q) - 0.05, top(q) + lift * t + 0.001)
+            });
+            let _ = k;
+            out.push(Solid {
+                owner: SolidOwner::Marking(id),
+                material,
+                triangles: tris,
+            });
+        }
+    }
+    let fill = m.fill();
+    let tris: Vec<[P3; 3]> = fill
+        .iter()
+        .flat_map(|poly| draped_prism(poly, |q| (top(q) + lift, top(q) + lift + 0.004)))
+        .collect();
+    if !tris.is_empty() {
+        out.push(Solid {
+            owner: SolidOwner::Marking(id),
+            material: m.material,
+            triangles: tris,
+        });
+    }
+    // Over the fill, the white of its outline and symbol.
+    let paint_material = if fill.is_some() {
+        model
+            .materials()
+            .find(|x| x.name == "Pintura vial blanca")
+            .map_or(m.material, |x| x.id)
+    } else {
+        m.material
+    };
+    let z = if fill.is_some() { 0.007 } else { 0.004 };
+    let tris: Vec<[P3; 3]> = m
+        .shapes()
+        .iter()
+        .flat_map(|poly| draped_prism(poly, |q| (top(q) + lift, top(q) + lift + z)))
+        .collect();
+    out.push(Solid {
+        owner: SolidOwner::Marking(id),
+        material: paint_material,
+        triangles: tris,
+    });
+    out.retain(|s| !s.triangles.is_empty());
     out
 }
 
@@ -5265,6 +5379,7 @@ pub fn level_solids(model: &Model, level: LevelId) -> Vec<Solid> {
         SolidOwner::Elevator(e) => model.elevator(e).is_some_and(|e| e.level == level),
         SolidOwner::Mass(m) => model.mass(m).is_some_and(|m| m.level == level),
         SolidOwner::Road(r) => model.road(r).is_some_and(|r| r.level == level),
+        SolidOwner::Marking(m) => model.marking(m).is_some_and(|m| m.level == level),
         SolidOwner::Run(r) => model.run(r).is_some_and(|r| r.level == level),
         SolidOwner::Device(d) => model.device(d).is_some_and(|d| d.level == level),
     };
