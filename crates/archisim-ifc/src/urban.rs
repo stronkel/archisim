@@ -18,6 +18,11 @@ use archisim_core::{GlobalId, MaterialId, Point2, RoadBand};
 use crate::step::{list, real, string, Ref};
 use crate::{derived_guid, Exporter, Schema};
 
+/// A piece of a road for IFC: its band, outline and material, how far it
+/// reaches under and over the carriageway, and, for a junction's piece,
+/// its top over the road's.
+type Part = (RoadBand, Vec<Point2>, MaterialId, f64, f64, Option<f64>);
+
 impl Exporter<'_> {
     pub(crate) fn write_urban(
         &mut self,
@@ -115,7 +120,7 @@ impl Exporter<'_> {
             // owns (U1): (band, outline, material, depth below and height
             // above the carriageway, the junction's top over the road's).
             let gaps = archisim_geom::crossroads::road_gaps(&junctions, r.id);
-            let mut parts: Vec<(RoadBand, Vec<Point2>, MaterialId, f64, f64, Option<f64>)> = r
+            let mut parts: Vec<Part> = r
                 .pieces_except(&gaps)
                 .into_iter()
                 .map(|p| {
