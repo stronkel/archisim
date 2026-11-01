@@ -6,6 +6,34 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-01 (74) · U7: el entorno traído con sus edificios con estilo
+
+Rama `bloque/u7-entorno` (encima de U6), con pull request. Sin cambios de formato.
+
+**Hecho**
+- Al **traer el entorno** (Archivo → Traer el entorno, o `archisim cartografia`), cada edificio del Catastro o de OpenStreetMap llega como edificio del entorno con el estilo que le corresponde. Se decide así:
+  - **Uso:** el `currentUse` del Catastro (residencial, industrial, oficinas, comercial, servicios públicos) o las etiquetas de OpenStreetMap (`building`, `amenity`, `tourism`). Industrial → nave; servicios públicos → equipamiento; hotel → hotel de costa; oficinas de 4 plantas o más → oficinas; comercio → comercio con viviendas.
+  - **Viviendas, por plantas, medianeras y zona:**
+    - 1–2 plantas: entre medianeras, casa andaluza en el casco o adosada fuera de él; con una medianera, pareada; aislada, chalet; con mucha huella y sin medianeras, casa patio.
+    - 3 plantas: casco histórico en el casco, comercio con viviendas en el ensanche, bloque de los 60–70 aislado en la periferia.
+    - 4–6 plantas: casco histórico, ensanche o bloque de los 60–70 según la zona.
+    - Más: bloque de los 60–70 (o ensanche hasta 8 plantas en el ensanche).
+  - **Zona:** se calcula para cada edificio por lo edificado en 60 m alrededor: más del 45 % es casco, más del 28 % ensanche, menos periferia; si la mitad de lo de alrededor es industrial, polígono. También se puede fijar una zona para todo en la ventana (casco, ensanche, periferia o polígono industrial).
+  - Las plantas del Catastro se conservan. Las medianeras salen solas, porque las partes del Catastro comparten lindes.
+- La ventana de Traer el entorno tiene el interruptor «Edificios con su estilo» y la elección de la zona. El informe dice cuántos edificios hay de cada estilo.
+- En las propiedades de un edificio del entorno, **«Seleccionar los del mismo estilo»** los selecciona todos para cambiarlos de una vez (una zona entera). También se pueden seleccionar con una ventana y cambiarles el estilo juntos.
+- Las propiedades de un edificio del entorno enseñan su estilo justo debajo del volumen, sin los grupos de Aristas y Deformar.
+
+**Pendiente**
+- La fachada principal no se distingue todavía de las demás: todas las fachadas libres llevan los mismos huecos (los escaparates del bajo comercial salen en todas).
+- Ortofoto del PNOA y alturas reales del LiDAR (después de U7 en la hoja de ruta).
+
+**Qué debe probar Antonio**
+- `archisim cartografia crates/archisim-carto/tests/fixtures/pueblo-catastro.gml crates/archisim-carto/tests/fixtures/pueblo.osm crates/archisim-carto/tests/fixtures/pueblo-mdt05.asc --salida out/pueblo.archisim`, y después `archisim render out/pueblo.archisim out/pueblo.png`.
+- Con un GML real del Catastro de un casco antiguo (el de Vejer, Arcos…): Archivo → Traer el entorno, y mirar si los estilos elegidos tienen sentido. Después, cambiar los de una zona con «Seleccionar los del mismo estilo».
+
+---
+
 ## 2026-11-01 (73) · U6: edificios paramétricos del entorno
 
 Rama `bloque/u6-edificios`, con pull request. Los PR #142 (U4) y #143 (U5) ya están unidos a `main`. Formato `.archisim` versión 67: el estilo de una masa. Las versiones anteriores avisan de que no pueden abrir el fichero.

@@ -145,6 +145,24 @@ impl ArchiSimApp {
                     }
                 });
                 ui.switch(&mut o.skip_own, "Sin los edificios que pisan los forjados del proyecto");
+                ui.switch(
+                    &mut o.styles,
+                    "Edificios con su estilo (por su uso, sus plantas y la zona)",
+                );
+                if o.styles {
+                    ui.horizontal(|ui| {
+                        ui.label("Zona");
+                        let shown = o.zone.map_or("Según lo edificado alrededor", |z| z.name());
+                        egui::ComboBox::from_id_salt("carto-zone")
+                            .selected_text(shown)
+                            .show_ui(ui, |ui| {
+                                ui.selectable_value(&mut o.zone, None, "Según lo edificado alrededor");
+                                for z in archisim_library::carto::Zone::ALL {
+                                    ui.selectable_value(&mut o.zone, Some(z), z.name());
+                                }
+                            });
+                    });
+                }
                 if georef.is_some() {
                     ui.switch(
                         &mut o.recentre,

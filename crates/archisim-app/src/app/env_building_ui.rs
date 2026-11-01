@@ -291,14 +291,7 @@ impl ArchiSimApp {
         let mut picked = None;
         let mut on = self.env_on_plots;
         group(ui, "tool-env", "Edificio del entorno", |ui| {
-            row(
-                ui,
-                "Estilo",
-                "Cómo son sus fachadas y su cubierta",
-                |ui, w| {
-                    picked = style_cards(ui, w - 8.0, style);
-                },
-            );
+            picked = style_cards(ui, ui.available_width(), style);
             row(
                 ui,
                 "En la parcela",
@@ -351,29 +344,24 @@ impl ArchiSimApp {
         let mut style = None;
         let mut edit: Option<Dress> = None;
         let mut undress = false;
+        let mut same = false;
         let title = if ids.len() > 1 {
             format!("Edificio del entorno · {} a la vez", ids.len())
         } else {
             "Edificio del entorno".to_string()
         };
         group(ui, "env-building", &title, |ui| {
-            row(
-                ui,
-                "Estilo",
-                "Cambia fachadas, cubierta y acabados de todos los seleccionados",
-                |ui, w| {
-                    if undressed {
-                        if ui
-                            .add_sized([w - 8.0, 22.0], egui::Button::new("Darle un estilo…"))
-                            .clicked()
-                        {
-                            style = Some(BuildingStyle::ShopAndFlats);
-                        }
-                    } else {
-                        style = style_cards(ui, w - 8.0, d.style);
-                    }
-                },
-            );
+            if undressed {
+                if ui
+                    .button("Darle un estilo…")
+                    .on_hover_text("Un edificio del entorno, con fachadas, huecos y cubierta")
+                    .clicked()
+                {
+                    style = Some(BuildingStyle::ShopAndFlats);
+                }
+            } else {
+                style = style_cards(ui, ui.available_width(), d.style);
+            }
             if undressed {
                 return;
             }
@@ -505,6 +493,13 @@ impl ArchiSimApp {
                 "Las fachadas que tocan otro volumen son medianeras: ciegas, y la cubierta no vierte sobre ellas.",
             );
             if ui
+                .button("Seleccionar los del mismo estilo")
+                .on_hover_text("Todos los edificios del entorno con este estilo, para cambiarlos a la vez (una zona entera)")
+                .clicked()
+            {
+                same = true;
+            }
+            if ui
                 .button("Quitar el estilo")
                 .on_hover_text("Vuelve a ser una masa por plantas de Concepto")
                 .clicked()
@@ -538,6 +533,17 @@ impl ArchiSimApp {
                 Ok::<_, archisim_core::ModelError>(())
             });
             self.report(r, "Edificio cambiado.");
+        } else if same {
+            let all: std::collections::BTreeSet<Element> = self
+                .ed
+                .model()
+                .env_buildings()
+                .filter(|b| b.dress.is_some_and(|x| x.style == d.style))
+                .map(|b| Element::Mass(b.id))
+                .collect();
+            let n = all.len();
+            self.ed.selection = all;
+            self.say(format!("{n} edificios con el estilo «{}».", d.style.name()));
         } else if undress {
             let r = self.ed.transact("Quitar el estilo", |m| {
                 for id in &list {
