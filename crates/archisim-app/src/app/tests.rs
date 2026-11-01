@@ -9160,3 +9160,57 @@ fn buildings_of_the_surroundings() {
         .env_buildings()
         .all(|b| b.dress.unwrap().style == archisim_core::BuildingStyle::Ensanche));
 }
+
+/// U8: the tool «Pegatina» sticks a PNG on the face of a wall picked in
+/// plan, facing out of it, at the height of the tool.
+#[test]
+fn a_decal_on_a_wall() {
+    let mut h = Harness::new(Editor::new_project());
+    let canvas = h.app.canvas;
+    h.app
+        .view
+        .fit_exact(canvas, p(-5.0, -5.0), p(15.0, 5.0), 0.0);
+    h.app.wall_settings.reference = ReferenceLine::Center;
+    let s = h.app.wall_settings;
+    h.app.ed.add_wall(&s, p(0.0, 0.0), p(10.0, 0.0)).unwrap();
+    // A 2 × 1 picture, red.
+    let mut png = Vec::new();
+    {
+        let mut e = png::Encoder::new(&mut png, 2, 1);
+        e.set_color(png::ColorType::Rgba);
+        e.set_depth(png::BitDepth::Eight);
+        let mut w = e.write_header().unwrap();
+        w.write_image_data(&[200, 20, 20, 255, 200, 20, 20, 255])
+            .unwrap();
+    }
+    h.app.decal_settings.image = archisim_core::decal_image("cartel.png", png);
+    h.app.decal_settings.width = 2.0;
+    h.app
+        .set_discipline(super::toolbox::Discipline::Architecture);
+    h.frame();
+    h.app.pick(super::toolbox::Pick::Tool(Tool::Decal));
+    assert_eq!(h.app.tool, Tool::Decal);
+    h.frame();
+    let face = h
+        .model()
+        .walls()
+        .next()
+        .and_then(|w| h.model().wall_type(w.wall_type))
+        .map(|t| t.thickness() / 2.0)
+        .unwrap_or(0.1);
+    h.click_at(p(5.0, -face - 0.1));
+    let d = h
+        .model()
+        .decals()
+        .next()
+        .unwrap_or_else(|| panic!("{:?}", h.app.message.as_ref().map(|m| m.text.clone())))
+        .clone();
+    assert!(d.normal[1] < -0.99, "{:?}", d.normal);
+    assert!((d.centre[2] - 1.6).abs() < 1e-9);
+    assert!((d.height() - 1.0).abs() < 1e-9);
+    assert!(h.app.ed.selection.contains(&Element::Decal(d.id)));
+    h.frame();
+    // In 3D, its squares with the picture's colour.
+    let colours = archisim_geom::decals::decal_colors(h.model(), d.id).unwrap();
+    assert!(colours.iter().all(|c| c[0] == [200, 20, 20]));
+}

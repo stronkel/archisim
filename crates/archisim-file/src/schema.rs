@@ -159,6 +159,9 @@ pub(crate) struct ProjectFile {
     /// Road markings (version 65).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub markings: Vec<MarkingOf>,
+    /// Pictures stuck on faces (version 68).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub decals: Vec<DecalOf>,
     /// Plantings: plants along a line or over an area (version 25).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub plantings: Vec<PlantingOf>,
@@ -1065,6 +1068,29 @@ pub(crate) struct Device {
     /// The type of a light point's fitting (version 55).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fixture: Option<u64>,
+}
+
+/// A picture stuck on a face (version 68).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct DecalOf {
+    pub id: u64,
+    pub guid: String,
+    pub name: String,
+    pub level: u64,
+    /// Its centre: x and y in plan, z over the level.
+    pub centre: [f64; 3],
+    pub normal: [f64; 3],
+    /// Degrees.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub rotation: f64,
+    pub width: f64,
+    pub source: String,
+    /// The PNG, in base64.
+    pub png: String,
+    pub aspect: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host: Option<u64>,
 }
 
 /// A road marking (version 65).
@@ -3621,6 +3647,24 @@ impl ProjectFile {
                     base_offset: x.base_offset,
                 })
                 .collect(),
+            decals: p
+                .decals
+                .iter()
+                .map(|d| DecalOf {
+                    id: d.id.0,
+                    guid: d.guid.to_string(),
+                    name: d.name.clone(),
+                    level: d.level.0,
+                    centre: d.centre,
+                    normal: d.normal,
+                    rotation: d.rotation.to_degrees(),
+                    width: d.width,
+                    source: d.image.source.clone(),
+                    png: crate::meshes::encode(&d.image.png),
+                    aspect: d.image.aspect,
+                    host: d.host,
+                })
+                .collect(),
             markings: p
                 .markings
                 .iter()
@@ -4322,6 +4366,7 @@ impl ProjectFile {
             roads: Vec::new(),
             roundabouts: Vec::new(),
             markings: Vec::new(),
+            decals: Vec::new(),
             plantings: Vec::new(),
             pools: Vec::new(),
             elevators: Vec::new(),
@@ -5036,6 +5081,29 @@ impl ProjectFile {
                 pavement: core::MaterialId(r.pavement),
                 kerb_material: core::MaterialId(r.kerb_material),
                 sidewalk_material: core::MaterialId(r.sidewalk_material),
+            });
+        }
+        for x in self.decals {
+            let element = format!("decal {} «{}»", x.id, x.name);
+            let png = crate::meshes::decode(&x.png).ok_or_else(|| FileError::Value {
+                element: element.clone(),
+                message: "the decal's picture is not base64".into(),
+            })?;
+            parts.decals.push(core::Decal {
+                id: core::DecalId(x.id),
+                guid: guid(&element, &x.guid)?,
+                name: x.name,
+                level: core::LevelId(x.level),
+                centre: x.centre,
+                normal: x.normal,
+                rotation: x.rotation.to_radians(),
+                width: x.width,
+                image: core::DecalImage {
+                    source: x.source,
+                    png: std::sync::Arc::new(png),
+                    aspect: x.aspect,
+                },
+                host: x.host,
             });
         }
         for x in self.markings {

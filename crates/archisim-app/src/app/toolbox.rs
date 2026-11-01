@@ -381,6 +381,13 @@ const ARCHITECTURE: &[Tile] = &[
         "Z",
         "Locales (IfcSpace): clic dentro de un recinto (superficie útil), polígono o rectángulo; número, nombre y uso",
     ),
+    tile(
+        Pick::Tool(Tool::Decal),
+        Glyph::Decal,
+        "Pegatina",
+        "PE",
+        "Una imagen PNG (grafiti, cartel, rótulo, mancha…) sobre cualquier cara, para la vista 3D y el render",
+    ),
 ];
 
 const STRUCTURE: &[Tile] = &[

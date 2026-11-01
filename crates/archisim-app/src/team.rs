@@ -43,6 +43,7 @@ pub fn raw_id(e: Element) -> u64 {
         Element::Road(i) => i.0,
         Element::Roundabout(i) => i.0,
         Element::Marking(i) => i.0,
+        Element::Decal(i) => i.0,
         Element::Planting(i) => i.0,
         Element::Run(i) => i.0,
         Element::Edge(i) => i.0,

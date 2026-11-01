@@ -540,6 +540,7 @@ impl Exporter<'_> {
             self.pset(el, &m.guid, "ArchiSim_EnvBuilding", &props);
             on_site.push(el);
         }
+        self.write_decals(site_pl, &mut on_site);
         if !roads.is_empty() {
             self.rel_aggregates(derived_guid(&model.site_guid, "roads"), site, &roads);
         }

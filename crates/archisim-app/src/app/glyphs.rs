@@ -58,6 +58,8 @@ pub enum Glyph {
     Manhole,
     /// A building of the surroundings: a block with windows and a roof.
     EnvBuilding,
+    /// A decal: a picture with a peeled corner.
+    Decal,
     Tree,
     /// Plants along a curve: three crowns on a dashed line.
     Planting,
@@ -239,6 +241,9 @@ impl Glyph {
             }
             Glyph::Manhole => {
                 r##"<circle cx="10" cy="10" r="7"/><circle cx="10" cy="10" r="4"/><path d="M6 10h8M10 6v8"/>"##
+            }
+            Glyph::Decal => {
+                r##"<path d="M3 3h14v9l-5 5H3z"/><path d="M17 12h-5v5" /><circle cx="8" cy="8" r="2" stroke-width="0.9"/>"##
             }
             Glyph::EnvBuilding => {
                 r##"<path d="M3 18V8l7-5 7 5v10z"/><path d="M6 10h2v2H6zM12 10h2v2h-2zM6 14h2v2H6zM12 14h2v2h-2zM9 18v-4h2v4" stroke-width="0.9"/>"##
@@ -439,6 +444,7 @@ impl Glyph {
         Glyph::Network,
         Glyph::Manhole,
         Glyph::EnvBuilding,
+        Glyph::Decal,
         Glyph::Tree,
         Glyph::Planting,
         Glyph::Nursery,

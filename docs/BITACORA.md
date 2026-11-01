@@ -6,6 +6,35 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-01 (75) · U8: pegatinas para el render
+
+Rama `bloque/u8-pegatinas` (encima de U7), con pull request. Formato `.archisim` versión 68: pegatinas. Las versiones anteriores avisan de que no pueden abrir el fichero.
+
+**Hecho**
+- **Pegatina:** una imagen PNG, con su transparencia, pegada sobre una cara: un grafiti, un cartel, un rótulo de tienda, una mancha de humedad, una flecha gastada en el asfalto.
+  - Se guarda la imagen dentro del proyecto, su centro, la cara (su normal), el giro sobre la cara y el ancho; el alto sigue la proporción de la imagen.
+  - No sigue a la cara si esta se mueve, pero recuerda sobre qué elemento se pegó.
+- **Herramienta Pegatina** en Arquitectura (tecla PE). Primero se elige la imagen en Propiedades («Elegir imagen PNG…»):
+  - en la vista 3D, un clic en cualquier cara (muro, fachada de un edificio del entorno, suelo, calle, cubierta…) la pega ahí;
+  - en planta, un clic junto a la cara de un muro la pega en esa cara, a la altura que diga la herramienta; lejos de los muros, va al suelo (o a la calle o al terreno que haya).
+  - Se pueden mover, copiar, girar y reflejar con las órdenes de siempre. En Propiedades se cambian el ancho, la altura, el giro y la imagen.
+- **Dónde sale:**
+  - vista 3D, imagen realista y modelo 3D (glTF): la imagen hecha cuadrícula, cada cuadrito del color de su píxel; lo transparente no se dibuja;
+  - en planta, la del suelo con su imagen y la de un muro como una línea fina de trazos;
+  - en alzados y secciones no sale (es un recurso de render).
+- **IFC:** `IfcBuildingElementProxy` (DECAL) con sus cuadritos de colores (`IfcIndexedColourMap`) y el conjunto `ArchiSim_Decal` con la imagen. Al importar vuelve a ser una pegatina.
+- `archisim entorno out/` lleva cuatro pegatinas dibujadas aquí: un grafiti en la nave, un rótulo en el bajo comercial, una mancha de humedad en una casa y una flecha en la calle.
+
+**Pendiente**
+- Moverlas arrastrando sobre la cara en 3D (hoy, con Mover o desde Propiedades).
+- Que sigan a su cara cuando el muro se mueve.
+
+**Qué debe probar Antonio**
+- `archisim entorno out/` y `archisim render out/entorno.archisim out/entorno.png`. Después, `archisim glb out/entorno.archisim out/entorno.glb` y abrir el glb en un visor.
+- En la vista 3D: Arquitectura → Pegatina, «Elegir imagen PNG…» y clic en una fachada y en el suelo. Probar un PNG con transparencia (un logotipo recortado).
+
+---
+
 ## 2026-11-01 (74) · U7: el entorno traído con sus edificios con estilo
 
 Rama `bloque/u7-entorno` (encima de U6), con pull request. Sin cambios de formato.

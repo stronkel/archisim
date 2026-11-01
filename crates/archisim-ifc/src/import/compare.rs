@@ -516,6 +516,28 @@ pub fn differences(a: &Model, b: &Model) -> Vec<String> {
             b.markings().count()
         ));
     }
+    if a.decals().count() != b.decals().count() {
+        diff(format!(
+            "número de pegatinas: {} / {}",
+            a.decals().count(),
+            b.decals().count()
+        ));
+    }
+    for s in a.decals() {
+        let Some(t) = b.decals().find(|t| t.guid == s.guid) else {
+            diff(format!("pegatina {} falta", s.guid));
+            continue;
+        };
+        let same = s.image == t.image
+            && (0..3).all(|k| close(s.centre[k], t.centre[k]) && close(s.normal[k], t.normal[k]))
+            && close(s.rotation, t.rotation)
+            && close(s.width, t.width)
+            && s.name == t.name
+            && level_guid(a, s.level) == level_guid(b, t.level);
+        if !same {
+            diff(format!("pegatina {} cambia", s.guid));
+        }
+    }
     if a.env_buildings().count() != b.env_buildings().count() {
         diff(format!(
             "número de edificios del entorno: {} / {}",

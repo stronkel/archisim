@@ -188,6 +188,9 @@ impl Model {
                 },
             );
         }
+        if self.decals.contains_key(&DecalId(id)) {
+            return Some(Architecture);
+        }
         if self.openings.contains_key(&OpeningId(id))
             || self.roofs.contains_key(&RoofId(id))
             || self.stairs.contains_key(&StairId(id))

@@ -379,6 +379,7 @@ impl ArchiSimApp {
             Tool::Pool => self.pool_click(p),
             Tool::Road => self.road_click(p),
             Tool::Roundabout => self.roundabout_click(p),
+            Tool::Decal => self.decal_click(p),
             Tool::Marking => self.marking_click(p),
             Tool::Planting => self.planting_click(p),
             Tool::Pipe | Tool::Duct => self.run_click(p),

@@ -27,6 +27,7 @@ pub mod annotate;
 pub mod axo;
 pub mod concept;
 pub mod curtain;
+pub mod decals;
 pub(crate) mod dim;
 pub mod drafting;
 pub mod drafting_views;
@@ -803,6 +804,15 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
         };
         overrides::group(&mut s, archisim_core::Category::Masses, |s| {
             concept::draw_masses(s, model, level, k, &vis)
+        });
+    }
+    if show(archisim_core::Category::Objects) {
+        let vis = |poly: &[Point2]| {
+            let (lo, hi) = bounds(poly);
+            visible(lo, hi)
+        };
+        overrides::group(&mut s, archisim_core::Category::Objects, |s| {
+            decals::draw_decals(s, model, level, k, &vis)
         });
     }
     if show(archisim_core::Category::Plots) {

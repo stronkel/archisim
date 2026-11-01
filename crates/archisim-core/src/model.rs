@@ -18,6 +18,7 @@ mod appearance;
 mod built_in;
 mod concept;
 mod curtain;
+mod decals;
 mod disciplines;
 mod dormers;
 mod draft_views;
@@ -63,6 +64,7 @@ mod worktops;
 pub use appearance::*;
 pub use concept::*;
 pub use curtain::*;
+pub use decals::*;
 pub use disciplines::*;
 pub use dormers::*;
 pub use draft_views::*;
@@ -1485,6 +1487,8 @@ pub struct ModelParts {
     pub roundabouts: Vec<Roundabout>,
     /// Road markings at will (U4).
     pub markings: Vec<Marking>,
+    /// Pictures stuck on faces (U8).
+    pub decals: Vec<Decal>,
     /// Plants spread along lines or over areas (after the objects they
     /// made).
     pub plantings: Vec<Planting>,
@@ -1615,6 +1619,7 @@ pub struct Model {
     roads: BTreeMap<RoadId, Road>,
     roundabouts: BTreeMap<RoundaboutId, Roundabout>,
     markings: BTreeMap<MarkingId, Marking>,
+    decals: BTreeMap<DecalId, Decal>,
     plantings: BTreeMap<PlantingId, Planting>,
     pools: BTreeMap<PoolId, Pool>,
     elevators: BTreeMap<ElevatorId, Elevator>,
@@ -1708,6 +1713,7 @@ impl Model {
             roads: BTreeMap::new(),
             roundabouts: BTreeMap::new(),
             markings: BTreeMap::new(),
+            decals: BTreeMap::new(),
             plantings: BTreeMap::new(),
             pools: BTreeMap::new(),
             elevators: BTreeMap::new(),
@@ -1857,6 +1863,7 @@ impl Model {
         self.roads.retain(|_, r| r.level != id);
         self.roundabouts.retain(|_, r| r.level != id);
         self.markings.retain(|_, r| r.level != id);
+        self.decals.retain(|_, r| r.level != id);
         self.plantings.retain(|_, p| p.level != id);
         self.pools.retain(|_, p| p.level != id);
         self.elevators.retain(|_, e| e.level != id && e.top != id);
@@ -4367,6 +4374,7 @@ impl Model {
             roads: self.roads.values().cloned().collect(),
             roundabouts: self.roundabouts.values().cloned().collect(),
             markings: self.markings.values().cloned().collect(),
+            decals: self.decals.values().cloned().collect(),
             plantings: self.plantings.values().cloned().collect(),
             pools: self.pools.values().cloned().collect(),
             elevators: self.elevators.values().cloned().collect(),
@@ -4739,6 +4747,7 @@ impl Model {
         model.restore_urban(parts.plots, parts.roads, &mut claim)?;
         model.restore_roundabouts(parts.roundabouts, &mut claim)?;
         model.restore_markings(parts.markings, &mut claim)?;
+        model.restore_decals(parts.decals, &mut claim)?;
         model.restore_plantings(parts.plantings, &mut claim)?;
         model.restore_pools(parts.pools, &mut claim)?;
         model.restore_elevators(parts.elevators, &mut claim)?;

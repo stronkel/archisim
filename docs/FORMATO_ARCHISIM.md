@@ -1,4 +1,4 @@
-# Formato de proyecto `.archisim` (versión 67)
+# Formato de proyecto `.archisim` (versión 68)
 
 El proyecto de ArchiSim se guarda en un único fichero de texto JSON con extensión `.archisim`. Es el equivalente al `.pln` de ArchiCAD o al `.rvt` de Revit, pero legible con cualquier editor de texto y comparable entre versiones (Git, diff).
 
@@ -125,3 +125,4 @@ Se puede, con cuidado: cambiar una altura, un nombre, mover una ventana, cambiar
 
 - Versión 66 (U5): las tuberías pueden ser de las redes urbanas (`system`: `sewer`, `stormwater`, `water_main`, `power_low`, `power_medium`, `street_lighting`, `telecom`, `gas`) y hay aparatos urbanos (`kind`: `manhole`, `gully`, `hydrant`, `chamber`, `transformer`, `main_fuse_box`, `street_light`). La estructura no cambia.
 - Versión 67 (U6): una masa puede llevar `dress`, su estilo de edificio del entorno: `style` (`andalusian`, `courtyard`, `terraced`, `semi_detached`, `ensanche`, `block_1960s`, `detached`, `historic_centre`, `offices`, `shop_and_flats`, `warehouse`, `facility`, `coastal_hotel`), `bay`, `window_width`, `window_height`, `sill`, `closure` (`none`, `grilles`, `balconies`, `terraces`, `curtain_wall`), `balcony_depth`, `shop`, `roof` (`flat`, `gable`, `hip`), `pitch`, `plinth`, `cornice`, `patio` y `materials` (fachada, zócalo y cornisa, cubierta, carpintería, vidrio y cerrajería, por id). Los ficheros anteriores no tienen ninguna.
+- Versión 68 (U8): lista `decals`, las pegatinas: `id`, `guid`, `name`, `level`, `centre` (x, y en planta y z sobre la planta), `normal` de la cara, `rotation` (grados), `width`, `source` (nombre del fichero), `png` (la imagen en base64), `aspect` (ancho entre alto) y `host` (el elemento sobre el que se pegó, si lo hay). Los ficheros anteriores no tienen ninguna.

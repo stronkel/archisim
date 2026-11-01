@@ -28,6 +28,7 @@ pub mod anchors;
 pub mod cover;
 pub mod crossroads;
 pub mod csg;
+pub mod decals;
 pub mod elevators;
 pub mod env_buildings;
 pub mod facade;
