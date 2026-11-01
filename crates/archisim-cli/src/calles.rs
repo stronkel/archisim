@@ -279,6 +279,126 @@ pub fn write(dir: &Path) -> Res {
     Ok(())
 }
 
+/// Every street type (U3), one beside the other, 40 m long each, by
+/// group; with a kiosk, so that the IFC has a building.
+pub fn build_types() -> Res<Model> {
+    let mut m = Model::new("Tipos de calle de ArchiSim");
+    let pb = m.add_level("Planta baja", 0.0);
+    let p1 = m.add_level("Planta primera", 3.0);
+    let lib = archisim_library::add_library(&mut m)?;
+    let asphalt = material(&m, "asphalt")
+        .or_else(|| material(&m, "concrete"))
+        .ok_or("sin asfalto")?;
+    let stone = material(&m, "stone").unwrap_or(asphalt);
+    let paving = material(&m, "ceramic").unwrap_or(stone);
+    let paint = m.add_material(
+        "Pintura vial blanca",
+        "paint",
+        [245, 245, 240],
+        archisim_core::CutPattern::Solid,
+    );
+    let grass = m.add_material(
+        "Césped",
+        "vegetation",
+        [120, 160, 90],
+        archisim_core::CutPattern::Solid,
+    );
+    let red = m.add_material(
+        "Aglomerado rojo (carril bici)",
+        "asphalt",
+        [176, 88, 72],
+        archisim_core::CutPattern::Solid,
+    );
+    let p = Point2::new;
+    let mut y = 0.0;
+    let mut x = 0.0;
+    let mut last_group = None;
+    for t in archisim_core::street_types() {
+        // A column per group.
+        if last_group.is_some_and(|g| g != t.group) {
+            x += 60.0;
+            y = 0.0;
+        }
+        last_group = Some(t.group);
+        let w = t.section.width();
+        y -= w / 2.0;
+        let mut sec = t.section.clone();
+        sec.markings = Some(paint);
+        sec.planting = Some(grass);
+        sec.bike = Some(red);
+        m.add_road(NewRoad {
+            name: t.name.into(),
+            level: pb,
+            axis: vec![p(x, y), p(x + 40.0, y)],
+            section: sec,
+            top_offset: 0.0,
+            profile: Vec::new(),
+            changes: Vec::new(),
+            pavement: asphalt,
+            kerb_material: stone,
+            sidewalk_material: paving,
+        })?;
+        y -= w / 2.0 + 6.0;
+    }
+    // A kiosk.
+    let corners = [p(-12.0, 0.0), p(-8.0, 0.0), p(-8.0, 3.0), p(-12.0, 3.0)];
+    for i in 0..4 {
+        m.add_wall(NewWall {
+            wall_type: lib.bearing_wall,
+            level: pb,
+            start: corners[i],
+            end: corners[(i + 1) % 4],
+            reference: ReferenceLine::ExteriorFace,
+            height: 3.0,
+            base_offset: 0.0,
+            bulge: 0.0,
+            top: WallTop::Level {
+                level: p1,
+                offset: 0.0,
+            },
+        })?;
+    }
+    Ok(m)
+}
+
+/// `archisim tipos-calle`: [`build_types`] with its plan, axonometric and
+/// IFC.
+pub fn write_types(dir: &Path) -> Res {
+    let m = build_types()?;
+    std::fs::create_dir_all(dir)?;
+    let project = dir.join(format!("tipos-calle.{}", archisim_file::EXTENSION));
+    archisim_file::save(&m, &project)?;
+    std::fs::write(
+        dir.join("tipos-calle.ifc"),
+        crate::ifc_text(&m, "tipos-calle", None),
+    )?;
+    let axo = archisim_core::Axo::default();
+    let drawing = archisim_plan::axo::axo_drawing(&m, &axo, Default::default());
+    let crop = archisim_plan::axo::axo_extent(&m, &axo, 500.0);
+    std::fs::write(
+        dir.join("tipos-calle-3d.svg"),
+        archisim_plan::axo::render_axo(&drawing, crop, 500.0),
+    )?;
+    let pb = m.levels()[0].id;
+    let options = archisim_plan::PlanOptions {
+        scale: 500.0,
+        ..Default::default()
+    };
+    std::fs::write(
+        dir.join("tipos-calle-planta.svg"),
+        archisim_plan::render_plan(&m, pb, &options),
+    )?;
+    println!("Tipos de calle: {}.", m.roads().count());
+    println!("  Proyecto: {}", project.display());
+    println!("  Planta: {}", dir.join("tipos-calle-planta.svg").display());
+    println!(
+        "  Axonometría: {}",
+        dir.join("tipos-calle-3d.svg").display()
+    );
+    println!("  IFC: {}", dir.join("tipos-calle.ifc").display());
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     /// The sample's streets meet in a crossing, three T's and an L, the
@@ -297,5 +417,14 @@ mod tests {
         let nueva = m.roads().find(|r| r.name == "Calle Nueva").unwrap();
         let (l, r) = nueva.extent_at(40.0);
         assert!((l - 8.5).abs() < 0.01 && (r - 7.0).abs() < 0.01, "{l} {r}");
+    }
+
+    /// Every street type is a road of the sample, and none meets another.
+    #[test]
+    fn every_street_type_side_by_side() {
+        let m = super::build_types().unwrap();
+        assert_eq!(m.roads().count(), archisim_core::street_types().len());
+        let pb = m.levels()[0].id;
+        assert!(archisim_geom::crossroads::junctions(&m, pb).is_empty());
     }
 }

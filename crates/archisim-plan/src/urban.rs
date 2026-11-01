@@ -136,12 +136,36 @@ pub fn draw_roads(
                     RoadBand::BikeLane => ("#e9c9bf", pens().view),
                     RoadBand::Planting => ("#d4dfc0", pens().view),
                     RoadBand::Median => ("#e8e4d6", pens().view),
+                    RoadBand::BusLane => ("#d9b3a8", pens().view),
+                    RoadBand::Tram => ("#c9d8b0", pens().view),
+                    RoadBand::Shoulder => ("#e3e3e3", pens().view),
+                    RoadBand::Ditch => ("#c7d3b5", pens().view),
+                    RoadBand::TreePits => ("#f1eee6", pens().view),
+                    RoadBand::BikePath => ("#ead2c8", pens().view),
                 };
                 let _ = writeln!(
                     s,
                     r#"<path d="{}" fill="{fill}" stroke="{INK}" stroke-width="{}"/>"#,
                     path(&p.outline),
                     num(width * k)
+                );
+            }
+            // The tree pits of its sidewalks (U3).
+            for pit in r.tree_pits_except(&gaps) {
+                let _ = writeln!(
+                    s,
+                    r##"<path d="{}" fill="#c9b48f" stroke="{INK}" stroke-width="{}"/>"##,
+                    path(&pit),
+                    num(pens().view * k)
+                );
+            }
+            // The rails of its tram strips (U3).
+            for rail in r.rail_lines() {
+                let _ = writeln!(
+                    s,
+                    r#"<path d="M{}" fill="none" stroke="{INK}" stroke-width="{}"/>"#,
+                    rail.iter().map(|p| pt(*p)).collect::<Vec<_>>().join(" L"),
+                    num(pens().cut * k)
                 );
             }
             // The road markings: lane lines, parking bays, zebra crossings.

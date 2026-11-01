@@ -254,7 +254,7 @@ impl Model {
             let mut left_used = None;
             let mut right_used = None;
             if let (Some(room), Some(first)) = (left, strips.first()) {
-                if first.band == RoadBand::Sidewalk {
+                if first.band.walk() {
                     let inner = offs[0].1;
                     if room - inner >= MIN_SIDEWALK {
                         left_used = Some(room - inner);
@@ -262,7 +262,7 @@ impl Model {
                 }
             }
             if let (Some(room), Some(end)) = (right, strips.last()) {
-                if end.band == RoadBand::Sidewalk && last > 0 {
+                if end.band.walk() && last > 0 {
                     let inner = -offs[last].2;
                     if room - inner >= MIN_SIDEWALK {
                         right_used = Some(room - inner);

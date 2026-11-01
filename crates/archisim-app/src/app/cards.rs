@@ -77,9 +77,20 @@ fn capitalized(s: &str) -> String {
 /// A card of the grid: its picture and its name below; `on` the one
 /// chosen.
 fn card(ui: &mut Ui, name: &str, on: bool, picture: impl FnOnce(&Ui, Rect)) -> egui::Response {
+    card_tall(ui, name, on, 38.0, picture)
+}
+
+/// A card with `text` points under its picture for its name.
+fn card_tall(
+    ui: &mut Ui,
+    name: &str,
+    on: bool,
+    text: f32,
+    picture: impl FnOnce(&Ui, Rect),
+) -> egui::Response {
     let p = Palette::current(ui.ctx());
     let name = &capitalized(name);
-    let (rect, resp) = ui.allocate_exact_size(Vec2::new(CARD_W, PICTURE.y + 38.0), Sense::click());
+    let (rect, resp) = ui.allocate_exact_size(Vec2::new(CARD_W, PICTURE.y + text), Sense::click());
     let resp = resp.on_hover_text(name);
     let fill = if on {
         p.accent_soft
@@ -227,6 +238,63 @@ pub(super) fn option_cards(
                 .max_height(460.0)
                 .show(ui, |ui| {
                     picked = option_grid(ui, options, current, 3, thumb);
+                });
+            if picked.is_some() {
+                ui.close();
+            }
+        });
+    picked
+}
+
+/// A choice of cards in groups, each card painted by `paint` (on white
+/// paper): the option chosen as a wide button and, when clicked, every
+/// option under its group's title. The option picked.
+pub(super) fn grouped_cards(
+    ui: &mut Ui,
+    width: f32,
+    groups: &[(String, Vec<String>)],
+    current: &str,
+    paint: &mut dyn FnMut(&Ui, Rect, &str),
+) -> Option<String> {
+    let blank = |ui: &Ui, r: Rect| {
+        ui.painter()
+            .rect_filled(r, CornerRadius::same(5), Color32::WHITE);
+    };
+    let button = current_button(ui, width, current, |ui, r| {
+        blank(ui, r);
+        paint(ui, r, current);
+    });
+    let mut picked = None;
+    egui::Popup::menu(&button)
+        .width(CARD_W * 4.0 + 40.0)
+        .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
+        .show(|ui| {
+            let p = Palette::current(ui.ctx());
+            egui::ScrollArea::vertical()
+                .max_height(520.0)
+                .show(ui, |ui| {
+                    for (title, options) in groups {
+                        if options.is_empty() {
+                            continue;
+                        }
+                        ui.label(egui::RichText::new(title).strong().color(p.muted));
+                        for chunk in options.chunks(4) {
+                            ui.horizontal(|ui| {
+                                ui.spacing_mut().item_spacing.x = 6.0;
+                                for o in chunk {
+                                    let resp = card_tall(ui, o, o == current, 52.0, |ui, r| {
+                                        blank(ui, r);
+                                        paint(ui, r, o);
+                                    });
+                                    if resp.clicked() {
+                                        picked = Some(o.clone());
+                                    }
+                                }
+                            });
+                            ui.add_space(4.0);
+                        }
+                        ui.add_space(4.0);
+                    }
                 });
             if picked.is_some() {
                 ui.close();

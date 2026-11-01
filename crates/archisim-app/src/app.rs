@@ -2662,6 +2662,7 @@ mod sheet_ui;
 mod sketch_ui;
 mod stair_ui;
 mod start_ui;
+mod street_types_ui;
 mod structure_ui;
 mod survey_ui;
 mod symbol_pick;

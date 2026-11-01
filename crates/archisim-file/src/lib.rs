@@ -48,7 +48,7 @@ use serde_json::Value;
 /// Value of the `format` field.
 pub const FORMAT: &str = "ArchiSim";
 /// File layout written by this version of ArchiSim.
-pub const CURRENT_VERSION: u32 = 62;
+pub const CURRENT_VERSION: u32 = 63;
 /// File name extension, without the dot.
 pub const EXTENSION: &str = "archisim";
 /// Length unit of every number in the file.
@@ -343,7 +343,10 @@ pub fn migrate(value: Value, from: u64) -> Result<Value, FileError> {
             // (`profile`) and the radius of its corners (`corner_radius`);
             // older roads are level, with corners of 4 m. 61 → 62: a road's
             // changes of section along it (`changes`); older ones have none.
-            9..=61 => {
+            // 62 → 63: new bands of a road's strips (bus, tram, shoulder,
+            // ditch, tree pits, bike path on the sidewalk); nothing to change,
+            // only so that older versions say they cannot read them.
+            9..=62 => {
                 let mut v = if version == 32 {
                     legacy_dormers(value)
                 } else {
@@ -2705,8 +2708,8 @@ mod tests {
             Err(FileError::NotAProject)
         ));
         assert!(matches!(
-            edited("\"version\": 62", "\"version\": 63"),
-            Err(FileError::TooNew { version: 63 })
+            edited("\"version\": 63", "\"version\": 64"),
+            Err(FileError::TooNew { version: 64 })
         ));
         assert!(matches!(
             edited("\"version\": 62", "\"version\": 0"),

@@ -3950,6 +3950,8 @@ pub fn road_solids_with(
             let (d0, d1) = match (p.band, p.raised) {
                 (RoadBand::Kerb, true) => (-s.depth, kh),
                 (_, true) => (kh - 0.2, kh),
+                // A ditch, 30 cm below the shoulder (U3).
+                (RoadBand::Ditch, _) => (-0.3 - 0.2, -0.3),
                 _ => (-s.depth, 0.0),
             };
             Solid {
@@ -3977,6 +3979,44 @@ pub fn road_solids_with(
                 triangles: tris,
             });
         }
+    }
+    // The rails of its tram strips, 7 cm wide and flush with the
+    // pavement (U3).
+    let rails: Vec<[P3; 3]> = r
+        .rail_lines()
+        .iter()
+        .map(|line| archisim_core::strip(line, -0.035, 0.035))
+        .flat_map(|poly| {
+            draped_prism(&poly, |q| {
+                let top = base + r.top_under(q);
+                (top - 0.05, top + 0.006)
+            })
+        })
+        .collect();
+    if !rails.is_empty() {
+        out.push(Solid {
+            owner: SolidOwner::Road(id),
+            material: r.kerb_material,
+            triangles: rails,
+        });
+    }
+    // Its tree pits: the soil, flush with the sidewalk (U3).
+    let pits: Vec<[P3; 3]> = r
+        .tree_pits_except(&gaps)
+        .iter()
+        .flat_map(|poly| {
+            draped_prism(poly, |q| {
+                let top = base + r.top_under(q);
+                (top + kh - 0.1, top + kh + 0.005)
+            })
+        })
+        .collect();
+    if !pits.is_empty() {
+        out.push(Solid {
+            owner: SolidOwner::Road(id),
+            material: s.planting.unwrap_or(r.sidewalk_material),
+            triangles: pits,
+        });
     }
     for j in junctions.iter().filter(|j| j.owner == id) {
         let top = base + j.top;
