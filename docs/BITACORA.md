@@ -6,6 +6,31 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-01 (64) · H7: traer el entorno desde cartografía gratuita
+
+Rama `bloque/h7-cartografia` (encima de H6), con pull request. Sin cambios de formato: lo que se trae son elementos de siempre. Detalle para Antonio en `docs/ENTORNO.md`.
+
+**Hecho**
+- **Archivo → Traer el entorno (Catastro, OpenStreetMap, MDT)…** (también soltando los ficheros en la ventana) y la orden `archisim cartografia`:
+  - del **Catastro** (GML INSPIRE): cada parte de edificio, un volumen de Concepto por plantas con las plantas sobre rasante del Catastro; cada parcela, una Parcela con su referencia catastral;
+  - de **OpenStreetMap** (.osm): las calles como viales con su tipo de vía según la clase de la calle (avenida, calle de uno o dos sentidos con aparcamiento, plataforma única), estrechadas al hueco entre las parcelas; los árboles y las filas de árboles como especies de la biblioteca (naranjo, plátano, jacarandá, palmera…); los edificios solo si no hay Catastro;
+  - del **CNIG** (MDT en ASC): un terreno con sus puntos dentro del radio.
+- Todo se coloca por la georreferencia y el norte del proyecto. Si el proyecto no está georreferenciado, toma la de los ficheros, con el origen en su centro y la cota ±0,00 en el terreno de ese punto. «Llevar el origen…» (`--centrar`) lo mueve aunque ya lo estuviera.
+- No se traen los edificios que pisan los forjados del proyecto. Todo se deshace en un paso.
+- Nuevo crate `archisim-carto` (lectores sin dependencias) y ficheros de prueba inventados (un pueblo de 4 × 4 manzanas), hechos con `scripts/make_carto_fixtures.py`.
+
+**Pendiente**
+- Las calles son horizontales, a la cota media del terreno; falta la rasante de los viales para calles en pendiente.
+- Los cruces entre calles se solapan.
+- Altura real de los edificios (LiDAR del PNOA) en una vuelta futura.
+
+**Qué debe probar Antonio**
+- Descargar de la Sede del Catastro los GML INSPIRE de edificios (`buildingpart`) y parcelas de su municipio, el `.osm` de la zona desde openstreetmap.org → Exportar, y la hoja MDT05 del CNIG en ASC.
+- Abrir su proyecto georreferenciado y hacer Archivo → Traer el entorno con esos ficheros. Mirar en planta y en 3D que los edificios y las calles caen donde deben.
+- Sin descargar nada: `archisim cartografia crates/archisim-carto/tests/fixtures/pueblo-catastro.gml crates/archisim-carto/tests/fixtures/pueblo.osm crates/archisim-carto/tests/fixtures/pueblo-mdt05.asc --salida out/entorno.archisim` y abrir `out/entorno.archisim`.
+
+---
+
 ## 2026-11-01 (63) · H6: calles por tipos
 
 Rama `bloque/h6-calles` (encima de H5), con pull request. Formato `.archisim` versión 60 (la sección de los viales por franjas; los ficheros antiguos se abren con la sección clásica de sus medidas).

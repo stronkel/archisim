@@ -786,6 +786,7 @@ pub enum StudioValue {
 }
 use StudioValue::{B, C, N, T};
 
+pub mod carto;
 pub mod collections;
 pub mod extended;
 pub mod facades;

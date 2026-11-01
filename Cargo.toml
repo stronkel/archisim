@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/archisim-family",
     "crates/archisim-dxf",
+    "crates/archisim-carto",
     "crates/archisim-mesh",
     "crates/archisim-flora",
     "crates/archisim-props",
@@ -36,6 +37,7 @@ repository = "https://github.com/stronkel/archisim"
 uuid = { version = "1", features = ["v4"] }
 archisim-family = { path = "crates/archisim-family" }
 archisim-dxf = { path = "crates/archisim-dxf" }
+archisim-carto = { path = "crates/archisim-carto" }
 archisim-mesh = { path = "crates/archisim-mesh" }
 archisim-flora = { path = "crates/archisim-flora" }
 archisim-props = { path = "crates/archisim-props" }

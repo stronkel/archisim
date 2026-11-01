@@ -4592,6 +4592,42 @@ fn streets_by_type_with_trees() {
     h.frame();
 }
 
+/// Bringing the surroundings (H7): cartography files dropped on the
+/// window open their dialog; brought, the project gets masses, plots,
+/// streets, trees and a terrain in one undo step.
+#[test]
+fn surroundings_from_cartography() {
+    let dir =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../archisim-carto/tests/fixtures");
+    let files: Vec<std::path::PathBuf> = ["pueblo-catastro.gml", "pueblo.osm", "pueblo-mdt05.asc"]
+        .iter()
+        .map(|f| dir.join(f))
+        .collect();
+    let mut h = Harness::new(Editor::new_project());
+    h.app.open_files(files);
+    assert!(h.app.carto_import.is_some());
+    h.frame();
+    let c = h.app.carto_import.take().unwrap();
+    assert_eq!(c.files.len(), 3);
+    let r = h
+        .app
+        .ed
+        .transact("Traer el entorno", |m| {
+            archisim_library::carto::import_carto(m, &c.files, &c.options)
+        })
+        .unwrap();
+    assert!(r.georeferenced);
+    assert!(
+        r.buildings > 20 && r.plots > 20 && r.roads >= 6 && r.trees > 10,
+        "{r:?}"
+    );
+    assert_eq!(h.model().terrains().count(), 1);
+    h.frame();
+    h.app.ed.undo();
+    assert_eq!(h.model().masses().count(), 0);
+    assert!(h.model().georeference().is_none());
+}
+
 fn road_id(h: &Harness) -> archisim_core::RoadId {
     h.model().roads().next().unwrap().id
 }
