@@ -377,6 +377,9 @@ def main(path: str) -> int:
         if not any(p.is_a("IfcMember") for p in parts):
             errors.append(f"{name}: no mullions")
         for p in parts:
+            # The doors in its panels (H1) are doors, checked as doors.
+            if p.is_a("IfcDoor"):
+                continue
             if eu.get_material(p) is None:
                 errors.append(f"{p.Name}: no material")
             if p.is_a("IfcShadingDevice"):
