@@ -1069,7 +1069,8 @@ mod tests {
                 "IfcBuildingElementProxy",
                 "IfcLightFixture",
                 "IfcVehicle",
-                "IfcRailing"
+                "IfcRailing",
+                "IfcTransportElement"
             ]
             .contains(&ev.outputs["ifc_class"].as_text().unwrap()));
             assert!(!m.family(f).unwrap().def().folder.is_empty(), "{name}");

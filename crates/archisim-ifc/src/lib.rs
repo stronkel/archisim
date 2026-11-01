@@ -44,6 +44,7 @@
 
 mod accessories;
 mod curtain;
+mod elevators;
 mod facades;
 mod foundations;
 pub mod import;
@@ -2136,6 +2137,7 @@ impl<'a> Exporter<'a> {
         self.write_footings(&materials, &storeys, &mut contained);
         self.write_rebar(&materials, &storeys);
         self.write_pools(&materials, &storeys, &mut contained);
+        self.write_elevators(&storeys, &mut contained);
         self.write_grids(&storeys, &mut contained);
         self.write_urban(&materials, site, site_pl);
         self.write_services(&storeys, &mut contained, building);

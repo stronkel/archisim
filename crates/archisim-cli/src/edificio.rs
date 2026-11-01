@@ -887,6 +887,19 @@ fn core(m: &mut Model, t: &Types, lv: &[LevelId]) -> R {
     c(m, p(19.6, SOUTH_IN), p(19.6, 3.1))?;
     hole(m, t.flat_door, west, p(17.0, 4.2), 0.0, Hand::Left)?;
     hole(m, t.flat_door, east, p(21.7, 6.0), 0.0, Hand::Right)?;
+    // The lift (H4) in its shaft of the core, from the ground floor to the
+    // roof garden: the shaft's walls are the core's, so the lift builds
+    // only its pit, doors, rails and car, and opens its holes in the
+    // slabs.
+    let th = m.wall_type(t.core).map_or(0.25, |w| w.thickness());
+    let (x0, x1, y0, y1) = (17.4 + th / 2.0, 19.6 - th / 2.0, SOUTH_IN, 3.2 - th / 2.0);
+    let mut lift = archisim_core::NewElevator::new(lv[0], cu, p((x0 + x1) / 2.0, (y0 + y1) / 2.0));
+    lift.name = "Ascensor".into();
+    lift.wall = 0.0;
+    lift.shaft_w = x1 - x0;
+    lift.shaft_d = y1 - y0;
+    lift.material = Some(t.concrete);
+    m.add_elevator(lift)?;
     Ok(())
 }
 

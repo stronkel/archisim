@@ -474,7 +474,8 @@ pub fn hotspots(model: &Model, selection: &BTreeSet<Element>) -> Vec<Hotspot> {
             | Element::Planting(_)
             | Element::Run(_)
             | Element::Edge(_)
-            | Element::Device(_) => {}
+            | Element::Device(_)
+            | Element::Elevator(_) => {}
         }
     }
     v
@@ -1317,6 +1318,9 @@ pub(crate) fn move_selection(
             Element::Pool(id) => {
                 model.edit_pool(*id, |x| x.outline.iter_mut().for_each(|p| *p = *p + d))?;
             }
+            Element::Elevator(id) => {
+                model.edit_elevator(*id, |x| x.position = x.position + d)?;
+            }
             Element::Road(id) => {
                 model.edit_road(*id, |x| x.axis.iter_mut().for_each(|p| *p = *p + d))?;
             }
@@ -1855,6 +1859,17 @@ pub(crate) fn copy(
                 let new = model.add_pool(spec)?;
                 copies.insert(Element::Pool(new));
             }
+            Element::Elevator(id) => {
+                let x = model
+                    .elevator(*id)
+                    .ok_or(ModelError::UnknownElement(id.0))?
+                    .clone();
+                let mut spec = x.spec();
+                spec.name = model.next_elevator_name();
+                spec.position = x.position + d;
+                let new = model.add_elevator(spec)?;
+                copies.insert(Element::Elevator(new));
+            }
             Element::Road(id) => {
                 let x = model
                     .road(*id)
@@ -2157,6 +2172,7 @@ pub(crate) fn exists(model: &Model, e: Element) -> bool {
         Element::Mass(id) => model.mass(id).is_some(),
         Element::Plot(id) => model.plot(id).is_some(),
         Element::Pool(id) => model.pool(id).is_some(),
+        Element::Elevator(id) => model.elevator(id).is_some(),
         Element::Road(id) => model.road(id).is_some(),
         Element::Planting(id) => model.planting(id).is_some(),
         Element::Run(id) => model.run(id).is_some(),
@@ -2235,6 +2251,7 @@ fn level_of(
             Element::Mass(id) => model.mass(*id).map(|m| m.level),
             Element::Plot(id) => model.plot(*id).map(|p| p.level),
             Element::Pool(id) => model.pool(*id).map(|p| p.level),
+            Element::Elevator(id) => model.elevator(*id).map(|e| e.level),
             Element::Road(id) => model.road(*id).map(|r| r.level),
             Element::Planting(id) => model.planting(*id).map(|r| r.level),
             Element::Run(id) => model.run(*id).map(|r| r.level),

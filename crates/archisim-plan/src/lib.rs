@@ -30,6 +30,7 @@ pub mod curtain;
 pub(crate) mod dim;
 pub mod drafting;
 pub mod drafting_views;
+pub mod elevators;
 pub mod grids;
 pub mod layout;
 pub mod lettering;
@@ -552,6 +553,11 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
             marker_points.extend(pools::pool_points(p));
         }
     }
+    if show(archisim_core::Category::Stairs) {
+        for e in model.elevators_on_level(level) {
+            marker_points.extend(elevators::elevator_points(e));
+        }
+    }
     if show(archisim_core::Category::Services) {
         for r in model.runs_on_level(level) {
             marker_points.extend(r.path.iter().copied());
@@ -769,6 +775,14 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
                 stairs::draw_stair(s, stair, rise + options.cut_plane, k)
             });
         }
+    }
+    // Lifts (H4), on every level they cross.
+    if show(archisim_core::Category::Stairs) {
+        let vis = |poly: &[Point2]| {
+            let (lo, hi) = bounds(poly);
+            visible(lo, hi)
+        };
+        elevators::draw_elevators(&mut s, model, level, k, &vis);
     }
     overrides::close(&mut s);
     s.push_str("</g>\n");

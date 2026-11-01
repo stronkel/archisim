@@ -57,6 +57,8 @@ pub enum Element {
     Road(archisim_core::RoadId),
     /// A pool built in the ground, picked inside its coping.
     Pool(archisim_core::PoolId),
+    /// A lift, picked inside its shaft on any level it crosses.
+    Elevator(archisim_core::ElevatorId),
     /// Plants along a line or over an area, picked by its line.
     Planting(archisim_core::PlantingId),
     /// A pipe or duct, picked by its band.
@@ -154,6 +156,7 @@ pub fn outline<G: Geo + ?Sized>(geo: &G, element: Element) -> Option<Vec<Point2>
         Element::Plot(id) => model.plot(id).map(|p| p.outline.clone()),
         Element::Road(id) => model.road(id).map(|r| r.outline()),
         Element::Pool(id) => model.pool(id).map(|p| p.coping_outline()),
+        Element::Elevator(id) => model.elevator(id).map(|e| e.outside()),
         Element::Planting(id) => model.planting(id).map(|p| {
             let line = archisim_core::planting_line(&p.path, p.closed, p.smooth);
             archisim_core::strip(&line, -0.25, 0.25)
@@ -458,6 +461,11 @@ pub fn elements_on_level(model: &Model, level: LevelId) -> Vec<Element> {
     v.extend(model.devices_on_level(level).map(|d| Element::Device(d.id)));
     v.extend(model.plots_on_level(level).map(|p| Element::Plot(p.id)));
     v.extend(model.pools_on_level(level).map(|p| Element::Pool(p.id)));
+    v.extend(
+        model
+            .elevators_on_level(level)
+            .map(|e| Element::Elevator(e.id)),
+    );
     v
 }
 
@@ -500,6 +508,7 @@ pub fn type_of(model: &Model, e: Element) -> Option<TypeOf> {
         | Element::Plot(_)
         | Element::Road(_)
         | Element::Pool(_)
+        | Element::Elevator(_)
         | Element::Planting(_)
         | Element::Run(_)
         | Element::Edge(_)
@@ -569,6 +578,8 @@ pub fn pick_all<G: Geo + ?Sized>(
         Element::Road(_) => 5,
         // In the ground, as a slab.
         Element::Pool(_) => 4,
+        // Over the slabs it goes through.
+        Element::Elevator(_) => 2,
         // Its line, under the plants it made.
         Element::Planting(_) => 4,
         // Under the ceiling, in front of the slab.
@@ -679,6 +690,7 @@ pub fn of_solid(owner: archisim_geom::solid::SolidOwner) -> Element {
         SolidOwner::Mass(id) => Element::Mass(id),
         SolidOwner::Road(id) => Element::Road(id),
         SolidOwner::Pool(id) => Element::Pool(id),
+        SolidOwner::Elevator(id) => Element::Elevator(id),
         SolidOwner::Run(id) => Element::Run(id),
         SolidOwner::Device(id) => Element::Device(id),
     }
@@ -705,6 +717,7 @@ pub fn solid_of(e: Element) -> Option<archisim_geom::solid::SolidOwner> {
         Element::Mass(id) => SolidOwner::Mass(id),
         Element::Road(id) => SolidOwner::Road(id),
         Element::Pool(id) => SolidOwner::Pool(id),
+        Element::Elevator(id) => SolidOwner::Elevator(id),
         Element::Run(id) => SolidOwner::Run(id),
         Element::Device(id) => SolidOwner::Device(id),
         _ => return None,

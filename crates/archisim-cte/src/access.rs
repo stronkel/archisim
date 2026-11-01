@@ -143,6 +143,7 @@ pub fn check(model: &Model, report: &mut Report) {
     if s.accessibility == Accessibility::None {
         return;
     }
+    lifts(model, report);
     let doors = doors(model);
     let dwelling_use = s.building_use == BuildingUse::Dwelling;
     match s.accessibility {
@@ -476,5 +477,40 @@ pub fn stairs_and_ramps(model: &Model, report: &mut Report) {
                 route: Vec::new(),
             });
         }
+    }
+}
+
+/// The lifts of an accessible route (SUA, Anejo A, «ascensor accesible»):
+/// a car of 1,00 × 1,25 m at least (1,10 × 1,40 m in buildings of more
+/// than 1.000 m² of other uses; with doors at an angle, 1,40 × 1,40 m,
+/// which the lift does not have) and doors of 0,80 m clear.
+fn lifts(model: &Model, report: &mut Report) {
+    let big = model.code_settings().building_use != BuildingUse::Dwelling
+        && model.rooms().map(|r| r.area()).sum::<f64>() > 1000.0;
+    let (w, d) = if big { (1.1, 1.4) } else { (1.0, 1.25) };
+    for e in model.elevators() {
+        let car_ok = e.car_w >= w - 1e-6 && e.car_d >= d - 1e-6;
+        let door_ok = e.door_w >= 0.8 - 1e-6;
+        report.items.push(Item {
+            section: Section::Accessibility,
+            status: if car_ok && door_ok {
+                Status::Passes
+            } else {
+                Status::Fails
+            },
+            subject: Subject::Building,
+            level: Some(e.level),
+            rule: "SUA, Anejo A (ascensor accesible)",
+            text: format!(
+                "{}: cabina de {} × {} y puerta de {}",
+                e.name,
+                crate::m(e.car_w),
+                crate::m(e.car_d),
+                crate::m(e.door_w)
+            ),
+            value: format!("{} × {}", crate::m(e.car_w), crate::m(e.car_d)),
+            required: format!("≥ {} × {}, puerta ≥ 0,80 m", crate::m(w), crate::m(d)),
+            route: Vec::new(),
+        });
     }
 }

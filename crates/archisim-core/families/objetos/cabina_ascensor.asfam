@@ -1,0 +1,37 @@
+family "Cabina de ascensor"
+  category furniture
+  host none
+  version 1
+  description "La cabina de un ascensor sola, para un hueco dibujado con muros: suelo, paredes, puertas, pasamanos, espejo y botonera; el punto de inserción es el centro de su trasera y las puertas miran hacia delante. Para el ascensor completo, con su hueco, foso, huida y puertas de piso, usa la herramienta Ascensor"
+  folder "Ascensores"
+
+type_params
+  section "Dimensiones"
+    width       length = 1.10 range 0.80..2.50 label "Ancho interior"
+    depth       length = 1.40 range 0.80..3.00 label "Fondo interior"
+    height      length = 2.20 range 2.00..3.00 label "Alto interior"
+    door_width  length = 0.90 range 0.60..1.40 label "Paso de la puerta"
+    door_height length = 2.00 range 1.80..2.40 label "Alto de la puerta"
+  section "Materiales"
+    panel  material = "Acero inoxidable" label "Paredes"
+    steel  material = "Acero inoxidable" label "Puertas y marcos"
+    floor  material = "Roca granito" label "Suelo"
+    mirror material = "Cromado" label "Espejo"
+    light  material = "Luz" label "Luz del techo"
+    glass  material = "Piloto" label "Botones"
+  section "Modelo 3D"
+    model3d choice("Cabina de ascensor") = "Cabina de ascensor" label "Modelo 3D"
+
+body
+  box (-width / 2 - 0.03, 0, 0) to (width / 2 + 0.03, depth + 0.06, height + 0.35) material panel
+
+plan 1:50
+  polygon (-width / 2 - 0.03, 0) (width / 2 + 0.03, 0) (width / 2 + 0.03, depth + 0.06) (-width / 2 - 0.03, depth + 0.06) pen view
+  line (-width / 2, 0.03) to (width / 2, depth + 0.03) pen thin
+  line (-width / 2, depth + 0.03) to (width / 2, 0.03) pen thin
+  line (-door_width / 2, depth + 0.06) to (door_width / 2, depth + 0.06) pen cut
+
+outputs
+  generator = "props:lift_car"
+  ifc_class = "IfcTransportElement"
+  ifc_type = "ELEVATOR"

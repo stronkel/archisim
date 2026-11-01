@@ -18,6 +18,8 @@ impl<'a> Importer<'a> {
         ids.extend(self.file.of_kind("IFCGEOGRAPHICELEMENT"));
         ids.extend(self.file.of_kind("IFCBUILDINGELEMENTPROXY"));
         ids.extend(self.file.of_kind("IFCVEHICLE"));
+        // Lifts' cars alone (a whole lift has no type: read as a lift).
+        ids.extend(self.file.of_kind("IFCTRANSPORTELEMENT"));
         ids.sort_unstable();
         for id in ids {
             if let Err(why) = self.import_object(id) {

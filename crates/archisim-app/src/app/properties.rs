@@ -82,6 +82,7 @@ impl ArchiSimApp {
             [Element::Mass(id)] => self.mass_properties(ui, *id),
             [Element::Plot(id)] => self.plot_properties(ui, *id),
             [Element::Pool(id)] => self.pool_properties(ui, *id),
+            [Element::Elevator(id)] => self.elevator_properties(ui, *id),
             [Element::Road(id)] => self.road_properties(ui, *id),
             [Element::Planting(id)] => self.planting_properties(ui, *id),
             [Element::Run(id)] => self.run_properties(ui, *id),
@@ -332,6 +333,7 @@ impl ArchiSimApp {
             Tool::Brush => self.brush_tool_properties(ui),
             Tool::Pipe | Tool::Duct => self.run_tool_properties(ui),
             Tool::Device => self.device_tool_properties(ui),
+            Tool::Elevator => self.elevator_tool_properties(ui),
             Tool::TeamZone => {}
             Tool::Cad => self.cad_tool_properties(ui),
         }

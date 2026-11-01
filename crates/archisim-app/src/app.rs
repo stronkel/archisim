@@ -122,6 +122,8 @@ pub enum Tool {
     Duct,
     /// Equipment, lights, sockets and switches, by a click.
     Device,
+    /// Lifts, by the centre of their shaft (H4).
+    Elevator,
     /// A zone reserved for team work, by two corners.
     TeamZone,
     /// A 2D drafting or editing command is running (AutoCAD's).
@@ -164,6 +166,7 @@ impl Tool {
                 | Tool::Pipe
                 | Tool::Duct
                 | Tool::Device
+                | Tool::Elevator
                 | Tool::TeamZone
         )
     }
@@ -202,6 +205,7 @@ impl Tool {
             "q" => Some(Tool::RefPlane),
             "pi" => Some(Tool::Brush),
             "ps" => Some(Tool::Pool),
+            "as" => Some(Tool::Elevator),
             _ => None,
         }
     }
@@ -337,6 +341,7 @@ pub struct ArchiSimApp {
     pub plot_setback: f64,
     pub pool_tool: SlabTool,
     pub pool_settings: pool_ui::PoolSettings,
+    pub elevator_settings: elevator_ui::ElevatorSettings,
     /// The axis of the road being drawn and what the road tool draws.
     pub road_points: Vec<Point2>,
     pub road_settings: urban_ui::RoadSettings,
@@ -755,6 +760,7 @@ impl ArchiSimApp {
             plot_setback: 3.0,
             pool_tool: SlabTool::default(),
             pool_settings: Default::default(),
+            elevator_settings: Default::default(),
             road_points: Vec::new(),
             road_settings,
             planting_points: Vec::new(),
@@ -2594,6 +2600,7 @@ mod discipline_ui;
 mod draft_props;
 mod drafting_view_ui;
 mod dxf_import_ui;
+mod elevator_ui;
 mod facade_ui;
 mod foundation_ui;
 mod ghost3d;

@@ -777,6 +777,7 @@ impl ArchiSimApp {
             Tool::TeamZone if self.team_ui.zone_start.is_some() => "Clic: esquina opuesta de la zona · Esc o botón derecho: anular",
             Tool::TeamZone => "Clic: primera esquina de la zona que reservas · Esc: flecha",
             Tool::Pipe | Tool::Duct | Tool::Device => self.services_hint(),
+            Tool::Elevator => self.elevator_hint(),
             Tool::Module => "Clic: colocar una copia (su origen en el punto) · Espacio: girar 90° · Propiedades: simetría · Esc: flecha",
             Tool::Object => "Clic: colocar el objeto (lado de atrás en el punto) · Espacio: girar 90° · Esc: flecha",
             Tool::Railing if self.railing_points.is_empty() => "Clic: inicio de la barandilla · Esc: flecha",

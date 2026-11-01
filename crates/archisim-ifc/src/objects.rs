@@ -30,6 +30,8 @@ enum Class {
     Proxy,
     /// Cars, bicycles… (`IfcVehicle`, IFC 4.3; a proxy in IFC4).
     Vehicle,
+    /// A lift's car alone (`IfcTransportElement`).
+    Transport,
 }
 
 impl Class {
@@ -42,6 +44,7 @@ impl Class {
             Class::Geographic => ("IFCGEOGRAPHICELEMENT", "IFCGEOGRAPHICELEMENTTYPE"),
             Class::Proxy => ("IFCBUILDINGELEMENTPROXY", "IFCBUILDINGELEMENTPROXYTYPE"),
             Class::Vehicle => ("IFCVEHICLE", "IFCVEHICLETYPE"),
+            Class::Transport => ("IFCTRANSPORTELEMENT", "IFCTRANSPORTELEMENTTYPE"),
         }
     }
 
@@ -54,6 +57,7 @@ impl Class {
             Class::Geographic => "ArchiSim_Phase",
             Class::Proxy => "Pset_BuildingElementProxyCommon",
             Class::Vehicle => "ArchiSim_Phase",
+            Class::Transport => "Pset_TransportElementCommon",
         }
     }
 }
@@ -74,6 +78,7 @@ fn ifc_kind(outputs: &archisim_core::Values, schema: crate::Schema) -> (Class, S
         "ifcbuildingelementproxy" => Class::Proxy,
         "ifcvehicle" if schema == crate::Schema::Ifc4x3 => Class::Vehicle,
         "ifcvehicle" => Class::Proxy,
+        "ifctransportelement" => Class::Transport,
         _ => Class::Furniture,
     };
     let allowed: &[&str] = match class {
@@ -104,6 +109,7 @@ fn ifc_kind(outputs: &archisim_core::Values, schema: crate::Schema) -> (Class, S
             crate::Schema::Ifc4 => &["TERRAIN"],
         },
         Class::Proxy => &["COMPLEX", "ELEMENT", "PARTIAL"],
+        Class::Transport => &["ELEVATOR", "ESCALATOR", "MOVINGWALKWAY"],
         Class::Vehicle => &[
             "VEHICLE",
             "VEHICLEWHEELED",

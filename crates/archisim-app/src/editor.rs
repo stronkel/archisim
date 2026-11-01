@@ -488,6 +488,7 @@ impl Editor {
             Element::Mass(id) => model.mass(*id).is_some(),
             Element::Plot(id) => model.plot(*id).is_some(),
             Element::Pool(id) => model.pool(*id).is_some(),
+            Element::Elevator(id) => model.elevator(*id).is_some(),
             Element::Road(id) => model.road(*id).is_some(),
             Element::Planting(id) => model.planting(*id).is_some(),
             Element::Run(id) => model.run(*id).is_some(),
@@ -800,6 +801,7 @@ impl Editor {
                         | Element::Mass(_)
                         | Element::Plot(_)
                         | Element::Pool(_)
+                        | Element::Elevator(_)
                         | Element::Road(_)
                         | Element::Planting(_)
                         | Element::Run(_)
@@ -1203,6 +1205,7 @@ impl Editor {
                         | Element::Mass(_)
                         | Element::Plot(_)
                         | Element::Pool(_)
+                        | Element::Elevator(_)
                         | Element::Road(_)
                         | Element::Planting(_)
                         | Element::Run(_)
@@ -1233,6 +1236,11 @@ impl Editor {
                     Element::Mass(id) => m.edit_mass(*id, |x| x.level = level)?,
                     Element::Plot(id) => m.edit_plot(*id, |x| x.level = level)?,
                     Element::Pool(id) => m.edit_pool(*id, |x| x.level = level)?,
+                    Element::Elevator(id) => {
+                        // The lift keeps its run of stops: its top goes as
+                        // many levels up as it went.
+                        m.edit_elevator(*id, |x| x.level = level)?
+                    }
                     Element::Road(id) => m.edit_road(*id, |x| x.level = level)?,
                     Element::Planting(id) => m.edit_planting(*id, |x| x.level = level)?,
                     Element::Run(id) => m.edit_run(*id, |x| x.level = level)?,
@@ -1519,6 +1527,7 @@ fn remove_element(m: &mut Model, e: Element) -> Result<(), archisim_core::ModelE
         Element::Mass(id) => m.remove_mass(id).map(drop),
         Element::Plot(id) => m.remove_plot(id).map(drop),
         Element::Pool(id) => m.remove_pool(id).map(drop),
+        Element::Elevator(id) => m.remove_elevator(id).map(drop),
         Element::Road(id) => m.remove_road(id).map(drop),
         Element::Planting(id) => m.remove_planting(id).map(drop),
         Element::Run(id) => m.remove_run(id).map(drop),
@@ -1630,6 +1639,7 @@ pub(crate) fn remove_items(m: &mut Model, items: &[Element]) -> Result<(), Model
             | Element::Mass(_)
             | Element::Plot(_)
             | Element::Pool(_)
+            | Element::Elevator(_)
             | Element::Road(_)
             | Element::Planting(_)
             | Element::Run(_)

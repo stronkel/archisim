@@ -67,6 +67,10 @@ typed_id!(
     PoolId
 );
 typed_id!(
+    /// Identifies an [`crate::Elevator`] (a lift).
+    ElevatorId
+);
+typed_id!(
     /// Identifies a [`crate::Planting`] (plants spread along a line or over
     /// an area).
     PlantingId

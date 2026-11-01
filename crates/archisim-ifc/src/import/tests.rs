@@ -1505,3 +1505,51 @@ fn wall_profile_round_trip() {
     let diffs = differences(&m, &model);
     assert!(diffs.is_empty(), "{}", diffs.join("\n"));
 }
+
+/// A lift (H4) comes back from its `IfcTransportElement` with its stops,
+/// sizes and GlobalId; its shaft wall is not read as a wall; and the car
+/// alone of the library, as an object.
+#[test]
+fn elevators_round_trip() {
+    let mut m = Model::new("Ascensor");
+    let pb = m.add_level("PB", 0.0);
+    m.add_level("P1", 3.2);
+    let p2 = m.add_level("P2", 6.4);
+    archisim_library::add_library(&mut m).unwrap();
+    let mut lift = archisim_core::NewElevator::new(pb, p2, Point2::new(3.0, 2.0));
+    lift.rotation = 0.3;
+    lift.car_at = Some(p2);
+    let id = m.add_elevator(lift).unwrap();
+    // And a car alone in another shaft.
+    let f = m.system_family("Cabina de ascensor").unwrap();
+    let values = m
+        .family_defaults(f, archisim_core::ParamScope::Type)
+        .unwrap();
+    let t = m.add_object_type("Cabina", f, values).unwrap();
+    m.add_object(archisim_core::NewObject {
+        level: pb,
+        object_type: t,
+        position: Point2::new(8.0, 2.0),
+        rotation: 0.0,
+        base_offset: 0.0,
+    })
+    .unwrap();
+    let ifc = export(&m);
+    if let Ok(dir) = std::env::var("ARCHISIM_ASCENSOR_IFC") {
+        std::fs::write(dir, &ifc).unwrap();
+    }
+    assert_eq!(ifc.matches("IFCTRANSPORTELEMENT(").count(), 2);
+    assert_eq!(ifc.matches("IFCTRANSPORTELEMENTTYPE(").count(), 1);
+    assert_eq!(ifc.matches("IFCBUILDINGELEMENTPROXY(").count(), 1);
+    let Imported { model, report } = import_ifc(&ifc).unwrap();
+    assert_eq!(report.elevators, 1);
+    assert_eq!(model.walls().count(), 0);
+    assert_eq!(model.objects().count(), 1);
+    let a = m.elevator(id).unwrap();
+    let b = model.elevators().next().unwrap();
+    assert_eq!(a.guid, b.guid);
+    assert_eq!(model.elevator_stops(b.id).len(), 3);
+    assert!((a.rotation - b.rotation).abs() < 1e-9);
+    assert!((a.shaft_w - b.shaft_w).abs() < 1e-6 && (a.pit - b.pit).abs() < 1e-6);
+    assert_eq!(model.level(b.car_at.unwrap()).unwrap().name, "P2");
+}
