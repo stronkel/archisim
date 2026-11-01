@@ -1119,7 +1119,7 @@ fn exit_sign(b: &mut Builder, w: f64, d: f64, h: f64) {
         [w / 2.0 - f, d / 2.0, h - f],
         0.0,
     );
-    // The figure: head, body and legs, a door; and the arrow.
+    // The figure running, and the arrow the way it runs.
     let y = d / 2.0 + 0.001;
     let (x0, z0) = (-w * 0.2, h / 2.0);
     let s = h * 0.32;
@@ -1157,17 +1157,17 @@ fn exit_sign(b: &mut Builder, w: f64, d: f64, h: f64) {
     );
     b.obox(
         "shade",
-        [w * 0.33, y, z0 + s * 0.18],
-        [s * 0.2, 0.0, -s * 0.2],
+        [w * 0.11, y, z0 + s * 0.18],
+        [s * 0.2, 0.0, s * 0.2],
         [0.0, 0.001, 0.0],
-        [s * 0.05, 0.0, s * 0.05],
+        [-s * 0.05, 0.0, s * 0.05],
     );
     b.obox(
         "shade",
-        [w * 0.33, y, z0 - s * 0.18],
-        [s * 0.2, 0.0, s * 0.2],
+        [w * 0.11, y, z0 - s * 0.18],
+        [s * 0.2, 0.0, -s * 0.2],
         [0.0, 0.001, 0.0],
-        [s * 0.05, 0.0, -s * 0.05],
+        [s * 0.05, 0.0, s * 0.05],
     );
 }
 
