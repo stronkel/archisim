@@ -1,0 +1,11 @@
+[package]
+name = "archisim-carto"
+description = "Reading free cartography: Catastro INSPIRE buildings and parcels (GML), OpenStreetMap (OSM XML) and terrain grids (ESRI ASCII)"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]

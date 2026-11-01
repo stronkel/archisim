@@ -4,6 +4,7 @@
 //! archisim demo [carpeta]                    vivienda de prueba: .archisim, IFC y plantas
 //! archisim exportar <proyecto.archisim> [carpeta]   IFC y plantas de un proyecto
 //! archisim importar <fichero.ifc> [proyecto.archisim]   proyecto a partir de un IFC
+//! archisim cartografia <ficheros…> [--proyecto p.archisim] [--radio m] [--centrar] [--salida s.archisim]   entorno del Catastro, OSM y MDT
 //! archisim medir [n] [carpeta]             rendimiento con n × n viviendas
 //! archisim png <dibujo.svg> [imagen.png] [ppp]   imagen de un SVG
 //! archisim comprobar-ids | comparar | interferencias | bcf   colaboración (fase 4, `colaboracion`)
@@ -11,6 +12,7 @@
 //! ```
 
 mod armado;
+mod cartografia;
 mod cocina;
 mod colaboracion;
 mod cubiertas;
@@ -61,6 +63,14 @@ Uso:
       forjados, puertas y ventanas, con sus GlobalId. Explica qué ha
       quedado fuera. Por defecto, casa.ifc → casa.archisim en la misma
       carpeta.
+
+  archisim cartografia <ficheros…> [--proyecto p.archisim] [--radio 150] [--centrar] [--salida s.archisim]
+      Trae el entorno de ficheros de cartografía gratuita: edificios por
+      plantas y parcelas del Catastro (GML INSPIRE), calles y árboles de
+      OpenStreetMap (.osm) y el terreno del CNIG (MDT en .asc), dentro de
+      un radio alrededor del origen del proyecto. Sin proyecto, empieza
+      uno nuevo georreferenciado por los ficheros; con --centrar, el
+      origen del proyecto se lleva al centro de lo que traen los ficheros.
 
   archisim biblioteca [carpeta] [proyecto.archisim]
       Escribe los tipos de puerta, ventana y objeto de la plantilla (o de
@@ -272,6 +282,40 @@ fn main() -> ExitCode {
                 ExitCode::FAILURE
             }
         },
+        Some("cartografia") | Some("cartografía") => {
+            let mut files = Vec::new();
+            let (mut project, mut radius, mut out, mut recentre) = (None, 150.0, None, false);
+            let mut it = args[1..].iter();
+            while let Some(a) = it.next() {
+                match a.as_str() {
+                    "--proyecto" => project = it.next().map(PathBuf::from),
+                    "--radio" => {
+                        radius = it
+                            .next()
+                            .and_then(|v| v.replace(',', ".").parse().ok())
+                            .unwrap_or(radius)
+                    }
+                    "--salida" => out = it.next().map(PathBuf::from),
+                    "--centrar" => recentre = true,
+                    _ => files.push(PathBuf::from(a)),
+                }
+            }
+            if files.is_empty() {
+                eprintln!("Uso: archisim cartografia <ficheros .gml .osm .asc…> [--proyecto p.archisim] [--radio 150] [--centrar] [--salida entorno.archisim]");
+                return ExitCode::FAILURE;
+            }
+            let out = out
+                .or_else(|| project.clone())
+                .unwrap_or_else(|| PathBuf::from("out/entorno.archisim"));
+            let refs: Vec<&Path> = files.iter().map(PathBuf::as_path).collect();
+            report(cartografia::run(
+                project.as_deref(),
+                &refs,
+                radius,
+                recentre,
+                &out,
+            ))
+        }
         Some("importar") | Some("import") => match args.get(1) {
             Some(ifc) => {
                 let ifc = PathBuf::from(ifc);

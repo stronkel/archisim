@@ -209,6 +209,13 @@ impl ArchiSimApp {
             {
                 self.pick_survey();
             }
+            if ui
+                .button("Traer el entorno (Catastro, OpenStreetMap, MDT)…")
+                .on_hover_text("Edificios por plantas y parcelas del Catastro, calles y árboles de OpenStreetMap y el terreno del CNIG alrededor del proyecto, de ficheros descargados gratis de sus webs")
+                .clicked()
+            {
+                self.pick_carto();
+            }
             if ui.button("Exportar IFC 4.3…").clicked() {
                 self.export_ifc(archisim_ifc::Schema::Ifc4x3);
             }

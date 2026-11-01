@@ -220,6 +220,7 @@ name = "archisim-app"
 version = "0.77.0"
 dependencies = [
  "archisim-bcf",
+ "archisim-carto",
  "archisim-coord",
  "archisim-core",
  "archisim-cte",
@@ -259,6 +260,10 @@ dependencies = [
  "roxmltree",
  "uuid",
 ]
+
+[[package]]
+name = "archisim-carto"
+version = "0.77.0"
 
 [[package]]
 name = "archisim-cli"
@@ -383,6 +388,7 @@ dependencies = [
 name = "archisim-library"
 version = "0.77.0"
 dependencies = [
+ "archisim-carto",
  "archisim-core",
  "archisim-mesh",
  "archisim-props",

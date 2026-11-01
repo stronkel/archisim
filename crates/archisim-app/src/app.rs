@@ -473,6 +473,8 @@ pub struct ArchiSimApp {
     pub cte: cte_ui::CteWindow,
     /// A topographic survey being imported (its window is open).
     pub survey_import: Option<survey_ui::SurveyImport>,
+    /// Cartography being brought around the project (H7; its window is open).
+    pub carto_import: Option<carto_ui::CartoImport>,
     /// The whole object library, for the gallery's pictures of the types
     /// the project does not have yet (made the first time it is needed).
     pub object_library: Option<archisim_core::Model>,
@@ -829,6 +831,7 @@ impl ArchiSimApp {
             params: Default::default(),
             cte: Default::default(),
             survey_import: None,
+            carto_import: None,
             object_library: None,
             collection: None,
             collection_libraries: Vec::new(),
@@ -1208,6 +1211,13 @@ impl ArchiSimApp {
             // Over the start screen: into the project behind it.
             self.start.open = false;
             self.mesh_import = Some(mesh_ui::MeshImport::new(m));
+        }
+        // Cartography (H7): the window to bring the surroundings.
+        let (carto, paths): (Vec<PathBuf>, Vec<PathBuf>) =
+            paths.into_iter().partition(|p| carto_ui::is_carto(p));
+        if !carto.is_empty() {
+            self.start.open = false;
+            self.open_carto(&carto);
         }
         let (cad, paths): (Vec<PathBuf>, Vec<PathBuf>) = paths.into_iter().partition(|p| {
             p.extension()
@@ -2330,6 +2340,7 @@ impl ArchiSimApp {
         self.curtain_types_dialog(ctx);
         self.vivero_dialog(ctx);
         self.survey_dialog(ctx);
+        self.carto_dialog(ctx);
         self.types_dialog(ctx);
         self.library_dialog(ctx);
         self.mesh_import_dialog(ctx);
@@ -2587,6 +2598,7 @@ mod brush_ui;
 mod budget_ui;
 mod cad_ui;
 mod cards;
+mod carto_ui;
 mod chrome;
 mod collection_ui;
 mod concept_ui;
