@@ -717,6 +717,7 @@ pub const KINDS: &[(&str, &[&str])] = &[
             "Clásica",
         ],
     ),
+    ("lift_car", &["Cabina de ascensor"]),
     (
         "letter_box",
         &["De pie", "Sobre poste", "Buzones de portal"],
@@ -1023,6 +1024,7 @@ pub fn make(kind: &str, p: &Params) -> Option<PropMesh> {
         "litter_bin" => street::litter_bin(&mut b, p),
         "bollard" => street::bollard(&mut b, p),
         "letter_box" => street::letter_box(&mut b, p),
+        "lift_car" => fine::lift::lift_car(&mut b, p),
         "container" => street::container(&mut b, p),
         "fountain" => street::fountain(&mut b, p),
         "planter" => street::planter(&mut b, p),

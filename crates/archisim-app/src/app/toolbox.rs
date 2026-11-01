@@ -342,6 +342,13 @@ const ARCHITECTURE: &[Tile] = &[
         "Escaleras por su línea de huella: tramos, mesetas y comprobación del CTE",
     ),
     tile(
+        Pick::Tool(Tool::Elevator),
+        Glyph::Stair,
+        "Ascensor",
+        "",
+        "Ascensor completo: hueco con foso y huida, puertas de piso en cada planta, cabina; abre los huecos de los forjados",
+    ),
+    tile(
         Pick::Tool(Tool::Railing),
         Glyph::Railing,
         "Barandilla",

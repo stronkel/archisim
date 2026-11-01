@@ -381,6 +381,7 @@ impl ArchiSimApp {
             Tool::Planting => self.planting_click(p),
             Tool::Pipe | Tool::Duct => self.run_click(p),
             Tool::Device => self.device_click(p),
+            Tool::Elevator => self.elevator_click(p),
             Tool::Terrain => self.terrain_click(p),
             _ => {}
         }

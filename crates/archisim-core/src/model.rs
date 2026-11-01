@@ -21,6 +21,7 @@ mod curtain;
 mod disciplines;
 mod dormers;
 mod draft_views;
+mod elevators;
 mod facades;
 mod flora;
 mod foundations;
@@ -58,6 +59,7 @@ pub use curtain::*;
 pub use disciplines::*;
 pub use dormers::*;
 pub use draft_views::*;
+pub use elevators::*;
 pub use facades::*;
 pub use flora::*;
 pub use foundations::*;
@@ -1463,6 +1465,8 @@ pub struct ModelParts {
     pub plantings: Vec<Planting>,
     /// Pools built in the ground.
     pub pools: Vec<Pool>,
+    /// Lifts (H4).
+    pub elevators: Vec<Elevator>,
     /// Pipes, ducts and devices.
     pub runs: Vec<ServiceRun>,
     pub devices: Vec<ServiceDevice>,
@@ -1586,6 +1590,7 @@ pub struct Model {
     roads: BTreeMap<RoadId, Road>,
     plantings: BTreeMap<PlantingId, Planting>,
     pools: BTreeMap<PoolId, Pool>,
+    elevators: BTreeMap<ElevatorId, Elevator>,
     runs: BTreeMap<RunId, ServiceRun>,
     devices: BTreeMap<DeviceId, ServiceDevice>,
     /// True north: radians, clockwise from the plan's up (+Y).
@@ -1676,6 +1681,7 @@ impl Model {
             roads: BTreeMap::new(),
             plantings: BTreeMap::new(),
             pools: BTreeMap::new(),
+            elevators: BTreeMap::new(),
             runs: BTreeMap::new(),
             devices: BTreeMap::new(),
             true_north: 0.0,
@@ -1822,6 +1828,12 @@ impl Model {
         self.roads.retain(|_, r| r.level != id);
         self.plantings.retain(|_, p| p.level != id);
         self.pools.retain(|_, p| p.level != id);
+        self.elevators.retain(|_, e| e.level != id && e.top != id);
+        for e in self.elevators.values_mut() {
+            if e.car_at == Some(id) {
+                e.car_at = None;
+            }
+        }
         self.runs.retain(|_, r| r.level != id);
         self.devices.retain(|_, d| d.level != id);
         self.plan_views.retain(|_, v| v.level != id);
@@ -4324,6 +4336,7 @@ impl Model {
             roads: self.roads.values().cloned().collect(),
             plantings: self.plantings.values().cloned().collect(),
             pools: self.pools.values().cloned().collect(),
+            elevators: self.elevators.values().cloned().collect(),
             runs: self.runs.values().cloned().collect(),
             devices: self.devices.values().cloned().collect(),
             true_north: self.true_north,
@@ -4693,6 +4706,7 @@ impl Model {
         model.restore_urban(parts.plots, parts.roads, &mut claim)?;
         model.restore_plantings(parts.plantings, &mut claim)?;
         model.restore_pools(parts.pools, &mut claim)?;
+        model.restore_elevators(parts.elevators, &mut claim)?;
         model.restore_services(parts.runs, parts.devices, &mut claim)?;
         model
             .set_plot_area(parts.plot_area)

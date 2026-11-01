@@ -149,6 +149,7 @@ impl ArchiSimApp {
             | Tool::Pipe
             | Tool::Duct
             | Tool::Device
+            | Tool::Elevator
             | Tool::TeamZone => CursorIcon::Crosshair,
             Tool::Paint => CursorIcon::PointingHand,
             Tool::Cad => match self.cad_want() {
@@ -474,6 +475,7 @@ impl ArchiSimApp {
             | Tool::Pipe
             | Tool::Duct
             | Tool::Device
+            | Tool::Elevator
             | Tool::TeamZone => {
                 let points = match self.tool {
                     Tool::Plot => self.plot_tool.corners().to_vec(),
@@ -481,7 +483,7 @@ impl ArchiSimApp {
                     Tool::Road => self.road_points.clone(),
                     Tool::Planting => self.planting_points.clone(),
                     Tool::Pipe | Tool::Duct => self.run_points.clone(),
-                    Tool::Device => Vec::new(),
+                    Tool::Device | Tool::Elevator => Vec::new(),
                     Tool::TeamZone => self.team_ui.zone_start.into_iter().collect(),
                     _ => self.concept_points(),
                 };
@@ -494,7 +496,7 @@ impl ArchiSimApp {
                     Tool::Road => self.road_points.last().copied(),
                     Tool::Planting => self.planting_points.last().copied(),
                     Tool::Pipe | Tool::Duct => self.run_points.last().copied(),
-                    Tool::Device | Tool::TeamZone => None,
+                    Tool::Device | Tool::Elevator | Tool::TeamZone => None,
                     _ => self.concept_anchor(),
                 };
                 if let Some(a) = anchor {
@@ -701,6 +703,10 @@ impl ArchiSimApp {
                     }
                 }
                 Tool::Module => self.turn_module_tool(),
+                Tool::Elevator => {
+                    self.elevator_turn();
+                    self.say("Ascensor girado 90° (Espacio para seguir girando).");
+                }
                 Tool::Device => {
                     let r = &mut self.service_settings.device_rotation;
                     *r = crate::editor::normal_angle(*r + std::f64::consts::FRAC_PI_2);
@@ -860,7 +866,7 @@ impl ArchiSimApp {
                         self.set_tool(Tool::Arrow);
                     }
                 }
-                Tool::Device => self.set_tool(Tool::Arrow),
+                Tool::Device | Tool::Elevator => self.set_tool(Tool::Arrow),
                 Tool::TeamZone => {
                     if self.team_ui.zone_start.take().is_none() {
                         self.set_tool(Tool::Arrow);
@@ -1168,6 +1174,13 @@ impl ArchiSimApp {
                 if response.clicked_by(PointerButton::Primary) {
                     if let Some(c) = self.cursor {
                         self.device_click(c.point);
+                    }
+                }
+            }
+            Tool::Elevator => {
+                if response.clicked_by(PointerButton::Primary) {
+                    if let Some(c) = self.cursor {
+                        self.elevator_click(c.point);
                     }
                 }
             }

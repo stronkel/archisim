@@ -55,6 +55,8 @@ pub enum SolidOwner {
     Growth(archisim_core::TerrainId),
     /// A pool built in the ground.
     Pool(archisim_core::PoolId),
+    /// A lift: its shaft, car, rails and doors (H4).
+    Elevator(archisim_core::ElevatorId),
     /// The pieces of a wall's façade (E9): bricks, blocks, panels.
     Facade(WallId),
 }
@@ -78,6 +80,7 @@ impl SolidOwner {
             SolidOwner::Object(x) => x.0,
             SolidOwner::Footing(x) => x.0,
             SolidOwner::Pool(x) => x.0,
+            SolidOwner::Elevator(x) => x.0,
             SolidOwner::Mass(x) => x.0,
             SolidOwner::Road(x) => x.0,
             SolidOwner::Run(x) => x.0,
@@ -3775,6 +3778,9 @@ pub fn model_solids_except_detailed(
     for p in model.pools() {
         out.extend(crate::pools::pool_solids(model, p.id));
     }
+    for e in model.elevators() {
+        out.extend(crate::elevators::elevator_solids(model, e.id));
+    }
     for m in model.masses() {
         out.extend(mass_solids(model, m.id));
     }
@@ -4400,6 +4406,15 @@ pub fn solid_glow(model: &Model, s: &Solid) -> Option<f64> {
             let (mats, reach) = type_glow_materials(model, d.fixture?);
             mats.contains(&s.material).then_some(reach)
         }
+        // A lift's ceiling light.
+        SolidOwner::Elevator(_) => {
+            let k = s
+                .material
+                .0
+                .checked_sub(crate::elevators::ELEVATOR_ROLE_BASE)?;
+            (archisim_core::props::fine::lift::ROLES.get(k as usize) == Some(&"light"))
+                .then_some(SIGN_REACH)
+        }
         _ => None,
     }
 }
@@ -4482,6 +4497,14 @@ pub fn solid_color(model: &Model, s: &Solid) -> [u8; 3] {
                 && model.material(s.material).is_some() =>
         {
             model.surface_color(s.material)
+        }
+        SolidOwner::Elevator(_)
+            if s.material.0 >= crate::elevators::ELEVATOR_ROLE_BASE
+                && s.material.0 < DEVICE_ROLE_BASE =>
+        {
+            crate::elevators::role_color(
+                (s.material.0 - crate::elevators::ELEVATOR_ROLE_BASE) as usize,
+            )
         }
         SolidOwner::Device(id) => match model.device(id).map(|d| d.kind) {
             Some(archisim_core::DeviceKind::Light) => [250, 230, 150],
@@ -5061,6 +5084,7 @@ pub fn level_solids(model: &Model, level: LevelId) -> Vec<Solid> {
         SolidOwner::Object(o) => model.object(o).is_some_and(|o| o.level == level),
         SolidOwner::Footing(f) => model.footing(f).is_some_and(|f| f.level == level),
         SolidOwner::Pool(p) => model.pool(p).is_some_and(|p| p.level == level),
+        SolidOwner::Elevator(e) => model.elevator(e).is_some_and(|e| e.level == level),
         SolidOwner::Mass(m) => model.mass(m).is_some_and(|m| m.level == level),
         SolidOwner::Road(r) => model.road(r).is_some_and(|r| r.level == level),
         SolidOwner::Run(r) => model.run(r).is_some_and(|r| r.level == level),

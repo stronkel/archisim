@@ -159,6 +159,9 @@ pub(crate) struct ProjectFile {
     /// Pools built in the ground (version 42).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub pools: Vec<PoolOf>,
+    /// Lifts (version 59).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub elevators: Vec<ElevatorOf>,
     /// Pipes and ducts (version 20).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub runs: Vec<Run>,
@@ -1096,6 +1099,33 @@ pub(crate) struct PoolOf {
     pub shell: u64,
     pub coping_material: u64,
     pub water: u64,
+}
+
+/// A lift (version 59): from its level to `top`, its shaft centred on
+/// `position`, the doors on its turned `+y` side.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ElevatorOf {
+    pub id: u64,
+    pub guid: String,
+    pub name: String,
+    pub level: u64,
+    pub top: u64,
+    pub position: Xy,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub rotation: f64,
+    pub shaft: [f64; 2],
+    pub wall: f64,
+    pub pit: f64,
+    pub overrun: f64,
+    pub car: [f64; 3],
+    pub door: [f64; 2],
+    pub load: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub car_at: Option<u64>,
+    pub cut_slabs: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub material: Option<u64>,
 }
 
 /// A road (version 19): its axis and cross-section.
@@ -3373,6 +3403,29 @@ impl ProjectFile {
                     water: x.water.0,
                 })
                 .collect(),
+            elevators: p
+                .elevators
+                .iter()
+                .map(|x| ElevatorOf {
+                    id: x.id.0,
+                    guid: x.guid.to_string(),
+                    name: x.name.clone(),
+                    level: x.level.0,
+                    top: x.top.0,
+                    position: xy(x.position),
+                    rotation: x.rotation,
+                    shaft: [x.shaft_w, x.shaft_d],
+                    wall: x.wall,
+                    pit: x.pit,
+                    overrun: x.overrun,
+                    car: [x.car_w, x.car_d, x.car_h],
+                    door: [x.door_w, x.door_h],
+                    load: x.load,
+                    car_at: x.car_at.map(|l| l.0),
+                    cut_slabs: x.cut_slabs,
+                    material: x.material.map(|m| m.0),
+                })
+                .collect(),
             plantings: p
                 .plantings
                 .iter()
@@ -4022,6 +4075,7 @@ impl ProjectFile {
             roads: Vec::new(),
             plantings: Vec::new(),
             pools: Vec::new(),
+            elevators: Vec::new(),
             runs: Vec::new(),
             devices: Vec::new(),
             railings: self
@@ -4551,6 +4605,32 @@ impl ProjectFile {
                 shell: core::MaterialId(x.shell),
                 coping_material: core::MaterialId(x.coping_material),
                 water: core::MaterialId(x.water),
+            });
+        }
+        for x in self.elevators {
+            let element = format!("lift {} «{}»", x.id, x.name);
+            parts.elevators.push(core::Elevator {
+                id: core::ElevatorId(x.id),
+                guid: guid(&element, &x.guid)?,
+                name: x.name,
+                level: core::LevelId(x.level),
+                top: core::LevelId(x.top),
+                position: pt(x.position),
+                rotation: x.rotation,
+                shaft_w: x.shaft[0],
+                shaft_d: x.shaft[1],
+                wall: x.wall,
+                pit: x.pit,
+                overrun: x.overrun,
+                car_w: x.car[0],
+                car_d: x.car[1],
+                car_h: x.car[2],
+                door_w: x.door[0],
+                door_h: x.door[1],
+                load: x.load,
+                car_at: x.car_at.map(core::LevelId),
+                cut_slabs: x.cut_slabs,
+                material: x.material.map(core::MaterialId),
             });
         }
         for r in self.runs {

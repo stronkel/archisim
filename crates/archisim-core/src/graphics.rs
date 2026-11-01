@@ -258,7 +258,7 @@ impl Category {
             Category::Tags => "Etiquetas",
             Category::Structure => "Pilares y vigas",
             Category::Roofs => "Cubiertas",
-            Category::Stairs => "Escaleras",
+            Category::Stairs => "Escaleras y ascensores",
             Category::CurtainWalls => "Muros cortina",
             Category::Railings => "Barandillas",
             Category::Objects => "Objetos y mobiliario",

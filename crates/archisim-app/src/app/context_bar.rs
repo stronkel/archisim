@@ -222,6 +222,7 @@ pub(super) fn element_name(e: &Element) -> &'static str {
         Element::Mass(_) => "Volumen",
         Element::Plot(_) => "Parcela",
         Element::Pool(_) => "Piscina",
+        Element::Elevator(_) => "Ascensor",
         Element::Road(_) => "Vial",
         Element::Planting(_) => "Plantación",
         Element::Run(_) => "Instalación",
@@ -366,6 +367,7 @@ impl ArchiSimApp {
                 Tool::Pipe => ("Tubería", None, "Varita", ""),
                 Tool::Duct => ("Conducto", None, "Varita", ""),
                 Tool::Device => ("Aparato", None, "Varita", ""),
+                Tool::Elevator => ("Ascensor", None, "Varita", ""),
                 Tool::Footing => return Some(("Cimentación", self.footing_methods())),
                 Tool::Arrow | Tool::Cad | Tool::TeamZone => return None,
             };

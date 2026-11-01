@@ -246,6 +246,30 @@ pub fn transform(
                     out.insert(*e);
                 }
             }
+            Element::Elevator(id) => {
+                let x = model
+                    .elevator(id)
+                    .ok_or(ModelError::UnknownElement(id.0))?
+                    .clone();
+                let position = t.apply(x.position);
+                let dir = archisim_core::Point2::new(x.rotation.cos(), x.rotation.sin());
+                let turned = t.apply(x.position + dir) - position;
+                let rotation = turned.y.atan2(turned.x);
+                if copy {
+                    let mut spec = x.spec();
+                    spec.name = model.next_elevator_name();
+                    spec.position = position;
+                    spec.rotation = rotation;
+                    let new = model.add_elevator(spec)?;
+                    out.insert(Element::Elevator(new));
+                } else {
+                    model.edit_elevator(id, |e| {
+                        e.position = position;
+                        e.rotation = rotation;
+                    })?;
+                    out.insert(*e);
+                }
+            }
             Element::Edge(id) => {
                 let x = model
                     .edge(id)

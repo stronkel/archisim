@@ -22,6 +22,7 @@ pub mod hospitality;
 pub mod indoor;
 pub mod kitchen;
 pub mod lamp;
+pub mod lift;
 pub mod lighting;
 pub mod nursery;
 pub mod office;

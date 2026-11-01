@@ -62,6 +62,7 @@ impl Model {
             || self.objects.contains_key(&ObjectId(id))
             || self.footings.contains_key(&FootingId(id))
             || self.pools.contains_key(&PoolId(id))
+            || self.elevators.contains_key(&ElevatorId(id))
     }
 
     /// Sets an element's phase. The doors and windows of a wall follow

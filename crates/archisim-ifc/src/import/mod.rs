@@ -31,6 +31,7 @@
 
 mod compare;
 mod curtain;
+mod elevators;
 mod foundations;
 pub mod geometry;
 mod members;
@@ -328,6 +329,7 @@ struct GuidPlan {
     plots: Vec<(archisim_core::PlotId, String)>,
     roads: Vec<(archisim_core::RoadId, String)>,
     pools: Vec<(archisim_core::PoolId, String)>,
+    elevators: Vec<(archisim_core::ElevatorId, String)>,
     runs: Vec<(archisim_core::RunId, String)>,
     devices: Vec<(archisim_core::DeviceId, String)>,
     project: Option<String>,
@@ -3017,6 +3019,7 @@ impl<'a> Importer<'a> {
         }
         // Pools first: their parts are left out of what follows.
         self.import_pools();
+        self.import_elevators();
         self.import_walls();
         self.import_slabs();
         self.restore_type_accessories();
@@ -3091,6 +3094,7 @@ impl<'a> Importer<'a> {
         restore!(plots, plots);
         restore!(roads, roads);
         restore!(pools, pools);
+        restore!(elevators, elevators);
         restore!(runs, runs);
         restore!(devices, devices);
         if duplicates > 0 {
