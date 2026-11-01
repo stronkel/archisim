@@ -154,6 +154,9 @@ pub enum Pick {
     Device(archisim_core::DeviceKind),
     /// The pipe tool for the networks under the street (U5).
     Network,
+    /// The mass tool by floors with a style: a building of the
+    /// surroundings (U6).
+    EnvBuilding,
     /// The object tool with only part of the library (vegetation, street
     /// furniture).
     Objects(super::object_gallery::ObjectScope),
@@ -576,6 +579,13 @@ const SITE: &[Tile] = &[
         "Marca vial",
         "MV",
         "Pasos de peatones, líneas, flechas, STOP, cebreados y plazas pintadas (Norma 8.2-IC)",
+    ),
+    tile(
+        Pick::EnvBuilding,
+        Glyph::EnvBuilding,
+        "Edificio del entorno",
+        "",
+        "Edificios del entorno con estilo: casa andaluza, ensanche, años 60, oficinas, nave… Clic en una parcela o dibuja su contorno",
     ),
     tile(
         Pick::Network,
@@ -1186,6 +1196,7 @@ impl ArchiSimApp {
             Pick::Network => {
                 Some(self.tool == Tool::Pipe && self.service_settings.pipe_system.is_urban())
             }
+            Pick::EnvBuilding => Some(self.env_building_picked()),
             Pick::Objects(s) => Some(self.tool == Tool::Object && self.object_scope == Some(s)),
             Pick::Tool(Tool::Object) => {
                 Some(self.tool == Tool::Object && self.object_scope.is_none())
@@ -1277,6 +1288,7 @@ impl ArchiSimApp {
             Pick::Concept(c) => self.concept_pick(c),
             Pick::Device(k) => self.device_pick(k),
             Pick::Network => self.network_pick(),
+            Pick::EnvBuilding => self.env_building_pick(),
             Pick::Objects(scope) => self.objects_pick(scope),
             Pick::Command(name) => self.start_command(name),
             Pick::Later(what) => self.say(format!("Esta herramienta llegará con {what}.")),

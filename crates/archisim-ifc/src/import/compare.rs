@@ -516,6 +516,38 @@ pub fn differences(a: &Model, b: &Model) -> Vec<String> {
             b.markings().count()
         ));
     }
+    if a.env_buildings().count() != b.env_buildings().count() {
+        diff(format!(
+            "número de edificios del entorno: {} / {}",
+            a.env_buildings().count(),
+            b.env_buildings().count()
+        ));
+    }
+    for s in a.env_buildings() {
+        let Some(t) = b.env_buildings().find(|t| t.guid == s.guid) else {
+            diff(format!("edificio del entorno {} falta", s.guid));
+            continue;
+        };
+        let (sd, td) = (s.dress.unwrap(), t.dress.unwrap());
+        let names = |m: &Model, d: &archisim_core::Dress| {
+            d.materials
+                .all()
+                .map(|x| m.material(x).map(|x| x.name.clone()))
+        };
+        let same = sd.encode() == td.encode()
+            && names(a, &sd) == names(b, &td)
+            && s.floors() == t.floors()
+            && close(s.height, t.height)
+            && close(s.base_offset, t.base_offset)
+            && s.name == t.name
+            && level_guid(a, s.level) == level_guid(b, t.level);
+        if !same {
+            diff(format!(
+                "edificio del entorno {}: {:?} / {:?}",
+                s.guid, s, t
+            ));
+        }
+    }
     for s in a.markings() {
         let Some(t) = b.markings().find(|t| t.guid == s.guid) else {
             diff(format!("marca vial {} falta", s.guid));

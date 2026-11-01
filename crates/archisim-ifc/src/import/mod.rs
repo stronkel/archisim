@@ -330,6 +330,7 @@ struct GuidPlan {
     roads: Vec<(archisim_core::RoadId, String)>,
     roundabouts: Vec<(archisim_core::RoundaboutId, String)>,
     markings: Vec<(archisim_core::MarkingId, String)>,
+    masses: Vec<(archisim_core::MassId, String)>,
     pools: Vec<(archisim_core::PoolId, String)>,
     elevators: Vec<(archisim_core::ElevatorId, String)>,
     runs: Vec<(archisim_core::RunId, String)>,
@@ -3040,6 +3041,7 @@ impl<'a> Importer<'a> {
         self.import_roads();
         self.import_roundabouts();
         self.import_markings();
+        self.import_env_buildings();
         self.import_services();
         self.read_reinforcements();
         self.read_parameters();
@@ -3099,6 +3101,7 @@ impl<'a> Importer<'a> {
         restore!(roads, roads);
         restore!(roundabouts, roundabouts);
         restore!(markings, markings);
+        restore!(masses, masses);
         restore!(pools, pools);
         restore!(elevators, elevators);
         restore!(runs, runs);

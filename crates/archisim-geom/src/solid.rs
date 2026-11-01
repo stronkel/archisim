@@ -3896,6 +3896,13 @@ pub fn mass_solids(model: &Model, id: archisim_core::MassId) -> Vec<Solid> {
     if m.building.is_some() {
         return Vec::new();
     }
+    // A building of the surroundings: its façades and roof.
+    if m.dress.is_some() {
+        let dressed = crate::env_buildings::dressed_solids(model, m);
+        if !dressed.is_empty() {
+            return dressed;
+        }
+    }
     let body = crate::forms::mass_body(m);
     let base = model.level(m.level).map_or(0.0, |l| l.elevation) + m.base_offset;
     let mut by: std::collections::BTreeMap<archisim_core::MaterialId, Vec<[P3; 3]>> =

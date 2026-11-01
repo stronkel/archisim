@@ -20,6 +20,7 @@ mod cubiertas;
 mod demo;
 mod diseno;
 mod edificio;
+mod entorno;
 mod equipo;
 mod escaleras;
 mod fachadas;
@@ -79,6 +80,9 @@ Uso:
       y las calles que suben siguiendo el terreno (rasante): calles.archisim,
       calles.ifc (con los ejes como IfcAlignment), planta y axonometría.
 
+  archisim entorno [carpeta]
+      Una calle con los trece estilos de edificios del entorno (U6):
+      entorno.archisim, entorno.ifc y su planta.
   archisim tipos-calle [carpeta]
       Todos los tipos de calle, uno al lado de otro y por grupos:
       tipos-calle.archisim, tipos-calle.ifc, planta y axonometría.
@@ -392,6 +396,10 @@ fn main() -> ExitCode {
         Some("calles") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
             report(calles::write(&dir))
+        }
+        Some("entorno") => {
+            let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
+            report(entorno::write(&dir))
         }
         Some("tipos-calle") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));

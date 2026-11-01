@@ -22,6 +22,7 @@ mod disciplines;
 mod dormers;
 mod draft_views;
 mod elevators;
+mod env_buildings;
 mod facades;
 mod flora;
 mod foundations;
@@ -66,6 +67,7 @@ pub use disciplines::*;
 pub use dormers::*;
 pub use draft_views::*;
 pub use elevators::*;
+pub use env_buildings::*;
 pub use facades::*;
 pub use flora::*;
 pub use foundations::*;
@@ -1079,6 +1081,9 @@ pub enum ModelError {
     InvalidPriority,
     /// A railing with fewer than two points, or out of range.
     InvalidRailing,
+    /// A building of the surroundings with bad measurements, or a mass
+    /// that cannot be dressed (not a contour by floors, or a building).
+    InvalidDress,
     /// A curtain wall with no height, too small a grid or a frame wider
     /// than its bays.
     InvalidCurtainWall,
@@ -1226,6 +1231,10 @@ impl fmt::Display for ModelError {
                 write!(f, "the family «{name}» does not make objects placed on a level")
             }
             ModelError::InvalidPriority => write!(f, "an intersection priority goes from 0 to 999"),
+            ModelError::InvalidDress => write!(
+                f,
+                "a building of the surroundings needs a contour mass by floors (1 to 60), bays of 1.2 to 12 m with windows narrower than them, and its finishes"
+            ),
             ModelError::InvalidRailing => write!(
                 f,
                 "a railing needs two points at least, 5 cm apart, a height from 0.3 to 3 m and posts 0.3 to 5 m apart"

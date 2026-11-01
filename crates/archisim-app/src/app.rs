@@ -343,6 +343,8 @@ pub struct ArchiSimApp {
     /// concept tools are doing.
     pub mass_tool: SlabTool,
     pub mass_settings: crate::editor::MassSettings,
+    /// With the tile «Edificio del entorno», a click in a plot fills it.
+    pub env_on_plots: bool,
     pub concept: concept_ui::ConceptState,
     /// The boundary of the plot being drawn and the setback of the next.
     pub plot_tool: SlabTool,
@@ -768,6 +770,7 @@ impl ArchiSimApp {
             module_watch: Default::default(),
             mass_tool: SlabTool::default(),
             mass_settings,
+            env_on_plots: true,
             concept: Default::default(),
             plot_tool: SlabTool::default(),
             plot_setback: 3.0,
@@ -2628,6 +2631,7 @@ mod draft_props;
 mod drafting_view_ui;
 mod dxf_import_ui;
 mod elevator_ui;
+mod env_building_ui;
 mod facade_ui;
 mod foundation_ui;
 mod ghost3d;

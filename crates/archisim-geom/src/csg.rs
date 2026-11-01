@@ -721,6 +721,7 @@ mod finished_tests {
             building: None,
             finish,
             deform: None,
+            dress: None,
         }
     }
 
@@ -804,6 +805,7 @@ mod joined_tests {
             building: None,
             finish,
             deform: None,
+            dress: None,
         };
         let base = mk(
             MassShape::Prism(vec![

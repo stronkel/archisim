@@ -1533,6 +1533,88 @@ pub(crate) struct Mass {
     /// Twisted or bent (version 28).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub deform: Option<DeformOf>,
+    /// Dressed as a building of the surroundings (version 67).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dress: Option<DressOf>,
+}
+
+/// How a mass is dressed as a building of the surroundings (version 67).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct DressOf {
+    pub style: String,
+    pub bay: f64,
+    pub window_width: f64,
+    pub window_height: f64,
+    pub sill: f64,
+    pub closure: String,
+    pub balcony_depth: f64,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub shop: bool,
+    pub roof: String,
+    pub pitch: f64,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub plinth: f64,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub cornice: bool,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub patio: f64,
+    /// Walls, trim, roof, joinery, glass and metal.
+    pub materials: [u64; 6],
+}
+
+impl DressOf {
+    pub(crate) fn out(d: &core::Dress) -> Self {
+        DressOf {
+            style: d.style.code().into(),
+            bay: d.bay,
+            window_width: d.window_width,
+            window_height: d.window_height,
+            sill: d.sill,
+            closure: d.closure.code().into(),
+            balcony_depth: d.balcony_depth,
+            shop: d.shop,
+            roof: d.roof.code().into(),
+            pitch: d.pitch,
+            plinth: d.plinth,
+            cornice: d.cornice,
+            patio: d.patio,
+            materials: d.materials.all().map(|m| m.0),
+        }
+    }
+
+    pub(crate) fn into_core(self, element: &str) -> Result<core::Dress, FileError> {
+        let bad = |what: &str, v: &str| FileError::Value {
+            element: element.to_string(),
+            message: format!("unknown building {what} \"{v}\""),
+        };
+        let [wall, trim, roof, joinery, glass, metal] = self.materials.map(core::MaterialId);
+        Ok(core::Dress {
+            style: core::BuildingStyle::from_code(&self.style)
+                .ok_or_else(|| bad("style", &self.style))?,
+            bay: self.bay,
+            window_width: self.window_width,
+            window_height: self.window_height,
+            sill: self.sill,
+            closure: core::Closure::from_code(&self.closure)
+                .ok_or_else(|| bad("closure", &self.closure))?,
+            balcony_depth: self.balcony_depth,
+            shop: self.shop,
+            roof: core::EnvRoof::from_code(&self.roof).ok_or_else(|| bad("roof", &self.roof))?,
+            pitch: self.pitch,
+            plinth: self.plinth,
+            cornice: self.cornice,
+            patio: self.patio,
+            materials: core::DressMaterials {
+                wall,
+                trim,
+                roof,
+                joinery,
+                glass,
+                metal,
+            },
+        })
+    }
 }
 
 /// A twist and a bend, in degrees (version 28).
@@ -3436,6 +3518,7 @@ impl ProjectFile {
                     shape: MassShapeOf::out(&m.shape),
                     finish: m.finish.as_ref().map(EdgeFinishOf::out),
                     deform: m.deform.as_ref().map(DeformOf::out),
+                    dress: m.dress.as_ref().map(DressOf::out),
                     base_offset: m.base_offset,
                     height: m.height,
                     floor_height: m.floor_height,
@@ -4721,6 +4804,7 @@ impl ProjectFile {
                 shape: m.shape.into_core(),
                 finish: m.finish.map(|f| f.into_core(&element)).transpose()?,
                 deform: m.deform.map(DeformOf::into_core),
+                dress: m.dress.map(|d| d.into_core(&element)).transpose()?,
                 base_offset: m.base_offset,
                 height: m.height,
                 floor_height: m.floor_height,
