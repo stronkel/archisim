@@ -165,7 +165,12 @@ pub struct RoadSection {
     pub planting: Option<MaterialId>,
     pub bike: Option<MaterialId>,
     pub markings: Option<MaterialId>,
+    /// Radius of the kerb at the corners where it meets another road (U1).
+    pub corner_radius: f64,
 }
+
+/// The usual radius of a kerb at a street corner.
+pub const CORNER_RADIUS: f64 = 4.0;
 
 impl Default for RoadSection {
     /// Two lanes of 3,00 m, parking of 2,20 m, kerbs of 0,15 m and
@@ -210,6 +215,7 @@ impl RoadSection {
             planting: None,
             bike: None,
             markings: None,
+            corner_radius: CORNER_RADIUS,
         }
     }
 
@@ -258,12 +264,13 @@ impl RoadSection {
             .map(|c| format!("{} {}", c.at, c.width))
             .collect();
         format!(
-            "{}|{}|{} {} {}|{}|{}",
+            "{}|{}|{} {} {} {}|{}|{}",
             strips.join(";"),
             self.parking.code(),
             self.kerb_height,
             self.depth,
             u8::from(self.single_level),
+            self.corner_radius,
             outs.join(";"),
             cross.join(";")
         )
@@ -285,12 +292,15 @@ impl RoadSection {
         let mut s = RoadSection::of(strips);
         s.parking = ParkingMode::from_code(parts[1].trim())?;
         let v: Vec<&str> = parts[2].split_whitespace().collect();
-        if v.len() != 3 {
+        if v.len() != 3 && v.len() != 4 {
             return None;
         }
         s.kerb_height = num(v[0])?;
         s.depth = num(v[1])?;
         s.single_level = v[2] == "1";
+        if let Some(r) = v.get(3) {
+            s.corner_radius = num(r)?;
+        }
         for x in parts[3].split(';').filter(|x| !x.trim().is_empty()) {
             let v: Vec<&str> = x.split_whitespace().collect();
             if v.len() != 3 {
@@ -492,9 +502,21 @@ impl RoadBand {
 #[derive(Debug, Clone, PartialEq)]
 pub struct RoadPiece {
     pub band: RoadBand,
+    /// From where to where along the axis.
+    pub span: (f64, f64),
     pub outline: Vec<Point2>,
     pub raised: bool,
     pub material: MaterialId,
+}
+
+/// The point at `s` along a path.
+pub(super) fn point_along(path: &[Point2], s: f64) -> Point2 {
+    along(path, s).0
+}
+
+/// The point at `s` along a path and its direction there.
+pub(super) fn axis_point(path: &[Point2], s: f64) -> (Point2, Point2) {
+    along(path, s)
 }
 
 /// The point at `s` along a path and its direction there.
@@ -548,6 +570,8 @@ pub struct Road {
     pub section: RoadSection,
     /// Height of the carriageway over the level.
     pub top_offset: f64,
+    /// Its longitudinal profile («rasante», U1; `road_profile`): none, level.
+    pub profile: Vec<ProfilePoint>,
     /// Of the carriageway and parking, of the kerbs and of the sidewalks.
     pub pavement: MaterialId,
     pub kerb_material: MaterialId,
@@ -562,6 +586,7 @@ pub struct NewRoad {
     pub axis: Vec<Point2>,
     pub section: RoadSection,
     pub top_offset: f64,
+    pub profile: Vec<ProfilePoint>,
     pub pavement: MaterialId,
     pub kerb_material: MaterialId,
     pub sidewalk_material: MaterialId,
@@ -572,12 +597,36 @@ impl Road {
     /// between the ends of the build-outs, where a build-out turns the
     /// parking of its side into sidewalk.
     pub fn pieces(&self) -> Vec<RoadPiece> {
+        self.pieces_except(&[])
+    }
+
+    /// Its pieces but over the stretches `gaps` of its axis (from, to),
+    /// where it crosses another road (U1). With a profile, the pieces are
+    /// cut where it turns ([`Road::profile_cuts`]).
+    pub fn pieces_except(&self, gaps: &[(f64, f64)]) -> Vec<RoadPiece> {
+        self.cut_pieces(gaps, true)
+    }
+
+    /// Its pieces but over `gaps`, not cut where its profile turns: for
+    /// the plan, where the profile does not show.
+    pub fn plan_pieces_except(&self, gaps: &[(f64, f64)]) -> Vec<RoadPiece> {
+        self.cut_pieces(gaps, false)
+    }
+
+    fn cut_pieces(&self, gaps: &[(f64, f64)], by_profile: bool) -> Vec<RoadPiece> {
         let s = &self.section;
         let len = self.length();
         let mut cuts = vec![0.0, len];
         for b in &s.buildouts {
             cuts.push(b.from.clamp(0.0, len));
             cuts.push(b.to.clamp(0.0, len));
+        }
+        for &(a, b) in gaps {
+            cuts.push(a.clamp(0.0, len));
+            cuts.push(b.clamp(0.0, len));
+        }
+        if by_profile {
+            cuts.extend(self.profile_cuts());
         }
         cuts.sort_by(f64::total_cmp);
         cuts.dedup_by(|a, b| (*a - *b).abs() < 1e-6);
@@ -588,6 +637,9 @@ impl Road {
                 continue;
             }
             let mid = (s0 + s1) / 2.0;
+            if gaps.iter().any(|&(a, b)| a <= mid && mid <= b) {
+                continue;
+            }
             let out_left = s
                 .buildouts
                 .iter()
@@ -618,6 +670,7 @@ impl Road {
                 };
                 out.push(RoadPiece {
                     band,
+                    span: (s0, s1),
                     raised: s.raised(band),
                     outline,
                     material,
@@ -639,6 +692,22 @@ impl Road {
     /// between lanes (dashed), the bays of the parking (not where the
     /// sidewalk widens) and the zebra crossings.
     pub fn markings(&self) -> Vec<Vec<Point2>> {
+        self.markings_except(&[])
+    }
+
+    /// The markings but over the stretches `gaps` of its axis.
+    pub fn markings_except(&self, gaps: &[(f64, f64)]) -> Vec<Vec<Point2>> {
+        let mut out = self.all_markings();
+        out.retain(|m| {
+            !m.iter().any(|p| {
+                let t = self.station_of(*p);
+                gaps.iter().any(|&(a, b)| t > a - 0.05 && t < b + 0.05)
+            })
+        });
+        out
+    }
+
+    fn all_markings(&self) -> Vec<Vec<Point2>> {
         let s = &self.section;
         let len = self.length();
         let offs = s.band_offsets();
@@ -908,6 +977,18 @@ impl Model {
             }
         }
         finite(r.top_offset, "road top offset")?;
+        finite(s.corner_radius, "corner radius")?;
+        if s.corner_radius < 0.0 {
+            return Err(ModelError::NonPositive("corner radius"));
+        }
+        for p in &r.profile {
+            finite(p.at, "profile point")?;
+            finite(p.z, "profile height")?;
+            finite(p.curve, "vertical curve")?;
+            if p.curve < 0.0 {
+                return Err(ModelError::NonPositive("vertical curve"));
+            }
+        }
         Ok(())
     }
 
@@ -924,6 +1005,7 @@ impl Model {
                 axis: spec.axis,
                 section: spec.section,
                 top_offset: spec.top_offset,
+                profile: spec.profile,
                 pavement: spec.pavement,
                 kerb_material: spec.kerb_material,
                 sidewalk_material: spec.sidewalk_material,
@@ -949,6 +1031,7 @@ impl Model {
             axis: r.axis.clone(),
             section: r.section.clone(),
             top_offset: r.top_offset,
+            profile: r.profile.clone(),
             pavement: r.pavement,
             kerb_material: r.kerb_material,
             sidewalk_material: r.sidewalk_material,
@@ -1012,6 +1095,7 @@ impl Model {
                 axis: r.axis.clone(),
                 section: r.section.clone(),
                 top_offset: r.top_offset,
+                profile: r.profile.clone(),
                 pavement: r.pavement,
                 kerb_material: r.kerb_material,
                 sidewalk_material: r.sidewalk_material,
@@ -1090,6 +1174,7 @@ mod tests {
                 axis: vec![Point2::new(0.0, 0.0), Point2::new(100.0, 0.0)],
                 section: RoadSection::default(),
                 top_offset: 0.0,
+                profile: Vec::new(),
                 pavement: mat,
                 kerb_material: mat,
                 sidewalk_material: mat,

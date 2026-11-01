@@ -262,6 +262,38 @@ pub fn prism(poly: &[Point2], z0: f64, z1: f64) -> Vec<[P3; 3]> {
     tris
 }
 
+/// A prism whose top and bottom follow the ground: each point of the plan
+/// polygon between its own two heights, `z(p) = (bottom, top)`.
+pub fn draped_prism(poly: &[Point2], z: impl Fn(Point2) -> (f64, f64)) -> Vec<[P3; 3]> {
+    if poly.len() < 3 {
+        return Vec::new();
+    }
+    let poly = ensure_ccw(poly.to_vec());
+    let n = poly.len();
+    let zs: Vec<(f64, f64)> = poly.iter().map(|p| z(*p)).collect();
+    if zs.iter().all(|(a, b)| b - a <= EPSILON) {
+        return Vec::new();
+    }
+    let at = |i: usize, top: bool| {
+        let p = poly[i];
+        [p.x, p.y, if top { zs[i].1 } else { zs[i].0 }]
+    };
+    let mut tris = Vec::new();
+    for [a, b, c] in triangulate(&poly) {
+        tris.push([at(a, true), at(b, true), at(c, true)]);
+        tris.push([at(a, false), at(c, false), at(b, false)]);
+    }
+    for i in 0..n {
+        let j = (i + 1) % n;
+        if poly[i].approx_eq(poly[j]) {
+            continue;
+        }
+        tris.push([at(i, false), at(j, false), at(j, true)]);
+        tris.push([at(i, false), at(j, true), at(i, true)]);
+    }
+    tris
+}
+
 /// The wall filled back in over an arch (or round an oculus), across one
 /// layer from `y0` to `y1`: its outline in `x` along the wall and `z` up,
 /// each point marked when it is on the shape (not on the box). Faces on
@@ -2533,8 +2565,26 @@ pub fn terrain_holes(model: &Model, outline: &[Point2]) -> Vec<archisim_core::Ex
             )
         },
     );
-    model
-        .excavations()
+    let mut holes = model.excavations();
+    // The roads sit in the ground (U1): their whole width, down to under
+    // their pavement where it is lowest.
+    for r in model.roads() {
+        let outline = r.outline();
+        if outline.len() < 3 {
+            continue;
+        }
+        let base = model.level(r.level).map_or(0.0, |l| l.elevation);
+        let len = r.length();
+        let n = (len / 5.0).ceil().max(1.0) as usize;
+        let low = (0..=n)
+            .map(|k| r.top_at(len * k as f64 / n as f64))
+            .fold(f64::MAX, f64::min);
+        holes.push(archisim_core::Excavation {
+            outline,
+            bottom: base + low - r.section.depth,
+        });
+    }
+    holes
         .into_iter()
         .filter(|e| {
             e.outline
@@ -3788,8 +3838,8 @@ pub fn model_solids_except_detailed(
     for m in model.masses() {
         out.extend(mass_solids(model, m.id));
     }
-    for r in model.roads() {
-        out.extend(road_solids(model, r.id));
+    for l in model.levels() {
+        out.extend(level_road_solids(model, l.id));
     }
     for r in model.runs() {
         out.extend(run_solids(model, r.id));
@@ -3862,43 +3912,92 @@ pub fn mass_solids(model: &Model, id: archisim_core::MassId) -> Vec<Solid> {
 /// markings a few millimetres over the carriageway when the road has their
 /// material.
 pub fn road_solids(model: &Model, id: archisim_core::RoadId) -> Vec<Solid> {
+    let Some(r) = model.road(id) else {
+        return Vec::new();
+    };
+    let junctions = crate::crossroads::junctions(model, r.level);
+    road_solids_with(model, id, &junctions)
+}
+
+/// The solids of the roads of a level, their junctions worked out once.
+pub fn level_road_solids(model: &Model, level: archisim_core::LevelId) -> Vec<Solid> {
+    let junctions = crate::crossroads::junctions(model, level);
+    model
+        .roads_on_level(level)
+        .flat_map(|r| road_solids_with(model, r.id, &junctions))
+        .collect()
+}
+
+/// A road's pieces (but where its junctions are), following its profile,
+/// its markings, and the junctions it owns (U1).
+pub fn road_solids_with(
+    model: &Model,
+    id: archisim_core::RoadId,
+    junctions: &[crate::crossroads::Junction],
+) -> Vec<Solid> {
     use archisim_core::RoadBand;
     let Some(r) = model.road(id) else {
         return Vec::new();
     };
-    let top = model.level(r.level).map_or(0.0, |l| l.elevation) + r.top_offset;
+    let base = model.level(r.level).map_or(0.0, |l| l.elevation);
     let s = &r.section;
     let kh = if s.single_level { 0.0 } else { s.kerb_height };
+    let gaps = crate::crossroads::road_gaps(junctions, id);
     let mut out: Vec<Solid> = r
-        .pieces()
+        .pieces_except(&gaps)
         .into_iter()
         .map(|p| {
-            let (z0, z1) = match (p.band, p.raised) {
-                (RoadBand::Kerb, true) => (top - s.depth, top + kh),
-                (_, true) => (top + kh - 0.2, top + kh),
-                _ => (top - s.depth, top),
+            let (d0, d1) = match (p.band, p.raised) {
+                (RoadBand::Kerb, true) => (-s.depth, kh),
+                (_, true) => (kh - 0.2, kh),
+                _ => (-s.depth, 0.0),
             };
             Solid {
                 owner: SolidOwner::Road(id),
                 material: p.material,
-                triangles: prism(&p.outline, z0, z1),
+                triangles: draped_prism(&p.outline, |q| {
+                    let top = base + r.top_under(q);
+                    (top + d0, top + d1)
+                }),
             }
         })
         .collect();
     if let Some(m) = s.markings {
         let mut tris = Vec::new();
-        for poly in r.markings() {
-            let mut poly = poly;
-            if archisim_core::signed_area(&poly) < 0.0 {
-                poly.reverse();
-            }
-            tris.extend(prism(&poly, top, top + 0.004));
+        for poly in r.markings_except(&gaps) {
+            tris.extend(draped_prism(&poly, |q| {
+                let top = base + r.top_under(q);
+                (top, top + 0.004)
+            }));
         }
         if !tris.is_empty() {
             out.push(Solid {
                 owner: SolidOwner::Road(id),
                 material: m,
                 triangles: tris,
+            });
+        }
+    }
+    for j in junctions.iter().filter(|j| j.owner == id) {
+        let top = base + j.top;
+        let kh = j.kerb_height;
+        out.push(Solid {
+            owner: SolidOwner::Road(id),
+            material: j.pavement,
+            triangles: prism(&j.plate, top - j.depth, top),
+        });
+        for k in &j.kerbs {
+            out.push(Solid {
+                owner: SolidOwner::Road(id),
+                material: j.kerb_material,
+                triangles: prism(k, top - j.depth, top + kh),
+            });
+        }
+        for w in &j.sidewalks {
+            out.push(Solid {
+                owner: SolidOwner::Road(id),
+                material: j.sidewalk_material,
+                triangles: prism(w, top + kh - 0.2, top + kh),
             });
         }
     }

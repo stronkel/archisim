@@ -26,6 +26,7 @@
 
 pub mod anchors;
 pub mod cover;
+pub mod crossroads;
 pub mod csg;
 pub mod elevators;
 pub mod facade;

@@ -6,6 +6,36 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-01 (66) · U1: rasante y cruces de las calles
+
+Rama `bloque/u1-rasante-cruces`, con pull request. Formato `.archisim` versión 61 (la rasante de los viales y el radio de sus esquinas; los proyectos antiguos se abren con calles horizontales y esquinas de 4 m).
+
+**Hecho**
+- **Rasante**: cada vial puede llevar puntos a lo largo de su eje con su cota y un acuerdo vertical parabólico en cada uno. Calzada, bordillos, aceras y marcas viales la siguen.
+  - En Propiedades del vial, grupo «Rasante»: puntos (en, cota, acuerdo), la pendiente de cada tramo, «Tomar del terreno» (un punto cada 20 m con acuerdos de 20 m), «Añadir punto» y «Horizontal».
+  - En planta, la pendiente de cada tramo con su flecha hacia abajo y la cota de cada punto.
+- **Cruces**: donde se encuentran dos viales de la misma planta se hace el cruce solo, sin guardarlo, así que sigue a las calles al moverlas:
+  - en cruz, en T (una calle que acaba en otra, en su eje o en su bordillo) y en L (dos calles que acaban en el mismo punto);
+  - la calzada sigue de una a otra, los bordillos doblan la esquina con su radio («Radio de esquina» en la sección, 4 m por defecto), recto donde siguen en línea y en punta por fuera de una L, y las aceras rellenan cada esquina.
+- **El terreno se recorta bajo las calles**: ya no tapa la calzada.
+- **IFC 4.3**: cada vial lleva su eje como `IfcAlignment` (planta y alzado con pendientes y acuerdos). Las piezas con pendiente van trianguladas y los cruces son piezas más del vial.
+- **Traer el entorno**: con MDT, las calles siguen el terreno con su rasante y se cruzan.
+- **Plantilla**: materiales «Aglomerado asfáltico» y «Bordillo de granito», que la herramienta Vial toma por defecto (antes la calzada salía de hormigón, blanca).
+- `archisim calles out/`: unas calles en ladera con un cruce, tres T y una L.
+
+**Pendiente**
+- Rebajes de bordillo y pasos de peatones en los cruces: con las marcas viales (U4).
+- La placa del cruce es horizontal, a la cota del primer vial en ese punto. Si las calles llegan con pendientes muy distintas queda un pequeño escalón en el borde del cruce.
+- Las medianas se interrumpen en el cruce; falta elegir si se abre un paso en ellas.
+
+**Qué debe probar Antonio**
+- `archisim calles out/` y abrir `out/calles.archisim`. Mirar en planta las esquinas redondeadas y las pendientes de la Calle Real y la Calle del Agua, y en 3D cómo suben siguiendo el terreno.
+- Dibujar dos viales que se crucen, y luego uno que acabe en el bordillo de otro: deben salir el cruce y la T solos. Mover uno: el cruce lo sigue.
+- En un vial sobre terreno, Propiedades → Rasante → «Tomar del terreno». Cambiar una cota y un acuerdo y mirar la planta y el 3D.
+- Cambiar el «Radio de esquina» en la sección de un vial.
+
+---
+
 ## 2026-11-01 (65) · v0.78: G1–G7, E17, el edificio y H1–H7 en `main`
 
 Unidos #123 a #137: detalle a 1:20 (E17), G1 a G7 (dibujo rápido, modo boceto, Pintar y Dividir cara, lámparas en los puntos de luz, árboles hoja a hoja, remates y huecos), el edificio de Florence Street, y la lista del 31/10: puertas en muros cortina (H1), agua transparente (H2), contra incendios, llaves de paso y placas solares (H3), ascensores (H4), trepadoras (H5), calles por tipos (H6) y traer el entorno (H7). Formato `.archisim` versión 60. Lo que hay que probar de cada uno está en sus entradas (51 a 64).

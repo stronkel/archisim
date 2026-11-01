@@ -195,6 +195,9 @@ impl<'a> Importer<'a> {
                 axis,
                 section,
                 top_offset,
+                profile: text(self, "Profile")
+                    .and_then(|t| archisim_core::Road::decode_profile(&t))
+                    .unwrap_or_default(),
                 pavement,
                 kerb_material,
                 sidewalk_material,
@@ -204,7 +207,7 @@ impl<'a> Importer<'a> {
         self.sources.push((rid.0, id));
         // Its pieces are not loose elements.
         if let Some(g) = archisim_core::GlobalId::parse(&guid) {
-            let pieces: Vec<String> = (0..512)
+            let pieces: Vec<String> = (0..4096)
                 .map(|i| crate::derived_guid(&g, &format!("band {i}")).to_string())
                 .collect();
             for kind in ["IFCPAVEMENT", "IFCKERB", "IFCBUILDINGELEMENTPROXY"] {

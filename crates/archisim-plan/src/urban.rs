@@ -101,13 +101,33 @@ pub fn draw_roads(
         return;
     }
     s.push_str("<g id=\"roads\">\n");
+    let junctions = archisim_geom::crossroads::junctions(model, level);
+    let base = model.level(level).map_or(0.0, |l| l.elevation);
+    // The profiles' grades and heights go over every road.
+    let mut over = String::new();
     for r in model.roads_on_level(level) {
+        let gaps = archisim_geom::crossroads::road_gaps(&junctions, r.id);
         let outline = r.outline();
         if outline.len() < 3 || !visible(&outline) {
             continue;
         }
         crate::dim::element(s, r.id.0, |s| {
-            for p in r.pieces() {
+            // Its junctions: the plate, the kerbs round the corners and the
+            // sidewalks at them (U1).
+            for j in junctions.iter().filter(|j| j.owner == r.id) {
+                let parts = std::iter::once((&j.plate, "#dcdcdc", pens().view))
+                    .chain(j.sidewalks.iter().map(|w| (w, "#f1eee6", pens().view)))
+                    .chain(j.kerbs.iter().map(|w| (w, "#ffffff", pens().cut)));
+                for (poly, fill, width) in parts {
+                    let _ = writeln!(
+                        s,
+                        r#"<path d="{}" fill="{fill}" stroke="{INK}" stroke-width="{}"/>"#,
+                        path(poly),
+                        num(width * k)
+                    );
+                }
+            }
+            for p in r.plan_pieces_except(&gaps) {
                 let (fill, width) = match p.band {
                     RoadBand::Carriageway => ("#dcdcdc", pens().view),
                     RoadBand::Parking => ("#e6e6e6", pens().view),
@@ -125,7 +145,7 @@ pub fn draw_roads(
                 );
             }
             // The road markings: lane lines, parking bays, zebra crossings.
-            for m in r.markings() {
+            for m in r.markings_except(&gaps) {
                 let _ = writeln!(
                     s,
                     r#"<path d="{}" fill="white" stroke="{INK}" stroke-width="{}"/>"#,
@@ -144,6 +164,70 @@ pub fn draw_roads(
                 num(1.5 * k),
                 num(1.5 * k)
             );
+            // Its profile: the grade of each stretch, with an arrow downhill,
+            // and the height of each point (U1).
+            if r.sloped() {
+                let s = &mut over;
+                let h = LABEL * k * 0.8;
+                let off = r.section.width() / 2.0 + 1.2 * h;
+                for (a, b, g) in r.grades() {
+                    if g.abs() < 1e-4 {
+                        continue;
+                    }
+                    let (p, u) = r.axis_at((a + b) / 2.0);
+                    let down = if g > 0.0 { u * -1.0 } else { u };
+                    let mut read = u;
+                    if read.x < -1e-9 || (read.x.abs() < 1e-9 && read.y < 0.0) {
+                        read = read * -1.0;
+                    }
+                    let at = p + u.perp_left() * off;
+                    let text = format!("{} %", format!("{:.2}", g.abs() * 100.0).replace('.', ","));
+                    let _ = writeln!(
+                        s,
+                        r#"<path d="{}" {}/>"#,
+                        text_path(&text, at, read, h, Align::Centre),
+                        crate::lettering::paint(h, INK)
+                    );
+                    // The arrow, under the text.
+                    let c = at - read.perp_left() * (0.9 * h);
+                    let (t0, t1) = (c - down * (2.5 * h), c + down * (2.5 * h));
+                    let w = down.perp_left() * (0.4 * h);
+                    let tip = t1 - down * (0.8 * h);
+                    let _ = writeln!(
+                        s,
+                        r#"<path d="M{} L{} M{} L{} L{}" fill="none" stroke="{INK}" stroke-width="{}"/>"#,
+                        pt(t0),
+                        pt(t1),
+                        pt(tip + w),
+                        pt(t1),
+                        pt(tip - w),
+                        num(pens().thin * k)
+                    );
+                }
+                for q in &r.profile {
+                    let (p, u) = r.axis_at(q.at);
+                    let z = base + r.top_at(q.at);
+                    let text = format!(
+                        "{}{}",
+                        if z >= 0.0 { "+" } else { "" },
+                        format!("{z:.2}").replace('.', ",")
+                    );
+                    let at = p - u.perp_left() * off;
+                    let _ = writeln!(
+                        s,
+                        r#"<path d="M{} L{}" fill="none" stroke="{INK}" stroke-width="{}"/>"#,
+                        pt(p - u.perp_left() * (off * 0.6)),
+                        pt(p + u.perp_left() * (off * 0.6)),
+                        num(pens().thin * k)
+                    );
+                    let _ = writeln!(
+                        s,
+                        r#"<path d="{}" {}/>"#,
+                        text_path(&text, at, Point2::new(1.0, 0.0), h, Align::Centre),
+                        crate::lettering::paint(h, INK)
+                    );
+                }
+            }
             // The name in the middle of the longest stretch, along it.
             if let Some(seg) = r
                 .axis
@@ -168,5 +252,6 @@ pub fn draw_roads(
             }
         });
     }
+    s.push_str(&over);
     s.push_str("</g>\n");
 }
