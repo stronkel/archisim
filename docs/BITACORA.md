@@ -6,6 +6,40 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-01 (76) · Remates de U2, U5, U7 y U8
+
+Rama `bloque/remates-u`, con pull request. Sin cambios de formato.
+
+**Hecho**
+- **Escaparates hacia la calle (U7):** el bajo comercial y la puerta grande de las naves solo van en las fachadas que dan a una calle, es decir, las que tienen el eje de un vial delante a menos de 30 m. Un edificio de esquina los lleva en sus dos calles. Las fachadas traseras llevan ventanas normales en la planta baja. Si no hay ninguna calle cerca, va en la fachada libre más larga.
+- **Pegatinas que siguen a su muro (U8):** si mueves o giras el muro, la pegatina se mueve con él. Mantiene su distancia al arranque del muro, su altura y su cara. Si borras el muro, la pegatina se queda donde estaba.
+- **Arrastrar pegatinas en 3D (U8):** con la pegatina seleccionada, arrástrala y se desliza sobre el plano de su cara, al centímetro, con su contorno de vista previa.
+- **Acometidas unidas al edificio (U5):** en las propiedades de una tubería de red urbana, el botón «Unir a los edificios» lleva cada acometida hasta la instalación del edificio de su parcela:
+  - el saneamiento, a la bajante más cercana (o al saneamiento del edificio), cayendo al 2 % hacia la arqueta;
+  - las pluviales, a una bajante;
+  - el abastecimiento, al contador (o al agua fría);
+  - la baja tensión, a la caja general de protección (o al cuadro).
+
+  Las que ya están unidas, o que no tienen a qué unirse, se dejan.
+- **Bordillos y líneas de fachada en modo boceto (U2):** con una calle seleccionada, «Editar contorno» (o «Bordillos y fachadas en boceto» en sus Cambios de sección) pasa a líneas de boceto el bordillo y la línea de fachada de cada lado. Son cuatro líneas abiertas de un extremo a otro de la calle, y se editan con las órdenes de dibujo de siempre.
+  - Al aceptar, donde las hayas movido, la calle cambia de sección, y entre dos quiebros de la línea hace una transición recta.
+  - Si mueves la línea de fachada, la acera se ensancha o estrecha.
+  - Si mueves el bordillo, la franja de dentro (el aparcamiento, por ejemplo) se ensancha o estrecha, y la acera se lleva hasta la fachada. Así se hacen ensanches, orejas de acera y retranqueos.
+  - La calzada se queda en su sitio: si un bordillo empuja directamente la calzada por un solo lado, el cambio se reparte a los dos.
+  - Todo va en un paso de Deshacer.
+- **Eje en boceto:** el mismo modo sirve para el eje de la calle, como una sola línea abierta (botón «Eje en boceto»).
+
+**Pendiente**
+- Botón «Descargar el entorno»: bajarse el Catastro y OpenStreetMap directamente desde la georreferencia del proyecto y un radio (propuesta a Antonio).
+
+**Qué debe probar Antonio**
+- `archisim entorno out/` y `archisim render out/entorno.archisim out/entorno.png`: los escaparates del ensanche y del comercio dan a la Calle Mayor, no a la parte de atrás.
+- Una pegatina sobre un muro: mover el muro y girarlo, y la pegatina va con él. En 3D, seleccionar la pegatina y arrastrarla por la fachada.
+- Una calle seleccionada → «Editar contorno»: retranquear la línea de fachada de un lado en un tramo, o meter el bordillo para hacer una oreja de acera, y aceptar con Intro. Mirar la planta y el 3D.
+- Una red de saneamiento con acometidas y, dentro de una parcela, una bajante: «Unir a los edificios».
+
+---
+
 ## 2026-11-01 (75) · U8: pegatinas para el render
 
 Rama `bloque/u8-pegatinas` (encima de U7), con pull request. Formato `.archisim` versión 68: pegatinas. Las versiones anteriores avisan de que no pueden abrir el fichero.

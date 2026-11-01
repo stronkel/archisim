@@ -1110,6 +1110,7 @@ impl ArchiSimApp {
         let Some(r) = self.ed.model().road(id).cloned() else {
             return;
         };
+        let mut sketch = None;
         group(ui, "road-changes", "Cambios de sección", |ui| {
             props::note(
                 ui,
@@ -1208,6 +1209,22 @@ impl ArchiSimApp {
                 });
             }
             let mut to_plots = false;
+            ui.horizontal_wrapped(|ui| {
+                if ui
+                    .button("Bordillos y fachadas en boceto")
+                    .on_hover_text("Dibuja a mano los bordillos y las líneas de fachada de cada lado: ensanches, estrechamientos y retranqueos se convierten en cambios de sección con su transición")
+                    .clicked()
+                {
+                    sketch = Some(crate::sketch::SketchTarget::RoadEdges(id));
+                }
+                if ui
+                    .button("Eje en boceto")
+                    .on_hover_text("Edita el eje de la calle como una línea abierta, con las órdenes de dibujo")
+                    .clicked()
+                {
+                    sketch = Some(crate::sketch::SketchTarget::Road(id));
+                }
+            });
             if ui
                 .button("Aceras hasta las parcelas")
                 .on_hover_text(
@@ -1241,5 +1258,8 @@ impl ArchiSimApp {
                 self.report(res, "Cambios de sección guardados.");
             }
         });
+        if let Some(t) = sketch {
+            self.start_sketch(t);
+        }
     }
 }

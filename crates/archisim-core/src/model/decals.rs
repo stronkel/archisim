@@ -515,8 +515,16 @@ mod tests {
             .unwrap();
         m.decals_follow(&before);
         let d = m.decal(id).unwrap();
-        assert!((d.centre[0] - 0.1).abs() < 1e-9 && (d.centre[1] - 6.0).abs() < 1e-9, "{:?}", d.centre);
-        assert!((d.normal[0] - 1.0).abs() < 1e-9 && d.normal[1].abs() < 1e-9, "{:?}", d.normal);
+        assert!(
+            (d.centre[0] - 0.1).abs() < 1e-9 && (d.centre[1] - 6.0).abs() < 1e-9,
+            "{:?}",
+            d.centre
+        );
+        assert!(
+            (d.normal[0] - 1.0).abs() < 1e-9 && d.normal[1].abs() < 1e-9,
+            "{:?}",
+            d.normal
+        );
         // Its wall gone, it stays.
         let before = m.decal_anchors();
         m.remove_wall(w).unwrap();

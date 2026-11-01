@@ -9224,3 +9224,152 @@ fn a_decal_on_a_wall() {
     assert!((moved.centre[1] - d.centre[1] - 3.0).abs() < 1e-9);
     assert_eq!(moved.host, d.host);
 }
+
+/// U2: a street's axis edited in sketch mode, as an open line: one more
+/// stretch drawn at its end and accepted in one step.
+#[test]
+fn a_street_axis_in_sketch_mode() {
+    let mut ed = Editor::new_project();
+    let level = ed.level;
+    let mat = ed.model().materials().next().unwrap().id;
+    let id = ed
+        .transact("Vial", |m| {
+            m.add_road(archisim_core::NewRoad {
+                name: "Calle".into(),
+                level,
+                axis: vec![p(0.0, 0.0), p(30.0, 0.0)],
+                section: archisim_core::RoadSection::default(),
+                top_offset: 0.0,
+                profile: Vec::new(),
+                changes: Vec::new(),
+                pavement: mat,
+                kerb_material: mat,
+                sidewalk_material: mat,
+            })
+        })
+        .unwrap();
+    let mut h = Harness::new(ed);
+    h.app.fit_requested = true;
+    h.frame();
+    h.app.start_sketch(crate::sketch::SketchTarget::Road(id));
+    h.frame();
+    let view = archisim_core::ViewRef::Level(level);
+    let layer = h.model().draw_layer_by_name("Boceto").unwrap().id;
+    let count = |h: &Harness| {
+        h.model()
+            .drafts_in(view)
+            .filter(|d| d.layer == layer)
+            .count()
+    };
+    // Open: one line for one stretch, none back to the start.
+    assert_eq!(count(&h), 1);
+    assert!(h.app.ed.hidden().contains(&Element::Road(id)));
+    h.app
+        .ed
+        .transact("Línea", |m| {
+            m.add_draft(archisim_core::NewDraft::new(
+                view,
+                layer,
+                archisim_core::Shape::Line {
+                    a: p(30.0, 0.0),
+                    b: p(40.0, 20.0),
+                },
+            ))
+            .map(drop)
+        })
+        .unwrap();
+    h.key(Key::Enter);
+    assert!(
+        h.app.sketch.is_none(),
+        "{:?}",
+        h.app.message.as_ref().map(|m| &m.text)
+    );
+    let axis = h.model().road(id).unwrap().axis.clone();
+    assert_eq!(axis.len(), 3, "{axis:?}");
+    assert!(axis[2].distance(p(40.0, 20.0)) < 1e-9);
+    assert_eq!(count(&h), 0);
+    assert_eq!(h.app.ed.undo_label(), Some("Editar el eje"));
+}
+
+/// U2: a street's kerbs and façade lines in sketch mode: the left façade
+/// line pushed back 2 m in the middle becomes changes of section with
+/// their transitions; the carriageway stays.
+#[test]
+fn a_street_widened_in_sketch_mode() {
+    let mut ed = Editor::new_project();
+    let level = ed.level;
+    let mat = ed.model().materials().next().unwrap().id;
+    let id = ed
+        .transact("Vial", |m| {
+            m.add_road(archisim_core::NewRoad {
+                name: "Calle".into(),
+                level,
+                axis: vec![p(0.0, 0.0), p(100.0, 0.0)],
+                section: archisim_core::RoadSection::default(),
+                top_offset: 0.0,
+                profile: Vec::new(),
+                changes: Vec::new(),
+                pavement: mat,
+                kerb_material: mat,
+                sidewalk_material: mat,
+            })
+        })
+        .unwrap();
+    let mut h = Harness::new(ed);
+    h.app.fit_requested = true;
+    h.frame();
+    h.app.ed.selection = [Element::Road(id)].into_iter().collect();
+    h.frame();
+    h.app
+        .start_sketch(crate::sketch::SketchTarget::RoadEdges(id));
+    h.frame();
+    let view = archisim_core::ViewRef::Level(level);
+    let layer = h.model().draw_layer_by_name("Boceto").unwrap().id;
+    let lines: Vec<archisim_core::Draft> = h
+        .model()
+        .drafts_in(view)
+        .filter(|d| d.layer == layer)
+        .cloned()
+        .collect();
+    // Four lines: two kerbs and two façade lines.
+    assert_eq!(lines.len(), 4);
+    let f = h.model().road(id).unwrap().edges().left_facade[0].y;
+    let facade = lines
+        .iter()
+        .find(|d| matches!(d.shape, archisim_core::Shape::Line { a, .. } if (a.y - f).abs() < 1e-9))
+        .unwrap()
+        .id;
+    h.app
+        .ed
+        .transact("Retranqueo", |m| {
+            m.remove_draft(facade)?;
+            let pts = [
+                p(0.0, f),
+                p(30.0, f),
+                p(40.0, f + 2.0),
+                p(60.0, f + 2.0),
+                p(70.0, f),
+                p(100.0, f),
+            ];
+            for w in pts.windows(2) {
+                m.add_draft(archisim_core::NewDraft::new(
+                    view,
+                    layer,
+                    archisim_core::Shape::Line { a: w[0], b: w[1] },
+                ))?;
+            }
+            Ok(())
+        })
+        .unwrap();
+    h.key(Key::Enter);
+    assert!(
+        h.app.sketch.is_none(),
+        "{:?}",
+        h.app.message.as_ref().map(|m| &m.text)
+    );
+    let r = h.model().road(id).unwrap().clone();
+    assert!(!r.changes.is_empty());
+    let w0 = r.section.strips[0].width;
+    assert!((r.strips_at(50.0)[0].width - (w0 + 2.0)).abs() < 0.011);
+    assert_eq!(h.app.ed.undo_label(), Some("Editar bordillos y fachadas"));
+}

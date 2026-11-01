@@ -215,6 +215,23 @@ impl ArchiSimApp {
                     self.report(res, &format!("{n} acometidas."));
                 }
                 if ui
+                    .button("Unir a los edificios")
+                    .on_hover_text("Lleva cada acometida hasta la instalación del edificio de su parcela: bajante o saneamiento, contador o agua fría, caja general de protección o cuadro")
+                    .clicked()
+                {
+                    let mut n = 0;
+                    let res = self.ed.transact("Unir acometidas", |m| {
+                        n = m.connect_buildings(id)?.len();
+                        Ok(())
+                    });
+                    let text = if n == 0 {
+                        "Ninguna acometida por unir: hacen falta acometidas y, en la parcela, la instalación del edificio (bajante, contador, cuadro…).".to_string()
+                    } else {
+                        format!("{n} acometidas unidas a su edificio.")
+                    };
+                    self.report(res, &text);
+                }
+                if ui
                     .button("Perfil longitudinal…")
                     .on_hover_text("Guarda el perfil (H 1:500, V 1:50) con su guitarra de cotas, como SVG")
                     .clicked()

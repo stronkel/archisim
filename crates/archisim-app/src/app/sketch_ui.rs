@@ -16,7 +16,9 @@ use archisim_core::{
 };
 
 use super::*;
-use crate::sketch::{loops_from_segs, Sketch, SketchError, SketchTarget};
+use crate::sketch::{
+    chain_from_segs, chains_from_segs, loops_from_segs, Sketch, SketchError, SketchTarget,
+};
 
 /// The sketch being edited.
 pub(crate) struct SketchState {
@@ -192,6 +194,7 @@ impl ArchiSimApp {
             _ => String::new(),
         };
         let references = wall_references(self.ed.model(), sketch.target);
+        let open = sketch.is_open();
         let mark = self.ed.undo_mark();
         let loops = sketch.loops.clone();
         let level_view = ViewRef::Level(self.ed.level);
@@ -237,7 +240,9 @@ impl ArchiSimApp {
             let view = elevation.map_or(level_view, |(v, _)| ViewRef::Drafting(v));
             for lp in &loops {
                 let n = lp.len();
-                for i in 0..n {
+                // A street's axis is open: no line back to its start.
+                let edges = if open { n.saturating_sub(1) } else { n };
+                for i in 0..edges {
                     m.add_draft(NewDraft::new(
                         view,
                         layer,
@@ -306,7 +311,11 @@ impl ArchiSimApp {
         let segs = self.sketch_segs(&st);
         let zones = st.sketch.is_zones();
         let mirror = st.mirror;
-        let loops = if zones && segs.is_empty() {
+        let loops = if matches!(st.sketch.target, SketchTarget::RoadEdges(_)) {
+            chains_from_segs(&segs)
+        } else if st.sketch.is_open() {
+            chain_from_segs(&segs).map(|c| vec![c])
+        } else if zones && segs.is_empty() {
             // Every zone taken away.
             Ok(Vec::new())
         } else {
@@ -346,12 +355,16 @@ impl ArchiSimApp {
             Ok(()) => {
                 let label = match st.sketch.target {
                     SketchTarget::WallProfile(_) => "Editar perfil",
+                    SketchTarget::Road(_) => "Editar el eje",
+                    SketchTarget::RoadEdges(_) => "Editar bordillos y fachadas",
                     _ if zones => "Dividir cara",
                     _ => "Editar contorno",
                 };
                 self.ed.join_since(st.mark, label);
                 let said = match st.sketch.target {
                     SketchTarget::WallProfile(_) => "Perfil del muro cambiado.",
+                    SketchTarget::Road(_) => "Eje de la calle cambiado.",
+                    SketchTarget::RoadEdges(_) => "Bordillos y fachadas cambiados: la calle cambia de sección donde los has movido.",
                     _ if zones => "Cara dividida: pinta cada zona con Pintar.",
                     _ => "Contorno cambiado.",
                 };
@@ -436,9 +449,13 @@ impl ArchiSimApp {
             }
             SketchTarget::WallFace(..) => "dividir la cara interior del muro",
             SketchTarget::WallProfile(_) => "perfil del muro en alzado",
+            SketchTarget::Road(_) => "eje de la calle (una línea abierta)",
+            SketchTarget::RoadEdges(_) => "bordillos y líneas de fachada de la calle",
         };
         let zones = st.sketch.is_zones();
         let profile = matches!(st.sketch.target, SketchTarget::WallProfile(_));
+        let road_edges = matches!(st.sketch.target, SketchTarget::RoadEdges(_));
+        let road_axis = matches!(st.sketch.target, SketchTarget::Road(_));
         let holes = st.sketch.takes_holes();
         let running = self.cad.as_ref().map(|c| c.name());
         let mut start: Option<&'static str> = None;
@@ -493,7 +510,11 @@ impl ArchiSimApp {
                             cancel = true;
                         }
                     });
-                    let note = if profile {
+                    let note = if road_edges {
+                        "Cuatro líneas abiertas, de un extremo de la calle al otro: bordillo y fachada de cada lado. Donde las muevas, la calle cambia de sección con su transición; la calzada se queda en su sitio."
+                    } else if road_axis {
+                        "Una sola línea abierta, de un extremo de la calle al otro."
+                    } else if profile {
                         "Las líneas tienen que cerrar contornos: el mayor es el muro en alzado y los de dentro, sus huecos. En gris, sus puertas y ventanas."
                     } else if zones {
                         "Cada contorno cerrado que dibujes sobre la cara es una zona que se pinta aparte (Pintar)."

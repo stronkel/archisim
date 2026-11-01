@@ -872,7 +872,11 @@ impl Model {
         if !out.iter().any(|x| *x) {
             let longest = (0..n)
                 .filter(|i| !party.get(*i).copied().unwrap_or(false))
-                .max_by(|x, y| p[*x].distance(p[(*x + 1) % n]).total_cmp(&p[*y].distance(p[(*y + 1) % n])));
+                .max_by(|x, y| {
+                    p[*x]
+                        .distance(p[(*x + 1) % n])
+                        .total_cmp(&p[*y].distance(p[(*y + 1) % n]))
+                });
             if let Some(i) = longest {
                 out[i] = true;
             }

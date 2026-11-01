@@ -431,7 +431,10 @@ impl ArchiSimApp {
                     })
                     .collect();
                 if pts.len() == 4 {
-                    painter.add(egui::Shape::closed_line(pts.clone(), Stroke::new(1.5, ACCENT)));
+                    painter.add(egui::Shape::closed_line(
+                        pts.clone(),
+                        Stroke::new(1.5, ACCENT),
+                    ));
                     let dist = (shift[0].powi(2) + shift[1].powi(2) + shift[2].powi(2)).sqrt();
                     super::handles::tag(
                         painter,
