@@ -1128,6 +1128,9 @@ pub(crate) struct ElevatorOf {
     pub material: Option<u64>,
 }
 
+/// A change of a road's section: `[at, transition, [[band, width]…]]`.
+pub(crate) type ChangeOf = (f64, f64, Vec<(String, f64)>);
+
 /// A road (version 19): its axis and cross-section.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -1175,7 +1178,7 @@ pub(crate) struct Road {
     /// Where its strips change along it (version 62): `[at, transition,
     /// [[band, width]…]]`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub changes: Vec<(f64, f64, Vec<(String, f64)>)>,
+    pub changes: Vec<ChangeOf>,
     pub kerb_height: f64,
     pub depth: f64,
     #[serde(default, skip_serializing_if = "is_zero")]
