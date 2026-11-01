@@ -96,21 +96,22 @@ pub fn build() -> Res<Model> {
         vec![p(-95.0, 0.0), p(95.0, 0.0)],
         0.0,
     )?;
-    let mut climbing: Vec<RoadId> = Vec::new();
-    climbing.push(road(
-        &mut m,
-        "Calle Real",
-        preset("Calle de doble sentido con aparcamiento"),
-        vec![p(0.0, -75.0), p(0.0, 95.0)],
-        0.0,
-    )?);
-    climbing.push(road(
-        &mut m,
-        "Calle del Agua",
-        preset("Calle de un sentido con aparcamiento"),
-        vec![p(60.0, 0.0), p(60.0, 95.0)],
-        0.0,
-    )?);
+    let climbing: Vec<RoadId> = vec![
+        road(
+            &mut m,
+            "Calle Real",
+            preset("Calle de doble sentido con aparcamiento"),
+            vec![p(0.0, -75.0), p(0.0, 95.0)],
+            0.0,
+        )?,
+        road(
+            &mut m,
+            "Calle del Agua",
+            preset("Calle de un sentido con aparcamiento"),
+            vec![p(60.0, 0.0), p(60.0, 95.0)],
+            0.0,
+        )?,
+    ];
     road(
         &mut m,
         "Calle Nueva",
