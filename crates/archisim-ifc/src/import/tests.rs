@@ -1141,6 +1141,9 @@ fn curtain_wall_types_round_trip() {
         }
     }
     let ifc = export(&m);
+    if let Ok(path) = std::env::var("ARCHISIM_CURTAIN_IFC") {
+        std::fs::write(path, &ifc).unwrap();
+    }
     assert_eq!(ifc.matches("IFCCURTAINWALLTYPE(").count(), 5);
     assert_eq!(ifc.matches("IFCDOOR(").count(), 1);
     assert!(ifc.contains("IFCSHADINGDEVICE("));

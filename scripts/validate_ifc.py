@@ -167,7 +167,10 @@ def main(path: str) -> int:
     for el in fillings:
         name = el.Name
         door = el.is_a("IfcDoor")
-        if len(el.FillsVoids) != 1:
+        # A door of a curtain wall's panel (H1) is part of the curtain wall:
+        # no opening to fill, in the storey through it.
+        in_curtain = any(r.RelatingObject.is_a("IfcCurtainWall") for r in el.Decomposes)
+        if len(el.FillsVoids) != 1 and not in_curtain:
             errors.append(f"{name}: does not fill exactly one opening")
         type_obj = eu.get_type(el)
         if type_obj is None:
@@ -184,7 +187,7 @@ def main(path: str) -> int:
                 errors.append(f"{name}: missing {required}")
         if not el.OverallWidth or not el.OverallHeight:
             errors.append(f"{name}: missing overall size")
-        if el.ContainedInStructure == ():
+        if el.ContainedInStructure == () and not in_curtain:
             errors.append(f"{name}: not contained in a storey")
         if geom_ok:
             try:

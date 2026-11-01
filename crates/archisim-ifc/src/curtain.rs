@@ -298,6 +298,33 @@ impl Exporter<'_> {
                     door.bay
                 ));
                 self.pset(e, &door.guid, "ArchiSim_CurtainDoor", &[bay]);
+                // Its common set and quantities, as every door's.
+                let reference = if dt.mark.is_empty() {
+                    &dt.name
+                } else {
+                    &dt.mark
+                };
+                let common = [
+                    self.w.add(format!(
+                        "IFCPROPERTYSINGLEVALUE('Reference',$,IFCIDENTIFIER({}),$)",
+                        string(reference)
+                    )),
+                    self.w.add(
+                        "IFCPROPERTYSINGLEVALUE('IsExternal',$,IFCBOOLEAN(.T.),$)".to_string(),
+                    ),
+                ];
+                self.pset(e, &door.guid, "Pset_DoorCommon", &common);
+                let (w, h) = (cell.along.1 - cell.along.0, cell.up.1 - cell.up.0);
+                self.quantities(
+                    e,
+                    &door.guid,
+                    "Qto_DoorBaseQuantities",
+                    &[
+                        ("Width", "IFCQUANTITYLENGTH", w),
+                        ("Height", "IFCQUANTITYLENGTH", h),
+                        ("Area", "IFCQUANTITYAREA", w * h),
+                    ],
+                );
                 parts.push(e);
                 doors_by_type.entry(door.opening_type).or_default().push(e);
                 door_texts.push(format!(
