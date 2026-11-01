@@ -378,4 +378,108 @@ impl<'a> Importer<'a> {
         }
         Ok(())
     }
+
+    /// Buildings of the surroundings (U6), from their `ArchiSim_EnvBuilding`
+    /// set: a mass by floors with its dress, its finishes found by name.
+    pub(super) fn import_env_buildings(&mut self) {
+        for id in self.file.of_kind("IFCBUILDINGELEMENTPROXY") {
+            if self
+                .property_own(id, "ArchiSim_EnvBuilding", "Dress")
+                .is_none()
+            {
+                continue;
+            }
+            if let Err(why) = self.import_env_building(id) {
+                self.report.skip("edificios del entorno", why);
+            }
+            self.road_ids.insert(id);
+        }
+    }
+
+    fn import_env_building(&mut self, id: u64) -> Result<(), String> {
+        let text = |s: &Self, key: &str| {
+            s.property_own(id, "ArchiSim_EnvBuilding", key)
+                .and_then(|v| v.as_str())
+                .map(str::to_string)
+        };
+        let num = |s: &Self, key: &str| {
+            s.property_own(id, "ArchiSim_EnvBuilding", key)
+                .and_then(|v| v.as_f64())
+        };
+        let outline: Vec<Point2> = text(self, "Outline")
+            .unwrap_or_default()
+            .split(';')
+            .filter_map(|p| {
+                let (x, y) = p.split_once(',')?;
+                Some(Point2::new(
+                    snap(x.trim().parse().ok()?),
+                    snap(y.trim().parse().ok()?),
+                ))
+            })
+            .collect();
+        let dress_text = text(self, "Dress").unwrap_or_default();
+        let style = dress_text
+            .split(';')
+            .find_map(|p| p.strip_prefix("style="))
+            .and_then(archisim_core::BuildingStyle::from_code)
+            .ok_or("estilo desconocido")?;
+        // The finishes by name; those not in the project, the style's.
+        let mut materials = self.model.style_materials(style);
+        let names: Vec<String> = text(self, "Materials")
+            .unwrap_or_default()
+            .split('|')
+            .map(str::to_string)
+            .collect();
+        let found = |s: &Self, i: usize| {
+            names
+                .get(i)
+                .and_then(|n| s.model.materials().find(|m| &m.name == n).map(|m| m.id))
+        };
+        let roles = [
+            &mut materials.wall,
+            &mut materials.trim,
+            &mut materials.roof,
+            &mut materials.joinery,
+            &mut materials.glass,
+            &mut materials.metal,
+        ];
+        for (i, slot) in roles.into_iter().enumerate() {
+            if let Some(m) = found(self, i) {
+                *slot = m;
+            }
+        }
+        let dress =
+            archisim_core::Dress::decode(&dress_text, materials).ok_or("medidas no válidas")?;
+        let floors = num(self, "Floors").unwrap_or(1.0).round().max(1.0) as u32;
+        let fh = num(self, "FloorHeight").unwrap_or(3.0);
+        let level = self.level_by_guid(id, "ArchiSim_EnvBuilding", 0.0);
+        let name = self
+            .ent(id)
+            .and_then(|e| e.arg(2).as_str().map(str::to_string))
+            .unwrap_or_else(|| style.name().to_string());
+        let mid = self
+            .model
+            .add_env_building(archisim_core::NewEnvBuilding {
+                name,
+                level,
+                outline,
+                style,
+                floors: Some(floors),
+                floor_height: Some(fh),
+                base_offset: num(self, "BaseOffset").unwrap_or(0.0),
+            })
+            .map_err(|e| explain(&e))?;
+        self.model
+            .set_mass_dress(mid, Some(dress))
+            .map_err(|e| explain(&e))?;
+        self.report.env_buildings += 1;
+        self.sources.push((mid.0, id));
+        if let Some(g) = self
+            .ent(id)
+            .and_then(|e| e.arg(0).as_str().map(str::to_string))
+        {
+            self.guids.masses.push((mid, g));
+        }
+        Ok(())
+    }
 }

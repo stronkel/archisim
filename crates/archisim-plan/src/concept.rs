@@ -107,6 +107,10 @@ pub fn draw_masses(
                 );
                 return;
             }
+            if let Some(dress) = &m.dress {
+                env_building(s, model, m, dress, &d, centre, k);
+                return;
+            }
             let _ = writeln!(
                 s,
                 r#"<path d="{}" fill="rgb({},{},{})" fill-opacity="0.6" fill-rule="evenodd" stroke="{INK}" stroke-width="{}"/>"#,
@@ -132,4 +136,118 @@ pub fn draw_masses(
         });
     }
     s.push_str("</g>\n");
+}
+
+/// A building of the surroundings, as town plans draw them: its footprint
+/// in grey with its outline, the party walls heavier, its courtyard, and
+/// its floors in Roman numerals.
+fn env_building(
+    s: &mut String,
+    model: &Model,
+    m: &archisim_core::Mass,
+    dress: &archisim_core::Dress,
+    d: &str,
+    centre: Point2,
+    k: f64,
+) {
+    let _ = writeln!(
+        s,
+        r#"<path d="{}" fill="{ENV_FILL}" fill-rule="evenodd" stroke="{INK}" stroke-width="{}"/>"#,
+        d,
+        num(pens().cut * k)
+    );
+    if let archisim_core::MassShape::Prism(p) = &m.shape {
+        let party = model.party_sides(m.id);
+        let n = p.len();
+        for (i, on) in party.iter().enumerate() {
+            if *on {
+                let _ = writeln!(
+                    s,
+                    r#"<path d="M{} L{}" stroke="{INK}" stroke-width="{}"/>"#,
+                    crate::pt(p[i]),
+                    crate::pt(p[(i + 1) % n]),
+                    num(pens().cut * 2.0 * k)
+                );
+            }
+        }
+        if dress.patio > 0.0 {
+            if let Some(inner) = archisim_core::offset_contour(p, -dress.patio)
+                .filter(|q| q.len() == n && archisim_core::signed_area(q) > 4.0)
+            {
+                let _ = writeln!(
+                    s,
+                    r#"<path d="{}" fill="white" stroke="{INK}" stroke-width="{}"/>"#,
+                    crate::path(&inner),
+                    num(pens().view * k)
+                );
+            }
+        }
+    }
+    let h = LABEL * 1.4 * k;
+    let floors = archisim_core::roman(m.floors().max(1) as u32);
+    let centre = match &m.shape {
+        archisim_core::MassShape::Prism(p) => label_point(p).unwrap_or(centre),
+        _ => centre,
+    };
+    let _ = writeln!(
+        s,
+        r#"<path d="{}" {}/>"#,
+        text_path(
+            &floors,
+            centre - Point2::new(0.0, h / 2.0),
+            Point2::new(1.0, 0.0),
+            h,
+            Align::Centre
+        ),
+        crate::lettering::paint(h, INK)
+    );
+}
+
+/// The grey of the buildings of the surroundings.
+const ENV_FILL: &str = "#dedbd5";
+
+/// Where a label sits well inside a contour: of a grid of points over it,
+/// the one inside farthest from its sides (the middle of an L's widest
+/// arm, not its corner).
+fn label_point(poly: &[Point2]) -> Option<Point2> {
+    let (mut lo, mut hi) = (poly[0], poly[0]);
+    for p in poly {
+        lo = Point2::new(lo.x.min(p.x), lo.y.min(p.y));
+        hi = Point2::new(hi.x.max(p.x), hi.y.max(p.y));
+    }
+    let n = poly.len();
+    let clearance = |q: Point2| {
+        (0..n)
+            .map(|i| to_segment(q, poly[i], poly[(i + 1) % n]))
+            .fold(f64::MAX, f64::min)
+    };
+    const STEPS: usize = 16;
+    let mut best: Option<(f64, Point2)> = None;
+    for i in 0..=STEPS {
+        for j in 0..=STEPS {
+            let q = Point2::new(
+                lo.x + (hi.x - lo.x) * i as f64 / STEPS as f64,
+                lo.y + (hi.y - lo.y) * j as f64 / STEPS as f64,
+            );
+            if !archisim_core::point_in_polygon(q, poly) {
+                continue;
+            }
+            let c = clearance(q);
+            if best.is_none_or(|b| c > b.0 + 1e-9) {
+                best = Some((c, q));
+            }
+        }
+    }
+    best.map(|b| b.1)
+}
+
+fn to_segment(q: Point2, a: Point2, b: Point2) -> f64 {
+    let ab = b - a;
+    let l2 = ab.dot(ab);
+    let t = if l2 <= 1e-18 {
+        0.0
+    } else {
+        ((q - a).dot(ab) / l2).clamp(0.0, 1.0)
+    };
+    q.distance(a + ab * t)
 }

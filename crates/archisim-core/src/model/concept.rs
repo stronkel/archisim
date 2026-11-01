@@ -193,6 +193,8 @@ pub struct Mass {
     pub finish: Option<EdgeFinish>,
     /// Twisted or bent.
     pub deform: Option<Deform>,
+    /// Dressed as a building of the surroundings (U6).
+    pub dress: Option<Dress>,
 }
 
 /// A loose edge of the concept phase: a line of the model (not of the
@@ -676,6 +678,7 @@ impl Model {
                 building: None,
                 finish: None,
                 deform: None,
+                dress: None,
             },
         );
         Ok(id)

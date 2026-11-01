@@ -293,6 +293,7 @@ pub fn explain(e: &ModelError) -> String {
             format!("la familia «{name}» no hace objetos (es una puerta, una ventana o va en un muro)")
         }
         ModelError::InvalidPriority => "la prioridad de intersección va de 0 a 999".into(),
+        ModelError::InvalidDress => "un edificio del entorno es una masa por plantas (de 1 a 60) de contorno; las ventanas, más estrechas que su ritmo (de 1,2 a 12 m)".into(),
         ModelError::InvalidRailing => "la barandilla necesita dos puntos al menos (a más de 5 cm), una altura de 30 cm a 3 m y montantes a 30 cm – 5 m".into(),
         ModelError::InvalidCurtainWall => "el muro cortina necesita altura y sitio entre los marcos de su tipo en cada paño y cada fila".into(),
         ModelError::UnknownCurtainType(_) => "el tipo de muro cortina ya no existe".into(),

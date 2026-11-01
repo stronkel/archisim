@@ -477,6 +477,69 @@ impl Exporter<'_> {
             self.pset(el, &m.guid, "ArchiSim_Marking", &props);
             on_site.push(el);
         }
+        // Buildings of the surroundings (U6): a proxy with its façades
+        // and roof, by material, and what makes them again.
+        for m in model.env_buildings() {
+            let (Some(d), archisim_core::MassShape::Prism(outline)) = (&m.dress, &m.shape) else {
+                continue;
+            };
+            let base = elevation(m.level);
+            let solids = archisim_geom::solid::mass_solids(model, m.id);
+            let refs: Vec<&archisim_geom::solid::Solid> = solids.iter().collect();
+            let Some(shape) = self.solids_shape(&refs, base) else {
+                continue;
+            };
+            let loc = self.point3(0.0, 0.0, base);
+            let pl = self.placement(Some(site_pl), loc, None);
+            let el = self.w.add(format!(
+                "IFCBUILDINGELEMENTPROXY({},$,{},{},'ENVIRONMENT',{pl},{shape},$,.USERDEFINED.)",
+                string(m.guid.as_str()),
+                string(&m.name),
+                string(d.style.name())
+            ));
+            let path: Vec<String> = outline
+                .iter()
+                .map(|p| format!("{},{}", real(p.x), real(p.y)))
+                .collect();
+            let names: Vec<String> = d
+                .materials
+                .all()
+                .iter()
+                .map(|x| model.material(*x).map_or(String::new(), |x| x.name.clone()))
+                .collect();
+            let props = vec![
+                self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('Outline',$,IFCTEXT({}),$)",
+                    string(&path.join(";"))
+                )),
+                self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('Dress',$,IFCTEXT({}),$)",
+                    string(&d.encode())
+                )),
+                self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('Floors',$,IFCCOUNTMEASURE({}),$)",
+                    m.floors()
+                )),
+                self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('FloorHeight',$,IFCPOSITIVELENGTHMEASURE({}),$)",
+                    real(m.floor_height.unwrap_or(m.height))
+                )),
+                self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('BaseOffset',$,IFCLENGTHMEASURE({}),$)",
+                    real(m.base_offset)
+                )),
+                self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('Materials',$,IFCTEXT({}),$)",
+                    string(&names.join("|"))
+                )),
+                self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('Level',$,IFCIDENTIFIER({}),$)",
+                    string(&level_guid(m.level))
+                )),
+            ];
+            self.pset(el, &m.guid, "ArchiSim_EnvBuilding", &props);
+            on_site.push(el);
+        }
         if !roads.is_empty() {
             self.rel_aggregates(derived_guid(&model.site_guid, "roads"), site, &roads);
         }

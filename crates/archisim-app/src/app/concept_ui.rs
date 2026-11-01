@@ -377,6 +377,9 @@ impl ArchiSimApp {
     }
 
     fn mass_click(&mut self, p: Point2) {
+        if self.env_building_click(p) {
+            return;
+        }
         if self.drawing_edges() {
             let reach = self.view.to_metres(REACH);
             // In 3D, the height the point is at (up a face).
@@ -838,6 +841,7 @@ impl ArchiSimApp {
                             building: None,
                             finish: None,
                             deform: None,
+                            dress: None,
                         };
                         let band = probe.outline();
                         if band.len() > 2 {
@@ -1201,6 +1205,9 @@ impl ArchiSimApp {
             );
         });
         self.mass_settings = s;
+        if self.tool == Tool::Mass && s.what == MassWhat::Mass {
+            self.env_tool_group(ui);
+        }
         if take_profile {
             self.take_profile(None);
         }

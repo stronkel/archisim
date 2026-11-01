@@ -9099,3 +9099,64 @@ fn a_sewer_under_the_street() {
     h.frame();
     assert!(archisim_plan::profile::run_profile_svg(h.model(), run.id).is_some());
 }
+
+/// U6: the tile «Edificio del entorno» fills a plot with a click; two
+/// buildings change style at once, and in a row they share a party wall.
+#[test]
+fn buildings_of_the_surroundings() {
+    let mut h = Harness::new(Editor::new_project());
+    let canvas = h.app.canvas;
+    h.app
+        .view
+        .fit_exact(canvas, p(-10.0, -10.0), p(40.0, 30.0), 0.0);
+    let level = h.app.ed.level;
+    for x in [0.0, 8.0] {
+        let r = h.app.ed.transact("Parcela", |m| {
+            m.add_plot(archisim_core::NewPlot {
+                name: "Parcela".into(),
+                level,
+                outline: vec![p(x, 0.0), p(x + 8.0, 0.0), p(x + 8.0, 15.0), p(x, 15.0)],
+                setback: 0.0,
+                reference: String::new(),
+            })
+            .map(drop)
+        });
+        assert!(r.is_ok());
+    }
+    h.app.set_discipline(super::toolbox::Discipline::Site);
+    h.frame();
+    h.app.pick(super::toolbox::Pick::EnvBuilding);
+    assert_eq!(h.app.tool, Tool::Mass);
+    assert_eq!(
+        h.app.mass_settings.style,
+        Some(archisim_core::BuildingStyle::Andalusian)
+    );
+    h.frame();
+    h.click_at(p(4.0, 7.0));
+    h.click_at(p(12.0, 7.0));
+    let ids: Vec<_> = h.model().env_buildings().map(|b| b.id).collect();
+    assert_eq!(
+        ids.len(),
+        2,
+        "{:?}",
+        h.app.message.as_ref().map(|m| m.text.clone())
+    );
+    assert_eq!(h.model().mass(ids[0]).unwrap().floors(), 2);
+    assert_eq!(
+        h.model().party_sides(ids[0]),
+        vec![false, true, false, false]
+    );
+    // Both selected: one style for the two.
+    h.app.ed.selection = ids.iter().map(|i| Element::Mass(*i)).collect();
+    h.frame();
+    let r = h.app.ed.transact("Estilo", |m| {
+        m.restyle_masses(&ids, archisim_core::BuildingStyle::Ensanche)
+            .map(drop)
+    });
+    assert!(r.is_ok());
+    h.frame();
+    assert!(h
+        .model()
+        .env_buildings()
+        .all(|b| b.dress.unwrap().style == archisim_core::BuildingStyle::Ensanche));
+}

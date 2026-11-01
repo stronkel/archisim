@@ -63,6 +63,9 @@ pub struct MassSettings {
     pub top_radius: f64,
     /// The profile Seguir sweeps.
     pub profile: SweepProfile,
+    /// A mass by floors made as a building of the surroundings in this
+    /// style (U6).
+    pub style: Option<archisim_core::BuildingStyle>,
 }
 
 /// The profile of a band along a path: the plain rectangle, a ready one
@@ -152,6 +155,7 @@ impl MassSettings {
             material,
             top_radius: 0.0,
             profile: SweepProfile::Band,
+            style: None,
         }
     }
 
@@ -210,6 +214,25 @@ fn add_mass_shape_in(
     shape: MassShape,
 ) -> Result<MassId, archisim_core::ModelError> {
     let (height, floor_height) = s.heights();
+    if let (Some(style), MassWhat::Mass, MassShape::Prism(outline)) = (s.style, s.what, &shape) {
+        let name = format!(
+            "{} {}",
+            style.name(),
+            m.env_buildings()
+                .filter(|b| b.dress.is_some_and(|d| d.style == style))
+                .count()
+                + 1
+        );
+        return m.add_env_building(archisim_core::NewEnvBuilding {
+            name,
+            level,
+            outline: outline.clone(),
+            style,
+            floors: Some(s.floors.max(1) as u32),
+            floor_height: Some(s.floor_height),
+            base_offset: s.base_offset,
+        });
+    }
     m.add_mass(NewMass {
         name: m.next_mass_name(floor_height.is_some()),
         level,

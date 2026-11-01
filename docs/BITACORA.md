@@ -6,6 +6,36 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-01 (73) · U6: edificios paramétricos del entorno
+
+Rama `bloque/u6-edificios`, con pull request. Los PR #142 (U4) y #143 (U5) ya están unidos a `main`. Formato `.archisim` versión 67: el estilo de una masa. Las versiones anteriores avisan de que no pueden abrir el fichero.
+
+**Hecho**
+- Un **edificio del entorno** es una masa por plantas de Concepto «vestida» con un estilo. Guarda su contorno, sus plantas, su altura de planta y los parámetros del estilo; las ventanas, balcones y cubierta se rehacen cada vez a partir de ellos.
+- **Trece estilos**, cada uno con sus plantas, su altura de planta y sus acabados (se buscan en el proyecto por su nombre o se crean):
+  - Casas: casa andaluza entre medianeras, casa patio, adosada, pareada, vivienda aislada (chalet).
+  - Bloques: casco histórico, bloque de ensanche, comercio con viviendas, bloque de los años 60–70, hotel de costa.
+  - Otros usos: oficinas de muro cortina, equipamiento, nave industrial.
+- **Parámetros** de cada edificio: ritmo de huecos, ancho y alto de ventana, antepecho, cierre de los huecos (ventanas, rejas, balcones, terrazas corridas o muro cortina), vuelo, cubierta (plana con peto, a dos aguas o a cuatro aguas) y su pendiente, zócalo, bajo comercial con escaparates y rótulo, cornisa y patio.
+- **Medianeras:** las fachadas que tocan otro volumen quedan ciegas y la cubierta no vierte sobre ellas. Entre medianeras, la cumbrera va paralela a la calle; en un edificio aislado, a lo largo de su lado mayor. Las cubiertas de teja salen del esqueleto recto, así que valen también para contornos en L.
+- **En planta:** la huella en gris con el número de plantas en romanos, las medianeras más gruesas y el patio en blanco.
+- **IFC:** cada edificio va como `IfcBuildingElementProxy` (ENVIRONMENT) con su cuerpo por materiales y el conjunto `ArchiSim_EnvBuilding`. Al importar vuelve a ser un edificio del entorno con el mismo estilo y los mismos acabados.
+- **En la aplicación:**
+  - ficha **Edificio del entorno** en Exterior: un clic en una parcela pone el edificio en su superficie edificable; con «Dibujar el contorno», se dibuja como una masa;
+  - el estilo se elige en tarjetas que enseñan una fachada pequeña de cada uno;
+  - en las propiedades de uno o de varios edificios a la vez: cambiar el estilo de todos, cambiar sus medidas o quitarles el estilo. Cualquier masa por plantas de Concepto puede recibir un estilo.
+- `archisim entorno out/`: dos calles con los trece estilos (una fila de casas andaluzas entre medianeras, casco, ensanche, bloques, oficinas, hotel, colegio, nave, adosadas, pareadas, chalets y casa patio). Genera `entorno.archisim`, `entorno.ifc` y su planta en SVG y PNG.
+
+**Pendiente**
+- Más estilos (ensanche europeo, nórdico…) y los colores de cada edificio cambiados a mano, uno a uno (hoy se cambian los materiales del proyecto, que comparten los del mismo estilo).
+- U7: que el Catastro traiga sus edificios con estilo.
+
+**Qué debe probar Antonio**
+- `archisim entorno out/`: abrir `out/entorno.archisim`, mirar la planta y la vista 3D. Después, `archisim render out/entorno.archisim out/entorno.png`.
+- Exterior → Edificio del entorno: hacer clic en dos parcelas que se tocan y comprobar que la medianera queda ciega. Seleccionar varios edificios y cambiarles el estilo de una vez.
+
+---
+
 ## 2026-11-01 (72) · U5: redes urbanas bajo la calle
 
 Rama `bloque/u5-redes` (encima de U4), con pull request. Formato `.archisim` versión 66: sistemas y aparatos nuevos. Las versiones anteriores avisan de que no pueden abrir el fichero.
