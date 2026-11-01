@@ -1725,6 +1725,13 @@ mod tests {
                 "water_heater" => (0.45, 0.45, 0.9),
                 "solar_panel" => (3.4, 1.6, 0.9),
                 "solar_collector" => (2.2, 1.7, 1.0),
+                "manhole" => (1.2, 1.2, 2.0),
+                "gully" => (0.6, 0.3, 0.8),
+                "chamber" => (0.6, 0.6, 0.8),
+                "hydrant" => (0.35, 0.35, 0.9),
+                "transformer" => (3.0, 2.5, 2.8),
+                "fuse_box" | "main_fuse_box" => (0.5, 0.25, 0.7),
+                "street_light" => (0.45, 0.45, 6.0),
                 _ => (0.08, 0.04, 0.08),
             };
             let m = device_model(kind, w, d, h).expect(kind);
@@ -1732,9 +1739,16 @@ mod tests {
             for p in &m.positions {
                 // Within the box, give or take the screws to the wall and
                 // a key a few millimetres proud.
+                // The arm of a street light reaches over the road, past the
+                // base it stands on.
+                let reach = if kind == "street_light" {
+                    1.35
+                } else {
+                    d / 2.0 + 0.05
+                };
                 assert!(
                     (p[0] as f64).abs() <= w / 2.0 + 0.05
-                        && (p[1] as f64).abs() <= d / 2.0 + 0.05
+                        && (p[1] as f64).abs() <= reach
                         && (p[2] as f64) >= -0.01
                         && (p[2] as f64) <= h + 0.01,
                     "{kind}: {p:?}"
