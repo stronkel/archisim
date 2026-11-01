@@ -6,7 +6,7 @@ use archisim_core::{DeviceKind, NewDevice, NewRun, Point2, ServiceSystem};
 
 use super::{explain, snap, Importer};
 
-const RUN_CLASSES: [&str; 2] = ["IFCPIPESEGMENT", "IFCDUCTSEGMENT"];
+const RUN_CLASSES: [&str; 3] = ["IFCPIPESEGMENT", "IFCDUCTSEGMENT", "IFCCABLECARRIERSEGMENT"];
 /// The classes the devices are written as (risers and downpipes as pipe
 /// segments, with `ArchiSim_Device`, not `ArchiSim_Run`).
 fn device_classes() -> Vec<&'static str> {
@@ -15,7 +15,7 @@ fn device_classes() -> Vec<&'static str> {
     v.dedup();
     v
 }
-const FITTING_CLASSES: [&str; 2] = ["IFCPIPEFITTING", "IFCDUCTFITTING"];
+const FITTING_CLASSES: [&str; 3] = ["IFCPIPEFITTING", "IFCDUCTFITTING", "IFCCABLECARRIERFITTING"];
 
 impl<'a> Importer<'a> {
     pub(super) fn import_services(&mut self) {

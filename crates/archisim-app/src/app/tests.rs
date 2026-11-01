@@ -9051,3 +9051,51 @@ fn markings_with_the_tool() {
     h.app.ed.selection = [Element::Marking(line.id)].into_iter().collect();
     h.frame();
 }
+
+/// A network under the street with the Redes tile (U5): the pipe tool on
+/// a sewer at its depth, its manholes and connections, its properties.
+#[test]
+fn a_sewer_under_the_street() {
+    let mut h = Harness::new(Editor::new_project());
+    let canvas = h.app.canvas;
+    h.app
+        .view
+        .fit_exact(canvas, p(-10.0, -30.0), p(90.0, 30.0), 0.0);
+    h.app.set_discipline(super::toolbox::Discipline::Site);
+    h.frame();
+    h.app.pick(super::toolbox::Pick::Network);
+    assert_eq!(h.app.tool, Tool::Pipe);
+    assert_eq!(
+        h.app.service_settings.pipe_system,
+        archisim_core::ServiceSystem::Sewer
+    );
+    h.click_at(p(0.0, 0.0));
+    assert_eq!(h.app.tool, Tool::Pipe);
+    assert_eq!(h.app.run_points.len(), 1);
+    h.click_at(p(40.0, 0.0));
+    assert_eq!(h.app.run_points.len(), 2);
+    h.key(Key::Enter);
+    let run = h
+        .model()
+        .runs()
+        .next()
+        .unwrap_or_else(|| panic!("{:?}", h.app.message.as_ref().map(|m| m.text.clone())))
+        .clone();
+    assert_eq!(run.system, archisim_core::ServiceSystem::Sewer);
+    assert!(run.elevation < -1.0 && run.slope > 0.0, "{run:?}");
+    let r = h
+        .app
+        .ed
+        .transact("Pozos", |m| m.add_manholes(run.id).map(drop));
+    assert!(r.is_ok());
+    assert_eq!(
+        h.model()
+            .devices()
+            .filter(|d| d.kind == archisim_core::DeviceKind::Manhole)
+            .count(),
+        2
+    );
+    h.app.ed.selection = [Element::Run(run.id)].into_iter().collect();
+    h.frame();
+    assert!(archisim_plan::profile::run_profile_svg(h.model(), run.id).is_some());
+}

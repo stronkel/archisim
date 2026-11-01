@@ -6,6 +6,57 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-01 (72) · U5: redes urbanas bajo la calle
+
+Rama `bloque/u5-redes` (encima de U4), con pull request. Formato `.archisim` versión 66: sistemas y aparatos nuevos. Las versiones anteriores avisan de que no pueden abrir el fichero.
+
+**Hecho**
+- **Ocho redes nuevas** en la herramienta Tubería, cada una con su tubo y su profundidad usuales:
+
+  | Red | Tubo usual | Profundidad del eje |
+  |---|---|---|
+  | Saneamiento | Ø 315 | 1,80 m |
+  | Pluviales | Ø 400 | 1,50 m |
+  | Abastecimiento | Ø 110 | 1,00 m |
+  | Baja tensión | Ø 160 | 0,70 m |
+  | Media tensión | Ø 160 | 1,00 m |
+  | Alumbrado público | Ø 90 | 0,60 m |
+  | Telecomunicaciones | Ø 110 | 0,60 m |
+  | Gas | Ø 90 | 0,80 m |
+
+  El saneamiento y las pluviales llevan pendiente. En Exterior hay una ficha **Redes** que abre directamente el saneamiento.
+- **Aparatos nuevos** (ficha «Pozo y arqueta»), cada uno con su modelo 3D y su símbolo en planta. Se apoyan en la calle o bajan desde ella:
+  - pozo de registro;
+  - imbornal con su rejilla;
+  - hidrante;
+  - arqueta;
+  - centro de transformación;
+  - caja general de protección;
+  - farola.
+- En las propiedades de una tubería de red urbana:
+  - **Pozos de registro:** en los extremos, en cada quiebro y a no más de 40 m, desde la solera hasta la calle.
+  - **Acometidas a las parcelas:** una arqueta en el frente de cada parcela a menos de 25 m y su tubería hasta la red, a escuadra. Las de saneamiento caen al 2 % hacia la red.
+  - **Perfil longitudinal (SVG):** escala horizontal 1:500 y vertical 1:50. Dibuja la calle, la tubería y los pozos, con la guitarra de distancias, cota de calle, cota de solera, profundidad y pendiente de cada tramo.
+- **Mediciones:** la excavación en zanja de cada red, en m³ (ancho del tubo más 40 cm, desde 10 cm bajo la solera hasta la calle), junto a los metros de tubería y las unidades de cada aparato.
+- **IFC:**
+  - los cables van en `IfcCableCarrierSegment` (CONDUITSEGMENT);
+  - los pozos y arquetas como `IfcDistributionChamberElement`;
+  - imbornal, hidrante, transformador, caja general y farola con su clase;
+  - cada red con su sistema (`SEWAGE`, `STORMWATER`, `WATERSUPPLY`, `ELECTRICAL`, `LIGHTING`, `COMMUNICATION`, `GAS`).
+- `archisim calles out/` ahora tiene:
+  - el saneamiento de la Calle Real con sus pozos y acometidas, y su perfil en `calles-perfil-saneamiento.svg`;
+  - en la Calle Nueva, abastecimiento, alumbrado, baja tensión y telecomunicaciones, con acometidas, un hidrante, tres farolas y un imbornal.
+
+**Pendiente**
+- Las acometidas no se unen todavía a la instalación interior de cada edificio (al cuadro o al contador).
+- Las farolas no forman aún un circuito con su cuadro de alumbrado.
+
+**Qué debe probar Antonio**
+- `archisim calles out/`: abrir `out/calles-perfil-saneamiento.svg` y mirar en planta las redes de la Calle Real y de la Calle Nueva.
+- Exterior → Redes: dibujar un saneamiento a lo largo de una calle con parcelas. Después, en sus propiedades: «Pozos de registro», «Acometidas a las parcelas» y «Perfil longitudinal…».
+
+---
+
 ## 2026-11-01 (71) · U4: marcas viales y pasos de peatones a voluntad
 
 Rama `bloque/u4-marcas`, con pull request. Formato `.archisim` versión 65: marcas viales. El PR #141 (glorietas y plazas) ya está unido a `main`.

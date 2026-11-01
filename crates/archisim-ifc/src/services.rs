@@ -86,13 +86,16 @@ impl Exporter<'_> {
                     derived_guid(&r.guid, &format!("stretch {i}"))
                 };
                 let name = string(&format!("{} {}", r.system.name(), r.size_text()));
-                let class = if r.is_duct() {
-                    "IFCDUCTSEGMENT"
+                // Cables under the street go in their conduits (U5).
+                let (class, predefined) = if r.is_duct() {
+                    ("IFCDUCTSEGMENT", "RIGIDSEGMENT")
+                } else if r.system.is_cable() {
+                    ("IFCCABLECARRIERSEGMENT", "CONDUITSEGMENT")
                 } else {
-                    "IFCPIPESEGMENT"
+                    ("IFCPIPESEGMENT", "RIGIDSEGMENT")
                 };
                 let el = self.w.add(format!(
-                    "{class}({},$,{name},$,$,{pl},{shape},$,.RIGIDSEGMENT.)",
+                    "{class}({},$,{name},$,$,{pl},{shape},$,.{predefined}.)",
                     string(guid.as_str())
                 ));
                 let mut props = vec![
@@ -350,6 +353,8 @@ impl Exporter<'_> {
             let pl = self.placement(Some(storey_pl), self.origin, None);
             let class = if r.is_duct() {
                 "IFCDUCTFITTING"
+            } else if r.system.is_cable() {
+                "IFCCABLECARRIERFITTING"
             } else {
                 "IFCPIPEFITTING"
             };

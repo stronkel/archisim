@@ -37,7 +37,7 @@ pub const ROLES: [&str; 11] = [
 ];
 
 /// The kinds that have a model: the codes of the devices' kinds.
-pub const KINDS: [&str; 29] = [
+pub const KINDS: [&str; 36] = [
     "equipment",
     "light",
     "socket",
@@ -67,6 +67,13 @@ pub const KINDS: [&str; 29] = [
     "water_heater",
     "solar_panel",
     "solar_collector",
+    "manhole",
+    "gully",
+    "hydrant",
+    "chamber",
+    "transformer",
+    "main_fuse_box",
+    "street_light",
 ];
 
 /// How far a key or a shutter is tilted, radians.
@@ -129,6 +136,13 @@ fn make(kind: &str, w: f64, d: f64, h: f64) -> Option<PropMesh> {
         "water_heater" => water_heater(&mut b, w, d, h),
         "solar_panel" => solar_row(&mut b, w, d, h, false),
         "solar_collector" => solar_row(&mut b, w, d, h, true),
+        "manhole" => manhole(&mut b, w, h),
+        "gully" => chamber(&mut b, w, d, h, true),
+        "chamber" => chamber(&mut b, w, d, h, false),
+        "hydrant" => hydrant(&mut b, w, h),
+        "transformer" => transformer(&mut b, w, d, h),
+        "main_fuse_box" => fuse_box(&mut b, w, d, h),
+        "street_light" => street_light(&mut b, w, h),
         _ => return None,
     }
     Some(PropMesh {
@@ -1502,6 +1516,182 @@ fn solar_row(b: &mut Builder, w: f64, d: f64, h: f64, thermal: bool) {
             ROUND,
         );
     }
+}
+
+/// A manhole (U5): its shaft of rings down to the sewer, its cone at the
+/// top and its cast iron cover flush with the street (the box's top).
+fn manhole(b: &mut Builder, w: f64, h: f64) {
+    let r = w / 2.0;
+    let cone = (r * 0.8).min(h * 0.4);
+    b.cone("body", [0.0, 0.0, 0.0], [0.0, 0.0, h - cone], r, r, 24);
+    b.cone(
+        "body",
+        [0.0, 0.0, h - cone],
+        [0.0, 0.0, h - 0.05],
+        r,
+        0.35,
+        24,
+    );
+    b.cone("metal", [0.0, 0.0, h - 0.05], [0.0, 0.0, h], 0.36, 0.36, 24);
+    b.cone(
+        "dark",
+        [0.0, 0.0, h - 0.004],
+        [0.0, 0.0, h + 0.002],
+        0.3,
+        0.3,
+        24,
+    );
+}
+
+/// A chamber or a gully (U5): its concrete box and its cover (a grating
+/// for a gully).
+fn chamber(b: &mut Builder, w: f64, d: f64, h: f64, grating: bool) {
+    b.rbox(
+        "body",
+        [-w / 2.0, -d / 2.0, 0.0],
+        [w / 2.0, d / 2.0, h - 0.04],
+        0.0,
+    );
+    b.rbox(
+        "metal",
+        [-w / 2.0 + 0.03, -d / 2.0 + 0.03, h - 0.04],
+        [w / 2.0 - 0.03, d / 2.0 - 0.03, h],
+        0.0,
+    );
+    if grating {
+        let n = 6;
+        for i in 0..n {
+            let x = -w / 2.0 + 0.06 + (w - 0.12) * (i as f64 + 0.5) / n as f64;
+            b.rbox(
+                "dark",
+                [x - 0.012, -d / 2.0 + 0.06, h - 0.002],
+                [x + 0.012, d / 2.0 - 0.06, h + 0.002],
+                0.0,
+            );
+        }
+    }
+}
+
+/// A fire hydrant (U5): its red post with its outlets and cap.
+fn hydrant(b: &mut Builder, w: f64, h: f64) {
+    let r = w / 2.0 * 0.6;
+    b.cone(
+        "red",
+        [0.0, 0.0, 0.0],
+        [0.0, 0.0, 0.1],
+        r * 1.4,
+        r * 1.4,
+        16,
+    );
+    b.cone("red", [0.0, 0.0, 0.1], [0.0, 0.0, h * 0.85], r, r, 16);
+    b.cone(
+        "red",
+        [0.0, 0.0, h * 0.85],
+        [0.0, 0.0, h],
+        r * 1.1,
+        r * 0.4,
+        16,
+    );
+    for s in [-1.0, 1.0] {
+        b.cone(
+            "metal",
+            [0.0, 0.0, h * 0.6],
+            [s * (r + 0.08), 0.0, h * 0.6],
+            r * 0.35,
+            r * 0.35,
+            12,
+        );
+    }
+}
+
+/// A transformer centre (U5): a prefabricated concrete hut with its doors
+/// and vents.
+fn transformer(b: &mut Builder, w: f64, d: f64, h: f64) {
+    b.rbox(
+        "body",
+        [-w / 2.0, -d / 2.0, 0.0],
+        [w / 2.0, d / 2.0, h - 0.1],
+        0.02,
+    );
+    b.rbox(
+        "plate",
+        [-w / 2.0 - 0.05, -d / 2.0 - 0.05, h - 0.1],
+        [w / 2.0 + 0.05, d / 2.0 + 0.05, h],
+        0.01,
+    );
+    for x in [-w / 4.0, w / 4.0] {
+        b.rbox(
+            "metal",
+            [x - 0.45, -d / 2.0 - 0.01, 0.1],
+            [x + 0.45, -d / 2.0, 2.1],
+            0.0,
+        );
+        b.rbox(
+            "dark",
+            [x - 0.3, -d / 2.0 - 0.015, 1.7],
+            [x + 0.3, -d / 2.0 - 0.01, 2.0],
+            0.0,
+        );
+    }
+    b.rbox(
+        "sign",
+        [-0.15, -d / 2.0 - 0.02, 2.2],
+        [0.15, -d / 2.0 - 0.015, 2.5],
+        0.0,
+    );
+}
+
+/// A building's main protection box (U5): a grey box in its niche with a
+/// lockable door.
+fn fuse_box(b: &mut Builder, w: f64, d: f64, h: f64) {
+    b.rbox(
+        "plate",
+        [-w / 2.0, -d / 2.0, 0.0],
+        [w / 2.0, d / 2.0, h],
+        0.01,
+    );
+    b.rbox(
+        "key",
+        [-w / 2.0 + 0.02, d / 2.0, 0.02],
+        [w / 2.0 - 0.02, d / 2.0 + 0.01, h - 0.02],
+        0.005,
+    );
+    b.rbox(
+        "sign",
+        [-0.05, d / 2.0 + 0.01, h * 0.7],
+        [0.05, d / 2.0 + 0.015, h * 0.8],
+        0.0,
+    );
+}
+
+/// A street light (U5): its base, its tapering pole and its lantern on
+/// an arm.
+fn street_light(b: &mut Builder, w: f64, h: f64) {
+    let r = (w / 2.0).max(0.08);
+    b.cone("dark", [0.0, 0.0, 0.0], [0.0, 0.0, 0.6], r, r * 0.8, 16);
+    b.cone(
+        "metal",
+        [0.0, 0.0, 0.6],
+        [0.0, 0.0, h - 0.2],
+        r * 0.5,
+        r * 0.3,
+        16,
+    );
+    b.cone(
+        "metal",
+        [0.0, 0.0, h - 0.25],
+        [0.0, 0.9, h - 0.05],
+        0.035,
+        0.035,
+        8,
+    );
+    b.rbox("dark", [-0.2, 0.7, h - 0.15], [0.2, 1.3, h], 0.03);
+    b.rbox(
+        "shade",
+        [-0.17, 0.73, h - 0.17],
+        [0.17, 1.27, h - 0.15],
+        0.0,
+    );
 }
 
 #[cfg(test)]
