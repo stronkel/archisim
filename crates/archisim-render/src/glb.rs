@@ -453,6 +453,7 @@ fn material_json(
     let m = model.material(look.material);
     let name = m.map_or_else(|| "Material".to_string(), |m| m.name.clone());
     let glass = m.is_some_and(|m| m.category == "glass");
+    let water = m.is_some_and(|m| m.category == "water");
     let rgb = model.surface_color(look.material);
     let mut colour = [linear(rgb[0]), linear(rgb[1]), linear(rgb[2]), 1.0];
     if look.vertex_colours {
@@ -465,6 +466,12 @@ fn material_json(
         pbr["roughnessFactor"] = json!(0.4);
     }
     let mut out = json!({"name": name, "doubleSided": false});
+    if water {
+        // See-through, so the floor of a pool shows.
+        colour[3] = 0.55;
+        pbr["roughnessFactor"] = json!(0.05);
+        out["alphaMode"] = json!("BLEND");
+    }
     if glass {
         colour[3] = 0.25;
         pbr["roughnessFactor"] = json!(0.05);

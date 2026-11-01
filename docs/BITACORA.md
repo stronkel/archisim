@@ -6,6 +6,28 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-31 (59) · H1 y H2: puertas en muros cortina, locales cerrados por ellos y agua transparente
+
+Ramas `bloque/h1-muro-cortina` y `bloque/h2-agua` (encima), con pull request cada una. Formato `.archisim` versión 57 (puertas de los muros cortina). Es el principio de la lista de Antonio del 31/10/2026 (H1–H7: muros cortina, incendios, ascensores, placas solares y agua, trepadoras, calles y cartografía).
+
+**Hecho**
+- **Puertas en muros cortina** (H1): una puerta de cualquier tipo de la biblioteca ocupa la celda de abajo de un paño, hasta el primer travesaño que quede a 2,00 m o más (si hay travesaños más bajos, la celda los junta). Se quitan los vidrios y el marco de abajo de esa celda; la puerta se hace con su familia a la medida del hueco. Mano y lado hacia el que abre, como en los muros.
+  - En Propiedades del muro cortina, grupo «Puertas»: añadir en el paño N, cambiar paño, tipo, mano y lado, quitar.
+  - Planta con el símbolo de la puerta a su escala, 3D, IFC (`IfcDoor` agregada al `IfcCurtainWall`, con su tipo) e importación de vuelta.
+- **Los muros cortina cierran locales** (como «delimitación de habitación» de Revit): la varita y los locales que siguen a sus muros los cuentan. El contorno del edificio (cara exterior) sigue siendo el de los muros.
+- En el edificio de Florence Street: las fachadas de vidrio de las viviendas tienen su puerta balconera de acero y vidrio, y el pabellón dos puertas al jardín. 86 de sus 117 locales quedan cerrados por muros o muros cortina.
+- **Agua transparente** (H2): el material de categoría «agua» deja ver el fondo en la vista 3D (55 % de opacidad), en el render (como vidrio) y en el glTF.
+
+**Pendiente**
+- El resto de la lista (H3–H7), en las ramas siguientes.
+
+**Qué debe probar Antonio**
+- `cargo run --release -p archisim-cli -- edificio out/` y abrir `out/edificio.archisim`. En la planta 1, mirar las fachadas de vidrio: cada una con su puerta dibujada y su apertura. Seleccionar un muro cortina y, en Propiedades → Puertas, cambiar la puerta de paño, de tipo y de mano.
+- Con la varita, clic dentro de una vivienda junto a la fachada de vidrio: el local debe cerrarse contra el muro cortina.
+- Abrir la demo, ponerse en 3D sobre la piscina: se ve el fondo y su pendiente a través del agua.
+
+---
+
 ## 2026-10-31 (58) · El edificio de Florence Street y vuelta de velocidad
 
 Rama `bloque/edificio` (sobre `bloque/g7-huecos`), con pull request. Sin cambios de formato.
