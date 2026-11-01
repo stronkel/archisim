@@ -6,6 +6,36 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-01 (61) · H4: ascensores
+
+Rama `bloque/h4-ascensores` (encima de H3), con pull request. Formato `.archisim` versión 59 (los ascensores).
+
+**Hecho**
+- **El ascensor como elemento** (herramienta Ascensor en Arquitectura, tecla AS): un clic en el centro del hueco; Espacio gira las puertas. Va desde la planta en la que se coloca hasta la más alta (o la que se elija) y para en todas las de en medio. Lleva:
+  - hueco con sus muros (o sin ellos, con grueso 0, si el hueco ya está dibujado con muros, como en el edificio);
+  - foso bajo la primera parada, con su escalera de pates, y huida sobre la última, con su techo;
+  - puertas de piso telescópicas en cada parada, con marco y botón de llamada;
+  - guías, contrapeso, cables y máquina;
+  - cabina con suelo, paredes, espejo, pasamanos, botonera y luz de techo (que se enciende de noche). Se dibuja en la planta que se elija.
+- **Modelos** (EN 81-20 y EN 81-70): 450 kg (accesible tipo 1), 630 kg (tipo 2), 1000 kg, 1275 kg (tipo 3) y montacamillas de 1600 kg. Cada uno trae su cabina, su puerta y su hueco; todo se puede cambiar a mano en Propiedades.
+- **Integración con el proyecto**: abre su hueco en los forjados que atraviesa (también en el de la primera parada si tiene foso) y lo vuelve a cerrar al moverlo o borrarlo. Se elige en todas las plantas que cruza.
+- **Planta**: el hueco cortado, la cruz del vacío, la cabina (a trazos en las plantas en las que no está), guías y contrapeso, la puerta de piso, y el nombre con la carga.
+- **IFC**: `IfcTransportElement` ELEVATOR con `ArchiSim_Elevator`, que se lee de vuelta. El hueco va como pieza aparte, que la importación salta.
+- **Comprobación CTE**: cabina de 1,00 × 1,25 m como mínimo (1,10 × 1,40 m en edificios de otros usos de más de 1.000 m²) y puerta de 0,80 m, en Accesibilidad.
+- **La cabina sola**, para un hueco dibujado con muros: la familia «Cabina de ascensor» en Objetos → Ascensores (`IfcTransportElement`).
+- El edificio de Florence Street lleva su ascensor de 630 kg en el hueco del núcleo, de planta baja a la cubierta.
+- Para que quepa la ficha, Ejes queda solo en Estructura (la tecla X sigue igual).
+
+**Pendiente**
+- Las puertas de piso son siempre telescópicas de dos hojas. Ascensores con dos embarques (cabina pasante) y escaleras mecánicas, si hacen falta.
+
+**Qué debe probar Antonio**
+- Abrir un proyecto con varias plantas, Arquitectura → Ascensor, clic donde va el hueco. Mirar la planta baja (foso a trazos, cabina) y las de arriba (cruz del hueco, puerta), y el 3D cortado con la caja de sección para ver la cabina, el foso y la huida.
+- Moverlo: los huecos de los forjados le siguen. En Propiedades, cambiar el modelo a 1000 kg y la última parada.
+- En el edificio (`archisim edificio out/`), el ascensor del núcleo en todas las plantas.
+
+---
+
 ## 2026-11-01 (60) · H3: protección contra incendios, equipos de agua y placas solares
 
 Rama `bloque/h3-incendios` (encima de H2), con pull request. Formato `.archisim` versión 58 (clases nuevas de aparatos y la red de protección contra incendios).
