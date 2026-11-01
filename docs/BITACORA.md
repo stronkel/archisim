@@ -6,6 +6,57 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-01 (69) · U3, primera parte: todos los tipos de calle en tarjetas
+
+Rama `bloque/u3-tipos-calle` (encima de U2), con pull request. Formato `.archisim` versión 63: franjas nuevas. Una versión anterior que abra un fichero con estas franjas avisa de que no lo puede leer.
+
+**Hecho**
+- **30 tipos de calle en seis grupos.** En «Tipo de vía» (Propiedades del vial y de la herramienta Vial) salen como tarjetas, cada una dibujada en sección: franjas a su altura, árboles, coches aparcados, autobús, carriles de tranvía y ancho total.
+  - **Peatonales y de coexistencia:**
+    - peatonal y peatonal arbolada;
+    - plataforma única y coexistencia con alcorques;
+    - casco histórico;
+    - paseo marítimo.
+  - **Residenciales:**
+    - doble sentido con aparcamiento a los dos lados, a un lado o sin él;
+    - un sentido con aparcamiento a uno o a los dos lados, o sin él;
+    - aparcamiento en batería y en espiga.
+  - **Arboladas:** a los dos lados, a un lado (acera con alcorques) y con franja verde continua.
+  - **Avenidas y bulevares:**
+    - mediana arbolada o ajardinada;
+    - dos calzadas con aparcamiento;
+    - bulevar con paseo central.
+  - **Bici, bus y tranvía:**
+    - carril bici;
+    - carril bici bidireccional con separador;
+    - carril bici en acera;
+    - carril bus;
+    - tranvía.
+  - **Travesías, carreteras y caminos:**
+    - travesía con arcenes;
+    - calle de servicio;
+    - carretera con arcén y cuneta;
+    - camino rural.
+- **Franjas nuevas:** carril bus, plataforma de tranvía, arcén, cuneta, acera con alcorques y carril bici en acera. La «franja verde» es la que antes se llamaba «Alcorques».
+  - Los **alcorques** son de 1,20 m cada 6 m, dibujados en planta y en 3D.
+  - El tranvía lleva sus **carriles**, con un ancho de vía de 1,435 m.
+  - La cuneta queda 30 cm por debajo.
+  - «Arbolado» planta un árbol en cada alcorque.
+- **Guardar en la biblioteca:** en «Sección tipo» de un vial seleccionado, con un nombre. Se guarda la sección y sus materiales en `Tipos de calle.ascalle`, en la carpeta de la biblioteca. Esos tipos salen en las tarjetas, en el grupo «En mi biblioteca», y al elegirlos en otro proyecto traen sus materiales (si no existen, se crean).
+- Una calle peatonal ya no necesita calzada.
+- `archisim tipos-calle out/`: todos los tipos uno al lado de otro, por grupos. Saca el proyecto, el IFC (validado) y la planta y la axonometría en SVG.
+
+**Pendiente (resto de U3)**
+- Rotondas y plazas: no son una sección, sino un elemento propio del cruce.
+- Que al traer OpenStreetMap cada calle tome su tipo: carril bus, tranvía, carril bici o peatonal. Va con U7.
+
+**Qué debe probar Antonio**
+- `archisim tipos-calle out/` y abrir `out/tipos-calle.archisim`: mirar los 30 tipos en planta y en 3D. ¿Las medidas son las que usáis? ¿Falta alguno?
+- Con un vial seleccionado, pulsar la tarjeta de «Tipo de vía» y elegir otro tipo.
+- Cambiar una franja y sus materiales y pulsar «Guardar en la biblioteca». Después, en otro proyecto, elegirlo en «En mi biblioteca».
+
+---
+
 ## 2026-11-01 (68) · U2, segunda parte: aceras hasta la línea de fachada
 
 En la misma rama `bloque/u2-secciones` (pull request de U2). Sin cambios de formato.

@@ -328,102 +328,13 @@ impl RoadSection {
     }
 }
 
-/// The usual roads: their name and their section.
+/// The usual roads: their name and their section (every street type of
+/// [`street_types`], U3).
 pub fn road_presets() -> Vec<(&'static str, RoadSection)> {
-    use RoadBand::*;
-    let s = |b, w| strip_of(b, w);
-    let mut single = RoadSection::of(vec![
-        s(Sidewalk, 1.8),
-        s(Carriageway, 3.5),
-        s(Sidewalk, 1.8),
-    ]);
-    single.single_level = true;
-    let mut battery = RoadSection::of(vec![
-        s(Sidewalk, 2.5),
-        s(Kerb, 0.15),
-        s(Parking, 5.0),
-        s(Carriageway, 3.5),
-        s(Kerb, 0.15),
-        s(Sidewalk, 2.5),
-    ]);
-    battery.parking = ParkingMode::Battery;
-    let mut rural = RoadSection::of(vec![
-        s(Planting, 1.0),
-        s(Carriageway, 2.75),
-        s(Carriageway, 2.75),
-        s(Planting, 1.0),
-    ]);
-    rural.single_level = true;
-    vec![
-        (
-            "Calle de doble sentido con aparcamiento",
-            RoadSection::default(),
-        ),
-        (
-            "Calle de un sentido con aparcamiento",
-            RoadSection::of(vec![
-                s(Sidewalk, 2.0),
-                s(Kerb, 0.15),
-                s(Parking, 2.2),
-                s(Carriageway, 3.5),
-                s(Kerb, 0.15),
-                s(Sidewalk, 2.0),
-            ]),
-        ),
-        ("Calle de plataforma única", single),
-        ("Calle con aparcamiento en batería", battery),
-        (
-            "Calle con carril bici",
-            RoadSection::of(vec![
-                s(Sidewalk, 2.5),
-                s(Kerb, 0.15),
-                s(BikeLane, 2.0),
-                s(Kerb, 0.15),
-                s(Parking, 2.2),
-                s(Carriageway, 3.0),
-                s(Carriageway, 3.0),
-                s(Kerb, 0.15),
-                s(Sidewalk, 2.5),
-            ]),
-        ),
-        (
-            "Avenida con mediana arbolada",
-            RoadSection::of(vec![
-                s(Sidewalk, 2.5),
-                s(Planting, 1.2),
-                s(Kerb, 0.15),
-                s(Parking, 2.2),
-                s(Carriageway, 3.25),
-                s(Carriageway, 3.25),
-                s(Kerb, 0.15),
-                s(Median, 2.0),
-                s(Kerb, 0.15),
-                s(Carriageway, 3.25),
-                s(Carriageway, 3.25),
-                s(Parking, 2.2),
-                s(Kerb, 0.15),
-                s(Planting, 1.2),
-                s(Sidewalk, 2.5),
-            ]),
-        ),
-        (
-            "Bulevar con paseo central",
-            RoadSection::of(vec![
-                s(Sidewalk, 3.0),
-                s(Kerb, 0.15),
-                s(Carriageway, 3.5),
-                s(Kerb, 0.15),
-                s(Planting, 1.5),
-                s(Median, 8.0),
-                s(Planting, 1.5),
-                s(Kerb, 0.15),
-                s(Carriageway, 3.5),
-                s(Kerb, 0.15),
-                s(Sidewalk, 3.0),
-            ]),
-        ),
-        ("Camino rural", rural),
-    ]
+    street_types()
+        .into_iter()
+        .map(|t| (t.name, t.section))
+        .collect()
 }
 
 /// A band of a road's section.
@@ -435,14 +346,32 @@ pub enum RoadBand {
     Kerb,
     Sidewalk,
     BikeLane,
-    /// A strip of soil for trees and shrubs («alcorques»).
+    /// A strip of soil for trees and shrubs, continuous.
     Planting,
     /// A raised median or central walk.
     Median,
+    /// A lane for buses only (U3).
+    BusLane,
+    /// A tram's track, on grass (U3).
+    Tram,
+    /// A road's hard shoulder («arcén»), at the carriageway's level (U3).
+    Shoulder,
+    /// A ditch beside a road («cuneta») (U3).
+    Ditch,
+    /// A sidewalk with tree pits («alcorques») every few metres (U3,
+    /// [`TREE_PIT_SPACING`]).
+    TreePits,
+    /// A bike lane at the sidewalk's height («carril bici en acera») (U3).
+    BikePath,
 }
 
+/// How far apart the tree pits of a [`RoadBand::TreePits`] strip are.
+pub const TREE_PIT_SPACING: f64 = 6.0;
+/// The side of a tree pit (narrower if the strip is).
+pub const TREE_PIT_SIZE: f64 = 1.2;
+
 impl RoadBand {
-    pub const ALL: [RoadBand; 7] = [
+    pub const ALL: [RoadBand; 13] = [
         RoadBand::Carriageway,
         RoadBand::Parking,
         RoadBand::Kerb,
@@ -450,6 +379,12 @@ impl RoadBand {
         RoadBand::BikeLane,
         RoadBand::Planting,
         RoadBand::Median,
+        RoadBand::BusLane,
+        RoadBand::Tram,
+        RoadBand::Shoulder,
+        RoadBand::Ditch,
+        RoadBand::TreePits,
+        RoadBand::BikePath,
     ];
 
     pub fn name(self) -> &'static str {
@@ -459,8 +394,14 @@ impl RoadBand {
             RoadBand::Kerb => "Bordillo",
             RoadBand::Sidewalk => "Acera",
             RoadBand::BikeLane => "Carril bici",
-            RoadBand::Planting => "Alcorques",
+            RoadBand::Planting => "Franja verde",
             RoadBand::Median => "Mediana",
+            RoadBand::BusLane => "Carril bus",
+            RoadBand::Tram => "Plataforma de tranvía",
+            RoadBand::Shoulder => "Arcén",
+            RoadBand::Ditch => "Cuneta",
+            RoadBand::TreePits => "Acera con alcorques",
+            RoadBand::BikePath => "Carril bici en acera",
         }
     }
 
@@ -473,6 +414,12 @@ impl RoadBand {
             RoadBand::BikeLane => "bike",
             RoadBand::Planting => "planting",
             RoadBand::Median => "median",
+            RoadBand::BusLane => "bus",
+            RoadBand::Tram => "tram",
+            RoadBand::Shoulder => "shoulder",
+            RoadBand::Ditch => "ditch",
+            RoadBand::TreePits => "pits",
+            RoadBand::BikePath => "bikepath",
         }
     }
 
@@ -485,15 +432,30 @@ impl RoadBand {
     pub fn raised(self) -> bool {
         matches!(
             self,
-            RoadBand::Kerb | RoadBand::Sidewalk | RoadBand::Planting | RoadBand::Median
+            RoadBand::Kerb
+                | RoadBand::Sidewalk
+                | RoadBand::Planting
+                | RoadBand::Median
+                | RoadBand::TreePits
+                | RoadBand::BikePath
         )
+    }
+
+    /// Whether people walk on it (a sidewalk of any kind).
+    pub fn walk(self) -> bool {
+        matches!(self, RoadBand::Sidewalk | RoadBand::TreePits)
     }
 
     /// Whether cars, bikes or the parked ones go on it.
     pub fn traffic(self) -> bool {
         matches!(
             self,
-            RoadBand::Carriageway | RoadBand::Parking | RoadBand::BikeLane
+            RoadBand::Carriageway
+                | RoadBand::Parking
+                | RoadBand::BikeLane
+                | RoadBand::BusLane
+                | RoadBand::Tram
+                | RoadBand::Shoulder
         )
     }
 }
@@ -536,6 +498,11 @@ fn along(path: &[Point2], s: f64) -> (Point2, Point2) {
 }
 
 /// The part of a path from `s0` to `s1` along it.
+pub(super) fn sub_path_of(path: &[Point2], s0: f64, s1: f64) -> Vec<Point2> {
+    sub_path(path, s0, s1)
+}
+
+/// The part of a path from `s0` to `s1` along it.
 fn sub_path(path: &[Point2], s0: f64, s1: f64) -> Vec<Point2> {
     let mut out = vec![along(path, s0).0];
     let mut s = 0.0;
@@ -551,7 +518,7 @@ fn sub_path(path: &[Point2], s0: f64, s1: f64) -> Vec<Point2> {
 
 /// A rectangle along the axis: from `s0` to `s1` along it, from `a` to `b`
 /// to its left.
-fn quad(path: &[Point2], s0: f64, s1: f64, a: f64, b: f64) -> Vec<Point2> {
+pub(super) fn quad(path: &[Point2], s0: f64, s1: f64, a: f64, b: f64) -> Vec<Point2> {
     let (p, u) = along(path, s0);
     let (q, v) = along(path, s1);
     let (n, m) = (u.perp_left(), v.perp_left());
@@ -688,11 +655,18 @@ impl Road {
                     continue;
                 }
                 let material = match band {
-                    RoadBand::Carriageway | RoadBand::Parking => self.pavement,
-                    RoadBand::BikeLane => s.bike.unwrap_or(self.pavement),
+                    RoadBand::Carriageway
+                    | RoadBand::Parking
+                    | RoadBand::BusLane
+                    | RoadBand::Shoulder => self.pavement,
+                    RoadBand::BikeLane | RoadBand::BikePath => s.bike.unwrap_or(self.pavement),
                     RoadBand::Kerb => self.kerb_material,
-                    RoadBand::Sidewalk | RoadBand::Median => self.sidewalk_material,
-                    RoadBand::Planting => s.planting.unwrap_or(self.sidewalk_material),
+                    RoadBand::Sidewalk | RoadBand::Median | RoadBand::TreePits => {
+                        self.sidewalk_material
+                    }
+                    RoadBand::Planting | RoadBand::Tram | RoadBand::Ditch => {
+                        s.planting.unwrap_or(self.sidewalk_material)
+                    }
                 };
                 out.push(RoadPiece {
                     band,
@@ -988,11 +962,18 @@ impl Model {
             ));
         }
         let s = &r.section;
+        // Anything to drive or walk on (a pedestrian street has only its
+        // paving, U3).
         if s.strips.is_empty()
-            || s.width_of(RoadBand::Carriageway) + s.width_of(RoadBand::BikeLane) <= EPSILON
+            || s.strips
+                .iter()
+                .filter(|x| x.band != RoadBand::Kerb)
+                .map(|x| x.width)
+                .sum::<f64>()
+                <= EPSILON
         {
             return Err(ModelError::InvalidShape(
-                "a road needs a lane or a bike lane in its section",
+                "a road needs a strip to drive or walk on in its section",
             ));
         }
         for st in &s.strips {

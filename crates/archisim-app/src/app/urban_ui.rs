@@ -134,44 +134,44 @@ fn band_combo(ui: &mut Ui, id: Id, value: RoadBand, w: f32) -> RoadBand {
 /// The fields of a road section (H6): its type, its strips across, its
 /// parking, kerbs and pavement, its build-outs and crossings; returns the
 /// section changed, if it was.
-fn section_rows(ui: &mut Ui, salt: u64, s: &RoadSection) -> Option<RoadSection> {
+fn section_rows(
+    ui: &mut Ui,
+    salt: u64,
+    s: &RoadSection,
+    saved: &mut Option<archisim_core::SavedStreet>,
+) -> Option<RoadSection> {
     let mut out = s.clone();
     let mut changed = false;
-    row(
-        ui,
-        "Tipo de vía",
-        "Una sección de partida; luego se cambia franja a franja",
-        |ui, w| {
-            let presets = archisim_core::road_presets();
-            let now = presets
-                .iter()
-                .position(|(_, p)| {
-                    p.strips == s.strips
-                        && p.single_level == s.single_level
-                        && p.parking == s.parking
-                })
-                .map_or("A medida", |i| presets[i].0);
-            ComboBox::from_id_salt(Id::unique(("road-preset", salt)))
-                .width(w - 8.0)
-                .truncate()
-                .selected_text(now)
-                .show_ui(ui, |ui| {
-                    for (name, p) in &presets {
-                        if ui.selectable_label(false, *name).clicked() {
-                            let mut n = p.clone();
-                            // What is along it and its materials stay.
-                            n.buildouts = s.buildouts.clone();
-                            n.crossings = s.crossings.clone();
-                            n.planting = s.planting;
-                            n.bike = s.bike;
-                            n.markings = s.markings;
-                            out = n;
-                            changed = true;
-                        }
-                    }
-                });
-        },
-    );
+    let _ = salt;
+    // The street type, as cards drawn in section (U3).
+    let picked = super::cards::card_row(ui, "Tipo de vía", |ui, w| {
+        super::street_types_ui::street_type_cards(ui, w, s)
+    });
+    match picked {
+        Some(super::street_types_ui::PickedStreet::Type(p)) => {
+            let mut n = p;
+            // What is along it and its materials stay.
+            n.buildouts = s.buildouts.clone();
+            n.crossings = s.crossings.clone();
+            n.planting = s.planting;
+            n.bike = s.bike;
+            n.markings = s.markings;
+            out = n;
+            changed = true;
+        }
+        Some(super::street_types_ui::PickedStreet::Saved(t)) => {
+            let mut n = t.section.clone();
+            n.buildouts = s.buildouts.clone();
+            n.crossings = s.crossings.clone();
+            n.planting = s.planting;
+            n.bike = s.bike;
+            n.markings = s.markings;
+            out = n;
+            *saved = Some(t);
+            changed = true;
+        }
+        None => {}
+    }
     props::note(
         ui,
         "Franjas de la sección, del borde izquierdo al derecho mirando en el sentido del eje:",
@@ -597,6 +597,7 @@ impl ArchiSimApp {
                 RoadBand::BikeLane => Color32::from_rgba_unmultiplied(200, 110, 90, 100),
                 RoadBand::Planting => Color32::from_rgba_unmultiplied(120, 160, 90, 110),
                 RoadBand::Median => Color32::from_rgba_unmultiplied(214, 206, 180, 110),
+                _ => super::street_types_ui::band_colour(band).gamma_multiply(0.5),
             };
             for i in 0..near.len().saturating_sub(1) {
                 let quad = [near[i], near[i + 1], far[i + 1], far[i]];
@@ -669,7 +670,8 @@ impl ArchiSimApp {
             );
         });
         group(ui, "tool-road", "Sección tipo", |ui| {
-            if let Some(sec) = section_rows(ui, 0, &s.section) {
+            let mut saved = None;
+            if let Some(sec) = section_rows(ui, 0, &s.section, &mut saved) {
                 s.section = sec;
             }
             row(ui, "Rasante (mm)", "La calzada sobre la planta", |ui, w| {
@@ -810,11 +812,43 @@ impl ArchiSimApp {
             });
         });
         group(ui, "road-section", "Sección tipo", |ui| {
-            if let Some(sec) = section_rows(ui, id.0, &r.section) {
-                let res = self.ed.transact("Sección del vial", |m| {
-                    m.edit_road(id, |x| x.section = sec)
-                });
+            let mut saved = None;
+            if let Some(sec) = section_rows(ui, id.0, &r.section, &mut saved) {
+                let res = match saved {
+                    // A type of the library: its materials too.
+                    Some(t) => self.ed.transact("Tipo de calle de la biblioteca", |m| {
+                        m.apply_saved_street(id, &t)
+                    }),
+                    None => self.ed.transact("Sección del vial", |m| {
+                        m.edit_road(id, |x| x.section = sec)
+                    }),
+                };
                 self.report(res, "Sección cambiada.");
+            }
+            {
+                let key = Id::unique(("road-save-name", id));
+                let mut name: String =
+                    ui.data_mut(|d| d.get_temp::<String>(key))
+                        .unwrap_or_else(|| {
+                            archisim_core::street_type_of(&r.section)
+                                .map_or_else(|| r.name.clone(), |t| format!("{} (propia)", t.name))
+                        });
+                ui.add(
+                    egui::TextEdit::singleline(&mut name).desired_width(ui.available_width() - 8.0),
+                );
+                ui.data_mut(|d| d.insert_temp(key, name.clone()));
+                if ui
+                    .button("Guardar en la biblioteca")
+                    .on_hover_text("Guarda la sección y los materiales de esta calle como un tipo de calle en la carpeta de la biblioteca («Tipos de calle.ascalle»), para usarlo en otros proyectos")
+                    .clicked()
+                {
+                    let saved = self.ed.model().saved_street(id, &name);
+                    match saved.map(|t| super::street_types_ui::save_street(&t)) {
+                        Some(Ok(_)) => self.say(format!("«{}» guardado en la biblioteca.", name.trim())),
+                        Some(Err(e)) => self.complain(format!("No se puede guardar el tipo de calle: {e}.")),
+                        None => {}
+                    }
+                }
             }
         });
         self.road_changes_group(ui, id);
@@ -832,7 +866,7 @@ impl ArchiSimApp {
         let sec = r.section.clone();
         group(ui, "road-mat", "Materiales", |ui| {
             for (i, (name, v)) in [
-                ("Alcorques", sec.planting),
+                ("Franja verde y alcorques", sec.planting),
                 ("Carril bici", sec.bike),
                 ("Marcas viales", sec.markings),
             ]
@@ -879,14 +913,18 @@ impl ArchiSimApp {
             }
         });
         // Trees in its planting strips.
-        if sec.strips.iter().any(|x| x.band == RoadBand::Planting) {
+        if sec
+            .strips
+            .iter()
+            .any(|x| matches!(x.band, RoadBand::Planting | RoadBand::TreePits))
+        {
             group(ui, "road-trees", "Arbolado", |ui| {
                 ui.horizontal_wrapped(|ui| {
                     for name in STREET_TREES {
                         if ui
                             .button(name)
                             .on_hover_text(
-                                "Una plantación por cada franja de alcorques, un árbol cada 6 m",
+                                "Una plantación por cada franja verde (un árbol cada 6 m) y por cada acera con alcorques (un árbol en cada alcorque)",
                             )
                             .clicked()
                         {
@@ -942,9 +980,7 @@ pub(super) fn plant_road_trees(
         return Ok(0);
     };
     let mut n = 0;
-    for (k, line) in r.strip_lines(RoadBand::Planting).into_iter().enumerate() {
-        let len: f64 = line.windows(2).map(|w| w[0].distance(w[1])).sum();
-        let count = ((len / 6.0).floor() as usize).max(1);
+    for (k, (line, count)) in r.tree_lines(6.0).into_iter().enumerate() {
         m.add_planting(archisim_core::NewPlanting {
             name: format!("{} · {} {}", r.name, species, k + 1),
             level: r.level,

@@ -79,6 +79,10 @@ Uso:
       y las calles que suben siguiendo el terreno (rasante): calles.archisim,
       calles.ifc (con los ejes como IfcAlignment), planta y axonometría.
 
+  archisim tipos-calle [carpeta]
+      Todos los tipos de calle, uno al lado de otro y por grupos:
+      tipos-calle.archisim, tipos-calle.ifc, planta y axonometría.
+
   archisim biblioteca [carpeta] [proyecto.archisim]
       Escribe los tipos de puerta, ventana y objeto de la plantilla (o de
       un proyecto) como ficheros de biblioteca: una familia por fichero
@@ -388,6 +392,10 @@ fn main() -> ExitCode {
         Some("calles") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
             report(calles::write(&dir))
+        }
+        Some("tipos-calle") => {
+            let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
+            report(calles::write_types(&dir))
         }
         Some("escaleras") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
