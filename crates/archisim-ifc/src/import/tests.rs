@@ -1100,23 +1100,52 @@ fn curtain_wall_types_round_trip() {
         .find(|t| t.design.louvres.is_some())
         .unwrap()
         .id;
-    for (t, y) in [(plain, 0.0), (spandrel, 5.0), (louvres, 10.0)] {
-        m.add_curtain_wall(NewCurtainWall {
-            curtain_type: t,
-            level: pb,
-            start: Point2::new(0.0, y),
-            end: Point2::new(6.0, y),
-            base_offset: 0.0,
-            top: WallTop::Level {
-                level: p1,
-                offset: 0.0,
-            },
-            height: 0.0,
+    // A door in the first one (paquete H1), of a door type of the project.
+    let mat = m.materials().next().unwrap().id;
+    let door = m
+        .add_opening_type(archisim_core::NewOpeningType {
+            name: "Puerta de vidrio".into(),
+            kind: archisim_core::OpeningKind::Door(archisim_core::DoorOperation::SingleSwing),
+            width: 0.9,
+            height: 2.1,
+            frame_width: 0.05,
+            frame_depth: 0.07,
+            frame_material: mat,
+            panel_material: mat,
         })
         .unwrap();
+    for (t, y) in [(plain, 0.0), (spandrel, 5.0), (louvres, 10.0)] {
+        let cw = m
+            .add_curtain_wall(NewCurtainWall {
+                curtain_type: t,
+                level: pb,
+                start: Point2::new(0.0, y),
+                end: Point2::new(6.0, y),
+                base_offset: 0.0,
+                top: WallTop::Level {
+                    level: p1,
+                    offset: 0.0,
+                },
+                height: 0.0,
+            })
+            .unwrap();
+        if t == plain {
+            m.add_curtain_door(
+                cw,
+                1,
+                door,
+                archisim_core::Hand::Right,
+                archisim_core::WallSide::Exterior,
+            )
+            .unwrap();
+        }
     }
     let ifc = export(&m);
+    if let Ok(path) = std::env::var("ARCHISIM_CURTAIN_IFC") {
+        std::fs::write(path, &ifc).unwrap();
+    }
     assert_eq!(ifc.matches("IFCCURTAINWALLTYPE(").count(), 5);
+    assert_eq!(ifc.matches("IFCDOOR(").count(), 1);
     assert!(ifc.contains("IFCSHADINGDEVICE("));
     let Imported { model, report } = import_ifc(&ifc).unwrap();
     let diffs = differences(&m, &model);

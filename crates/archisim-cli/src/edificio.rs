@@ -82,6 +82,7 @@ struct Types {
     shopfront: OpeningTypeId,
     entrance: OpeningTypeId,
     garage: OpeningTypeId,
+    balcony_door: OpeningTypeId,
     service_door: OpeningTypeId,
     column: archisim_core::MemberTypeId,
     beam: archisim_core::MemberTypeId,
@@ -302,6 +303,23 @@ fn types(m: &mut Model) -> R<Types> {
         2.6,
         "Escaparate fijo de acero negro en el zócalo de ladrillo",
     )?;
+    // The doors of the black steel glazing: glazed leaves.
+    let balcony_door = sized(
+        m,
+        "Puerta de entrada 1 hoja 100×215",
+        "Puerta balconera de acero y vidrio",
+        0.9,
+        2.2,
+        "Hoja acristalada en el muro cortina de acero negro (toma el ancho y alto de su celda)",
+    )?;
+    if let Some(bt) = m.opening_type(balcony_door).cloned() {
+        let mut values = bt.values.clone();
+        values.insert(
+            "leaf_design".into(),
+            archisim_core::Value::Text("Vidriera".into()),
+        );
+        let _ = m.edit_family_type(balcony_door, bt.family, values);
+    }
     let garage = sized(
         m,
         "Puerta de garaje seccional 250×220",
@@ -339,6 +357,7 @@ fn types(m: &mut Model) -> R<Types> {
         shopfront,
         entrance: opening_type(m, "Puerta pivotante de entrada 120×240")?,
         garage,
+        balcony_door,
         service_door: opening_type(m, "Puerta de paso 82,5")?,
         column: lib.column,
         beam: lib.beam,
@@ -702,11 +721,18 @@ fn typical_floor(m: &mut Model, t: &Types, lv: &[LevelId], k: usize) -> R {
         (EAST_GLASS, 3.3, 7.5),
         (EAST_GLASS, 7.7, NORTH_IN),
     ] {
-        m.add_curtain_wall(NewCurtainWall {
+        // Outside on the left: the street's end runs northwards, the
+        // lane's southwards.
+        let (start, end) = if x < 10.0 {
+            (p(x, y0), p(x, y1))
+        } else {
+            (p(x, y1), p(x, y0))
+        };
+        let cw = m.add_curtain_wall(NewCurtainWall {
             curtain_type: t.glazing,
             level: l,
-            start: p(x, y1),
-            end: p(x, y0),
+            start,
+            end,
             base_offset: 0.0,
             top: WallTop::Level {
                 level: top,
@@ -714,6 +740,9 @@ fn typical_floor(m: &mut Model, t: &Types, lv: &[LevelId], k: usize) -> R {
             },
             height: 0.0,
         })?;
+        // The door to the balcony (or to the podium's terrace), opening
+        // in, in the second bay.
+        m.add_curtain_door(cw, 1, t.balcony_door, Hand::Left, WallSide::Interior)?;
     }
     // On level 1 the podium's roof is a terrace: a brick parapet at the
     // street and at the back lane.
@@ -903,7 +932,7 @@ fn roof(m: &mut Model, t: &Types, lv: &[LevelId]) -> R {
         (p(EAST_GLASS, NORTH_IN), p(EAST_GLASS, SOUTH_IN)),
         (p(21.8, NORTH_IN), p(21.8, 7.3)),
     ] {
-        m.add_curtain_wall(NewCurtainWall {
+        let cw = m.add_curtain_wall(NewCurtainWall {
             curtain_type: t.glazing,
             level: cu,
             start: a,
@@ -915,6 +944,11 @@ fn roof(m: &mut Model, t: &Types, lv: &[LevelId]) -> R {
             },
             height: 0.0,
         })?;
+        // Out to the deck by the lane, in the middle of the east glass.
+        if a.x > 30.0 {
+            m.add_curtain_door(cw, 5, t.balcony_door, Hand::Right, WallSide::Interior)?;
+            m.add_curtain_door(cw, 6, t.balcony_door, Hand::Left, WallSide::Interior)?;
+        }
     }
     // The laundry in its north-east corner.
     let w1 = axis(m, t.partition, cu, pav, p(31.6, NORTH_IN), p(31.6, 9.5))?;

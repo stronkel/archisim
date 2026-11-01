@@ -2143,7 +2143,10 @@ impl<'a> Importer<'a> {
             "IFCWINDOWSTANDARDCASE",
         ] {
             for id in self.file.of_kind(kind) {
-                if placed.contains(&id) {
+                // Doors of a curtain wall come back with it.
+                if placed.contains(&id)
+                    || self.property(id, "ArchiSim_CurtainDoor", "Bay").is_some()
+                {
                     continue;
                 }
                 let host = self.ix.filled.get(&id).and_then(|o| {

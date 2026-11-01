@@ -2125,7 +2125,7 @@ impl<'a> Exporter<'a> {
         self.write_roofs(&storeys, &slab_sets, &mut contained, &mut slabs_by_type);
         self.write_stairs(&materials, &storeys, &mut contained);
         self.write_terrains(&materials, &storeys, &mut contained);
-        self.write_curtain_walls(&materials, &storeys, &mut contained);
+        self.write_curtain_walls(&materials, &storeys, &mut contained, &mut openings_by_type);
         self.write_railings(&materials, &storeys, &mut contained);
         self.write_accessories(&materials, &storeys, &mut contained);
         self.write_facade_parts(&materials, &storeys);
@@ -2197,7 +2197,7 @@ impl<'a> Exporter<'a> {
 /// `IfcDoorTypeOperationEnum` value. IFC reads left and right looking along
 /// the door's +Y axis (towards the side it opens to), so the UNE-EN 12519
 /// hand, seen from that side, swaps.
-fn door_operation(op: DoorOperation, hand: Hand) -> &'static str {
+pub(crate) fn door_operation(op: DoorOperation, hand: Hand) -> &'static str {
     match (op, hand) {
         (DoorOperation::SingleSwing, Hand::Left) => "SINGLE_SWING_RIGHT",
         (DoorOperation::SingleSwing, Hand::Right) => "SINGLE_SWING_LEFT",
@@ -2213,7 +2213,7 @@ fn door_operation(op: DoorOperation, hand: Hand) -> &'static str {
 
 /// `UserDefinedOperationType` of a door whose operation IFC does not name:
 /// a pivot door, a sectional or up-and-over garage door.
-fn door_user_operation(op: DoorOperation) -> String {
+pub(crate) fn door_user_operation(op: DoorOperation) -> String {
     match op {
         DoorOperation::Pivot => string("PIVOT"),
         DoorOperation::Overhead => string("OVERHEAD"),

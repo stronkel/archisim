@@ -427,7 +427,11 @@ impl Exporter<'_> {
     }
 
     /// A body of triangles, one face set per material with its colour.
-    fn styled_shape(&mut self, pieces: &[(MaterialId, Vec<[[f64; 3]; 3]>)], storey_z: f64) -> Ref {
+    pub(crate) fn styled_shape(
+        &mut self,
+        pieces: &[(MaterialId, Vec<[[f64; 3]; 3]>)],
+        storey_z: f64,
+    ) -> Ref {
         let mut items = Vec::new();
         for (material, tris) in pieces {
             let mut pts: Vec<String> = Vec::new();

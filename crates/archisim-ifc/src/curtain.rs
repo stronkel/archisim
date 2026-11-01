@@ -137,6 +137,7 @@ impl Exporter<'_> {
         materials: &BTreeMap<MaterialId, Ref>,
         storeys: &BTreeMap<LevelId, (Ref, Ref)>,
         contained: &mut BTreeMap<LevelId, Vec<Ref>>,
+        doors_by_type: &mut BTreeMap<archisim_core::OpeningTypeId, Vec<Ref>>,
     ) {
         let model = self.model;
         if model.curtain_walls().next().is_none() && model.curtain_types().next().is_none() {
@@ -259,6 +260,87 @@ impl Exporter<'_> {
                 by_material.entry(p.material).or_default().push(e);
                 parts.push(e);
             }
+            // Its doors: an `IfcDoor` each, in the cell it takes, typed by
+            // its door type and part of the curtain wall.
+            let storey_z = model.level(c.level).map_or(0.0, |l| l.elevation);
+            let mut door_texts = Vec::new();
+            for (i, door) in c.doors.iter().enumerate() {
+                let Some(dt) = model.opening_type(door.opening_type) else {
+                    continue;
+                };
+                let body = archisim_geom::solid::curtain_door_body(model, c.id, i);
+                let Ok((_, cell)) = model.evaluate_curtain_door(c.id, i) else {
+                    continue;
+                };
+                if body.is_empty() {
+                    continue;
+                }
+                let shape = self.styled_shape(&body, storey_z);
+                let op = match dt.kind {
+                    archisim_core::OpeningKind::Door(op) => op,
+                    _ => continue,
+                };
+                let e = self.w.add(format!(
+                    "IFCDOOR({},$,{},$,{},{pl},{shape},{},{},{},.DOOR.,.{}.,{})",
+                    string(door.guid.as_str()),
+                    string(&format!("{} · {} {}", name, dt.name, i + 1)),
+                    string(&dt.name),
+                    string(&dt.mark),
+                    real(cell.up.1 - cell.up.0),
+                    real(cell.along.1 - cell.along.0),
+                    crate::door_operation(op, door.hand),
+                    crate::door_user_operation(op)
+                ));
+                // That it belongs to the curtain wall (the importer leaves
+                // it to it).
+                let bay = self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('Bay',$,IFCINTEGER({}),$)",
+                    door.bay
+                ));
+                self.pset(e, &door.guid, "ArchiSim_CurtainDoor", &[bay]);
+                // Its common set and quantities, as every door's.
+                let reference = if dt.mark.is_empty() {
+                    &dt.name
+                } else {
+                    &dt.mark
+                };
+                let common = [
+                    self.w.add(format!(
+                        "IFCPROPERTYSINGLEVALUE('Reference',$,IFCIDENTIFIER({}),$)",
+                        string(reference)
+                    )),
+                    self.w
+                        .add("IFCPROPERTYSINGLEVALUE('IsExternal',$,IFCBOOLEAN(.T.),$)"),
+                ];
+                self.pset(e, &door.guid, "Pset_DoorCommon", &common);
+                let (w, h) = (cell.along.1 - cell.along.0, cell.up.1 - cell.up.0);
+                self.quantities(
+                    e,
+                    &door.guid,
+                    "Qto_DoorBaseQuantities",
+                    &[
+                        ("Width", "IFCQUANTITYLENGTH", w),
+                        ("Height", "IFCQUANTITYLENGTH", h),
+                        ("Area", "IFCQUANTITYAREA", w * h),
+                    ],
+                );
+                parts.push(e);
+                doors_by_type.entry(door.opening_type).or_default().push(e);
+                door_texts.push(format!(
+                    "{} {} {} {} {}",
+                    door.bay,
+                    dt.guid,
+                    match door.hand {
+                        archisim_core::Hand::Left => "left",
+                        archisim_core::Hand::Right => "right",
+                    },
+                    match door.opens_to {
+                        archisim_core::WallSide::Interior => "interior",
+                        archisim_core::WallSide::Exterior => "exterior",
+                    },
+                    door.guid
+                ));
+            }
             for (mat, items) in &by_material {
                 if let Some(m) = materials.get(mat) {
                     self.w.add(format!(
@@ -313,6 +395,12 @@ impl Exporter<'_> {
                 props.push(self.w.add(format!(
                     "IFCPROPERTYSINGLEVALUE('{key}',$,IFCLENGTHMEASURE({}),$)",
                     real(v)
+                )));
+            }
+            if !door_texts.is_empty() {
+                props.push(self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('Doors',$,IFCTEXT({}),$)",
+                    string(&door_texts.join(";"))
                 )));
             }
             self.pset(cw, &c.guid, "ArchiSim_CurtainWall", &props);

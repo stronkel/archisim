@@ -1836,6 +1836,13 @@ pub fn curtain_wall_solids(model: &Model, id: archisim_core::CurtainWallId) -> V
             None => by_material.push((p.material, tris)),
         }
     }
+    // Its doors, in the cells they take.
+    for (material, tris) in curtain_door_solids(model, id) {
+        match by_material.iter_mut().find(|(m, _)| *m == material) {
+            Some((_, t)) => t.extend(tris),
+            None => by_material.push((material, tris)),
+        }
+    }
     by_material
         .into_iter()
         .map(|(material, triangles)| Solid {
@@ -3320,31 +3327,25 @@ fn opening_detail_of(
         wall: o.wall,
     })
 }
-
-/// The solids of the recipe's body evaluated as `ev`.
-fn opening_body_solids(
-    model: &Model,
-    id: OpeningId,
+/// The pieces of a door or window family evaluated, placed: `point(t, y)`
+/// is the plan point `t` along its host and `y` towards its exterior;
+/// `at` is the middle of its frame along, across and the height of its
+/// sill; its leaves open to `opens_to`. By material.
+#[allow(clippy::type_complexity)]
+fn family_body(
     ev: &archisim_core::family::Evaluation,
-) -> Vec<Solid> {
-    let (Some(o), Some(og)) = (model.opening(id), opening_geometry(model, id)) else {
-        return Vec::new();
-    };
-    let Some(wall) = model.wall(o.wall) else {
-        return Vec::new();
-    };
-    let level = model.level(wall.level).map_or(0.0, |l| l.elevation);
-    let z_sill = level + og.sill;
-    let mid = (og.t0 + og.t1) / 2.0;
-    let y_mid = (og.frame_exterior + og.frame_interior) / 2.0;
-    // The normal `n` points to the exterior. Seen from the exterior, the
-    // wall's direction runs to the left; seen from the interior, to the
+    point: &dyn Fn(f64, f64) -> Point2,
+    at: (f64, f64, f64),
+    opens_to: WallSide,
+) -> Vec<(MaterialId, Vec<[P3; 3]>)> {
+    let (mid, y_mid, z_sill) = at;
+    // The normal points to the exterior. Seen from the exterior, the
+    // host's direction runs to the left; seen from the interior, to the
     // right.
-    let (sx, sy) = match og.opens_to {
+    let (sx, sy) = match opens_to {
         WallSide::Exterior => (-1.0, 1.0),
         WallSide::Interior => (1.0, -1.0),
     };
-
     let mut by_material: Vec<(MaterialId, Vec<[P3; 3]>)> = Vec::new();
     // The pieces of one `outline` (a frame round an arch, a surround) as
     // one body: no faces between them.
@@ -3366,7 +3367,7 @@ fn opening_body_solids(
     }
     for (key, pieces, y0, y1) in &groups {
         let tris = profile_group(pieces, *y0, *y1, sx * sy, |x, y, z| {
-            let p = og.point(mid + sx * x, y_mid + sy * y);
+            let p = point(mid + sx * x, y_mid + sy * y);
             [p.x, p.y, z_sill + z]
         });
         let material = MaterialId(key.1);
@@ -3379,12 +3380,7 @@ fn opening_body_solids(
         let tris = {
             let (ta, tb) = sorted(mid + sx * part.min[0], mid + sx * part.max[0]);
             let (ya, yb) = sorted(y_mid + sy * part.min[1], y_mid + sy * part.max[1]);
-            let rect = [
-                og.point(ta, ya),
-                og.point(tb, ya),
-                og.point(tb, yb),
-                og.point(ta, yb),
-            ];
+            let rect = [point(ta, ya), point(tb, ya), point(tb, yb), point(ta, yb)];
             prism(&rect, z_sill + part.min[2], z_sill + part.max[2])
         };
         let material = MaterialId(part.material);
@@ -3393,6 +3389,77 @@ fn opening_body_solids(
             None => by_material.push((material, tris)),
         }
     }
+    by_material
+}
+
+/// The doors of a curtain wall, each in its cell, by material.
+pub fn curtain_door_solids(
+    model: &Model,
+    id: archisim_core::CurtainWallId,
+) -> Vec<(MaterialId, Vec<[P3; 3]>)> {
+    let Some(c) = model.curtain_wall(id) else {
+        return Vec::new();
+    };
+    let mut out: Vec<(MaterialId, Vec<[P3; 3]>)> = Vec::new();
+    for i in 0..c.doors.len() {
+        for (m, tris) in curtain_door_body(model, id, i) {
+            match out.iter_mut().find(|(k, _)| *k == m) {
+                Some((_, list)) => list.extend(tris),
+                None => out.push((m, tris)),
+            }
+        }
+    }
+    out
+}
+
+/// One door of a curtain wall in its cell, by material (empty if it does
+/// not evaluate).
+pub fn curtain_door_body(
+    model: &Model,
+    id: archisim_core::CurtainWallId,
+    index: usize,
+) -> Vec<(MaterialId, Vec<[P3; 3]>)> {
+    let Some(c) = model.curtain_wall(id) else {
+        return Vec::new();
+    };
+    let Some(door) = c.doors.get(index) else {
+        return Vec::new();
+    };
+    let Ok((ev, cell)) = model.evaluate_curtain_door(id, index) else {
+        return Vec::new();
+    };
+    let z = model.level(c.level).map_or(0.0, |l| l.elevation) + c.base_offset;
+    let mid = (cell.along.0 + cell.along.1) / 2.0;
+    family_body(
+        &ev,
+        &|t, y| c.point_at(t, y),
+        (mid, 0.0, z + cell.up.0),
+        door.opens_to,
+    )
+}
+
+/// The solids of the recipe's body evaluated as `ev`.
+fn opening_body_solids(
+    model: &Model,
+    id: OpeningId,
+    ev: &archisim_core::family::Evaluation,
+) -> Vec<Solid> {
+    let (Some(o), Some(og)) = (model.opening(id), opening_geometry(model, id)) else {
+        return Vec::new();
+    };
+    let Some(wall) = model.wall(o.wall) else {
+        return Vec::new();
+    };
+    let level = model.level(wall.level).map_or(0.0, |l| l.elevation);
+    let z_sill = level + og.sill;
+    let mid = (og.t0 + og.t1) / 2.0;
+    let y_mid = (og.frame_exterior + og.frame_interior) / 2.0;
+    let by_material = family_body(
+        ev,
+        &|t, y| og.point(t, y),
+        (mid, y_mid, z_sill),
+        og.opens_to,
+    );
     by_material
         .into_iter()
         .map(|(material, triangles)| Solid {

@@ -618,7 +618,18 @@ pub fn differences(a: &Model, b: &Model) -> Vec<String> {
                             == crate::curtain::design_texts(b, &y.design)
                 }
                 _ => false,
-            };
+            }
+            // Its doors: in the same bays, of the same type, opening the
+            // same way.
+            && s.doors.len() == t.doors.len()
+            && s.doors.iter().zip(&t.doors).all(|(x, y)| {
+                x.guid == y.guid
+                    && x.bay == y.bay
+                    && x.hand == y.hand
+                    && x.opens_to == y.opens_to
+                    && a.opening_type(x.opening_type).map(|t| &t.guid)
+                        == b.opening_type(y.opening_type).map(|t| &t.guid)
+            });
         if !same {
             diff(format!("muro cortina {}: {:?} / {:?}", s.guid, s, t));
         }
