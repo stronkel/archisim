@@ -6,6 +6,12 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-01 (65) · v0.78: G1–G7, E17, el edificio y H1–H7 en `main`
+
+Unidos #123 a #137: detalle a 1:20 (E17), G1 a G7 (dibujo rápido, modo boceto, Pintar y Dividir cara, lámparas en los puntos de luz, árboles hoja a hoja, remates y huecos), el edificio de Florence Street, y la lista del 31/10: puertas en muros cortina (H1), agua transparente (H2), contra incendios, llaves de paso y placas solares (H3), ascensores (H4), trepadoras (H5), calles por tipos (H6) y traer el entorno (H7). Formato `.archisim` versión 60. Lo que hay que probar de cada uno está en sus entradas (51 a 64).
+
+---
+
 ## 2026-11-01 (64) · H7: traer el entorno desde cartografía gratuita
 
 Rama `bloque/h7-cartografia` (encima de H6), con pull request. Sin cambios de formato: lo que se trae son elementos de siempre. Detalle para Antonio en `docs/ENTORNO.md`.
