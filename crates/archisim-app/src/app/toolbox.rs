@@ -127,7 +127,7 @@ impl Discipline {
 /// Rows of tiles kept for every discipline, so that Properties below does
 /// not move when the discipline changes (the one with most tools fills
 /// them).
-pub const TILE_ROWS: usize = 3;
+pub const TILE_ROWS: usize = 4;
 pub const TILE_COLUMNS: usize = 4;
 const TILE_HEIGHT: f32 = 54.0;
 const TILE_GAP: f32 = 4.0;
