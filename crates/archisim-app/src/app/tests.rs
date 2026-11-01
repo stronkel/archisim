@@ -8727,3 +8727,50 @@ fn sides_of_columns_are_divided_and_stairs_painted() {
         archisim_geom::solid::painted_material(h.model(), &solids[0], &solids[0].triangles[0]);
     assert_eq!(painted, Some(mat));
 }
+
+/// Ascensores (H4): the tool places a lift by the centre of its shaft
+/// with Espacio turning it; its properties show and it is picked on every
+/// level it stops at; moved, rotated and deleted as everything else.
+#[test]
+fn lifts_are_placed() {
+    use super::toolbox::Pick;
+    let mut h = Harness::new(Editor::new_project());
+    let canvas = h.app.canvas;
+    h.app
+        .view
+        .fit_exact(canvas, p(-2.0, -2.0), p(12.0, 10.0), 0.0);
+    let pb = h.app.ed.level;
+    let p1 = h
+        .app
+        .ed
+        .transact("Planta", |m| Ok::<_, archisim_core::ModelError>(m.add_level("P1", 3.2)))
+        .unwrap();
+    h.app.pick(Pick::Tool(Tool::Elevator));
+    assert_eq!(h.app.tool, Tool::Elevator);
+    h.frame();
+    h.key(Key::Space);
+    h.click_at(p(4.0, 4.0));
+    let lift = h.model().elevators().next().unwrap().clone();
+    assert_eq!(lift.level, pb);
+    let mut levels = h.model().levels();
+    levels.sort_by(|a, b| a.elevation.total_cmp(&b.elevation));
+    assert_eq!(Some(lift.top), levels.last().map(|l| l.id));
+    assert!(h.model().elevator_stops(lift.id).contains(&p1));
+    assert!((lift.rotation - std::f64::consts::FRAC_PI_2).abs() < 1e-9);
+    assert!(lift.position.distance(p(4.0, 4.0)) < 1e-6);
+    h.key(Key::Escape);
+    h.app.ed.selection = [Element::Elevator(lift.id)].into_iter().collect();
+    h.frame();
+    assert_eq!(
+        crate::pick::pick(h.model(), p1, p(4.0, 4.0), 0.05),
+        Some(Element::Elevator(lift.id))
+    );
+    let t = archisim_draft::Transform::translate(archisim_core::Vec2::new(1.0, 0.0));
+    let sel: std::collections::BTreeSet<Element> =
+        [Element::Elevator(lift.id)].into_iter().collect();
+    let mut moved = h.model().clone();
+    crate::xform::transform(&mut moved, &sel, &t, false).unwrap();
+    assert!((moved.elevator(lift.id).unwrap().position.x - 5.0).abs() < 1e-9);
+    h.key(Key::Delete);
+    assert_eq!(h.model().elevators().count(), 0);
+}
