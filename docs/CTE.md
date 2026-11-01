@@ -55,6 +55,21 @@ Sobre las tuberías dibujadas con la herramienta Tubería, en cada planta:
 
 **A comprobar por Antonio**: los valores de las tablas 4.1 de HS 5 y 4.2 de HS 4 están escritos de memoria del texto del CTE y no los he podido contrastar con el documento oficial desde aquí. Las pendientes sí están contrastadas.
 
+## Protección contra incendios (SI 4) · H3
+
+Sobre los aparatos de protección contra incendios dibujados (ficha Instalaciones: Rociador, BIE, Extintor, Detección, Emergencia), en cada planta:
+
+- **Lo que pide el uso** (tabla 1.1), con la superficie de los locales dibujados: BIE en Administrativo y Docente de más de 2.000 m², Residencial Público de más de 1.000 m², Comercial, Pública Concurrencia y Aparcamiento de más de 500 m², Hospitalario siempre; sistema de alarma (pulsadores y sirenas) en Administrativo, Docente y Comercial de más de 1.000 m², Residencial Público de más de 500 m², Hospitalario siempre; detección en Administrativo y Docente de más de 5.000 m², Comercial de más de 2.000 m², Pública Concurrencia de más de 1.000 m², Residencial Público y Aparcamiento de más de 500 m², Hospitalario siempre. Si en los datos del edificio se marca «extinción automática» (que alarga los recorridos de evacuación) y no hay rociadores dibujados, sale un aviso.
+- **Extintores**: un 21A-113B a 15 m como mucho de todo punto de los locales de la planta; en un edificio de viviendas, solo de las zonas comunes (portal, escalera, rellanos, garaje, trasteros, cuartos de instalaciones): las viviendas no lo piden.
+- **BIE** (RIPCI, anexo I): todo punto a 25 m como mucho de una (20 m de manguera y 5 de chorro), y ninguna a más de 50 m de la siguiente.
+- **Pulsadores de alarma**: todo punto a 25 m como mucho de uno.
+- **Rociadores** (UNE-EN 12845, riesgo ligero): en cada local con rociadores, uno por cada 21 m² como mucho y a 4,6 m como mucho del siguiente.
+- **Detectores de humo** (UNE 23007-14): en cada local con detectores, uno por cada 60 m².
+- **Alumbrado de emergencia y señales**: cuántos hay en cada planta; aviso si un edificio que no es de viviendas no tiene ninguno en una planta.
+- Las distancias se miden en línea recta: lo que no cumple, no cumple; lo que cumple puede no cumplir por el recorrido real si hay muros por medio.
+
+Valores de la tabla 1.1 contrastados en normatia.com (CTE DB-SI 2025) el 31/10/2026. El alarma de Pública Concurrencia va por ocupación (más de 500 personas) y no se comprueba todavía; tampoco la columna seca, los hidrantes ni los extintores de las zonas de riesgo especial.
+
 ## Superficies
 
 Superficie útil de cada local, por uso y por planta; superficie construida de cada planta (lo que encierran las caras exteriores de los muros, con los muros, sin patios de más de 1 m²) y del edificio, con la ocupación.

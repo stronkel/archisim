@@ -142,6 +142,9 @@ impl Exporter<'_> {
         }
         let mut lighting = Vec::new();
         let mut electrical = Vec::new();
+        let mut alarm = Vec::new();
+        let mut emergency = Vec::new();
+        let mut solar = Vec::new();
         for d in model.devices() {
             let Some(&(_, storey_pl)) = storeys.get(&d.level) else {
                 continue;
@@ -154,21 +157,7 @@ impl Exporter<'_> {
                 .collect();
             let shape = self.triangulated_shape(&tris, storey_z);
             let pl = self.placement(Some(storey_pl), self.origin, None);
-            let (class, predefined) = match d.kind {
-                DeviceKind::Equipment => ("IFCUNITARYEQUIPMENT", "USERDEFINED"),
-                DeviceKind::Light => ("IFCLIGHTFIXTURE", "POINTSOURCE"),
-                DeviceKind::Socket => ("IFCOUTLET", "POWEROUTLET"),
-                DeviceKind::Switch => ("IFCSWITCHINGDEVICE", "TOGGLESWITCH"),
-                DeviceKind::Radiator => ("IFCSPACEHEATER", "RADIATOR"),
-                DeviceKind::Grille => ("IFCAIRTERMINAL", "GRILLE"),
-                DeviceKind::Diffuser => ("IFCAIRTERMINAL", "DIFFUSER"),
-                DeviceKind::TwoWaySwitch => ("IFCSWITCHINGDEVICE", "TOGGLESWITCH"),
-                DeviceKind::PowerSocket => ("IFCOUTLET", "POWEROUTLET"),
-                DeviceKind::TvSocket => ("IFCOUTLET", "AUDIOVISUALOUTLET"),
-                DeviceKind::DataSocket => ("IFCOUTLET", "DATAOUTLET"),
-                DeviceKind::Panel => ("IFCELECTRICDISTRIBUTIONBOARD", "DISTRIBUTIONBOARD"),
-                DeviceKind::Riser | DeviceKind::Downpipe => ("IFCPIPESEGMENT", "RIGIDSEGMENT"),
-            };
+            let (class, predefined) = d.kind.ifc_class();
             let object_type = if predefined == "USERDEFINED" {
                 string(d.kind.name())
             } else {
@@ -228,6 +217,15 @@ impl Exporter<'_> {
             match d.kind {
                 DeviceKind::Light => lighting.push(el),
                 k if k.is_electric() => electrical.push(el),
+                DeviceKind::SmokeDetector | DeviceKind::CallPoint | DeviceKind::Siren => {
+                    alarm.push(el)
+                }
+                DeviceKind::EmergencyLight | DeviceKind::ExitSign => emergency.push(el),
+                DeviceKind::SolarPanel => solar.push(el),
+                DeviceKind::Extinguisher => by_system
+                    .entry(ServiceSystem::FireProtection)
+                    .or_default()
+                    .push(el),
                 DeviceKind::Equipment => {}
                 k => {
                     if let Some(s) = k.system() {
@@ -258,6 +256,15 @@ impl Exporter<'_> {
         }
         if !electrical.is_empty() {
             systems.push(("Fuerza".into(), "ELECTRICAL", electrical));
+        }
+        if !alarm.is_empty() {
+            systems.push(("Detección y alarma".into(), "FIREPROTECTION", alarm));
+        }
+        if !emergency.is_empty() {
+            systems.push(("Alumbrado de emergencia".into(), "LIGHTING", emergency));
+        }
+        if !solar.is_empty() {
+            systems.push(("Fotovoltaica".into(), "ELECTRICAL", solar));
         }
         for (name, predefined, els) in systems {
             let guid = derived_guid(&model.project_guid, &format!("system {name}"));

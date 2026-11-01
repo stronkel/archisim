@@ -20,6 +20,7 @@
 pub mod access;
 pub mod electrical;
 pub mod evacuation;
+pub mod fire;
 pub mod occupancy;
 pub mod region;
 pub mod services;
@@ -49,6 +50,8 @@ pub enum Status {
 pub enum Section {
     /// DB-SI 3: occupancy and evacuation.
     Evacuation,
+    /// DB-SI 4: the fire protection installations (H3).
+    Fire,
     /// DB-SUA 9 and Anejo A: accessibility.
     Accessibility,
     /// DB-SUA 1: stairs and ramps.
@@ -64,8 +67,9 @@ pub enum Section {
 }
 
 impl Section {
-    pub const ALL: [Section; 7] = [
+    pub const ALL: [Section; 8] = [
         Section::Evacuation,
+        Section::Fire,
         Section::Accessibility,
         Section::StairsAndRamps,
         Section::Services,
@@ -77,6 +81,7 @@ impl Section {
     pub fn title(self) -> &'static str {
         match self {
             Section::Evacuation => "Evacuación (DB-SI 3)",
+            Section::Fire => "Protección contra incendios (DB-SI 4)",
             Section::Accessibility => "Accesibilidad (DB-SUA 9)",
             Section::StairsAndRamps => "Escaleras y rampas (DB-SUA 1)",
             Section::Services => "Agua y saneamiento (DB-HS 4 y HS 5)",
@@ -303,6 +308,7 @@ pub fn check(model: &Model) -> Report {
     let levels = report.levels.clone();
     surfaces::items(&levels, &mut report);
     evacuation::check(model, &mut report);
+    fire::check(model, &mut report);
     access::check(model, &mut report);
     access::stairs_and_ramps(model, &mut report);
     services::check(model, &mut report);

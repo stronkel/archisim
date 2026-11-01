@@ -21,14 +21,17 @@ pub enum ServiceSystem {
     SupplyAir,
     ReturnAir,
     ExhaustAir,
+    /// The water of the fire protection: sprinklers and hose reels (H3).
+    FireProtection,
 }
 
 impl ServiceSystem {
-    pub const PIPES: [ServiceSystem; 4] = [
+    pub const PIPES: [ServiceSystem; 5] = [
         ServiceSystem::ColdWater,
         ServiceSystem::HotWater,
         ServiceSystem::Drainage,
         ServiceSystem::Heating,
+        ServiceSystem::FireProtection,
     ];
     pub const DUCTS: [ServiceSystem; 3] = [
         ServiceSystem::SupplyAir,
@@ -49,6 +52,7 @@ impl ServiceSystem {
             ServiceSystem::SupplyAir => "supply_air",
             ServiceSystem::ReturnAir => "return_air",
             ServiceSystem::ExhaustAir => "exhaust_air",
+            ServiceSystem::FireProtection => "fire_protection",
         }
     }
 
@@ -68,6 +72,7 @@ impl ServiceSystem {
             ServiceSystem::SupplyAir => "Impulsión",
             ServiceSystem::ReturnAir => "Retorno",
             ServiceSystem::ExhaustAir => "Extracción",
+            ServiceSystem::FireProtection => "Protección contra incendios",
         }
     }
 
@@ -81,6 +86,7 @@ impl ServiceSystem {
             ServiceSystem::SupplyAir => [70, 170, 210],
             ServiceSystem::ReturnAir => [80, 160, 90],
             ServiceSystem::ExhaustAir => [130, 130, 130],
+            ServiceSystem::FireProtection => [200, 20, 40],
         }
     }
 
@@ -93,6 +99,7 @@ impl ServiceSystem {
             ServiceSystem::Heating => "HEATING",
             ServiceSystem::SupplyAir | ServiceSystem::ReturnAir => "VENTILATION",
             ServiceSystem::ExhaustAir => "EXHAUST",
+            ServiceSystem::FireProtection => "FIREPROTECTION",
         }
     }
 }
@@ -289,10 +296,42 @@ pub enum DeviceKind {
     Riser,
     /// A downpipe of the drainage («bajante»).
     Downpipe,
+    /// A sprinkler, under the ceiling.
+    Sprinkler,
+    /// A hose reel cabinet («boca de incendio equipada», 25 mm), on a wall.
+    HoseReel,
+    /// A portable extinguisher on its hook (21A-113B), on a wall, its top at
+    /// 1,20 m.
+    Extinguisher,
+    /// An optical smoke detector, on the ceiling.
+    SmokeDetector,
+    /// A manual call point, on a wall.
+    CallPoint,
+    /// An alarm sounder with its flash, on a wall.
+    Siren,
+    /// An emergency light, on a wall over the doors and along the routes.
+    EmergencyLight,
+    /// A lit exit sign («SALIDA»), over a door.
+    ExitSign,
+    /// A stop valve («llave de paso»), on a pipe: its axis at 40 % of its
+    /// height, along `x`.
+    Valve,
+    /// A water meter, in its box.
+    WaterMeter,
+    /// A water tank («aljibe», «depósito»): a cylinder standing.
+    Tank,
+    /// A booster pump set, on the floor.
+    Pump,
+    /// A hot water heater («termo» or «calentador»), on a wall.
+    WaterHeater,
+    /// A row of photovoltaic panels: its box is the row; the panels are tilted to fill it (rise over depth), lie flat when its height is small.
+    SolarPanel,
+    /// A row of solar thermal collectors, the same way.
+    SolarCollector,
 }
 
 impl DeviceKind {
-    pub const ALL: [DeviceKind; 14] = [
+    pub const ALL: [DeviceKind; 29] = [
         DeviceKind::Equipment,
         DeviceKind::Light,
         DeviceKind::Socket,
@@ -307,6 +346,21 @@ impl DeviceKind {
         DeviceKind::Panel,
         DeviceKind::Riser,
         DeviceKind::Downpipe,
+        DeviceKind::Sprinkler,
+        DeviceKind::HoseReel,
+        DeviceKind::Extinguisher,
+        DeviceKind::SmokeDetector,
+        DeviceKind::CallPoint,
+        DeviceKind::Siren,
+        DeviceKind::EmergencyLight,
+        DeviceKind::ExitSign,
+        DeviceKind::Valve,
+        DeviceKind::WaterMeter,
+        DeviceKind::Tank,
+        DeviceKind::Pump,
+        DeviceKind::WaterHeater,
+        DeviceKind::SolarPanel,
+        DeviceKind::SolarCollector,
     ];
 
     /// The mechanisms of the electricity and telecommunications.
@@ -345,6 +399,21 @@ impl DeviceKind {
             DeviceKind::Panel => "panel",
             DeviceKind::Riser => "riser",
             DeviceKind::Downpipe => "downpipe",
+            DeviceKind::Sprinkler => "sprinkler",
+            DeviceKind::HoseReel => "hose_reel",
+            DeviceKind::Extinguisher => "extinguisher",
+            DeviceKind::SmokeDetector => "smoke_detector",
+            DeviceKind::CallPoint => "call_point",
+            DeviceKind::Siren => "siren",
+            DeviceKind::EmergencyLight => "emergency_light",
+            DeviceKind::ExitSign => "exit_sign",
+            DeviceKind::Valve => "valve",
+            DeviceKind::WaterMeter => "water_meter",
+            DeviceKind::Tank => "tank",
+            DeviceKind::Pump => "pump",
+            DeviceKind::WaterHeater => "water_heater",
+            DeviceKind::SolarPanel => "solar_panel",
+            DeviceKind::SolarCollector => "solar_collector",
         }
     }
 
@@ -368,6 +437,21 @@ impl DeviceKind {
             DeviceKind::Panel => "Cuadro eléctrico",
             DeviceKind::Riser => "Montante",
             DeviceKind::Downpipe => "Bajante",
+            DeviceKind::Sprinkler => "Rociador",
+            DeviceKind::HoseReel => "BIE",
+            DeviceKind::Extinguisher => "Extintor",
+            DeviceKind::SmokeDetector => "Detector de humo",
+            DeviceKind::CallPoint => "Pulsador de alarma",
+            DeviceKind::Siren => "Sirena",
+            DeviceKind::EmergencyLight => "Alumbrado de emergencia",
+            DeviceKind::ExitSign => "Señal de salida",
+            DeviceKind::Valve => "Llave de paso",
+            DeviceKind::WaterMeter => "Contador de agua",
+            DeviceKind::Tank => "Depósito",
+            DeviceKind::Pump => "Grupo de presión",
+            DeviceKind::WaterHeater => "Termo",
+            DeviceKind::SolarPanel => "Placas solares",
+            DeviceKind::SolarCollector => "Captadores solares",
         }
     }
 
@@ -390,7 +474,89 @@ impl DeviceKind {
             // A pipe: its diameter and how far it goes up (a storey).
             DeviceKind::Riser => (0.04, 0.04, 3.0, 0.0),
             DeviceKind::Downpipe => (0.11, 0.11, 3.0, 0.0),
+            DeviceKind::Sprinkler => (0.08, 0.08, 0.08, 2.6),
+            DeviceKind::HoseReel => (0.7, 0.25, 0.7, 1.15),
+            DeviceKind::Extinguisher => (0.2, 0.18, 0.6, 0.6),
+            DeviceKind::SmokeDetector => (0.11, 0.11, 0.06, 2.64),
+            DeviceKind::CallPoint => (0.09, 0.05, 0.09, 1.4),
+            DeviceKind::Siren => (0.12, 0.08, 0.12, 2.3),
+            DeviceKind::EmergencyLight => (0.3, 0.06, 0.1, 2.2),
+            DeviceKind::ExitSign => (0.32, 0.03, 0.16, 2.25),
+            DeviceKind::Valve => (0.08, 0.06, 0.08, 0.37),
+            DeviceKind::WaterMeter => (0.4, 0.15, 0.3, 0.6),
+            DeviceKind::Tank => (1.0, 1.0, 1.5, 0.0),
+            DeviceKind::Pump => (0.9, 0.5, 0.8, 0.0),
+            DeviceKind::WaterHeater => (0.45, 0.45, 0.9, 1.3),
+            DeviceKind::SolarPanel => (3.4, 1.6, 0.9, 0.0),
+            DeviceKind::SolarCollector => (2.2, 1.7, 1.0, 0.0),
         }
+    }
+
+    /// Its IFC class and predefined type.
+    pub fn ifc_class(self) -> (&'static str, &'static str) {
+        match self {
+            DeviceKind::Equipment => ("IFCUNITARYEQUIPMENT", "USERDEFINED"),
+            DeviceKind::Light => ("IFCLIGHTFIXTURE", "POINTSOURCE"),
+            DeviceKind::Socket => ("IFCOUTLET", "POWEROUTLET"),
+            DeviceKind::Switch => ("IFCSWITCHINGDEVICE", "TOGGLESWITCH"),
+            DeviceKind::Radiator => ("IFCSPACEHEATER", "RADIATOR"),
+            DeviceKind::Grille => ("IFCAIRTERMINAL", "GRILLE"),
+            DeviceKind::Diffuser => ("IFCAIRTERMINAL", "DIFFUSER"),
+            DeviceKind::TwoWaySwitch => ("IFCSWITCHINGDEVICE", "TOGGLESWITCH"),
+            DeviceKind::PowerSocket => ("IFCOUTLET", "POWEROUTLET"),
+            DeviceKind::TvSocket => ("IFCOUTLET", "AUDIOVISUALOUTLET"),
+            DeviceKind::DataSocket => ("IFCOUTLET", "DATAOUTLET"),
+            DeviceKind::Panel => ("IFCELECTRICDISTRIBUTIONBOARD", "DISTRIBUTIONBOARD"),
+            DeviceKind::Riser | DeviceKind::Downpipe => ("IFCPIPESEGMENT", "RIGIDSEGMENT"),
+            DeviceKind::Sprinkler => ("IFCFIRESUPPRESSIONTERMINAL", "SPRINKLER"),
+            DeviceKind::HoseReel => ("IFCFIRESUPPRESSIONTERMINAL", "HOSEREEL"),
+            DeviceKind::Extinguisher => ("IFCFIRESUPPRESSIONTERMINAL", "USERDEFINED"),
+            DeviceKind::SmokeDetector => ("IFCSENSOR", "SMOKESENSOR"),
+            DeviceKind::CallPoint => ("IFCALARM", "MANUALPULLBOX"),
+            DeviceKind::Siren => ("IFCALARM", "SIREN"),
+            DeviceKind::EmergencyLight => ("IFCLIGHTFIXTURE", "SECURITYLIGHTING"),
+            DeviceKind::ExitSign => ("IFCLIGHTFIXTURE", "SECURITYLIGHTING"),
+            DeviceKind::Valve => ("IFCVALVE", "ISOLATING"),
+            DeviceKind::WaterMeter => ("IFCFLOWMETER", "WATERMETER"),
+            DeviceKind::Tank => ("IFCTANK", "STORAGE"),
+            DeviceKind::Pump => ("IFCPUMP", "VERTICALINLINE"),
+            DeviceKind::WaterHeater => ("IFCBOILER", "WATER"),
+            DeviceKind::SolarPanel => ("IFCSOLARDEVICE", "SOLARPANEL"),
+            DeviceKind::SolarCollector => ("IFCSOLARDEVICE", "SOLARCOLLECTOR"),
+        }
+    }
+
+    /// The fire protection's (DB-SI 4): sprinklers, hose reels,
+    /// extinguishers, detection and alarm, emergency lighting and signs.
+    pub fn is_fire(self) -> bool {
+        matches!(
+            self,
+            DeviceKind::Sprinkler
+                | DeviceKind::HoseReel
+                | DeviceKind::Extinguisher
+                | DeviceKind::SmokeDetector
+                | DeviceKind::CallPoint
+                | DeviceKind::Siren
+                | DeviceKind::EmergencyLight
+                | DeviceKind::ExitSign
+        )
+    }
+
+    /// The water's equipment: valves, meters, tanks, pumps and heaters.
+    pub fn is_water(self) -> bool {
+        matches!(
+            self,
+            DeviceKind::Valve
+                | DeviceKind::WaterMeter
+                | DeviceKind::Tank
+                | DeviceKind::Pump
+                | DeviceKind::WaterHeater
+        )
+    }
+
+    /// The solar panels and collectors, whose box is their row.
+    pub fn is_solar(self) -> bool {
+        matches!(self, DeviceKind::SolarPanel | DeviceKind::SolarCollector)
     }
 
     /// The system it is usually fed by, if any.
@@ -401,6 +567,14 @@ impl DeviceKind {
             DeviceKind::Diffuser => Some(ServiceSystem::SupplyAir),
             DeviceKind::Riser => Some(ServiceSystem::ColdWater),
             DeviceKind::Downpipe => Some(ServiceSystem::Drainage),
+            DeviceKind::Sprinkler => Some(ServiceSystem::FireProtection),
+            DeviceKind::HoseReel => Some(ServiceSystem::FireProtection),
+            DeviceKind::Valve => Some(ServiceSystem::ColdWater),
+            DeviceKind::WaterMeter => Some(ServiceSystem::ColdWater),
+            DeviceKind::Tank => Some(ServiceSystem::ColdWater),
+            DeviceKind::Pump => Some(ServiceSystem::ColdWater),
+            DeviceKind::WaterHeater => Some(ServiceSystem::HotWater),
+            DeviceKind::SolarCollector => Some(ServiceSystem::HotWater),
             _ => None,
         }
     }
@@ -440,6 +614,29 @@ pub struct NewDevice {
     pub width: f64,
     pub depth: f64,
     pub height: f64,
+}
+
+/// Width of a solar module across its row, metres (a panel of 1,13 ×
+/// 2,28 m, or a collector of 1,1 × 2 m, standing).
+pub const SOLAR_MODULE: f64 = 1.13;
+/// Peak power of a photovoltaic module, kWp.
+pub const MODULE_PEAK_KW: f64 = 0.45;
+/// Area of a thermal collector, m² (its absorber).
+pub const COLLECTOR_AREA: f64 = 2.0;
+
+/// How many modules a row of solar panels or collectors has (H3).
+pub fn solar_modules(d: &ServiceDevice) -> usize {
+    ((d.width / SOLAR_MODULE).round() as usize).max(1)
+}
+
+/// The tilt of a row of solar modules, radians: its box's rise over its
+/// depth; flat on what it stands on when the box is low (≤ 5 cm).
+pub fn solar_tilt(d: &ServiceDevice) -> f64 {
+    if d.height <= 0.05 {
+        0.0
+    } else {
+        d.height.atan2(d.depth)
+    }
 }
 
 impl ServiceDevice {

@@ -519,6 +519,23 @@ fn draw_device(s: &mut String, d: &archisim_core::ServiceDevice, k: f64) {
                 }
             }
         }
+        kind @ (DeviceKind::Sprinkler
+        | DeviceKind::HoseReel
+        | DeviceKind::Extinguisher
+        | DeviceKind::SmokeDetector
+        | DeviceKind::CallPoint
+        | DeviceKind::Siren
+        | DeviceKind::EmergencyLight
+        | DeviceKind::ExitSign
+        | DeviceKind::Valve
+        | DeviceKind::WaterMeter
+        | DeviceKind::Tank
+        | DeviceKind::Pump
+        | DeviceKind::WaterHeater
+        | DeviceKind::SolarPanel
+        | DeviceKind::SolarCollector) => {
+            fire_water_symbol(s, d, kind, r, ink, k);
+        }
         DeviceKind::Equipment => {
             let o = d.outline();
             let _ = writeln!(
@@ -543,6 +560,225 @@ fn draw_device(s: &mut String, d: &archisim_core::ServiceDevice, k: f64) {
                 crate::lettering::paint(h, ink)
             );
         }
+    }
+}
+
+/// The red of the fire protection's symbols (UNE 23032) and the green of
+/// the evacuation's.
+const FIRE_INK: &str = "#c8142a";
+const EXIT_INK: &str = "#14915a";
+
+/// The symbols of the fire protection, the water's equipment and the
+/// solar panels (H3): the fire's in red as UNE 23032 draws them, with a
+/// letter where a shape alone would not say what they are; the water's in
+/// the colour of their system; the panels as their row of modules.
+fn fire_water_symbol(
+    s: &mut String,
+    d: &archisim_core::ServiceDevice,
+    kind: DeviceKind,
+    r: f64,
+    ink: &str,
+    k: f64,
+) {
+    let c = d.position;
+    let (cs, sn) = (d.rotation.cos(), d.rotation.sin());
+    let rot = |x: f64, y: f64| c + Point2::new(x * cs - y * sn, x * sn + y * cs);
+    let w = num(pens().view * k);
+    let poly = |s: &mut String, pts: &[Point2], fill: &str, stroke: &str| {
+        let _ = writeln!(
+            s,
+            r#"<path d="{}" fill="{fill}" stroke="{stroke}" stroke-width="{w}" stroke-linejoin="round"/>"#,
+            path(pts)
+        );
+    };
+    let square = |half: f64| -> Vec<Point2> {
+        [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)]
+            .into_iter()
+            .map(|(x, y)| rot(x * half, y * half))
+            .collect()
+    };
+    let disc = |radius: f64| -> Vec<Point2> {
+        (0..24)
+            .map(|i| {
+                let a = std::f64::consts::TAU * i as f64 / 24.0;
+                c + Point2::new(radius * a.cos(), radius * a.sin())
+            })
+            .collect()
+    };
+    let letter = |s: &mut String, text: &str, h: f64, colour: &str, at: Point2| {
+        let _ = writeln!(
+            s,
+            r#"<path d="{}" {}/>"#,
+            text_path(
+                text,
+                at - Point2::new(0.0, h / 2.0),
+                Point2::new(1.0, 0.0),
+                h,
+                Align::Centre
+            ),
+            crate::lettering::paint(h, colour)
+        );
+    };
+    let line = |s: &mut String, a: Point2, b: Point2, colour: &str| {
+        let _ = writeln!(
+            s,
+            r#"<path d="M{} L{}" fill="none" stroke="{colour}" stroke-width="{w}"/>"#,
+            pt(a),
+            pt(b)
+        );
+    };
+    let system = hex(kind.system().map_or([90, 90, 90], |s| s.color()));
+    match kind {
+        DeviceKind::Sprinkler => {
+            // Its head, with its spray.
+            poly(s, &disc(r * 0.45), FIRE_INK, FIRE_INK);
+            for i in 0..4 {
+                let a = std::f64::consts::FRAC_PI_4 + std::f64::consts::FRAC_PI_2 * i as f64;
+                let u = Point2::new(a.cos(), a.sin());
+                line(s, c + u * (r * 0.6), c + u * r, FIRE_INK);
+            }
+        }
+        DeviceKind::HoseReel => {
+            // Its cabinet, with the reel.
+            poly(s, &square(r), "white", FIRE_INK);
+            poly(s, &disc(r * 0.6), "none", FIRE_INK);
+            poly(s, &disc(r * 0.18), FIRE_INK, FIRE_INK);
+        }
+        DeviceKind::Extinguisher => {
+            poly(s, &square(r * 0.8), FIRE_INK, FIRE_INK);
+            letter(s, "E", r, "white", c);
+        }
+        DeviceKind::SmokeDetector => {
+            poly(s, &disc(r * 0.8), "white", FIRE_INK);
+            letter(s, "D", r * 0.9, FIRE_INK, c);
+        }
+        DeviceKind::CallPoint => {
+            poly(s, &square(r * 0.7), "white", FIRE_INK);
+            poly(s, &disc(r * 0.28), FIRE_INK, FIRE_INK);
+        }
+        DeviceKind::Siren => {
+            // A horn opening out from the wall.
+            let horn = [
+                rot(-r * 0.3, 0.0),
+                rot(r * 0.3, 0.0),
+                rot(r * 0.8, r * 0.9),
+                rot(-r * 0.8, r * 0.9),
+            ];
+            poly(s, &horn, FIRE_INK, FIRE_INK);
+        }
+        DeviceKind::EmergencyLight => {
+            let o = [rot(-r, 0.0), rot(r, 0.0), rot(r, r * 0.7), rot(-r, r * 0.7)];
+            poly(s, &o, "white", ink);
+            let half = [
+                rot(0.0, 0.0),
+                rot(r, 0.0),
+                rot(r, r * 0.7),
+                rot(0.0, r * 0.7),
+            ];
+            poly(s, &half, ink, ink);
+        }
+        DeviceKind::ExitSign => {
+            let o = [
+                rot(-r * 1.2, 0.0),
+                rot(r * 1.2, 0.0),
+                rot(r * 1.2, r * 0.8),
+                rot(-r * 1.2, r * 0.8),
+            ];
+            poly(s, &o, EXIT_INK, EXIT_INK);
+            // Its arrow.
+            line(s, rot(-r * 0.7, r * 0.4), rot(r * 0.7, r * 0.4), "white");
+            line(s, rot(r * 0.7, r * 0.4), rot(r * 0.35, r * 0.65), "white");
+            line(s, rot(r * 0.7, r * 0.4), rot(r * 0.35, r * 0.15), "white");
+        }
+        DeviceKind::Valve => {
+            // Two triangles tip to tip, across the pipe; its stem.
+            let a = r * 0.8;
+            poly(
+                s,
+                &[rot(-a, -a * 0.6), rot(0.0, 0.0), rot(-a, a * 0.6)],
+                &system,
+                &system,
+            );
+            poly(
+                s,
+                &[rot(a, -a * 0.6), rot(0.0, 0.0), rot(a, a * 0.6)],
+                &system,
+                &system,
+            );
+            line(s, rot(0.0, 0.0), rot(0.0, a * 0.9), &system);
+            line(s, rot(-a * 0.4, a * 0.9), rot(a * 0.4, a * 0.9), &system);
+        }
+        DeviceKind::WaterMeter => {
+            poly(s, &d.outline(), "white", ink);
+            poly(s, &disc(r * 0.6), "white", &system);
+            letter(s, "C", r * 0.7, &system, c);
+        }
+        DeviceKind::Tank => {
+            let rr = (d.width.min(d.depth) / 2.0).max(r);
+            poly(s, &disc(rr), "white", &system);
+            let q = rr * 0.55;
+            line(
+                s,
+                c + Point2::new(-q, -q * 0.3),
+                c + Point2::new(q, -q * 0.3),
+                &system,
+            );
+            line(
+                s,
+                c + Point2::new(-q * 0.7, -q * 0.6),
+                c + Point2::new(q * 0.7, -q * 0.6),
+                &system,
+            );
+            letter(s, &d.name, r * 0.8, ink, c + Point2::new(0.0, rr * 0.3));
+        }
+        DeviceKind::Pump => {
+            poly(s, &d.outline(), "white", ink);
+            let rr = r.min(d.width.min(d.depth) / 2.0).max(r * 0.6);
+            poly(s, &disc(rr), "white", &system);
+            poly(
+                s,
+                &[
+                    rot(-rr * 0.5, -rr * 0.6),
+                    rot(rr * 0.75, 0.0),
+                    rot(-rr * 0.5, rr * 0.6),
+                ],
+                &system,
+                &system,
+            );
+        }
+        DeviceKind::WaterHeater => {
+            let rr = (d.width.min(d.depth) / 2.0).max(r);
+            poly(s, &disc(rr), "white", &system);
+            letter(s, "ACS", rr * 0.55, &system, c);
+        }
+        DeviceKind::SolarPanel | DeviceKind::SolarCollector => {
+            // Its modules along the row, with their cells or tubes.
+            let (hx, hy) = (d.width / 2.0, d.depth / 2.0);
+            let n = archisim_core::solar_modules(d);
+            let step = d.width / n as f64;
+            let colour = if kind == DeviceKind::SolarPanel {
+                "#1d3a6b"
+            } else {
+                &system
+            };
+            for i in 0..n {
+                let x0 = -hx + step * i as f64 + 0.01;
+                let x1 = x0 + step - 0.02;
+                let m = [rot(x0, -hy), rot(x1, -hy), rot(x1, hy), rot(x0, hy)];
+                poly(s, &m, "white", colour);
+                let lines = if kind == DeviceKind::SolarPanel { 5 } else { 8 };
+                for j in 1..lines {
+                    if kind == DeviceKind::SolarPanel {
+                        let y = -hy + d.depth * j as f64 / lines as f64;
+                        line(s, rot(x0, y), rot(x1, y), colour);
+                    } else {
+                        let x = x0 + (x1 - x0) * j as f64 / lines as f64;
+                        line(s, rot(x, -hy), rot(x, hy), colour);
+                    }
+                }
+            }
+        }
+        _ => {}
     }
 }
 

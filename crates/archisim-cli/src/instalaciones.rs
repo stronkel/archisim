@@ -3,7 +3,8 @@
 //! their plan symbols and the circuits of the REBT (C1 lights, C2 sockets,
 //! C3 the cooker, C5 the bathroom and kitchen), the board, water pipes
 //! with bends of their radius, a riser and a downpipe through both floors
-//! with the drains ending at it.
+//! with the drains ending at it; and (H3) the fire protection, the
+//! water's equipment and the solar panels.
 
 use std::path::Path;
 
@@ -118,6 +119,44 @@ pub fn build() -> Res<Model> {
         (K::Socket, 7.6, 3.0, up),
     ] {
         device(&mut m, first, k, x, y, r)?;
+    }
+    // H3: the fire protection upstairs, the water's equipment downstairs
+    // and a row of panels and one of collectors over the first floor.
+    let (face, north) = (7.62, 5.62);
+    for (k, x, y, r) in [
+        (K::Sprinkler, 4.0, 4.0, 0.0),
+        (K::SmokeDetector, 6.0, 4.5, 0.0),
+        (K::HoseReel, face - 0.125, 1.6, up),
+        (K::Extinguisher, face - 0.09, 2.6, up),
+        (K::CallPoint, face - 0.025, 0.9, up),
+        (K::Siren, 3.5, north - 0.04, std::f64::consts::PI),
+        (K::EmergencyLight, 4.6, north - 0.03, std::f64::consts::PI),
+        (K::ExitSign, 5.6, north - 0.015, std::f64::consts::PI),
+        (K::Tank, 2.2, 3.2, 0.0),
+    ] {
+        device(&mut m, first, k, x, y, r)?;
+    }
+    for (k, x, y, r) in [
+        (K::Valve, 1.5, 5.4, 0.0),
+        (K::WaterMeter, 0.455, 3.0, -up),
+        (K::WaterHeater, 3.6, north - 0.225, std::f64::consts::PI),
+        (K::Pump, 6.0, 1.2, 0.0),
+    ] {
+        device(&mut m, ground, k, x, y, r)?;
+    }
+    for (k, x) in [(K::SolarPanel, 2.5), (K::SolarCollector, 6.0)] {
+        let (dw, dd, dh, _) = k.defaults();
+        m.add_device(NewDevice {
+            level: first,
+            kind: k,
+            name: k.name().into(),
+            position: Point2::new(x, 3.0),
+            rotation: std::f64::consts::PI,
+            elevation: 3.0,
+            width: dw,
+            depth: dd,
+            height: dh,
+        })?;
     }
     // The washing machine's socket, on C4 by hand.
     let washer = m

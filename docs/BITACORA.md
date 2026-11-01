@@ -6,6 +6,43 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-01 (60) · H3: protección contra incendios, equipos de agua y placas solares
+
+Rama `bloque/h3-incendios` (encima de H2), con pull request. Formato `.archisim` versión 58 (clases nuevas de aparatos y la red de protección contra incendios).
+
+**Hecho**
+- **Protección contra incendios**, como aparatos de Instalaciones, cada uno con su modelo 3D, su símbolo en planta y su clase IFC:
+  - rociador (`IfcFireSuppressionTerminal` SPRINKLER);
+  - BIE (HOSEREEL);
+  - extintor;
+  - detector de humo (`IfcSensor`);
+  - pulsador y sirena (`IfcAlarm`);
+  - alumbrado de emergencia y señal de salida (`IfcLightFixture` SECURITYLIGHTING; se encienden de noche).
+- Los símbolos de planta van en rojo, como UNE 23032; la señal de salida, en verde. Tubería del sistema nuevo «Protección contra incendios», en rojo, e IFC FIREPROTECTION.
+- **Equipos de agua**, con el color de su red: llave de paso (las dos cuñas del símbolo de siempre y su maneta en 3D), contador, depósito, grupo de presión y termo.
+- **Placas solares**: fotovoltaicas y captadores térmicos (`IfcSolarDevice`). La caja del aparato es la fila: el ancho da los módulos (1,13 m cada uno) y la inclinación sale del alto sobre el fondo (planas si el alto es de 5 cm o menos). En Propiedades, módulos, inclinación y potencia pico (o superficie de captación).
+- **Ficha Instalaciones** reordenada para que quepa en su rejilla: Clima (radiador, rejilla, difusor), Incendios, Equipos de agua y Placas solares; las demás clases se eligen en el «Tipo» del aparato, que ahora enseña solo las de su familia.
+- **Comprobación DB-SI 4** (Colaboración → Comprobación CTE, sección nueva):
+  - lo que pide la tabla 1.1 según el uso y la superficie (BIE, alarma, detección; contrastado con el texto de 2025);
+  - extintores a 15 m de todo punto (en viviendas, solo de las zonas comunes);
+  - BIE a 25 m y a no más de 50 m entre ellas;
+  - pulsadores a 25 m;
+  - rociadores: uno por cada 21 m², a 4,6 m como mucho;
+  - detectores: uno por cada 60 m²;
+  - luces de emergencia por planta.
+  - Detalle en `docs/CTE.md`.
+- La demo lleva llave de paso, extintor, detector, emergencia y una fila de placas en la cubierta. El edificio de Florence Street lleva extintor, emergencia y señal de salida en cada rellano, y placas en el pabellón. `archisim instalaciones out/` las pone todas.
+
+**Pendiente**
+- Las distancias del SI 4 son en línea recta, no por el recorrido. La alarma de Pública Concurrencia (por ocupación), la columna seca y los hidrantes no se comprueban todavía.
+
+**Qué debe probar Antonio**
+- `cargo run --release -p archisim-cli -- instalaciones out/` y abrir `out/instalaciones.archisim`: en la planta primera, los aparatos de incendios; en la baja, la llave de paso, el contador, el termo y el grupo de presión; las placas encima. Mirar los símbolos en planta y el 3D.
+- En la ficha Instalaciones → Incendios, colocar un extintor y, en su Tipo, cambiarlo a BIE o a rociador.
+- En el edificio, Comprobación CTE → «Protección contra incendios (DB-SI 4)».
+
+---
+
 ## 2026-10-31 (59) · H1 y H2: puertas en muros cortina, locales cerrados por ellos y agua transparente
 
 Ramas `bloque/h1-muro-cortina` y `bloque/h2-agua` (encima), con pull request cada una. Formato `.archisim` versión 57 (puertas de los muros cortina). Es el principio de la lista de Antonio del 31/10/2026 (H1–H7: muros cortina, incendios, ascensores, placas solares y agua, trepadoras, calles y cartografía).

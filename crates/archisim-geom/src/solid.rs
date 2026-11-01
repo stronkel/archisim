@@ -4351,6 +4351,8 @@ fn device_role_color(d: &archisim_core::ServiceDevice, role: usize) -> [u8; 3] {
         Some("pipe") => d.kind.system().map_or([170, 140, 110], |s| s.color()),
         Some("shade") => [255, 244, 214],
         Some("red") => [205, 50, 45],
+        Some("sign") => [30, 160, 90],
+        Some("cell") => [29, 52, 98],
         _ => [235, 235, 230],
     }
 }
@@ -4358,6 +4360,8 @@ fn device_role_color(d: &archisim_core::ServiceDevice, role: usize) -> [u8; 3] {
 /// How far a lamp's light reaches at night, metres; a streetlight's.
 pub const LAMP_REACH: f64 = 4.5;
 pub const STREET_REACH: f64 = 11.0;
+/// The glow of an emergency light or an exit sign.
+pub const SIGN_REACH: f64 = 1.5;
 
 /// The materials of an object that glow at night: the shade and the bulb
 /// of a lamp (also of a bedside table's), a candle's flame, the fire of a
@@ -4386,7 +4390,12 @@ pub fn solid_glow(model: &Model, s: &Solid) -> Option<f64> {
             if s.material.0 >= DEVICE_ROLE_BASE {
                 let role = archisim_core::props::fine::services::ROLES
                     .get((s.material.0 - DEVICE_ROLE_BASE) as usize)?;
-                return (*role == "shade").then_some(LAMP_REACH);
+                return match *role {
+                    "shade" if d.kind.is_fire() => Some(SIGN_REACH),
+                    "shade" => Some(LAMP_REACH),
+                    "sign" => Some(SIGN_REACH),
+                    _ => None,
+                };
             }
             let (mats, reach) = type_glow_materials(model, d.fixture?);
             mats.contains(&s.material).then_some(reach)

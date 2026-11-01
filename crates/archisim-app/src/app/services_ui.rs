@@ -98,13 +98,71 @@ fn system_combo(ui: &mut Ui, id: Id, ducts: bool, value: ServiceSystem, w: f32) 
     v
 }
 
+/// «IFCFIRESUPPRESSIONTERMINAL» → «IfcFireSuppressionTerminal».
+fn ifc_name(class: &str) -> String {
+    const WORDS: [&str; 28] = [
+        "UNITARY",
+        "EQUIPMENT",
+        "LIGHT",
+        "FIXTURE",
+        "OUTLET",
+        "SWITCHING",
+        "DEVICE",
+        "SPACE",
+        "HEATER",
+        "AIR",
+        "TERMINAL",
+        "ELECTRIC",
+        "DISTRIBUTION",
+        "BOARD",
+        "PIPE",
+        "SEGMENT",
+        "FIRE",
+        "SUPPRESSION",
+        "SENSOR",
+        "ALARM",
+        "VALVE",
+        "FLOW",
+        "METER",
+        "TANK",
+        "PUMP",
+        "BOILER",
+        "SOLAR",
+        "IFC",
+    ];
+    let mut rest = class;
+    let mut out = String::new();
+    'next: while !rest.is_empty() {
+        for w in WORDS {
+            if let Some(r) = rest.strip_prefix(w) {
+                let mut c = w.chars();
+                if let Some(f) = c.next() {
+                    out.push(f);
+                    out.extend(c.flat_map(|x| x.to_lowercase()));
+                }
+                rest = r;
+                continue 'next;
+            }
+        }
+        out.push_str(&rest.to_lowercase());
+        break;
+    }
+    out
+}
+
 fn kind_combo(ui: &mut Ui, id: Id, value: DeviceKind, w: f32) -> DeviceKind {
     let mut v = value;
     ComboBox::from_id_salt(id)
         .width(w - 8.0)
         .selected_text(value.name())
         .show_ui(ui, |ui| {
-            for k in DeviceKind::ALL {
+            // The kinds of its own family: fire protection, water,
+            // solar, or the rest.
+            let family = |k: DeviceKind| (k.is_fire(), k.is_water(), k.is_solar());
+            for k in DeviceKind::ALL
+                .into_iter()
+                .filter(|k| family(*k) == family(value))
+            {
                 ui.selectable_value(&mut v, k, k.name());
             }
         });
@@ -574,30 +632,40 @@ impl ArchiSimApp {
                 }
             });
         });
+        // A row of solar panels: its modules, tilt and power (H3).
+        if d.kind.is_solar() {
+            group(ui, "dev-solar", "Captación solar", |ui| {
+                let n = archisim_core::solar_modules(&d);
+                text_row(ui, "Módulos", "", &n.to_string());
+                text_row(
+                    ui,
+                    "Inclinación (°)",
+                    "El alto de la caja sobre su fondo; plana si el alto es de 5 cm o menos",
+                    &comma(archisim_core::solar_tilt(&d).to_degrees(), 0),
+                );
+                if d.kind == DeviceKind::SolarPanel {
+                    text_row(
+                        ui,
+                        "Potencia pico (kWp)",
+                        "",
+                        &comma(n as f64 * archisim_core::MODULE_PEAK_KW, 2),
+                    );
+                } else {
+                    text_row(
+                        ui,
+                        "Superficie de captación (m²)",
+                        "",
+                        &comma(n as f64 * archisim_core::COLLECTOR_AREA, 1),
+                    );
+                }
+            });
+        }
         // A light point's lamp (G4).
         if d.kind == DeviceKind::Light {
             self.fixture_group(ui, id, d.fixture);
         }
         group(ui, "dev-identity", "Datos de identidad", |ui| {
-            text_row(
-                ui,
-                "Clase IFC",
-                "",
-                match d.kind {
-                    DeviceKind::Equipment => "IfcUnitaryEquipment",
-                    DeviceKind::Light => "IfcLightFixture",
-                    DeviceKind::Socket => "IfcOutlet",
-                    DeviceKind::Switch => "IfcSwitchingDevice",
-                    DeviceKind::Radiator => "IfcSpaceHeater",
-                    DeviceKind::Grille | DeviceKind::Diffuser => "IfcAirTerminal",
-                    DeviceKind::TwoWaySwitch => "IfcSwitchingDevice",
-                    DeviceKind::PowerSocket | DeviceKind::TvSocket | DeviceKind::DataSocket => {
-                        "IfcOutlet"
-                    }
-                    DeviceKind::Panel => "IfcElectricDistributionBoard",
-                    DeviceKind::Riser | DeviceKind::Downpipe => "IfcPipeSegment",
-                },
-            );
+            text_row(ui, "Clase IFC", "", &ifc_name(d.kind.ifc_class().0));
         });
         // The circuit of a mechanism (E13).
         if d.kind.is_electric() && d.kind != DeviceKind::Panel {

@@ -7,17 +7,14 @@ use archisim_core::{DeviceKind, NewDevice, NewRun, Point2, ServiceSystem};
 use super::{explain, snap, Importer};
 
 const RUN_CLASSES: [&str; 2] = ["IFCPIPESEGMENT", "IFCDUCTSEGMENT"];
-const DEVICE_CLASSES: [&str; 8] = [
-    "IFCELECTRICDISTRIBUTIONBOARD",
-    // Risers and downpipes (with `ArchiSim_Device`, not `ArchiSim_Run`).
-    "IFCPIPESEGMENT",
-    "IFCUNITARYEQUIPMENT",
-    "IFCLIGHTFIXTURE",
-    "IFCOUTLET",
-    "IFCSWITCHINGDEVICE",
-    "IFCSPACEHEATER",
-    "IFCAIRTERMINAL",
-];
+/// The classes the devices are written as (risers and downpipes as pipe
+/// segments, with `ArchiSim_Device`, not `ArchiSim_Run`).
+fn device_classes() -> Vec<&'static str> {
+    let mut v: Vec<&str> = DeviceKind::ALL.iter().map(|k| k.ifc_class().0).collect();
+    v.sort_unstable();
+    v.dedup();
+    v
+}
 const FITTING_CLASSES: [&str; 2] = ["IFCPIPEFITTING", "IFCDUCTFITTING"];
 
 impl<'a> Importer<'a> {
@@ -49,8 +46,8 @@ impl<'a> Importer<'a> {
                 self.report.skip("instalaciones", why);
             }
         }
-        let mut ids: Vec<u64> = DEVICE_CLASSES
-            .iter()
+        let mut ids: Vec<u64> = device_classes()
+            .into_iter()
             .flat_map(|k| self.file.of_kind(k))
             .collect();
         ids.sort_unstable();

@@ -254,7 +254,16 @@ pub fn class_name(kind: &str) -> &'static str {
         | "IFCAIRTERMINAL"
         | "IFCELECTRICAPPLIANCE"
         | "IFCOUTLET"
-        | "IFCSWITCHINGDEVICE" => "elementos de instalaciones",
+        | "IFCSWITCHINGDEVICE"
+        | "IFCFIRESUPPRESSIONTERMINAL"
+        | "IFCSENSOR"
+        | "IFCALARM"
+        | "IFCVALVE"
+        | "IFCFLOWMETER"
+        | "IFCTANK"
+        | "IFCPUMP"
+        | "IFCBOILER"
+        | "IFCSOLARDEVICE" => "elementos de instalaciones",
         "IFCTRANSPORTELEMENT" => "ascensores y transporte",
         "IFCGEOGRAPHICELEMENT" => "elementos del terreno",
         _ => "otros elementos",
