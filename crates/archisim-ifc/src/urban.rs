@@ -18,6 +18,11 @@ use archisim_core::{GlobalId, MaterialId, Point2, RoadBand};
 use crate::step::{list, real, string, Ref};
 use crate::{derived_guid, Exporter, Schema};
 
+/// A piece of a road for IFC: its band, outline and material, how far it
+/// reaches under and over the carriageway, and, for a junction's piece,
+/// its top over the road's.
+type Part = (RoadBand, Vec<Point2>, MaterialId, f64, f64, Option<f64>);
+
 impl Exporter<'_> {
     pub(crate) fn write_urban(
         &mut self,
@@ -87,7 +92,16 @@ impl Exporter<'_> {
         // Roads.
         let mut roads = Vec::new();
         let mut on_site = Vec::new();
+        let mut alignments = Vec::new();
+        let junctions: Vec<archisim_geom::crossroads::Junction> = model
+            .levels()
+            .iter()
+            .flat_map(|l| archisim_geom::crossroads::junctions(model, l.id))
+            .collect();
         for r in model.roads() {
+            if self.schema == Schema::Ifc4x3 {
+                alignments.push(self.write_alignment(r, elevation(r.level), site_pl));
+            }
             let top = elevation(r.level) + r.top_offset;
             let loc = self.point3(0.0, 0.0, top);
             let road_pl = self.placement(Some(site_pl), loc, None);
@@ -102,31 +116,88 @@ impl Exporter<'_> {
             let s = &r.section;
             let kh = if s.single_level { 0.0 } else { s.kerb_height };
             let mut pieces = Vec::new();
-            for (i, p) in r.pieces().into_iter().enumerate() {
-                let (band, outline, material) = (p.band, p.outline, p.material);
-                let (z0, z1) = match (band, p.raised) {
-                    (RoadBand::Kerb, true) => (-s.depth, kh),
-                    (_, true) => (kh - 0.2, kh),
-                    _ => (-s.depth, 0.0),
+            // Its pieces but where its junctions are, and the junctions it
+            // owns (U1): (band, outline, material, depth below and height
+            // above the carriageway, the junction's top over the road's).
+            let gaps = archisim_geom::crossroads::road_gaps(&junctions, r.id);
+            let mut parts: Vec<Part> = r
+                .pieces_except(&gaps)
+                .into_iter()
+                .map(|p| {
+                    let (z0, z1) = match (p.band, p.raised) {
+                        (RoadBand::Kerb, true) => (-s.depth, kh),
+                        (_, true) => (kh - 0.2, kh),
+                        _ => (-s.depth, 0.0),
+                    };
+                    (p.band, p.outline, p.material, z0, z1, None)
+                })
+                .collect();
+            for j in junctions.iter().filter(|j| j.owner == r.id) {
+                let up = j.top - r.top_offset;
+                let jk = j.kerb_height;
+                parts.push((
+                    RoadBand::Carriageway,
+                    j.plate.clone(),
+                    j.pavement,
+                    -j.depth,
+                    0.0,
+                    Some(up),
+                ));
+                for k in &j.kerbs {
+                    parts.push((
+                        RoadBand::Kerb,
+                        k.clone(),
+                        j.kerb_material,
+                        -j.depth,
+                        jk,
+                        Some(up),
+                    ));
+                }
+                for w in &j.sidewalks {
+                    parts.push((
+                        RoadBand::Sidewalk,
+                        w.clone(),
+                        j.sidewalk_material,
+                        jk - 0.2,
+                        jk,
+                        Some(up),
+                    ));
+                }
+            }
+            let sloped = r.sloped();
+            for (i, (band, outline, material, z0, z1, fixed)) in parts.into_iter().enumerate() {
+                let shape = if sloped && fixed.is_none() {
+                    // Following the profile: a body of triangles, heights
+                    // from the road's placement.
+                    let base = elevation(r.level) + r.top_offset;
+                    let tris = archisim_geom::solid::draped_prism(&outline, |q| {
+                        let t = base + r.top_under(q) - r.top_offset;
+                        (t + z0, t + z1)
+                    });
+                    if tris.is_empty() {
+                        continue;
+                    }
+                    self.triangulated_shape(&tris, base)
+                } else {
+                    let up = fixed.unwrap_or(0.0);
+                    let curve = self.polyline(&outline, true);
+                    let profile = self
+                        .w
+                        .add(format!("IFCARBITRARYCLOSEDPROFILEDEF(.AREA.,$,{curve})"));
+                    let o = self.point3(0.0, 0.0, up + z0);
+                    let solid_pl = self.w.add(format!("IFCAXIS2PLACEMENT3D({o},$,$)"));
+                    let solid = self.w.add(format!(
+                        "IFCEXTRUDEDAREASOLID({profile},{solid_pl},{},{})",
+                        self.z,
+                        real(z1 - z0)
+                    ));
+                    let body = self.w.add(format!(
+                        "IFCSHAPEREPRESENTATION({},'Body','SweptSolid',({solid}))",
+                        self.body_ctx
+                    ));
+                    self.w
+                        .add(format!("IFCPRODUCTDEFINITIONSHAPE($,$,({body}))"))
                 };
-                let curve = self.polyline(&outline, true);
-                let profile = self
-                    .w
-                    .add(format!("IFCARBITRARYCLOSEDPROFILEDEF(.AREA.,$,{curve})"));
-                let o = self.point3(0.0, 0.0, z0);
-                let solid_pl = self.w.add(format!("IFCAXIS2PLACEMENT3D({o},$,$)"));
-                let solid = self.w.add(format!(
-                    "IFCEXTRUDEDAREASOLID({profile},{solid_pl},{},{})",
-                    self.z,
-                    real(z1 - z0)
-                ));
-                let body = self.w.add(format!(
-                    "IFCSHAPEREPRESENTATION({},'Body','SweptSolid',({solid}))",
-                    self.body_ctx
-                ));
-                let shape = self
-                    .w
-                    .add(format!("IFCPRODUCTDEFINITIONSHAPE($,$,({body}))"));
                 let pl = self.placement(Some(road_pl), self.origin, None);
                 let guid: GlobalId = derived_guid(&r.guid, &format!("band {i}"));
                 let name = string(&format!("{} · {}", r.name, band.name()));
@@ -153,7 +224,7 @@ impl Exporter<'_> {
                         string(derived_guid(&guid, "material").as_str())
                     ));
                 }
-                if i == 0 {
+                if pieces.is_empty() {
                     // To read the road back: its axis and section.
                     let axis: Vec<String> = r
                         .axis
@@ -182,6 +253,12 @@ impl Exporter<'_> {
                         "IFCPROPERTYSINGLEVALUE('Section',$,IFCTEXT({}),$)",
                         string(&s.encode())
                     )));
+                    if !r.profile.is_empty() {
+                        props.push(self.w.add(format!(
+                            "IFCPROPERTYSINGLEVALUE('Profile',$,IFCTEXT({}),$)",
+                            string(&r.encode_profile())
+                        )));
+                    }
                     for (key, v) in [
                         ("KerbHeight", s.kerb_height),
                         ("Depth", s.depth),
@@ -227,6 +304,13 @@ impl Exporter<'_> {
         if !roads.is_empty() {
             self.rel_aggregates(derived_guid(&model.site_guid, "roads"), site, &roads);
         }
+        if !alignments.is_empty() {
+            self.w.add(format!(
+                "IFCRELREFERENCEDINSPATIALSTRUCTURE({},$,$,$,{},{site})",
+                string(derived_guid(&model.site_guid, "alignments").as_str()),
+                list(&alignments)
+            ));
+        }
         if !on_site.is_empty() {
             self.w.add(format!(
                 "IFCRELCONTAINEDINSPATIALSTRUCTURE({},$,$,$,{},{site})",
@@ -234,5 +318,116 @@ impl Exporter<'_> {
                 list(&on_site)
             ));
         }
+    }
+
+    /// The road's axis and profile as an IFC 4.3 alignment (U1): its
+    /// horizontal layout (a straight segment per stretch of the axis) and
+    /// its vertical one (constant grades and parabolic curves), nested.
+    fn write_alignment(&mut self, r: &archisim_core::Road, level_z: f64, site_pl: Ref) -> Ref {
+        let g = &r.guid;
+        let mut h_segs = Vec::new();
+        let mut s_at = 0.0;
+        for (k, w) in r.axis.windows(2).enumerate() {
+            let (a, b) = (w[0], w[1]);
+            let len = a.distance(b);
+            if len < 1e-9 {
+                continue;
+            }
+            let p = self
+                .w
+                .add(format!("IFCCARTESIANPOINT(({},{}))", real(a.x), real(a.y)));
+            let dir = (b.y - a.y).atan2(b.x - a.x);
+            let design = self.w.add(format!(
+                "IFCALIGNMENTHORIZONTALSEGMENT($,$,{p},{},0.,0.,{},$,.LINE.)",
+                real(dir),
+                real(len)
+            ));
+            h_segs.push(self.w.add(format!(
+                "IFCALIGNMENTSEGMENT({},$,$,$,$,$,$,{design})",
+                string(derived_guid(g, &format!("h segment {k}")).as_str())
+            )));
+            s_at += len;
+        }
+        let horizontal = self.w.add(format!(
+            "IFCALIGNMENTHORIZONTAL({},$,$,$,$,$,$)",
+            string(derived_guid(g, "horizontal").as_str())
+        ));
+        self.w.add(format!(
+            "IFCRELNESTS({},$,$,$,{horizontal},{})",
+            string(derived_guid(g, "horizontal segments").as_str()),
+            list(&h_segs)
+        ));
+        // The vertical layout: grades between the curves' ends, and the
+        // curves; level all along with no profile.
+        let len = s_at;
+        let mut stops: Vec<(f64, bool)> = vec![(0.0, false)];
+        if r.sloped() {
+            let mut p = r.profile.clone();
+            p.sort_by(|a, b| a.at.total_cmp(&b.at));
+            for v in p.iter().skip(1).take(p.len().saturating_sub(2)) {
+                let half = v.curve / 2.0;
+                if half > 1e-6 {
+                    stops.push((v.at - half, true));
+                    stops.push((v.at + half, false));
+                } else {
+                    stops.push((v.at, false));
+                }
+            }
+        }
+        stops.push((len, false));
+        stops.retain(|x| x.0 >= -1e-9 && x.0 <= len + 1e-9);
+        stops.sort_by(|a, b| a.0.total_cmp(&b.0));
+        stops.dedup_by(|a, b| (a.0 - b.0).abs() < 1e-6);
+        let slope_at = |s: f64| {
+            let e = 1e-3;
+            (r.top_at((s + e).min(len)) - r.top_at((s - e).max(0.0)))
+                / ((s + e).min(len) - (s - e).max(0.0))
+        };
+        let mut v_segs = Vec::new();
+        for (k, w) in stops.windows(2).enumerate() {
+            let (s0, s1) = (w[0].0, w[1].0);
+            if s1 - s0 < 1e-6 {
+                continue;
+            }
+            let curve = w[0].1;
+            let (g0, g1) = (slope_at(s0 + 1e-3), slope_at(s1 - 1e-3));
+            let (kind, radius) = if curve && (g1 - g0).abs() > 1e-9 {
+                ("PARABOLICARC", real((s1 - s0) / (g1 - g0)))
+            } else {
+                ("CONSTANTGRADIENT", "$".to_string())
+            };
+            let design = self.w.add(format!(
+                "IFCALIGNMENTVERTICALSEGMENT($,$,{},{},{},{},{},{radius},.{kind}.)",
+                real(s0),
+                real(s1 - s0),
+                real(level_z + r.top_at(s0)),
+                real(g0),
+                real(g1)
+            ));
+            v_segs.push(self.w.add(format!(
+                "IFCALIGNMENTSEGMENT({},$,$,$,$,$,$,{design})",
+                string(derived_guid(g, &format!("v segment {k}")).as_str())
+            )));
+        }
+        let vertical = self.w.add(format!(
+            "IFCALIGNMENTVERTICAL({},$,$,$,$,$,$)",
+            string(derived_guid(g, "vertical").as_str())
+        ));
+        self.w.add(format!(
+            "IFCRELNESTS({},$,$,$,{vertical},{})",
+            string(derived_guid(g, "vertical segments").as_str()),
+            list(&v_segs)
+        ));
+        let pl = self.placement(Some(site_pl), self.origin, None);
+        let alignment = self.w.add(format!(
+            "IFCALIGNMENT({},$,{},$,$,{pl},$,.NOTDEFINED.)",
+            string(derived_guid(g, "alignment").as_str()),
+            string(&format!("Eje · {}", r.name))
+        ));
+        self.w.add(format!(
+            "IFCRELNESTS({},$,$,$,{alignment},({horizontal},{vertical}))",
+            string(derived_guid(g, "alignment layouts").as_str())
+        ));
+        alignment
     }
 }

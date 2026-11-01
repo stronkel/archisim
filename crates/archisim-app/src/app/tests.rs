@@ -4628,6 +4628,54 @@ fn surroundings_from_cartography() {
     assert!(h.model().georeference().is_none());
 }
 
+/// Two roads drawn across each other make a crossing with rounded
+/// corners (U1); a road given a profile is drawn with its grades, and
+/// its properties (with «Rasante») show.
+#[test]
+fn roads_cross_and_climb() {
+    let mut h = Harness::new(Editor::new_project());
+    let canvas = h.app.canvas;
+    h.app
+        .view
+        .fit_exact(canvas, p(-40.0, -40.0), p(40.0, 40.0), 0.0);
+    h.app.set_discipline(super::toolbox::Discipline::Site);
+    for (a, b) in [(p(-30.0, 0.0), p(30.0, 0.0)), (p(0.0, -30.0), p(0.0, 30.0))] {
+        h.type_text("w");
+        assert_eq!(h.app.tool, Tool::Road);
+        h.click_at(a);
+        h.click_at(b);
+        h.key(Key::Enter);
+        h.key(Key::Escape);
+    }
+    assert_eq!(h.model().roads().count(), 2);
+    let level = h.model().roads().next().unwrap().level;
+    let js = archisim_geom::crossroads::junctions(h.model(), level);
+    assert_eq!(js.len(), 1);
+    assert_eq!(js[0].arms.len(), 4);
+    h.frame();
+    let id = h.model().roads().last().unwrap().id;
+    let r = h.app.ed.transact("Rasante", |m| {
+        m.edit_road(id, |r| {
+            r.profile = vec![
+                archisim_core::ProfilePoint {
+                    at: 0.0,
+                    z: 0.0,
+                    curve: 0.0,
+                },
+                archisim_core::ProfilePoint {
+                    at: 60.0,
+                    z: 1.8,
+                    curve: 0.0,
+                },
+            ]
+        })
+    });
+    assert!(r.is_ok(), "{r:?}");
+    assert!(h.model().road(id).unwrap().sloped());
+    h.app.ed.selection = [Element::Road(id)].into_iter().collect();
+    h.frame();
+}
+
 fn road_id(h: &Harness) -> archisim_core::RoadId {
     h.model().roads().next().unwrap().id
 }

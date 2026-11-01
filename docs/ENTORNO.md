@@ -21,7 +21,8 @@ Todo es gratuito y de uso libre: el Catastro con su licencia de reutilización, 
 - Si no lo está, el proyecto toma la del Catastro (su sistema, EPSG:25830 por ejemplo) o, con solo OpenStreetMap, la del huso UTM de la zona en ETRS89, con el origen en el centro de lo que traen los ficheros y la cota ±0,00 en el terreno de ese punto si hay MDT.
 - Con «Llevar el origen del proyecto al centro de lo que traen los ficheros» (`--centrar`), el proyecto se mueve allí aunque ya estuviera georreferenciado.
 - Los edificios que pisan los forjados del proyecto no se traen (se puede desmarcar).
-- Los edificios se apoyan en el terreno; las calles van a la cota media del terreno a lo largo de ellas.
+- Los edificios se apoyan en el terreno. Con MDT, las calles siguen el terreno con su rasante (un punto cada 20 m, con acuerdos verticales); sin él, quedan horizontales a la cota media.
+- Donde se encuentran dos calles se hace el cruce (U1): calzada continua y bordillos redondeados en las esquinas.
 
 ## Tipos de vía según OpenStreetMap
 
@@ -36,6 +37,4 @@ Si la calle no cabe entre las parcelas (o los edificios) de los dos lados, se es
 
 ## Lo que queda pendiente
 
-- Las calles son horizontales: en una calle en pendiente quedan a la cota media (hace falta la rasante del vial).
-- Los cruces entre calles no se resuelven: las calles se solapan en las esquinas.
 - Las alturas de los edificios son por número de plantas, no por la altura real (el Catastro no la da; el LiDAR del PNOA sí, en una vuelta futura).

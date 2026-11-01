@@ -1166,6 +1166,12 @@ pub(crate) struct Road {
     pub bike_material: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub marking_material: Option<u64>,
+    /// Radius of the kerb at street corners (version 61; none: 4 m).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub corner_radius: Option<f64>,
+    /// Its longitudinal profile (version 61): `[at, z, curve]`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub profile: Vec<(f64, f64, f64)>,
     pub kerb_height: f64,
     pub depth: f64,
     #[serde(default, skip_serializing_if = "is_zero")]
@@ -3513,6 +3519,9 @@ impl ProjectFile {
                     planting_material: r.section.planting.map(|m| m.0),
                     bike_material: r.section.bike.map(|m| m.0),
                     marking_material: r.section.markings.map(|m| m.0),
+                    corner_radius: ((r.section.corner_radius - core::CORNER_RADIUS).abs() > 1e-9)
+                        .then_some(r.section.corner_radius),
+                    profile: r.profile.iter().map(|p| (p.at, p.z, p.curve)).collect(),
                     kerb_height: r.section.kerb_height,
                     depth: r.section.depth,
                     top_offset: r.top_offset,
@@ -4798,9 +4807,17 @@ impl ProjectFile {
                     sec.planting = r.planting_material.map(core::MaterialId);
                     sec.bike = r.bike_material.map(core::MaterialId);
                     sec.markings = r.marking_material.map(core::MaterialId);
+                    if let Some(c) = r.corner_radius {
+                        sec.corner_radius = c;
+                    }
                     sec
                 },
                 top_offset: r.top_offset,
+                profile: r
+                    .profile
+                    .iter()
+                    .map(|&(at, z, curve)| core::ProfilePoint { at, z, curve })
+                    .collect(),
                 pavement: core::MaterialId(r.pavement),
                 kerb_material: core::MaterialId(r.kerb_material),
                 sidewalk_material: core::MaterialId(r.sidewalk_material),

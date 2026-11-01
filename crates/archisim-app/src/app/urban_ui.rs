@@ -282,6 +282,11 @@ fn section_rows(ui: &mut Ui, salt: u64, s: &RoadSection) -> Option<RoadSection> 
             s.kerb_height,
         ),
         ("Firme (mm)", "Espesor del pavimento de la calzada", s.depth),
+        (
+            "Radio de esquina (mm)",
+            "Radio del bordillo en las esquinas de los cruces con otras calles",
+            s.corner_radius,
+        ),
     ]
     .into_iter()
     .enumerate()
@@ -290,7 +295,8 @@ fn section_rows(ui: &mut Ui, salt: u64, s: &RoadSection) -> Option<RoadSection> 
             if let Some(v) = length_field(ui, Id::unique(("road-sec", salt, i)), value, w - 8.0) {
                 match i {
                     0 => out.kerb_height = v.max(0.0),
-                    _ => out.depth = v.max(0.01),
+                    1 => out.depth = v.max(0.01),
+                    _ => out.corner_radius = v.clamp(0.0, 30.0),
                 }
                 changed = true;
             }
@@ -485,6 +491,7 @@ impl ArchiSimApp {
                 axis,
                 section: s.section.clone(),
                 top_offset: s.top_offset,
+                profile: Vec::new(),
                 pavement: s.pavement,
                 kerb_material: s.kerb,
                 sidewalk_material: s.sidewalk,
@@ -808,6 +815,7 @@ impl ArchiSimApp {
                 self.report(res, "Sección cambiada.");
             }
         });
+        self.road_profile_group(ui, id);
         group(ui, "road-figures", "Mediciones", |ui| {
             text_row(ui, "Longitud del eje (m)", "", &comma(r.length(), 2));
             for band in RoadBand::ALL {
@@ -952,4 +960,105 @@ pub(super) fn plant_road_trees(
         n += 1;
     }
     Ok(n)
+}
+
+impl ArchiSimApp {
+    /// The road's longitudinal profile («Rasante», U1): its points along
+    /// the axis with their heights and vertical curves, the grades between
+    /// them, and taking it from the terrain.
+    fn road_profile_group(&mut self, ui: &mut Ui, id: RoadId) {
+        let Some(r) = self.ed.model().road(id).cloned() else {
+            return;
+        };
+        let terrain = self.ed.model().terrains_on_level(r.level).next().is_some();
+        group(ui, "road-profile", "Rasante", |ui| {
+            props::note(
+                ui,
+                "Cota del eje de la calzada a lo largo de la calle (sobre la planta y su desfase) y el acuerdo vertical en cada punto. Sin puntos, la calle es horizontal.",
+            );
+            let mut p = r.profile.clone();
+            p.sort_by(|a, b| a.at.total_cmp(&b.at));
+            let mut out = p.clone();
+            let mut changed = false;
+            let mut drop = None;
+            for (i, q) in p.iter().enumerate() {
+                ui.horizontal(|ui| {
+                    ui.label("en");
+                    if let Some(v) = length_field(ui, Id::unique(("prof-at", id, i)), q.at, 60.0) {
+                        out[i].at = v.clamp(0.0, r.length());
+                        changed = true;
+                    }
+                    ui.label("cota");
+                    if let Some(v) = length_field(ui, Id::unique(("prof-z", id, i)), q.z, 60.0) {
+                        out[i].z = v;
+                        changed = true;
+                    }
+                    ui.label("acuerdo");
+                    if let Some(v) = length_field(ui, Id::unique(("prof-k", id, i)), q.curve, 50.0)
+                    {
+                        out[i].curve = v.max(0.0);
+                        changed = true;
+                    }
+                    if ui.small_button("✕").clicked() {
+                        drop = Some(i);
+                    }
+                });
+                if let Some(w) = p.get(i + 1) {
+                    if w.at - q.at > 1e-6 {
+                        let g = (w.z - q.z) / (w.at - q.at) * 100.0;
+                        ui.label(
+                            egui::RichText::new(format!(
+                                "    pendiente {} %",
+                                format!("{g:.2}").replace('.', ",")
+                            ))
+                            .small(),
+                        );
+                    }
+                }
+            }
+            if let Some(i) = drop {
+                out.remove(i);
+                changed = true;
+            }
+            ui.horizontal_wrapped(|ui| {
+                if ui
+                    .add_enabled(terrain, egui::Button::new("Tomar del terreno"))
+                    .on_hover_text("Un punto cada 20 m con la cota del terreno bajo el eje, con acuerdos de 20 m")
+                    .clicked()
+                {
+                    let res = self.ed.transact("Rasante del terreno", |m| {
+                        let prof = m
+                            .road_profile_from_terrain(id, 20.0)
+                            .ok_or(archisim_core::ModelError::InvalidShape("no hay terreno bajo la calle"))?;
+                        m.edit_road(id, |x| x.profile = prof)
+                    });
+                    self.report(res, "Rasante tomada del terreno.");
+                }
+                if ui.button("Añadir punto").clicked() {
+                    let len = r.length();
+                    let at = match (out.first(), out.last()) {
+                        (None, _) => {
+                            out.push(archisim_core::ProfilePoint { at: 0.0, z: 0.0, curve: 0.0 });
+                            len
+                        }
+                        (Some(_), Some(l)) if l.at < len - 1.0 => len,
+                        _ => len / 2.0,
+                    };
+                    let z = r.profile_at(at);
+                    out.push(archisim_core::ProfilePoint { at, z, curve: 0.0 });
+                    changed = true;
+                }
+                if !out.is_empty() && ui.button("Horizontal").clicked() {
+                    out.clear();
+                    changed = true;
+                }
+            });
+            if changed {
+                let res = self
+                    .ed
+                    .transact("Rasante del vial", |m| m.edit_road(id, |x| x.profile = out));
+                self.report(res, "Rasante cambiada.");
+            }
+        });
+    }
 }

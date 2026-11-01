@@ -239,6 +239,19 @@ pub fn add_library(m: &mut Model) -> Result<Library, ModelError> {
         CutPattern::Solid,
     );
     let grava = mat("Grava", "gravel", [210, 204, 190], CutPattern::Dots);
+    // The streets' (U1): their pavement and kerbs.
+    mat(
+        "Aglomerado asfáltico",
+        "asphalt",
+        [74, 74, 76],
+        CutPattern::Solid,
+    );
+    mat(
+        "Bordillo de granito",
+        "stone",
+        [186, 186, 182],
+        CutPattern::Solid,
+    );
     // The volumes of the concept phase.
     mat(
         "Volumen de concepto",

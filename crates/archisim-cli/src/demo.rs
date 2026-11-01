@@ -1554,6 +1554,7 @@ pub fn masterplan(house: &std::path::Path) -> Result<Model, Box<dyn std::error::
             s
         },
         top_offset: -0.3,
+        profile: Vec::new(),
         pavement: asphalt,
         kerb_material: kerb,
         sidewalk_material: paving,

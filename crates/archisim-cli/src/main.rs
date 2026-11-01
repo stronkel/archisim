@@ -12,6 +12,7 @@
 //! ```
 
 mod armado;
+mod calles;
 mod cartografia;
 mod cocina;
 mod colaboracion;
@@ -71,6 +72,12 @@ Uso:
       un radio alrededor del origen del proyecto. Sin proyecto, empieza
       uno nuevo georreferenciado por los ficheros; con --centrar, el
       origen del proyecto se lleva al centro de lo que traen los ficheros.
+
+  archisim calles [carpeta]
+      Unas calles en una ladera que se encuentran de todas las maneras:
+      un cruce, tres en T y una esquina en L, con las esquinas redondeadas
+      y las calles que suben siguiendo el terreno (rasante): calles.archisim,
+      calles.ifc (con los ejes como IfcAlignment), planta y axonometría.
 
   archisim biblioteca [carpeta] [proyecto.archisim]
       Escribe los tipos de puerta, ventana y objeto de la plantilla (o de
@@ -377,6 +384,10 @@ fn main() -> ExitCode {
         Some("cocina") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
             report(cocina::write(&dir))
+        }
+        Some("calles") => {
+            let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
+            report(calles::write(&dir))
         }
         Some("escaleras") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));

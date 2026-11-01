@@ -387,23 +387,29 @@ pub fn import_carto(
                         Some(room) => fit_section(&section, room),
                         None => section.clone(),
                     };
-                    // A road is level (it has no profile yet): at the
-                    // ground's mean height along it.
+                    // At the ground's mean height along it, and, with a
+                    // terrain, following it (its «rasante», U1).
                     {
                         let piece = whole;
                         let spots = along(&piece, 4.0);
                         let top = spots.iter().map(|p| on_ground(*p)).sum::<f64>()
                             / spots.len().max(1) as f64;
-                        m.add_road(NewRoad {
+                        let id = m.add_road(NewRoad {
                             name: w.tag("name").unwrap_or("Calle").to_string(),
                             level,
                             axis: piece,
                             section,
                             top_offset: top,
+                            profile: Vec::new(),
                             pavement,
                             kerb_material: kerb,
                             sidewalk_material: sidewalk,
                         })?;
+                        if !ground.is_empty() {
+                            if let Some(profile) = m.road_profile_from_terrain(id, 20.0) {
+                                m.edit_road(id, |r| r.profile = profile)?;
+                            }
+                        }
                         report.roads += 1;
                     }
                 }
