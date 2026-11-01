@@ -153,6 +153,9 @@ pub(crate) struct ProjectFile {
     /// Roads (version 19).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub roads: Vec<Road>,
+    /// Roundabouts and squares (version 64).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub roundabouts: Vec<RoundaboutOf>,
     /// Plantings: plants along a line or over an area (version 25).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub plantings: Vec<PlantingOf>,
@@ -1059,6 +1062,30 @@ pub(crate) struct Device {
     /// The type of a light point's fitting (version 55).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fixture: Option<u64>,
+}
+
+/// A roundabout or a square where streets meet (version 64).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct RoundaboutOf {
+    pub id: u64,
+    pub guid: String,
+    pub name: String,
+    pub level: u64,
+    pub centre: Xy,
+    pub radius: f64,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub island: f64,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub apron: f64,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub top_offset: f64,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub plaza: bool,
+    pub island_finish: String,
+    pub pavement: u64,
+    pub kerb_material: u64,
+    pub island_material: u64,
 }
 
 /// A plot (version 19).
@@ -3489,6 +3516,26 @@ impl ProjectFile {
                     base_offset: x.base_offset,
                 })
                 .collect(),
+            roundabouts: p
+                .roundabouts
+                .iter()
+                .map(|c| RoundaboutOf {
+                    id: c.id.0,
+                    guid: c.guid.to_string(),
+                    name: c.name.clone(),
+                    level: c.level.0,
+                    centre: xy(c.centre),
+                    radius: c.radius,
+                    island: c.island,
+                    apron: c.apron,
+                    top_offset: c.top_offset,
+                    plaza: c.plaza,
+                    island_finish: c.island_finish.code().to_string(),
+                    pavement: c.pavement.0,
+                    kerb_material: c.kerb_material.0,
+                    island_material: c.island_material.0,
+                })
+                .collect(),
             roads: p
                 .roads
                 .iter()
@@ -4152,6 +4199,7 @@ impl ProjectFile {
             plot_area: None,
             plots: Vec::new(),
             roads: Vec::new(),
+            roundabouts: Vec::new(),
             plantings: Vec::new(),
             pools: Vec::new(),
             elevators: Vec::new(),
@@ -4865,6 +4913,30 @@ impl ProjectFile {
                 pavement: core::MaterialId(r.pavement),
                 kerb_material: core::MaterialId(r.kerb_material),
                 sidewalk_material: core::MaterialId(r.sidewalk_material),
+            });
+        }
+        for c in self.roundabouts {
+            let element = format!("roundabout {} «{}»", c.id, c.name);
+            parts.roundabouts.push(core::Roundabout {
+                id: core::RoundaboutId(c.id),
+                guid: guid(&element, &c.guid)?,
+                name: c.name,
+                level: core::LevelId(c.level),
+                centre: pt(c.centre),
+                radius: c.radius,
+                island: c.island,
+                apron: c.apron,
+                top_offset: c.top_offset,
+                plaza: c.plaza,
+                island_finish: core::IslandFinish::from_code(&c.island_finish).ok_or_else(
+                    || FileError::Value {
+                        element: element.clone(),
+                        message: format!("«{}» is not an island's finish", c.island_finish),
+                    },
+                )?,
+                pavement: core::MaterialId(c.pavement),
+                kerb_material: core::MaterialId(c.kerb_material),
+                island_material: core::MaterialId(c.island_material),
             });
         }
         for s in self.module_sources {

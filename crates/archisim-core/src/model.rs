@@ -44,6 +44,7 @@ mod road_changes;
 mod road_profile;
 mod road_types;
 mod roofs;
+mod roundabouts;
 mod sections;
 mod services;
 mod site;
@@ -83,6 +84,7 @@ pub use road_changes::*;
 pub use road_profile::*;
 pub use road_types::*;
 pub use roofs::*;
+pub use roundabouts::*;
 pub use sections::*;
 pub use services::*;
 pub use site::*;
@@ -1466,6 +1468,8 @@ pub struct ModelParts {
     /// Plots and roads of the site.
     pub plots: Vec<Plot>,
     pub roads: Vec<Road>,
+    /// Roundabouts and squares where streets meet (U3).
+    pub roundabouts: Vec<Roundabout>,
     /// Plants spread along lines or over areas (after the objects they
     /// made).
     pub plantings: Vec<Planting>,
@@ -1594,6 +1598,7 @@ pub struct Model {
     plot_area: Option<f64>,
     plots: BTreeMap<PlotId, Plot>,
     roads: BTreeMap<RoadId, Road>,
+    roundabouts: BTreeMap<RoundaboutId, Roundabout>,
     plantings: BTreeMap<PlantingId, Planting>,
     pools: BTreeMap<PoolId, Pool>,
     elevators: BTreeMap<ElevatorId, Elevator>,
@@ -1685,6 +1690,7 @@ impl Model {
             plot_area: None,
             plots: BTreeMap::new(),
             roads: BTreeMap::new(),
+            roundabouts: BTreeMap::new(),
             plantings: BTreeMap::new(),
             pools: BTreeMap::new(),
             elevators: BTreeMap::new(),
@@ -1832,6 +1838,7 @@ impl Model {
         self.edges.retain(|_, e| e.level != id);
         self.plots.retain(|_, p| p.level != id);
         self.roads.retain(|_, r| r.level != id);
+        self.roundabouts.retain(|_, r| r.level != id);
         self.plantings.retain(|_, p| p.level != id);
         self.pools.retain(|_, p| p.level != id);
         self.elevators.retain(|_, e| e.level != id && e.top != id);
@@ -4340,6 +4347,7 @@ impl Model {
             plot_area: self.plot_area,
             plots: self.plots.values().cloned().collect(),
             roads: self.roads.values().cloned().collect(),
+            roundabouts: self.roundabouts.values().cloned().collect(),
             plantings: self.plantings.values().cloned().collect(),
             pools: self.pools.values().cloned().collect(),
             elevators: self.elevators.values().cloned().collect(),
@@ -4710,6 +4718,7 @@ impl Model {
                 error,
             })?;
         model.restore_urban(parts.plots, parts.roads, &mut claim)?;
+        model.restore_roundabouts(parts.roundabouts, &mut claim)?;
         model.restore_plantings(parts.plantings, &mut claim)?;
         model.restore_pools(parts.pools, &mut claim)?;
         model.restore_elevators(parts.elevators, &mut claim)?;

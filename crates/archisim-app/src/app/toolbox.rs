@@ -562,6 +562,13 @@ const SITE: &[Tile] = &[
         "Viales por su eje y una sección tipo: calzada, aparcamiento, bordillo y acera",
     ),
     tile(
+        Pick::Tool(Tool::Roundabout),
+        Glyph::Roundabout,
+        "Glorieta",
+        "GL",
+        "Glorieta o plaza donde se encuentran las calles: clic en el cruce; las calles se recortan en su círculo",
+    ),
+    tile(
         Pick::Objects(super::object_gallery::ObjectScope::Vegetation),
         Glyph::Tree,
         "Vegetación",

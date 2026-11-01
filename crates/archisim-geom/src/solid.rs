@@ -2584,6 +2584,14 @@ pub fn terrain_holes(model: &Model, outline: &[Point2]) -> Vec<archisim_core::Ex
             bottom: base + low - r.section.depth,
         });
     }
+    // And the roundabouts and squares, with the sidewalk round them (U3).
+    for c in model.roundabouts() {
+        let base = model.level(c.level).map_or(0.0, |l| l.elevation);
+        holes.push(archisim_core::Excavation {
+            outline: archisim_core::circle_of(c.centre, c.radius + 3.0, 48),
+            bottom: base + c.top_offset - 0.4,
+        });
+    }
     holes
         .into_iter()
         .filter(|e| {
@@ -4038,6 +4046,14 @@ pub fn road_solids_with(
                 owner: SolidOwner::Road(id),
                 material: j.sidewalk_material,
                 triangles: prism(w, top + kh - 0.2, top + kh),
+            });
+        }
+        // A roundabout's island and apron (U3).
+        for p in &j.parts {
+            out.push(Solid {
+                owner: SolidOwner::Road(id),
+                material: p.material,
+                triangles: prism(&p.outline, top + p.z0, top + p.z1),
             });
         }
     }

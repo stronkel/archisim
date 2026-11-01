@@ -3,7 +3,8 @@
 //! climbs the hill (a crossing), a one-way street that ends on the avenue
 //! (a T), a street between the two at the top (two T's) and two
 //! pedestrian streets that meet at a corner (an L). The streets that
-//! climb follow the terrain («rasante»); the Calle Nueva's sidewalks
+//! climb follow the terrain («rasante»); the crossing is a roundabout
+//! and the two pedestrian streets meet in a square; the Calle Nueva's sidewalks
 //! reach the façade line of its plots. To see the corners, the kerbs
 //! and the grades in plan, in 3D and in the IFC (with its alignments).
 
@@ -202,6 +203,41 @@ pub fn build() -> Res<Model> {
             transition: 6.0,
             strips: single,
         }];
+    })?;
+    // A roundabout where the Calle Real crosses the avenue, and a square
+    // with a fountain where the two pedestrian streets meet (U3).
+    let grass = material(&m, "vegetation").unwrap_or(paving);
+    let real_top = {
+        let r = m.road(real).ok_or("sin calle")?;
+        r.top_at(r.station_of(p(0.0, 0.0)))
+    };
+    m.add_roundabout(archisim_core::NewRoundabout {
+        name: "Glorieta del Mar".into(),
+        level: pb,
+        centre: p(0.0, 0.0),
+        radius: 16.0,
+        island: 7.5,
+        apron: 1.5,
+        top_offset: real_top,
+        plaza: false,
+        island_finish: archisim_core::IslandFinish::Garden,
+        pavement: asphalt,
+        kerb_material: stone,
+        island_material: grass,
+    })?;
+    m.add_roundabout(archisim_core::NewRoundabout {
+        name: "Plaza del Pozo".into(),
+        level: pb,
+        centre: p(-35.0, 30.0),
+        radius: 9.0,
+        island: 2.5,
+        apron: 0.0,
+        top_offset: ground(p(-35.0, 30.0)),
+        plaza: true,
+        island_finish: archisim_core::IslandFinish::Paved,
+        pavement: paving,
+        kerb_material: stone,
+        island_material: stone,
     })?;
     // A house on the block between them.
     let corners = [p(15.0, 15.0), p(35.0, 15.0), p(35.0, 28.0), p(15.0, 28.0)];
@@ -412,6 +448,8 @@ mod tests {
         let mut arms: Vec<usize> = js.iter().map(|j| j.arms.len()).collect();
         arms.sort_unstable();
         assert_eq!(arms, vec![2, 3, 3, 3, 4], "{arms:?}");
+        // The crossing is a roundabout and the L a square.
+        assert_eq!(js.iter().filter(|j| j.ring.is_some()).count(), 2);
         assert_eq!(m.roads().filter(|r| r.sloped()).count(), 2);
         assert_eq!(m.roads().filter(|r| !r.changes.is_empty()).count(), 3);
         let nueva = m.roads().find(|r| r.name == "Calle Nueva").unwrap();

@@ -200,6 +200,33 @@ pub fn transform(
             | Element::Grid(_)
             | Element::RefPlane(_)
             | Element::Module(_) => {}
+            Element::Roundabout(id) => {
+                let x = model
+                    .roundabout(id)
+                    .ok_or(ModelError::UnknownElement(id.0))?
+                    .clone();
+                let centre = t.apply(x.centre);
+                if copy {
+                    let new = model.add_roundabout(archisim_core::NewRoundabout {
+                        name: model.next_roundabout_name(),
+                        level: x.level,
+                        centre,
+                        radius: x.radius,
+                        island: x.island,
+                        apron: x.apron,
+                        top_offset: x.top_offset,
+                        plaza: x.plaza,
+                        island_finish: x.island_finish,
+                        pavement: x.pavement,
+                        kerb_material: x.kerb_material,
+                        island_material: x.island_material,
+                    })?;
+                    out.insert(Element::Roundabout(new));
+                } else {
+                    model.edit_roundabout(id, |p| p.centre = centre)?;
+                    out.insert(*e);
+                }
+            }
             Element::Plot(id) => {
                 let x = model
                     .plot(id)

@@ -169,6 +169,7 @@ impl Model {
         if self.terrains.contains_key(&TerrainId(id))
             || self.plots.contains_key(&PlotId(id))
             || self.roads.contains_key(&RoadId(id))
+            || self.roundabouts.contains_key(&RoundaboutId(id))
         {
             return Some(Site);
         }

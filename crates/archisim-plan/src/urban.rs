@@ -115,9 +115,33 @@ pub fn draw_roads(
             // Its junctions: the plate, the kerbs round the corners and the
             // sidewalks at them (U1).
             for j in junctions.iter().filter(|j| j.owner == r.id) {
-                let parts = std::iter::once((&j.plate, "#dcdcdc", pens().view))
+                let plate_fill = if j
+                    .ring
+                    .and_then(|c| model.roundabout(c))
+                    .is_some_and(|c| c.plaza)
+                {
+                    "#ece6d8"
+                } else {
+                    "#dcdcdc"
+                };
+                let parts = std::iter::once((&j.plate, plate_fill, pens().view))
                     .chain(j.sidewalks.iter().map(|w| (w, "#f1eee6", pens().view)))
-                    .chain(j.kerbs.iter().map(|w| (w, "#ffffff", pens().cut)));
+                    .chain(j.kerbs.iter().map(|w| (w, "#ffffff", pens().cut)))
+                    .chain(j.parts.iter().map(|p| {
+                        (
+                            &p.outline,
+                            match p.band {
+                                RoadBand::Planting => "#d4dfc0",
+                                RoadBand::Kerb => "#efefef",
+                                _ => "#e8e4d6",
+                            },
+                            if p.band == RoadBand::Kerb {
+                                pens().thin
+                            } else {
+                                pens().cut
+                            },
+                        )
+                    }));
                 for (poly, fill, width) in parts {
                     let _ = writeln!(
                         s,

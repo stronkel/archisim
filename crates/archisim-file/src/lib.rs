@@ -48,7 +48,7 @@ use serde_json::Value;
 /// Value of the `format` field.
 pub const FORMAT: &str = "ArchiSim";
 /// File layout written by this version of ArchiSim.
-pub const CURRENT_VERSION: u32 = 63;
+pub const CURRENT_VERSION: u32 = 64;
 /// File name extension, without the dot.
 pub const EXTENSION: &str = "archisim";
 /// Length unit of every number in the file.
@@ -345,8 +345,10 @@ pub fn migrate(value: Value, from: u64) -> Result<Value, FileError> {
             // changes of section along it (`changes`); older ones have none.
             // 62 → 63: new bands of a road's strips (bus, tram, shoulder,
             // ditch, tree pits, bike path on the sidewalk); nothing to change,
-            // only so that older versions say they cannot read them.
-            9..=62 => {
+            // only so that older versions say they cannot read them. 63 →
+            // 64: roundabouts and squares (`roundabouts`); older files have
+            // none.
+            9..=63 => {
                 let mut v = if version == 32 {
                     legacy_dormers(value)
                 } else {
@@ -1785,7 +1787,7 @@ mod tests {
         let back = from_str(&text).unwrap();
         assert_eq!(back, m);
         // A version 6 file has none of them and still opens.
-        let v6 = to_string(&sample()).replacen("\"version\": 63", "\"version\": 6", 1);
+        let v6 = to_string(&sample()).replacen("\"version\": 64", "\"version\": 6", 1);
         assert_eq!(from_str(&v6).unwrap().columns().count(), 0);
     }
 
@@ -1812,7 +1814,7 @@ mod tests {
         let opened = from_str(&old).unwrap();
         assert_same_project(&opened, &m);
         // Saved again, it is a version 5 file.
-        assert!(to_string(&opened).contains("\"version\": 63"));
+        assert!(to_string(&opened).contains("\"version\": 64"));
     }
 
     /// The project as ArchiSim 0.10–0.13 wrote it (file version 2): door and
@@ -1978,7 +1980,7 @@ mod tests {
         assert_eq!(back, m);
         let plain = to_string(&sample());
         assert!(!plain.contains("wrap_"));
-        let old = from_str(&plain.replacen("\"version\": 63", "\"version\": 40", 1)).unwrap();
+        let old = from_str(&plain.replacen("\"version\": 64", "\"version\": 40", 1)).unwrap();
         for t in old.wall_types() {
             assert_eq!(t.wrap_ends, Wrap::None);
             assert_eq!(
@@ -2014,7 +2016,7 @@ mod tests {
             FacadeSystem::Brick
         );
         let plain = to_string(&sample());
-        let old = from_str(&plain.replacen("\"version\": 63", "\"version\": 48", 1)).unwrap();
+        let old = from_str(&plain.replacen("\"version\": 64", "\"version\": 48", 1)).unwrap();
         assert!(old.wall_types().all(|t| t.facade.is_none()));
     }
 
@@ -2048,7 +2050,7 @@ mod tests {
         assert_eq!(back, m);
         let plain = to_string(&sample());
         assert!(!plain.contains("allow_join"));
-        let old = plain.replacen("\"version\": 63", "\"version\": 39", 1);
+        let old = plain.replacen("\"version\": 64", "\"version\": 39", 1);
         assert!(from_str(&old)
             .unwrap()
             .walls()
@@ -2074,7 +2076,7 @@ mod tests {
         let start = text.find("      \"top\": {").unwrap();
         let end = start + text[start..].find("}\n").unwrap() + 2;
         let old = format!("{}{}", &text[..start], &text[end..])
-            .replacen("\"version\": 63", "\"version\": 3", 1)
+            .replacen("\"version\": 64", "\"version\": 3", 1)
             .replace("\"base_offset\": -0.1,\n", "\"base_offset\": -0.1\n");
         let opened = from_str(&old).unwrap();
         let w = opened.wall(tied.id).unwrap();
@@ -2136,7 +2138,7 @@ mod tests {
         assert!(back.opening_type(void).unwrap().is_void());
         assert_eq!(back.opening_type(void).unwrap().mark, "H-01");
         // Version 5 (ArchiSim 0.19): no holes, no voids.
-        let v5 = to_string(&sample()).replacen("\"version\": 63", "\"version\": 5", 1);
+        let v5 = to_string(&sample()).replacen("\"version\": 64", "\"version\": 5", 1);
         assert!(from_str(&v5).unwrap().slabs().all(|s| s.holes.is_empty()));
     }
 
@@ -2597,7 +2599,7 @@ mod tests {
         assert_same_project(&back, &m);
         assert_eq!(back.wall(curved).unwrap().bulge, -0.4);
         // Version 4 (ArchiSim 0.17–0.18): no bulge anywhere.
-        let v4 = to_string(&sample()).replacen("\"version\": 63", "\"version\": 4", 1);
+        let v4 = to_string(&sample()).replacen("\"version\": 64", "\"version\": 4", 1);
         let opened = from_str(&v4).unwrap();
         assert!(opened.walls().all(|w| w.bulge == 0.0));
         // A bend tighter than the wall is thick is refused on opening.
@@ -2629,7 +2631,7 @@ mod tests {
             })
             .unwrap();
         let wall = m.materials().next().unwrap().id;
-        let text = to_string(&m).replacen("\"version\": 63", "\"version\": 32", 1);
+        let text = to_string(&m).replacen("\"version\": 64", "\"version\": 32", 1);
         let mut v: Value = serde_json::from_str(&text).unwrap();
         let roofs = v["roofs"].as_array_mut().unwrap();
         let at = roofs.iter().position(|r| r["id"] == roof.0).unwrap();
@@ -2662,7 +2664,7 @@ mod tests {
     #[test]
     fn layout_is_readable() {
         let text = to_string(&sample());
-        assert!(text.starts_with("{\n  \"format\": \"ArchiSim\",\n  \"version\": 63,\n"));
+        assert!(text.starts_with("{\n  \"format\": \"ArchiSim\",\n  \"version\": 64,\n"));
         // A wall tied to a level says which, and how far from it; a free
         // wall has no `top`.
         assert!(text.contains("\"top\": {\n        \"level\": "));
@@ -2708,11 +2710,11 @@ mod tests {
             Err(FileError::NotAProject)
         ));
         assert!(matches!(
-            edited("\"version\": 63", "\"version\": 64"),
-            Err(FileError::TooNew { version: 64 })
+            edited("\"version\": 64", "\"version\": 65"),
+            Err(FileError::TooNew { version: 65 })
         ));
         assert!(matches!(
-            edited("\"version\": 63", "\"version\": 0"),
+            edited("\"version\": 64", "\"version\": 0"),
             Err(FileError::UnknownVersion(0))
         ));
         assert!(matches!(

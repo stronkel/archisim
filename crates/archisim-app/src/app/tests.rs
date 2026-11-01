@@ -8939,3 +8939,55 @@ fn lifts_are_placed() {
     h.key(Key::Delete);
     assert_eq!(h.model().elevators().count(), 0);
 }
+
+/// A roundabout put with a click near a crossing (U3): it goes to the
+/// crossing, the roads are cut at its circle, and it can be picked and
+/// moved; its properties are drawn.
+#[test]
+fn a_roundabout_on_a_crossing() {
+    let mut h = Harness::new(Editor::new_project());
+    let canvas = h.app.canvas;
+    h.app
+        .view
+        .fit_exact(canvas, p(-60.0, -60.0), p(60.0, 60.0), 0.0);
+    h.app.set_discipline(super::toolbox::Discipline::Site);
+    for (a, b) in [(p(-50.0, 0.0), p(50.0, 0.0)), (p(0.0, -50.0), p(0.0, 50.0))] {
+        h.type_text("w");
+        h.click_at(a);
+        h.click_at(b);
+        h.key(Key::Enter);
+        h.key(Key::Escape);
+    }
+    h.app.set_tool(Tool::Roundabout);
+    h.frame();
+    h.click_at(p(3.0, -2.0));
+    assert_eq!(h.model().roundabouts().count(), 1);
+    let c = h.model().roundabouts().next().unwrap().clone();
+    assert!(c.centre.distance(p(0.0, 0.0)) < 1e-6, "{:?}", c.centre);
+    let js = archisim_geom::crossroads::junctions(h.model(), c.level);
+    assert_eq!(js.len(), 1);
+    assert_eq!(js[0].ring, Some(c.id));
+    assert_eq!(js[0].arms.len(), 4);
+    // Selected, with its properties; then moved.
+    assert!(h.app.ed.selection.contains(&Element::Roundabout(c.id)));
+    h.key(Key::Escape);
+    h.frame();
+    h.app.ed.selection = [Element::Roundabout(c.id)].into_iter().collect();
+    h.frame();
+    let r = h.app.ed.transact("Plaza", |m| {
+        m.edit_roundabout(c.id, |x| {
+            x.plaza = true;
+            x.island = 2.0;
+            x.apron = 0.0;
+        })
+    });
+    assert!(r.is_ok(), "{r:?}");
+    h.frame();
+    let sel = h.app.ed.selection.clone();
+    let r = h.app.ed.transact("Mover", |m| {
+        crate::drag::move_selection(m, &sel, p(5.0, 0.0))
+    });
+    assert!(r.is_ok(), "{r:?}");
+    let now = h.model().roundabout(c.id).unwrap().centre;
+    assert!(now.distance(p(5.0, 0.0)) < 1e-6, "{now:?}");
+}
