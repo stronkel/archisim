@@ -364,6 +364,7 @@ version = "0.78.0"
 dependencies = [
  "archisim-core",
  "i_overlay",
+ "png",
 ]
 
 [[package]]
