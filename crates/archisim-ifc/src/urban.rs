@@ -163,6 +163,10 @@ impl Exporter<'_> {
                         Some(up),
                     ));
                 }
+                // A roundabout's island and apron (U3).
+                for p in &j.parts {
+                    parts.push((p.band, p.outline.clone(), p.material, p.z0, p.z1, Some(up)));
+                }
             }
             let sloped = r.sloped();
             for (i, (band, outline, material, z0, z1, fixed)) in parts.into_iter().enumerate() {
@@ -306,6 +310,55 @@ impl Exporter<'_> {
                 }
                 None => on_site.extend(pieces),
             }
+        }
+        // Roundabouts and squares (U3): their circle and what they are, to
+        // read them back (their pieces go with the junction's road).
+        for c in model.roundabouts() {
+            let loc = self.point3(0.0, 0.0, elevation(c.level) + c.top_offset);
+            let pl = self.placement(Some(site_pl), loc, None);
+            let curve = self.polyline(&c.outline(), true);
+            let set = self.w.add(format!("IFCGEOMETRICCURVESET(({curve}))"));
+            let rep = self.w.add(format!(
+                "IFCSHAPEREPRESENTATION({},'FootPrint','GeometricCurveSet',({set}))",
+                self.axis_ctx
+            ));
+            let shape = self
+                .w
+                .add(format!("IFCPRODUCTDEFINITIONSHAPE($,$,({rep}))"));
+            let el = self.w.add(format!(
+                "IFCBUILDINGELEMENTPROXY({},$,{},$,{},{pl},{shape},$,.USERDEFINED.)",
+                string(c.guid.as_str()),
+                string(&c.name),
+                string(if c.plaza { "PLAZA" } else { "ROUNDABOUT" })
+            ));
+            let mut props = vec![
+                self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('Centre',$,IFCTEXT({}),$)",
+                    string(&format!("{},{}", real(c.centre.x), real(c.centre.y)))
+                )),
+                self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('Shape',$,IFCTEXT({}),$)",
+                    string(&c.encode())
+                )),
+                self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('Level',$,IFCIDENTIFIER({}),$)",
+                    string(&level_guid(c.level))
+                )),
+            ];
+            for (key, m) in [
+                ("Pavement", c.pavement),
+                ("KerbMaterial", c.kerb_material),
+                ("IslandMaterial", c.island_material),
+            ] {
+                if let Some(x) = model.material(m) {
+                    props.push(self.w.add(format!(
+                        "IFCPROPERTYSINGLEVALUE('{key}',$,IFCLABEL({}),$)",
+                        string(&x.name)
+                    )));
+                }
+            }
+            self.pset(el, &c.guid, "ArchiSim_Roundabout", &props);
+            on_site.push(el);
         }
         if !roads.is_empty() {
             self.rel_aggregates(derived_guid(&model.site_guid, "roads"), site, &roads);

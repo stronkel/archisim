@@ -52,6 +52,7 @@ pub enum Glyph {
     /// A pool: its coping round the water, with a ladder.
     Pool,
     Road,
+    Roundabout,
     Tree,
     /// Plants along a curve: three crowns on a dashed line.
     Planting,
@@ -228,6 +229,9 @@ impl Glyph {
                 r##"<rect x="2.5" y="5" width="15" height="10" rx="1.5"/><rect x="4.5" y="7" width="11" height="6" rx="0.5"/><path d="M6 10.5q1.5-1 3 0t3 0 3 0"/>"##
             }
             Glyph::Road => r##"<path d="M2 5h16M2 15h16"/><path d="M2 10h3M8 10h4M15 10h3"/>"##,
+            Glyph::Roundabout => {
+                r##"<circle cx="10" cy="10" r="6.5"/><circle cx="10" cy="10" r="2.5"/><path d="M10 1v2.5M10 16.5V19M1 10h2.5M16.5 10H19"/>"##
+            }
             Glyph::Tree => {
                 r##"<circle cx="10" cy="10" r="6"/><path d="M10 4v12M4 10h12M6 6l8 8M14 6l-8 8" stroke-width="0.7"/>"##
             }
@@ -413,6 +417,7 @@ impl Glyph {
         Glyph::Plot,
         Glyph::Pool,
         Glyph::Road,
+        Glyph::Roundabout,
         Glyph::Tree,
         Glyph::Planting,
         Glyph::Nursery,

@@ -111,6 +111,8 @@ pub enum Tool {
     Pool,
     /// Roads, by their axis.
     Road,
+    /// Roundabouts and squares, by their centre (U3).
+    Roundabout,
     /// Plants along a line or over an area.
     Planting,
     /// The Exterior brushes: shape the ground, paint lawn or gravel,
@@ -162,6 +164,7 @@ impl Tool {
                 | Tool::Plot
                 | Tool::Pool
                 | Tool::Road
+                | Tool::Roundabout
                 | Tool::Planting
                 | Tool::Pipe
                 | Tool::Duct
@@ -206,6 +209,7 @@ impl Tool {
             "pi" => Some(Tool::Brush),
             "ps" => Some(Tool::Pool),
             "as" => Some(Tool::Elevator),
+            "gl" => Some(Tool::Roundabout),
             _ => None,
         }
     }
@@ -345,6 +349,7 @@ pub struct ArchiSimApp {
     /// The axis of the road being drawn and what the road tool draws.
     pub road_points: Vec<Point2>,
     pub road_settings: urban_ui::RoadSettings,
+    pub roundabout_settings: roundabout_ui::RoundaboutSettings,
     /// The line of the planting being drawn and what the tool plants.
     pub planting_points: Vec<Point2>,
     pub planting_settings: planting_ui::PlantingSettings,
@@ -765,6 +770,7 @@ impl ArchiSimApp {
             elevator_settings: Default::default(),
             road_points: Vec::new(),
             road_settings,
+            roundabout_settings: Default::default(),
             planting_points: Vec::new(),
             planting_settings: Default::default(),
             run_points: Vec::new(),
@@ -2652,6 +2658,7 @@ mod revit_keys;
 mod roof_ui;
 mod room_tool_ui;
 mod room_ui;
+mod roundabout_ui;
 mod schedule_ui;
 mod sculpt_ui;
 mod search_ui;

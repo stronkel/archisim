@@ -509,6 +509,22 @@ pub fn differences(a: &Model, b: &Model) -> Vec<String> {
             diff(format!("vial {}: {:?} / {:?}", s.guid, s, t));
         }
     }
+    for s in a.roundabouts() {
+        let Some(t) = b.roundabouts().find(|t| t.guid == s.guid) else {
+            diff(format!("glorieta {} falta", s.guid));
+            continue;
+        };
+        let same = s.centre.distance(t.centre) <= TOL
+            && close(s.radius, t.radius)
+            && close(s.island, t.island)
+            && close(s.apron, t.apron)
+            && s.plaza == t.plaza
+            && s.island_finish == t.island_finish
+            && s.name == t.name;
+        if !same {
+            diff(format!("glorieta {}: {:?} / {:?}", s.guid, s, t));
+        }
+    }
     if a.objects().count() != b.objects().count() {
         diff(format!(
             "número de objetos: {} / {}",

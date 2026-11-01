@@ -6,6 +6,35 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-01 (70) · U3, segunda parte: glorietas y plazas
+
+Rama `bloque/u3-rotondas`, con pull request. Formato `.archisim` versión 64: glorietas y plazas. Los ficheros anteriores no tienen ninguna.
+
+Antes de empezar se unieron a `main` los PR #138 (U1), #139 (U2) y #140 (U3, tipos de calle), en ese orden.
+
+**Hecho**
+- **Herramienta Glorieta** (disciplina Exterior, junto a Vial). Un clic en un cruce pone la glorieta en su centro; un clic fuera de un cruce, donde se haga. Se ajustan:
+  - radio exterior (hasta el bordillo de fuera);
+  - radio de la isleta, ajardinada o pavimentada;
+  - borde montable de adoquín alrededor de la isleta, para camiones;
+  - rasante y materiales (calzada, bordillo, isleta).
+- **Las calles que llegan se recortan en su círculo.** Las que lo atraviesan, las que acaban dentro y las que acaban a menos de 3 m. Sus bordillos se unen al círculo con un arco del radio de esquina de cada calle, y la acera sigue alrededor con el ancho de la acera más estrecha. Por defecto el radio exterior es de 15 m, con 7 m de isleta y 1,5 m de borde montable: queda un anillo de 6,5 m. No se admite un anillo de menos de 4 m.
+- **Plaza:** la misma pieza pavimentada entera al nivel de la calle, con una fuente o jardinera opcional en el centro.
+- En planta, en 3D y en el render. El terreno se recorta bajo la glorieta.
+- IFC: las piezas van con el vial, como `IfcPavement` e `IfcKerb`. La glorieta va como `IfcBuildingElementProxy` con su círculo y `ArchiSim_Roundabout`, y se lee de vuelta al importar.
+- `archisim calles out/`: el cruce de la Avenida del Mar con la Calle Real es ahora la **Glorieta del Mar**, y el encuentro de las dos calles peatonales es la **Plaza del Pozo**.
+
+**Pendiente**
+- En planta, el eje de trazo y punto y el nombre de las calles siguen dibujándose sobre la glorieta.
+- Las marcas de la glorieta (ceda el paso en las entradas, borde del anillo) van con U4.
+- De U2: editar a mano el contorno de la acera y del bordillo en modo boceto.
+
+**Qué debe probar Antonio**
+- `archisim calles out/` y abrir `out/calles.archisim`: ver la Glorieta del Mar y la Plaza del Pozo en planta y en 3D.
+- Dibujar dos calles que se crucen. Elegir Exterior → Glorieta y hacer clic cerca del cruce. Después, con la glorieta seleccionada, cambiar los radios, pasarla a plaza y moverla.
+
+---
+
 ## 2026-11-01 (69) · U3, primera parte: todos los tipos de calle en tarjetas
 
 Rama `bloque/u3-tipos-calle` (encima de U2), con pull request. Formato `.archisim` versión 63: franjas nuevas. Una versión anterior que abra un fichero con estas franjas avisa de que no lo puede leer.

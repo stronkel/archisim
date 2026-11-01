@@ -18,13 +18,17 @@
 //! it follows them as they move.
 
 use archisim_core::{
-    offset_path, strip, LevelId, MaterialId, Model, Point2, Road, RoadBand, RoadId, Vec2,
+    offset_path, strip, IslandFinish, LevelId, MaterialId, Model, Point2, Road, RoadBand, RoadId,
+    Roundabout, RoundaboutId, Vec2,
 };
 
 /// A road going out of a junction.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Arm {
     pub road: RoadId,
+    /// The point of its axis its distances out are measured from (where
+    /// the junction is on the road, or where its axis would reach it).
+    pub origin: Point2,
     /// Where the junction is along the road.
     pub station: f64,
     /// Whether the arm goes on along the road (its distances growing) or
@@ -65,6 +69,22 @@ pub struct Junction {
     pub kerb_material: MaterialId,
     pub sidewalk_material: MaterialId,
     pub depth: f64,
+    /// The roundabout or square it is (U3).
+    pub ring: Option<RoundaboutId>,
+    /// What else it has: a roundabout's island and apron.
+    pub parts: Vec<JunctionPart>,
+}
+
+/// A piece of a junction besides its plate, kerbs and sidewalks: its
+/// outline, what it is, its material and how far it reaches under and
+/// over the junction's carriageway.
+#[derive(Debug, Clone, PartialEq)]
+pub struct JunctionPart {
+    pub band: RoadBand,
+    pub outline: Vec<Point2>,
+    pub material: MaterialId,
+    pub z0: f64,
+    pub z1: f64,
 }
 
 /// Points closer than this are one junction.
@@ -239,23 +259,28 @@ struct Corner {
     line: Vec<Point2>,
     /// Where the outer edges meet (none: straight on).
     outer: Option<Point2>,
+    /// The sidewalk's outer edge along the whole corner, when it follows
+    /// the kerb line (round a roundabout) instead of meeting at `outer`.
+    outer_line: Option<Vec<Point2>>,
 }
 
-fn corner(x: Point2, a: &Arm, b: &Arm, radius: f64) -> Corner {
+fn corner(a: &Arm, b: &Arm, radius: f64) -> Corner {
     let (na, nb) = (a.dir.perp_left(), b.dir.perp_left());
-    let pa = x + na * a.kerb_left;
-    let pb = x - nb * b.kerb_right;
+    let (xa, xb) = (a.origin, b.origin);
+    let pa = xa + na * a.kerb_left;
+    let pb = xb - nb * b.kerb_right;
     let theta = {
         let t = b.dir.y.atan2(b.dir.x) - a.dir.y.atan2(a.dir.x);
         t.rem_euclid(std::f64::consts::TAU)
     };
-    let outer = meet(x + na * a.edge_left, a.dir, x - nb * b.edge_right, b.dir);
+    let outer = meet(xa + na * a.edge_left, a.dir, xb - nb * b.edge_right, b.dir);
     if (theta - std::f64::consts::PI).abs() < STRAIGHT {
         return Corner {
             t_a: 0.0,
             t_b: 0.0,
             line: Vec::new(),
             outer: None,
+            outer_line: None,
         };
     }
     let Some(c) = meet(pa, a.dir, pb, b.dir) else {
@@ -264,15 +289,17 @@ fn corner(x: Point2, a: &Arm, b: &Arm, radius: f64) -> Corner {
             t_b: 0.0,
             line: Vec::new(),
             outer: None,
+            outer_line: None,
         };
     };
     if theta > std::f64::consts::PI {
         // The outside of a bend: the kerbs meet in a point.
         return Corner {
-            t_a: (c - x).dot(a.dir),
-            t_b: (c - x).dot(b.dir),
+            t_a: (c - xa).dot(a.dir),
+            t_b: (c - xb).dot(b.dir),
             line: vec![c],
             outer,
+            outer_line: None,
         };
     }
     let d = radius / (theta / 2.0).tan();
@@ -297,170 +324,416 @@ fn corner(x: Point2, a: &Arm, b: &Arm, radius: f64) -> Corner {
         })
         .collect();
     Corner {
-        t_a: (ta - x).dot(a.dir),
-        t_b: (tb - x).dot(b.dir),
+        t_a: (ta - xa).dot(a.dir),
+        t_b: (tb - xb).dot(b.dir),
         line,
         outer,
+        outer_line: None,
     }
 }
 
-/// The junctions of the roads of a level.
+/// An arc round `centre` from `p` to `q`, the short way (or, `ccw`, always
+/// counter-clockwise), with its ends.
+fn arc(centre: Point2, p: Point2, q: Point2, ccw: bool) -> Vec<Point2> {
+    let (sp, sq) = (p - centre, q - centre);
+    let r = sp.length();
+    let a0 = sp.y.atan2(sp.x);
+    let mut sweep = sq.y.atan2(sq.x) - a0;
+    if ccw {
+        sweep = sweep.rem_euclid(std::f64::consts::TAU);
+    } else {
+        while sweep > std::f64::consts::PI {
+            sweep -= std::f64::consts::TAU;
+        }
+        while sweep < -std::f64::consts::PI {
+            sweep += std::f64::consts::TAU;
+        }
+    }
+    let steps = ((sweep.abs() / (std::f64::consts::PI / 24.0)).ceil() as usize).max(ARC_STEPS);
+    (0..=steps)
+        .map(|k| {
+            let t = a0 + sweep * k as f64 / steps as f64;
+            centre + Point2::new(t.cos(), t.sin()) * r
+        })
+        .collect()
+}
+
+/// Where a kerb line (from `from` along `dir`) is joined to a roundabout's
+/// outer circle by a fillet of `radius` on the side `side` (its normal
+/// towards the sidewalk): how far out along the line the fillet starts,
+/// and the fillet from the line to the circle.
+fn ring_fillet(
+    from: Point2,
+    dir: Vec2,
+    side: Vec2,
+    centre: Point2,
+    ring: f64,
+    radius: f64,
+) -> (f64, Vec<Point2>) {
+    let r = radius.max(0.5);
+    let p0 = from + side * r - centre;
+    let b = p0.dot(dir);
+    let disc = b * b - p0.dot(p0) + (ring + r) * (ring + r);
+    if disc < 0.0 {
+        // The line misses the circle: it simply reaches its radius.
+        return (ring, vec![from + dir * ring]);
+    }
+    let t = -b + disc.sqrt();
+    let f = from + side * r + dir * t;
+    let on_line = from + dir * t;
+    let on_circle = centre + (f - centre) * (ring / (ring + r));
+    (t, arc(f, on_line, on_circle, false))
+}
+
+/// A corner between two arms of a roundabout: from `a`'s kerb line,
+/// round the outer circle counter-clockwise, to `b`'s.
+fn ring_corner(a: &Arm, b: &Arm, centre: Point2, ring: f64, ra: f64, rb: f64, walk: f64) -> Corner {
+    let (na, nb) = (a.dir.perp_left(), b.dir.perp_left());
+    let (ta, fa) = ring_fillet(a.origin + na * a.kerb_left, a.dir, na, centre, ring, ra);
+    let (tb, fb) = ring_fillet(
+        b.origin - nb * b.kerb_right,
+        b.dir,
+        nb * -1.0,
+        centre,
+        ring,
+        rb,
+    );
+    let mut line = fa.clone();
+    let (ca, cb) = (fa[fa.len() - 1], fb[fb.len() - 1]);
+    let round = arc(centre, ca, cb, true);
+    line.extend(round.iter().skip(1));
+    line.extend(fb.iter().rev().skip(1));
+    line.dedup_by(|p, q| p.distance(*q) < 1e-6);
+    // The sidewalk round it, as wide as the narrower of the two.
+    let outer_line = offset_path(&line, -walk);
+    Corner {
+        t_a: ta,
+        t_b: tb,
+        line,
+        outer: None,
+        outer_line,
+    }
+}
+
+/// An arm of road `r` from `origin`, at `s` along it, going on along it
+/// (`forward`) or back.
+fn arm_of(r: &Road, origin: Point2, s: f64, forward: bool) -> Arm {
+    let len = length(&r.axis);
+    let (_, u) = along(&r.axis, s.clamp(0.0, len));
+    let (kl, kr, wl, wr, hl, hr) = reach(r, s.clamp(0.0, len));
+    // Looking back along the road, its left is its right.
+    let (dir, kerb_left, kerb_right, kw_l, kw_r, e_l, e_r) = if forward {
+        (u, kl, kr, wl, wr, hl, hr)
+    } else {
+        (u * -1.0, kr, kl, wr, wl, hr, hl)
+    };
+    Arm {
+        road: r.id,
+        origin,
+        station: s,
+        forward,
+        dir,
+        kerb_left,
+        kerb_right,
+        kerb_width_left: kw_l,
+        kerb_width_right: kw_r,
+        edge_left: e_l,
+        edge_right: e_r,
+        cut: 0.5,
+    }
+}
+
+/// The arms of the roads that reach a roundabout: those whose axis goes
+/// through its circle (two arms) or ends in it or near it (one, measured
+/// from where its axis would pass by the centre).
+fn ring_arms(roads: &[&Road], c: &Roundabout) -> Vec<Arm> {
+    let mut arms = Vec::new();
+    for r in roads {
+        let len = length(&r.axis);
+        let (s, d) = nearest_on(r, c.centre);
+        let reach = c.radius + 3.0;
+        let at_end = s <= 1e-6 || s >= len - 1e-6;
+        if !at_end {
+            if d >= c.radius {
+                continue;
+            }
+            let (o, _) = along(&r.axis, s);
+            for forward in [true, false] {
+                let room = if forward { len - s } else { s };
+                if room > c.radius + 1.0 {
+                    arms.push(arm_of(r, o, s, forward));
+                }
+            }
+            continue;
+        }
+        // An end: where its line passes by the centre.
+        let forward = s <= 1e-6;
+        let (end, _) = along(&r.axis, s);
+        if end.distance(c.centre) > reach {
+            continue;
+        }
+        let (_, u) = along(&r.axis, if forward { 0.0 } else { len });
+        let out = if forward { u } else { u * -1.0 };
+        let back = (c.centre - end).dot(out);
+        if back > 0.0 {
+            continue;
+        }
+        let o = end + out * back;
+        let station = if forward { back } else { len - back };
+        if len > 1.0 {
+            arms.push(arm_of(r, o, station, forward));
+        }
+    }
+    arms.sort_by(|a, b| a.dir.y.atan2(a.dir.x).total_cmp(&b.dir.y.atan2(b.dir.x)));
+    arms
+}
+
+/// The junctions of the roads of a level: at its roundabouts and squares
+/// and wherever roads meet away from them.
 pub fn junctions(model: &Model, level: LevelId) -> Vec<Junction> {
     let mut roads: Vec<&Road> = model.roads_on_level(level).collect();
     roads.sort_by_key(|r| r.id.0);
     let mut out = Vec::new();
+    let rings: Vec<&Roundabout> = model.roundabouts_on_level(level).collect();
+    for c in &rings {
+        let arms = ring_arms(&roads, c);
+        if let Some(j) = assemble(model, &roads, arms, c.centre, Some(c)) {
+            out.push(j);
+        }
+    }
     for (x, met) in meeting_points(&roads) {
+        if rings.iter().any(|c| c.centre.distance(x) < c.radius + 1.0) {
+            continue;
+        }
         let mut arms: Vec<Arm> = Vec::new();
         for &(i, s) in &met {
             let r = roads[i];
             let len = length(&r.axis);
-            let (_, u) = along(&r.axis, s.clamp(0.0, len));
-            let (kl, kr, wl, wr, hl, hr) = reach(r, s.clamp(0.0, len));
             for forward in [true, false] {
                 let room = if forward { len - s } else { s };
                 if room <= SAME {
                     continue;
                 }
-                // Looking back along the road, its left is its right.
-                let (dir, kerb_left, kerb_right, kw_l, kw_r, e_l, e_r) = if forward {
-                    (u, kl, kr, wl, wr, hl, hr)
-                } else {
-                    (u * -1.0, kr, kl, wr, wl, hr, hl)
-                };
-                arms.push(Arm {
-                    road: r.id,
-                    station: s,
-                    forward,
-                    dir,
-                    kerb_left,
-                    kerb_right,
-                    kerb_width_left: kw_l,
-                    kerb_width_right: kw_r,
-                    edge_left: e_l,
-                    edge_right: e_r,
-                    cut: 0.5,
-                });
+                arms.push(arm_of(r, x, s, forward));
             }
         }
         if arms.len() < 2 || arms.iter().all(|a| a.road == arms[0].road) {
             continue;
         }
         arms.sort_by(|a, b| a.dir.y.atan2(a.dir.x).total_cmp(&b.dir.y.atan2(b.dir.x)));
-        let n = arms.len();
-        let owner = roads
-            .iter()
-            .find(|r| met.iter().any(|&(i, _)| roads[i].id == r.id))
-            .copied()
-            .expect("a road meets there");
-        let radius_of = |a: &Arm, b: &Arm| {
-            let ra = model.road(a.road).map_or(4.0, |r| r.section.corner_radius);
-            let rb = model.road(b.road).map_or(4.0, |r| r.section.corner_radius);
-            ra.min(rb).max(0.0)
-        };
-        // The corners first, which set where the arms are cut: the cut of
-        // an arm reaches past both its corners and past the other roads'
-        // carriageways.
-        let mut corners: Vec<Corner> = (0..n)
-            .map(|i| {
-                let (a, b) = (&arms[i], &arms[(i + 1) % n]);
-                corner(x, a, b, radius_of(a, b))
-            })
-            .collect();
-        for i in 0..n {
-            let prev = &corners[(i + n - 1) % n];
-            let next = &corners[i];
-            let wide = arms
-                .iter()
-                .filter(|o| o.road != arms[i].road)
-                .map(|o| o.kerb_left.max(o.kerb_right) + o.kerb_width_left.max(o.kerb_width_right))
-                .fold(0.0, f64::max);
-            arms[i].cut = next.t_a.max(prev.t_b).max(wide).max(0.5);
+        if let Some(j) = assemble(model, &roads, arms, x, None) {
+            out.push(j);
         }
-        // Again, now that the cuts are known (the kerb line runs to them).
-        corners = (0..n)
-            .map(|i| {
-                let (a, b) = (&arms[i], &arms[(i + 1) % n]);
-                corner(x, a, b, radius_of(a, b))
-            })
-            .collect();
-        let mut plate = Vec::new();
-        let mut kerbs = Vec::new();
-        let mut sidewalks = Vec::new();
-        let kerb_height = met
-            .iter()
-            .map(|&(i, _)| {
-                let s = &roads[i].section;
-                if s.single_level {
-                    0.0
-                } else {
-                    s.kerb_height
-                }
-            })
-            .fold(f64::MAX, f64::min);
-        for i in 0..n {
-            let (a, b) = (&arms[i], &arms[(i + 1) % n]);
-            let (na, nb) = (a.dir.perp_left(), b.dir.perp_left());
-            let right_cut = x + a.dir * a.cut - na * a.kerb_right;
-            let left_cut = x + a.dir * a.cut + na * a.kerb_left;
-            plate.push(right_cut);
-            plate.push(left_cut);
-            // The kerb line of the corner, from the cut of `a` to the cut
-            // of `b`.
-            let mut line = vec![left_cut];
-            line.extend(corners[i].line.iter().copied());
-            line.push(x + b.dir * b.cut - nb * b.kerb_right);
-            line.dedup_by(|p, q| p.distance(*q) < 1e-6);
-            plate.extend(
-                line.iter()
-                    .skip(1)
-                    .take(line.len().saturating_sub(2))
-                    .copied(),
-            );
-            if line.len() < 2 {
-                continue;
-            }
-            // The kerb and the sidewalk lie to the right of that line.
-            let kw = a.kerb_width_left.max(b.kerb_width_right);
-            if kw > 1e-6 {
-                let k = strip(&line, -kw, 0.0);
-                if k.len() >= 3 {
-                    kerbs.push(k);
-                }
-            }
-            let Some(inner) = offset_path(&line, -kw) else {
-                continue;
-            };
-            let mut side = inner;
-            side.push(x + b.dir * b.cut - nb * b.edge_right);
-            if let Some(e) = corners[i].outer {
-                side.push(e);
-            }
-            side.push(x + a.dir * a.cut + na * a.edge_left);
-            side.dedup_by(|p, q| p.distance(*q) < 1e-6);
-            if side.len() >= 3 && archisim_core::signed_area(&side).abs() > 1e-4 {
-                sidewalks.push(side);
-            }
-        }
-        plate.dedup_by(|p, q| p.distance(*q) < 1e-6);
-        if archisim_core::signed_area(&plate) < 0.0 {
-            plate.reverse();
-        }
-        out.push(Junction {
-            at: x,
-            owner: owner.id,
-            top: owner.top_under(x),
-            kerb_height,
-            pavement: owner.pavement,
-            kerb_material: owner.kerb_material,
-            sidewalk_material: owner.sidewalk_material,
-            depth: owner.section.depth,
-            arms,
-            plate,
-            kerbs,
-            sidewalks,
-        });
     }
     out
+}
+
+/// A junction at `x` of `arms` (sorted round it), round a roundabout's
+/// circle if `ring`.
+fn assemble(
+    model: &Model,
+    roads: &[&Road],
+    mut arms: Vec<Arm>,
+    x: Point2,
+    ring: Option<&Roundabout>,
+) -> Option<Junction> {
+    if arms.is_empty() {
+        return None;
+    }
+    let n = arms.len();
+    let owner = roads.iter().find(|r| arms.iter().any(|a| a.road == r.id))?;
+    let radius_of = |id: RoadId| {
+        model
+            .road(id)
+            .map_or(4.0, |r| r.section.corner_radius)
+            .max(0.0)
+    };
+    // The sidewalk round a roundabout: as wide as the narrowest of its
+    // roads' sidewalks.
+    let walk = arms
+        .iter()
+        .map(|a| {
+            (a.edge_left - a.kerb_left - a.kerb_width_left)
+                .min(a.edge_right - a.kerb_right - a.kerb_width_right)
+        })
+        .fold(f64::INFINITY, f64::min)
+        .max(0.0);
+    let kw_ring = arms
+        .iter()
+        .map(|a| a.kerb_width_left.max(a.kerb_width_right))
+        .fold(0.0, f64::max);
+    let make = |arms: &[Arm]| -> Vec<Corner> {
+        (0..n)
+            .map(|i| {
+                let (a, b) = (&arms[i], &arms[(i + 1) % n]);
+                match ring {
+                    Some(c) => ring_corner(
+                        a,
+                        b,
+                        c.centre,
+                        c.radius,
+                        radius_of(a.road),
+                        radius_of(b.road),
+                        kw_ring + walk,
+                    ),
+                    None => corner(a, b, radius_of(a.road).min(radius_of(b.road))),
+                }
+            })
+            .collect()
+    };
+    // The corners first, which set where the arms are cut: the cut of an
+    // arm reaches past both its corners and past the other roads'
+    // carriageways.
+    let corners = make(&arms);
+    for i in 0..n {
+        let prev = &corners[(i + n - 1) % n];
+        let next = &corners[i];
+        let wide = if ring.is_some() {
+            0.0
+        } else {
+            arms.iter()
+                .filter(|o| o.road != arms[i].road)
+                .map(|o| o.kerb_left.max(o.kerb_right) + o.kerb_width_left.max(o.kerb_width_right))
+                .fold(0.0, f64::max)
+        };
+        arms[i].cut = next.t_a.max(prev.t_b).max(wide).max(0.5);
+    }
+    // Again, now that the cuts are known (the kerb line runs to them).
+    let corners = make(&arms);
+    let mut plate = Vec::new();
+    let mut kerbs = Vec::new();
+    let mut sidewalks = Vec::new();
+    let kerb_height = arms
+        .iter()
+        .filter_map(|a| model.road(a.road))
+        .map(|r| {
+            let s = &r.section;
+            if s.single_level {
+                0.0
+            } else {
+                s.kerb_height
+            }
+        })
+        .fold(f64::MAX, f64::min);
+    for i in 0..n {
+        let (a, b) = (&arms[i], &arms[(i + 1) % n]);
+        let (na, nb) = (a.dir.perp_left(), b.dir.perp_left());
+        let right_cut = a.origin + a.dir * a.cut - na * a.kerb_right;
+        let left_cut = a.origin + a.dir * a.cut + na * a.kerb_left;
+        plate.push(right_cut);
+        plate.push(left_cut);
+        // The kerb line of the corner, from the cut of `a` to the cut of
+        // `b`.
+        let mut line = vec![left_cut];
+        line.extend(corners[i].line.iter().copied());
+        line.push(b.origin + b.dir * b.cut - nb * b.kerb_right);
+        line.dedup_by(|p, q| p.distance(*q) < 1e-6);
+        plate.extend(
+            line.iter()
+                .skip(1)
+                .take(line.len().saturating_sub(2))
+                .copied(),
+        );
+        if line.len() < 2 {
+            continue;
+        }
+        // The kerb and the sidewalk lie to the right of that line.
+        let kw = if ring.is_some() {
+            kw_ring
+        } else {
+            a.kerb_width_left.max(b.kerb_width_right)
+        };
+        if kw > 1e-6 {
+            let k = strip(&line, -kw, 0.0);
+            if k.len() >= 3 {
+                kerbs.push(k);
+            }
+        }
+        let Some(inner) = offset_path(&line, -kw) else {
+            continue;
+        };
+        let mut side = inner;
+        match (&corners[i].outer_line, ring) {
+            (Some(outer), Some(_)) => {
+                // Round a roundabout: out to the roads' outer edges at
+                // their cuts, along the circle's offset.
+                let mut far = outer.clone();
+                far[0] = a.origin + a.dir * a.cut + na * a.edge_left;
+                let last = far.len() - 1;
+                far[last] = b.origin + b.dir * b.cut - nb * b.edge_right;
+                far.reverse();
+                side.extend(far);
+            }
+            _ => {
+                side.push(b.origin + b.dir * b.cut - nb * b.edge_right);
+                if let Some(e) = corners[i].outer {
+                    side.push(e);
+                }
+                side.push(a.origin + a.dir * a.cut + na * a.edge_left);
+            }
+        }
+        side.dedup_by(|p, q| p.distance(*q) < 1e-6);
+        if side.len() >= 3 && archisim_core::signed_area(&side).abs() > 1e-4 {
+            sidewalks.push(side);
+        }
+    }
+    plate.dedup_by(|p, q| p.distance(*q) < 1e-6);
+    if archisim_core::signed_area(&plate) < 0.0 {
+        plate.reverse();
+    }
+    let mut parts = Vec::new();
+    let (top, pavement, kerb_material) = match ring {
+        Some(c) => {
+            // Its island, raised and filled, and the apron round it.
+            if c.island > 0.1 {
+                let kh = kerb_height.max(0.15);
+                parts.push(JunctionPart {
+                    band: match c.island_finish {
+                        IslandFinish::Garden => RoadBand::Planting,
+                        IslandFinish::Paved => RoadBand::Median,
+                    },
+                    outline: archisim_core::circle_of(c.centre, c.island, 64),
+                    material: c.island_material,
+                    z0: -owner.section.depth,
+                    z1: kh,
+                });
+                if c.apron > 0.05 {
+                    let steps = 48;
+                    let (r0, r1) = (c.island, c.island + c.apron);
+                    for k in 0..steps {
+                        let t0 = std::f64::consts::TAU * k as f64 / steps as f64;
+                        let t1 = std::f64::consts::TAU * (k + 1) as f64 / steps as f64;
+                        let at = |r: f64, t: f64| c.centre + Point2::new(t.cos(), t.sin()) * r;
+                        parts.push(JunctionPart {
+                            band: RoadBand::Kerb,
+                            outline: vec![at(r0, t0), at(r1, t0), at(r1, t1), at(r0, t1)],
+                            material: c.kerb_material,
+                            z0: -owner.section.depth,
+                            z1: 0.05,
+                        });
+                    }
+                }
+            }
+            (c.top_offset, c.pavement, c.kerb_material)
+        }
+        None => (owner.top_under(x), owner.pavement, owner.kerb_material),
+    };
+    Some(Junction {
+        at: x,
+        owner: owner.id,
+        top,
+        kerb_height,
+        pavement,
+        kerb_material,
+        sidewalk_material: owner.sidewalk_material,
+        depth: owner.section.depth,
+        ring: ring.map(|c| c.id),
+        parts,
+        arms,
+        plate,
+        kerbs,
+        sidewalks,
+    })
 }
 
 /// The stretches of a road's axis that its junctions take: (from, to).
@@ -573,5 +846,59 @@ mod tests {
         assert_eq!(js[0].arms.len(), 2);
         assert_eq!(js[0].kerbs.len(), 2);
         assert!(signed_area(&js[0].plate) > 100.0);
+    }
+
+    #[test]
+    fn a_roundabout_takes_the_roads_that_reach_it() {
+        let (mut m, level, a, b) = town();
+        let mat = m.road(a).unwrap().pavement;
+        // A road ending near it from the north-east, too.
+        m.add_road(NewRoad {
+            name: "Diagonal".into(),
+            level,
+            axis: vec![Point2::new(12.0, 12.0), Point2::new(60.0, 60.0)],
+            section: RoadSection::default(),
+            top_offset: 0.0,
+            profile: Vec::new(),
+            changes: Vec::new(),
+            pavement: mat,
+            kerb_material: mat,
+            sidewalk_material: mat,
+        })
+        .unwrap();
+        m.add_roundabout(archisim_core::NewRoundabout {
+            name: "G".into(),
+            level,
+            centre: Point2::new(0.0, 0.0),
+            radius: 15.0,
+            island: 7.0,
+            apron: 1.5,
+            top_offset: 0.0,
+            plaza: false,
+            island_finish: IslandFinish::Garden,
+            pavement: mat,
+            kerb_material: mat,
+            island_material: mat,
+        })
+        .unwrap();
+        let js = junctions(&m, level);
+        assert_eq!(js.len(), 1, "no other junction: the crossing is inside it");
+        let j = &js[0];
+        assert!(j.ring.is_some());
+        assert_eq!(j.arms.len(), 5);
+        for arm in &j.arms {
+            assert!(arm.cut > 15.0, "{}", arm.cut);
+        }
+        // The disc and the arms' mouths.
+        let area = signed_area(&j.plate);
+        assert!(area > std::f64::consts::PI * 15.0 * 15.0, "{area}");
+        assert_eq!(j.kerbs.len(), 5);
+        assert_eq!(j.sidewalks.len(), 5);
+        // The island and the apron's pieces.
+        assert_eq!(j.parts.len(), 1 + 48);
+        // Each road leaves out its stretch in it.
+        let gaps = road_gaps(&js, b);
+        assert_eq!(gaps.len(), 2);
+        assert!(gaps.iter().all(|g| g.1 - g.0 > 15.0));
     }
 }

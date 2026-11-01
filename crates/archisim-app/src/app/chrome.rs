@@ -778,6 +778,7 @@ impl ArchiSimApp {
             Tool::Grid | Tool::RefPlane | Tool::Footing => self.foundation_hint(),
             Tool::Mass | Tool::PushPull | Tool::DivideFace | Tool::Deform | Tool::MassOffset | Tool::Tape | Tool::Paint => self.concept_hint(),
             Tool::Plot | Tool::Road => self.urban_hint(),
+            Tool::Roundabout => "Clic: centro de la glorieta (en un cruce, se centra en él) · Esc: flecha",
             Tool::Pool => self.pool_hint(),
             Tool::Planting => self.planting_hint(),
             Tool::Brush => self.brush_hint(),

@@ -41,6 +41,7 @@ pub fn raw_id(e: Element) -> u64 {
         Element::Pool(i) => i.0,
         Element::Elevator(i) => i.0,
         Element::Road(i) => i.0,
+        Element::Roundabout(i) => i.0,
         Element::Planting(i) => i.0,
         Element::Run(i) => i.0,
         Element::Edge(i) => i.0,

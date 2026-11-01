@@ -145,6 +145,7 @@ impl ArchiSimApp {
             | Tool::Pool
             | Tool::Brush
             | Tool::Road
+            | Tool::Roundabout
             | Tool::Planting
             | Tool::Pipe
             | Tool::Duct
@@ -471,6 +472,7 @@ impl ArchiSimApp {
             | Tool::Plot
             | Tool::Pool
             | Tool::Road
+            | Tool::Roundabout
             | Tool::Planting
             | Tool::Pipe
             | Tool::Duct
@@ -483,7 +485,7 @@ impl ArchiSimApp {
                     Tool::Road => self.road_points.clone(),
                     Tool::Planting => self.planting_points.clone(),
                     Tool::Pipe | Tool::Duct => self.run_points.clone(),
-                    Tool::Device | Tool::Elevator => Vec::new(),
+                    Tool::Device | Tool::Elevator | Tool::Roundabout => Vec::new(),
                     Tool::TeamZone => self.team_ui.zone_start.into_iter().collect(),
                     _ => self.concept_points(),
                 };
@@ -496,7 +498,7 @@ impl ArchiSimApp {
                     Tool::Road => self.road_points.last().copied(),
                     Tool::Planting => self.planting_points.last().copied(),
                     Tool::Pipe | Tool::Duct => self.run_points.last().copied(),
-                    Tool::Device | Tool::Elevator | Tool::TeamZone => None,
+                    Tool::Device | Tool::Elevator | Tool::TeamZone | Tool::Roundabout => None,
                     _ => self.concept_anchor(),
                 };
                 if let Some(a) = anchor {
@@ -852,6 +854,7 @@ impl ArchiSimApp {
                         self.set_tool(Tool::Arrow);
                     }
                 }
+                Tool::Roundabout => self.set_tool(Tool::Arrow),
                 Tool::Planting => {
                     if self.planting_points.pop().is_none() {
                         self.set_tool(Tool::Arrow);
@@ -1204,6 +1207,13 @@ impl ArchiSimApp {
                 } else if response.clicked_by(PointerButton::Primary) {
                     if let Some(c) = self.cursor {
                         self.planting_click(c.point);
+                    }
+                }
+            }
+            Tool::Roundabout => {
+                if response.clicked_by(PointerButton::Primary) {
+                    if let Some(c) = self.cursor {
+                        self.roundabout_click(c.point);
                     }
                 }
             }

@@ -55,6 +55,8 @@ pub enum Element {
     /// A plot, picked by its boundary or inside it if nothing else is.
     Plot(archisim_core::PlotId),
     Road(archisim_core::RoadId),
+    /// A roundabout or square, picked inside its circle.
+    Roundabout(archisim_core::RoundaboutId),
     /// A pool built in the ground, picked inside its coping.
     Pool(archisim_core::PoolId),
     /// A lift, picked inside its shaft on any level it crosses.
@@ -155,6 +157,7 @@ pub fn outline<G: Geo + ?Sized>(geo: &G, element: Element) -> Option<Vec<Point2>
         Element::Mass(id) => model.mass(id).map(|m| m.outline()),
         Element::Plot(id) => model.plot(id).map(|p| p.outline.clone()),
         Element::Road(id) => model.road(id).map(|r| r.outline()),
+        Element::Roundabout(id) => model.roundabout(id).map(|r| r.outline()),
         Element::Pool(id) => model.pool(id).map(|p| p.coping_outline()),
         Element::Elevator(id) => model.elevator(id).map(|e| e.outside()),
         Element::Planting(id) => model.planting(id).map(|p| {
@@ -453,6 +456,11 @@ pub fn elements_on_level(model: &Model, level: LevelId) -> Vec<Element> {
     v.extend(model.roads_on_level(level).map(|r| Element::Road(r.id)));
     v.extend(
         model
+            .roundabouts_on_level(level)
+            .map(|r| Element::Roundabout(r.id)),
+    );
+    v.extend(
+        model
             .plantings_on_level(level)
             .map(|p| Element::Planting(p.id)),
     );
@@ -507,6 +515,7 @@ pub fn type_of(model: &Model, e: Element) -> Option<TypeOf> {
         | Element::Mass(_)
         | Element::Plot(_)
         | Element::Road(_)
+        | Element::Roundabout(_)
         | Element::Pool(_)
         | Element::Elevator(_)
         | Element::Planting(_)
@@ -576,6 +585,7 @@ pub fn pick_all<G: Geo + ?Sized>(
         // In the concept phase the volumes are what is worked on.
         Element::Mass(_) => 2,
         Element::Road(_) => 5,
+        Element::Roundabout(_) => 4,
         // In the ground, as a slab.
         Element::Pool(_) => 4,
         // Over the slabs it goes through.
