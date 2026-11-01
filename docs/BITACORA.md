@@ -6,6 +6,34 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-01 (63) · H6: calles por tipos
+
+Rama `bloque/h6-calles` (encima de H5), con pull request. Formato `.archisim` versión 60 (la sección de los viales por franjas; los ficheros antiguos se abren con la sección clásica de sus medidas).
+
+**Hecho**
+- **Tipo de vía** al dibujar o editar un vial: calle de doble sentido con aparcamiento, de un sentido con aparcamiento, de plataforma única, con aparcamiento en batería, con carril bici, avenida con mediana arbolada y bulevar con paseo central. Es solo el punto de partida:
+  - la sección se cambia **franja a franja**, de izquierda a derecha mirando en el sentido del eje: carril, aparcamiento, bordillo, acera, carril bici, alcorques o mediana, cada una con su ancho; se añaden, se quitan y se reordenan;
+  - **aparcamiento** en línea, en batería o en espiga (pone el ancho usual a sus franjas y dibuja las plazas);
+  - **plataforma única** (todo al mismo nivel, sin bordillo alto);
+  - **orejas** en el acerado: la acera se ensancha sobre el aparcamiento entre dos distancias del eje, a la izquierda o a la derecha (el «quiebro» de las esquinas y los pasos);
+  - **pasos de peatones** a una distancia del inicio, con su ancho; el botón «Añadir orejas» pone las dos orejas del último paso.
+- **Marcas viales**: líneas entre carriles discontinuas, plazas de aparcamiento (no donde hay oreja) y cebreados, en planta y en 3D, del material «marcas viales».
+- Materiales propios para alcorques, carril bici y marcas viales (si no se eligen, los de acera o calzada).
+- **Arbolado**: en un vial con alcorques, el grupo «Arbolado» de sus propiedades planta un árbol cada 6 m por cada franja (naranjo, jacarandá, plátano de sombra, tipuana o palmera datilera), como plantación que luego se edita como cualquier otra.
+- IFC 4.3: un `IfcPavement` por franja (también carril bici, mediana y alcorques) e `IfcKerb`; la sección entera en `ArchiSim_Road.Section` para leerla de vuelta.
+- La demo lleva un paso de peatones delante de la casa; el edificio de Florence Street, un paso con orejas a los dos lados.
+
+**Pendiente**
+- Los viales siguen siendo de tramos rectos; las esquinas entre dos viales (cruces) no se resuelven solas.
+- Las marcas viales no van al IFC.
+
+**Qué debe probar Antonio**
+- Exterior → Vial: en Propiedades, elegir «Avenida con mediana arbolada», dibujar el eje con dos clics e Intro.
+- Con el vial seleccionado, en «Sección tipo»: cambiar una franja a carril bici, quitar una de aparcamiento, pasar el aparcamiento a batería, añadir un paso de peatones y sus orejas. Mirar la planta y el 3D.
+- En «Arbolado», pulsar «Naranjo» y ver los árboles en los alcorques.
+
+---
+
 ## 2026-11-01 (62) · H5: trepadoras y fachadas vegetales
 
 Rama `bloque/h5-trepadoras` (encima de H4), con pull request. Sin cambios de formato.

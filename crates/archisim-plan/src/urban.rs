@@ -107,48 +107,33 @@ pub fn draw_roads(
             continue;
         }
         crate::dim::element(s, r.id.0, |s| {
-            for (band, o) in r.bands() {
-                let (fill, width) = match band {
+            for p in r.pieces() {
+                let (fill, width) = match p.band {
                     RoadBand::Carriageway => ("#dcdcdc", pens().view),
                     RoadBand::Parking => ("#e6e6e6", pens().view),
                     RoadBand::Kerb => ("#ffffff", pens().cut),
                     RoadBand::Sidewalk => ("#f1eee6", pens().view),
+                    RoadBand::BikeLane => ("#e9c9bf", pens().view),
+                    RoadBand::Planting => ("#d4dfc0", pens().view),
+                    RoadBand::Median => ("#e8e4d6", pens().view),
                 };
                 let _ = writeln!(
                     s,
                     r#"<path d="{}" fill="{fill}" stroke="{INK}" stroke-width="{}"/>"#,
-                    path(&o),
+                    path(&p.outline),
                     num(width * k)
                 );
             }
-            // The parking bays: a line every 2,5 m on each parking band.
-            let sec = r.section;
-            if sec.parking > 0.0 {
-                let c = sec.carriageway / 2.0;
-                for seg in r.axis.windows(2) {
-                    let (a, b) = (seg[0], seg[1]);
-                    let Some(u) = (b - a).normalized() else {
-                        continue;
-                    };
-                    let n = u.perp_left();
-                    let len = a.distance(b);
-                    let mut t = 2.5;
-                    while t < len - 0.5 {
-                        for side in [1.0, -1.0] {
-                            let p = a + u * t + n * (side * c);
-                            let q = p + n * (side * sec.parking);
-                            let _ = writeln!(
-                                s,
-                                r#"<path d="M{} L{}" fill="none" stroke="{INK}" stroke-width="{}"/>"#,
-                                pt(p),
-                                pt(q),
-                                num(pens().thin * k)
-                            );
-                        }
-                        t += 2.5;
-                    }
-                }
+            // The road markings: lane lines, parking bays, zebra crossings.
+            for m in r.markings() {
+                let _ = writeln!(
+                    s,
+                    r#"<path d="{}" fill="white" stroke="{INK}" stroke-width="{}"/>"#,
+                    path(&m),
+                    num(pens().thin * k * 0.5)
+                );
             }
+            let sec = &r.section;
             let _ = writeln!(
                 s,
                 r#"<path d="M{}" fill="none" stroke="{INK}" stroke-width="{}" stroke-dasharray="{} {} {} {}"/>"#,
@@ -170,7 +155,8 @@ pub fn draw_roads(
                     if u.x < -1e-9 || (u.x.abs() < 1e-9 && u.y < 0.0) {
                         u = u * -1.0;
                     }
-                    let m = (a + b) * 0.5 + u.perp_left() * (sec.carriageway / 4.0);
+                    let m =
+                        (a + b) * 0.5 + u.perp_left() * (sec.width_of(RoadBand::Carriageway) / 4.0);
                     let h = LABEL * k;
                     let _ = writeln!(
                         s,

@@ -1137,10 +1137,35 @@ pub(crate) struct Road {
     pub name: String,
     pub level: u64,
     pub axis: Vec<Xy>,
+    /// The section of before version 60: a carriageway, and on each side
+    /// parking, kerb and sidewalk (read when `strips` is empty).
+    #[serde(default, skip_serializing_if = "is_zero")]
     pub carriageway: f64,
+    #[serde(default, skip_serializing_if = "is_zero")]
     pub parking: f64,
+    #[serde(default, skip_serializing_if = "is_zero")]
     pub kerb: f64,
+    #[serde(default, skip_serializing_if = "is_zero")]
     pub sidewalk: f64,
+    /// Its strips across, from the left edge (version 60): `[band, width]`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub strips: Vec<(String, f64)>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub single_level: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parking_mode: Option<String>,
+    /// `[left, from, to]`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub buildouts: Vec<(bool, f64, f64)>,
+    /// `[at, width]`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub crossings: Vec<(f64, f64)>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub planting_material: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bike_material: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub marking_material: Option<u64>,
     pub kerb_height: f64,
     pub depth: f64,
     #[serde(default, skip_serializing_if = "is_zero")]
@@ -3460,10 +3485,34 @@ impl ProjectFile {
                     name: r.name.clone(),
                     level: r.level.0,
                     axis: r.axis.iter().copied().map(xy).collect(),
-                    carriageway: r.section.carriageway,
-                    parking: r.section.parking,
-                    kerb: r.section.kerb,
-                    sidewalk: r.section.sidewalk,
+                    carriageway: 0.0,
+                    parking: 0.0,
+                    kerb: 0.0,
+                    sidewalk: 0.0,
+                    strips: r
+                        .section
+                        .strips
+                        .iter()
+                        .map(|x| (x.band.code().to_string(), x.width))
+                        .collect(),
+                    single_level: r.section.single_level,
+                    parking_mode: (r.section.parking != core::ParkingMode::Line)
+                        .then(|| r.section.parking.code().to_string()),
+                    buildouts: r
+                        .section
+                        .buildouts
+                        .iter()
+                        .map(|b| (b.left, b.from, b.to))
+                        .collect(),
+                    crossings: r
+                        .section
+                        .crossings
+                        .iter()
+                        .map(|c| (c.at, c.width))
+                        .collect(),
+                    planting_material: r.section.planting.map(|m| m.0),
+                    bike_material: r.section.bike.map(|m| m.0),
+                    marking_material: r.section.markings.map(|m| m.0),
                     kerb_height: r.section.kerb_height,
                     depth: r.section.depth,
                     top_offset: r.top_offset,
@@ -4710,13 +4759,46 @@ impl ProjectFile {
                 name: r.name,
                 level: core::LevelId(r.level),
                 axis: r.axis.into_iter().map(pt).collect(),
-                section: core::RoadSection {
-                    carriageway: r.carriageway,
-                    parking: r.parking,
-                    kerb: r.kerb,
-                    sidewalk: r.sidewalk,
-                    kerb_height: r.kerb_height,
-                    depth: r.depth,
+                section: {
+                    let mut sec = if r.strips.is_empty() {
+                        core::RoadSection::classic(r.carriageway, r.parking, r.kerb, r.sidewalk)
+                    } else {
+                        let mut strips = Vec::new();
+                        for (band, width) in &r.strips {
+                            strips.push(core::RoadStrip {
+                                band: core::RoadBand::from_code(band).ok_or_else(|| {
+                                    FileError::Value {
+                                        element: element.clone(),
+                                        message: format!("«{band}» is not a band of a road"),
+                                    }
+                                })?,
+                                width: *width,
+                            });
+                        }
+                        core::RoadSection::of(strips)
+                    };
+                    sec.kerb_height = r.kerb_height;
+                    sec.depth = r.depth;
+                    sec.single_level = r.single_level;
+                    sec.parking = r
+                        .parking_mode
+                        .as_deref()
+                        .and_then(core::ParkingMode::from_code)
+                        .unwrap_or_default();
+                    sec.buildouts = r
+                        .buildouts
+                        .iter()
+                        .map(|&(left, from, to)| core::Buildout { left, from, to })
+                        .collect();
+                    sec.crossings = r
+                        .crossings
+                        .iter()
+                        .map(|&(at, width)| core::Crossing { at, width })
+                        .collect();
+                    sec.planting = r.planting_material.map(core::MaterialId);
+                    sec.bike = r.bike_material.map(core::MaterialId);
+                    sec.markings = r.marking_material.map(core::MaterialId);
+                    sec
                 },
                 top_offset: r.top_offset,
                 pavement: core::MaterialId(r.pavement),

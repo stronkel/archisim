@@ -487,16 +487,21 @@ pub fn differences(a: &Model, b: &Model) -> Vec<String> {
             diff(format!("vial {} falta", s.guid));
             continue;
         };
-        let (x, y) = (s.section, t.section);
+        let (x, y) = (&s.section, &t.section);
         let same = s.axis.len() == t.axis.len()
             && s.axis
                 .iter()
                 .zip(&t.axis)
                 .all(|(p, q)| p.distance(*q) <= TOL)
-            && close(x.carriageway, y.carriageway)
-            && close(x.parking, y.parking)
-            && close(x.kerb, y.kerb)
-            && close(x.sidewalk, y.sidewalk)
+            && x.strips.len() == y.strips.len()
+            && x.strips
+                .iter()
+                .zip(&y.strips)
+                .all(|(p, q)| p.band == q.band && close(p.width, q.width))
+            && x.parking == y.parking
+            && x.single_level == y.single_level
+            && x.buildouts.len() == y.buildouts.len()
+            && x.crossings.len() == y.crossings.len()
             && close(s.top_offset, t.top_offset)
             && s.name == t.name
             && level_guid(a, s.level) == level_guid(b, t.level);

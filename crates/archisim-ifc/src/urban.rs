@@ -99,13 +99,15 @@ impl Exporter<'_> {
                 ))),
                 Schema::Ifc4 => None,
             };
-            let s = r.section;
+            let s = &r.section;
+            let kh = if s.single_level { 0.0 } else { s.kerb_height };
             let mut pieces = Vec::new();
-            for (i, (band, outline)) in r.bands().into_iter().enumerate() {
-                let (material, z0, z1) = match band {
-                    RoadBand::Carriageway | RoadBand::Parking => (r.pavement, -s.depth, 0.0),
-                    RoadBand::Kerb => (r.kerb_material, -s.depth, s.kerb_height),
-                    RoadBand::Sidewalk => (r.sidewalk_material, s.kerb_height - 0.2, s.kerb_height),
+            for (i, p) in r.pieces().into_iter().enumerate() {
+                let (band, outline, material) = (p.band, p.outline, p.material);
+                let (z0, z1) = match (band, p.raised) {
+                    (RoadBand::Kerb, true) => (-s.depth, kh),
+                    (_, true) => (kh - 0.2, kh),
+                    _ => (-s.depth, 0.0),
                 };
                 let curve = self.polyline(&outline, true);
                 let profile = self
@@ -137,11 +139,7 @@ impl Exporter<'_> {
                         (Schema::Ifc4x3, _) => self.w.add(format!(
                             "IFCPAVEMENT({},$,{name},$,$,{pl},{shape},$,.{}.)",
                             string(guid.as_str()),
-                            if band == RoadBand::Sidewalk {
-                                "RIGID"
-                            } else {
-                                "FLEXIBLE"
-                            }
+                            if band.raised() { "RIGID" } else { "FLEXIBLE" }
                         )),
                         (Schema::Ifc4, _) => self.w.add(format!(
                         "IFCBUILDINGELEMENTPROXY({},$,{name},$,{},{pl},{shape},$,.USERDEFINED.)",
@@ -155,7 +153,7 @@ impl Exporter<'_> {
                         string(derived_guid(&guid, "material").as_str())
                     ));
                 }
-                if band == RoadBand::Carriageway && i == 0 {
+                if i == 0 {
                     // To read the road back: its axis and section.
                     let axis: Vec<String> = r
                         .axis
@@ -180,11 +178,11 @@ impl Exporter<'_> {
                             string(&level_guid(r.level))
                         )),
                     ];
+                    props.push(self.w.add(format!(
+                        "IFCPROPERTYSINGLEVALUE('Section',$,IFCTEXT({}),$)",
+                        string(&s.encode())
+                    )));
                     for (key, v) in [
-                        ("Carriageway", s.carriageway),
-                        ("Parking", s.parking),
-                        ("Kerb", s.kerb),
-                        ("Sidewalk", s.sidewalk),
                         ("KerbHeight", s.kerb_height),
                         ("Depth", s.depth),
                         ("TopOffset", r.top_offset),
@@ -195,11 +193,14 @@ impl Exporter<'_> {
                         )));
                     }
                     let mats = [
-                        ("Pavement", r.pavement),
-                        ("KerbMaterial", r.kerb_material),
-                        ("SidewalkMaterial", r.sidewalk_material),
+                        ("Pavement", Some(r.pavement)),
+                        ("KerbMaterial", Some(r.kerb_material)),
+                        ("SidewalkMaterial", Some(r.sidewalk_material)),
+                        ("PlantingMaterial", s.planting),
+                        ("BikeMaterial", s.bike),
+                        ("MarkingMaterial", s.markings),
                     ];
-                    for (key, m) in mats {
+                    for (key, m) in mats.into_iter().filter_map(|(k, m)| Some((k, m?))) {
                         if let Some(x) = model.material(m) {
                             props.push(self.w.add(format!(
                                 "IFCPROPERTYSINGLEVALUE('{key}',$,IFCLABEL({}),$)",

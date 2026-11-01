@@ -49,7 +49,7 @@ impl RoadReference {
 }
 
 /// What the road tool draws.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct RoadSettings {
     pub reference: RoadReference,
     pub section: RoadSection,
@@ -108,43 +108,309 @@ fn comma(v: f64, d: usize) -> String {
     format!("{v:.d$}").replace('.', ",")
 }
 
-/// The fields of a road section; returns the section changed, if it was.
-fn section_rows(ui: &mut Ui, salt: u64, s: RoadSection) -> Option<RoadSection> {
-    let mut out = s;
+/// The species planted in a road's planting strips: the Seville orange
+/// of Andalusian streets, or the others usual in them.
+pub const STREET_TREES: [&str; 5] = [
+    "Naranjo",
+    "Jacaranda",
+    "Plátano de sombra",
+    "Tipuana",
+    "Palmera datilera",
+];
+
+fn band_combo(ui: &mut Ui, id: Id, value: RoadBand, w: f32) -> RoadBand {
+    let mut v = value;
+    ComboBox::from_id_salt(id)
+        .width(w)
+        .selected_text(value.name())
+        .show_ui(ui, |ui| {
+            for b in RoadBand::ALL {
+                ui.selectable_value(&mut v, b, b.name());
+            }
+        });
+    v
+}
+
+/// The fields of a road section (H6): its type, its strips across, its
+/// parking, kerbs and pavement, its build-outs and crossings; returns the
+/// section changed, if it was.
+fn section_rows(ui: &mut Ui, salt: u64, s: &RoadSection) -> Option<RoadSection> {
+    let mut out = s.clone();
     let mut changed = false;
-    let fields: [(&str, &str, f64); 6] = [
-        ("Calzada (mm)", "Ancho total de los carriles", s.carriageway),
-        (
-            "Aparcamiento (mm)",
-            "A cada lado; 0: sin aparcamiento",
-            s.parking,
-        ),
-        ("Bordillo (mm)", "Ancho, a cada lado", s.kerb),
-        ("Acera (mm)", "A cada lado", s.sidewalk),
+    row(
+        ui,
+        "Tipo de vía",
+        "Una sección de partida; luego se cambia franja a franja",
+        |ui, w| {
+            let presets = archisim_core::road_presets();
+            let now = presets
+                .iter()
+                .position(|(_, p)| {
+                    p.strips == s.strips
+                        && p.single_level == s.single_level
+                        && p.parking == s.parking
+                })
+                .map_or("A medida", |i| presets[i].0);
+            ComboBox::from_id_salt(Id::unique(("road-preset", salt)))
+                .width(w - 8.0)
+                .truncate()
+                .selected_text(now)
+                .show_ui(ui, |ui| {
+                    for (name, p) in &presets {
+                        if ui.selectable_label(false, *name).clicked() {
+                            let mut n = p.clone();
+                            // What is along it and its materials stay.
+                            n.buildouts = s.buildouts.clone();
+                            n.crossings = s.crossings.clone();
+                            n.planting = s.planting;
+                            n.bike = s.bike;
+                            n.markings = s.markings;
+                            out = n;
+                            changed = true;
+                        }
+                    }
+                });
+        },
+    );
+    props::note(
+        ui,
+        "Franjas de la sección, del borde izquierdo al derecho mirando en el sentido del eje:",
+    );
+    let mut remove = None;
+    let mut up = None;
+    for (i, st) in s.strips.iter().enumerate() {
+        ui.horizontal(|ui| {
+            let w = ui.available_width();
+            let b = band_combo(
+                ui,
+                Id::unique(("road-band", salt, i)),
+                st.band,
+                (w * 0.45).max(80.0),
+            );
+            if b != st.band {
+                out.strips[i].band = b;
+                changed = true;
+            }
+            if let Some(v) = length_field(
+                ui,
+                Id::unique(("road-w", salt, i)),
+                st.width,
+                (w * 0.3).max(50.0),
+            ) {
+                if v > 0.0 {
+                    out.strips[i].width = v;
+                    changed = true;
+                }
+            }
+            if i > 0
+                && ui
+                    .small_button("↑")
+                    .on_hover_text("Más a la izquierda")
+                    .clicked()
+            {
+                up = Some(i);
+            }
+            if s.strips.len() > 1
+                && ui
+                    .small_button("✕")
+                    .on_hover_text("Quitar la franja")
+                    .clicked()
+            {
+                remove = Some(i);
+            }
+        });
+    }
+    if let Some(i) = up {
+        out.strips.swap(i - 1, i);
+        changed = true;
+    }
+    if let Some(i) = remove {
+        out.strips.remove(i);
+        changed = true;
+    }
+    if ui
+        .button("Añadir franja")
+        .on_hover_text("Una acera a la derecha; cámbiala después")
+        .clicked()
+    {
+        out.strips
+            .push(archisim_core::strip_of(RoadBand::Sidewalk, 2.0));
+        changed = true;
+    }
+    text_row(ui, "Ancho total (mm)", "", &fmt_mm(out.width()));
+    if s.strips.iter().any(|x| x.band == RoadBand::Parking) {
+        row(
+            ui,
+            "Aparcamiento",
+            "Cómo aparcan los coches; cambia el ancho de sus franjas al usual",
+            |ui, w| {
+                let mut v = s.parking;
+                ComboBox::from_id_salt(Id::unique(("road-park", salt)))
+                    .width(w - 8.0)
+                    .selected_text(v.name())
+                    .show_ui(ui, |ui| {
+                        for m in archisim_core::ParkingMode::ALL {
+                            ui.selectable_value(&mut v, m, m.name());
+                        }
+                    });
+                if v != s.parking {
+                    out.parking = v;
+                    for st in out
+                        .strips
+                        .iter_mut()
+                        .filter(|x| x.band == RoadBand::Parking)
+                    {
+                        st.width = v.width();
+                    }
+                    changed = true;
+                }
+            },
+        );
+    }
+    let mut single = s.single_level;
+    if ui
+        .checkbox(&mut single, "Plataforma única (todo al mismo nivel)")
+        .changed()
+    {
+        out.single_level = single;
+        changed = true;
+    }
+    for (i, (name, hint, value)) in [
         (
             "Altura del bordillo (mm)",
             "Lo que sube la acera sobre la calzada",
             s.kerb_height,
         ),
         ("Firme (mm)", "Espesor del pavimento de la calzada", s.depth),
-    ];
-    for (i, (name, hint, value)) in fields.into_iter().enumerate() {
+    ]
+    .into_iter()
+    .enumerate()
+    {
         row(ui, name, hint, |ui, w| {
             if let Some(v) = length_field(ui, Id::unique(("road-sec", salt, i)), value, w - 8.0) {
-                let v = v.max(0.0);
                 match i {
-                    0 => out.carriageway = v,
-                    1 => out.parking = v,
-                    2 => out.kerb = v,
-                    3 => out.sidewalk = v,
-                    4 => out.kerb_height = v,
-                    _ => out.depth = v,
+                    0 => out.kerb_height = v.max(0.0),
+                    _ => out.depth = v.max(0.01),
                 }
                 changed = true;
             }
         });
     }
+    // Build-outs and crossings along the axis.
+    props::note(ui, "Orejas (la acera se ensancha sobre el aparcamiento) y pasos de peatones, a una distancia del inicio del eje:");
+    let mut drop_out = None;
+    for (i, b) in s.buildouts.iter().enumerate() {
+        ui.horizontal(|ui| {
+            let mut left = b.left;
+            ComboBox::from_id_salt(Id::unique(("road-bo-side", salt, i)))
+                .width(90.0)
+                .selected_text(if left { "Izquierda" } else { "Derecha" })
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(&mut left, true, "Izquierda");
+                    ui.selectable_value(&mut left, false, "Derecha");
+                });
+            if left != b.left {
+                out.buildouts[i].left = left;
+                changed = true;
+            }
+            for (k, v) in [b.from, b.to].into_iter().enumerate() {
+                if let Some(n) = length_field(ui, Id::unique(("road-bo", salt, i, k)), v, 60.0) {
+                    if k == 0 {
+                        out.buildouts[i].from = n;
+                    } else {
+                        out.buildouts[i].to = n;
+                    }
+                    changed = true;
+                }
+            }
+            if ui.small_button("✕").clicked() {
+                drop_out = Some(i);
+            }
+        });
+    }
+    if let Some(i) = drop_out {
+        out.buildouts.remove(i);
+        changed = true;
+    }
+    let mut drop_cross = None;
+    for (i, c) in s.crossings.iter().enumerate() {
+        ui.horizontal(|ui| {
+            ui.label("Paso en");
+            if let Some(n) = length_field(ui, Id::unique(("road-cr", salt, i, 0)), c.at, 70.0) {
+                out.crossings[i].at = n;
+                changed = true;
+            }
+            ui.label("ancho");
+            if let Some(n) = length_field(ui, Id::unique(("road-cr", salt, i, 1)), c.width, 60.0) {
+                out.crossings[i].width = n.max(1.0);
+                changed = true;
+            }
+            if ui.small_button("✕").clicked() {
+                drop_cross = Some(i);
+            }
+        });
+    }
+    if let Some(i) = drop_cross {
+        out.crossings.remove(i);
+        changed = true;
+    }
+    ui.horizontal(|ui| {
+        let at = out.crossings.last().map_or(10.0, |c| c.at + 20.0);
+        if ui.button("Añadir paso de peatones").clicked() {
+            out.crossings
+                .push(archisim_core::Crossing { at, width: 4.0 });
+            changed = true;
+        }
+        if s.strips.iter().any(|x| x.band == RoadBand::Parking)
+            && ui
+                .button("Añadir orejas")
+                .on_hover_text(
+                    "A los dos lados de un tramo de 8 m, donde está el último paso de peatones",
+                )
+                .clicked()
+        {
+            let c = out.crossings.last().map_or(10.0, |c| c.at);
+            for left in [true, false] {
+                out.buildouts.push(archisim_core::Buildout {
+                    left,
+                    from: c - 4.0,
+                    to: c + 4.0,
+                });
+            }
+            changed = true;
+        }
+    });
     changed.then_some(out)
+}
+
+/// The value of an optional material: «—» for none.
+fn optional_material(
+    ui: &mut Ui,
+    id: Id,
+    model: &Model,
+    value: Option<MaterialId>,
+    w: f32,
+) -> Option<Option<MaterialId>> {
+    let mut v = value;
+    let shown = value
+        .and_then(|m| model.material(m))
+        .map_or("— (el de la acera o la calzada)".to_string(), |m| {
+            m.name.clone()
+        });
+    let mut mats: Vec<(MaterialId, String)> =
+        model.materials().map(|m| (m.id, m.name.clone())).collect();
+    mats.sort_by_key(|a| a.1.to_lowercase());
+    ComboBox::from_id_salt(id)
+        .width(w - 8.0)
+        .truncate()
+        .selected_text(shown)
+        .show_ui(ui, |ui| {
+            ui.selectable_value(&mut v, None, "—");
+            for (mid, name) in &mats {
+                ui.selectable_value(&mut v, Some(*mid), name);
+            }
+        });
+    (v != value).then_some(v)
 }
 
 impl ArchiSimApp {
@@ -207,7 +473,7 @@ impl ArchiSimApp {
             return;
         }
         let level = self.ed.level;
-        let s = self.road_settings;
+        let s = self.road_settings.clone();
         let Some(axis) = s.reference.axis(&drawn, &s.section) else {
             self.complain("No se puede crear el vial: el eje dibujado no tiene longitud.");
             return;
@@ -217,7 +483,7 @@ impl ArchiSimApp {
                 name: m.next_road_name(),
                 level,
                 axis,
-                section: s.section,
+                section: s.section.clone(),
                 top_offset: s.top_offset,
                 pavement: s.pavement,
                 kerb_material: s.kerb,
@@ -284,7 +550,7 @@ impl ArchiSimApp {
                 }
                 let mut drawn = self.road_points.clone();
                 drawn.push(c.point);
-                let s = self.road_settings;
+                let s = self.road_settings.clone();
                 // The whole road as it will be: each band filled with its
                 // colour, the kerbs drawn, and the line clicked.
                 if let Some(axis) = s.reference.axis(&drawn, &s.section) {
@@ -319,6 +585,9 @@ impl ArchiSimApp {
                 RoadBand::Parking => Color32::from_rgba_unmultiplied(140, 146, 154, 80),
                 RoadBand::Kerb => Color32::from_rgba_unmultiplied(235, 235, 230, 200),
                 RoadBand::Sidewalk => Color32::from_rgba_unmultiplied(214, 196, 160, 110),
+                RoadBand::BikeLane => Color32::from_rgba_unmultiplied(200, 110, 90, 100),
+                RoadBand::Planting => Color32::from_rgba_unmultiplied(120, 160, 90, 110),
+                RoadBand::Median => Color32::from_rgba_unmultiplied(214, 206, 180, 110),
             };
             for i in 0..near.len().saturating_sub(1) {
                 let quad = [near[i], near[i + 1], far[i + 1], far[i]];
@@ -382,7 +651,7 @@ impl ArchiSimApp {
     pub(super) fn road_tool_properties(&mut self, ui: &mut Ui) {
         props::title(ui, "Herramienta Vial · lo que vas a dibujar");
         let model = self.ed.model();
-        let mut s = self.road_settings;
+        let mut s = self.road_settings.clone();
         group(ui, "tool-road-ref", "Dibujo", |ui| {
             text_row(ui, "Línea dibujada", "", s.reference.name());
             props::note(
@@ -391,10 +660,9 @@ impl ArchiSimApp {
             );
         });
         group(ui, "tool-road", "Sección tipo", |ui| {
-            if let Some(sec) = section_rows(ui, 0, s.section) {
+            if let Some(sec) = section_rows(ui, 0, &s.section) {
                 s.section = sec;
             }
-            text_row(ui, "Ancho total (mm)", "", &fmt_mm(s.section.width()));
             row(ui, "Rasante (mm)", "La calzada sobre la planta", |ui, w| {
                 if let Some(v) =
                     length_field(ui, Id::unique("tool-road-top"), s.top_offset, w - 8.0)
@@ -533,7 +801,7 @@ impl ArchiSimApp {
             });
         });
         group(ui, "road-section", "Sección tipo", |ui| {
-            if let Some(sec) = section_rows(ui, id.0, r.section) {
+            if let Some(sec) = section_rows(ui, id.0, &r.section) {
                 let res = self.ed.transact("Sección del vial", |m| {
                     m.edit_road(id, |x| x.section = sec)
                 });
@@ -542,7 +810,7 @@ impl ArchiSimApp {
         });
         group(ui, "road-figures", "Mediciones", |ui| {
             text_row(ui, "Longitud del eje (m)", "", &comma(r.length(), 2));
-            for band in [RoadBand::Carriageway, RoadBand::Parking, RoadBand::Sidewalk] {
+            for band in RoadBand::ALL {
                 let a = r.area_of(band);
                 if a > 0.0 {
                     text_row(ui, &format!("{} (m²)", band.name()), "", &comma(a, 2));
@@ -550,7 +818,35 @@ impl ArchiSimApp {
             }
         });
         let (p, k, s) = (r.pavement, r.kerb_material, r.sidewalk_material);
+        let sec = r.section.clone();
         group(ui, "road-mat", "Materiales", |ui| {
+            for (i, (name, v)) in [
+                ("Alcorques", sec.planting),
+                ("Carril bici", sec.bike),
+                ("Marcas viales", sec.markings),
+            ]
+            .into_iter()
+            .enumerate()
+            {
+                row(ui, name, "", |ui, w| {
+                    if let Some(n) = optional_material(
+                        ui,
+                        Id::unique(("road-opt", id, i)),
+                        self.ed.model(),
+                        v,
+                        w,
+                    ) {
+                        let res = self.ed.transact("Material del vial", |m| {
+                            m.edit_road(id, |x| match i {
+                                0 => x.section.planting = n,
+                                1 => x.section.bike = n,
+                                _ => x.section.markings = n,
+                            })
+                        });
+                        self.report(res, "Material cambiado.");
+                    }
+                });
+            }
             for (i, (name, v)) in [("Calzada", p), ("Bordillo", k), ("Acera", s)]
                 .into_iter()
                 .enumerate()
@@ -571,6 +867,27 @@ impl ArchiSimApp {
                 });
             }
         });
+        // Trees in its planting strips.
+        if sec.strips.iter().any(|x| x.band == RoadBand::Planting) {
+            group(ui, "road-trees", "Arbolado", |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    for name in STREET_TREES {
+                        if ui
+                            .button(name)
+                            .on_hover_text(
+                                "Una plantación por cada franja de alcorques, un árbol cada 6 m",
+                            )
+                            .clicked()
+                        {
+                            let res = self
+                                .ed
+                                .transact("Árboles del vial", |m| plant_road_trees(m, id, name));
+                            self.report(res.map(drop), "Árboles plantados.");
+                        }
+                    }
+                });
+            });
+        }
         group(ui, "road-identity", "Datos de identidad", |ui| {
             text_row(
                 ui,
@@ -597,4 +914,42 @@ impl ArchiSimApp {
             },
         )
     }
+}
+
+/// Plantings along the middle of each planting strip of a road: a tree of
+/// that species every 6 m.
+pub(super) fn plant_road_trees(
+    m: &mut Model,
+    road: RoadId,
+    species: &str,
+) -> Result<usize, archisim_core::ModelError> {
+    let r = m
+        .road(road)
+        .cloned()
+        .ok_or(archisim_core::ModelError::UnknownElement(road.0))?;
+    let Some(t) = archisim_library::flora::add_flora_entry(m, species)? else {
+        return Ok(0);
+    };
+    let mut n = 0;
+    for (k, line) in r.strip_lines(RoadBand::Planting).into_iter().enumerate() {
+        let len: f64 = line.windows(2).map(|w| w[0].distance(w[1])).sum();
+        let count = ((len / 6.0).floor() as usize).max(1);
+        m.add_planting(archisim_core::NewPlanting {
+            name: format!("{} · {} {}", r.name, species, k + 1),
+            level: r.level,
+            path: line,
+            closed: false,
+            smooth: false,
+            arrangement: archisim_core::Arrangement::Line,
+            count: count as u32,
+            species: vec![t],
+            size_variation: 0.15,
+            shape_variation: 0.3,
+            spread: 0.0,
+            seed: 7 + k as u64,
+            base_offset: r.top_offset + r.section.kerb_height,
+        })?;
+        n += 1;
+    }
+    Ok(n)
 }
