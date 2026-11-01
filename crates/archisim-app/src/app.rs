@@ -128,6 +128,8 @@ pub enum Tool {
     Device,
     /// Lifts, by the centre of their shaft (H4).
     Elevator,
+    /// Pictures stuck on faces, by a click (U8).
+    Decal,
     /// A zone reserved for team work, by two corners.
     TeamZone,
     /// A 2D drafting or editing command is running (AutoCAD's).
@@ -167,6 +169,7 @@ impl Tool {
                 | Tool::Pool
                 | Tool::Road
                 | Tool::Roundabout
+                | Tool::Decal
                 | Tool::Marking
                 | Tool::Planting
                 | Tool::Pipe
@@ -213,6 +216,7 @@ impl Tool {
             "ps" => Some(Tool::Pool),
             "as" => Some(Tool::Elevator),
             "gl" => Some(Tool::Roundabout),
+            "pe" => Some(Tool::Decal),
             "mv" => Some(Tool::Marking),
             _ => None,
         }
@@ -356,6 +360,7 @@ pub struct ArchiSimApp {
     pub road_points: Vec<Point2>,
     pub road_settings: urban_ui::RoadSettings,
     pub roundabout_settings: roundabout_ui::RoundaboutSettings,
+    pub decal_settings: decal_ui::DecalSettings,
     pub marking_settings: marking_ui::MarkingSettings,
     pub marking_points: Vec<Point2>,
     /// The line of the planting being drawn and what the tool plants.
@@ -780,6 +785,7 @@ impl ArchiSimApp {
             road_points: Vec::new(),
             road_settings,
             roundabout_settings: Default::default(),
+            decal_settings: Default::default(),
             marking_settings: Default::default(),
             marking_points: Vec::new(),
             planting_points: Vec::new(),
@@ -2626,6 +2632,7 @@ mod coord_ui;
 mod cte_ui;
 mod curtain_types_ui;
 mod curtain_ui;
+mod decal_ui;
 mod discipline_ui;
 mod draft_props;
 mod drafting_view_ui;

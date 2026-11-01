@@ -482,4 +482,70 @@ impl<'a> Importer<'a> {
         }
         Ok(())
     }
+
+    /// Decals (U8), from their `ArchiSim_Decal` set.
+    pub(super) fn import_decals(&mut self) {
+        for id in self.file.of_kind("IFCBUILDINGELEMENTPROXY") {
+            if self.property_own(id, "ArchiSim_Decal", "Image").is_none() {
+                continue;
+            }
+            if let Err(why) = self.import_decal(id) {
+                self.report.skip("pegatinas", why);
+            }
+            self.road_ids.insert(id);
+        }
+    }
+
+    fn import_decal(&mut self, id: u64) -> Result<(), String> {
+        let text = |s: &Self, key: &str| {
+            s.property_own(id, "ArchiSim_Decal", key)
+                .and_then(|v| v.as_str())
+                .map(str::to_string)
+        };
+        let num = |s: &Self, key: &str| {
+            s.property_own(id, "ArchiSim_Decal", key)
+                .and_then(|v| v.as_f64())
+        };
+        let triple = |t: Option<String>| -> Option<[f64; 3]> {
+            let v: Vec<f64> = t?
+                .split(',')
+                .filter_map(|x| x.trim().parse().ok())
+                .collect();
+            (v.len() == 3).then(|| [v[0], v[1], v[2]])
+        };
+        let png = text(self, "Image")
+            .and_then(|t| archisim_core::base64_decode(&t))
+            .ok_or("imagen no válida")?;
+        let source = text(self, "Source").unwrap_or_default();
+        let image = archisim_core::decal_image(&source, png).ok_or("no es un PNG")?;
+        let centre = triple(text(self, "Centre")).ok_or("sin centro")?;
+        let normal = triple(text(self, "Normal")).ok_or("sin normal")?;
+        let level = self.level_by_guid(id, "ArchiSim_Decal", 0.0);
+        let name = self
+            .ent(id)
+            .and_then(|e| e.arg(2).as_str().map(str::to_string))
+            .unwrap_or_else(|| self.model.next_decal_name());
+        let did = self
+            .model
+            .add_decal(archisim_core::NewDecal {
+                name,
+                level,
+                centre,
+                normal,
+                rotation: num(self, "Rotation").unwrap_or(0.0),
+                width: num(self, "Width").unwrap_or(1.0),
+                image,
+                host: None,
+            })
+            .map_err(|e| explain(&e))?;
+        self.report.decals += 1;
+        self.sources.push((did.0, id));
+        if let Some(g) = self
+            .ent(id)
+            .and_then(|e| e.arg(0).as_str().map(str::to_string))
+        {
+            self.guids.decals.push((did, g));
+        }
+        Ok(())
+    }
 }

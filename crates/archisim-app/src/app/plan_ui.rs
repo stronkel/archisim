@@ -147,6 +147,7 @@ impl ArchiSimApp {
             | Tool::Brush
             | Tool::Road
             | Tool::Roundabout
+            | Tool::Decal
             | Tool::Marking
             | Tool::Planting
             | Tool::Pipe
@@ -475,6 +476,7 @@ impl ArchiSimApp {
             | Tool::Pool
             | Tool::Road
             | Tool::Roundabout
+            | Tool::Decal
             | Tool::Marking
             | Tool::Planting
             | Tool::Pipe
@@ -488,7 +490,7 @@ impl ArchiSimApp {
                     Tool::Road => self.road_points.clone(),
                     Tool::Planting => self.planting_points.clone(),
                     Tool::Pipe | Tool::Duct => self.run_points.clone(),
-                    Tool::Device | Tool::Elevator | Tool::Roundabout => Vec::new(),
+                    Tool::Device | Tool::Elevator | Tool::Roundabout | Tool::Decal => Vec::new(),
                     Tool::Marking => self.marking_points.clone(),
                     Tool::TeamZone => self.team_ui.zone_start.into_iter().collect(),
                     _ => self.concept_points(),
@@ -502,7 +504,11 @@ impl ArchiSimApp {
                     Tool::Road => self.road_points.last().copied(),
                     Tool::Planting => self.planting_points.last().copied(),
                     Tool::Pipe | Tool::Duct => self.run_points.last().copied(),
-                    Tool::Device | Tool::Elevator | Tool::TeamZone | Tool::Roundabout => None,
+                    Tool::Device
+                    | Tool::Elevator
+                    | Tool::TeamZone
+                    | Tool::Roundabout
+                    | Tool::Decal => None,
                     Tool::Marking => self.marking_points.last().copied(),
                     _ => self.concept_anchor(),
                 };
@@ -861,7 +867,7 @@ impl ArchiSimApp {
                         self.set_tool(Tool::Arrow);
                     }
                 }
-                Tool::Roundabout => self.set_tool(Tool::Arrow),
+                Tool::Roundabout | Tool::Decal => self.set_tool(Tool::Arrow),
                 Tool::Marking => {
                     if self.marking_points.pop().is_none() {
                         self.set_tool(Tool::Arrow);
@@ -1237,6 +1243,13 @@ impl ArchiSimApp {
                 if response.clicked_by(PointerButton::Primary) {
                     if let Some(c) = self.cursor {
                         self.roundabout_click(c.point);
+                    }
+                }
+            }
+            Tool::Decal => {
+                if response.clicked_by(PointerButton::Primary) {
+                    if let Some(c) = self.cursor {
+                        self.decal_click(c.point);
                     }
                 }
             }

@@ -71,6 +71,10 @@ typed_id!(
     MarkingId
 );
 typed_id!(
+    /// Identifies a [`crate::Decal`] (a picture stuck on a face).
+    DecalId
+);
+typed_id!(
     /// Identifies a [`crate::Pool`] (a pool built in the ground).
     PoolId
 );

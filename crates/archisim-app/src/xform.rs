@@ -200,6 +200,30 @@ pub fn transform(
             | Element::Grid(_)
             | Element::RefPlane(_)
             | Element::Module(_) => {}
+            Element::Decal(id) => {
+                let x = model
+                    .decal(id)
+                    .ok_or(ModelError::UnknownElement(id.0))?
+                    .clone();
+                let c = archisim_core::Point2::new(x.centre[0], x.centre[1]);
+                let tc = t.apply(c);
+                // The normal turned as the plan is (only its plan part).
+                let n = t.apply(c + archisim_core::Vec2::new(x.normal[0], x.normal[1])) - tc;
+                let mut spec = x.spec();
+                spec.centre = [tc.x, tc.y, x.centre[2]];
+                spec.normal = [n.x, n.y, x.normal[2]];
+                if copy {
+                    spec.name = model.next_decal_name();
+                    let new = model.add_decal(spec)?;
+                    out.insert(Element::Decal(new));
+                } else {
+                    model.edit_decal(id, |m| {
+                        m.centre = spec.centre;
+                        m.normal = spec.normal;
+                    })?;
+                    out.insert(*e);
+                }
+            }
             Element::Marking(id) => {
                 let x = model
                     .marking(id)

@@ -44,6 +44,7 @@
 
 mod accessories;
 mod curtain;
+mod decals;
 mod elevators;
 mod facades;
 mod foundations;

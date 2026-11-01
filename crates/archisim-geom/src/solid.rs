@@ -50,6 +50,8 @@ pub enum SolidOwner {
     Road(archisim_core::RoadId),
     /// A road marking (U4).
     Marking(archisim_core::MarkingId),
+    /// A picture stuck on a face (U8).
+    Decal(archisim_core::DecalId),
     /// A pipe or duct.
     Run(archisim_core::RunId),
     Device(archisim_core::DeviceId),
@@ -86,6 +88,7 @@ impl SolidOwner {
             SolidOwner::Mass(x) => x.0,
             SolidOwner::Road(x) => x.0,
             SolidOwner::Marking(x) => x.0,
+            SolidOwner::Decal(x) => x.0,
             SolidOwner::Run(x) => x.0,
             SolidOwner::Device(x) => x.0,
         }
@@ -2404,6 +2407,9 @@ pub fn solid_vertex_colors(model: &Model, s: &Solid) -> Option<Vec<[[u8; 3]; 3]>
     if let SolidOwner::Growth(_) = s.owner {
         return crate::growth::growth_colors(model, s);
     }
+    if let SolidOwner::Decal(id) = s.owner {
+        return crate::decals::decal_colors(model, id);
+    }
     let SolidOwner::Object(id) = s.owner else {
         return None;
     };
@@ -3854,6 +3860,12 @@ pub fn model_solids_except_detailed(
     }
     for m in model.markings() {
         out.extend(marking_solids(model, m.id));
+    }
+    // Pictures stuck on faces (U8), for the 3D, the render and the glTF.
+    if pieces {
+        for d in model.decals() {
+            out.extend(crate::decals::decal_solids(model, d.id));
+        }
     }
     for r in model.runs() {
         out.extend(run_solids(model, r.id));
@@ -5387,6 +5399,7 @@ pub fn level_solids(model: &Model, level: LevelId) -> Vec<Solid> {
         SolidOwner::Mass(m) => model.mass(m).is_some_and(|m| m.level == level),
         SolidOwner::Road(r) => model.road(r).is_some_and(|r| r.level == level),
         SolidOwner::Marking(m) => model.marking(m).is_some_and(|m| m.level == level),
+        SolidOwner::Decal(d) => model.decal(d).is_some_and(|d| d.level == level),
         SolidOwner::Run(r) => model.run(r).is_some_and(|r| r.level == level),
         SolidOwner::Device(d) => model.device(d).is_some_and(|d| d.level == level),
     };

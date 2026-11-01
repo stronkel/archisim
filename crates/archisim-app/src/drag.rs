@@ -473,6 +473,7 @@ pub fn hotspots(model: &Model, selection: &BTreeSet<Element>) -> Vec<Hotspot> {
             | Element::Plot(_)
             | Element::Roundabout(_)
             | Element::Marking(_)
+            | Element::Decal(_)
             | Element::Planting(_)
             | Element::Run(_)
             | Element::Edge(_)
@@ -1332,6 +1333,12 @@ pub(crate) fn move_selection(
             Element::Marking(id) => {
                 model.edit_marking(*id, |x| x.path.iter_mut().for_each(|p| *p = *p + d))?;
             }
+            Element::Decal(id) => {
+                model.edit_decal(*id, |x| {
+                    x.centre[0] += d.x;
+                    x.centre[1] += d.y;
+                })?;
+            }
             Element::Planting(id) => {
                 model.edit_planting(*id, |x| x.path.iter_mut().for_each(|p| *p = *p + d))?;
             }
@@ -1895,6 +1902,18 @@ pub(crate) fn copy(
                 })?;
                 copies.insert(Element::Marking(new));
             }
+            Element::Decal(id) => {
+                let x = model
+                    .decal(*id)
+                    .ok_or(ModelError::UnknownElement(id.0))?
+                    .clone();
+                let mut spec = x.spec();
+                spec.centre[0] += d.x;
+                spec.centre[1] += d.y;
+                spec.name = model.next_decal_name();
+                let new = model.add_decal(spec)?;
+                copies.insert(Element::Decal(new));
+            }
             Element::Pool(id) => {
                 let x = model
                     .pool(*id)
@@ -2226,6 +2245,7 @@ pub(crate) fn exists(model: &Model, e: Element) -> bool {
         Element::Road(id) => model.road(id).is_some(),
         Element::Roundabout(id) => model.roundabout(id).is_some(),
         Element::Marking(id) => model.marking(id).is_some(),
+        Element::Decal(id) => model.decal(id).is_some(),
         Element::Planting(id) => model.planting(id).is_some(),
         Element::Run(id) => model.run(id).is_some(),
         Element::Edge(id) => model.edge(id).is_some(),
@@ -2307,6 +2327,7 @@ fn level_of(
             Element::Road(id) => model.road(*id).map(|r| r.level),
             Element::Roundabout(id) => model.roundabout(*id).map(|r| r.level),
             Element::Marking(id) => model.marking(*id).map(|r| r.level),
+            Element::Decal(id) => model.decal(*id).map(|r| r.level),
             Element::Planting(id) => model.planting(*id).map(|r| r.level),
             Element::Run(id) => model.run(*id).map(|r| r.level),
             Element::Edge(id) => model.edge(*id).map(|e| e.level),

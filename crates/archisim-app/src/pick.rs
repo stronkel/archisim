@@ -59,6 +59,7 @@ pub enum Element {
     Roundabout(archisim_core::RoundaboutId),
     /// A road marking, picked on its paint or along its path.
     Marking(archisim_core::MarkingId),
+    Decal(archisim_core::DecalId),
     /// A pool built in the ground, picked inside its coping.
     Pool(archisim_core::PoolId),
     /// A lift, picked inside its shaft on any level it crosses.
@@ -161,6 +162,7 @@ pub fn outline<G: Geo + ?Sized>(geo: &G, element: Element) -> Option<Vec<Point2>
         Element::Road(id) => model.road(id).map(|r| r.outline()),
         Element::Roundabout(id) => model.roundabout(id).map(|r| r.outline()),
         Element::Marking(id) => model.marking(id).map(marking_outline),
+        Element::Decal(id) => model.decal(id).map(|d| decal_outline(model, d)),
         Element::Pool(id) => model.pool(id).map(|p| p.coping_outline()),
         Element::Elevator(id) => model.elevator(id).map(|e| e.outside()),
         Element::Planting(id) => model.planting(id).map(|p| {
@@ -467,6 +469,7 @@ pub fn elements_on_level(model: &Model, level: LevelId) -> Vec<Element> {
             .markings_on_level(level)
             .map(|m| Element::Marking(m.id)),
     );
+    v.extend(model.decals_on_level(level).map(|d| Element::Decal(d.id)));
     v.extend(
         model
             .plantings_on_level(level)
@@ -525,6 +528,7 @@ pub fn type_of(model: &Model, e: Element) -> Option<TypeOf> {
         | Element::Road(_)
         | Element::Roundabout(_)
         | Element::Marking(_)
+        | Element::Decal(_)
         | Element::Pool(_)
         | Element::Elevator(_)
         | Element::Planting(_)
@@ -596,6 +600,8 @@ pub fn pick_all<G: Geo + ?Sized>(
         Element::Road(_) => 5,
         Element::Roundabout(_) => 4,
         Element::Marking(_) => 3,
+        // Small, on what it is stuck to.
+        Element::Decal(_) => 1,
         // In the ground, as a slab.
         Element::Pool(_) => 4,
         // Over the slabs it goes through.
@@ -710,6 +716,7 @@ pub fn of_solid(owner: archisim_geom::solid::SolidOwner) -> Element {
         SolidOwner::Mass(id) => Element::Mass(id),
         SolidOwner::Road(id) => Element::Road(id),
         SolidOwner::Marking(id) => Element::Marking(id),
+        SolidOwner::Decal(id) => Element::Decal(id),
         SolidOwner::Pool(id) => Element::Pool(id),
         SolidOwner::Elevator(id) => Element::Elevator(id),
         SolidOwner::Run(id) => Element::Run(id),
@@ -738,6 +745,7 @@ pub fn solid_of(e: Element) -> Option<archisim_geom::solid::SolidOwner> {
         Element::Mass(id) => SolidOwner::Mass(id),
         Element::Road(id) => SolidOwner::Road(id),
         Element::Marking(id) => SolidOwner::Marking(id),
+        Element::Decal(id) => SolidOwner::Decal(id),
         Element::Pool(id) => SolidOwner::Pool(id),
         Element::Elevator(id) => SolidOwner::Elevator(id),
         Element::Run(id) => SolidOwner::Run(id),
@@ -843,6 +851,23 @@ fn polygon_touches(poly: &[Point2], lo: Point2, hi: Point2) -> bool {
 
 /// What a road marking is picked by: the box round its paint (a line,
 /// a strip half a metre wide along its path).
+/// A decal in plan: on a floor, its rectangle; on a wall, a thin strip
+/// along its trace.
+fn decal_outline(model: &Model, d: &archisim_core::Decal) -> Vec<Point2> {
+    let base = model.level(d.level).map_or(0.0, |l| l.elevation);
+    let c = d.corners(base);
+    let p = |q: [f64; 3]| Point2::new(q[0], q[1]);
+    if d.lying() {
+        return c.iter().map(|q| p(*q)).collect();
+    }
+    let (a, b) = (p(c[0]), p(c[1]));
+    let n = archisim_core::Vec2::new(d.normal[0], d.normal[1])
+        .normalized()
+        .unwrap_or(archisim_core::Vec2::new(0.0, 1.0))
+        * 0.08;
+    vec![a - n, b - n, b + n, a + n]
+}
+
 fn marking_outline(m: &archisim_core::Marking) -> Vec<Point2> {
     match m.kind.place() {
         archisim_core::MarkingPlace::Area => m.path.clone(),

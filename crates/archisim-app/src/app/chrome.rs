@@ -780,6 +780,7 @@ impl ArchiSimApp {
             Tool::Plot | Tool::Road => self.urban_hint(),
             Tool::Roundabout => "Clic: centro de la glorieta (en un cruce, se centra en él) · Esc: flecha",
             Tool::Marking => self.marking_hint(),
+            Tool::Decal => self.decal_hint(),
             Tool::Pool => self.pool_hint(),
             Tool::Planting => self.planting_hint(),
             Tool::Brush => self.brush_hint(),
