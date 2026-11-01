@@ -1171,6 +1171,33 @@ impl ArchiSimApp {
                     strips: r.strips_at(at),
                 });
             }
+            let mut to_plots = false;
+            if ui
+                .button("Aceras hasta las parcelas")
+                .on_hover_text(
+                    "Lleva las aceras de los dos lados hasta la línea de fachada de las parcelas: un cambio de sección donde la línea se mueve más de 25 cm. La calzada no se mueve. Sustituye los cambios que haya.",
+                )
+                .clicked()
+            {
+                to_plots = true;
+            }
+            if to_plots {
+                match self.ed.model().sidewalks_to_plots(id) {
+                    Some(changes) => {
+                        let n = changes.len();
+                        let res = self.ed.transact("Aceras hasta las parcelas", |m| {
+                            m.edit_road(id, |x| x.changes = changes)
+                        });
+                        self.report(
+                            res,
+                            &format!("Aceras hasta las parcelas: {n} cambios de sección."),
+                        );
+                    }
+                    None => self
+                        .complain("No hay parcelas junto a la calle, o no tiene acera por fuera."),
+                }
+                return;
+            }
             if out != before {
                 let res = self.ed.transact("Cambios de sección", |m| {
                     m.edit_road(id, |x| x.changes = out)

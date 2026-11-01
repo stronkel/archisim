@@ -656,8 +656,7 @@ impl Road {
             // The strips at each end of the stretch (they change along a
             // transition, U2) and at each point of its path.
             let tiny = ((s1 - s0) * 1e-6).min(1e-6);
-            let (at0, at1) = (self.section_at(s0 + tiny), self.section_at(s1 - tiny));
-            let (o0, o1) = (at0.band_offsets(), at1.band_offsets());
+            let (o0, o1) = (self.offsets_at(s0 + tiny), self.offsets_at(s1 - tiny));
             let o1 = if o1.len() == o0.len() { o1 } else { o0.clone() };
             let fracs: Vec<f64> = {
                 let total: f64 = path.windows(2).map(|w| w[0].distance(w[1])).sum();
@@ -743,7 +742,7 @@ impl Road {
         // U2).
         let mut t = 1.0;
         while t + 3.0 <= len - 1.0 {
-            let here = self.section_at(t + 1.5).band_offsets();
+            let here = self.offsets_at(t + 1.5);
             for w in here.windows(2) {
                 if w[0].0 == RoadBand::Carriageway && w[1].0 == RoadBand::Carriageway {
                     let d = w[0].1;
@@ -766,7 +765,7 @@ impl Road {
         let bay = s.parking.bay();
         let mut t = bay;
         while t < len - 0.5 {
-            for (band, a, b) in self.section_at(t).band_offsets() {
+            for (band, a, b) in self.offsets_at(t) {
                 if band != RoadBand::Parking || b - a < 0.8 {
                     continue;
                 }
@@ -794,7 +793,7 @@ impl Road {
             if s0 < 0.0 || s1 > len {
                 continue;
             }
-            for (band, a, b) in self.section_at(c.at).band_offsets() {
+            for (band, a, b) in self.offsets_at(c.at) {
                 if !band.traffic() || band == RoadBand::Parking {
                     continue;
                 }
@@ -828,17 +827,15 @@ impl Road {
         at.sort_by(f64::total_cmp);
         at.dedup_by(|a, b| (*a - *b).abs() < 1e-6);
         let path: Vec<Point2> = at.iter().map(|x| along(&self.axis, *x).0).collect();
-        let half: Vec<f64> = at
-            .iter()
-            .map(|x| {
-                let tiny = 1e-6;
-                let l = self.section_at((x - tiny).max(0.0)).width();
-                let r = self.section_at((x + tiny).min(len)).width();
-                l.max(r) / 2.0
-            })
-            .collect();
-        let neg: Vec<f64> = half.iter().map(|h| -h).collect();
-        super::road_changes::strip_by(&path, &neg, &half)
+        let (mut left, mut right) = (Vec::new(), Vec::new());
+        for x in &at {
+            let tiny = 1e-6;
+            let (l0, r0) = self.extent_at((x - tiny).max(0.0));
+            let (l1, r1) = self.extent_at((x + tiny).min(len));
+            left.push(l0.max(l1));
+            right.push(-r0.max(r1));
+        }
+        super::road_changes::strip_by(&path, &right, &left)
     }
 
     pub fn length(&self) -> f64 {

@@ -6,6 +6,28 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-01 (68) · U2, segunda parte: aceras hasta la línea de fachada
+
+En la misma rama `bloque/u2-secciones` (pull request de U2). Sin cambios de formato.
+
+**Hecho**
+- **La calzada se queda en su sitio** cuando cambia la sección: ensanchar una sola acera ya no desplaza los carriles; la mitad de la calzada sigue donde la pone la sección propia del vial. Los cruces miden cada lado por separado.
+- **Aceras hasta las parcelas**: botón en «Cambios de sección». Mide cada metro, a escuadra con el eje, dónde está la línea de fachada de las parcelas a cada lado y lleva la acera de fuera hasta ella:
+  - empieza un tramo nuevo donde la línea se mueve más de 25 cm; cada tramo llega al punto más cercano de la línea, así que la acera nunca entra en la parcela;
+  - pasada la última parcela (en los cruces, por lo general) la acera sigue con el ancho que tenía junto a ella;
+  - los lados sin parcelas o sin acera por fuera se quedan como estaban; aceras de menos de 90 cm no se hacen;
+  - sustituye los cambios de sección que hubiera (se deshace en un paso).
+- `archisim calles out/`: tres parcelas a los lados de la Calle Nueva, con la fachada retranqueada 1,5 m en la segunda, y sus aceras llevadas hasta ellas.
+
+**Pendiente (resto de U2)**
+- Editar a mano el contorno del bordillo y de la acera en modo boceto, como el forjado.
+
+**Qué debe probar Antonio**
+- `archisim calles out/` y abrir `out/calles.archisim`: en la Calle Nueva, la acera norte da un salto de 1,5 m donde cambia la parcela y la calzada sigue recta.
+- Dibujar dos parcelas con distinta línea de fachada junto a un vial, seleccionarlo y pulsar «Aceras hasta las parcelas».
+
+---
+
 ## 2026-11-01 (67) · U2, primera parte: cambios de sección a lo largo de la calle
 
 Rama `bloque/u2-secciones` (encima de U1), con pull request. Formato `.archisim` versión 62.

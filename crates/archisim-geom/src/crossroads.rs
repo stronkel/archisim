@@ -179,7 +179,8 @@ fn meeting_points(roads: &[&Road]) -> Vec<(Point2, Vec<(usize, f64)>)> {
                 let lx = length(&x.axis);
                 for (end, sx) in [(x.axis[0], 0.0), (x.axis[x.axis.len() - 1], lx)] {
                     let (sy, d) = nearest_on(y, end);
-                    if d <= y.section_at(sy).width() / 2.0 + 0.5 && d > 1e-6 {
+                    let (yl, yr) = y.extent_at(sy);
+                    if d <= yl.max(yr) + 0.5 && d > 1e-6 {
                         // Its distance as if its axis went on to the
                         // other's axis.
                         let (p, _) = along(&y.axis, sy);
@@ -196,14 +197,13 @@ fn meeting_points(roads: &[&Road]) -> Vec<(Point2, Vec<(usize, f64)>)> {
 
 /// How far a road's carriageway (lanes, parking, bike lanes) reaches to
 /// each side of its axis (left, right), the kerbs beside it and its whole
-/// half-widths.
-fn reach(r: &Road, at: f64) -> (f64, f64, f64, f64, f64) {
-    let sec = r.section_at(at);
-    let offs = sec.band_offsets();
+/// half-widths (left, right).
+fn reach(r: &Road, at: f64) -> (f64, f64, f64, f64, f64, f64) {
+    let offs = r.offsets_at(at);
     let traffic: Vec<&(RoadBand, f64, f64)> = offs.iter().filter(|o| o.0.traffic()).collect();
-    let half = sec.width() / 2.0;
+    let (el, er) = r.extent_at(at);
     let (left, right) = if traffic.is_empty() {
-        (half, half)
+        (el, er)
     } else {
         (
             traffic
@@ -221,9 +221,9 @@ fn reach(r: &Road, at: f64) -> (f64, f64, f64, f64, f64) {
             })
             .map_or(0.0, |o| o.2 - o.1)
     };
-    let kl = kerb_beside(left).max(if left < half { 0.12 } else { 0.0 });
-    let kr = kerb_beside(-right).max(if right < half { 0.12 } else { 0.0 });
-    (left, right, kl.min(half - left), kr.min(half - right), half)
+    let kl = kerb_beside(left).max(if left < el { 0.12 } else { 0.0 });
+    let kr = kerb_beside(-right).max(if right < er { 0.12 } else { 0.0 });
+    (left, right, kl.min(el - left), kr.min(er - right), el, er)
 }
 
 /// A corner between two arms next to each other: the kerb line from the
@@ -315,17 +315,17 @@ pub fn junctions(model: &Model, level: LevelId) -> Vec<Junction> {
             let r = roads[i];
             let len = length(&r.axis);
             let (_, u) = along(&r.axis, s.clamp(0.0, len));
-            let (kl, kr, wl, wr, half) = reach(r, s.clamp(0.0, len));
+            let (kl, kr, wl, wr, hl, hr) = reach(r, s.clamp(0.0, len));
             for forward in [true, false] {
                 let room = if forward { len - s } else { s };
                 if room <= SAME {
                     continue;
                 }
                 // Looking back along the road, its left is its right.
-                let (dir, kerb_left, kerb_right, kw_l, kw_r) = if forward {
-                    (u, kl, kr, wl, wr)
+                let (dir, kerb_left, kerb_right, kw_l, kw_r, e_l, e_r) = if forward {
+                    (u, kl, kr, wl, wr, hl, hr)
                 } else {
-                    (u * -1.0, kr, kl, wr, wl)
+                    (u * -1.0, kr, kl, wr, wl, hr, hl)
                 };
                 arms.push(Arm {
                     road: r.id,
@@ -336,8 +336,8 @@ pub fn junctions(model: &Model, level: LevelId) -> Vec<Junction> {
                     kerb_right,
                     kerb_width_left: kw_l,
                     kerb_width_right: kw_r,
-                    edge_left: half,
-                    edge_right: half,
+                    edge_left: e_l,
+                    edge_right: e_r,
                     cut: 0.5,
                 });
             }
