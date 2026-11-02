@@ -232,6 +232,12 @@ pub fn build() -> Res<Model> {
             },
         })?;
     }
+    // The life of the streets: trees, lights, cars, people.
+    archisim_library::street_life::add_street_life(
+        &mut m,
+        pb,
+        &archisim_library::street_life::LifeOptions::default(),
+    )?;
     Ok(m)
 }
 

@@ -33,7 +33,7 @@ impl Quality {
     pub fn hint(self) -> &'static str {
         match self {
             Quality::Light => "Sin sombras y sin suavizado: para ordenadores antiguos",
-            Quality::Normal => "Con las sombras del sol",
+            Quality::Normal => "Con las sombras del sol y la penumbra de los rincones",
             Quality::Pretty => {
                 "Sombras más finas y suaves y la penumbra de los rincones: para capturas"
             }
@@ -73,7 +73,7 @@ impl Quality {
 
     /// The shade of inner corners.
     pub fn occlusion(self) -> bool {
-        self == Quality::Pretty
+        self != Quality::Light
     }
 
     /// The picture may be drawn larger than the screen and scaled down.
@@ -129,13 +129,15 @@ impl Light {
     /// ground far away. Linear RGB.
     pub fn colours(self) -> LightColours {
         match self {
+            // An illustration's day: a warm, strong sun, a sky light a
+            // little blue in the shade, a blue sky.
             Light::Day => LightColours {
-                sun: [1.0, 0.94, 0.84, 0.58],
-                sky_hi: [0.84, 0.89, 1.0, 1.0],
-                sky_lo: [0.60, 0.60, 0.64, 1.0],
-                zenith: [0.42, 0.62, 0.88, 1.0],
-                haze: [0.80, 0.86, 0.92, 1.0],
-                ground: [0.72, 0.73, 0.70, 1.0],
+                sun: [1.0, 0.86, 0.66, 0.82],
+                sky_hi: [0.70, 0.80, 1.0, 0.92],
+                sky_lo: [0.56, 0.56, 0.62, 0.92],
+                zenith: [0.16, 0.38, 0.82, 1.0],
+                haze: [0.62, 0.76, 0.92, 1.0],
+                ground: [0.70, 0.69, 0.60, 1.0],
                 night: 0.0,
             },
             Light::Evening => LightColours {

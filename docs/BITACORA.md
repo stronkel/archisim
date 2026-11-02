@@ -6,6 +6,45 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-02 (84) · Vida en la calle, oficio en las casas y luz de ilustración
+
+Rama `bloque/vida-calle`, con pull request. Sin cambios de formato.
+
+Antonio vio el entorno «sin vida» al lado de CityRT. Se hizo lo propuesto, en su orden.
+
+**Hecho**
+- **Vestir la calle** (`archisim_library::street_life`, al traer el entorno; interruptor «Vida en la calle» en Traer y en Descargar el entorno):
+  - árboles de alineación (plátano, naranjo, jacaranda; jóvenes, 8 m) cada 9 m en las aceras de 2 m o más, o uno por alcorque si la calle los tiene;
+  - farolas cada 24 m, bancos cada 42 m, papeleras cada 33 m, alguna persona paseando;
+  - coches aparcados en las bandas de aparcamiento, uno cada 5,6 m con huecos, de seis colores y tres modelos, en el sentido de la marcha;
+  - nada a menos de 9 m de un cruce ni encima de lo que ya hay (los árboles de OpenStreetMap, lo colocado a mano);
+  - jardín delantero en adosadas, pareadas, chalets y casas andaluzas con frente a la calle: césped en la parcela, seto de 0,9 m por el borde con un hueco de cancela, cubo de basura junto a ella y un arbusto;
+  - todo son objetos normales de la biblioteca (se mueven, se cambian y se borran) y siempre sale lo mismo para las mismas calles;
+  - `archisim vida-calle <proyecto> [salida]` lo hace en un proyecto ya traído; la muestra `archisim entorno` también lo lleva.
+- **Oficio en las casas** (edificios del entorno con cubierta de teja, en su versión completa):
+  - tejas por hiladas cada 34 cm, cada una con su pico;
+  - ventanas de cubierta en las adosadas, pareadas y chalets (y alguna en el casco);
+  - en las casas entre medianeras, las chimeneas van en la medianera junto a la cumbrera: dos vecinas hacen una pareja;
+  - canalón bajo el alero y bajante por la esquina hasta el suelo;
+  - tejadillo de teja sobre la puerta, con dos ménsulas;
+  - carpintería blanca más frecuente y vidrio más claro («Vidrio claro del entorno»).
+- **Luz de ilustración:**
+  - vista 3D: sol más cálido y fuerte, sombra algo azulada, cielo azul, colores un 20 % más vivos y la penumbra de los rincones también en calidad Normal;
+  - imagen realista: sol cálido, cielo azul también por debajo del horizonte (el modelo flota en el cielo, no sobre gris) y colores más vivos.
+- Prueba nueva para ver cualquier proyecto como en la Maqueta: `ARCHISIM_VISTAS_OUT=carpeta ARCHISIM_VISTAS_PROYECTO=fichero ARCHISIM_VISTAS="nombre:x,y,z,inclinación,giro,distancia;…" cargo test --release -p archisim-app project_pictures`.
+
+**Pendiente**
+- Los árboles cercanos se ven como bolas lisas cuando hay muchos (el detalle de las plantas por cantidad); mejorar su versión media.
+- Las hiladas de teja se ven por la luz, sin línea: de lejos se pierden (la versión ligera no las lleva).
+- Los jardines solo salen donde hay parcela del Catastro delante de la casa.
+
+**Qué debe probar Antonio**
+1. Abrir un proyecto con el entorno ya traído y ejecutar `archisim vida-calle proyecto.archisim con-vida.archisim`; abrir `con-vida.archisim` y pasear en la Maqueta por una calle: árboles, farolas, coches aparcados, gente y jardines. Borrar unos cuantos coches y árboles: deben irse como cualquier objeto.
+2. Archivo → Descargar el entorno de nuevo (con «Vida en la calle» encendido) en Poetas Andaluces y mirar las adosadas de cerca: tejas por hiladas, ventanas en el faldón, chimeneas pareadas en las medianeras, canalón y bajante, tejadillo sobre la puerta.
+3. Mirar el color de la Maqueta (calidad Normal): sol cálido, sombras, rincones en penumbra y cielo azul al levantar la vista. Hacer una imagen realista (Archivo → Imagen realista) y comprobar que el fondo es azul y no gris.
+
+---
+
 ## 2026-11-02 (83) · Edificios del entorno con detalle (al estilo de CityRT y Paralives)
 
 Rama `bloque/entorno-detalle`, con pull request. Sin cambios de formato.

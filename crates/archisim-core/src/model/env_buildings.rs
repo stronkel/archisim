@@ -124,7 +124,7 @@ impl BuildingStyle {
 
     /// What it is drawn with: name, category and colour of each finish.
     pub fn finishes(self) -> [(&'static str, &'static str, [u8; 3]); 6] {
-        let glass = ("Vidrio del entorno", "glass", [120, 150, 165]);
+        let glass = ("Vidrio claro del entorno", "glass", [168, 198, 212]);
         let iron = ("Hierro forjado negro", "metal", [40, 40, 42]);
         let tile = ("Teja cerámica curva", "roof", [172, 88, 58]);
         let white = ("Cal blanca", "render", [246, 244, 236]);
@@ -279,7 +279,7 @@ impl BuildingStyle {
             BuildingStyle::Terraced | BuildingStyle::SemiDetached => (
                 &[OCHRE, CREAM, PINK, BLUE, WHITE, GREEN],
                 &[TILE, TILE_RED, SLATE, TILE_DARK],
-                &[WHITE_J, DARK_J, WOOD_J, GREEN_J],
+                &[WHITE_J, WHITE_J, WOOD_J, WHITE_J, DARK_J, GREEN_J],
             ),
             BuildingStyle::Ensanche => (
                 &[CREAM, YELLOW, PINK, BLUE, GREEN, ALMAGRA, GREY],
@@ -294,7 +294,7 @@ impl BuildingStyle {
             BuildingStyle::Detached => (
                 &[WHITE, CREAM, BLUE, ALBERO, PINK, GREEN],
                 &[TILE_RED, SLATE, TILE, GLAZED, TILE_DARK],
-                &[WHITE_J, WOOD_J, GREEN_J, BLUE_J, DARK_J],
+                &[WHITE_J, WOOD_J, WHITE_J, GREEN_J, WHITE_J, BLUE_J],
             ),
             BuildingStyle::HistoricCentre => (
                 &[ALMAGRA, YELLOW, CREAM, PINK, BLUE, GREEN, ALBERO],
@@ -773,7 +773,6 @@ impl Model {
             "stone" => Some(TextureKind::Stone),
             "concrete" => Some(TextureKind::Concrete),
             "render" => Some(TextureKind::Plaster),
-            "roof" if name.starts_with("Teja") => Some(TextureKind::Tile),
             "metal" if name.starts_with("Chapa") => Some(TextureKind::Metal),
             _ => None,
         };

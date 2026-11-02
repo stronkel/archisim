@@ -1526,6 +1526,13 @@ fn add_solids(
                 .contains(&solid.material),
             // The leaves of a green wall (H5).
             SolidOwner::Facade(_) => model.appearance(solid.material).growth.is_some(),
+            // The courses of tiles of the buildings of the surroundings:
+            // shaded by the light, not outlined.
+            SolidOwner::Mass(m) => model.mass(m).is_some_and(|m| {
+                m.dress.is_some_and(|d| {
+                    d.materials.roof == solid.material && d.roof != archisim_core::EnvRoof::Flat
+                })
+            }),
             _ => false,
         };
         let smooth: Option<HashMap<[i64; 3], Vec3>> = (soft || fabric).then(|| {

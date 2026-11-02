@@ -297,6 +297,12 @@ fn shade(n_in: vec3<f32>, color: vec3<f32>, lit: f32) -> vec3<f32> {
     return color * (sky + sun);
 }
 
+// An illustration's colours: a little livelier than the materials'.
+fn vivid(c: vec3<f32>) -> vec3<f32> {
+    let l = dot(c, vec3<f32>(0.2126, 0.7152, 0.0722));
+    return max(mix(vec3<f32>(l), c, 1.22), vec3<f32>(0.0));
+}
+
 // The warm light of the lamps lit at night on a point of a face (no
 // shadows). A fixed number of turns, only sums: Windows' compiler unrolls
 // it.
@@ -657,7 +663,7 @@ fn fs_model(i: VertexOut, @builtin(front_facing) front: bool) -> ModelOut {
     }
     let lit = sunlit(i.world, i.normal);
     let base = textured(i.color.rgb, i.world, i.normal, i.tex);
-    var color = shade(i.normal, base, lit) + base * lamplight(i.world, i.normal);
+    var color = vivid(shade(i.normal, base, lit) + base * lamplight(i.world, i.normal));
     if (i.soft > 1.5 && i.soft < 2.5) {
         // A lampshade or a bulb at night: it glows.
         let glow = (base * 0.6 + vec3<f32>(0.55, 0.42, 0.25)) * 1.6;

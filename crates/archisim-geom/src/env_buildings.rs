@@ -95,6 +95,10 @@ struct Touches {
     awnings: bool,
     /// Stair housing, machines, tanks and an aerial on a flat roof.
     roof_gear: bool,
+    /// Windows in the slope of a tiled roof.
+    roof_windows: usize,
+    /// A little tiled canopy over the front door.
+    canopy: bool,
 }
 
 impl Touches {
@@ -145,6 +149,14 @@ impl Touches {
             door: !matches!(d.style, S::Warehouse | S::Offices),
             awnings: roll(6, 0.7),
             roof_gear: !matches!(d.style, S::Warehouse),
+            roof_windows: if matches!(d.style, S::Terraced | S::SemiDetached | S::Detached) {
+                roll(7, 0.6) as usize + roll(8, 0.3) as usize
+            } else if d.style == S::HistoricCentre {
+                roll(7, 0.3) as usize
+            } else {
+                0
+            },
+            canopy: matches!(d.style, S::Terraced | S::SemiDetached | S::Detached) && roll(9, 0.7),
         }
     }
 }
@@ -310,7 +322,16 @@ pub fn dressed_solids_detail(model: &Model, m: &Mass, light: bool) -> Vec<Solid>
             } else {
                 along
             };
-            pitched_roof(&mut out, d, &poly, &sides, &|i| party(i), top, axis, m.id.0)
+            pitched_roof(
+                &mut out,
+                d,
+                &poly,
+                &sides,
+                &|i| party(i),
+                (z0, top),
+                axis,
+                m.id.0,
+            )
         }
     };
     if !tiled {
@@ -554,14 +575,42 @@ fn front_door(out: &mut Out, d: &Dress, side: &Side, c: f64, floor: f64, fh: f64
         side.block((s.0 - 0.25, s.1 + 0.25), (0.0, 0.4), (floor, floor + 0.14)),
     );
     let top = floor + h + if fh - h > 0.9 { 0.55 } else { FRAME };
-    out.add(
-        mat.trim,
-        side.block(
-            (s.0 - 0.3, s.1 + 0.3),
-            (0.0, 0.28),
-            (top + 0.04, top + 0.16),
-        ),
-    );
+    if out.touches.canopy && !out.light {
+        // A tiled canopy on two brackets.
+        let (a, b) = (s.0 - 0.45, s.1 + 0.45);
+        let (z, deep) = (top + 0.12, 0.8);
+        let tris = side.block((a, b), (0.0, deep), (z, z + 0.08));
+        out.add(mat.trim, tris);
+        // Its tiles, falling from the wall.
+        let quad = [
+            side.at(a - 0.03, 0.0),
+            side.at(b + 0.03, 0.0),
+            side.at(b + 0.03, deep + 0.05),
+            side.at(a - 0.03, deep + 0.05),
+        ];
+        out.add(
+            mat.roof,
+            draped_prism(&quad, |p| {
+                let t = (p - side.a).dot(side.out);
+                (z + 0.06, z + 0.11 + 0.25 * (1.0 - t / deep).max(0.0))
+            }),
+        );
+        for x in [a + 0.08, b - 0.12] {
+            out.add(
+                mat.joinery,
+                side.block((x, x + 0.04), (0.0, deep * 0.6), (z - 0.3, z)),
+            );
+        }
+    } else {
+        out.add(
+            mat.trim,
+            side.block(
+                (s.0 - 0.3, s.1 + 0.3),
+                (0.0, 0.28),
+                (top + 0.04, top + 0.16),
+            ),
+        );
+    }
 }
 
 /// Two shutters folded back against the wall either side of a window.
@@ -1092,7 +1141,7 @@ fn pitched_roof(
     poly: &[Point2],
     sides: &[Side],
     party: &dyn Fn(usize) -> bool,
-    top: f64,
+    (z0, top): (f64, f64),
     axis: Vec2,
     seed: u64,
 ) -> bool {
@@ -1149,6 +1198,8 @@ fn pitched_roof(
     ];
     let footprint = vec![(crate::ensure_ccw(roof_outline.clone()), Vec::new())];
     let mut any = false;
+    // The tiled faces, for the roof windows.
+    let mut faces: Vec<(Vec2, Vec<Point2>)> = Vec::new();
     for (k, (gk, kk)) in planes.iter().enumerate() {
         let mut region = boxed.clone();
         for (j, (gj, kj)) in planes.iter().enumerate() {
@@ -1172,6 +1223,10 @@ fn pitched_roof(
                     (z, z + slab)
                 }),
             );
+            if !out.light && gk.length() > 1e-9 {
+                tile_courses(out, mat.roof, &outer, *gk, &|q| top + lowest(q) + slab);
+                faces.push((*gk, outer));
+            }
         }
     }
     if !any {
@@ -1237,6 +1292,9 @@ fn pitched_roof(
                 (top + za - 0.16, top + za + slab),
             ),
         );
+        if !out.light && !party(i) {
+            gutter(out, mat.metal, &edge, &sides[i], (z0, top + za - 0.16));
+        }
     }
     // The ridge cap, where the two falls meet below the level top.
     if pitch * hw < MAX_RIDGE {
@@ -1266,19 +1324,185 @@ fn pitched_roof(
             }
         }
     }
-    // Chimneys through the roof, near the ridge.
-    for k in 0..out.touches.chimneys {
-        let along = 0.2 + 0.6 * unit(seed, 50 + k as u64);
-        let p = c0
-            + axis * (u0 + (u1 - u0) * along)
-            + across * (cn + 0.7 * if k % 2 == 0 { 1.0 } else { -1.0 });
-        if !inside(p, poly) {
-            continue;
-        }
+    // On a house between party walls, the chimneys go on them, by the
+    // ridge: each house its own, so that the two neighbours' stand in a
+    // pair.
+    let party_sides: Vec<usize> = (0..sides.len()).filter(|i| party(*i)).collect();
+    if !party_sides.is_empty() && out.touches.chimneys > 0 {
         let ridge = top + pitch * hw.min(MAX_RIDGE / pitch);
-        chimney(out, d, p, top + rise(p) - 0.1, ridge + 0.8);
+        for &i in party_sides.iter().take(2) {
+            let side = &sides[i];
+            // Where the roof is highest along the wall.
+            let best = (1..20)
+                .map(|k| side.len * k as f64 / 20.0)
+                .max_by(|a, b| rise(side.at(*a, 0.0)).total_cmp(&rise(side.at(*b, 0.0))));
+            let Some(t) = best else { continue };
+            let t = t.clamp(0.5, (side.len - 0.5).max(0.5));
+            let p = side.at(t, -0.32);
+            if rise(p) < 0.5 {
+                continue;
+            }
+            chimney(out, d, p, top + rise(p) - 0.1, ridge + 0.7);
+        }
+    } else {
+        // Chimneys through the roof, near the ridge.
+        for k in 0..out.touches.chimneys {
+            let along = 0.2 + 0.6 * unit(seed, 50 + k as u64);
+            let p = c0
+                + axis * (u0 + (u1 - u0) * along)
+                + across * (cn + 0.7 * if k % 2 == 0 { 1.0 } else { -1.0 });
+            if !inside(p, poly) {
+                continue;
+            }
+            let ridge = top + pitch * hw.min(MAX_RIDGE / pitch);
+            chimney(out, d, p, top + rise(p) - 0.1, ridge + 0.8);
+        }
+    }
+    // Windows in the slope, on the biggest faces.
+    if !out.light && out.touches.roof_windows > 0 {
+        faces.sort_by(|a, b| signed_area(&b.1).abs().total_cmp(&signed_area(&a.1).abs()));
+        for (k, (g, face)) in faces.iter().take(out.touches.roof_windows).enumerate() {
+            roof_window(
+                out,
+                d,
+                face,
+                *g,
+                &|q| top + lowest(q) + slab,
+                unit(seed, 60 + k as u64),
+            );
+        }
     }
     true
+}
+
+/// Courses of tiles over a tiled face that rises along `g`: plates
+/// thicker at their lower edge, so each course steps down over the next.
+fn tile_courses(out: &mut Out, m: MaterialId, face: &[Point2], g: Vec2, z: &dyn Fn(Point2) -> f64) {
+    let Some(up) = g.normalized() else { return };
+    let k = (1.0 + g.dot(g)).sqrt();
+    let course = 0.34 / k;
+    let ds: Vec<f64> = face
+        .iter()
+        .map(|p| (*p - Point2::new(0.0, 0.0)).dot(up))
+        .collect();
+    let (d0, d1) = ds
+        .iter()
+        .fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), &x| {
+            (a.min(x), b.max(x))
+        });
+    let across = up.perp_left();
+    let cs: Vec<f64> = face
+        .iter()
+        .map(|p| (*p - Point2::new(0.0, 0.0)).dot(across))
+        .collect();
+    let (c0, c1) = cs
+        .iter()
+        .fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), &x| {
+            (a.min(x), b.max(x))
+        });
+    let shape = vec![(crate::ensure_ccw(face.to_vec()), Vec::new())];
+    let at = |c: f64, d: f64| Point2::new(0.0, 0.0) + across * c + up * d;
+    let n = ((d1 - d0) / course).ceil().clamp(1.0, 200.0) as usize;
+    // Each course: its nose at the lower edge, rising steeply, and the
+    // tile falling gently back to the roof up to the next course, so that
+    // a line shows at every course from any side.
+    let nose = (0.025 / k).min(course / 3.0);
+    let (low, high) = (0.008, 0.04);
+    for i in 0..n {
+        let lo = d0 + course * i as f64;
+        let hi = (lo + course).min(d1);
+        for (a, b, za, zb) in [(lo, lo + nose, low, high), (lo + nose, hi, high, low)] {
+            if b - a < 1e-6 {
+                continue;
+            }
+            let strip = crate::ensure_ccw(vec![
+                at(c0 - 1.0, a),
+                at(c1 + 1.0, a),
+                at(c1 + 1.0, b),
+                at(c0 - 1.0, b),
+            ]);
+            let span = b - a;
+            for (piece, _) in crate::junctions::intersection(&shape, &[(strip, Vec::new())]) {
+                out.add(
+                    m,
+                    draped_prism(&piece, |q| {
+                        let f = (((q - Point2::new(0.0, 0.0)).dot(up) - a) / span).clamp(0.0, 1.0);
+                        let base = z(q);
+                        (base - 0.01, base + za + (zb - za) * f)
+                    }),
+                );
+            }
+        }
+    }
+}
+
+/// A window lying in a tiled face that rises along `g`: its frame and its
+/// glass, somewhere along the face (`at`, 0 to 1), if it fits.
+fn roof_window(
+    out: &mut Out,
+    d: &Dress,
+    face: &[Point2],
+    g: Vec2,
+    z: &dyn Fn(Point2) -> f64,
+    at: f64,
+) {
+    let Some(up) = g.normalized() else { return };
+    let k = (1.0 + g.dot(g)).sqrt();
+    let across = up.perp_left();
+    let (w, h) = (0.78, 1.18 / k);
+    let n = face.len() as f64;
+    let c = face.iter().fold(Point2::new(0.0, 0.0), |a, p| {
+        a + (*p - Point2::new(0.0, 0.0))
+    }) * (1.0 / n);
+    let ds: Vec<f64> = face.iter().map(|p| (*p - c).dot(across)).collect();
+    let (lo, hi) = ds
+        .iter()
+        .fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), &x| {
+            (a.min(x), b.max(x))
+        });
+    let mid = c + across * (lo + (hi - lo) * (0.25 + 0.5 * at));
+    let rect = |m: f64| {
+        let (a, b) = (w / 2.0 - m, h / 2.0 - m / k);
+        [
+            mid - across * a - up * b,
+            mid + across * a - up * b,
+            mid + across * a + up * b,
+            mid - across * a + up * b,
+        ]
+    };
+    let frame = rect(0.0);
+    if !frame.iter().all(|p| inside(*p, face)) || !frame.iter().all(|p| inside(*p + up * 0.3, face))
+    {
+        return;
+    }
+    let mat = d.materials;
+    out.add(
+        mat.joinery,
+        draped_prism(&frame, |q| (z(q) - 0.02, z(q) + 0.09)),
+    );
+    out.add(
+        mat.glass,
+        draped_prism(&rect(0.07), |q| (z(q) + 0.05, z(q) + 0.1)),
+    );
+}
+
+/// A gutter under the eaves along `edge` (its outer edge) and a downpipe
+/// down the wall at its start, to the ground at `z0`.
+fn gutter(out: &mut Out, m: MaterialId, edge: &Side, wall: &Side, (z0, z): (f64, f64)) {
+    out.add(m, edge.block((0.0, edge.len), (-0.02, 0.12), (z - 0.12, z)));
+    // The downpipe at the wall's corner, with its bend to the gutter.
+    let s = 0.2;
+    out.add(
+        m,
+        wall.block((s, s + 0.08), (0.02, 0.1), (z0 + 0.05, z - 0.25)),
+    );
+    let reach = (edge.at(s, 0.05) - wall.at(s, 0.0)).dot(wall.out);
+    if reach > 0.1 {
+        out.add(
+            m,
+            wall.block((s, s + 0.08), (0.02, reach + 0.06), (z - 0.3, z - 0.18)),
+        );
+    }
 }
 
 /// A contour with each side moved out by its `by` (the eaves standing out
@@ -1590,7 +1814,8 @@ mod tests {
                 let s = dressed_solids(&m, &mass);
                 let roof = mass.dress.unwrap().materials.roof;
                 let mut covered = 0.0;
-                for t in s
+                // The light version: the full one lays courses over it.
+                for t in dressed_solids_detail(&m, &mass, true)
                     .iter()
                     .filter(|s| s.material == roof)
                     .flat_map(|s| &s.triangles)
