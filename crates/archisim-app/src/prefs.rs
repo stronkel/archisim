@@ -74,6 +74,48 @@ pub struct Prefs {
     /// How the 3D view draws the materials' textures: `completas`,
     /// `ligeras` or `no` (none: as the computer goes).
     pub textures_3d: Option<String>,
+    /// How the 3D view moves (`docs/INTERFAZ.md` §12.5).
+    pub nav: Navigation,
+}
+
+/// How the 3D view moves: speeds from 1 to 10 (5 is as it always was) and
+/// the helps against getting lost.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Navigation {
+    /// Walking and flying with W A S D.
+    pub walk: u8,
+    /// Turning the view with the right button.
+    pub turn: u8,
+    /// Each step of the wheel.
+    pub wheel: u8,
+    /// Turn about what is under the cursor (none there: the selection, or
+    /// the middle of the view).
+    pub pivot_under_cursor: bool,
+    /// Do not go further than a few times the size of the model.
+    pub keep_near: bool,
+    /// Moving the mouse up looks down.
+    pub invert: bool,
+}
+
+impl Default for Navigation {
+    fn default() -> Self {
+        Navigation {
+            walk: 5,
+            turn: 5,
+            wheel: 5,
+            pivot_under_cursor: true,
+            keep_near: true,
+            invert: false,
+        }
+    }
+}
+
+impl Navigation {
+    /// The factor of a speed from 1 to 10: 5 is 1, each step about a third
+    /// more or less (1 is a quarter, 10 three times).
+    pub fn factor(speed: u8) -> f32 {
+        1.32_f32.powi(speed.clamp(1, 10) as i32 - 5)
+    }
 }
 
 impl Default for Prefs {
@@ -90,6 +132,7 @@ impl Default for Prefs {
             price_bank: None,
             textures_3d: None,
             quality_3d: None,
+            nav: Navigation::default(),
         }
     }
 }
@@ -128,6 +171,14 @@ impl Prefs {
             "banco_de_precios": self.price_bank,
             "texturas_3d": self.textures_3d,
             "calidad_3d": self.quality_3d.map(|q| q.key()),
+            "navegacion": {
+                "paseo": self.nav.walk,
+                "giro": self.nav.turn,
+                "rueda": self.nav.wheel,
+                "girar_bajo_el_cursor": self.nav.pivot_under_cursor,
+                "no_alejarse": self.nav.keep_near,
+                "invertir": self.nav.invert,
+            },
         });
         serde_json::to_string_pretty(&v).unwrap_or_default()
     }
@@ -186,6 +237,28 @@ impl Prefs {
                 .get("texturas_3d")
                 .and_then(|x| x.as_str())
                 .map(str::to_string),
+            nav: {
+                let n = v.get("navegacion");
+                let dn = Navigation::default();
+                let speed = |k: &str, def: u8| {
+                    n.and_then(|n| n.get(k))
+                        .and_then(|x| x.as_u64())
+                        .map_or(def, |x| x.clamp(1, 10) as u8)
+                };
+                let on = |k: &str, def: bool| {
+                    n.and_then(|n| n.get(k))
+                        .and_then(|x| x.as_bool())
+                        .unwrap_or(def)
+                };
+                Navigation {
+                    walk: speed("paseo", dn.walk),
+                    turn: speed("giro", dn.turn),
+                    wheel: speed("rueda", dn.wheel),
+                    pivot_under_cursor: on("girar_bajo_el_cursor", dn.pivot_under_cursor),
+                    keep_near: on("no_alejarse", dn.keep_near),
+                    invert: on("invertir", dn.invert),
+                }
+            },
         }
     }
 
@@ -239,8 +312,18 @@ mod tests {
             price_bank: Some("/bancos/bcca.bc3".into()),
             quality_3d: Some(crate::view3d::look::Quality::Pretty),
             textures_3d: Some("ligeras".into()),
+            nav: Navigation {
+                walk: 2,
+                turn: 9,
+                wheel: 3,
+                pivot_under_cursor: false,
+                keep_near: false,
+                invert: true,
+            },
         };
         assert_eq!(Prefs::from_json(&p.to_json()), p);
+        assert!((Navigation::factor(5) - 1.0).abs() < 1e-6);
+        assert!(Navigation::factor(1) < 0.4 && Navigation::factor(10) > 3.0);
         // Unknown or broken files give the defaults.
         assert_eq!(Prefs::from_json("no es json"), Prefs::default());
         let partial = Prefs::from_json(r#"{"tamaño_letra": "grande", "otra": 3}"#);

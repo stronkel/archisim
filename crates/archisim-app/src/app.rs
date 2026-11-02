@@ -1864,6 +1864,18 @@ impl ArchiSimApp {
         if self.maquette {
             // Before the shortcuts: W A S D Q E walk here.
             self.maquette_walk(&ctx);
+        } else if self.mode == ViewMode::ThreeD
+            && ctx.input(|i| {
+                i.pointer.secondary_down()
+                    && i.pointer
+                        .latest_pos()
+                        .is_some_and(|p| self.v3d.canvas.contains(p))
+            })
+        {
+            // Técnica: flying with the right button held.
+            self.maquette_walk(&ctx);
+        } else {
+            self.v3d.flying = false;
         }
         self.handle_shortcuts(&ctx);
         self.command_search_window(&ctx);
@@ -2715,6 +2727,7 @@ mod types_ui;
 mod urban_ui;
 mod vertex_ui;
 mod view3d_ui;
+mod view_cube;
 mod views_ui;
 mod vivero_ui;
 mod wall_profile_ui;

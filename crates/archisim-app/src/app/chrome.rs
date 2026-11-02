@@ -504,6 +504,7 @@ impl ArchiSimApp {
             }
             ui.switch(&mut self.show_underlay, "Calco de la planta inferior");
             ui.switch(&mut self.v3d.camera.perspective, "Perspectiva en 3D");
+            ui.menu_button("Navegación 3D", |ui| self.navigation_controls(ui));
             ui.separator();
             ui.switch(&mut self.show_properties, "Propiedades");
             ui.switch(&mut self.show_navigator, "Navegador");
@@ -672,7 +673,7 @@ impl ArchiSimApp {
                 ViewMode::ThreeD => {
                     let cam = &mut self.v3d.camera;
                     let mut persp = cam.perspective;
-                    ui.allocate_ui(Vec2::new(220.0, 26.0), |ui| {
+                    ui.allocate_ui(Vec2::new(190.0, 26.0), |ui| {
                         widgets::segmented(
                             ui,
                             "bar-projection",
@@ -698,7 +699,8 @@ impl ArchiSimApp {
                         self.v3d.toggle_section();
                     }
                     self.thin_lines_chip(ui);
-                    self.cutaway_buttons(ui);
+                    self.cutaway_combo(ui);
+                    self.navigation_button(ui);
                 }
             }
             let drawn = matches!(
@@ -707,7 +709,17 @@ impl ArchiSimApp {
             );
             ui.separator();
             caption(ui, "Anotar");
-            ui.add_enabled_ui(drawn, |ui| self.drawing_segments(ui));
+            if drawn {
+                self.drawing_segments(ui);
+            } else {
+                // Shown faint and short where nothing is drawn on the view.
+                ui.label(
+                    egui::RichText::new("Línea · Relleno · Texto · Cota")
+                        .small()
+                        .color(p.faint),
+                )
+                .on_hover_text("Se dibuja y se anota en las plantas, los planos y las vistas de dibujo");
+            }
             ui.separator();
             caption(ui, "Ayudas");
             ui.add_enabled_ui(drawn, |ui| {
@@ -756,7 +768,7 @@ impl ArchiSimApp {
                             ui.label(egui::RichText::new(kind).small().color(p.accent));
                         }
                     }
-                } else if self.mode != ViewMode::Schedule {
+                } else if !matches!(self.mode, ViewMode::Schedule | ViewMode::ThreeD) {
                     ui.label(
                         egui::RichText::new(format!(
                             "{} elementos seleccionados",

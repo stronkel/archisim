@@ -6620,6 +6620,75 @@ fn maquette_walks_with_wasd() {
     assert_eq!(h.app.tool, Tool::Arrow);
 }
 
+/// In Técnica, W A S D fly with the right button held over the 3D view
+/// (`docs/INTERFAZ.md` §12.5); let go, the letters are orders again. The
+/// right button turns about what is under the cursor, and the view keeps
+/// near the model.
+#[test]
+fn technical_3d_flies_with_the_right_button() {
+    let mut h = Harness::new(Editor::new_project());
+    draw_outline(&mut h);
+    h.key(Key::Escape);
+    h.key(Key::Escape);
+    h.key(Key::F3);
+    h.frame();
+    h.frame();
+    let canvas = h.app.v3d.canvas;
+    h.pos = canvas.center();
+    h.events.push(Event::PointerMoved(h.pos));
+    h.frame();
+    let hold = |h: &mut Harness, key: Key, frames: usize| {
+        h.events.push(Event::Key {
+            key,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: Default::default(),
+        });
+        h.events
+            .push(Event::Text(format!("{key:?}").to_lowercase()));
+        for _ in 0..frames {
+            h.frame();
+        }
+        h.events.push(Event::Key {
+            key,
+            physical_key: None,
+            pressed: false,
+            repeat: false,
+            modifiers: Default::default(),
+        });
+        h.frame();
+    };
+    let before = h.app.v3d.camera;
+    h.button(PointerButton::Secondary, true);
+    hold(&mut h, Key::W, 10);
+    h.button(PointerButton::Secondary, false);
+    let moved = h.app.v3d.camera.target - before.target;
+    assert!(moved.length() > 0.1, "{moved:?}");
+    assert!(moved.dot(before.forward()) > 0.0);
+    assert_eq!(h.app.tool, Tool::Arrow, "the letters flew, no tool");
+    // Without the button, M is the wall again.
+    h.type_text("m");
+    assert_eq!(h.app.tool, Tool::Wall);
+    // The wheel never takes the view far from the model.
+    h.key(Key::Escape);
+    for _ in 0..60 {
+        h.events.push(Event::MouseWheel {
+            unit: egui::MouseWheelUnit::Point,
+            delta: Vec2::new(0.0, -400.0),
+            phase: egui::TouchPhase::Move,
+            source: egui::MouseWheelSource::Wheel,
+            modifiers: Modifiers::NONE,
+        });
+        h.frame();
+    }
+    assert!(
+        h.app.v3d.camera.distance < 200.0,
+        "{}",
+        h.app.v3d.camera.distance
+    );
+}
+
 /// After choosing in the catalog (a card keeps the keyboard focus), Esc
 /// still leaves the tool in the Maqueta's 3D view.
 #[test]
