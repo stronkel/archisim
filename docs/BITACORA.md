@@ -6,6 +6,28 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-02 (79) · V3: altura de los edificios con el LiDAR
+
+Rama `bloque/lidar`, con pull request. Sin cambios de formato.
+
+**Hecho**
+- **Plantas de los edificios del entorno por el LiDAR del PNOA:** «Traer el entorno» reconoce el modelo digital de superficies (MDS05 del CNIG) por su nombre: «MDS…», «DSM…» o «superficie».
+  - En cada huella de edificio, el MDS menos el MDT da su altura. Se toma la mediana, que no se deja engañar por chimeneas ni patios.
+  - Las plantas salen de restar medio metro de cubierta y dividir por la altura de planta.
+  - Si no hay MDT, el suelo es el décimo más bajo del MDS alrededor del edificio (las calles y patios de al lado).
+- **Con el Catastro:** si llegan los dos, manda el LiDAR. El Catastro a veces no dice las plantas, o las dice mal; el LiDAR mide.
+- **Después, solo:** si se trae solo el MDS (y el MDT si se quiere) a un proyecto que ya tiene edificios del entorno, estos cambian de altura.
+- El informe dice cuántos edificios tomaron sus plantas del LiDAR. La ventana explica de dónde se descarga el MDS05.
+
+**Pendiente**
+- La descarga directa del MDS: el CNIG lo da por hojas en su Centro de Descargas, no he encontrado un servicio para pedirlo por recuadro.
+
+**Qué debe probar Antonio**
+- Del Centro de Descargas del CNIG, el MDT05 y el MDS05 de la hoja de un sitio que conozcas, y los ficheros del Catastro de esa zona. Soltarlos juntos en la ventana: las alturas tienen que parecerse a las reales. Mirar sobre todo las casas de 2 plantas junto a bloques de 6.
+- Después, en un proyecto con edificios ya traídos, soltar solo el MDS: los edificios cambian de altura en un paso de Deshacer.
+
+---
+
 ## 2026-11-02 (78) · V2: ortofoto sobre el terreno y las calles
 
 Rama `bloque/ortofoto`, con pull request. Formato `.archisim` versión 69: la ortofoto. Las versiones anteriores avisan de que no pueden abrir el fichero.

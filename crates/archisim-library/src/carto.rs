@@ -257,6 +257,8 @@ pub struct CartoReport {
     pub roads: usize,
     pub trees: usize,
     pub terrain_points: usize,
+    /// Buildings whose floors the LiDAR gave (V3).
+    pub lidar_floors: usize,
     /// The georeference was taken from the files.
     pub georeferenced: bool,
     /// Things worth saying (files not understood, what was left out).
@@ -276,6 +278,7 @@ impl CartoReport {
             (self.roads, "calles"),
             (self.trees, "árboles"),
             (self.terrain_points, "puntos de terreno"),
+            (self.lidar_floors, "edificios con sus plantas del LiDAR"),
         ] {
             if n > 0 {
                 out.push(format!("{n} {what}"));
@@ -292,6 +295,9 @@ struct Read {
     cadastre: Vec<catastro::Cadastre>,
     osm: Vec<osm::Osm>,
     grids: Vec<asc::Grid>,
+    /// Surface models (MDS, from the LiDAR): the ground with what stands
+    /// on it.
+    surfaces: Vec<asc::Grid>,
 }
 
 /// Map ↔ plan by the georeference and the true north (as the IFC's
@@ -380,6 +386,113 @@ pub fn world_file_bbox(text: &str, w: u32, h: u32) -> Option<[f64; 4]> {
     Some([west, north + e * h as f64, west + a * w as f64, north])
 }
 
+/// The height of a grid at a point of the map (its nearest cell), from
+/// the first grid that has it.
+fn grid_z(grids: &[asc::Grid], p: [f64; 2]) -> Option<f64> {
+    grids.iter().find_map(|g| {
+        let c = ((p[0] - g.x0) / g.cell).round();
+        let r = ((p[1] - g.y0) / g.cell).round();
+        if c < 0.0 || r < 0.0 {
+            return None;
+        }
+        g.at(c as usize, r as usize)
+    })
+}
+
+/// The height of a building over the ground by the LiDAR (V3): the
+/// median of the surface model (MDS) less the terrain model (MDT) over
+/// its footprint. With no terrain model, the ground is the lowest tenth
+/// of the surface round the building (the streets and yards about it).
+fn lidar_height(
+    surface: &[asc::Grid],
+    terrain: &[asc::Grid],
+    outline: &[Point2],
+    frame: &Frame,
+) -> Option<f64> {
+    let cell = surface.first()?.cell.max(0.5);
+    let (mut lo, mut hi) = (outline[0], outline[0]);
+    for p in outline {
+        lo = Point2::new(lo.x.min(p.x), lo.y.min(p.y));
+        hi = Point2::new(hi.x.max(p.x), hi.y.max(p.y));
+    }
+    let (mut over, mut round) = (Vec::new(), Vec::new());
+    let reach = 12.0;
+    let mut y = lo.y - reach;
+    while y <= hi.y + reach {
+        let mut x = lo.x - reach;
+        while x <= hi.x + reach {
+            let p = Point2::new(x, y);
+            let map = frame.to_map(p);
+            if let Some(s) = grid_z(surface, map) {
+                if in_polygon(p, outline) {
+                    match grid_z(terrain, map) {
+                        Some(t) => over.push(s - t),
+                        None => over.push(s),
+                    }
+                } else if terrain.is_empty() {
+                    round.push(s);
+                }
+            }
+            x += cell;
+        }
+        y += cell;
+    }
+    if over.len() < 3 {
+        return None;
+    }
+    if terrain.is_empty() {
+        if round.len() < 3 {
+            return None;
+        }
+        round.sort_by(f64::total_cmp);
+        let ground = round[round.len() / 10];
+        over.iter_mut().for_each(|h| *h -= ground);
+    }
+    over.sort_by(f64::total_cmp);
+    Some(over[over.len() / 2])
+}
+
+/// Floors of a height (the roof and its parapet take half a metre).
+fn floors_of_height(h: f64, floor_height: f64) -> u32 {
+    (((h - 0.5) / floor_height).round().max(1.0) as u32).min(archisim_core::MAX_ENV_FLOORS)
+}
+
+/// Whether a grid file is a surface model (MDS), by its name: the CNIG
+/// calls them «MDS05», «MDSnE»…; the rest are terrain models.
+pub fn is_surface_model(name: &str) -> bool {
+    let n = name.to_ascii_lowercase();
+    n.contains("mds") || n.contains("dsm") || n.contains("superficie")
+}
+
+/// With a surface model and no buildings brought, the buildings of the
+/// surroundings already in the project get their floors from the LiDAR.
+fn lidar_existing(
+    m: &mut Model,
+    read: &Read,
+    frame: &Frame,
+    opts: &CartoOptions,
+    report: &mut CartoReport,
+) -> Result<(), ModelError> {
+    let list: Vec<(archisim_core::MassId, Vec<Point2>, f64)> = m
+        .masses()
+        .filter(|x| x.dress.is_some() || x.floor_height.is_some())
+        .filter_map(|x| match &x.shape {
+            MassShape::Prism(p) if centre_of(p).distance(opts.centre) <= opts.radius => {
+                Some((x.id, p.clone(), x.floor_height.unwrap_or(opts.floor_height)))
+            }
+            _ => None,
+        })
+        .collect();
+    for (id, outline, fh) in list {
+        if let Some(h) = lidar_height(&read.surfaces, &read.grids, &outline, frame) {
+            let floors = floors_of_height(h, fh);
+            m.edit_mass(id, |x| x.height = fh * floors as f64)?;
+            report.lidar_floors += 1;
+        }
+    }
+    Ok(())
+}
+
 /// Brings the cartographic files (their names and texts) into the model
 /// around `opts.centre`.
 pub fn import_carto(
@@ -394,6 +507,7 @@ pub fn import_carto(
             Some(FileKind::Cadastre) => read.cadastre.push(catastro::read(text)),
             Some(FileKind::Osm) => read.osm.push(osm::read(text)),
             Some(FileKind::Grid) => match asc::read(text) {
+                Ok(g) if is_surface_model(name) => read.surfaces.push(g),
                 Ok(g) => read.grids.push(g),
                 Err(e) => report.notes.push(format!("{name}: {e}")),
             },
@@ -581,6 +695,15 @@ pub fn import_carto(
                 continue;
             }
             let fh = opts.floor_height.max(2.0);
+            // The LiDAR's height, when there is a surface model, says the
+            // floors better than the cadastre.
+            let floors = match lidar_height(&read.surfaces, &read.grids, &outline, &frame) {
+                Some(h) => {
+                    report.lidar_floors += 1;
+                    floors_of_height(h, fh)
+                }
+                None => floors,
+            };
             let id = m.add_mass(NewMass {
                 name,
                 level,
@@ -596,6 +719,9 @@ pub fn import_carto(
         if opts.styles {
             dress_brought(m, &made, opts.zone, &mut report)?;
         }
+    }
+    if !read.surfaces.is_empty() && report.buildings == 0 {
+        lidar_existing(m, &read, &frame, opts, &mut report)?;
     }
 
     // Parcels.
@@ -1204,6 +1330,83 @@ fn dress_brought(
 
 #[cfg(test)]
 mod tests {
+
+    /// The LiDAR (V3): a surface model 15,5 m over the terrain on one
+    /// building's footprint gives it five floors of 3 m, brought with the
+    /// cadastre or afterwards on its own.
+    #[test]
+    fn the_lidar_gives_the_floors() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../archisim-carto/tests/fixtures");
+        let read = |f: &str| std::fs::read_to_string(dir.join(f)).unwrap();
+        let (gml, mdt) = (read("pueblo-catastro.gml"), read("pueblo-mdt05.asc"));
+        let opts = CartoOptions {
+            styles: false,
+            ..CartoOptions::default()
+        };
+        let mut m = Model::new("T");
+        m.add_level("Planta baja", 0.0);
+        import_carto(
+            &mut m,
+            &[
+                ("c.gml".into(), gml.clone()),
+                ("mdt.asc".into(), mdt.clone()),
+            ],
+            &opts,
+        )
+        .unwrap();
+        let (id, outline) = m
+            .masses()
+            .find_map(|x| match &x.shape {
+                MassShape::Prism(p) if x.height < 14.0 => Some((x.id, p.clone())),
+                _ => None,
+            })
+            .unwrap();
+        // The surface model: the terrain, and the building 15,5 m up.
+        let frame = Frame::of(&m, m.georeference().unwrap());
+        let ground = asc::read(&mdt).unwrap();
+        let mut text = format!(
+            "ncols {}\nnrows {}\nxllcenter {}\nyllcenter {}\ncellsize {}\nNODATA_value -9999\n",
+            ground.cols, ground.rows, ground.x0, ground.y0, ground.cell
+        );
+        let plan_of = |e: f64, n: f64| frame.to_plan([e, n]);
+        for r in (0..ground.rows).rev() {
+            let row: Vec<String> = (0..ground.cols)
+                .map(|c| {
+                    let [e, n] = ground.point(c, r);
+                    let z = ground.at(c, r).unwrap_or(-9999.0);
+                    let up = if in_polygon(plan_of(e, n), &outline) {
+                        15.5
+                    } else {
+                        0.0
+                    };
+                    format!("{:.2}", z + up)
+                })
+                .collect();
+            text.push_str(&row.join(" "));
+            text.push('\n');
+        }
+        // Afterwards, on its own: the building already brought is raised.
+        let r = import_carto(&mut m, &[("pueblo-mds05.asc".into(), text.clone())], &opts).unwrap();
+        assert!(r.lidar_floors >= 1, "{r:?}");
+        assert_eq!(m.mass(id).unwrap().height, 15.0);
+        // With the cadastre, at once.
+        let mut fresh = Model::new("T");
+        fresh.add_level("Planta baja", 0.0);
+        let r = import_carto(
+            &mut fresh,
+            &[
+                ("c.gml".into(), gml),
+                ("mdt.asc".into(), mdt),
+                ("MDS05.asc".into(), text),
+            ],
+            &opts,
+        )
+        .unwrap();
+        assert!(r.lidar_floors >= 1);
+        assert!(fresh.masses().any(|x| x.height == 15.0));
+        assert_eq!(fresh.terrains().count(), 1);
+    }
 
     #[test]
     fn an_orthophoto_is_laid_by_the_georeference() {
