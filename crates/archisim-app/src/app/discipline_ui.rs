@@ -29,9 +29,22 @@ pub fn focus_for(d: Discipline) -> DisciplineFocus {
         Discipline::Site => DisciplineFocus::Only(ElementDiscipline::Site),
         Discipline::Architecture
         | Discipline::Documentation
+        | Discipline::Presentation
         | Discipline::Analysis
         | Discipline::Coordination => DisciplineFocus::None,
     }
+}
+
+/// The colours of an element's discipline: those of the discipline that
+/// works on it (§12.1).
+pub fn hue_of(d: ElementDiscipline, dark: bool) -> super::toolbox::Hue {
+    match d {
+        ElementDiscipline::Architecture => Discipline::Architecture,
+        ElementDiscipline::Structure => Discipline::Structure,
+        ElementDiscipline::Services => Discipline::Services,
+        ElementDiscipline::Site => Discipline::Site,
+    }
+    .hue(dark)
 }
 
 fn glyph_of(d: ElementDiscipline) -> Glyph {
@@ -122,6 +135,7 @@ impl ArchiSimApp {
             let (rect, _) =
                 ui.allocate_exact_size(Vec2::new(ui.available_width(), 28.0), Sense::hover());
             let fg = if hidden { p.faint } else { p.text };
+            let hue = hue_of(d, ui.visuals().dark_mode);
             glyphs::paint(
                 ui.painter(),
                 Rect::from_center_size(
@@ -129,7 +143,7 @@ impl ArchiSimApp {
                     Vec2::splat(16.0),
                 ),
                 glyph_of(d),
-                fg,
+                if hidden { p.faint } else { hue.ink },
             );
             ui.painter().text(
                 rect.left_center() + Vec2::new(32.0, 0.0),

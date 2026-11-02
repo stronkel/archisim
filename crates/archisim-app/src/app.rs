@@ -673,6 +673,8 @@ pub struct ArchiSimApp {
     pub locked_disciplines: std::collections::BTreeSet<archisim_core::ElementDiscipline>,
     /// The discipline whose tools are shown.
     pub discipline: toolbox::Discipline,
+    /// The tile whose variants are open below it (its name).
+    pub tile_group: Option<&'static str>,
     /// The tab of the navigator shown.
     pub nav_tab: navigator::NavTab,
     /// The command search, while open: what is typed and the result chosen.
@@ -943,6 +945,7 @@ impl ArchiSimApp {
             hidden_disciplines: Default::default(),
             locked_disciplines: Default::default(),
             discipline: toolbox::Discipline::default(),
+            tile_group: None,
             nav_tab: navigator::NavTab::default(),
             command_search: None,
             side_width: SIDE_WIDTH,

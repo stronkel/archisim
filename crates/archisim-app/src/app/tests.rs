@@ -1387,8 +1387,10 @@ fn disciplines_keys_and_command_search() {
     h.type_text("f");
     assert_eq!(h.app.tool, Tool::Slab);
     assert_eq!(h.app.discipline, Discipline::Structure);
+    // The level mark is in the bottom bar, for every discipline: N keeps
+    // the discipline (§12.2).
     h.type_text("n");
-    assert_eq!(h.app.discipline, Discipline::Documentation);
+    assert_eq!(h.app.discipline, Discipline::Structure);
     h.key(Key::Escape);
     h.key(Key::Escape);
     // The search: Ctrl+Espacio, «viga», Intro.

@@ -116,6 +116,16 @@ pub enum Glyph {
     HeadSquare,
     HeadSoft,
     HeadSplatter,
+    Camera,
+    Sun,
+    LookStyle,
+    Render,
+    Picture,
+    Walk,
+    Budget,
+    Areas,
+    Present,
+    Deliver,
 }
 
 impl Glyph {
@@ -386,6 +396,34 @@ impl Glyph {
             Glyph::HeadSoft => {
                 r##"<circle cx="10" cy="10" r="4.5"/><circle cx="10" cy="10" r="7.5" stroke-width="0.8" stroke-dasharray="1.2 1.6"/>"##
             }
+            Glyph::Camera => {
+                r##"<rect x="2.5" y="6" width="15" height="10" rx="1.5"/><circle cx="10" cy="11" r="3"/><path d="M7 6l1.2-2h3.6L13 6"/>"##
+            }
+            Glyph::Sun => {
+                r##"<circle cx="10" cy="10" r="3.5"/><path d="M10 2v2.5M10 15.5V18M2 10h2.5M15.5 10H18M4.3 4.3l1.8 1.8M13.9 13.9l1.8 1.8M4.3 15.7l1.8-1.8M13.9 6.1l1.8-1.8" stroke-width="1"/>"##
+            }
+            Glyph::LookStyle => {
+                r##"<circle cx="10" cy="10" r="7"/><circle cx="7" cy="8" r="1.3"/><circle cx="12" cy="6.8" r="1.3"/><circle cx="13.5" cy="11" r="1.3"/><path d="M8 15c1-2 0-3-2-3" stroke-width="1"/>"##
+            }
+            Glyph::Render => {
+                r##"<path d="M3 15l4-5 3 3 3-4 4 6z"/><rect x="2" y="3" width="16" height="14" rx="1"/><circle cx="14" cy="6.5" r="1.4" stroke-width="1"/>"##
+            }
+            Glyph::Picture => {
+                r##"<rect x="2" y="4" width="16" height="12" rx="1"/><path d="M2 13l5-4 4 3 3-2 4 3" stroke-width="1"/>"##
+            }
+            Glyph::Walk => {
+                r##"<circle cx="11" cy="3.5" r="1.6"/><path d="M11 6l-1 6 3 5M10 12l-3 5M7 9l3-3 3 3 2 1" stroke-width="1.1"/>"##
+            }
+            Glyph::Budget => {
+                r##"<rect x="4" y="2" width="12" height="16" rx="1"/><path d="M12.5 7.5a3 3 0 1 0 0 5M7 9h4M7 11h4" stroke-width="1"/>"##
+            }
+            Glyph::Areas => {
+                r##"<rect x="3" y="3" width="14" height="14"/><path d="M3 10h8V3M11 10v7" stroke-width="1"/><path d="M5.5 6.5h3M13 13.5h2" stroke-width="0.8"/>"##
+            }
+            Glyph::Present => {
+                r##"<rect x="2" y="3" width="16" height="11" rx="1"/><path d="M10 14v3M6 18h8"/><path d="M5 11l3-3 2 2 4-4" stroke-width="1"/>"##
+            }
+            Glyph::Deliver => r##"<path d="M10 2.5v9M6 8l4 4 4-4M3 14v3h14v-3"/>"##,
             Glyph::HeadSplatter => {
                 r##"<circle cx="7" cy="7" r="2.5"/><circle cx="13.5" cy="8" r="1.8"/><circle cx="9" cy="13.5" r="2"/><circle cx="15" cy="14" r="1.2"/><circle cx="4" cy="13" r="1"/>"##
             }
@@ -497,6 +535,16 @@ impl Glyph {
         Glyph::HeadSquare,
         Glyph::HeadSoft,
         Glyph::HeadSplatter,
+        Glyph::Camera,
+        Glyph::Sun,
+        Glyph::LookStyle,
+        Glyph::Render,
+        Glyph::Picture,
+        Glyph::Walk,
+        Glyph::Budget,
+        Glyph::Areas,
+        Glyph::Present,
+        Glyph::Deliver,
     ];
 }
 
