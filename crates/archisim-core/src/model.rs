@@ -34,6 +34,7 @@ mod meshes;
 mod modules;
 mod networks;
 mod objects;
+mod orthophoto;
 mod paint;
 mod parameters;
 mod phases;
@@ -80,6 +81,7 @@ pub use meshes::*;
 pub use modules::*;
 pub use networks::*;
 pub use objects::*;
+pub use orthophoto::*;
 pub use paint::*;
 pub use parameters::*;
 pub use phases::*;
@@ -1506,6 +1508,8 @@ pub struct ModelParts {
     pub room_usages: Vec<String>,
     /// Where the project is on the map.
     pub georeference: Option<crate::georef::Georeference>,
+    /// The aerial picture laid on the ground (V2).
+    pub orthophoto: Option<Orthophoto>,
     /// Use, accessibility and sprinklers, for the code checks.
     pub code: crate::code::CodeSettings,
     /// Drawing layers, layer "0" included.
@@ -1629,6 +1633,7 @@ pub struct Model {
     true_north: f64,
     pub(crate) room_usages: Vec<String>,
     pub(crate) georeference: Option<crate::georef::Georeference>,
+    pub(crate) orthophoto: Option<Orthophoto>,
     pub(crate) code: crate::code::CodeSettings,
     /// The phase new elements are given (the survey is drawn as
     /// existing). Not saved.
@@ -1722,6 +1727,7 @@ impl Model {
             true_north: 0.0,
             room_usages: Vec::new(),
             georeference: None,
+            orthophoto: None,
             code: Default::default(),
             draw_phase: Phase::New,
             draw_layers: BTreeMap::from([(LAYER_ZERO, DrawLayer::zero())]),
@@ -4383,6 +4389,7 @@ impl Model {
             true_north: self.true_north,
             room_usages: self.room_usages.clone(),
             georeference: self.georeference.clone(),
+            orthophoto: self.orthophoto.clone(),
             code: self.code,
             draw_layers: self.draw_layers.values().cloned().collect(),
             drafts: self.drafts.values().cloned().collect(),
@@ -4774,6 +4781,12 @@ impl Model {
             .set_georeference(parts.georeference)
             .map_err(|error| RestoreError {
                 element: "georeference".into(),
+                error,
+            })?;
+        model
+            .set_orthophoto(parts.orthophoto)
+            .map_err(|error| RestoreError {
+                element: "orthophoto".into(),
                 error,
             })?;
         model.set_code_settings(parts.code);

@@ -633,6 +633,11 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
     }
 
     s.push_str("<g id=\"slabs\">\n");
+    if show(archisim_core::Category::Terrain) {
+        overrides::group(&mut s, archisim_core::Category::Terrain, |s| {
+            decals::draw_orthophoto(s, model, level)
+        });
+    }
     for t in model
         .terrains_on_level(level)
         .filter(|_| show(archisim_core::Category::Terrain))

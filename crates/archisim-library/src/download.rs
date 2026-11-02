@@ -23,6 +23,8 @@ pub enum Source {
     Osm,
     /// The IGN's terrain (MDT05).
     Terrain,
+    /// The PNOA's orthophoto (a PNG of the rectangle).
+    Orthophoto,
 }
 
 impl Source {
@@ -34,6 +36,7 @@ impl Source {
             Source::Parcels => "Catastro: parcelas",
             Source::Osm => "OpenStreetMap: calles y árboles",
             Source::Terrain => "IGN: terreno (MDT05)",
+            Source::Orthophoto => "IGN: ortofoto del PNOA",
         }
     }
 }
@@ -45,6 +48,8 @@ pub struct Request {
     /// The name its answer is given (as if it were a file).
     pub name: String,
     pub url: String,
+    /// The rectangle of the map a picture covers (the orthophoto).
+    pub bbox: Option<Bbox>,
 }
 
 /// The cadastre's services (INSPIRE WFS 2.0).
@@ -52,6 +57,11 @@ pub const CADASTRE_BU: &str = "http://ovc.catastro.meh.es/INSPIRE/wfsBU.aspx";
 pub const CADASTRE_CP: &str = "http://ovc.catastro.meh.es/INSPIRE/wfsCP.aspx";
 /// OpenStreetMap through Overpass.
 pub const OVERPASS: &str = "https://overpass-api.de/api/interpreter";
+/// The PNOA's most recent orthophoto (INSPIRE WMS 1.3.0).
+pub const PNOA: &str = "https://www.ign.es/wms-inspire/pnoa-ma";
+/// Pixels of the orthophoto: one each 25 cm (the PNOA's), up to this many
+/// a side.
+pub const ORTHO_PIXELS: u32 = 2048;
 /// The IGN's digital terrain models (INSPIRE WCS 2.0.1).
 pub const IGN_MDT: &str = "https://servicios.idee.es/wcs-inspire/mdt";
 
@@ -144,11 +154,13 @@ pub fn plan(m: &Model, opts: &CartoOptions) -> Result<Vec<Request>, String> {
     if opts.buildings {
         for (i, t) in tiles(b, BUILDINGS_TILE).into_iter().enumerate() {
             out.push(Request {
+                bbox: None,
                 source: Source::Buildings,
                 name: format!("catastro-edificios-{}.gml", i + 1),
                 url: wfs(CADASTRE_BU, "BU.BUILDING", t, code),
             });
             out.push(Request {
+                bbox: None,
                 source: Source::BuildingParts,
                 name: format!("catastro-partes-{}.gml", i + 1),
                 url: wfs(CADASTRE_BU, "BU.BUILDINGPART", t, code),
@@ -158,6 +170,7 @@ pub fn plan(m: &Model, opts: &CartoOptions) -> Result<Vec<Request>, String> {
     if opts.parcels {
         for (i, t) in tiles(b, PARCELS_TILE).into_iter().enumerate() {
             out.push(Request {
+                bbox: None,
                 source: Source::Parcels,
                 name: format!("catastro-parcelas-{}.gml", i + 1),
                 url: wfs(CADASTRE_CP, "CP.CADASTRALPARCEL", t, code),
@@ -177,6 +190,7 @@ pub fn plan(m: &Model, opts: &CartoOptions) -> Result<Vec<Request>, String> {
         let w = corners.iter().map(|c| c.1).fold(f64::MAX, f64::min);
         let e = corners.iter().map(|c| c.1).fold(f64::MIN, f64::max);
         out.push(Request {
+            bbox: None,
             source: Source::Osm,
             name: "openstreetmap.osm".into(),
             url: format!(
@@ -185,8 +199,23 @@ pub fn plan(m: &Model, opts: &CartoOptions) -> Result<Vec<Request>, String> {
             ),
         });
     }
+    if opts.orthophoto {
+        let px = ((b[2] - b[0]) / 0.25)
+            .ceil()
+            .clamp(64.0, ORTHO_PIXELS as f64) as u32;
+        out.push(Request {
+            bbox: Some(b),
+            source: Source::Orthophoto,
+            name: "pnoa.png".into(),
+            url: format!(
+                "{PNOA}?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=OI.OrthoimageCoverage&STYLES=&CRS=EPSG:{code}&BBOX={:.0},{:.0},{:.0},{:.0}&WIDTH={px}&HEIGHT={px}&FORMAT=image/png",
+                b[0], b[1], b[2], b[3]
+            ),
+        });
+    }
     if opts.terrain {
         out.push(Request {
+            bbox: None,
             source: Source::Terrain,
             name: "ign-mdt05.asc".into(),
             url: format!(
@@ -196,6 +225,11 @@ pub fn plan(m: &Model, opts: &CartoOptions) -> Result<Vec<Request>, String> {
         });
     }
     Ok(out)
+}
+
+/// Whether bytes are a PNG.
+pub fn is_png(bytes: &[u8]) -> bool {
+    bytes.starts_with(&[0x89, b'P', b'N', b'G'])
 }
 
 /// What a service answered, as the text the importer reads: the grid of a
@@ -296,6 +330,18 @@ mod tests {
         let t = &of(Source::Terrain)[0].url;
         assert!(t.contains("CoverageId=Elevacion25830_5"), "{t}");
         assert!(t.contains("SUBSET=x(439400,440600)"), "{t}");
+        // The orthophoto: the rectangle at 25 cm a pixel, up to its limit.
+        let o = of(Source::Orthophoto)[0];
+        assert!(
+            o.url.starts_with(PNOA) && o.url.contains("CRS=EPSG:25830"),
+            "{}",
+            o.url
+        );
+        assert!(o.url.contains("WIDTH=2048&HEIGHT=2048"), "{}", o.url);
+        assert_eq!(
+            o.bbox,
+            Some([439_400.0, 4_473_400.0, 440_600.0, 4_474_600.0])
+        );
         // Only what is asked.
         let few = plan(
             &m,
@@ -304,6 +350,7 @@ mod tests {
                 parcels: false,
                 streets: false,
                 trees: false,
+                orthophoto: false,
                 ..CartoOptions::default()
             },
         )

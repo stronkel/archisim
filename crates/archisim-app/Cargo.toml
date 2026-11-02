@@ -33,7 +33,7 @@ archisim-team.workspace = true
 archisim-render.workspace = true
 serde_json = "1"
 eframe = "0.37"
-resvg = { version = "0.48", default-features = false }
+resvg = { version = "0.48", default-features = false, features = ["raster-images"] }
 rfd = "0.17"
 png = "0.18"
 # Downloads the surroundings (Catastro, OpenStreetMap, IGN) on a thread.

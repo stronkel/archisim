@@ -6,6 +6,33 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-02 (78) · V2: ortofoto sobre el terreno y las calles
+
+Rama `bloque/ortofoto`, con pull request. Formato `.archisim` versión 69: la ortofoto. Las versiones anteriores avisan de que no pueden abrir el fichero.
+
+**Hecho**
+- **Ortofoto:** una foto aérea tendida sobre el terreno y, si se quiere, sobre las calles. Se guarda la imagen dentro del proyecto y el rectángulo de planta que cubre; se gira con el norte del proyecto.
+  - **Vista 3D, imagen realista y modelo 3D (glTF):** una malla de hasta 256 × 256 cuadros, 3 cm por encima del terreno (o de la calle), con el color de la foto en cada esquina. Un clic sobre ella selecciona el terreno de debajo.
+  - **Planta:** la foto debajo de todo en la planta del terreno; calles, parcelas y edificios se dibujan encima.
+  - **Propiedades del proyecto** (sin nada seleccionado), grupo «Ortofoto»: de dónde viene, cuánto cubre, «Sobre las calles» y «Quitar la ortofoto».
+- **De dónde sale:**
+  - «Descargar el entorno» tiene un interruptor más, «Ortofoto (PNOA)»: pide al IGN la ortofoto más reciente del PNOA del mismo recuadro, un píxel cada 25 cm hasta 2048 × 2048;
+  - «Traer el entorno» acepta también una imagen PNG con su fichero de georreferencia al lado (`foto.pgw`), como las que da el Centro de Descargas del CNIG o un SIG.
+- **Arreglo:** la planta en pantalla y las exportaciones a PNG no dibujaban imágenes: las pegatinas sobre el suelo no salían. Ya salen.
+- `archisim ortofoto proyecto.archisim [salida.archisim]` hace una **ortofoto de ensayo** desde el propio modelo (una vista desde arriba con algo de grano) y la tiende. Así se ve sin descargar nada. Escribe también la imagen con su `.pgw`, para soltarla en «Traer el entorno».
+- La ortofoto no va al IFC: es un recurso de imagen, como las texturas.
+
+**Pendiente**
+- Tampoco aquí se ha podido probar la descarga real del PNOA desde el contenedor.
+- La foto se ve con la finura de la malla (1,25 m por cuadro en 320 m). Si hace falta más detalle, el siguiente paso es llevarla como textura a la vista 3D y al glTF.
+
+**Qué debe probar Antonio**
+- `archisim cartografia crates/archisim-carto/tests/fixtures/pueblo-catastro.gml crates/archisim-carto/tests/fixtures/pueblo.osm crates/archisim-carto/tests/fixtures/pueblo-mdt05.asc --salida out/pueblo-geo.archisim`, después `archisim ortofoto out/pueblo-geo.archisim out/pueblo-orto.archisim`. Abrirlo: la planta con la foto debajo y el 3D con la foto sobre el terreno. Probar `archisim render out/pueblo-orto.archisim out/pueblo-orto.png`.
+- En un proyecto real georreferenciado: Archivo → Descargar el entorno con «Ortofoto (PNOA)» encendida.
+- Propiedades del proyecto → Ortofoto: apagar «Sobre las calles» y mirar el 3D.
+
+---
+
 ## 2026-11-02 (77) · Descargar el entorno
 
 Rama `bloque/descargar-entorno`, con pull request. Sin cambios de formato.

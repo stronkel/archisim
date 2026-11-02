@@ -27,6 +27,8 @@ pub struct CartoOptions {
     pub streets: bool,
     pub trees: bool,
     pub terrain: bool,
+    /// The aerial picture (V2), laid on the terrain and the streets.
+    pub orthophoto: bool,
     /// Height of a floor of the buildings brought, metres.
     pub floor_height: f64,
     /// Leave out the buildings over the project's own slabs.
@@ -237,6 +239,7 @@ impl Default for CartoOptions {
             streets: true,
             trees: true,
             terrain: true,
+            orthophoto: true,
             floor_height: 3.0,
             skip_own: true,
             recentre: false,
@@ -329,6 +332,52 @@ impl Frame {
             -dx * self.sin + dy * self.cos,
         )
     }
+}
+
+/// Lays an aerial picture (a PNG) on the ground, covering the rectangle
+/// of the map `bbox` (west, south, east, north, in the project's system):
+/// placed by the georeference, turned with the project's north.
+pub fn place_orthophoto(
+    m: &mut Model,
+    source: &str,
+    png: Vec<u8>,
+    bbox: [f64; 4],
+) -> Result<(), ModelError> {
+    let g = m
+        .georeference()
+        .cloned()
+        .ok_or(ModelError::InvalidShape("the project has no georeference"))?;
+    let f = Frame::of(m, &g);
+    let o = f.to_plan([bbox[0], bbox[1]]);
+    let e = f.to_plan([bbox[2], bbox[1]]);
+    let n = f.to_plan([bbox[0], bbox[3]]);
+    let image = archisim_core::decal_image(source, png)
+        .ok_or(ModelError::InvalidShape("the orthophoto is not a PNG"))?;
+    m.set_orthophoto(Some(archisim_core::Orthophoto {
+        image,
+        origin: [o.x, o.y],
+        u: [e.x - o.x, e.y - o.y],
+        v: [n.x - o.x, n.y - o.y],
+        on_roads: true,
+    }))
+}
+
+/// The rectangle of the map a picture covers by its world file (`.pgw`:
+/// pixel size across, two turns, pixel size down —negative—, and the
+/// centre of the top-left pixel), for a picture of `w` × `h` pixels; turned
+/// world files are not read.
+pub fn world_file_bbox(text: &str, w: u32, h: u32) -> Option<[f64; 4]> {
+    let v: Vec<f64> = text
+        .split_whitespace()
+        .filter_map(|t| t.replace(',', ".").parse().ok())
+        .collect();
+    let [a, d, b, e, c, f] = v.get(..6)?.try_into().ok()?;
+    if d.abs() > 1e-9 || b.abs() > 1e-9 || a <= 0.0 || e >= 0.0 {
+        return None;
+    }
+    let west = c - a / 2.0;
+    let north = f - e / 2.0;
+    Some([west, north + e * h as f64, west + a * w as f64, north])
 }
 
 /// Brings the cartographic files (their names and texts) into the model
@@ -1155,6 +1204,46 @@ fn dress_brought(
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn an_orthophoto_is_laid_by_the_georeference() {
+        let mut m = Model::new("T");
+        m.set_georeference(Some(Georeference {
+            crs: "EPSG:25830".into(),
+            eastings: 440_000.0,
+            northings: 4_474_000.0,
+            height: 0.0,
+        }))
+        .unwrap();
+        // A 1 × 1 PNG (its header is what is read).
+        let mut png = vec![0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A];
+        png.extend_from_slice(&13u32.to_be_bytes());
+        png.extend_from_slice(b"IHDR");
+        png.extend_from_slice(&1u32.to_be_bytes());
+        png.extend_from_slice(&1u32.to_be_bytes());
+        png.extend_from_slice(&[8, 6, 0, 0, 0, 0, 0, 0, 0]);
+        place_orthophoto(
+            &mut m,
+            "pnoa.png",
+            png,
+            [439_900.0, 4_473_950.0, 440_100.0, 4_474_050.0],
+        )
+        .unwrap();
+        let o = m.orthophoto().unwrap();
+        let (w, h) = o.size();
+        assert!((w - 200.0).abs() < 1e-6 && (h - 100.0).abs() < 1e-6);
+        // The project's origin near its middle (turned by the convergence).
+        let (a, b) = o.uv(Point2::new(0.0, 0.0)).unwrap();
+        assert!((a - 0.5).abs() < 0.02 && (b - 0.5).abs() < 0.02, "{a} {b}");
+    }
+
+    #[test]
+    fn a_world_file_gives_the_rectangle() {
+        let b = world_file_bbox("0.5\n0\n0\n-0.5\n1000.25\n2999.75\n", 400, 200).unwrap();
+        assert_eq!(b, [1000.0, 2900.0, 1200.0, 3000.0]);
+        assert!(world_file_bbox("1 0.1 0 -1 0 0", 2, 2).is_none());
+    }
+
     use super::*;
 
     const GML: &str = r#"<?xml version="1.0" encoding="UTF-8"?>

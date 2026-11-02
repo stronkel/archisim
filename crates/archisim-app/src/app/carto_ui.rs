@@ -20,12 +20,20 @@ pub struct CartoImport {
     pub options: CartoOptions,
     /// What did not arrive, when they were downloaded.
     pub notes: Vec<String>,
+    /// An aerial picture: its name, PNG and the rectangle of the map it
+    /// covers.
+    pub orthophoto: Option<(String, Vec<u8>, [f64; 4])>,
 }
 
 impl CartoImport {
     pub fn open(paths: &[PathBuf]) -> Result<CartoImport, String> {
         let mut files = Vec::new();
+        let mut orthophoto = None;
         for p in paths {
+            if is_picture(p) {
+                orthophoto = Some(picture_with_world_file(p)?);
+                continue;
+            }
             let bytes = std::fs::read(p).map_err(|e| format!("{}: {e}", p.display()))?;
             let name = p.file_name().map_or_else(
                 || p.display().to_string(),
@@ -37,11 +45,16 @@ impl CartoImport {
             files,
             options: CartoOptions::default(),
             notes: Vec::new(),
+            orthophoto,
         })
     }
 
     /// What each file is, for the window.
     fn kinds(&self) -> Vec<(&str, &'static str)> {
+        let picture = self
+            .orthophoto
+            .iter()
+            .map(|(n, _, _)| (n.as_str(), "Ortofoto (imagen georreferenciada)"));
         self.files
             .iter()
             .map(|(n, t)| {
@@ -53,6 +66,7 @@ impl CartoImport {
                 };
                 (n.as_str(), k)
             })
+            .chain(picture)
             .collect()
     }
 }
@@ -79,8 +93,10 @@ impl ArchiSimApp {
         let mut d = rfd::FileDialog::new()
             .set_title("Traer el entorno (Catastro, OpenStreetMap, MDT)")
             .add_filter(
-                "Cartografía (GML, OSM, ASC)",
-                &["gml", "GML", "xml", "XML", "osm", "OSM", "asc", "ASC"],
+                "Cartografía (GML, OSM, ASC, PNG con .pgw)",
+                &[
+                    "gml", "GML", "xml", "XML", "osm", "OSM", "asc", "ASC", "png", "PNG",
+                ],
             );
         if let Some(dir) = self.start_dir() {
             d = d.set_directory(dir);
@@ -139,6 +155,9 @@ impl ArchiSimApp {
                     ui.switch(&mut o.streets, "Calles");
                     ui.switch(&mut o.trees, "Árboles");
                     ui.switch(&mut o.terrain, "Terreno");
+                    if c.orthophoto.is_some() {
+                        ui.switch(&mut o.orthophoto, "Ortofoto");
+                    }
                 });
                 ui.horizontal(|ui| {
                     ui.label("Radio alrededor del origen");
@@ -197,8 +216,14 @@ impl ArchiSimApp {
         if go {
             let mut lines = Vec::new();
             let res = self.ed.transact("Traer el entorno", |m| {
-                let r = import_carto(m, &c.files, &c.options)?;
-                lines = r.lines();
+                if !c.files.is_empty() {
+                    let r = import_carto(m, &c.files, &c.options)?;
+                    lines = r.lines();
+                }
+                if let (true, Some((name, png, bbox))) = (c.options.orthophoto, &c.orthophoto) {
+                    archisim_library::carto::place_orthophoto(m, name, png.clone(), *bbox)?;
+                    lines.push("la ortofoto".into());
+                }
                 Ok(())
             });
             match res {
@@ -222,5 +247,38 @@ pub fn is_carto(path: &Path) -> bool {
         .extension()
         .map(|e| e.to_string_lossy().to_ascii_lowercase())
         .unwrap_or_default();
-    matches!(ext.as_str(), "gml" | "osm" | "asc")
+    matches!(ext.as_str(), "gml" | "osm" | "asc") || is_picture(path)
+}
+
+/// Whether a file is a picture with its world file beside it (an
+/// orthophoto).
+fn is_picture(path: &Path) -> bool {
+    let png = path
+        .extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("png"));
+    png && world_file_of(path).is_some()
+}
+
+/// The world file of a picture: «foto.pgw», «foto.pngw» or «foto.wld».
+fn world_file_of(path: &Path) -> Option<PathBuf> {
+    ["pgw", "PGW", "pngw", "wld"]
+        .iter()
+        .map(|e| path.with_extension(e))
+        .find(|p| p.is_file())
+}
+
+/// A picture and the rectangle of the map its world file says.
+fn picture_with_world_file(path: &Path) -> Result<(String, Vec<u8>, [f64; 4]), String> {
+    let png = std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let (w, h) = archisim_core::png_size(&png)
+        .ok_or_else(|| format!("{}: no es una imagen PNG", path.display()))?;
+    let wf = world_file_of(path).ok_or("falta su fichero de georreferencia (.pgw)")?;
+    let text = std::fs::read_to_string(&wf).map_err(|e| format!("{}: {e}", wf.display()))?;
+    let bbox = archisim_library::carto::world_file_bbox(&text, w, h)
+        .ok_or_else(|| format!("{}: no se entiende (o está girado)", wf.display()))?;
+    let name = path.file_name().map_or_else(
+        || "ortofoto.png".into(),
+        |n| n.to_string_lossy().into_owned(),
+    );
+    Ok((name, png, bbox))
 }
