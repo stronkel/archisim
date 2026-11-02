@@ -6,6 +6,76 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-02 (86) · Interfaz, segunda versión: V1 a V4
+
+Rama `bloque/interfaz-v2`, con pull request. Sin cambios de formato ni de IFC. Diseño en `docs/INTERFAZ.md` §12, decidido con Antonio sobre el prototipo «ArchiSim · interfaz por colores y barras».
+
+**Hecho**
+- **V1 · Colores y fichas.**
+  - Cada disciplina tiene su color en el carril, la ficha activa, la cabecera de Propiedades y el navegador (tabla en §12.1).
+  - Fichas agrupadas, doce como mucho y tres filas siempre. El triángulo de la esquina abre las variantes encima de Propiedades, sin mover nada.
+  - Las agrupaciones: Empujar, Dividir y Volumen en Concepto; Escalera con Ascensor; Cimentación con Zapata y Losa; Aparato con Equipos de agua; Mecanismo con Enchufe e Interruptor; Calle, Redes, Entorno (con Traer y Descargar) y Vegetación (con Plantación, Rocas y Vivero) en Urbanismo.
+  - Disciplina nueva, **Presentación**: Sol, Estilo, Render, Imagen y Pegatina; Cámara y Recorrido, apagadas hasta su bloque.
+  - Análisis gana Presupuesto y Superficies. Documentación gana Vista de dibujo.
+  - Cota, Cota de nivel y Texto salen de Documentación: están en Anotar, abajo. N ya no cambia de disciplina. El buscador los sigue encontrando («Barra inferior»).
+- **V2 · Barras.**
+  - Arriba, el botón **Entregar** sustituye a «Exportar IFC»: modelo (IFC 4.3, IFC4, glTF), planos y documentos (este plano, todos, carpinterías, memoria, superficies, armaduras, BC3) e imágenes (render, imagen 3D). Archivo sigue teniéndolo todo.
+  - Abajo, los mismos tramos en todas las vistas: **Vista** · **Anotar** · **Ayudas** · coordenadas. Lo que no vale en una vista se ve apagado.
+  - **Guía** nueva en Ayudas: plano de referencia (Q) y, en su flecha, la cinta.
+- **V3 · Vista 3D.**
+  - **Cubo de vistas** semitransparente, sin recuadro, que gira con la cámara (`app/view_cube`).
+    - Sus caras van a la planta y a los alzados, mirados a nivel para que las verticales salgan rectas.
+    - Sus esquinas de arriba van a las vistas de esquina.
+    - Al pasar el ratón: girar 90° a cada lado e Inicio. N, S, E y O en el suelo.
+  - **Aspecto** arriba a la izquierda: Sombreado, Texturas y Realista.
+  - **Cámara libre** en Técnica:
+    - el derecho gira alrededor de lo que hay bajo el cursor (punto naranja mientras gira);
+    - con el derecho apretado, W A S D vuelan y el ratón mira desde donde estás;
+    - al soltar, las letras vuelven a ser órdenes.
+  - En la **Maqueta**, la cámara no baja de 30° ni sube de 70°.
+  - **Navegación** (barra inferior del 3D y Vista → Navegación 3D, guardada en `preferencias.json`):
+    - velocidad de paseo, de giro y de la rueda, del 1 al 10;
+    - girar alrededor de lo que hay bajo el cursor;
+    - no alejarse más allá del modelo (la vista no pasa de tres veces su tamaño);
+    - invertir el ratón.
+  - Los modos de muros recortados pasan a una lista en la barra, para que los tramos no se salgan.
+- **V4 · Propiedades.**
+  - La cabecera va en el color de la disciplina de lo seleccionado.
+  - Las medidas principales salen como cifras grandes en tarjetas: muro (longitud y altura que se escriben, espesor), puerta y ventana (ancho, alto, antepecho que se escribe) y forjado (canto, desfase).
+  - Los grupos de identidad, fases, disciplina y comprobaciones empiezan plegados.
+- Pruebas nuevas:
+  - `technical_3d_flies_with_the_right_button`: vuelo, letras como órdenes al soltar, la rueda no se aleja;
+  - las vistas del cubo;
+  - la navegación en las preferencias;
+  - lo que está donde.
+
+  Las 360 de la aplicación pasan.
+
+**Pendiente**
+- **V5 · Maqueta con las mismas barras** (catálogo en la columna de fichas, estancias en el carril). Está esperando a que Antonio pruebe V1 a V4, por si cambia algo de las barras.
+- **Cámaras guardadas** (ficha Cámara de Presentación) y **Recorrido**.
+- Los modos de representación **Aristas** y **Líneas ocultas** necesitan su propio sombreado. De momento hay Sombreado, Texturas y Realista.
+- Las tarjetas de medidas, en el resto de elementos (pilares, vigas, cubiertas, escaleras…). La galería de tipos parecidos en tarjetas (hoy es el desplegable con dibujo de siempre).
+- La ficha Sol solo lleva a Propiedades › Proyecto.
+
+**Qué debe probar Antonio**
+1. `cargo run --release -p archisim-app -- out/demo.archisim` (antes, `cargo run -p archisim-cli -- demo out/`).
+2. Pasa por las disciplinas del carril:
+   - ¿se distinguen los colores sin chillar, en claro y en oscuro?
+   - En Urbanismo pulsa Calle, Redes, Entorno y Vegetación: las variantes salen debajo, encima de Propiedades.
+3. Abajo, en planta:
+   - Cota y su flecha (cota de nivel, angular…);
+   - **Guía** → plano de referencia y, en la flecha, la cinta.
+4. Arriba, **Entregar**: ¿falta alguna salida?
+5. Vista 3D:
+   - pasa el ratón por el cubo y pincha Sur, Este, Planta, una esquina, «‹ 90°» e Inicio;
+   - mantén el derecho sobre una esquina de la casa y gira: debe girar alrededor de ella;
+   - con el derecho apretado, pulsa W, A, S, D, Q y E; suéltalo y pulsa M: debe salir el muro;
+   - en **Navegación**, baja el giro a 3 y la rueda a 3 y comprueba si se controla mejor.
+6. Selecciona un muro, una ventana y un forjado: tarjetas de medidas arriba. Escribe una longitud o un antepecho.
+
+---
+
 ## 2026-11-02 (85) · Gama de materiales estilizada: prototipo para decidir el aspecto
 
 Rama `main`, sin cambios en la aplicación ni en el formato: solo la carpeta `prototipos/gama-estilizada/`.
