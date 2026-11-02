@@ -533,6 +533,8 @@ impl Editor {
                     .tags()
                     .map(|t| (t.id, t.at, archisim_plan::rooms::tag_anchor(m, t.target)))
                     .collect();
+                // Decals go with the wall they are stuck on.
+                let decals = m.decal_anchors();
                 let r = edit(m)?;
                 // In a shared project, only what is reserved (what follows
                 // below goes with it: dimensions, rooms, tags).
@@ -544,6 +546,9 @@ impl Editor {
                 }
                 if m.footings().next().is_some() {
                     m.footings_follow_hosts();
+                }
+                if !decals.is_empty() {
+                    m.decals_follow(&decals);
                 }
                 for (id, at, anchor) in tags {
                     let Some(t) = m.tag(id) else { continue };

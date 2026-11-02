@@ -1086,6 +1086,7 @@ impl ArchiSimApp {
                 [Element::Slab(id)] => Some(crate::sketch::SketchTarget::Slab(*id)),
                 [Element::Roof(id)] => Some(crate::sketch::SketchTarget::Roof(*id)),
                 [Element::Terrain(id)] => Some(crate::sketch::SketchTarget::Terrain(*id)),
+                [Element::Road(id)] => Some(crate::sketch::SketchTarget::RoadEdges(*id)),
                 // A wall: its profile in elevation (Revit's «Editar perfil»).
                 [Element::Wall(id)]
                     if self.ed.model().wall(*id).is_some_and(|w| !w.is_curved()) =>

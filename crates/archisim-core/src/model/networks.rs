@@ -150,6 +150,131 @@ impl Model {
         Ok(out)
     }
 
+    /// What a network's connection is joined to inside a building: the
+    /// kinds of device and the building's own systems.
+    fn building_ends(system: ServiceSystem) -> (&'static [DeviceKind], &'static [ServiceSystem]) {
+        match system {
+            ServiceSystem::Sewer => (&[DeviceKind::Downpipe], &[ServiceSystem::Drainage]),
+            ServiceSystem::Stormwater => (&[DeviceKind::Downpipe], &[]),
+            ServiceSystem::WaterMain => (&[DeviceKind::WaterMeter], &[ServiceSystem::ColdWater]),
+            ServiceSystem::PowerLow => (&[DeviceKind::MainFuseBox, DeviceKind::Panel], &[]),
+            _ => (&[], &[]),
+        }
+    }
+
+    /// Joins the connections of an urban network (the chambers
+    /// [`Model::connect_plots`] made) to each building's installation in
+    /// its plot: the sewer to the nearest downpipe (or the building's
+    /// drainage), stormwater to a downpipe, the water main to the meter
+    /// (or the cold water), low voltage to the general protection box (or
+    /// the panel). A pipe from the chamber to it, on the chamber's level;
+    /// a sewer's falls [`CONNECTION_SLOPE`] to the chamber. Those joined
+    /// already, or with nothing to join to, are left. The pipes made.
+    pub fn connect_buildings(&mut self, run: RunId) -> Result<Vec<RunId>, ModelError> {
+        let r = self
+            .run(run)
+            .cloned()
+            .ok_or(ModelError::UnknownElement(run.0))?;
+        let (kinds, systems) = Self::building_ends(r.system);
+        if kinds.is_empty() && systems.is_empty() {
+            return Ok(Vec::new());
+        }
+        let prefix = format!("Acometida de {}", r.system.name());
+        let chambers: Vec<ServiceDevice> = self
+            .devices_on_level(r.level)
+            .filter(|d| d.kind == DeviceKind::Chamber && d.name.starts_with(&prefix))
+            .cloned()
+            .collect();
+        let plots: Vec<Plot> = self.plots_on_level(r.level).cloned().collect();
+        let near = |a: Point2, b: Point2| a.distance(b) < 0.05;
+        let mut out = Vec::new();
+        for ch in chambers {
+            let at = ch.position;
+            // Its plot: the one whose boundary is nearest (it stands half a
+            // metre out of it).
+            let Some(plot) = plots
+                .iter()
+                .map(|p| {
+                    let o = &p.outline;
+                    let d = (0..o.len())
+                        .map(|i| nearest_along(&[o[i], o[(i + 1) % o.len()]], at).2)
+                        .fold(f64::INFINITY, f64::min);
+                    (d, p)
+                })
+                .filter(|(d, _)| *d < 1.0)
+                .min_by(|a, b| a.0.total_cmp(&b.0))
+                .map(|x| x.1)
+            else {
+                continue;
+            };
+            let inside = |q: Point2| point_in_polygon(q, &plot.outline);
+            let mine = |x: &ServiceRun| x.system == r.system;
+            // Joined already: a pipe of the network from the chamber into
+            // the plot.
+            let joined = self.runs().filter(|x| mine(x)).any(|x| {
+                let (a, b) = (x.path[0], x.path[x.path.len() - 1]);
+                (near(a, at) && inside(b)) || (near(b, at) && inside(a))
+            });
+            if joined {
+                continue;
+            }
+            // The chamber's connection pipe, for its depth there.
+            let Some(z_in) = self.runs().filter(|x| mine(x)).find_map(|x| {
+                let n = x.path.len();
+                if near(x.path[0], at) {
+                    Some(x.z_at(0.0))
+                } else if near(x.path[n - 1], at) {
+                    Some(x.z_at(x.length()))
+                } else {
+                    None
+                }
+            }) else {
+                continue;
+            };
+            // The nearest end inside the plot: a device, or a point of the
+            // building's own pipes.
+            let devices = self
+                .devices()
+                .filter(|d| kinds.contains(&d.kind) && inside(d.position))
+                .map(|d| d.position);
+            let pipes = self
+                .runs()
+                .filter(|x| systems.contains(&x.system))
+                .flat_map(|x| x.path.iter().copied())
+                .filter(|q| inside(*q));
+            let Some(target) = devices
+                .chain(pipes)
+                .min_by(|a, b| a.distance(at).total_cmp(&b.distance(at)))
+            else {
+                continue;
+            };
+            let len = target.distance(at);
+            if len < 0.1 {
+                continue;
+            }
+            let (elevation, slope) = if r.system.falls() {
+                (z_in + CONNECTION_SLOPE * len, CONNECTION_SLOPE)
+            } else {
+                (z_in, 0.0)
+            };
+            let size = if r.system.falls() {
+                0.16
+            } else {
+                (r.width * 0.5).max(0.04)
+            };
+            out.push(self.add_run(NewRun {
+                level: r.level,
+                system: r.system,
+                path: vec![target, at],
+                elevation,
+                width: size,
+                height: size,
+                slope,
+            })?);
+        }
+        Ok(out)
+    }
+
     /// Manholes along a sewer (or a stormwater pipe): one at each end, at
     /// each corner and no more than [`MANHOLE_SPACING`] apart, from its
     /// bottom up to the street, where there is not one already.
@@ -290,6 +415,27 @@ mod tests {
             assert!(ch.elevation < 0.0 && ch.elevation + ch.height > -1e-6);
         }
         assert!(m.connect_plots(sewer).unwrap().is_empty(), "no twice");
+        // Joined to the buildings: the second plot's house has a downpipe.
+        m.add_device(NewDevice {
+            level: lv,
+            kind: DeviceKind::Downpipe,
+            name: "Bajante".into(),
+            position: Point2::new(50.0, 12.0),
+            rotation: 0.0,
+            elevation: 0.0,
+            width: 0.11,
+            depth: 0.11,
+            height: 6.0,
+        })
+        .unwrap();
+        let joined = m.connect_buildings(sewer).unwrap();
+        assert_eq!(joined.len(), 1);
+        let pipe = m.run(joined[0]).unwrap();
+        assert!(pipe.path[0].distance(Point2::new(50.0, 12.0)) < 1e-9);
+        assert!((pipe.path[1].y - 7.5).abs() < 1e-6);
+        // It falls into the chamber's connection.
+        assert!(pipe.z_at(pipe.length()) < pipe.elevation);
+        assert!(m.connect_buildings(sewer).unwrap().is_empty(), "no twice");
         // Its profile: the ground over it, the pipe falling and the
         // manholes.
         let prof = m.run_profile(sewer);

@@ -384,6 +384,270 @@ impl Model {
     }
 }
 
+/// The lines of a street drawn in sketch mode (U2): the kerb and the
+/// façade line (the outer edge of the sidewalk) of each side, each from
+/// the road's start to its end; empty where the side has no sidewalk.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct RoadEdges {
+    pub left_kerb: Vec<Point2>,
+    pub left_facade: Vec<Point2>,
+    pub right_kerb: Vec<Point2>,
+    pub right_facade: Vec<Point2>,
+}
+
+impl RoadEdges {
+    /// All four, those there are.
+    pub fn lines(&self) -> Vec<Vec<Point2>> {
+        [
+            &self.left_kerb,
+            &self.left_facade,
+            &self.right_kerb,
+            &self.right_facade,
+        ]
+        .into_iter()
+        .filter(|l| l.len() >= 2)
+        .cloned()
+        .collect()
+    }
+}
+
+/// On one side of a road with a sidewalk at its edge: how far from the
+/// axis its kerb is (the kerb's outer face, or the sidewalk's inner edge
+/// without a kerb) and its façade line (the sidewalk's outer edge), and
+/// the strip just inside the kerb, which a kerb's move widens or
+/// narrows.
+fn side_lines(
+    strips: &[RoadStrip],
+    offs: &[(RoadBand, f64, f64)],
+    left: bool,
+) -> Option<(f64, f64, Option<usize>)> {
+    let n = strips.len();
+    if n < 2 || offs.len() != n {
+        return None;
+    }
+    // Indices from that side inwards.
+    let order: Vec<usize> = if left {
+        (0..n).collect()
+    } else {
+        (0..n).rev().collect()
+    };
+    if !strips[order[0]].band.walk() {
+        return None;
+    }
+    // Distance from the axis to an edge of strip i, on this side.
+    let outer_of = |i: usize| if left { offs[i].2 } else { -offs[i].1 };
+    let inner_of = |i: usize| if left { offs[i].1 } else { -offs[i].2 };
+    let half = &order[..n.div_ceil(2)];
+    let kb = half
+        .iter()
+        .copied()
+        .find(|&i| strips[i].band == RoadBand::Kerb);
+    let kerb = match kb {
+        Some(i) => outer_of(i),
+        None => inner_of(order[0]),
+    };
+    let from = kb.map_or(1, |i| order.iter().position(|&x| x == i).unwrap_or(0) + 1);
+    let inner = order[from.min(n - 1)..]
+        .iter()
+        .copied()
+        .find(|&i| !strips[i].band.walk() && strips[i].band != RoadBand::Kerb);
+    Some((kerb, outer_of(order[0]), inner))
+}
+
+/// The narrowest a strip is left by moving a kerb or a façade line.
+pub const MIN_EDGE_STRIP: f64 = 0.3;
+
+impl Road {
+    /// Where its section can change: its ends, its axis's corners and its
+    /// changes' cuts.
+    fn edge_stations(&self) -> Vec<f64> {
+        let len = self.length();
+        let mut st = vec![0.0, len];
+        let mut s = 0.0;
+        for w in self.axis.windows(2) {
+            s += w[0].distance(w[1]);
+            st.push(s);
+        }
+        st.extend(self.change_cuts());
+        st.retain(|x| (0.0..=len).contains(x));
+        st.sort_by(|a, b| a.total_cmp(b));
+        st.dedup_by(|a, b| (*a - *b).abs() < 0.05);
+        st
+    }
+
+    /// Its kerbs and façade lines as they are, to edit them.
+    pub fn edges(&self) -> RoadEdges {
+        let mut e = RoadEdges::default();
+        for s in self.edge_stations() {
+            let (p, u) = self.axis_at(s);
+            let n = u.perp_left();
+            let strips = self.strips_at(s);
+            let offs = self.offsets_at(s);
+            for left in [true, false] {
+                if let Some((k, f, _)) = side_lines(&strips, &offs, left) {
+                    let sign = if left { 1.0 } else { -1.0 };
+                    let (kerb, facade) = if left {
+                        (&mut e.left_kerb, &mut e.left_facade)
+                    } else {
+                        (&mut e.right_kerb, &mut e.right_facade)
+                    };
+                    kerb.push(p + n * (sign * k));
+                    facade.push(p + n * (sign * f));
+                }
+            }
+        }
+        e
+    }
+
+    /// Which line each of some lines drawn beside the road is: by its
+    /// side of the axis, and on each side the nearer the kerb and the
+    /// farther the façade line (one alone: the one it is nearer to now).
+    pub fn edges_of(&self, lines: Vec<Vec<Point2>>) -> RoadEdges {
+        let now = self.edges();
+        let side_of = |l: &[Point2]| -> f64 {
+            let v: Vec<f64> = l
+                .iter()
+                .map(|q| {
+                    let (p, u) = self.axis_at(self.station_of(*q));
+                    (*q - p).dot(u.perp_left())
+                })
+                .collect();
+            v.iter().sum::<f64>() / v.len().max(1) as f64
+        };
+        let mean_of = |l: &[Point2]| if l.is_empty() { None } else { Some(side_of(l)) };
+        let mut e = RoadEdges::default();
+        for left in [true, false] {
+            let mut mine: Vec<(f64, Vec<Point2>)> = lines
+                .iter()
+                .map(|l| (side_of(l), l.clone()))
+                .filter(|(d, _)| (*d > 0.0) == left)
+                .collect();
+            mine.sort_by(|a, b| a.0.abs().total_cmp(&b.0.abs()));
+            let (kerb, facade) = if left {
+                (&mut e.left_kerb, &mut e.left_facade)
+            } else {
+                (&mut e.right_kerb, &mut e.right_facade)
+            };
+            match mine.len() {
+                0 => {}
+                1 => {
+                    let (d, l) = mine.remove(0);
+                    let (k, f) = if left {
+                        (mean_of(&now.left_kerb), mean_of(&now.left_facade))
+                    } else {
+                        (mean_of(&now.right_kerb), mean_of(&now.right_facade))
+                    };
+                    let to_kerb = k.map_or(f64::INFINITY, |k| (k - d).abs());
+                    let to_facade = f.map_or(f64::INFINITY, |f| (f - d).abs());
+                    if to_kerb <= to_facade {
+                        *kerb = l;
+                    } else {
+                        *facade = l;
+                    }
+                }
+                _ => {
+                    *kerb = mine[0].1.clone();
+                    *facade = mine[mine.len() - 1].1.clone();
+                }
+            }
+        }
+        e
+    }
+
+    /// The changes of section that make the road's kerbs and façade lines
+    /// follow the lines given (those missing stay as they are): at each
+    /// corner of the axis or of a line, the sidewalk as wide as from the
+    /// kerb to the façade line, and the strip inside it (parking, a
+    /// planting strip, the carriageway) out to the kerb; between corners,
+    /// a straight transition. The road's own section stays, so its lanes
+    /// stay where they are; a carriageway widened on one side only widens
+    /// half on each.
+    pub fn changes_from_edges(&self, e: &RoadEdges) -> Vec<SectionChange> {
+        let len = self.length();
+        let mut st = self.edge_stations();
+        for l in e.lines() {
+            st.extend(l.iter().map(|q| self.station_of(*q)));
+        }
+        st.retain(|x| (0.0..=len).contains(x));
+        st.sort_by(|a, b| a.total_cmp(b));
+        st.dedup_by(|a, b| (*a - *b).abs() < 0.05);
+        // The distance from the axis to a line along the normal there.
+        let reach = |p: Point2, n: Vec2, line: &[Point2]| -> Option<f64> {
+            let mut best: Option<f64> = None;
+            for w in line.windows(2) {
+                let (a, b) = (w[0], w[1]);
+                let d = b - a;
+                let den = n.x * d.y - n.y * d.x;
+                if den.abs() < 1e-12 {
+                    continue;
+                }
+                let q = a - p;
+                let t = (q.x * d.y - q.y * d.x) / den;
+                let k = (q.x * n.y - q.y * n.x) / den;
+                if (-1e-9..=1.0 + 1e-9).contains(&k) && t > 0.0 {
+                    best = Some(best.map_or(t, |x| x.min(t)));
+                }
+            }
+            best
+        };
+        let round = |v: f64| (v * 100.0).round() / 100.0;
+        let mut stations: Vec<(f64, Vec<RoadStrip>)> = Vec::new();
+        for s in st {
+            let (p, u) = self.axis_at(s);
+            let n = u.perp_left();
+            let mut strips = self.strips_at(s);
+            let offs = self.offsets_at(s);
+            for left in [true, false] {
+                let Some((k0, f0, inner)) = side_lines(&strips, &offs, left) else {
+                    continue;
+                };
+                let dir = if left { n } else { -n };
+                let (kerb, facade) = if left {
+                    (&e.left_kerb, &e.left_facade)
+                } else {
+                    (&e.right_kerb, &e.right_facade)
+                };
+                let k = reach(p, dir, kerb).unwrap_or(k0);
+                let f = reach(p, dir, facade).unwrap_or(f0);
+                // The kerb moved: the strip inside it takes it, and what is
+                // outside it goes with it; the sidewalk to the façade line.
+                let dk = k - k0;
+                if let Some(j) = inner {
+                    strips[j].width = (strips[j].width + dk).max(MIN_EDGE_STRIP);
+                }
+                let outer = if left { 0 } else { strips.len() - 1 };
+                strips[outer].width = (strips[outer].width + (f - f0) - dk).max(MIN_EDGE_STRIP);
+            }
+            for x in &mut strips {
+                x.width = round(x.width);
+            }
+            stations.push((s, strips));
+        }
+        let same = |a: &[RoadStrip], b: &[RoadStrip]| {
+            alike(a, b)
+                && a.iter()
+                    .zip(b)
+                    .all(|(x, y)| (x.width - y.width).abs() < 0.005)
+        };
+        let mut changes = Vec::new();
+        let mut prev = self.section.strips.clone();
+        let mut prev_s = 0.0;
+        for (i, (s, strips)) in stations.into_iter().enumerate() {
+            if !same(&prev, &strips) {
+                let gradual = i > 0 && alike(&prev, &strips);
+                changes.push(SectionChange {
+                    at: round(s),
+                    transition: if gradual { round(s - prev_s) } else { 0.0 },
+                    strips: strips.clone(),
+                });
+            }
+            prev = strips;
+            prev_s = s;
+        }
+        changes
+    }
+}
+
 /// A path moved to its left by a distance of its own at each point
 /// (negative: to its right), mitred at its corners.
 pub(super) fn offset_path_by(path: &[Point2], d: &[f64]) -> Option<Vec<Point2>> {
@@ -590,5 +854,90 @@ mod tests {
             (l - 10.0).abs() < 1e-6 && (rr - 9.0).abs() < 1e-6,
             "{l} {rr}"
         );
+    }
+
+    #[test]
+    fn kerbs_and_facades_drawn_make_the_changes() {
+        let (m, id) = {
+            let mut m = Model::new("T");
+            let lv = m.add_level("PB", 0.0);
+            let mat = m.add_material("A", "asphalt", [60, 60, 60], CutPattern::Solid);
+            let id = m
+                .add_road(NewRoad {
+                    name: "R".into(),
+                    level: lv,
+                    axis: vec![Point2::new(0.0, 0.0), Point2::new(100.0, 0.0)],
+                    section: RoadSection::default(),
+                    top_offset: 0.0,
+                    profile: Vec::new(),
+                    changes: Vec::new(),
+                    pavement: mat,
+                    kerb_material: mat,
+                    sidewalk_material: mat,
+                })
+                .unwrap();
+            (m, id)
+        };
+        let r = m.road(id).unwrap();
+        let e = r.edges();
+        assert_eq!(e.lines().len(), 4);
+        // As they are: no changes.
+        assert!(r.changes_from_edges(&e).is_empty());
+        // The left façade line steps back 2 m from 40 to 60 m, with 10 m
+        // ramps.
+        let f = e.left_facade[0].y;
+        let mut moved = e.clone();
+        moved.left_facade = vec![
+            Point2::new(0.0, f),
+            Point2::new(30.0, f),
+            Point2::new(40.0, f + 2.0),
+            Point2::new(60.0, f + 2.0),
+            Point2::new(70.0, f),
+            Point2::new(100.0, f),
+        ];
+        let changes = r.changes_from_edges(&moved);
+        let mut r2 = r.clone();
+        r2.changes = changes;
+        let w0 = r.strips_at(50.0)[0].width;
+        assert!((r2.strips_at(50.0)[0].width - (w0 + 2.0)).abs() < 0.011);
+        assert!((r2.strips_at(35.0)[0].width - (w0 + 1.0)).abs() < 0.011);
+        assert!((r2.strips_at(90.0)[0].width - w0).abs() < 0.011);
+        // The kerb did not move: the carriageway is as it was.
+        let lanes = |r: &Road, s: f64| r.strips_at(s)[1..r.strips_at(s).len() - 1].to_vec();
+        assert_eq!(lanes(&r2, 50.0), lanes(r, 50.0));
+        // The right kerb comes 1 m in from 40 to 60 m (a bulb-out): the
+        // parking narrows and the sidewalk widens, the façade stays.
+        let k = e.right_kerb[0].y;
+        let mut bulb = e.clone();
+        bulb.right_kerb = vec![
+            Point2::new(0.0, k),
+            Point2::new(35.0, k),
+            Point2::new(40.0, k + 1.0),
+            Point2::new(60.0, k + 1.0),
+            Point2::new(65.0, k),
+            Point2::new(100.0, k),
+        ];
+        let mut r3 = r.clone();
+        r3.changes = r.changes_from_edges(&bulb);
+        let mid = r3.strips_at(50.0);
+        let own = r.strips_at(50.0);
+        let last = mid.len() - 1;
+        assert!(
+            (mid[last].width - (own[last].width + 1.0)).abs() < 0.011,
+            "{mid:?}"
+        );
+        assert!(
+            (mid[last - 2].width - (own[last - 2].width - 1.0)).abs() < 0.011,
+            "{mid:?}"
+        );
+        assert!((r3.edges().right_facade[0].y - e.right_facade[0].y).abs() < 1e-9);
+        // The lines told apart by side and distance.
+        let back = r.edges_of(vec![
+            moved.right_facade.clone(),
+            moved.left_kerb.clone(),
+            moved.left_facade.clone(),
+            moved.right_kerb.clone(),
+        ]);
+        assert_eq!(back, moved);
     }
 }

@@ -636,6 +636,10 @@ pub struct NewEnvBuilding {
 pub const PARTY_GAP: f64 = 0.3;
 pub const PARTY_SHARE: f64 = 0.5;
 
+/// How far a street's axis may be in front of a façade for it to face
+/// the street (m).
+pub const STREET_REACH: f64 = 30.0;
+
 /// Most floors of a building of the surroundings.
 pub const MAX_ENV_FLOORS: u32 = 60;
 
@@ -829,6 +833,57 @@ impl Model {
             .collect()
     }
 
+    /// Which sides of a mass's contour face a street: free sides with a
+    /// road's axis in front of them within `STREET_REACH`. With no road
+    /// near, its longest free side. They take the shop fronts and the
+    /// big door.
+    pub fn street_sides(&self, id: MassId) -> Vec<bool> {
+        let Some(m) = self.masses.get(&id) else {
+            return Vec::new();
+        };
+        let MassShape::Prism(p) = &m.shape else {
+            return Vec::new();
+        };
+        let mut p = p.clone();
+        if signed_area(&p) < 0.0 {
+            p.reverse();
+        }
+        let party = self.party_sides(id);
+        let n = p.len();
+        let roads: Vec<&Road> = self.roads_on_level(m.level).collect();
+        let mut out: Vec<bool> = (0..n)
+            .map(|i| {
+                if party.get(i).copied().unwrap_or(false) {
+                    return false;
+                }
+                let (a, b) = (p[i], p[(i + 1) % n]);
+                let Some(u) = (b - a).normalized() else {
+                    return false;
+                };
+                let out = -u.perp_left();
+                let mid = (a + b) * 0.5;
+                roads.iter().any(|r| {
+                    let q = r.axis_at(r.station_of(mid)).0;
+                    let d = q - mid;
+                    d.length() <= STREET_REACH && d.dot(out) > 0.5 * d.length()
+                })
+            })
+            .collect();
+        if !out.iter().any(|x| *x) {
+            let longest = (0..n)
+                .filter(|i| !party.get(*i).copied().unwrap_or(false))
+                .max_by(|x, y| {
+                    p[*x]
+                        .distance(p[(*x + 1) % n])
+                        .total_cmp(&p[*y].distance(p[(*y + 1) % n]))
+                });
+            if let Some(i) = longest {
+                out[i] = true;
+            }
+        }
+        out
+    }
+
     /// The building of the surroundings for a plot: its buildable area.
     pub fn plot_outline_for_building(&self, plot: PlotId) -> Option<Vec<Point2>> {
         self.plot(plot)?.buildable()
@@ -914,6 +969,46 @@ mod tests {
         assert_eq!(Dress::decode(&text, d.materials), Some(d));
         let back = Model::from_parts(m.to_parts()).unwrap();
         assert_eq!(back.mass(ids[1]).unwrap().dress, b.dress);
+    }
+
+    #[test]
+    fn the_shops_face_the_street() {
+        let mut m = Model::new("T");
+        let l = m.add_level("Planta baja", 0.0);
+        let mat = m.add_material("Asfalto", "asphalt", [60, 60, 60], CutPattern::Solid);
+        // A corner block: a street in front (south) and one to the east.
+        let block = m
+            .add_env_building(NewEnvBuilding {
+                name: "Esquina".into(),
+                level: l,
+                outline: rect(0.0, 0.0, 20.0, 15.0),
+                style: BuildingStyle::Ensanche,
+                floors: None,
+                floor_height: None,
+                base_offset: 0.0,
+            })
+            .unwrap();
+        // With no street, its longest free side.
+        assert_eq!(m.street_sides(block), vec![false, false, true, false]);
+        for axis in [
+            vec![Point2::new(-10.0, -6.0), Point2::new(40.0, -6.0)],
+            vec![Point2::new(26.0, -20.0), Point2::new(26.0, 40.0)],
+        ] {
+            m.add_road(NewRoad {
+                name: "Calle".into(),
+                level: l,
+                axis,
+                section: RoadSection::default(),
+                top_offset: 0.0,
+                profile: Vec::new(),
+                changes: Vec::new(),
+                pavement: mat,
+                kerb_material: mat,
+                sidewalk_material: mat,
+            })
+            .unwrap();
+        }
+        assert_eq!(m.street_sides(block), vec![true, true, false, false]);
     }
 
     #[test]

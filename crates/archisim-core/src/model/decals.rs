@@ -252,6 +252,80 @@ impl Model {
     }
 }
 
+/// Where the wall a decal is stuck on was, so that the decal can follow
+/// it (see [`Model::decals_follow`]).
+#[derive(Debug, Clone, PartialEq)]
+pub struct DecalAnchor {
+    pub decal: DecalId,
+    pub centre: [f64; 3],
+    pub start: Point2,
+    pub end: Point2,
+    /// The wall's base, absolute.
+    pub base: f64,
+}
+
+impl Model {
+    /// Where the walls of the decals stuck on walls are now.
+    pub fn decal_anchors(&self) -> Vec<DecalAnchor> {
+        self.decals
+            .values()
+            .filter_map(|d| {
+                let w = self.wall(WallId(d.host?))?;
+                Some(DecalAnchor {
+                    decal: d.id,
+                    centre: d.centre,
+                    start: w.start,
+                    end: w.end,
+                    base: self.level(w.level).map_or(0.0, |l| l.elevation) + w.base_offset,
+                })
+            })
+            .collect()
+    }
+
+    /// Moves each decal with its wall, if the wall moved (and the decal
+    /// did not move by itself): the same distance from the wall's start,
+    /// the same distance off it, the same height over its base, turned
+    /// with it. A decal whose wall is gone stays where it is, without it.
+    pub fn decals_follow(&mut self, before: &[DecalAnchor]) {
+        for a in before {
+            let Some(d) = self.decals.get(&a.decal) else {
+                continue;
+            };
+            if d.centre != a.centre {
+                continue;
+            }
+            let Some(host) = d.host else { continue };
+            let Some(w) = self.wall(WallId(host)) else {
+                if let Some(d) = self.decals.get_mut(&a.decal) {
+                    d.host = None;
+                }
+                continue;
+            };
+            let base = self.level(w.level).map_or(0.0, |l| l.elevation) + w.base_offset;
+            if w.start == a.start && w.end == a.end && (base - a.base).abs() < 1e-12 {
+                continue;
+            }
+            let (Some(u0), Some(u1)) = (
+                (a.end - a.start).normalized(),
+                (w.end - w.start).normalized(),
+            ) else {
+                continue;
+            };
+            let (start1, z_shift) = (w.start, base - a.base);
+            let c = Point2::new(a.centre[0], a.centre[1]);
+            let along = (c - a.start).dot(u0);
+            let across = (c - a.start).dot(u0.perp_left());
+            let c1 = start1 + u1 * along + u1.perp_left() * across;
+            // The plan part of the normal turned as the wall turned.
+            let (cos, sin) = (u0.dot(u1), u0.cross(u1));
+            let d = self.decals.get_mut(&a.decal).expect("checked");
+            let (nx, ny) = (d.normal[0], d.normal[1]);
+            d.normal = [nx * cos - ny * sin, nx * sin + ny * cos, d.normal[2]];
+            d.centre = [c1.x, c1.y, d.centre[2] + z_shift];
+        }
+    }
+}
+
 /// The size of a PNG (width, height) from its header, without decoding
 /// it.
 pub fn png_size(png: &[u8]) -> Option<(u32, u32)> {
@@ -392,5 +466,69 @@ mod tests {
         assert!(m.edit_decal(id, |x| x.image = bad).is_err());
         let bytes = tiny_png();
         assert_eq!(base64_decode(&base64_encode(&bytes)), Some(bytes));
+    }
+
+    #[test]
+    fn a_decal_goes_with_its_wall() {
+        let mut m = Model::new("T");
+        let l = m.add_level("Planta baja", 0.0);
+        let mat = m.add_material("Fábrica", "masonry", [180, 90, 60], CutPattern::Solid);
+        let t = m
+            .add_wall_type(
+                "Muro",
+                WallFunction::Exterior,
+                vec![Layer {
+                    material: mat,
+                    thickness: 0.2,
+                    function: LayerFunction::Structure,
+                }],
+            )
+            .unwrap();
+        let w = m
+            .add_wall(NewWall {
+                wall_type: t,
+                level: l,
+                start: Point2::new(0.0, 0.0),
+                end: Point2::new(10.0, 0.0),
+                reference: ReferenceLine::Center,
+                height: 3.0,
+                base_offset: 0.0,
+                bulge: 0.0,
+                top: WallTop::Unconnected,
+            })
+            .unwrap();
+        let id = m
+            .add_decal(NewDecal {
+                name: "Cartel".into(),
+                level: l,
+                centre: [4.0, -0.1, 1.5],
+                normal: [0.0, -1.0, 0.0],
+                rotation: 0.0,
+                width: 2.0,
+                image: decal_image("c.png", tiny_png()).unwrap(),
+                host: Some(w.0),
+            })
+            .unwrap();
+        // The wall moved north 2 m and turned a quarter about its start.
+        let before = m.decal_anchors();
+        m.move_wall(w, Point2::new(0.0, 2.0), Point2::new(0.0, 12.0))
+            .unwrap();
+        m.decals_follow(&before);
+        let d = m.decal(id).unwrap();
+        assert!(
+            (d.centre[0] - 0.1).abs() < 1e-9 && (d.centre[1] - 6.0).abs() < 1e-9,
+            "{:?}",
+            d.centre
+        );
+        assert!(
+            (d.normal[0] - 1.0).abs() < 1e-9 && d.normal[1].abs() < 1e-9,
+            "{:?}",
+            d.normal
+        );
+        // Its wall gone, it stays.
+        let before = m.decal_anchors();
+        m.remove_wall(w).unwrap();
+        m.decals_follow(&before);
+        assert_eq!(m.decal(id).unwrap().host, None);
     }
 }

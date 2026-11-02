@@ -27,6 +27,11 @@ pub enum SketchTarget {
     /// A wall's profile in elevation, as Revit's «Editar perfil»
     /// (coordinates along the wall from its start, up from its base).
     WallProfile(archisim_core::WallId),
+    /// A street's axis: one open line, not a contour (U2).
+    Road(archisim_core::RoadId),
+    /// A street's kerbs and façade lines: open lines that become its
+    /// changes of section (U2).
+    RoadEdges(archisim_core::RoadId),
 }
 
 /// A contour being edited.
@@ -59,6 +64,8 @@ pub enum SketchError {
     Open(Vec<Point2>),
     /// A roof or a terrain takes one contour only.
     OneLoop,
+    /// A street's axis is one line, from one end to the other.
+    OneLine,
     /// No sketch lines at all.
     Empty,
 }
@@ -76,6 +83,10 @@ impl std::fmt::Display for SketchError {
             SketchError::OneLoop => {
                 write!(f, "aquí el boceto tiene que ser un solo contorno cerrado")
             }
+            SketchError::OneLine => write!(
+                f,
+                "el eje de la calle tiene que ser una sola línea, de un extremo a otro, sin cerrarse"
+            ),
             SketchError::Empty => write!(f, "el boceto no tiene líneas"),
         }
     }
@@ -128,6 +139,18 @@ impl Sketch {
                     zones,
                     elevated: true,
                 });
+            }
+            SketchTarget::Road(id) => {
+                let r = model.road(id)?;
+                (vec![r.axis.clone()], Vec::new(), Vec::new())
+            }
+            SketchTarget::RoadEdges(id) => {
+                let r = model.road(id)?;
+                let lines = r.edges().lines();
+                if lines.is_empty() {
+                    return None;
+                }
+                (lines, Vec::new(), Vec::new())
             }
             SketchTarget::WallProfile(w) => {
                 let wall = model.wall(w)?;
@@ -186,6 +209,14 @@ impl Sketch {
         self.elevated
     }
 
+    /// Whether it is one open line (a street's axis) and not contours.
+    pub fn is_open(&self) -> bool {
+        matches!(
+            self.target,
+            SketchTarget::Road(_) | SketchTarget::RoadEdges(_)
+        )
+    }
+
     /// Whether its loops are zones, any number of them, none needed.
     pub fn is_zones(&self) -> bool {
         matches!(
@@ -197,6 +228,25 @@ impl Sketch {
     /// Puts the sketch into the model: the element's contour as sketched.
     /// The model checks it (a crossing outline, a hole outside the slab).
     pub fn apply(&self, m: &mut Model) -> Result<(), SketchError> {
+        if let SketchTarget::RoadEdges(id) = self.target {
+            let r = m
+                .road(id)
+                .ok_or(SketchError::Model(ModelError::UnknownElement(id.0)))?;
+            let edges = r.edges_of(self.loops.clone());
+            let changes = r.changes_from_edges(&edges);
+            return m
+                .edit_road(id, |r| r.changes = changes)
+                .map_err(SketchError::Model);
+        }
+        if let SketchTarget::Road(id) = self.target {
+            let axis = self.loops.first().cloned().unwrap_or_default();
+            if axis.len() < 2 {
+                return Err(SketchError::TooFew);
+            }
+            return m
+                .edit_road(id, |r| r.axis = axis)
+                .map_err(SketchError::Model);
+        }
         if self.loops.iter().any(|l| l.len() < 3) {
             return Err(SketchError::TooFew);
         }
@@ -281,8 +331,11 @@ impl Sketch {
                 })
                 .map_err(SketchError::Model)?;
             }
-            SketchTarget::Zones(..) | SketchTarget::WallFace(..) | SketchTarget::WallProfile(_) => {
-            }
+            SketchTarget::Zones(..)
+            | SketchTarget::WallFace(..)
+            | SketchTarget::WallProfile(_)
+            | SketchTarget::Road(_)
+            | SketchTarget::RoadEdges(_) => {}
             SketchTarget::Terrain(id) if self.terrain.is_empty() => {
                 // An edge drawn by hand (E5): the terrain takes the new one.
                 m.edit_terrain(id, |t| t.set_outline(outline))
@@ -409,6 +462,75 @@ pub fn loops_from_segs(segs: &[archisim_draft::Seg]) -> Result<Vec<Vec<Point2>>,
     Ok(loops)
 }
 
+/// The open lines made by sketch lines (a street's axis, its kerbs and
+/// façade lines): each one's points from one free end to the other, the
+/// arcs in short chords. Branches (three ends at a point) come back as
+/// `Open` with where they are; a closed ring as `OneLine`.
+pub fn chains_from_segs(segs: &[archisim_draft::Seg]) -> Result<Vec<Vec<Point2>>, SketchError> {
+    let tol = 0.05;
+    let open: Vec<&archisim_draft::Seg> = segs.iter().filter(|s| s.length() > 1e-6).collect();
+    if open.is_empty() {
+        return Err(SketchError::Empty);
+    }
+    let ends: Vec<Point2> = open.iter().flat_map(|s| [s.start(), s.end()]).collect();
+    let partner = |k: usize| -> Vec<usize> {
+        (0..ends.len())
+            .filter(|&j| j != k && j / 2 != k / 2 && ends[j].distance(ends[k]) < JOIN)
+            .collect()
+    };
+    let branches: Vec<Point2> = (0..ends.len())
+        .filter(|&k| partner(k).len() > 1)
+        .map(|k| ends[k])
+        .collect();
+    if !branches.is_empty() {
+        return Err(SketchError::Open(branches));
+    }
+    let mut used = vec![false; open.len()];
+    let mut out = Vec::new();
+    for first in (0..ends.len()).filter(|&k| partner(k).is_empty()) {
+        if used[first / 2] {
+            continue;
+        }
+        let mut pts: Vec<Point2> = Vec::new();
+        let mut k = first;
+        loop {
+            let i = k / 2;
+            used[i] = true;
+            let forward = k.is_multiple_of(2);
+            let s = if forward {
+                *open[i]
+            } else {
+                open[i].reversed()
+            };
+            let mut t = s.tessellate(tol);
+            if !pts.is_empty() {
+                t.remove(0);
+            }
+            pts.extend(t);
+            let at = if forward { 2 * i + 1 } else { 2 * i };
+            match partner(at).first() {
+                Some(&next) if !used[next / 2] => k = next,
+                _ => break,
+            }
+        }
+        out.push(pts);
+    }
+    // What is left closes on itself.
+    if used.iter().any(|u| !u) {
+        return Err(SketchError::OneLine);
+    }
+    Ok(out)
+}
+
+/// The one open line made by sketch lines (a street's axis).
+pub fn chain_from_segs(segs: &[archisim_draft::Seg]) -> Result<Vec<Point2>, SketchError> {
+    let mut c = chains_from_segs(segs)?;
+    if c.len() != 1 {
+        return Err(SketchError::OneLine);
+    }
+    Ok(c.remove(0))
+}
+
 impl Sketch {
     /// The same element with new contours from sketch lines: a slab's
     /// largest is its outline and the rest its holes; a roof keeps the
@@ -416,6 +538,22 @@ impl Sketch {
     /// take the nearest's); a terrain keeps the points it had where a
     /// vertex still is, and the new ones take the height of the nearest.
     pub fn with_loops(&self, mut loops: Vec<Vec<Point2>>) -> Result<Sketch, SketchError> {
+        if matches!(self.target, SketchTarget::RoadEdges(_)) {
+            if loops.is_empty() || loops.len() > 4 {
+                return Err(SketchError::OneLine);
+            }
+            let mut out = self.clone();
+            out.loops = loops;
+            return Ok(out);
+        }
+        if self.is_open() {
+            if loops.len() != 1 {
+                return Err(SketchError::OneLine);
+            }
+            let mut out = self.clone();
+            out.loops = loops;
+            return Ok(out);
+        }
         loops.sort_by(|a, b| signed_area(b).abs().total_cmp(&signed_area(a).abs()));
         if self.is_zones() {
             let mut out = self.clone();
@@ -476,6 +614,7 @@ impl Sketch {
             SketchTarget::WallFace(w, _) | SketchTarget::WallProfile(w) => {
                 crate::pick::Element::Wall(w)
             }
+            SketchTarget::Road(id) | SketchTarget::RoadEdges(id) => crate::pick::Element::Road(id),
         }
     }
 }
@@ -617,6 +756,36 @@ mod tests {
 
     /// A roof keeps the slope of each edge on an old one; the new edges
     /// take the nearest's. It takes one contour only.
+    #[test]
+    fn a_street_axis_is_one_open_line() {
+        let segs = vec![
+            line(p(10.0, 0.0), p(10.0, 10.0)),
+            line(p(0.0, 0.0), p(10.0, 0.0)),
+        ];
+        let chain = chain_from_segs(&segs).unwrap();
+        assert_eq!(chain.len(), 3);
+        assert!(chain[1].distance(p(10.0, 0.0)) < 1e-9);
+        // Closed, or two lines: not an axis.
+        let ring = vec![
+            line(p(0.0, 0.0), p(10.0, 0.0)),
+            line(p(10.0, 0.0), p(10.0, 10.0)),
+            line(p(10.0, 10.0), p(0.0, 0.0)),
+        ];
+        assert_eq!(chain_from_segs(&ring), Err(SketchError::OneLine));
+        let apart = vec![
+            line(p(0.0, 0.0), p(1.0, 0.0)),
+            line(p(5.0, 0.0), p(6.0, 0.0)),
+        ];
+        assert_eq!(chain_from_segs(&apart), Err(SketchError::OneLine));
+        // Three ends at a point: where it branches.
+        let tee = vec![
+            line(p(0.0, 0.0), p(5.0, 0.0)),
+            line(p(5.0, 0.0), p(10.0, 0.0)),
+            line(p(5.0, 0.0), p(5.0, 5.0)),
+        ];
+        assert!(matches!(chain_from_segs(&tee), Err(SketchError::Open(_))));
+    }
+
     #[test]
     fn a_roof_keeps_its_slopes() {
         let s = Sketch {
