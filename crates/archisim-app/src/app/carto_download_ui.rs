@@ -321,6 +321,7 @@ impl ArchiSimApp {
                     ui.switch(&mut o.trees, "Árboles (OpenStreetMap)");
                     ui.switch(&mut o.terrain, "Terreno (IGN, MDT05)");
                     ui.switch(&mut o.orthophoto, "Ortofoto (PNOA)");
+                    ui.switch(&mut o.street_life, "Vida en la calle");
                 });
                 ui.horizontal(|ui| {
                     ui.label("Radio alrededor del origen");

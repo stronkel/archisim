@@ -199,6 +199,11 @@ Uso:
   archisim medir vistas proyecto.archisim   lo que tarda cada alzado y planta en pantalla
   archisim medir proyecto proyecto.archisim  abrir, 3D, IFC, CTE, mediciones y vistas de un proyecto
 
+  archisim vida-calle <proyecto.archisim> [salida.archisim]
+      Viste las calles del proyecto: árboles en las aceras, farolas,
+      bancos, papeleras, coches aparcados, alguna persona y los jardines
+      delanteros de las viviendas con su seto, su cubo y un arbusto.
+
   archisim png <dibujo.svg> [imagen.png] [ppp]
       Convierte una planta o un plano en SVG en una imagen PNG, a 200
       puntos por pulgada si no se dice otra cosa.
@@ -454,6 +459,17 @@ fn main() -> ExitCode {
                 }
             }
         }
+        Some("vida-calle") => match args.get(1) {
+            Some(p) => {
+                let p = PathBuf::from(p);
+                let out = args.get(2).map_or_else(|| p.clone(), PathBuf::from);
+                report(street_life(&p, &out))
+            }
+            None => {
+                eprintln!("Uso: archisim vida-calle <proyecto.archisim> [salida.archisim]");
+                ExitCode::FAILURE
+            }
+        },
         Some("entorno") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
             report(entorno::write(&dir))
@@ -1057,6 +1073,30 @@ fn svg_to_png(svg: &Path, png: &Path, dpi: f32) -> Result<(), Box<dyn std::error
         .save_png(png)
         .map_err(|e| format!("{}: {e}", png.display()))?;
     println!("{} ({w} × {h} px)", png.display());
+    Ok(())
+}
+
+/// `archisim vida-calle`: trees, street lights, benches, bins, cars,
+/// people and front gardens along the streets of a project.
+fn street_life(project: &Path, out: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let mut m = archisim_file::open(project)?;
+    let levels: Vec<_> = m.levels().iter().map(|l| l.id).collect();
+    let mut total = archisim_library::street_life::LifeReport::default();
+    for l in levels {
+        let r = archisim_library::street_life::add_street_life(
+            &mut m,
+            l,
+            &archisim_library::street_life::LifeOptions::default(),
+        )?;
+        total.trees += r.trees;
+        total.furniture += r.furniture;
+        total.cars += r.cars;
+        total.people += r.people;
+        total.garden_pieces += r.garden_pieces;
+    }
+    archisim_file::save(&m, out)?;
+    println!("En las calles: {}", total.line());
+    println!("Proyecto: {}", out.display());
     Ok(())
 }
 

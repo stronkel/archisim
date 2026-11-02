@@ -808,6 +808,7 @@ pub mod flora;
 pub mod ground;
 pub mod imported;
 pub mod railings;
+pub mod street_life;
 pub mod workshop;
 
 /// Adds the studio's usual door and window types, with the materials they

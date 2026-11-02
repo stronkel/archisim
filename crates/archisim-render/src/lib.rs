@@ -141,7 +141,7 @@ impl Light {
     /// The sky's colour at the horizon and at the zenith.
     fn sky_colours(self) -> (V3, V3) {
         match self {
-            Light::Day => ([0.78, 0.84, 0.92], [0.36, 0.52, 0.80]),
+            Light::Day => ([0.60, 0.75, 0.94], [0.16, 0.36, 0.80]),
             Light::Evening => ([0.98, 0.72, 0.50], [0.32, 0.38, 0.62]),
             Light::Night => ([0.07, 0.09, 0.16], [0.015, 0.025, 0.06]),
         }
@@ -602,7 +602,8 @@ fn sky(light: Light, d: V3) -> V3 {
         let k = (-t).powf(0.5);
         let floor = match light {
             Light::Night => [0.05, 0.05, 0.06],
-            _ => [0.86, 0.86, 0.83],
+            // By day, the sky's own blue, paler: the model floats in it.
+            _ => [0.74, 0.82, 0.92],
         };
         return add(mul(horizon, 1.0 - k), mul(floor, k));
     }
@@ -615,8 +616,9 @@ const LAMP: V3 = [1.0, 0.72, 0.42];
 /// How bright a lamp is near it.
 const LAMP_POWER: f64 = 2.2;
 
-const SUN: V3 = [3.1, 2.95, 2.7];
-const SKY_LIGHT: V3 = [0.62, 0.70, 0.82];
+/// A warm sun, an illustration's.
+const SUN: V3 = [3.3, 2.85, 2.2];
+const SKY_LIGHT: V3 = [0.54, 0.65, 0.88];
 
 impl Scene {
     /// The light coming back along a ray.
@@ -795,6 +797,9 @@ pub fn render(model: &Model, view: &View, opt: &Options, progress: &(dyn Fn(f64)
                         }
                     }
                     let c = mul(acc, 1.0 / (samples * samples) as f64);
+                    // An illustration's colours: a little livelier.
+                    let l = 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+                    let c = c.map(|v| (l + (v - l) * 1.2).max(0.0));
                     // A gentle tone curve, so the sun does not burn.
                     let tone = |v: f64| {
                         let v = v * 0.85;
