@@ -8,11 +8,11 @@
 use std::collections::BTreeMap;
 
 use archisim_core::{
-    offset_contour, signed_area, skeleton, BuildingStyle, Closure, Dress, EnvRoof, Mass, MassShape,
+    offset_contour, signed_area, BuildingStyle, Closure, Dress, EnvRoof, Mass, MassShape,
     MaterialId, Model, Point2, Vec2,
 };
 
-use crate::solid::{draped_prism, prism, triangulate, Solid, SolidOwner, P3};
+use crate::solid::{draped_prism, prism, Solid, SolidOwner, P3};
 
 /// The parapet of a flat roof: height and thickness.
 const PARAPET: (f64, f64) = (0.9, 0.25);
@@ -211,7 +211,18 @@ pub fn dressed_solids(model: &Model, m: &Mass) -> Vec<Solid> {
         EnvRoof::Flat => false,
         EnvRoof::Gable | EnvRoof::Hip if court.is_some() => false,
         EnvRoof::Gable | EnvRoof::Hip => {
-            tiled_roof(&mut out, d, &poly, &sides, &|i| party(i), top, longest_free)
+            // The ridge along the street front (or the longest free
+            // side, or the longest), turned if asked.
+            let along = door_side
+                .or(longest_free)
+                .or_else(|| (0..n).max_by(|a, b| sides[*a].len.total_cmp(&sides[*b].len)))
+                .map_or(Vec2::new(1.0, 0.0), |i| sides[i].u);
+            let axis = if d.ridge_turned {
+                along.perp_left()
+            } else {
+                along
+            };
+            pitched_roof(&mut out, d, &poly, &sides, &|i| party(i), top, axis)
         }
     };
     if !tiled {
@@ -627,136 +638,155 @@ fn flat_roof(
     }
 }
 
-/// A tiled roof over the straight skeleton of the contour: the free sides
-/// fall (all of them for a hipped roof, the long ones for a gabled one),
-/// the others stand as gables. False if it cannot be made (then the roof
-/// is flat).
-fn tiled_roof(
+/// A tiled roof as the lowest of a few planes over the whole contour: two
+/// falling from the ridge (a gabled roof; with two more at its ends, a
+/// hipped one, when the building stands free) and a level one at
+/// `MAX_RIDGE` over the eaves that flattens what would climb higher. Each
+/// plane covers the part of the contour where it is the lowest, so the
+/// roof always closes, whatever the contour; the walls go up to it along
+/// every side (the gables). The ridge runs along `axis`. False if nothing
+/// could be made (then the roof is flat).
+fn pitched_roof(
     out: &mut Out,
     d: &Dress,
     poly: &[Point2],
     sides: &[Side],
     party: &dyn Fn(usize) -> bool,
     top: f64,
-    longest_free: Option<usize>,
+    axis: Vec2,
 ) -> bool {
-    let n = poly.len();
-    // The ridge runs along the street: between party walls, square to
-    // them; free-standing, along the longest side.
-    let along = (0..n)
-        .find(|i| party(*i))
-        .map(|i| sides[i].u.perp_left())
-        .or(longest_free.map(|i| sides[i].u));
-    let speeds: Vec<f64> = (0..n)
-        .map(|i| {
-            if party(i) {
-                return 0.0;
-            }
-            match (d.roof, along) {
-                (EnvRoof::Gable, Some(u)) if sides[i].u.dot(u).abs() < 0.5 => 0.0,
-                _ => 1.0,
-            }
-        })
-        .collect();
-    if speeds.iter().all(|s| *s <= 0.0) {
-        return false;
+    let across = axis.perp_left();
+    let c0 = poly[0];
+    let (mut u0, mut u1, mut n0, mut n1) = (f64::MAX, f64::MIN, f64::MAX, f64::MIN);
+    for p in poly {
+        let q = *p - c0;
+        u0 = u0.min(q.dot(axis));
+        u1 = u1.max(q.dot(axis));
+        n0 = n0.min(q.dot(across));
+        n1 = n1.max(q.dot(across));
     }
-    let Some(faces) = skeleton::faces(poly, &speeds) else {
-        return false;
-    };
     let pitch = d.pitch.max(0.05);
-    // The height over the eaves of a point of side i's face.
-    let rise = |i: usize, q: Point2| ((q - sides[i].a).dot(-sides[i].out)).max(0.0) * pitch;
-    // A roof that is not one: faces that do not cover the contour (the
-    // skeleton of a tangled outline), or that climb past what a tiled
-    // roof climbs (a deep plot with one free side, or a long thin wing),
-    // is left flat.
-    let covered: f64 = faces.iter().map(|f| signed_area(f).abs()).sum();
-    let area = signed_area(poly).abs();
-    if (covered - area).abs() > area * 0.02 {
-        return false;
+    let (hw, cn) = ((n1 - n0) / 2.0, (n0 + n1) / 2.0);
+    let (hl, cu) = ((u1 - u0) / 2.0, (u0 + u1) / 2.0);
+    // Planes as (slope, height at c0) over the eaves.
+    let mut planes: Vec<(Vec2, f64)> = vec![
+        (across * -pitch, pitch * (hw + cn)),
+        (across * pitch, pitch * (hw - cn)),
+    ];
+    let free = !(0..sides.len()).any(party);
+    if d.roof == EnvRoof::Hip && free {
+        planes.push((axis * -pitch, pitch * (hl + cu)));
+        planes.push((axis * pitch, pitch * (hl - cu)));
     }
-    let (lo, hi) = bounds_2d(poly);
-    let reach = (hi - lo).length() * 0.02 + 0.05;
-    let highest = faces
-        .iter()
-        .enumerate()
-        .flat_map(|(i, f)| f.iter().map(move |q| (i, *q)))
-        .map(|(i, q)| {
-            let out_of = q.x < lo.x - reach
-                || q.y < lo.y - reach
-                || q.x > hi.x + reach
-                || q.y > hi.y + reach;
-            if out_of {
-                f64::INFINITY
-            } else {
-                rise(i, q)
-            }
-        })
-        .fold(0.0, f64::max);
-    if highest > MAX_RIDGE {
-        return false;
-    }
+    planes.push((Vec2::new(0.0, 0.0), MAX_RIDGE));
+    let rise = |p: Point2| -> f64 {
+        let q = p - c0;
+        planes
+            .iter()
+            .map(|(g, k)| g.dot(q) + k)
+            .fold(f64::INFINITY, f64::min)
+            .max(0.0)
+    };
     let mat = d.materials;
-    let mut on_line: Vec<(usize, Point2, f64)> = Vec::new();
-    for (i, face) in faces.iter().enumerate() {
-        if face.len() < 3 {
+    // The faces: where each plane is the lowest.
+    let (lo, hi) = bounds_2d(poly);
+    let pad = 1.0;
+    let boxed = vec![
+        Point2::new(lo.x - pad, lo.y - pad) - c0,
+        Point2::new(hi.x + pad, lo.y - pad) - c0,
+        Point2::new(hi.x + pad, hi.y + pad) - c0,
+        Point2::new(lo.x - pad, hi.y + pad) - c0,
+    ];
+    let footprint = vec![(crate::ensure_ccw(poly.to_vec()), Vec::new())];
+    let mut any = false;
+    for (k, (gk, kk)) in planes.iter().enumerate() {
+        let mut region = boxed.clone();
+        for (j, (gj, kj)) in planes.iter().enumerate() {
+            if j != k {
+                region = clip_half(&region, *gk - *gj, kk - kj);
+            }
+        }
+        if region.len() < 3 || signed_area(&region).abs() < 1e-6 {
             continue;
         }
-        out.add(
-            mat.roof,
-            draped_prism(face, |q| {
-                let z = top + rise(i, q);
-                (z, z + TILES)
-            }),
-        );
-        for q in face {
-            on_line.push((i, *q, rise(i, *q)));
+        let region: Vec<Point2> = region.into_iter().map(|q| q + c0).collect();
+        for (outer, _) in crate::junctions::intersection(&footprint, &[(region, Vec::new())]) {
+            if outer.len() < 3 || signed_area(&outer).abs() < 1e-4 {
+                continue;
+            }
+            any = true;
+            out.add(
+                mat.roof,
+                draped_prism(&outer, |q| {
+                    let z = top + rise(q);
+                    (z, z + TILES)
+                }),
+            );
         }
     }
-    // The eaves' fascia on the falling sides.
-    for (i, side) in sides.iter().enumerate() {
-        if speeds[i] > 0.0 {
+    if !any {
+        return false;
+    }
+    // The walls up to the roof along every side, broken where the roof
+    // changes plane; the fascia along the eaves.
+    for side in sides {
+        let (a, b) = (side.a, side.at(side.len, 0.0));
+        let mut ts = vec![0.0, 1.0];
+        for (j, (gj, kj)) in planes.iter().enumerate() {
+            for (gk, kk) in &planes[j + 1..] {
+                let g = *gj - *gk;
+                let fa = g.dot(a - c0) + kj - kk;
+                let fb = g.dot(b - c0) + kj - kk;
+                if (fa - fb).abs() > 1e-12 {
+                    let t = fa / (fa - fb);
+                    if t > 1e-6 && t < 1.0 - 1e-6 {
+                        ts.push(t);
+                    }
+                }
+            }
+        }
+        ts.sort_by(f64::total_cmp);
+        let mut tris = Vec::new();
+        for w in ts.windows(2) {
+            let (p, q) = (a + (b - a) * w[0], a + (b - a) * w[1]);
+            let (zp, zq) = (rise(p), rise(q));
+            if zp < 1e-3 && zq < 1e-3 {
+                continue;
+            }
+            let (p0, q0) = ([p.x, p.y, top], [q.x, q.y, top]);
+            let (p1, q1) = ([p.x, p.y, top + zp], [q.x, q.y, top + zq]);
+            for t in [[p0, q0, q1], [p0, q1, p1]] {
+                tris.push(t);
+                tris.push([t[0], t[2], t[1]]);
+            }
+        }
+        out.add(mat.wall, tris);
+        let eave = rise(a) < 1e-3 && rise(b) < 1e-3 && rise(side.at(side.len / 2.0, 0.0)) < 1e-3;
+        if eave {
             out.add(
                 mat.trim,
                 side.block((0.0, side.len), (0.0, 0.05), (top - 0.12, top + 0.02)),
             );
         }
     }
-    // The gables: the wall up to the roof over each side that does not
-    // fall.
-    for (i, side) in sides.iter().enumerate() {
-        if speeds[i] > 0.0 {
-            continue;
-        }
-        let mut pts: Vec<(f64, f64)> = on_line
-            .iter()
-            .filter(|(_, q, _)| (*q - side.a).dot(side.out).abs() < 1e-6)
-            .map(|(_, q, h)| ((*q - side.a).dot(side.u), *h))
-            .filter(|(s, _)| *s > 1e-6 && *s < side.len - 1e-6)
-            .collect();
-        pts.sort_by(|a, b| b.0.total_cmp(&a.0));
-        pts.dedup_by(|a, b| (a.0 - b.0).abs() < 1e-6);
-        if pts.iter().all(|(_, h)| *h <= 1e-6) {
-            continue;
-        }
-        // In the plane of the façade: (s, z) counter-clockwise seen from
-        // outside.
-        let mut outline = vec![Point2::new(0.0, 0.0), Point2::new(side.len, 0.0)];
-        outline.extend(pts.iter().map(|(s, h)| Point2::new(*s, *h + TILES)));
-        let world = |p: Point2| -> P3 {
-            let q = side.at(p.x, 0.0);
-            [q.x, q.y, top + p.y]
-        };
-        let mut tris = Vec::new();
-        for [a, b, c] in triangulate(&outline) {
-            let (a, b, c) = (world(outline[a]), world(outline[b]), world(outline[c]));
-            tris.push([a, b, c]);
-            tris.push([a, c, b]);
-        }
-        out.add(mat.wall, tris);
-    }
     true
+}
+
+/// The part of a convex polygon where `g·q + k <= 0`.
+fn clip_half(poly: &[Point2], g: Vec2, k: f64) -> Vec<Point2> {
+    let f = |q: Point2| g.dot(q) + k;
+    let mut out = Vec::new();
+    for i in 0..poly.len() {
+        let (p, q) = (poly[i], poly[(i + 1) % poly.len()]);
+        let (fp, fq) = (f(p), f(q));
+        if fp <= 0.0 {
+            out.push(p);
+        }
+        if (fp < 0.0 && fq > 0.0) || (fp > 0.0 && fq < 0.0) {
+            out.push(p + (q - p) * (fp / (fp - fq)));
+        }
+    }
+    out
 }
 
 #[cfg(test)]
@@ -923,5 +953,88 @@ mod tests {
         let (lo, hi) = bounds(&s);
         assert!(hi[2] < mass.height + 6.0, "{}", hi[2]);
         assert!(lo[0] > -1.0 && hi[0] < 7.0 && lo[1] > -2.0 && hi[1] < 41.0);
+    }
+
+    /// The roof covers the whole contour whatever its shape (an L, a
+    /// tangled outline of the cadastre), never climbs past `MAX_RIDGE`,
+    /// and its ridge can be turned.
+    #[test]
+    fn tiled_roofs_close_over_any_contour() {
+        let mut m = Model::new("T");
+        let l = m.add_level("Planta baja", 0.0);
+        let shapes = [
+            // An L.
+            vec![
+                Point2::new(0.0, 0.0),
+                Point2::new(20.0, 0.0),
+                Point2::new(20.0, 8.0),
+                Point2::new(8.0, 8.0),
+                Point2::new(8.0, 18.0),
+                Point2::new(0.0, 18.0),
+            ],
+            // A ragged outline with a notch and a slanted side.
+            vec![
+                Point2::new(0.0, 0.0),
+                Point2::new(9.0, 0.5),
+                Point2::new(9.2, 4.0),
+                Point2::new(12.0, 4.1),
+                Point2::new(13.0, 11.0),
+                Point2::new(6.0, 12.5),
+                Point2::new(5.5, 7.0),
+                Point2::new(0.4, 7.2),
+            ],
+        ];
+        for (k, outline) in shapes.into_iter().enumerate() {
+            for (style, turned) in [
+                (BuildingStyle::Detached, false),
+                (BuildingStyle::Detached, true),
+                (BuildingStyle::Terraced, false),
+            ] {
+                let x = k as f64 * 100.0;
+                let outline: Vec<Point2> =
+                    outline.iter().map(|p| Point2::new(p.x + x, p.y)).collect();
+                let id = m
+                    .add_env_building(NewEnvBuilding {
+                        name: "Casa".into(),
+                        level: l,
+                        outline: outline.clone(),
+                        style,
+                        floors: Some(2),
+                        floor_height: None,
+                        base_offset: 0.0,
+                    })
+                    .unwrap();
+                let mut dress = m.mass(id).unwrap().dress.unwrap();
+                if dress.roof == EnvRoof::Flat {
+                    dress.roof = EnvRoof::Gable;
+                }
+                dress.ridge_turned = turned;
+                m.set_mass_dress(id, Some(dress)).unwrap();
+                let mass = m.mass(id).unwrap().clone();
+                let s = dressed_solids(&m, &mass);
+                let roof = mass.dress.unwrap().materials.roof;
+                let mut covered = 0.0;
+                for t in s
+                    .iter()
+                    .filter(|s| s.material == roof)
+                    .flat_map(|s| &s.triangles)
+                {
+                    let a = [t[1][0] - t[0][0], t[1][1] - t[0][1]];
+                    let b = [t[2][0] - t[0][0], t[2][1] - t[0][1]];
+                    let up = (a[0] * b[1] - a[1] * b[0]) / 2.0;
+                    if up > 0.0 {
+                        covered += up;
+                    }
+                }
+                let area = signed_area(&outline).abs();
+                assert!(
+                    (covered - area).abs() < area * 0.01,
+                    "{k} {turned}: {covered} of {area}"
+                );
+                let (_, hi) = bounds(&s);
+                assert!(hi[2] <= mass.height + MAX_RIDGE + TILES + 1e-6, "{}", hi[2]);
+                m.remove_mass(id).unwrap();
+            }
+        }
     }
 }

@@ -51,8 +51,10 @@ pub struct Request {
     pub url: String,
     /// The rectangle of the map a picture covers (the orthophoto).
     pub bbox: Option<Bbox>,
-    /// Other servers that give the same, tried in turn when it fails.
-    pub alternatives: Vec<String>,
+    /// When given, what is asked instead of `url`, in turn until one
+    /// answers: an address and, for a POST, its form (`url` stays the
+    /// address to open in a browser).
+    pub attempts: Vec<(String, Option<String>)>,
     /// A tile of heights of the terrain and what it is for.
     pub tile: Option<TerrainTile>,
 }
@@ -75,6 +77,8 @@ pub const CADASTRE_CP: &str = "http://ovc.catastro.meh.es/INSPIRE/wfsCP.aspx";
 /// OpenStreetMap through Overpass, and other public servers of it for
 /// when the main one is busy.
 pub const OVERPASS: &str = "https://overpass-api.de/api/interpreter";
+/// OpenStreetMap's own map by rectangle (up to 0,25 square degrees).
+pub const OSM_MAP: &str = "https://api.openstreetmap.org/api/0.6/map";
 pub const OVERPASS_MIRRORS: [&str; 2] = [
     "https://overpass.kumi.systems/api/interpreter",
     "https://overpass.private.coffee/api/interpreter",
@@ -183,7 +187,7 @@ pub fn plan(m: &Model, opts: &CartoOptions) -> Result<Vec<Request>, String> {
         for (i, t) in tiles(b, BUILDINGS_TILE).into_iter().enumerate() {
             out.push(Request {
                 bbox: None,
-                alternatives: Vec::new(),
+                attempts: Vec::new(),
                 tile: None,
                 source: Source::Buildings,
                 name: format!("catastro-edificios-{}.gml", i + 1),
@@ -191,7 +195,7 @@ pub fn plan(m: &Model, opts: &CartoOptions) -> Result<Vec<Request>, String> {
             });
             out.push(Request {
                 bbox: None,
-                alternatives: Vec::new(),
+                attempts: Vec::new(),
                 tile: None,
                 source: Source::BuildingParts,
                 name: format!("catastro-partes-{}.gml", i + 1),
@@ -203,7 +207,7 @@ pub fn plan(m: &Model, opts: &CartoOptions) -> Result<Vec<Request>, String> {
         for (i, t) in tiles(b, PARCELS_TILE).into_iter().enumerate() {
             out.push(Request {
                 bbox: None,
-                alternatives: Vec::new(),
+                attempts: Vec::new(),
                 tile: None,
                 source: Source::Parcels,
                 name: format!("catastro-parcelas-{}.gml", i + 1),
@@ -225,7 +229,7 @@ pub fn plan(m: &Model, opts: &CartoOptions) -> Result<Vec<Request>, String> {
         let e = corners.iter().map(|c| c.1).fold(f64::MIN, f64::max);
         out.push(Request {
             bbox: None,
-            alternatives: Vec::new(),
+            attempts: Vec::new(),
             tile: None,
             source: Source::Osm,
             name: "openstreetmap.osm".into(),
@@ -234,11 +238,21 @@ pub fn plan(m: &Model, opts: &CartoOptions) -> Result<Vec<Request>, String> {
                 encode(&overpass_query(s, w, n, e, opts.buildings))
             ),
         });
-        let query = encode(&overpass_query(s, w, n, e, opts.buildings));
+        // Overpass asked by POST (as it prefers), its other servers when
+        // it is busy, and last OpenStreetMap's own map (everything in the
+        // rectangle; the importer takes what it wants).
+        let form = format!(
+            "data={}",
+            encode(&overpass_query(s, w, n, e, opts.buildings))
+        );
         if let Some(r) = out.last_mut() {
-            r.alternatives = OVERPASS_MIRRORS
-                .iter()
-                .map(|m| format!("{m}?data={query}"))
+            r.attempts = std::iter::once(OVERPASS)
+                .chain(OVERPASS_MIRRORS)
+                .map(|m| (m.to_string(), Some(form.clone())))
+                .chain(std::iter::once((
+                    format!("{OSM_MAP}?bbox={w:.6},{s:.6},{e:.6},{n:.6}"),
+                    None,
+                )))
                 .collect();
         }
     }
@@ -248,7 +262,7 @@ pub fn plan(m: &Model, opts: &CartoOptions) -> Result<Vec<Request>, String> {
             .clamp(64.0, ORTHO_PIXELS as f64) as u32;
         out.push(Request {
             bbox: Some(b),
-            alternatives: Vec::new(),
+            attempts: Vec::new(),
             tile: None,
             source: Source::Orthophoto,
             name: "pnoa.png".into(),
@@ -262,7 +276,7 @@ pub fn plan(m: &Model, opts: &CartoOptions) -> Result<Vec<Request>, String> {
         for (x, y) in tiles_over(b, zone, north, TERRAIN_ZOOM) {
             out.push(Request {
                 bbox: Some(b),
-                alternatives: Vec::new(),
+                attempts: Vec::new(),
                 tile: Some(TerrainTile {
                     z: TERRAIN_ZOOM,
                     x,
@@ -462,11 +476,12 @@ mod tests {
             "{}",
             t[0].url
         );
-        // Overpass, with other servers for when it is busy.
-        assert_eq!(
-            of(Source::Osm)[0].alternatives.len(),
-            OVERPASS_MIRRORS.len()
-        );
+        // Overpass by POST, its other servers for when it is busy, and
+        // last OpenStreetMap's own map.
+        let a = &of(Source::Osm)[0].attempts;
+        assert_eq!(a.len(), OVERPASS_MIRRORS.len() + 2);
+        assert!(a[0].0 == OVERPASS && a[0].1.as_ref().is_some_and(|f| f.starts_with("data=")));
+        assert!(a.last().unwrap().0.starts_with(OSM_MAP) && a.last().unwrap().1.is_none());
         // The orthophoto: the rectangle at 25 cm a pixel, up to its limit.
         let o = of(Source::Orthophoto)[0];
         assert!(

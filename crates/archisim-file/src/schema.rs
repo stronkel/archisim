@@ -1599,6 +1599,9 @@ pub(crate) struct DressOf {
     pub cornice: bool,
     #[serde(default, skip_serializing_if = "is_zero")]
     pub patio: f64,
+    /// The ridge turned a right angle (version 70).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub ridge_turned: bool,
     /// Walls, trim, roof, joinery, glass and metal.
     pub materials: [u64; 6],
 }
@@ -1619,6 +1622,7 @@ impl DressOf {
             plinth: d.plinth,
             cornice: d.cornice,
             patio: d.patio,
+            ridge_turned: d.ridge_turned,
             materials: d.materials.all().map(|m| m.0),
         }
     }
@@ -1645,6 +1649,7 @@ impl DressOf {
             plinth: self.plinth,
             cornice: self.cornice,
             patio: self.patio,
+            ridge_turned: self.ridge_turned,
             materials: core::DressMaterials {
                 wall,
                 trim,

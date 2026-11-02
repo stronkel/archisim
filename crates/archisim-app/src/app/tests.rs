@@ -4663,7 +4663,7 @@ fn surroundings_downloaded() {
     let opts = h.app.carto_download.as_ref().unwrap().options.clone();
     let requests = archisim_library::download::plan(h.model(), &opts).unwrap();
     let progress = std::sync::Mutex::new(super::carto_download_ui::Progress::default());
-    super::carto_download_ui::run(&requests, &progress, |url| {
+    super::carto_download_ui::run(&requests, &progress, |url, _form| {
         if url.contains("wfsBU") || url.contains("wfsCP") {
             Ok(gml.clone().into_bytes())
         } else if url.contains("overpass-api") {
