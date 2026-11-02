@@ -63,6 +63,8 @@ pub enum SolidOwner {
     Elevator(archisim_core::ElevatorId),
     /// The pieces of a wall's façade (E9): bricks, blocks, panels.
     Facade(WallId),
+    /// The aerial picture on the ground (V2).
+    Orthophoto,
 }
 
 impl SolidOwner {
@@ -91,6 +93,7 @@ impl SolidOwner {
             SolidOwner::Decal(x) => x.0,
             SolidOwner::Run(x) => x.0,
             SolidOwner::Device(x) => x.0,
+            SolidOwner::Orthophoto => 0,
         }
     }
 }
@@ -2410,6 +2413,9 @@ pub fn solid_vertex_colors(model: &Model, s: &Solid) -> Option<Vec<[[u8; 3]; 3]>
     if let SolidOwner::Decal(id) = s.owner {
         return crate::decals::decal_colors(model, id);
     }
+    if s.owner == SolidOwner::Orthophoto {
+        return crate::orthophoto::orthophoto_colors(model);
+    }
     let SolidOwner::Object(id) = s.owner else {
         return None;
     };
@@ -3866,6 +3872,7 @@ pub fn model_solids_except_detailed(
         for d in model.decals() {
             out.extend(crate::decals::decal_solids(model, d.id));
         }
+        out.extend(crate::orthophoto::orthophoto_solids(model));
     }
     for r in model.runs() {
         out.extend(run_solids(model, r.id));
@@ -5402,6 +5409,14 @@ pub fn level_solids(model: &Model, level: LevelId) -> Vec<Solid> {
         SolidOwner::Decal(d) => model.decal(d).is_some_and(|d| d.level == level),
         SolidOwner::Run(r) => model.run(r).is_some_and(|r| r.level == level),
         SolidOwner::Device(d) => model.device(d).is_some_and(|d| d.level == level),
+        SolidOwner::Orthophoto => {
+            model
+                .terrains()
+                .next()
+                .map(|t| t.level)
+                .or_else(|| model.levels().first().map(|l| l.id))
+                == Some(level)
+        }
     };
     model_solids(model)
         .into_iter()

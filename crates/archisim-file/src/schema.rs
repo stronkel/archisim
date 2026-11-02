@@ -1093,6 +1093,20 @@ pub(crate) struct DecalOf {
     pub host: Option<u64>,
 }
 
+/// The orthophoto (version 69): its PNG and the plan rectangle it covers.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct OrthophotoOf {
+    pub source: String,
+    /// The PNG, in base64.
+    pub png: String,
+    pub origin: [f64; 2],
+    pub u: [f64; 2],
+    pub v: [f64; 2],
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub on_roads: bool,
+}
+
 /// A road marking (version 65).
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -2444,6 +2458,9 @@ pub(crate) struct Project {
     /// Where the project is on the map (version 11).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub georeference: Option<Georeference>,
+    /// The aerial picture on the ground (version 69).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub orthophoto: Option<OrthophotoOf>,
     /// Use, accessibility and sprinklers for the code checks (version
     /// 12); absent: a dwelling, without either.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -2985,6 +3002,14 @@ impl ProjectFile {
                     eastings: g.eastings,
                     northings: g.northings,
                     height: g.height,
+                }),
+                orthophoto: p.orthophoto.as_ref().map(|o| OrthophotoOf {
+                    source: o.image.source.clone(),
+                    png: crate::meshes::encode(&o.image.png),
+                    origin: o.origin,
+                    u: o.u,
+                    v: o.v,
+                    on_roads: o.on_roads,
                 }),
                 code: (p.code != core::CodeSettings::default()).then(|| Code {
                     building_use: p.code.building_use.code().into(),
@@ -4404,6 +4429,24 @@ impl ProjectFile {
                 northings: g.northings,
                 height: g.height,
             }),
+            orthophoto: match &project.orthophoto {
+                None => None,
+                Some(o) => {
+                    let png = crate::meshes::decode(&o.png)
+                        .and_then(|b| core::decal_image(&o.source, b))
+                        .ok_or_else(|| FileError::Value {
+                            element: "orthophoto".into(),
+                            message: "its picture is not a PNG in base64".into(),
+                        })?;
+                    Some(core::Orthophoto {
+                        image: png,
+                        origin: o.origin,
+                        u: o.u,
+                        v: o.v,
+                        on_roads: o.on_roads,
+                    })
+                }
+            },
             code: match &project.code {
                 None => core::CodeSettings::default(),
                 Some(c) => core::CodeSettings {

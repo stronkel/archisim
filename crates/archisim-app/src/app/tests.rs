@@ -4665,14 +4665,17 @@ fn surroundings_downloaded() {
     let progress = std::sync::Mutex::new(super::carto_download_ui::Progress::default());
     super::carto_download_ui::run(&requests, &progress, |url| {
         if url.contains("wfsBU") || url.contains("wfsCP") {
-            Ok(gml.clone())
+            Ok(gml.clone().into_bytes())
         } else if url.contains("overpass") {
-            Ok(osm.clone())
+            Ok(osm.clone().into_bytes())
+        } else if url.contains("pnoa") {
+            Ok(green_png())
         } else {
             // The terrain, as the WCS sends it: in several parts.
-            Ok(format!(
-                "--b\r\nContent-Type: application/asc\r\n\r\n{asc}\r\n--b--\r\n"
-            ))
+            Ok(
+                format!("--b\r\nContent-Type: application/asc\r\n\r\n{asc}\r\n--b--\r\n")
+                    .into_bytes(),
+            )
         }
     });
     let mut p = progress.into_inner().unwrap();
@@ -4687,7 +4690,9 @@ fn surroundings_downloaded() {
     assert!(h.app.carto_download.is_none());
     let c = h.app.carto_import.take().expect("«Traer el entorno» opens");
     assert_eq!(c.notes.len(), 1);
-    assert_eq!(c.files.len(), requests.len());
+    // Every answer but the picture is a file; the picture, the orthophoto.
+    assert_eq!(c.files.len(), requests.len() - 1);
+    assert!(c.orthophoto.is_some());
     let r = h
         .app
         .ed
@@ -4708,6 +4713,33 @@ fn surroundings_downloaded() {
     assert_eq!(r.buildings, once, "{r:?}");
     assert!(r.roads > 0 && r.trees > 0, "{r:?}");
     assert_eq!(h.model().terrains().count(), 1);
+    let (name, png, bbox) = c.orthophoto.clone().unwrap();
+    h.app
+        .ed
+        .transact("Ortofoto", |m| {
+            archisim_library::carto::place_orthophoto(m, &name, png, bbox)
+        })
+        .unwrap();
+    let o = h.model().orthophoto().unwrap();
+    assert!((o.size().0 - 2.0 * c.options.radius).abs() < 1e-6);
+    // In 3D, a picture over the ground.
+    let solids = archisim_geom::solid::model_solids(h.model());
+    assert!(solids
+        .iter()
+        .any(|s| s.owner == archisim_geom::solid::SolidOwner::Orthophoto));
+}
+
+/// A PNG of 4 × 4 green pixels.
+fn green_png() -> Vec<u8> {
+    let mut out = Vec::new();
+    {
+        let mut e = png::Encoder::new(&mut out, 4, 4);
+        e.set_color(png::ColorType::Rgb);
+        e.set_depth(png::BitDepth::Eight);
+        let mut w = e.write_header().unwrap();
+        w.write_image_data(&[60, 140, 50].repeat(16)).unwrap();
+    }
+    out
 }
 
 /// Two roads drawn across each other make a crossing with rounded

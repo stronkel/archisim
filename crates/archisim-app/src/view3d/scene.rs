@@ -1360,7 +1360,14 @@ fn add_solids(
         if !look.shared && model.hidden_by_discipline(&look.disciplines.hidden, id) {
             continue;
         }
-        let owner = Owner::Model(element(solid.owner));
+        // The orthophoto is picked as the terrain under it.
+        let owner = Owner::Model(match solid.owner {
+            SolidOwner::Orthophoto => model
+                .terrains()
+                .next()
+                .map_or(element(solid.owner), |t| Element::Terrain(t.id)),
+            o => element(o),
+        });
         let mat = model.material(solid.material);
         let dimmed = !look.shared && model.dimmed(look.disciplines.focus, id);
         let selected = !look.shared && look.selection.contains(&element(solid.owner));

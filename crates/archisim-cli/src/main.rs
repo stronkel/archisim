@@ -30,6 +30,7 @@ mod grande;
 mod instalaciones;
 mod modelos;
 mod muestrario;
+mod ortofoto;
 mod taller;
 mod tramas;
 mod vivero;
@@ -431,6 +432,19 @@ fn main() -> ExitCode {
         Some("calles") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
             report(calles::write(&dir))
+        }
+        Some("ortofoto") => {
+            match args.get(1) {
+                Some(p) => {
+                    let p = PathBuf::from(p);
+                    let out = args.get(2).map_or_else(|| p.clone(), PathBuf::from);
+                    report(ortofoto::run(&p, &out))
+                }
+                None => {
+                    eprintln!("Uso: archisim ortofoto <proyecto georreferenciado.archisim> [salida.archisim]");
+                    ExitCode::FAILURE
+                }
+            }
         }
         Some("entorno") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));

@@ -30,6 +30,8 @@ pub struct Progress {
     pub current: String,
     /// What arrived: name and text.
     pub files: Vec<(String, String)>,
+    /// The orthophoto, if it arrived: name, PNG and the map rectangle.
+    pub picture: Option<(String, Vec<u8>, [f64; 4])>,
     /// What did not: what it was, why, and its address.
     pub failures: Vec<(String, String, String)>,
     pub finished: bool,
@@ -64,7 +66,7 @@ impl Default for CartoDownload {
 pub fn run(
     requests: &[Request],
     progress: &Mutex<Progress>,
-    fetch: impl Fn(&str) -> Result<String, String>,
+    fetch: impl Fn(&str) -> Result<Vec<u8>, String>,
 ) {
     if let Ok(mut p) = progress.lock() {
         p.total = requests.len();
@@ -76,8 +78,24 @@ pub fn run(
             }
             p.current = r.source.name().to_string();
         }
-        let got = fetch(&r.url).and_then(|body| download::answer_text(r.source, &body));
+        let got = fetch(&r.url);
         let Ok(mut p) = progress.lock() else { return };
+        let got = match (got, r.source, r.bbox) {
+            (Ok(b), download::Source::Orthophoto, Some(bbox)) if download::is_png(&b) => {
+                p.picture = Some((r.name.clone(), b, bbox));
+                p.done += 1;
+                continue;
+            }
+            (Ok(b), _, _) => download::answer_text(r.source, &String::from_utf8_lossy(&b))
+                .and_then(|t| {
+                    if r.source == download::Source::Orthophoto {
+                        Err("no ha llegado una imagen PNG".into())
+                    } else {
+                        Ok(t)
+                    }
+                }),
+            (Err(e), _, _) => Err(e),
+        };
         match got {
             Ok(text) => p.files.push((r.name.clone(), text)),
             Err(e) => p
@@ -92,7 +110,7 @@ pub fn run(
 }
 
 /// One address, by HTTP (through the system's proxy if it has one).
-pub fn http_get(url: &str) -> Result<String, String> {
+pub fn http_get(url: &str) -> Result<Vec<u8>, String> {
     let agent = ureq::AgentBuilder::new()
         .timeout_connect(Duration::from_secs(20))
         .timeout(Duration::from_secs(240))
@@ -116,7 +134,7 @@ pub fn http_get(url: &str) -> Result<String, String> {
         .take(MAX_ANSWER)
         .read_to_end(&mut bytes)
         .map_err(|e| format!("la respuesta se ha cortado ({e})"))?;
-    Ok(String::from_utf8_lossy(&bytes).into_owned())
+    Ok(bytes)
 }
 
 impl ArchiSimApp {
@@ -151,6 +169,7 @@ impl ArchiSimApp {
             return;
         }
         let files = std::mem::take(&mut p.files);
+        let orthophoto = p.picture.take();
         let failures = p.failures.clone();
         let notes: Vec<String> = failures
             .iter()
@@ -159,7 +178,7 @@ impl ArchiSimApp {
         let stopped = p.stop;
         drop(p);
         let options = d.options.clone();
-        if files.is_empty() {
+        if files.is_empty() && orthophoto.is_none() {
             // The window stays, saying why.
             if let Some(d) = &mut self.carto_download {
                 d.job = None;
@@ -172,6 +191,7 @@ impl ArchiSimApp {
             files,
             options,
             notes,
+            orthophoto,
         });
     }
 
@@ -232,6 +252,7 @@ impl ArchiSimApp {
                     ui.switch(&mut o.streets, "Calles (OpenStreetMap)");
                     ui.switch(&mut o.trees, "Árboles (OpenStreetMap)");
                     ui.switch(&mut o.terrain, "Terreno (IGN, MDT05)");
+                    ui.switch(&mut o.orthophoto, "Ortofoto (PNOA)");
                 });
                 ui.horizontal(|ui| {
                     ui.label("Radio alrededor del origen");

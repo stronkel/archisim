@@ -56,3 +56,29 @@ pub fn draw_decals(
     }
     s.push_str("</g>\n");
 }
+
+/// The orthophoto (V2) under the plan of the level of the ground: its
+/// picture over the rectangle it covers.
+pub fn draw_orthophoto(s: &mut String, model: &Model, level: LevelId) {
+    let Some(o) = model.orthophoto() else { return };
+    let ground = model
+        .terrains()
+        .next()
+        .map(|t| t.level)
+        .or_else(|| model.levels().first().map(|l| l.id));
+    if ground != Some(level) {
+        return;
+    }
+    let (u, v) = (o.u, o.v);
+    let _ = writeln!(
+        s,
+        r#"<image class="orthophoto" x="0" y="0" width="1" height="1" preserveAspectRatio="none" transform="matrix({} {} {} {} {} {})" href="data:image/png;base64,{}"/>"#,
+        num(u[0]),
+        num(-u[1]),
+        num(-v[0]),
+        num(v[1]),
+        num(o.origin[0] + v[0]),
+        num(-(o.origin[1] + v[1])),
+        crate::base64(&o.image.png)
+    );
+}

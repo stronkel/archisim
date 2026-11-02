@@ -13,7 +13,7 @@ archisim-core.workspace = true
 archisim-draft.workspace = true
 archisim-plan.workspace = true
 # The drawings are SVG; usvg reads them into plain paths for PDF and DXF.
-resvg = { version = "0.48", default-features = false }
+resvg = { version = "0.48", default-features = false, features = ["raster-images"] }
 miniz_oxide = "0.8"
 
 [dev-dependencies]

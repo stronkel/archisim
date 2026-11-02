@@ -37,6 +37,7 @@ pub mod growth;
 pub mod index;
 pub mod joins;
 pub mod junctions;
+pub mod orthophoto;
 pub mod pools;
 pub mod rebar;
 pub mod roof_parts;

@@ -1036,6 +1036,49 @@ impl ArchiSimApp {
     /// coordinate system, the UTM coordinates of the ±0,00 at plan 0,0 and
     /// its height above sea level. They go to the IFC (`IfcMapConversion`,
     /// latitude and longitude of the site).
+    /// The orthophoto (V2), in the project's properties: what it is, over
+    /// the streets or not, and to take it away.
+    pub(super) fn orthophoto_group(&mut self, ui: &mut Ui) {
+        let Some(o) = self.ed.model().orthophoto().cloned() else {
+            return;
+        };
+        let mut on_roads = o.on_roads;
+        let mut remove = false;
+        group(ui, "project-ortho", "Ortofoto", |ui| {
+            let (w, h) = o.size();
+            text_row(ui, "Imagen", "De dónde viene", &o.image.source);
+            text_row(
+                ui,
+                "Cubre (m)",
+                "Ancho y alto sobre el terreno",
+                &format!("{} × {}", metres(w), metres(h)),
+            );
+            row(
+                ui,
+                "Sobre las calles",
+                "También sobre las calles, no solo sobre el terreno",
+                |ui, _| {
+                    ui.switch(&mut on_roads, "");
+                },
+            );
+            ui.horizontal(|ui| {
+                ui.add_space(4.0);
+                if ui.button("Quitar la ortofoto").clicked() {
+                    remove = true;
+                }
+            });
+        });
+        if remove {
+            let _ = self
+                .ed
+                .transact("Quitar la ortofoto", |m| m.set_orthophoto(None));
+        } else if on_roads != o.on_roads {
+            let _ = self.ed.transact("Ortofoto sobre las calles", |m| {
+                m.set_orthophoto_on_roads(on_roads)
+            });
+        }
+    }
+
     pub(super) fn georeference_group(&mut self, ui: &mut Ui) {
         let current = self.ed.model().georeference().cloned();
         let mut new = current.clone();
