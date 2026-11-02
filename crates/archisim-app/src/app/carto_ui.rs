@@ -61,6 +61,11 @@ impl CartoImport {
                 let k = match archisim_carto::kind_of(t) {
                     Some(archisim_carto::FileKind::Cadastre) => "Catastro (GML INSPIRE)",
                     Some(archisim_carto::FileKind::Osm) => "OpenStreetMap",
+                    Some(archisim_carto::FileKind::Grid)
+                        if archisim_library::carto::is_surface_model(n) =>
+                    {
+                        "Modelo digital de superficies (MDS, LiDAR): da las plantas de los edificios"
+                    }
                     Some(archisim_carto::FileKind::Grid) => "Modelo digital del terreno (ASC)",
                     None => "No se reconoce",
                 };
@@ -72,7 +77,7 @@ impl CartoImport {
 }
 
 /// Where to download each file, for the window and the documentation.
-pub const WHERE_FROM: [(&str, &str); 3] = [
+pub const WHERE_FROM: [(&str, &str); 4] = [
     (
         "Catastro",
         "Sede Electrónica del Catastro → Descarga de datos y cartografía por municipio → INSPIRE: el fichero de edificios con sus partes (buildingpart, da las plantas) y el de parcelas (cadastralparcel).",
@@ -84,6 +89,10 @@ pub const WHERE_FROM: [(&str, &str); 3] = [
     (
         "Terreno",
         "Centro de Descargas del CNIG → Modelos digitales de elevaciones → MDT05 (o MDT02) en formato ASC de la hoja de la zona.",
+    ),
+    (
+        "Altura de los edificios (LiDAR)",
+        "Centro de Descargas del CNIG → Modelos digitales de elevaciones → MDS05 (modelo de superficies) en ASC de la misma hoja. Con su nombre (MDS…) se reconoce: el MDS menos el MDT da la altura, y de ella las plantas, de los edificios que se traen o de los que ya hay.",
     ),
 ];
 
