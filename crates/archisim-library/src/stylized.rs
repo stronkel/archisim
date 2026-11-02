@@ -11,8 +11,8 @@ use archisim_core::{Appearance, CutPattern, MaterialId, Model, TextureKind};
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Stylized {
     pub name: &'static str,
-    /// Its group for people (Fachadas, Cubiertas, Suelos, Pavimentos,
-    /// Pinturas).
+    /// Its group for people (Fachadas, Cubiertas, Alicatados, Suelos,
+    /// Pavimentos, Tierras, Pinturas).
     pub group: &'static str,
     pub category: &'static str,
     /// Its colour (sRGB).
@@ -328,6 +328,88 @@ pub const STYLIZED: &[Stylized] = &[
         [201, 193, 178],
         TextureKind::Gravel,
         0.08,
+    ),
+    // Wall tiles.
+    st(
+        "Azulejo metro blanco",
+        "Alicatados",
+        "ceramic",
+        [242, 241, 236],
+        TextureKind::MetroTiles,
+        0.2,
+    ),
+    st(
+        "Azulejo metro verde",
+        "Alicatados",
+        "ceramic",
+        [95, 156, 134],
+        TextureKind::MetroTiles,
+        0.15,
+    ),
+    st(
+        "Azulejo liso 15 × 15",
+        "Alicatados",
+        "ceramic",
+        [233, 229, 220],
+        TextureKind::Tile,
+        0.15,
+    ),
+    st(
+        "Azulejo andaluz",
+        "Alicatados",
+        "ceramic",
+        [47, 106, 163],
+        TextureKind::PatternTiles,
+        0.15,
+    ),
+    st(
+        "Baldosa hidráulica",
+        "Alicatados",
+        "ceramic",
+        [154, 74, 60],
+        TextureKind::PatternTiles,
+        0.2,
+    ),
+    // Earth.
+    st(
+        "Tierra de camino",
+        "Tierras",
+        "earth",
+        [176, 138, 98],
+        TextureKind::EarthPath,
+        1.0,
+    ),
+    st(
+        "Albero",
+        "Tierras",
+        "earth",
+        [225, 178, 90],
+        TextureKind::Albero,
+        1.0,
+    ),
+    st(
+        "Tierra en surcos",
+        "Tierras",
+        "earth",
+        [140, 100, 68],
+        TextureKind::Furrows,
+        0.7,
+    ),
+    st(
+        "Huerta",
+        "Tierras",
+        "earth",
+        [125, 90, 62],
+        TextureKind::KitchenGarden,
+        0.8,
+    ),
+    st(
+        "Tierra cuarteada",
+        "Tierras",
+        "earth",
+        [196, 154, 108],
+        TextureKind::CrackedEarth,
+        0.35,
     ),
     // Paints, for trims, frames and shutters.
     paint("Pintura crema", [243, 236, 216]),

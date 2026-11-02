@@ -457,14 +457,14 @@ function buildStreet() {
 const board = new THREE.Group();
 const labels = [];
 function buildBoard() {
-  const groups = ['Fachadas', 'Cubiertas', 'Suelos', 'Pavimentos', 'Detalles'];
-  box(board, 'concrete', 0, -2, -0.4, 40, 30, 0.4);
+  const groups = ['Fachadas', 'Cubiertas', 'Alicatados', 'Suelos', 'Pavimentos', 'Tierras', 'Detalles'];
+  box(board, 'concrete', 0, -7, -0.4, 40, 42, 0.4);
   groups.forEach((gname, gi) => {
     const keys = Object.keys(RANGE).filter((k) => RANGE[k].group === gname && !RANGE[k].hidden);
     const y = 9.5 - gi * 5.3;
     keys.forEach((k, i) => {
       const x = (i - (keys.length - 1) / 2) * 3.5;
-      if (gname === 'Fachadas') box(board, k, x, y, 0, 2.6, 0.5, 2.6);
+      if (gname === 'Fachadas' || gname === 'Alicatados') box(board, k, x, y, 0, 2.6, 0.5, 2.6);
       else if (gname === 'Detalles') box(board, k, x, y - 0.6, 0, 1.8, 1.8, 1.8);
       else if (gname === 'Cubiertas') gable(board, k, x, y, 0, 2.4, 2.4, 1.2, 0.1, false, 0.1);
       else {
@@ -580,7 +580,7 @@ scene.add(board);
 
 const VIEWS = {
   street: { show: street, pos: [-6, -50, 15], target: [1, 0, 2.5] },
-  board: { show: board, pos: [0, -37, 35], target: [0, -2.5, 0] },
+  board: { show: board, pos: [0, -46, 44], target: [0, -7, 0] },
 };
 let view = 'street';
 function setView(name) {

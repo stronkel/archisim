@@ -41,8 +41,11 @@ pub fn period(kind: TextureKind) -> f64 {
         | TextureKind::Plaster
         | TextureKind::Water
         | TextureKind::Asphalt
-        | TextureKind::Strata => 8.0,
-        TextureKind::Grass | TextureKind::Sea | TextureKind::SettsFan => 16.0,
+        | TextureKind::Strata
+        | TextureKind::EarthPath
+        | TextureKind::Albero => 8.0,
+        TextureKind::Grass | TextureKind::Sea => 16.0,
+        TextureKind::SettsFan => 48.0,
         TextureKind::Clapboard => 20.0,
         TextureKind::Opus => 24.0,
         _ => 4.0,
@@ -598,35 +601,35 @@ fn pattern(kind: TextureKind, p: [f64; 2]) -> Lin {
         }
         // Setts laid diagonally.
         TextureKind::SettsDiagonal => setts([x + y, y - x]),
-        // Setts in fans, sixteen setts wide.
+        // Setts in fans: circles of arcs sixteen setts wide, in rows six
+        // apart, the lower ones over the upper ones.
         TextureKind::SettsFan => {
-            let fw = 16.0;
-            let fh = fw * 0.5;
-            let rad = fw * 0.75;
-            let r0 = (y / fh).floor();
+            let (fw, rad, fh) = (16.0, 8.0, 6.0);
+            let r0 = ((y - rad) / fh).floor();
             let mut found = None;
-            for k in 0..3 {
-                let r = r0 - k as f64;
+            let mut below = 99.0f64;
+            for k in 0..4 {
+                let r = r0 + k as f64;
                 let off = odd(r) * 0.5 * fw;
                 let cx = ((x - off) / fw + 0.5).floor() * fw + off;
                 let c = [cx, r * fh];
-                if y >= c[1] && ((x - c[0]).powi(2) + (y - c[1]).powi(2)).sqrt() < rad {
+                let dist = ((x - c[0]).powi(2) + (y - c[1]).powi(2)).sqrt();
+                if dist < rad {
                     found = Some((c, r));
                     break;
                 }
+                below = below.min(dist - rad);
             }
             let (c, row) = found.unwrap_or(([x, y], 0.0));
             let d = [x - c[0], y - c[1]];
             let rr = (d[0] * d[0] + d[1] * d[1]).sqrt();
             let band = rr.floor();
-            let along = d[0].atan2(d[1]) * (band + 0.5) + hash2([band, row.rem_euclid(per)]);
+            let rw = row.rem_euclid(per / fh);
+            let along = d[0].atan2(d[1]) * (band + 0.5) + hash2([band, rw]);
             let e = edist(rr, 1.0)
                 .min(edist(along, 1.0) * rr.max(1.0) / (band + 0.5).max(0.5))
-                .min(rad - rr);
-            let id = hash2([
-                along.floor(),
-                band + row.rem_euclid(per) * 31.0 + c[0].rem_euclid(per),
-            ]);
+                .min(below);
+            let id = hash2([along.floor(), band + rw * 31.0 + c[0].rem_euclid(per)]);
             let k = (0.8 + 0.28 * tones(id, 4.0)) * if id > 0.8 { 0.85 } else { 1.0 };
             Lin::base(0.6).mix(Lin::base(k), on_piece(e, 0.05))
         }
@@ -750,6 +753,136 @@ fn pattern(kind: TextureKind, p: [f64; 2]) -> Lin {
             };
             let gap = smoothstep(0.03, 0.09, c[1] - c[0]);
             Lin::base(0.3).mix(tint.times(0.75 + 0.35 * dome), gap)
+        }
+        // Metro tiles: staggered oblongs, a glint along the top of each.
+        TextureKind::MetroTiles => {
+            let row = (y * 2.0).floor();
+            let u = x + 0.5 * odd(row);
+            let e = edist(u, 1.0).min(edist(y, 0.5));
+            let id = g(1.0, 2.0).hash([u.floor(), row]);
+            let fy = fract(y * 2.0);
+            let glint = smoothstep(0.7, 0.86, fy) * (1.0 - smoothstep(0.86, 0.95, fy)) * 0.25;
+            let body = Lin::base(0.96 + 0.06 * tones(id, 3.0)).mix(Lin::fixed([1.0; 3]), glint);
+            Lin::base(1.0)
+                .mix(Lin::fixed([0.85, 0.84, 0.81]), 0.7)
+                .mix(body, on_piece(e, 0.0075))
+        }
+        // Patterned tiles: a star, a ring, petals and corners.
+        TextureKind::PatternTiles => {
+            let f = [fract(x) - 0.5, fract(y) - 0.5];
+            let a = [f[0].abs(), f[1].abs()];
+            let len = |u: f64, v: f64| (u * u + v * v).sqrt();
+            let r = len(f[0], f[1]);
+            let star = 1.0 - smoothstep(0.17, 0.18, (a[0] + a[1]).min(a[0].max(a[1]) * 1.25));
+            let ring = smoothstep(0.27, 0.28, r) * (1.0 - smoothstep(0.31, 0.32, r));
+            let corner = 1.0 - smoothstep(0.2, 0.21, len(a[0] - 0.5, a[1] - 0.5));
+            let petals = (1.0 - smoothstep(0.06, 0.07, len(a[0] - 0.33, a[1])))
+                + (1.0 - smoothstep(0.06, 0.07, len(a[0], a[1] - 0.33)));
+            let body = Lin::fixed([0.85, 0.78, 0.6])
+                .mix(Lin::base(1.0), (corner + ring + petals).clamp(0.0, 1.0))
+                .mix(
+                    Lin {
+                        a: 0.45,
+                        b: [0.35, 0.22, 0.02],
+                    },
+                    star,
+                )
+                .times(0.97 + 0.04 * g(8.0, 8.0).noise(p));
+            let e = edist(x, 1.0).min(edist(y, 1.0));
+            Lin::fixed([0.8, 0.77, 0.7]).mix(body, on_piece(e, 0.0075))
+        }
+        // An earth path: patches, little stones, a few cracks.
+        TextureKind::EarthPath => {
+            let n = g(0.6, 0.6).noise(p) * 0.6 + g(2.2, 2.2).noise(p) * 0.4;
+            let mut c = Lin::base(0.88).mix(
+                Lin {
+                    a: 1.15,
+                    b: [0.03, 0.025, 0.015],
+                },
+                tones(smoothstep(0.3, 0.75, n), 3.0) * 0.6,
+            );
+            let k = g(7.0, 7.0).cells(p);
+            if k[2] >= 0.72 {
+                c = c.mix(
+                    Lin {
+                        a: 0.7,
+                        b: [0.3, 0.28, 0.24],
+                    },
+                    (1.0 - smoothstep(0.1, 0.17, k[0])) * 0.8,
+                );
+            }
+            let k2 = g(1.3, 1.3).cells(p);
+            if g(0.7, 0.7).noise(p) >= 0.5 {
+                c = c.times(1.0 - 0.25 * (1.0 - smoothstep(0.0, 0.025, k2[1] - k2[0])));
+            }
+            c
+        }
+        // Albero: fine yellow sand.
+        TextureKind::Albero => {
+            let n = g(0.8, 0.8).noise(p) * 0.5
+                + g(3.0, 3.0).noise(p) * 0.3
+                + g(60.0, 60.0).noise(p) * 0.2;
+            let mut k = 0.92 + 0.12 * tones(smoothstep(0.3, 0.75, n), 4.0);
+            let c = g(25.0, 25.0).cells(p);
+            if c[2] >= 0.8 {
+                k *= 1.0 - 0.2 * (1.0 - smoothstep(0.05, 0.12, c[0]));
+            }
+            Lin::base(k)
+        }
+        // Furrows: ridges and troughs, shoots on some.
+        TextureKind::Furrows => {
+            let f = fract(y);
+            let row = y.floor();
+            let rw = row.rem_euclid(per);
+            let ridge = (f * std::f64::consts::PI).sin();
+            let c = Lin::base(0.55)
+                .mix(Lin::base(1.1), ridge)
+                .times(0.9 + 0.14 * g(1.05, 4.2).noise(p) + 0.06 * g(17.5, 17.5).noise(p));
+            let i = (x / 0.25).floor().rem_euclid(per / 0.25);
+            let l = [
+                fract(x / 0.25) - 0.5 + (hash2([i, rw]) - 0.5) * 0.3,
+                (f - 0.5) * 4.0,
+            ];
+            let sown = hash2([rw, 1.0]) >= 0.3 && hash2([i, rw + 7.0]) >= 0.15;
+            let shoot = if sown {
+                1.0 - smoothstep(0.16, 0.22, (l[0] * l[0] + l[1] * l[1] * 0.64).sqrt())
+            } else {
+                0.0
+            };
+            let green = 0.8 + 0.4 * hash2([i, rw]);
+            c.mix(Lin::fixed([0.2 * green, 0.42 * green, 0.06 * green]), shoot)
+        }
+        // A kitchen garden: round plants along the ridges.
+        TextureKind::KitchenGarden => {
+            let f = fract(y);
+            let row = y.floor();
+            let rw = row.rem_euclid(per);
+            let ridge = (f * std::f64::consts::PI).sin();
+            let c = Lin::base(0.6)
+                .mix(Lin::base(1.0), ridge)
+                .times(0.92 + 0.1 * g(2.4, 2.4).noise(p));
+            let sh = hash2([rw, 3.0]);
+            let i = (x / 0.5 + sh).floor().rem_euclid(per / 0.5);
+            let l = [fract(x / 0.5 + sh) - 0.5, (f - 0.5) * 2.0];
+            let size = 0.32 + 0.1 * hash2([i, rw]);
+            let plant = 1.0 - smoothstep(size - 0.03, size, (l[0] * l[0] + l[1] * l[1]).sqrt());
+            let leafy = g(24.0, 24.0).noise(p);
+            let shade = 0.85 + 0.25 * (0.5 - l[1]);
+            let green =
+                [0.07 + 0.09 * leafy, 0.2 + 0.18 * leafy, 0.03 + 0.03 * leafy].map(|v| v * shade);
+            c.mix(Lin::fixed(green), plant)
+        }
+        // Cracked earth: dry plates, dark cracks.
+        TextureKind::CrackedEarth => {
+            let k = g(1.0, 1.0).cells(p);
+            let e = (k[1] - k[0]) * 0.5;
+            let curl = smoothstep(0.0, 0.5, k[0]);
+            let body = Lin::base(
+                (0.9 + 0.14 * tones(k[2], 3.0))
+                    * (0.95 + 0.06 * g(2.8, 2.8).noise(p))
+                    * (1.0 + 0.08 * curl),
+            );
+            Lin::base(0.45).mix(body, on_piece(e, 0.017))
         }
     }
 }

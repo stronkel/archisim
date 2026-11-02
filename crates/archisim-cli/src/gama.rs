@@ -70,7 +70,15 @@ pub fn build() -> Res<Model> {
     let mut b = Builder { m, level };
 
     // The board: one row a group, the pieces 3.5 m apart.
-    let groups = ["Fachadas", "Cubiertas", "Suelos", "Pavimentos", "Pinturas"];
+    let groups = [
+        "Fachadas",
+        "Cubiertas",
+        "Alicatados",
+        "Suelos",
+        "Pavimentos",
+        "Tierras",
+        "Pinturas",
+    ];
     b.mass(
         "Tablero",
         rect(-20.0, -2.0, 40.0, 30.0),
@@ -80,11 +88,13 @@ pub fn build() -> Res<Model> {
     )?;
     for (gi, group) in groups.iter().enumerate() {
         let items: Vec<_> = STYLIZED.iter().filter(|s| s.group == *group).collect();
-        let y = 24.0 - gi as f64 * 5.5;
+        let y = 25.0 - gi as f64 * 5.0;
         for (i, s) in items.iter().enumerate() {
             let x = (i as f64 - (items.len() as f64 - 1.0) / 2.0) * 3.5;
             match *group {
-                "Fachadas" => b.mass(s.name, rect(x - 1.3, y, 2.6, 0.5), 0.0, 2.6, s.name)?,
+                "Fachadas" | "Alicatados" => {
+                    b.mass(s.name, rect(x - 1.3, y, 2.6, 0.5), 0.0, 2.6, s.name)?
+                }
                 "Cubiertas" => b.mass(s.name, gable(x, y, 2.6, 2.6), 0.0, 1.3, s.name)?,
                 "Pinturas" => b.mass(s.name, rect(x - 0.9, y - 0.9, 1.8, 1.8), 0.0, 1.8, s.name)?,
                 _ => b.mass(
@@ -100,7 +110,7 @@ pub fn build() -> Res<Model> {
 
     // A little street in front: a lawn, a pavement of setts, houses, a
     // round tower, and below the road a cliff of strata down to the sea.
-    let y0 = -16.0;
+    let y0 = -24.0;
     b.mass("Césped", rect(-24.0, y0, 48.0, 10.0), -0.05, 0.05, "Césped")?;
     b.mass(
         "Acera",

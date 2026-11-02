@@ -27,7 +27,10 @@ fn tex_point(world: vec3<f32>, n_in: vec3<f32>, tex: vec2<f32>) -> vec2<f32> {
         period = 20.0;
     }
     if (kind == 32) {
-        period = 16.0;
+        period = 48.0;
+    }
+    if (kind == 42 || kind == 43) {
+        period = 8.0;
     }
     if (kind == 35) {
         period = 24.0;

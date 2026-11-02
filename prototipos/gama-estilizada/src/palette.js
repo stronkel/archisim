@@ -43,6 +43,18 @@ export const RANGE = {
   marble:     { name: 'Mármol',                 group: 'Pavimentos', kind: 29, base: '#f1eee8', base2: '#9a9aa2', joint: '#000', dims: [0.6, 0.6, 0.003, 0], old: 18, oldScale: 0.8 },
   pebbles:    { name: 'Guijarros',              group: 'Pavimentos', kind: 30, base: '#9b968e', base2: '#ece6da', joint: '#3e3a35', dims: [0.09, 0, 0, 0], old: 9, oldScale: 0.08 },
   gravel:     { name: 'Grava',                  group: 'Pavimentos', kind: 31, base: '#c9c1b2', base2: '#9c8f7a', joint: '#6f675b', dims: [0.025, 0, 0, 0], old: 9, oldScale: 0.08 },
+  // Wall tiles
+  metro:      { name: 'Azulejo metro blanco',   group: 'Alicatados', kind: 32, base: '#f2f1ec', base2: '#f2f1ec', joint: '#d9d6cf', dims: [0.2, 0.1, 0.003, 0.006], old: 3, oldScale: 0.6 },
+  metroGreen: { name: 'Azulejo metro verde',    group: 'Alicatados', kind: 32, base: '#5f9c86', base2: '#5f9c86', joint: '#e8e4da', dims: [0.15, 0.075, 0.003, 0.006], old: 3, oldScale: 0.6 },
+  glazed:     { name: 'Azulejo liso 15 × 15',   group: 'Alicatados', kind: 11, base: '#e9e5dc', base2: '#e9e5dc', joint: '#f8f6f1', dims: [0.15, 0.15, 0.003, 0.003], old: 3, oldScale: 0.6 },
+  sevillano:  { name: 'Azulejo andaluz',        group: 'Alicatados', kind: 33, base: '#2f6aa3', base2: '#d9a03b', joint: '#ece6d8', dims: [0.15, 0, 0.003, 0], old: 3, oldScale: 0.6 },
+  hidraulico: { name: 'Baldosa hidráulica',     group: 'Alicatados', kind: 33, base: '#9a4a3c', base2: '#2f4f4a', joint: '#d8d0c0', dims: [0.2, 0, 0.002, 0], old: 3, oldScale: 0.6 },
+  // Earth
+  earthPath:  { name: 'Tierra de camino',       group: 'Tierras', kind: 34, base: '#b08a62', base2: '#c9a67c', joint: '#000', dims: [0, 0, 0, 0], old: 19, oldScale: 0.5 },
+  albero:     { name: 'Albero',                 group: 'Tierras', kind: 35, base: '#e1b25a', base2: '#e1b25a', joint: '#000', dims: [0, 0, 0, 0], old: 19, oldScale: 0.5 },
+  furrows:    { name: 'Tierra en surcos',       group: 'Tierras', kind: 36, base: '#8c6444', base2: '#7fae4a', joint: '#000', dims: [0.7, 0, 0, 0], old: 19, oldScale: 0.5 },
+  garden:     { name: 'Huerta',                 group: 'Tierras', kind: 37, base: '#7d5a3e', base2: '#5e9a3e', joint: '#000', dims: [0.8, 0, 0, 0], old: 19, oldScale: 0.5 },
+  cracked:    { name: 'Tierra cuarteada',       group: 'Tierras', kind: 38, base: '#c49a6c', base2: '#c49a6c', joint: '#000', dims: [0.35, 0, 0.012, 0], old: 19, oldScale: 0.5 },
   // Details
   trimCream:  { name: 'Pintura crema',          group: 'Detalles', kind: 19, base: '#f3ecd8', base2: '#f3ecd8', joint: '#000', dims: [0, 0, 0, 0], old: 0, oldScale: 1 },
   trimGreen:  { name: 'Pintura verde carruaje', group: 'Detalles', kind: 19, base: '#3f7a52', base2: '#3f7a52', joint: '#000', dims: [0, 0, 0, 0], old: 0, oldScale: 1 },

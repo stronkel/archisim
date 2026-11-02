@@ -981,32 +981,41 @@ fn textured(base: vec3<f32>, world: vec3<f32>, n_in: vec3<f32>, tex: vec2<f32>) 
             let q = vec2<f32>(p.x + p.y, p.y - p.x);
             return setts(q, base, w);
         }
-        // Setts in fans: arcs of setts, the fans (sixteen setts wide) in
-        // staggered rows, each over the two below it.
+        // Setts in fans: each fan a circle of arcs, half a fan's width
+        // across (sixteen setts wide); the fans in rows 3/8 of a width
+        // apart, every other row moved half a fan; the lower fans lie over
+        // the upper ones, so each shows its upper part, bounded by the arcs
+        // of the fans below it.
         case 32: {
             let fw = 16.0;
-            let fh = fw * 0.5;
-            let rad = fw * 0.75;
+            let rad = 8.0;
+            let fh = 6.0;
             var centre = vec2<f32>(0.0);
-            var found = false;
             var frow = 0.0;
-            let r0 = floor(p.y / fh);
-            for (var k = 0; k < 3; k = k + 1) {
-                let r = r0 - f32(k);
+            var found = false;
+            var below = 99.0;
+            let r0 = floor((p.y - rad) / fh);
+            for (var k = 0; k < 4; k = k + 1) {
+                let r = r0 + f32(k);
                 let off = odd(r) * 0.5 * fw;
                 let cx = floor((p.x - off) / fw + 0.5) * fw + off;
                 let cc = vec2<f32>(cx, r * fh);
-                if (!found && p.y >= cc.y && length(p - cc) < rad) {
-                    centre = cc;
-                    found = true;
-                    frow = r;
+                let dist = length(p - cc);
+                if (!found) {
+                    if (dist < rad) {
+                        centre = cc;
+                        frow = r;
+                        found = true;
+                    } else {
+                        below = min(below, dist - rad);
+                    }
                 }
             }
             let d = p - centre;
             let rr = length(d);
             let band = floor(rr);
             let along = atan2(d.x, d.y) * (band + 0.5) + hash2(vec2<f32>(band, frow));
-            let e = min(min(edist(rr, 1.0), edist(along, 1.0) * max(rr, 1.0) / max(band + 0.5, 0.5)), rad - rr);
+            let e = min(min(edist(rr, 1.0), edist(along, 1.0) * max(rr, 1.0) / max(band + 0.5, 0.5)), below);
             let id = hash2(vec2<f32>(floor(along), band + frow * 31.0 + centre.x));
             var c = base * (0.8 + 0.28 * tones(id, 4.0)) * select(1.0, 0.85, id > 0.8);
             c = mix(base * 0.6, c, on_piece(e, 0.05, w));
@@ -1103,6 +1112,100 @@ fn textured(base: vec3<f32>, world: vec3<f32>, n_in: vec3<f32>, tex: vec2<f32>) 
             let c = mix(base * 0.3, tint * (0.75 + 0.35 * dome), gap);
             tex_height = dome * 0.13 * gap * s;
             return far_off(c, base * 0.75, 1.0, w);
+        }
+        // Metro tiles: glazed oblongs twice as long as high, staggered, a
+        // soft bevel and a glint along the top of each, thin light joints.
+        case 40: {
+            let row = floor(p.y * 2.0);
+            let u = p.x + 0.5 * odd(row);
+            let e = min(edist(u, 1.0), edist(p.y, 0.5));
+            let id = hash2(vec2<f32>(floor(u), row));
+            let fy = fract(p.y * 2.0);
+            var c = base * (0.96 + 0.06 * tones(id, 3.0));
+            c = mix(c, vec3<f32>(1.0), smoothstep(0.7, 0.86, fy) * (1.0 - smoothstep(0.86, 0.95, fy)) * 0.25);
+            c = mix(mix(base, vec3<f32>(0.85, 0.84, 0.81), 0.7), c, on_piece(e, 0.0075, w));
+            tex_height = sqrt(smoothstep(0.0075, 0.04, e)) * 0.02 * s;
+            return far_off(c, base * 0.97, 0.5, w);
+        }
+        // Patterned tiles: on each a star in the middle, quarter circles at
+        // the corners, a ring and four petals between, on a cream ground.
+        case 41: {
+            let f = fract(p) - 0.5;
+            let a = abs(f);
+            let r = length(f);
+            let star = 1.0 - smoothstep(0.17, 0.18, min(a.x + a.y, max(a.x, a.y) * 1.25));
+            let ring = smoothstep(0.27, 0.28, r) * (1.0 - smoothstep(0.31, 0.32, r));
+            let corner = 1.0 - smoothstep(0.2, 0.21, length(a - 0.5));
+            let petals = (1.0 - smoothstep(0.06, 0.07, length(a - vec2<f32>(0.33, 0.0)))) + (1.0 - smoothstep(0.06, 0.07, length(a - vec2<f32>(0.0, 0.33))));
+            var c = mix(vec3<f32>(0.85, 0.78, 0.6), base, clamp(corner + ring + petals, 0.0, 1.0));
+            c = mix(c, base * 0.45 + vec3<f32>(0.35, 0.22, 0.02), star);
+            c = c * (0.97 + 0.04 * noise(p * 8.0));
+            let e = min(edist(p.x, 1.0), edist(p.y, 1.0));
+            c = mix(vec3<f32>(0.8, 0.77, 0.7), c, on_piece(e, 0.0075, w));
+            tex_height = smoothstep(0.0075, 0.03, e) * 0.015 * s;
+            return far_off(c, mix(base, vec3<f32>(0.85, 0.78, 0.6), 0.5), 1.0, w);
+        }
+        // An earth path: trodden earth in soft patches, little stones, a
+        // few cracks.
+        case 42: {
+            let n = noise(p * 0.6) * 0.6 + noise(p * 2.2) * 0.4;
+            var c = mix(base * 0.88, base * 1.15 + vec3<f32>(0.03, 0.025, 0.015), tones(smoothstep(0.3, 0.75, n), 3.0) * 0.6);
+            let k3 = cells(p * 7.0);
+            let stone = (1.0 - smoothstep(0.1, 0.17, k3.x)) * step(0.72, k3.z);
+            c = mix(c, base * 0.7 + vec3<f32>(0.3, 0.28, 0.24), stone * 0.8);
+            let k4 = cells(p * 1.3);
+            c = c * (1.0 - 0.25 * (1.0 - smoothstep(0.0, 0.025, k4.y - k4.x)) * step(0.5, noise(p * 0.7)));
+            tex_height = stone * 0.008 * s;
+            return c;
+        }
+        // Albero: fine yellow sand, softly raked.
+        case 43: {
+            let n = noise(p * 0.8) * 0.5 + noise(p * 3.0) * 0.3 + noise(p * 60.0) * 0.2;
+            var c = base * (0.92 + 0.12 * tones(smoothstep(0.3, 0.75, n), 4.0));
+            let k3 = cells(p * 25.0);
+            c = mix(c, c * 0.8, (1.0 - smoothstep(0.05, 0.12, k3.x)) * step(0.8, k3.z) * (1.0 - smoothstep(0.004, 0.012, w)));
+            return c;
+        }
+        // Furrows: ridges a piece apart, lit on one side and shaded on the
+        // other, a row of small shoots on some.
+        case 44: {
+            let f = fract(p.y);
+            let row = floor(p.y);
+            let ridge = sin(f * 3.14159);
+            var c = mix(base * 0.55, base * 1.1, ridge) * (0.9 + 0.14 * noise(p * vec2<f32>(1.05, 4.2)) + 0.06 * noise(p * 17.5));
+            let i = floor(p.x / 0.25);
+            let l = vec2<f32>(fract(p.x / 0.25) - 0.5 + (hash2(vec2<f32>(i, row)) - 0.5) * 0.3, (f - 0.5) * 4.0);
+            let sown = step(0.3, hash2(vec2<f32>(row, 1.0))) * step(0.15, hash2(vec2<f32>(i, row + 7.0)));
+            let shoot = (1.0 - smoothstep(0.16, 0.22, length(l * vec2<f32>(1.0, 0.8)))) * sown;
+            c = mix(c, vec3<f32>(0.2, 0.42, 0.06) * (0.8 + 0.4 * hash2(vec2<f32>(i, row))), shoot);
+            tex_height = (ridge * 0.07 + shoot * 0.015) * s;
+            return far_off(c, base * 0.85, 1.0, w);
+        }
+        // A kitchen garden: round green plants along the ridges of earth.
+        case 45: {
+            let f = fract(p.y);
+            let row = floor(p.y);
+            let ridge = sin(f * 3.14159);
+            var c = mix(base * 0.6, base, ridge) * (0.92 + 0.1 * noise(p * 2.4));
+            let sh = hash2(vec2<f32>(row, 3.0));
+            let i = floor(p.x / 0.5 + sh);
+            let l = vec2<f32>(fract(p.x / 0.5 + sh) - 0.5, (f - 0.5) * 2.0);
+            let size = 0.32 + 0.1 * hash2(vec2<f32>(i, row));
+            let plant = 1.0 - smoothstep(size - 0.03, size, length(l));
+            let green = mix(vec3<f32>(0.07, 0.2, 0.03), vec3<f32>(0.16, 0.38, 0.06), noise(p * 24.0)) * (0.85 + 0.25 * (0.5 - l.y));
+            c = mix(c, green, plant);
+            tex_height = plant * (size - length(l)) * 0.15 * s;
+            return far_off(c, mix(base * 0.8, vec3<f32>(0.1, 0.27, 0.04), 0.4), 1.0, w);
+        }
+        // Cracked earth: dry plates curling up a little, dark cracks.
+        case 46: {
+            let k3 = cells(p);
+            let e = (k3.y - k3.x) * 0.5;
+            let curl = smoothstep(0.0, 0.5, k3.x);
+            var c = base * (0.9 + 0.14 * tones(k3.z, 3.0)) * (0.95 + 0.06 * noise(p * 2.8)) * (1.0 + 0.08 * curl);
+            c = mix(base * 0.45, c, on_piece(e, 0.017, w));
+            tex_height = curl * 0.017 * s;
+            return far_off(c, base * 0.9, 1.0, w);
         }
         default: {
             return base;

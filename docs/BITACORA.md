@@ -10,7 +10,7 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 Rama `bloque/gama-estilizada`, con pull request. Formato `.archisim` versión 71: texturas nuevas en el aspecto de los materiales. Las versiones anteriores avisan de que no pueden abrir el fichero.
 
-Antonio aprobó el estilo de la página de prueba (entrada 85) y lo quiere siempre en el 3D: los materiales, el contorno fino y la posibilidad de quitar el relieve. Pidió además:
+Antonio aprobó el estilo de la página de prueba (entrada 85) y lo quiere siempre en el 3D: los materiales, el contorno fino y la posibilidad de quitar el relieve. Pidió además alicatados y tierras, y que el adoquín en abanico no se cortara, además de:
 - otra agua de mar: trazos que se mueven, no puntos;
 - otro césped: briznas en 3D, matas y flores, como los pinceles de Urbanismo;
 - más pavimentos;
@@ -25,7 +25,9 @@ Antonio aprobó el estilo de la página de prueba (entrada 85) y lo quiere siemp
 - **Texturas nuevas:**
   - fachadas y cubiertas: sillería, tablas solapadas, tejuela, escamas, teja curva y chapa de junta alzada;
   - suelos: adoquín, asfalto, roca en estratos y agua de mar;
-  - pavimentos: adoquín en diagonal, adoquín en abanico, empedrado, empedrado antiguo, opus romano, laja, laja en césped, losas de mármol y guijarros.
+  - pavimentos: adoquín en diagonal, adoquín en abanico, empedrado, empedrado antiguo, opus romano, laja, laja en césped, losas de mármol y guijarros. El abanico se repite bien: cada abanico queda limitado por los arcos de los de abajo, sin cortes rectos;
+  - alicatados: azulejo metro (blanco y verde), azulejo liso de 15 × 15, azulejo andaluz y baldosa hidráulica (dibujo en tres colores);
+  - tierras: tierra de camino, albero, tierra en surcos (con brotes), huerta y tierra cuarteada.
 - **Agua:**
   - la de piscina, clara y muy transparente;
   - la de mar, más opaca, con trazos de azul claro a blanco que avanzan y se deslizan.
@@ -34,7 +36,7 @@ Antonio aprobó el estilo de la página de prueba (entrada 85) y lo quiere siemp
 - **Luz:** el lado iluminado envuelve un poco más y su borde es más nítido, como una sombra pintada.
 - **Contorno fino siempre en el 3D,** del color de la propia superficie oscurecido, no negro. El interruptor «Líneas finas» sigue valiendo para la planta y los alzados.
 - **Interruptor «Relieve»** en las propiedades de la vista 3D y en el menú «Imagen» de la Maqueta, junto a «Agua en movimiento». Las dos opciones se guardan en las preferencias.
-- **38 materiales de la gama** en la sección «Gama estilizada» de las tarjetas de materiales (fachadas, cubiertas, suelos, pavimentos y pinturas). Se añaden al proyecto al elegirlos.
+- **48 materiales de la gama** en la sección «Gama estilizada» de las tarjetas de materiales (fachadas, cubiertas, alicatados, suelos, pavimentos, tierras y pinturas). Se añaden al proyecto al elegirlos.
 - La imagen realista y el `.glb` usan las mismas texturas, con el relieve pintado como luz desde arriba.
 - `archisim gama out/` hace un proyecto con el muestrario y una calle con acantilado, mar y piscina.
 

@@ -398,29 +398,33 @@ Look settsDiagonal(vec2 uv, vec3 base) {
   return settsAt(q, base, uDims.x, uDims.y);
 }
 
-// 23 Setts in fans ("adoquín en abanico"): arcs of small setts, the fans
-// in staggered rows, each over the two below.
+// 23 Setts in fans ("adoquín en abanico"): each fan a circle of arcs,
+// half a fan's width across; the fans in rows 3/8 of a width apart, each
+// row moved half a fan, and the lower fans lying over the upper ones, so
+// that each shows its upper part, bounded by the arcs of the fans below.
 Look settsFan(vec2 uv, vec3 base) {
-  float W = uDims.x;             // a fan's width
-  float H = W * 0.5;             // rows of fans
-  float R = W * 0.75;            // a fan's radius
   float s = uDims.y;             // a sett
-  vec2 centre = vec2(0.0); float fan = -1.0; float row = 0.0;
-  float r0 = floor(uv.y / H);
-  for (int k = 0; k < 3; k++) {
-    float r = r0 - float(k);
+  vec2 q = uv / s;               // in setts
+  float W = 16.0, R = 8.0, H = 6.0;
+  vec2 centre = vec2(0.0); float row = 0.0; bool found = false;
+  float lowerGap = 99.0;         // how far the point is outside the fans below
+  float r0 = floor((q.y - R) / H);
+  for (int k = 0; k < 4; k++) {
+    float r = r0 + float(k);
     float off = mod(r, 2.0) * 0.5 * W;
-    float cx = (floor((uv.x - off) / W + 0.5)) * W + off;
+    float cx = floor((q.x - off) / W + 0.5) * W + off;
     vec2 c = vec2(cx, r * H);
-    if (fan < 0.0 && uv.y >= c.y && length(uv - c) < R) { centre = c; fan = 1.0; row = r; }
+    float d = length(q - c);
+    if (!found) {
+      if (d < R) { centre = c; row = r; found = true; }
+      else lowerGap = min(lowerGap, d - R);
+    }
   }
-  vec2 d = uv - centre;
-  float rr = length(d);
-  float ang = atan(d.x, d.y);
-  float band = floor(rr / s);
-  float along = ang * (band + 0.5) * s / s + hash2(vec2(band, row)) ;
-  float e = min(edist(rr, s), edist(along, 1.0) * max(rr, s));
-  e = min(e, R - rr);
+  vec2 dd = q - centre;
+  float rr = length(dd);
+  float band = floor(rr);
+  float along = atan(dd.x, dd.y) * (band + 0.5) + hash2(vec2(band, row));
+  float e = min(min(edist(rr, 1.0), edist(along, 1.0) * max(rr, 1.0) / max(band + 0.5, 0.5)), lowerGap) * s;
   float id = hash2(vec2(floor(along), band + row * 31.0 + centre.x));
   vec3 c = base * (0.8 + 0.28 * tones(id, 4.0));
   c = mix(c, uBase2, step(0.8, id) * 0.7);
@@ -547,6 +551,124 @@ Look gravel(vec2 uv, vec3 base) {
   return Look(c, dome * 0.006);
 }
 
+
+// ---- Wall tiles ("alicatados") -----------------------------------------------
+
+// 32 Metro tiles: glazed oblongs twice as long as high, staggered, a soft
+// bevel and a glint along the top edge of each, thin light joints.
+Look metroTiles(vec2 uv, vec3 base) {
+  float bw = uDims.x, bh = uDims.y;
+  float row = floor(uv.y / bh);
+  float u = uv.x + mod(row, 2.0) * 0.5 * bw;
+  float e = min(edist(u, bw), edist(uv.y, bh));
+  float id = hash2(vec2(floor(u / bw), row));
+  vec3 c = base * (0.96 + 0.06 * tones(id, 3.0));
+  float fy = fract(uv.y / bh);
+  c = mix(c, vec3(1.0), smoothstep(0.7, 0.86, fy) * (1.0 - smoothstep(0.86, 0.95, fy)) * 0.25);
+  float m = onPiece(e, uDims.z * 0.5);
+  float h = sqrt(smoothstep(uDims.z * 0.5, uDims.z * 0.5 + uDims.w, e));
+  return Look(mix(uJoint, c, m), h * 0.004);
+}
+
+// 33 Patterned tiles ("azulejo hidráulico / andaluz"): squares with a
+// motif in three colours, each tile the same, mirrored at its middle: a
+// star in the centre, quarter circles at the corners, a ring between.
+Look patternTiles(vec2 uv, vec3 base) {
+  float t = uDims.x;
+  vec2 f = fract(uv / t) - 0.5;          // -0.5..0.5 in the tile
+  vec2 a = abs(f);
+  float r = length(f);
+  float diamond = a.x + a.y;
+  // The star: a diamond and a square turned over it.
+  float star = 1.0 - smoothstep(0.17, 0.18, min(diamond, max(a.x, a.y) * 1.25));
+  float ring = smoothstep(0.27, 0.28, r) * (1.0 - smoothstep(0.31, 0.32, r));
+  float corner = 1.0 - smoothstep(0.2, 0.21, length(a - 0.5));
+  float petals = (1.0 - smoothstep(0.06, 0.07, length(vec2(a.x, a.y) - vec2(0.33, 0.0)))) + (1.0 - smoothstep(0.06, 0.07, length(vec2(a.x, a.y) - vec2(0.0, 0.33))));
+  vec3 cream = vec3(0.93, 0.89, 0.8);
+  vec3 c = cream;
+  c = mix(c, base, clamp(corner + ring + petals, 0.0, 1.0));
+  c = mix(c, uBase2, star);
+  c *= 0.97 + 0.04 * noise(uv * 40.0);
+  float e = min(edist(uv.x, t), edist(uv.y, t));
+  float m = onPiece(e, uDims.z * 0.5);
+  return Look(mix(uJoint, c, m), smoothstep(uDims.z * 0.5, uDims.z * 0.5 + 0.004, e) * 0.003);
+}
+
+// ---- Earth ---------------------------------------------------------------------
+
+// 34 Earth path ("tierra de camino"): trodden earth in soft patches, two
+// paler bands where it is walked, little stones, a few cracks.
+Look earthPath(vec2 uv, vec3 base) {
+  float n = noise(uv * 0.6) * 0.6 + noise(uv * 2.2) * 0.4;
+  vec3 c = mix(base * 0.88, uBase2, tones(smoothstep(0.3, 0.75, n), 3.0) * 0.6);
+  vec3 k = cells(uv * 7.0);
+  float stone = (1.0 - smoothstep(0.1, 0.17, k.x)) * step(0.72, k.z);
+  c = mix(c, mix(uBase2, vec3(0.9, 0.86, 0.78), 0.4), stone * 0.8);
+  vec3 k2 = cells(uv * 1.3);
+  float crack = (1.0 - smoothstep(0.0, 0.025, k2.y - k2.x)) * step(0.5, noise(uv * 0.7));
+  c *= 1.0 - 0.25 * crack;
+  return Look(c, stone * 0.008);
+}
+
+// 35 Albero: the yellow sand of Andalusian paths and squares, fine grain,
+// softly raked.
+Look albero(vec2 uv, vec3 base) {
+  float n = noise(uv * 0.8) * 0.5 + noise(uv * 3.0) * 0.3 + noise(uv * 60.0) * 0.2;
+  vec3 c = base * (0.92 + 0.12 * tones(smoothstep(0.3, 0.75, n), 4.0));
+  vec3 k = cells(uv * 25.0);
+  c = mix(c, c * 0.8, (1.0 - smoothstep(0.05, 0.12, k.x)) * step(0.8, k.z));
+  return Look(c, 0.0);
+}
+
+// 36 Furrows ("tierra en surcos", a field ploughed or sown): ridges and
+// troughs, each ridge lit on one side and shaded on the other, and a row
+// of small shoots along the top of some ridges.
+Look furrows(vec2 uv, vec3 base) {
+  float w = uDims.x;                       // a ridge and its trough
+  float f = fract(uv.y / w);
+  float row = floor(uv.y / w);
+  float ridge = sin(f * 3.14159);
+  vec3 c = mix(base * 0.55, base * 1.1, ridge);
+  c *= 0.9 + 0.14 * noise(uv * vec2(1.5, 6.0)) + 0.06 * noise(uv * 25.0);
+  float sp = w * 0.22;
+  float i = floor(uv.x / sp);
+  vec2 l = vec2(fract(uv.x / sp) - 0.5 + (hash2(vec2(i, row)) - 0.5) * 0.3, (f - 0.5) * w / sp);
+  float sown = step(0.3, hash2(vec2(row, 1.0))) * step(0.15, hash2(vec2(i, row + 7.0)));
+  float shoot = (1.0 - smoothstep(0.16, 0.22, length(l * vec2(1.0, 0.8)))) * sown;
+  vec3 green = mix(uBase2 * 0.8, uBase2 * 1.2, hash2(vec2(i, row)));
+  return Look(mix(c, green, shoot), ridge * 0.05 + shoot * 0.01);
+}
+
+// 37 Kitchen garden ("huerta"): rows of plants, round green tufts along
+// the ridges of earth.
+Look kitchenGarden(vec2 uv, vec3 base) {
+  float w = uDims.x;
+  float f = fract(uv.y / w);
+  float row = floor(uv.y / w);
+  float ridge = sin(f * 3.14159);
+  vec3 c = mix(base * 0.6, base, ridge) * (0.92 + 0.1 * noise(uv * 3.0));
+  float sp = w * 0.55;
+  float i = floor(uv.x / sp + hash2(vec2(row, 3.0)));
+  vec2 l = vec2(fract(uv.x / sp + hash2(vec2(row, 3.0))) - 0.5, (f - 0.5) * w / sp);
+  float size = 0.32 + 0.1 * hash2(vec2(i, row));
+  float plant = 1.0 - smoothstep(size - 0.03, size, length(l));
+  float leafy = noise(uv * 30.0);
+  vec3 green = mix(uBase2 * 0.7, uBase2 * 1.15, leafy) * (0.85 + 0.25 * (0.5 - l.y));
+  c = mix(c, green, plant);
+  return Look(c, plant * (size - length(l)) * 0.12);
+}
+
+// 38 Cracked earth ("tierra cuarteada"): dry plates curling up a little,
+// dark cracks between them.
+Look crackedEarth(vec2 uv, vec3 base) {
+  vec3 k = cells(uv / uDims.x);
+  float e = (k.y - k.x) * 0.5 * uDims.x;
+  vec3 c = base * (0.9 + 0.14 * tones(k.z, 3.0)) * (0.95 + 0.06 * noise(uv * 8.0));
+  c *= 1.0 + 0.08 * smoothstep(0.0, 0.5, k.x);
+  float m = onPiece(e, uDims.z * 0.5);
+  return Look(mix(base * 0.45, c, m), smoothstep(0.0, 0.5, k.x) * 0.006 * m);
+}
+
 Look stylizedNear(vec2 uv, vec3 base);
 // From afar the pieces melt into their mean colour (no shimmer), as a
 // painter would draw a far wall.
@@ -592,6 +714,13 @@ Look stylizedNear(vec2 uv, vec3 base) {
   if (uKind == 29) return marble(uv, base);
   if (uKind == 30) return pebbles(uv, base);
   if (uKind == 31) return gravel(uv, base);
+  if (uKind == 32) return metroTiles(uv, base);
+  if (uKind == 33) return patternTiles(uv, base);
+  if (uKind == 34) return earthPath(uv, base);
+  if (uKind == 35) return albero(uv, base);
+  if (uKind == 36) return furrows(uv, base);
+  if (uKind == 37) return kitchenGarden(uv, base);
+  if (uKind == 38) return crackedEarth(uv, base);
   if (uKind == 18) return glass(uv, base);
   if (uKind == 20) return foliage(uv, base);
   return paint(uv, base);

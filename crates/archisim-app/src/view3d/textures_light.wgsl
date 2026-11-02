@@ -181,6 +181,32 @@ fn textured(base: vec3<f32>, world: vec3<f32>, n_in: vec3<f32>, tex: vec2<f32>) 
         // Marble slabs: veins and joints.
         let wv = p.x * 0.8 + p.y * 0.4 + noise(p) * 3.0;
         out = base * (1.0 - 0.3 * (1.0 - smoothstep(0.0, 0.08, abs(fract(wv) - 0.5)))) * mix(0.8, 1.0, joint(p.x, 0.01) * joint(p.y, 0.01));
+    } else if (kind < 40.5) {
+        // Metro tiles.
+        let row = floor(p.y * 2.0);
+        let u = p.x + 0.5 * fract(row * 0.5) * 2.0;
+        out = mix(mix(base, vec3<f32>(0.85, 0.84, 0.81), 0.7), base, joint(u, 0.015) * joint(p.y * 2.0, 0.03));
+    } else if (kind < 41.5) {
+        // Patterned tiles: a star and a ring on each.
+        let f = fract(p) - 0.5;
+        let r = length(f);
+        let ring = smoothstep(0.27, 0.28, r) * (1.0 - smoothstep(0.31, 0.32, r));
+        let star = 1.0 - smoothstep(0.17, 0.18, abs(f.x) + abs(f.y));
+        out = mix(mix(vec3<f32>(0.85, 0.78, 0.6), base, ring), base * 0.45 + vec3<f32>(0.35, 0.22, 0.02), star);
+    } else if (kind < 43.5) {
+        // Earth path, albero: soft patches.
+        out = base * (0.9 + 0.15 * noise(p * 0.7) + 0.05 * noise(p * 9.0));
+    } else if (kind < 45.5) {
+        // Furrows, kitchen garden: ridges, green along some.
+        let ridge = 0.5 + 0.5 * sin(fract(p.y) * 3.14159);
+        out = mix(base * 0.55, base * 1.1, ridge);
+        if (kind > 44.5) {
+            out = mix(out, vec3<f32>(0.1, 0.27, 0.04), smoothstep(0.55, 0.6, noise(p * vec2<f32>(2.0, 0.0) + vec2<f32>(0.0, floor(p.y) * 3.0))) * ridge);
+        }
+    } else if (kind < 46.5) {
+        // Cracked earth.
+        let v = noise(p * 1.7);
+        out = mix(base * 0.45, base, smoothstep(0.03, 0.08, abs(fract(v * 3.0) - 0.5)));
     }
     return out;
 }

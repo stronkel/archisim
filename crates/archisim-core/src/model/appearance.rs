@@ -94,10 +94,25 @@ pub enum TextureKind {
     MarbleSlabs,
     /// Pebbles ("guijarros"): small oval stones of three colours.
     Pebbles,
+    /// Metro tiles ("azulejo metro"): glazed oblongs, staggered.
+    MetroTiles,
+    /// Patterned tiles ("azulejo andaluz", "baldosa hidráulica"): a motif in
+    /// three colours on each tile.
+    PatternTiles,
+    /// An earth path ("tierra de camino"): trodden earth, little stones.
+    EarthPath,
+    /// Albero: the yellow sand of Andalusian paths.
+    Albero,
+    /// Furrows ("tierra en surcos"): a field ploughed or sown.
+    Furrows,
+    /// A kitchen garden ("huerta"): rows of plants on ridges.
+    KitchenGarden,
+    /// Cracked earth ("tierra cuarteada"): dry plates.
+    CrackedEarth,
 }
 
 impl TextureKind {
-    pub const ALL: [TextureKind; 39] = [
+    pub const ALL: [TextureKind; 46] = [
         TextureKind::Brick,
         TextureKind::Stone,
         TextureKind::Tile,
@@ -137,6 +152,13 @@ impl TextureKind {
         TextureKind::FlagsInGrass,
         TextureKind::MarbleSlabs,
         TextureKind::Pebbles,
+        TextureKind::MetroTiles,
+        TextureKind::PatternTiles,
+        TextureKind::EarthPath,
+        TextureKind::Albero,
+        TextureKind::Furrows,
+        TextureKind::KitchenGarden,
+        TextureKind::CrackedEarth,
     ];
 
     pub fn code(self) -> &'static str {
@@ -180,6 +202,13 @@ impl TextureKind {
             TextureKind::FlagsInGrass => "flagstones_in_grass",
             TextureKind::MarbleSlabs => "marble_slabs",
             TextureKind::Pebbles => "pebbles",
+            TextureKind::MetroTiles => "metro_tiles",
+            TextureKind::PatternTiles => "pattern_tiles",
+            TextureKind::EarthPath => "earth_path",
+            TextureKind::Albero => "albero",
+            TextureKind::Furrows => "furrows",
+            TextureKind::KitchenGarden => "kitchen_garden",
+            TextureKind::CrackedEarth => "cracked_earth",
         }
     }
 
@@ -229,6 +258,13 @@ impl TextureKind {
             TextureKind::FlagsInGrass => "Laja en césped",
             TextureKind::MarbleSlabs => "Losas de mármol",
             TextureKind::Pebbles => "Guijarros",
+            TextureKind::MetroTiles => "Azulejo metro",
+            TextureKind::PatternTiles => "Azulejo de dibujo",
+            TextureKind::EarthPath => "Tierra de camino",
+            TextureKind::Albero => "Albero",
+            TextureKind::Furrows => "Tierra en surcos",
+            TextureKind::KitchenGarden => "Huerta",
+            TextureKind::CrackedEarth => "Tierra cuarteada",
         }
     }
 
@@ -280,6 +316,15 @@ impl TextureKind {
             TextureKind::FlagsInGrass => 0.7,
             TextureKind::MarbleSlabs => 0.6,
             TextureKind::Pebbles => 0.09,
+            // A tile's length; a tile's side; earth (a metre); a ridge and
+            // its trough; a row of plants; a dry plate.
+            TextureKind::MetroTiles => 0.2,
+            TextureKind::PatternTiles => 0.2,
+            TextureKind::EarthPath => 1.0,
+            TextureKind::Albero => 1.0,
+            TextureKind::Furrows => 0.7,
+            TextureKind::KitchenGarden => 0.8,
+            TextureKind::CrackedEarth => 0.35,
         }
     }
 
