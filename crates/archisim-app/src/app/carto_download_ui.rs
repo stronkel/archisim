@@ -66,7 +66,7 @@ impl Default for CartoDownload {
 pub fn run(
     requests: &[Request],
     progress: &Mutex<Progress>,
-    fetch: impl Fn(&str) -> Result<Vec<u8>, String>,
+    fetch: impl Fn(&str, Option<&str>) -> Result<Vec<u8>, String>,
 ) {
     if let Ok(mut p) = progress.lock() {
         p.total = requests.len();
@@ -82,14 +82,26 @@ pub fn run(
             }
             p.current = r.source.name().to_string();
         }
-        // The address, and the other servers when it fails.
-        let mut got = fetch(&r.url);
-        for alt in &r.alternatives {
-            if got.is_ok() {
-                break;
+        // The address, or its attempts in turn until one answers (each
+        // one's failure kept, to say them all).
+        let got = if r.attempts.is_empty() {
+            fetch(&r.url, None)
+        } else {
+            let mut why = Vec::new();
+            let mut got = None;
+            for (url, form) in &r.attempts {
+                match fetch(url, form.as_deref()).and_then(|b| {
+                    download::answer_text(r.source, &String::from_utf8_lossy(&b)).map(|_| b)
+                }) {
+                    Ok(b) => {
+                        got = Some(b);
+                        break;
+                    }
+                    Err(e) => why.push(format!("{}: {e}", host_of(url))),
+                }
             }
-            got = fetch(alt);
-        }
+            got.ok_or_else(|| why.join("; "))
+        };
         let Ok(mut p) = progress.lock() else { return };
         if let Some(t) = r.tile {
             terrain = Some(t);
@@ -151,8 +163,15 @@ pub fn run(
     }
 }
 
-/// One address, by HTTP (through the system's proxy if it has one).
-pub fn http_get(url: &str) -> Result<Vec<u8>, String> {
+/// The server of an address, to say which one failed.
+fn host_of(url: &str) -> &str {
+    let rest = url.split_once("://").map_or(url, |(_, r)| r);
+    rest.split('/').next().unwrap_or(rest)
+}
+
+/// One address, by HTTP (through the system's proxy if it has one): a GET,
+/// or a POST of a form.
+pub fn http_get(url: &str, form: Option<&str>) -> Result<Vec<u8>, String> {
     let agent = ureq::AgentBuilder::new()
         .timeout_connect(Duration::from_secs(20))
         .timeout(Duration::from_secs(240))
@@ -163,7 +182,14 @@ pub fn http_get(url: &str) -> Result<Vec<u8>, String> {
         ))
         .try_proxy_from_env(true)
         .build();
-    let res = agent.get(url).call().map_err(|e| match e {
+    let res = match form {
+        Some(f) => agent
+            .post(url)
+            .set("Content-Type", "application/x-www-form-urlencoded")
+            .send_string(f),
+        None => agent.get(url).call(),
+    };
+    let res = res.map_err(|e| match e {
         ureq::Error::Status(code, r) => {
             let body = r.into_string().unwrap_or_default();
             let body: String = body.chars().take(120).collect();

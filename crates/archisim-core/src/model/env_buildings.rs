@@ -381,6 +381,9 @@ pub struct Dress {
     /// Round a courtyard (casa patio): the depth of the wings round it (0:
     /// none).
     pub patio: f64,
+    /// The ridge of a tiled roof turned a right angle from the usual one
+    /// (along the street front; with no street, along the longest side).
+    pub ridge_turned: bool,
     pub materials: DressMaterials,
 }
 
@@ -406,6 +409,7 @@ impl Dress {
             plinth: 0.0,
             cornice: false,
             patio: 0.0,
+            ridge_turned: false,
             materials,
         };
         match style {
@@ -563,7 +567,7 @@ impl Dress {
     /// Its parameters as text, for the IFC (`key=value;…`).
     pub fn encode(&self) -> String {
         format!(
-            "style={};bay={};window={}x{};sill={};closure={};balcony={};shop={};roof={};pitch={};plinth={};cornice={};patio={}",
+            "style={};bay={};window={}x{};sill={};closure={};balcony={};shop={};roof={};pitch={};plinth={};cornice={};patio={};ridge={}",
             self.style.code(),
             self.bay,
             self.window_width,
@@ -577,6 +581,7 @@ impl Dress {
             self.plinth,
             self.cornice as u8,
             self.patio,
+            self.ridge_turned as u8,
         )
     }
 
@@ -608,6 +613,7 @@ impl Dress {
                 "plinth" => d.plinth = num()?,
                 "cornice" => d.cornice = v == "1",
                 "patio" => d.patio = num()?,
+                "ridge" => d.ridge_turned = v == "1",
                 _ => {}
             }
         }

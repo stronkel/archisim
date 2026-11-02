@@ -8,6 +8,7 @@ use archisim_core::{BuildingStyle, Closure, Dress, EnvRoof, MassId, Point2};
 use eframe::egui::{self, Color32, CornerRadius, Id, Rect, Stroke, Ui};
 
 use super::props::{self, choice, group, row};
+use super::widgets::SwitchExt as _;
 use super::*;
 use crate::editor::{MassMode, MassWhat};
 
@@ -445,6 +446,16 @@ impl ArchiSimApp {
                         changed = true;
                     }
                 });
+                row(
+                    ui,
+                    "Cumbrera girada",
+                    "La cumbrera a escuadra con la de siempre (paralela a la fachada de la calle)",
+                    |ui, _| {
+                        if ui.switch(&mut x.ridge_turned, "").changed() {
+                            changed = true;
+                        }
+                    },
+                );
             }
             changed |= metres(
                 ui,

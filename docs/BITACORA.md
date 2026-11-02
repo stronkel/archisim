@@ -6,6 +6,36 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-02 (82) · Cubiertas del entorno que siempre cierran, cumbrera girada y OpenStreetMap por otro camino
+
+Rama `bloque/cubiertas-entorno`, con pull request. Formato `.archisim` versión 70: la cumbrera girada de los edificios del entorno. Las versiones anteriores avisan de que no pueden abrir el fichero.
+
+**Hecho**
+- **Cubiertas de teja rehechas:** antes salían del esqueleto recto del contorno. Con las huellas enrevesadas del Catastro, los faldones se perdían, no cerraban o subían en el aire. Ahora la cubierta es la más baja de unos pocos planos sobre todo el contorno:
+  - **a dos aguas:** dos faldones que bajan desde la cumbrera;
+  - **a cuatro aguas:** dos faldones más en las testas, si el edificio está exento; entre medianeras queda a dos aguas;
+  - **techo:** un plano horizontal a 4,5 m sobre el alero, que corta lo que subiría más (una casa honda queda con la parte alta plana en vez de un faldón de 20 m).
+
+  Cada plano cubre la parte del contorno donde es el más bajo, así que la cubierta cierra siempre, sea cual sea la forma (L, muescas, lados torcidos). Los muros suben hasta la cubierta por todos los lados (los hastiales) y el alero lleva su remate.
+- **La cumbrera, paralela a la fachada de la calle** (o, sin calle, al lado libre más largo). En una hilera de adosados va a lo largo de la hilera, como en la realidad.
+- **«Cumbrera girada»** en las propiedades del edificio del entorno (grupo de la cubierta) gira la cumbrera a escuadra para los casos en que la de siempre no es la buena. Se guarda en el fichero y en el IFC.
+- **OpenStreetMap por otro camino:** en Windows salía «Network Error» con Overpass. Ahora se intenta en este orden:
+  - Overpass por POST (como prefiere ese servicio);
+  - sus dos servidores de reserva;
+  - por último, el mapa del propio OpenStreetMap (`api.openstreetmap.org`), que da todo lo del recuadro.
+
+  Si todo falla, la ventana dice qué contestó cada servidor.
+
+**Pendiente**
+- Faldón solo en la primera crujía de las casas hondas entre medianeras (ahora la parte alta queda plana a 4,5 m).
+- Ortofoto como textura; detalle de los edificios por distancia.
+
+**Qué debe probar Antonio**
+- Repetir la descarga en Poetas Andaluces. Mirar las cubiertas: deben cerrar todas, y las de los adosados deben ir a lo largo de la hilera. Si alguna tiene la cumbrera al revés, seleccionarla y encender «Cumbrera girada».
+- Que lleguen las calles y los árboles. Si no, mandarme el texto que sale en «No ha llegado».
+
+---
+
 ## 2026-11-02 (81) · Entorno real: lo que salió en Punta Umbría
 
 Rama `bloque/entorno-real`, con pull request. Sin cambios de formato.
