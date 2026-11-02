@@ -6,6 +6,28 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-02 (81) · Entorno real: lo que salió en Punta Umbría
+
+Rama `bloque/entorno-real`, con pull request. Sin cambios de formato.
+
+Antonio probó «Descargar el entorno» en la Plaza Poetas Andaluces (Punta Umbría, huso 29). Llegaron el Catastro y la ortofoto. No llegaron OpenStreetMap (servidor saturado, error 502) ni el terreno (error 404 del IGN). Había cubiertas inclinadas en el aire.
+
+**Hecho**
+- **Terreno de cualquier sitio de España:** el servicio WCS que usaba no tiene el MDT en el huso 29. Ahora se piden las **teselas de alturas del IGN** (`xyz-mdt.idee.es`, el mismo MDT para toda España, unos 4 m por píxel). Con ellas se hace la malla de 5 m del recuadro, que entra como cualquier MDT.
+- **OpenStreetMap con reintento:** si el servidor de Overpass está ocupado, se prueba con otros dos servidores públicos (kumi.systems y private.coffee).
+- **Cubiertas imposibles:** una cubierta de teja que sube más de 4,5 m sobre el alero se hace plana. Pasaba en una casa honda con medianeras a los lados y detrás, que caía en un solo faldón desde la calle. También se hace plana si los faldones no cubren bien la huella (contornos enrevesados del Catastro).
+
+**Pendiente**
+- La ortofoto se ve borrosa de cerca: hay que llevarla como textura de verdad (bloque siguiente).
+- Edificios del entorno con más detalle cerca y más ligeros lejos, por distancia.
+- Las casas hondas entre medianeras quedan con cubierta plana; lo justo sería un faldón solo en la primera crujía, junto a la calle.
+
+**Qué debe probar Antonio**
+- Repetir la descarga en Poetas Andaluces con la versión de esta rama (o de `main` cuando se una). Debe llegar el terreno: la ortofoto ya no queda sobre un plano, sino sobre el terreno. Deben llegar también las calles y los árboles, aunque el servidor principal de OpenStreetMap esté ocupado.
+- Mirar en 3D que ya no hay cubiertas en el aire.
+
+---
+
 ## 2026-11-02 (80) · Pasada de cierre: comprobaciones y un barrio entero
 
 Rama `bloque/cierre-v`, con pull request. Sin cambios de formato.

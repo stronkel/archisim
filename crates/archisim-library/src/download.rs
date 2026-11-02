@@ -1,7 +1,8 @@
 //! «Descargar el entorno»: the addresses of the free services that give
 //! the surroundings of a georeferenced project — the cadastre's buildings,
 //! their parts and parcels (its INSPIRE WFS), OpenStreetMap's streets and
-//! trees (Overpass) and the IGN's terrain (its INSPIRE WCS) — split in
+//! trees (Overpass, with other servers when one is busy) and the IGN's
+//! terrain (its tiles of heights, `xyz-mdt`, in any UTM zone) — split in
 //! tiles the services accept. No network here: the application fetches
 //! them (on a thread) and hands the answers to `carto::import_carto`;
 //! `answer_text` cleans what a service answers.
@@ -35,7 +36,7 @@ impl Source {
             Source::BuildingParts => "Catastro: partes de edificios (plantas)",
             Source::Parcels => "Catastro: parcelas",
             Source::Osm => "OpenStreetMap: calles y árboles",
-            Source::Terrain => "IGN: terreno (MDT05)",
+            Source::Terrain => "IGN: terreno (MDT)",
             Source::Orthophoto => "IGN: ortofoto del PNOA",
         }
     }
@@ -50,20 +51,47 @@ pub struct Request {
     pub url: String,
     /// The rectangle of the map a picture covers (the orthophoto).
     pub bbox: Option<Bbox>,
+    /// Other servers that give the same, tried in turn when it fails.
+    pub alternatives: Vec<String>,
+    /// A tile of heights of the terrain and what it is for.
+    pub tile: Option<TerrainTile>,
+}
+
+/// A tile of the IGN's heights (zoom, column, row of the web map) and the
+/// rectangle of the map its grid is wanted for.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TerrainTile {
+    pub z: u32,
+    pub x: u32,
+    pub y: u32,
+    pub bbox: Bbox,
+    pub zone: u32,
+    pub north: bool,
 }
 
 /// The cadastre's services (INSPIRE WFS 2.0).
 pub const CADASTRE_BU: &str = "http://ovc.catastro.meh.es/INSPIRE/wfsBU.aspx";
 pub const CADASTRE_CP: &str = "http://ovc.catastro.meh.es/INSPIRE/wfsCP.aspx";
-/// OpenStreetMap through Overpass.
+/// OpenStreetMap through Overpass, and other public servers of it for
+/// when the main one is busy.
 pub const OVERPASS: &str = "https://overpass-api.de/api/interpreter";
+pub const OVERPASS_MIRRORS: [&str; 2] = [
+    "https://overpass.kumi.systems/api/interpreter",
+    "https://overpass.private.coffee/api/interpreter",
+];
 /// The PNOA's most recent orthophoto (INSPIRE WMS 1.3.0).
 pub const PNOA: &str = "https://www.ign.es/wms-inspire/pnoa-ma";
 /// Pixels of the orthophoto: one each 25 cm (the PNOA's), up to this many
 /// a side.
 pub const ORTHO_PIXELS: u32 = 2048;
-/// The IGN's digital terrain models (INSPIRE WCS 2.0.1).
-pub const IGN_MDT: &str = "https://servicios.idee.es/wcs-inspire/mdt";
+/// The IGN's tiles of heights of the whole of Spain (MDT, «Terrain RGB»:
+/// height = −10000 + (R·65536 + G·256 + B) · 0,1 m), in the web map's
+/// tiles.
+pub const IGN_HEIGHTS: &str = "https://xyz-mdt.idee.es/1.0.0/raster-dem";
+/// Zoom of those tiles: 15, its finest (some 4 m a pixel in Spain).
+pub const TERRAIN_ZOOM: u32 = 15;
+/// Spacing of the terrain grid made from them, metres.
+pub const TERRAIN_CELL: f64 = 5.0;
 
 /// Largest side of a tile of the cadastre's buildings (it serves up to
 /// 4 km² a time) and of its parcels (1 km²), metres, with some room.
@@ -155,12 +183,16 @@ pub fn plan(m: &Model, opts: &CartoOptions) -> Result<Vec<Request>, String> {
         for (i, t) in tiles(b, BUILDINGS_TILE).into_iter().enumerate() {
             out.push(Request {
                 bbox: None,
+                alternatives: Vec::new(),
+                tile: None,
                 source: Source::Buildings,
                 name: format!("catastro-edificios-{}.gml", i + 1),
                 url: wfs(CADASTRE_BU, "BU.BUILDING", t, code),
             });
             out.push(Request {
                 bbox: None,
+                alternatives: Vec::new(),
+                tile: None,
                 source: Source::BuildingParts,
                 name: format!("catastro-partes-{}.gml", i + 1),
                 url: wfs(CADASTRE_BU, "BU.BUILDINGPART", t, code),
@@ -171,6 +203,8 @@ pub fn plan(m: &Model, opts: &CartoOptions) -> Result<Vec<Request>, String> {
         for (i, t) in tiles(b, PARCELS_TILE).into_iter().enumerate() {
             out.push(Request {
                 bbox: None,
+                alternatives: Vec::new(),
+                tile: None,
                 source: Source::Parcels,
                 name: format!("catastro-parcelas-{}.gml", i + 1),
                 url: wfs(CADASTRE_CP, "CP.CADASTRALPARCEL", t, code),
@@ -191,6 +225,8 @@ pub fn plan(m: &Model, opts: &CartoOptions) -> Result<Vec<Request>, String> {
         let e = corners.iter().map(|c| c.1).fold(f64::MIN, f64::max);
         out.push(Request {
             bbox: None,
+            alternatives: Vec::new(),
+            tile: None,
             source: Source::Osm,
             name: "openstreetmap.osm".into(),
             url: format!(
@@ -198,6 +234,13 @@ pub fn plan(m: &Model, opts: &CartoOptions) -> Result<Vec<Request>, String> {
                 encode(&overpass_query(s, w, n, e, opts.buildings))
             ),
         });
+        let query = encode(&overpass_query(s, w, n, e, opts.buildings));
+        if let Some(r) = out.last_mut() {
+            r.alternatives = OVERPASS_MIRRORS
+                .iter()
+                .map(|m| format!("{m}?data={query}"))
+                .collect();
+        }
     }
     if opts.orthophoto {
         let px = ((b[2] - b[0]) / 0.25)
@@ -205,6 +248,8 @@ pub fn plan(m: &Model, opts: &CartoOptions) -> Result<Vec<Request>, String> {
             .clamp(64.0, ORTHO_PIXELS as f64) as u32;
         out.push(Request {
             bbox: Some(b),
+            alternatives: Vec::new(),
+            tile: None,
             source: Source::Orthophoto,
             name: "pnoa.png".into(),
             url: format!(
@@ -214,17 +259,98 @@ pub fn plan(m: &Model, opts: &CartoOptions) -> Result<Vec<Request>, String> {
         });
     }
     if opts.terrain {
-        out.push(Request {
-            bbox: None,
-            source: Source::Terrain,
-            name: "ign-mdt05.asc".into(),
-            url: format!(
-                "{IGN_MDT}?SERVICE=WCS&VERSION=2.0.1&REQUEST=GetCoverage&CoverageId=Elevacion{code}_5&SUBSET=x({:.0},{:.0})&SUBSET=y({:.0},{:.0})&FORMAT=application/asc",
-                b[0], b[2], b[1], b[3]
-            ),
-        });
+        for (x, y) in tiles_over(b, zone, north, TERRAIN_ZOOM) {
+            out.push(Request {
+                bbox: Some(b),
+                alternatives: Vec::new(),
+                tile: Some(TerrainTile {
+                    z: TERRAIN_ZOOM,
+                    x,
+                    y,
+                    bbox: b,
+                    zone,
+                    north,
+                }),
+                source: Source::Terrain,
+                name: format!("mdt-{TERRAIN_ZOOM}-{x}-{y}.png"),
+                url: format!("{IGN_HEIGHTS}/{TERRAIN_ZOOM}/{x}/{y}.png"),
+            });
+        }
     }
     Ok(out)
+}
+
+/// Where a latitude and longitude fall on the web map at zoom `z`: its
+/// column and row, with their fractions.
+pub fn web_tile(lat: f64, lon: f64, z: u32) -> (f64, f64) {
+    let n = 2f64.powi(z as i32);
+    let x = (lon + 180.0) / 360.0 * n;
+    let r = lat.to_radians();
+    let y = (1.0 - (r.tan() + 1.0 / r.cos()).ln() / std::f64::consts::PI) / 2.0 * n;
+    (x, y)
+}
+
+/// The tiles of the web map at zoom `z` that hold a rectangle of the map.
+pub fn tiles_over(b: Bbox, zone: u32, north: bool, z: u32) -> Vec<(u32, u32)> {
+    let corners = [
+        utm_to_lat_lon(b[0], b[1], zone, north),
+        utm_to_lat_lon(b[2], b[1], zone, north),
+        utm_to_lat_lon(b[2], b[3], zone, north),
+        utm_to_lat_lon(b[0], b[3], zone, north),
+    ];
+    let pts: Vec<(f64, f64)> = corners.iter().map(|c| web_tile(c.0, c.1, z)).collect();
+    let x0 = pts.iter().map(|p| p.0).fold(f64::MAX, f64::min).floor() as u32;
+    let x1 = pts.iter().map(|p| p.0).fold(f64::MIN, f64::max).floor() as u32;
+    let y0 = pts.iter().map(|p| p.1).fold(f64::MAX, f64::min).floor() as u32;
+    let y1 = pts.iter().map(|p| p.1).fold(f64::MIN, f64::max).floor() as u32;
+    let mut out = Vec::new();
+    for y in y0..=y1 {
+        for x in x0..=x1 {
+            out.push((x, y));
+        }
+    }
+    out
+}
+
+/// The height a pixel of the IGN's tiles of heights holds, metres; `None`
+/// for no data (black).
+pub fn tile_height(rgb: [u8; 3]) -> Option<f64> {
+    let v = (rgb[0] as u32) << 16 | (rgb[1] as u32) << 8 | rgb[2] as u32;
+    (v != 0).then(|| -10_000.0 + v as f64 * 0.1)
+}
+
+/// The terrain of a rectangle of the map as an ESRI ASCII grid (what the
+/// importer reads), from the tiles of heights that arrived: `pixel` gives
+/// the colour of a tile `(x, y)` at a point of it (both from 0 to 1).
+pub fn terrain_grid(
+    t: &TerrainTile,
+    pixel: impl Fn(u32, u32, f64, f64) -> Option<[u8; 3]>,
+) -> Option<String> {
+    let b = t.bbox;
+    let cols = ((b[2] - b[0]) / TERRAIN_CELL).floor() as usize + 1;
+    let rows = ((b[3] - b[1]) / TERRAIN_CELL).floor() as usize + 1;
+    let mut text = format!(
+        "ncols {cols}\nnrows {rows}\nxllcenter {:.2}\nyllcenter {:.2}\ncellsize {TERRAIN_CELL}\nNODATA_value -9999\n",
+        b[0], b[1]
+    );
+    let mut any = false;
+    for r in (0..rows).rev() {
+        let mut row = Vec::with_capacity(cols);
+        for c in 0..cols {
+            let (e, n) = (
+                b[0] + c as f64 * TERRAIN_CELL,
+                b[1] + r as f64 * TERRAIN_CELL,
+            );
+            let (lat, lon) = utm_to_lat_lon(e, n, t.zone, t.north);
+            let (tx, ty) = web_tile(lat, lon, t.z);
+            let z = pixel(tx as u32, ty as u32, tx.fract(), ty.fract()).and_then(tile_height);
+            any |= z.is_some();
+            row.push(z.map_or("-9999".to_string(), |z| format!("{z:.2}")));
+        }
+        text.push_str(&row.join(" "));
+        text.push('\n');
+    }
+    any.then_some(text)
 }
 
 /// Whether bytes are a PNG.
@@ -327,9 +453,20 @@ mod tests {
         let o = &of(Source::Osm)[0].url;
         assert!(o.starts_with(OVERPASS), "{o}");
         assert!(o.contains("highway") && o.contains("40.4"), "{o}");
-        let t = &of(Source::Terrain)[0].url;
-        assert!(t.contains("CoverageId=Elevacion25830_5"), "{t}");
-        assert!(t.contains("SUBSET=x(439400,440600)"), "{t}");
+        // The terrain: the tiles of heights that hold the rectangle (some
+        // 1,2 km at 4,8 m a pixel: two or three a side).
+        let t = of(Source::Terrain);
+        assert!((4..=9).contains(&t.len()), "{}", t.len());
+        assert!(
+            t[0].url.starts_with(&format!("{IGN_HEIGHTS}/15/")),
+            "{}",
+            t[0].url
+        );
+        // Overpass, with other servers for when it is busy.
+        assert_eq!(
+            of(Source::Osm)[0].alternatives.len(),
+            OVERPASS_MIRRORS.len()
+        );
         // The orthophoto: the rectangle at 25 cm a pixel, up to its limit.
         let o = of(Source::Orthophoto)[0];
         assert!(
@@ -355,8 +492,7 @@ mod tests {
             },
         )
         .unwrap();
-        assert_eq!(few.len(), 1);
-        assert_eq!(few[0].source, Source::Terrain);
+        assert!(!few.is_empty() && few.iter().all(|r| r.source == Source::Terrain));
         // Without a georeference there is nothing to ask.
         assert!(plan(&Model::new("T"), &opts).is_err());
     }
@@ -377,6 +513,34 @@ mod tests {
         );
         assert!(answer_text(Source::Osm, "<html>busy</html>").is_err());
         assert!(answer_text(Source::Osm, "<?xml?><osm version=\"0.6\"></osm>").is_ok());
+    }
+
+    /// The tiles of heights become a grid of the rectangle: a pixel of
+    /// R 1, G 134, B 160 is −10000 + 100000 · 0,1 = 0 m… plus 3,2 m.
+    #[test]
+    fn tiles_of_heights_make_the_terrain() {
+        assert_eq!(tile_height([0, 0, 0]), None);
+        let h = tile_height([1, 134, 192]).unwrap();
+        assert!((h - (-10_000.0 + (65_536.0 + 134.0 * 256.0 + 192.0) * 0.1)).abs() < 1e-9);
+        // Madrid, Puerta del Sol: tile 16046, 12355 at zoom 15.
+        let (x, y) = web_tile(40.4168, -3.7038, 15);
+        assert_eq!((x as u32, y as u32), (16046, 12355));
+        let t = TerrainTile {
+            z: 15,
+            x: 0,
+            y: 0,
+            bbox: [440_000.0, 4_474_000.0, 440_020.0, 4_474_010.0],
+            zone: 30,
+            north: true,
+        };
+        // Everything at 12,5 m: (10000 + 12,5) / 0,1 = 100125.
+        let v: u32 = 100_125;
+        let rgb = [(v >> 16) as u8, (v >> 8) as u8, v as u8];
+        let text = terrain_grid(&t, |_, _, _, _| Some(rgb)).unwrap();
+        let g = archisim_carto::asc::read(&text).unwrap();
+        assert_eq!((g.cols, g.rows), (5, 3));
+        assert!((g.at(2, 1).unwrap() - 12.5).abs() < 1e-6);
+        assert!(terrain_grid(&t, |_, _, _, _| None).is_none());
     }
 
     #[test]

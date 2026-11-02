@@ -4666,10 +4666,16 @@ fn surroundings_downloaded() {
     super::carto_download_ui::run(&requests, &progress, |url| {
         if url.contains("wfsBU") || url.contains("wfsCP") {
             Ok(gml.clone().into_bytes())
-        } else if url.contains("overpass") {
-            Ok(osm.clone().into_bytes())
+        } else if url.contains("overpass-api") {
+            Err("el servicio responde 502 busy".into())
         } else if url.contains("pnoa") {
             Ok(green_png())
+        } else if url.contains("xyz-mdt") {
+            // Tiles of heights: all at 12,5 m.
+            Ok(height_png(12.5))
+        } else if url.contains("kumi") {
+            // Overpass's other server, when the first is busy.
+            Ok(osm.clone().into_bytes())
         } else {
             // The terrain, as the WCS sends it: in several parts.
             Ok(
@@ -4690,8 +4696,11 @@ fn surroundings_downloaded() {
     assert!(h.app.carto_download.is_none());
     let c = h.app.carto_import.take().expect("«Traer el entorno» opens");
     assert_eq!(c.notes.len(), 1);
-    // Every answer but the picture is a file; the picture, the orthophoto.
-    assert_eq!(c.files.len(), requests.len() - 1);
+    // Every answer but the picture and the tiles is a file; the tiles make
+    // one terrain grid, the picture the orthophoto.
+    let tiles = requests.iter().filter(|r| r.tile.is_some()).count();
+    assert!(tiles >= 1);
+    assert_eq!(c.files.len(), requests.len() - 1 - tiles + 1);
     assert!(c.orthophoto.is_some());
     let r = h
         .app
@@ -4727,6 +4736,21 @@ fn surroundings_downloaded() {
     assert!(solids
         .iter()
         .any(|s| s.owner == archisim_geom::solid::SolidOwner::Orthophoto));
+}
+
+/// A tile of heights of the IGN all at `h` metres.
+fn height_png(h: f64) -> Vec<u8> {
+    let v = ((h + 10_000.0) / 0.1).round() as u32;
+    let px = [(v >> 16) as u8, (v >> 8) as u8, v as u8];
+    let mut out = Vec::new();
+    {
+        let mut e = png::Encoder::new(&mut out, 4, 4);
+        e.set_color(png::ColorType::Rgb);
+        e.set_depth(png::BitDepth::Eight);
+        let mut w = e.write_header().unwrap();
+        w.write_image_data(&px.repeat(16)).unwrap();
+    }
+    out
 }
 
 /// A PNG of 4 × 4 green pixels.
