@@ -6,6 +6,40 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-02 (80) · Pasada de cierre: comprobaciones y un barrio entero
+
+Rama `bloque/cierre-v`, con pull request. Sin cambios de formato.
+
+**Comprobado** (todo lo de CLAUDE.md, con `main` después de V1–V3)
+- Formato, clippy y pruebas de todo el espacio de trabajo.
+- Demo: IFC 4.3 e IFC4 válidos, 4 «NO CUMPLE» en el CTE (como antes), ida y vuelta idéntica salvo la fecha, importación del IFC, DXF válidos, PDF de los planos sano y muestrario válido.
+- La casa dibujada con la app (`drawn_project`, `gpu_tests`): `sesion.ifc` y `tipos.ifc` válidos.
+- Edificio de Florence Street, calles y entorno: IFC válidos.
+- El pueblo con ortofoto: glTF válido.
+
+**Medido: un barrio entero traído** (1272 edificios vestidos, 1272 parcelas, 38 calles, en 600 m de radio; ficheros inventados con el generador de los de prueba, ampliado)
+- Con todo el detalle, cada edificio pesaba unos 11.600 triángulos: 16,4 millones en total. El IFC salía de 741 MB y la vista 3D no llegaba a montarse con 7 GB de memoria.
+- **Arreglo, la versión ligera:** con más de 150 edificios vestidos en el proyecto, cada uno se hace en su versión ligera:
+  - las ventanas son solo su vidrio, sin marco, travesaño, parteluz ni vierteaguas;
+  - sin rejas;
+  - las barandillas, sus dos pasamanos sin barrotes.
+
+  La altura, los huecos, los balcones, los bajos comerciales, las cornisas y las cubiertas no cambian.
+- Con ella:
+
+  | | Antes | Ahora |
+  |---|---|---|
+  | Triángulos de los edificios | 14,8 millones | 2,3 millones |
+  | IFC | 741 MB en 23 s | 180 MB en 6 s |
+  | Escena 3D | no cabe en memoria | 5,4 s, 435 MB en la tarjeta |
+
+  De lejos no se nota; de cerca, en un barrio de mil edificios, tampoco hacen falta los barrotes.
+
+**Qué debe probar Antonio**
+- Traer un barrio grande de verdad (radio de 500 m o más en una ciudad) y moverse en 3D: tiene que ir fluido. Comparar con un pueblo pequeño (menos de 150 edificios), que sigue con todo el detalle.
+
+---
+
 ## 2026-11-02 (79) · V3: altura de los edificios con el LiDAR
 
 Rama `bloque/lidar`, con pull request. Sin cambios de formato.

@@ -58,10 +58,17 @@ impl Side {
     }
 }
 
+/// Up to this many dressed buildings in the project, each is made with
+/// all its detail; past it (a whole neighbourhood brought in), the light
+/// version: windows as their glass, no grilles, railings as two rails.
+pub const FULL_DRESS_LIMIT: usize = 150;
+
 /// What a dressed building gives, by material.
 #[derive(Default)]
 struct Out {
     by: BTreeMap<MaterialId, Vec<[P3; 3]>>,
+    /// The light version.
+    light: bool,
 }
 
 impl Out {
@@ -108,7 +115,10 @@ pub fn dressed_solids(model: &Model, m: &Mass) -> Vec<Solid> {
     }
     let party = |i: usize| party.get(i).copied().unwrap_or(false);
     let mat = d.materials;
-    let mut out = Out::default();
+    let mut out = Out {
+        light: light_dress(model),
+        ..Out::default()
+    };
 
     // The body, or the wings round the courtyard.
     let court = (d.patio > 0.0)
@@ -203,6 +213,16 @@ pub fn dressed_solids(model: &Model, m: &Mass) -> Vec<Solid> {
             triangles,
         })
         .collect()
+}
+
+/// Whether the project's dressed buildings are made in their light
+/// version (more than `FULL_DRESS_LIMIT` of them).
+pub fn light_dress(model: &Model) -> bool {
+    model
+        .masses()
+        .filter(|m| m.dress.is_some())
+        .nth(FULL_DRESS_LIMIT)
+        .is_some()
 }
 
 /// A free façade: plinth, cornice and, floor by floor, its windows with
@@ -321,6 +341,13 @@ fn window_axes(len: f64, bay: f64, width: f64) -> Vec<f64> {
 /// A window: its frame and its glass, with a sill if it has one.
 fn window(out: &mut Out, d: &Dress, side: &Side, s: (f64, f64), z: f64, h: f64, sill: bool) {
     let mat = d.materials;
+    if out.light {
+        out.add(
+            mat.glass,
+            side.block((s.0, s.1), (0.0, GLASS_OUT), (z, z + h)),
+        );
+        return;
+    }
     out.add(
         mat.joinery,
         side.block(
@@ -370,6 +397,9 @@ fn window(out: &mut Out, d: &Dress, side: &Side, s: (f64, f64), z: f64, h: f64, 
 
 /// A window grille, standing out of the wall.
 fn grille(out: &mut Out, d: &Dress, side: &Side, s: (f64, f64), (floor, z): (f64, f64), h: f64) {
+    if out.light {
+        return;
+    }
     let m = d.materials.metal;
     let (t0, t1) = (0.12, 0.14);
     let (lo, hi) = ((z - 0.1).max(floor), z + h + 0.1);
@@ -427,6 +457,9 @@ fn railing(
         side.block(s, (t.0 - 0.01, t.1 + 0.01), (floor + h - 0.04, floor + h)),
     );
     out.add(m, side.block(s, t, (floor + 0.08, floor + 0.11)));
+    if out.light {
+        return;
+    }
     let k = (((s.1 - s.0) / BARS).round() as usize).max(2);
     for j in 0..=k {
         let x = s.0 + 0.02 + (s.1 - s.0 - 0.04) * j as f64 / k as f64;
@@ -745,6 +778,41 @@ mod tests {
             // It goes through the plain mass solids too.
             assert_eq!(crate::solid::mass_solids(&m, id).len(), s.len());
         }
+    }
+
+    /// A whole neighbourhood: past `FULL_DRESS_LIMIT` buildings, each is
+    /// made in its light version, less than half as heavy and as tall.
+    #[test]
+    fn many_buildings_are_lighter() {
+        let mut m = Model::new("T");
+        let l = m.add_level("Planta baja", 0.0);
+        let add = |m: &mut Model, i: usize| {
+            let x = (i % 20) as f64 * 30.0;
+            let y = (i / 20) as f64 * 30.0;
+            m.add_env_building(NewEnvBuilding {
+                name: format!("B{i}"),
+                level: l,
+                outline: rect(x, y, x + 16.0, y + 12.0),
+                style: BuildingStyle::Block1960s,
+                floors: Some(5),
+                floor_height: None,
+                base_offset: 0.0,
+            })
+            .unwrap()
+        };
+        let first = add(&mut m, 0);
+        let count = |m: &Model| -> (usize, f64) {
+            let s = dressed_solids(m, m.mass(first).unwrap());
+            (s.iter().map(|s| s.triangles.len()).sum(), bounds(&s).1[2])
+        };
+        let (full, top) = count(&m);
+        for i in 1..=FULL_DRESS_LIMIT {
+            add(&mut m, i);
+        }
+        assert!(light_dress(&m));
+        let (light, top_light) = count(&m);
+        assert!(light * 2 < full, "{light} of {full}");
+        assert!((top - top_light).abs() < 1e-9);
     }
 
     #[test]
