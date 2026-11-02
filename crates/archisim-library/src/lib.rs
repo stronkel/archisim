@@ -801,6 +801,7 @@ use StudioValue::{B, C, N, T};
 
 pub mod carto;
 pub mod collections;
+pub mod download;
 pub mod extended;
 pub mod facades;
 pub mod flora;

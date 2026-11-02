@@ -294,7 +294,7 @@ struct Read {
 /// Map ↔ plan by the georeference and the true north (as the IFC's
 /// `IfcMapConversion` writes it).
 #[derive(Debug, Clone, Copy)]
-struct Frame {
+pub(crate) struct Frame {
     e: f64,
     n: f64,
     h: f64,
@@ -303,7 +303,7 @@ struct Frame {
 }
 
 impl Frame {
-    fn of(m: &Model, g: &Georeference) -> Frame {
+    pub(crate) fn of(m: &Model, g: &Georeference) -> Frame {
         let a = m.true_north() + g.convergence();
         Frame {
             e: g.eastings,
@@ -312,6 +312,14 @@ impl Frame {
             cos: a.cos(),
             sin: a.sin(),
         }
+    }
+
+    /// The map coordinates of a point of the plan.
+    pub(crate) fn to_map(self, p: Point2) -> [f64; 2] {
+        [
+            self.e + p.x * self.cos - p.y * self.sin,
+            self.n + p.x * self.sin + p.y * self.cos,
+        ]
     }
 
     fn to_plan(self, p: [f64; 2]) -> Point2 {
@@ -343,6 +351,15 @@ pub fn import_carto(
             None => report.notes.push(format!(
                 "{name}: no es GML del Catastro, OSM ni una malla ASC"
             )),
+        }
+    }
+    // The same feature in two files (downloads by tiles overlap) once.
+    {
+        let mut seen = std::collections::HashSet::new();
+        for c in &mut read.cadastre {
+            c.features.retain(|f| {
+                f.id.is_empty() || seen.insert((f.kind as u8, f.id.clone(), f.reference.clone()))
+            });
         }
     }
     let had_height = m.georeference().is_some();

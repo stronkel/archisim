@@ -1,0 +1,290 @@
+//! «Descargar el entorno»: what «Traer el entorno» reads from files, asked
+//! straight to the cadastre, OpenStreetMap and the IGN for the project's
+//! georeference and a radius (`archisim_library::download` gives the
+//! addresses). It runs on a thread; when it ends, «Traer el entorno»
+//! opens with what arrived, and says what did not.
+
+use std::io::Read as _;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
+
+use archisim_library::carto::CartoOptions;
+use archisim_library::download::{self, Request};
+
+use super::carto_ui::CartoImport;
+use super::length_field;
+use super::theme::Palette;
+use super::widgets::SwitchExt as _;
+use super::ArchiSimApp;
+use eframe::egui;
+
+/// The most a service may send, bytes.
+const MAX_ANSWER: u64 = 400 * 1024 * 1024;
+
+/// How a download goes.
+#[derive(Debug, Default)]
+pub struct Progress {
+    pub done: usize,
+    pub total: usize,
+    /// What is being asked now.
+    pub current: String,
+    /// What arrived: name and text.
+    pub files: Vec<(String, String)>,
+    /// What did not: what it was, why, and its address.
+    pub failures: Vec<(String, String, String)>,
+    pub finished: bool,
+    /// Asked to stop.
+    pub stop: bool,
+}
+
+/// The window: what to bring, and the download while it runs.
+pub struct CartoDownload {
+    pub options: CartoOptions,
+    pub job: Option<Arc<Mutex<Progress>>>,
+    /// Why the last download brought nothing: what, why and its address.
+    pub failures: Vec<(String, String, String)>,
+}
+
+impl Default for CartoDownload {
+    fn default() -> Self {
+        CartoDownload {
+            options: CartoOptions {
+                radius: 200.0,
+                ..CartoOptions::default()
+            },
+            job: None,
+            failures: Vec::new(),
+        }
+    }
+}
+
+/// Fetches the addresses one after the other with `fetch`, writing how it
+/// goes in `progress` (the application's fetch is `http_get`; the tests
+/// give their own).
+pub fn run(
+    requests: &[Request],
+    progress: &Mutex<Progress>,
+    fetch: impl Fn(&str) -> Result<String, String>,
+) {
+    if let Ok(mut p) = progress.lock() {
+        p.total = requests.len();
+    }
+    for r in requests {
+        if let Ok(mut p) = progress.lock() {
+            if p.stop {
+                break;
+            }
+            p.current = r.source.name().to_string();
+        }
+        let got = fetch(&r.url).and_then(|body| download::answer_text(r.source, &body));
+        let Ok(mut p) = progress.lock() else { return };
+        match got {
+            Ok(text) => p.files.push((r.name.clone(), text)),
+            Err(e) => p
+                .failures
+                .push((r.source.name().to_string(), e, r.url.clone())),
+        }
+        p.done += 1;
+    }
+    if let Ok(mut p) = progress.lock() {
+        p.finished = true;
+    }
+}
+
+/// One address, by HTTP (through the system's proxy if it has one).
+pub fn http_get(url: &str) -> Result<String, String> {
+    let agent = ureq::AgentBuilder::new()
+        .timeout_connect(Duration::from_secs(20))
+        .timeout(Duration::from_secs(240))
+        .user_agent(concat!(
+            "ArchiSim/",
+            env!("CARGO_PKG_VERSION"),
+            " (+https://github.com/stronkel/archisim)"
+        ))
+        .try_proxy_from_env(true)
+        .build();
+    let res = agent.get(url).call().map_err(|e| match e {
+        ureq::Error::Status(code, r) => {
+            let body = r.into_string().unwrap_or_default();
+            let body: String = body.chars().take(120).collect();
+            format!("el servicio responde {code} {}", body.trim())
+        }
+        ureq::Error::Transport(t) => format!("no se llega al servicio ({})", t.kind()),
+    })?;
+    let mut bytes = Vec::new();
+    res.into_reader()
+        .take(MAX_ANSWER)
+        .read_to_end(&mut bytes)
+        .map_err(|e| format!("la respuesta se ha cortado ({e})"))?;
+    Ok(String::from_utf8_lossy(&bytes).into_owned())
+}
+
+impl ArchiSimApp {
+    /// Opens the window (Archivo → Descargar el entorno).
+    pub(super) fn open_carto_download(&mut self) {
+        if self.carto_download.is_none() {
+            self.carto_download = Some(CartoDownload::default());
+        }
+    }
+
+    /// Starts the download of what the window asks.
+    pub fn start_carto_download(&mut self) -> Result<(), String> {
+        let Some(d) = &mut self.carto_download else {
+            return Err("no hay nada que descargar".into());
+        };
+        let requests = download::plan(self.ed.model(), &d.options)?;
+        d.failures.clear();
+        let job = Arc::new(Mutex::new(Progress::default()));
+        d.job = Some(job.clone());
+        std::thread::spawn(move || run(&requests, &job, http_get));
+        Ok(())
+    }
+
+    /// When the download has ended, «Traer el entorno» with what arrived.
+    pub fn finish_carto_download(&mut self) {
+        let Some(d) = &self.carto_download else {
+            return;
+        };
+        let Some(job) = &d.job else { return };
+        let Ok(mut p) = job.lock() else { return };
+        if !p.finished {
+            return;
+        }
+        let files = std::mem::take(&mut p.files);
+        let failures = p.failures.clone();
+        let notes: Vec<String> = failures
+            .iter()
+            .map(|(what, why, url)| format!("{what}: {why}. Dirección: {url}"))
+            .collect();
+        let stopped = p.stop;
+        drop(p);
+        let options = d.options.clone();
+        if files.is_empty() {
+            // The window stays, saying why.
+            if let Some(d) = &mut self.carto_download {
+                d.job = None;
+                d.failures = if stopped { Vec::new() } else { failures };
+            }
+            return;
+        }
+        self.carto_download = None;
+        self.carto_import = Some(CartoImport {
+            files,
+            options,
+            notes,
+        });
+    }
+
+    pub(super) fn carto_download_dialog(&mut self, ctx: &egui::Context) {
+        self.finish_carto_download();
+        let Some(mut d) = self.carto_download.take() else {
+            return;
+        };
+        let mut open = true;
+        let mut start = false;
+        let georef = self.ed.model().georeference().cloned();
+        let running = d.job.clone();
+        super::widgets::dialog("Descargar el entorno")
+            .open(&mut open)
+            .default_width(520.0)
+            .show(ctx, |ui| {
+                let p = Palette::current(ui.ctx());
+                if let Some(job) = &running {
+                    let (done, total, current) = job
+                        .lock()
+                        .map(|p| (p.done, p.total, p.current.clone()))
+                        .unwrap_or_default();
+                    ui.label(format!("Descargando… {current}"));
+                    ui.add(
+                        egui::ProgressBar::new(if total == 0 {
+                            0.0
+                        } else {
+                            done as f32 / total as f32
+                        })
+                        .text(format!("{done} de {total}")),
+                    );
+                    if ui.button("Parar").clicked() {
+                        if let Ok(mut p) = job.lock() {
+                            p.stop = true;
+                        }
+                    }
+                    ctx.request_repaint_after(Duration::from_millis(200));
+                    return;
+                }
+                match &georef {
+                    Some(g) => ui.label(
+                        egui::RichText::new(format!(
+                            "Alrededor del origen del proyecto ({}, X {:.0} · Y {:.0}).",
+                            g.crs, g.eastings, g.northings
+                        ))
+                        .color(p.muted),
+                    ),
+                    None => ui.label(
+                        egui::RichText::new("El proyecto no está georreferenciado: pon antes su emplazamiento en las propiedades del proyecto («Emplazamiento (georreferencia)», sin nada seleccionado).")
+                            .color(p.bad),
+                    ),
+                };
+                ui.add_space(4.0);
+                let o = &mut d.options;
+                ui.horizontal_wrapped(|ui| {
+                    ui.switch(&mut o.buildings, "Edificios (Catastro)");
+                    ui.switch(&mut o.parcels, "Parcelas (Catastro)");
+                    ui.switch(&mut o.streets, "Calles (OpenStreetMap)");
+                    ui.switch(&mut o.trees, "Árboles (OpenStreetMap)");
+                    ui.switch(&mut o.terrain, "Terreno (IGN, MDT05)");
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Radio alrededor del origen");
+                    if let Some(v) =
+                        length_field(ui, egui::Id::unique("carto-download-radius"), o.radius, 90.0)
+                    {
+                        o.radius = v.clamp(10.0, 2000.0);
+                    }
+                });
+                ui.label(
+                    egui::RichText::new("Son servicios públicos y gratuitos; con radios grandes tardan unos minutos. Al terminar se abre «Traer el entorno» para elegir cómo se trae.")
+                        .color(p.muted),
+                );
+                if !d.failures.is_empty() {
+                    ui.add_space(4.0);
+                    ui.label(egui::RichText::new("No ha llegado nada:").color(p.bad));
+                    egui::ScrollArea::vertical()
+                        .max_height(220.0)
+                        .show(ui, |ui| {
+                            for (what, why, url) in &d.failures {
+                                ui.horizontal_wrapped(|ui| {
+                                    ui.label(egui::RichText::new(what).strong());
+                                    ui.label(egui::RichText::new(why).color(p.muted));
+                                    ui.hyperlink_to("Abrir la dirección", url);
+                                });
+                            }
+                        });
+                    ui.label(
+                        egui::RichText::new("Prueba las direcciones en el navegador, o descarga los ficheros a mano y usa «Traer el entorno».")
+                            .color(p.muted),
+                    );
+                }
+                ui.add_space(6.0);
+                if ui
+                    .add_enabled(georef.is_some(), egui::Button::new("Descargar"))
+                    .clicked()
+                {
+                    start = true;
+                }
+            });
+        self.carto_download = open.then_some(d);
+        if !open {
+            // Closing the window stops the download.
+            if let Some(job) = running {
+                if let Ok(mut p) = job.lock() {
+                    p.stop = true;
+                }
+            }
+        }
+        if start {
+            if let Err(e) = self.start_carto_download() {
+                self.complain(format!("No se puede descargar el entorno: {e}."));
+            }
+        }
+    }
+}

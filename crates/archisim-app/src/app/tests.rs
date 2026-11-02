@@ -4628,6 +4628,88 @@ fn surroundings_from_cartography() {
     assert!(h.model().georeference().is_none());
 }
 
+/// «Descargar el entorno»: the addresses for a georeferenced project are
+/// asked one after the other (here answered with the sample files) and,
+/// when they end, «Traer el entorno» opens with what arrived and says
+/// what did not.
+#[test]
+fn surroundings_downloaded() {
+    let dir =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../archisim-carto/tests/fixtures");
+    let read = |f: &str| std::fs::read_to_string(dir.join(f)).unwrap();
+    let (gml, osm, asc) = (
+        read("pueblo-catastro.gml"),
+        read("pueblo.osm"),
+        read("pueblo-mdt05.asc"),
+    );
+    // The project placed where the sample is.
+    let mut placed = archisim_core::Model::new("T");
+    placed.add_level("Planta baja", 0.0);
+    archisim_library::carto::import_carto(
+        &mut placed,
+        &[("c.gml".into(), gml.clone())],
+        &Default::default(),
+    )
+    .unwrap();
+    let mut h = Harness::new(Editor::new_project());
+    h.app
+        .ed
+        .transact("Emplazamiento", |m| {
+            m.set_georeference(placed.georeference().cloned())
+        })
+        .unwrap();
+    h.app.open_carto_download();
+    h.frame();
+    let opts = h.app.carto_download.as_ref().unwrap().options.clone();
+    let requests = archisim_library::download::plan(h.model(), &opts).unwrap();
+    let progress = std::sync::Mutex::new(super::carto_download_ui::Progress::default());
+    super::carto_download_ui::run(&requests, &progress, |url| {
+        if url.contains("wfsBU") || url.contains("wfsCP") {
+            Ok(gml.clone())
+        } else if url.contains("overpass") {
+            Ok(osm.clone())
+        } else {
+            // The terrain, as the WCS sends it: in several parts.
+            Ok(format!(
+                "--b\r\nContent-Type: application/asc\r\n\r\n{asc}\r\n--b--\r\n"
+            ))
+        }
+    });
+    let mut p = progress.into_inner().unwrap();
+    assert!(p.finished && p.failures.is_empty(), "{:?}", p.failures);
+    assert_eq!(p.done, requests.len());
+    // One address that fails is told, not fatal.
+    p.failures
+        .push(("IGN".into(), "no responde".into(), "https://…".into()));
+    h.app.carto_download.as_mut().unwrap().job =
+        Some(std::sync::Arc::new(std::sync::Mutex::new(p)));
+    h.frame();
+    assert!(h.app.carto_download.is_none());
+    let c = h.app.carto_import.take().expect("«Traer el entorno» opens");
+    assert_eq!(c.notes.len(), 1);
+    assert_eq!(c.files.len(), requests.len());
+    let r = h
+        .app
+        .ed
+        .transact("Traer el entorno", |m| {
+            archisim_library::carto::import_carto(m, &c.files, &c.options)
+        })
+        .unwrap();
+    assert!(!r.georeferenced);
+    // The same buildings came in several files: each is brought once.
+    let once = {
+        let mut m = archisim_core::Model::new("T");
+        m.add_level("Planta baja", 0.0);
+        m.set_georeference(placed.georeference().cloned()).unwrap();
+        archisim_library::carto::import_carto(&mut m, &[("c.gml".into(), gml.clone())], &c.options)
+            .unwrap()
+            .buildings
+    };
+    assert_eq!(r.buildings, once, "{r:?}");
+    assert!(r.roads > 0 && r.trees > 0, "{r:?}");
+    assert_eq!(h.model().terrains().count(), 1);
+}
+
 /// Two roads drawn across each other make a crossing with rounded
 /// corners (U1); a road given a profile is drawn with its grades, and
 /// its properties (with «Rasante») show.

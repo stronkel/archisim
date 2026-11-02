@@ -18,6 +18,8 @@ pub struct CartoImport {
     /// Name and text of each file.
     pub files: Vec<(String, String)>,
     pub options: CartoOptions,
+    /// What did not arrive, when they were downloaded.
+    pub notes: Vec<String>,
 }
 
 impl CartoImport {
@@ -34,6 +36,7 @@ impl CartoImport {
         Ok(CartoImport {
             files,
             options: CartoOptions::default(),
+            notes: Vec::new(),
         })
     }
 
@@ -114,6 +117,9 @@ impl ArchiSimApp {
                         ui.label(egui::RichText::new(kind).color(p.muted));
                     });
                 }
+                for n in &c.notes {
+                    ui.label(egui::RichText::new(format!("No ha llegado: {n}")).color(p.muted));
+                }
                 ui.add_space(4.0);
                 ui.label(
                     egui::RichText::new(match &georef {
@@ -135,11 +141,11 @@ impl ArchiSimApp {
                     ui.switch(&mut o.terrain, "Terreno");
                 });
                 ui.horizontal(|ui| {
-                    ui.label("Radio alrededor del origen (mm)");
+                    ui.label("Radio alrededor del origen");
                     if let Some(v) = length_field(ui, egui::Id::unique("carto-radius"), o.radius, 90.0) {
                         o.radius = v.clamp(10.0, 2000.0);
                     }
-                    ui.label("Altura de planta (mm)");
+                    ui.label("Altura de planta");
                     if let Some(v) = length_field(ui, egui::Id::unique("carto-floor"), o.floor_height, 70.0) {
                         o.floor_height = v.clamp(2.0, 10.0);
                     }
