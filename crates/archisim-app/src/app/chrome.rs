@@ -216,6 +216,13 @@ impl ArchiSimApp {
             {
                 self.pick_carto();
             }
+            if ui
+                .button("Descargar el entorno (Catastro, OpenStreetMap, IGN)…")
+                .on_hover_text("Lo mismo, pedido directamente a sus servicios gratuitos para el emplazamiento del proyecto y un radio")
+                .clicked()
+            {
+                self.open_carto_download();
+            }
             if ui.button("Exportar IFC 4.3…").clicked() {
                 self.export_ifc(archisim_ifc::Schema::Ifc4x3);
             }

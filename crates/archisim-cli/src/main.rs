@@ -300,6 +300,7 @@ fn main() -> ExitCode {
         Some("cartografia") | Some("cartografía") => {
             let mut files = Vec::new();
             let (mut project, mut radius, mut out, mut recentre) = (None, 150.0, None, false);
+            let mut links = false;
             let mut it = args[1..].iter();
             while let Some(a) = it.next() {
                 match a.as_str() {
@@ -312,11 +313,45 @@ fn main() -> ExitCode {
                     }
                     "--salida" => out = it.next().map(PathBuf::from),
                     "--centrar" => recentre = true,
+                    "--enlaces" => links = true,
                     _ => files.push(PathBuf::from(a)),
                 }
             }
+            if links {
+                // The addresses «Descargar el entorno» asks, to try them in
+                // a browser.
+                let Some(p) = &project else {
+                    eprintln!(
+                        "Uso: archisim cartografia --enlaces --proyecto p.archisim [--radio 150]"
+                    );
+                    return ExitCode::FAILURE;
+                };
+                let m = match archisim_file::open(p) {
+                    Ok(m) => m,
+                    Err(e) => {
+                        eprintln!("{e}");
+                        return ExitCode::FAILURE;
+                    }
+                };
+                let opts = archisim_library::carto::CartoOptions {
+                    radius,
+                    ..Default::default()
+                };
+                match archisim_library::download::plan(&m, &opts) {
+                    Ok(rs) => {
+                        for r in rs {
+                            println!("{}\n  {}", r.source.name(), r.url);
+                        }
+                        return ExitCode::SUCCESS;
+                    }
+                    Err(e) => {
+                        eprintln!("{e}");
+                        return ExitCode::FAILURE;
+                    }
+                }
+            }
             if files.is_empty() {
-                eprintln!("Uso: archisim cartografia <ficheros .gml .osm .asc…> [--proyecto p.archisim] [--radio 150] [--centrar] [--salida entorno.archisim]");
+                eprintln!("Uso: archisim cartografia <ficheros .gml .osm .asc…> [--proyecto p.archisim] [--radio 150] [--centrar] [--salida entorno.archisim]  (o --enlaces --proyecto p.archisim: las direcciones de «Descargar el entorno»)");
                 return ExitCode::FAILURE;
             }
             let out = out

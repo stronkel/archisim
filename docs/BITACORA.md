@@ -6,6 +6,29 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-02 (77) · Descargar el entorno
+
+Rama `bloque/descargar-entorno`, con pull request. Sin cambios de formato.
+
+**Hecho**
+- **Archivo → «Descargar el entorno (Catastro, OpenStreetMap, IGN)…»:** lo mismo que «Traer el entorno», pero sin bajar ficheros a mano. Con el proyecto georreferenciado, se eligen qué traer y el radio y se pulsa «Descargar». ArchiSim pide, uno tras otro y sin bloquear la ventana:
+  - al Catastro (servicio INSPIRE WFS): los edificios (su uso), sus partes (las plantas) y las parcelas, en el sistema de coordenadas del proyecto. Se trocea la zona en recuadros que el Catastro acepta (4 km² de edificios y 1 km² de parcelas por petición);
+  - a OpenStreetMap (Overpass): calles, árboles, alineaciones de árboles y edificios, por latitud y longitud;
+  - al IGN (servicio WCS del MDT): el terreno MDT05 en malla ASC.
+- Al terminar se abre «Traer el entorno» con lo que ha llegado, para elegir estilos, zona, altura de planta…, y dice lo que no ha llegado. Si no llega nada, la ventana se queda con el motivo de cada servicio y un enlace «Abrir la dirección» para probarla en el navegador.
+- Lo que llega repetido en dos recuadros (un edificio partido por el borde) se trae una sola vez.
+- `archisim cartografia --enlaces --proyecto p.archisim --radio 300` escribe las direcciones que se piden, para probarlas a mano.
+
+**Pendiente**
+- Desde aquí no hay salida a esos servicios, así que solo se ha probado con los ficheros de ejemplo haciendo de respuesta. La primera prueba real es la de Antonio. Lo más dudoso es el terreno del IGN: el nombre de la cobertura (`Elevacion25830_5`) y los ejes del recorte (`x`, `y`). Si falla, el enlace de la ventana dirá por qué.
+
+**Qué debe probar Antonio**
+- Un proyecto con su emplazamiento puesto (propiedades del proyecto sin nada seleccionado, «Emplazamiento (georreferencia)»). Archivo → Descargar el entorno, radio 200 m, Descargar. Al terminar, «Traer» y mirar planta y 3D.
+- Si algo no llega, pulsar «Abrir la dirección» y decirme qué contesta el navegador.
+- `archisim cartografia --enlaces --proyecto mi-proyecto.archisim`: pegar las direcciones en el navegador.
+
+---
+
 ## 2026-11-01 (76) · Remates de U2, U5, U7 y U8
 
 Rama `bloque/remates-u`, con pull request. Sin cambios de formato.

@@ -493,6 +493,7 @@ pub struct ArchiSimApp {
     pub survey_import: Option<survey_ui::SurveyImport>,
     /// Cartography being brought around the project (H7; its window is open).
     pub carto_import: Option<carto_ui::CartoImport>,
+    pub carto_download: Option<carto_download_ui::CartoDownload>,
     /// The whole object library, for the gallery's pictures of the types
     /// the project does not have yet (made the first time it is needed).
     pub object_library: Option<archisim_core::Model>,
@@ -855,6 +856,7 @@ impl ArchiSimApp {
             cte: Default::default(),
             survey_import: None,
             carto_import: None,
+            carto_download: None,
             object_library: None,
             collection: None,
             collection_libraries: Vec::new(),
@@ -2364,6 +2366,7 @@ impl ArchiSimApp {
         self.curtain_types_dialog(ctx);
         self.vivero_dialog(ctx);
         self.survey_dialog(ctx);
+        self.carto_download_dialog(ctx);
         self.carto_dialog(ctx);
         self.types_dialog(ctx);
         self.library_dialog(ctx);
@@ -2622,6 +2625,7 @@ mod brush_ui;
 mod budget_ui;
 mod cad_ui;
 mod cards;
+mod carto_download_ui;
 mod carto_ui;
 mod chrome;
 mod collection_ui;
