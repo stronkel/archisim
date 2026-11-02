@@ -38,6 +38,7 @@ impl ArchiSimApp {
     pub(super) fn properties(&mut self, ui: &mut Ui) {
         let selection: Vec<Element> = self.ed.selection.iter().copied().collect();
         if self.tool != Tool::Arrow {
+            props::set_hue(ui.ctx(), self.discipline.hue(ui.visuals().dark_mode));
             self.tool_properties(ui);
             return;
         }
@@ -54,6 +55,20 @@ impl ArchiSimApp {
         if !drafts.is_empty() && drafts.len() == selection.len() {
             self.draft_properties(ui, &drafts);
             return;
+        }
+        // Drawn in the colours of the discipline of what is selected, or of
+        // the one worked in (§12.1).
+        {
+            let dark = ui.visuals().dark_mode;
+            let model = self.ed.model();
+            let hue = match selection.as_slice() {
+                [e] => super::discipline_ui::element_id(*e)
+                    .and_then(|id| model.discipline(id))
+                    .map(|d| super::discipline_ui::hue_of(d, dark)),
+                _ => None,
+            }
+            .unwrap_or_else(|| self.discipline.hue(dark));
+            props::set_hue(ui.ctx(), hue);
         }
         match selection.as_slice() {
             [] => self.view_properties(ui),
@@ -1233,6 +1248,46 @@ impl ArchiSimApp {
         if card.select_all {
             self.select_instances(same_type, "muros");
         }
+        // The measures at a glance (§12.6); all of them, in the groups below.
+        let free = matches!(w.top, WallTop::Unconnected);
+        match props::measure_tiles(
+            ui,
+            ("wall", id),
+            &[
+                props::Measure {
+                    label: "Longitud",
+                    hint: "Se cambia desde el inicio del muro",
+                    value: w.length(),
+                    editable: true,
+                },
+                props::Measure {
+                    label: "Altura",
+                    hint: if free {
+                        "Altura del muro desconectado"
+                    } else {
+                        "Sale de las plantas: para escribirla, desconecta el muro en Restricciones"
+                    },
+                    value: w.height,
+                    editable: free,
+                },
+                props::Measure {
+                    label: "Espesor",
+                    hint: "Del tipo",
+                    value: thickness,
+                    editable: false,
+                },
+            ],
+        ) {
+            Some((0, v)) => {
+                let r = self.ed.set_wall_length(id, v);
+                self.report(r, "Longitud cambiada desde el inicio del muro.");
+            }
+            Some((1, v)) => {
+                let r = self.ed.set_walls_height(&walls, v);
+                self.report(r, "Altura cambiada.");
+            }
+            _ => {}
+        }
         self.wall_tools_group(ui, id, &w);
         self.wall_profile_group(ui, id, &w);
         let above = self.levels_above(w.level);
@@ -1517,6 +1572,34 @@ impl ArchiSimApp {
         if card.select_all {
             self.select_instances(same_type, if door { "puertas" } else { "ventanas" });
         }
+        // The measures at a glance (§12.6): the size is the type's.
+        if let Some((_, v)) = props::measure_tiles(
+            ui,
+            ("opening", id),
+            &[
+                props::Measure {
+                    label: "Ancho",
+                    hint: "Hueco de obra, del tipo",
+                    value: ot.width,
+                    editable: false,
+                },
+                props::Measure {
+                    label: "Alto",
+                    hint: "Hueco de obra, del tipo",
+                    value: ot.height,
+                    editable: false,
+                },
+                props::Measure {
+                    label: "Antepecho",
+                    hint: "Desde la planta",
+                    value: o.sill,
+                    editable: true,
+                },
+            ],
+        ) {
+            let r = self.ed.move_opening(id, o.along, v);
+            self.report(r, "Antepecho cambiado.");
+        }
         let model = self.ed.model();
         let level = model
             .wall(o.wall)
@@ -1744,6 +1827,28 @@ impl ArchiSimApp {
         }
         if card.select_all {
             self.select_instances(same_type, "forjados");
+        }
+        // The measures at a glance (§12.6).
+        if let Some((_, v)) = props::measure_tiles(
+            ui,
+            ("slab", id),
+            &[
+                props::Measure {
+                    label: "Canto",
+                    hint: "Del tipo",
+                    value: thickness,
+                    editable: false,
+                },
+                props::Measure {
+                    label: "Desfase",
+                    hint: "De la cara superior, sobre la planta",
+                    value: s.top_offset,
+                    editable: true,
+                },
+            ],
+        ) {
+            let r = self.ed.set_slab_offset(id, v);
+            self.report(r, "Desfase cambiado.");
         }
         group(ui, "slab-constraints", "Restricciones", |ui| {
             self.level_row(

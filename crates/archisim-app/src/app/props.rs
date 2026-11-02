@@ -24,8 +24,13 @@ pub fn label_width(width: f32) -> f32 {
 /// A group of parameters with a header that folds it (remembered).
 pub fn group(ui: &mut Ui, id: &str, title: &str, add: impl FnOnce(&mut Ui)) {
     let p = Palette::current(ui.ctx());
+    // What is only looked at now and then starts folded (§12.6): the
+    // identity, the phase, the discipline and the checks.
+    let quiet = ["-identity", "-phase", "-checks", "-discipline"]
+        .iter()
+        .any(|s| id.ends_with(s));
     let id = ui.make_persistent_id(("prop-group", id));
-    let mut state = CollapsingState::load_with_default_open(ui.ctx(), id, true);
+    let mut state = CollapsingState::load_with_default_open(ui.ctx(), id, !quiet);
     ui.add_space(4.0);
     let (rect, resp) =
         ui.allocate_exact_size(Vec2::new(ui.available_width(), 26.0), Sense::click());
@@ -521,21 +526,128 @@ pub fn chip_label(ui: &mut Ui, text: &str) {
     ui.painter().galley(r.center() - g.size() / 2.0, g, p.muted);
 }
 
-/// The palette's title: "Propiedades" and what it shows.
+/// The colours Properties is drawn in: those of the discipline of what is
+/// shown (§12.1), set before it is drawn.
+pub fn set_hue(ctx: &egui::Context, hue: super::toolbox::Hue) {
+    ctx.data_mut(|d| d.insert_temp(egui::Id::unique("props-hue"), hue));
+}
+
+fn hue(ctx: &egui::Context) -> Option<super::toolbox::Hue> {
+    ctx.data(|d| d.get_temp(egui::Id::unique("props-hue")))
+}
+
+/// The palette's title: "Propiedades" and what it shows, on a band of the
+/// discipline's colour.
 pub fn title(ui: &mut Ui, what: &str) {
     let p = Palette::current(ui.ctx());
+    let h = hue(ui.ctx());
     ui.add_space(8.0);
-    ui.horizontal(|ui| {
-        ui.label(
-            egui::RichText::new("Propiedades")
-                .font(strong_font(13.0))
-                .color(p.text),
-        );
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            ui.add(egui::Label::new(egui::RichText::new(what).small().color(p.muted)).truncate());
+    egui::Frame::new()
+        .fill(h.map_or(p.raised, |h| h.soft))
+        .corner_radius(CornerRadius::same(8))
+        .inner_margin(egui::Margin::symmetric(10, 7))
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.horizontal(|ui| {
+                ui.label(
+                    egui::RichText::new("Propiedades")
+                        .font(strong_font(13.0))
+                        .color(h.map_or(p.text, |h| h.ink)),
+                );
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    ui.add(
+                        egui::Label::new(
+                            egui::RichText::new(what)
+                                .small()
+                                .color(h.map_or(p.muted, |h| h.ink)),
+                        )
+                        .truncate(),
+                    );
+                });
+            });
         });
-    });
     ui.add_space(6.0);
+}
+
+/// A measure shown big on a tile (§12.6): what it is, its value in metres,
+/// and whether it is typed in here.
+pub struct Measure {
+    pub label: &'static str,
+    pub hint: &'static str,
+    pub value: f64,
+    pub editable: bool,
+}
+
+/// The main measures of an element as big figures, three to a row; a
+/// figure that can be typed is a field. Returns the one changed and its
+/// new value.
+pub fn measure_tiles(
+    ui: &mut Ui,
+    salt: impl std::hash::Hash + std::fmt::Debug,
+    tiles: &[Measure],
+) -> Option<(usize, f64)> {
+    let p = Palette::current(ui.ctx());
+    let mut changed = None;
+    let gap = 6.0;
+    let n = tiles.len().clamp(1, 3) as f32;
+    let w = (ui.available_width() - gap * (n - 1.0)) / n;
+    let salt = egui::Id::unique(("measure-tiles", salt));
+    ui.add_space(4.0);
+    for (row, chunk) in tiles.chunks(3).enumerate() {
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = gap;
+            for (i, m) in chunk.iter().enumerate() {
+                let index = row * 3 + i;
+                egui::Frame::new()
+                    .fill(p.raised)
+                    .corner_radius(CornerRadius::same(9))
+                    .inner_margin(egui::Margin::symmetric(8, 6))
+                    .show(ui, |ui| {
+                        ui.vertical(|ui| {
+                            let cw = (w - 16.0).max(30.0);
+                            ui.set_width(cw);
+                            ui.set_max_width(cw);
+                            ui.add(
+                                egui::Label::new(
+                                    egui::RichText::new(format!(
+                                        "{} ({})",
+                                        m.label,
+                                        crate::units::unit().symbol()
+                                    ))
+                                    .small()
+                                    .color(p.muted),
+                                )
+                                .truncate(),
+                            )
+                            .on_hover_text(m.hint);
+                            if m.editable {
+                                ui.scope(|ui| {
+                                    ui.style_mut().override_font_id = Some(strong_font(15.0));
+                                    ui.spacing_mut().button_padding = Vec2::new(2.0, 1.0);
+                                    if let Some(v) =
+                                        super::length_field(ui, salt.with(index), m.value, cw - 6.0)
+                                    {
+                                        changed = Some((index, v));
+                                    }
+                                });
+                            } else {
+                                ui.add(
+                                    egui::Label::new(
+                                        egui::RichText::new(crate::units::fmt_mm(m.value))
+                                            .font(strong_font(15.0))
+                                            .color(p.text),
+                                    )
+                                    .truncate(),
+                                )
+                                .on_hover_text(m.hint);
+                            }
+                        })
+                    });
+            }
+        });
+        ui.add_space(gap);
+    }
+    changed
 }
 
 /// A swatch of a material's cut colour.
