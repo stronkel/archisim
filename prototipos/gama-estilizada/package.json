@@ -1,0 +1,6 @@
+{
+  "name": "archisim-gama-estilizada",
+  "private": true,
+  "description": "Prototipo de la gama de materiales estilizada de ArchiSim (página web con three.js)",
+  "dependencies": { "three": "0.187.0", "esbuild": "0.28.2" }
+}

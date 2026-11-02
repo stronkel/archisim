@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ArchiSim · Gama de materiales estilizada (prototipo)</title>
+<style>
+  :root { --ink: #2b2a33; --paper: #fbf7ee; --line: #e3dccb; --accent: #d9693f; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #cfe9f7; font-family: "IBM Plex Sans", system-ui, sans-serif; color: var(--ink); }
+  #view { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  .bar { position: fixed; top: 14px; left: 14px; right: 14px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; pointer-events: none; }
+  .card { pointer-events: auto; background: rgba(251, 247, 238, 0.94); border: 1px solid var(--line); border-radius: 14px; padding: 6px; display: flex; gap: 4px; align-items: center; box-shadow: 0 2px 10px rgba(60, 50, 30, 0.12); }
+  .title { padding: 6px 12px; }
+  .title b { display: block; font-size: 15px; }
+  .title span { font-size: 12px; opacity: 0.7; }
+  .card small { font-size: 10px; opacity: 0.6; padding: 0 4px 0 6px; text-transform: uppercase; letter-spacing: 0.04em; }
+  button { font: inherit; font-size: 13px; border: 0; background: transparent; color: var(--ink); padding: 6px 9px; border-radius: 9px; cursor: pointer; }
+  button:hover { background: #efe7d5; }
+  button.on { background: var(--accent); color: white; }
+  #labels { position: fixed; inset: 0; pointer-events: none; }
+  .label { position: absolute; left: 0; top: 0; font-size: 11.5px; background: rgba(251, 247, 238, 0.92); border: 1px solid var(--line); border-radius: 7px; padding: 2px 7px 2px 4px; white-space: nowrap; display: flex; align-items: center; gap: 5px; }
+  .label i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; border: 1px solid rgba(0,0,0,0.15); }
+  .hint { position: fixed; bottom: 12px; left: 14px; font-size: 12px; background: rgba(251,247,238,0.88); border: 1px solid var(--line); padding: 5px 10px; border-radius: 9px; }
+</style>
+</head>
+<body>
+<canvas id="view"></canvas>
+<div id="labels"></div>
+<div class="bar">
+  <div class="card title"><b>Gama estilizada</b><span>Prototipo · ArchiSim</span></div>
+  <div class="card" id="segView"><small>Ver</small><button class="on" data-v="street">Calle</button><button data-v="board">Muestrario</button></div>
+  <div class="card" id="segStyle"><small>Materiales</small><button class="on" data-v="new">Estilizados</button><button data-v="old">Actuales</button></div>
+  <div class="card" id="segLight"><small>Luz</small><button class="on" data-v="morning">Mañana</button><button data-v="evening">Tarde</button></div>
+  <div class="card" id="segRelief"><small>Relieve</small><button class="on" data-v="on">Sí</button><button data-v="off">No</button></div>
+  <div class="card" id="segLines"><small>Contornos</small><button class="on" data-v="on">Sí</button><button data-v="off">No</button></div>
+</div>
+<div class="hint">Arrastrar: girar · Rueda: acercar · Botón derecho: desplazar</div>
+<script>/*BUNDLE*/</script>
+</body>
+</html>

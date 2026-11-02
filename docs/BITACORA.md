@@ -6,6 +6,41 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-02 (85) · Gama de materiales estilizada: prototipo para decidir el aspecto
+
+Rama `main`, sin cambios en la aplicación ni en el formato: solo la carpeta `prototipos/gama-estilizada/`.
+
+Antonio pidió una gama de materiales entre realista y de dibujos animados, con colorido, al estilo de Paralives y CityRT, y verla antes de meterla en el programa.
+
+**Hecho**
+- Una página web con una calle de prueba y un muestrario. La calle tiene:
+  - casa de ladrillo amarillo;
+  - casa de tablas solapadas azules con buhardillas;
+  - casa de sillería de tres plantas;
+  - casa de estuco amarillo con mirador de madera;
+  - torre de mampostería con cono de cobre;
+  - casa andaluza encalada con teja curva.
+- Un muestrario con los 30 materiales. Botones para comparar con los materiales actuales de ArchiSim, cambiar la luz (mañana, tarde) y quitar el relieve o los contornos.
+- Mismo método que la vista 3D de ArchiSim: texturas calculadas desde la posición, sin imágenes. Lo nuevo:
+  - relieve por pieza (bisel del ladrillo, labio de la tabla, teja curva) que marca la luz;
+  - pocos tonos por pieza;
+  - hiladas paralelas al alero en las cubiertas;
+  - piezas que siguen la vuelta en torres y conos;
+  - fundido al color medio de lejos (sin muaré);
+  - luz de ilustración: sombra pintada, sombras frías y contornos de color.
+
+  Explicado en `prototipos/gama-estilizada/README.md`, con lo que haría falta para pasarlo a `shaders.wgsl`.
+
+**Pendiente**
+- Que Antonio diga qué materiales, colores y cuánto relieve y contorno quiere. Después, llevarlo a ArchiSim: `TextureKind` o variante estilizada en el formato, el sombreador WGSL y sus versiones ligera y en imagen, el horneado del render y del glTF, y la luz de `shade()`.
+
+**Qué debe probar Antonio**
+- Abrir la página publicada (enlace en la conversación) y girar alrededor de la calle.
+- Pasar de «Estilizados» a «Actuales» para ver la diferencia con lo que hay hoy.
+- En «Muestrario», decir qué materiales sobran, cuáles faltan (p. ej. azulejo, celosía, chapa ondulada, piedra ostionera) y qué colores cambiaría.
+
+---
+
 ## 2026-11-02 (84) · Vida en la calle, oficio en las casas y luz de ilustración
 
 Rama `bloque/vida-calle`, con pull request. Sin cambios de formato.
