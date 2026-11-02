@@ -2075,6 +2075,19 @@ pub fn without_plants<T>(f: impl FnOnce() -> T) -> T {
     out
 }
 
+thread_local! {
+    static NO_DRESSED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Runs `f` with the buildings of the surroundings left without solids:
+/// for the 3D view, which makes each with its near and far versions.
+pub fn without_dressed<T>(f: impl FnOnce() -> T) -> T {
+    let old = NO_DRESSED.with(|c| c.replace(true));
+    let out = f();
+    NO_DRESSED.with(|c| c.set(old));
+    out
+}
+
 /// Whether the grass on painted areas is grown: not for the drawings that
 /// leave the plants out or take them less detailed (sections, shadows).
 pub fn growth_wanted() -> bool {
@@ -3915,8 +3928,14 @@ pub fn mass_solids(model: &Model, id: archisim_core::MassId) -> Vec<Solid> {
     if m.building.is_some() {
         return Vec::new();
     }
-    // A building of the surroundings: its façades and roof.
+    // A building of the surroundings: its façades and roof (none when
+    // the caller draws them itself, as the 3D view does, near and far).
     if m.dress.is_some() {
+        let made_apart = matches!(&m.shape, archisim_core::MassShape::Prism(p) if p.len() >= 3)
+            && m.height > 0.0;
+        if made_apart && NO_DRESSED.with(|c| c.get()) {
+            return Vec::new();
+        }
         let dressed = crate::env_buildings::dressed_solids(model, m);
         if !dressed.is_empty() {
             return dressed;

@@ -249,6 +249,14 @@ fn main() -> ExitCode {
                 archisim_render::Light::Day
             };
             let textures = !args.iter().any(|a| a == "--sin-texturas");
+            // `--camara=x,y,z,tx,ty,tz`: from where and to where it looks.
+            let camera: Option<[f64; 6]> = args
+                .iter()
+                .find_map(|a| a.strip_prefix("--camara="))
+                .and_then(|v| {
+                    let n: Vec<f64> = v.split(',').filter_map(|x| x.trim().parse().ok()).collect();
+                    n.try_into().ok()
+                });
             let plain: Vec<&String> = args
                 .iter()
                 .skip(1)
@@ -262,10 +270,10 @@ fn main() -> ExitCode {
                         .map(PathBuf::from)
                         .unwrap_or_else(|| project.with_extension("png"));
                     let width: usize = plain.get(2).and_then(|w| w.parse().ok()).unwrap_or(1600);
-                    report(run_render(&project, &png, width, light, textures))
+                    report(run_render(&project, &png, width, light, textures, camera))
                 }
                 None => {
-                    eprintln!("Falta el proyecto: archisim render <proyecto.archisim> [imagen.png] [ancho] [--atardecer | --noche] [--sin-texturas]");
+                    eprintln!("Falta el proyecto: archisim render <proyecto.archisim> [imagen.png] [ancho] [--atardecer | --noche] [--sin-texturas] [--camara=x,y,z,tx,ty,tz]");
                     ExitCode::FAILURE
                 }
             }
@@ -711,6 +719,7 @@ fn run_render(
     width: usize,
     light: archisim_render::Light,
     textures: bool,
+    camera: Option<[f64; 6]>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let model = archisim_file::open(project)
         .map_err(|e| format!("no se puede abrir {}: {e}", project.display()))?;
@@ -723,7 +732,11 @@ fn run_render(
         textures,
         ..Default::default()
     };
-    let view = archisim_render::View::fit(&model);
+    let mut view = archisim_render::View::fit(&model);
+    if let Some([x, y, z, tx, ty, tz]) = camera {
+        view.eye = [x, y, z];
+        view.target = [tx, ty, tz];
+    }
     let start = std::time::Instant::now();
     let img = archisim_render::render(&model, &view, &options, &|_| {});
     let bytes =

@@ -238,6 +238,10 @@ pub struct Chunk {
     pub hi: Vec3,
 }
 
+/// With a whole neighbourhood of buildings of the surroundings, those
+/// within this distance of the project's origin keep their detail.
+const DETAIL_AROUND: f64 = 150.0;
+
 /// Triangles in a chunk: small enough to leave out what is not seen,
 /// large enough not to draw too many pieces.
 const CHUNK: usize = 32_768;
@@ -780,6 +784,93 @@ impl Scene {
                 group.bounds.push((lo, hi));
             }
         }
+        // The buildings of the surroundings: each its own model with all
+        // its detail near and its light version far (a whole
+        // neighbourhood brought in stays light to draw).
+        // With a whole neighbourhood, only those round the project (its
+        // origin) keep their detail: the rest would not fit in memory.
+        let crowd = archisim_geom::env_buildings::light_dress(model);
+        let mut dressed = std::collections::HashSet::new();
+        if !isolate {
+            for m in model.masses() {
+                if m.dress.is_none() || model.hidden_by_discipline(&disciplines.hidden, m.id.0) {
+                    continue;
+                }
+                let near = !crowd
+                    || match &m.shape {
+                        archisim_core::MassShape::Prism(p) if !p.is_empty() => {
+                            let c = p
+                                .iter()
+                                .fold(archisim_core::Point2::new(0.0, 0.0), |a, q| a + *q)
+                                * (1.0 / p.len() as f64);
+                            c.length() < DETAIL_AROUND
+                        }
+                        _ => false,
+                    };
+                let full = archisim_geom::env_buildings::dressed_solids_detail(model, m, !near);
+                if full.is_empty() {
+                    continue;
+                }
+                dressed.insert(m.id);
+                let look = Look {
+                    selection,
+                    isolate: false,
+                    disciplines,
+                    anchors: &HashMap::new(),
+                    shared: true,
+                    between: false,
+                };
+                let mut shared = Shared::default();
+                add_solids(model, full, &look, &mut shared);
+                if near {
+                    let light = archisim_geom::env_buildings::dressed_solids_detail(model, m, true);
+                    let mut plain = Shared::default();
+                    add_solids(model, light, &look, &mut plain);
+                    shared.simple = Some(plain.opaque.mesh);
+                }
+                let mut lo = Vec3::splat(f32::INFINITY);
+                let mut hi = Vec3::splat(f32::NEG_INFINITY);
+                for v in shared
+                    .opaque
+                    .mesh
+                    .vertices
+                    .iter()
+                    .chain(&shared.glass.mesh.vertices)
+                {
+                    lo = lo.min(Vec3::from_array(v.pos));
+                    hi = hi.max(Vec3::from_array(v.pos));
+                }
+                if lo.x > hi.x {
+                    continue;
+                }
+                let instance = Instance {
+                    place: [1.0, 0.0, 0.0, 0.0],
+                    lift: [0.0, 1.0, 1.0, 1.0],
+                    cut: [cutaway::PLAIN, 0.0, 0.0, lo.z],
+                    flags: [
+                        if selection.contains(&Element::Mass(m.id)) {
+                            1.0
+                        } else {
+                            0.0
+                        },
+                        if model.dimmed(disciplines.focus, m.id.0) {
+                            1.0
+                        } else {
+                            0.0
+                        },
+                        0.0,
+                        0.0,
+                    ],
+                };
+                s.lo = s.lo.min(lo);
+                s.hi = s.hi.max(hi);
+                let mut group = Group::default();
+                group.instances.push(instance);
+                group.owners.push(Element::Mass(m.id));
+                group.bounds.push((lo, hi));
+                groups.push((shared, group));
+            }
+        }
         for (shared, mut group) in groups {
             group.opaque = shared.opaque.mesh;
             group.glass = shared.glass.mesh;
@@ -810,7 +901,13 @@ impl Scene {
             }
         }
         let mut loose = Loose::default();
-        let solids = archisim_geom::solid::model_solids_except_detailed(model, &skip, &detailed);
+        let solids: Vec<_> = if dressed.is_empty() {
+            archisim_geom::solid::model_solids_except_detailed(model, &skip, &detailed)
+        } else {
+            archisim_geom::solid::without_dressed(|| {
+                archisim_geom::solid::model_solids_except_detailed(model, &skip, &detailed)
+            })
+        };
         let anchors = anchors(&solids);
         // The faces with painted zones (G3): their elements' solids.
         let zone_solids: Vec<archisim_geom::solid::Solid> = {

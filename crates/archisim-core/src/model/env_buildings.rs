@@ -229,6 +229,117 @@ impl BuildingStyle {
     }
 }
 
+/// A finish: name, category and colour.
+pub type Finish = (&'static str, &'static str, [u8; 3]);
+
+impl BuildingStyle {
+    /// The walls, roofs and joinery a building of the style may have, so
+    /// that a street is not all one colour: the first of each is the
+    /// style's own (`finishes`).
+    pub fn palette(self) -> (&'static [Finish], &'static [Finish], &'static [Finish]) {
+        const WHITE: Finish = ("Cal blanca", "render", [246, 244, 236]);
+        const ALBERO: Finish = ("Revoco amarillo albero", "render", [238, 214, 148]);
+        const ALMAGRA_LIGHT: Finish = ("Revoco almagra claro", "render", [222, 160, 128]);
+        const OCHRE: Finish = ("Revoco ocre claro", "render", [230, 212, 176]);
+        const CREAM: Finish = ("Revoco crema", "render", [226, 210, 178]);
+        const PINK: Finish = ("Revoco rosa pálido", "render", [234, 196, 186]);
+        const BLUE: Finish = ("Revoco azul pálido", "render", [172, 196, 214]);
+        const GREEN: Finish = ("Revoco verde pálido", "render", [192, 212, 180]);
+        const YELLOW: Finish = ("Revoco amarillo ocre", "render", [226, 186, 104]);
+        const ALMAGRA: Finish = ("Revoco almagra", "render", [196, 128, 92]);
+        const GREY: Finish = ("Revoco gris perla", "render", [204, 204, 198]);
+        const OFF_WHITE: Finish = ("Revoco blanco roto", "render", [236, 230, 218]);
+        const BRICK: Finish = ("Ladrillo visto rojizo", "masonry", [168, 92, 64]);
+        const BRICK_YELLOW: Finish = ("Ladrillo visto amarillo", "masonry", [214, 182, 122]);
+        const TILE: Finish = ("Teja cerámica curva", "roof", [172, 88, 58]);
+        const TILE_RED: Finish = ("Teja mixta roja", "roof", [160, 70, 50]);
+        const TILE_DARK: Finish = ("Teja envejecida", "roof", [128, 76, 58]);
+        const SLATE: Finish = ("Teja de pizarra", "roof", [72, 76, 86]);
+        const GLAZED: Finish = ("Teja vidriada verde", "roof", [78, 118, 92]);
+        const FLAT: Finish = ("Cubierta plana gris", "roof", [168, 166, 160]);
+        const FLAT_LIGHT: Finish = ("Cubierta plana clara", "roof", [196, 192, 182]);
+        const GREEN_J: Finish = ("Carpintería verde carruaje", "wood", [38, 74, 52]);
+        const BLUE_J: Finish = ("Carpintería azul añil", "wood", [42, 72, 120]);
+        const RED_J: Finish = ("Carpintería granate", "wood", [112, 40, 40]);
+        const WOOD_J: Finish = ("Carpintería madera", "wood", [120, 80, 48]);
+        const WHITE_J: Finish = ("Carpintería blanca", "metal", [236, 236, 232]);
+        const ALU_J: Finish = ("Carpintería aluminio", "metal", [190, 192, 194]);
+        const DARK_J: Finish = ("Carpintería gris antracita", "metal", [62, 66, 72]);
+        match self {
+            BuildingStyle::Andalusian => (
+                &[WHITE, WHITE, ALBERO, ALMAGRA_LIGHT, WHITE, OCHRE],
+                &[TILE, TILE_DARK, TILE_RED],
+                &[GREEN_J, BLUE_J, RED_J, WOOD_J, WHITE_J],
+            ),
+            BuildingStyle::Courtyard => (
+                &[WHITE, ALBERO, OCHRE],
+                &[FLAT, FLAT_LIGHT],
+                &[WOOD_J, GREEN_J, BLUE_J],
+            ),
+            BuildingStyle::Terraced | BuildingStyle::SemiDetached => (
+                &[OCHRE, CREAM, PINK, BLUE, WHITE, GREEN],
+                &[TILE, TILE_RED, SLATE, TILE_DARK],
+                &[WHITE_J, DARK_J, WOOD_J, GREEN_J],
+            ),
+            BuildingStyle::Ensanche => (
+                &[CREAM, YELLOW, PINK, BLUE, GREEN, ALMAGRA, GREY],
+                &[FLAT, FLAT_LIGHT],
+                &[WOOD_J, GREEN_J, WHITE_J, RED_J],
+            ),
+            BuildingStyle::Block1960s => (
+                &[BRICK, BRICK_YELLOW, GREY, PINK],
+                &[FLAT, FLAT_LIGHT],
+                &[ALU_J, WHITE_J, DARK_J],
+            ),
+            BuildingStyle::Detached => (
+                &[WHITE, CREAM, BLUE, ALBERO, PINK, GREEN],
+                &[TILE_RED, SLATE, TILE, GLAZED, TILE_DARK],
+                &[WHITE_J, WOOD_J, GREEN_J, BLUE_J, DARK_J],
+            ),
+            BuildingStyle::HistoricCentre => (
+                &[ALMAGRA, YELLOW, CREAM, PINK, BLUE, GREEN, ALBERO],
+                &[TILE, TILE_DARK, SLATE],
+                &[GREEN_J, WOOD_J, RED_J, BLUE_J],
+            ),
+            BuildingStyle::ShopAndFlats => (
+                &[OFF_WHITE, CREAM, GREY, PINK, OCHRE],
+                &[FLAT, FLAT_LIGHT],
+                &[ALU_J, DARK_J, WHITE_J],
+            ),
+            BuildingStyle::Facility => (&[OFF_WHITE, GREY, CREAM], &[FLAT], &[ALU_J, DARK_J]),
+            BuildingStyle::CoastalHotel => (
+                &[WHITE, OFF_WHITE, BLUE],
+                &[FLAT, FLAT_LIGHT],
+                &[ALU_J, WHITE_J],
+            ),
+            BuildingStyle::Offices | BuildingStyle::Warehouse => (&[], &[], &[]),
+        }
+    }
+
+    /// The finishes of a building of the style picked by `seed` from its
+    /// palette (the same seed, the same ones).
+    pub fn varied_finishes(self, seed: u64) -> [Finish; 6] {
+        let mut f = self.finishes();
+        let (walls, roofs, joinery) = self.palette();
+        let mix = |k: u64| {
+            let mut h = seed.wrapping_add(k).wrapping_mul(0x9E37_79B9_7F4A_7C15);
+            h ^= h >> 29;
+            h = h.wrapping_mul(0xBF58_476D_1CE4_E5B9);
+            h ^ (h >> 32)
+        };
+        if !walls.is_empty() {
+            f[0] = walls[(mix(1) % walls.len() as u64) as usize];
+        }
+        if !roofs.is_empty() {
+            f[2] = roofs[(mix(2) % roofs.len() as u64) as usize];
+        }
+        if !joinery.is_empty() {
+            f[3] = joinery[(mix(3) % joinery.len() as u64) as usize];
+        }
+        f
+    }
+}
+
 /// What closes the windows on the outside.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Closure {
@@ -693,6 +804,27 @@ impl Model {
         }
     }
 
+    /// The materials of a building of a style picked from its palette by
+    /// `seed`.
+    pub fn varied_materials(&mut self, style: BuildingStyle, seed: u64) -> DressMaterials {
+        let f = style.varied_finishes(seed);
+        let ids = f.map(|(n, c, rgb)| self.env_material(n, c, rgb));
+        DressMaterials {
+            wall: ids[0],
+            trim: ids[1],
+            roof: ids[2],
+            joinery: ids[3],
+            glass: ids[4],
+            metal: ids[5],
+        }
+    }
+
+    /// The usual dress of a style with its colours picked by `seed`.
+    pub fn varied_dress(&mut self, style: BuildingStyle, seed: u64) -> Dress {
+        let m = self.varied_materials(style, seed);
+        Dress::usual(style, m)
+    }
+
     /// The usual dress of a style, with its materials.
     pub fn usual_dress(&mut self, style: BuildingStyle) -> Dress {
         let m = self.style_materials(style);
@@ -708,7 +840,13 @@ impl Model {
         if floors == 0 || floors > MAX_ENV_FLOORS || !(2.0..=12.0).contains(&fh) {
             return Err(ModelError::InvalidDress);
         }
-        let dress = self.usual_dress(spec.style);
+        // Its colours from the style's palette, by where it stands.
+        let seed = spec.outline.iter().fold(0u64, |h, p| {
+            h.rotate_left(13)
+                ^ ((p.x * 10.0).round() as i64 as u64)
+                ^ ((p.y * 10.0).round() as i64 as u64).rotate_left(29)
+        });
+        let dress = self.varied_dress(spec.style, seed);
         let id = self.add_mass(NewMass {
             name: spec.name,
             level: spec.level,
@@ -761,9 +899,10 @@ impl Model {
         ids: &[MassId],
         style: BuildingStyle,
     ) -> Result<usize, ModelError> {
-        let dress = self.usual_dress(style);
         let mut n = 0;
         for id in ids {
+            // Each its own colours from the style's palette.
+            let dress = self.varied_dress(style, id.0);
             let Some(m) = self.masses.get(id) else {
                 continue;
             };
@@ -959,12 +1098,13 @@ mod tests {
         assert_eq!(b.floors(), 2);
         let d = b.dress.unwrap();
         assert_eq!(d.closure, Closure::Grilles);
-        assert_eq!(m.material(d.materials.wall).unwrap().name, "Cal blanca");
-        // The same finishes for all three.
-        assert_eq!(
-            m.mass(ids[0]).unwrap().dress.unwrap().materials,
-            d.materials
-        );
+        // Each its colours from its style's palette.
+        let (walls, _, _) = BuildingStyle::Andalusian.palette();
+        for id in &ids {
+            let w = m.mass(*id).unwrap().dress.unwrap().materials.wall;
+            let name = &m.material(w).unwrap().name;
+            assert!(walls.iter().any(|f| f.0 == name), "{name}");
+        }
         // A whole row restyled at once keeps its floors.
         assert_eq!(m.restyle_masses(&ids, BuildingStyle::Ensanche).unwrap(), 3);
         let b = m.mass(ids[1]).unwrap();
