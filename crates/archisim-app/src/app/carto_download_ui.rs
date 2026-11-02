@@ -71,6 +71,10 @@ pub fn run(
     if let Ok(mut p) = progress.lock() {
         p.total = requests.len();
     }
+    // The tiles of heights that arrived, to make the terrain at the end.
+    let mut heights: std::collections::HashMap<(u32, u32), archisim_geom::decals::Pixels> =
+        Default::default();
+    let mut terrain = None;
     for r in requests {
         if let Ok(mut p) = progress.lock() {
             if p.stop {
@@ -78,8 +82,28 @@ pub fn run(
             }
             p.current = r.source.name().to_string();
         }
-        let got = fetch(&r.url);
+        // The address, and the other servers when it fails.
+        let mut got = fetch(&r.url);
+        for alt in &r.alternatives {
+            if got.is_ok() {
+                break;
+            }
+            got = fetch(alt);
+        }
         let Ok(mut p) = progress.lock() else { return };
+        if let Some(t) = r.tile {
+            terrain = Some(t);
+            // A tile out of Spain or at sea is not there: no harm.
+            if let Some(px) = got
+                .as_deref()
+                .ok()
+                .and_then(archisim_geom::decals::decode_png)
+            {
+                heights.insert((t.x, t.y), px);
+            }
+            p.done += 1;
+            continue;
+        }
         let got = match (got, r.source, r.bbox) {
             (Ok(b), download::Source::Orthophoto, Some(bbox)) if download::is_png(&b) => {
                 p.picture = Some((r.name.clone(), b, bbox));
@@ -103,6 +127,24 @@ pub fn run(
                 .push((r.source.name().to_string(), e, r.url.clone())),
         }
         p.done += 1;
+    }
+    // The terrain, from its tiles of heights.
+    if let Some(t) = terrain {
+        let grid = download::terrain_grid(&t, |x, y, u, v| {
+            let px = heights.get(&(x, y))?;
+            let c = px.at(u, 1.0 - v);
+            (c[3] > 0).then_some([c[0], c[1], c[2]])
+        });
+        if let Ok(mut p) = progress.lock() {
+            match grid {
+                Some(text) => p.files.push(("ign-mdt.asc".into(), text)),
+                None => p.failures.push((
+                    download::Source::Terrain.name().to_string(),
+                    "no han llegado las alturas".into(),
+                    format!("{}/{}/{}/{}.png", download::IGN_HEIGHTS, t.z, t.x, t.y),
+                )),
+            }
+        }
     }
     if let Ok(mut p) = progress.lock() {
         p.finished = true;

@@ -28,6 +28,19 @@ const END_WALL: f64 = 0.35;
 const BARS: f64 = 0.13;
 /// The tiles' thickness over the roof planes.
 const TILES: f64 = 0.06;
+/// The highest a tiled roof climbs over its eaves; past it, flat.
+const MAX_RIDGE: f64 = 4.5;
+
+/// The corners of the box round a contour.
+fn bounds_2d(poly: &[Point2]) -> (Point2, Point2) {
+    let mut lo = poly[0];
+    let mut hi = poly[0];
+    for p in poly {
+        lo = Point2::new(lo.x.min(p.x), lo.y.min(p.y));
+        hi = Point2::new(hi.x.max(p.x), hi.y.max(p.y));
+    }
+    (lo, hi)
+}
 
 /// One side of the contour, seen from outside.
 #[derive(Clone, Copy)]
@@ -654,6 +667,36 @@ fn tiled_roof(
     let pitch = d.pitch.max(0.05);
     // The height over the eaves of a point of side i's face.
     let rise = |i: usize, q: Point2| ((q - sides[i].a).dot(-sides[i].out)).max(0.0) * pitch;
+    // A roof that is not one: faces that do not cover the contour (the
+    // skeleton of a tangled outline), or that climb past what a tiled
+    // roof climbs (a deep plot with one free side, or a long thin wing),
+    // is left flat.
+    let covered: f64 = faces.iter().map(|f| signed_area(f).abs()).sum();
+    let area = signed_area(poly).abs();
+    if (covered - area).abs() > area * 0.02 {
+        return false;
+    }
+    let (lo, hi) = bounds_2d(poly);
+    let reach = (hi - lo).length() * 0.02 + 0.05;
+    let highest = faces
+        .iter()
+        .enumerate()
+        .flat_map(|(i, f)| f.iter().map(move |q| (i, *q)))
+        .map(|(i, q)| {
+            let out_of = q.x < lo.x - reach
+                || q.y < lo.y - reach
+                || q.x > hi.x + reach
+                || q.y > hi.y + reach;
+            if out_of {
+                f64::INFINITY
+            } else {
+                rise(i, q)
+            }
+        })
+        .fold(0.0, f64::max);
+    if highest > MAX_RIDGE {
+        return false;
+    }
     let mat = d.materials;
     let mut on_line: Vec<(usize, Point2, f64)> = Vec::new();
     for (i, face) in faces.iter().enumerate() {
@@ -851,5 +894,34 @@ mod tests {
         let (_, hi) = bounds(&s);
         let ridge = 6.0 + 6.0 * 0.4;
         assert!((hi[2] - (ridge + TILES)).abs() < 0.05, "{}", hi[2]);
+    }
+
+    /// A deep house closed on three sides would climb 40 m × its pitch
+    /// from the street: its roof is left flat, never in the air.
+    #[test]
+    fn a_roof_never_climbs_into_the_air() {
+        let mut m = Model::new("T");
+        let l = m.add_level("Planta baja", 0.0);
+        let add = |m: &mut Model, outline| {
+            m.add_env_building(NewEnvBuilding {
+                name: "Casa".into(),
+                level: l,
+                outline,
+                style: BuildingStyle::Andalusian,
+                floors: Some(2),
+                floor_height: None,
+                base_offset: 0.0,
+            })
+            .unwrap()
+        };
+        let deep = add(&mut m, rect(0.0, 0.0, 6.0, 40.0));
+        add(&mut m, rect(-6.0, 0.0, 0.0, 40.0));
+        add(&mut m, rect(6.0, 0.0, 12.0, 40.0));
+        add(&mut m, rect(0.0, 40.0, 6.0, 46.0));
+        let mass = m.mass(deep).unwrap();
+        let s = dressed_solids(&m, mass);
+        let (lo, hi) = bounds(&s);
+        assert!(hi[2] < mass.height + 6.0, "{}", hi[2]);
+        assert!(lo[0] > -1.0 && hi[0] < 7.0 && lo[1] > -2.0 && hi[1] < 41.0);
     }
 }
