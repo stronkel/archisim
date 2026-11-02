@@ -180,6 +180,10 @@ impl ArchiSimApp {
                 });
                 ui.switch(&mut o.skip_own, "Sin los edificios que pisan los forjados del proyecto");
                 ui.switch(
+                    &mut o.street_life,
+                    "Vida en la calle: árboles, farolas, bancos, coches, personas y jardines",
+                );
+                ui.switch(
                     &mut o.styles,
                     "Edificios con su estilo (por su uso, sus plantas y la zona)",
                 );

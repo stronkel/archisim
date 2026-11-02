@@ -42,6 +42,9 @@ pub struct CartoOptions {
     /// The kind of place, for the styles; none: each building's by how
     /// built up its surroundings are.
     pub zone: Option<Zone>,
+    /// Dress the streets and gardens: trees, lights, benches, bins, cars,
+    /// people, hedges ([`crate::street_life`]).
+    pub street_life: bool,
 }
 
 /// The kind of place a building stands in, for its style.
@@ -245,6 +248,7 @@ impl Default for CartoOptions {
             recentre: false,
             styles: true,
             zone: None,
+            street_life: true,
         }
     }
 }
@@ -261,6 +265,8 @@ pub struct CartoReport {
     pub lidar_floors: usize,
     /// The georeference was taken from the files.
     pub georeferenced: bool,
+    /// The life put in the streets and gardens.
+    pub life: crate::street_life::LifeReport,
     /// Things worth saying (files not understood, what was left out).
     pub notes: Vec<String>,
 }
@@ -283,6 +289,9 @@ impl CartoReport {
             if n > 0 {
                 out.push(format!("{n} {what}"));
             }
+        }
+        if self.life.total() > 0 {
+            out.push(format!("En las calles: {}", self.life.line()));
         }
         out.extend(self.notes.iter().cloned());
         out
@@ -873,6 +882,16 @@ pub fn import_carto(
             })?;
             report.trees += 1;
         }
+    }
+    if opts.street_life && opts.streets {
+        report.life = crate::street_life::add_street_life(
+            m,
+            level,
+            &crate::street_life::LifeOptions {
+                around: Some((opts.centre, opts.radius + 20.0)),
+                ..Default::default()
+            },
+        )?;
     }
     Ok(report)
 }

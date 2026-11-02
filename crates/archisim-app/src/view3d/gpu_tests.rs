@@ -971,3 +971,47 @@ fn climber_pictures() {
         pixmap.save_png(dir.join(format!("{name}.png"))).unwrap();
     }
 }
+
+/// Pictures of any project from given cameras, for looking (not a check):
+/// `ARCHISIM_VISTAS_OUT=folder ARCHISIM_VISTAS_PROYECTO=file.archisim
+/// ARCHISIM_VISTAS="name:x,y,z,pitch,yaw,distance;…"` (the point looked
+/// at, the camera's pitch and turn in radians and its distance).
+#[test]
+fn project_pictures() {
+    let (Some(dir), Some(path)) = (
+        std::env::var_os("ARCHISIM_VISTAS_OUT"),
+        std::env::var_os("ARCHISIM_VISTAS_PROYECTO"),
+    ) else {
+        return;
+    };
+    let Some((device, queue, view_formats)) = gpu() else {
+        return;
+    };
+    let m = archisim_file::open(std::path::Path::new(&path)).unwrap();
+    let scene = Scene::build(&m, &BTreeSet::new());
+    let size = [1200u32, 760u32];
+    let dir = std::path::PathBuf::from(dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let views = std::env::var("ARCHISIM_VISTAS").unwrap_or_default();
+    let mut r = Renderer::new(&device, view_formats, super::render::TextureMode::Full);
+    r.set_scene(&device, &scene);
+    for v in views.split(';').filter(|v| !v.is_empty()) {
+        let (name, nums) = v.split_once(':').unwrap();
+        let n: Vec<f32> = nums.split(',').map(|x| x.trim().parse().unwrap()).collect();
+        let camera = Camera {
+            target: glam::Vec3::new(n[0], n[1], n[2]),
+            pitch: n[3],
+            yaw: n[4],
+            distance: n[5],
+            perspective: true,
+        };
+        r.render(&device, &queue, &camera, size, 1);
+        let (w, h, px) = r.read_pixels(&device, &queue).unwrap();
+        let pixmap = resvg::tiny_skia::Pixmap::from_vec(
+            px,
+            resvg::tiny_skia::IntSize::from_wh(w, h).unwrap(),
+        )
+        .unwrap();
+        pixmap.save_png(dir.join(format!("{name}.png"))).unwrap();
+    }
+}
