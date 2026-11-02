@@ -14,21 +14,25 @@
 // Where a point of a face is on its picture (0–1 over its period).
 fn tex_point(world: vec3<f32>, n_in: vec3<f32>, tex: vec2<f32>) -> vec2<f32> {
     let kind = i32(tex.x + 0.5);
-    let n = abs(normalize(n_in));
-    var uv = world.xy;
-    if (n.z < 0.7) {
-        if (n.x > n.y) {
-            uv = world.yz;
-        } else {
-            uv = world.xz;
-        }
-    }
     let s = max(tex.y, 0.01);
+    // As `archisim_render::textures::period`.
     var period = 4.0;
-    if (kind == 5) {
+    if (kind == 5 || kind == 7 || kind == 10 || kind == 28 || kind == 29) {
         period = 8.0;
     }
-    return uv / s / period;
+    if (kind == 8 || kind == 30) {
+        period = 16.0;
+    }
+    if (kind == 22) {
+        period = 20.0;
+    }
+    if (kind == 32) {
+        period = 16.0;
+    }
+    if (kind == 35) {
+        period = 24.0;
+    }
+    return tex_uv(world, n_in, kind) / s / period;
 }
 
 fn tex_lod(world: vec3<f32>, n_in: vec3<f32>, tex: vec2<f32>) -> f32 {

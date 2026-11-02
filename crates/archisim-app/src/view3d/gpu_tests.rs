@@ -552,7 +552,7 @@ fn streetlights_and_fires_are_lamps() {
 }
 
 /// Thin lines: the contours of the room are one pixel wide instead of
-/// two, so the picture has about half the dark ink.
+/// two, and the colour of the surface darkened instead of black.
 #[test]
 fn thin_lines_draw_less_ink() {
     let Some((device, queue, view_formats)) = gpu() else {
@@ -572,7 +572,8 @@ fn thin_lines_draw_less_ink() {
         let (_, _, px) = r.read_pixels(&device, &queue).expect("picture");
         let dark = px
             .chunks(4)
-            .filter(|p| p[..3].iter().all(|c| *c < 90))
+            // Thin lines are the surface's colour darkened, not black.
+            .filter(|p| p[..3].iter().all(|c| *c < 130))
             .count();
         if let Some(dir) = std::env::var_os("ARCHISIM_TEST_OUT") {
             let pixmap = resvg::tiny_skia::Pixmap::from_vec(
@@ -595,7 +596,8 @@ fn thin_lines_draw_less_ink() {
     let thin = ink(true);
     assert!(thick > 100, "{thick}");
     assert!(
-        (thin as f64) > thick as f64 * 0.3 && (thin as f64) < thick as f64 * 0.8,
+        // One pixel instead of two, and lighter (the surface darkened).
+        (thin as f64) > thick as f64 * 0.05 && (thin as f64) < thick as f64 * 0.6,
         "{thin} / {thick}"
     );
 }

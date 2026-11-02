@@ -55,7 +55,8 @@ struct Globals {
     // x = 1 with the sky; y: night (0…1); z, w: where the haze begins and
     // where it is thickest.
     atmos: vec4<f32>,
-    // Lamps lit at night: position and reach; lamp_count.x of them.
+    // Lamps lit at night: position and reach; lamp_count.x of them; y: the
+    // water's clock (seconds); z = 1 with the textures' relief.
     lamps: array<vec4<f32>, 16>,
     lamp_count: vec4<f32>,
     // What a cut shows: xyz a flat colour, w = 1 to use it; otherwise the
@@ -290,7 +291,9 @@ fn cap(p: vec3<f32>, kept: Keep) -> vec4<f32> {
 fn shade(n_in: vec3<f32>, color: vec3<f32>, lit: f32) -> vec3<f32> {
     let n = normalize(n_in);
     let ndl = dot(n, normalize(g.sun.xyz));
-    let direct = (0.65 * max(ndl, 0.0) + 0.35 * smoothstep(0.0, 0.3, ndl)) * lit;
+    // The lit side wraps a little further round and its edge is crisper,
+    // like a painted shadow line (the stylized range, 2026-11-02).
+    let direct = (0.82 * smoothstep(-0.08, 0.42, ndl) + 0.18 * max(ndl, 0.0)) * lit;
     let up = 0.5 + 0.5 * n.z;
     let sky = mix(g.sky_lo.rgb * g.sky_lo.w, g.sky_hi.rgb * g.sky_hi.w, up) * (0.48 + 0.18 * up);
     let sun = g.sun_color.rgb * g.sun_color.w * direct;
@@ -368,6 +371,97 @@ fn sunlit(world: vec3<f32>, n: vec3<f32>) -> f32 {
 // The level of detail of the textures' pictures at this pixel (set at the
 // start of the fragment; only the pictures' textures use it).
 var<private> tex_level: f32;
+// Metres a pixel covers at this point, and whether the face is curved (a
+// round tower), both set at the start of the fragment (derivatives only
+// in uniform control flow).
+var<private> tex_px: f32;
+var<private> tex_curved: bool;
+// The relief of the texture at this point, metres off the face (the
+// stylized range: a brick's bevel, a board's lip); 0 for the others.
+var<private> tex_height: f32;
+
+// Roof coverings: their courses run along the eaves and up the slope on
+// any pitch (`TextureKind::on_slopes`, and the ribbed sheet).
+fn tex_on_slopes(kind: i32) -> bool {
+    return kind == 11 || (kind >= 23 && kind <= 26);
+}
+
+// Where a point of a face is on its texture, metres: on faces looking up,
+// across the plan (roof coverings only when flat); on curved faces, along
+// x or y and up; on the others, along the face and up it (up the slope on
+// a roof). As `archisim_render::textures::texture_point`.
+fn tex_uv(world: vec3<f32>, n_in: vec3<f32>, kind: i32) -> vec2<f32> {
+    let n = normalize(n_in);
+    let a = abs(n);
+    if (a.z > 0.985 || (a.z >= 0.7 && !tex_on_slopes(kind))) {
+        return world.xy;
+    }
+    if (tex_curved) {
+        if (a.x > a.y) {
+            return world.yz;
+        }
+        return world.xz;
+    }
+    let t = normalize(vec3<f32>(-n.y, n.x, 0.0));
+    let b = cross(n, t);
+    return vec2<f32>(dot(world, t), dot(world, b));
+}
+
+// Sets what the textures need of the derivatives (call first thing in a
+// fragment).
+fn tex_begin(world: vec3<f32>, n_in: vec3<f32>) {
+    let dw = length(fwidth(world));
+    tex_px = max(dw * 0.7, 1e-5);
+    tex_curved = length(fwidth(n_in)) > 0.05 * dw;
+    tex_height = 0.0;
+}
+
+// The normal tilted by the texture's relief (`tex_height`), with the
+// relief on (`g.lamp_count.z`); fades out where a pixel covers more than
+// a few centimetres. Call in uniform control flow, after `textured`.
+fn relief_normal(world: vec3<f32>, n_in: vec3<f32>) -> vec3<f32> {
+    let n = normalize(n_in);
+    let dpx = dpdx(world);
+    let dpy = dpdy(world);
+    let hx = dpdx(tex_height);
+    let hy = dpdy(tex_height);
+    if (g.lamp_count.z < 0.5) {
+        return n;
+    }
+    let r1 = cross(dpy, n);
+    let r2 = cross(n, dpx);
+    let det = dot(dpx, r1);
+    var grad = sign(det) * (hx * r1 + hy * r2);
+    // No more than some 55° of tilt: a step in the relief (a lip) would
+    // otherwise make a black line on the pixels across it.
+    let most = 1.4 * abs(det);
+    let gl = length(grad);
+    if (gl > most) {
+        grad = grad * (most / gl);
+    }
+    let fade = 1.0 - smoothstep(0.006, 0.03, tex_px);
+    let bent = abs(det) * n - grad * fade;
+    if (dot(bent, bent) < 1e-20) {
+        return n;
+    }
+    return normalize(bent);
+}
+
+// Water, seen through: little when looked into, nearly opaque at a
+// glancing look; the sea more than a pool.
+fn water_alpha(world: vec3<f32>, n_in: vec3<f32>, kind: i32, alpha: f32) -> f32 {
+    if (kind != 10 && kind != 30) {
+        return alpha;
+    }
+    var d = g.forward.xyz;
+    if (g.eye.w > 0.5) {
+        d = normalize(world - g.eye.xyz);
+    }
+    let fres = pow(1.0 - abs(dot(normalize(n_in), d)), 3.0);
+    let lo = select(0.32, 0.74, kind == 30);
+    return mix(lo, 0.96, fres);
+}
+
 
 // ---- Textures -------------------------------------------------------------
 //
@@ -427,64 +521,191 @@ fn tex_lod(world: vec3<f32>, n_in: vec3<f32>, tex: vec2<f32>) -> f32 {
     return 0.0;
 }
 
+// Distance from `t` to the nearest multiple of `size` (same units).
+fn edist(t: f32, size: f32) -> f32 {
+    let f = fract(t / size);
+    return min(f, 1.0 - f) * size;
+}
+
+// 0 in a joint `half` wide each side of its line, 1 on the piece, over
+// `w` (a pixel, in the texture's pieces).
+fn on_piece(e: f32, half: f32, w: f32) -> f32 {
+    // Where a pixel is wider than the joint, the joint is only as dark as
+    // the share of the pixel it covers (no thick lines from afar).
+    let s = smoothstep(half - w, half + w, e);
+    return 1.0 - (1.0 - s) * clamp(half / w, 0.0, 1.0);
+}
+
+// A 0–1 value in `n` steps: a painter's few tones, not a photo's many.
+fn tones(x: f32, n: f32) -> f32 {
+    return floor(min(x, 0.999) * n) / max(n - 1.0, 1.0);
+}
+
+// Odd rows (row parity without a remainder of reals).
+fn odd(row: f32) -> f32 {
+    return step(0.25, fract(row * 0.5));
+}
+
+// From afar, the pieces melt into their mean colour and lose their
+// relief: no shimmer where a piece is a few pixels (`piece` in pieces,
+// `w` a pixel in pieces).
+fn far_off(c: vec3<f32>, mean: vec3<f32>, piece: f32, w: f32) -> vec3<f32> {
+    let f = smoothstep(piece * 0.05, piece * 0.25, w);
+    tex_height = tex_height * (1.0 - f);
+    return mix(c, mean, f * 0.85);
+}
+
+// Grass at `q` (metres), its colour `base`, a pixel `wm` metres: soft
+// patches in three greens, darker clumps of clover and, near, little
+// strokes of blades seen from above, each its own slant and tone.
+fn grass_at(q: vec2<f32>, base: vec3<f32>, wm: f32) -> vec3<f32> {
+    let n = noise(q * 0.3) * 0.55 + noise(q * 0.9) * 0.3 + noise(q * 2.6) * 0.15;
+    var c = mix(base * 0.86, base * 0.75 + vec3<f32>(0.13, 0.19, 0.04), tones(smoothstep(0.3, 0.7, n), 3.0));
+    let k3 = cells(q * 1.4);
+    c = c * (1.0 - 0.12 * (1.0 - smoothstep(0.15, 0.4, k3.x)) * step(0.72, k3.z));
+    let near = 1.0 - smoothstep(0.004, 0.012, wm);
+    if (near <= 0.0) {
+        return c;
+    }
+    let gq = q * 9.0;
+    let i = floor(gq);
+    var stroke = 0.0;
+    var tone = 0.0;
+    for (var y = -1; y <= 1; y = y + 1) {
+        for (var x = -1; x <= 1; x = x + 1) {
+            let cc = i + vec2<f32>(f32(x), f32(y));
+            let o = vec2<f32>(hash2(cc), hash2(cc + 17.0));
+            let a = (hash2(cc + 5.0) - 0.5) * 1.4;
+            let d = vec2<f32>(sin(a), cos(a));
+            let rel = gq - (cc + o);
+            let along = clamp(dot(rel, d), -0.32, 0.32);
+            let s1 = 1.0 - smoothstep(0.035, 0.07, length(rel - d * along));
+            if (s1 > stroke) {
+                stroke = s1;
+                tone = hash2(cc + 9.0);
+            }
+        }
+    }
+    let lit = select(c * 0.78, c * 1.22 + vec3<f32>(0.03, 0.04, 0.0), tone > 0.5);
+    return mix(c, lit, stroke * 0.75 * near);
+}
+
+// A row of strokes on the sea: lines a `width` of their spacing wide,
+// `freq` lines a metre, moving `speed` lines a second, broken into dashes
+// where a noise is over `dashes`.
+fn wave_strokes(q: vec2<f32>, freq: f32, speed: f32, t: f32, width: f32, dashes: f32) -> f32 {
+    let y = q.y * freq + noise(q * vec2<f32>(0.05, 0.2)) * 1.5 - t * speed;
+    let li = floor(y);
+    let f = fract(y);
+    let line = smoothstep(0.0, width * 0.4, f) * (1.0 - smoothstep(width * 0.6, width, f));
+    let dash = smoothstep(dashes, dashes + 0.12, noise(vec2<f32>(q.x * 0.4 + li * 13.0 + t * 0.25, li * 1.7)));
+    return line * dash;
+}
+
+// Setts in courses half a sett high, every other course moved half a
+// sett (`q` in setts).
+fn setts(q: vec2<f32>, base: vec3<f32>, w: f32) -> vec3<f32> {
+    let row = floor(q.y * 2.0);
+    let u = q.x + 0.5 * odd(row);
+    let e = min(edist(u, 1.0), edist(q.y, 0.5));
+    let id = hash2(vec2<f32>(floor(u), row));
+    var c = base * (0.82 + 0.26 * tones(id, 4.0)) * select(1.0, 0.85, id > 0.8) * (0.95 + 0.07 * noise(q * 4.0));
+    c = mix(base * 0.6, c, on_piece(e, 0.025, w));
+    tex_height = sqrt(smoothstep(0.025, 0.085, e)) * 0.075 * (tex_px / max(w, 1e-4));
+    return far_off(c, base * 0.85, 0.5, w);
+}
+
+// The piece of the opus romanum's module (8 × 6 units) a point `l` of it
+// falls in: x, y, width and height.
+fn opus_piece(l: vec2<f32>) -> vec4<f32> {
+    if (l.x < 4.0 && l.y < 4.0) {
+        return vec4<f32>(0.0, 0.0, 4.0, 4.0);
+    }
+    if (l.x >= 4.0 && l.y < 2.0) {
+        return vec4<f32>(4.0, 0.0, 4.0, 2.0);
+    }
+    if (l.x >= 4.0 && l.x < 6.0 && l.y < 4.0) {
+        return vec4<f32>(4.0, 2.0, 2.0, 2.0);
+    }
+    if (l.x >= 6.0) {
+        return vec4<f32>(6.0, 2.0, 2.0, 4.0);
+    }
+    if (l.x < 2.0) {
+        return vec4<f32>(0.0, 4.0, 2.0, 2.0);
+    }
+    if (l.x < 4.0) {
+        return vec4<f32>(2.0, 4.0, 2.0, 2.0);
+    }
+    return vec4<f32>(4.0, 4.0, 2.0, 2.0);
+}
+
 fn textured(base: vec3<f32>, world: vec3<f32>, n_in: vec3<f32>, tex: vec2<f32>) -> vec3<f32> {
     let kind = i32(tex.x + 0.5);
     if (kind == 0) {
         return base;
     }
-    let n = abs(normalize(n_in));
-    // Along the face (horizontal) and up it; on faces looking up, the plan.
-    var uv = world.xy;
-    if (n.z < 0.7) {
-        if (n.x > n.y) {
-            uv = world.yz;
-        } else {
-            uv = world.xz;
-        }
-    }
     let s = max(tex.y, 0.01);
-    let p = uv / s;
-    let mortar = mix(base, vec3<f32>(0.78, 0.76, 0.72), 0.75);
+    let p = tex_uv(world, n_in, kind) / s;
+    // A pixel, in pieces.
+    let w = max(tex_px / s, 1e-4);
+    let t = g.lamp_count.y;
+    let mortar = mix(base, vec3<f32>(0.82, 0.79, 0.73), 0.78);
     switch kind {
-        // Brick: courses a quarter of the brick's length high, every other
-        // one moved half a brick; each brick a little different.
+        // Brick: chunky bricks, four courses a brick's length, each brick
+        // one of a few tones (a burnt one, a pale one), bevelled, light
+        // joints.
         case 1: {
-            let row = floor(p.y * 3.8);
-            let q = vec2<f32>(p.x + 0.5 * (row % 2.0), p.y * 3.8);
-            let id = hash2(vec2<f32>(floor(q.x), row));
-            let body = base * (0.82 + 0.3 * id) * (0.93 + 0.1 * noise(p * 9.0));
-            let m = joint(q.x, 0.06) * joint(q.y, 0.2);
-            return mix(mortar, body, m);
+            let row = floor(p.y * 4.0);
+            let u = p.x + 0.5 * odd(row);
+            let e = min(edist(u, 1.0), edist(p.y, 0.25));
+            let id = hash2(vec2<f32>(floor(u), row));
+            var k = 0.84 + 0.24 * tones(id, 4.0);
+            k = k * select(1.0, 0.7, id > 0.88) * select(1.0, 1.12, id < 0.08);
+            k = k * (0.95 + 0.07 * noise(p * 7.0)) * (0.97 + 0.08 * (fract(p.y * 4.0) - 0.3));
+            let c = mix(mortar, base * k, on_piece(e, 0.025, w));
+            tex_height = sqrt(smoothstep(0.025, 0.075, e)) * 0.048 * s;
+            return far_off(c, mix(base * 0.95, mortar, 0.25), 0.25, w);
         }
-        // Stone: irregular pieces with dark joints.
+        // Stone (rubble, "mampostería"): rounded stones, pillowy, a light
+        // mortar between them.
         case 2: {
-            let c = cells(p * 1.6);
-            let edge = smoothstep(0.02, 0.09, c.y - c.x);
-            let body = base * (0.75 + 0.45 * c.z) * (0.9 + 0.15 * noise(p * 6.0));
-            return mix(base * 0.45, body, edge);
+            let k3 = cells(p * vec2<f32>(1.25, 1.9));
+            let e = (k3.y - k3.x) * 0.4;
+            var c = base * (0.82 + 0.28 * tones(k3.z, 5.0)) * (0.94 + 0.08 * noise(p * 7.0));
+            c = mix(c, base * 0.86 + vec3<f32>(0.06, 0.05, 0.02), select(0.0, 0.5, k3.z > 0.8));
+            let j = mix(base, vec3<f32>(0.86, 0.84, 0.79), 0.6);
+            c = mix(j, c, on_piece(e, 0.025, w));
+            tex_height = sqrt(smoothstep(0.025, 0.15, e)) * 0.09 * s;
+            return far_off(c, mix(base * 0.95, j, 0.15), 0.6, w);
         }
-        // Tiles: squares with light joints.
+        // Tiles and slabs: squares a piece wide, thin light joints, each
+        // its tone.
         case 3: {
+            let e = min(edist(p.x, 1.0), edist(p.y, 1.0));
             let id = hash2(floor(p));
-            let body = base * (0.95 + 0.08 * id);
-            let m = joint(p.x, 0.03) * joint(p.y, 0.03);
-            return mix(mortar, body, m);
+            var c = base * (0.93 + 0.1 * tones(id, 3.0)) * (0.96 + 0.06 * noise(p * 1.8) + 0.03 * noise(p * 30.0));
+            let j = mix(base, vec3<f32>(0.93, 0.91, 0.87), 0.7);
+            c = mix(j, c, on_piece(e, 0.008, w));
+            tex_height = smoothstep(0.008, 0.02, e) * 0.01 * s;
+            return far_off(c, base * 0.97, 1.0, w);
         }
         // Wood: grain.
         case 4: {
-            let g = sin(p.y * 40.0 + noise(p * vec2<f32>(1.5, 8.0)) * 6.0);
-            return base * (0.86 + 0.1 * g + 0.08 * noise(p * vec2<f32>(0.5, 30.0)));
+            let gr = sin(p.y * 40.0 + noise(p * vec2<f32>(1.5, 8.0)) * 6.0);
+            return base * (0.86 + 0.1 * gr + 0.08 * noise(p * vec2<f32>(0.5, 30.0)));
         }
-        // Boards: strips a board wide, joined end to end in turns, with
-        // their grain.
+        // Boards (decking, "tarima"): a board a piece wide and eight
+        // long, a few tones, painted grain, dark joints.
         case 5: {
             let row = floor(p.y);
             let along = p.x / 8.0 + hash2(vec2<f32>(row, 1.0));
             let id = hash2(vec2<f32>(floor(along), row));
-            let g = sin(p.y * 25.0 + noise(vec2<f32>(p.x * 0.6, p.y * 5.0)) * 5.0);
-            let body = base * (0.82 + 0.25 * id) * (0.93 + 0.06 * g);
-            let m = joint(p.y, 0.06) * joint(along, 0.01);
-            return mix(base * 0.4, body, m);
+            let gr = noise(vec2<f32>(p.x * 0.17, p.y * 4.2) + id * 10.0);
+            var c = base * (0.8 + 0.3 * tones(id, 4.0)) * (0.9 + 0.14 * smoothstep(0.3, 0.7, gr));
+            let e = min(edist(p.y, 1.0), edist(along, 1.0) * 8.0);
+            c = mix(base * 0.45, c, on_piece(e, 0.015, w));
+            tex_height = smoothstep(0.015, 0.045, e) * 0.02 * s;
+            return far_off(c, base * 0.93, 1.0, w);
         }
         // Board-marked concrete: panels, their joints and tie holes.
         case 6: {
@@ -492,32 +713,44 @@ fn textured(base: vec3<f32>, world: vec3<f32>, n_in: vec3<f32>, tex: vec2<f32>) 
             let m = joint(q.x, 0.008) * joint(q.y, 0.012);
             let f = fract(q);
             let hole = smoothstep(0.012, 0.022, min(length(f - vec2<f32>(0.15, 0.25)), length(f - vec2<f32>(0.85, 0.25))));
-            let body = base * (0.94 + 0.1 * noise(p * 12.0) + 0.04 * noise(p * 50.0));
+            let id = hash2(floor(q));
+            let body = base * (0.94 + 0.06 * tones(id, 3.0) + 0.08 * noise(p * 12.0) + 0.03 * noise(p * 50.0));
             return body * mix(0.82, 1.0, m) * mix(0.55, 1.0, hole);
         }
-        // Render: a fine grain.
+        // Render ("estuco"): broad soft patches, as painted, a fine grain.
         case 7: {
-            return base * (0.95 + 0.07 * noise(p * 60.0) + 0.04 * noise(p * 7.0));
+            let n = noise(p * 0.45) * 0.55 + noise(p * 1.35) * 0.3 + noise(p * 3.5) * 0.15;
+            tex_height = noise(p * 22.0) * 0.003 * s;
+            return base * (0.95 + 0.08 * smoothstep(0.35, 0.65, n)) * (0.985 + 0.03 * noise(p * 45.0));
         }
-        // Grass: blades of light and dark green.
+        // Grass: soft painted patches, darker clumps of clover and little
+        // strokes of blades seen from above.
         case 8: {
-            let v = noise(p * vec2<f32>(18.0, 40.0)) * 0.6 + noise(p * 4.0) * 0.4;
-            return base * (0.7 + 0.55 * v);
+            return grass_at(p * s, base, w * s);
         }
-        // Gravel: little stones.
+        // Gravel ("grava"): fine stones in three tones, domed.
         case 9: {
-            let c = cells(p * 3.0);
-            let body = base * (0.7 + 0.5 * c.z);
-            return mix(base * 0.5, body, smoothstep(0.0, 0.25, c.y - c.x));
+            let k3 = cells(p * 3.0);
+            let dome = 1.0 - smoothstep(0.0, 0.6, k3.x);
+            var c = mix(base * 0.78, base * 0.9 + vec3<f32>(0.05, 0.04, 0.03), tones(k3.z, 3.0) * 0.7) * (0.8 + 0.3 * dome);
+            c = mix(base * 0.55, c, smoothstep(0.0, 0.12, k3.y - k3.x));
+            tex_height = dome * 0.02 * s;
+            return far_off(c, base * 0.8, 0.3, w);
         }
-        // Water: ripples.
+        // Water of a pool: clear, with the bright web of caustics wandering
+        // over it.
         case 10: {
-            let w = noise(p * vec2<f32>(3.0, 1.2) + vec2<f32>(noise(p * 2.0) * 2.0, 0.0));
-            return base * (0.88 + 0.25 * smoothstep(0.55, 0.8, w));
+            let q = p * 1.6 + vec2<f32>(noise(p * 0.9 + t * 0.25), noise(p * 0.9 - t * 0.2 + 5.0)) * 0.9;
+            let k3 = cells(q + vec2<f32>(t * 0.08, t * 0.05));
+            let web = 1.0 - smoothstep(0.0, 0.09, k3.y - k3.x);
+            tex_height = (sin(p.x * 7.0 + t * 2.0) + sin(p.y * 6.0 - t * 1.7)) * 0.004 * s;
+            return mix(base, vec3<f32>(0.72, 0.95, 1.0), web * 0.85) * (0.96 + 0.06 * noise(p * 2.0 + t * 0.3));
         }
-        // Sheet metal: ribs along the face.
+        // Sheet metal: corrugations along the face (down the slope on a
+        // roof).
         case 11: {
             let r = 0.5 + 0.5 * sin(p.x * 6.2832);
+            tex_height = r * 0.25 * s;
             return base * (0.8 + 0.3 * r);
         }
         // Linen: threads both ways and slubs along them, faint up close,
@@ -561,8 +794,8 @@ fn textured(base: vec3<f32>, world: vec3<f32>, n_in: vec3<f32>, tex: vec2<f32>) 
             let c = floor(q);
             let f = fract(q);
             let across = (c.x + c.y) % 2.0;
-            let t = select(f.x, f.y, across > 0.5);
-            let strand = sin(t * 3.1416);
+            let tt = select(f.x, f.y, across > 0.5);
+            let strand = sin(tt * 3.1416);
             let gap = smoothstep(0.0, 0.08, min(min(f.x, 1.0 - f.x), min(f.y, 1.0 - f.y)));
             return base * (0.55 + 0.5 * strand * gap + 0.05 * hash2(c));
         }
@@ -581,9 +814,9 @@ fn textured(base: vec3<f32>, world: vec3<f32>, n_in: vec3<f32>, tex: vec2<f32>) 
         }
         // Marble: grey veins wandering across a white ground.
         case 18: {
-            let w = p.x * 1.3 + p.y * 0.7 + noise(p * 1.5) * 3.0 + noise(p * 5.0) * 0.8;
-            let vein = 1.0 - smoothstep(0.0, 0.06, abs(sin(w * 3.1416)));
-            let fine = 1.0 - smoothstep(0.0, 0.03, abs(sin((w + noise(p * 9.0)) * 9.0)));
+            let wv = p.x * 1.3 + p.y * 0.7 + noise(p * 1.5) * 3.0 + noise(p * 5.0) * 0.8;
+            let vein = 1.0 - smoothstep(0.0, 0.06, abs(sin(wv * 3.1416)));
+            let fine = 1.0 - smoothstep(0.0, 0.03, abs(sin((wv + noise(p * 9.0)) * 9.0)));
             return base * (0.97 + 0.03 * noise(p * 4.0)) * (1.0 - 0.32 * vein - 0.12 * fine);
         }
         // Soil: a mottle with clods and, here and there, a light stone.
@@ -608,6 +841,269 @@ fn textured(base: vec3<f32>, world: vec3<f32>, n_in: vec3<f32>, tex: vec2<f32>) 
             let ground = base * (0.72 + 0.25 * noise(p * 6.0));
             return mix(ground, tint, leaf * 0.85);
         }
+        // Ashlar ("sillería"): big squared blocks, courses half a block
+        // high, each course its block length; chamfered.
+        case 21: {
+            let row = floor(p.y * 2.0);
+            let bw = 0.8 + 0.4 * hash2(vec2<f32>(row, 7.0));
+            let u = p.x + hash2(vec2<f32>(row, 3.0)) * bw;
+            let e = min(edist(u, bw), edist(p.y, 0.5));
+            let id = hash2(vec2<f32>(floor(u / bw), row));
+            var c = base * (0.88 + 0.16 * tones(id, 4.0)) * (0.93 + 0.1 * noise(p * 3.6) + 0.04 * noise(p * 24.0));
+            c = select(c, c * 0.92 + vec3<f32>(0.02, 0.015, 0.0), hash2(vec2<f32>(floor(u / bw) + 5.0, row)) > 0.75);
+            let j = mix(base, vec3<f32>(0.9, 0.87, 0.8), 0.6);
+            c = mix(j, c, on_piece(e, 0.01, w));
+            tex_height = smoothstep(0.01, 0.06, e) * 0.035 * s;
+            return far_off(c, base * 0.95, 0.5, w);
+        }
+        // Clapboard ("tablas solapadas"): a board a piece wide, leaning out
+        // over the one below, a shadow under its lip, butt joints.
+        case 22: {
+            let f = fract(p.y);
+            let row = floor(p.y);
+            let along = p.x / 20.0 + hash2(vec2<f32>(row, 2.0));
+            let id = hash2(vec2<f32>(floor(along), row));
+            var c = base * (0.95 + 0.07 * tones(id, 3.0)) * (0.97 + 0.05 * noise(vec2<f32>(p.x * 0.32, p.y * 11.2)));
+            c = c * (1.0 - 0.32 * smoothstep(0.82, 1.0, f)) * (0.92 + 0.08 * smoothstep(0.0, 0.25, f));
+            c = mix(c * 0.7, c, on_piece(edist(along, 1.0) * 20.0, 0.02, w));
+            tex_height = (1.0 - f) * 0.11 * smoothstep(0.0, 0.06, f) * s;
+            return far_off(c, base * 0.93, 1.0, w);
+        }
+        // Shingles ("tejuela"): rows a piece high, shingles a piece and a
+        // bit wide, staggered; each its tone; a shadow under each row.
+        case 23: {
+            let f = fract(p.y);
+            let row = floor(p.y);
+            let u = p.x / 1.2 + hash2(vec2<f32>(row, 9.0));
+            let id = hash2(vec2<f32>(floor(u), row));
+            var c = base * (0.8 + 0.32 * tones(id, 4.0)) * (0.95 + 0.08 * noise(vec2<f32>(p.x * 0.9, p.y * 5.4)));
+            c = select(c, c * 1.15 + vec3<f32>(0.02), id > 0.85);
+            c = c * (1.0 - 0.38 * smoothstep(0.78, 1.0, f));
+            c = mix(base * 0.55, c, on_piece(edist(u, 1.0) * 1.2, 0.035, w));
+            tex_height = (1.0 - f) * 0.12 * smoothstep(0.0, 0.06, f) * s;
+            return far_off(c, base * 0.88, 1.0, w);
+        }
+        // Fish scales ("escamas"): rounded lower edges.
+        case 24: {
+            var row = floor(p.y);
+            var f = fract(p.y);
+            var u = p.x / 1.5 + 0.5 * odd(row);
+            var x = fract(u) * 2.0 - 1.0;
+            var bottom = 0.45 * (1.0 - sqrt(max(0.0, 1.0 - x * x)));
+            if (f < bottom) {
+                // Still the scale of the row below.
+                row = row - 1.0;
+                f = f + 1.0;
+                u = p.x / 1.5 + 0.5 * odd(row);
+                x = fract(u) * 2.0 - 1.0;
+                bottom = 0.45 * (1.0 - sqrt(max(0.0, 1.0 - x * x)));
+            }
+            let id = hash2(vec2<f32>(floor(u), row));
+            let edge = smoothstep(0.0, 0.06, f - bottom);
+            var c = base * (0.82 + 0.28 * tones(id, 4.0)) * mix(0.55, 1.0, edge);
+            c = c * (1.0 - 0.3 * smoothstep(0.85, 1.4, f));
+            tex_height = (1.4 - f) * 0.12 * edge * s;
+            return far_off(c, base * 0.85, 1.0, w);
+        }
+        // Barrel tiles ("teja curva"): channels and caps down the slope,
+        // a lip at each course; some weathered.
+        case 25: {
+            let course = floor(p.y / 1.8);
+            let f = fract(p.y / 1.8);
+            let r = sin(fract(p.x + 0.5) * 3.14159);
+            let id = hash2(vec2<f32>(floor(p.x + 0.5), course));
+            var c = base * (0.84 + 0.26 * tones(id, 4.0));
+            c = mix(c, base * 0.6 + vec3<f32>(0.1, 0.07, 0.04), smoothstep(0.6, 0.95, noise(p * 0.18)) * 0.45);
+            c = c * (0.72 + 0.36 * r) * (1.0 - 0.35 * smoothstep(0.85, 1.0, f));
+            tex_height = (r * 0.16 + (1.0 - f) * 0.055 * smoothstep(0.0, 0.04, f)) * s;
+            return far_off(c, base * 0.86, 1.0, w);
+        }
+        // Standing seam ("chapa de junta alzada"): panels a piece wide,
+        // their seams catching the light, a patina in patches.
+        case 26: {
+            let e = edist(p.x, 1.0);
+            let id = hash2(vec2<f32>(floor(p.x), 1.0));
+            var c = base * (0.95 + 0.08 * tones(id, 3.0));
+            let pat = smoothstep(0.45, 0.8, noise(p * vec2<f32>(0.36, 0.16)) * 0.7 + noise(p * 1.8) * 0.3);
+            c = mix(c, base * 1.3 + vec3<f32>(0.03, 0.05, 0.04), pat * 0.6);
+            let rib = 1.0 - smoothstep(0.0, max(0.03, w), e);
+            c = mix(c, c * 1.18, rib) * (1.0 - 0.18 * (1.0 - smoothstep(0.03, 0.09, e)) * (1.0 - rib));
+            tex_height = rib * 0.05 * s;
+            return far_off(c, base * 1.02, 1.0, w);
+        }
+        // Setts ("adoquín"): rounded stones in courses.
+        case 27: {
+            return setts(p, base, w);
+        }
+        // Asphalt: worn patches and light speckles.
+        case 28: {
+            let n = noise(p * 0.25) * 0.6 + noise(p * 1.3) * 0.4;
+            var c = base * (0.96 + 0.12 * tones(smoothstep(0.35, 0.8, n), 3.0));
+            let k3 = cells(p * 30.0);
+            c = mix(c, c * 1.35, (1.0 - smoothstep(0.05, 0.12, k3.x)) * step(0.7, k3.z) * (1.0 - smoothstep(0.02, 0.06, w)));
+            return c;
+        }
+        // Rock in strata: soft horizontal layers of sandstone of different
+        // thickness and tone, each a little proud of the one above (light
+        // on its top edge, shade under it), runs of weathering, a few deep
+        // crevices.
+        case 29: {
+            var z = p.y + noise(vec2<f32>(p.x * 0.14, 2.0)) * 1.6 + noise(vec2<f32>(p.x * 0.6, 7.0)) * 0.27;
+            z = z + 0.8 * sin(z * 0.5);
+            let band = floor(z);
+            let f = fract(z);
+            var c = base * (1.0 - 0.18 * tones(hash2(vec2<f32>(band, 5.0)), 4.0));
+            c = c * (1.0 + 0.14 * smoothstep(0.82, 0.97, f)) * (1.0 - 0.22 * (1.0 - smoothstep(0.0, 0.18, f)));
+            c = c * (0.9 + 0.13 * noise(vec2<f32>(p.x * 1.3, p.y * 0.1)));
+            c = c * (1.0 - 0.35 * step(0.55, hash2(vec2<f32>(band, 9.0))) * (1.0 - smoothstep(0.0, 0.07, f)));
+            tex_height = f * 0.12 * (1.0 - smoothstep(0.94, 1.0, f)) * s;
+            return far_off(c, base * 0.92, 1.0, w);
+        }
+        // The sea: broad tones, and strokes of light blue to white that
+        // drift towards the shore and slide along it, in dashes.
+        case 30: {
+            let q = p + vec2<f32>(noise(p * 0.08 + t * 0.01) * 6.0, 0.0);
+            let wv = noise(p * vec2<f32>(0.1, 0.25) + t * vec2<f32>(0.02, 0.01)) * 0.7 + noise(p * 0.5 - t * 0.03) * 0.3;
+            let light = base * 1.3 + vec3<f32>(0.12, 0.22, 0.24);
+            var c = mix(base, mix(base, light, 0.3), smoothstep(0.4, 0.7, wv));
+            let deep = wave_strokes(q * 1.1 + 11.0, 0.28, 0.04, t, 0.3, 0.4);
+            let mid = wave_strokes(q, 0.36, 0.06, t, 0.22, 0.48);
+            let crest = wave_strokes(q * 0.8 + 37.0, 0.3, 0.08, t, 0.12, 0.62);
+            let near = 1.0 - smoothstep(0.03, 0.1, w);
+            c = mix(c, mix(base, light, 0.55), deep * 0.55);
+            c = mix(c, mix(base, light, 0.85), mid * 0.75);
+            c = mix(c, vec3<f32>(0.93, 0.97, 1.0), crest * 0.8 * near);
+            tex_height = (deep * 0.5 + mid + crest) * 0.015 * s;
+            return c;
+        }
+        // Setts laid diagonally: courses half a sett high, turned 45°.
+        case 31: {
+            let q = vec2<f32>(p.x + p.y, p.y - p.x);
+            return setts(q, base, w);
+        }
+        // Setts in fans: arcs of setts, the fans (sixteen setts wide) in
+        // staggered rows, each over the two below it.
+        case 32: {
+            let fw = 16.0;
+            let fh = fw * 0.5;
+            let rad = fw * 0.75;
+            var centre = vec2<f32>(0.0);
+            var found = false;
+            var frow = 0.0;
+            let r0 = floor(p.y / fh);
+            for (var k = 0; k < 3; k = k + 1) {
+                let r = r0 - f32(k);
+                let off = odd(r) * 0.5 * fw;
+                let cx = floor((p.x - off) / fw + 0.5) * fw + off;
+                let cc = vec2<f32>(cx, r * fh);
+                if (!found && p.y >= cc.y && length(p - cc) < rad) {
+                    centre = cc;
+                    found = true;
+                    frow = r;
+                }
+            }
+            let d = p - centre;
+            let rr = length(d);
+            let band = floor(rr);
+            let along = atan2(d.x, d.y) * (band + 0.5) + hash2(vec2<f32>(band, frow));
+            let e = min(min(edist(rr, 1.0), edist(along, 1.0) * max(rr, 1.0) / max(band + 0.5, 0.5)), rad - rr);
+            let id = hash2(vec2<f32>(floor(along), band + frow * 31.0 + centre.x));
+            var c = base * (0.8 + 0.28 * tones(id, 4.0)) * select(1.0, 0.85, id > 0.8);
+            c = mix(base * 0.6, c, on_piece(e, 0.05, w));
+            tex_height = sqrt(smoothstep(0.05, 0.15, e)) * 0.1 * s;
+            return far_off(c, base * 0.85, 1.0, w);
+        }
+        // Cobbles ("empedrado"): rounded stones packed close, dark gaps.
+        case 33: {
+            let k3 = cells(p);
+            let e = (k3.y - k3.x) * 0.5;
+            let round_ = 1.0 - smoothstep(0.05, 0.6, k3.x);
+            var c = base * (0.78 + 0.32 * tones(k3.z, 5.0));
+            c = select(c, c * 0.8 + vec3<f32>(0.07, 0.06, 0.04), k3.z > 0.82);
+            c = mix(base * 0.42, c * (0.72 + 0.4 * round_), on_piece(e, 0.056, w));
+            tex_height = sqrt(round_) * 0.19 * s * on_piece(e, 0.056, w);
+            return far_off(c, base * 0.75, 1.0, w);
+        }
+        // Old cobbles: bigger, uneven, worn smooth on top, earth and a
+        // little moss in the joints.
+        case 34: {
+            let q = p + vec2<f32>(noise(p * 0.31), noise(p * 0.31 + 4.0)) * 0.35;
+            let k3 = cells(q * vec2<f32>(1.0, 1.3));
+            let e = (k3.y - k3.x) * 0.5;
+            var c = base * (0.74 + 0.36 * tones(k3.z, 5.0));
+            c = select(c, c * 0.85 + vec3<f32>(0.06, 0.05, 0.03), k3.z > 0.75);
+            c = c * (0.88 + 0.2 * (1.0 - smoothstep(0.0, 0.45, k3.x)));
+            let joint_c = mix(base * 0.45 + vec3<f32>(0.02, 0.015, 0.0), vec3<f32>(0.05, 0.11, 0.025), smoothstep(0.55, 0.75, noise(p * 0.5)) * 0.7);
+            let half = 0.0625 * (0.7 + 0.6 * noise(p * 0.7));
+            c = mix(joint_c, c, on_piece(e, half, w));
+            tex_height = sqrt(smoothstep(half, half + 0.17, e)) * 0.125 * s;
+            return far_off(c, base * 0.8, 1.0, w);
+        }
+        // Opus romanum: squares and oblongs of four sizes in a module of
+        // 8 × 6 units that repeats.
+        case 35: {
+            let m = floor(p / vec2<f32>(8.0, 6.0));
+            let l = p - m * vec2<f32>(8.0, 6.0);
+            let r = opus_piece(l);
+            let a = l - r.xy;
+            let b = r.xy + r.zw - l;
+            let e = min(min(a.x, a.y), min(b.x, b.y));
+            let id = hash2(m * 7.0 + vec2<f32>(r.x * 3.0 + r.y, r.z));
+            var c = base * (0.86 + 0.2 * tones(id, 4.0)) * (0.95 + 0.07 * noise(p * 0.75) + 0.03 * noise(p * 6.0));
+            c = select(c, c * 0.88 + vec3<f32>(0.03, 0.02, 0.0), id > 0.7);
+            c = mix(mix(base, vec3<f32>(0.94, 0.91, 0.84), 0.7), c, on_piece(e, 0.027, w));
+            tex_height = smoothstep(0.027, 0.08, e) * 0.053 * s;
+            return far_off(c, base * 0.95, 1.0, w);
+        }
+        // Flagstone ("laja"): irregular flat stones of several colours,
+        // wide mortar joints.
+        case 36: {
+            let k3 = cells(p + vec2<f32>(noise(p * 0.7), noise(p * 0.7 + 3.0)) * 0.25);
+            let e = (k3.y - k3.x) * 0.5;
+            var c = base * (0.82 + 0.26 * tones(k3.z, 5.0));
+            c = select(c, c * 0.85 + vec3<f32>(0.1, 0.05, 0.02), fract(k3.z * 3.7) > 0.7);
+            c = c * (0.94 + 0.08 * noise(p * 1.5) + 0.04 * noise(p * 12.5));
+            c = mix(mix(base, vec3<f32>(0.85, 0.82, 0.76), 0.7), c, on_piece(e, 0.025, w));
+            tex_height = smoothstep(0.025, 0.065, e) * 0.024 * s;
+            return far_off(c, base * 0.92, 1.0, w);
+        }
+        // Flagstones in grass: stepping stones, grass between them.
+        case 37: {
+            let k3 = cells(p);
+            let e = (k3.y - k3.x) * 0.5;
+            let stone = smoothstep(0.17 - w, 0.19 + w, e);
+            let c = base * (0.84 + 0.24 * tones(k3.z, 4.0)) * (0.94 + 0.08 * noise(p * 2.1));
+            let gr = grass_at(p * s, vec3<f32>(0.18, 0.42, 0.07), w * s);
+            tex_height = stone * 0.03 * s;
+            return mix(gr, c, stone);
+        }
+        // Marble slabs: veined slabs a piece square, thin joints.
+        case 38: {
+            let cell = floor(p);
+            let id = hash2(cell);
+            let q = p * 0.6 + id * 7.0;
+            let wv = q.x * 1.3 + q.y * 0.7 + noise(q * 1.5) * 3.0 + noise(q * 5.0) * 0.8;
+            let vein = 1.0 - smoothstep(0.0, 0.06, abs(sin(wv * 3.1416)));
+            let fine = 1.0 - smoothstep(0.0, 0.03, abs(sin((wv + noise(q * 9.0)) * 9.0)));
+            var c = base * (0.97 + 0.04 * tones(id, 3.0)) * (1.0 - 0.32 * vein - 0.12 * fine);
+            c = mix(c * 0.8, c, on_piece(min(edist(p.x, 1.0), edist(p.y, 1.0)), 0.003, w));
+            return far_off(c, base * 0.94, 1.0, w);
+        }
+        // Pebbles: small oval stones, white, grey and ochre, domed.
+        case 39: {
+            let k3 = cells(p * vec2<f32>(1.0, 1.4));
+            let dome = 1.0 - smoothstep(0.0, 0.55, k3.x);
+            var tint = base;
+            if (k3.z > 0.66) {
+                tint = base * 0.4 + vec3<f32>(0.5, 0.48, 0.44);
+            } else if (k3.z < 0.33) {
+                tint = base * 0.7 + vec3<f32>(0.12, 0.1, 0.06);
+            }
+            let gap = smoothstep(0.03, 0.09, k3.y - k3.x);
+            let c = mix(base * 0.3, tint * (0.75 + 0.35 * dome), gap);
+            tex_height = dome * 0.13 * gap * s;
+            return far_off(c, base * 0.75, 1.0, w);
+        }
         default: {
             return base;
         }
@@ -622,7 +1118,12 @@ struct ModelOut {
 @fragment
 fn fs_model(i: VertexOut, @builtin(front_facing) front: bool) -> ModelOut {
     var out: ModelOut;
+    tex_begin(i.world, i.normal);
     tex_level = tex_lod(i.world, i.normal, i.tex);
+    // The texture and its relief, worked out here, where every pixel still
+    // runs together (derivatives).
+    let base = textured(i.color.rgb, i.world, i.normal, i.tex);
+    let bent = relief_normal(i.world, i.normal);
     if (stretched(i.picked)) {
         discard;
     }
@@ -662,8 +1163,7 @@ fn fs_model(i: VertexOut, @builtin(front_facing) front: bool) -> ModelOut {
         return out;
     }
     let lit = sunlit(i.world, i.normal);
-    let base = textured(i.color.rgb, i.world, i.normal, i.tex);
-    var color = vivid(shade(i.normal, base, lit) + base * lamplight(i.world, i.normal));
+    var color = vivid(shade(bent, base, lit) + base * lamplight(i.world, bent));
     if (i.soft > 1.5 && i.soft < 2.5) {
         // A lampshade or a bulb at night: it glows.
         let glow = (base * 0.6 + vec3<f32>(0.55, 0.42, 0.25)) * 1.6;
@@ -686,6 +1186,11 @@ fn fs_model(i: VertexOut, @builtin(front_facing) front: bool) -> ModelOut {
 
 @fragment
 fn fs_glass(i: VertexOut) -> @location(0) vec4<f32> {
+    // Water's texture (moving) and its ripples, first (derivatives).
+    tex_begin(i.world, i.normal);
+    tex_level = tex_lod(i.world, i.normal, i.tex);
+    let base = textured(i.color.rgb, i.world, i.normal, i.tex);
+    let bent = relief_normal(i.world, i.normal);
     if (stretched(i.picked)) {
         discard;
     }
@@ -693,8 +1198,9 @@ fn fs_glass(i: VertexOut) -> @location(0) vec4<f32> {
     if (kept.on && outside(i.world, kept)) {
         discard;
     }
-    let c = shade(i.normal, i.color.rgb, 1.0) + i.color.rgb * lamplight(i.world, i.normal);
-    return vec4<f32>(hazed(c, i.view_dist), i.color.a);
+    let c = vivid(shade(bent, base, 1.0)) + base * lamplight(i.world, bent);
+    let alpha = water_alpha(i.world, i.normal, i32(i.tex.x + 0.5), i.color.a);
+    return vec4<f32>(hazed(c, i.view_dist), alpha);
 }
 
 // ---- Shadow map -------------------------------------------------------------
@@ -909,8 +1415,11 @@ fn fs_edges(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
         shade_corner = corner_shade(p, c, 3 * s);
     }
     // The ink: darker at night, or it would be lighter than the scene.
-    let ink = vec3<f32>(0.05, 0.05, 0.06) * (1.0 - 0.9 * g.atmos.y);
-    return vec4<f32>(ink, max(e * abs(g.edges.y), shade_corner));
+    // Thin lines are the surface's own colour darkened (a little over
+    // half way to the ink), finer than black.
+    let ink = vec3<f32>(0.05, 0.05, 0.08) * (1.0 - 0.9 * g.atmos.y);
+    let strength = select(1.0, 0.6, g.edges.y < 0.0);
+    return vec4<f32>(ink, max(e * strength, shade_corner));
 }
 
 // How far the surface through `c` bends inwards between two samples on

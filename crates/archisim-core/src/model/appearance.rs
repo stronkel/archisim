@@ -51,10 +51,53 @@ pub enum TextureKind {
     Soil,
     /// Fallen leaves on the ground ("hojarasca").
     Leaves,
+    // The stylized range (2026-11-02): drawn with a relief that the light
+    // catches and a few tones a piece, as a painter would.
+    /// Ashlar ("sillería"): big squared blocks in courses, chamfered.
+    Ashlar,
+    /// Clapboard ("tablas solapadas"): boards along the wall, each leaning
+    /// out over the one below.
+    Clapboard,
+    /// Shingles ("tejuela", wood or slate): staggered rows.
+    Shingles,
+    /// Fish scales ("escamas"): shingles with rounded lower edges.
+    Scales,
+    /// Barrel tiles ("teja curva"): channels and caps down the slope.
+    Barrel,
+    /// Standing seam metal ("chapa de junta alzada"): copper, zinc.
+    Seam,
+    /// Setts ("adoquín"): rounded stones in courses.
+    Pavers,
+    /// Asphalt: a blue-grey ground with worn patches.
+    Asphalt,
+    /// Rock in strata ("roca en estratos"): stacked slabs of sandstone.
+    Strata,
+    /// The sea: deep, with strokes of light that drift (water of a pool
+    /// is [`TextureKind::Water`]).
+    Sea,
+    /// Setts laid diagonally ("adoquín en diagonal").
+    SettsDiagonal,
+    /// Setts in fans ("adoquín en abanico").
+    SettsFan,
+    /// Cobbles ("empedrado"): rounded stones packed close.
+    Cobbles,
+    /// Old cobbles ("empedrado antiguo"): uneven, worn, earth and moss in
+    /// the joints.
+    OldCobbles,
+    /// Opus romanum: squares and oblongs of four sizes in a module.
+    Opus,
+    /// Flagstone ("laja"): irregular flat stones, wide joints.
+    Flagstone,
+    /// Flagstones in grass ("laja en césped"): stepping stones.
+    FlagsInGrass,
+    /// Marble slabs ("losas de mármol"): veined slabs with thin joints.
+    MarbleSlabs,
+    /// Pebbles ("guijarros"): small oval stones of three colours.
+    Pebbles,
 }
 
 impl TextureKind {
-    pub const ALL: [TextureKind; 20] = [
+    pub const ALL: [TextureKind; 39] = [
         TextureKind::Brick,
         TextureKind::Stone,
         TextureKind::Tile,
@@ -75,6 +118,25 @@ impl TextureKind {
         TextureKind::Marble,
         TextureKind::Soil,
         TextureKind::Leaves,
+        TextureKind::Ashlar,
+        TextureKind::Clapboard,
+        TextureKind::Shingles,
+        TextureKind::Scales,
+        TextureKind::Barrel,
+        TextureKind::Seam,
+        TextureKind::Pavers,
+        TextureKind::Asphalt,
+        TextureKind::Strata,
+        TextureKind::Sea,
+        TextureKind::SettsDiagonal,
+        TextureKind::SettsFan,
+        TextureKind::Cobbles,
+        TextureKind::OldCobbles,
+        TextureKind::Opus,
+        TextureKind::Flagstone,
+        TextureKind::FlagsInGrass,
+        TextureKind::MarbleSlabs,
+        TextureKind::Pebbles,
     ];
 
     pub fn code(self) -> &'static str {
@@ -99,6 +161,25 @@ impl TextureKind {
             TextureKind::Marble => "marble",
             TextureKind::Soil => "soil",
             TextureKind::Leaves => "leaves",
+            TextureKind::Ashlar => "ashlar",
+            TextureKind::Clapboard => "clapboard",
+            TextureKind::Shingles => "shingles",
+            TextureKind::Scales => "scales",
+            TextureKind::Barrel => "barrel_tiles",
+            TextureKind::Seam => "standing_seam",
+            TextureKind::Pavers => "setts",
+            TextureKind::Asphalt => "asphalt",
+            TextureKind::Strata => "strata",
+            TextureKind::Sea => "sea",
+            TextureKind::SettsDiagonal => "setts_diagonal",
+            TextureKind::SettsFan => "setts_fan",
+            TextureKind::Cobbles => "cobbles",
+            TextureKind::OldCobbles => "old_cobbles",
+            TextureKind::Opus => "opus_romanum",
+            TextureKind::Flagstone => "flagstone",
+            TextureKind::FlagsInGrass => "flagstones_in_grass",
+            TextureKind::MarbleSlabs => "marble_slabs",
+            TextureKind::Pebbles => "pebbles",
         }
     }
 
@@ -129,6 +210,25 @@ impl TextureKind {
             TextureKind::Marble => "Mármol",
             TextureKind::Soil => "Tierra",
             TextureKind::Leaves => "Hojarasca",
+            TextureKind::Ashlar => "Sillería",
+            TextureKind::Clapboard => "Tablas solapadas",
+            TextureKind::Shingles => "Tejuela",
+            TextureKind::Scales => "Escamas",
+            TextureKind::Barrel => "Teja curva",
+            TextureKind::Seam => "Chapa de junta alzada",
+            TextureKind::Pavers => "Adoquín",
+            TextureKind::Asphalt => "Asfalto",
+            TextureKind::Strata => "Roca en estratos",
+            TextureKind::Sea => "Agua de mar",
+            TextureKind::SettsDiagonal => "Adoquín en diagonal",
+            TextureKind::SettsFan => "Adoquín en abanico",
+            TextureKind::Cobbles => "Empedrado",
+            TextureKind::OldCobbles => "Empedrado antiguo",
+            TextureKind::Opus => "Opus romano",
+            TextureKind::Flagstone => "Laja",
+            TextureKind::FlagsInGrass => "Laja en césped",
+            TextureKind::MarbleSlabs => "Losas de mármol",
+            TextureKind::Pebbles => "Guijarros",
         }
     }
 
@@ -156,6 +256,30 @@ impl TextureKind {
             TextureKind::Marble => 0.8,
             TextureKind::Soil => 0.5,
             TextureKind::Leaves => 0.4,
+            // A block's width; a board's; a course of shingles or scales;
+            // a tile's channel; a panel; a sett; a slab's height.
+            TextureKind::Ashlar => 0.6,
+            TextureKind::Clapboard => 0.16,
+            TextureKind::Shingles => 0.18,
+            TextureKind::Scales => 0.16,
+            TextureKind::Barrel => 0.22,
+            TextureKind::Seam => 0.45,
+            TextureKind::Pavers => 0.2,
+            TextureKind::Asphalt => 1.0,
+            TextureKind::Strata => 0.55,
+            TextureKind::Sea => 1.0,
+            // A sett times √2 (so the diagonal repeats); a sett of the
+            // fans; a cobble; an old cobble; the opus's unit; a flag; a
+            // stepping stone; a slab; a pebble.
+            TextureKind::SettsDiagonal => 0.28,
+            TextureKind::SettsFan => 0.12,
+            TextureKind::Cobbles => 0.16,
+            TextureKind::OldCobbles => 0.24,
+            TextureKind::Opus => 0.15,
+            TextureKind::Flagstone => 0.5,
+            TextureKind::FlagsInGrass => 0.7,
+            TextureKind::MarbleSlabs => 0.6,
+            TextureKind::Pebbles => 0.09,
         }
     }
 
@@ -188,6 +312,20 @@ impl TextureKind {
                 _ => return None,
             }
         })
+    }
+
+    /// Whether it covers a roof: its courses run along the eaves and up the
+    /// slope on any pitch (the others lie in plan on faces looking up).
+    pub fn on_slopes(self) -> bool {
+        matches!(
+            self,
+            TextureKind::Shingles | TextureKind::Scales | TextureKind::Barrel | TextureKind::Seam
+        )
+    }
+
+    /// Water, seen through and moving.
+    pub fn is_water(self) -> bool {
+        matches!(self, TextureKind::Water | TextureKind::Sea)
     }
 
     /// The number the 3D view knows it by (0 is none).

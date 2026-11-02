@@ -721,7 +721,7 @@ impl Scene {
         let Some(tile) = self.tiles.get(tri.tex as usize).and_then(|t| t.as_ref()) else {
             return tri.albedo;
         };
-        let q = textures::texture_point(p, tri.n, tri.scale as f64);
+        let q = textures::texture_point(p, tri.n, tri.scale as f64, tile.kind);
         let mut c = tile.apply(tri.srgb, q);
         if tile.kind == archisim_core::TextureKind::Velvet {
             let k = textures::velvet_sheen(dot(tri.n, d));

@@ -706,6 +706,13 @@ pub(super) fn material_panel(
     let keep = |c: &&MatCard| q.is_empty() || c.name.to_lowercase().contains(&q);
     let rec: Vec<MatCard> = recommended.iter().filter(keep).cloned().collect();
     let oth: Vec<MatCard> = others.iter().filter(keep).cloned().collect();
+    // The stylized range, not yet among them (the project's own of the
+    // same name are shown above).
+    let range: Vec<MatCard> = stylized_cards()
+        .into_iter()
+        .filter(|c| !recommended.iter().chain(others).any(|o| o.name == c.name))
+        .filter(|c| keep(&c))
+        .collect();
     let mut picked = None;
     egui::ScrollArea::vertical()
         .max_height(440.0)
@@ -735,8 +742,34 @@ pub(super) fn material_panel(
                     .take()
                     .or(material_grid(ui, swatches, &oth, current, 4));
             }
+            if !range.is_empty() {
+                ui.add_space(4.0);
+                ui.label(
+                    egui::RichText::new("Gama estilizada")
+                        .small()
+                        .strong()
+                        .color(p.muted),
+                );
+                ui.add_space(2.0);
+                picked = picked
+                    .take()
+                    .or(material_grid(ui, swatches, &range, current, 4));
+            }
         });
     picked
+}
+
+/// The stylized range as cards (added to the project when picked).
+pub(super) fn stylized_cards() -> Vec<MatCard> {
+    archisim_library::stylized::STYLIZED
+        .iter()
+        .map(|s| MatCard {
+            pick: MatPick::Palette(s.name),
+            name: s.name.to_string(),
+            rgb: s.color,
+            texture: s.texture.map(|t| (t, s.scale)),
+        })
+        .collect()
 }
 
 /// A material shown as its swatch and name; a click opens the materials
@@ -991,7 +1024,8 @@ mod tests {
         let wood = swatch_image([180, 140, 100], Some((TextureKind::Planks, 0.2)));
         let distinct: std::collections::BTreeSet<[u8; 4]> =
             wood.pixels.iter().map(|p| p.to_array()).collect();
-        assert!(distinct.len() > 20, "{}", distinct.len());
+        // The stylized range draws each board in one of a few tones.
+        assert!(distinct.len() > 8, "{}", distinct.len());
     }
 
     /// A fabric is offered fabrics, of the project and of the palette;

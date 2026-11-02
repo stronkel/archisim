@@ -6,6 +6,51 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-02 (86) · Gama estilizada en la vista 3D: materiales, relieve, contorno fino y agua en movimiento
+
+Rama `bloque/gama-estilizada`, con pull request. Formato `.archisim` versión 71: texturas nuevas en el aspecto de los materiales. Las versiones anteriores avisan de que no pueden abrir el fichero.
+
+Antonio aprobó el estilo de la página de prueba (entrada 85) y lo quiere siempre en el 3D: los materiales, el contorno fino y la posibilidad de quitar el relieve. Pidió además:
+- otra agua de mar: trazos que se mueven, no puntos;
+- otro césped: briznas en 3D, matas y flores, como los pinceles de Urbanismo;
+- más pavimentos;
+- otra roca en estratos.
+
+**Hecho**
+- **Texturas en estilo «estilizado»** (vista 3D, en las tres formas de dibujar: completas, ligeras y en imagen):
+  - Cada pieza toma uno de pocos tonos y tiene relieve: el bisel del ladrillo, el labio de las tablas, la teja, el adoquín. La luz del sol marca ese relieve.
+  - De lejos, cada material se funde en su color medio, sin muaré.
+  - En las cubiertas, las hiladas van paralelas al alero en cualquier pendiente.
+- **Texturas existentes rehechas:** ladrillo, piedra (ahora mampostería), baldosa (losa), tablas (tarima), enfoscado (estuco), césped, grava y agua (de piscina, con las cáusticas moviéndose). Los proyectos que ya las usaban se ven con el estilo nuevo sin tocar nada.
+- **Texturas nuevas:**
+  - fachadas y cubiertas: sillería, tablas solapadas, tejuela, escamas, teja curva y chapa de junta alzada;
+  - suelos: adoquín, asfalto, roca en estratos y agua de mar;
+  - pavimentos: adoquín en diagonal, adoquín en abanico, empedrado, empedrado antiguo, opus romano, laja, laja en césped, losas de mármol y guijarros.
+- **Agua:**
+  - la de piscina, clara y muy transparente;
+  - la de mar, más opaca, con trazos de azul claro a blanco que avanzan y se deslizan.
+
+  Las dos son casi opacas en rasante. Se mueven mientras están a la vista; el interruptor «Agua en movimiento» las deja quietas.
+- **Luz:** el lado iluminado envuelve un poco más y su borde es más nítido, como una sombra pintada.
+- **Contorno fino siempre en el 3D,** del color de la propia superficie oscurecido, no negro. El interruptor «Líneas finas» sigue valiendo para la planta y los alzados.
+- **Interruptor «Relieve»** en las propiedades de la vista 3D y en el menú «Imagen» de la Maqueta, junto a «Agua en movimiento». Las dos opciones se guardan en las preferencias.
+- **38 materiales de la gama** en la sección «Gama estilizada» de las tarjetas de materiales (fachadas, cubiertas, suelos, pavimentos y pinturas). Se añaden al proyecto al elegirlos.
+- La imagen realista y el `.glb` usan las mismas texturas, con el relieve pintado como luz desde arriba.
+- `archisim gama out/` hace un proyecto con el muestrario y una calle con acantilado, mar y piscina.
+
+**Pendiente**
+- El césped de la gama es la textura. Las briznas, matas y flores en 3D ya existen con los pinceles de Exterior (cubiertas «Pradera», «Césped»…), pero no salen al pintar una cara con el material «Césped». Si Antonio lo quiere, se puede hacer que el material lleve su crecimiento.
+- El relieve no se ve en las texturas «Ligeras» ni «En imagen» (en imagen va pintado como luz desde arriba).
+- Los edificios del entorno siguen con sus materiales; se les puede dar la gama (teja curva, estuco…) en otra vuelta.
+
+**Qué debe probar Antonio**
+1. `archisim gama out/` y abrir `out/gama.archisim`. En la vista 3D y en la Maqueta (F4), mirar el muestrario de cerca y de lejos y pasear por la calle hasta el acantilado y el mar.
+2. Propiedades de la vista 3D: apagar y encender «Relieve» y «Agua en movimiento».
+3. Abrir un proyecto suyo y comprobar que los ladrillos, piedras, baldosas y tarimas se ven con el estilo nuevo.
+4. Pintar una cara (Pintar) y elegir en las tarjetas un material de la sección «Gama estilizada».
+
+---
+
 ## 2026-11-02 (85) · Gama de materiales estilizada: prototipo para decidir el aspecto
 
 Rama `main`, sin cambios en la aplicación ni en el formato: solo la carpeta `prototipos/gama-estilizada/`.

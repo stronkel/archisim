@@ -233,7 +233,7 @@ fn add_triangles(
                 part.normal.push(gl(n));
                 let uv = match texture {
                     Some((kind, scale)) => {
-                        let q = textures::texture_point(*p, n, scale);
+                        let q = textures::texture_point(*p, n, scale, kind);
                         let per = textures::period(kind);
                         [(q[0] / per) as f32, (-q[1] / per) as f32]
                     }
