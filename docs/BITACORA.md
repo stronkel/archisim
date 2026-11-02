@@ -6,6 +6,52 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-02 (83) · Edificios del entorno con detalle (al estilo de CityRT y Paralives)
+
+Rama `bloque/entorno-detalle`, con pull request. Sin cambios de formato.
+
+Antonio pidió edificios del entorno como los de CityRT, con su estilo y el de Paralives. Se ha tomado de ahí el estilo, no los modelos: todo lo hace nuestro generador.
+
+**Hecho**
+- **Colores variados:** cada estilo tiene una paleta de fachadas, cubiertas y carpinterías, y cada edificio saca la suya de ella según dónde está (o su número), siempre la misma.
+  - Fachadas en almagra, amarillo albero, azul y verde pálidos, rosa o crema.
+  - Cubiertas de teja curva, mixta, envejecida, pizarra o vidriada verde.
+  - Carpinterías verde carruaje, añil, granate, madera, blanca o antracita.
+
+  Así una calle no sale toda igual. Vale al traer el entorno, al colocarlos a mano y al cambiarles el estilo.
+- **Cubiertas de teja:**
+  - más gruesas (16 cm, de maqueta);
+  - con alero de 45 cm sobre las fachadas libres y su remate;
+  - con caballete en la cumbrera;
+  - con una o dos chimeneas con su sombrerete, que atraviesan el faldón.
+- **Fachadas** (cada edificio lleva unas cosas u otras según su estilo y su número):
+  - **ventanas:** contraventanas de lamas abiertas a los lados, recercado con dintel, impostas entre plantas y sillares en las esquinas libres;
+  - **portal:** puerta en la fachada de la calle, con su marco, hoja con cuarterones, montante si la planta es alta, escalón y guardapolvo;
+  - **comercios:** toldos inclinados con faldón.
+- **Cubiertas planas:**
+  - casetón de escalera en los bloques;
+  - máquinas de aire acondicionado;
+  - depósito de agua en las casas y bloques del centro;
+  - antena;
+  - chimeneas en las azoteas de las casas.
+- **Detalle por distancia en la vista 3D:**
+  - cada edificio del entorno lleva dos versiones, completa y ligera, y se dibuja la completa de cerca (a menos de unos 160 m para un edificio de 20 m) y la ligera de lejos;
+  - con un barrio entero (más de 150 edificios), solo los que están a menos de 150 m del origen del proyecto llevan la versión completa;
+  - la imagen realista, el glTF y el IFC siguen haciendo la ligera cuando hay más de 150;
+  - el barrio de prueba de 1272 edificios sigue cabiendo en la vista 3D: se monta en 7,4 s (antes 5,4 s) y ocupa 625 MB en la tarjeta (antes 435).
+- `archisim render` admite `--camara=x,y,z,tx,ty,tz` para imágenes de cerca.
+
+**Pendiente**
+- Jardineras con flores, balcones con macetas, rótulos de los comercios y farolas en la fachada: piden colores de plantas que todavía no hay en los materiales del edificio.
+- Buhardillas en las cubiertas de teja.
+
+**Qué debe probar Antonio**
+- `archisim entorno out/`, abrir `out/entorno.archisim`, Vista 3D: acercarse a la calle de las casas andaluzas y del centro histórico.
+- `archisim render out/entorno.archisim calle.png 1600 --camara=8,-4,4.5,30,14,6`.
+- Volver a traer Poetas Andaluces y moverse en 3D: cerca, el detalle; lejos, que vaya fluido.
+
+---
+
 ## 2026-11-02 (82) · Cubiertas del entorno que siempre cierran, cumbrera girada y OpenStreetMap por otro camino
 
 Rama `bloque/cubiertas-entorno`, con pull request. Formato `.archisim` versión 70: la cumbrera girada de los edificios del entorno. Las versiones anteriores avisan de que no pueden abrir el fichero.

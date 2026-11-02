@@ -76,12 +76,91 @@ impl Side {
 /// version: windows as their glass, no grilles, railings as two rails.
 pub const FULL_DRESS_LIMIT: usize = 150;
 
+/// The touches a building gets beyond its dress, by its style and its own
+/// seed (so that the neighbours do not all look alike): nothing of this is
+/// stored, the same building always gets the same.
+#[derive(Default, Clone, Copy)]
+struct Touches {
+    shutters: bool,
+    /// A band round each window.
+    surrounds: bool,
+    /// A band at each floor.
+    courses: bool,
+    /// Stones at the free corners.
+    quoins: bool,
+    /// Chimneys on the roof.
+    chimneys: usize,
+    /// A front door (if the ground floor is not a shop).
+    door: bool,
+    awnings: bool,
+    /// Stair housing, machines, tanks and an aerial on a flat roof.
+    roof_gear: bool,
+}
+
+impl Touches {
+    fn of(d: &Dress, seed: u64) -> Touches {
+        let roll = |k: u64, p: f64| {
+            let mut h = seed
+                .wrapping_add(k.wrapping_mul(0x9E37_79B9))
+                .wrapping_mul(0xBF58_476D_1CE4_E5B9);
+            h ^= h >> 31;
+            (h % 1000) as f64 / 1000.0 < p
+        };
+        use BuildingStyle as S;
+        let homely = matches!(
+            d.style,
+            S::Andalusian
+                | S::Terraced
+                | S::SemiDetached
+                | S::Detached
+                | S::HistoricCentre
+                | S::Courtyard
+        );
+        Touches {
+            shutters: match d.style {
+                S::HistoricCentre | S::Ensanche => roll(1, 0.6),
+                S::Andalusian | S::Detached | S::Terraced | S::SemiDetached => roll(1, 0.45),
+                _ => false,
+            },
+            surrounds: match d.style {
+                S::HistoricCentre | S::Ensanche => true,
+                S::Andalusian => roll(2, 0.5),
+                S::Detached | S::Courtyard => roll(2, 0.3),
+                _ => false,
+            },
+            courses: matches!(
+                d.style,
+                S::Ensanche | S::HistoricCentre | S::ShopAndFlats | S::Facility
+            ) || (d.style == S::Block1960s && roll(3, 0.5)),
+            quoins: match d.style {
+                S::HistoricCentre | S::Ensanche => roll(4, 0.7),
+                S::Detached | S::Facility => roll(4, 0.3),
+                _ => false,
+            },
+            chimneys: if homely || matches!(d.style, S::Ensanche) {
+                1 + roll(5, 0.4) as usize
+            } else {
+                0
+            },
+            door: !matches!(d.style, S::Warehouse | S::Offices),
+            awnings: roll(6, 0.7),
+            roof_gear: !matches!(d.style, S::Warehouse),
+        }
+    }
+}
+
+/// How far the eaves of a tiled roof stand out of the walls.
+const EAVES: f64 = 0.45;
+/// The thickness of a tiled roof (chunky, as a model, not a drawing).
+const ROOF_SLAB: f64 = 0.16;
+
 /// What a dressed building gives, by material.
 #[derive(Default)]
 struct Out {
     by: BTreeMap<MaterialId, Vec<[P3; 3]>>,
     /// The light version.
     light: bool,
+    touches: Touches,
 }
 
 impl Out {
@@ -93,8 +172,14 @@ impl Out {
 }
 
 /// The solids of a dressed mass: its body, façades and roof, one solid per
-/// material. Empty if the mass is not a dressed contour.
+/// material. Empty if the mass is not a dressed contour. In its light
+/// version when the project has many of them (`light_dress`).
 pub fn dressed_solids(model: &Model, m: &Mass) -> Vec<Solid> {
+    dressed_solids_detail(model, m, light_dress(model))
+}
+
+/// The same, with all its detail or in its light version (for far away).
+pub fn dressed_solids_detail(model: &Model, m: &Mass, light: bool) -> Vec<Solid> {
     let (Some(d), MassShape::Prism(poly)) = (m.dress.as_ref(), &m.shape) else {
         return Vec::new();
     };
@@ -129,7 +214,8 @@ pub fn dressed_solids(model: &Model, m: &Mass) -> Vec<Solid> {
     let party = |i: usize| party.get(i).copied().unwrap_or(false);
     let mat = d.materials;
     let mut out = Out {
-        light: light_dress(model),
+        light,
+        touches: Touches::of(d, m.id.0),
         ..Out::default()
     };
 
@@ -160,6 +246,8 @@ pub fn dressed_solids(model: &Model, m: &Mass) -> Vec<Solid> {
     let door_side = (0..n)
         .filter(|i| on_street(*i))
         .max_by(|a, b| sides[*a].len.total_cmp(&sides[*b].len));
+    // The front door on the street (or on the longest free side).
+    let front = door_side.or(longest_free);
     for (i, side) in sides.iter().enumerate() {
         if party(i) {
             continue;
@@ -172,7 +260,7 @@ pub fn dressed_solids(model: &Model, m: &Mass) -> Vec<Solid> {
             side,
             (z0, top, fh, floors),
             (prev_party, next_party),
-            (on_street(i), door_side == Some(i)),
+            (on_street(i), front == Some(i)),
         );
     }
     // Courtyard façades: windows looking in.
@@ -222,11 +310,19 @@ pub fn dressed_solids(model: &Model, m: &Mass) -> Vec<Solid> {
             } else {
                 along
             };
-            pitched_roof(&mut out, d, &poly, &sides, &|i| party(i), top, axis)
+            pitched_roof(&mut out, d, &poly, &sides, &|i| party(i), top, axis, m.id.0)
         }
     };
     if !tiled {
-        flat_roof(&mut out, d, &poly, &sides, court.as_deref(), top);
+        flat_roof(
+            &mut out,
+            d,
+            &poly,
+            &sides,
+            court.as_deref(),
+            top,
+            (floors, m.id.0),
+        );
     }
 
     out.by
@@ -294,6 +390,33 @@ fn facade(
             ),
         );
     }
+    let t = out.touches;
+    if !out.light && t.courses && d.closure != Closure::CurtainWall {
+        for f in 1..floors {
+            let z = z0 + f as f64 * fh;
+            out.add(
+                mat.trim,
+                side.block(ends(0.06), (0.0, 0.06), (z - 0.06, z + 0.08)),
+            );
+        }
+    }
+    if !out.light && t.quoins {
+        let lo = z0 + d.plinth;
+        for (free, at_end) in [(!prev_party, false), (!next_party, true)] {
+            if !free || len < 2.0 {
+                continue;
+            }
+            let mut z = lo;
+            let mut k = 0;
+            while z + 0.3 < top - if d.cornice { 0.45 } else { 0.0 } {
+                let w = if k % 2 == 0 { 0.55 } else { 0.35 };
+                let s = if at_end { (len - w, len) } else { (0.0, w) };
+                out.add(mat.trim, side.block(s, (0.0, 0.03), (z, z + 0.3)));
+                z += 0.34;
+                k += 1;
+            }
+        }
+    }
     if len < MIN_FACADE {
         return;
     }
@@ -302,6 +425,18 @@ fn facade(
         return;
     }
     let bays = window_axes(len, d.bay, d.window_width);
+    // The front door: in the bay nearest the middle of the ground floor.
+    let door_bay = (main && t.door && !(d.shop && street))
+        .then(|| {
+            (0..bays.len()).min_by(|a, b| {
+                (bays[*a] - len / 2.0)
+                    .abs()
+                    .total_cmp(&(bays[*b] - len / 2.0).abs())
+            })
+        })
+        .flatten();
+    // Room for shutters beside the windows.
+    let shutters = !out.light && t.shutters && d.bay - d.window_width >= d.window_width + 0.3;
     for f in 0..floors {
         let floor = z0 + f as f64 * fh;
         if f == 0 && d.shop && street {
@@ -338,15 +473,113 @@ fn facade(
         if d.closure == Closure::Terraces && f > 0 {
             terrace(out, d, side, floor, ends(0.0));
         }
-        for c in &bays {
+        for (k, c) in bays.iter().enumerate() {
             let s = (c - d.window_width / 2.0, c + d.window_width / 2.0);
+            if f == 0 && door_bay == Some(k) {
+                front_door(out, d, side, *c, floor, fh);
+                continue;
+            }
             window(out, d, side, s, floor + sill, h, sill > 0.0);
+            if shutters && d.closure != Closure::Grilles {
+                shutter_pair(out, d, side, s, floor + sill, h);
+            }
             if d.closure == Closure::Grilles {
                 grille(out, d, side, s, (floor, floor + sill), h);
             }
             if d.closure == Closure::Balconies && f > 0 {
                 balcony_on(out, d, side, s, floor);
             }
+        }
+    }
+}
+
+/// A front door in the wall: its frame, its leaf with panels, a fanlight
+/// when the floor is tall, the step and a little lintel over it.
+fn front_door(out: &mut Out, d: &Dress, side: &Side, c: f64, floor: f64, fh: f64) {
+    let mat = d.materials;
+    let w = (d.bay * 0.85).clamp(0.85, 1.1);
+    let h = (fh - 0.4).min(2.2);
+    let s = (c - w / 2.0, c + w / 2.0);
+    out.add(
+        mat.joinery,
+        side.block(
+            (s.0 - FRAME, s.1 + FRAME),
+            (0.0, FRAME_OUT),
+            (floor, floor + h + FRAME),
+        ),
+    );
+    // The leaf a little back, with two raised panels.
+    out.add(
+        mat.joinery,
+        side.block(
+            s,
+            (FRAME_OUT, FRAME_OUT + 0.015),
+            (floor + 0.02, floor + h - 0.02),
+        ),
+    );
+    if !out.light {
+        for (z0, z1) in [(0.15, h * 0.45), (h * 0.52, h - 0.15)] {
+            out.add(
+                mat.joinery,
+                side.block(
+                    (s.0 + 0.12, s.1 - 0.12),
+                    (FRAME_OUT + 0.015, FRAME_OUT + 0.035),
+                    (floor + z0, floor + z1),
+                ),
+            );
+        }
+    }
+    // A fanlight over it when there is room.
+    if fh - h > 0.9 {
+        out.add(
+            mat.joinery,
+            side.block(
+                (s.0 - FRAME, s.1 + FRAME),
+                (0.0, FRAME_OUT),
+                (floor + h + FRAME, floor + h + 0.55),
+            ),
+        );
+        out.add(
+            mat.glass,
+            side.block(
+                s,
+                (FRAME_OUT, GLASS_OUT),
+                (floor + h + FRAME + 0.05, floor + h + 0.48),
+            ),
+        );
+    }
+    // The step, and the lintel standing out over the door.
+    out.add(
+        mat.trim,
+        side.block((s.0 - 0.25, s.1 + 0.25), (0.0, 0.4), (floor, floor + 0.14)),
+    );
+    let top = floor + h + if fh - h > 0.9 { 0.55 } else { FRAME };
+    out.add(
+        mat.trim,
+        side.block(
+            (s.0 - 0.3, s.1 + 0.3),
+            (0.0, 0.28),
+            (top + 0.04, top + 0.16),
+        ),
+    );
+}
+
+/// Two shutters folded back against the wall either side of a window.
+fn shutter_pair(out: &mut Out, d: &Dress, side: &Side, s: (f64, f64), z: f64, h: f64) {
+    let mat = d.materials;
+    let w = (s.1 - s.0) / 2.0;
+    for (a, b) in [
+        (s.0 - FRAME - w, s.0 - FRAME - 0.01),
+        (s.1 + FRAME + 0.01, s.1 + FRAME + w),
+    ] {
+        out.add(mat.joinery, side.block((a, b), (0.0, 0.04), (z, z + h)));
+        // Its rails, as a louvred shutter's.
+        for k in 1..4 {
+            let zk = z + h * k as f64 / 4.0;
+            out.add(
+                mat.joinery,
+                side.block((a + 0.03, b - 0.03), (0.04, 0.055), (zk - 0.02, zk + 0.02)),
+            );
         }
     }
 }
@@ -372,11 +605,31 @@ fn window(out: &mut Out, d: &Dress, side: &Side, s: (f64, f64), z: f64, h: f64, 
         );
         return;
     }
+    if out.touches.surrounds {
+        // A band of render or stone round it, and a lintel over it.
+        let b = 0.14;
+        out.add(
+            mat.trim,
+            side.block(
+                (s.0 - FRAME - b, s.1 + FRAME + b),
+                (0.0, 0.02),
+                (if sill { z - FRAME } else { z }, z + h + FRAME + b),
+            ),
+        );
+        out.add(
+            mat.trim,
+            side.block(
+                (s.0 - FRAME - b - 0.04, s.1 + FRAME + b + 0.04),
+                (0.0, 0.07),
+                (z + h + FRAME + b, z + h + FRAME + b + 0.1),
+            ),
+        );
+    }
     out.add(
         mat.joinery,
         side.block(
             (s.0 - FRAME, s.1 + FRAME),
-            (0.0, FRAME_OUT),
+            (0.0, FRAME_OUT + 0.01),
             (if sill { z - FRAME } else { z }, z + h + FRAME),
         ),
     );
@@ -564,12 +817,53 @@ fn shop_front(out: &mut Out, d: &Dress, side: &Side, floor: f64, fh: f64) {
             mat.glass,
             side.block((s0, s1), (FRAME_OUT, GLASS_OUT), (floor + 0.15, floor + h)),
         );
+        if !out.light && out.touches.awnings {
+            awning(
+                out,
+                mat.joinery,
+                side,
+                (s0 - 0.1, s1 + 0.1),
+                floor + h + 0.1,
+            );
+        }
     }
     // The fascia, for the sign.
     out.add(
         mat.trim,
         side.block((0.0, len), (0.0, 0.08), (floor + h + 0.12, floor + h + 0.6)),
     );
+}
+
+/// A sloping awning over a shop window, `z` its lowest edge at the wall
+/// side's height: out 0,9 m, down 0,45 m, with its valance.
+fn awning(out: &mut Out, m: MaterialId, side: &Side, s: (f64, f64), z: f64) {
+    let (reach, drop, thick) = (0.9, 0.45, 0.04);
+    let p = |s: f64, t: f64, z: f64| -> P3 {
+        let q = side.at(s, t);
+        [q.x, q.y, z]
+    };
+    let hi = z + drop;
+    let lo = z;
+    let top = [
+        p(s.0, 0.0, hi),
+        p(s.1, 0.0, hi),
+        p(s.1, reach, lo),
+        p(s.0, reach, lo),
+    ];
+    let bot = top.map(|q| [q[0], q[1], q[2] - thick]);
+    let mut tris = Vec::new();
+    let mut quad = |a: P3, b: P3, c: P3, d: P3| {
+        tris.push([a, b, c]);
+        tris.push([a, c, d]);
+    };
+    quad(top[0], top[3], top[2], top[1]);
+    quad(bot[0], bot[1], bot[2], bot[3]);
+    for i in 0..4 {
+        let j = (i + 1) % 4;
+        quad(bot[i], bot[j], top[j], top[i]);
+    }
+    out.add(m, tris);
+    out.add(m, side.block(s, (reach - 0.02, reach), (lo - 0.25, lo)));
 }
 
 /// A curtain wall over the whole façade: glass, spandrels at the floors
@@ -605,6 +899,7 @@ fn flat_roof(
     sides: &[Side],
     court: Option<&[Point2]>,
     top: f64,
+    (floors, seed): (usize, u64),
 ) {
     let mat = d.materials;
     let (h, t) = PARAPET;
@@ -634,6 +929,150 @@ fn flat_roof(
         None => {
             let finish = offset_contour(poly, -t).unwrap_or_else(|| poly.to_vec());
             out.add(mat.roof, prism(&finish, top, top + 0.03));
+            roof_gear(out, d, poly, top + 0.03, (floors, seed));
+        }
+    }
+}
+
+/// A little of a hash of the seed and `k`, from 0 to 1.
+fn unit(seed: u64, k: u64) -> f64 {
+    let mut h = seed.wrapping_add(k.wrapping_mul(0x9E37_79B9_7F4A_7C15));
+    h = (h ^ (h >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    h = (h ^ (h >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    ((h ^ (h >> 31)) % 10_000) as f64 / 10_000.0
+}
+
+/// Whether a point is inside a contour.
+fn inside(p: Point2, poly: &[Point2]) -> bool {
+    let mut c = false;
+    let n = poly.len();
+    for i in 0..n {
+        let (a, b) = (poly[i], poly[(i + 1) % n]);
+        if (a.y > p.y) != (b.y > p.y) && p.x < a.x + (p.y - a.y) / (b.y - a.y) * (b.x - a.x) {
+            c = !c;
+        }
+    }
+    c
+}
+
+/// A point well inside a contour, about `along`, `across` of its box (0 to
+/// 1), with `room` of clear space round it; `None` if there is none.
+fn spot(poly: &[Point2], along: f64, across: f64, room: f64) -> Option<Point2> {
+    let (lo, hi) = bounds_2d(poly);
+    let p = Point2::new(lo.x + (hi.x - lo.x) * along, lo.y + (hi.y - lo.y) * across);
+    let ok = |q: Point2| {
+        inside(q, poly)
+            && [(room, 0.0), (-room, 0.0), (0.0, room), (0.0, -room)]
+                .iter()
+                .all(|(dx, dy)| inside(Point2::new(q.x + dx, q.y + dy), poly))
+    };
+    ok(p).then_some(p)
+}
+
+/// A box standing on the roof at `p`: `w` × `d` and `h` high from `z`.
+fn roof_box(p: Point2, (w, d): (f64, f64), (z, h): (f64, f64)) -> Vec<[P3; 3]> {
+    let q = [
+        Point2::new(p.x - w / 2.0, p.y - d / 2.0),
+        Point2::new(p.x + w / 2.0, p.y - d / 2.0),
+        Point2::new(p.x + w / 2.0, p.y + d / 2.0),
+        Point2::new(p.x - w / 2.0, p.y + d / 2.0),
+    ];
+    prism(&q, z, z + h)
+}
+
+/// A chimney from `z` (where it leaves the roof) up to `to`, with its cap.
+fn chimney(out: &mut Out, d: &Dress, p: Point2, z: f64, to: f64) {
+    let mat = d.materials;
+    out.add(mat.wall, roof_box(p, (0.55, 0.7), (z, to - z)));
+    out.add(mat.trim, roof_box(p, (0.75, 0.9), (to, 0.08)));
+    if !out.light {
+        out.add(mat.trim, roof_box(p, (0.3, 0.3), (to + 0.08, 0.18)));
+        out.add(mat.trim, roof_box(p, (0.45, 0.45), (to + 0.26, 0.05)));
+    }
+}
+
+/// What stands on a flat roof: the stair housing on blocks, machines,
+/// a tank, an aerial, and the chimneys of the houses.
+fn roof_gear(out: &mut Out, d: &Dress, poly: &[Point2], z: f64, (floors, seed): (usize, u64)) {
+    let t = out.touches;
+    if !t.roof_gear {
+        return;
+    }
+    let mat = d.materials;
+    let area = signed_area(poly).abs();
+    // The stair housing, on blocks of flats.
+    if floors >= 3 && area > 80.0 {
+        if let Some(p) = spot(
+            poly,
+            0.35 + 0.3 * unit(seed, 1),
+            0.35 + 0.3 * unit(seed, 2),
+            2.0,
+        ) {
+            out.add(mat.wall, roof_box(p, (2.4, 3.2), (z, 2.6)));
+            out.add(mat.trim, roof_box(p, (2.7, 3.5), (z + 2.6, 0.12)));
+            let door = Point2::new(p.x, p.y - 1.6);
+            out.add(mat.joinery, roof_box(door, (0.9, 0.06), (z, 2.05)));
+        }
+    }
+    if out.light {
+        return;
+    }
+    // Air conditioning machines.
+    if !matches!(
+        d.style,
+        BuildingStyle::Andalusian | BuildingStyle::Courtyard
+    ) || unit(seed, 3) < 0.5
+    {
+        let n = 1 + (unit(seed, 4) * 3.0) as usize;
+        for k in 0..n {
+            if let Some(p) = spot(
+                poly,
+                0.2 + 0.6 * unit(seed, 10 + k as u64),
+                0.2 + 0.6 * unit(seed, 20 + k as u64),
+                0.8,
+            ) {
+                out.add(mat.metal, roof_box(p, (0.9, 0.45), (z, 0.65)));
+                out.add(mat.trim, roof_box(p, (0.95, 0.5), (z + 0.65, 0.04)));
+            }
+        }
+    }
+    // A water tank on the houses' terraces.
+    if matches!(
+        d.style,
+        BuildingStyle::Andalusian
+            | BuildingStyle::HistoricCentre
+            | BuildingStyle::Courtyard
+            | BuildingStyle::ShopAndFlats
+    ) && unit(seed, 5) < 0.6
+    {
+        if let Some(p) = spot(
+            poly,
+            0.25 + 0.5 * unit(seed, 6),
+            0.25 + 0.5 * unit(seed, 7),
+            0.9,
+        ) {
+            out.add(mat.trim, roof_box(p, (0.8, 0.8), (z, 0.3)));
+            out.add(mat.wall, roof_box(p, (1.0, 1.0), (z + 0.3, 1.0)));
+        }
+    }
+    // An aerial.
+    if unit(seed, 8) < 0.7 {
+        if let Some(p) = spot(poly, 0.3 + 0.4 * unit(seed, 9), 0.6, 0.5) {
+            out.add(mat.metal, roof_box(p, (0.05, 0.05), (z, 2.2)));
+            for (k, w) in [(1.6, 1.0), (1.9, 0.8), (2.15, 0.6)] {
+                out.add(mat.metal, roof_box(p, (w, 0.03), (z + k, 0.03)));
+            }
+        }
+    }
+    // The chimneys of the houses.
+    for k in 0..t.chimneys {
+        if let Some(p) = spot(
+            poly,
+            0.15 + 0.7 * unit(seed, 30 + k as u64),
+            0.2 + 0.6 * unit(seed, 40 + k as u64),
+            0.5,
+        ) {
+            chimney(out, d, p, z, z + PARAPET.0 + 0.6);
         }
     }
 }
@@ -646,6 +1085,7 @@ fn flat_roof(
 /// roof always closes, whatever the contour; the walls go up to it along
 /// every side (the gables). The ridge runs along `axis`. False if nothing
 /// could be made (then the roof is flat).
+#[allow(clippy::too_many_arguments)]
 fn pitched_roof(
     out: &mut Out,
     d: &Dress,
@@ -654,6 +1094,7 @@ fn pitched_roof(
     party: &dyn Fn(usize) -> bool,
     top: f64,
     axis: Vec2,
+    seed: u64,
 ) -> bool {
     let across = axis.perp_left();
     let c0 = poly[0];
@@ -674,22 +1115,31 @@ fn pitched_roof(
         (across * pitch, pitch * (hw - cn)),
     ];
     let free = !(0..sides.len()).any(party);
-    if d.roof == EnvRoof::Hip && free {
+    let hip = d.roof == EnvRoof::Hip && free;
+    if hip {
         planes.push((axis * -pitch, pitch * (hl + cu)));
         planes.push((axis * pitch, pitch * (hl - cu)));
     }
     planes.push((Vec2::new(0.0, 0.0), MAX_RIDGE));
-    let rise = |p: Point2| -> f64 {
+    // Over the eaves (below zero out of the walls, where the eaves stand
+    // out and drop).
+    let lowest = |p: Point2| -> f64 {
         let q = p - c0;
         planes
             .iter()
             .map(|(g, k)| g.dot(q) + k)
             .fold(f64::INFINITY, f64::min)
-            .max(0.0)
     };
+    let rise = |p: Point2| lowest(p).max(0.0);
     let mat = d.materials;
+    // The roof stands out of the free walls by the eaves.
+    let eaves: Vec<f64> = (0..sides.len())
+        .map(|i| if party(i) { 0.0 } else { EAVES })
+        .collect();
+    let roof_outline = grown(poly, sides, &eaves);
+    let slab = if out.light { TILES } else { ROOF_SLAB };
     // The faces: where each plane is the lowest.
-    let (lo, hi) = bounds_2d(poly);
+    let (lo, hi) = bounds_2d(&roof_outline);
     let pad = 1.0;
     let boxed = vec![
         Point2::new(lo.x - pad, lo.y - pad) - c0,
@@ -697,7 +1147,7 @@ fn pitched_roof(
         Point2::new(hi.x + pad, hi.y + pad) - c0,
         Point2::new(lo.x - pad, hi.y + pad) - c0,
     ];
-    let footprint = vec![(crate::ensure_ccw(poly.to_vec()), Vec::new())];
+    let footprint = vec![(crate::ensure_ccw(roof_outline.clone()), Vec::new())];
     let mut any = false;
     for (k, (gk, kk)) in planes.iter().enumerate() {
         let mut region = boxed.clone();
@@ -718,8 +1168,8 @@ fn pitched_roof(
             out.add(
                 mat.roof,
                 draped_prism(&outer, |q| {
-                    let z = top + rise(q);
-                    (z, z + TILES)
+                    let z = top + lowest(q);
+                    (z, z + slab)
                 }),
             );
         }
@@ -728,7 +1178,7 @@ fn pitched_roof(
         return false;
     }
     // The walls up to the roof along every side, broken where the roof
-    // changes plane; the fascia along the eaves.
+    // changes plane.
     for side in sides {
         let (a, b) = (side.a, side.at(side.len, 0.0));
         let mut ts = vec![0.0, 1.0];
@@ -761,15 +1211,127 @@ fn pitched_roof(
             }
         }
         out.add(mat.wall, tris);
-        let eave = rise(a) < 1e-3 && rise(b) < 1e-3 && rise(side.at(side.len / 2.0, 0.0)) < 1e-3;
-        if eave {
-            out.add(
-                mat.trim,
-                side.block((0.0, side.len), (0.0, 0.05), (top - 0.12, top + 0.02)),
-            );
+    }
+    // The fascia along the eaves, at their edge.
+    let n = roof_outline.len();
+    for i in 0..n {
+        let (a, b) = (roof_outline[i], roof_outline[(i + 1) % n]);
+        let Some(u) = (b - a).normalized() else {
+            continue;
+        };
+        let (za, zb) = (lowest(a), lowest(b));
+        if (za - zb).abs() > 1e-3 || za > -1e-3 {
+            continue;
+        }
+        let edge = Side {
+            a,
+            u,
+            out: -u.perp_left(),
+            len: a.distance(b),
+        };
+        out.add(
+            mat.trim,
+            edge.block(
+                (0.0, edge.len),
+                (-0.04, 0.0),
+                (top + za - 0.16, top + za + slab),
+            ),
+        );
+    }
+    // The ridge cap, where the two falls meet below the level top.
+    if pitch * hw < MAX_RIDGE {
+        let (s0, s1) = if hip {
+            (u0 + hw, u1 - hw)
+        } else {
+            (u0 - EAVES, u1 + EAVES)
+        };
+        if s1 - s0 > 0.3 {
+            let a = c0 + axis * s0 + across * cn;
+            let b = c0 + axis * s1 + across * cn;
+            let z = top + pitch * hw + slab;
+            for (p, q) in inside_parts(a, b, &roof_outline) {
+                let Some(u) = (q - p).normalized() else {
+                    continue;
+                };
+                let ridge = Side {
+                    a: p,
+                    u,
+                    out: -u.perp_left(),
+                    len: p.distance(q),
+                };
+                out.add(
+                    mat.roof,
+                    ridge.block((0.0, ridge.len), (-0.13, 0.13), (z - 0.05, z + 0.09)),
+                );
+            }
         }
     }
+    // Chimneys through the roof, near the ridge.
+    for k in 0..out.touches.chimneys {
+        let along = 0.2 + 0.6 * unit(seed, 50 + k as u64);
+        let p = c0
+            + axis * (u0 + (u1 - u0) * along)
+            + across * (cn + 0.7 * if k % 2 == 0 { 1.0 } else { -1.0 });
+        if !inside(p, poly) {
+            continue;
+        }
+        let ridge = top + pitch * hw.min(MAX_RIDGE / pitch);
+        chimney(out, d, p, top + rise(p) - 0.1, ridge + 0.8);
+    }
     true
+}
+
+/// A contour with each side moved out by its `by` (the eaves standing out
+/// of the free walls).
+fn grown(poly: &[Point2], sides: &[Side], by: &[f64]) -> Vec<Point2> {
+    let n = poly.len();
+    (0..n)
+        .map(|i| {
+            let prev = &sides[(i + n - 1) % n];
+            let next = &sides[i];
+            let (bp, bn) = (by[(i + n - 1) % n], by[i]);
+            // Where the two moved sides meet.
+            let p0 = prev.a + prev.out * bp;
+            let q0 = next.a + next.out * bn;
+            let cross = prev.u.cross(next.u);
+            if cross.abs() < 1e-9 {
+                return q0;
+            }
+            let t = (q0 - p0).cross(next.u) / cross;
+            let p = p0 + prev.u * t;
+            // A very sharp corner would shoot far out: keep it near.
+            if p.distance(poly[i]) > 3.0 * bp.max(bn).max(0.01) {
+                q0
+            } else {
+                p
+            }
+        })
+        .collect()
+}
+
+/// The parts of a segment inside a contour.
+fn inside_parts(a: Point2, b: Point2, poly: &[Point2]) -> Vec<(Point2, Point2)> {
+    let mut ts = vec![0.0, 1.0];
+    let n = poly.len();
+    let d = b - a;
+    for i in 0..n {
+        let (p, q) = (poly[i], poly[(i + 1) % n]);
+        let e = q - p;
+        let den = d.cross(e);
+        if den.abs() < 1e-12 {
+            continue;
+        }
+        let t = (p - a).cross(e) / den;
+        let u = (p - a).cross(d) / den;
+        if (0.0..=1.0).contains(&t) && (0.0..=1.0).contains(&u) {
+            ts.push(t);
+        }
+    }
+    ts.sort_by(f64::total_cmp);
+    ts.windows(2)
+        .filter(|w| w[1] - w[0] > 1e-6 && inside(a + d * ((w[0] + w[1]) / 2.0), poly))
+        .map(|w| (a + d * w[0], a + d * w[1]))
+        .collect()
 }
 
 /// The part of a convex polygon where `g·q + k <= 0`.
@@ -838,7 +1400,14 @@ mod tests {
             assert!(tris > 200, "{}: {tris}", style.name());
             let (lo, hi) = bounds(&s);
             // On the ground, and up to the top (and the roof over it).
-            assert!(lo[2].abs() < 1e-9, "{}", style.name());
+            for so in &s {
+                for t in &so.triangles {
+                    for q in t {
+                        assert!(q[2] > -1e-9, "{} {:?}: {t:?}", style.name(), so.material);
+                    }
+                }
+            }
+            assert!(lo[2].abs() < 1e-9, "{}: {lo:?}", style.name());
             assert!(hi[2] >= mass.height, "{}", style.name());
             assert!(
                 hi[2] < mass.height + 16.0 * 0.5 + 1.5,
@@ -920,10 +1489,17 @@ mod tests {
         {
             assert!(t[0] > 6.0 + 0.2 && t[0] < 12.0 - 0.2, "{t:?}");
         }
-        // Its gabled roof rises to the ridge in the middle of the depth.
-        let (_, hi) = bounds(&s);
+        // Its gabled roof rises to the ridge in the middle of the depth,
+        // with its cap over it.
+        let roof = mid.dress.unwrap().materials.roof;
+        let tiles: Vec<Solid> = s.iter().filter(|s| s.material == roof).cloned().collect();
+        let (_, hi) = bounds(&tiles);
         let ridge = 6.0 + 6.0 * 0.4;
-        assert!((hi[2] - (ridge + TILES)).abs() < 0.05, "{}", hi[2]);
+        assert!(
+            (hi[2] - (ridge + ROOF_SLAB + 0.09)).abs() < 0.05,
+            "{}",
+            hi[2]
+        );
     }
 
     /// A deep house closed on three sides would climb 40 m × its pitch
@@ -1026,13 +1602,19 @@ mod tests {
                         covered += up;
                     }
                 }
+                // All of it, and the eaves round it.
                 let area = signed_area(&outline).abs();
                 assert!(
-                    (covered - area).abs() < area * 0.01,
+                    covered > area * 0.99 && covered < area * 1.5,
                     "{k} {turned}: {covered} of {area}"
                 );
-                let (_, hi) = bounds(&s);
-                assert!(hi[2] <= mass.height + MAX_RIDGE + TILES + 1e-6, "{}", hi[2]);
+                let tiles: Vec<Solid> = s.iter().filter(|s| s.material == roof).cloned().collect();
+                let (_, hi) = bounds(&tiles);
+                assert!(
+                    hi[2] <= mass.height + MAX_RIDGE + ROOF_SLAB + 0.1,
+                    "{}",
+                    hi[2]
+                );
                 m.remove_mass(id).unwrap();
             }
         }
