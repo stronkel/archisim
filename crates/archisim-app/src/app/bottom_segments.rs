@@ -422,6 +422,45 @@ impl ArchiSimApp {
     }
 
     /// The snaps, as drawings: ends, middles, edges, tracking and ortho.
+    /// Guía: reference planes and the tape, the lines to draw against,
+    /// for every discipline (§12.2).
+    pub(super) fn guide_segment(&mut self, ui: &mut Ui) {
+        let on = self.tool == Tool::RefPlane
+            || self.concept_picked(super::concept_ui::ConceptPick::Tape);
+        let value = if self.tool == Tool::RefPlane {
+            "Plano"
+        } else if on {
+            "Cinta"
+        } else {
+            ""
+        };
+        let (main, arrow) = segment(ui, Glyph::RefPlane, "Guía", value, on);
+        if main
+            .on_hover_text("Planos de referencia (Q): líneas para dibujar contra ellas, en todas las plantas. Flecha: la cinta, que mide y deja guías")
+            .clicked()
+        {
+            self.pick(Pick::Tool(Tool::RefPlane));
+        }
+        egui::Popup::menu(&arrow)
+            .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
+            .show(|ui| {
+                ui.set_min_width(230.0);
+                let mut chosen = None;
+                for t in super::toolbox::BAR_TOOLS
+                    .iter()
+                    .filter(|t| matches!(t.pick, Pick::Tool(Tool::RefPlane) | Pick::Concept(_)))
+                {
+                    if menu_row(ui, Mark::Glyph(t.glyph), t.name, t.key).clicked() {
+                        chosen = Some(t.pick);
+                    }
+                }
+                if let Some(p) = chosen {
+                    self.pick(p);
+                    ui.close();
+                }
+            });
+    }
+
     pub(super) fn snap_toggles(&mut self, ui: &mut Ui) {
         ui.spacing_mut().item_spacing.x = 2.0;
         let f = &mut self.snap_filter;
