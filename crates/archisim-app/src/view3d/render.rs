@@ -1500,7 +1500,7 @@ fn feature_edges(mesh: &super::scene::Mesh, n: usize) -> Vec<u32> {
     type Edge = (u32, u32, glam::Vec3, u32);
     let mut faces: HashMap<([i64; 3], [i64; 3]), Edge> = HashMap::new();
     let mut turned = Vec::new();
-    for t in mesh.indices[..n - n % 3].chunks_exact(3) {
+    for t in mesh.indices[..n - n % 3].as_chunks::<3>().0 {
         let (a, b, c) = (pos(t[0]), pos(t[1]), pos(t[2]));
         let normal = (b - a).cross(c - a);
         if normal.length_squared() < 1e-14 {
