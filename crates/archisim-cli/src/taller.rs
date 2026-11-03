@@ -73,3 +73,26 @@ pub fn write_buildings(dir: &Path) -> Res {
     );
     Ok(())
 }
+
+/// The buildings of the world (tanda 6): every place's house of the
+/// street, block and detached house, a row each (`only`: some places by
+/// their key).
+pub fn write_world(dir: &Path, only: &[&str]) -> Res {
+    let m = archisim_library::building_workshop::world_project(only)?;
+    std::fs::create_dir_all(dir)?;
+    let path = dir.join(format!("mundo.{}", archisim_file::EXTENSION));
+    archisim_file::save(&m, &path)?;
+    std::fs::write(dir.join("mundo.ifc"), crate::ifc_text(&m, "mundo", None))?;
+    let mut total = 0;
+    for t in m.object_types().filter(|t| t.name.ends_with("(taller)")) {
+        let tris = m.type_prop(t.id).map_or(0, |p| p.0.triangle_count());
+        total += tris;
+        println!("{}: {tris} triángulos", t.name);
+    }
+    println!(
+        "Edificios del mundo: {} edificios ({total} triángulos), en {}",
+        m.objects().count(),
+        path.display()
+    );
+    Ok(())
+}

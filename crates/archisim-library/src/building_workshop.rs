@@ -45,7 +45,16 @@ pub const RECIPES: &[&str] = &[
     include_str!("../taller/edificio_comercio.asfam"),
     include_str!("../taller/edificio_hotel.asfam"),
     include_str!("../taller/edificio_supermercado.asfam"),
+    include_str!("../taller/edificio_mundo_entre_medianeras.asfam"),
+    include_str!("../taller/edificio_mundo_bloque.asfam"),
+    include_str!("../taller/edificio_mundo_aislada.asfam"),
 ];
+
+/// The families of the buildings of the world (tanda 6): one typology
+/// each, dressed by the skin of a place.
+pub const WORLD_TOWNHOUSE: &str = "Casa entre medianeras del mundo (taller)";
+pub const WORLD_BLOCK: &str = "Bloque de viviendas del mundo (taller)";
+pub const WORLD_HOUSE: &str = "Vivienda aislada del mundo (taller)";
 
 /// A building of the workshop: its family, its type's name, its values
 /// (numbers), and the style of today's building it stands opposite, with
@@ -763,9 +772,148 @@ pub fn project() -> Result<Model, ModelError> {
     Ok(m)
 }
 
+/// A type of a family of the workshop with some values (or the one of
+/// that name already there).
+fn type_with(
+    m: &mut Model,
+    family_name: &str,
+    name: &str,
+    values: &[(&str, f64)],
+) -> Result<ObjectTypeId, ModelError> {
+    if let Some(t) = m.object_types().find(|t| t.name == name) {
+        return Ok(t.id);
+    }
+    let f = family(m, family_name)?;
+    let mut v = m.family_defaults(f, ParamScope::Type)?;
+    for (key, n) in values {
+        v.insert((*key).into(), Value::Number(*n));
+    }
+    m.add_object_type(name, f, v)
+}
+
+/// One row of the world's workshop: what it is and where it goes.
+pub struct WorldPiece {
+    pub skin: usize,
+    pub family: &'static str,
+    pub name: String,
+    pub values: Vec<(&'static str, f64)>,
+    /// Its origin (the middle of its back) and its plan.
+    pub at: (f64, f64),
+    pub size: (f64, f64),
+}
+
+/// The buildings of the world's workshop: a row for each place, west to
+/// east three houses of its street side by side (three variants), its
+/// block of flats and its detached house in its plot; the rows from north
+/// to south. `only` keeps the places named by their key.
+pub fn world_pieces(only: &[&str]) -> Vec<WorldPiece> {
+    use archisim_core::props::fine::buildings::world::{types::usual_width, SKINS};
+    let mut out = Vec::new();
+    let mut y = 0.0;
+    for (i, sk) in SKINS.iter().enumerate() {
+        if !only.is_empty() && !only.contains(&sk.key) {
+            continue;
+        }
+        let w = usual_width(sk);
+        let d = 12.0;
+        let mut x = 0.0;
+        for v in 1..=3 {
+            out.push(WorldPiece {
+                skin: i,
+                family: WORLD_TOWNHOUSE,
+                name: format!("Entre medianeras · {} · {v} (taller)", sk.name),
+                values: vec![
+                    ("skin", i as f64),
+                    ("variant", v as f64),
+                    ("width", w),
+                    ("depth", d),
+                    ("floors", sk.floors as f64),
+                ],
+                at: (x + w / 2.0, y),
+                size: (w, d),
+            });
+            x += w;
+        }
+        x += 6.0;
+        let (bw, bd) = (22.0, 14.0);
+        out.push(WorldPiece {
+            skin: i,
+            family: WORLD_BLOCK,
+            name: format!("Bloque · {} (taller)", sk.name),
+            values: vec![
+                ("skin", i as f64),
+                ("variant", 1.0),
+                ("width", bw),
+                ("depth", bd),
+                ("floors", sk.block.floors as f64),
+            ],
+            at: (x + bw / 2.0, y),
+            size: (bw, bd),
+        });
+        x += bw + 9.0;
+        let (hw, hd) = (10.0, 8.0);
+        out.push(WorldPiece {
+            skin: i,
+            family: WORLD_HOUSE,
+            name: format!("Vivienda aislada · {} (taller)", sk.name),
+            values: vec![
+                ("skin", i as f64),
+                ("variant", 1.0),
+                ("width", hw),
+                ("depth", hd),
+                ("floors", sk.house.floors as f64),
+            ],
+            at: (x + hw / 2.0, y + 3.0),
+            size: (hw, hd),
+        });
+        y -= 45.0;
+    }
+    out
+}
+
+/// The world's workshop as a project (see [`world_pieces`]).
+pub fn world_project(only: &[&str]) -> Result<Model, ModelError> {
+    let mut m = crate::new_project("Taller de edificios del mundo");
+    let level = m.levels()[0].id;
+    for p in world_pieces(only) {
+        let t = type_with(&mut m, p.family, &p.name, &p.values)?;
+        m.add_object(NewObject {
+            object_type: t,
+            level,
+            position: Point2::new(p.at.0, p.at.1),
+            rotation: 0.0,
+            base_offset: 0.0,
+        })?;
+    }
+    Ok(m)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The world's workshop is made, and every role of its buildings has
+    /// its material in the recipe.
+    #[test]
+    fn the_world_is_made() {
+        let m = world_project(&["andalucia", "paris", "japon"]).unwrap();
+        assert_eq!(m.objects().count(), 15);
+        for t in m.object_types().filter(|t| t.name.ends_with("(taller)")) {
+            let (mesh, _) = m.type_prop(t.id).expect("a model");
+            let family = m.family(t.family).unwrap().name().to_string();
+            let recipe = RECIPES
+                .iter()
+                .find(|r| r.lines().next().is_some_and(|l| l.contains(&family)))
+                .unwrap();
+            for (role, _) in &mesh.parts {
+                assert!(
+                    recipe.contains(&format!("    {role} material")),
+                    "{}: the role «{role}» has no material",
+                    t.name
+                );
+            }
+        }
+    }
 
     #[test]
     fn the_street_is_made() {

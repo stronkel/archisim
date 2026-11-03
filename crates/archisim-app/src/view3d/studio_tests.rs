@@ -2416,6 +2416,82 @@ fn building_pictures() {
     }
 }
 
+/// The buildings of the world (taller de edificios, tanda 6): for each
+/// place, a picture of its row and close ones of its houses of the
+/// street, its block and its detached house, in one sheet
+/// (`NN-<lugar>.png`). `ARCHISIM_MUNDO_OUT=carpeta`; `ARCHISIM_MUNDO` keeps
+/// some places by their key (`paris,japon`).
+#[test]
+fn world_pictures() {
+    let Some(dir) = std::env::var_os("ARCHISIM_MUNDO_OUT") else {
+        return;
+    };
+    let dir = Path::new(&dir);
+    std::fs::create_dir_all(dir).unwrap();
+    let Some(gpu) = super::gpu_tests::gpu() else {
+        eprintln!("No graphics adapter: pictures skipped.");
+        return;
+    };
+    let wanted = std::env::var("ARCHISIM_MUNDO").unwrap_or_default();
+    let wanted: Vec<&str> = wanted.split(',').filter(|k| !k.is_empty()).collect();
+    let mut r = Renderer::new(&gpu.0, gpu.2, TextureMode::Full);
+    let size = [1100u32, 800u32];
+    let aspect = size[0] as f32 / size[1] as f32;
+    let skins = archisim_core::props::fine::buildings::world::SKINS;
+    for (i, sk) in skins.iter().enumerate() {
+        if !wanted.is_empty() && !wanted.contains(&sk.key) {
+            continue;
+        }
+        let m = archisim_library::building_workshop::world_project(&[sk.key]).unwrap();
+        let only = |keep: &[usize]| {
+            let mut one = m.clone();
+            let objects: Vec<_> = one.objects().map(|o| o.id).collect();
+            for (k, o) in objects.into_iter().enumerate() {
+                if !keep.contains(&k) {
+                    one.remove_object(o).unwrap();
+                }
+            }
+            one
+        };
+        let shots = [
+            (only(&[0, 1, 2, 3, 4]), 150.0, 24.0, 1.15),
+            (only(&[0, 1, 2]), 140.0, 14.0, 1.1),
+            (only(&[3]), 130.0, 18.0, 1.05),
+            (only(&[4]), 135.0, 22.0, 1.1),
+        ];
+        let pics: Vec<Pixmap> = shots
+            .iter()
+            .map(|(m, yaw, pitch, zoom)| {
+                building_picture(
+                    &mut r,
+                    &gpu,
+                    m,
+                    |lo, hi| camera(lo, hi, aspect, *yaw, *pitch, *zoom),
+                    size,
+                    Light::Day,
+                )
+            })
+            .collect();
+        let top = side_by_side(&pics[0], &pics[1]);
+        let bottom = side_by_side(&pics[2], &pics[3]);
+        let mut sheet = Pixmap::new(top.width(), top.height() + bottom.height() + 12).unwrap();
+        sheet.fill(resvg::tiny_skia::Color::WHITE);
+        for (pic, y) in [(&top, 0), (&bottom, top.height() + 12)] {
+            sheet.draw_pixmap(
+                0,
+                y as i32,
+                pic.as_ref(),
+                &PixmapPaint::default(),
+                Transform::identity(),
+                None,
+            );
+        }
+        sheet
+            .save_png(dir.join(format!("{:02}-{}.png", i, sk.key)))
+            .unwrap();
+    }
+}
+
 /// A picture as the Maqueta shows it, the shadows drawn for the scene's
 /// own box (a long street casts its shadows finer than the studio's).
 fn building_picture(

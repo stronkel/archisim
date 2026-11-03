@@ -41,6 +41,7 @@ pub mod salud;
 pub mod terraced;
 pub mod toros;
 pub mod village;
+pub mod world;
 
 use crate::build::{Builder, P3};
 

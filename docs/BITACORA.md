@@ -6,6 +6,38 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-04 (94) · Taller de edificios, tanda 6: pieles por lugar
+
+Misma rama `bloque/taller-edificios` y mismo pull request (#160). Sin cambios de formato ni de IFC.
+
+**Hecho**
+- Las pieles por lugar que pidió Antonio. Son tres tipologías que se visten con la piel de 24 lugares:
+  - casa entre medianeras, bloque exento y vivienda aislada en su parcela;
+  - lugares de España, la Península, Europa, América, Asia y otros, incluidos los cuatro que propuse: Grecia, Magreb, Europa del Este y trópico.
+- Cada piel lleva:
+  - sus colores y piedras;
+  - sus ventanas y lo que las cierra;
+  - sus balcones: galerías, miradores, escaleras de incendios, verandas, celosías, jaulas, terrazas acristaladas;
+  - su planta baja: comercio, escalinata, soportales, garaje, celosía de machiya, pilotis;
+  - su cornisa y su cubierta: mansarda con buhardillas, hastial escalonado o de campana, oriental, teja curva, pizarra, chapa;
+  - lo que se cuelga en fachadas y azoteas.
+  - Cada edificio elige sus colores por su variante, así que una calle no sale repetida.
+- Los parámetros «Lugar» y «Variante» en las tres recetas (`edificio_mundo_*.asfam`). Esto es lo que usará la tanda 7 para asignar la piel por la georreferencia.
+- Prueba nueva: las tres tipologías en los 24 lugares se construyen, con todos sus materiales y nada en el aire. `archisim mundo out/` las pone en filas; las fotos salen con `world_pictures`.
+- Materiales nuevos en la paleta: estucos de colores, piedra parda, ladrillos pardo, gris y de Londres, tablas, madera de Falun, tejas plana, negra, gris y vidriada, tejuela asfáltica, chapa roja y lacados.
+
+**Pendiente**
+- La opinión de Antonio, lugar por lugar.
+- Tanda 7: asignación automática por la georreferencia, el uso del Catastro y las etiquetas de OSM.
+- El IFC de los 120 edificios juntos pesa 190 MB. Para la tanda 7 habrá que usar la versión ligera de lejos.
+
+**Qué debe probar Antonio**
+1. Ejecuta `cargo run --release -p archisim-cli -- mundo out/ andalucia paris reino_unido japon` y abre `out/mundo.archisim`: hay una fila por lugar.
+2. En una de las casas, cambia «Lugar» y «Variante» en el tipo y mira que se viste de otro sitio.
+3. Dime qué lugar no se reconoce y qué detalle le falta.
+
+---
+
 ## 2026-11-03 (93) · Taller de edificios, tanda 5: ciudad y comercio
 
 Misma rama `bloque/taller-edificios` y mismo pull request (#160). Sin cambios de formato ni de IFC.

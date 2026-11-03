@@ -1,0 +1,716 @@
+//! The three typologies of the world's buildings: the house between party
+//! walls of a street, the block of flats standing free and the detached
+//! house in its plot. Each takes its skin by number (`skin`) and its
+//! look by its variant.
+
+use super::super::more::{fruit_tree, palm};
+use super::super::*;
+use super::facade::{front, Front, REVEAL};
+use super::roofs::{faces, roof, RoofPlan};
+use super::skins::*;
+use super::{look, recolour, Look};
+use crate::build::Builder;
+use crate::Params;
+
+/// The usual front of the street's house of a place.
+pub fn usual_width(sk: &Skin) -> f64 {
+    match sk.key {
+        "paises_bajos" | "reino_unido" => 5.6,
+        "nueva_york" | "san_francisco" | "tropico" | "japon" => 6.5,
+        "andalucia" | "algarve" | "grecia" => 7.5,
+        "magreb" => 8.0,
+        "lisboa" | "china" => 9.0,
+        "paris" | "mediterraneo" | "latam" | "corea" | "este" | "california" => 12.5,
+        _ => 10.0,
+    }
+}
+
+fn seed_of(p: &Params) -> u64 {
+    p.get("variant", 1.0).round().max(0.0) as u64
+}
+
+fn floors_of(p: &Params, usual: usize, max: usize) -> usize {
+    let n = p.get("floors", 0.0).round();
+    if n < 1.0 {
+        usual
+    } else {
+        (n as usize).clamp(1, max)
+    }
+}
+
+/// The roles the shared pieces draw in, given the building's.
+fn finish(b: &mut Builder, l: &Look) {
+    recolour(b, "tiles", l.roof);
+    recolour(b, "roof", l.roof);
+    recolour(b, "wall", l.wall);
+    recolour(b, "trim", l.trim);
+}
+
+/// The core inside, under the walk of an arcade if there is one.
+fn cores(b: &mut Builder, w: f64, d: f64, fr: &Front, top: f64) {
+    let t = fr.thick;
+    let x = w / 2.0 - t;
+    let from = if fr.stilts() { fr.lift } else { 0.0 };
+    if fr.recess > 0.0 && !fr.plain {
+        let zg = fr.z(1) - 0.3;
+        b.rbox("interior", [-x, t, from], [x, d - fr.recess - t, zg], 0.0);
+        b.rbox("interior", [-x, t, zg], [x, d - t, top], 0.0);
+    } else {
+        b.rbox("interior", [-x, t, from], [x, d - t, top], 0.0);
+    }
+}
+
+/// The house between party walls of a street.
+pub fn townhouse(b: &mut Builder, p: &Params) {
+    let sk = skin_of(p.get("skin", 0.0));
+    let seed = seed_of(p);
+    let w = p.get("width", 0.0);
+    let w = if w <= 0.0 {
+        usual_width(sk)
+    } else {
+        w.clamp(4.0, 30.0)
+    };
+    let d = p.get("depth", 12.0).clamp(7.0, 25.0);
+    let floors = floors_of(p, sk.floors, 10);
+    let l = look(sk, seed, false);
+    let [fface, right, bface, left] = Face::sides(w, d);
+    let mut fr = Front::of(fface, sk, floors, seed);
+    if fr.ground == Ground::Pilotis {
+        fr.recess = (d * 0.5).min(6.0);
+    }
+    if floors < 2 && matches!(fr.ground, Ground::Arcade | Ground::Pilotis) {
+        fr.ground = Ground::Door;
+        fr.recess = 0.0;
+    }
+    let made = front(b, &fr, sk, &l);
+    let top = made.top;
+    let back = fr.plain_of(bface, true, false);
+    front(b, &back, sk, &l);
+    for f in [right, left] {
+        wall(b, l.wall, &f, (0.0, top), 0.3, &[]);
+    }
+    cores(b, w, d, &fr, top);
+    let form = match sk.roof {
+        Roof::Hip | Roof::Asian => Roof::Gable,
+        r => r,
+    };
+    roof(
+        b,
+        &RoofPlan {
+            x: (-w / 2.0, w / 2.0),
+            y: (0.0, d),
+            z: top,
+            form,
+            cover: sk.cover,
+            pitch: sk.pitch,
+            eaves: sk.eaves,
+            party: true,
+            dormers: made.axes.iter().map(|a| a - w / 2.0).collect(),
+            gable: sk.gable,
+            seed,
+            extras: sk.extras,
+            top: sk.top,
+            block: false,
+        },
+        &l,
+    );
+    b.rbox("paving", [-w / 2.0, d, 0.0], [w / 2.0, d + 2.2, 0.03], 0.0);
+    finish(b, &l);
+}
+
+/// The block of flats, free on its four sides.
+pub fn block(b: &mut Builder, p: &Params) {
+    let base = skin_of(p.get("skin", 0.0));
+    let seed = seed_of(p);
+    let mut sk = *base;
+    if !base.block.walls.is_empty() {
+        sk.walls = base.block.walls;
+    }
+    sk.balc = base.block.balc;
+    sk.ground = match base.block.ground {
+        Ground::Stoop | Ground::Lattice => Ground::Door,
+        g => g,
+    };
+    sk.top = base.block.top;
+    sk.extras = (base.extras & !(PENT | HOIST)) | base.block.extras;
+    if sk.balc == Balc::Bay && sk.ground == Ground::Garage {
+        sk.ground = Ground::Shop;
+    }
+    let sk = &sk;
+    let w = p.get("width", 22.0).clamp(10.0, 60.0);
+    let d = p.get("depth", 14.0).clamp(9.0, 24.0);
+    let floors = floors_of(p, base.block.floors, 16);
+    let l = look(sk, seed, false);
+    let [fface, right, bface, left] = Face::sides(w, d);
+    let mut fr = Front::of(fface, sk, floors, seed);
+    fr.party = false;
+    if fr.ground == Ground::Pilotis {
+        fr.recess = (d * 0.45).min(6.0);
+    }
+    let made = front(b, &fr, sk, &l);
+    let top = made.top;
+    let back = Front {
+        f: bface,
+        ground: Ground::Door,
+        recess: 0.0,
+        seed: seed + 3,
+        extras: fr.extras & !(SIGNS | AWNINGS),
+        balc: if fr.balc == Balc::FireEscape {
+            Balc::None
+        } else {
+            fr.balc
+        },
+        ..fr
+    };
+    front(b, &back, sk, &l);
+    for f in [right, left] {
+        let side = fr.plain_of(f, false, true);
+        front(b, &side, sk, &l);
+    }
+    cores(b, w, d, &fr, top);
+    let form = base.block.roof;
+    let (cover, pitch) = if form == Roof::Flat {
+        (sk.cover, sk.pitch)
+    } else if sk.roof == Roof::Flat {
+        (Cover::Curved, 0.4)
+    } else {
+        (sk.cover, sk.pitch.min(0.8))
+    };
+    let flat_mat = if sk.roof_mat.starts_with("r_") || sk.roof_mat == "w_white" {
+        sk.roof_mat
+    } else {
+        "r_gravel"
+    };
+    let l = Look {
+        roof: if form == Roof::Flat {
+            if sk.roof == Roof::Flat {
+                flat_mat
+            } else {
+                "r_gravel"
+            }
+        } else if sk.roof == Roof::Flat {
+            "r_curved"
+        } else {
+            l.roof
+        },
+        ..l
+    };
+    roof(
+        b,
+        &RoofPlan {
+            x: (-w / 2.0, w / 2.0),
+            y: (0.0, d),
+            z: top,
+            form,
+            cover,
+            pitch,
+            eaves: sk.eaves.max(0.3),
+            party: false,
+            dormers: made.axes.iter().map(|a| a - w / 2.0).collect(),
+            gable: Gable::Plain,
+            seed,
+            extras: sk.extras,
+            top: sk.top,
+            block: true,
+        },
+        &l,
+    );
+    b.rbox(
+        "paving",
+        [-w / 2.0 - 2.0, d, 0.0],
+        [w / 2.0 + 2.0, d + 3.0, 0.03],
+        0.0,
+    );
+    finish(b, &l);
+}
+
+/// The detached house in its plot.
+pub fn house(b: &mut Builder, p: &Params) {
+    let base = skin_of(p.get("skin", 0.0));
+    let seed = seed_of(p);
+    let h = base.house;
+    let mut sk = *base;
+    if !h.walls.is_empty() {
+        sk.walls = h.walls;
+    }
+    sk.shut = h.shut;
+    sk.balc = h.balc;
+    sk.ground = Ground::Door;
+    sk.extras = h.extras;
+    sk.storey = (3.0, 2.9);
+    sk.head = match base.head {
+        Head::Pediment => Head::Hood,
+        x => x,
+    };
+    sk.top = if h.roof == Roof::Flat {
+        Top::Band
+    } else {
+        Top::None
+    };
+    let sk = &sk;
+    let w = p.get("width", 10.0).clamp(6.0, 20.0);
+    let d = p.get("depth", 8.0).clamp(6.0, 16.0);
+    let floors = floors_of(p, h.floors, 3);
+    let l = look(sk, seed, true);
+    let l = Look {
+        roof: if h.roof_mat.is_empty() {
+            l.roof
+        } else {
+            h.roof_mat
+        },
+        ..l
+    };
+    let raised = h.raised;
+    let deck = matches!(h.porch, Porch::Veranda | Porch::Wraparound);
+    let [fface, right, bface, left] = Face::sides(w, d);
+    let mut fr = Front::of(fface, sk, floors, seed);
+    fr.party = false;
+    fr.ground = Ground::Door;
+    fr.recess = 0.0;
+    fr.lift = raised;
+    fr.steps = !deck;
+    fr.open_below = raised > 0.5;
+    let made = front(b, &fr, sk, &l);
+    let top = made.top;
+    let back = fr.plain_of(bface, true, false);
+    front(b, &back, sk, &l);
+    for f in [right, left] {
+        let side = fr.plain_of(f, false, true);
+        front(b, &side, sk, &l);
+    }
+    cores(b, w, d, &fr, top);
+    let roof_form = h.roof;
+    roof(
+        b,
+        &RoofPlan {
+            x: (-w / 2.0, w / 2.0),
+            y: (0.0, d),
+            z: top,
+            form: roof_form,
+            cover: h.cover,
+            pitch: h.pitch,
+            eaves: if roof_form == Roof::Asian { 0.9 } else { 0.5 },
+            party: false,
+            dormers: if h.extras & DORMERS != 0 {
+                made.axes.iter().map(|a| a - w / 2.0).collect()
+            } else {
+                Vec::new()
+            },
+            gable: Gable::Plain,
+            seed,
+            extras: h.extras,
+            top: sk.top,
+            block: false,
+        },
+        &l,
+    );
+    if raised > 0.5 {
+        stilts(b, w, d, raised, &l);
+    }
+    // The door's axis, as the front put it.
+    let n = made.axes.len();
+    let door_x = made.axes[if n % 2 == 1 {
+        n / 2
+    } else if unit(seed, 11) > 0.5 {
+        0
+    } else {
+        n - 1
+    }] - w / 2.0;
+    porch(
+        b,
+        h.porch,
+        &fface,
+        w,
+        d,
+        raised,
+        &fr,
+        &l,
+        roof_form == Roof::Flat,
+        door_x + w / 2.0,
+    );
+    plot(b, h.fence, w, d, door_x, raised, seed, &l, h.extras);
+    finish(b, &l);
+}
+
+/// Posts under a house on stilts and the lattice round them.
+fn stilts(b: &mut Builder, w: f64, d: f64, raised: f64, l: &Look) {
+    let nx = (w / 2.5).ceil() as usize;
+    let ny = (d / 2.5).ceil() as usize;
+    for i in 0..=nx {
+        for j in 0..=ny {
+            let x = -w / 2.0 + 0.2 + (w - 0.4) * i as f64 / nx as f64;
+            let y = 0.2 + (d - 0.4) * j as f64 / ny as f64;
+            b.rbox(
+                "c_concrete",
+                [x - 0.12, y - 0.12, 0.0],
+                [x + 0.12, y + 0.12, raised],
+                0.0,
+            );
+        }
+    }
+    b.rbox(
+        l.door,
+        [-w / 2.0, 0.0, raised - 0.25],
+        [w / 2.0, d, raised],
+        0.0,
+    );
+    for f in Face::sides(w, d) {
+        grille_plane(
+            b,
+            &f,
+            l.trim,
+            (0.3, f.len - 0.3),
+            (0.0, raised - 0.25),
+            -0.05,
+            0.1,
+            2,
+        );
+    }
+}
+
+/// The porch of a house.
+#[allow(clippy::too_many_arguments)]
+fn porch(
+    b: &mut Builder,
+    kind: Porch,
+    f: &Face,
+    w: f64,
+    d: f64,
+    raised: f64,
+    fr: &Front,
+    l: &Look,
+    flat: bool,
+    door_s: f64,
+) {
+    let zg = fr.z(1).min(fr.top());
+    match kind {
+        Porch::None => {}
+        Porch::Portico => {
+            let c = door_s;
+            let (a, e) = ((c - 1.1).max(0.1), (c + 1.1).min(w - 0.1));
+            let out = 1.7;
+            let floor = raised.max(0.15);
+            f.bx(b, l.base, (a, e), (0.0, floor), (-0.02, out));
+            let zp = (fr.lift + 2.95).min(zg - 0.05);
+            for x in [a + 0.2, e - 0.2] {
+                f.bar(b, l.trim, (x, floor), (x, zp), out - 0.2, 0.09, 12);
+            }
+            f.bx(b, l.trim, (a, e), (zp, zp + 0.2), (-0.02, out));
+            let fp = f.moved(out);
+            fp.prism(
+                b,
+                l.roof,
+                &[
+                    (a - 0.05, zp + 0.2),
+                    (e + 0.05, zp + 0.2),
+                    ((a + e) / 2.0, zp + 0.7),
+                ],
+                (-out, 0.05),
+            );
+            fp.prism(
+                b,
+                l.trim,
+                &[
+                    (a + 0.1, zp + 0.24),
+                    (e - 0.1, zp + 0.24),
+                    ((a + e) / 2.0, zp + 0.6),
+                ],
+                (0.05, 0.08),
+            );
+            if raised > 0.3 {
+                steps_out(b, f, (c - 0.7, c + 0.7), out, raised, l);
+            }
+        }
+        Porch::Veranda | Porch::Wraparound => {
+            let out = 2.4;
+            let all = kind == Porch::Wraparound;
+            let sides: Vec<Face> = if all {
+                faces((-w / 2.0, w / 2.0), (0.0, d)).to_vec()
+            } else {
+                vec![*f]
+            };
+            let floor = raised.max(0.25);
+            let zr = zg - 0.1;
+            for (i, sf) in sides.iter().enumerate() {
+                let ext = if all && i % 2 == 0 { out } else { 0.0 };
+                let s = (-ext, sf.len + ext);
+                sf.bx(b, l.door, s, (floor - 0.15, floor), (-0.02, out));
+                if raised > 0.3 {
+                    sf.bx(b, l.trim, s, (0.0, floor - 0.15), (out - 0.1, out));
+                }
+                // Posts and rails.
+                let n = ((s.1 - s.0) / 2.3).round().max(1.0) as usize;
+                for k in 0..=n {
+                    let x = s.0 + 0.1 + (s.1 - s.0 - 0.2) * k as f64 / n as f64;
+                    sf.bx(
+                        b,
+                        l.trim,
+                        (x - 0.07, x + 0.07),
+                        (floor, zr),
+                        (out - 0.2, out - 0.06),
+                    );
+                }
+                if raised > 0.3 {
+                    let door = if i == 0 {
+                        Some((door_s - 0.7, door_s + 0.7))
+                    } else {
+                        None
+                    };
+                    let mut runs = vec![(s.0 + 0.1, s.1 - 0.1)];
+                    if let Some((a, e)) = door {
+                        runs = vec![(s.0 + 0.1, a), (e, s.1 - 0.1)];
+                    }
+                    for (a, e) in runs {
+                        if e - a > 0.3 {
+                            railing(b, sf, l.trim, (a, e), floor, out - 0.13, 0.9, 0.12);
+                        }
+                    }
+                } else {
+                    let _ = 0;
+                }
+                sf.leaning(b, l.roof, s, (zr + 0.4, 0.0), (zr, out + 0.15), 0.05);
+                sf.bx(
+                    b,
+                    l.trim,
+                    s,
+                    (zr - 0.2, zr + 0.08),
+                    (out - 0.22, out - 0.04),
+                );
+            }
+            if raised > 0.3 {
+                steps_out(b, f, (door_s - 0.7, door_s + 0.7), out, raised, l);
+            }
+        }
+        Porch::Arcade => {
+            let out = 2.4;
+            let n = ((w - 0.4) / 3.0).round().max(2.0) as usize;
+            let top = zg - 0.05;
+            let fp = f.moved(out);
+            let mut piers = Vec::new();
+            for k in 0..=n {
+                let x = 0.2 + (w - 0.4) * k as f64 / n as f64;
+                let x = x.clamp(0.25, w - 0.25);
+                piers.push((x - 0.22, x + 0.22));
+            }
+            for &(a, e) in &piers {
+                fp.bx(b, l.trim, (a, e), (0.0, top), (-0.44, 0.0));
+            }
+            for p in piers.windows(2) {
+                let (a, e) = (p[0].1, p[1].0);
+                let r = (e - a) / 2.0;
+                let spring = top - 0.45 - r;
+                if spring > 1.8 {
+                    super::super::ensanche::arch_fill(b, &fp, l.wall, (a, e), spring, (-0.44, 0.0));
+                }
+            }
+            fp.bx(b, l.wall, (0.0, w), (top - 0.45, top), (-0.44, 0.0));
+            f.bx(b, "paving", (0.0, w), (0.0, 0.05), (0.0, out));
+            if flat {
+                f.bx(b, l.wall, (0.0, w), (top, top + 0.25), (-0.02, out));
+                fp.bx(b, l.wall, (0.0, w), (top + 0.25, top + 1.0), (-0.2, 0.0));
+            } else {
+                f.leaning(
+                    b,
+                    l.roof,
+                    (-0.1, w + 0.1),
+                    (top + 0.45, 0.0),
+                    (top, out + 0.2),
+                    0.06,
+                );
+            }
+        }
+    }
+}
+
+/// Steps from a raised porch down to the garden, `out` from the wall.
+fn steps_out(b: &mut Builder, f: &Face, s: (f64, f64), out: f64, lift: f64, l: &Look) {
+    let n = (lift / 0.18).ceil().max(1.0) as usize;
+    let rise = lift / n as f64;
+    let run = 0.28;
+    for j in 0..n.saturating_sub(1) {
+        f.bx(
+            b,
+            l.base,
+            s,
+            (0.0, lift - rise * (j + 1) as f64),
+            (out - 0.05, out + run * (j + 1) as f64),
+        );
+    }
+}
+
+/// The plot round a house: grass, the path to the door, the fence or the
+/// wall with its gate, and a tree.
+#[allow(clippy::too_many_arguments)]
+fn plot(
+    b: &mut Builder,
+    fence: Fence,
+    w: f64,
+    d: f64,
+    door_x: f64,
+    raised: f64,
+    seed: u64,
+    l: &Look,
+    extras: u32,
+) {
+    let px = (-w / 2.0 - 3.0, w / 2.0 + 3.0);
+    let py = (-3.0, d + 5.5);
+    b.rbox("lawn", [px.0, py.0, 0.0], [px.1, py.1, 0.02], 0.0);
+    let path_from = d + if raised > 0.3 {
+        2.4 + (raised / 0.18).ceil() * 0.28
+    } else {
+        0.0
+    };
+    if path_from < py.1 {
+        b.rbox(
+            "paving",
+            [door_x - 0.6, path_from, 0.0],
+            [door_x + 0.6, py.1, 0.035],
+            0.0,
+        );
+    }
+    let gate = (door_x - 0.7 - px.0, door_x + 0.7 - px.0);
+    let fronts = faces(px, py);
+    // The front with its gate, and the two sides.
+    for (i, f) in fronts.iter().enumerate() {
+        if i == 2 {
+            continue;
+        }
+        let runs: Vec<(f64, f64)> = if i == 0 {
+            vec![(0.0, gate.0), (gate.1, f.len)]
+        } else {
+            vec![(0.0, f.len)]
+        };
+        for (a, e) in runs {
+            if e - a < 0.2 {
+                continue;
+            }
+            match fence {
+                Fence::None => {}
+                Fence::Picket => {
+                    f.bx(b, "b_white", (a, e), (0.3, 0.38), (-0.06, -0.03));
+                    f.bx(b, "b_white", (a, e), (0.75, 0.83), (-0.06, -0.03));
+                    let mut x = a + 0.05;
+                    while x < e - 0.03 {
+                        f.prism(
+                            b,
+                            "b_white",
+                            &[
+                                (x - 0.035, 0.0),
+                                (x + 0.035, 0.0),
+                                (x + 0.035, 0.95),
+                                (x, 1.02),
+                                (x - 0.035, 0.95),
+                            ],
+                            (-0.03, 0.0),
+                        );
+                        x += 0.13;
+                    }
+                }
+                Fence::Wall => {
+                    f.bx(b, l.wall, (a, e), (0.0, 1.1), (-0.25, 0.0));
+                    f.bx(b, l.trim, (a - 0.02, e + 0.02), (1.1, 1.17), (-0.28, 0.03));
+                }
+                Fence::Hedge => {
+                    let c = f.at((a + e) / 2.0, 0.0, -0.4);
+                    let half = (e - a) / 2.0;
+                    let lo = [
+                        c[0] - (f.u[0] * half).abs() - 0.35 * f.u[1].abs(),
+                        c[1] - (f.u[1] * half).abs() - 0.35 * f.u[0].abs(),
+                        0.0,
+                    ];
+                    let hi = [
+                        c[0] + (f.u[0] * half).abs() + 0.35 * f.u[1].abs(),
+                        c[1] + (f.u[1] * half).abs() + 0.35 * f.u[0].abs(),
+                        1.2,
+                    ];
+                    b.rbox("hedge", lo, hi, 0.25);
+                }
+                Fence::Iron => {
+                    f.bx(b, l.wall, (a, e), (0.0, 0.5), (-0.25, 0.0));
+                    f.bx(b, l.trim, (a - 0.02, e + 0.02), (0.5, 0.56), (-0.28, 0.03));
+                    railing(b, f, "iron", (a + 0.05, e - 0.05), 0.56, -0.125, 0.95, 0.12);
+                }
+            }
+        }
+    }
+    // The gate.
+    let f = &fronts[0];
+    match fence {
+        Fence::Wall | Fence::Iron => {
+            for x in [gate.0, gate.1] {
+                f.bx(b, l.wall, (x - 0.22, x + 0.22), (0.0, 1.5), (-0.3, 0.05));
+                f.bx(b, l.trim, (x - 0.26, x + 0.26), (1.5, 1.58), (-0.34, 0.09));
+            }
+            grille_plane(
+                b,
+                f,
+                "iron",
+                (gate.0 + 0.22, gate.1 - 0.22),
+                (0.05, 1.3),
+                -0.12,
+                0.11,
+                3,
+            );
+        }
+        Fence::Picket => {
+            for x in [gate.0, gate.1] {
+                f.bx(b, "b_white", (x - 0.05, x + 0.05), (0.0, 1.1), (-0.08, 0.0));
+            }
+            f.bx(
+                b,
+                "b_white",
+                (gate.0 + 0.05, gate.1 - 0.05),
+                (0.3, 0.38),
+                (-0.06, -0.03),
+            );
+            f.bx(
+                b,
+                "b_white",
+                (gate.0 + 0.05, gate.1 - 0.05),
+                (0.75, 0.83),
+                (-0.06, -0.03),
+            );
+            let mut x = gate.0 + 0.1;
+            while x < gate.1 - 0.05 {
+                f.bx(
+                    b,
+                    "b_white",
+                    (x - 0.03, x + 0.03),
+                    (0.3, 0.95),
+                    (-0.03, 0.0),
+                );
+                x += 0.13;
+            }
+        }
+        _ => {}
+    }
+    // A mailbox for the picket fences, a tree, a palm.
+    if fence == Fence::Picket {
+        let p = f.at(gate.1 + 0.6, 0.0, -0.4);
+        b.rbox(
+            "metal",
+            [p[0] - 0.03, p[1] - 0.03, 0.0],
+            [p[0] + 0.03, p[1] + 0.03, 1.05],
+            0.0,
+        );
+        b.rbox(
+            l.door,
+            [p[0] - 0.12, p[1] - 0.25, 1.05],
+            [p[0] + 0.12, p[1] + 0.25, 1.3],
+            0.06,
+        );
+    }
+    if extras & TREE != 0 {
+        fruit_tree(
+            b,
+            [px.0 + 1.6, d + 3.0],
+            4.2 + 1.2 * unit(seed, 31),
+            seed,
+            false,
+        );
+    }
+    if extras & PALM != 0 {
+        palm(b, [px.1 - 1.4, d + 3.2], 6.5 + 2.0 * unit(seed, 32), seed);
+    }
+    let _ = REVEAL;
+}

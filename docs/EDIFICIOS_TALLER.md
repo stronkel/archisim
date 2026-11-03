@@ -53,7 +53,36 @@ Los ejes 1 y 2 dan el volumen; los ejes 3, 4 y 5 dan la piel. Hay detalles que h
 3. **Tanda 3, usos singulares** (hecha, en revisión): mercado de abastos, iglesia parroquial, plaza de toros, colegio, centro de salud, gasolinera. Quedan para otra: ermita, ayuntamiento, casa cuartel, cementerio, estación de autobuses.
 4. **Tanda 4, regiones de España** (hecha, en revisión): casa castellana con soportales, caserío vasco, casa con galería gallega, masía catalana, casa canaria, casa payesa ibicenca. Quedan: casa montañesa con solana, hórreo y palloza, barraca valenciana, casa manchega, casas colgadas, casa de piedra de sierra.
 5. **Tanda 5, ciudad y comercio** (hecha, en revisión): torre de oficinas, oficinas de los 70, parque empresarial, cafetería de esquina, comercio con viviendas en cuatro versiones, hotel urbano, supermercado.
-6. **Tanda 6, pieles por región:** cada tipología con una piel por lugar, en un reparto equilibrado: Andalucía; España y sus regiones; Algarve y Portugal; Francia; Italia; Reino Unido; centro de Europa; Bélgica y Países Bajos; nórdico; Estados Unidos (Nueva York y Chicago, rural, California); Latinoamérica; China, Japón y Corea. Propuestos además: Grecia y el Mediterráneo oriental, Magreb y Oriente Medio, Europa del Este, Australia y el trópico.
+6. **Tanda 6, pieles por lugar** (hecha, en revisión): tres tipologías (casa entre medianeras, bloque exento y vivienda aislada) vestidas con la piel de 24 lugares (§4).
 7. **Tanda 7, por sitio:** al traer el entorno (Catastro, OpenStreetMap, LiDAR), cada masa toma la tipología por su uso y sus plantas y la piel por la zona geográfica de la georreferencia; todo editable a mano después.
 
 Cuando Antonio apruebe una tanda, la integración será que los estilos de U6 (y U7, al traer el Catastro) usen estos modelos sobre la planta y las plantas que tenga cada masa.
+
+## 4. Las pieles por lugar (tanda 6)
+
+Una **piel** dice con qué y cómo construye un lugar; las **tipologías** son el volumen. Con eso, un edificio traído de un mapa puede tomar la piel de donde está (tanda 7) y cambiarse luego a mano con el parámetro «Lugar».
+
+- **Tipologías:** «Casa entre medianeras del mundo», «Bloque de viviendas del mundo» y «Vivienda aislada del mundo» (carpeta «Taller · Edificios del mundo»). Cada una tiene «Lugar», «Variante», fachada, fondo y plantas.
+- **Qué lleva cada piel:**
+  - colores de fachada, zócalo, recercados, carpintería, contraventanas y puertas: cada edificio elige uno de la lista por su variante;
+  - las ventanas: abatibles, de guillotina o correderas, con sus cuarterones, y lo que las cierra (persiana enrollable, contraventanas de lamas o de tablas);
+  - el remate del hueco: recercado, guardapolvo, frontón, arco o clave;
+  - los balcones: de forja, corridos, de madera con tejadillo, galería, mirador, escalera de incendios, verandas de encaje, celosías, jaulas, terrazas acristaladas o balcones corridos con antepecho;
+  - la planta baja: puerta, comercio, escalinata, soportales, garaje, celosía de madera o pilotis con coches;
+  - la cornisa;
+  - la cubierta: plana con pretil o balaustrada, a dos aguas, hastial a la calle escalonado o de campana, a cuatro aguas, mansarda con buhardillas o la oriental. Va de teja curva, en hiladas (pizarra, teja plana, tejuela) o de chapa con sus juntas;
+  - lo que cada sitio pone en la fachada y en la azotea: aires acondicionados, ropa tendida, jardineras, depósitos, chimeneas con sus cañones, la chimenea algarvía, el depósito de madera de Nueva York, los calentadores solares, rótulos verticales…
+- **Los 24 lugares:**
+  - España: Andalucía; Castilla y Madrid; Galicia y el Cantábrico; Cataluña y Levante.
+  - Península: Lisboa y Portugal; Algarve.
+  - Europa: París; Italia; Reino Unido; Centroeuropa; Países Bajos y Bélgica; Países nórdicos.
+  - América: Nueva York y Chicago; Estados Unidos rural; California; San Francisco; Latinoamérica colonial.
+  - Asia: China; Japón; Corea.
+  - Otros: Grecia y el Mediterráneo oriental; Magreb y Oriente Medio; Europa del Este; Australia y el trópico.
+- **Para verlos:**
+  - `archisim mundo out/` crea `out/mundo.archisim`, con una fila por lugar: tres casas de su calle, su bloque y su vivienda aislada. Con `archisim mundo out/ paris japon` saca solo esos lugares.
+  - Fotos: `ARCHISIM_MUNDO_OUT=carpeta cargo test --release -p archisim-app -- world_pictures`. Hace una hoja por lugar; con `ARCHISIM_MUNDO=paris,japon` solo esos.
+- **Para el programador:**
+  - las pieles son datos en `archisim_props::fine::buildings::world::skins` (`SKINS`);
+  - la fachada está en `world::facade`, la cubierta en `world::roofs` y las tipologías en `world::types`;
+  - los materiales, uno por papel, están en `world::MATERIALS`.
