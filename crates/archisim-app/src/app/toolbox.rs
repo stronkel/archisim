@@ -1880,7 +1880,7 @@ impl ArchiSimApp {
 }
 
 /// A square button of the rail: in the discipline's colour.
-fn rail_button(
+pub(super) fn rail_button(
     ui: &mut Ui,
     on: bool,
     hue: Hue,

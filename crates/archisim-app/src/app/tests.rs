@@ -9582,3 +9582,53 @@ fn a_street_widened_in_sketch_mode() {
     assert!((r.strips_at(50.0)[0].width - (w0 + 2.0)).abs() < 0.011);
     assert_eq!(h.app.ed.undo_label(), Some("Editar bordillos y fachadas"));
 }
+
+/// The Maqueta has the same bars as Técnica (V5, `docs/INTERFAZ.md`
+/// §12.7): «Entregar» above and «Vista · Anotar · Ayudas» below; its rail
+/// holds the rooms, and a room's catalog is in the column beside it.
+#[test]
+fn maquette_has_the_same_bars_and_rooms_in_the_rail() {
+    use super::missions_ui::marked;
+    let mut h = Harness::new(Editor::new_project());
+    h.frame();
+    h.key(Key::F4);
+    h.frame();
+    h.frame();
+    assert!(h.app.maquette);
+    let ctx = h.ctx.clone();
+    // The rooms of the rail, top to bottom.
+    let rooms: Vec<Rect> = super::maquette_ui::ROOMS
+        .iter()
+        .map(|r| marked(&ctx, &format!("room:{}", r.name)).unwrap_or_else(|| panic!("{}", r.name)))
+        .collect();
+    assert!(rooms.windows(2).all(|w| w[0].top() < w[1].top()));
+    // The kitchen: its catalog in the column, with its kinds.
+    let kitchen = marked(&ctx, "room:Cocina").unwrap();
+    h.click_screen(kitchen.center());
+    assert_eq!(
+        h.app.catalog_group,
+        super::maquette_ui::CatalogGroup::Furnish
+    );
+    assert_eq!(h.app.catalog_theme, "Cocina");
+    // Outside: its themes as chips; the first one shown.
+    let outside = marked(&ctx, "room:Exterior").unwrap();
+    h.click_screen(outside.center());
+    assert_eq!(
+        h.app.catalog_group,
+        super::maquette_ui::CatalogGroup::Outside
+    );
+    assert_eq!(h.app.catalog_theme, "Jardín y terraza");
+    // The cards are beside the rail, left of the 3D view.
+    let card = marked(&ctx, "card:Pincel");
+    if let Some(c) = card {
+        assert!(c.right() < h.app.v3d.canvas.left());
+    }
+    for r in &rooms {
+        assert!(r.right() < h.app.v3d.canvas.left());
+    }
+    // The same bars as Técnica: «Entregar» above, «Anotar» below.
+    let deliver = marked(&ctx, "bar:Entregar").expect("Entregar in the Maqueta");
+    let notes = marked(&ctx, "bar:Anotar").expect("Anotar in the Maqueta");
+    assert!(deliver.bottom() < h.app.v3d.canvas.top());
+    assert!(notes.top() > h.app.v3d.canvas.bottom());
+}

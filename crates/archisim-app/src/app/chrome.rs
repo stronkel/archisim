@@ -178,6 +178,7 @@ impl ArchiSimApp {
         let r = ui.add(button).on_hover_text(
             "Todo lo que sale del proyecto: modelo IFC, planos y documentos, mediciones e imágenes",
         );
+        super::missions_ui::mark(ui.ctx(), "bar:Entregar", r.rect);
         icons::paint(
             ui.painter(),
             Rect::from_center_size(
@@ -716,7 +717,13 @@ impl ArchiSimApp {
                 ViewMode::Plan | ViewMode::Sheet(_) | ViewMode::Drafting(_)
             );
             ui.separator();
+            let at = ui.cursor().min;
             caption(ui, "Anotar");
+            super::missions_ui::mark(
+                ui.ctx(),
+                "bar:Anotar",
+                Rect::from_min_size(at, Vec2::new(40.0, 20.0)),
+            );
             if drawn {
                 self.drawing_segments(ui);
             } else {

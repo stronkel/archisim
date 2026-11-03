@@ -1,10 +1,11 @@
-//! The «Maqueta» environment (`docs/MAQUETA.md`): the same model and the
-//! same tools, shown as Los Sims or Paralives would. The 3D view fills
-//! the window; a catalog at the bottom (Construir · Amueblar · Exterior)
-//! replaces the tiles and the types; a card next to what is selected
-//! replaces Properties; the top bar keeps only undo, the level, the walls
-//! cut away and the grid. «Técnica · Maqueta» switches between the two
-//! environments, keeping the selection.
+//! The «Maqueta» environment (`docs/MAQUETA.md`, `docs/INTERFAZ.md` §12.7):
+//! the same model and the same tools, shown as Los Sims or Paralives would,
+//! with the same bars as Técnica. The rail holds the rooms (Construir, each
+//! room to furnish, Exterior), the column beside it the catalog of the room
+//! (its themes, kinds and cards); the 3D view fills the middle with a row
+//! for the level, the walls cut away, the grid and the light; a card next
+//! to what is selected replaces Properties. «Técnica · Maqueta» switches
+//! between the two environments, keeping the selection.
 
 use super::widgets::SwitchExt as _;
 use archisim_core::{DormerKind, LevelId, OpeningTypeId, Point2};
@@ -31,13 +32,24 @@ pub enum CatalogGroup {
 }
 
 impl CatalogGroup {
-    const ALL: [CatalogGroup; 3] = [Self::Build, Self::Furnish, Self::Outside];
-
-    fn name(self) -> &'static str {
+    /// The colour of the group, as the disciplines': what is built as
+    /// Arquitectura, what furnishes as Presentación, the outside as
+    /// Urbanismo.
+    pub(super) fn hue(self, dark: bool) -> super::toolbox::Hue {
+        use super::toolbox::Discipline as D;
         match self {
-            Self::Build => "Construir",
-            Self::Furnish => "Amueblar",
-            Self::Outside => "Exterior",
+            Self::Build => D::Architecture.hue(dark),
+            Self::Furnish => D::Presentation.hue(dark),
+            Self::Outside => D::Site.hue(dark),
+        }
+    }
+
+    /// What it is for, under its name in the column.
+    fn purpose(self) -> &'static str {
+        match self {
+            Self::Build => "Habitaciones, puertas, ventanas, cubiertas y escaleras",
+            Self::Furnish => "Muebles y piezas de la estancia",
+            Self::Outside => "Jardín, vegetación, calle y terreno",
         }
     }
 
@@ -77,6 +89,37 @@ impl CatalogGroup {
         }
     }
 }
+
+/// A room of the Maqueta's rail (V5): its name (the theme it furnishes,
+/// or the group), its drawing and its group.
+pub(super) struct RailRoom {
+    pub name: &'static str,
+    glyph: Glyph,
+    pub group: CatalogGroup,
+}
+
+/// The rail of the Maqueta, top to bottom.
+pub(super) const ROOMS: [RailRoom; 13] = {
+    use CatalogGroup::{Build, Furnish, Outside};
+    const fn r(name: &'static str, glyph: Glyph, group: CatalogGroup) -> RailRoom {
+        RailRoom { name, glyph, group }
+    }
+    [
+        r("Construir", Glyph::Build, Build),
+        r("Salón", Glyph::Sofa, Furnish),
+        r("Comedor", Glyph::Dining, Furnish),
+        r("Cocina", Glyph::Kitchen, Furnish),
+        r("Baño", Glyph::Bath, Furnish),
+        r("Dormitorio", Glyph::Bed, Furnish),
+        r("Despacho", Glyph::Desk, Furnish),
+        r("Decoración", Glyph::Decor, Furnish),
+        r("Deporte", Glyph::Sport, Furnish),
+        r("Hostelería y comercio", Glyph::Shop, Furnish),
+        r("Diseño", Glyph::Design, Furnish),
+        r("Otros", Glyph::Object, Furnish),
+        r("Exterior", Glyph::Outside, Outside),
+    ]
+};
 
 /// The room a folder of the object library furnishes.
 fn room_of(folder: &str) -> &'static str {
@@ -230,8 +273,8 @@ struct Card {
     sub: String,
 }
 
-/// Height of the catalog at the bottom.
-const CATALOG_HEIGHT: f32 = 204.0;
+/// Width of the catalog's column beside the rail: two cards abreast.
+const CATALOG_WIDTH: f32 = 270.0;
 /// Size of a card.
 const CARD: Vec2 = Vec2::new(112.0, 108.0);
 /// Spacing of the ground grid.
@@ -294,36 +337,97 @@ impl ArchiSimApp {
         }
     }
 
-    /// The whole window in the Maqueta.
+    /// The whole window in the Maqueta (V5, `docs/INTERFAZ.md` §12.7): the
+    /// same bars as Técnica in the same place (the project above; the
+    /// view, notes and aids below), the rooms in the rail, the catalog in
+    /// the column beside it, and the 3D view in the middle with its own
+    /// row: the level, the walls cut away, the grid and the light.
     pub(super) fn maquette_frame(&mut self, ui: &mut Ui) {
         let p = Palette::current(ui.ctx());
-        let bar = |fill| {
-            egui::Frame::new()
-                .fill(fill)
-                .inner_margin(egui::Margin::symmetric(10, 4))
-                .stroke(Stroke::new(1.0, p.line))
-        };
         if self.mode != ViewMode::ThreeD {
             self.set_mode(ViewMode::ThreeD);
         }
-        egui::Panel::top("maquette-top")
-            .frame(bar(p.panel))
-            .show(ui, |ui| self.maquette_top_bar(ui));
-        egui::Panel::bottom("maquette-catalog")
+        ui.painter()
+            .rect_filled(ui.max_rect(), CornerRadius::ZERO, p.ground);
+        let gap = 5;
+        let island = |m: egui::Margin| {
+            egui::Frame::new()
+                .fill(p.panel)
+                .corner_radius(CornerRadius::same(14))
+                .stroke(Stroke::new(1.0, p.line))
+                .shadow(egui::epaint::Shadow {
+                    offset: [0, 2],
+                    blur: 10,
+                    spread: 0,
+                    color: Color32::from_black_alpha(14),
+                })
+                .outer_margin(m)
+        };
+        let side = |l: i8, r: i8| egui::Margin {
+            left: l,
+            right: r,
+            top: gap,
+            bottom: gap,
+        };
+        egui::Panel::top("top-bar")
+            .frame(
+                island(egui::Margin {
+                    left: gap * 2,
+                    right: gap * 2,
+                    top: gap * 2,
+                    bottom: gap,
+                })
+                .inner_margin(egui::Margin::symmetric(10, 3)),
+            )
+            .show(ui, |ui| self.top_bar(ui));
+        egui::Panel::bottom("bottom-bar")
+            .frame(
+                island(egui::Margin {
+                    left: gap * 2,
+                    right: gap * 2,
+                    top: gap,
+                    bottom: gap * 2,
+                })
+                .inner_margin(egui::Margin::symmetric(10, 3)),
+            )
+            .show(ui, |ui| self.bottom_bar(ui));
+        egui::Panel::left("maquette-rooms")
             .resizable(false)
-            .exact_size(CATALOG_HEIGHT)
-            .frame(bar(p.panel))
-            .show(ui, |ui| self.maquette_catalog(ui));
-        egui::CentralPanel::no_frame().show(ui, |ui| {
+            .exact_size(super::RAIL_WIDTH + (gap * 3) as f32)
+            .frame(island(side(gap * 2, gap)).inner_margin(egui::Margin::symmetric(4, 6)))
+            .show(ui, |ui| self.maquette_rail(ui));
+        egui::Panel::left("maquette-catalog")
+            .resizable(true)
+            .default_size(CATALOG_WIDTH)
+            .min_size(CATALOG_WIDTH - 60.0)
+            .max_size(CATALOG_WIDTH + 200.0)
+            .frame(island(side(gap, gap)).inner_margin(egui::Margin::symmetric(10, 6)))
+            .show(ui, |ui| self.maquette_column(ui));
+        let centre = egui::Frame::new()
+            .fill(p.panel)
+            .corner_radius(CornerRadius::same(14))
+            .stroke(Stroke::new(1.0, p.line))
+            .outer_margin(side(gap, gap * 2))
+            .inner_margin(egui::Margin::same(1));
+        egui::CentralPanel::default().frame(centre).show(ui, |ui| {
             ui.spacing_mut().item_spacing.y = 0.0;
+            egui::Panel::top("maquette-view-row")
+                .resizable(false)
+                .exact_size(super::context_bar::CONTEXT_BAR_HEIGHT)
+                .frame(
+                    egui::Frame::new()
+                        .fill(p.panel)
+                        .inner_margin(egui::Margin::symmetric(8, 0))
+                        .stroke(Stroke::new(1.0, p.line)),
+                )
+                .show(ui, |ui| self.maquette_view_row(ui));
             self.view_3d(ui);
         });
         let ctx = ui.ctx().clone();
-        let bottom = ctx.content_rect().bottom() - CATALOG_HEIGHT;
-        self.object_bar(&ctx, bottom);
+        let canvas = self.v3d.canvas;
+        self.object_bar(&ctx, canvas.bottom());
         self.maquette_more(&ctx);
-        let top = ctx.content_rect().top() + 44.0;
-        self.brush_panel_maquette(&ctx, top, bottom);
+        self.brush_panel_maquette(&ctx, canvas.left(), canvas.top(), canvas.bottom());
     }
 
     /// Walking as in a game: W A S D forwards, left, back and right along
@@ -376,36 +480,12 @@ impl ArchiSimApp {
         ctx.request_repaint();
     }
 
-    fn maquette_top_bar(&mut self, ui: &mut Ui) {
+    /// The row over the Maqueta's 3D view: the level (down and up), the
+    /// grid, the picture and its light, and «Encuadrar» (the walls cut
+    /// away are in the bar below, as in Técnica).
+    fn maquette_view_row(&mut self, ui: &mut Ui) {
         let p = Palette::current(ui.ctx());
-        ui.horizontal(|ui| {
-            ui.set_min_height(32.0);
-            ui.label(
-                egui::RichText::new("ArchiSim")
-                    .font(strong_font(14.0))
-                    .color(p.text),
-            );
-            ui.add_space(8.0);
-            if ui
-                .add_enabled(
-                    self.ed.undo_label().is_some(),
-                    egui::Button::new("↶ Deshacer"),
-                )
-                .clicked()
-            {
-                self.undo();
-            }
-            if ui
-                .add_enabled(
-                    self.ed.redo_label().is_some(),
-                    egui::Button::new("↷ Rehacer"),
-                )
-                .clicked()
-            {
-                self.redo();
-            }
-            ui.separator();
-            // The level: down and up.
+        ui.horizontal_centered(|ui| {
             let levels: Vec<(LevelId, String, f64)> = {
                 let mut v: Vec<_> = self
                     .ed
@@ -440,8 +520,7 @@ impl ArchiSimApp {
             {
                 self.switch_level(levels[at + 1].0);
             }
-            ui.separator();
-            self.cutaway_buttons(ui);
+            // The walls cut away are in the bar below, as in Técnica.
             ui.separator();
             ui.switch(&mut self.ground_grid, "Cuadrícula")
                 .on_hover_text(
@@ -450,9 +529,6 @@ impl ArchiSimApp {
             ui.separator();
             self.look_menus(ui);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                self.workspace_switch(ui);
-
-                ui.add_space(10.0);
                 if ui
                     .button("Encuadrar")
                     .on_hover_text("Todo el modelo a la vista (Inicio)")
@@ -513,33 +589,9 @@ impl ArchiSimApp {
             });
     }
 
-    /// Walls up, cut away or low (in the 3D view of both environments).
-    pub(super) fn cutaway_buttons(&mut self, ui: &mut Ui) {
-        ui.spacing_mut().item_spacing.x = 2.0;
-        for c in Cutaway::ALL {
-            let hint = match c {
-                Cutaway::Up => "Todo el edificio",
-                Cutaway::Front => "Los muros entre la cámara y el centro de la vista bajan a 30 cm; los del fondo quedan enteros. Sigue a la cámara al girar. Los muebles no se cortan",
-                Cutaway::Cut => "Corte a 1,20 m sobre la planta: se ve el interior; las plantas de arriba y la cubierta se ocultan. Los muebles no se cortan",
-                Cutaway::Low => "Corte a 30 cm: la planta en 3D. Los muebles no se cortan",
-            };
-            if ui
-                .selectable_label(self.v3d.cutaway == c, c.name())
-                .on_hover_text(hint)
-                .clicked()
-            {
-                self.v3d.cutaway = c;
-            }
-        }
-        // What the cut walls show (the same choice as the section box's).
-        if self.v3d.cutaway != Cutaway::Up {
-            ui.separator();
-            super::view3d_ui::caps_choice(ui, &mut self.v3d.caps);
-        }
-    }
-
-    /// The same choice in a list, for the bottom bar of Técnica, where
-    /// the segments must keep their place (§12.3).
+    /// Walls up, cut away or low, in a list in the bottom bar of both
+    /// environments, where the segments keep their place (§12.3), with
+    /// what the cut walls show.
     pub(super) fn cutaway_combo(&mut self, ui: &mut Ui) {
         let current = self.v3d.cutaway;
         egui::ComboBox::from_id_salt("bar-cutaway")
@@ -547,7 +599,22 @@ impl ArchiSimApp {
             .selected_text(current.name())
             .show_ui(ui, |ui| {
                 for c in Cutaway::ALL {
-                    ui.selectable_value(&mut self.v3d.cutaway, c, c.name());
+                    let hint = match c {
+                        Cutaway::Up => "Todo el edificio",
+                        Cutaway::Front => "Los muros entre la cámara y el centro de la vista bajan a 30 cm; los del fondo quedan enteros. Sigue a la cámara al girar. Los muebles no se cortan",
+                        Cutaway::Cut => "Corte a 1,20 m sobre la planta: se ve el interior; las plantas de arriba y la cubierta se ocultan. Los muebles no se cortan",
+                        Cutaway::Low => "Corte a 30 cm: la planta en 3D. Los muebles no se cortan",
+                    };
+                    ui.selectable_value(&mut self.v3d.cutaway, c, c.name())
+                        .on_hover_text(hint);
+                }
+                // What the cut walls show (the same choice as the section
+                // box's).
+                if self.v3d.cutaway != Cutaway::Up {
+                    ui.separator();
+                    ui.horizontal(|ui| {
+                        super::view3d_ui::caps_choice(ui, &mut self.v3d.caps);
+                    });
                 }
             })
             .response
@@ -954,53 +1021,143 @@ impl ArchiSimApp {
         }
     }
 
-    fn maquette_catalog(&mut self, ui: &mut Ui) {
+    /// The rail of the Maqueta (V5): the arrow, then what is built, each
+    /// room to furnish and the outside, in the colour of their group.
+    pub(super) fn maquette_rail(&mut self, ui: &mut Ui) {
+        let p = Palette::current(ui.ctx());
+        let dark = ui.visuals().dark_mode;
+        ui.add_space(8.0);
+        egui::ScrollArea::vertical()
+            .id_salt("maquette-rail")
+            .show(ui, |ui| {
+                ui.vertical_centered(|ui| {
+                    ui.spacing_mut().item_spacing.y = 4.0;
+                    let arrow = self.tool == Tool::Arrow;
+                    let blue = super::toolbox::Hue {
+                        main: p.accent,
+                        soft: p.accent_soft,
+                        ink: p.accent,
+                    };
+                    let r =
+                        super::toolbox::rail_button(ui, arrow, blue, p.text, |painter, rect, c| {
+                            super::icons::paint(painter, rect, super::icons::Icon::Arrow, c)
+                        });
+                    if r.on_hover_text("Seleccionar (Esc) — elegir, mover y estirar lo que ya está")
+                        .clicked()
+                    {
+                        self.set_tool(Tool::Arrow);
+                    }
+                    let mut last = None;
+                    for room in ROOMS {
+                        if last.is_some_and(|g| g != room.group) {
+                            let (line, _) =
+                                ui.allocate_exact_size(Vec2::new(28.0, 9.0), Sense::hover());
+                            ui.painter().hline(
+                                line.x_range(),
+                                line.center().y,
+                                Stroke::new(1.0, p.line),
+                            );
+                        }
+                        last = Some(room.group);
+                        let on = self.catalog_room() == room.name;
+                        let hue = room.group.hue(dark);
+                        let r = super::toolbox::rail_button(
+                            ui,
+                            on,
+                            hue,
+                            hue.ink,
+                            |painter, rect, c| glyphs::paint(painter, rect, room.glyph, c),
+                        );
+                        super::missions_ui::mark(ui.ctx(), format!("room:{}", room.name), r.rect);
+                        if r.on_hover_text(room.name).clicked() {
+                            self.catalog_group = room.group;
+                            self.catalog_theme = if room.group == CatalogGroup::Furnish {
+                                room.name
+                            } else {
+                                room.group.themes()[0]
+                            };
+                            self.catalog_sub = None;
+                        }
+                    }
+                });
+            });
+    }
+
+    /// The name of the rail's room the catalog shows.
+    fn catalog_room(&self) -> &'static str {
+        match self.catalog_group {
+            CatalogGroup::Build => "Construir",
+            CatalogGroup::Outside => "Exterior",
+            CatalogGroup::Furnish => ROOMS
+                .iter()
+                .find(|r| r.name == self.catalog_theme)
+                .map_or("Otros", |r| r.name),
+        }
+    }
+
+    /// The column beside the rail in the Maqueta (V5): the room's name, the
+    /// collection, the themes of what is built or outside, the kinds of
+    /// the theme (Bajos, Altos…) and its cards, top to bottom.
+    pub(super) fn maquette_column(&mut self, ui: &mut Ui) {
         let p = Palette::current(ui.ctx());
         let ctx = ui.ctx().clone();
+        let dark = ui.visuals().dark_mode;
+        let hue = self.catalog_group.hue(dark);
+        ui.add_space(8.0);
         ui.horizontal(|ui| {
-            ui.spacing_mut().item_spacing.x = 4.0;
-            for g in CatalogGroup::ALL {
-                let on = self.catalog_group == g;
-                let text = egui::RichText::new(g.name())
-                    .font(strong_font(13.0))
-                    .color(if on { Color32::WHITE } else { p.text });
-                if ui
-                    .add(egui::Button::new(text).fill(if on { p.accent } else { p.panel }))
-                    .clicked()
-                {
-                    self.catalog_group = g;
-                    self.catalog_theme = g.themes()[0];
-                    self.catalog_sub = None;
-                }
-            }
-            ui.separator();
-            let themes = self.catalog_group.themes();
-            if !themes.contains(&self.catalog_theme) {
-                self.catalog_theme = themes[0];
-            }
-            for t in themes {
-                if ui.selectable_label(self.catalog_theme == *t, *t).clicked() {
-                    self.catalog_theme = t;
-                    self.catalog_sub = None;
-                }
-            }
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui
-                    .button("Seleccionar")
-                    .on_hover_text("La flecha: elegir, mover y estirar lo que ya está (Esc)")
-                    .clicked()
-                {
-                    self.set_tool(Tool::Arrow);
-                }
-                if self.catalog_group != CatalogGroup::Build {
-                    ui.separator();
-                    ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
-                        self.collection_chooser(ui);
-                    });
+            let (dot, _) = ui.allocate_exact_size(Vec2::splat(10.0), Sense::hover());
+            ui.painter()
+                .rect_filled(dot, CornerRadius::same(3), hue.main);
+            ui.label(
+                egui::RichText::new(self.catalog_room())
+                    .font(strong_font(12.5))
+                    .color(hue.ink),
+            );
+        });
+        ui.add(
+            egui::Label::new(
+                egui::RichText::new(self.catalog_group.purpose())
+                    .small()
+                    .color(p.muted),
+            )
+            .wrap(),
+        );
+        ui.add_space(4.0);
+        if self.catalog_group != CatalogGroup::Build {
+            self.collection_chooser(ui);
+            ui.add_space(4.0);
+        }
+        let themes = self.catalog_group.themes();
+        if !themes.contains(&self.catalog_theme) {
+            self.catalog_theme = themes[0];
+        }
+        // What is built and what is outside: their themes as chips (a
+        // room to furnish is a theme of its own).
+        let chip = |ui: &mut Ui, label: &str, on: bool| -> bool {
+            let text =
+                egui::RichText::new(label)
+                    .size(12.5)
+                    .color(if on { hue.ink } else { p.text });
+            ui.add(
+                egui::Button::new(text)
+                    .fill(if on { hue.soft } else { p.panel })
+                    .stroke(Stroke::new(1.0, if on { hue.main } else { p.line }))
+                    .corner_radius(CornerRadius::same(12)),
+            )
+            .clicked()
+        };
+        if self.catalog_group != CatalogGroup::Furnish {
+            ui.horizontal_wrapped(|ui| {
+                ui.spacing_mut().item_spacing = Vec2::new(4.0, 4.0);
+                for t in themes {
+                    if chip(ui, t, self.catalog_theme == *t) {
+                        self.catalog_theme = t;
+                        self.catalog_sub = None;
+                    }
                 }
             });
-        });
-        ui.add_space(4.0);
+            ui.add_space(4.0);
+        }
         let mut cards = self.catalog_cards(&ctx, self.catalog_group, self.catalog_theme);
         // The third level of the tree: the kinds of the theme (Bajos,
         // Altos, Columnas…), as chips; «Todas» shows them all.
@@ -1014,40 +1171,20 @@ impl ArchiSimApp {
         if self.catalog_sub.as_ref().is_some_and(|k| !subs.contains(k)) {
             self.catalog_sub = None;
         }
-        ui.horizontal(|ui| {
-            ui.spacing_mut().item_spacing.x = 4.0;
-            ui.add_space(2.0);
-            ui.label(egui::RichText::new("↳").color(p.muted));
-            if subs.len() < 2 {
-                ui.label(
-                    egui::RichText::new(self.catalog_theme)
-                        .font(strong_font(12.5))
-                        .color(p.text),
-                );
-                return;
-            }
-            let chip = |ui: &mut Ui, label: &str, on: bool| -> bool {
-                let text =
-                    egui::RichText::new(label)
-                        .size(12.5)
-                        .color(if on { p.accent } else { p.text });
-                ui.add(
-                    egui::Button::new(text)
-                        .fill(if on { p.accent_soft } else { p.panel })
-                        .stroke(Stroke::new(1.0, if on { p.accent_soft } else { p.line }))
-                        .corner_radius(CornerRadius::same(12)),
-                )
-                .clicked()
-            };
-            if chip(ui, "Todas", self.catalog_sub.is_none()) {
-                self.catalog_sub = None;
-            }
-            for k in &subs {
-                if chip(ui, k, self.catalog_sub.as_deref() == Some(k.as_str())) {
-                    self.catalog_sub = Some(k.clone());
+        if subs.len() >= 2 {
+            ui.horizontal_wrapped(|ui| {
+                ui.spacing_mut().item_spacing = Vec2::new(4.0, 4.0);
+                ui.label(egui::RichText::new("↳").color(p.muted));
+                if chip(ui, "Todas", self.catalog_sub.is_none()) {
+                    self.catalog_sub = None;
                 }
-            }
-        });
+                for k in &subs {
+                    if chip(ui, k, self.catalog_sub.as_deref() == Some(k.as_str())) {
+                        self.catalog_sub = Some(k.clone());
+                    }
+                }
+            });
+        }
         if let Some(k) = &self.catalog_sub {
             cards.retain(|c| &c.sub == k);
         }
@@ -1070,11 +1207,11 @@ impl ArchiSimApp {
             return;
         }
         let mut take = None;
-        egui::ScrollArea::horizontal()
+        egui::ScrollArea::vertical()
             .id_salt("maquette-cards")
             .show(ui, |ui| {
-                ui.horizontal(|ui| {
-                    ui.spacing_mut().item_spacing.x = 8.0;
+                ui.horizontal_wrapped(|ui| {
+                    ui.spacing_mut().item_spacing = Vec2::new(8.0, 8.0);
                     for c in &cards {
                         let on = self.card_on(c.act);
                         let (rect, resp) = ui.allocate_exact_size(CARD, Sense::click());
