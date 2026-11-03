@@ -6,6 +6,79 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-03 (89) · Árboles de cerca, edificios del entorno, Maqueta con las mismas barras (V5) y Presentación completa (V6)
+
+Rama `bloque/interfaz-v5`, con pull request. Formato `.archisim` versión 72 (cámaras guardadas).
+
+Antonio aprobó V1 a V4 de la interfaz y pidió:
+- mejorar los árboles vistos de cerca y los edificios del entorno;
+- seguir con lo pendiente desde V5.
+
+**Hecho**
+- **Árboles de cerca.**
+  - Antes, cada mata de hojas tenía un núcleo de 20 caras que se veía como un hexágono oscuro, con las hojas sueltas a su alrededor.
+  - Ahora las matas se funden por celdas en unos pocos **cogollos redondos** (80 caras, sombreado suave), con las hojas pegadas a su superficie. La copa se lee como los árboles estilizados de la gama: abombada, con hojas que rompen el contorno.
+  - Con muchas plantas en el proyecto, todas bajaban de detalle, también las de delante. Ahora **las 12 plantas más cercanas al origen** (a menos de 60 m) se dibujan con todas sus hojas de cerca, y con la versión del proyecto de lejos.
+- **Edificios del entorno.** Los zócalos, impostas y cornisas de piedra ya no llevan la mampostería, que en una banda estrecha parecía un enlosado: llevan **sillería**. Las cubiertas planas llevan **grava**. Afecta a los edificios que se traen o se ponen a partir de ahora; los materiales que ya están en un proyecto no cambian.
+- **V5 · Maqueta con las mismas barras.**
+  - Arriba, la barra del proyecto con Entregar; abajo, Vista · Anotar · Ayudas, como en Técnica. Los muros recortados se eligen en la lista de abajo, con lo que muestran los cortes.
+  - El **carril** son las estancias, cada una con su dibujo:
+    - Construir (en el color de Arquitectura);
+    - Salón, Comedor, Cocina, Baño, Dormitorio, Despacho, Decoración, Deporte, Hostelería y comercio, Diseño y Otros (en el de Presentación);
+    - Exterior (en el de Urbanismo).
+  - La **columna** es el catálogo de la estancia: colección, temas en pastillas (en Construir y Exterior), clases (Bajos, Altos…) y tarjetas de dos en dos.
+  - Sobre el 3D, una fila con la planta (▼ ▲), Cuadrícula, Imagen, Luz y Encuadrar.
+- **V4, segunda vuelta.**
+  - Tarjetas de medidas también en:
+    - pilares (ancho, fondo, altura);
+    - vigas (longitud, canto, ancho);
+    - cubiertas (espesor, alero, desfase);
+    - escaleras (altura, ancho, huella);
+    - barandillas (longitud, altura, desfase).
+  - Bajo el tipo de cualquier elemento, **«Parecidos»**: cuatro tipos de su carpeta, o los de al lado en la lista, con su dibujo, para cambiar con un clic.
+- **V6 · Presentación.**
+  - **Cámara** guarda el punto de vista del 3D. Las cámaras salen en el navegador, en «Cámaras»: un clic vuelve a mirar desde ella; con clic derecho se renombra, se actualiza con la vista o se borra.
+  - **Recorrido** pone los ojos a 1,60 m sobre la planta activa, donde miraba la vista:
+    - W A S D andan a paso de persona y Mayús corre;
+    - el botón derecho mira alrededor;
+    - Cámara guarda el punto de vista;
+    - Esc vuelve a la vista de antes.
+  - **Sol** abre su panel:
+    - el recorrido del sol en planta para verano, equinoccio e invierno, con el norte del proyecto;
+    - el sol de ahora;
+    - día y hora solar con deslizadores (se apunta al soltar);
+    - botones para los tres días, la altura y el rumbo del sol, y la latitud.
+  - **Aspecto** del 3D: además de Sombreado, Texturas y Realista, **Aristas** (caras en su color pálido y plano, todas las aristas en tinta) y **Líneas ocultas** (papel blanco y las aristas que se ven).
+- Pruebas nuevas:
+  - `maquette_has_the_same_bars_and_rooms_in_the_rail`;
+  - `saved_cameras_and_the_walk`;
+  - cámaras guardadas y leídas en `archisim-core` y `archisim-file`;
+  - fotos de los aspectos con `ARCHISIM_VISTAS_ESTILO=aristas|ocultas` en `project_pictures`.
+
+**Pendiente**
+- Grabar el recorrido como vídeo y poner las cámaras en las láminas de presentación.
+- Tarjetas de medidas de objetos, zapatas, muros cortina y terreno.
+- Pasar los edificios del entorno ya traídos a la piedra y la grava nuevas (por ahora, solo los nuevos).
+
+**Qué debe probar Antonio**
+1. `cargo run -p archisim-cli -- demo out/` y `cargo run --release -p archisim-app -- out/demo.archisim`.
+2. **Árboles:**
+   - En la vista 3D, acércate a los árboles de la demo: copas abombadas con hojas, sin hexágonos.
+   - Con `archisim vivero out/` y `out/vivero.archisim`, mira de cerca el pino piñonero y el olivo, que están junto al origen.
+3. **Entorno:** con `archisim entorno out/`, mira las cornisas y zócalos de piedra y las cubiertas planas.
+4. **Maqueta (Técnica · Maqueta, arriba a la derecha):**
+   - pasa por las estancias del carril y mira las tarjetas de la columna;
+   - Entregar arriba, y Vista · Anotar · Ayudas abajo;
+   - la fila de planta, cuadrícula, imagen y luz sobre el 3D.
+5. **Presentación (carril, pantalla con gráfica):**
+   - en la vista 3D pulsa Cámara: sale en el navegador, en «Cámaras»; gira la vista y pincha la cámara;
+   - pulsa Recorrido y anda por la casa con W A S D y el botón derecho; Esc;
+   - pulsa Sol y mueve día y hora: las sombras cambian al soltar.
+6. **Aspecto** (arriba a la izquierda del 3D): Aristas y Líneas ocultas.
+7. Selecciona un pilar, una viga, una cubierta y una escalera: las tarjetas de medidas y los «Parecidos» bajo el tipo.
+
+---
+
 ## 2026-11-03 (88) · Interfaz, segunda versión: V1 a V4
 
 Rama `bloque/interfaz-v2`, con pull request. Sin cambios de formato ni de IFC. Diseño en `docs/INTERFAZ.md` §12, decidido con Antonio sobre el prototipo «ArchiSim · interfaz por colores y barras».
