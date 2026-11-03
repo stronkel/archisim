@@ -768,11 +768,14 @@ impl Model {
             return m.id;
         }
         let id = self.add_material(name, category, rgb, CutPattern::Solid);
+        // The stylized textures of the 3D (the dressed stone of plinths,
+        // bands and cornices as ashlar, not rubble; flat roofs in gravel).
         let texture = match category {
             "masonry" => Some(TextureKind::Brick),
-            "stone" => Some(TextureKind::Stone),
+            "stone" => Some(TextureKind::Ashlar),
             "concrete" => Some(TextureKind::Concrete),
             "render" => Some(TextureKind::Plaster),
+            "roof" if name.starts_with("Cubierta plana") => Some(TextureKind::Gravel),
             "metal" if name.starts_with("Chapa") => Some(TextureKind::Metal),
             _ => None,
         };

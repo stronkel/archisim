@@ -242,6 +242,12 @@ pub struct Chunk {
 /// within this distance of the project's origin keep their detail.
 const DETAIL_AROUND: f64 = 150.0;
 
+/// How many plants, nearest the project's origin and no farther than
+/// [`NEAR_PLANTS_AROUND`], keep every leaf when there are too many for all
+/// of them to.
+const NEAR_PLANTS: usize = 12;
+const NEAR_PLANTS_AROUND: f64 = 60.0;
+
 /// Triangles in a chunk: small enough to leave out what is not seen,
 /// large enough not to draw too many pieces.
 const CHUNK: usize = 32_768;
@@ -880,6 +886,87 @@ impl Scene {
                 group.owners.push(Element::Mass(m.id));
                 group.bounds.push((lo, hi));
                 groups.push((shared, group));
+            }
+        }
+        // The plants nearest the project (its origin) with every leaf,
+        // when there are so many that the project grows them all coarser:
+        // their full version near and the project's farther away.
+        if !isolate {
+            use archisim_core::flora::Lod;
+            let base = model.plant_detail();
+            if base != Lod::Full {
+                let mut near: Vec<(f64, archisim_core::ObjectId)> = model
+                    .objects()
+                    .filter(|o| model.type_grows(o.object_type))
+                    .filter(|o| !model.hidden_by_discipline(&disciplines.hidden, o.id.0))
+                    .map(|o| (o.position.length(), o.id))
+                    .filter(|(d, _)| *d < NEAR_PLANTS_AROUND)
+                    .collect();
+                near.sort_by(|a, b| a.0.total_cmp(&b.0));
+                near.truncate(NEAR_PLANTS);
+                let look = Look {
+                    selection,
+                    isolate: false,
+                    disciplines,
+                    anchors: &HashMap::new(),
+                    shared: true,
+                    between: false,
+                };
+                for (_, id) in near {
+                    let full = archisim_geom::solid::with_plant_lod(Lod::Full, || {
+                        let solids = archisim_geom::solid::plant_solids(model, id)?;
+                        let mut shared = Shared::default();
+                        add_solids(model, solids, &look, &mut shared);
+                        Some(shared)
+                    });
+                    let far = archisim_geom::solid::with_plant_lod(base, || {
+                        let solids = archisim_geom::solid::plant_solids(model, id)?;
+                        let mut plain = Shared::default();
+                        add_solids(model, solids, &look, &mut plain);
+                        Some(plain)
+                    });
+                    let (Some(mut shared), Some(plain)) = (full, far) else {
+                        continue;
+                    };
+                    let mut lo = Vec3::splat(f32::INFINITY);
+                    let mut hi = Vec3::splat(f32::NEG_INFINITY);
+                    for v in shared.opaque.mesh.vertices.iter() {
+                        lo = lo.min(Vec3::from_array(v.pos));
+                        hi = hi.max(Vec3::from_array(v.pos));
+                    }
+                    if lo.x > hi.x {
+                        continue;
+                    }
+                    shared.simple = Some(plain.opaque.mesh);
+                    skip.insert(id);
+                    let c = (lo + hi) / 2.0;
+                    let instance = Instance {
+                        place: [1.0, 0.0, 0.0, 0.0],
+                        lift: [0.0, 1.0, 1.0, 1.0],
+                        cut: [cutaway::OBJECT, c.x, c.y, lo.z],
+                        flags: [
+                            if selection.contains(&Element::Object(id)) {
+                                1.0
+                            } else {
+                                0.0
+                            },
+                            if model.dimmed(disciplines.focus, id.0) {
+                                1.0
+                            } else {
+                                0.0
+                            },
+                            0.0,
+                            0.0,
+                        ],
+                    };
+                    s.lo = s.lo.min(lo);
+                    s.hi = s.hi.max(hi);
+                    let mut group = Group::default();
+                    group.instances.push(instance);
+                    group.owners.push(Element::Object(id));
+                    group.bounds.push((lo, hi));
+                    groups.push((shared, group));
+                }
             }
         }
         for (shared, mut group) in groups {

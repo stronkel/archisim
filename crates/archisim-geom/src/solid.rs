@@ -2045,6 +2045,9 @@ fn coarseness(l: archisim_core::flora::Lod) -> usize {
 /// The level of detail of the plants: the views', no finer than asked by
 /// [`with_plant_detail`].
 fn plant_lod(model: &Model) -> archisim_core::flora::Lod {
+    if let Some(l) = PLANT_EXACT.with(|c| c.get()) {
+        return l;
+    }
     let base = model.plant_detail();
     match PLANT_CAP.with(|c| c.get()) {
         Some(cap) if coarseness(cap) > coarseness(base) => cap,
@@ -2058,6 +2061,21 @@ pub fn with_plant_detail<T>(lod: archisim_core::flora::Lod, f: impl FnOnce() -> 
     let old = PLANT_CAP.with(|c| c.replace(Some(lod)));
     let out = f();
     PLANT_CAP.with(|c| c.set(old));
+    out
+}
+
+thread_local! {
+    static PLANT_EXACT: std::cell::Cell<Option<archisim_core::flora::Lod>> =
+        const { std::cell::Cell::new(None) };
+}
+
+/// Runs `f` with the plants at exactly this level of detail, whatever
+/// the project's: the 3D view grows the plants nearest the project with
+/// every leaf, and the rest as the project's count allows.
+pub fn with_plant_lod<T>(lod: archisim_core::flora::Lod, f: impl FnOnce() -> T) -> T {
+    let old = PLANT_EXACT.with(|c| c.replace(Some(lod)));
+    let out = f();
+    PLANT_EXACT.with(|c| c.set(old));
     out
 }
 
