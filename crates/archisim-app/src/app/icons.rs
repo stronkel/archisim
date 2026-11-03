@@ -39,7 +39,6 @@ pub enum Icon {
     ChevronDown,
     Theme,
     Plus,
-    Minus,
     Fit,
     /// Geometry methods of the wall and slab tools.
     GeoSingle,
@@ -372,7 +371,6 @@ pub fn paint(painter: &Painter, rect: Rect, icon: Icon, color: Color32) {
             line(&[(12.0, 5.0), (12.0, 19.0)], st);
             line(&[(5.0, 12.0), (19.0, 12.0)], st);
         }
-        Icon::Minus => line(&[(5.0, 12.0), (19.0, 12.0)], st),
         Icon::Fit => {
             line(&[(4.0, 9.0), (4.0, 4.0), (9.0, 4.0)], st);
             line(&[(15.0, 4.0), (20.0, 4.0), (20.0, 9.0)], st);

@@ -142,7 +142,12 @@ pub const SHORTCUTS: &[(&str, &[Shortcut])] = &[
             key("ZA", KeyAct::ZoomAll, "Zoom ajustar todo", true),
             key("ZE", KeyAct::ZoomAll, "Zoom extensión", true),
             key("ZF", KeyAct::ZoomAll, "Zoom ajustar", true),
-            key("TL", KeyAct::ThinLines, "Líneas finas", true),
+            key(
+                "TL",
+                KeyAct::ThinLines,
+                "Líneas finas o grosores de impresión",
+                true,
+            ),
             key("HH", KeyAct::HideSelection, "Ocultar temporalmente", true),
             key("EH", KeyAct::HideSelection, "Ocultar elemento", true),
             key("HR", KeyAct::ShowAll, "Restablecer ocultos", true),
@@ -204,9 +209,9 @@ impl ArchiSimApp {
             KeyAct::ThinLines => {
                 self.thin_lines = !self.thin_lines;
                 self.say(if self.thin_lines {
-                    "Líneas finas"
+                    "Líneas finas, para trabajar"
                 } else {
-                    "Líneas con su grosor"
+                    "Grosores de impresión"
                 });
             }
             KeyAct::HideSelection => {

@@ -328,8 +328,12 @@ impl ArchiSimApp {
 
     /// Walking as in a game: W A S D forwards, left, back and right along
     /// the ground, Q down and E up, faster with Mayús; held, it keeps
-    /// going. The letters are the walk's here, not the tools'.
+    /// going. The letters are the walk's here, not the tools'. In the
+    /// Maqueta always; in Técnica while the right button is held over the
+    /// 3D view (`docs/INTERFAZ.md` §12.5), and when it is let go the letters
+    /// are orders again.
     pub(super) fn maquette_walk(&mut self, ctx: &egui::Context) {
+        self.v3d.flying = false;
         if crate::app::typing_in_text(ctx) {
             return;
         }
@@ -355,12 +359,16 @@ impl ArchiSimApp {
         if !held.iter().any(|h| *h) {
             return;
         }
+        self.v3d.flying = true;
         let axis = |plus: bool, minus: bool| f32::from(u8::from(plus)) - f32::from(u8::from(minus));
         let forward = axis(held[0], held[2]);
         let right = axis(held[3], held[1]);
         let up = axis(held[5], held[4]);
         // Metres a second: more from afar, so it feels the same at any zoom.
-        let speed = self.v3d.camera.distance.clamp(3.0, 200.0) * 0.6 * if fast { 3.0 } else { 1.0 };
+        let speed = self.v3d.camera.distance.clamp(3.0, 200.0)
+            * 0.6
+            * crate::prefs::Navigation::factor(self.prefs.nav.walk)
+            * if fast { 3.0 } else { 1.0 };
         let step = speed * dt;
         self.v3d
             .camera
@@ -528,6 +536,22 @@ impl ArchiSimApp {
             ui.separator();
             super::view3d_ui::caps_choice(ui, &mut self.v3d.caps);
         }
+    }
+
+    /// The same choice in a list, for the bottom bar of Técnica, where
+    /// the segments must keep their place (§12.3).
+    pub(super) fn cutaway_combo(&mut self, ui: &mut Ui) {
+        let current = self.v3d.cutaway;
+        egui::ComboBox::from_id_salt("bar-cutaway")
+            .width(130.0)
+            .selected_text(current.name())
+            .show_ui(ui, |ui| {
+                for c in Cutaway::ALL {
+                    ui.selectable_value(&mut self.v3d.cutaway, c, c.name());
+                }
+            })
+            .response
+            .on_hover_text("Muros arriba, los de delante bajos, recortados a 1,20 m o bajos a 30 cm (como en Los Sims)");
     }
 
     /// The names on the cards of a theme (for the tests).

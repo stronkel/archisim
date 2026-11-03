@@ -673,6 +673,8 @@ pub struct ArchiSimApp {
     pub locked_disciplines: std::collections::BTreeSet<archisim_core::ElementDiscipline>,
     /// The discipline whose tools are shown.
     pub discipline: toolbox::Discipline,
+    /// The tile whose variants are open below it (its name).
+    pub tile_group: Option<&'static str>,
     /// The tab of the navigator shown.
     pub nav_tab: navigator::NavTab,
     /// The command search, while open: what is typed and the result chosen.
@@ -926,7 +928,9 @@ impl ArchiSimApp {
             table_new_level: None,
             schedule_level: None,
             show_grid: true,
-            thin_lines: false,
+            // To work with: every line one pixel; the weights of print
+            // are a button away (`docs/INTERFAZ.md` §12.3).
+            thin_lines: true,
             phase_view: Default::default(),
             show_underlay: true,
             other_walls: Vec::new(),
@@ -943,6 +947,7 @@ impl ArchiSimApp {
             hidden_disciplines: Default::default(),
             locked_disciplines: Default::default(),
             discipline: toolbox::Discipline::default(),
+            tile_group: None,
             nav_tab: navigator::NavTab::default(),
             command_search: None,
             side_width: SIDE_WIDTH,
@@ -1861,6 +1866,18 @@ impl ArchiSimApp {
         if self.maquette {
             // Before the shortcuts: W A S D Q E walk here.
             self.maquette_walk(&ctx);
+        } else if self.mode == ViewMode::ThreeD
+            && ctx.input(|i| {
+                i.pointer.secondary_down()
+                    && i.pointer
+                        .latest_pos()
+                        .is_some_and(|p| self.v3d.canvas.contains(p))
+            })
+        {
+            // Técnica: flying with the right button held.
+            self.maquette_walk(&ctx);
+        } else {
+            self.v3d.flying = false;
         }
         self.handle_shortcuts(&ctx);
         self.command_search_window(&ctx);
@@ -2712,6 +2729,7 @@ mod types_ui;
 mod urban_ui;
 mod vertex_ui;
 mod view3d_ui;
+mod view_cube;
 mod views_ui;
 mod vivero_ui;
 mod wall_profile_ui;

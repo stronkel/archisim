@@ -29,19 +29,30 @@ pub enum Discipline {
     Services,
     Site,
     Documentation,
+    Presentation,
     Analysis,
     Coordination,
 }
 
+/// The colours of a discipline in the window (`docs/INTERFAZ.md` §12.1):
+/// the colour itself, a soft background and a darker one for text on it.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Hue {
+    pub main: Color32,
+    pub soft: Color32,
+    pub ink: Color32,
+}
+
 impl Discipline {
     /// In the order of the rail.
-    pub const ALL: [Discipline; 8] = [
+    pub const ALL: [Discipline; 9] = [
         Discipline::Concept,
         Discipline::Architecture,
         Discipline::Structure,
         Discipline::Services,
         Discipline::Site,
         Discipline::Documentation,
+        Discipline::Presentation,
         Discipline::Analysis,
         Discipline::Coordination,
     ];
@@ -54,22 +65,57 @@ impl Discipline {
             Discipline::Services => "Instalaciones",
             Discipline::Site => "Urbanismo",
             Discipline::Documentation => "Documentación",
+            Discipline::Presentation => "Presentación",
             Discipline::Analysis => "Análisis",
             Discipline::Coordination => "Coordinación",
         }
     }
 
-    fn purpose(self) -> &'static str {
+    pub fn purpose(self) -> &'static str {
         match self {
-            Discipline::Concept => "Anteproyecto: volúmenes, masas con edificabilidad y ejes",
+            Discipline::Concept => "Volúmenes, masas y edificabilidad",
             Discipline::Architecture => "El edificio",
-            Discipline::Structure => "Pilares, vigas, forjados, muros de carga y cimentación",
-            Discipline::Services => "Fontanería, climatización, electricidad e iluminación",
-            Discipline::Site => "Parcela, terreno, viales y vegetación",
-            Discipline::Documentation => "Cotas, etiquetas, secciones, alzados, planos y tablas",
-            Discipline::Analysis => "Comprobaciones del proyecto: CTE y mediciones",
-            Discipline::Coordination => {
-                "Vínculos, módulos, interferencias, incidencias, requisitos y equipo"
+            Discipline::Structure => "Pilares, vigas, forjados y cimentación",
+            Discipline::Services => "Agua, clima, electricidad e incendios",
+            Discipline::Site => "Parcela, terreno, calles y paisaje",
+            Discipline::Documentation => "Vistas, planos y tablas",
+            Discipline::Presentation => "Imágenes y láminas para enseñar",
+            Discipline::Analysis => "Comprobaciones, superficies y costes",
+            Discipline::Coordination => "Vínculos, versiones y equipo",
+        }
+    }
+
+    /// Its colours, for the light or the dark theme.
+    pub fn hue(self, dark: bool) -> Hue {
+        let (main, soft, ink) = match self {
+            Discipline::Concept => ([160, 120, 74], [245, 238, 228], [107, 79, 44]),
+            Discipline::Architecture => ([192, 88, 47], [251, 237, 230], [142, 59, 28]),
+            Discipline::Structure => ([76, 106, 146], [233, 239, 246], [52, 80, 122]),
+            Discipline::Services => ([22, 137, 122], [226, 244, 240], [15, 106, 94]),
+            Discipline::Site => ([79, 138, 43], [234, 243, 224], [58, 107, 28]),
+            Discipline::Documentation => ([110, 107, 100], [239, 237, 232], [69, 67, 62]),
+            Discipline::Presentation => ([184, 69, 122], [251, 234, 242], [143, 47, 92]),
+            Discipline::Analysis => ([184, 117, 20], [251, 240, 220], [131, 80, 10]),
+            Discipline::Coordination => ([110, 85, 194], [239, 235, 251], [84, 64, 160]),
+        };
+        let rgb = |c: [u8; 3]| Color32::from_rgb(c[0], c[1], c[2]);
+        if dark {
+            // Over the dark panels: the colour lighter for text, and a
+            // quarter of it over the panel for the background.
+            let mix = |a: [u8; 3], b: [u8; 3], t: f32| {
+                let m = |x: u8, y: u8| (x as f32 + (y as f32 - x as f32) * t).round() as u8;
+                Color32::from_rgb(m(a[0], b[0]), m(a[1], b[1]), m(a[2], b[2]))
+            };
+            Hue {
+                main: mix(main, [255, 255, 255], 0.15),
+                soft: mix([29, 32, 37], main, 0.28),
+                ink: mix(main, [255, 255, 255], 0.45),
+            }
+        } else {
+            Hue {
+                main: rgb(main),
+                soft: rgb(soft),
+                ink: rgb(ink),
             }
         }
     }
@@ -82,7 +128,8 @@ impl Discipline {
             Discipline::Structure => Glyph::Column,
             Discipline::Services => Glyph::Pipe,
             Discipline::Site => Glyph::Tree,
-            Discipline::Documentation => Glyph::Dimension,
+            Discipline::Documentation => Glyph::Sheet,
+            Discipline::Presentation => Glyph::Present,
             Discipline::Analysis => Glyph::Cte,
             Discipline::Coordination => Glyph::Link,
         }
@@ -97,24 +144,26 @@ impl Discipline {
             Discipline::Services => SERVICES,
             Discipline::Site => SITE,
             Discipline::Documentation => DOCUMENTATION,
+            Discipline::Presentation => PRESENTATION,
             Discipline::Analysis => ANALYSIS,
             Discipline::Coordination => COORDINATION,
         }
     }
 
-    /// Whether one of its tiles does `pick`.
+    /// Whether one of its tiles, or one of their variants, does `pick`.
     pub fn offers(self, pick: Pick) -> bool {
-        self.tiles().iter().any(|t| t.pick == pick)
+        self.tiles().iter().any(|t| t.does(pick))
     }
 
     /// The discipline a pick belongs to when it is taken from elsewhere
     /// (its key, the search): the first that offers it, the building first.
     pub fn home(pick: Pick) -> Option<Discipline> {
-        const BY_PRIORITY: [Discipline; 8] = [
+        const BY_PRIORITY: [Discipline; 9] = [
             Discipline::Architecture,
             Discipline::Structure,
             Discipline::Documentation,
             Discipline::Site,
+            Discipline::Presentation,
             Discipline::Analysis,
             Discipline::Coordination,
             Discipline::Concept,
@@ -125,9 +174,9 @@ impl Discipline {
 }
 
 /// Rows of tiles kept for every discipline, so that Properties below does
-/// not move when the discipline changes (the one with most tools fills
-/// them).
-pub const TILE_ROWS: usize = 4;
+/// not move when the discipline changes: twelve tiles at most (§12.2),
+/// the variants of a tool in one tile.
+pub const TILE_ROWS: usize = 3;
 pub const TILE_COLUMNS: usize = 4;
 const TILE_HEIGHT: f32 = 54.0;
 const TILE_GAP: f32 = 4.0;
@@ -173,6 +222,10 @@ pub enum Action {
     NewSheet,
     Schedule,
     Takeoff,
+    /// The budget, at the top of the takeoff.
+    Budget,
+    /// The table of room areas.
+    Areas,
     Cte,
     Link,
     Versions,
@@ -181,6 +234,20 @@ pub enum Action {
     Requirements,
     /// The vivero: species of plants with their sliders and 3D.
     Vivero,
+    /// A new drafting view.
+    DraftingView,
+    /// Bring the surroundings from downloaded files.
+    BringSurroundings,
+    /// Ask for the surroundings to the free services.
+    DownloadSurroundings,
+    /// The sun of the project, in Properties.
+    Sun,
+    /// The presentation styles.
+    Styles,
+    /// A realistic picture of the 3D view.
+    Render,
+    /// The 3D view as a picture.
+    Picture,
 }
 
 pub struct Tile {
@@ -189,6 +256,23 @@ pub struct Tile {
     pub name: &'static str,
     pub key: &'static str,
     pub hint: &'static str,
+    /// The variants of a tile that gathers several (its own pick is the
+    /// first's); empty for a single tool.
+    pub variants: &'static [Tile],
+}
+
+impl Tile {
+    /// Whether the tile or one of its variants does `pick`.
+    pub fn does(&self, pick: Pick) -> bool {
+        self.pick == pick || self.variants.iter().any(|v| v.pick == pick)
+    }
+
+    /// The tile and its variants (the tile alone if it has none).
+    pub fn all(&self) -> impl Iterator<Item = &Tile> {
+        std::iter::once(self)
+            .filter(|t| t.variants.is_empty())
+            .chain(self.variants.iter())
+    }
 }
 
 const fn tile(
@@ -204,6 +288,24 @@ const fn tile(
         name,
         key,
         hint,
+        variants: &[],
+    }
+}
+
+/// A tile that gathers `variants`: it takes the first's tool and key.
+const fn group(
+    glyph: Glyph,
+    name: &'static str,
+    hint: &'static str,
+    variants: &'static [Tile],
+) -> Tile {
+    Tile {
+        pick: variants[0].pick,
+        glyph,
+        name,
+        key: variants[0].key,
+        hint,
+        variants,
     }
 }
 
@@ -217,40 +319,75 @@ const CONCEPT: &[Tile] = &[
         "",
         "Líneas del modelo (no del dibujo): quedan abiertas, y al cerrar un contorno se hace una cara. Rectángulo y círculo, en la barra superior",
     ),
-    tile(
-        Pick::Concept(super::concept_ui::ConceptPick::Push),
+    group(
         Glyph::PushPull,
         "Empujar",
-        "",
-        "Empujar o tirar de una cara para hacer un volumen",
-    ),
-    tile(
-        Pick::Concept(super::concept_ui::ConceptPick::Divide),
-        Glyph::DivideFace,
-        "Dividir",
-        "",
-        "Dividir una cara de un volumen con una línea, para pintar o empujar cada parte",
-    ),
-    tile(
-        Pick::Concept(super::concept_ui::ConceptPick::Follow),
-        Glyph::FollowMe,
-        "Seguir",
-        "",
-        "Llevar un perfil a lo largo de un camino",
+        "Empujar o tirar de una cara, o llevar un perfil a lo largo de un camino",
+        &[
+            tile(
+                Pick::Concept(super::concept_ui::ConceptPick::Push),
+                Glyph::PushPull,
+                "Empujar",
+                "",
+                "Empujar o tirar de una cara para hacer un volumen",
+            ),
+            tile(
+                Pick::Concept(super::concept_ui::ConceptPick::Follow),
+                Glyph::FollowMe,
+                "Seguir",
+                "",
+                "Llevar un perfil a lo largo de un camino",
+            ),
+        ],
     ),
     tile(
         Pick::Concept(super::concept_ui::ConceptPick::Offset),
         Glyph::FaceOffset,
-        "Equidist.",
+        "Equidistancia",
         "",
         "Contorno paralelo dentro o fuera de una cara",
     ),
-    tile(
-        Pick::Concept(super::concept_ui::ConceptPick::Volume),
+    group(
+        Glyph::DivideFace,
+        "Dividir",
+        "Dividir una cara o deformar un volumen",
+        &[
+            tile(
+                Pick::Concept(super::concept_ui::ConceptPick::Divide),
+                Glyph::DivideFace,
+                "Dividir cara",
+                "",
+                "Dividir una cara de un volumen con una línea, para pintar o empujar cada parte",
+            ),
+            tile(
+                Pick::Concept(super::concept_ui::ConceptPick::Deform),
+                Glyph::Deform,
+                "Deformar",
+                "",
+                "Retorcer un volumen alrededor de su centro o doblarlo hacia un lado (con Mayús)",
+            ),
+        ],
+    ),
+    group(
         Glyph::Volume,
         "Volumen",
-        "",
-        "Prisma por su contorno y altura",
+        "Prismas por su contorno y altura, y formas: esfera, cilindro, cono y revolución",
+        &[
+            tile(
+                Pick::Concept(super::concept_ui::ConceptPick::Volume),
+                Glyph::Volume,
+                "Volumen",
+                "",
+                "Prisma por su contorno y altura",
+            ),
+            tile(
+                Pick::Concept(super::concept_ui::ConceptPick::Form),
+                Glyph::Sphere,
+                "Formas",
+                "",
+                "Esfera, cilindro, cono y revolución de un perfil (en la barra superior). Para unir, restar o intersecar volúmenes, selecciona varios",
+            ),
+        ],
     ),
     tile(
         Pick::Concept(super::concept_ui::ConceptPick::Mass),
@@ -260,32 +397,11 @@ const CONCEPT: &[Tile] = &[
         "Volumen por plantas con superficie construida, edificabilidad y ocupación en directo",
     ),
     tile(
-        Pick::Concept(super::concept_ui::ConceptPick::Form),
-        Glyph::Sphere,
-        "Formas",
-        "",
-        "Esfera, cilindro, cono y revolución de un perfil (en la barra superior). Para unir, restar o intersecar volúmenes, selecciona varios",
-    ),
-    tile(
-        Pick::Concept(super::concept_ui::ConceptPick::Tape),
-        Glyph::Tape,
-        "Cinta",
-        "",
-        "Medir y dejar guías",
-    ),
-    tile(
         Pick::Concept(super::concept_ui::ConceptPick::Paint),
         Glyph::Paint,
         "Pintar",
         "",
         "Dar un material a una cara",
-    ),
-    tile(
-        Pick::Concept(super::concept_ui::ConceptPick::Deform),
-        Glyph::Deform,
-        "Deformar",
-        "",
-        "Retorcer un volumen alrededor de su centro o doblarlo hacia un lado (con Mayús)",
     ),
     tile(
         Pick::Action(Action::Convert),
@@ -339,19 +455,26 @@ const ARCHITECTURE: &[Tile] = &[
         "T",
         "Cubiertas inclinadas por faldones: a cuatro, dos o un agua, con alero",
     ),
-    tile(
-        Pick::Tool(Tool::Stair),
+    group(
         Glyph::Stair,
         "Escalera",
-        "E",
-        "Escaleras por su línea de huella: tramos, mesetas y comprobación del CTE",
-    ),
-    tile(
-        Pick::Tool(Tool::Elevator),
-        Glyph::Stair,
-        "Ascensor",
-        "AS",
-        "Ascensor completo: hueco con foso y huida, puertas de piso en cada planta, cabina; abre los huecos de los forjados",
+        "Escaleras y ascensores",
+        &[
+            tile(
+                Pick::Tool(Tool::Stair),
+                Glyph::Stair,
+                "Escalera",
+                "E",
+                "Escaleras por su línea de huella: tramos, mesetas y comprobación del CTE",
+            ),
+            tile(
+                Pick::Tool(Tool::Elevator),
+                Glyph::Stair,
+                "Ascensor",
+                "AS",
+                "Ascensor completo: hueco con foso y huida, puertas de piso en cada planta, cabina; abre los huecos de los forjados",
+            ),
+        ],
     ),
     tile(
         Pick::Tool(Tool::Railing),
@@ -380,13 +503,6 @@ const ARCHITECTURE: &[Tile] = &[
         "Local",
         "Z",
         "Locales (IfcSpace): clic dentro de un recinto (superficie útil), polígono o rectángulo; número, nombre y uso",
-    ),
-    tile(
-        Pick::Tool(Tool::Decal),
-        Glyph::Decal,
-        "Pegatina",
-        "PE",
-        "Una imagen PNG (grafiti, cartel, rótulo, mancha…) sobre cualquier cara, para la vista 3D y el render",
     ),
 ];
 
@@ -419,14 +535,21 @@ const STRUCTURE: &[Tile] = &[
         "M",
         "Muros portantes (la herramienta Muro con un tipo portante)",
     ),
-    tile(
-        Pick::Tool(Tool::Footing),
+    group(
         Glyph::Footing,
-        "Zapata",
-        "A",
-        "Zapatas aisladas bajo pilares y corridas bajo muros",
+        "Cimentación",
+        "Zapatas aisladas y corridas, y losas de cimentación",
+        &[
+            tile(
+                Pick::Tool(Tool::Footing),
+                Glyph::Footing,
+                "Zapata",
+                "A",
+                "Zapatas aisladas bajo pilares y corridas bajo muros",
+            ),
+            tile(Pick::Raft, Glyph::Raft, "Losa de cimentación", "", "Losa de cimentación"),
+        ],
     ),
-    tile(Pick::Raft, Glyph::Raft, "Losa", "", "Losa de cimentación"),
     tile(
         Pick::Rebar,
         Glyph::Rebar,
@@ -448,13 +571,6 @@ const STRUCTURE: &[Tile] = &[
         "X",
         "Ejes de replanteo con su numeración",
     ),
-    tile(
-        Pick::Tool(Tool::RefPlane),
-        Glyph::RefPlane,
-        "Plano ref.",
-        "Q",
-        "Planos de referencia: líneas para dibujar contra ellas, en todas las plantas",
-    ),
 ];
 
 const SERVICES: &[Tile] = &[
@@ -472,12 +588,26 @@ const SERVICES: &[Tile] = &[
         "D",
         "Climatización y ventilación",
     ),
-    tile(
-        Pick::Device(archisim_core::DeviceKind::Equipment),
+    group(
         Glyph::Fixture,
         "Aparato",
-        "",
-        "Calderas, bombas, máquinas de climatización",
+        "Aparatos y equipos de agua",
+        &[
+            tile(
+                Pick::Device(archisim_core::DeviceKind::Equipment),
+                Glyph::Fixture,
+                "Aparato",
+                "",
+                "Calderas, bombas, máquinas de climatización",
+            ),
+            tile(
+                Pick::Device(archisim_core::DeviceKind::Valve),
+                Glyph::Pipe,
+                "Equipos de agua",
+                "",
+                "Llaves de paso; en su tipo, contadores, depósitos, grupos de presión y termos",
+            ),
+        ],
     ),
     tile(
         Pick::Device(archisim_core::DeviceKind::Light),
@@ -486,19 +616,26 @@ const SERVICES: &[Tile] = &[
         "",
         "Luminarias",
     ),
-    tile(
-        Pick::Device(archisim_core::DeviceKind::Socket),
+    group(
         Glyph::Outlet,
-        "Enchufe",
-        "",
-        "Tomas de corriente; en su tipo, base de 25 A, tomas de TV y de datos",
-    ),
-    tile(
-        Pick::Device(archisim_core::DeviceKind::Switch),
-        Glyph::Outlet,
-        "Interruptor",
-        "",
-        "Interruptores; en su tipo, conmutadores",
+        "Mecanismo",
+        "Enchufes e interruptores",
+        &[
+            tile(
+                Pick::Device(archisim_core::DeviceKind::Socket),
+                Glyph::Outlet,
+                "Enchufe",
+                "",
+                "Tomas de corriente; en su tipo, base de 25 A, tomas de TV y de datos",
+            ),
+            tile(
+                Pick::Device(archisim_core::DeviceKind::Switch),
+                Glyph::Outlet,
+                "Interruptor",
+                "",
+                "Interruptores; en su tipo, conmutadores",
+            ),
+        ],
     ),
     tile(
         Pick::Device(archisim_core::DeviceKind::Panel),
@@ -529,13 +666,6 @@ const SERVICES: &[Tile] = &[
         "Extintores; en su tipo, rociadores, BIE, detectores, pulsadores, sirenas, alumbrado de emergencia y señales de salida",
     ),
     tile(
-        Pick::Device(archisim_core::DeviceKind::Valve),
-        Glyph::Pipe,
-        "Equipos de agua",
-        "",
-        "Llaves de paso; en su tipo, contadores, depósitos, grupos de presión y termos",
-    ),
-    tile(
         Pick::Device(archisim_core::DeviceKind::SolarPanel),
         Glyph::Light,
         "Placas solares",
@@ -559,6 +689,83 @@ const SITE: &[Tile] = &[
         "Y",
         "Lindes, superficie y retranqueos",
     ),
+    group(
+        Glyph::Road,
+        "Calle",
+        "Viales, glorietas y marcas viales",
+        &[
+            tile(
+                Pick::Tool(Tool::Road),
+                Glyph::Road,
+                "Vial",
+                "W",
+                "Viales por su eje y una sección tipo: calzada, aparcamiento, bordillo y acera",
+            ),
+            tile(
+                Pick::Tool(Tool::Roundabout),
+                Glyph::Roundabout,
+                "Glorieta",
+                "GL",
+                "Glorieta o plaza donde se encuentran las calles: clic en el cruce; las calles se recortan en su círculo",
+            ),
+            tile(
+                Pick::Tool(Tool::Marking),
+                Glyph::Marking,
+                "Marca vial",
+                "MV",
+                "Pasos de peatones, líneas, flechas, STOP, cebreados y plazas pintadas (Norma 8.2-IC)",
+            ),
+        ],
+    ),
+    group(
+        Glyph::Network,
+        "Redes",
+        "Redes bajo la calle, pozos y arquetas",
+        &[
+            tile(
+                Pick::Network,
+                Glyph::Network,
+                "Redes",
+                "",
+                "Redes bajo la calle: saneamiento, pluviales, abastecimiento, baja y media tensión, alumbrado, telecomunicaciones y gas; pozos, acometidas y perfil longitudinal",
+            ),
+            tile(
+                Pick::Device(archisim_core::DeviceKind::Manhole),
+                Glyph::Manhole,
+                "Pozo y arqueta",
+                "",
+                "Pozos de registro, arquetas, imbornales, hidrantes, farolas, centros de transformación y cajas generales de protección",
+            ),
+        ],
+    ),
+    group(
+        Glyph::EnvBuilding,
+        "Entorno",
+        "Edificios del entorno con estilo, y el entorno traído de la cartografía gratuita",
+        &[
+            tile(
+                Pick::EnvBuilding,
+                Glyph::EnvBuilding,
+                "Edificio del entorno",
+                "",
+                "Edificios del entorno con estilo: casa andaluza, ensanche, años 60, oficinas, nave… Clic en una parcela o dibuja su contorno",
+            ),
+            tile(
+                Pick::Action(Action::BringSurroundings),
+                Glyph::Plot,
+                "Traer el entorno",
+                "",
+                "Edificios y parcelas del Catastro, calles y árboles de OpenStreetMap y el terreno del CNIG, de ficheros descargados",
+            ),
+            tile(
+                Pick::Action(Action::DownloadSurroundings),
+                Glyph::Deliver,
+                "Descargar el entorno",
+                "",
+                "Lo mismo, pedido directamente a sus servicios gratuitos para el emplazamiento del proyecto y un radio",
+            ),
+        ],
+    ),
     tile(
         Pick::Tool(Tool::Pool),
         Glyph::Pool,
@@ -566,68 +773,40 @@ const SITE: &[Tile] = &[
         "PS",
         "Piscina construida por el borde del agua: vaso con pendiente, coronación y lámina de agua; recorta el terreno",
     ),
-    tile(
-        Pick::Tool(Tool::Road),
-        Glyph::Road,
-        "Vial",
-        "W",
-        "Viales por su eje y una sección tipo: calzada, aparcamiento, bordillo y acera",
-    ),
-    tile(
-        Pick::Tool(Tool::Roundabout),
-        Glyph::Roundabout,
-        "Glorieta",
-        "GL",
-        "Glorieta o plaza donde se encuentran las calles: clic en el cruce; las calles se recortan en su círculo",
-    ),
-    tile(
-        Pick::Tool(Tool::Marking),
-        Glyph::Marking,
-        "Marca vial",
-        "MV",
-        "Pasos de peatones, líneas, flechas, STOP, cebreados y plazas pintadas (Norma 8.2-IC)",
-    ),
-    tile(
-        Pick::EnvBuilding,
-        Glyph::EnvBuilding,
-        "Edificio del entorno",
-        "",
-        "Edificios del entorno con estilo: casa andaluza, ensanche, años 60, oficinas, nave… Clic en una parcela o dibuja su contorno",
-    ),
-    tile(
-        Pick::Network,
-        Glyph::Network,
-        "Redes",
-        "",
-        "Redes bajo la calle: saneamiento, pluviales, abastecimiento, baja y media tensión, alumbrado, telecomunicaciones y gas; pozos, acometidas y perfil longitudinal",
-    ),
-    tile(
-        Pick::Device(archisim_core::DeviceKind::Manhole),
-        Glyph::Manhole,
-        "Pozo y arqueta",
-        "",
-        "Pozos de registro, arquetas, imbornales, hidrantes, farolas, centros de transformación y cajas generales de protección",
-    ),
-    tile(
-        Pick::Objects(super::object_gallery::ObjectScope::Vegetation),
+    group(
         Glyph::Tree,
         "Vegetación",
-        "",
-        "Árboles, palmeras, arbustos y matas que crecen cada uno distinto (y personas y vehículos)",
-    ),
-    tile(
-        Pick::Tool(Tool::Planting),
-        Glyph::Planting,
-        "Plantación",
-        "J",
-        "Plantas a lo largo de una línea o spline, o dentro de un contorno: cuántas, más o menos regulares y variadas",
-    ),
-    tile(
-        Pick::Action(Action::Vivero),
-        Glyph::Nursery,
-        "Vivero",
-        "",
-        "Las especies de vegetación con todos sus parámetros, en 3D y en planta: crear y ajustar especies",
+        "Árboles y plantas sueltos o en plantaciones, rocas y el vivero de especies",
+        &[
+            tile(
+                Pick::Objects(super::object_gallery::ObjectScope::Vegetation),
+                Glyph::Tree,
+                "Vegetación",
+                "",
+                "Árboles, palmeras, arbustos y matas que crecen cada uno distinto (y personas y vehículos)",
+            ),
+            tile(
+                Pick::Tool(Tool::Planting),
+                Glyph::Planting,
+                "Plantación",
+                "J",
+                "Plantas a lo largo de una línea o spline, o dentro de un contorno: cuántas, más o menos regulares y variadas",
+            ),
+            tile(
+                Pick::Objects(super::object_gallery::ObjectScope::Nature),
+                Glyph::Rock,
+                "Rocas",
+                "",
+                "Rocas, cantos rodados, lajas, grupos de rocas, troncos caídos y tocones",
+            ),
+            tile(
+                Pick::Action(Action::Vivero),
+                Glyph::Nursery,
+                "Vivero",
+                "",
+                "Las especies de vegetación con todos sus parámetros, en 3D y en planta: crear y ajustar especies",
+            ),
+        ],
     ),
     tile(
         Pick::Tool(Tool::Brush),
@@ -637,16 +816,9 @@ const SITE: &[Tile] = &[
         "Pinta el terreno con césped, praderas con flores, tierra, arena, grava o losas; bórralo; súbelo, bájalo, alísalo o aplánalo; esparce plantas y rocas",
     ),
     tile(
-        Pick::Objects(super::object_gallery::ObjectScope::Nature),
-        Glyph::Rock,
-        "Rocas",
-        "",
-        "Rocas, cantos rodados, lajas, grupos de rocas, troncos caídos y tocones",
-    ),
-    tile(
         Pick::Objects(super::object_gallery::ObjectScope::Street),
         Glyph::StreetLamp,
-        "Mobiliario urbano",
+        "Mobiliario",
         "",
         "Farolas, bancos, papeleras, buzones, bolardos, fuentes, aparcabicis, contenedores, señales, jardineras y alcorques",
     ),
@@ -661,34 +833,6 @@ const SITE: &[Tile] = &[
 
 const DOCUMENTATION: &[Tile] = &[
     tile(
-        Pick::Tool(Tool::Dimension),
-        Glyph::Dimension,
-        "Cota",
-        "C",
-        "Cotas lineales, encadenadas y de huecos de muro (angular DAN, radio DRA, arco DAR)",
-    ),
-    tile(
-        Pick::LevelMark,
-        Glyph::LevelMark,
-        "Cota de nivel",
-        "N",
-        "Cota de nivel del suelo terminado",
-    ),
-    tile(
-        Pick::Command("ETIQUETA"),
-        Glyph::Tag,
-        "Etiqueta",
-        "ETI",
-        "Etiquetas de puertas, ventanas, muros y locales (T: todas)",
-    ),
-    tile(
-        Pick::Command("TEXTO"),
-        Glyph::Text,
-        "Texto",
-        "TX",
-        "Textos de una o varias líneas (directriz DIR, nube de revisión NR)",
-    ),
-    tile(
         Pick::Tool(Tool::Section),
         Glyph::Section,
         "Sección",
@@ -701,6 +845,13 @@ const DOCUMENTATION: &[Tile] = &[
         "Alzado",
         "",
         "Crea los cuatro alzados (norte, sur, este y oeste) alrededor del edificio",
+    ),
+    tile(
+        Pick::Command("ETIQUETA"),
+        Glyph::Tag,
+        "Etiqueta",
+        "ETI",
+        "Etiquetas de puertas, ventanas, muros y locales (T: todas)",
     ),
     tile(
         Pick::Action(Action::NewSheet),
@@ -717,11 +868,63 @@ const DOCUMENTATION: &[Tile] = &[
         "Tablas de planificación: carpintería, muros, forjados, locales, estructura…",
     ),
     tile(
-        Pick::Tool(Tool::RefPlane),
-        Glyph::RefPlane,
-        "Plano ref.",
-        "Q",
-        "Planos de referencia: líneas para dibujar contra ellas, en todas las plantas",
+        Pick::Action(Action::DraftingView),
+        Glyph::Line,
+        "Vista de dibujo",
+        "",
+        "Una vista de dibujo 2D a su escala, para detalles y esquemas, con calcos de plantas y secciones",
+    ),
+];
+
+const PRESENTATION: &[Tile] = &[
+    tile(
+        Pick::Later("las cámaras guardadas (bloque V3 de la interfaz)"),
+        Glyph::Camera,
+        "Cámara",
+        "",
+        "Guardar un punto de vista del 3D para volver a él, renderizarlo o ponerlo en una lámina",
+    ),
+    tile(
+        Pick::Action(Action::Sun),
+        Glyph::Sun,
+        "Sol",
+        "",
+        "La fecha, la hora y el emplazamiento que dan el sol y las sombras",
+    ),
+    tile(
+        Pick::Action(Action::Styles),
+        Glyph::LookStyle,
+        "Estilo",
+        "",
+        "Estilos de presentación: papel, paleta, muros macizados y grueso de líneas",
+    ),
+    tile(
+        Pick::Action(Action::Render),
+        Glyph::Render,
+        "Render",
+        "",
+        "Imagen realista de la vista 3D: luz del día, del atardecer o de noche, con sombras y reflejos",
+    ),
+    tile(
+        Pick::Action(Action::Picture),
+        Glyph::Picture,
+        "Imagen",
+        "",
+        "La vista 3D tal como se ve, en una imagen PNG",
+    ),
+    tile(
+        Pick::Tool(Tool::Decal),
+        Glyph::Decal,
+        "Pegatina",
+        "PE",
+        "Una imagen PNG (grafiti, cartel, rótulo, mancha…) sobre cualquier cara, para la vista 3D y el render",
+    ),
+    tile(
+        Pick::Later("los recorridos (más adelante)"),
+        Glyph::Walk,
+        "Recorrido",
+        "",
+        "Pasear por la casa a la altura de los ojos y grabarlo",
     ),
 ];
 
@@ -738,7 +941,21 @@ const ANALYSIS: &[Tile] = &[
         Glyph::Takeoff,
         "Mediciones",
         "",
-        "Mediciones por tipo, con demoliciones; se exportan a BC3 desde Archivo",
+        "Mediciones por tipo, con demoliciones; se entregan en BC3",
+    ),
+    tile(
+        Pick::Action(Action::Budget),
+        Glyph::Budget,
+        "Presupuesto",
+        "",
+        "Precios de un banco BC3 para cada partida, con gastos generales, beneficio e IVA",
+    ),
+    tile(
+        Pick::Action(Action::Areas),
+        Glyph::Areas,
+        "Superficies",
+        "",
+        "Cuadro de superficies: útil de cada local, construida por plantas y por usos",
     ),
 ];
 
@@ -798,6 +1015,46 @@ const COORDINATION: &[Tile] = &[
         "Publicar",
         "",
         "Publicar los cambios para el resto del equipo",
+    ),
+];
+
+/// What moved from the tiles to the bottom bar (§12.2): annotation and the
+/// aids to drawing, for every discipline. The search finds them there.
+pub const BAR_TOOLS: &[Tile] = &[
+    tile(
+        Pick::Tool(Tool::Dimension),
+        Glyph::Dimension,
+        "Cota",
+        "C",
+        "Cotas lineales, encadenadas y de huecos de muro (angular DAN, radio DRA, arco DAR)",
+    ),
+    tile(
+        Pick::LevelMark,
+        Glyph::LevelMark,
+        "Cota de nivel",
+        "N",
+        "Cota de nivel del suelo terminado",
+    ),
+    tile(
+        Pick::Command("TEXTO"),
+        Glyph::Text,
+        "Texto",
+        "TX",
+        "Textos de una o varias líneas (directriz DIR, nube de revisión NR)",
+    ),
+    tile(
+        Pick::Tool(Tool::RefPlane),
+        Glyph::RefPlane,
+        "Plano de referencia",
+        "Q",
+        "Planos de referencia: líneas para dibujar contra ellas, en todas las plantas",
+    ),
+    tile(
+        Pick::Concept(super::concept_ui::ConceptPick::Tape),
+        Glyph::Tape,
+        "Cinta",
+        "",
+        "Medir y dejar guías",
     ),
 ];
 
@@ -1078,6 +1335,7 @@ pub fn order_name(command: &str) -> Option<&'static str> {
             Discipline::ALL
                 .iter()
                 .flat_map(|d| d.tiles())
+                .flat_map(|t| t.all())
                 .find(|t| matches!(t.pick, Pick::Command(c) if c == command))
                 .map(|t| t.name)
         })
@@ -1122,7 +1380,7 @@ fn searchable() -> Vec<Found> {
     let mut all: Vec<Found> = Vec::new();
     let tiles = std::iter::once(Discipline::Architecture)
         .chain(Discipline::ALL)
-        .flat_map(|d| d.tiles().iter().map(move |t| (d, t)));
+        .flat_map(|d| d.tiles().iter().flat_map(|t| t.all()).map(move |t| (d, t)));
     for (d, t) in tiles {
         if all.iter().any(|f| f.name == t.name) {
             continue;
@@ -1133,6 +1391,19 @@ fn searchable() -> Vec<Found> {
             key: t.key,
             hint: t.hint,
             place: d.name(),
+            mark: Mark::Glyph(t.glyph),
+        });
+    }
+    for t in BAR_TOOLS {
+        if all.iter().any(|f| f.name == t.name) {
+            continue;
+        }
+        all.push(Found {
+            pick: t.pick,
+            name: t.name,
+            key: t.key,
+            hint: t.hint,
+            place: "Barra inferior",
             mark: Mark::Glyph(t.glyph),
         });
     }
@@ -1234,7 +1505,24 @@ impl ArchiSimApp {
                 Action::Requirements => {
                     self.coord_window.open && self.coord_window.tab == CoordTab::Requirements
                 }
-                Action::Elevations | Action::NewSheet | Action::Link | Action::Convert => false,
+                Action::Areas => matches!(
+                    self.tabs.get(self.active_tab).map(|t| t.kind),
+                    Some(TabKind::Schedule(SchedTab::Kind(
+                        archisim_core::ScheduleKind::Rooms
+                    )))
+                ),
+                Action::Render => self.render.open,
+                Action::Styles => self.presentation.open,
+                Action::Elevations
+                | Action::NewSheet
+                | Action::Link
+                | Action::Convert
+                | Action::DraftingView
+                | Action::BringSurroundings
+                | Action::DownloadSurroundings
+                | Action::Sun
+                | Action::Budget
+                | Action::Picture => false,
             }),
             Pick::Command(name) => {
                 Some(self.tool == Tool::Cad && self.cad.as_ref().is_some_and(|c| c.name() == name))
@@ -1320,6 +1608,31 @@ impl ArchiSimApp {
                 )));
             }
             Action::Takeoff => self.open_view(TabKind::Schedule(SchedTab::Takeoff)),
+            Action::Budget => {
+                self.open_view(TabKind::Schedule(SchedTab::Takeoff));
+                self.say("El presupuesto está al principio de Mediciones: elige un banco BC3 y da precio a cada partida.");
+            }
+            Action::Areas => self.open_view(TabKind::Schedule(SchedTab::Kind(
+                archisim_core::ScheduleKind::Rooms,
+            ))),
+            Action::DraftingView => self.new_drafting_view(),
+            Action::BringSurroundings => self.pick_carto(),
+            Action::DownloadSurroundings => self.open_carto_download(),
+            Action::Sun => {
+                self.set_tool(Tool::Arrow);
+                self.ed.selection.clear();
+                self.show_properties = true;
+                self.say("El sol: fecha, hora y emplazamiento, en Propiedades › Proyecto.");
+            }
+            Action::Styles => self.presentation.open = true,
+            Action::Render => self.render.open = true,
+            Action::Picture => {
+                if self.mode == super::view3d_ui::ViewMode::ThreeD {
+                    self.export_3d_picture();
+                } else {
+                    self.say("Abre la vista 3D y vuelve a pulsar Imagen: guarda lo que se ve.");
+                }
+            }
             Action::Cte => self.cte.open = true,
             Action::Vivero => self.open_vivero(None, Default::default()),
             Action::Link => self.link_ifc_dialog(),
@@ -1336,15 +1649,30 @@ impl ArchiSimApp {
         }
     }
 
+    /// Whether a tile, or one of its variants, is the tool in use.
+    fn tile_picked(&self, t: &Tile) -> Option<bool> {
+        if t.variants.is_empty() {
+            self.picked(t.pick)
+        } else {
+            Some(t.variants.iter().any(|v| self.picked(v.pick) == Some(true)))
+        }
+    }
+
     /// The rail of disciplines, on the far left: the arrow on top, always
-    /// there, then the disciplines.
+    /// there, then the disciplines, each with its colour.
     pub(super) fn discipline_rail(&mut self, ui: &mut Ui) {
         let p = Palette::current(ui.ctx());
+        let dark = ui.visuals().dark_mode;
         ui.add_space(8.0);
         ui.vertical_centered(|ui| {
             ui.spacing_mut().item_spacing.y = 4.0;
             let arrow = self.tool == Tool::Arrow;
-            let r = rail_button(ui, arrow, |painter, rect, color| {
+            let blue = Hue {
+                main: p.accent,
+                soft: p.accent_soft,
+                ink: p.accent,
+            };
+            let r = rail_button(ui, arrow, blue, p.text, |painter, rect, color| {
                 icons::paint(painter, rect, Icon::Arrow, color)
             });
             if r.on_hover_text("Flecha (Esc) — seleccionar, mover, copiar y estirar")
@@ -1357,13 +1685,15 @@ impl ArchiSimApp {
                 .hline(line.x_range(), line.center().y, Stroke::new(1.0, p.line));
             for d in Discipline::ALL {
                 let on = self.discipline == d;
-                let r = rail_button(ui, on, |painter, rect, color| {
+                let hue = d.hue(dark);
+                let r = rail_button(ui, on, hue, hue.ink, |painter, rect, color| {
                     glyphs::paint(painter, rect, d.glyph(), color)
                 });
                 super::missions_ui::mark(ui.ctx(), format!("rail:{}", d.name()), r.rect);
                 if r.on_hover_text(format!("{} — {}", d.name(), d.purpose()))
                     .clicked()
                 {
+                    self.tile_group = None;
                     self.set_discipline(d);
                 }
             }
@@ -1371,15 +1701,28 @@ impl ArchiSimApp {
     }
 
     /// The column beside the rail: the tiles of the discipline, always the
-    /// same size, and Properties below.
+    /// same size, and Properties below. A tile with variants opens them
+    /// over what is below, without moving anything.
     pub(super) fn tool_column(&mut self, ui: &mut Ui) {
         let p = Palette::current(ui.ctx());
+        let hue = self.discipline.hue(ui.visuals().dark_mode);
         ui.add_space(8.0);
         ui.horizontal(|ui| {
+            let (dot, _) = ui.allocate_exact_size(Vec2::splat(10.0), Sense::hover());
+            ui.painter()
+                .rect_filled(dot, CornerRadius::same(3), hue.main);
             ui.label(
                 egui::RichText::new(self.discipline.name())
                     .font(strong_font(12.5))
-                    .color(p.text),
+                    .color(hue.ink),
+            );
+            ui.add(
+                egui::Label::new(
+                    egui::RichText::new(self.discipline.purpose())
+                        .small()
+                        .color(p.muted),
+                )
+                .truncate(),
             );
         });
         ui.add_space(6.0);
@@ -1390,6 +1733,7 @@ impl ArchiSimApp {
             TILE_ROWS as f32 * TILE_HEIGHT + (TILE_ROWS as f32 - 1.0) * TILE_GAP,
         );
         let (block, _) = ui.allocate_exact_size(area, Sense::hover());
+        let mut open_below: Option<(Rect, &'static Tile)> = None;
         for (i, t) in self.discipline.tiles().iter().enumerate() {
             let (row, col) = (i / TILE_COLUMNS, i % TILE_COLUMNS);
             let min = block.min
@@ -1398,17 +1742,44 @@ impl ArchiSimApp {
                     row as f32 * (TILE_HEIGHT + TILE_GAP),
                 );
             let rect = Rect::from_min_size(min, Vec2::new(w, TILE_HEIGHT));
-            let active = self.picked(t.pick);
-            let resp = glyph_tile(ui, rect, t, active);
+            let active = self.tile_picked(t);
+            let open = self.tile_group == Some(t.name) && !t.variants.is_empty();
+            let resp = glyph_tile(ui, rect, t, active, hue, open);
             super::missions_ui::mark(ui.ctx(), format!("tile:{}", t.name), rect);
+            if open {
+                open_below = Some((rect, t));
+            }
             let hint = match t.pick {
                 Pick::Later(what) => format!("{} — {} (llegará con {what})", t.name, t.hint),
+                _ if !t.variants.is_empty() => format!(
+                    "{} — {}. Variantes: {}",
+                    t.name,
+                    t.hint,
+                    t.variants
+                        .iter()
+                        .map(|v| v.name)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
                 _ if t.key.is_empty() => format!("{} — {}", t.name, t.hint),
                 _ => format!("{} ({}) — {}", t.name, t.key, t.hint),
             };
             if resp.on_hover_text(hint).clicked() {
-                self.pick(t.pick);
+                if t.variants.is_empty() {
+                    self.tile_group = None;
+                    self.pick(t.pick);
+                } else {
+                    // Keeps the variant in use, or takes the first; the
+                    // variants open below (a second click closes them).
+                    if active != Some(true) {
+                        self.pick(t.pick);
+                    }
+                    self.tile_group = if open { None } else { Some(t.name) };
+                }
             }
+        }
+        if let Some((rect, t)) = open_below {
+            self.tile_variants(ui, rect, block, t, hue);
         }
         ui.add_space(8.0);
         if self.show_properties {
@@ -1424,18 +1795,102 @@ impl ArchiSimApp {
                 });
         }
     }
+
+    /// The variants of a tile, in a strip over what is below it.
+    fn tile_variants(&mut self, ui: &mut Ui, tile: Rect, block: Rect, t: &'static Tile, hue: Hue) {
+        let p = Palette::current(ui.ctx());
+        let area = egui::Area::new(egui::Id::unique(("tile-variants", t.name)))
+            .order(egui::Order::Foreground)
+            .fixed_pos(egui::pos2(block.left(), tile.bottom() + 4.0));
+        let mut chosen = None;
+        let shown = area.show(ui.ctx(), |ui| {
+            egui::Frame::new()
+                .fill(p.panel)
+                .stroke(Stroke::new(1.0, hue.main))
+                .corner_radius(CornerRadius::same(10))
+                .inner_margin(egui::Margin::same(6))
+                .shadow(egui::Shadow {
+                    offset: [0, 4],
+                    blur: 14,
+                    spread: 0,
+                    color: Color32::from_black_alpha(36),
+                })
+                .show(ui, |ui| {
+                    ui.set_width(block.width() - 12.0);
+                    ui.spacing_mut().item_spacing.y = 2.0;
+                    for v in t.variants {
+                        let on = self.picked(v.pick) == Some(true);
+                        let (r, resp) = ui.allocate_exact_size(
+                            Vec2::new(ui.available_width(), 30.0),
+                            Sense::click(),
+                        );
+                        let fill = if on {
+                            hue.soft
+                        } else if resp.hovered() {
+                            p.raised
+                        } else {
+                            Color32::TRANSPARENT
+                        };
+                        ui.painter().rect_filled(r, CornerRadius::same(7), fill);
+                        glyphs::paint(
+                            ui.painter(),
+                            Rect::from_center_size(
+                                egui::pos2(r.left() + 16.0, r.center().y),
+                                Vec2::splat(18.0),
+                            ),
+                            v.glyph,
+                            hue.ink,
+                        );
+                        ui.painter().text(
+                            egui::pos2(r.left() + 32.0, r.center().y),
+                            Align2::LEFT_CENTER,
+                            v.name,
+                            if on {
+                                strong_font(12.0)
+                            } else {
+                                FontId::proportional(12.0)
+                            },
+                            if on { hue.ink } else { p.text },
+                        );
+                        if !v.key.is_empty() {
+                            ui.painter().text(
+                                egui::pos2(r.right() - 8.0, r.center().y),
+                                Align2::RIGHT_CENTER,
+                                v.key,
+                                FontId::monospace(10.5),
+                                p.muted,
+                            );
+                        }
+                        if resp.on_hover_text(v.hint).clicked() {
+                            chosen = Some(v.pick);
+                        }
+                    }
+                });
+        });
+        if let Some(pick) = chosen {
+            self.tile_group = None;
+            self.pick(pick);
+        } else if shown.response.clicked_elsewhere()
+            && !ui.rect_contains_pointer(tile)
+            && ui.input(|i| i.pointer.any_click())
+        {
+            self.tile_group = None;
+        }
+    }
 }
 
-/// A square button of the rail.
+/// A square button of the rail: in the discipline's colour.
 fn rail_button(
     ui: &mut Ui,
     on: bool,
+    hue: Hue,
+    rest: Color32,
     draw: impl FnOnce(&egui::Painter, Rect, Color32),
 ) -> egui::Response {
     let p = Palette::current(ui.ctx());
     let (rect, resp) = ui.allocate_exact_size(Vec2::splat(38.0), Sense::click());
     let fill = if on {
-        p.accent_soft
+        hue.soft
     } else if resp.hovered() {
         p.raised
     } else {
@@ -1449,9 +1904,9 @@ fn rail_button(
             rect.left_bottom() + Vec2::new(-3.0, -9.0),
         );
         ui.painter()
-            .rect_filled(bar, CornerRadius::same(1), p.accent);
+            .rect_filled(bar, CornerRadius::same(1), hue.main);
     }
-    let color = if on { p.accent } else { p.text };
+    let color = if on { hue.ink } else { rest };
     draw(
         ui.painter(),
         Rect::from_center_size(rect.center(), Vec2::splat(22.0)),
@@ -1460,9 +1915,18 @@ fn rail_button(
     resp
 }
 
-/// A tile: the drawing and the name below it. No border at rest, a soft
-/// fill under the mouse, accent border and fill when it is the tool in use.
-fn glyph_tile(ui: &mut Ui, rect: Rect, t: &Tile, active: Option<bool>) -> egui::Response {
+/// A tile: the drawing and the name below it, in the colour of the
+/// discipline. No border at rest, a soft fill under the mouse, the colour's
+/// border and fill when it is the tool in use; a corner triangle when it
+/// has variants.
+fn glyph_tile(
+    ui: &mut Ui,
+    rect: Rect,
+    t: &Tile,
+    active: Option<bool>,
+    hue: Hue,
+    open: bool,
+) -> egui::Response {
     let p = Palette::current(ui.ctx());
     let sense = if active.is_some() {
         Sense::click()
@@ -1472,11 +1936,11 @@ fn glyph_tile(ui: &mut Ui, rect: Rect, t: &Tile, active: Option<bool>) -> egui::
     let resp = ui.interact(rect, ui.scope_id().with(("tile", t.name, t.glyph)), sense);
     let painter = ui.painter_at(rect.expand(1.0));
     let on = active == Some(true);
-    let (fill, stroke, fg) = match active {
-        Some(true) => (p.accent_soft, Stroke::new(1.5, p.accent), p.accent),
-        Some(false) if resp.hovered() => (p.raised, Stroke::NONE, p.text),
-        Some(false) => (Color32::TRANSPARENT, Stroke::NONE, p.text),
-        None => (Color32::TRANSPARENT, Stroke::NONE, p.faint),
+    let (fill, stroke, glyph_fg, text_fg) = match active {
+        Some(true) => (hue.soft, Stroke::new(1.5, hue.main), hue.ink, hue.ink),
+        Some(false) if resp.hovered() || open => (p.raised, Stroke::NONE, hue.ink, p.text),
+        Some(false) => (Color32::TRANSPARENT, Stroke::NONE, hue.ink, p.text),
+        None => (Color32::TRANSPARENT, Stroke::NONE, p.faint, p.faint),
     };
     painter.rect(
         rect,
@@ -1489,8 +1953,17 @@ fn glyph_tile(ui: &mut Ui, rect: Rect, t: &Tile, active: Option<bool>) -> egui::
         &painter,
         Rect::from_center_size(rect.center_top() + Vec2::new(0.0, 19.0), Vec2::splat(22.0)),
         t.glyph,
-        fg,
+        glyph_fg,
     );
+    if !t.variants.is_empty() {
+        // In the top right corner, clear of the name.
+        let c = rect.right_top() + Vec2::new(-5.0, 5.0);
+        painter.add(egui::Shape::convex_polygon(
+            vec![c, c + Vec2::new(0.0, 7.0), c + Vec2::new(-7.0, 0.0)],
+            if on { hue.ink } else { hue.main },
+            Stroke::NONE,
+        ));
+    }
     // The name, smaller if it does not fit.
     let room = rect.width() - 4.0;
     let mut size = 10.5;
@@ -1502,7 +1975,7 @@ fn glyph_tile(ui: &mut Ui, rect: Rect, t: &Tile, active: Option<bool>) -> egui::
         }
     };
     while size > 8.5 {
-        let g = painter.layout_no_wrap(t.name.to_string(), font(size), fg);
+        let g = painter.layout_no_wrap(t.name.to_string(), font(size), text_fg);
         if g.size().x <= room {
             break;
         }
@@ -1513,7 +1986,7 @@ fn glyph_tile(ui: &mut Ui, rect: Rect, t: &Tile, active: Option<bool>) -> egui::
         Align2::CENTER_CENTER,
         t.name,
         font(size),
-        fg,
+        text_fg,
     );
     resp
 }
@@ -1530,7 +2003,7 @@ mod tests {
                 "{} has too many tiles",
                 d.name()
             );
-            for t in d.tiles() {
+            for t in d.tiles().iter().flat_map(|t| t.all()) {
                 assert!(!t.name.is_empty() && !t.hint.is_empty());
                 if let Pick::Tool(tool) = t.pick {
                     assert_eq!(Tool::from_key(t.key), Some(tool), "{}", t.name);
@@ -1549,9 +2022,15 @@ mod tests {
             Discipline::home(Pick::Tool(Tool::Column)),
             Some(Discipline::Structure)
         );
+        // Annotation is in the bottom bar, for every discipline.
+        assert_eq!(Discipline::home(Pick::LevelMark), None);
         assert_eq!(
-            Discipline::home(Pick::LevelMark),
-            Some(Discipline::Documentation)
+            Discipline::home(Pick::Tool(Tool::Elevator)),
+            Some(Discipline::Architecture)
+        );
+        assert_eq!(
+            Discipline::home(Pick::Tool(Tool::Decal)),
+            Some(Discipline::Presentation)
         );
         assert_eq!(
             Discipline::home(Pick::Tool(Tool::Terrain)),
@@ -1564,6 +2043,7 @@ mod tests {
     fn search_finds_by_name_key_and_accents() {
         let names = |q: &str| search(q).iter().map(|f| f.name).collect::<Vec<_>>();
         assert_eq!(names("viga")[0], "Viga");
+        assert_eq!(names("glorieta")[0], "Glorieta");
         assert_eq!(names("cota de nivel")[0], "Cota de nivel");
         assert_eq!(names("zapata")[0], "Zapata");
         assert_eq!(names("girar")[0], "Girar");

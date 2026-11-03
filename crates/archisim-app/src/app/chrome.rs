@@ -124,15 +124,7 @@ impl ArchiSimApp {
                     self.team_top_bar(ui);
                 }
                 ui.separator();
-                if ui
-                    .add(egui::Button::new(
-                        egui::RichText::new("Exportar IFC").font(strong_font(12.0)),
-                    ))
-                    .on_hover_text("Exportar el proyecto en IFC 4.3")
-                    .clicked()
-                {
-                    self.export_ifc(archisim_ifc::Schema::Ifc4x3);
-                }
+                self.deliver_button(ui);
                 if icon_button(ui, Icon::Save, "Guardar (Ctrl+S)", false).clicked() {
                     self.save(false);
                 }
@@ -170,6 +162,114 @@ impl ArchiSimApp {
                 }
             });
         });
+    }
+
+    /// Entregar: every output of the project in one menu (§12.3), the same
+    /// orders as in Archivo.
+    fn deliver_button(&mut self, ui: &mut Ui) {
+        let p = Palette::current(ui.ctx());
+        let button = egui::Button::new(
+            egui::RichText::new("      Entregar")
+                .font(strong_font(12.0))
+                .color(p.accent),
+        )
+        .stroke(egui::Stroke::new(1.0, p.accent))
+        .fill(p.accent_soft);
+        let r = ui.add(button).on_hover_text(
+            "Todo lo que sale del proyecto: modelo IFC, planos y documentos, mediciones e imágenes",
+        );
+        icons::paint(
+            ui.painter(),
+            Rect::from_center_size(
+                r.rect.left_center() + Vec2::new(15.0, 0.0),
+                Vec2::splat(14.0),
+            ),
+            Icon::Export,
+            p.accent,
+        );
+        let on_sheet = matches!(self.mode, ViewMode::Sheet(_));
+        let has_sheets = !self.ed.model().sheets().is_empty();
+        egui::Popup::menu(&r)
+            .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
+            .show(|ui| {
+                ui.set_min_width(290.0);
+                let head = |ui: &mut Ui, text: &str| {
+                    ui.add_space(4.0);
+                    ui.label(egui::RichText::new(text).size(11.0).strong().color(p.muted));
+                };
+                head(ui, "Modelo");
+                if ui.add(shortcut_button("IFC 4.3…", ".ifc")).clicked() {
+                    self.export_ifc(archisim_ifc::Schema::Ifc4x3);
+                }
+                if ui
+                    .add(shortcut_button("IFC4 (compatibilidad)…", ".ifc"))
+                    .clicked()
+                {
+                    self.export_ifc(archisim_ifc::Schema::Ifc4);
+                }
+                if ui
+                    .add(shortcut_button("Modelo 3D para render…", ".glb"))
+                    .clicked()
+                {
+                    self.export_glb();
+                }
+                head(ui, "Planos y documentos");
+                if ui
+                    .add_enabled(on_sheet, shortcut_button("Este plano…", "PDF · DXF · SVG"))
+                    .clicked()
+                {
+                    self.export_sheets(false);
+                }
+                if ui
+                    .add_enabled(has_sheets, shortcut_button("Todos los planos…", "PDF"))
+                    .clicked()
+                {
+                    self.export_sheets(true);
+                }
+                if ui
+                    .add(shortcut_button("Plano de carpinterías…", "PDF"))
+                    .clicked()
+                {
+                    self.export_document(crate::documents::Document::Carpentry);
+                }
+                if ui
+                    .add(shortcut_button("Memoria de carpinterías…", "PDF"))
+                    .clicked()
+                {
+                    self.export_document(crate::documents::Document::CarpentryReport);
+                }
+                if ui
+                    .add(shortcut_button("Cuadro de superficies…", "PDF"))
+                    .clicked()
+                {
+                    self.export_document(crate::documents::Document::Areas);
+                }
+                if ui
+                    .add(shortcut_button("Despiece de armaduras…", "PDF"))
+                    .clicked()
+                {
+                    self.export_document(crate::documents::Document::Bars);
+                }
+                if ui
+                    .add(shortcut_button("Mediciones y presupuesto…", "BC3"))
+                    .clicked()
+                {
+                    self.export_bc3();
+                }
+                head(ui, "Imágenes");
+                if ui.add(shortcut_button("Render…", "PNG")).clicked() {
+                    self.render.open = true;
+                }
+                if ui
+                    .add_enabled(
+                        self.mode == ViewMode::ThreeD,
+                        shortcut_button("Imagen de la vista 3D…", "PNG"),
+                    )
+                    .clicked()
+                {
+                    self.export_3d_picture();
+                }
+            });
     }
 
     fn menus(&mut self, ui: &mut Ui) {
@@ -398,12 +498,22 @@ impl ArchiSimApp {
             ui.separator();
             ui.switch(&mut self.show_reference_lines, "Líneas de referencia");
             ui.switch(&mut self.show_grid, "Rejilla");
-            ui.switch(&mut self.thin_lines, "Líneas finas (planta, alzados y 3D)");
+            {
+                let mut print = !self.thin_lines;
+                if ui
+                    .switch(&mut print, "Grosores de impresión")
+                    .on_hover_text("Plantas, secciones, alzados y planos con el grosor real de cada línea a su escala, como salen al imprimir; apagado, todas a un píxel para trabajar")
+                    .changed()
+                {
+                    self.thin_lines = !print;
+                }
+            }
             if ui.button("Visibilidad y gráficos…").clicked() {
                 self.views.vg_open = true;
             }
             ui.switch(&mut self.show_underlay, "Calco de la planta inferior");
             ui.switch(&mut self.v3d.camera.perspective, "Perspectiva en 3D");
+            ui.menu_button("Navegación 3D", |ui| self.navigation_controls(ui));
             ui.separator();
             ui.switch(&mut self.show_properties, "Propiedades");
             ui.switch(&mut self.show_navigator, "Navegador");
@@ -528,22 +638,19 @@ impl ArchiSimApp {
 
     pub(super) fn bottom_bar(&mut self, ui: &mut Ui) {
         let p = Palette::current(ui.ctx());
+        // The same segments in the same order in every view (§12.3): Vista
+        // · Anotar · Ayudas · coordinates. What does not apply to a view is
+        // shown faint, not taken away.
         ui.horizontal(|ui| {
             ui.set_min_height(30.0);
             ui.spacing_mut().item_spacing.x = 6.0;
+            let caption = |ui: &mut Ui, text: &str| {
+                ui.label(egui::RichText::new(text).size(10.5).color(p.muted));
+            };
+            caption(ui, "Vista");
             match self.mode {
-                ViewMode::Plan => {
+                ViewMode::Plan | ViewMode::Section => {
                     self.scale_and_zoom(ui);
-                    ui.separator();
-                    self.thin_lines_chip(ui);
-                    ui.separator();
-                    self.drawing_segments(ui);
-                    ui.separator();
-                    self.snap_toggles(ui);
-                }
-                ViewMode::Section => {
-                    self.scale_and_zoom(ui);
-                    ui.separator();
                     self.thin_lines_chip(ui);
                 }
                 ViewMode::Sheet(id) => {
@@ -554,10 +661,6 @@ impl ArchiSimApp {
                         .map(|s| format!("Papel {} · 1:1", s.size_name()))
                         .unwrap_or_default();
                     ui.label(egui::RichText::new(paper).small().color(p.muted));
-                    ui.separator();
-                    self.drawing_segments(ui);
-                    ui.separator();
-                    self.snap_toggles(ui);
                 }
                 ViewMode::Drafting(id) => {
                     let scale = self
@@ -567,12 +670,7 @@ impl ArchiSimApp {
                         .map(|v| format!("Vista de dibujo · 1:{}", v.scale))
                         .unwrap_or_default();
                     ui.label(egui::RichText::new(scale).small().color(p.muted));
-                    ui.separator();
                     self.thin_lines_chip(ui);
-                    ui.separator();
-                    self.drawing_segments(ui);
-                    ui.separator();
-                    self.snap_toggles(ui);
                 }
                 ViewMode::Schedule => {
                     ui.label(
@@ -584,7 +682,7 @@ impl ArchiSimApp {
                 ViewMode::ThreeD => {
                     let cam = &mut self.v3d.camera;
                     let mut persp = cam.perspective;
-                    ui.allocate_ui(Vec2::new(220.0, 26.0), |ui| {
+                    ui.allocate_ui(Vec2::new(190.0, 26.0), |ui| {
                         widgets::segmented(
                             ui,
                             "bar-projection",
@@ -596,14 +694,9 @@ impl ArchiSimApp {
                         );
                     });
                     cam.perspective = persp;
-                    ui.separator();
                     if icon_button(ui, Icon::Fit, "Ajustar (Inicio)", false).clicked() {
                         self.v3d.fit_requested = true;
                     }
-                    if icon_button(ui, Icon::Export, "Guardar imagen 3D (PNG)", false).clicked() {
-                        self.export_3d_picture();
-                    }
-                    ui.separator();
                     let mut on = self.v3d.section.is_some();
                     chip(
                         ui,
@@ -614,12 +707,35 @@ impl ArchiSimApp {
                     if on != self.v3d.section.is_some() {
                         self.v3d.toggle_section();
                     }
-                    ui.separator();
-                    self.thin_lines_chip(ui);
-                    ui.separator();
-                    self.cutaway_buttons(ui);
+                    self.cutaway_combo(ui);
+                    self.navigation_button(ui);
                 }
             }
+            let drawn = matches!(
+                self.mode,
+                ViewMode::Plan | ViewMode::Sheet(_) | ViewMode::Drafting(_)
+            );
+            ui.separator();
+            caption(ui, "Anotar");
+            if drawn {
+                self.drawing_segments(ui);
+            } else {
+                // Shown faint and short where nothing is drawn on the view.
+                ui.label(
+                    egui::RichText::new("Línea · Relleno · Texto · Cota")
+                        .small()
+                        .color(p.faint),
+                )
+                .on_hover_text("Se dibuja y se anota en las plantas, los planos y las vistas de dibujo");
+            }
+            ui.separator();
+            caption(ui, "Ayudas");
+            ui.add_enabled_ui(drawn, |ui| {
+                if self.mode == ViewMode::Plan {
+                    self.guide_segment(ui);
+                }
+                self.snap_toggles(ui);
+            });
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let level = self
                     .ed
@@ -660,7 +776,7 @@ impl ArchiSimApp {
                             ui.label(egui::RichText::new(kind).small().color(p.accent));
                         }
                     }
-                } else if self.mode != ViewMode::Schedule {
+                } else if !matches!(self.mode, ViewMode::Schedule | ViewMode::ThreeD) {
                     ui.label(
                         egui::RichText::new(format!(
                             "{} elementos seleccionados",
@@ -674,16 +790,20 @@ impl ArchiSimApp {
         });
     }
 
-    /// ArchiCAD's "Líneas finas": every line one pixel wide, in plan,
-    /// sections, elevations and 3D; off, the true weight at the scale of
-    /// the view (in 3D, contours two pixels wide).
+    /// «Grosores de impresión»: on, every line with its true weight at the
+    /// scale of the view, as it prints; off (the default, to work), every
+    /// line one pixel wide, as ArchiCAD's «Líneas finas». Plans, sections,
+    /// elevations, sheets and drafting views; the 3D view's contours belong
+    /// to its look.
     fn thin_lines_chip(&mut self, ui: &mut Ui) {
+        let mut print = !self.thin_lines;
         chip(
             ui,
-            &mut self.thin_lines,
-            "Líneas finas",
-            "Todas las líneas a un píxel, sin grosor, en planta, alzados, secciones y 3D; apagado, cada línea con su grosor real a la escala de la vista",
+            &mut print,
+            "Grosores de impresión",
+            "Cada línea con su grosor real a la escala de la vista, como sale en el plano; apagado, todas a un píxel para trabajar",
         );
+        self.thin_lines = !print;
     }
 
     /// The scale of the view and the zoom, at the left of the bottom bar.
@@ -701,10 +821,8 @@ impl ArchiSimApp {
             .response
             .on_hover_text("Escala del dibujo: grosores de línea, textos y símbolos");
         self.set_scale(scale as f64);
-        let rect = self.canvas;
-        if icon_button(ui, Icon::Minus, "Alejar", false).clicked() {
-            self.view.zoom_at(rect, rect.center(), 1.0 / 1.25);
-        }
+        // The zoom: the wheel zooms; its figure stays to read (the buttons
+        // made room for the segments, §12.3).
         ui.add_sized(
             [42.0, 20.0],
             egui::Label::new(
@@ -713,10 +831,9 @@ impl ArchiSimApp {
                     .color(p.text),
             ),
         )
-        .on_hover_text("100 %: el papel a su tamaño real en la pantalla");
-        if icon_button(ui, Icon::Plus, "Acercar", false).clicked() {
-            self.view.zoom_at(rect, rect.center(), 1.25);
-        }
+        .on_hover_text(
+            "100 %: el papel a su tamaño real en la pantalla. Acercar y alejar: la rueda",
+        );
         if icon_button(ui, Icon::Fit, "Ajustar a la ventana (Inicio)", false).clicked() {
             self.fit_requested = true;
         }

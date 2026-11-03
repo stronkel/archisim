@@ -265,3 +265,79 @@ Las herramientas de Instalaciones (tubería, conducto, aparato, iluminación, en
 | D22 | Cursor de los compañeros en directo | **Opcional, apagado por defecto** |
 
 Consecuencia de D20 para el trabajo en equipo (§9.2): Google Drive sincroniza **ficheros**, no es un servidor que responda al momento. El proyecto compartido será, por tanto, una **carpeta** con el modelo, un fichero de cambios por persona (cada uno escribe solo el suyo, así Drive nunca tiene que mezclar dos versiones del mismo fichero) y los ficheros de reservas. ArchiSim lee los de los demás al recibir y escribe el suyo al publicar. El mismo esquema sirve tal cual en una carpeta de un NAS o un servidor propio, y más adelante se le puede poner un servidor delante para la presencia en directo (cursores, avisos al momento), que con Drive llegará con unos segundos de retraso.
+
+## 12. Segunda versión (2 de noviembre de 2026)
+
+Decidida con Antonio sobre el prototipo «ArchiSim · interfaz por colores y barras» (pizarra navegable y hoja de disciplinas). Con las funciones de las v0.33 a v0.78, la regla del formato fijo (§2.3) se había roto (Urbanismo con 16 fichas, Arquitectura y Concepto con 15), la barra superior y la inferior mezclaban cosas distintas, las salidas estaban repartidas (render en Propiedades del 3D, estilos en Vista, entorno y PDF en Archivo) y la ventana era más fría que lo que dibuja.
+
+### 12.1 Color por disciplina
+
+Cada disciplina tiene un color suave, en el carril, en la ficha activa, en la cabecera de Propiedades y en el navegador. El azul queda solo para la selección. El dibujo sigue siendo papel blanco: el color está en la ventana, no en la planta.
+
+| Disciplina | Color | Fondo | Texto |
+|---|---|---|---|
+| Concepto | `#A0784A` arena | `#F5EEE4` | `#6B4F2C` |
+| Arquitectura | `#C0582F` terracota | `#FBEDE6` | `#8E3B1C` |
+| Estructura | `#4C6A92` pizarra | `#E9EFF6` | `#34507A` |
+| Instalaciones | `#16897A` verde agua | `#E2F4F0` | `#0F6A5E` |
+| Urbanismo | `#4F8A2B` verde hoja | `#EAF3E0` | `#3A6B1C` |
+| Documentación | `#6E6B64` grafito | `#EFEDE8` | `#45433E` |
+| Presentación | `#B8457A` frambuesa | `#FBEAF2` | `#8F2F5C` |
+| Análisis | `#B87514` ámbar | `#FBF0DC` | `#83500A` |
+| Coordinación | `#6E55C2` violeta | `#EFEBFB` | `#5440A0` |
+
+### 12.2 Fichas agrupadas, doce como mucho
+
+Tres filas de cuatro. Las variantes de una herramienta van en una sola ficha con un triángulo en la esquina, que abre las variantes encima del dibujo sin mover nada. Lo que se usa en cualquier disciplina sale de las fichas y va a la barra inferior.
+
+| Disciplina | Fichas (▸ con variantes) |
+|---|---|
+| Concepto | Arista · Empujar ▸ (Seguir) · Equidistancia · Dividir ▸ (Deformar) · Volumen ▸ (Formas) · Masa · Pintar · Convertir |
+| Arquitectura | Muro · Forjado · Puerta · Ventana · Abertura · Cubierta · Escalera ▸ (Ascensor) · Barandilla · Muro cortina · Objeto · Local |
+| Estructura | Pilar · Viga · Forjado · Muro de carga · Cimentación ▸ (Zapata, Losa) · Armado · Abertura · Ejes |
+| Instalaciones | Tubería · Conducto · Aparato ▸ (Equipos de agua) · Iluminación · Mecanismo ▸ (Enchufe, Interruptor) · Cuadro · Montante · Clima · Incendios · Placas solares |
+| Urbanismo | Terreno · Parcela · Calle ▸ (Vial, Glorieta, Marca vial) · Redes ▸ (Pozo y arqueta) · Entorno ▸ (Edificio del entorno, Traer, Descargar) · Piscina · Vegetación ▸ (Plantación, Rocas, Vivero) · Pincel · Mobiliario urbano · Forma |
+| Documentación | Sección · Alzado · Etiqueta · Plano · Tabla · Vista de dibujo |
+| Presentación (nueva) | Cámara · Sol · Estilo · Render · Imagen · Pegatina · Recorrido (más adelante) |
+| Análisis | CTE · Mediciones · Presupuesto · Superficies |
+| Coordinación | Vincular · Módulo · Versiones · Interferencias · Incidencias · Requisitos · Equipo · Publicar |
+
+Cambian de sitio: Cinta y Plano de referencia → **Guía**, en la barra inferior; Cota, Cota de nivel y Texto → **Anotar**, en la barra inferior; Pegatina → Presentación; el render, los estilos de presentación, la imagen 3D y el sol → Presentación.
+
+### 12.3 Una regla para cada barra
+
+- **Arriba, el proyecto**: menús, nombre y fichero, buscador, deshacer, guardar, equipo y un solo botón **Entregar** con todas las salidas (IFC 4.3, IFC4, glTF; planos, carpinterías, superficies, mediciones BC3; render e imagen). Las mismas órdenes siguen en Archivo.
+- **Abajo, la vista y lo que se dibuja sobre ella**, siempre los mismos tramos en el mismo orden: **Vista** (escala o proyección, **Grosores de impresión** —apagado por defecto: líneas finas para trabajar; encendido, como se imprime; no en 3D, donde el contorno es del aspecto—, estilo, atenuar, caja de sección) · **Anotar** (Línea, Relleno, Texto, Cota con sus variantes) · **Ayudas** (Guía y forzados) · coordenadas. Lo que no vale en una vista se ve apagado, no desaparece.
+
+### 12.4 Presentación
+
+Lo que se enseña al cliente, al ayuntamiento o en un concurso, aparte de los planos técnicos (que siguen en Documentación). Al entrar, la vista toma su estilo de presentación. Las cámaras y láminas de presentación tienen su grupo en el navegador.
+
+### 12.5 La vista 3D
+
+- **Cubo de vistas** discreto: semitransparente, sin recuadro, arriba a la derecha. Sus caras llevan a planta y alzados (perspectivados, con las verticales rectas), sus esquinas a las cuatro vistas de esquina; al pasar el ratón se ve entero y aparecen girar 90° y la vista de inicio.
+- **Aspecto** arriba a la izquierda: Sombreado (sin texturas), Texturas y Realista (sombras finas y penumbra de los rincones). Aristas y Líneas ocultas, cuando tengan su propio sombreado.
+- **Una cámara por modo** (sin selector):
+  - **Técnica, cámara libre**: el derecho mantenido gira alrededor de lo que hay bajo el cursor (marcado con un punto naranja); con el derecho apretado, W A S D vuelan, Q y E bajan y suben, Mayús acelera; al soltar, las letras vuelven a ser órdenes.
+  - **Maqueta, cámara de maqueta**: mira siempre a un punto del suelo, con la inclinación entre 30° y 70°; W A S D la mueven por el suelo sin pulsar nada.
+  - Lo que hace cada tecla con la cámara del modo se lee abajo a la izquierda del dibujo.
+  - Recorrer la casa a la altura de los ojos es la ficha Recorrido de Presentación.
+- **Navegación** (en la barra inferior del 3D y en Vista → Navegación 3D): velocidad de paseo, de giro y paso de la rueda, del 1 al 10; girar alrededor de lo que hay bajo el cursor; no alejarse más allá del modelo (tres veces su tamaño); invertir el ratón. Las verticales rectas no son una opción: los alzados del cubo se miran a nivel.
+
+### 12.6 Propiedades en tarjetas
+
+Dos niveles: arriba, tarjetas con lo que más se toca (el tipo con su dibujo grande y los tipos parecidos para cambiar de un clic; las medidas como cifras grandes que se escriben; la función en botones; los acabados con su muestra; la altura dibujada de planta a planta); debajo, «Todas las propiedades» con la lista técnica completa de siempre. Con una herramienta activa, la galería de tipos; sin nada, las tarjetas de estilo y escala de la vista.
+
+### 12.7 Maqueta
+
+Las mismas barras en el mismo sitio. La columna de fichas pasa a ser el catálogo y el carril, las estancias. Las diferencias con Técnica quedan en: la cámara, las letras sueltas (cámara en Maqueta, órdenes en Técnica), el color (siempre a todo color), la selección (muebles primero) y el catálogo.
+
+### 12.8 Bloques
+
+| Bloque | Contenido |
+|---|---|
+| V1 ✅ | Colores por disciplina, fichas agrupadas, Presentación, herramientas recolocadas |
+| V2 ✅ | Barras: Entregar arriba; Vista · Anotar · Ayudas abajo |
+| V3 ✅ | Vista 3D: cubo, aspecto, cámara libre con vuelo, navegación |
+| V4 ✅ (primera vuelta) | Propiedades: banda de color y medidas en tarjetas de muros, huecos y forjados |
+| V5 | Maqueta con las mismas barras y su cámara |

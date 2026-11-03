@@ -205,6 +205,14 @@ pub struct View3dState {
     /// Where and when the wheel last aimed the camera at what is under the
     /// cursor (looked up again when the cursor moves or after a pause).
     zoom_aim: Option<(std::time::Instant, Pos2)>,
+    /// What the right button turns the view about, chosen when it is
+    /// pressed (§12.5: what is under the cursor).
+    pub orbit_pivot: Option<glam::Vec3>,
+    /// W A S D moved the camera in this frame: the right button then looks
+    /// around from the eye, as in a game.
+    pub flying: bool,
+    /// The cursor is over the cube of views.
+    pub cube_hover: bool,
 }
 
 /// Full textures, except on Intel Macs: their AMD graphics drivers (on
@@ -223,6 +231,9 @@ impl Default for View3dState {
         Self {
             camera: Camera::default(),
             fit_requested: true,
+            orbit_pivot: None,
+            flying: false,
+            cube_hover: false,
             scene: Scene::default(),
             scene_key: None,
             gpu: None,
@@ -866,15 +877,32 @@ impl ArchiSimApp {
         let grabbing_object = self.object_grips_3d(&ctx, &response, rect)
             | self.mass_grips_3d(&ctx, &response, rect)
             | self.object_drag_3d(&ctx, &response, rect);
-        // With something selected, the camera turns about it.
-        let pivot = if self.ed.selection.is_empty() {
-            None
-        } else {
-            self.v3d
-                .scene
-                .bounds_of(&self.ed.selection)
-                .map(|(lo, hi)| (lo + hi) / 2.0)
-        };
+        // The camera turns about what is under the cursor when the right
+        // button is pressed (§12.5); with nothing there, about the
+        // selection; with nothing selected, about its target.
+        let nav = self.prefs.nav;
+        let turning = response.drag_started_by(PointerButton::Secondary)
+            || (ctx.input(|i| i.modifiers.shift)
+                && response.drag_started_by(PointerButton::Middle));
+        if turning {
+            let under = if nav.pivot_under_cursor {
+                ctx.input(|i| i.pointer.press_origin())
+                    .and_then(|p| self.v3d.hit(p - rect.min, rect.size()))
+                    .map(|h| h.0)
+            } else {
+                None
+            };
+            let selected = if self.ed.selection.is_empty() {
+                None
+            } else {
+                self.v3d
+                    .scene
+                    .bounds_of(&self.ed.selection)
+                    .map(|(lo, hi)| (lo + hi) / 2.0)
+            };
+            self.v3d.orbit_pivot = under.or(selected);
+        }
+        let maquette = self.maquette;
         let v = &mut self.v3d;
 
         // Navigation: the right button held turns the view (with Shift,
@@ -884,9 +912,27 @@ impl ArchiSimApp {
         if response.dragged_by(PointerButton::Secondary)
             || (shift && response.dragged_by(PointerButton::Middle))
         {
-            match pivot {
-                Some(p) => v.camera.orbit_about(delta, p),
-                None => v.camera.orbit(delta),
+            let k = crate::prefs::Navigation::factor(nav.turn);
+            let mut d = delta * k;
+            if nav.invert {
+                d.y = -d.y;
+            }
+            if maquette {
+                // The Maqueta's camera looks down at the ground, between
+                // 30° and 70° (§12.5).
+                let (lo, hi) = (30.0_f32.to_radians(), 70.0_f32.to_radians());
+                let wanted = (v.camera.pitch + d.y * 0.008).clamp(lo, hi);
+                d.y = (wanted - v.camera.pitch) / 0.008;
+            }
+            if v.flying {
+                // Looking around from where one is, as in a game.
+                let eye = v.camera.eye();
+                v.camera.orbit_about(d, eye);
+            } else {
+                match v.orbit_pivot {
+                    Some(p) => v.camera.orbit_about(d, p),
+                    None => v.camera.orbit(d),
+                }
             }
         } else if response.dragged_by(PointerButton::Middle) {
             // What was grabbed follows the cursor, however far the target
@@ -898,12 +944,16 @@ impl ArchiSimApp {
             }
             v.camera.pan(delta, size.y);
         }
+        if !response.dragged() {
+            v.orbit_pivot = None;
+        }
         if response.double_clicked_by(PointerButton::Middle) {
             v.fit_requested = true;
         }
         if let Some(pos) = response.hover_pos() {
             let (scroll, zoom) = ctx.input(|i| (i.smooth_scroll_delta, i.zoom_delta()));
-            let factor = (-scroll.y / 300.0).exp() / zoom;
+            let factor =
+                (-scroll.y / 300.0 * crate::prefs::Navigation::factor(nav.wheel)).exp() / zoom;
             if (factor - 1.0).abs() > 1e-6 {
                 let local = pos - rect.min;
                 // Towards what is under the cursor: looked up once per
@@ -921,6 +971,20 @@ impl ArchiSimApp {
                     glam::Vec2::new(local.x, local.y),
                     glam::Vec2::new(size.x, size.y),
                 );
+            }
+        }
+        if nav.keep_near {
+            // Never further than a few times the model (§12.5): turning
+            // about something does not fling the view away.
+            let far = ((v.scene.hi - v.scene.lo).length() * 3.0).max(40.0);
+            if v.camera.distance > far {
+                v.camera.distance = far;
+            }
+            let centre = (v.scene.lo + v.scene.hi) / 2.0;
+            let reach = far * 1.5;
+            let off = v.camera.target - centre;
+            if off.length() > reach {
+                v.camera.target = centre + off.normalize() * reach;
             }
         }
 
@@ -1084,13 +1148,11 @@ impl ArchiSimApp {
             self.draw_tool_3d(&painter, rect);
             self.draw_brush_3d(&painter, rect);
         }
+        let turning = response.dragged_by(PointerButton::Secondary);
+        self.camera_hint(&painter, rect, turning);
+        self.view_cube(&ctx, rect);
+        self.look_bar(&ctx, rect);
         let v = &mut self.v3d;
-        draw_north(
-            &painter,
-            rect,
-            &v.camera,
-            self.ed.model().true_north() as f32,
-        );
         let on_handle = v.section_hover.is_some()
             || v.section_drag.is_some()
             || self.object_grip_hover.is_some()
@@ -1157,39 +1219,6 @@ fn draw_section_box(painter: &egui::Painter, rect: Rect, v: &super::View3dState)
         painter.circle_filled(p, r, if active { ink } else { Color32::WHITE });
         painter.circle_stroke(p, r, Stroke::new(1.5, ink));
     }
-}
-
-/// A north arrow in the corner, turning with the camera, towards the
-/// project's true north (`north`: radians clockwise from the plan's up).
-fn draw_north(painter: &egui::Painter, rect: Rect, camera: &Camera, north: f32) {
-    let c = rect.right_top() + Vec2::new(-34.0, 34.0);
-    // North (+Y) on the screen: along screen-right it is cos(yaw), along
-    // screen-up -sin(yaw)·sin(pitch); egui's Y grows downwards.
-    let (sy, cy) = (camera.yaw + north).sin_cos();
-    let dir = Vec2::new(cy, sy * camera.pitch.sin());
-    let len = dir.length();
-    let dir = if len > 1e-3 {
-        dir / len
-    } else {
-        Vec2::new(0.0, -1.0)
-    };
-    let ink = Color32::from_gray(50);
-    painter.circle_filled(c, 20.0, Color32::from_white_alpha(170));
-    painter.circle_stroke(c, 20.0, Stroke::new(1.0, Color32::from_gray(150)));
-    let tip = c + dir * 15.0;
-    let side = Vec2::new(-dir.y, dir.x) * 5.0;
-    painter.add(egui::Shape::convex_polygon(
-        vec![tip, c - dir * 6.0 + side, c - dir * 6.0 - side],
-        ink,
-        Stroke::NONE,
-    ));
-    painter.text(
-        c - dir * 13.0,
-        Align2::CENTER_CENTER,
-        "N",
-        FontId::proportional(10.0),
-        ink,
-    );
 }
 
 impl ArchiSimApp {
