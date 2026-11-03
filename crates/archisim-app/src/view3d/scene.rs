@@ -545,6 +545,17 @@ struct Look<'a> {
 }
 
 impl Scene {
+    /// Whether some water is seen through (a pool's, the sea): it moves,
+    /// so the picture is drawn again while it is in view.
+    pub fn has_water(&self) -> bool {
+        let water = |v: &Vertex| matches!(v.misc[2], 10 | 30);
+        self.glass.iter().any(|c| c.mesh.vertices.iter().any(water))
+            || self
+                .groups
+                .iter()
+                .any(|g| g.glass.vertices.iter().any(water))
+    }
+
     pub fn build(model: &Model, selection: &BTreeSet<Element>) -> Self {
         Self::build_with(model, selection, &[], false, &Default::default())
     }

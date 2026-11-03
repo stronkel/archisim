@@ -19,11 +19,12 @@ Usa el mismo método que la vista 3D de ArchiSim (`view3d/shaders.wgsl`, funció
    - un pie de muro algo más oscuro;
    - contornos del color de la superficie oscurecido, en lugar de negros.
 
-## Los 30 materiales
+## Los materiales
 
 - **Fachadas:** ladrillo rojo y amarillo, sillería, mampostería, estuco amarillo y almagra, encalado, tablas solapadas azul y verde, hormigón suave.
 - **Cubiertas:** tejuela de pizarra y verde, escamas, teja curva, cobre con pátina, zinc.
-- **Suelos:** adoquín, losa de acera, asfalto, tarima, césped, roca en estratos, agua.
+- **Suelos:** adoquín, losa de acera, asfalto, tarima, césped (con briznas, flores y matas en 3D), roca en estratos, agua de mar y de piscina (con movimiento y transparencia), gresite.
+- **Pavimentos:** adoquín en diagonal y en abanico, empedrado, empedrado antiguo, opus romano, laja, laja en césped, mármol, guijarros y grava.
 - **Detalles:** pinturas crema, verde carruaje, chocolate y granate, vidrio pintado, follaje, madera de poste.
 
 Colores y tamaños de pieza en `src/palette.js`. Las funciones de cada material en `src/materials.glsl.js`, que también lleva las texturas actuales de ArchiSim para compararlas (botón «Actuales»).
@@ -37,7 +38,11 @@ sh build.sh          # out/index.html, una sola página con todo dentro
 node shot.js '[{"name":"calle"},{"name":"muestrario","view":"board"}]'
 ```
 
-## Para llevarlo a ArchiSim (cuando Antonio lo apruebe)
+## En ArchiSim
+
+Llevado a la vista 3D en la rama `bloque/gama-estilizada` (entrada 86 de la bitácora). Lo que sigue es el resumen de cómo se hizo.
+
+## Para llevarlo a ArchiSim
 
 - **Materiales:** `TextureKind` nuevos o una variante «estilizada» de los actuales en `model/appearance.rs`. El tamaño de pieza (`dims`) va en la escala que ya hay o en un campo nuevo, con su número de versión del formato.
 - **Sombreador:**

@@ -76,6 +76,10 @@ pub struct Prefs {
     pub textures_3d: Option<String>,
     /// How the 3D view moves (`docs/INTERFAZ.md` §12.5).
     pub nav: Navigation,
+    /// The relief of the textures in 3D (bricks' bevels, boards' lips…).
+    pub relief_3d: bool,
+    /// Water moving in 3D.
+    pub water_3d: bool,
 }
 
 /// How the 3D view moves: speeds from 1 to 10 (5 is as it always was) and
@@ -133,6 +137,8 @@ impl Default for Prefs {
             textures_3d: None,
             quality_3d: None,
             nav: Navigation::default(),
+            relief_3d: true,
+            water_3d: true,
         }
     }
 }
@@ -179,6 +185,8 @@ impl Prefs {
                 "no_alejarse": self.nav.keep_near,
                 "invertir": self.nav.invert,
             },
+            "relieve_3d": self.relief_3d,
+            "agua_en_movimiento": self.water_3d,
         });
         serde_json::to_string_pretty(&v).unwrap_or_default()
     }
@@ -259,6 +267,8 @@ impl Prefs {
                     invert: on("invertir", dn.invert),
                 }
             },
+            relief_3d: flag("relieve_3d", d.relief_3d),
+            water_3d: flag("agua_en_movimiento", d.water_3d),
         }
     }
 
@@ -320,6 +330,8 @@ mod tests {
                 keep_near: false,
                 invert: true,
             },
+            relief_3d: false,
+            water_3d: false,
         };
         assert_eq!(Prefs::from_json(&p.to_json()), p);
         assert!((Navigation::factor(5) - 1.0).abs() < 1e-6);

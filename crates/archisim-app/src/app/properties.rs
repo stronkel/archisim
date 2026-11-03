@@ -960,6 +960,22 @@ impl ArchiSimApp {
                 self.v3d.quality = quality;
                 self.prefs.quality_3d = Some(quality);
             }
+            super::props::row(
+                ui,
+                "Relieve",
+                "El relieve de las texturas: el bisel del ladrillo, el labio de las tablas solapadas, las tejas… que la luz del sol marca",
+                |ui, _| {
+                    ui.switch(&mut self.prefs.relief_3d, "");
+                },
+            );
+            super::props::row(
+                ui,
+                "Agua en movimiento",
+                "El agua del mar y de las piscinas se mueve mientras se ve (apagado: quieta, gasta menos)",
+                |ui, _| {
+                    ui.switch(&mut self.prefs.water_3d, "");
+                },
+            );
         });
         self.render_group(ui);
         self.section_box_group(ui);

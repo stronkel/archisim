@@ -1,4 +1,4 @@
-# Formato de proyecto `.archisim` (versión 70)
+# Formato de proyecto `.archisim` (versión 71)
 
 El proyecto de ArchiSim se guarda en un único fichero de texto JSON con extensión `.archisim`. Es el equivalente al `.pln` de ArchiCAD o al `.rvt` de Revit, pero legible con cualquier editor de texto y comparable entre versiones (Git, diff).
 
@@ -128,3 +128,4 @@ Se puede, con cuidado: cambiar una altura, un nombre, mover una ventana, cambiar
 - Versión 68 (U8): lista `decals`, las pegatinas: `id`, `guid`, `name`, `level`, `centre` (x, y en planta y z sobre la planta), `normal` de la cara, `rotation` (grados), `width`, `source` (nombre del fichero), `png` (la imagen en base64), `aspect` (ancho entre alto) y `host` (el elemento sobre el que se pegó, si lo hay). Los ficheros anteriores no tienen ninguna.
 - Versión 69 (V2): `project.orthophoto`, la ortofoto sobre el suelo: `source`, `png` (base64), `origin` (esquina inferior izquierda en planta), `u` y `v` (vectores en planta de su lado inferior y del izquierdo) y `on_roads` (también sobre las calles). Los ficheros anteriores no la tienen.
 - Versión 70: en el `dress` de un edificio del entorno, `ridge_turned` (la cumbrera de su cubierta de teja girada un ángulo recto respecto a la de siempre). Los ficheros anteriores la tienen como siempre.
+- Versión 71: texturas nuevas de la gama estilizada en el aspecto de los materiales (`texture`: `ashlar`, `clapboard`, `shingles`, `scales`, `barrel_tiles`, `standing_seam`, `setts`, `asphalt`, `strata`, `sea`, `setts_diagonal`, `setts_fan`, `cobbles`, `old_cobbles`, `opus_romanum`, `flagstone`, `flagstones_in_grass`, `marble_slabs`, `pebbles`, `metro_tiles`, `pattern_tiles`, `earth_path`, `albero`, `furrows`, `kitchen_garden`, `cracked_earth`). La estructura no cambia; solo para que las versiones anteriores avisen de que no pueden leerlas.

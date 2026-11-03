@@ -26,6 +26,7 @@ mod escaleras;
 mod fachadas;
 mod figuras;
 mod formas;
+mod gama;
 mod grande;
 mod instalaciones;
 mod modelos;
@@ -167,6 +168,10 @@ Uso:
       rombos, bloque, paneles, ventilada y aplacado), con dinteles a
       sardinel, esquinas trabadas y frentes de forjado: fachadas.archisim y
       fachadas.ifc, y cuántas piezas lleva. Por defecto: ./out
+  archisim gama [carpeta]
+      La gama estilizada de materiales: un muestrario con cada uno (fachadas,
+      cubiertas, suelos, pavimentos y pinturas) y una calle con acantilado,
+      mar y piscina. Escribe gama.archisim. Por defecto: ./out
   archisim formas [carpeta]
       Las formas de Concepto juntas: aristas redondeadas y achaflanadas,
       esfera, cilindro, cono, revolución, uniones, restas, intersecciones,
@@ -501,6 +506,10 @@ fn main() -> ExitCode {
         Some("cubiertas") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
             report(cubiertas::write(&dir))
+        }
+        Some("gama") => {
+            let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
+            report(gama::write(&dir))
         }
         Some("formas") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));

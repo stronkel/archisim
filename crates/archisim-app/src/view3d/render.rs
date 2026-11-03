@@ -80,7 +80,8 @@ struct Globals {
     /// x = 1 with the sky drawn; y: night (0…1); z, w: where the haze
     /// begins and where it is thickest, metres from the eye.
     atmos: [f32; 4],
-    /// Lamps lit: position and reach; `lamp_count.x` of them.
+    /// Lamps lit: position and reach; `lamp_count.x` of them (y: the
+    /// water's clock, seconds; z = 1 with the textures' relief).
     lamps: [[f32; 4]; MAX_LAMPS],
     lamp_count: [f32; 4],
     /// What a cut shows: xyz a flat colour (linear), w = 1 to use it;
@@ -233,6 +234,11 @@ pub struct Renderer {
     selected: bool,
     /// Contours one pixel wide (ArchiCAD's "thin lines"), instead of two.
     pub thin_lines: bool,
+    /// The relief of the stylized textures (bricks' bevels, boards'
+    /// lips…) tilting the light.
+    pub relief: bool,
+    /// Seconds, for the water's movement (wrapped every hour).
+    pub time: f32,
     /// The background left transparent (premultiplied: what is drawn
     /// under the picture, the ground grid, shows where there is no model).
     transparent: bool,
@@ -670,6 +676,8 @@ impl Renderer {
             cut: None,
             selected: false,
             thin_lines: false,
+            relief: true,
+            time: 0.0,
             transparent: false,
             atmosphere: None,
             lamps: Vec::new(),
@@ -977,7 +985,12 @@ impl Renderer {
             grid,
             atmos: [sky_on, colours.night, haze_from, haze_from * 5.0 + 60.0],
             lamps,
-            lamp_count: [lamp_n as f32, 0.0, 0.0, 0.0],
+            lamp_count: [
+                lamp_n as f32,
+                self.time.rem_euclid(3600.0),
+                if self.relief { 1.0 } else { 0.0 },
+                0.0,
+            ],
             caps: match self.caps {
                 CapStyle::Layers => [0.0, 0.0, 0.0, 0.0],
                 CapStyle::Flat([r, g, b]) => [

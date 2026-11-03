@@ -483,6 +483,11 @@ impl ArchiSimApp {
                     }
                 }
                 ui.separator();
+                ui.switch(&mut self.prefs.relief_3d, "Relieve")
+                    .on_hover_text("El relieve de las texturas: el bisel del ladrillo, el labio de las tablas, las tejas…");
+                ui.switch(&mut self.prefs.water_3d, "Agua en movimiento")
+                    .on_hover_text("El mar y las piscinas se mueven mientras se ven");
+                ui.separator();
                 if ui
                     .button("Captura grande…")
                     .on_hover_text("Guarda la vista tal cual en una imagen de 3840 píxeles de ancho (PNG), para un render con IA o con otro programa")
