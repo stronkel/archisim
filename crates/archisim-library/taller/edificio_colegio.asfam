@@ -1,0 +1,55 @@
+family "Colegio público (taller)"
+  category street
+  host none
+  version 1
+  description "Colegio público: aulario de dos plantas de ladrillo con bandas blancas, ventanas corridas con persianas, porche cubierto, entrada con marquesina, nombre en azulejos y tres banderas, gimnasio, patio con pista de baloncesto, columpio y tobogán, árboles, bancos y valla con cancela (modelo del taller, en revisión)"
+  folder "Taller · Edificios"
+
+type_params
+  section "Dimensiones"
+    width length = 40.00 range 24.00..70.00 label "Largo del aulario"
+    variant integer = 1 range 0..99 label "Variante"
+  section "Materiales"
+    brick material = "Ladrillo visto" label "Ladrillo"
+    band material = "Cal blanca" label "Bandas y remates"
+    plinth material = "Piedra caliza" label "Zócalo"
+    accent material = "Lacado azul celeste" label "Color del colegio (puertas, vierteaguas, cancela)"
+    frame material = "Aluminio plata" label "Carpintería y soportes"
+    canopy material = "Cal blanca" label "Porche y marquesina"
+    tile_panel material = "Azulejo andaluz" label "Rótulo"
+    panel_wall material = "Panel sándwich gris" label "Panel del gimnasio"
+    metal_roof material = "Panel sándwich gris" label "Cubierta del gimnasio"
+    roof_floor material = "Hormigón pulido" label "Cubierta plana"
+    panel material = "Panel solar" label "Placas solares"
+    metal material = "Acero galvanizado" label "Valla y soportes"
+    flag material = "Plástico rojo" label "Bandera 1"
+    flag_b material = "Plástico verde" label "Bandera 2"
+    flag_c material = "Lacado azul añil" label "Bandera 3"
+    yard material = "Hormigón suave" label "Patio"
+    court material = "Pista verde" label "Pista"
+    ground material = "Pista terracota" label "Zona de seguridad"
+    line material = "Línea blanca" label "Líneas"
+    key material = "Pista azul" label "Zonas"
+    board material = "Lacado blanco" label "Tableros"
+    net material = "Red blanca" label "Redes"
+    dark material = "Goma negra" label "Bases"
+    seat material = "Goma negra" label "Asientos del columpio"
+    slide material = "Plástico amarillo" label "Tobogán"
+    stone material = "Piedra caliza" label "Bancos"
+    blind material = "Persiana crema" label "Persianas"
+    glass material = "Vidrio claro" label "Vidrio"
+    interior material = "Interior en sombra" label "Interior visto por los huecos"
+    brass material = "Latón" label "Herrajes"
+    trunk material = "Corteza de olivo" label "Troncos"
+    leaves material = "Hoja verde" label "Árboles y plantas"
+
+body
+  box (-(width + 20) / 2, 0, 0) to ((width + 20) / 2, 34, 12) material brick
+
+plan 1:50
+  polygon (-(width + 20) / 2, 0) ((width + 20) / 2, 0) ((width + 20) / 2, 34) (-(width + 20) / 2, 34) pen view
+
+outputs
+  generator = "props:fine_school"
+  ifc_class = "IfcBuildingElementProxy"
+  ifc_type = "USERDEFINED"

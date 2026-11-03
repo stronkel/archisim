@@ -1,0 +1,47 @@
+family "Gasolinera (taller)"
+  category street
+  host none
+  version 1
+  description "Gasolinera sin marca: marquesina con frente de color y luces, dos isletas con dos surtidores cada una, tienda acristalada con rótulo, monolito de precios, túnel de lavado con cepillos, poste de aire y agua, jardineras y marcas en el suelo (modelo del taller, en revisión)"
+  folder "Taller · Edificios"
+
+type_params
+  section "Dimensiones"
+    variant integer = 1 range 0..99 label "Variante"
+  section "Materiales"
+    brand material = "Lacado azul añil" label "Color de la estación"
+    brand_b material = "Pintura amarilla" label "Franja"
+    canopy material = "Lacado blanco" label "Marquesina"
+    trim material = "Cal blanca" label "Isletas y remates"
+    lamp material = "Luz de farola" label "Luces"
+    stripe material = "Pintura amarilla" label "Marcas de las isletas"
+    screen material = "Pantalla de televisor" label "Pantallas"
+    digits material = "Llama clara" label "Cifras"
+    nozzle_a material = "Plástico verde" label "Boquereles 1"
+    nozzle_b material = "Plástico amarillo" label "Boquereles 2"
+    dark material = "Goma negra" label "Mangueras"
+    appliance material = "Lacado blanco" label "Surtidores y poste"
+    gas material = "Plástico azul" label "Bombonas"
+    brush material = "Plástico azul" label "Cepillos"
+    wall material = "Cal blanca" label "Tienda y lavado"
+    frame material = "Aluminio plata" label "Carpintería"
+    sign_text material = "Lacado blanco" label "Letreros"
+    roof_floor material = "Hormigón pulido" label "Cubiertas"
+    metal material = "Acero galvanizado" label "Pórtico y expositor"
+    plinth material = "Hormigón suave" label "Jardineras"
+    leaves material = "Hoja verde" label "Plantas"
+    line material = "Línea blanca" label "Marcas"
+    yard material = "Asfalto" label "Explanada"
+    glass material = "Vidrio claro" label "Vidrio"
+    interior material = "Interior en sombra" label "Interior visto por los huecos"
+
+body
+  box (-(32) / 2, 0, 0) to ((32) / 2, 24, 8) material brand
+
+plan 1:50
+  polygon (-(32) / 2, 0) ((32) / 2, 0) ((32) / 2, 24) (-(32) / 2, 24) pen view
+
+outputs
+  generator = "props:fine_petrol_station"
+  ifc_class = "IfcBuildingElementProxy"
+  ifc_type = "USERDEFINED"

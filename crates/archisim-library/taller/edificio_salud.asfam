@@ -1,0 +1,45 @@
+family "Centro de salud (taller)"
+  category street
+  host none
+  version 1
+  description "Centro de salud: bloque blanco de dos plantas con bandas de ventanas, lamas verticales en la planta alta, vestíbulo de vidrio a doble altura, marquesina volada con rótulo y cruz verde, rampa con pasamanos y escalones, porche de ambulancias, máquinas en cubierta, aparcamiento y árboles (modelo del taller, en revisión)"
+  folder "Taller · Edificios"
+
+type_params
+  section "Dimensiones"
+    width length = 32.00 range 18.00..60.00 label "Fachada"
+    depth length = 14.00 range 10.00..24.00 label "Fondo"
+    variant integer = 1 range 0..99 label "Variante"
+  section "Materiales"
+    wall material = "Cal blanca" label "Fachada"
+    band material = "Piedra caliza" label "Bandas"
+    plinth material = "Piedra gris" label "Zócalo"
+    fins material = "Roble claro" label "Lamas"
+    frame material = "Aluminio plata" label "Carpintería"
+    canopy material = "Cal blanca" label "Marquesinas"
+    sign material = "Lacado blanco" label "Rótulo"
+    cross material = "Plástico verde" label "Cruz"
+    step material = "Terrazo" label "Escalones y rampa"
+    metal material = "Acero inoxidable" label "Pasamanos y conductos"
+    appliance material = "Lacado blanco" label "Máquinas"
+    roof_floor material = "Hormigón pulido" label "Cubierta"
+    line material = "Línea blanca" label "Marcas"
+    paving material = "Losa de acera" label "Acera"
+    yard material = "Asfalto" label "Aparcamiento"
+    stone material = "Piedra caliza" label "Alcorques"
+    blind material = "Persiana crema" label "Persianas"
+    glass material = "Vidrio claro" label "Vidrio"
+    interior material = "Interior en sombra" label "Interior visto por los huecos"
+    trunk material = "Corteza de olivo" label "Troncos"
+    leaves material = "Hoja verde" label "Árboles y plantas"
+
+body
+  box (-(width) / 2, 0, 0) to ((width) / 2, depth + 14, 9) material wall
+
+plan 1:50
+  polygon (-(width) / 2, 0) ((width) / 2, 0) ((width) / 2, depth + 14) (-(width) / 2, depth + 14) pen view
+
+outputs
+  generator = "props:fine_health_centre"
+  ifc_class = "IfcBuildingElementProxy"
+  ifc_type = "USERDEFINED"

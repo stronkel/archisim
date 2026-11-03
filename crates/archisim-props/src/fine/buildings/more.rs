@@ -407,3 +407,39 @@ pub fn trough(b: &mut Builder, c: [f64; 2], len: f64) {
         0.0,
     );
 }
+
+/// A flag pole with its flag (`role`) hung from the top.
+pub fn flag_pole(b: &mut Builder, base: [f64; 2], h: f64, role: &'static str) {
+    b.cyl(
+        "metal",
+        [base[0], base[1], 0.0],
+        [base[0], base[1], h],
+        0.04,
+    );
+    b.ellipsoid("metal", [base[0], base[1], h + 0.04], [0.07, 0.07, 0.07]);
+    b.rbox(
+        role,
+        [base[0] + 0.03, base[1] - 0.008, h - 1.05],
+        [base[0] + 1.55, base[1] + 0.008, h - 0.05],
+        0.0,
+    );
+}
+
+/// A bell hung from a beam at `top` (its crown there), `size` across.
+pub fn bell(b: &mut Builder, c: [f64; 2], top: f64, size: f64) {
+    let s = size / 0.5;
+    b.lathe(
+        "bell",
+        [c[0], c[1], top - 0.7 * s],
+        &[
+            (0.0, 0.0),
+            (0.25 * s, 0.02 * s),
+            (0.2 * s, 0.2 * s),
+            (0.12 * s, 0.62 * s),
+            (0.03 * s, 0.7 * s),
+            (0.0, 0.7 * s),
+        ],
+        1.0,
+        1.0,
+    );
+}

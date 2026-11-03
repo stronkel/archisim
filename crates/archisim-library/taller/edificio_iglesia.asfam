@@ -1,0 +1,44 @@
+family "Iglesia parroquial (taller)"
+  category street
+  host none
+  version 1
+  description "Iglesia parroquial andaluza: nave encalada con contrafuertes y cubierta de teja, ábside, portada de piedra con arco, pilastras, hornacina y óculo, puerta lateral con tejaroz, torre con caña blanca, cuerpo de campanas con arcos y campanas y chapitel de azulejo con pináculos y veleta, y la plaza delante con naranjos y bancos (modelo del taller, en revisión)"
+  folder "Taller · Edificios"
+
+type_params
+  section "Dimensiones"
+    width length = 11.00 range 8.00..20.00 label "Ancho de la nave"
+    depth length = 28.00 range 16.00..50.00 label "Largo de la nave"
+    tower_height length = 26.00 range 14.00..40.00 label "Altura de la torre"
+    variant integer = 1 range 0..99 label "Variante"
+  section "Materiales"
+    wall material = "Encalado" label "Muros"
+    trim material = "Estuco amarillo" label "Bandas y cornisas"
+    plinth material = "Piedra caliza" label "Zócalo"
+    stone material = "Piedra caliza" label "Portada"
+    niche material = "Lacado azul añil" label "Fondo de la hornacina"
+    glaze material = "Cerámica turquesa" label "Chapitel de azulejo"
+    bell material = "Oro viejo" label "Campanas"
+    wood material = "Nogal" label "Puertas y yugos"
+    iron material = "Hierro forjado" label "Rejas, cruz y veleta"
+    tiles material = "Teja curva" label "Tejas"
+    roof material = "Terracota" label "Faldones"
+    step material = "Mármol" label "Escalinata"
+    paving material = "Empedrado" label "Plaza"
+    fruit material = "Naranja" label "Naranjas"
+    glass material = "Vidrio claro" label "Vidrio"
+    interior material = "Interior en sombra" label "Interior visto por los huecos"
+    brass material = "Latón" label "Herrajes"
+    trunk material = "Corteza de olivo" label "Troncos"
+    leaves material = "Hoja verde" label "Árboles y plantas"
+
+body
+  box (-(width) / 2, 0, 0) to ((width) / 2, depth + 9, tower_height + 6) material wall
+
+plan 1:50
+  polygon (-(width) / 2, 0) ((width) / 2, 0) ((width) / 2, depth + 9) (-(width) / 2, depth + 9) pen view
+
+outputs
+  generator = "props:fine_church"
+  ifc_class = "IfcBuildingElementProxy"
+  ifc_type = "USERDEFINED"

@@ -40,13 +40,15 @@ Los ejes 1 y 2 dan el volumen; los ejes 3, 4 y 5 dan la piel. Hay detalles que h
 | Chalet | **Chalet de los 80** (tanda 2): ladrillo visto en esquinas y recercados, porche de tres arcos con terraza y balaustrada, mallorquinas, cuatro aguas, garaje, murete con pilastras, palmera y piscina |
 | Pareada | **Viviendas pareadas** (tanda 2): una cubierta a cuatro aguas para las dos, porches con columnas, miradores, balcones con toldo, jardines con setos y cancelas |
 | Nave industrial | **Nave de polígono** (tanda 2): bloque y panel nervado, hastial con rótulo, puerta seccional con portillo, muelle de carga con abrigo, oficinas con ventanas corridas, policarbonato, lucernarios, valla de malla |
-| Oficinas, comercio con viviendas, equipamiento | Siguientes tandas |
+| Equipamiento | **Mercado de abastos**, **iglesia parroquial**, **plaza de toros**, **colegio público**, **centro de salud** (tanda 3) |
+| Comercio | **Gasolinera** sin marca (tanda 3) |
+| Oficinas, comercio con viviendas | Siguientes tandas |
 
 ## 3. Orden de las tandas
 
 1. **Tanda 1** (hecha, aprobada por Antonio el 03/11/2026 como salto de calidad): casa de pueblo, casa señorial, ensanche, bloque de los 60, torre de costa, adosados.
 2. **Tanda 2** (hecha, en revisión): corral de vecinos, cortijo, viviendas de colonización, chalet de los 80, pareadas, nave de polígono. Pendientes de Andalucía para otra tanda: casa-patio de una planta, VPO de ladrillo, chiringuito.
-3. **Usos singulares:** mercado de abastos, iglesia parroquial y ermita, plaza de toros, colegio, centro de salud, gasolinera.
+3. **Tanda 3, usos singulares** (hecha, en revisión): mercado de abastos, iglesia parroquial, plaza de toros, colegio, centro de salud, gasolinera. Quedan para otra: ermita, ayuntamiento, casa cuartel, cementerio, estación de autobuses.
 4. **Resto de España por regiones:** Castilla con soportales, caserío, galería gallega, masía, casa canaria, casa ibicenca.
 5. **Extranjero:** Haussmann, casa de canal de Ámsterdam, hilera inglesa, nórdico, suburbio americano, japonés, rascacielos.
 

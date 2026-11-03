@@ -17,15 +17,21 @@
 pub mod block60;
 pub mod chalet80;
 pub mod coast;
+pub mod colegio;
 pub mod colonizacion;
 pub mod corral;
 pub mod cortijo;
 pub mod ensanche;
+pub mod gasolinera;
+pub mod iglesia;
 pub mod manor;
+pub mod mercado;
 pub mod more;
 pub mod nave;
 pub mod pareada;
+pub mod salud;
 pub mod terraced;
+pub mod toros;
 pub mod village;
 
 use crate::build::{Builder, P3};
@@ -1334,6 +1340,12 @@ mod tests {
             "fine_chalet_80s",
             "fine_semi_detached",
             "fine_warehouse",
+            "fine_market",
+            "fine_church",
+            "fine_bullring",
+            "fine_school",
+            "fine_health_centre",
+            "fine_petrol_station",
         ] {
             let m = make(kind, &Params::default()).unwrap();
             let tris: usize = m.parts.iter().map(|(_, t)| t.len()).sum();

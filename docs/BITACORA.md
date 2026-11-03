@@ -6,6 +6,35 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-03 (91) · Taller de edificios, tanda 3: usos singulares
+
+Misma rama `bloque/taller-edificios` y mismo pull request (#160). Sin cambios de formato ni de IFC. Antonio vio la tanda 2 («maravilloso») y pidió la 3.
+
+**Hecho**
+- Seis edificios más, con sus recetas del taller:
+  - **mercado de abastos** regionalista: ladrillo, arcos con abanicos, linterna de lamas, frontón escalonado con reloj y azulejos, puestos de fruta;
+  - **iglesia parroquial**: nave con contrafuertes, ábside, portada con hornacina y óculo, torre con campanas y chapitel de azulejo, plaza con naranjos;
+  - **plaza de toros**: fachada poligonal con pilastras de albero, ruedo con rayas, barrera, callejón, tendidos y galería cubierta, puerta grande con banderas;
+  - **colegio público**: aulario de ladrillo, porche, gimnasio, patio con pista de baloncesto, columpio y tobogán (los del taller de parques), valla con cancela;
+  - **centro de salud**: bandas de ventanas, lamas, vestíbulo de vidrio, marquesina con cruz verde, rampa, porche de ambulancias;
+  - **gasolinera** sin marca: marquesina, surtidores, tienda, monolito de precios, lavado.
+- Piezas comunes nuevas: mástil con bandera y campana (`more.rs`). Las piezas de un anillo de la plaza se hacen por sectores.
+- La calle del taller tiene ya 21 edificios.
+
+**Pendiente**
+- La opinión de Antonio sobre la tanda 3.
+- La plaza de toros (95.000 triángulos) y el corral (124.000) son los más pesados.
+- Siguientes: regiones de España (tanda 4) e integración en U6/U7 de lo aprobado.
+
+**Qué debe probar Antonio**
+1. `cargo run -p archisim-cli -- edificios out/` y abre `out/edificios.archisim` en 3D. Los seis nuevos están al final de la calle.
+2. Mira:
+   - las proporciones de la torre y del chapitel;
+   - los tendidos y la galería de la plaza;
+   - si el colegio y el centro de salud se reconocen como los de la Junta.
+
+---
+
 ## 2026-11-03 (90) · Taller de edificios, tanda 2: corral, cortijo, colonización, chalet de los 80, pareadas y nave
 
 Misma rama `bloque/taller-edificios` y mismo pull request (#160). Sin cambios de formato ni de IFC. Antonio vio la tanda 1 («un salto de calidad con creces») y pidió seguir.

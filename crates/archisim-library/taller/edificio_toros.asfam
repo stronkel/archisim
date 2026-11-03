@@ -1,0 +1,44 @@
+family "Plaza de toros (taller)"
+  category street
+  host none
+  version 1
+  description "Plaza de toros: fachada poligonal encalada con pilastras y bandas de albero, puertas en arco abajo y ventanas en arco arriba, puerta grande con portada y banderas; dentro, el ruedo de albero con sus dos rayas, la barrera roja, el callejón, los tendidos y la galería de columnas bajo el tejado (modelo del taller, en revisión)"
+  folder "Taller · Edificios"
+
+type_params
+  section "Dimensiones"
+    radius length = 28.00 range 18.00..45.00 label "Radio exterior"
+    variant integer = 1 range 0..99 label "Variante"
+  section "Materiales"
+    wall material = "Encalado" label "Muros"
+    trim material = "Estuco amarillo" label "Bandas, pilastras, columnas y barandillas"
+    plinth material = "Estuco almagra" label "Zócalo"
+    stone material = "Piedra caliza" label "Puerta grande"
+    tile_panel material = "Azulejo andaluz" label "Azulejos"
+    sand material = "Albero" label "Ruedo y callejón"
+    line material = "Línea blanca" label "Rayas"
+    barrier material = "Pintura roja" label "Barrera"
+    seat material = "Piedra gris" label "Tendidos"
+    seat_b material = "Cal blanca" label "Tendidos (filas alternas)"
+    wood material = "Lacado verde carruaje" label "Puertas"
+    iron material = "Hierro forjado" label "Rejas"
+    tiles material = "Teja curva" label "Tejas"
+    roof material = "Terracota" label "Faldones"
+    metal material = "Acero galvanizado" label "Mástiles"
+    flag material = "Plástico rojo" label "Bandera 1"
+    flag_b material = "Plástico amarillo" label "Bandera 2"
+    paving material = "Losa de acera" label "Explanada"
+    glass material = "Vidrio claro" label "Vidrio"
+    interior material = "Interior en sombra" label "Interior visto por los huecos"
+    brass material = "Latón" label "Herrajes"
+
+body
+  box (-(2 * radius + 8) / 2, 0, 0) to ((2 * radius + 8) / 2, 2 * radius + 4, 12) material wall
+
+plan 1:50
+  polygon (-(2 * radius + 8) / 2, 0) ((2 * radius + 8) / 2, 0) ((2 * radius + 8) / 2, 2 * radius + 4) (-(2 * radius + 8) / 2, 2 * radius + 4) pen view
+
+outputs
+  generator = "props:fine_bullring"
+  ifc_class = "IfcBuildingElementProxy"
+  ifc_type = "USERDEFINED"
