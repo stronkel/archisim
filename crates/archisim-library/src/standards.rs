@@ -127,13 +127,15 @@ impl Standard {
             s.palette = palette.to_vec();
             s.poche = poche;
             s.line_scale = lines;
-            s.shadows = !palette.is_empty();
+            s.shadows = palette.len() > 2;
             s.pens = pens;
             s
         };
         let accented = |mut s: PresentationStyle| {
             s.accent = Some(BEACON_RED);
             s.accent_on = ACCENTED.into_iter().collect();
+            // Flat greys, without the sun's shadows.
+            s.shadows = false;
             s
         };
         match self {
@@ -267,11 +269,11 @@ impl Standard {
 /// The warm red of «Faro».
 pub const BEACON_RED: [u8; 3] = [214, 72, 44];
 
-/// What «Faro» draws in its accent: the annotations.
-pub const ACCENTED: [Category; 6] = [
+/// What «Faro» draws in its accent: the annotations (not the rooms, whose
+/// floors are drawn with them).
+pub const ACCENTED: [Category; 5] = [
     Category::Dimensions,
     Category::Tags,
-    Category::Rooms,
     Category::LevelMarks,
     Category::SectionMarks,
     Category::Grids,

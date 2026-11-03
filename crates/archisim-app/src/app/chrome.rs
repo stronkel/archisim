@@ -526,13 +526,7 @@ impl ArchiSimApp {
             {
                 self.title_blocks_ui.open = true;
             }
-            if ui
-                .button("Estilos de presentación…")
-                .on_hover_text("Los estilos que se eligen por vista y por plano: papel, paleta, macizado, grosores y color de acento")
-                .clicked()
-            {
-                self.presentation.open = true;
-            }
+
             ui.switch(&mut self.show_underlay, "Calco de la planta inferior");
             ui.switch(&mut self.v3d.camera.perspective, "Perspectiva en 3D");
             ui.menu_button("Navegación 3D", |ui| self.navigation_controls(ui));

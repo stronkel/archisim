@@ -21,8 +21,14 @@ pub struct TitleBlocksUi {
     preview: Option<(TitleBlock, TextureHandle)>,
 }
 
-/// Size of the preview: the bottom right of an A3 landscape sheet.
-const PREVIEW_MM: (f64, f64) = (240.0, 160.0);
+/// Size of the preview: the bottom right of an A3 landscape sheet (its
+/// whole right side for a strip down the sheet).
+fn preview_mm(design: TitleBlockDesign) -> (f64, f64) {
+    match design {
+        TitleBlockDesign::Beacon => (150.0, 297.0),
+        _ => (240.0, 160.0),
+    }
+}
 
 impl ArchiSimApp {
     pub(super) fn title_blocks_dialog(&mut self, ctx: &egui::Context) {
@@ -321,7 +327,7 @@ impl ArchiSimApp {
                     s.revision = "0".into();
                     let _ = m.set_sheet(s);
                 }
-                let (w, h) = PREVIEW_MM;
+                let (w, h) = preview_mm(shown.design);
                 let mm = 0.001;
                 let options = archisim_plan::sheet::SheetOptions {
                     region: Some((
@@ -342,9 +348,13 @@ impl ArchiSimApp {
                 self.title_blocks_ui.preview = Some((shown, tex));
             }
         }
-        if let Some((_, tex)) = &self.title_blocks_ui.preview {
-            let w = ui.available_width().min(560.0);
-            let size = egui::vec2(w, w * (PREVIEW_MM.1 / PREVIEW_MM.0) as f32);
+        if let Some((t, tex)) = &self.title_blocks_ui.preview {
+            let (pw, ph) = preview_mm(t.design);
+            let w = ui
+                .available_width()
+                .min(560.0)
+                .min(360.0 * (pw / ph) as f32);
+            let size = egui::vec2(w, w * (ph / pw) as f32);
             ui.add(egui::Image::new((tex.id(), size)));
             ui.label(
                 RichText::new("La esquina de un A3 con este cajetín y los datos del proyecto.")
