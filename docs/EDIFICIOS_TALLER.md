@@ -43,7 +43,8 @@ Los ejes 1 y 2 dan el volumen; los ejes 3, 4 y 5 dan la piel. Hay detalles que h
 | Equipamiento | **Mercado de abastos**, **iglesia parroquial**, **plaza de toros**, **colegio público**, **centro de salud** (tanda 3) |
 | Comercio | **Gasolinera** sin marca (tanda 3) |
 | Casco histórico, chalet, casa patio (otras regiones) | **Casa castellana con soportales**, **caserío vasco**, **casa con galería gallega**, **masía catalana**, **casa canaria**, **casa payesa ibicenca** (tanda 4) |
-| Oficinas, comercio con viviendas | Siguientes tandas |
+| Oficinas | **Torre de oficinas** de muro cortina con plaza y marquesina, **oficinas de los 70** con antepechos prefabricados, parasoles y pilotis, **parque empresarial** con aparcamiento cubierto (tanda 5) |
+| Comercio con viviendas | **Cafetería de esquina** con toldos y terraza, **comercio con viviendas** (farmacia, banco, panadería o moda; cuatro colores de fachada), **hotel urbano** con marquesina, banderas y terraza en la azotea, **supermercado** con aparcamiento (tanda 5) |
 
 ## 3. Orden de las tandas
 
@@ -51,6 +52,8 @@ Los ejes 1 y 2 dan el volumen; los ejes 3, 4 y 5 dan la piel. Hay detalles que h
 2. **Tanda 2** (hecha, en revisión): corral de vecinos, cortijo, viviendas de colonización, chalet de los 80, pareadas, nave de polígono. Pendientes de Andalucía para otra tanda: casa-patio de una planta, VPO de ladrillo, chiringuito.
 3. **Tanda 3, usos singulares** (hecha, en revisión): mercado de abastos, iglesia parroquial, plaza de toros, colegio, centro de salud, gasolinera. Quedan para otra: ermita, ayuntamiento, casa cuartel, cementerio, estación de autobuses.
 4. **Tanda 4, regiones de España** (hecha, en revisión): casa castellana con soportales, caserío vasco, casa con galería gallega, masía catalana, casa canaria, casa payesa ibicenca. Quedan: casa montañesa con solana, hórreo y palloza, barraca valenciana, casa manchega, casas colgadas, casa de piedra de sierra.
-5. **Extranjero:** Haussmann, casa de canal de Ámsterdam, hilera inglesa, nórdico, suburbio americano, japonés, rascacielos.
+5. **Tanda 5, ciudad y comercio** (hecha, en revisión): torre de oficinas, oficinas de los 70, parque empresarial, cafetería de esquina, comercio con viviendas en cuatro versiones, hotel urbano, supermercado.
+6. **Tanda 6, pieles por región:** cada tipología con una piel por lugar, en un reparto equilibrado: Andalucía; España y sus regiones; Algarve y Portugal; Francia; Italia; Reino Unido; centro de Europa; Bélgica y Países Bajos; nórdico; Estados Unidos (Nueva York y Chicago, rural, California); Latinoamérica; China, Japón y Corea. Propuestos además: Grecia y el Mediterráneo oriental, Magreb y Oriente Medio, Europa del Este, Australia y el trópico.
+7. **Tanda 7, por sitio:** al traer el entorno (Catastro, OpenStreetMap, LiDAR), cada masa toma la tipología por su uso y sus plantas y la piel por la zona geográfica de la georreferencia; todo editable a mano después.
 
 Cuando Antonio apruebe una tanda, la integración será que los estilos de U6 (y U7, al traer el Catastro) usen estos modelos sobre la planta y las plantas que tenga cada masa.

@@ -22,6 +22,7 @@ pub mod chalet80;
 pub mod coast;
 pub mod colegio;
 pub mod colonizacion;
+pub mod commerce;
 pub mod corral;
 pub mod cortijo;
 pub mod ensanche;
@@ -34,6 +35,7 @@ pub mod masia;
 pub mod mercado;
 pub mod more;
 pub mod nave;
+pub mod offices;
 pub mod pareada;
 pub mod salud;
 pub mod terraced;
@@ -1358,6 +1360,13 @@ mod tests {
             "fine_masia",
             "fine_canarian_house",
             "fine_ibizan_house",
+            "fine_office_tower",
+            "fine_office_1970s",
+            "fine_business_park",
+            "fine_corner_cafe",
+            "fine_shop_and_flats",
+            "fine_urban_hotel",
+            "fine_supermarket",
         ] {
             let m = make(kind, &Params::default()).unwrap();
             let tris: usize = m.parts.iter().map(|(_, t)| t.len()).sum();

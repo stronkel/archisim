@@ -2331,6 +2331,10 @@ pub const COZY_PALETTE: &[(&str, &str, [u8; 3])] = &[
     ("Bloque de hormigón", "stone", [156, 156, 150]),
     ("Panel sándwich gris", "metal", [194, 197, 200]),
     ("Policarbonato", "glass", [214, 224, 218]),
+    // Tanda 5.
+    ("Vidrio reflectante", "glass", [104, 140, 166]),
+    ("Vidrio opaco gris", "other", [64, 74, 84]),
+    ("Aluminio bronce", "metal", [118, 94, 70]),
 ];
 
 /// The steel of the reinforcement (E11): the project's, or added.

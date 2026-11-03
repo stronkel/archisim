@@ -1,0 +1,60 @@
+family "Comercio con viviendas (taller)"
+  category street
+  host none
+  version 1
+  description "Edificio de viviendas sobre un comercio de cuatro clases: farmacia con su cruz verde, banco con su cajero, panadería con su toldo o tienda de moda con maniquíes; portal, rótulo, balcones y persianas (modelo del taller, en revisión)"
+  folder "Taller · Edificios"
+
+type_params
+  section "Dimensiones"
+    width length = 10.00 range 6.00..24.00 label "Fachada"
+    depth length = 12.00 range 8.00..24.00 label "Fondo"
+    floors integer = 4 range 2..9 label "Plantas (con la baja)"
+    shop integer = 0 range 0..3 label "Comercio (0 farmacia, 1 banco, 2 panadería, 3 moda)"
+    facade integer = -1 range -1..3 label "Fachada (-1 según el comercio, 0 ladrillo, 1 almagra, 2 crema, 3 cal)"
+    variant integer = 1 range 0..99 label "Variante"
+  section "Materiales"
+    wall material = "Ladrillo visto" label "Fachada de ladrillo"
+    wall_ochre material = "Estuco almagra" label "Fachada almagra"
+    wall_cream material = "Monocapa crema" label "Fachada crema"
+    wall_white material = "Cal blanca" label "Fachada de cal"
+    party material = "Enfoscado gris" label "Medianeras"
+    plinth material = "Piedra gris" label "Planta baja"
+    trim material = "Cal blanca" label "Impostas y vierteaguas"
+    shop_frame material = "Aluminio plata" label "Escaparate"
+    sign material = "Lacado verde carruaje" label "Rótulo"
+    shutter material = "Acero galvanizado" label "Cierre"
+    wood material = "Nogal" label "Portal"
+    brass material = "Latón" label "Herrajes"
+    cross material = "Plástico verde" label "Cruz de farmacia"
+    steel material = "Acero inoxidable" label "Cajero y soportes"
+    screen material = "Pantalla de televisor" label "Pantalla"
+    bread material = "Cuero coñac" label "Pan"
+    counter material = "Roble claro" label "Mostrador"
+    mannequin material = "Lacado blanco" label "Maniquíes"
+    awning material = "Lona verde" label "Toldo"
+    awning_b material = "Lona crema" label "Toldo (franjas)"
+    roof_floor material = "Hormigón pulido" label "Azotea"
+    paving material = "Losa de acera" label "Acera"
+    glass material = "Vidrio claro" label "Vidrio"
+    interior material = "Interior en sombra" label "Interior visto por los huecos"
+    frame material = "Aluminio blanco" label "Carpintería de las viviendas"
+    blind material = "Persiana crema" label "Persianas"
+    curtain material = "Visillo" label "Visillos"
+    iron material = "Hierro forjado" label "Barandillas"
+    metal material = "Acero galvanizado" label "Soportes"
+    appliance material = "Lacado blanco" label "Aires acondicionados y máquinas"
+    pot material = "Terracota" label "Macetas"
+    flowers material = "Buganvilla" label "Flores"
+    leaves material = "Hoja verde" label "Plantas"
+
+body
+  box (-(width) / 2, 0, 0) to ((width) / 2, depth + 3, 3.8 + 3 * (floors - 1) + 2) material wall
+
+plan 1:50
+  polygon (-(width) / 2, 0) ((width) / 2, 0) ((width) / 2, depth + 3) (-(width) / 2, depth + 3) pen view
+
+outputs
+  generator = "props:fine_shop_and_flats"
+  ifc_class = "IfcBuildingElementProxy"
+  ifc_type = "USERDEFINED"

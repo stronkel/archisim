@@ -1,0 +1,49 @@
+family "Supermercado (taller)"
+  category street
+  host none
+  version 1
+  description "Supermercado: caja baja de panel con franja de color, entrada acristalada bajo marquesina, rótulo, marquesina de carros, máquinas en cubierta y aparcamiento con árboles y coches (modelo del taller, en revisión)"
+  folder "Taller · Edificios"
+
+type_params
+  section "Dimensiones"
+    width length = 40.00 range 20.00..90.00 label "Fachada"
+    depth length = 30.00 range 15.00..70.00 label "Fondo"
+    variant integer = 1 range 0..99 label "Variante"
+  section "Materiales"
+    panel material = "Panel sándwich gris" label "Panel"
+    plinth material = "Hormigón suave" label "Zócalo"
+    accent material = "Pintura roja" label "Franja de color"
+    curtain_glass material = "Vidrio claro" label "Fachada acristalada"
+    mullion material = "Aluminio plata" label "Montantes y pilares"
+    spandrel material = "Vidrio opaco gris" label "Antepechos"
+    door_frame material = "Acero inoxidable" label "Puertas"
+    canopy material = "Lacado blanco" label "Marquesinas"
+    sign material = "Pintura roja" label "Rótulo"
+    sign_text material = "Lacado blanco" label "Letras"
+    trolley material = "Acero inoxidable" label "Carros"
+    appliance material = "Lacado blanco" label "Máquinas"
+    roof_floor material = "Grava" label "Cubierta"
+    line material = "Línea blanca" label "Marcas"
+    paving material = "Losa de acera" label "Acera"
+    yard material = "Asfalto" label "Aparcamiento"
+    stone material = "Piedra caliza" label "Alcorques"
+    interior material = "Interior en sombra" label "Interior visto por los huecos"
+    car_a material = "Plástico rojo" label "Coches 1"
+    car_b material = "Lacado blanco" label "Coches 2"
+    car_c material = "Metal negro" label "Coches 3"
+    car_glass material = "Vidrio opaco gris" label "Lunas de los coches"
+    tyre material = "Goma negra" label "Ruedas"
+    trunk material = "Corteza de olivo" label "Troncos"
+    leaves material = "Hoja verde" label "Árboles y plantas"
+
+body
+  box (-(width + 4) / 2, 0, 0) to ((width + 4) / 2, depth + 22, 8) material panel
+
+plan 1:50
+  polygon (-(width + 4) / 2, 0) ((width + 4) / 2, 0) ((width + 4) / 2, depth + 22) (-(width + 4) / 2, depth + 22) pen view
+
+outputs
+  generator = "props:fine_supermarket"
+  ifc_class = "IfcBuildingElementProxy"
+  ifc_type = "USERDEFINED"

@@ -1,0 +1,48 @@
+family "Edificio de parque empresarial (taller)"
+  category street
+  host none
+  version 1
+  description "Edificio de parque empresarial: tres plantas de panel composite con bandas de ventanas, esquina de muro cortina con la entrada bajo marquesina, aletas de color, rótulo, y aparcamiento con árboles, pérgolas fotovoltaicas y coches (modelo del taller, en revisión)"
+  folder "Taller · Edificios"
+
+type_params
+  section "Dimensiones"
+    width length = 36.00 range 18.00..70.00 label "Fachada"
+    depth length = 16.00 range 10.00..30.00 label "Fondo"
+    variant integer = 1 range 0..99 label "Variante"
+  section "Materiales"
+    panel material = "Panel sándwich gris" label "Panel composite"
+    accent material = "Lacado azul celeste" label "Aletas de color"
+    frame material = "Aluminio plata" label "Carpintería"
+    glass material = "Vidrio claro" label "Vidrio"
+    curtain_glass material = "Vidrio reflectante" label "Muro cortina"
+    mullion material = "Aluminio plata" label "Montantes y soportes"
+    spandrel material = "Vidrio opaco gris" label "Antepechos"
+    blind material = "Lino gris" label "Estores"
+    canopy material = "Lacado blanco" label "Marquesina"
+    sign material = "Lacado blanco" label "Rótulo"
+    sign_text material = "Lacado azul añil" label "Letras"
+    panel_solar material = "Panel solar" label "Pérgolas fotovoltaicas"
+    line material = "Línea blanca" label "Marcas"
+    paving material = "Losa de acera" label "Acera"
+    yard material = "Asfalto" label "Aparcamiento"
+    roof_floor material = "Grava" label "Cubierta"
+    interior material = "Interior en sombra" label "Interior visto por los huecos"
+    car_a material = "Plástico rojo" label "Coches 1"
+    car_b material = "Lacado blanco" label "Coches 2"
+    car_c material = "Metal negro" label "Coches 3"
+    car_glass material = "Vidrio opaco gris" label "Lunas de los coches"
+    tyre material = "Goma negra" label "Ruedas"
+    trunk material = "Corteza de olivo" label "Troncos"
+    leaves material = "Hoja verde" label "Árboles y plantas"
+
+body
+  box (-(width + 4) / 2, 0, 0) to ((width + 4) / 2, depth + 18, 12.5) material panel
+
+plan 1:50
+  polygon (-(width + 4) / 2, 0) ((width + 4) / 2, 0) ((width + 4) / 2, depth + 18) (-(width + 4) / 2, depth + 18) pen view
+
+outputs
+  generator = "props:fine_business_park"
+  ifc_class = "IfcBuildingElementProxy"
+  ifc_type = "USERDEFINED"

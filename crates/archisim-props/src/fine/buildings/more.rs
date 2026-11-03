@@ -569,3 +569,79 @@ pub fn timber_frame(
         );
     }
 }
+
+/// A café set on a pavement: a round table on its foot and chairs round
+/// it, and a parasol over it if `parasol`.
+pub fn cafe_set(b: &mut Builder, c: [f64; 2], chairs: usize, parasol: bool, seed: u64) {
+    b.cone(
+        "furniture",
+        [c[0], c[1], 0.0],
+        [c[0], c[1], 0.03],
+        0.25,
+        0.25,
+        12,
+    );
+    b.cyl("furniture", [c[0], c[1], 0.03], [c[0], c[1], 0.72], 0.03);
+    b.cone(
+        "table_top",
+        [c[0], c[1], 0.72],
+        [c[0], c[1], 0.75],
+        0.35,
+        0.35,
+        16,
+    );
+    for k in 0..chairs {
+        let a = std::f64::consts::TAU * (k as f64 + 0.15 * unit(seed, k as u64)) / chairs as f64;
+        let (s, co) = a.sin_cos();
+        let p = [c[0] + co * 0.62, c[1] + s * 0.62];
+        let start = b.mark();
+        for (dx, dy) in [(-0.18, -0.18), (0.18, -0.18), (0.18, 0.18), (-0.18, 0.18)] {
+            b.cyl("furniture", [dx, dy, 0.0], [dx, dy, 0.45], 0.012);
+        }
+        b.rbox("seat", [-0.21, -0.21, 0.45], [0.21, 0.21, 0.48], 0.0);
+        b.rbox("seat", [0.17, -0.21, 0.48], [0.21, 0.21, 0.88], 0.0);
+        turn_from(b, start, [0.0, 0.0], a);
+        b.transform_from(start, |q| [q[0] + p[0], q[1] + p[1], q[2]]);
+    }
+    if parasol {
+        b.cyl("furniture", [c[0], c[1], 0.75], [c[0], c[1], 2.35], 0.025);
+        b.cone(
+            "awning",
+            [c[0], c[1], 2.05],
+            [c[0], c[1], 2.45],
+            1.25,
+            0.04,
+            8,
+        );
+    }
+}
+
+/// A curtain wall on a face from `s0` to `s1` and `z0` to `z1`: mullions
+/// every `bay`, transoms at every `floor`, spandrel bands of opaque glass,
+/// the glass between.
+#[allow(clippy::too_many_arguments)]
+pub fn curtain_wall(
+    b: &mut Builder,
+    f: &Face,
+    s: (f64, f64),
+    z: (f64, f64),
+    bay: f64,
+    floor: f64,
+    out: f64,
+) {
+    let n = ((s.1 - s.0) / bay).round().max(1.0) as usize;
+    let d = (out - 0.14, out);
+    for i in 0..=n {
+        let x = s.0 + (s.1 - s.0) * i as f64 / n as f64;
+        f.bx(b, "mullion", (x - 0.035, x + 0.035), z, d);
+    }
+    let m = ((z.1 - z.0) / floor).round().max(1.0) as usize;
+    for k in 0..=m {
+        let zz = z.0 + (z.1 - z.0) * k as f64 / m as f64;
+        f.bx(b, "mullion", s, (zz - 0.04, zz + 0.04), d);
+        if k < m {
+            f.bx(b, "spandrel", s, (zz, zz + 0.9), (out - 0.1, out - 0.08));
+        }
+    }
+    f.bx(b, "curtain_glass", s, z, (out - 0.1, out - 0.09));
+}

@@ -1,0 +1,41 @@
+family "Torre de oficinas (taller)"
+  category street
+  host none
+  version 1
+  description "Torre de oficinas de muro cortina: vestíbulo acristalado retranqueado tras pilares, marquesina y nombre, fachada de vidrio con montantes y antepechos opacos, estores a distintas alturas, coronación de lamas que oculta las máquinas, y plaza con bancos y árboles (modelo del taller, en revisión)"
+  folder "Taller · Edificios"
+
+type_params
+  section "Dimensiones"
+    width length = 24.00 range 14.00..50.00 label "Fachada"
+    depth length = 20.00 range 12.00..40.00 label "Fondo"
+    floors integer = 12 range 4..40 label "Plantas"
+    variant integer = 1 range 0..99 label "Variante"
+  section "Materiales"
+    curtain_glass material = "Vidrio reflectante" label "Vidrio"
+    mullion material = "Aluminio plata" label "Montantes y travesaños"
+    spandrel material = "Vidrio opaco gris" label "Antepechos"
+    structure material = "Hormigón pulido" label "Pilares y losa"
+    door_frame material = "Acero inoxidable" label "Entrada"
+    canopy material = "Lacado blanco" label "Marquesina"
+    sign material = "Metal negro" label "Nombre"
+    louvre_metal material = "Aluminio plata" label "Lamas de coronación"
+    blind material = "Lino gris" label "Estores"
+    appliance material = "Lacado blanco" label "Máquinas"
+    roof_floor material = "Grava" label "Cubierta"
+    paving material = "Losa de acera" label "Plaza"
+    stone material = "Piedra caliza" label "Bancos y alcorques"
+    interior material = "Interior en sombra" label "Interior visto por los huecos"
+    trunk material = "Corteza de olivo" label "Troncos"
+    leaves material = "Hoja verde" label "Árboles y plantas"
+
+body
+  box (-(width) / 2, 0, 0) to ((width) / 2, depth + 10, 5 + 3.6 * (floors - 1) + 3) material curtain_glass
+
+plan 1:50
+  polygon (-(width) / 2, 0) ((width) / 2, 0) ((width) / 2, depth + 10) (-(width) / 2, depth + 10) pen view
+
+outputs
+  generator = "props:fine_office_tower"
+  ifc_class = "IfcBuildingElementProxy"
+  ifc_type = "USERDEFINED"

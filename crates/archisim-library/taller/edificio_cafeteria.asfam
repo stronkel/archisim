@@ -1,0 +1,53 @@
+family "Edificio con cafetería en esquina (taller)"
+  category street
+  host none
+  version 1
+  description "Edificio de esquina con cafetería en la planta baja: escaparates de perfil negro en las dos fachadas, rótulo, toldos, barra y lámparas por dentro, terraza con mesas, sillas y sombrillas en la acera, jardineras, y viviendas encima con balcones (modelo del taller, en revisión)"
+  folder "Taller · Edificios"
+
+type_params
+  section "Dimensiones"
+    width length = 14.00 range 8.00..30.00 label "Fachada"
+    depth length = 12.00 range 8.00..24.00 label "Fondo"
+    floors integer = 4 range 2..8 label "Plantas (con la baja)"
+    variant integer = 1 range 0..99 label "Variante"
+  section "Materiales"
+    wall material = "Monocapa crema" label "Fachada"
+    party material = "Enfoscado gris" label "Medianeras"
+    plinth material = "Piedra gris" label "Planta baja"
+    trim material = "Cal blanca" label "Impostas y vierteaguas"
+    shop_frame material = "Metal negro" label "Escaparates"
+    glass material = "Vidrio claro" label "Vidrio"
+    sign material = "Lacado verde carruaje" label "Rótulo"
+    awning material = "Lona verde" label "Toldos"
+    awning_b material = "Lona crema" label "Toldos (franjas)"
+    counter material = "Nogal" label "Barra"
+    lamp material = "Luz cálida" label "Lámparas"
+    interior_floor material = "Baldosa hidráulica" label "Suelo de la cafetería"
+    furniture material = "Metal negro" label "Mesas y sillas"
+    table_top material = "Mármol" label "Tableros"
+    seat material = "Ratán" label "Asientos"
+    planter material = "Acero corten" label "Jardineras"
+    roof_floor material = "Hormigón pulido" label "Azotea"
+    paving material = "Losa de acera" label "Acera"
+    interior material = "Interior en sombra" label "Interior visto por los huecos"
+    frame material = "Aluminio blanco" label "Carpintería de las viviendas"
+    blind material = "Persiana crema" label "Persianas"
+    curtain material = "Visillo" label "Visillos"
+    iron material = "Hierro forjado" label "Barandillas"
+    metal material = "Acero galvanizado" label "Soportes"
+    appliance material = "Lacado blanco" label "Aires acondicionados y máquinas"
+    pot material = "Terracota" label "Macetas"
+    flowers material = "Buganvilla" label "Flores"
+    leaves material = "Hoja verde" label "Plantas"
+
+body
+  box (-(width + 5) / 2, 0, 0) to ((width + 5) / 2, depth + 5, 4 + 3 * (floors - 1) + 1) material wall
+
+plan 1:50
+  polygon (-(width + 5) / 2, 0) ((width + 5) / 2, 0) ((width + 5) / 2, depth + 5) (-(width + 5) / 2, depth + 5) pen view
+
+outputs
+  generator = "props:fine_corner_cafe"
+  ifc_class = "IfcBuildingElementProxy"
+  ifc_type = "USERDEFINED"

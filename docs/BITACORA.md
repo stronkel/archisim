@@ -6,6 +6,34 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-03 (93) · Taller de edificios, tanda 5: ciudad y comercio
+
+Misma rama `bloque/taller-edificios` y mismo pull request (#160). Sin cambios de formato ni de IFC.
+
+**Hecho**
+- Siete edificios más (diez en la calle, porque el comercio sale en sus cuatro clases):
+  - **torre de oficinas**: muro cortina con montantes y antepechos opacos, planta baja retranqueada con pilares, marquesina, plaza con árboles y bancos, celosía de instalaciones en la cubierta;
+  - **oficinas de los 70**: antepechos prefabricados, parasoles verticales, carpintería de bronce con cortinas, pilotis y planta baja de granito, núcleo de escalera sobre la cubierta;
+  - **parque empresarial**: ventanas corridas con parasol, cuerpo de vidrio del vestíbulo, marquesina, aparcamiento con pérgolas y coches;
+  - **cafetería de esquina**: toldos a rayas, terraza con mesas, sillas y sombrillas, viviendas encima con balcones;
+  - **comercio con viviendas**: farmacia con su cruz, banco con cajero, panadería con toldo o tienda de moda; parámetro «Fachada» con ladrillo, almagra, crema o cal (por defecto, según el comercio);
+  - **hotel urbano**: marquesina, banderas, aires acondicionados, terraza con pérgola en la azotea;
+  - **supermercado**: panel sándwich, banda con rótulo, porche de entrada, carros, aparcamiento con árboles.
+- Piezas comunes nuevas: coche (`offices::car`), terraza de café y muro cortina (`more.rs`).
+- La calle del taller tiene ya 37 edificios.
+- Acordado con Antonio el plan de las pieles por región (tanda 6) y su asignación automática al traer el entorno (tanda 7), en `docs/EDIFICIOS_TALLER.md` §3.
+
+**Pendiente**
+- La opinión de Antonio sobre la tanda 5.
+- Tanda 6: pieles por región.
+
+**Qué debe probar Antonio**
+1. `cargo run -p archisim-cli -- edificios out/` y abre `out/edificios.archisim`. Los nuevos son los diez últimos de la calle.
+2. En el comercio, cambia «Comercio» y «Fachada» en el tipo y mira que cambian el bajo y el color.
+3. Dime si las oficinas y el hotel se leen como de una ciudad española o si les falta algo.
+
+---
+
 ## 2026-11-03 (92) · Taller de edificios, tanda 4: regiones de España
 
 Misma rama `bloque/taller-edificios` y mismo pull request (#160). Sin cambios de formato ni de IFC. Antonio pidió la tanda 4 antes de integrar nada.
