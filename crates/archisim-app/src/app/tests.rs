@@ -9632,3 +9632,66 @@ fn maquette_has_the_same_bars_and_rooms_in_the_rail() {
     assert!(deliver.bottom() < h.app.v3d.canvas.top());
     assert!(notes.top() > h.app.v3d.canvas.bottom());
 }
+
+/// Presentación: the Cámara tile keeps the 3D view's point of view in the
+/// project, the navigator brings it back, and Recorrido walks at eye
+/// height (W A S D level, Esc back to where the view was).
+#[test]
+fn saved_cameras_and_the_walk() {
+    let mut h = Harness::new(Editor::new_project());
+    h.frame();
+    h.app.open_view(super::tabs::TabKind::ThreeD);
+    h.frame();
+    h.app.v3d.camera.target = glam::Vec3::new(3.0, 2.0, 0.0);
+    h.app.v3d.camera.yaw = 0.7;
+    h.app.v3d.camera.pitch = 0.4;
+    h.app.v3d.camera.distance = 18.0;
+    let before = h.app.v3d.camera;
+    h.app.save_camera();
+    let saved: Vec<_> = h.model().cameras().cloned().collect();
+    assert_eq!(saved.len(), 1);
+    assert_eq!(saved[0].name, "Cámara 1");
+    // Somewhere else, and back to it.
+    h.app.v3d.camera.target = glam::Vec3::new(-10.0, 5.0, 1.0);
+    h.app.go_to_camera(saved[0].id);
+    assert!((h.app.v3d.camera.target - before.target).length() < 1e-5);
+    assert!((h.app.v3d.camera.distance - before.distance).abs() < 1e-5);
+    // It is kept in the file.
+    let text = archisim_file::to_string(h.model());
+    let back = archisim_file::from_str(&text).unwrap();
+    assert_eq!(back.cameras().count(), 1);
+    // The walk: the eyes at 1.60 m, looking level.
+    h.app.toggle_walk();
+    assert_eq!(h.app.v3d.walk_eye, Some(super::camera_ui::EYE_HEIGHT));
+    assert!((h.app.v3d.camera.eye().z - super::camera_ui::EYE_HEIGHT).abs() < 1e-4);
+    assert!(h.app.v3d.camera.pitch.abs() < 1e-6);
+    let start = h.app.v3d.camera.eye();
+    // W held for a few frames: forwards, at the same height.
+    for _ in 0..5 {
+        h.events.push(Event::Key {
+            key: Key::W,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: Modifiers::NONE,
+        });
+        h.time += 0.1;
+        h.frame();
+    }
+    h.events.push(Event::Key {
+        key: Key::W,
+        physical_key: None,
+        pressed: false,
+        repeat: false,
+        modifiers: Modifiers::NONE,
+    });
+    h.frame();
+    let now = h.app.v3d.camera.eye();
+    assert!((now - start).length() > 0.05, "walked: {start} → {now}");
+    assert!((now.z - start.z).abs() < 1e-4);
+    // Esc: back to the view before the walk.
+    h.key(Key::Escape);
+    assert!(h.app.v3d.walk_eye.is_none());
+    assert!((h.app.v3d.camera.target - before.target).length() < 1e-4);
+    assert!(h.app.ed.selection.is_empty());
+}

@@ -1113,6 +1113,7 @@ pub enum ModelError {
     UnknownPlanView(PlanViewId),
     UnknownViewTemplate(ViewTemplateId),
     UnknownRefPlane(RefPlaneId),
+    UnknownCamera(CameraId),
     UnknownTag(TagId),
     UnknownTable(TableId),
     /// A drafting element or annotation is not well formed.
@@ -1300,6 +1301,7 @@ impl fmt::Display for ModelError {
                 write!(f, "view template {id} does not exist")
             }
             ModelError::UnknownRefPlane(id) => write!(f, "reference plane {id} does not exist"),
+            ModelError::UnknownCamera(id) => write!(f, "camera {id} does not exist"),
             ModelError::UnknownTag(id) => write!(f, "tag {id} does not exist"),
             ModelError::UnknownTable(id) => write!(f, "schedule {id} on a sheet does not exist"),
             ModelError::InvalidShape(what) => write!(f, "{what}"),
@@ -1475,6 +1477,8 @@ pub struct ModelParts {
     pub level_styles: Vec<(LevelId, crate::graphics::ViewStyle)>,
     pub view_templates: Vec<ViewTemplate>,
     pub ref_planes: Vec<RefPlane>,
+    /// Saved points of view of the 3D (version 72).
+    pub cameras: Vec<SavedCamera>,
     /// When the shadows of presentation drawings are cast.
     pub sun: Sun,
     /// Prices of the budget's items, by their keys.
@@ -1615,6 +1619,7 @@ pub struct Model {
     level_styles: BTreeMap<LevelId, crate::graphics::ViewStyle>,
     view_templates: BTreeMap<ViewTemplateId, ViewTemplate>,
     ref_planes: BTreeMap<RefPlaneId, RefPlane>,
+    cameras: BTreeMap<CameraId, SavedCamera>,
     sun: Sun,
     prices: BTreeMap<String, PriceConcept>,
     budget: BudgetSettings,
@@ -1710,6 +1715,7 @@ impl Model {
             level_styles: BTreeMap::new(),
             view_templates: BTreeMap::new(),
             ref_planes: BTreeMap::new(),
+            cameras: BTreeMap::new(),
             sun: Sun::default(),
             prices: BTreeMap::new(),
             budget: BudgetSettings::default(),
@@ -4368,6 +4374,7 @@ impl Model {
                 .collect(),
             view_templates: self.view_templates.values().cloned().collect(),
             ref_planes: self.ref_planes.values().cloned().collect(),
+            cameras: self.cameras.values().cloned().collect(),
             sun: self.sun,
             prices: self
                 .prices
@@ -4733,6 +4740,7 @@ impl Model {
             parts.ref_planes,
             &mut claim,
         )?;
+        model.restore_cameras(parts.cameras, &mut claim)?;
         model.set_sun(parts.sun).map_err(|error| RestoreError {
             element: "sun".into(),
             error,

@@ -274,6 +274,11 @@ impl ArchiSimApp {
                 open = Some(TabKind::ThreeD);
             }
             super::sheet_drop::drag_source(ui, &r, super::sheet_drop::Drop::ThreeD, "La vista 3D");
+            // The saved cameras (Presentación › Cámara).
+            if self.ed.model().cameras().next().is_some() {
+                sub_header(ui, "Cámaras", None);
+                self.cameras_rows(ui);
+            }
             sub_header(
                 ui,
                 "Secciones y alzados",
@@ -926,6 +931,8 @@ fn sub_header(ui: &mut Ui, title: &str, button: Option<(&str, &mut bool)>) {
         "Crear un plano (A1 apaisado) y abrirlo"
     } else if title == "Vistas de dibujo" {
         "Una vista solo de dibujo (un detalle, un esquema) a 1:20; se coloca en los planos"
+    } else if title == "Cámaras" {
+        "Los puntos de vista guardados del 3D (Presentación › Cámara)"
     } else {
         "Los cuatro alzados alrededor del edificio (los que falten)"
     };

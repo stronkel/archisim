@@ -308,7 +308,11 @@ impl ArchiSimApp {
     pub(super) fn look_bar(&mut self, ctx: &egui::Context, rect: Rect) {
         let p = Palette::current(ctx);
         let v = &self.v3d;
-        let current = if v.textures == TextureMode::Off {
+        let current = if v.style == 2 {
+            4
+        } else if v.style == 1 {
+            3
+        } else if v.textures == TextureMode::Off {
             0
         } else if v.quality == Quality::Pretty {
             2
@@ -331,6 +335,8 @@ impl ArchiSimApp {
                                 ("Sombreado", "Los colores de los materiales, sin texturas: lo más ligero"),
                                 ("Texturas", "Ladrillo, madera, piedra… con las sombras del sol"),
                                 ("Realista", "Sombras más finas y la penumbra de los rincones: para enseñar y para capturas"),
+                                ("Aristas", "Las caras en el color de su material, pálido y plano, y todas las aristas en tinta: para leer la forma"),
+                                ("Líneas ocultas", "Papel blanco y las aristas que se ven en tinta, como un dibujo"),
                             ]
                             .into_iter()
                             .enumerate()
@@ -359,7 +365,13 @@ impl ArchiSimApp {
             });
         if let Some(i) = chosen {
             let v = &mut self.v3d;
+            v.style = match i {
+                3 => 1,
+                4 => 2,
+                _ => 0,
+            };
             match i {
+                3 | 4 => {}
                 0 => v.textures = TextureMode::Off,
                 1 => {
                     if v.textures == TextureMode::Off {
@@ -396,7 +408,12 @@ impl ArchiSimApp {
                 }
             }
         }
-        let (name, keys) = if self.maquette {
+        let (name, keys) = if v.walk_eye.is_some() {
+            (
+                "Recorrido",
+                "W A S D: andar · Mayús: correr · derecho: mirar · Esc: salir",
+            )
+        } else if self.maquette {
             (
                 "Cámara de maqueta",
                 "W A S D: mover por el suelo · derecho: girar · rueda: acercar",

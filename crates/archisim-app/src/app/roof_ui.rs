@@ -281,6 +281,43 @@ impl ArchiSimApp {
             self.start_sketch(crate::sketch::SketchTarget::Roof(id));
             return;
         }
+        // The measures at a glance (§12.6).
+        if let Some((k, v)) = props::measure_tiles(
+            ui,
+            ("roof", id.0),
+            &[
+                props::Measure {
+                    label: "Espesor",
+                    hint: "Del tipo",
+                    value: thickness,
+                    editable: false,
+                },
+                props::Measure {
+                    label: "Alero",
+                    hint: "Vuelo de aleros y piñones",
+                    value: r.overhang,
+                    editable: true,
+                },
+                props::Measure {
+                    label: "Desfase",
+                    hint: "De la base, sobre la planta",
+                    value: r.base_offset,
+                    editable: true,
+                },
+            ],
+        ) {
+            let res = match k {
+                1 => self
+                    .ed
+                    .edit_roof("Alero de la cubierta", id, |r| r.overhang = v.max(0.0)),
+                _ => self
+                    .ed
+                    .edit_roof("Desfase de la cubierta", id, |r| r.base_offset = v),
+            };
+            self.report(res, "Cubierta cambiada.");
+            return;
+        }
+        let model = self.ed.model();
         let types = roof_types(model);
         props::note(
             ui,

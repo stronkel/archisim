@@ -293,6 +293,13 @@ pub fn type_card<T: PartialEq + Copy>(
                 *chosen = Some(v);
             }
         }
+        // The types like it (§12.6): those of its folder, or the ones next
+        // to it in the list, to change with one click.
+        if let Some(v) = similar_types(ui, salt, cur, items) {
+            if Some(v) != current {
+                *chosen = Some(v);
+            }
+        }
         ui.add_space(6.0);
         ui.horizontal(|ui| {
             if ui
@@ -316,6 +323,100 @@ pub fn type_card<T: PartialEq + Copy>(
         });
     });
     action
+}
+
+/// Up to four types like `cur` in small cards with their picture: those
+/// in its folder, else its neighbours in the list. Returns the one
+/// clicked.
+fn similar_types<T: PartialEq + Copy>(
+    ui: &mut Ui,
+    salt: &str,
+    cur: Option<&TypeItem<T>>,
+    items: &[TypeItem<T>],
+) -> Option<T> {
+    let cur = cur?;
+    let at = items.iter().position(|i| i.id == cur.id)?;
+    let mut like: Vec<&TypeItem<T>> = if cur.folder.is_empty() {
+        Vec::new()
+    } else {
+        items
+            .iter()
+            .filter(|i| i.id != cur.id && i.folder == cur.folder)
+            .collect()
+    };
+    if like.len() < 2 {
+        // Its neighbours, after it first.
+        like = items[at + 1..]
+            .iter()
+            .chain(items[..at].iter().rev())
+            .collect();
+    }
+    like.truncate(4);
+    if like.is_empty() {
+        return None;
+    }
+    let p = Palette::current(ui.ctx());
+    ui.add_space(6.0);
+    ui.label(egui::RichText::new("Parecidos").small().color(p.muted));
+    let gap = 4.0;
+    let w = ((ui.available_width() - gap * 3.0) / 4.0).max(30.0);
+    let size = Vec2::new(w, 52.0);
+    let mut picked = None;
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = gap;
+        for (k, item) in like.iter().enumerate() {
+            let (rect, resp) = ui.allocate_exact_size(size, Sense::click());
+            let resp = resp.on_hover_text(&item.name);
+            #[cfg(test)]
+            ui.ctx()
+                .data_mut(|d| d.insert_temp(egui::Id::unique(("test-similar", salt, k)), rect));
+            let _ = (salt, k);
+            ui.painter().rect(
+                rect,
+                CornerRadius::same(6),
+                egui::Color32::WHITE,
+                Stroke::new(1.0, if resp.hovered() { p.accent } else { p.line }),
+                StrokeKind::Inside,
+            );
+            match item.thumb {
+                Some(t) => {
+                    let s = t.fit(rect.shrink(4.0).size());
+                    ui.painter().image(
+                        t.tex,
+                        Rect::from_center_size(rect.center(), s),
+                        Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)),
+                        egui::Color32::WHITE,
+                    );
+                }
+                None => {
+                    let job = egui::text::LayoutJob {
+                        wrap: egui::text::TextWrapping {
+                            max_width: rect.width() - 6.0,
+                            max_rows: 3,
+                            break_anywhere: false,
+                            overflow_character: Some('…'),
+                        },
+                        halign: egui::Align::Center,
+                        ..egui::text::LayoutJob::single_section(
+                            item.name.clone(),
+                            egui::TextFormat::simple(egui::FontId::proportional(10.0), p.text),
+                        )
+                    };
+                    let g = ui.painter().layout_job(job);
+                    let h = g.size().y;
+                    ui.painter().galley(
+                        Pos2::new(rect.center().x, rect.center().y - h / 2.0),
+                        g,
+                        p.text,
+                    );
+                }
+            }
+            if resp.clicked() {
+                picked = Some(item.id);
+            }
+        }
+    });
+    picked
 }
 
 /// A type picture on white paper, fitted in `max`, centred.

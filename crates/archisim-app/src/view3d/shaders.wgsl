@@ -1311,6 +1311,15 @@ fn fs_model(i: VertexOut, @builtin(front_facing) front: bool) -> ModelOut {
         let glow = (base * 0.6 + vec3<f32>(0.55, 0.42, 0.25)) * 1.6;
         color = mix(color, glow, g.atmos.y);
     }
+    // «Aristas»: the material's colour pale and flat, barely turned by the
+    // light; «Líneas ocultas»: white paper. The contour pass draws the
+    // edges in full ink over them.
+    if (g.lamp_count.w > 1.5) {
+        color = vec3<f32>(0.97, 0.97, 0.96);
+    } else if (g.lamp_count.w > 0.5) {
+        let turn = max(dot(normalize(i.normal), normalize(vec3<f32>(0.3, -0.4, 0.86))), 0.0);
+        color = mix(i.color.rgb, vec3<f32>(1.0), 0.6) * (0.9 + 0.1 * turn);
+    }
     out.color = vec4<f32>(hazed(color, i.view_dist), 1.0);
     out.normal_dist = vec4<f32>(normalize(i.view_normal), i.view_dist * mark);
     if (i.soft > 0.5 && i.soft < 1.5) {
@@ -1560,7 +1569,9 @@ fn fs_edges(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     // Thin lines are the surface's own colour darkened (a little over
     // half way to the ink), finer than black.
     let ink = vec3<f32>(0.05, 0.05, 0.08) * (1.0 - 0.9 * g.atmos.y);
-    let strength = select(1.0, 0.6, g.edges.y < 0.0);
+    // Thin lines lighter, but in full ink when the faces are only paper
+    // («Aristas», «Líneas ocultas»).
+    let strength = select(1.0, 0.6, g.edges.y < 0.0 && g.lamp_count.w < 0.5);
     return vec4<f32>(ink, max(e * strength, shade_corner));
 }
 

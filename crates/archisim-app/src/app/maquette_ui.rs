@@ -467,10 +467,17 @@ impl ArchiSimApp {
         let axis = |plus: bool, minus: bool| f32::from(u8::from(plus)) - f32::from(u8::from(minus));
         let forward = axis(held[0], held[2]);
         let right = axis(held[3], held[1]);
-        let up = axis(held[5], held[4]);
-        // Metres a second: more from afar, so it feels the same at any zoom.
-        let speed = self.v3d.camera.distance.clamp(3.0, 200.0)
-            * 0.6
+        let walking = self.v3d.walk_eye.is_some();
+        // Walking through the house the eyes stay at their height.
+        let up = if walking { 0.0 } else { axis(held[5], held[4]) };
+        // Metres a second: more from afar, so it feels the same at any zoom;
+        // walking, a person's pace.
+        let base = if walking {
+            1.4
+        } else {
+            self.v3d.camera.distance.clamp(3.0, 200.0) * 0.6
+        };
+        let speed = base
             * crate::prefs::Navigation::factor(self.prefs.nav.walk)
             * if fast { 3.0 } else { 1.0 };
         let step = speed * dt;

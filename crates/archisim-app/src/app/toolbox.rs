@@ -240,8 +240,12 @@ pub enum Action {
     BringSurroundings,
     /// Ask for the surroundings to the free services.
     DownloadSurroundings,
-    /// The sun of the project, in Properties.
+    /// The sun of the project, in its panel.
     Sun,
+    /// Saves the point of view of the 3D as a camera.
+    SaveCamera,
+    /// Walks through the house at eye height.
+    Walk,
     /// The presentation styles.
     Styles,
     /// A realistic picture of the 3D view.
@@ -878,11 +882,11 @@ const DOCUMENTATION: &[Tile] = &[
 
 const PRESENTATION: &[Tile] = &[
     tile(
-        Pick::Later("las cámaras guardadas (bloque V3 de la interfaz)"),
+        Pick::Action(Action::SaveCamera),
         Glyph::Camera,
         "Cámara",
         "",
-        "Guardar un punto de vista del 3D para volver a él, renderizarlo o ponerlo en una lámina",
+        "Guardar el punto de vista del 3D para volver a él, renderizarlo o ponerlo en una lámina: sale en el navegador, en Cámaras",
     ),
     tile(
         Pick::Action(Action::Sun),
@@ -920,11 +924,11 @@ const PRESENTATION: &[Tile] = &[
         "Una imagen PNG (grafiti, cartel, rótulo, mancha…) sobre cualquier cara, para la vista 3D y el render",
     ),
     tile(
-        Pick::Later("los recorridos (más adelante)"),
+        Pick::Action(Action::Walk),
         Glyph::Walk,
         "Recorrido",
         "",
-        "Pasear por la casa a la altura de los ojos y grabarlo",
+        "Pasear por la casa a la altura de los ojos: W A S D andan, el botón derecho mira, Esc sale",
     ),
 ];
 
@@ -1513,6 +1517,7 @@ impl ArchiSimApp {
                 ),
                 Action::Render => self.render.open,
                 Action::Styles => self.presentation.open,
+                Action::Walk => self.v3d.walk_eye.is_some(),
                 Action::Elevations
                 | Action::NewSheet
                 | Action::Link
@@ -1521,6 +1526,7 @@ impl ArchiSimApp {
                 | Action::BringSurroundings
                 | Action::DownloadSurroundings
                 | Action::Sun
+                | Action::SaveCamera
                 | Action::Budget
                 | Action::Picture => false,
             }),
@@ -1619,11 +1625,10 @@ impl ArchiSimApp {
             Action::BringSurroundings => self.pick_carto(),
             Action::DownloadSurroundings => self.open_carto_download(),
             Action::Sun => {
-                self.set_tool(Tool::Arrow);
-                self.ed.selection.clear();
-                self.show_properties = true;
-                self.say("El sol: fecha, hora y emplazamiento, en Propiedades › Proyecto.");
+                self.presentation.sun_open = true;
             }
+            Action::SaveCamera => self.save_camera(),
+            Action::Walk => self.toggle_walk(),
             Action::Styles => self.presentation.open = true,
             Action::Render => self.render.open = true,
             Action::Picture => {

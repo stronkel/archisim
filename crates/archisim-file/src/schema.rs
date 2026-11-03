@@ -144,6 +144,9 @@ pub(crate) struct ProjectFile {
     pub view_templates: Vec<crate::views::ViewTemplateOf>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub ref_planes: Vec<crate::views::RefPlaneOf>,
+    /// Saved cameras of the 3D (version 72).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cameras: Vec<crate::views::CameraOf>,
     /// Plot area for the masses' figures, m² (version 18).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plot_area: Option<f64>,
@@ -3527,6 +3530,7 @@ impl ProjectFile {
                 .iter()
                 .map(crate::views::RefPlaneOf::out)
                 .collect(),
+            cameras: p.cameras.iter().map(crate::views::CameraOf::out).collect(),
             paint_zones: p
                 .paint_zones
                 .iter()
@@ -4391,6 +4395,7 @@ impl ProjectFile {
             level_styles: Vec::new(),
             view_templates: Vec::new(),
             ref_planes: Vec::new(),
+            cameras: Vec::new(),
             plot_area: None,
             plots: Vec::new(),
             roads: Vec::new(),
@@ -4807,6 +4812,9 @@ impl ProjectFile {
         }
         for r in self.ref_planes {
             parts.ref_planes.push(r.into_core());
+        }
+        for c in self.cameras {
+            parts.cameras.push(c.into_core());
         }
         for a in self.appearances {
             let element = format!("appearance of material {}", a.material);

@@ -15,6 +15,11 @@ const MAX_TONES: usize = 6;
 #[derive(Default)]
 pub struct PresentationUi {
     pub open: bool,
+    /// The panel of the sun (the Sol tile of Presentación).
+    pub sun_open: bool,
+    /// The sun being moved with the sliders: written to the project when
+    /// they are let go (one undo step, not one a frame).
+    sun_draft: Option<archisim_core::Sun>,
     pub selected: Option<PresentationStyleId>,
     /// The style being edited; written to the project when the mouse and
     /// the keyboard leave it (one undo step per change, not per frame).
@@ -399,6 +404,168 @@ impl ArchiSimApp {
             .clicked()
     }
 
+    /// The panel of the sun (§12.4, the Sol tile of Presentación): its
+    /// path over the project for midsummer, the equinox and midwinter, the
+    /// day and the solar hour on sliders, and the three days architects
+    /// look at, with the sun's height and bearing.
+    pub(super) fn sun_dialog(&mut self, ctx: &egui::Context) {
+        if !self.presentation.sun_open {
+            return;
+        }
+        let mut open = true;
+        super::widgets::dialog("Sol")
+            .id(egui::Id::unique("sun-panel"))
+            .open(&mut open)
+            .default_width(300.0)
+            .resizable(false)
+            .show(ctx, |ui| self.sun_contents(ui));
+        self.presentation.sun_open = open;
+    }
+
+    fn sun_contents(&mut self, ui: &mut Ui) {
+        let p = super::theme::Palette::current(ui.ctx());
+        let model = self.ed.model();
+        let lat = model.latitude();
+        let north = model.true_north();
+        let georef = model.georeference().is_some();
+        let mut sun = self.presentation.sun_draft.unwrap_or(model.sun());
+        // The path of the sun, in plan: the horizon a circle, the zenith in
+        // the middle; north where the project's north is.
+        let size = ui.available_width().min(280.0);
+        let (rect, _) = ui.allocate_exact_size(Vec2::new(size, size), egui::Sense::hover());
+        let painter = ui.painter_at(rect);
+        let c = rect.center();
+        let r = size * 0.42;
+        painter.circle_filled(c, r, p.raised);
+        painter.circle_stroke(c, r, Stroke::new(1.0, p.line));
+        for k in [1.0 / 3.0, 2.0 / 3.0] {
+            painter.circle_stroke(c, r * k as f32, Stroke::new(0.5, p.line));
+        }
+        // A bearing from north (clockwise) and a height to the screen.
+        let at = |alt: f64, az: f64| -> Pos2 {
+            let b = (az + north) as f32;
+            let d = r * (1.0 - (alt / std::f64::consts::FRAC_PI_2) as f32).clamp(0.0, 1.0);
+            Pos2::new(c.x + d * b.sin(), c.y - d * b.cos())
+        };
+        for (label, b) in [("N", 0.0), ("E", 90.0), ("S", 180.0), ("O", 270.0)] {
+            let q = at(-0.12, f64::to_radians(b));
+            painter.text(
+                q,
+                egui::Align2::CENTER_CENTER,
+                label,
+                egui::FontId::proportional(11.0),
+                if label == "N" { p.accent } else { p.muted },
+            );
+        }
+        let days = [
+            (172u16, Color32::from_rgb(220, 140, 40)),
+            (80, Color32::from_rgb(200, 170, 60)),
+            (355, Color32::from_rgb(110, 140, 190)),
+        ];
+        for (day, col) in days {
+            let pts: Vec<Pos2> = (0..=96)
+                .map(|i| archisim_core::Sun {
+                    day,
+                    hour: i as f64 / 4.0,
+                })
+                .map(|s| s.position(lat))
+                .filter(|(alt, _)| *alt > 0.0)
+                .map(|(alt, az)| at(alt, az))
+                .collect();
+            if pts.len() > 1 {
+                painter.add(egui::Shape::line(pts, Stroke::new(1.5, col)));
+            }
+        }
+        let (alt, az) = sun.position(lat);
+        if alt > 0.0 {
+            let q = at(alt, az);
+            painter.line_segment([c, q], Stroke::new(1.0, p.muted));
+            painter.circle_filled(q, 7.0, Color32::from_rgb(255, 196, 40));
+            painter.circle_stroke(q, 7.0, Stroke::new(1.0, Color32::from_rgb(200, 130, 20)));
+        }
+        ui.horizontal(|ui| {
+            for (day, col, name) in [
+                (172u16, days[0].1, "Verano"),
+                (80, days[1].1, "Equinoccio"),
+                (355, days[2].1, "Invierno"),
+            ] {
+                let (dot, _) = ui.allocate_exact_size(Vec2::splat(9.0), egui::Sense::hover());
+                ui.painter().circle_filled(dot.center(), 4.0, col);
+                if ui
+                    .small_button(name)
+                    .on_hover_text("Ese día, a mediodía solar")
+                    .clicked()
+                {
+                    sun = archisim_core::Sun { day, hour: 12.0 };
+                    self.presentation.sun_draft = None;
+                    let r = self.ed.set_sun(sun);
+                    self.report(r, "Sol cambiado.");
+                }
+            }
+        });
+        ui.add_space(6.0);
+        let (d, m) = day_month(sun.day);
+        let mut day = sun.day as f64;
+        let rd = ui.add(
+            egui::Slider::new(&mut day, 1.0..=365.0)
+                .step_by(1.0)
+                .show_value(false)
+                .text(format!("{d} de {}", MONTH_NAMES[m as usize - 1])),
+        );
+        let mut hour = sun.hour;
+        let h = hour.floor();
+        let clock = format!(
+            "{:02}:{:02} solar",
+            h as u32,
+            ((hour - h) * 60.0).round() as u32
+        );
+        let rh = ui.add(
+            egui::Slider::new(&mut hour, 4.0..=21.0)
+                .step_by(0.25)
+                .show_value(false)
+                .text(clock),
+        );
+        let moved = rd.changed() || rh.changed();
+        if moved {
+            sun = archisim_core::Sun {
+                day: (day.round() as u16).clamp(1, 365),
+                hour: hour.clamp(0.0, 24.0),
+            };
+            self.presentation.sun_draft = Some(sun);
+        }
+        let let_go =
+            (rd.drag_stopped() || rh.drag_stopped()) || (moved && !rd.dragged() && !rh.dragged());
+        if let_go {
+            if let Some(s) = self.presentation.sun_draft.take() {
+                let r = self.ed.set_sun(s);
+                self.report(
+                    r,
+                    "Sol cambiado: las sombras de las vistas de presentación y del 3D lo siguen.",
+                );
+            }
+        }
+        ui.add_space(4.0);
+        let text = if alt > 0.0 {
+            format!(
+                "Altura {:.0}° · desde el norte {:.0}°",
+                alt.to_degrees(),
+                az.to_degrees()
+            )
+        } else {
+            "El sol está bajo el horizonte".to_string()
+        };
+        ui.label(RichText::new(text).color(p.text));
+        ui.label(
+            RichText::new(if georef {
+                format!("Latitud {lat:.2}°, de la georreferencia del proyecto")
+            } else {
+                format!("Latitud {lat:.2}° (Madrid): sin georreferencia en el proyecto")
+            })
+            .small()
+            .color(p.muted),
+        );
+    }
+
     /// The sun of the shadows in the project's properties: the day (as
     /// day/month) and the solar hour.
     pub(super) fn sun_rows(&mut self, ui: &mut Ui) {
@@ -451,6 +618,21 @@ impl ArchiSimApp {
 }
 
 const MONTH_DAYS: [u16; 12] = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
+const MONTH_NAMES: [&str; 12] = [
+    "enero",
+    "febrero",
+    "marzo",
+    "abril",
+    "mayo",
+    "junio",
+    "julio",
+    "agosto",
+    "septiembre",
+    "octubre",
+    "noviembre",
+    "diciembre",
+];
 
 /// Day and month of a day of the year.
 fn day_month(n: u16) -> (u16, u16) {

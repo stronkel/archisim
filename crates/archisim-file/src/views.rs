@@ -137,3 +137,51 @@ impl RefPlaneOf {
         }
     }
 }
+
+/// A saved camera of the 3D (version 72).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct CameraOf {
+    pub id: u64,
+    pub name: String,
+    pub target: [f64; 3],
+    pub pitch: f64,
+    pub yaw: f64,
+    pub distance: f64,
+    #[serde(default = "yes", skip_serializing_if = "is_true")]
+    pub perspective: bool,
+}
+
+fn yes() -> bool {
+    true
+}
+
+fn is_true(v: &bool) -> bool {
+    *v
+}
+
+impl CameraOf {
+    pub fn out(c: &core::SavedCamera) -> Self {
+        Self {
+            id: c.id.0,
+            name: c.name.clone(),
+            target: c.target,
+            pitch: c.pitch,
+            yaw: c.yaw,
+            distance: c.distance,
+            perspective: c.perspective,
+        }
+    }
+
+    pub fn into_core(self) -> core::SavedCamera {
+        core::SavedCamera {
+            id: core::CameraId(self.id),
+            name: self.name,
+            target: self.target,
+            pitch: self.pitch,
+            yaw: self.yaw,
+            distance: self.distance,
+            perspective: self.perspective,
+        }
+    }
+}

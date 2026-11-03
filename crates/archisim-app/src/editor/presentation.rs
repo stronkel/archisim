@@ -67,6 +67,44 @@ impl Editor {
     }
 }
 
+impl Editor {
+    /// Saves a point of view of the 3D, named «Cámara N» when unnamed.
+    pub fn add_camera(
+        &mut self,
+        c: archisim_core::SavedCamera,
+    ) -> EditResult<archisim_core::CameraId> {
+        self.transact("Guardar cámara", |m| m.add_camera(c))
+    }
+
+    pub fn rename_camera(&mut self, id: archisim_core::CameraId, name: &str) -> EditResult {
+        let name = name.trim().to_string();
+        self.transact("Renombrar cámara", |m| {
+            m.edit_camera(id, |c| c.name = name)
+        })
+    }
+
+    /// Moves a saved camera to where the view looks now.
+    pub fn update_camera(
+        &mut self,
+        id: archisim_core::CameraId,
+        from: archisim_core::SavedCamera,
+    ) -> EditResult {
+        self.transact("Actualizar cámara", |m| {
+            m.edit_camera(id, |c| {
+                c.target = from.target;
+                c.pitch = from.pitch;
+                c.yaw = from.yaw;
+                c.distance = from.distance;
+                c.perspective = from.perspective;
+            })
+        })
+    }
+
+    pub fn remove_camera(&mut self, id: archisim_core::CameraId) -> EditResult {
+        self.transact("Borrar cámara", |m| m.remove_camera(id).map(|_| ()))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -239,6 +239,10 @@ pub struct Renderer {
     pub relief: bool,
     /// Seconds, for the water's movement (wrapped every hour).
     pub time: f32,
+    /// How the faces are drawn (§12.5): 0 as their material (shaded,
+    /// textured or realistic), 1 «Aristas» (pale, flat, every edge in
+    /// ink), 2 «Líneas ocultas» (white paper, the visible edges in ink).
+    pub style: u8,
     /// The background left transparent (premultiplied: what is drawn
     /// under the picture, the ground grid, shows where there is no model).
     transparent: bool,
@@ -677,6 +681,7 @@ impl Renderer {
             selected: false,
             thin_lines: false,
             relief: true,
+            style: 0,
             time: 0.0,
             transparent: false,
             atmosphere: None,
@@ -989,7 +994,7 @@ impl Renderer {
                 lamp_n as f32,
                 self.time.rem_euclid(3600.0),
                 if self.relief { 1.0 } else { 0.0 },
-                0.0,
+                self.style as f32,
             ],
             caps: match self.caps {
                 CapStyle::Layers => [0.0, 0.0, 0.0, 0.0],
