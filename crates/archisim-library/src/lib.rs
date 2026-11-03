@@ -600,6 +600,9 @@ pub fn add_library(m: &mut Model) -> Result<Library, ModelError> {
     for g in &ground::GREEN_WALLS {
         ground::green_wall_material(m, g);
     }
+    // The studio standards' schemes and a template per discipline, to be
+    // chosen by view and by sheet (last so older ids stay put).
+    standards::add_schemes(m);
     Ok(Library {
         curtain,
         void,

@@ -318,31 +318,41 @@ pub fn level_below(model: &Model, level: LevelId) -> Option<LevelId> {
 
 /// Renders the plan of one level as an SVG document.
 pub fn render_plan(model: &Model, level: LevelId, options: &PlanOptions) -> String {
+    // The view's discipline, as what it leaves out and greys.
+    if options.style.discipline.is_some() {
+        let mut o = options.clone();
+        o.style = options.style.effective().into_owned();
+        o.style.discipline = None;
+        return render_plan(model, level, &o);
+    }
     let _font = lettering::use_font(model.graphics.font);
     let coarse = options
         .px_per_mm
         .is_some_and(|px| px * HATCH_SPACING < MIN_HATCH_PX);
     COARSE.with(|c| c.set(coarse));
     PX_PER_MM.with(|c| c.set(options.px_per_mm));
+    let look = presentation::style_of(model, &options.style);
     let pens = options
         .pens
-        .unwrap_or_else(|| model.graphics.pens(options.scale));
+        .unwrap_or_else(|| presentation::pens(model, look, options.scale));
     PENS.with(|p| p.set(pens));
     DETAIL.with(|d| d.set(options.style.detail));
     let phased = phases::phase_model(model, options.phase_view);
     // Ids are the same in the phased copy: what is greyed comes from the
     // model as it is.
     let _greyed = dim::begin(model, &options.style);
-    let look = presentation::style_of(model, &options.style);
     let _poche = presentation::begin(look);
     let _layers = overrides::begin(&options.style);
     let mut svg = render_plan_inner(phased.as_ref().unwrap_or(model), level, options);
     if let Some(p) = look {
         svg = presentation::apply(&svg, p);
     }
-    // Each category's own graphics, over the presentation style.
-    if !options.style.overrides.is_empty() {
-        svg = overrides::apply(&svg, &options.style);
+    // Each category's own graphics, over the presentation style (with
+    // its accent).
+    let accented = look.and_then(|p| p.accented(&options.style));
+    let graphics = accented.as_ref().unwrap_or(&options.style);
+    if !graphics.overrides.is_empty() {
+        svg = overrides::apply(&svg, graphics);
     }
     COARSE.with(|c| c.set(false));
     PX_PER_MM.with(|c| c.set(None));

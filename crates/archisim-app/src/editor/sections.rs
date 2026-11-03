@@ -41,6 +41,15 @@ impl Editor {
         self.transact(label, |m| m.edit_section(id, edit))
     }
 
+    /// Removes a section or elevation, and its views on the sheets.
+    pub fn remove_section(&mut self, id: SectionId) -> EditResult {
+        let label = match self.model().section(id).map(|s| s.kind) {
+            Some(archisim_core::SectionKind::Elevation) => "Borrar alzado",
+            _ => "Borrar sección",
+        };
+        self.transact(label, |m| m.remove_section(id).map(drop))
+    }
+
     /// Renames a section; names are unique among sections and among
     /// elevations.
     pub fn rename_section(&mut self, id: SectionId, name: &str) -> EditResult {

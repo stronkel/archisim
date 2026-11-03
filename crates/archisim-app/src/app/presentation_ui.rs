@@ -255,12 +255,100 @@ impl ArchiSimApp {
                 ui.switch(&mut d.shadows, "arrojadas sobre el suelo");
                 ui.end_row();
 
+                ui.label("Grosores y textos")
+                    .on_hover_text("Los grosores de línea y la altura de los textos de la vista: los de la norma del proyecto (Normas gráficas) o los de una norma propia del estilo");
+                ui.horizontal(|ui| {
+                    use archisim_library::standards::Standard;
+                    let now = match d.pens {
+                        None => 0,
+                        Some(p) => Standard::ALL
+                            .iter()
+                            .position(|s| {
+                                let g = s.graphics();
+                                g.fine == p.fine && g.coarse == p.coarse
+                            })
+                            .map_or(4, |i| i + 1),
+                    };
+                    let names = ["Del proyecto", "Clásica", "Hilo", "Faro", "Propios"];
+                    let mut pick = now;
+                    egui::ComboBox::from_id_salt("style-pens")
+                        .selected_text(names[now])
+                        .show_ui(ui, |ui| {
+                            for (i, n) in names.iter().enumerate().take(4) {
+                                ui.selectable_value(&mut pick, i, *n);
+                            }
+                        });
+                    if pick != now {
+                        d.pens = (pick > 0).then(|| {
+                            let g = Standard::ALL[pick - 1].graphics();
+                            archisim_core::StylePens {
+                                fine: g.fine,
+                                coarse: g.coarse,
+                            }
+                        });
+                    }
+                    if let Some(p) = &mut d.pens {
+                        ui.label("corte");
+                        ui.add(
+                            egui::DragValue::new(&mut p.fine.cut)
+                                .range(0.05..=2.0)
+                                .speed(0.01)
+                                .suffix(" mm"),
+                        )
+                        .on_hover_text("Lo cortado a 1:50 (a 1:100, la norma de escalas pequeñas)");
+                        ui.label("texto");
+                        ui.add(
+                            egui::DragValue::new(&mut p.fine.text)
+                                .range(1.0..=6.0)
+                                .speed(0.05)
+                                .suffix(" mm"),
+                        );
+                    }
+                });
+                ui.end_row();
+
                 ui.label("Grueso de las líneas");
                 ui.add(
                     egui::Slider::new(&mut d.line_scale, 0.3..=2.0)
                         .step_by(0.05)
                         .custom_formatter(|v, _| format!("× {v:.2}")),
                 );
+                ui.end_row();
+
+                ui.label("Color de acento")
+                    .on_hover_text("Un color que resalta las anotaciones sobre la paleta: cotas y textos en rojo sobre un dibujo en grises, por ejemplo");
+                ui.vertical(|ui| {
+                    ui.horizontal(|ui| {
+                        let mut on = d.accent.is_some();
+                        if ui.switch(&mut on, "").changed() {
+                            d.accent = on.then_some(d.accent.unwrap_or([214, 72, 44]));
+                            if on && d.accent_on.is_empty() {
+                                d.accent_on = archisim_library::standards::ACCENTED
+                                    .into_iter()
+                                    .collect();
+                            }
+                        }
+                        if let Some(c) = &mut d.accent {
+                            ui.color_edit_button_srgb(c);
+                        } else {
+                            ui.label(RichText::new("sin acento").weak());
+                        }
+                    });
+                    if d.accent.is_some() {
+                        ui.horizontal_wrapped(|ui| {
+                            for c in archisim_core::Category::ALL {
+                                let mut on = d.accent_on.contains(&c);
+                                if ui.toggle_value(&mut on, c.label()).changed() {
+                                    if on {
+                                        d.accent_on.insert(c);
+                                    } else {
+                                        d.accent_on.remove(&c);
+                                    }
+                                }
+                            }
+                        });
+                    }
+                });
                 ui.end_row();
             });
         // A strip of what the style turns the usual colours into.
@@ -283,6 +371,10 @@ impl ArchiSimApp {
             if let Some(p) = d.poche {
                 ui.label("muro:");
                 swatch(ui, p, 22.0);
+            }
+            if let Some(a) = d.accent {
+                ui.label("acento:");
+                swatch(ui, a, 22.0);
             }
         });
         let in_use = self
@@ -393,12 +485,29 @@ impl ArchiSimApp {
         props::row(
             ui,
             "Estilo",
-            "Papel, paleta, muros macizados y grueso de líneas de un estilo de presentación",
+            "Papel, paleta, muros macizados, grosores de línea, tamaño de los textos y color de acento de la vista (Hilo, Faro, Bosque…)",
             |ui, w| {
                 let refs: Vec<(Option<PresentationStyleId>, &str)> =
                     opts.iter().map(|(a, b)| (*a, b.as_str())).collect();
                 style.presentation =
                     props::choice(ui, "view-presentation", w, style.presentation, &refs);
+            },
+        );
+        props::row(
+            ui,
+            "Disciplina",
+            "Para qué es la vista: Arquitectura deja fuera las instalaciones; Estructura e Instalaciones dejan fuera la urbanización y lo demás en gris; Urbanización deja fuera las instalaciones y la estructura del edificio",
+            |ui, w| {
+                let opts: Vec<(Option<archisim_core::ElementDiscipline>, &str)> =
+                    std::iter::once((None, "Todas"))
+                        .chain(
+                            archisim_core::ElementDiscipline::ALL
+                                .iter()
+                                .map(|d| (Some(*d), discipline_label(*d))),
+                        )
+                        .collect();
+                style.discipline =
+                    props::choice(ui, "view-discipline", w, style.discipline, &opts);
             },
         );
         ui.small_button("Estilos de presentación…")
@@ -665,6 +774,17 @@ fn parse_hour(t: &str) -> Option<f64> {
     let (h, m): (f64, f64) = (h.trim().parse().ok()?, m.trim().parse().ok()?);
     let v = h + m / 60.0;
     ((0.0..=24.0).contains(&v) && (0.0..60.0).contains(&m)).then_some(v)
+}
+
+/// A view discipline's name.
+pub(super) fn discipline_label(d: archisim_core::ElementDiscipline) -> &'static str {
+    use archisim_core::ElementDiscipline as D;
+    match d {
+        D::Architecture => "Arquitectura",
+        D::Structure => "Estructura",
+        D::Services => "Instalaciones",
+        D::Site => "Urbanización",
+    }
 }
 
 #[cfg(test)]

@@ -328,6 +328,7 @@ pub fn explain(e: &ModelError) -> String {
         ModelError::UnknownViewTemplate(_) => "la plantilla de vista ya no existe".into(),
         ModelError::UnknownRefPlane(_) => "el plano de referencia ya no existe".into(),
         ModelError::UnknownCamera(_) => "la cámara ya no existe".into(),
+        ModelError::UnknownTitleBlock(_) => "el cajetín ya no existe".into(),
         ModelError::UnknownTag(_) => "la etiqueta ya no existe".into(),
         ModelError::UnknownTable(_) => "la tabla ya no está en el plano".into(),
         ModelError::InvalidShape(what) => es_shape(what).into(),

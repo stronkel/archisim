@@ -15,6 +15,13 @@ pub fn style_of<'a>(model: &'a Model, style: &ViewStyle) -> Option<&'a Presentat
         .and_then(|id| model.presentation_style(id))
 }
 
+/// The pens of a drawing at 1:`scale`: the presentation style's own, or
+/// the project's graphic standard.
+pub fn pens(model: &Model, look: Option<&PresentationStyle>, scale: f64) -> archisim_core::Pens {
+    look.and_then(|p| p.pens_at(&model.graphics, scale))
+        .unwrap_or_else(|| model.graphics.pens(scale))
+}
+
 /// Sets the solid fill of cut walls and columns for the drawing that
 /// follows; the guard clears it.
 pub(crate) fn begin(p: Option<&PresentationStyle>) -> Guard {
@@ -100,6 +107,15 @@ pub fn apply(svg: &str, p: &PresentationStyle) -> String {
 /// A fragment of a drawing (a sheet's title block, tables, texts) in a
 /// presentation style: its lines and colours, without paper of its own.
 pub fn apply_fragment(svg: &str, p: &PresentationStyle) -> String {
+    apply_fragment_keeping(svg, p, &[])
+}
+
+/// The same, keeping some colours as they are (and the style's accent).
+pub fn apply_fragment_keeping(
+    svg: &str,
+    p: &PresentationStyle,
+    keep: &[archisim_core::Rgb],
+) -> String {
     let scaled = if (p.line_scale - 1.0).abs() > 1e-9 {
         scale_strokes(svg, p.line_scale)
     } else {
@@ -108,6 +124,8 @@ pub fn apply_fragment(svg: &str, p: &PresentationStyle) -> String {
     crate::dim::map_colours(&scaled, |c| {
         if c == [255, 255, 255] {
             p.background
+        } else if keep.contains(&c) || Some(c) == p.accent {
+            c
         } else {
             p.tone(c)
         }

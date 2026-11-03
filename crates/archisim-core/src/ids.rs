@@ -47,6 +47,10 @@ typed_id!(
     CameraId
 );
 typed_id!(
+    /// Identifies a [`crate::TitleBlock`] (a title block of the project).
+    TitleBlockId
+);
+typed_id!(
     /// Identifies a [`crate::ConceptEdge`] (a loose edge of the concept phase).
     EdgeId
 );

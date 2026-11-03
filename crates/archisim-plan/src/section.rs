@@ -1787,18 +1787,29 @@ impl Pending {
 }
 
 pub fn render_section(model: &Model, d: &SectionDrawing, options: &PlanOptions) -> String {
+    if options.style.discipline.is_some() {
+        let mut o = options.clone();
+        o.style = options.style.effective().into_owned();
+        o.style.discipline = None;
+        return render_section(model, d, &o);
+    }
     let _font = crate::lettering::use_font(model.graphics.font);
+    let look = crate::presentation::style_of(model, &options.style);
     let pens = options
         .pens
-        .unwrap_or_else(|| model.graphics.pens(options.scale));
+        .unwrap_or_else(|| crate::presentation::pens(model, look, options.scale));
     crate::set_pens(pens);
     let _greyed = crate::dim::begin(model, &options.style);
-    let look = crate::presentation::style_of(model, &options.style);
     let _poche = crate::presentation::begin(look);
     let mut svg = render_section_inner(model, d, options);
     crate::set_pens(archisim_core::Pens::FINE);
     if let Some(p) = look {
         svg = crate::presentation::apply(&svg, p);
+    }
+    let accented = look.and_then(|p| p.accented(&options.style));
+    let graphics = accented.as_ref().unwrap_or(&options.style);
+    if !graphics.overrides.is_empty() {
+        svg = crate::overrides::apply(&svg, graphics);
     }
     svg
 }

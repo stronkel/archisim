@@ -512,6 +512,27 @@ impl ArchiSimApp {
             if ui.button("Visibilidad y gráficos…").clicked() {
                 self.views.vg_open = true;
             }
+            if ui
+                .button("Normas gráficas…")
+                .on_hover_text("Grosores de línea y textos por defecto del proyecto y su norma (Clásica, Hilo, Faro); cada vista puede llevar otra en su Estilo")
+                .clicked()
+            {
+                self.show_graphics = true;
+            }
+            if ui
+                .button("Cajetines…")
+                .on_hover_text("Los cajetines del proyecto: el de por defecto y los propios, con logotipo, filas, sello y color")
+                .clicked()
+            {
+                self.title_blocks_ui.open = true;
+            }
+            if ui
+                .button("Estilos de presentación…")
+                .on_hover_text("Los estilos que se eligen por vista y por plano: papel, paleta, macizado, grosores y color de acento")
+                .clicked()
+            {
+                self.presentation.open = true;
+            }
             ui.switch(&mut self.show_underlay, "Calco de la planta inferior");
             ui.switch(&mut self.v3d.camera.perspective, "Perspectiva en 3D");
             ui.menu_button("Navegación 3D", |ui| self.navigation_controls(ui));

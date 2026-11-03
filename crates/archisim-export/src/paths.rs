@@ -29,6 +29,16 @@ pub struct Item {
     pub group: String,
     /// Inside a nested view (a viewport of a sheet).
     pub nested: bool,
+    /// A picture instead of lines (a logo, an orthophoto…).
+    pub picture: Option<Picture>,
+}
+
+/// A PNG drawn on the page: its bytes and where three of its corners go
+/// (top left, top right, bottom left), in user units.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Picture {
+    pub png: std::sync::Arc<Vec<u8>>,
+    pub corners: [P; 3],
 }
 
 /// Parses an SVG drawing.
@@ -196,6 +206,7 @@ fn walk(
                 even_odd,
                 group: group.to_string(),
                 nested,
+                picture: None,
             };
             match clip {
                 None => out.push(item(subpaths, fill, stroke, dashes)),
@@ -217,7 +228,45 @@ fn walk(
                 }
             }
         }
-        Node::Image(_) | Node::Text(_) => {}
+        Node::Image(img) => {
+            let usvg::ImageKind::PNG(png) = img.kind() else {
+                return;
+            };
+            if !img.is_visible() {
+                return;
+            }
+            let sz = img.size();
+            let (w, h) = (sz.width(), sz.height());
+            let corners = [apply(t, 0.0, 0.0), apply(t, w, 0.0), apply(t, 0.0, h)];
+            // Inside a view's frame, only if it fits whole (pictures are
+            // not cut).
+            if let Some((lo, hi)) = clip {
+                let far = (
+                    corners[1].0 + corners[2].0 - corners[0].0,
+                    corners[1].1 + corners[2].1 - corners[0].1,
+                );
+                let inside = |p: &P| p.0 >= lo.0 && p.0 <= hi.0 && p.1 >= lo.1 && p.1 <= hi.1;
+                if !corners.iter().chain([&far]).all(inside) {
+                    return;
+                }
+            }
+            out.push(Item {
+                subpaths: Vec::new(),
+                fill: None,
+                fill_opacity: 1.0,
+                stroke_opacity: 1.0,
+                stroke: None,
+                dashes: Vec::new(),
+                even_odd: false,
+                group: group.to_string(),
+                nested,
+                picture: Some(Picture {
+                    png: png.clone(),
+                    corners,
+                }),
+            });
+        }
+        Node::Text(_) => {}
     }
 }
 

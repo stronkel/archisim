@@ -23,6 +23,8 @@ pub fn pdf(pages: &[Page<'_>], title: &str) -> Result<Vec<u8>, String> {
     let n = pages.len();
     let page_ids: Vec<usize> = (0..n).map(|i| 3 + 2 * i).collect();
     let info_id = 3 + 2 * n;
+    // Pictures after the info: an image and its mask each.
+    let mut next_id = info_id + 1;
     w.object(1, "<< /Type /Catalog /Pages 2 0 R >>".into());
     let kids: Vec<String> = page_ids.iter().map(|i| format!("{i} 0 R")).collect();
     w.object(
@@ -40,16 +42,40 @@ pub fn pdf(pages: &[Page<'_>], title: &str) -> Result<Vec<u8>, String> {
             ),
         };
         let px = wpt / size.width() as f64;
-        let (content, alphas) = content(&tree, hpt, px);
+        let (content, alphas, pictures) = content(&tree, hpt, px);
         let mut gs = String::new();
         for (k, a) in alphas.iter().enumerate() {
             let _ = write!(gs, "/A{k} << /ca {a} /CA {a} >> ");
         }
-        let resources = if alphas.is_empty() {
-            "<< >>".to_string()
-        } else {
-            format!("<< /ExtGState << {gs}>> >>")
-        };
+        let mut xobjects = String::new();
+        for (k, png) in pictures.iter().enumerate() {
+            let Some((width, height, rgb, alpha)) = decode(png) else {
+                continue;
+            };
+            let (im, mask) = (next_id, next_id + 1);
+            next_id += 2;
+            let packed = miniz_oxide::deflate::compress_to_vec_zlib(&alpha, 6);
+            w.stream(
+                mask,
+                &format!("/Type /XObject /Subtype /Image /Width {width} /Height {height} /ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /FlateDecode"),
+                &packed,
+            );
+            let packed = miniz_oxide::deflate::compress_to_vec_zlib(&rgb, 6);
+            w.stream(
+                im,
+                &format!("/Type /XObject /Subtype /Image /Width {width} /Height {height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /SMask {mask} 0 R /Filter /FlateDecode"),
+                &packed,
+            );
+            let _ = write!(xobjects, "/Im{k} {im} 0 R ");
+        }
+        let mut resources = String::from("<< ");
+        if !alphas.is_empty() {
+            let _ = write!(resources, "/ExtGState << {gs}>> ");
+        }
+        if !xobjects.is_empty() {
+            let _ = write!(resources, "/XObject << {xobjects}>> ");
+        }
+        resources.push_str(">>");
         let pid = page_ids[i];
         w.object(
             pid,
@@ -133,8 +159,26 @@ fn num(v: f64) -> String {
     }
 }
 
-/// The page's drawing operators, and the opacities they use.
-fn content(tree: &resvg::usvg::Tree, hpt: f64, pt_per_px: f64) -> (String, Vec<f64>) {
+/// A PNG as its size, its colours (RGB) and its opacity.
+fn decode(png: &[u8]) -> Option<(u32, u32, Vec<u8>, Vec<u8>)> {
+    let pm = resvg::tiny_skia::Pixmap::decode_png(png).ok()?;
+    let (w, h) = (pm.width(), pm.height());
+    let mut rgb = Vec::with_capacity((w * h * 3) as usize);
+    let mut alpha = Vec::with_capacity((w * h) as usize);
+    for p in pm.pixels() {
+        let c = p.demultiply();
+        rgb.extend_from_slice(&[c.red(), c.green(), c.blue()]);
+        alpha.push(c.alpha());
+    }
+    Some((w, h, rgb, alpha))
+}
+
+/// The page's drawing operators, the opacities and the pictures they use.
+fn content(
+    tree: &resvg::usvg::Tree,
+    hpt: f64,
+    pt_per_px: f64,
+) -> (String, Vec<f64>, Vec<std::sync::Arc<Vec<u8>>>) {
     let mut s = String::new();
     // PDF y goes up; the drawing is in CSS pixels.
     let _ = writeln!(
@@ -160,7 +204,34 @@ fn content(tree: &resvg::usvg::Tree, hpt: f64, pt_per_px: f64) -> (String, Vec<f
         alphas.push(1.0);
     }
     let mut current = 0;
+    let mut pictures: Vec<std::sync::Arc<Vec<u8>>> = Vec::new();
     for it in items {
+        if let Some(pic) = &it.picture {
+            // The unit square of the image: its bottom left at the third
+            // corner, x along the top, y up its left side.
+            let k = match pictures
+                .iter()
+                .position(|p| std::sync::Arc::ptr_eq(p, &pic.png))
+            {
+                Some(k) => k,
+                None => {
+                    pictures.push(pic.png.clone());
+                    pictures.len() - 1
+                }
+            };
+            let [o, x, y] = pic.corners;
+            let _ = writeln!(
+                s,
+                "q {} {} {} {} {} {} cm /Im{k} Do Q",
+                num(x.0 - o.0),
+                num(x.1 - o.1),
+                num(o.0 - y.0),
+                num(o.1 - y.1),
+                num(y.0),
+                num(y.1)
+            );
+            continue;
+        }
         if see_through {
             let a = (alpha(&it) * 100.0).round() / 100.0;
             let k = match alphas.iter().position(|x| (x - a).abs() < 1e-9) {
@@ -177,7 +248,7 @@ fn content(tree: &resvg::usvg::Tree, hpt: f64, pt_per_px: f64) -> (String, Vec<f
         }
         draw(&mut s, &it);
     }
-    (s, alphas)
+    (s, alphas, pictures)
 }
 
 fn path_ops(s: &mut String, it: &Item) {
@@ -240,6 +311,7 @@ mod tests {
         // A4 in points.
         assert!(text.contains("/MediaBox [0 0 595.2756 841.8898]"), "{text}");
         assert!(text.trim_end().ends_with("%%EOF"));
+        assert!(!text.contains("/XObject"));
         // The cross-reference table points at each object.
         let xref = bytes.windows(4).rposition(|w| w == b"xref").unwrap();
         let tail = String::from_utf8_lossy(&bytes[xref..]).to_string();
@@ -248,5 +320,37 @@ mod tests {
             let want = format!("{} 0 obj", i + 1);
             assert!(bytes[off..].starts_with(want.as_bytes()), "{line}");
         }
+    }
+
+    #[test]
+    fn pictures_go_into_the_pdf() {
+        // A 2 × 1 red PNG, placed as a logo.
+        let mut png = Vec::new();
+        {
+            let mut pm = resvg::tiny_skia::Pixmap::new(2, 1).unwrap();
+            pm.fill(resvg::tiny_skia::Color::from_rgba8(200, 0, 0, 255));
+            png = pm.encode_png().unwrap_or(png);
+        }
+        let b64 = archisim_core::base64_encode(&png);
+        let svg = format!(
+            r##"<svg xmlns="http://www.w3.org/2000/svg" width="210mm" height="297mm" viewBox="0 0 0.21 0.297">
+<image x="0.02" y="0.02" width="0.04" height="0.02" preserveAspectRatio="none" href="data:image/png;base64,{b64}"/>
+</svg>"##
+        );
+        let bytes = pdf(
+            &[Page {
+                svg: &svg,
+                title: "A-01",
+            }],
+            "Logo",
+        )
+        .unwrap();
+        let text = String::from_utf8_lossy(&bytes);
+        assert!(text.contains("/XObject << /Im0"), "{text}");
+        assert!(text.contains("/Subtype /Image /Width 2 /Height 1"));
+        // Drawn on the page (its content, compressed).
+        let (content, _, pictures) = content(&paths::parse(&svg).unwrap(), 841.89, 1.0);
+        assert_eq!(pictures.len(), 1);
+        assert!(content.contains("/Im0 Do"), "{content}");
     }
 }

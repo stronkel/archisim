@@ -618,6 +618,8 @@ pub struct ArchiSimApp {
     /// to when it ends.
     walk_return: Option<crate::view3d::camera::Camera>,
     pub presentation: presentation_ui::PresentationUi,
+    /// The panel of the project's title blocks.
+    pub title_blocks_ui: title_blocks_ui::TitleBlocksUi,
     /// The sheet picture and what it was drawn for.
     sheet_image: Option<(sheet_ui::SheetKey, egui::TextureHandle)>,
     /// The picture of the view for drawing shown (E7).
@@ -921,6 +923,7 @@ impl ArchiSimApp {
             show_graphics: false,
             walk_return: None,
             presentation: Default::default(),
+            title_blocks_ui: Default::default(),
             sheet_image: None,
             drafting_image: None,
             sheet_sel: None,
@@ -2069,6 +2072,7 @@ impl ArchiSimApp {
         self.wall_profile_dialog(&ctx);
         self.graphics_dialog(&ctx);
         self.presentation_dialog(&ctx);
+        self.title_blocks_dialog(&ctx);
         self.sun_dialog(&ctx);
         self.render_window(&ctx);
         self.price_pick_window(&ctx);
@@ -2735,6 +2739,7 @@ mod terrain_ui;
 pub mod theme;
 mod thumbs;
 mod thumbs3d;
+mod title_blocks_ui;
 mod toolbox;
 mod tools3d;
 mod type_views;

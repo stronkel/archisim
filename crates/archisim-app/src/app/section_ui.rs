@@ -38,6 +38,8 @@ pub struct SectionKey {
     thin_lines: bool,
     focus: archisim_core::DisciplineFocus,
     hidden: std::collections::BTreeSet<archisim_core::ElementDiscipline>,
+    /// The section's own look (its style, its discipline).
+    style: archisim_core::ViewStyle,
 }
 
 impl SectionKey {
@@ -68,7 +70,7 @@ fn section_options(key: &SectionKey) -> archisim_plan::PlanOptions {
         style: archisim_core::ViewStyle {
             focus: key.focus,
             hidden_disciplines: key.hidden.clone(),
-            ..Default::default()
+            ..key.style.clone()
         },
         ..archisim_plan::PlanOptions::default()
     }
@@ -585,6 +587,11 @@ impl ArchiSimApp {
             thin_lines: self.thin_lines,
             focus: self.screen_focus(),
             hidden: self.hidden_disciplines.clone(),
+            style: self
+                .active_section()
+                .and_then(|id| self.ed.model().section(id))
+                .map(|s| s.style.clone())
+                .unwrap_or_default(),
         };
         let moving = self.view_moving(ctx);
         let only_moved = self
@@ -792,6 +799,80 @@ impl ArchiSimApp {
         });
     }
 
+    /// The style and discipline of a section's view, kept with the
+    /// section, and the templates to give it.
+    fn section_look_group(&mut self, ui: &mut Ui, s: &archisim_core::SectionLine) {
+        let mut style = s.style.clone();
+        let templates: Vec<(archisim_core::ViewTemplateId, String)> = self
+            .ed
+            .model()
+            .view_templates()
+            .map(|t| (t.id, t.name.clone()))
+            .collect();
+        let styles: Vec<(Option<archisim_core::PresentationStyleId>, String)> =
+            std::iter::once((None, "Técnica (sin estilo)".to_string()))
+                .chain(
+                    self.ed
+                        .model()
+                        .presentation_styles()
+                        .map(|p| (Some(p.id), p.name.clone())),
+                )
+                .collect();
+        let mut template = None;
+        group(ui, "section-view-look", "Presentación", |ui| {
+            row(
+                ui,
+                "Estilo",
+                "Papel, paleta, muros macizados, grosores de línea, tamaño de los textos y color de acento de la vista",
+                |ui, w| {
+                    let refs: Vec<(Option<archisim_core::PresentationStyleId>, &str)> =
+                        styles.iter().map(|(a, b)| (*a, b.as_str())).collect();
+                    style.presentation =
+                        props::choice(ui, ("section-look", s.id), w, style.presentation, &refs);
+                },
+            );
+            row(
+                ui,
+                "Disciplina",
+                "Para qué es la vista: Arquitectura deja fuera las instalaciones; Estructura e Instalaciones, la urbanización y lo demás en gris",
+                |ui, w| {
+                    let opts: Vec<(Option<archisim_core::ElementDiscipline>, &str)> =
+                        std::iter::once((None, "Todas"))
+                            .chain(archisim_core::ElementDiscipline::ALL.iter().map(|d| {
+                                (Some(*d), super::presentation_ui::discipline_label(*d))
+                            }))
+                            .collect();
+                    style.discipline =
+                        props::choice(ui, ("section-discipline", s.id), w, style.discipline, &opts);
+                },
+            );
+            if !templates.is_empty() {
+                row(
+                    ui,
+                    "Plantilla",
+                    "Darle a la vista el aspecto de una plantilla",
+                    |ui, w| {
+                        let mut opts: Vec<(Option<archisim_core::ViewTemplateId>, &str)> =
+                            vec![(None, "Aplicar…")];
+                        opts.extend(templates.iter().map(|(id, n)| (Some(*id), n.as_str())));
+                        template = props::choice(ui, ("section-template", s.id), w, None, &opts);
+                    },
+                );
+            }
+        });
+        if let Some(t) = template.and_then(|id| self.ed.model().view_template(id).cloned()) {
+            style = t.style;
+            style.focus = archisim_core::DisciplineFocus::None;
+            style.hidden_disciplines.clear();
+        }
+        if style != s.style {
+            let r = self
+                .ed
+                .edit_section("Gráficos de la vista", s.id, |x| x.style = style);
+            self.report(r, "Vista cambiada.");
+        }
+    }
+
     pub(super) fn section_view_properties(&mut self, ui: &mut Ui) {
         let Some(s) = self
             .active_section()
@@ -843,6 +924,7 @@ impl ArchiSimApp {
                 }
             });
         });
+        self.section_look_group(ui, &s);
         group(ui, "section-view-detail", "Detalle", |ui| {
             let picking = self.detail_pick.is_some_and(|(x, _)| x == s.id);
             let label = if picking {

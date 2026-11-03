@@ -719,6 +719,7 @@ impl ArchiSimApp {
         let mut g = self.ed.model().graphics;
         let before = g;
         let mut take = None;
+        let mut open_blocks = false;
         super::widgets::dialog("Normas gráficas")
             .open(&mut open)
             .default_width(460.0)
@@ -728,7 +729,8 @@ impl ArchiSimApp {
                 // presentation styles and view templates.
                 use archisim_library::standards::Standard;
                 let now = Standard::of(self.ed.model());
-                ui.label(egui::RichText::new("Norma del estudio").strong());
+                ui.label(egui::RichText::new("Norma por defecto del proyecto").strong())
+                    .on_hover_text("La de las vistas sin estilo. Cada planta, sección o vista de un plano puede llevar otra eligiendo su Estilo en Propiedades (Hilo · rayado, Faro…)");
                 ui.horizontal(|ui| {
                     for st in Standard::ALL {
                         let on = now == Some(st);
@@ -750,14 +752,14 @@ impl ArchiSimApp {
                 }
                 ui.add_space(8.0);
                 ui.horizontal(|ui| {
-                    ui.label("Cajetín y títulos de los planos:");
-                    for d in archisim_core::TitleBlockDesign::ALL {
-                        ui.selectable_value(&mut g.title_block, d, d.label());
+                    ui.label("Cajetines de los planos:");
+                    if ui
+                        .button("Cajetines…")
+                        .on_hover_text("El de por defecto, los propios (con logotipo, filas, sello y color) y cuál lleva cada plano")
+                        .clicked()
+                    {
+                        open_blocks = true;
                     }
-                });
-                ui.horizontal(|ui| {
-                    ui.label("Color de títulos y sellos:");
-                    ui.color_edit_button_srgb(&mut g.accent);
                 });
                 ui.add_space(6.0);
                 ui.horizontal(|ui| {
@@ -803,6 +805,9 @@ impl ArchiSimApp {
             });
         if !open {
             self.show_graphics = false;
+        }
+        if open_blocks {
+            self.title_blocks_ui.open = true;
         }
         if let Some(st) = take {
             match self.ed.apply_standard(st) {

@@ -430,6 +430,7 @@ impl Model {
         self.view_templates
             .values_mut()
             .for_each(|t| clear(&mut t.style));
+        self.sections.values_mut().for_each(|x| clear(&mut x.style));
     }
 
     pub(super) fn restore_views(
