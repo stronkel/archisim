@@ -468,7 +468,7 @@ pub fn chalet_80s(b: &mut Builder, p: &Params) {
 /// Louvred shutters (mallorquinas) open against the wall either side of a
 /// hole; `open` 0 to 1 says how open the right one is (some are half
 /// shut).
-fn shutters(b: &mut Builder, f: &Face, h: &Hole, open: f64) {
+pub fn shutters(b: &mut Builder, f: &Face, h: &Hole, open: f64) {
     let lw = (h.s.1 - h.s.0) / 2.0 + 0.02;
     let (z0, z1) = (h.z.0 - 0.02, h.z.1 + 0.02);
     for (a, e) in [

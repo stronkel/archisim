@@ -1,0 +1,40 @@
+family "Casa payesa ibicenca (taller)"
+  category street
+  host none
+  version 1
+  description "Casa payesa de Ibiza: cubos blancos añadidos, terrados con el borde redondeado, ventanas pequeñas y hondas, porche de vigas de sabina sobre pilares blancos con cañizo, escalera exterior, chimenea con sombrerete, paredes de piedra seca, olivo y limonero (modelo del taller, en revisión)"
+  folder "Taller · Edificios"
+
+type_params
+  section "Dimensiones"
+    variant integer = 1 range 0..99 label "Variante"
+  section "Materiales"
+    wall material = "Encalado" label "Muros"
+    plinth material = "Enfoscado gris" label "Zócalo"
+    roof_floor material = "Cal blanca" label "Terrados"
+    wood material = "Lacado verde carruaje" label "Puertas y ventanas"
+    juniper material = "Corteza de olivo" label "Vigas de sabina"
+    canes material = "Cañizo" label "Cañizo"
+    dry_stone material = "Mampostería" label "Piedra seca"
+    paving material = "Laja" label "Suelo del porche"
+    yard material = "Tierra de camino" label "Tierra"
+    trunk material = "Corteza de olivo" label "Troncos"
+    fruit material = "Limón" label "Limones"
+    glass material = "Vidrio claro" label "Vidrio"
+    interior material = "Interior en sombra" label "Interior visto por los huecos"
+    brass material = "Latón" label "Herrajes"
+    curtain material = "Visillo" label "Visillos"
+    pot material = "Terracota" label "Macetas"
+    leaves material = "Hoja verde" label "Plantas"
+    flowers material = "Buganvilla" label "Flores"
+
+body
+  box (-(22) / 2, 0, 0) to ((22) / 2, 14, 6.5) material wall
+
+plan 1:50
+  polygon (-(22) / 2, 0) ((22) / 2, 0) ((22) / 2, 14) (-(22) / 2, 14) pen view
+
+outputs
+  generator = "props:fine_ibizan_house"
+  ifc_class = "IfcBuildingElementProxy"
+  ifc_type = "USERDEFINED"

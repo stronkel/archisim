@@ -42,6 +42,7 @@ Los ejes 1 y 2 dan el volumen; los ejes 3, 4 y 5 dan la piel. Hay detalles que h
 | Nave industrial | **Nave de polígono** (tanda 2): bloque y panel nervado, hastial con rótulo, puerta seccional con portillo, muelle de carga con abrigo, oficinas con ventanas corridas, policarbonato, lucernarios, valla de malla |
 | Equipamiento | **Mercado de abastos**, **iglesia parroquial**, **plaza de toros**, **colegio público**, **centro de salud** (tanda 3) |
 | Comercio | **Gasolinera** sin marca (tanda 3) |
+| Casco histórico, chalet, casa patio (otras regiones) | **Casa castellana con soportales**, **caserío vasco**, **casa con galería gallega**, **masía catalana**, **casa canaria**, **casa payesa ibicenca** (tanda 4) |
 | Oficinas, comercio con viviendas | Siguientes tandas |
 
 ## 3. Orden de las tandas
@@ -49,7 +50,7 @@ Los ejes 1 y 2 dan el volumen; los ejes 3, 4 y 5 dan la piel. Hay detalles que h
 1. **Tanda 1** (hecha, aprobada por Antonio el 03/11/2026 como salto de calidad): casa de pueblo, casa señorial, ensanche, bloque de los 60, torre de costa, adosados.
 2. **Tanda 2** (hecha, en revisión): corral de vecinos, cortijo, viviendas de colonización, chalet de los 80, pareadas, nave de polígono. Pendientes de Andalucía para otra tanda: casa-patio de una planta, VPO de ladrillo, chiringuito.
 3. **Tanda 3, usos singulares** (hecha, en revisión): mercado de abastos, iglesia parroquial, plaza de toros, colegio, centro de salud, gasolinera. Quedan para otra: ermita, ayuntamiento, casa cuartel, cementerio, estación de autobuses.
-4. **Resto de España por regiones:** Castilla con soportales, caserío, galería gallega, masía, casa canaria, casa ibicenca.
+4. **Tanda 4, regiones de España** (hecha, en revisión): casa castellana con soportales, caserío vasco, casa con galería gallega, masía catalana, casa canaria, casa payesa ibicenca. Quedan: casa montañesa con solana, hórreo y palloza, barraca valenciana, casa manchega, casas colgadas, casa de piedra de sierra.
 5. **Extranjero:** Haussmann, casa de canal de Ámsterdam, hilera inglesa, nórdico, suburbio americano, japonés, rascacielos.
 
 Cuando Antonio apruebe una tanda, la integración será que los estilos de U6 (y U7, al traer el Catastro) usen estos modelos sobre la planta y las plantas que tenga cada masa.

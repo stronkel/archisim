@@ -1,0 +1,46 @@
+family "Masía catalana (taller)"
+  category street
+  host none
+  version 1
+  description "Masía catalana de tipo basilical: cuerpo central de tres plantas con el hastial a la fachada y dos cuerpos laterales a un agua, mampostería con esquinales y recercados de piedra labrada, portal de dovelas largas, balcón de hierro, las tres arcadas de la buhardilla, reloj de sol, alero de varias hiladas, era y dos cipreses (modelo del taller, en revisión)"
+  folder "Taller · Edificios"
+
+type_params
+  section "Dimensiones"
+    width length = 9.00 range 7.00..14.00 label "Ancho del cuerpo central"
+    side_width length = 5.00 range 3.50..8.00 label "Ancho de cada cuerpo lateral"
+    depth length = 14.00 range 10.00..22.00 label "Fondo"
+    variant integer = 1 range 0..99 label "Variante"
+  section "Materiales"
+    stone_wall material = "Mampostería" label "Mampostería"
+    quoin material = "Sillería arenisca" label "Piedra labrada"
+    wall material = "Mampostería" label "Chimenea"
+    trim material = "Piedra caliza" label "Remates"
+    frame material = "Nogal" label "Carpintería"
+    wood material = "Nogal" label "Portal"
+    iron material = "Hierro forjado" label "Balcón, rejas y gnomon"
+    sundial material = "Cal blanca" label "Reloj de sol"
+    tiles_eave material = "Terracota" label "Alero"
+    tiles material = "Teja curva" label "Tejas"
+    roof material = "Terracota" label "Faldones"
+    paving material = "Laja" label "Era"
+    yard material = "Tierra de camino" label "Explanada"
+    trunk material = "Corteza de pino" label "Troncos"
+    glass material = "Vidrio claro" label "Vidrio"
+    interior material = "Interior en sombra" label "Interior visto por los huecos"
+    brass material = "Latón" label "Herrajes"
+    curtain material = "Visillo" label "Visillos"
+    pot material = "Terracota" label "Macetas"
+    leaves material = "Hoja verde" label "Plantas"
+    flowers material = "Buganvilla" label "Flores"
+
+body
+  box (-(width + 2 * side_width + 8) / 2, 0, 0) to ((width + 2 * side_width + 8) / 2, depth + 12, 12.5) material stone_wall
+
+plan 1:50
+  polygon (-(width + 2 * side_width + 8) / 2, 0) ((width + 2 * side_width + 8) / 2, 0) ((width + 2 * side_width + 8) / 2, depth + 12) (-(width + 2 * side_width + 8) / 2, depth + 12) pen view
+
+outputs
+  generator = "props:fine_masia"
+  ifc_class = "IfcBuildingElementProxy"
+  ifc_type = "USERDEFINED"

@@ -1,0 +1,40 @@
+family "Casa canaria (taller)"
+  category street
+  host none
+  version 1
+  description "Casa canaria: dos plantas de revoco con esquinas, impostas y recercados de piedra volcánica oscura, ventanas de guillotina con postigos, puerta en su marco de piedra, balcón canario de madera con balaustres torneados, pies derechos y tejadillo, cubierta a cuatro aguas, palmera y drago (modelo del taller, en revisión)"
+  folder "Taller · Edificios"
+
+type_params
+  section "Dimensiones"
+    width length = 11.00 range 8.00..18.00 label "Fachada"
+    depth length = 10.00 range 7.00..16.00 label "Fondo"
+    variant integer = 1 range 0..99 label "Variante"
+  section "Materiales"
+    wall material = "Monocapa crema" label "Revoco"
+    stone material = "Piedra gris" label "Cantería"
+    wood material = "Nogal" label "Balcón, ventanas y puerta"
+    shutter_wood material = "Lacado verde carruaje" label "Postigos"
+    tiles material = "Teja curva" label "Tejas"
+    roof material = "Terracota" label "Faldones"
+    yard material = "Tierra de camino" label "Jardín"
+    palm material = "Hoja verde" label "Palmera"
+    trunk material = "Corteza de olivo" label "Troncos"
+    glass material = "Vidrio claro" label "Vidrio"
+    interior material = "Interior en sombra" label "Interior visto por los huecos"
+    brass material = "Latón" label "Herrajes"
+    curtain material = "Visillo" label "Visillos"
+    pot material = "Terracota" label "Macetas"
+    leaves material = "Hoja verde" label "Plantas"
+    flowers material = "Buganvilla" label "Flores"
+
+body
+  box (-(width + 6) / 2, 0, 0) to ((width + 6) / 2, depth + 5, 6.8 + 3) material wall
+
+plan 1:50
+  polygon (-(width + 6) / 2, 0) ((width + 6) / 2, 0) ((width + 6) / 2, depth + 5) (-(width + 6) / 2, depth + 5) pen view
+
+outputs
+  generator = "props:fine_canarian_house"
+  ifc_class = "IfcBuildingElementProxy"
+  ifc_type = "USERDEFINED"

@@ -15,6 +15,9 @@
 //! go on any side.
 
 pub mod block60;
+pub mod canaria;
+pub mod caserio;
+pub mod castilla;
 pub mod chalet80;
 pub mod coast;
 pub mod colegio;
@@ -22,9 +25,12 @@ pub mod colonizacion;
 pub mod corral;
 pub mod cortijo;
 pub mod ensanche;
+pub mod galeria;
 pub mod gasolinera;
+pub mod ibicenca;
 pub mod iglesia;
 pub mod manor;
+pub mod masia;
 pub mod mercado;
 pub mod more;
 pub mod nave;
@@ -1346,6 +1352,12 @@ mod tests {
             "fine_school",
             "fine_health_centre",
             "fine_petrol_station",
+            "fine_castilian_arcade",
+            "fine_caserio",
+            "fine_galician_galleries",
+            "fine_masia",
+            "fine_canarian_house",
+            "fine_ibizan_house",
         ] {
             let m = make(kind, &Params::default()).unwrap();
             let tris: usize = m.parts.iter().map(|(_, t)| t.len()).sum();

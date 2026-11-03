@@ -1,0 +1,47 @@
+family "Caserío vasco (taller)"
+  category street
+  host none
+  version 1
+  description "Caserío vasco: bloque cuadrado con cubierta de dos aguas suaves y hastial a la fachada, planta baja de mampostería con el gran arco del portalón, hastial de entramado de madera sobre relleno blanco, balcón de madera, contraventanas, leña apilada y manzano (modelo del taller, en revisión)"
+  folder "Taller · Edificios"
+
+type_params
+  section "Dimensiones"
+    width length = 15.00 range 10.00..22.00 label "Fachada"
+    depth length = 14.00 range 10.00..22.00 label "Fondo"
+    variant integer = 1 range 0..99 label "Variante"
+  section "Materiales"
+    stone_wall material = "Mampostería" label "Mampostería"
+    infill material = "Cal blanca" label "Relleno del entramado"
+    timber material = "Roble ahumado" label "Entramado y balcón"
+    quoin material = "Piedra caliza" label "Esquinales, dovelas y recercados"
+    frame material = "Lacado blanco" label "Carpintería"
+    shutter_wood material = "Lacado verde carruaje" label "Contraventanas"
+    wood material = "Roble ahumado" label "Portalón"
+    iron material = "Hierro forjado" label "Rejas y herrajes"
+    tiles material = "Teja curva" label "Tejas"
+    roof material = "Terracota" label "Faldones"
+    logs material = "Pino viejo" label "Leña"
+    log_ends material = "Roble claro" label "Testas de la leña"
+    lawn material = "Césped natural" label "Prado"
+    paving material = "Laja" label "Camino"
+    trunk material = "Corteza de olivo" label "Tronco"
+    fruit material = "Manzana verde" label "Manzanas"
+    glass material = "Vidrio claro" label "Vidrio"
+    interior material = "Interior en sombra" label "Interior visto por los huecos"
+    brass material = "Latón" label "Herrajes"
+    curtain material = "Visillo" label "Visillos"
+    pot material = "Terracota" label "Macetas"
+    leaves material = "Hoja verde" label "Plantas"
+    flowers material = "Buganvilla" label "Flores"
+
+body
+  box (-(width) / 2, 0, 0) to ((width) / 2, depth + 6, 6.4 + 7.5 * 0.42 + 1) material stone_wall
+
+plan 1:50
+  polygon (-(width) / 2, 0) ((width) / 2, 0) ((width) / 2, depth + 6) (-(width) / 2, depth + 6) pen view
+
+outputs
+  generator = "props:fine_caserio"
+  ifc_class = "IfcBuildingElementProxy"
+  ifc_type = "USERDEFINED"

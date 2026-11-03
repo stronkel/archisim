@@ -6,6 +6,32 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-03 (92) · Taller de edificios, tanda 4: regiones de España
+
+Misma rama `bloque/taller-edificios` y mismo pull request (#160). Sin cambios de formato ni de IFC. Antonio pidió la tanda 4 antes de integrar nada.
+
+**Hecho**
+- Seis edificios más, con sus recetas del taller:
+  - **casa castellana con soportales**: columnas de piedra con zapatas y carrera, comercios detrás, balcón corrido de madera, revoco almagra, alero sobre canecillos;
+  - **caserío vasco**: hastial a la fachada con entramado de madera, portalón en arco de piedra, balcón de madera, contraventanas, leña y manzano;
+  - **casa con galería gallega**: granito abajo y en pilastras, galerías de madera blanca y cristales pequeños en todas las plantas;
+  - **masía catalana basilical**: cuerpo central alto con hastial y laterales a un agua, portal de dovelas, las tres arcadas de la buhardilla, reloj de sol, era y cipreses;
+  - **casa canaria**: cantería oscura, guillotinas con postigos, balcón canario con tejadillo, cuatro aguas, palmera y drago;
+  - **casa payesa ibicenca**: cubos blancos, terrados de borde redondeado, porche de sabina con cañizo, escalera exterior, chimenea con sombrerete, piedra seca.
+- Piezas comunes nuevas: balcón corrido de madera con balaustres torneados y entramado de madera (`more.rs`); las contraventanas del chalet, ahora compartidas.
+- La calle del taller tiene ya 27 edificios.
+
+**Pendiente**
+- La opinión de Antonio sobre la tanda 4.
+- La integración en U6/U7: elegir el modelo del taller por estilo, por región y por la planta de cada masa.
+- Las regiones que faltan (§3 de `docs/EDIFICIOS_TALLER.md`).
+
+**Qué debe probar Antonio**
+1. `cargo run -p archisim-cli -- edificios out/` y abre `out/edificios.archisim`. Los seis nuevos están al final de la calle.
+2. Mira si cada uno se reconoce de su región y qué detalle le falta.
+
+---
+
 ## 2026-11-03 (91) · Taller de edificios, tanda 3: usos singulares
 
 Misma rama `bloque/taller-edificios` y mismo pull request (#160). Sin cambios de formato ni de IFC. Antonio vio la tanda 2 («maravilloso») y pidió la 3.

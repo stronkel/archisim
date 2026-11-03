@@ -3,7 +3,7 @@
 //! was made, low walls with their coping, palms and fruit trees, wells and
 //! troughs.
 
-use super::{out_tri, unit, Face};
+use super::{out_tri, unit, Face, Xy};
 use crate::build::{Builder, P3};
 
 /// Turns what was made since `start` by `a` round the vertical through
@@ -442,4 +442,130 @@ pub fn bell(b: &mut Builder, c: [f64; 2], top: f64, size: f64) {
         1.0,
         1.0,
     );
+}
+
+/// A balcony of wood running along a face (balcón corrido): its floor of
+/// boards on beams, turned balusters, the handrail, and posts to the eaves
+/// if `posts_to` is given.
+#[allow(clippy::too_many_arguments)]
+pub fn wooden_balcony(
+    b: &mut Builder,
+    f: &Face,
+    s: (f64, f64),
+    floor: f64,
+    out: f64,
+    role: &'static str,
+    posts_to: Option<f64>,
+) {
+    let (s0, s1) = s;
+    f.bx(b, role, (s0, s1), (floor - 0.08, floor), (-0.01, out));
+    let n = ((s1 - s0) / 1.2).ceil().max(1.0) as usize;
+    for i in 0..=n {
+        let x = (s0 + (s1 - s0) * i as f64 / n as f64).clamp(s0 + 0.06, s1 - 0.06);
+        f.bx(
+            b,
+            role,
+            (x - 0.06, x + 0.06),
+            (floor - 0.26, floor - 0.08),
+            (-0.01, out + 0.05),
+        );
+    }
+    let d = out - 0.06;
+    let mut x = s0 + 0.08;
+    while x < s1 - 0.05 {
+        let c = f.at(x, 0.0, d);
+        b.lathe(
+            role,
+            [c[0], c[1], floor],
+            &[
+                (0.035, 0.0),
+                (0.03, 0.1),
+                (0.05, 0.3),
+                (0.025, 0.65),
+                (0.035, 0.85),
+                (0.0, 0.86),
+            ],
+            1.0,
+            1.0,
+        );
+        x += 0.14;
+    }
+    f.bx(
+        b,
+        role,
+        (s0, s1),
+        (floor + 0.86, floor + 0.95),
+        (d - 0.05, d + 0.05),
+    );
+    for side in [s0, s1] {
+        let sf = Face {
+            o: f.at(side, 0.0, 0.0).map_xy(),
+            u: f.out(),
+            len: d,
+        };
+        sf.bx(
+            b,
+            role,
+            (0.0, d + 0.05),
+            (floor + 0.86, floor + 0.95),
+            (-0.05, 0.05),
+        );
+    }
+    if let Some(top) = posts_to {
+        for i in 0..=n {
+            let x = (s0 + (s1 - s0) * i as f64 / n as f64).clamp(s0 + 0.07, s1 - 0.07);
+            f.bx(
+                b,
+                role,
+                (x - 0.07, x + 0.07),
+                (floor, top),
+                (d - 0.07, d + 0.07),
+            );
+        }
+    }
+}
+
+/// Timber framing showing on a face (entramado): posts every `bay`, a
+/// rail at mid height and at the top, braces in every other bay.
+pub fn timber_frame(
+    b: &mut Builder,
+    f: &Face,
+    s: (f64, f64),
+    z: (f64, f64),
+    bay: f64,
+    role: &'static str,
+) {
+    let n = ((s.1 - s.0) / bay).round().max(1.0) as usize;
+    let t = 0.09;
+    let d = (-0.01, 0.04);
+    for i in 0..=n {
+        let x = (s.0 + (s.1 - s.0) * i as f64 / n as f64).clamp(s.0 + t, s.1 - t);
+        f.bx(b, role, (x - t, x + t), z, d);
+    }
+    let zm = (z.0 + z.1) / 2.0;
+    for zz in [z.0 + t, zm, z.1 - t] {
+        f.bx(b, role, s, (zz - t, zz + t), d);
+    }
+    for i in 0..n {
+        if i % 2 == 1 {
+            continue;
+        }
+        let a = s.0 + (s.1 - s.0) * i as f64 / n as f64;
+        let e = s.0 + (s.1 - s.0) * (i + 1) as f64 / n as f64;
+        let (p, q) = if (i / 2) % 2 == 0 {
+            ((a, z.0), (e, zm))
+        } else {
+            ((a, zm), (e, z.0))
+        };
+        f.bar(b, role, p, q, 0.015, 0.075, 4);
+        f.bar(
+            b,
+            role,
+            (p.0, p.1 + (zm - z.0)),
+            (q.0, q.1 + (zm - z.0)),
+            0.015,
+            0.075,
+            4,
+        );
+    }
 }
