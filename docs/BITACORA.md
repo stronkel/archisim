@@ -6,6 +6,64 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-03 (91) · Normas por vista, cajetines por plano, plano de carpinterías y borrar vistas
+
+Rama `bloque/normas-por-vista` (sale de `bloque/interfaz-v5`), con pull request. Formato `.archisim` versión 74.
+
+Antonio no encontraba las Normas gráficas y pidió:
+- que las normas y sus colores se elijan **por vista**, como Bosque o Terracota, afectando a líneas, textos y muros;
+- **cajetines por plano**, personalizables y propios;
+- que un plano de Arquitectura **oculte las instalaciones**, con su esquema de color (grises, pasteles, acento rojo en líneas y textos como 30X40);
+- que el **plano de carpinterías** lleve sus alzados;
+- poder **borrar** planos de presentación, secciones y alzados.
+
+**Hecho**
+- **Esquemas por vista.**
+  - Los estilos de presentación pueden llevar sus **grosores y textos** (del proyecto, Clásica, Hilo, Faro o retocados) y un **color de acento** con las categorías que resalta (cotas, etiquetas, locales, cotas de nivel, marcas, ejes).
+  - Hilo y Faro son ahora estilos que se eligen por vista. Hay «Hilo · rayado», «· macizado negro», «· macizado blanco» y «· color», y «Faro», «Faro · gris claro» y «Faro · blanco y negro».
+  - En Normas gráficas queda la norma por defecto del proyecto (la de las vistas sin estilo).
+  - Normas gráficas, Cajetines y Estilos de presentación están ahora en el menú **Vista**.
+- **Disciplina de la vista.** En Propiedades → Presentación, junto al Estilo:
+  - Arquitectura deja fuera las instalaciones;
+  - Estructura e Instalaciones dejan fuera la urbanización y lo demás en gris;
+  - Urbanización deja fuera instalaciones y estructura.
+
+  Hay plantillas de vista con esos nombres.
+- **Secciones y alzados** guardan su estilo, su disciplina y su plantilla (antes solo lo tenía la pestaña). Al colocar una vista en un plano, toma el estilo de su planta o sección.
+- **Planos.** Cada uno elige su **Cajetín**, su **Disciplina** (para sus vistas que no tienen) y «Estilo en sus vistas» (todas con el del plano).
+- **Cajetines** (Vista → Cajetines…, o el lápiz junto al cajetín en el plano):
+  - el proyecto guarda Clásico, Hilo, Faro y los propios;
+  - de cada uno se cambia composición, ancho, color, estudio, **logotipo PNG**, monograma, sello y las **filas de datos** (rótulo y qué muestran, también textos propios);
+  - se ve una vista previa de la esquina de un A3;
+  - uno es el de por defecto.
+
+  El PDF lleva ahora las imágenes PNG (antes se perdían).
+- **Plano de carpinterías** (navegador → Planos → «+ Plano de carpinterías»):
+  - planos A3 de verdad, con cada tipo de puerta y ventana como una vista: alzado desde fuera con ancho y alto, sección y datos (tipo, medidas, apertura, carpintería, antepecho, unidades, situación);
+  - en dos columnas y a una escala por plano (1:50 si caben);
+  - siguen al modelo, se mueven y se borran como las demás vistas;
+  - la demo lo trae (C-01 y C-02).
+- **Borrar y renombrar** secciones, alzados, vistas de dibujo y planos (también los de presentación) con el clic derecho en el navegador. Al borrar una sección o vista de dibujo, se va también de los planos.
+
+**Pendiente**
+- Arrastrar un tipo de puerta o ventana suelto del navegador a un plano.
+- En secciones y alzados, el color de acento aún no resalta las cotas (sus anotaciones no van por categorías).
+
+**Qué debe probar Antonio**
+1. `cargo run --release -p archisim-cli -- demo out/` y abrir `out/demo-planos.pdf`: los planos C-01 y C-02 de carpinterías.
+2. Abrir `out/demo.archisim`. En una planta, Propiedades → Presentación:
+   - Estilo «Faro»: grises con cotas y locales en rojo, corte más grueso;
+   - «Hilo · color»: líneas finas y tonos pastel;
+   - Disciplina «Arquitectura»: desaparecen las instalaciones.
+3. Abrir un alzado y cambiarle el Estilo: se queda guardado al cerrar y abrir.
+4. Abrir el plano A-01, Propiedades → Cajetín «Faro», y luego el lápiz:
+   - hacer uno propio con «Nuevo a partir de este»;
+   - cambiar el color, poner un logotipo PNG y una fila «COLEGIADO»;
+   - exportar el PDF.
+5. En el navegador, clic derecho sobre un alzado, una sección o un plano: Renombrar y Borrar.
+
+---
+
 ## 2026-11-03 (90) · Maqueta más limpia, aspectos del 3D que se notan, normas gráficas Hilo y Faro, sin «AD5»
 
 Misma rama `bloque/interfaz-v5` (pull request #158). Formato `.archisim` versión 73 (cajetín y color de acento de las normas gráficas).

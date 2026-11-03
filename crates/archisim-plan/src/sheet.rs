@@ -100,6 +100,11 @@ pub(crate) fn drawing_extent(d: &crate::section::SectionDrawing, scale: f64) -> 
 /// The part of the model a view shows (its crop, or its whole level or
 /// section). A section view placed from the app always has its crop.
 pub fn viewport_crop(model: &Model, v: &Viewport) -> (Point2, Point2) {
+    if let Some(t) = v.opening_type {
+        if let Some((r, _)) = crate::carpentry::card(model, t, v.scale) {
+            return r;
+        }
+    }
     let whole = || match (v.axo, v.section) {
         _ if v.drafting.is_some() => v.drafting.map(|d| {
             crate::drafting_views::drafting_region(
@@ -140,6 +145,9 @@ pub fn viewport_title(model: &Model, v: &Viewport) -> String {
     if v.title.trim().is_empty() {
         if v.axo.is_some() {
             return "VISTA 3D".into();
+        }
+        if let Some(t) = v.opening_type {
+            return crate::carpentry::card_title(model, t);
         }
         if let Some(d) = v.drafting.and_then(|d| model.draft_view(d)) {
             return d.name.to_uppercase();
@@ -921,6 +929,20 @@ fn draw_viewport(
     } else {
         v
     };
+    // A door or window type, with its data.
+    if let Some(t) = v.opening_type {
+        if let Some((crop, body)) = crate::carpentry::card(model, t, v.scale) {
+            let svg = format!(
+                r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="{} {} {} {}">{body}</svg>"#,
+                num(crop.0.x),
+                num(-crop.1.y),
+                num(crop.1.x - crop.0.x),
+                num(crop.1.y - crop.0.y)
+            );
+            place_view_svg(s, &svg, v, crop);
+        }
+        return;
+    }
     // A view only for drawing (E7).
     if let Some(d) = v.drafting {
         let crop = viewport_crop(model, v);

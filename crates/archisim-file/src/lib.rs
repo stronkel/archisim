@@ -2079,6 +2079,85 @@ mod tests {
         assert!(back.orthophoto().is_some_and(|o| o.on_roads));
     }
 
+    /// Version 74: presentation styles with their pens and accent, the
+    /// views' discipline, the sections' own style, title blocks with a
+    /// logo, the sheets' title block, discipline and style for their views,
+    /// and doors and windows placed on a sheet.
+    #[test]
+    fn schemes_title_blocks_and_carpentry_views_are_kept() {
+        let mut m = sample();
+        let level = m.levels()[0].id;
+        let mut st = archisim_core::PresentationStyle::new("Faro");
+        st.pens = Some(archisim_core::StylePens {
+            fine: archisim_core::Pens::FINE,
+            coarse: archisim_core::Pens::COARSE,
+        });
+        st.accent = Some([214, 72, 44]);
+        st.accent_on = [archisim_core::Category::Dimensions].into_iter().collect();
+        let style = m.add_presentation_style(st).unwrap();
+        m.set_level_style(
+            level,
+            archisim_core::ViewStyle {
+                presentation: Some(style),
+                discipline: Some(archisim_core::ElementDiscipline::Architecture),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let sec = m
+            .add_section(archisim_core::NewSection {
+                name: "A".into(),
+                kind: archisim_core::SectionKind::Section,
+                start: Point2::new(0.0, -1.0),
+                end: Point2::new(4.0, -1.0),
+                depth: 5.0,
+            })
+            .unwrap();
+        m.edit_section(sec, |s| {
+            s.style.presentation = Some(style);
+            s.style.discipline = Some(archisim_core::ElementDiscipline::Structure);
+        })
+        .unwrap();
+        let mut png = vec![0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A];
+        png.extend_from_slice(&13u32.to_be_bytes());
+        png.extend_from_slice(b"IHDR");
+        png.extend_from_slice(&2u32.to_be_bytes());
+        png.extend_from_slice(&1u32.to_be_bytes());
+        png.extend_from_slice(&[8, 6, 0, 0, 0, 0, 0, 0, 0]);
+        let mut tb = archisim_core::TitleBlock::standard(archisim_core::TitleBlockDesign::Beacon);
+        tb.name = "Estudio".into();
+        tb.logo = archisim_core::decal_image("logo.png", png);
+        tb.rows.push(archisim_core::TitleRow::new(
+            "COLEGIADO",
+            archisim_core::TitleValue::Text("1234".into()),
+        ));
+        let tb = m.add_title_block(tb).unwrap();
+        m.set_default_title_block(Some(tb)).unwrap();
+        let sheet = m
+            .add_sheet(NewSheet {
+                number: "C-01".into(),
+                name: "Carpinterías".into(),
+                width: 420.0,
+                height: 297.0,
+            })
+            .unwrap();
+        let mut s = m.sheet(sheet).unwrap().clone();
+        s.title_type = Some(tb);
+        s.discipline = Some(archisim_core::ElementDiscipline::Architecture);
+        s.restyle_views = true;
+        s.presentation = Some(style);
+        m.set_sheet(s).unwrap();
+        let first = m.opening_types().next().map(|t| t.id);
+        if let Some(t) = first {
+            m.add_opening_viewport(sheet, t, Point2::new(0.1, 0.1), 50.0)
+                .unwrap();
+        }
+        let text = to_string(&m);
+        assert!(text.contains("\"title_blocks\""));
+        let back = from_str(&text).unwrap();
+        assert_eq!(back, m);
+    }
+
     /// Version 40: an end that may not join (Revit's «No permitir unión»)
     /// is kept; older files open with every end joining.
     #[test]

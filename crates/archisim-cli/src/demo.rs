@@ -1261,6 +1261,9 @@ pub fn build() -> Result<Document, ModelError> {
                 style: look,
             },
         )?;
+        // The carpentry sheet: each door and window type with its
+        // elevation, section and data.
+        archisim_plan::carpentry::add_carpentry_sheets(m)?;
         Ok(())
     })?;
 
@@ -1624,7 +1627,9 @@ mod tests {
         assert_eq!(m.prices().count(), 29);
         assert_eq!(m.user_parameters().count(), 2);
         assert_eq!(m.sections().count(), 6);
-        assert_eq!(m.sheets().len(), 3);
+        // A-01 to A-03 and the two carpentry sheets.
+        assert_eq!(m.sheets().len(), 5);
+        assert!(m.viewports().any(|v| v.opening_type.is_some()));
         assert!(m.viewports().any(|v| v.style.presentation.is_some()));
         assert_eq!(m.viewports().filter(|v| v.section.is_some()).count(), 3);
         assert_eq!(m.rooms().count(), 4);

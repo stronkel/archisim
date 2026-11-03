@@ -3448,9 +3448,13 @@ impl Model {
                 "{users} door(s) or window(s) use this type"
             )));
         }
-        self.opening_types
+        let t = self
+            .opening_types
             .remove(&id)
-            .ok_or(ModelError::UnknownOpeningType(id))
+            .ok_or(ModelError::UnknownOpeningType(id))?;
+        // Its views on the sheets go with it.
+        self.viewports.retain(|_, v| v.opening_type != Some(id));
+        Ok(t)
     }
 
     /// Changes the name, mark and description of a type.

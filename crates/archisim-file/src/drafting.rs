@@ -953,6 +953,9 @@ pub(crate) struct Viewport {
     /// A view only for drawing instead of a plan (version 48).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub drafting: Option<u64>,
+    /// A door or window type, in elevation with its data (version 74).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub opening_type: Option<u64>,
 }
 
 /// A view only for drawing (version 48): its name, scale and underlays.
@@ -1154,6 +1157,7 @@ pub(crate) fn viewports_out(v: &[core::Viewport]) -> Vec<Viewport> {
             title: v.title.clone(),
             show_title: v.show_title,
             drafting: v.drafting.map(|d| d.0),
+            opening_type: v.opening_type.map(|d| d.0),
         })
         .collect()
 }
@@ -1177,6 +1181,7 @@ pub(crate) fn viewports_in(v: Vec<Viewport>) -> Result<Vec<core::Viewport>, File
                 title: v.title,
                 show_title: v.show_title,
                 drafting: v.drafting.map(core::DraftViewId),
+                opening_type: v.opening_type.map(core::OpeningTypeId),
             })
         })
         .collect()

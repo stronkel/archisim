@@ -399,6 +399,7 @@ impl ArchiSimApp {
         let mut presentation = false;
         let mut open = None;
         let mut drafting_act: Option<(archisim_core::DraftViewId, RowAct)> = None;
+        let mut carpentry = false;
         nav_section(ui, "nav-sheets", "PLANOS", |ui| {
             sub_header(ui, "Planos", Some(("+ Nuevo plano", &mut new)));
             open = self.nav_sheet_rows(ui, active);
@@ -450,6 +451,13 @@ impl ArchiSimApp {
                 });
             }
             if ui
+                .small_button("+ Plano de carpinterías")
+                .on_hover_text("Planos A3 con cada tipo de puerta y ventana del proyecto: su alzado desde fuera con medidas, su sección y sus datos (apertura, carpintería, antepecho, unidades y situación), que siguen al modelo")
+                .clicked()
+            {
+                carpentry = true;
+            }
+            if ui
                 .small_button("+ Plano de presentación")
                 .on_hover_text("Lámina A3 de la planta activa: título, planta, 3D, sección, superficies y recorrido solar, en el estilo de la vista")
                 .clicked()
@@ -465,6 +473,26 @@ impl ArchiSimApp {
         }
         if presentation {
             self.new_presentation_sheet();
+        }
+        if carpentry {
+            match self.ed.transact("Plano de carpinterías", |m| {
+                archisim_plan::carpentry::add_carpentry_sheets(m)
+            }) {
+                Ok(sheets) if sheets.is_empty() => {
+                    self.say("El proyecto no tiene tipos de puerta ni de ventana.")
+                }
+                Ok(sheets) => {
+                    let n = sheets.len();
+                    self.say(format!(
+                        "{n} {} de carpinterías: cada tipo con su alzado, su sección y sus datos.",
+                        if n == 1 { "plano" } else { "planos" }
+                    ));
+                    if let Some(s) = sheets.first() {
+                        self.open_view(TabKind::Sheet(*s));
+                    }
+                }
+                Err(e) => self.complain(format!("No se pudo hacer el plano: {e}.")),
+            }
         }
         match drafting_act {
             Some((id, RowAct::Rename(n))) => {

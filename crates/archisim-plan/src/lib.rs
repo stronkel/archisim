@@ -25,6 +25,7 @@
 
 pub mod annotate;
 pub mod axo;
+pub mod carpentry;
 pub mod concept;
 pub mod curtain;
 pub mod decals;
@@ -51,6 +52,8 @@ pub mod services;
 pub mod sheet;
 pub mod stairs;
 pub mod terrain;
+pub mod type_drawing;
+pub mod type_models;
 pub mod urban;
 
 use std::fmt::Write as _;

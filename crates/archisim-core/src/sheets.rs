@@ -141,6 +141,10 @@ pub struct Viewport {
     /// A view only for drawing instead of a plan (E7). Its crop is in its
     /// own metres.
     pub drafting: Option<crate::ids::DraftViewId>,
+    /// A door or window type instead of a plan (version 74): its
+    /// elevation from outside, its section and its data, as the carpentry
+    /// sheets draw them.
+    pub opening_type: Option<crate::ids::OpeningTypeId>,
 }
 
 /// Where an axonometric view looks from: the direction the eye stands in,
@@ -370,6 +374,7 @@ impl Model {
                 title: String::new(),
                 show_title: true,
                 drafting: None,
+                opening_type: None,
             },
         );
         Ok(id)
@@ -405,6 +410,40 @@ impl Model {
         })?;
         if let Some(v) = self.viewports.get_mut(&id) {
             v.drafting = Some(view);
+        }
+        Ok(id)
+    }
+
+    /// Places a door or window type on a sheet (its elevation, section and
+    /// data) at 1:`scale`, centred at `centre` (paper metres).
+    pub fn add_opening_viewport(
+        &mut self,
+        sheet: SheetId,
+        opening_type: crate::ids::OpeningTypeId,
+        centre: Point2,
+        scale: f64,
+    ) -> Result<ViewportId, ModelError> {
+        if self.opening_type(opening_type).is_none() {
+            return Err(ModelError::UnknownOpeningType(opening_type));
+        }
+        let level = self
+            .levels()
+            .first()
+            .map(|l| l.id)
+            .ok_or(ModelError::LastLevel)?;
+        let id = self.add_viewport(NewViewport {
+            sheet,
+            level,
+            section: None,
+            axo: None,
+            scale,
+            cut_plane: 1.1,
+            crop: None,
+            centre,
+        })?;
+        if let Some(v) = self.viewports.get_mut(&id) {
+            v.opening_type = Some(opening_type);
+            v.style = ViewStyle::default();
         }
         Ok(id)
     }
