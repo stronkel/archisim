@@ -1,0 +1,48 @@
+family "Viviendas de colonización (taller)"
+  category street
+  host none
+  version 1
+  description "Viviendas de un pueblo de colonización: volúmenes blancos y limpios, una pieza de dos plantas y otra de una con cubiertas a un agua hacia lados opuestos, huecos cuadrados hondos, puerta en marco de color, celosía de ladrillo, chimenea alta, y al lado el corral con su portón para el carro bajo tejadillo, cobertizo e higuera (modelo del taller, en revisión)"
+  folder "Taller · Edificios"
+
+type_params
+  section "Dimensiones"
+    houses integer = 3 range 1..8 label "Viviendas"
+    house_width length = 7.00 range 5.50..10.00 label "Fachada de la casa"
+    yard_width length = 4.00 range 3.00..8.00 label "Fachada del corral"
+    depth length = 10.00 range 7.00..16.00 label "Fondo"
+    variant integer = 1 range 0..99 label "Variante"
+  section "Materiales"
+    wall material = "Encalado" label "Muros"
+    party material = "Encalado" label "Medianeras"
+    plinth material = "Enfoscado gris" label "Zócalo y vierteaguas"
+    brick material = "Ladrillo visto" label "Celosía"
+    frame material = "Lacado azul añil" label "Carpintería y marco (1)"
+    frame_b material = "Lacado verde carruaje" label "Carpintería y marco (2)"
+    wood material = "Pino viejo" label "Cobertizo"
+    wood_b material = "Lacado verde carruaje" label "Portón del corral"
+    step material = "Terrazo" label "Escalón"
+    iron material = "Hierro forjado" label "Rejas"
+    tiles material = "Teja curva" label "Tejas"
+    roof material = "Terracota" label "Faldones"
+    yard material = "Albero" label "Corral"
+    glass material = "Vidrio claro" label "Vidrio"
+    curtain material = "Visillo" label "Visillos"
+    blind material = "Persiana crema" label "Persianas"
+    pot material = "Terracota" label "Macetas"
+    leaves material = "Hoja verde" label "Plantas"
+    flowers material = "Buganvilla" label "Flores"
+    interior material = "Interior en sombra" label "Interior visto por los huecos"
+    brass material = "Latón" label "Herrajes"
+    trunk material = "Corteza de olivo" label "Troncos"
+
+body
+  box (-(houses * (house_width + yard_width)) / 2, 0, 0) to ((houses * (house_width + yard_width)) / 2, depth, 6.0 + 2.5) material wall
+
+plan 1:50
+  polygon (-(houses * (house_width + yard_width)) / 2, 0) ((houses * (house_width + yard_width)) / 2, 0) ((houses * (house_width + yard_width)) / 2, depth) (-(houses * (house_width + yard_width)) / 2, depth) pen view
+
+outputs
+  generator = "props:fine_colonization_row"
+  ifc_class = "IfcBuildingElementProxy"
+  ifc_type = "USERDEFINED"

@@ -1,0 +1,53 @@
+family "Chalet de los 80 (taller)"
+  category street
+  host none
+  version 1
+  description "Chalet de los años 80: dos plantas exentas con esquinas y recercados de ladrillo visto, porche de tres arcos con terraza y balaustrada encima, mallorquinas verdes, rejas, cubierta a cuatro aguas con chimenea de ladrillo, garaje al lado y jardín con murete, pilastras, cancela, palmera y piscina (modelo del taller, en revisión)"
+  folder "Taller · Edificios"
+
+type_params
+  section "Dimensiones"
+    width length = 12.00 range 9.00..18.00 label "Fachada"
+    depth length = 10.00 range 8.00..14.00 label "Fondo"
+    variant integer = 1 range 0..99 label "Variante"
+    pool bool = yes label "Piscina"
+  section "Materiales"
+    wall material = "Monocapa crema" label "Fachada y murete"
+    brick material = "Ladrillo visto" label "Ladrillo"
+    trim material = "Cal blanca" label "Balaustrada y remates"
+    shutter_wood material = "Lacado verde carruaje" label "Mallorquinas"
+    wood material = "Nogal" label "Puerta"
+    frame material = "Lacado blanco" label "Carpintería"
+    iron material = "Hierro forjado" label "Rejas y cancela"
+    garage material = "Lacado blanco" label "Puerta del garaje"
+    step material = "Terrazo" label "Porche"
+    tiles material = "Teja curva" label "Tejas"
+    roof material = "Terracota" label "Faldones"
+    lawn material = "Césped natural" label "Césped"
+    paving material = "Losa de acera" label "Caminos"
+    coping material = "Piedra caliza" label "Borde de la piscina"
+    pool_tile material = "Gresite azul" label "Vaso de la piscina"
+    water material = "Agua de piscina" label "Agua"
+    metal material = "Acero inoxidable" label "Escalerilla"
+    palm material = "Hoja verde" label "Palmera"
+    glass material = "Vidrio claro" label "Vidrio"
+    curtain material = "Visillo" label "Visillos"
+    blind material = "Persiana crema" label "Persianas"
+    pot material = "Terracota" label "Macetas"
+    leaves material = "Hoja verde" label "Plantas"
+    flowers material = "Buganvilla" label "Flores"
+    interior material = "Interior en sombra" label "Interior visto por los huecos"
+    brass material = "Latón" label "Herrajes"
+    trunk material = "Corteza de olivo" label "Troncos"
+    fruit material = "Naranja" label "Frutos"
+
+body
+  box (-(width) / 2, 0, 0) to ((width) / 2, depth, 5.8 + 3.0) material wall
+
+plan 1:50
+  polygon (-(width) / 2, 0) ((width) / 2, 0) ((width) / 2, depth) (-(width) / 2, depth) pen view
+
+outputs
+  generator = "props:fine_chalet_80s"
+  ifc_class = "IfcBuildingElementProxy"
+  ifc_type = "USERDEFINED"

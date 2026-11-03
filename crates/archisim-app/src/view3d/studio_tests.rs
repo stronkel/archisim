@@ -2329,6 +2329,13 @@ fn building_pictures() {
         .split(',')
         .filter_map(|n| n.trim().parse().ok())
         .collect();
+    // `ARCHISIM_EDIFICIOS_CAMARA` = «yaw,pitch,zoom» of the new ones.
+    let cam: Vec<f32> = std::env::var("ARCHISIM_EDIFICIOS_CAMARA")
+        .unwrap_or_else(|_| "125,14,1".into())
+        .split(',')
+        .filter_map(|n| n.trim().parse().ok())
+        .collect();
+    let (yaw, pitch, zoom) = (cam[0], cam[1], cam[2]);
     let mut r = Renderer::new(&gpu.0, gpu.2, TextureMode::Full);
     let m = archisim_library::building_workshop::project().unwrap();
     let size = [1100u32, 900u32];
@@ -2373,7 +2380,7 @@ fn building_pictures() {
             &mut r,
             &gpu,
             &bare(Some(i), None),
-            |lo, hi| camera(lo, hi, aspect, 125.0, 14.0, 1.0),
+            |lo, hi| camera(lo, hi, aspect, yaw, pitch, zoom),
             size,
             Light::Day,
         );

@@ -35,12 +35,17 @@ Los ejes 1 y 2 dan el volumen; los ejes 3, 4 y 5 dan la piel. Hay detalles que h
 | Bloque de los 60–70 | **Bloque desarrollista**: ladrillo visto, terrazas voladas (unas cerradas con aluminio, otras con el toldo verde bajado), escalera entre plantas, locales con cierre, azotea con antenas |
 | Hotel de costa | **Torre de apartamentos de costa**: soportales, terrazas corridas con aletas, barandilla de fábrica o de vidrio, toldos a rayas, placas solares |
 | Adosada | **Adosados de promotora**: jardín delantero con murete y cancela, garaje, porche, muros cortafuegos sobre la cubierta |
-| Casa patio, pareada, chalet, oficinas, comercio con viviendas, nave, equipamiento | Siguientes tandas |
+| Casa patio | **Corral de vecinos** (tanda 2): patio alargado con galería de hierro en tres lados bajo cubiertas a un agua, zaguán con cancela, escalera, ropa tendida, naranjo, pila. Y **cortijo** (tanda 2): casa de dos plantas al fondo del patio de albero, naves con portones, torre de contrapeso, portada con espadaña, pozo, abrevadero, olivos y palmera |
+| Casa andaluza (otra variante) | **Viviendas de colonización** (tanda 2): pieza alta y pieza baja con cubiertas a un agua opuestas, huecos hondos, marcos de color, celosía de ladrillo, chimenea alta, corral con portón y cobertizo |
+| Chalet | **Chalet de los 80** (tanda 2): ladrillo visto en esquinas y recercados, porche de tres arcos con terraza y balaustrada, mallorquinas, cuatro aguas, garaje, murete con pilastras, palmera y piscina |
+| Pareada | **Viviendas pareadas** (tanda 2): una cubierta a cuatro aguas para las dos, porches con columnas, miradores, balcones con toldo, jardines con setos y cancelas |
+| Nave industrial | **Nave de polígono** (tanda 2): bloque y panel nervado, hastial con rótulo, puerta seccional con portillo, muelle de carga con abrigo, oficinas con ventanas corridas, policarbonato, lucernarios, valla de malla |
+| Oficinas, comercio con viviendas, equipamiento | Siguientes tandas |
 
 ## 3. Orden de las tandas
 
-1. **Tanda 1** (hecha, en revisión): las seis de arriba.
-2. **Andalucía y costa de Huelva:** corral de vecinos, cortijo, pueblo de colonización, chalet de los 80 con arcos, pareada, casa-patio, VPO de ladrillo, nave de polígono, chiringuito.
+1. **Tanda 1** (hecha, aprobada por Antonio el 03/11/2026 como salto de calidad): casa de pueblo, casa señorial, ensanche, bloque de los 60, torre de costa, adosados.
+2. **Tanda 2** (hecha, en revisión): corral de vecinos, cortijo, viviendas de colonización, chalet de los 80, pareadas, nave de polígono. Pendientes de Andalucía para otra tanda: casa-patio de una planta, VPO de ladrillo, chiringuito.
 3. **Usos singulares:** mercado de abastos, iglesia parroquial y ermita, plaza de toros, colegio, centro de salud, gasolinera.
 4. **Resto de España por regiones:** Castilla con soportales, caserío, galería gallega, masía, casa canaria, casa ibicenca.
 5. **Extranjero:** Haussmann, casa de canal de Ámsterdam, hilera inglesa, nórdico, suburbio americano, japonés, rascacielos.

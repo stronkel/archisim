@@ -1,0 +1,55 @@
+family "Corral de vecinos (taller)"
+  category street
+  host none
+  version 1
+  description "Corral de vecinos: viviendas en dos plantas alrededor de un patio alargado, zaguán con cancela desde la calle, galería de hierro en tres lados bajo cubiertas a un agua, escalera al corredor, ropa tendida de lado a lado, naranjo en su arriate, pila y macetas (modelo del taller, en revisión)"
+  folder "Taller · Edificios"
+
+type_params
+  section "Dimensiones"
+    width length = 16.00 range 12.00..28.00 label "Fachada"
+    depth length = 24.00 range 15.00..44.00 label "Fondo"
+    variant integer = 1 range 0..99 label "Variante"
+  section "Materiales"
+    wall material = "Encalado" label "Muros"
+    party material = "Encalado" label "Medianeras"
+    plinth material = "Estuco almagra" label "Zócalos"
+    trim material = "Estuco almagra" label "Recercados y cornisa"
+    stone material = "Piedra caliza" label "Portada y arriate"
+    step material = "Mármol" label "Escalones y vierteaguas"
+    tile_panel material = "Azulejo andaluz" label "Panel de azulejos"
+    tiles material = "Teja curva" label "Tejas"
+    roof material = "Terracota" label "Faldones"
+    wood material = "Lacado verde carruaje" label "Puertas"
+    wood_b material = "Lacado azul añil" label "Puertas (otras)"
+    frame material = "Lacado verde carruaje" label "Carpintería"
+    iron material = "Hierro forjado" label "Galería, rejas y cancela"
+    gallery material = "Baldosa hidráulica" label "Suelo de la galería"
+    gallery_edge material = "Cal blanca" label "Canto de la galería"
+    patio_floor material = "Empedrado" label "Patio"
+    water material = "Agua de fuente" label "Agua de la pila"
+    glass material = "Vidrio claro" label "Vidrio"
+    curtain material = "Visillo" label "Visillos"
+    blind material = "Persiana crema" label "Persianas"
+    pot material = "Terracota" label "Macetas"
+    leaves material = "Hoja verde" label "Plantas"
+    flowers material = "Buganvilla" label "Flores"
+    interior material = "Interior en sombra" label "Interior visto por los huecos"
+    brass material = "Latón" label "Herrajes"
+    trunk material = "Corteza de olivo" label "Troncos"
+    fruit material = "Naranja" label "Frutos"
+    line material = "Línea blanca" label "Cuerdas de tender"
+    cloth_a material = "Lino añil" label "Ropa tendida 1"
+    cloth_b material = "Toalla blanca" label "Ropa tendida 2"
+    cloth_c material = "Lana teja" label "Ropa tendida 3"
+
+body
+  box (-(width) / 2, 0, 0) to ((width) / 2, depth, 5.8 + 2.5) material wall
+
+plan 1:50
+  polygon (-(width) / 2, 0) ((width) / 2, 0) ((width) / 2, depth) (-(width) / 2, depth) pen view
+
+outputs
+  generator = "props:fine_corral"
+  ifc_class = "IfcBuildingElementProxy"
+  ifc_type = "USERDEFINED"

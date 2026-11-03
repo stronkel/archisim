@@ -20,6 +20,12 @@ pub const RECIPES: &[&str] = &[
     include_str!("../taller/edificio_bloque_60.asfam"),
     include_str!("../taller/edificio_torre_costa.asfam"),
     include_str!("../taller/edificio_adosados.asfam"),
+    include_str!("../taller/edificio_corral.asfam"),
+    include_str!("../taller/edificio_cortijo.asfam"),
+    include_str!("../taller/edificio_colonizacion.asfam"),
+    include_str!("../taller/edificio_chalet80.asfam"),
+    include_str!("../taller/edificio_pareadas.asfam"),
+    include_str!("../taller/edificio_nave.asfam"),
 ];
 
 /// A building of the workshop: its family, its type's name, its values
@@ -35,6 +41,15 @@ pub struct Building {
     pub size: (f64, f64),
     /// The gap to the next one.
     pub gap: f64,
+    /// Where its origin is from the start of what it takes along the
+    /// street (half of it, for most).
+    pub left: f64,
+    /// Today's buildings it is made of (a row of terraced houses, a pair)
+    /// and how much of its depth is garden in front, not building.
+    pub parts: usize,
+    pub garden: f64,
+    /// Which tanda it belongs to.
+    pub tanda: usize,
 }
 
 /// The street of the workshop, west to east: a row of the old centre
@@ -53,6 +68,10 @@ pub const BUILDINGS: &[Building] = &[
         today: BuildingStyle::Andalusian,
         floors: 2,
         size: (7.0, 10.0),
+        left: 7.0 / 2.0,
+        parts: 1,
+        garden: 0.0,
+        tanda: 1,
         gap: 0.0,
     },
     Building {
@@ -68,6 +87,10 @@ pub const BUILDINGS: &[Building] = &[
         today: BuildingStyle::Andalusian,
         floors: 3,
         size: (6.0, 10.0),
+        left: 6.0 / 2.0,
+        parts: 1,
+        garden: 0.0,
+        tanda: 1,
         gap: 0.0,
     },
     Building {
@@ -82,6 +105,10 @@ pub const BUILDINGS: &[Building] = &[
         today: BuildingStyle::Andalusian,
         floors: 1,
         size: (5.5, 10.0),
+        left: 5.5 / 2.0,
+        parts: 1,
+        garden: 0.0,
+        tanda: 1,
         gap: 0.0,
     },
     Building {
@@ -96,6 +123,10 @@ pub const BUILDINGS: &[Building] = &[
         today: BuildingStyle::HistoricCentre,
         floors: 3,
         size: (12.0, 14.0),
+        left: 12.0 / 2.0,
+        parts: 1,
+        garden: 0.0,
+        tanda: 1,
         gap: 0.0,
     },
     Building {
@@ -110,6 +141,10 @@ pub const BUILDINGS: &[Building] = &[
         today: BuildingStyle::Ensanche,
         floors: 5,
         size: (14.0, 16.0),
+        left: 14.0 / 2.0,
+        parts: 1,
+        garden: 0.0,
+        tanda: 1,
         gap: 6.0,
     },
     Building {
@@ -124,6 +159,10 @@ pub const BUILDINGS: &[Building] = &[
         today: BuildingStyle::Block1960s,
         floors: 6,
         size: (18.0, 12.0),
+        left: 18.0 / 2.0,
+        parts: 1,
+        garden: 0.0,
+        tanda: 1,
         gap: 8.0,
     },
     Building {
@@ -138,6 +177,10 @@ pub const BUILDINGS: &[Building] = &[
         today: BuildingStyle::CoastalHotel,
         floors: 10,
         size: (20.0, 13.0),
+        left: 20.0 / 2.0,
+        parts: 1,
+        garden: 0.0,
+        tanda: 1,
         gap: 4.0,
     },
     Building {
@@ -153,6 +196,10 @@ pub const BUILDINGS: &[Building] = &[
         today: BuildingStyle::CoastalHotel,
         floors: 7,
         size: (16.0, 12.0),
+        left: 16.0 / 2.0,
+        parts: 1,
+        garden: 0.0,
+        tanda: 1,
         gap: 8.0,
     },
     Building {
@@ -168,6 +215,99 @@ pub const BUILDINGS: &[Building] = &[
         today: BuildingStyle::Terraced,
         floors: 2,
         size: (24.0, 13.0),
+        left: 24.0 / 2.0,
+        parts: 4,
+        garden: 3.0,
+        tanda: 1,
+        gap: 0.0,
+    },
+    Building {
+        family: "Corral de vecinos (taller)",
+        name: "Corral de vecinos (taller)",
+        values: &[("width", 16.0), ("depth", 24.0), ("variant", 1.0)],
+        today: BuildingStyle::Courtyard,
+        floors: 2,
+        size: (16.0, 24.0),
+        left: 8.0,
+        parts: 1,
+        garden: 0.0,
+        tanda: 2,
+        gap: 6.0,
+    },
+    Building {
+        family: "Cortijo andaluz (taller)",
+        name: "Cortijo (taller)",
+        values: &[("width", 32.0), ("depth", 28.0), ("variant", 1.0)],
+        today: BuildingStyle::Courtyard,
+        floors: 2,
+        size: (32.0, 28.0),
+        left: 16.0,
+        parts: 1,
+        garden: 0.0,
+        tanda: 2,
+        gap: 6.0,
+    },
+    Building {
+        family: "Viviendas de colonización (taller)",
+        name: "Viviendas de colonización · 3 casas (taller)",
+        values: &[
+            ("houses", 3.0),
+            ("house_width", 7.0),
+            ("yard_width", 4.0),
+            ("depth", 10.0),
+            ("variant", 1.0),
+        ],
+        today: BuildingStyle::Andalusian,
+        floors: 2,
+        size: (33.0, 10.0),
+        left: 16.5,
+        parts: 3,
+        garden: 0.0,
+        tanda: 2,
+        gap: 6.0,
+    },
+    Building {
+        family: "Chalet de los 80 (taller)",
+        name: "Chalet de los 80 (taller)",
+        values: &[("width", 12.0), ("depth", 10.0), ("variant", 1.0)],
+        today: BuildingStyle::Detached,
+        floors: 2,
+        size: (21.6, 16.0),
+        left: 9.0,
+        parts: 1,
+        garden: 6.0,
+        tanda: 2,
+        gap: 4.0,
+    },
+    Building {
+        family: "Viviendas pareadas (taller)",
+        name: "Viviendas pareadas (taller)",
+        values: &[("house_width", 8.0), ("depth", 10.0), ("variant", 1.0)],
+        today: BuildingStyle::SemiDetached,
+        floors: 2,
+        size: (21.0, 14.5),
+        left: 10.5,
+        parts: 2,
+        garden: 4.5,
+        tanda: 2,
+        gap: 6.0,
+    },
+    Building {
+        family: "Nave de polígono (taller)",
+        name: "Nave de polígono (taller)",
+        values: &[
+            ("width", 24.0),
+            ("depth", 40.0),
+            ("height", 8.0),
+            ("variant", 1.0),
+        ],
+        today: BuildingStyle::Warehouse,
+        floors: 1,
+        size: (28.0, 50.0),
+        left: 14.0,
+        parts: 1,
+        garden: 10.0,
+        tanda: 2,
         gap: 0.0,
     },
 ];
@@ -253,7 +393,7 @@ pub fn project() -> Result<Model, ModelError> {
         m.add_object(NewObject {
             object_type: t,
             level,
-            position: Point2::new(x + w / 2.0, -half - 0.3 - d),
+            position: Point2::new(x + b.left, -half - 0.3 - d),
             rotation: 0.0,
             base_offset: 0.0,
         })?;
@@ -305,6 +445,18 @@ mod tests {
             let t = m.object_types().find(|t| t.name == b.name).unwrap().id;
             let (mesh, _) = m.type_prop(t).expect("a model");
             assert!(mesh.positions.len() > 1000, "{}", b.name);
+            // Every piece of the model has its material in the recipe.
+            let recipe = RECIPES
+                .iter()
+                .find(|r| r.lines().next().is_some_and(|l| l.contains(b.family)))
+                .unwrap();
+            for (role, _) in &mesh.parts {
+                assert!(
+                    recipe.contains(&format!("    {role} material")),
+                    "{}: the role «{role}» has no material",
+                    b.family
+                );
+            }
         }
         // Every material a recipe names is in the palette.
         for r in RECIPES {

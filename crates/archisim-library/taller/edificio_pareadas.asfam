@@ -1,0 +1,50 @@
+family "Viviendas pareadas (taller)"
+  category street
+  host none
+  version 1
+  description "Dos viviendas pareadas bajo una cubierta a cuatro aguas: porche con columnas sobre la entrada, mirador en la planta baja, balcón con toldo arriba, persianas con cajón y, delante, el jardín partido con setos, cancelas y caminos (modelo del taller, en revisión)"
+  folder "Taller · Edificios"
+
+type_params
+  section "Dimensiones"
+    house_width length = 8.00 range 6.00..12.00 label "Fachada de cada vivienda"
+    depth length = 10.00 range 8.00..14.00 label "Fondo"
+    variant integer = 1 range 0..99 label "Variante"
+  section "Materiales"
+    wall material = "Monocapa crema" label "Fachada"
+    plinth material = "Piedra caliza" label "Zócalo"
+    trim material = "Cal blanca" label "Impostas, porche y balcón"
+    door material = "Nogal" label "Puerta"
+    frame material = "Aluminio blanco" label "Carpintería"
+    iron material = "Metal negro" label "Barandillas y cancelas"
+    metal material = "Acero galvanizado" label "Soportes"
+    appliance material = "Lacado blanco" label "Aires acondicionados"
+    awning material = "Lona verde" label "Toldos"
+    awning_b material = "Lona crema" label "Toldos (franjas)"
+    lamp material = "Luz de farola" label "Faroles"
+    step material = "Terrazo" label "Escalones"
+    tiles material = "Teja curva" label "Tejas"
+    roof material = "Terracota" label "Faldones"
+    lawn material = "Césped natural" label "Césped"
+    hedge material = "Hoja verde" label "Setos"
+    paving material = "Losa de acera" label "Caminos"
+    trunk material = "Corteza de olivo" label "Troncos"
+    glass material = "Vidrio claro" label "Vidrio"
+    curtain material = "Visillo" label "Visillos"
+    blind material = "Persiana crema" label "Persianas"
+    pot material = "Terracota" label "Macetas"
+    leaves material = "Hoja verde" label "Plantas"
+    flowers material = "Buganvilla" label "Flores"
+    interior material = "Interior en sombra" label "Interior visto por los huecos"
+    brass material = "Latón" label "Herrajes"
+
+body
+  box (-(2 * house_width) / 2, 0, 0) to ((2 * house_width) / 2, depth, 5.85 + 3.0) material wall
+
+plan 1:50
+  polygon (-(2 * house_width) / 2, 0) ((2 * house_width) / 2, 0) ((2 * house_width) / 2, depth) (-(2 * house_width) / 2, depth) pen view
+
+outputs
+  generator = "props:fine_semi_detached"
+  ifc_class = "IfcBuildingElementProxy"
+  ifc_type = "USERDEFINED"

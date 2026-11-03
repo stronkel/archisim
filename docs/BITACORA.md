@@ -6,6 +6,40 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-03 (90) · Taller de edificios, tanda 2: corral, cortijo, colonización, chalet de los 80, pareadas y nave
+
+Misma rama `bloque/taller-edificios` y mismo pull request (#160). Sin cambios de formato ni de IFC. Antonio vio la tanda 1 («un salto de calidad con creces») y pidió seguir.
+
+**Hecho**
+- Seis edificios más en `archisim_props::fine::buildings`, con sus recetas del taller (`edificio_corral`, `_cortijo`, `_colonizacion`, `_chalet80`, `_pareadas`, `_nave`):
+  - **corral de vecinos**: patio, galería, zaguán con cancela, escalera, ropa tendida, naranjo y pila;
+  - **cortijo**: casa al fondo, naves, torre de contrapeso, portada con espadaña y campana, pozo, abrevadero, olivos y palmera;
+  - **viviendas de colonización**: piezas alta y baja con cubiertas a un agua opuestas, celosía, chimenea, corral con portón;
+  - **chalet de los 80**: porche de arcos con terraza, mallorquinas, cuatro aguas, garaje, jardín con murete, palmera y piscina;
+  - **pareadas**: cubierta común a cuatro aguas, porches, miradores, setos;
+  - **nave de polígono**: bloque y panel, rótulo, seccional, muelle, oficinas, lucernarios, valla.
+- Piezas nuevas para el taller (`more.rs`): cubiertas a un agua y a cuatro aguas con sus hiladas de teja, chapiteles, placas inclinadas, tapias con albardilla, palmeras, árboles frutales, pozo y abrevadero.
+- La calle del taller tiene ya quince edificios; enfrente, los de hoy (casa patio, chalet, pareada, nave).
+- La prueba del taller comprueba que cada pieza de cada modelo tiene su material en la receta.
+- `ARCHISIM_EDIFICIOS_CAMARA` cambia el punto de vista de las fotos.
+- Paleta: bloque de hormigón, panel sándwich gris, policarbonato.
+
+**Pendiente**
+- La opinión de Antonio sobre la tanda 2.
+- El corral es el más pesado (unos 124.000 triángulos): si se usa mucho, habrá que aligerar sus puertas en la versión de lejos.
+- Tanda 3: usos singulares (mercado, iglesia, plaza de toros, colegio, centro de salud, gasolinera).
+
+**Qué debe probar Antonio**
+1. `cargo run -p archisim-cli -- edificios out/` y abre `out/edificios.archisim` en 3D.
+2. Los nuevos están al final de la calle.
+3. Fíjate en:
+   - la escala del patio del corral y de su galería;
+   - la torre y la espadaña del cortijo;
+   - las alturas de las piezas de colonización;
+   - si al chalet le falta algo típico de los 80.
+
+---
+
 ## 2026-11-03 (89) · Taller de edificios, tanda 1: seis edificios españoles al nivel de los muebles
 
 Rama `bloque/taller-edificios`, con pull request. Sin cambios de formato ni de IFC. Las piezas nuevas son recetas del taller (`archisim-library/taller/edificio_*.asfam`), así que no entran en la biblioteca hasta que Antonio las apruebe. Diseño y catálogo completo en `docs/EDIFICIOS_TALLER.md`.

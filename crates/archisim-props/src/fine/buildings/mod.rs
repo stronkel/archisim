@@ -15,9 +15,16 @@
 //! go on any side.
 
 pub mod block60;
+pub mod chalet80;
 pub mod coast;
+pub mod colonizacion;
+pub mod corral;
+pub mod cortijo;
 pub mod ensanche;
 pub mod manor;
+pub mod more;
+pub mod nave;
+pub mod pareada;
 pub mod terraced;
 pub mod village;
 
@@ -196,7 +203,7 @@ impl Face {
 }
 
 /// A triangle facing away from `centre`.
-fn out_tri(b: &mut Builder, role: &'static str, t: [P3; 3], centre: P3) {
+pub(crate) fn out_tri(b: &mut Builder, role: &'static str, t: [P3; 3], centre: P3) {
     let e1 = [t[1][0] - t[0][0], t[1][1] - t[0][1], t[1][2] - t[0][2]];
     let e2 = [t[2][0] - t[0][0], t[2][1] - t[0][1], t[2][2] - t[0][2]];
     let nrm = crate::build::cross(e1, e2);
@@ -1321,6 +1328,12 @@ mod tests {
             "fine_ensanche",
             "fine_coastal_tower",
             "fine_terraced_row",
+            "fine_corral",
+            "fine_cortijo",
+            "fine_colonization_row",
+            "fine_chalet_80s",
+            "fine_semi_detached",
+            "fine_warehouse",
         ] {
             let m = make(kind, &Params::default()).unwrap();
             let tris: usize = m.parts.iter().map(|(_, t)| t.len()).sum();

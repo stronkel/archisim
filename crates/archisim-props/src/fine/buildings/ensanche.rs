@@ -343,7 +343,20 @@ pub fn arch_fill(
 }
 
 /// The stones round an arch, the keystone bigger.
-fn voussoirs(b: &mut Builder, f: &Face, s: (f64, f64), spring: f64) {
+pub fn voussoirs(b: &mut Builder, f: &Face, s: (f64, f64), spring: f64) {
+    voussoirs_of(b, f, s, spring, "stone", 0.3);
+}
+
+/// The stones (or bricks) round an arch, `deep` along the curve, the
+/// keystone bigger.
+pub fn voussoirs_of(
+    b: &mut Builder,
+    f: &Face,
+    s: (f64, f64),
+    spring: f64,
+    role: &'static str,
+    deep: f64,
+) {
     let r = (s.1 - s.0) / 2.0;
     let c = s.0 + r;
     let n = 11;
@@ -351,7 +364,7 @@ fn voussoirs(b: &mut Builder, f: &Face, s: (f64, f64), spring: f64) {
         let a0 = std::f64::consts::PI * i as f64 / n as f64;
         let a1 = std::f64::consts::PI * (i + 1) as f64 / n as f64;
         let key = i == n / 2;
-        let rr = if key { r + 0.42 } else { r + 0.3 };
+        let rr = if key { r + deep * 1.4 } else { r + deep };
         let gap = 0.012;
         let (a0, a1) = (a0 + gap / r, a1 - gap / r);
         let pts = [
@@ -360,7 +373,7 @@ fn voussoirs(b: &mut Builder, f: &Face, s: (f64, f64), spring: f64) {
             (c + rr * a1.cos(), spring + rr * a1.sin()),
             (c + r * a1.cos(), spring + r * a1.sin()),
         ];
-        f.prism(b, "stone", &pts, (-0.01, if key { 0.07 } else { 0.035 }));
+        f.prism(b, role, &pts, (-0.01, if key { 0.07 } else { 0.035 }));
     }
 }
 

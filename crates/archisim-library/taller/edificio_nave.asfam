@@ -1,0 +1,46 @@
+family "Nave de polígono (taller)"
+  category street
+  host none
+  version 1
+  description "Nave de polígono industrial: bloque de hormigón hasta tres metros y panel nervado encima, hastial con rótulo, puerta seccional con portillo, muelle de carga con abrigo, oficinas en una esquina con ventanas corridas y marquesina, bandas de policarbonato, cubierta de chapa con lucernarios, canalones y bajantes, y patio con valla de malla (modelo del taller, en revisión)"
+  folder "Taller · Edificios"
+
+type_params
+  section "Dimensiones"
+    width length = 24.00 range 12.00..50.00 label "Frente"
+    depth length = 40.00 range 15.00..90.00 label "Fondo"
+    height length = 8.00 range 5.00..14.00 label "Altura al alero"
+    variant integer = 1 range 0..99 label "Variante"
+    offices bool = yes label "Oficinas"
+  section "Materiales"
+    block material = "Bloque de hormigón" label "Bloque"
+    panel_wall material = "Panel sándwich gris" label "Panel de fachada"
+    roof material = "Panel sándwich gris" label "Cubierta"
+    skylight material = "Policarbonato" label "Policarbonato y lucernarios"
+    frame material = "Aluminio plata" label "Remates y carpintería"
+    garage material = "Lacado blanco" label "Puertas seccionales"
+    sign material = "Lacado azul añil" label "Rótulo"
+    sign_text material = "Lacado blanco" label "Letras del rótulo"
+    dock material = "Hormigón suave" label "Muelle de carga"
+    rubber material = "Goma negra" label "Abrigo y topes"
+    stripe material = "Pintura amarilla" label "Marcas"
+    step material = "Terrazo" label "Escalón"
+    metal material = "Acero galvanizado" label "Canalones y bajantes"
+    appliance material = "Lacado blanco" label "Aires acondicionados"
+    fence material = "Acero galvanizado" label "Valla"
+    yard material = "Hormigón suave" label "Patio"
+    pallet material = "Pino viejo" label "Palés"
+    glass material = "Vidrio claro" label "Vidrio"
+    blind material = "Persiana crema" label "Persianas"
+    interior material = "Interior en sombra" label "Interior visto por los huecos"
+
+body
+  box (-(width) / 2, 0, 0) to ((width) / 2, depth + 10, height + width / 2 * 0.1) material block
+
+plan 1:50
+  polygon (-(width) / 2, 0) ((width) / 2, 0) ((width) / 2, depth + 10) (-(width) / 2, depth + 10) pen view
+
+outputs
+  generator = "props:fine_warehouse"
+  ifc_class = "IfcBuildingElementProxy"
+  ifc_type = "USERDEFINED"
