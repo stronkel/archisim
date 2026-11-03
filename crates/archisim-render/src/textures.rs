@@ -644,7 +644,7 @@ fn pattern(kind: TextureKind, p: [f64; 2]) -> Lin {
             }
             Lin::base(0.42).mix(body.times(0.72 + 0.4 * round), on_piece(e, 0.056))
         }
-        // Old cobbles: uneven, worn, earth and moss in the joints.
+        // Old cobbles: uneven, worn, earth and a muted moss in the joints.
         TextureKind::OldCobbles => {
             let warp = [
                 g(0.31, 0.31).noise(p) * 0.35,
@@ -658,13 +658,16 @@ fn pattern(kind: TextureKind, p: [f64; 2]) -> Lin {
                 body = body.times(0.85).plus([0.06, 0.05, 0.03]);
             }
             body = body.times(0.88 + 0.2 * (1.0 - smoothstep(0.0, 0.45, c[0])));
+            let moss =
+                smoothstep(0.58, 0.8, g(0.45, 0.45).noise(p)) * (0.6 + 0.4 * g(7.0, 7.0).noise(p));
+            let moss_c = 0.8 + 0.3 * g(13.0, 13.0).noise(p);
             let joint_c = Lin {
-                a: 0.45,
-                b: [0.02, 0.015, 0.0],
+                a: 0.42,
+                b: [0.03, 0.025, 0.01],
             }
             .mix(
-                Lin::fixed([0.05, 0.11, 0.025]),
-                smoothstep(0.55, 0.75, g(0.5, 0.5).noise(p)) * 0.7,
+                Lin::fixed([0.19, 0.22, 0.1].map(|v| v * moss_c)),
+                moss * 0.6,
             );
             let half = 0.0625 * (0.7 + 0.6 * g(0.7, 0.7).noise(p));
             joint_c.mix(body, on_piece(e, half))
@@ -829,48 +832,64 @@ fn pattern(kind: TextureKind, p: [f64; 2]) -> Lin {
             }
             Lin::base(k)
         }
-        // Furrows: ridges and troughs, shoots on some.
+        // Furrows: a ploughed field, ridges broken into clods.
         TextureKind::Furrows => {
-            let f = fract(y);
-            let row = y.floor();
-            let rw = row.rem_euclid(per);
-            let ridge = (f * std::f64::consts::PI).sin();
-            let c = Lin::base(0.55)
-                .mix(Lin::base(1.1), ridge)
-                .times(0.9 + 0.14 * g(1.05, 4.2).noise(p) + 0.06 * g(17.5, 17.5).noise(p));
-            let i = (x / 0.25).floor().rem_euclid(per / 0.25);
-            let l = [
-                fract(x / 0.25) - 0.5 + (hash2([i, rw]) - 0.5) * 0.3,
-                (f - 0.5) * 4.0,
-            ];
-            let sown = hash2([rw, 1.0]) >= 0.3 && hash2([i, rw + 7.0]) >= 0.15;
-            let shoot = if sown {
-                1.0 - smoothstep(0.16, 0.22, (l[0] * l[0] + l[1] * l[1] * 0.64).sqrt())
-            } else {
-                0.0
-            };
-            let green = 0.8 + 0.4 * hash2([i, rw]);
-            c.mix(Lin::fixed([0.2 * green, 0.42 * green, 0.06 * green]), shoot)
+            let yy = y + g(0.12, 1.0).noise([x, 3.0]) * 0.5;
+            let ridge = (fract(yy) * std::f64::consts::PI).sin();
+            let c = g(7.0, 9.0).cells([x, yy]);
+            let up = smoothstep(0.15, 0.7, ridge);
+            let clod = (1.0 - smoothstep(0.1, 0.6, c[0])) * up;
+            let mut body = Lin::base(0.5).mix(Lin::base(1.08), ridge);
+            body = body.mix(Lin::base(0.4), (1.0 - smoothstep(0.0, 0.22, ridge)) * 0.55);
+            body.times(
+                (1.0 + (0.12 * tones(c[2], 3.0) - 0.04) * clod)
+                    * (0.94 + 0.1 * g(0.6, 2.0).noise(p)),
+            )
         }
-        // A kitchen garden: round plants along the ridges.
+        // A kitchen garden: lettuces and cabbages, leafy rosettes on ridges.
         TextureKind::KitchenGarden => {
             let f = fract(y);
             let row = y.floor();
             let rw = row.rem_euclid(per);
             let ridge = (f * std::f64::consts::PI).sin();
-            let c = Lin::base(0.6)
-                .mix(Lin::base(1.0), ridge)
-                .times(0.92 + 0.1 * g(2.4, 2.4).noise(p));
+            let mut c = Lin::base(0.55).mix(Lin::base(1.02), ridge).times(
+                (0.95 + 0.08 * g(2.4, 2.4).noise(p)) * (1.0 + 0.08 * (g(9.0, 9.0).noise(p) - 0.5)),
+            );
             let sh = hash2([rw, 3.0]);
             let i = (x / 0.5 + sh).floor().rem_euclid(per / 0.5);
             let l = [fract(x / 0.5 + sh) - 0.5, (f - 0.5) * 2.0];
-            let size = 0.32 + 0.1 * hash2([i, rw]);
-            let plant = 1.0 - smoothstep(size - 0.03, size, (l[0] * l[0] + l[1] * l[1]).sqrt());
-            let leafy = g(24.0, 24.0).noise(p);
-            let shade = 0.85 + 0.25 * (0.5 - l[1]);
-            let green =
-                [0.07 + 0.09 * leafy, 0.2 + 0.18 * leafy, 0.03 + 0.03 * leafy].map(|v| v * shade);
-            c.mix(Lin::fixed(green), plant)
+            let h = hash2([i, rw]);
+            let cabbage = hash2([rw, 11.0]) > 0.5;
+            let lobes = if cabbage { 6.0 } else { 9.0 };
+            let size = 0.36 + 0.08 * h;
+            let r = (l[0] * l[0] + l[1] * l[1]).sqrt();
+            let ang = l[1].atan2(l[0]) + h * std::f64::consts::TAU;
+            let frill = if cabbage { 0.0 } else { 0.025 };
+            let rim =
+                size * (0.92 + 0.07 * (ang * lobes).cos() + frill * (ang * lobes * 3.0).cos());
+            let plant = 1.0 - smoothstep(rim - 0.03, rim, r);
+            let heart_r = size * 0.55 * (0.92 + 0.08 * (ang * lobes + 1.6).cos());
+            let heart = 1.0 - smoothstep(heart_r - 0.03, heart_r, r);
+            let t = r / rim.max(0.001);
+            let (light, dark) = if cabbage {
+                ([0.36, 0.56, 0.4], [0.15, 0.33, 0.22])
+            } else {
+                ([0.42, 0.66, 0.16], [0.2, 0.42, 0.07])
+            };
+            let k = smoothstep(0.15, 1.0, t);
+            let mut green: [f64; 3] = [0, 1, 2].map(|j| light[j] * (1.0 - k) + dark[j] * k);
+            green = [0, 1, 2].map(|j| green[j] + (light[j] * 1.12 - green[j]) * heart * 0.7);
+            let rib =
+                (1.0 - smoothstep(0.0, 0.03, (ang * lobes * 0.5).sin().abs() * r)) * (1.0 - heart);
+            green = [0, 1, 2].map(|j| {
+                let to = light[j] * 1.2 + [0.06, 0.06, 0.04][j];
+                green[j] + (to - green[j]) * rib * 0.5
+            });
+            let lit = 0.9 + 0.2 * (0.5 - l[1]);
+            let d = ((l[0] - 0.08).powi(2) + (l[1] + 0.1).powi(2)).sqrt();
+            let shadow = 1.0 - smoothstep(size * 0.9, size * 1.15, d);
+            c = c.times(1.0 - 0.35 * shadow);
+            c.mix(Lin::fixed(green.map(|v| v * lit)), plant)
         }
         // Cracked earth: dry plates, dark cracks.
         TextureKind::CrackedEarth => {
@@ -997,6 +1016,12 @@ fn relief(kind: TextureKind, p: [f64; 2]) -> f64 {
             let e = edist(x + 0.5 * odd(row), 1.0).min(edist(y, 0.5));
             smoothstep(0.025, 0.085, e).sqrt() * 0.075
         }
+        TextureKind::Furrows => {
+            let g = Grid::new([0.12, 1.0], period(kind));
+            let yy = y + g.noise([x, 3.0]) * 0.5;
+            (fract(yy) * std::f64::consts::PI).sin() * 0.08
+        }
+        TextureKind::KitchenGarden => (fract(y) * std::f64::consts::PI).sin() * 0.05,
         _ => 0.0,
     }
 }
@@ -1118,6 +1143,9 @@ pub fn texture_point(world: [f64; 3], normal: [f64; 3], scale: f64, kind: Textur
     let slopes = kind.on_slopes() || kind == TextureKind::Metal;
     let uv = if n[2] > 0.985 || (n[2] >= 0.7 && !slopes) {
         [world[0], world[1]]
+    } else if kind == TextureKind::Strata {
+        // Level layers that go on unbroken round corners and curves.
+        [world[0] * 0.8 + world[1] * 0.6, world[2]]
     } else if slopes {
         // Roof coverings: along the eaves and up the slope (the 3D view's
         // frame on flat faces).

@@ -150,10 +150,14 @@ fn textured(base: vec3<f32>, world: vec3<f32>, n_in: vec3<f32>, tex: vec2<f32>) 
         // Asphalt: worn patches.
         out = base * (0.96 + 0.12 * smoothstep(0.35, 0.8, noise(p * 0.25)));
     } else if (kind < 29.5) {
-        // Rock in strata: long low slabs.
-        let row = floor(p.y);
-        let u = p.x * 0.306 + hash2(vec2<f32>(row, 5.0));
-        out = mix(base * 0.6, base * (0.86 + 0.14 * hash2(vec2<f32>(floor(u), row))), joint(u, 0.02) * joint(p.y, 0.06));
+        // Rock in strata: level layers of a few tones, shaded under each.
+        if (abs(normalize(n_in).z) >= 0.7) {
+            out = base * (0.95 + 0.1 * noise(p * 0.5));
+        } else {
+            let z = p.y + noise(vec2<f32>(p.x * 0.14, 2.0)) * 1.6;
+            let f = fract(z);
+            out = base * (1.0 - 0.18 * hash2(vec2<f32>(floor(z), 5.0))) * (1.0 - 0.22 * (1.0 - smoothstep(0.0, 0.18, f)));
+        }
     } else if (kind < 30.5) {
         // The sea: bands of light drifting.
         let t = g.lamp_count.y;
@@ -197,11 +201,13 @@ fn textured(base: vec3<f32>, world: vec3<f32>, n_in: vec3<f32>, tex: vec2<f32>) 
         // Earth path, albero: soft patches.
         out = base * (0.9 + 0.15 * noise(p * 0.7) + 0.05 * noise(p * 9.0));
     } else if (kind < 45.5) {
-        // Furrows, kitchen garden: ridges, green along some.
-        let ridge = 0.5 + 0.5 * sin(fract(p.y) * 3.14159);
-        out = mix(base * 0.55, base * 1.1, ridge);
+        // Furrows, kitchen garden: ridges; plants along them in the garden.
+        let ridge = sin(fract(p.y) * 3.14159);
+        out = mix(base * 0.5, base * 1.08, ridge);
         if (kind > 44.5) {
-            out = mix(out, vec3<f32>(0.1, 0.27, 0.04), smoothstep(0.55, 0.6, noise(p * vec2<f32>(2.0, 0.0) + vec2<f32>(0.0, floor(p.y) * 3.0))) * ridge);
+            let l = vec2<f32>(fract(p.x / 0.5 + hash2(vec2<f32>(floor(p.y), 3.0))) - 0.5, (fract(p.y) - 0.5) * 2.0);
+            let plant = 1.0 - smoothstep(0.35, 0.38, length(l));
+            out = mix(out, mix(vec3<f32>(0.4, 0.62, 0.17), vec3<f32>(0.2, 0.42, 0.08), length(l) * 2.6), plant);
         }
     } else if (kind < 46.5) {
         // Cracked earth.

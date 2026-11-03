@@ -5,7 +5,7 @@
 
 use std::path::Path;
 
-use archisim_core::{MassShape, MaterialId, Model, NewMass, Point2, Primitive};
+use archisim_core::{MassShape, MaterialId, Model, NewMass, Point2, Primitive, TextureKind};
 use archisim_library::stylized::{stylized_material, STYLIZED};
 
 type Res<T = ()> = Result<T, Box<dyn std::error::Error>>;
@@ -97,11 +97,17 @@ pub fn build() -> Res<Model> {
                 }
                 "Cubiertas" => b.mass(s.name, gable(x, y, 2.6, 2.6), 0.0, 1.3, s.name)?,
                 "Pinturas" => b.mass(s.name, rect(x - 0.9, y - 0.9, 1.8, 1.8), 0.0, 1.8, s.name)?,
+                // Rock in strata as a block, to see its layers turn the
+                // corners; the other floors as a slab.
                 _ => b.mass(
                     s.name,
                     rect(x - 1.35, y - 1.35, 2.7, 2.7),
                     0.0,
-                    0.12,
+                    if s.texture == Some(TextureKind::Strata) {
+                        1.6
+                    } else {
+                        0.12
+                    },
                     s.name,
                 )?,
             }

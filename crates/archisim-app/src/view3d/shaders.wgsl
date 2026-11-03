@@ -389,12 +389,19 @@ fn tex_on_slopes(kind: i32) -> bool {
 // Where a point of a face is on its texture, metres: on faces looking up,
 // across the plan (roof coverings only when flat); on curved faces, along
 // x or y and up; on the others, along the face and up it (up the slope on
-// a roof). As `archisim_render::textures::texture_point`.
+// a roof); rock in strata, level layers that turn corners. As
+// `archisim_render::textures::texture_point`.
 fn tex_uv(world: vec3<f32>, n_in: vec3<f32>, kind: i32) -> vec2<f32> {
     let n = normalize(n_in);
     let a = abs(n);
     if (a.z > 0.985 || (a.z >= 0.7 && !tex_on_slopes(kind))) {
         return world.xy;
+    }
+    if (kind == 29) {
+        // Rock in strata: the layers keep to the height, and the line
+        // along them is the same on every side of a corner (or round a
+        // curve) so that they go on unbroken. As `texture_point`.
+        return vec2<f32>(dot(world.xy, vec2<f32>(0.8, 0.6)), world.z);
     }
     if (tex_curved) {
         if (a.x > a.y) {
@@ -943,11 +950,17 @@ fn textured(base: vec3<f32>, world: vec3<f32>, n_in: vec3<f32>, tex: vec2<f32>) 
             c = mix(c, c * 1.35, (1.0 - smoothstep(0.05, 0.12, k3.x)) * step(0.7, k3.z) * (1.0 - smoothstep(0.02, 0.06, w)));
             return c;
         }
-        // Rock in strata: soft horizontal layers of sandstone of different
+        // Rock in strata: soft level layers of sandstone of different
         // thickness and tone, each a little proud of the one above (light
         // on its top edge, shade under it), runs of weathering, a few deep
-        // crevices.
+        // crevices. The layers keep to the height and turn corners
+        // unbroken (`tex_uv`); on top, the bare rock.
         case 29: {
+            if (abs(normalize(n_in).z) >= 0.7) {
+                var c = base * (0.95 + 0.1 * tones(noise(p * 0.5), 3.0)) * (0.93 + 0.1 * noise(p * 3.0));
+                tex_height = noise(p * 1.5) * 0.03 * s;
+                return far_off(c, base * 0.97, 1.0, w);
+            }
             var z = p.y + noise(vec2<f32>(p.x * 0.14, 2.0)) * 1.6 + noise(vec2<f32>(p.x * 0.6, 7.0)) * 0.27;
             z = z + 0.8 * sin(z * 0.5);
             let band = floor(z);
@@ -1033,8 +1046,8 @@ fn textured(base: vec3<f32>, world: vec3<f32>, n_in: vec3<f32>, tex: vec2<f32>) 
             tex_height = sqrt(round_) * 0.19 * s * on_piece(e, 0.056, w);
             return far_off(c, base * 0.75, 1.0, w);
         }
-        // Old cobbles: bigger, uneven, worn smooth on top, earth and a
-        // little moss in the joints.
+        // Old cobbles: bigger, uneven, worn smooth on top, dark earth in
+        // the joints and, here and there, a muted olive moss in them.
         case 34: {
             let q = p + vec2<f32>(noise(p * 0.31), noise(p * 0.31 + 4.0)) * 0.35;
             let k3 = cells(q * vec2<f32>(1.0, 1.3));
@@ -1042,10 +1055,14 @@ fn textured(base: vec3<f32>, world: vec3<f32>, n_in: vec3<f32>, tex: vec2<f32>) 
             var c = base * (0.74 + 0.36 * tones(k3.z, 5.0));
             c = select(c, c * 0.85 + vec3<f32>(0.06, 0.05, 0.03), k3.z > 0.75);
             c = c * (0.88 + 0.2 * (1.0 - smoothstep(0.0, 0.45, k3.x)));
-            let joint_c = mix(base * 0.45 + vec3<f32>(0.02, 0.015, 0.0), vec3<f32>(0.05, 0.11, 0.025), smoothstep(0.55, 0.75, noise(p * 0.5)) * 0.7);
+            let near = 1.0 - smoothstep(0.02, 0.08, w);
+            let moss = smoothstep(0.58, 0.8, noise(p * 0.45)) * (0.6 + 0.4 * noise(p * 7.0) * near + 0.2 * (1.0 - near));
+            let moss_c = vec3<f32>(0.19, 0.22, 0.1) * (0.8 + 0.3 * noise(p * 13.0) * near);
+            let joint_c = mix(base * 0.42 + vec3<f32>(0.03, 0.025, 0.01), moss_c, moss * 0.6);
             let half = 0.0625 * (0.7 + 0.6 * noise(p * 0.7));
             c = mix(joint_c, c, on_piece(e, half, w));
-            tex_height = sqrt(smoothstep(half, half + 0.17, e)) * 0.125 * s;
+            let dome = smoothstep(half, half + 0.22, e);
+            tex_height = dome * (1.6 - 0.6 * dome) * 0.06 * s;
             return far_off(c, base * 0.8, 1.0, w);
         }
         // Opus romanum: squares and oblongs of four sizes in a module of
@@ -1166,36 +1183,58 @@ fn textured(base: vec3<f32>, world: vec3<f32>, n_in: vec3<f32>, tex: vec2<f32>) 
             c = mix(c, c * 0.8, (1.0 - smoothstep(0.05, 0.12, k3.x)) * step(0.8, k3.z) * (1.0 - smoothstep(0.004, 0.012, w)));
             return c;
         }
-        // Furrows: ridges a piece apart, lit on one side and shaded on the
-        // other, a row of small shoots on some.
+        // Furrows: a ploughed field. Ridges a piece apart, a little
+        // wavering, lit on top and shaded in the damp trough, broken into
+        // clods of a few tones.
         case 44: {
-            let f = fract(p.y);
-            let row = floor(p.y);
+            let y = p.y + noise(vec2<f32>(p.x * 0.12, 3.0)) * 0.5;
+            let f = fract(y);
             let ridge = sin(f * 3.14159);
-            var c = mix(base * 0.55, base * 1.1, ridge) * (0.9 + 0.14 * noise(p * vec2<f32>(1.05, 4.2)) + 0.06 * noise(p * 17.5));
-            let i = floor(p.x / 0.25);
-            let l = vec2<f32>(fract(p.x / 0.25) - 0.5 + (hash2(vec2<f32>(i, row)) - 0.5) * 0.3, (f - 0.5) * 4.0);
-            let sown = step(0.3, hash2(vec2<f32>(row, 1.0))) * step(0.15, hash2(vec2<f32>(i, row + 7.0)));
-            let shoot = (1.0 - smoothstep(0.16, 0.22, length(l * vec2<f32>(1.0, 0.8)))) * sown;
-            c = mix(c, vec3<f32>(0.2, 0.42, 0.06) * (0.8 + 0.4 * hash2(vec2<f32>(i, row))), shoot);
-            tex_height = (ridge * 0.07 + shoot * 0.015) * s;
-            return far_off(c, base * 0.85, 1.0, w);
+            let near = 1.0 - smoothstep(0.01, 0.04, w);
+            let k3 = cells(vec2<f32>(p.x * 7.0, y * 9.0));
+            let up = smoothstep(0.15, 0.7, ridge);
+            let clod = (1.0 - smoothstep(0.1, 0.6, k3.x)) * up * near;
+            var c = mix(base * 0.5, base * 1.08, ridge);
+            c = mix(c, base * 0.4, (1.0 - smoothstep(0.0, 0.22, ridge)) * 0.55);
+            c = c * (1.0 + (0.12 * tones(k3.z, 3.0) - 0.04) * clod) * (0.94 + 0.1 * noise(p * vec2<f32>(0.6, 2.0)));
+            tex_height = (ridge * 0.08 + clod * 0.012) * s;
+            return far_off(c, base * 0.82, 1.0, w);
         }
-        // A kitchen garden: round green plants along the ridges of earth.
+        // A kitchen garden: rows of lettuces and cabbages, leafy rosettes
+        // with their lobes, ribs and a lighter heart, on ridges of earth,
+        // each throwing a little shade.
         case 45: {
             let f = fract(p.y);
             let row = floor(p.y);
             let ridge = sin(f * 3.14159);
-            var c = mix(base * 0.6, base, ridge) * (0.92 + 0.1 * noise(p * 2.4));
+            let near = 1.0 - smoothstep(0.02, 0.08, w);
+            var c = mix(base * 0.55, base * 1.02, ridge) * (0.95 + 0.08 * noise(p * 2.4)) * (1.0 + 0.08 * (noise(p * 9.0) - 0.5) * near);
             let sh = hash2(vec2<f32>(row, 3.0));
             let i = floor(p.x / 0.5 + sh);
             let l = vec2<f32>(fract(p.x / 0.5 + sh) - 0.5, (f - 0.5) * 2.0);
-            let size = 0.32 + 0.1 * hash2(vec2<f32>(i, row));
-            let plant = 1.0 - smoothstep(size - 0.03, size, length(l));
-            let green = mix(vec3<f32>(0.07, 0.2, 0.03), vec3<f32>(0.16, 0.38, 0.06), noise(p * 24.0)) * (0.85 + 0.25 * (0.5 - l.y));
-            c = mix(c, green, plant);
-            tex_height = plant * (size - length(l)) * 0.15 * s;
-            return far_off(c, mix(base * 0.8, vec3<f32>(0.1, 0.27, 0.04), 0.4), 1.0, w);
+            let h = hash2(vec2<f32>(i, row));
+            let cabbage = hash2(vec2<f32>(row, 11.0)) > 0.5;
+            let lobes = select(9.0, 6.0, cabbage);
+            let size = 0.36 + 0.08 * h;
+            let r = length(l);
+            let ang = atan2(l.y, l.x) + h * 6.2831853;
+            let rim = size * (0.92 + 0.07 * cos(ang * lobes) + select(0.025, 0.0, cabbage) * cos(ang * lobes * 3.0));
+            let plant = 1.0 - smoothstep(rim - 0.03, rim, r);
+            let heart_r = size * 0.55 * (0.92 + 0.08 * cos(ang * lobes + 1.6));
+            let heart = 1.0 - smoothstep(heart_r - 0.03, heart_r, r);
+            let t = r / max(rim, 0.001);
+            let light = select(vec3<f32>(0.42, 0.66, 0.16), vec3<f32>(0.36, 0.56, 0.4), cabbage);
+            let dark = select(vec3<f32>(0.2, 0.42, 0.07), vec3<f32>(0.15, 0.33, 0.22), cabbage);
+            var green = mix(light, dark, smoothstep(0.15, 1.0, t));
+            green = mix(green, light * 1.12, heart * 0.7);
+            let rib = (1.0 - smoothstep(0.0, 0.03, abs(sin(ang * lobes * 0.5)) * r)) * (1.0 - heart) * near;
+            green = mix(green, light * 1.2 + vec3<f32>(0.06, 0.06, 0.04), rib * 0.5);
+            let shadow = 1.0 - smoothstep(size * 0.9, size * 1.15, length(l - vec2<f32>(0.08, -0.1)));
+            c = c * (1.0 - 0.35 * shadow);
+            c = mix(c, green * (0.9 + 0.2 * (0.5 - l.y)), plant);
+            let bulge = sqrt(max(1.0 - t * t, 0.0));
+            tex_height = (ridge * 0.05 + bulge * 0.12) * s;
+            return far_off(c, mix(base * 0.8, vec3<f32>(0.22, 0.42, 0.12), 0.5), 1.0, w);
         }
         // Cracked earth: dry plates curling up a little, dark cracks.
         case 46: {

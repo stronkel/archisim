@@ -6,6 +6,39 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-03 (87) · Gama estilizada: roca en estratos continua, tierra arada, huerta y empedrado antiguo
+
+Misma rama `bloque/gama-estilizada` y mismo pull request. Sin cambios de formato.
+
+Antonio probó la gama en el programa y le gustó. Señaló cuatro materiales:
+- la roca en estratos se corta en las esquinas y la unión no es continua;
+- la tierra en surcos parece una huerta y sus puntitos verdes quedan por debajo del resto;
+- la huerta se ve algo pobre;
+- el verdín del empedrado antiguo es demasiado llamativo.
+
+**Hecho**
+- **Roca en estratos:** las capas van por la altura, y la línea a lo largo de ellas es la misma a los dos lados de una esquina y alrededor de una curva. Las capas siguen sin cortes al doblar la esquina de un bloque o de un acantilado. Por encima, la roca se ve lisa, sin capas. En el muestrario de `archisim gama` es ahora un bloque de 1,6 m para que se vea doblar las esquinas.
+- **Tierra en surcos:** ahora es tierra arada, sin brotes:
+  - caballones que ondulan un poco, iluminados arriba;
+  - el fondo del surco más oscuro y húmedo;
+  - terrones pequeños y redondos.
+- **Huerta:** filas alternas de lechugas (verde claro, hoja rizada) y coles (verde azulado, hojas más anchas). Cada planta tiene su roseta con lóbulos, nervios, el cogollo más claro, su bulto en relieve y su sombra sobre la tierra.
+- **Empedrado antiguo:**
+  - juntas de tierra oscura, con un musgo verde oliva apagado solo a trechos;
+  - piedras con un abombado más suave, sin las medias lunas oscuras en un lado.
+- Las tres formas de dibujar (completas, ligeras y en imagen) y las imágenes del render y del glTF hacen lo mismo.
+
+**Pendiente**
+- Lo de la entrada 86: hierba en 3D con el material césped, relieve en los modos ligero y en imagen, y la gama para los edificios del entorno.
+- IfcOpenShell no se pudo instalar en este servidor por la red. El IFC no cambia en este bloque y la integración continua lo valida.
+
+**Qué debe probar Antonio**
+1. Ejecuta `archisim gama out/` y abre `out/gama.archisim` en 3D.
+2. Gira alrededor del bloque de roca en estratos (grupo Suelos) y del acantilado de la calle: las capas deben seguir sin cortes al doblar la esquina.
+3. Mira de cerca la tierra en surcos, la huerta y el empedrado antiguo.
+
+---
+
 ## 2026-11-02 (86) · Gama estilizada en la vista 3D: materiales, relieve, contorno fino y agua en movimiento
 
 Rama `bloque/gama-estilizada`, con pull request. Formato `.archisim` versión 71: texturas nuevas en el aspecto de los materiales. Las versiones anteriores avisan de que no pueden abrir el fichero.

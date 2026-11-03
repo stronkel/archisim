@@ -61,6 +61,10 @@ fn textured(base: vec3<f32>, world: vec3<f32>, n_in: vec3<f32>, tex: vec2<f32>) 
         let rim = 1.0 - abs(dot(normalize(n_in), d));
         c = c + base * 0.45 * rim * rim;
     }
+    if (kind == 29 && abs(normalize(n_in).z) >= 0.7) {
+        // Rock in strata, on top: the bare rock, not the layers.
+        c = base * (0.95 + 0.1 * (t.a * 1.6 - 0.9));
+    }
     return c;
 }
 
