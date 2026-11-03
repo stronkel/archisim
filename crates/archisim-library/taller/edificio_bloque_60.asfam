@@ -1,0 +1,53 @@
+family "Bloque de los años 60 y 70 (taller)"
+  category street
+  host none
+  version 1
+  description "Bloque desarrollista: ladrillo visto entre cantos de forjado blancos, terrazas voladas con antepecho de ladrillo y tubo de hierro (unas cerradas con aluminio, otras con el toldo verde bajado), persianas a distintas alturas, ventanas de la escalera entre plantas, aires acondicionados y tendederos, locales con cierre metálico y rótulo, portal de aluminio con marquesina y, en la azotea, casetón, depósito y antenas (modelo del taller, en revisión)"
+  folder "Taller · Edificios"
+
+type_params
+  section "Dimensiones"
+    width length = 18.00 range 9.00..40.00 label "Fachada"
+    depth length = 12.00 range 8.00..24.00 label "Fondo"
+    floors integer = 6 range 3..12 label "Plantas (con la baja)"
+    variant integer = 1 range 0..99 label "Variante"
+    shops bool = yes label "Locales en la planta baja"
+  section "Materiales"
+    brick material = "Ladrillo visto" label "Fachada"
+    ground_clad material = "Piedra caliza" label "Chapado de la planta baja"
+    party material = "Enfoscado gris" label "Medianeras y casetón"
+    slab_edge material = "Cal blanca" label "Cantos de forjado y vierteaguas"
+    frame material = "Aluminio plata" label "Carpintería"
+    alu material = "Aluminio plata" label "Cerramientos de terraza"
+    iron material = "Hierro forjado" label "Barandillas"
+    awning material = "Lona verde" label "Toldos"
+    awning_b material = "Lona crema" label "Toldos (franjas)"
+    shutter material = "Acero galvanizado" label "Cierres metálicos"
+    sign material = "Rótulo granate" label "Rótulos"
+    step material = "Terrazo" label "Escalones del portal"
+    roof_floor material = "Terracota" label "Azotea"
+    metal material = "Acero galvanizado" label "Antenas, soportes y tendederos"
+    appliance material = "Lacado blanco" label "Aires acondicionados y depósito"
+    glass material = "Vidrio claro" label "Vidrio"
+    curtain material = "Visillo" label "Visillos"
+    blind material = "Persiana crema" label "Persianas"
+    pot material = "Terracota" label "Macetas"
+    leaves material = "Hoja verde" label "Plantas"
+    flowers material = "Buganvilla" label "Flores"
+    interior material = "Interior en sombra" label "Interior visto por los huecos"
+    brass material = "Latón" label "Herrajes"
+    line material = "Línea blanca" label "Cuerdas de tender"
+    cloth_a material = "Lino añil" label "Ropa tendida 1"
+    cloth_b material = "Toalla blanca" label "Ropa tendida 2"
+    cloth_c material = "Lana teja" label "Ropa tendida 3"
+
+body
+  box (-(width) / 2, 0, 0) to ((width) / 2, depth, 3.6 + 2.85 * (floors - 1) + 4.6) material brick
+
+plan 1:50
+  polygon (-(width) / 2, 0) ((width) / 2, 0) ((width) / 2, depth) (-(width) / 2, depth) pen view
+
+outputs
+  generator = "props:fine_block_1960s"
+  ifc_class = "IfcBuildingElementProxy"
+  ifc_type = "USERDEFINED"

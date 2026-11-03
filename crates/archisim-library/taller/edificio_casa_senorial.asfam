@@ -1,0 +1,49 @@
+family "Casa señorial del casco (taller)"
+  category street
+  host none
+  version 1
+  description "Casa señorial de tres plantas por ejes: portada de piedra con pilastras, entablamento y escudo, rejas en los huecos de la planta baja, balcones de forja con guardapolvos en la planta noble, recercados blancos sobre estuco, esquinas de sillares, cornisa sobre canecillos, pretil con bolas y torre mirador en la azotea (modelo del taller, en revisión)"
+  folder "Taller · Edificios"
+
+type_params
+  section "Dimensiones"
+    width length = 12.00 range 7.00..24.00 label "Fachada"
+    depth length = 14.00 range 8.00..30.00 label "Fondo"
+    floors integer = 3 range 2..4 label "Plantas"
+    variant integer = 1 range 0..99 label "Variante"
+    tower bool = yes label "Torre mirador"
+  section "Materiales"
+    wall material = "Estuco amarillo" label "Fachada"
+    party material = "Encalado" label "Medianeras"
+    plinth material = "Estuco almagra" label "Zócalo"
+    trim material = "Cal blanca" label "Recercados, impostas y cornisa"
+    stone material = "Piedra caliza" label "Portada, balcones y bolas"
+    wood material = "Lacado verde carruaje" label "Portón"
+    frame material = "Lacado verde carruaje" label "Carpintería"
+    iron material = "Hierro forjado" label "Rejas y balcones"
+    roof_floor material = "Terracota" label "Azotea"
+    metal material = "Acero galvanizado" label "Antenas y tendedero"
+    appliance material = "Lacado blanco" label "Parabólica"
+    glass material = "Vidrio claro" label "Vidrio"
+    curtain material = "Visillo" label "Visillos"
+    blind material = "Persiana crema" label "Persianas"
+    pot material = "Terracota" label "Macetas"
+    leaves material = "Hoja verde" label "Plantas"
+    flowers material = "Buganvilla" label "Flores"
+    interior material = "Interior en sombra" label "Interior visto por los huecos"
+    brass material = "Latón" label "Herrajes"
+    line material = "Línea blanca" label "Cuerdas de tender"
+    cloth_a material = "Lino añil" label "Ropa tendida 1"
+    cloth_b material = "Toalla blanca" label "Ropa tendida 2"
+    cloth_c material = "Lana teja" label "Ropa tendida 3"
+
+body
+  box (-(width) / 2, 0, 0) to ((width) / 2, depth, 4.2 + 3.8 + 3.1 * (floors - 2) + 1.2) material wall
+
+plan 1:50
+  polygon (-(width) / 2, 0) ((width) / 2, 0) ((width) / 2, depth) (-(width) / 2, depth) pen view
+
+outputs
+  generator = "props:fine_manor_house"
+  ifc_class = "IfcBuildingElementProxy"
+  ifc_type = "USERDEFINED"

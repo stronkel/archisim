@@ -116,6 +116,10 @@ Uso:
       la aplicación: dice qué ha leído (unidades, caras antes y después de
       aligerarlo, materiales y su acabado) y escribe diseno.archisim,
       diseno.ifc y una planta 1:20 en SVG. Por defecto: ./out
+  archisim edificios [carpeta]
+      El taller de edificios: cada edificio nuevo del entorno, en revisión,
+      frente al edificio del mismo tipo que hace hoy ArchiSim:
+      edificios.archisim y edificios.ifc.
   archisim taller [carpeta]
       El taller de modelos: cada mueble nuevo, en revisión, delante del
       de la biblioteca al que sustituiría: taller.archisim, taller.ifc,
@@ -434,6 +438,10 @@ fn main() -> ExitCode {
         Some("taller") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
             report(taller::write(&dir))
+        }
+        Some("edificios") => {
+            let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
+            report(taller::write_buildings(&dir))
         }
         Some("tramas") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));

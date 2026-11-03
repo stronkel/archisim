@@ -1,0 +1,51 @@
+family "Edificio de ensanche (taller)"
+  category street
+  host none
+  version 1
+  description "Edificio de ensanche (1900–1930): planta baja de sillería con arcos de medio punto y abanicos de vidrio, balcones de forja sobre ménsulas en cada hueco, miradores de madera blanca superpuestos, alicantinas recogidas o bajadas, recercados con clave, impostas, cornisa sobre canecillos y ático tras una balaustrada (modelo del taller, en revisión)"
+  folder "Taller · Edificios"
+
+type_params
+  section "Dimensiones"
+    width length = 14.00 range 8.00..30.00 label "Fachada"
+    depth length = 16.00 range 8.00..30.00 label "Fondo"
+    floors integer = 5 range 3..8 label "Plantas (con la baja)"
+    variant integer = 1 range 0..99 label "Variante"
+    miradores bool = yes label "Miradores"
+  section "Materiales"
+    ashlar material = "Sillería arenisca" label "Planta baja"
+    plinth material = "Piedra gris" label "Zócalo"
+    wall material = "Monocapa crema" label "Fachada"
+    party material = "Enfoscado gris" label "Medianeras"
+    trim material = "Cal blanca" label "Recercados, impostas y cornisa"
+    stone material = "Piedra caliza" label "Balcones y dovelas"
+    frame material = "Lacado blanco" label "Carpintería"
+    bay material = "Lacado blanco" label "Miradores"
+    wood material = "Nogal" label "Portal y escaparates"
+    iron material = "Hierro forjado" label "Balcones"
+    shutter material = "Acero gris" label "Cierres de los locales"
+    alicantina material = "Enea" label "Alicantinas"
+    zinc material = "Zinc" label "Tejadillo del mirador"
+    roof_floor material = "Terracota" label "Azotea"
+    metal material = "Acero galvanizado" label "Antenas"
+    appliance material = "Lacado blanco" label "Depósito y parabólica"
+    line material = "Línea blanca" label "Cuerdas"
+    glass material = "Vidrio claro" label "Vidrio"
+    curtain material = "Visillo" label "Visillos"
+    blind material = "Persiana crema" label "Persianas"
+    pot material = "Terracota" label "Macetas"
+    leaves material = "Hoja verde" label "Plantas"
+    flowers material = "Buganvilla" label "Flores"
+    interior material = "Interior en sombra" label "Interior visto por los huecos"
+    brass material = "Latón" label "Herrajes"
+
+body
+  box (-(width) / 2, 0, 0) to ((width) / 2, depth, 4.5 + 3.3 * (floors - 1) + 3.0) material ashlar
+
+plan 1:50
+  polygon (-(width) / 2, 0) ((width) / 2, 0) ((width) / 2, depth) (-(width) / 2, depth) pen view
+
+outputs
+  generator = "props:fine_ensanche"
+  ifc_class = "IfcBuildingElementProxy"
+  ifc_type = "USERDEFINED"

@@ -1,0 +1,51 @@
+family "Torre de apartamentos de costa (taller)"
+  category street
+  host none
+  version 1
+  description "Torre de apartamentos de costa sobre soportales: terraza corrida en cada planta con barandilla de vidrio o de fábrica blanca con banda de color, aletas entre viviendas, correderas de aluminio, toldos a rayas, toallas tendidas, cafetería con toldo en la planta baja y, en la cubierta, casetón, antenas y placas solares (modelo del taller, en revisión)"
+  folder "Taller · Edificios"
+
+type_params
+  section "Dimensiones"
+    width length = 20.00 range 10.00..40.00 label "Fachada"
+    depth length = 13.00 range 8.00..24.00 label "Fondo"
+    floors integer = 10 range 4..16 label "Plantas (con la baja)"
+    variant integer = 1 range 0..99 label "Variante"
+    glass_rail bool = no label "Barandillas de vidrio"
+  section "Materiales"
+    wall material = "Cal blanca" label "Fachada"
+    ground_clad material = "Piedra caliza" label "Planta baja"
+    slab_edge material = "Cal blanca" label "Cantos de las terrazas"
+    band material = "Lacado azul celeste" label "Banda de las barandillas"
+    alu material = "Aluminio blanco" label "Carpintería"
+    awning material = "Lino añil" label "Toldos"
+    awning_b material = "Lona crema" label "Toldos (franjas)"
+    shutter material = "Acero galvanizado" label "Cierre de la cafetería"
+    sign material = "Rótulo granate" label "Rótulo"
+    step material = "Mármol" label "Escalones"
+    panel material = "Panel solar" label "Placas solares"
+    roof_floor material = "Terracota" label "Cubierta"
+    metal material = "Acero galvanizado" label "Antenas y soportes"
+    appliance material = "Lacado blanco" label "Aires acondicionados y depósito"
+    cloth_a material = "Lino añil" label "Toallas 1"
+    cloth_b material = "Toalla blanca" label "Toallas 2"
+    cloth_c material = "Lana teja" label "Toallas 3"
+    glass material = "Vidrio claro" label "Vidrio"
+    curtain material = "Visillo" label "Visillos"
+    blind material = "Persiana crema" label "Persianas"
+    pot material = "Terracota" label "Macetas"
+    leaves material = "Hoja verde" label "Plantas"
+    flowers material = "Buganvilla" label "Flores"
+    interior material = "Interior en sombra" label "Interior visto por los huecos"
+    brass material = "Latón" label "Herrajes"
+
+body
+  box (-(width) / 2, 0, 0) to ((width) / 2, depth, 4.0 + 2.9 * (floors - 1) + 3.2) material wall
+
+plan 1:50
+  polygon (-(width) / 2, 0) ((width) / 2, 0) ((width) / 2, depth) (-(width) / 2, depth) pen view
+
+outputs
+  generator = "props:fine_coastal_tower"
+  ifc_class = "IfcBuildingElementProxy"
+  ifc_type = "USERDEFINED"

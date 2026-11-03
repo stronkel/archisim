@@ -12,6 +12,7 @@ pub mod armchairs;
 pub mod bath;
 pub mod bedding;
 pub mod bedroom;
+pub mod buildings;
 pub mod built_in;
 pub mod chairs;
 pub mod climbers;
@@ -52,6 +53,12 @@ use soft::{knife_pillow, Soft};
 
 /// The kinds of the workshop and the names of their models.
 pub const KINDS: &[(&str, &[&str])] = &[
+    ("fine_village_house", &["Único"]),
+    ("fine_manor_house", &["Único"]),
+    ("fine_block_1960s", &["Único"]),
+    ("fine_ensanche", &["Único"]),
+    ("fine_coastal_tower", &["Único"]),
+    ("fine_terraced_row", &["Único"]),
     ("built_in_wardrobe", &["Empotrado"]),
     ("door", &door::COLLECTIONS),
     ("sliding_door", &door::COLLECTIONS),
@@ -581,6 +588,12 @@ fn chairs_around(b: &mut Builder, p: &Params) {
 /// Makes a workshop model, if `kind` is one.
 pub fn make(kind: &str, b: &mut Builder, p: &Params) -> bool {
     match kind {
+        "fine_village_house" => buildings::village::village_house(b, p),
+        "fine_manor_house" => buildings::manor::manor_house(b, p),
+        "fine_block_1960s" => buildings::block60::block_1960s(b, p),
+        "fine_ensanche" => buildings::ensanche::ensanche(b, p),
+        "fine_coastal_tower" => buildings::coast::coastal_tower(b, p),
+        "fine_terraced_row" => buildings::terraced::terraced_row(b, p),
         "built_in_wardrobe" => built_in::wardrobe(b, p),
         "door" => door::door(b, p),
         "sliding_door" => door::sliding_door(b, p),

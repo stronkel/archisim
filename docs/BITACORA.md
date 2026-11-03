@@ -6,6 +6,46 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-03 (89) · Taller de edificios, tanda 1: seis edificios españoles al nivel de los muebles
+
+Rama `bloque/taller-edificios`, con pull request. Sin cambios de formato ni de IFC. Las piezas nuevas son recetas del taller (`archisim-library/taller/edificio_*.asfam`), así que no entran en la biblioteca hasta que Antonio las apruebe. Diseño y catálogo completo en `docs/EDIFICIOS_TALLER.md`.
+
+**Hecho**
+- Seis edificios nuevos, cada uno con sus tamaños, plantas y materiales por pieza:
+  - casa de pueblo andaluza;
+  - casa señorial del casco con torre mirador;
+  - edificio de ensanche;
+  - bloque de los 60–70;
+  - torre de apartamentos de costa;
+  - hilera de adosados de promotora.
+- Están hechos como los muebles (`archisim_props::fine::buildings`), con las mismas líneas y la misma paleta:
+  - muros perforados con los huecos en su mocheta;
+  - la carpintería retranqueada;
+  - persianas a distintas alturas, visillos, rejas voladas, cierros, balcones de forja con ménsulas, alicantinas, miradores;
+  - toldos a rayas, aires acondicionados, ropa tendida, macetas, faroles;
+  - cubiertas de teja canal a canal, azoteas con pretil, depósitos, antenas y placas.
+- `archisim edificios out/`: una calle con los nuevos frente a los de hoy (U6) del mismo tipo.
+- Fotos con `building_pictures` (`ARCHISIM_EDIFICIOS_OUT`).
+- Paleta: once materiales nuevos (lacado verde carruaje, lonas, aluminios, interior en sombra, monocapa crema…).
+
+**Pendiente**
+- La opinión de Antonio sobre la tanda 1.
+- Después, integrarlos en U6/U7: que una masa vestida use estos modelos a su tamaño.
+- Siguientes tandas en `docs/EDIFICIOS_TALLER.md` §3.
+- En las fotos del estudio, las sombras de los edificios largos se veían mal; las fotos del taller de edificios usan la sombra como la Maqueta (`building_picture`).
+- El IFC de `edificios.ifc` valida sin errores salvo el aviso de «no hay muros», que es lo esperado en un proyecto solo de objetos.
+
+**Qué debe probar Antonio**
+1. `cargo run -p archisim-cli -- edificios out/` y abre `out/edificios.archisim` en 3D (o mira las fotos que van en la conversación).
+2. Calle abajo, compara cada edificio nuevo con el de hoy que tiene enfrente.
+3. Fíjate en:
+   - proporciones y alturas de planta;
+   - colores por defecto;
+   - lo que falta o sobra en cada tipo;
+   - si el «aire español» se reconoce.
+
+---
+
 ## 2026-11-03 (88) · Interfaz, segunda versión: V1 a V4
 
 Rama `bloque/interfaz-v2`, con pull request. Sin cambios de formato ni de IFC. Diseño en `docs/INTERFAZ.md` §12, decidido con Antonio sobre el prototipo «ArchiSim · interfaz por colores y barras».

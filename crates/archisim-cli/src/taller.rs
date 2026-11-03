@@ -42,3 +42,34 @@ pub fn write(dir: &Path) -> Res {
     );
     Ok(())
 }
+
+/// `archisim edificios`: the workshop of buildings (tanda 1), each new
+/// building on the south side of a street facing today's of the same
+/// kind: edificios.archisim and edificios.ifc.
+pub fn write_buildings(dir: &Path) -> Res {
+    let m = archisim_library::building_workshop::project()?;
+    std::fs::create_dir_all(dir)?;
+    archisim_file::save(
+        &m,
+        dir.join(format!("edificios.{}", archisim_file::EXTENSION)),
+    )?;
+    std::fs::write(
+        dir.join("edificios.ifc"),
+        crate::ifc_text(&m, "edificios", None),
+    )?;
+    for b in archisim_library::building_workshop::BUILDINGS {
+        let t = m
+            .object_types()
+            .find(|t| t.name == b.name)
+            .ok_or("falta un edificio del taller")?;
+        let tris = m.type_prop(t.id).map_or(0, |p| p.0.triangle_count());
+        println!("{}: {tris} triángulos", b.name);
+    }
+    println!(
+        "Taller de edificios: {} edificios nuevos frente a los de hoy, en {}",
+        archisim_library::building_workshop::BUILDINGS.len(),
+        dir.join(format!("edificios.{}", archisim_file::EXTENSION))
+            .display()
+    );
+    Ok(())
+}

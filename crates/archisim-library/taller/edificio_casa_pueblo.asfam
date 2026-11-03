@@ -1,0 +1,45 @@
+family "Casa de pueblo andaluza (taller)"
+  category street
+  host none
+  version 1
+  description "Casa de pueblo entre medianeras: muros encalados, zócalo pintado, puerta de cuarterones con montante y escalón, rejas voladas o cierro en la planta baja, balcón de forja, macetas colgadas, farol, alero de dos hiladas de teja y cubierta de teja curva a la calle y al patio (modelo del taller, en revisión)"
+  folder "Taller · Edificios"
+
+type_params
+  section "Dimensiones"
+    width length = 7.00 range 4.50..14.00 label "Fachada"
+    depth length = 10.00 range 6.00..20.00 label "Fondo"
+    floors integer = 2 range 1..3 label "Plantas"
+    variant integer = 1 range 0..99 label "Variante (cambia puertas, persianas y macetas)"
+    cierro bool = yes label "Cierro en la planta baja"
+  section "Materiales"
+    wall material = "Encalado" label "Fachada"
+    party material = "Encalado" label "Medianeras"
+    plinth material = "Estuco almagra" label "Zócalo"
+    trim material = "Estuco amarillo" label "Recercados y cornisa"
+    tiles material = "Teja curva" label "Tejas"
+    roof material = "Terracota" label "Faldones"
+    step material = "Mármol" label "Escalón, vierteaguas y balcón"
+    wood material = "Nogal" label "Puertas"
+    frame material = "Lacado verde carruaje" label "Carpintería"
+    iron material = "Hierro forjado" label "Rejas y balcón"
+    lamp material = "Luz de farola" label "Farol"
+    glass material = "Vidrio claro" label "Vidrio"
+    curtain material = "Visillo" label "Visillos"
+    blind material = "Persiana crema" label "Persianas"
+    pot material = "Terracota" label "Macetas"
+    leaves material = "Hoja verde" label "Plantas"
+    flowers material = "Buganvilla" label "Flores"
+    interior material = "Interior en sombra" label "Interior visto por los huecos"
+    brass material = "Latón" label "Herrajes"
+
+body
+  box (-(width) / 2, 0, 0) to ((width) / 2, depth, 3.1 + 2.85 * (floors - 1) + 0.35 + depth / 2 * 0.42) material wall
+
+plan 1:50
+  polygon (-(width) / 2, 0) ((width) / 2, 0) ((width) / 2, depth) (-(width) / 2, depth) pen view
+
+outputs
+  generator = "props:fine_village_house"
+  ifc_class = "IfcBuildingElementProxy"
+  ifc_type = "USERDEFINED"

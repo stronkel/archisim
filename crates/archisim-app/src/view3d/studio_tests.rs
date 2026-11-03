@@ -2306,3 +2306,142 @@ fn window_pictures() {
         }
     }
 }
+
+/// The workshop of buildings (taller de edificios): each new building
+/// alone, today's building of the same kind alone, the two side by side
+/// (today on the left) and the whole street, into
+/// `ARCHISIM_EDIFICIOS_OUT`: `ARCHISIM_EDIFICIOS_OUT=folder cargo test
+/// --release -p archisim-app -- building_pictures` (`ARCHISIM_EDIFICIOS`
+/// = numbers to make only some, as `1,4`).
+#[test]
+fn building_pictures() {
+    let Some(dir) = std::env::var_os("ARCHISIM_EDIFICIOS_OUT") else {
+        return;
+    };
+    let dir = Path::new(&dir);
+    std::fs::create_dir_all(dir).unwrap();
+    let Some(gpu) = super::gpu_tests::gpu() else {
+        eprintln!("No graphics adapter: pictures skipped.");
+        return;
+    };
+    let wanted: Vec<usize> = std::env::var("ARCHISIM_EDIFICIOS")
+        .unwrap_or_default()
+        .split(',')
+        .filter_map(|n| n.trim().parse().ok())
+        .collect();
+    let mut r = Renderer::new(&gpu.0, gpu.2, TextureMode::Full);
+    let m = archisim_library::building_workshop::project().unwrap();
+    let size = [1100u32, 900u32];
+    let aspect = size[0] as f32 / size[1] as f32;
+    let bare = |keep_object: Option<usize>, keep_today: Option<(f64, f64)>| {
+        let mut one = m.clone();
+        let objects: Vec<_> = one.objects().map(|o| o.id).collect();
+        for (i, o) in objects.into_iter().enumerate() {
+            if keep_object != Some(i) {
+                one.remove_object(o).unwrap();
+            }
+        }
+        let masses: Vec<_> = one
+            .env_buildings()
+            .filter(|b| {
+                let o = b.outline();
+                let x = o.iter().map(|p| p.x).sum::<f64>() / o.len().max(1) as f64;
+                !keep_today.is_some_and(|(a, e)| x > a && x < e)
+            })
+            .map(|b| b.id)
+            .collect();
+        for id in masses {
+            one.remove_mass(id).unwrap();
+        }
+        let roads: Vec<_> = one.roads().map(|r| r.id).collect();
+        for id in roads {
+            one.remove_road(id).unwrap();
+        }
+        one
+    };
+    let mut x = 0.0;
+    for (i, b) in archisim_library::building_workshop::BUILDINGS
+        .iter()
+        .enumerate()
+    {
+        let span = (x, x + b.size.0);
+        x += b.size.0 + b.gap;
+        if !wanted.is_empty() && !wanted.contains(&(i + 1)) {
+            continue;
+        }
+        let new = building_picture(
+            &mut r,
+            &gpu,
+            &bare(Some(i), None),
+            |lo, hi| camera(lo, hi, aspect, 125.0, 14.0, 1.0),
+            size,
+            Light::Day,
+        );
+        let today = building_picture(
+            &mut r,
+            &gpu,
+            &bare(None, Some(span)),
+            |lo, hi| camera(lo, hi, aspect, -55.0, 14.0, 1.0),
+            size,
+            Light::Day,
+        );
+        let n = i + 1;
+        new.save_png(dir.join(format!("{n:02}-nuevo.png"))).unwrap();
+        side_by_side(&today, &new)
+            .save_png(dir.join(format!("{n:02}-hoy-y-nuevo.png")))
+            .unwrap();
+    }
+    if wanted.is_empty() {
+        for (name, yaw, pitch, zoom) in [
+            ("calle-nuevos", 140.0, 22.0, 2.3),
+            ("calle-hoy", -40.0, 22.0, 2.3),
+        ] {
+            let pic = building_picture(
+                &mut r,
+                &gpu,
+                &m,
+                |lo, hi| camera(lo, hi, aspect, yaw, pitch, zoom),
+                [1800, 900],
+                Light::Day,
+            );
+            pic.save_png(dir.join(format!("{name}.png"))).unwrap();
+        }
+    }
+}
+
+/// A picture as the Maqueta shows it, the shadows drawn for the scene's
+/// own box (a long street casts its shadows finer than the studio's).
+fn building_picture(
+    r: &mut Renderer,
+    gpu: &(eframe::wgpu::Device, eframe::wgpu::Queue, bool),
+    m: &Model,
+    cam: impl Fn(glam::Vec3, glam::Vec3) -> Camera,
+    size: [u32; 2],
+    light: Light,
+) -> Pixmap {
+    let scene = Scene::build(m, &BTreeSet::new());
+    r.set_scene(&gpu.0, &scene);
+    r.set_clip(None);
+    r.set_cut(None);
+    r.set_transparent(false);
+    r.set_atmosphere(Some(Atmosphere {
+        light,
+        ground_z: 0.0,
+        grid: None,
+    }));
+    r.set_look(
+        Quality::default(),
+        Some(glam::Vec3::new(-0.45, 0.55, 0.75).normalize()),
+    );
+    let camera = cam(scene.lo, scene.hi);
+    let t = camera.target;
+    let reach = (camera.distance * 0.8).clamp(8.0, 120.0);
+    r.set_shadow_focus(Some((
+        glam::Vec3::new(t.x - reach, t.y - reach, f32::MIN),
+        glam::Vec3::new(t.x + reach, t.y + reach, f32::MAX),
+    )));
+    r.thin_lines = true;
+    r.render(&gpu.0, &gpu.1, &camera, size, 1);
+    let (w, h, px) = r.read_pixels(&gpu.0, &gpu.1).unwrap();
+    Pixmap::from_vec(px, IntSize::from_wh(w, h).unwrap()).unwrap()
+}

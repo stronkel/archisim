@@ -799,6 +799,7 @@ pub enum StudioValue {
 }
 use StudioValue::{B, C, N, T};
 
+pub mod building_workshop;
 pub mod carto;
 pub mod collections;
 pub mod download;
@@ -2314,6 +2315,18 @@ pub const COZY_PALETTE: &[(&str, &str, [u8; 3])] = &[
     ("Terciopelo verde botella", "fabric", [44, 82, 64]),
     // The lamps of the collections (paquete 4).
     ("Papel de arroz", "other", [246, 240, 226]),
+    // The buildings of the workshop (taller de edificios, tanda 1).
+    ("Lacado verde carruaje", "wood", [46, 84, 62]),
+    ("Lona verde", "fabric", [58, 112, 76]),
+    ("Lona crema", "fabric", [236, 226, 200]),
+    ("Aluminio plata", "metal", [178, 178, 172]),
+    ("Aluminio blanco", "metal", [232, 232, 228]),
+    ("Interior en sombra", "other", [58, 58, 62]),
+    ("Enfoscado gris", "stone", [168, 164, 156]),
+    ("Monocapa crema", "stone", [226, 208, 172]),
+    ("Rótulo granate", "other", [122, 31, 43]),
+    ("Panel solar", "glass", [36, 52, 86]),
+    ("Persiana crema", "metal", [214, 204, 178]),
 ];
 
 /// The steel of the reinforcement (E11): the project's, or added.
