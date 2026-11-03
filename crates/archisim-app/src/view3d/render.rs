@@ -127,6 +127,9 @@ struct GpuMesh {
     vertices: wgpu::Buffer,
     indices: wgpu::Buffer,
     count: u32,
+    /// Its edges for the wireframe («Alámbrico»): pairs of corners where
+    /// the surface ends or turns; made only while it is shown.
+    wire: Option<(wgpu::Buffer, u32)>,
     lo: glam::Vec3,
     hi: glam::Vec3,
 }
@@ -240,9 +243,13 @@ pub struct Renderer {
     /// Seconds, for the water's movement (wrapped every hour).
     pub time: f32,
     /// How the faces are drawn (§12.5): 0 as their material (shaded,
-    /// textured or realistic), 1 «Aristas» (pale, flat, every edge in
-    /// ink), 2 «Líneas ocultas» (white paper, the visible edges in ink).
+    /// textured or realistic), 1 «Colores planos» (pale, flat, every
+    /// edge in ink), 2 «Líneas ocultas» (white paper, the visible edges in
+    /// ink), 3 «Alámbrico» (only the edges, seen through).
     pub style: u8,
+    /// The scene on the card carries its wireframe edges.
+    wired: bool,
+    wire_pipeline: wgpu::RenderPipeline,
     /// The background left transparent (premultiplied: what is drawn
     /// under the picture, the ground grid, shows where there is no model).
     transparent: bool,
@@ -512,6 +519,40 @@ impl Renderer {
             multiview_mask: None,
             cache: None,
         });
+        // The wireframe: the edges as lines, through everything.
+        let wire_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("wire"),
+            layout: Some(&model_layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("vs_model"),
+                compilation_options: Default::default(),
+                buffers: &[Some(vertex_layout.clone()), Some(instance_layout.clone())],
+            },
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::LineList,
+                ..Default::default()
+            },
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: DEPTH_FORMAT,
+                depth_write_enabled: Some(false),
+                depth_compare: Some(wgpu::CompareFunction::Always),
+                stencil: Default::default(),
+                bias: Default::default(),
+            }),
+            multisample: wgpu::MultisampleState {
+                count: SAMPLES,
+                ..Default::default()
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fs_wire"),
+                compilation_options: Default::default(),
+                targets: &[Some(COLOR_FORMAT.into()), Some(NORMAL_FORMAT.into())],
+            }),
+            multiview_mask: None,
+            cache: None,
+        });
         let grass_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("grass"),
             layout: Some(&model_layout),
@@ -682,6 +723,8 @@ impl Renderer {
             thin_lines: false,
             relief: true,
             style: 0,
+            wired: false,
+            wire_pipeline,
             time: 0.0,
             transparent: false,
             atmosphere: None,
@@ -743,7 +786,7 @@ impl Renderer {
     /// Uploads (or clears) the filled sections of the objects the section
     /// box cuts.
     pub fn set_fill(&mut self, device: &wgpu::Device, fill: &[Chunk]) {
-        self.fill = upload(device, fill);
+        self.fill = upload(device, fill, false);
     }
 
     /// Sets (or clears) the cut away walls of the next pictures.
@@ -755,7 +798,13 @@ impl Renderer {
     /// selected element (`Scene::of_solids`).
     pub fn set_overlay(&mut self, device: &wgpu::Device, overlay: Option<&Scene>) {
         self.uploads += 1;
-        self.overlay = overlay.map(|o| (upload(device, &o.opaque), upload(device, &o.glass)));
+        let wire = self.wired;
+        self.overlay = overlay.map(|o| {
+            (
+                upload(device, &o.opaque, wire),
+                upload(device, &o.glass, wire),
+            )
+        });
     }
 
     /// How much memory of the graphics card the scene takes, bytes.
@@ -782,13 +831,15 @@ impl Renderer {
     pub fn set_scene(&mut self, device: &wgpu::Device, scene: &Scene) {
         self.uploads += 1;
         self.bounds = (scene.lo, scene.hi);
-        self.opaque = upload(device, &scene.opaque);
-        self.grass = upload(device, &scene.grass);
-        self.glass = upload(device, &scene.glass);
+        let wire = self.style == 3;
+        self.wired = wire;
+        self.opaque = upload(device, &scene.opaque, wire);
+        self.grass = upload(device, &scene.grass, false);
+        self.glass = upload(device, &scene.glass, wire);
         self.groups = scene
             .groups
             .iter()
-            .map(|g| upload_group(device, g))
+            .map(|g| upload_group(device, g, wire))
             .collect();
         self.selected = scene.has_selection();
         self.lamps = scene.lamps.clone();
@@ -1158,42 +1209,71 @@ impl Renderer {
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
-            pass.set_pipeline(&self.model_pipeline);
             pass.set_bind_group(0, &self.globals_bind, &[]);
             pass.set_bind_group(1, shadow_bind, &[]);
             pass.set_bind_group(2, &self.pictures_bind, &[]);
-            for m in self.opaque.iter().filter(|m| chunk_seen(m)) {
-                draw_mesh(&mut pass, m, same, 0..m.count, 0..1);
-            }
-            for m in self.overlay.iter().flat_map(|o| o.0.iter()) {
-                draw_mesh(&mut pass, m, same, 0..m.count, 0..1);
-            }
-            if self.clip.is_some() {
-                for m in &self.fill {
+            if self.style == 3 && self.wired {
+                // The wireframe: every edge, of what is in front and
+                // behind, and nothing else.
+                pass.set_pipeline(&self.wire_pipeline);
+                let wire = |pass: &mut wgpu::RenderPass, m: &GpuMesh, inst, which| {
+                    if let Some((buf, n)) = &m.wire {
+                        pass.set_vertex_buffer(0, m.vertices.slice(..));
+                        pass.set_vertex_buffer(1, inst);
+                        pass.set_index_buffer(buf.slice(..), wgpu::IndexFormat::Uint32);
+                        pass.draw_indexed(0..*n, 0, which);
+                    }
+                };
+                let loose = self.opaque.iter().chain(&self.glass).chain(
+                    self.overlay
+                        .iter()
+                        .flat_map(|o| o.0.iter().chain(o.1.iter())),
+                );
+                for m in loose.filter(|m| chunk_seen(m)) {
+                    wire(&mut pass, m, same, 0..1);
+                }
+                for (g, d) in self.groups.iter().zip(&draws) {
+                    for range in d.levels.iter().filter(|r| !r.is_empty()) {
+                        for m in g.opaque.iter().chain(&g.glass) {
+                            wire(&mut pass, m, self.instance_buffer.slice(..), range.clone());
+                        }
+                    }
+                }
+            } else {
+                pass.set_pipeline(&self.model_pipeline);
+                for m in self.opaque.iter().filter(|m| chunk_seen(m)) {
                     draw_mesh(&mut pass, m, same, 0..m.count, 0..1);
                 }
-            }
-            for (g, d) in self.groups.iter().zip(&draws) {
-                let Some(m) = &g.opaque else {
-                    continue;
-                };
-                for (level, range) in d.levels.iter().enumerate() {
-                    if range.is_empty() {
-                        continue;
-                    }
-                    let (first, count) = g.levels[level];
-                    draw_mesh(
-                        &mut pass,
-                        m,
-                        self.instance_buffer.slice(..),
-                        first..first + count,
-                        range.clone(),
-                    );
+                for m in self.overlay.iter().flat_map(|o| o.0.iter()) {
+                    draw_mesh(&mut pass, m, same, 0..m.count, 0..1);
                 }
-            }
-            pass.set_pipeline(&self.grass_pipeline);
-            for m in self.grass.iter().filter(|m| chunk_seen(m)) {
-                draw_mesh(&mut pass, m, same, 0..m.count, 0..1);
+                if self.clip.is_some() {
+                    for m in &self.fill {
+                        draw_mesh(&mut pass, m, same, 0..m.count, 0..1);
+                    }
+                }
+                for (g, d) in self.groups.iter().zip(&draws) {
+                    let Some(m) = &g.opaque else {
+                        continue;
+                    };
+                    for (level, range) in d.levels.iter().enumerate() {
+                        if range.is_empty() {
+                            continue;
+                        }
+                        let (first, count) = g.levels[level];
+                        draw_mesh(
+                            &mut pass,
+                            m,
+                            self.instance_buffer.slice(..),
+                            first..first + count,
+                            range.clone(),
+                        );
+                    }
+                }
+                pass.set_pipeline(&self.grass_pipeline);
+                for m in self.grass.iter().filter(|m| chunk_seen(m)) {
+                    draw_mesh(&mut pass, m, same, 0..m.count, 0..1);
+                }
             }
         }
         // 2. The glass over it; the samples are averaged into the picture.
@@ -1218,11 +1298,21 @@ impl Renderer {
             pass.set_bind_group(0, &self.globals_bind, &[]);
             pass.set_bind_group(1, shadow_bind, &[]);
             pass.set_bind_group(2, &self.pictures_bind, &[]);
-            let over = self.overlay.iter().flat_map(|o| o.1.iter());
-            for m in self.glass.iter().filter(|m| chunk_seen(m)).chain(over) {
+            let wireframe = self.style == 3 && self.wired;
+            let over = self
+                .overlay
+                .iter()
+                .flat_map(|o| o.1.iter())
+                .filter(|_| !wireframe);
+            for m in self
+                .glass
+                .iter()
+                .filter(|m| !wireframe && chunk_seen(m))
+                .chain(over)
+            {
                 draw_mesh(&mut pass, m, same, 0..m.count, 0..1);
             }
-            for (g, d) in self.groups.iter().zip(&draws) {
+            for (g, d) in self.groups.iter().zip(&draws).filter(|_| !wireframe) {
                 if let (Some(m), false) = (&g.glass, d.glass.is_empty()) {
                     draw_mesh(
                         &mut pass,
@@ -1266,6 +1356,11 @@ impl Renderer {
         }
         queue.submit([encoder.finish()]);
         &t.color
+    }
+
+    /// Whether the scene on the card carries its wireframe.
+    pub fn wired(&self) -> bool {
+        self.wired
     }
 
     /// A view of the last picture for egui (gamma-encoded values).
@@ -1352,8 +1447,22 @@ fn upload_mesh(
     mesh: &super::scene::Mesh,
     lo: glam::Vec3,
     hi: glam::Vec3,
+    wire: Option<usize>,
 ) -> Option<GpuMesh> {
     (!mesh.is_empty()).then(|| GpuMesh {
+        wire: wire.and_then(|n| {
+            let edges = feature_edges(mesh, n.min(mesh.indices.len()));
+            (!edges.is_empty()).then(|| {
+                (
+                    device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                        label: Some("wire"),
+                        contents: bytemuck::cast_slice(&edges),
+                        usage: wgpu::BufferUsages::INDEX,
+                    }),
+                    edges.len() as u32,
+                )
+            })
+        }),
         vertices: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("corners"),
             contents: bytemuck::cast_slice(&mesh.vertices),
@@ -1370,20 +1479,82 @@ fn upload_mesh(
     })
 }
 
+/// The edges of a mesh's first `n` indices where its surface ends or
+/// turns by more than about 25° (each pair of corners once): the lines of
+/// the wireframe, without the diagonals of flat faces.
+fn feature_edges(mesh: &super::scene::Mesh, n: usize) -> Vec<u32> {
+    use std::collections::HashMap;
+    let pos = |i: u32| glam::Vec3::from_array(mesh.vertices[i as usize].pos);
+    // Corners at the same place are the same corner (faces are split at
+    // creases into corners of their own).
+    let key = |i: u32| {
+        let p = pos(i);
+        [
+            (p.x * 2000.0).round() as i64,
+            (p.y * 2000.0).round() as i64,
+            (p.z * 2000.0).round() as i64,
+        ]
+    };
+    // An edge by its two corners' places: its corners, the first face's
+    // normal and how many faces it has.
+    type Edge = (u32, u32, glam::Vec3, u32);
+    let mut faces: HashMap<([i64; 3], [i64; 3]), Edge> = HashMap::new();
+    let mut turned = Vec::new();
+    for t in mesh.indices[..n - n % 3].chunks_exact(3) {
+        let (a, b, c) = (pos(t[0]), pos(t[1]), pos(t[2]));
+        let normal = (b - a).cross(c - a);
+        if normal.length_squared() < 1e-14 {
+            continue;
+        }
+        let normal = normal.normalize();
+        for (i, j) in [(t[0], t[1]), (t[1], t[2]), (t[2], t[0])] {
+            let (ki, kj) = (key(i), key(j));
+            if ki == kj {
+                continue;
+            }
+            let k = if ki < kj { (ki, kj) } else { (kj, ki) };
+            match faces.get_mut(&k) {
+                Some(e) => {
+                    // A second face along it: a line only if they turn.
+                    if e.3 == 1 && e.2.dot(normal).abs() < 0.9 {
+                        turned.push((e.0, e.1));
+                    }
+                    e.3 += 1;
+                }
+                None => {
+                    faces.insert(k, (i, j, normal, 1));
+                }
+            }
+        }
+    }
+    let mut out: Vec<u32> = faces
+        .values()
+        .filter(|e| e.3 == 1)
+        .flat_map(|e| [e.0, e.1])
+        .collect();
+    out.extend(turned.into_iter().flat_map(|(a, b)| [a, b]));
+    out
+}
+
 /// The chunks of the elements drawn once (each well under the size of
 /// buffer every card takes: 32 768 triangles).
-fn upload(device: &wgpu::Device, chunks: &[Chunk]) -> Vec<GpuMesh> {
+fn upload(device: &wgpu::Device, chunks: &[Chunk], wire: bool) -> Vec<GpuMesh> {
     chunks
         .iter()
-        .filter_map(|c| upload_mesh(device, &c.mesh, c.lo, c.hi))
+        .filter_map(|c| upload_mesh(device, &c.mesh, c.lo, c.hi, wire.then_some(usize::MAX)))
         .collect()
 }
 
-fn upload_group(device: &wgpu::Device, g: &Group) -> GpuGroup {
+fn upload_group(device: &wgpu::Device, g: &Group, wire: bool) -> GpuGroup {
+    // The wireframe of its finest version.
+    let finest = g
+        .levels
+        .first()
+        .map_or(usize::MAX, |l| (l.0 + l.1) as usize);
     GpuGroup {
-        opaque: upload_mesh(device, &g.opaque, g.lo, g.hi),
+        opaque: upload_mesh(device, &g.opaque, g.lo, g.hi, wire.then_some(finest)),
         levels: g.levels.clone(),
-        glass: upload_mesh(device, &g.glass, g.lo, g.hi),
+        glass: upload_mesh(device, &g.glass, g.lo, g.hi, wire.then_some(usize::MAX)),
         instances: g.instances.clone(),
         bounds: g.bounds.clone(),
         radius: g.radius(),

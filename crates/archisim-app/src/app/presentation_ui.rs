@@ -105,7 +105,9 @@ impl ArchiSimApp {
                 ui.add_space(6.0);
                 if ui
                     .button("Estilos de partida")
-                    .on_hover_text("Añade AD5, Terracota, Bosque, Azul y Monocromo si faltan")
+                    .on_hover_text(
+                        "Añade Blanco y negro, Terracota, Bosque, Azul y Monocromo si faltan",
+                    )
                     .clicked()
                 {
                     action = Some("starters");

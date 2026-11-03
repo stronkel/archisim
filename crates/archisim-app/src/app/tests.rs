@@ -5455,7 +5455,7 @@ fn presentation_styles_and_floor_fills() {
     let ad5 = h
         .model()
         .presentation_styles()
-        .find(|s| s.name == "AD5")
+        .find(|s| s.name == "Blanco y negro")
         .unwrap()
         .id;
     h.app.view_style.presentation = Some(ad5);
@@ -6167,9 +6167,9 @@ fn views_graphics_and_reference_planes() {
     let ad5 = h
         .model()
         .view_templates()
-        .find(|t| t.name == "AD5")
+        .find(|t| t.name == "Blanco y negro")
         .map(|t| t.id)
-        .expect("AD5 template");
+        .expect("«Blanco y negro» template");
     h.app.apply_template(ad5);
     h.frame();
     h.frame();

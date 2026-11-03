@@ -1014,12 +1014,15 @@ fn project_pictures() {
         grid: None,
     }));
     r.thin_lines = true;
-    // How the faces are drawn (`ARCHISIM_VISTAS_ESTILO`: aristas, ocultas).
+    // How the faces are drawn (`ARCHISIM_VISTAS_ESTILO`: planos, ocultas,
+    // alambrico); the wireframe's edges are made with the scene.
     r.style = match std::env::var("ARCHISIM_VISTAS_ESTILO").as_deref() {
-        Ok("aristas") => 1,
+        Ok("planos") => 1,
         Ok("ocultas") => 2,
+        Ok("alambrico") => 3,
         _ => 0,
     };
+    r.set_scene(&device, &scene);
     for v in views.split(';').filter(|v| !v.is_empty()) {
         let (name, nums) = v.split_once(':').unwrap();
         let n: Vec<f32> = nums.split(',').map(|x| x.trim().parse().unwrap()).collect();

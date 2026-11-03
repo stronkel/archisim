@@ -543,7 +543,7 @@ mod tests {
         let t = m
             .add_view_template(ViewTemplate {
                 id: ViewTemplateId(0),
-                name: "AD5".into(),
+                name: "Blanco y negro".into(),
                 style: ViewStyle::ad5(),
             })
             .unwrap();

@@ -118,14 +118,14 @@ impl ArchiSimApp {
 
     /// A presentation board of the active level on A3: title, plan, 3D
     /// view, section, areas and the sun, in the active view's style (or
-    /// the studio's, AD5).
+    /// «Blanco y negro»).
     pub(super) fn new_presentation_sheet(&mut self) {
         let model = self.ed.model();
         let number = model.next_sheet_number();
         let style = self.view_style.presentation.or_else(|| {
             model
                 .presentation_styles()
-                .find(|s| s.name == "AD5")
+                .find(|s| s.name == "Blanco y negro" || s.name == "AD5")
                 .or_else(|| model.presentation_styles().next())
                 .map(|s| s.id)
         });

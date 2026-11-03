@@ -1255,7 +1255,7 @@ fn project_parameters_survive_the_round_trip() {
         .add_user_parameter(NewUserParameter {
             name: "Resistencia al fuego".into(),
             kind: UserKind::Choice(vec!["—".into(), "EI2 30-C5".into(), "EI2 60-C5".into()]),
-            group: "AD5_Datos".into(),
+            group: "Proyecto_Datos".into(),
             categories: vec![ParamCategory::Doors],
             by_type: true,
             default: Value::Text("—".into()),
@@ -1266,7 +1266,7 @@ fn project_parameters_survive_the_round_trip() {
         .add_user_parameter(NewUserParameter {
             name: "Acabado interior".into(),
             kind: UserKind::Text,
-            group: "AD5_Acabados".into(),
+            group: "Proyecto_Acabados".into(),
             categories: vec![ParamCategory::Walls],
             by_type: false,
             default: Value::Text(String::new()),
@@ -1277,7 +1277,7 @@ fn project_parameters_survive_the_round_trip() {
         .add_user_parameter(NewUserParameter {
             name: "Altura libre".into(),
             kind: UserKind::Length,
-            group: "AD5_Datos".into(),
+            group: "Proyecto_Datos".into(),
             categories: vec![ParamCategory::Walls, ParamCategory::Doors],
             by_type: false,
             default: Value::Number(0.0),
@@ -1301,7 +1301,7 @@ fn project_parameters_survive_the_round_trip() {
     )
     .unwrap();
     let ifc = export(&m);
-    assert!(ifc.contains("'AD5_Datos'"));
+    assert!(ifc.contains("'Proyecto_Datos'"));
     assert!(ifc.contains("'ArchiSim_Parameters'"));
     let Imported { model, report } = import_ifc(&ifc).unwrap();
     let diffs = differences(&m, &model);

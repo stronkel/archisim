@@ -75,14 +75,14 @@ names!(PlanStyle {
     Silhouette => "silueta",
     Sprigs => "ramitos",
     BranchesEdge => "ramas y borde",
-    Ad5Circles => "AD5 círculos",
-    Ad5Clusters => "AD5 racimos",
-    Ad5Star => "AD5 estrella",
-    Ad5Crown => "AD5 copa",
+    Ad5Circles => "dibujo: círculos",
+    Ad5Clusters => "dibujo: racimos",
+    Ad5Star => "dibujo: estrella",
+    Ad5Crown => "dibujo: copa",
 });
 
 impl PlanStyle {
-    /// AD5's drawing a style lays on the plant, if it is one of theirs.
+    /// The studio drawing a style lays on the plant, if it is one.
     pub(crate) fn ad5(self) -> Option<&'static str> {
         match self {
             PlanStyle::Ad5Circles => Some("círculos"),
@@ -93,7 +93,7 @@ impl PlanStyle {
         }
     }
 
-    /// Whether it is one of AD5's drawings.
+    /// Whether it is one of the studio drawings.
     pub fn is_ad5(self) -> bool {
         self.ad5().is_some()
     }

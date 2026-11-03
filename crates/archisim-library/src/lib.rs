@@ -60,11 +60,11 @@ pub fn new_project(name: impl Into<String>) -> Model {
     model
 }
 
-/// The view templates a project starts with (Revit's): «AD5» (everything
+/// The view templates a project starts with (Revit's): «Blanco y negro» (everything
 /// in white with black lines, walls with their air gap only, the garden
 /// and the site in pastel), «Albañilería» (walls, doors and windows and
 /// dimensions; no furniture, garden or installations) and «Superficies»
-/// (the rooms with their floors and areas, in AD5's look).
+/// (the rooms with their floors and areas, in the black and white look).
 pub fn view_templates() -> Vec<archisim_core::ViewTemplate> {
     use archisim_core::{Category as C, ViewStyle, ViewTemplate, ViewTemplateId};
     let template = |name: &str, style: ViewStyle| ViewTemplate {
@@ -77,7 +77,7 @@ pub fn view_templates() -> Vec<archisim_core::ViewTemplate> {
         s
     };
     vec![
-        template("AD5", ViewStyle::ad5()),
+        template("Blanco y negro", ViewStyle::ad5()),
         template(
             "Albañilería",
             hide(
@@ -110,7 +110,7 @@ pub fn view_templates() -> Vec<archisim_core::ViewTemplate> {
     ]
 }
 
-/// The presentation styles a project starts with: the studio's («AD5»:
+/// The presentation styles a project starts with: «Blanco y negro» (
 /// fine black lines, walls cut black, the drawing's own colours) and four
 /// with a palette of their own, after presentation plans of other
 /// studios (solid walls in one colour, soft tones, a tinted paper).
@@ -127,7 +127,7 @@ pub fn presentation_styles() -> Vec<archisim_core::PresentationStyle> {
         s
     };
     vec![
-        style("AD5", [255, 255, 255], &[], [28, 28, 28], 0.7),
+        style("Blanco y negro", [255, 255, 255], &[], [28, 28, 28], 0.7),
         style(
             "Terracota",
             [247, 242, 235],
@@ -808,6 +808,7 @@ pub mod flora;
 pub mod ground;
 pub mod imported;
 pub mod railings;
+pub mod standards;
 pub mod street_life;
 pub mod stylized;
 pub mod workshop;

@@ -1311,7 +1311,7 @@ fn fs_model(i: VertexOut, @builtin(front_facing) front: bool) -> ModelOut {
         let glow = (base * 0.6 + vec3<f32>(0.55, 0.42, 0.25)) * 1.6;
         color = mix(color, glow, g.atmos.y);
     }
-    // «Aristas»: the material's colour pale and flat, barely turned by the
+    // «Colores planos»: the material's colour pale and flat, barely turned by the
     // light; «Líneas ocultas»: white paper. The contour pass draws the
     // edges in full ink over them.
     if (g.lamp_count.w > 1.5) {
@@ -1332,6 +1332,34 @@ fn fs_model(i: VertexOut, @builtin(front_facing) front: bool) -> ModelOut {
         // contour pass draws no line next to them.
         out.normal_dist = vec4<f32>(0.0, 0.0, -1.0, i.view_dist * mark);
     }
+    return out;
+}
+
+// The wireframe («Alámbrico»): every edge, in front and behind, in ink
+// tinted by its material; what is selected, in blue.
+@fragment
+fn fs_wire(i: VertexOut) -> ModelOut {
+    var out: ModelOut;
+    if (stretched(i.picked)) {
+        discard;
+    }
+    let kept = keep(i.cut);
+    if (kept.on && outside(i.world, kept)) {
+        discard;
+    }
+    var c = mix(i.color.rgb * 0.45, vec3<f32>(0.12, 0.13, 0.16), 0.55);
+    if ((i.soft > 0.5 && i.soft < 1.5) || i.soft > 3.5) {
+        // Leaves, grass and many small pieces: light, so that they do not
+        // hide the building behind them.
+        c = mix(c, vec3<f32>(0.86, 0.87, 0.84), 0.72);
+    }
+    if (i.picked > 0.5) {
+        c = vec3<f32>(0.1, 0.45, 0.95);
+    }
+    out.color = vec4<f32>(c, 1.0);
+    // Marked as the fine leaves are (a normal straight back): the sky is
+    // not painted over the lines, and no contour is drawn next to them.
+    out.normal_dist = vec4<f32>(0.0, 0.0, -1.0, i.view_dist);
     return out;
 }
 

@@ -561,7 +561,11 @@ impl View3dState {
             overlay_uploaded: 0,
             fill_for: None,
         });
-        if gpu.uploaded != self.scene_serial {
+        // The wireframe's edges are made with the scene, only while it is
+        // shown: switching to or from it uploads the scene again.
+        gpu.renderer.style = self.style;
+        let wire_changed = gpu.renderer.wired() != (self.style == 3);
+        if gpu.uploaded != self.scene_serial || wire_changed {
             crate::crash::stage("3D: subir la escena a la tarjeta gráfica");
             gpu.renderer.set_scene(&gpu.state.device, &self.scene);
             gpu.uploaded = self.scene_serial;

@@ -583,6 +583,13 @@ pub(crate) struct Graphics {
     /// Lettering of texts and dimensions (version 27; sans if missing).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub font: Option<String>,
+    /// The sheets' title block (version 73; classic if missing).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title_block: Option<String>,
+    /// The colour of the sheets' titles and stamps (version 73; black if
+    /// missing).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub accent: Option<[u8; 3]>,
 }
 
 impl Graphics {
@@ -592,6 +599,9 @@ impl Graphics {
             coarse: Pens::out(&g.coarse),
             coarse_from: g.coarse_from,
             font: (g.font != core::TextFont::default()).then(|| g.font.code().to_string()),
+            title_block: (g.title_block != core::TitleBlockDesign::default())
+                .then(|| g.title_block.code().to_string()),
+            accent: (g.accent != [0, 0, 0]).then_some(g.accent),
         }
     }
 
@@ -607,6 +617,16 @@ impl Graphics {
                     message: format!("unknown font «{f}»"),
                 })?,
             },
+            title_block: match &self.title_block {
+                None => core::TitleBlockDesign::default(),
+                Some(d) => {
+                    core::TitleBlockDesign::from_code(d).ok_or_else(|| FileError::Value {
+                        element: "graphics".into(),
+                        message: format!("unknown title block «{d}»"),
+                    })?
+                }
+            },
+            accent: self.accent.unwrap_or([0, 0, 0]),
         })
     }
 }

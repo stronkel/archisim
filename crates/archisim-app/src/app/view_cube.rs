@@ -87,6 +87,9 @@ fn inside(poly: &[Pos2], p: Pos2) -> bool {
     true
 }
 
+/// How long the camera's keys are shown when the camera changes, seconds.
+const HINT_SECONDS: f64 = 6.0;
+
 impl ArchiSimApp {
     /// Takes a view of the cube: the camera turns and frames the model.
     pub(super) fn take_cube_view(&mut self, view: CubeView) {
@@ -308,16 +311,13 @@ impl ArchiSimApp {
     pub(super) fn look_bar(&mut self, ctx: &egui::Context, rect: Rect) {
         let p = Palette::current(ctx);
         let v = &self.v3d;
-        let current = if v.style == 2 {
-            4
-        } else if v.style == 1 {
-            3
-        } else if v.textures == TextureMode::Off {
-            0
-        } else if v.quality == Quality::Pretty {
-            2
-        } else {
-            1
+        let current = match v.style {
+            3 => 0,
+            2 => 1,
+            1 => 2,
+            _ if v.textures == TextureMode::Off => 3,
+            _ if v.quality == Quality::Pretty => 5,
+            _ => 4,
         };
         let mut chosen = None;
         egui::Area::new(egui::Id::unique("look-bar"))
@@ -332,11 +332,12 @@ impl ArchiSimApp {
                         ui.horizontal(|ui| {
                             ui.spacing_mut().item_spacing.x = 2.0;
                             for (i, (name, hint)) in [
-                                ("Sombreado", "Los colores de los materiales, sin texturas: lo más ligero"),
-                                ("Texturas", "Ladrillo, madera, piedra… con las sombras del sol"),
-                                ("Realista", "Sombras más finas y la penumbra de los rincones: para enseñar y para capturas"),
-                                ("Aristas", "Las caras en el color de su material, pálido y plano, y todas las aristas en tinta: para leer la forma"),
-                                ("Líneas ocultas", "Papel blanco y las aristas que se ven en tinta, como un dibujo"),
+                                ("Alámbrico", "Solo las aristas, también las de detrás: se ve a través de todo"),
+                                ("Líneas ocultas", "Papel blanco y las aristas que se ven, en tinta: como un dibujo a mano"),
+                                ("Colores planos", "Cada material en su color, pálido y sin sombras ni texturas, con todas las aristas en tinta: para leer la forma y los materiales"),
+                                ("Sombreado", "Los colores de los materiales con la luz del sol y sus sombras, sin texturas: lo más ligero"),
+                                ("Texturas", "Ladrillo, madera, piedra… con relieve, la luz del sol y sus sombras"),
+                                ("Realista", "Las texturas con sombras más finas y la penumbra de los rincones: para enseñar y para capturas"),
                             ]
                             .into_iter()
                             .enumerate()
@@ -364,29 +365,40 @@ impl ArchiSimApp {
                     });
             });
         if let Some(i) = chosen {
-            let v = &mut self.v3d;
-            v.style = match i {
-                3 => 1,
-                4 => 2,
-                _ => 0,
-            };
-            match i {
-                3 | 4 => {}
-                0 => v.textures = TextureMode::Off,
-                1 => {
-                    if v.textures == TextureMode::Off {
-                        v.textures = super::view3d_ui::default_textures();
-                    }
-                    v.quality = Quality::Normal;
-                }
-                _ => {
-                    if v.textures == TextureMode::Off {
-                        v.textures = super::view3d_ui::default_textures();
-                    }
-                    v.quality = Quality::Pretty;
-                }
-            }
+            self.set_look_mode(i);
         }
+    }
+
+    /// Takes one of the looks of the 3D view (as `look_bar` lists them):
+    /// the wireframe, hidden lines and flat colours draw the faces their
+    /// own way; shaded, textured and realistic change the textures (the
+    /// shaders are made again) and the quality of the light, and are kept
+    /// in the preferences.
+    pub(super) fn set_look_mode(&mut self, i: usize) {
+        use super::view3d_ui::default_textures;
+        let v = &mut self.v3d;
+        v.style = match i {
+            0 => 3,
+            1 => 2,
+            2 => 1,
+            _ => 0,
+        };
+        if i < 3 {
+            return;
+        }
+        let textures = match i {
+            3 => TextureMode::Off,
+            _ if v.textures == TextureMode::Off => default_textures(),
+            _ => v.textures,
+        };
+        v.set_textures(textures);
+        v.quality = if i == 5 {
+            Quality::Pretty
+        } else {
+            Quality::Normal
+        };
+        self.prefs.quality_3d = Some(v.quality);
+        self.prefs.textures_3d = Some(textures.key().to_string());
     }
 
     /// What the keys and the buttons do with the camera of the mode, bottom
@@ -424,10 +436,30 @@ impl ArchiSimApp {
                 "Derecho: girar alrededor de lo que hay debajo · derecho + W A S D: volar · rueda: acercar",
             )
         };
+        // Shown for a few seconds when the camera changes (another
+        // environment, a walk, the 3D opened), then it goes.
+        let ctx = painter.ctx();
+        let now = ctx.input(|i| i.time);
+        let id = egui::Id::unique("camera-hint");
+        let since = match ctx.data(|d| d.get_temp::<(String, f64)>(id)) {
+            Some((n, t)) if n == name => t,
+            _ => {
+                ctx.data_mut(|d| d.insert_temp(id, (name.to_string(), now)));
+                now
+            }
+        };
+        let age = now - since;
+        if age > HINT_SECONDS {
+            return;
+        }
+        ctx.request_repaint();
+        let fade = (HINT_SECONDS - age).clamp(0.0, 1.0) as f32;
         let font = FontId::proportional(11.0);
         let bold = super::widgets::strong_font(11.0);
-        let g1 = painter.layout_no_wrap(name.to_string(), bold, Color32::WHITE);
-        let g2 = painter.layout_no_wrap(keys.to_string(), font, Color32::from_gray(214));
+        let white = Color32::WHITE.gamma_multiply(fade);
+        let grey = Color32::from_gray(214).gamma_multiply(fade);
+        let g1 = painter.layout_no_wrap(name.to_string(), bold, white);
+        let g2 = painter.layout_no_wrap(keys.to_string(), font, grey);
         let w = g1.size().x + g2.size().x + 30.0;
         let r = Rect::from_min_size(
             rect.right_bottom() + Vec2::new(-w - 10.0, -34.0),
@@ -436,19 +468,15 @@ impl ArchiSimApp {
         painter.rect_filled(
             r,
             CornerRadius::same(8),
-            Color32::from_rgba_unmultiplied(27, 30, 35, 200),
+            Color32::from_rgba_unmultiplied(27, 30, 35, (200.0 * fade) as u8),
         );
         let y = r.center().y;
         let x = r.left() + 10.0;
-        painter.galley(
-            Pos2::new(x, y - g1.size().y / 2.0),
-            g1.clone(),
-            Color32::WHITE,
-        );
+        painter.galley(Pos2::new(x, y - g1.size().y / 2.0), g1.clone(), white);
         painter.galley(
             Pos2::new(x + g1.size().x + 10.0, y - g2.size().y / 2.0),
             g2,
-            Color32::from_gray(214),
+            grey,
         );
     }
 }

@@ -6,6 +6,57 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-03 (90) · Maqueta más limpia, aspectos del 3D que se notan, normas gráficas Hilo y Faro, sin «AD5»
+
+Misma rama `bloque/interfaz-v5` (pull request #158). Formato `.archisim` versión 73 (cajetín y color de acento de las normas gráficas).
+
+Antonio pidió, con una captura y dos guías de plantillas de Revit:
+- que la ficha del objeto de la Maqueta no tape el carril ni el catálogo;
+- que el aviso negro de la cámara salga solo al cambiar de modo;
+- entender los aspectos del 3D y tener un alámbrico, porque Sombreado, Texturas y Realista no cambiaban nada;
+- adoptar el estilo de esas dos plantillas con otros nombres;
+- quitar las referencias a AD5 que verá gente de fuera.
+
+**Hecho**
+- **Ficha del objeto** (Maqueta): va dentro de la vista 3D, abajo a la izquierda, y se ajusta a su ancho.
+- **Aviso de la cámara**: sale al cambiar de modo de cámara, unos 6 segundos, y se desvanece.
+- **Aspecto del 3D**: seis botones, cada uno con su explicación al pasar el ratón:
+  - **Alámbrico**: solo las aristas de todo, se ve a través;
+  - **Líneas ocultas**: blanco con aristas, lo de detrás queda tapado (lo que antes se llamaba así);
+  - **Colores planos**: cada material en su color, sin luz ni texturas (lo que antes se llamaba «Aristas»);
+  - **Sombreado**, **Texturas** y **Realista**.
+
+  El fallo: los tres últimos cambiaban un ajuste que solo se leía al abrir el programa. Ahora cambian de verdad, y el aspecto elegido se guarda en las preferencias.
+- **Normas gráficas del estudio.** En Normas gráficas, «Norma del estudio» con tres botones. La Clásica sigue siendo la de siempre y la de los proyectos nuevos.
+  - **Hilo** (de la primera guía): líneas muy finas (corte 0,35, vista 0,13, cotas 0,09), letra de 2 mm.
+    - Cajetín «Hilo»: una columna estrecha abajo a la derecha, con monograma, filas con rótulos grises y el número de plano grande.
+    - Títulos de vista en mayúsculas con raya fina y escala en gris.
+    - Estilos de presentación «Hilo · rayado», «Hilo · macizado negro», «Hilo · macizado blanco» y «Hilo · color» (tonos pastel), con sus cuatro plantillas de vista.
+  - **Faro** (de la segunda guía): líneas más gruesas (corte 0,6), letra de 2,5 mm y un color de acento rojo.
+    - Cajetín «Faro»: una franja a toda la altura del plano a la derecha, con el nombre del estudio de pie, datos del proyecto, tabla de revisiones, sello «NO VÁLIDO PARA OBRA» mientras la fase no sea de ejecución, y número grande.
+    - Títulos de vista con número en un círculo.
+    - Estilos «Faro» y «Faro · gris claro», y la plantilla «Faro · planta» con las cotas, etiquetas y locales en el color de acento.
+  - El cajetín y el color de acento se pueden cambiar también por separado.
+- **Sin «AD5»** en lo que ve el usuario:
+  - el estilo y la plantilla «AD5» se llaman **«Blanco y negro»**;
+  - los grupos de parámetros se llaman `Proyecto_Datos`, `Proyecto_Acabados` y `Proyecto_Mediciones`;
+  - los cuatro dibujos de árbol se llaman «dibujo: círculos», «dibujo: racimos», «dibujo: estrella» y «dibujo: copa»;
+  - la empresa del instalador y la organización del IFC se llaman «ArchiSim».
+
+  Los proyectos antiguos se siguen abriendo con sus nombres de antes.
+
+**Pendiente**
+- Decidir si una de las normas nuevas debe ser la de los proyectos nuevos.
+- En la demo, la tabla de superficies del plano cae sobre la franja del cajetín Faro (por dónde la coloca la demo, no por el cajetín).
+
+**Qué debe probar Antonio**
+1. `cargo run --release -p archisim-app -- out/demo.archisim`, F4 para la Maqueta, seleccionar un mueble: la ficha queda dentro del 3D. El aviso de la cámara se va solo.
+2. En la vista 3D, los seis botones de Aspecto: Alámbrico deja ver a través; Sombreado, Texturas y Realista se distinguen.
+3. Normas gráficas → Norma del estudio → Hilo (o Faro), y abrir un plano: cajetín, plumillas y títulos de vista. En una planta, plantilla de vista «Faro · planta» o «Hilo · planta …».
+4. Comprobar que no queda «AD5» en estilos, plantillas, parámetros ni dibujos de árbol.
+
+---
+
 ## 2026-11-03 (89) · Árboles de cerca, edificios del entorno, Maqueta con las mismas barras (V5) y Presentación completa (V6)
 
 Rama `bloque/interfaz-v5`, con pull request. Formato `.archisim` versión 72 (cámaras guardadas).

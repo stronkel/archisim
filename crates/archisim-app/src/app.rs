@@ -2411,7 +2411,7 @@ impl ArchiSimApp {
                 .show(ctx, |ui| {
                     ui.heading(format!("ArchiSim {}", env!("CARGO_PKG_VERSION")));
                     ui.label("Herramienta BIM de autoría. IFC4 como modelo de datos.");
-                    ui.label("Versión de desarrollo · AD5");
+                    ui.label("Versión de desarrollo");
                 });
         }
     }

@@ -2480,7 +2480,7 @@ fn documentation(m: &mut Model, lv: &[LevelId]) -> R {
         client: "Cooperativa de vivienda (ejercicio del máster BIM)".into(),
         site: "Florence Street, Brunswick (Melbourne)".into(),
         author: "Antonio Fernández".into(),
-        studio: "AD5".into(),
+        studio: "Estudio".into(),
         number: "MBIM-01".into(),
         phase: "Modelo de prueba de ArchiSim".into(),
         date: "octubre 2026".into(),

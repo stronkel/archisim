@@ -87,8 +87,54 @@ impl TextFont {
     }
 }
 
-/// The project's graphic standard: pens for fine and coarse scales, and
-/// the lettering.
+/// How the sheets are framed: the title block («cajetín») and the titles
+/// of the views on them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Hash)]
+pub enum TitleBlockDesign {
+    /// A block of cells across the bottom right, titles underlined.
+    #[default]
+    Classic,
+    /// «Hilo»: hairlines, a narrow column at the bottom right headed by
+    /// the studio's monogram, labels in small grey capitals, the sheet
+    /// number large; titles in spaced capitals with the scale under.
+    Thread,
+    /// «Faro»: a strip down the right edge with the studio's name upright,
+    /// the project, revisions and a stamp in the accent colour, and the
+    /// sheet number large at its foot; titles with their number in a
+    /// circle, in the accent colour.
+    Beacon,
+}
+
+impl TitleBlockDesign {
+    pub const ALL: [TitleBlockDesign; 3] = [
+        TitleBlockDesign::Classic,
+        TitleBlockDesign::Thread,
+        TitleBlockDesign::Beacon,
+    ];
+
+    pub fn code(self) -> &'static str {
+        match self {
+            TitleBlockDesign::Classic => "classic",
+            TitleBlockDesign::Thread => "thread",
+            TitleBlockDesign::Beacon => "beacon",
+        }
+    }
+
+    pub fn from_code(code: &str) -> Option<TitleBlockDesign> {
+        TitleBlockDesign::ALL.into_iter().find(|d| d.code() == code)
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            TitleBlockDesign::Classic => "Clásico",
+            TitleBlockDesign::Thread => "Hilo",
+            TitleBlockDesign::Beacon => "Faro",
+        }
+    }
+}
+
+/// The project's graphic standard: pens for fine and coarse scales, the
+/// lettering, and how its sheets are framed.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct GraphicStandard {
     pub fine: Pens,
@@ -96,6 +142,11 @@ pub struct GraphicStandard {
     /// Scales from 1:`coarse_from` down use the coarse pens.
     pub coarse_from: f64,
     pub font: TextFont,
+    /// The title block and the titles of the views (version 73).
+    pub title_block: TitleBlockDesign,
+    /// The colour of the sheets' titles, stamps and marks (black in the
+    /// classic sheets).
+    pub accent: crate::Rgb,
 }
 
 impl Default for GraphicStandard {
@@ -105,6 +156,8 @@ impl Default for GraphicStandard {
             coarse: Pens::COARSE,
             coarse_from: 100.0,
             font: TextFont::default(),
+            title_block: TitleBlockDesign::default(),
+            accent: [0, 0, 0],
         }
     }
 }
@@ -438,7 +491,7 @@ impl ViewStyle {
         }
     }
 
-    /// The view template «AD5»: everything cut or seen in white with
+    /// The view template «Blanco y negro»: everything cut or seen in white with
     /// black lines, walls with their air gap only, the garden and the
     /// site in pastel colours.
     pub fn ad5() -> ViewStyle {

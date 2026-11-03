@@ -1271,7 +1271,7 @@ pub fn build() -> Result<Document, ModelError> {
         let finish = m.add_user_parameter(NewUserParameter {
             name: "Acabado de suelo".into(),
             kind: UserKind::Choice(vec!["Gres".into(), "Tarima".into(), "Microcemento".into()]),
-            group: "AD5_Acabados".into(),
+            group: "Proyecto_Acabados".into(),
             categories: vec![ParamCategory::Rooms],
             by_type: false,
             default: Value::Text("Gres".into()),
@@ -1280,7 +1280,7 @@ pub fn build() -> Result<Document, ModelError> {
         let code = m.add_user_parameter(NewUserParameter {
             name: "Código de medición".into(),
             kind: UserKind::Text,
-            group: "AD5_Mediciones".into(),
+            group: "Proyecto_Mediciones".into(),
             categories: vec![ParamCategory::Walls],
             by_type: true,
             default: Value::Text(String::new()),
@@ -1362,7 +1362,11 @@ pub fn build() -> Result<Document, ModelError> {
             cut_plane: 1.1,
             style,
         };
-        m.add_plan_view(view("Planta baja — AD5", PlanKind::Floor, ViewStyle::ad5()))?;
+        m.add_plan_view(view(
+            "Planta baja — blanco y negro",
+            PlanKind::Floor,
+            ViewStyle::ad5(),
+        ))?;
         let mut masonry = ViewStyle::default();
         for c in [
             C::Objects,

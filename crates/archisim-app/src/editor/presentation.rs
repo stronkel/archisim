@@ -115,9 +115,12 @@ mod tests {
         let starters = ed.model().presentation_styles().count();
         assert!(starters >= 5, "the starter styles");
         let id = ed
-            .add_presentation_style(PresentationStyle::new("AD5"))
+            .add_presentation_style(PresentationStyle::new("Blanco y negro"))
             .unwrap();
-        assert_eq!(ed.model().presentation_style(id).unwrap().name, "AD5 2");
+        assert_eq!(
+            ed.model().presentation_style(id).unwrap().name,
+            "Blanco y negro 2"
+        );
         assert_eq!(
             ed.add_missing_styles(archisim_library::presentation_styles())
                 .unwrap(),
