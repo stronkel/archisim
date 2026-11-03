@@ -809,6 +809,7 @@ pub mod ground;
 pub mod imported;
 pub mod railings;
 pub mod street_life;
+pub mod stylized;
 pub mod workshop;
 
 /// Adds the studio's usual door and window types, with the materials they
@@ -2326,6 +2327,9 @@ pub fn rebar_material(m: &mut Model) -> MaterialId {
 /// A material of the cosy palette, added to the project if it has none of
 /// that name.
 pub fn palette_material(m: &mut Model, name: &str) -> Option<MaterialId> {
+    if stylized::stylized(name).is_some() && !COZY_PALETTE.iter().any(|e| e.0 == name) {
+        return stylized::stylized_material(m, name);
+    }
     let (name, category, color) = COZY_PALETTE.iter().find(|e| e.0 == name)?;
     let id = material_named(m, name, category, *color, CutPattern::Solid);
     if m.appearance(id).is_plain() {

@@ -13,6 +13,7 @@ renderer.shadowMap.type = THREE.PCFShadowMap;
 
 const camera = new THREE.PerspectiveCamera(32, 1, 0.5, 600);
 camera.up.set(0, 0, 1);
+camera.layers.enable(1);
 const controls = new OrbitControls(camera, canvas);
 controls.enableDamping = true;
 controls.maxPolarAngle = Math.PI * 0.49;
@@ -23,6 +24,7 @@ const G = {
   uStyle: { value: 1 },
   uRelief: { value: 1 },
   uGround: { value: 0 },
+  uTime: { value: 0 },
 };
 
 // ---- Materials ---------------------------------------------------------------
@@ -41,6 +43,10 @@ function material(key, opts = {}) {
   if (materials[id]) return materials[id];
   const d = RANGE[key];
   const m = new THREE.MeshLambertMaterial({ color: 0xffffff });
+  // Water is seen through: little when looking straight down, nearly
+  // opaque at a glancing look (Fresnel).
+  const water = d.water;
+  if (water) { m.transparent = true; m.depthWrite = false; }
   const u = {
     uKind: { value: d.kind },
     uOld: { value: d.old },
@@ -92,9 +98,13 @@ function material(key, opts = {}) {
           float fade = 1.0 - smoothstep(0.006, 0.03, length(fwidth(vWorld)));
           vec3 Nb = normalize(abs(det) * Nw - grad * fade);
           normal = normalize((viewMatrix * vec4(Nb, 0.0)).xyz);
-        }`);
+        }
+        ${water ? `{
+          float fres = pow(1.0 - abs(dot(normalize(vViewPosition), normal)), 3.0);
+          diffuseColor.a = mix(${water[0].toFixed(3)}, ${water[1].toFixed(3)}, fres);
+        }` : ''}`);
   };
-  m.customProgramCacheKey = () => 'archisim-stylized';
+  m.customProgramCacheKey = () => 'archisim-stylized' + (water ? water.join() : '');
   materials[id] = m;
   return m;
 }
@@ -111,6 +121,7 @@ function mesh(geo, mat, parent) {
 
 function box(parent, key, x, y, z, w, d, h, opts) {
   const o = mesh(new THREE.BoxGeometry(w, d, h), material(key, opts), parent);
+  if (RANGE[key].water) o.castShadow = false;
   o.position.set(x, y, z + h / 2);
   return o;
 }
@@ -236,6 +247,76 @@ function bush(parent, x, y, z, s = 1) {
   }
 }
 
+// ---- Grass growing on the grass: tufts of blades, flowers in patches and a
+// few small bushes (ArchiSim's "growth", drawn without contour lines).
+const GROW_LAYER = 1;
+let tuftGeo = null;
+function tuftGeometry() {
+  if (tuftGeo) return tuftGeo;
+  const pos = [], col = [];
+  const dark = new THREE.Color('#3f7a2c'), light = new THREE.Color('#a7cf5a');
+  for (let i = 0; i < 7; i++) {
+    const a = (i / 7) * Math.PI * 2 + Math.random() * 0.5;
+    const r = 0.03 + Math.random() * 0.03;
+    const h = 0.1 + Math.random() * 0.12;
+    const lean = 0.03 + Math.random() * 0.06;
+    const bx = Math.cos(a) * r, by = Math.sin(a) * r;
+    const px = -Math.sin(a) * 0.012, py = Math.cos(a) * 0.012;
+    pos.push(bx - px, by - py, 0, bx + px, by + py, 0, bx + Math.cos(a) * lean, by + Math.sin(a) * lean, h);
+    for (const c of [dark, dark, light]) col.push(c.r, c.g, c.b);
+  }
+  tuftGeo = new THREE.BufferGeometry();
+  tuftGeo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  tuftGeo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  tuftGeo.computeVertexNormals();
+  return tuftGeo;
+}
+const tuftMat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
+const flowerMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+const FLOWERS = ['#f4f1e6', '#f6d24a', '#e8697a', '#a98ad8', '#f29b45'];
+function rand(seed) { let t = seed; return () => { t = (t * 16807) % 2147483647; return (t - 1) / 2147483646; }; }
+function growGrass(parent, x0, x1, y0, y1, z, density, flowers, onlyBetween) {
+  const r = rand(Math.floor(Math.abs(x0 * 131 + y0 * 977)) + 7);
+  const area = (x1 - x0) * (y1 - y0);
+  const n = Math.floor(area * density);
+  const tufts = new THREE.InstancedMesh(tuftGeometry(), tuftMat, n);
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), v = new THREE.Vector3(), sc = new THREE.Vector3();
+  let k = 0;
+  for (let i = 0; i < n; i++) {
+    const x = x0 + r() * (x1 - x0), y = y0 + r() * (y1 - y0);
+    if (onlyBetween && !betweenFlags(x, y)) continue;
+    e.set(0, 0, r() * 6.28); q.setFromEuler(e);
+    const s = 0.7 + r() * 0.8;
+    m.compose(v.set(x, y, z), q, sc.set(s, s, s));
+    tufts.setMatrixAt(k++, m);
+  }
+  tufts.count = k;
+  tufts.receiveShadow = true;
+  tufts.layers.set(GROW_LAYER);
+  parent.add(tufts);
+  if (!flowers) return;
+  // Flowers in patches: where a slow noise is high, of one or two colours.
+  const heads = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(0.035, 0), flowerMat, Math.floor(area * flowers));
+  let f = 0;
+  const color = new THREE.Color();
+  for (let i = 0; i < heads.count; i++) {
+    const x = x0 + r() * (x1 - x0), y = y0 + r() * (y1 - y0);
+    const patch = Math.sin(x * 0.7) * Math.cos(y * 0.9) + Math.sin(x * 0.23 + y * 0.31);
+    if (patch < 0.9) continue;
+    const pick = Math.floor((Math.sin(Math.floor(x / 3) * 12.9 + Math.floor(y / 3) * 78.2) * 0.5 + 0.5) * FLOWERS.length) % FLOWERS.length;
+    color.set(FLOWERS[r() < 0.8 ? pick : (pick + 1) % FLOWERS.length]);
+    m.compose(v.set(x, y, z + 0.14 + r() * 0.1), q.identity(), sc.set(1, 1, 0.8));
+    heads.setMatrixAt(f, m);
+    heads.setColorAt(f, color);
+    f++;
+  }
+  heads.count = f;
+  heads.layers.set(GROW_LAYER);
+  parent.add(heads);
+}
+// Between the stepping stones of 'flagGrass' (as its shader's cells).
+function betweenFlags() { return true; }
+
 // ---- The street --------------------------------------------------------------
 
 const street = new THREE.Group();
@@ -249,7 +330,8 @@ function buildStreet() {
   box(S, 'slabs', 0, -4.5, -0.3, 64, 3, 0.42);
   box(S, 'concrete', 0, -6.08, -0.3, 64, 0.16, 0.38);                        // kerb
   box(S, 'asphalt', 0, -10.5, -0.55, 64, 9, 0.1);
-  box(S, 'water', 0, -32, -6.3, 140, 34, 0.1);
+  box(S, 'water', 0, -40, -6.3, 160, 50, 0.1);
+  box(S, 'seabed', 0, -40, -12, 160, 50, 4.6);   // the sea floor, seen through
   box(S, 'grass', 0, 30, -0.3, 64, 24, 0.3);
   box(S, 'strata', 0, 30, -7, 64, 24, 6.7);
 
@@ -341,6 +423,18 @@ function buildStreet() {
     }
     windowAt(S, x, fy, 3.6, 1.1, 1.6, { trim: 'trimGreen' });
   }
+  // A raised pool in the front yard of the ochre brick house.
+  {
+    const x = -20, y = -1.45, L = 6.4, W = 1.9, H = 0.55;
+    box(S, 'gresite', x, y, 0, L, W, 0.06);
+    for (const s of [-1, 1]) {
+      box(S, 'gresite', x, y + s * (W / 2 - 0.06), 0, L, 0.12, H);
+      box(S, 'gresite', x + s * (L / 2 - 0.06), y, 0, 0.12, W, H);
+      box(S, 'slabs', x, y + s * (W / 2 - 0.02), H, L + 0.3, 0.3, 0.07);
+      box(S, 'slabs', x + s * (L / 2 + 0.0), y, H, 0.3, W - 0.3, 0.07);
+    }
+    box(S, 'poolWater', x, y, H - 0.12, L - 0.24, W - 0.24, 0.02);
+  }
   // Pavers in the side yard, a path, trees and hedges.
   box(S, 'pavers', 12.3, -1.5, -0.02, 2.4, 3, 0.04);
   box(S, 'planks', -13.8, 2, 0, 2.6, 5.5, 0.25);
@@ -348,6 +442,9 @@ function buildStreet() {
   tree(S, 29.5, 8, 0, 1.0, false);
   tree(S, 11.8, 9, 0, 1.3);
   for (const bx of [-24, -17, -11, -4, 4, 19.5]) bush(S, bx, -2.3, 0, 0.9);
+  // The grass grows: tufts everywhere, flowers in patches, small bushes.
+  growGrass(S, -32, 32, -2.7, 18, 0, 5, 1.2);
+  for (const [bx, by] of [[-26, 9], [-14.5, 12], [5.5, 13], [13, 15], [27, 13], [-3, 15]]) bush(S, bx, by, 0, 0.6);
   // Street poles.
   for (const px of [-14, 5, 20]) {
     cylinder(S, 'pole', px, -3.3, 0, 0.13, 9, 10);
@@ -360,17 +457,21 @@ function buildStreet() {
 const board = new THREE.Group();
 const labels = [];
 function buildBoard() {
-  const groups = ['Fachadas', 'Cubiertas', 'Suelos', 'Detalles'];
-  box(board, 'concrete', 0, 0, -0.4, 40, 24, 0.4);
+  const groups = ['Fachadas', 'Cubiertas', 'Alicatados', 'Suelos', 'Pavimentos', 'Tierras', 'Detalles'];
+  box(board, 'concrete', 0, -7, -0.4, 40, 42, 0.4);
   groups.forEach((gname, gi) => {
-    const keys = Object.keys(RANGE).filter((k) => RANGE[k].group === gname);
-    const y = 8.5 - gi * 5.6;
+    const keys = Object.keys(RANGE).filter((k) => RANGE[k].group === gname && !RANGE[k].hidden);
+    const y = 9.5 - gi * 5.3;
     keys.forEach((k, i) => {
       const x = (i - (keys.length - 1) / 2) * 3.5;
-      if (gname === 'Fachadas') box(board, k, x, y, 0, 2.6, 0.5, 2.6);
+      if (gname === 'Fachadas' || gname === 'Alicatados') box(board, k, x, y, 0, 2.6, 0.5, 2.6);
       else if (gname === 'Detalles') box(board, k, x, y - 0.6, 0, 1.8, 1.8, 1.8);
       else if (gname === 'Cubiertas') gable(board, k, x, y, 0, 2.4, 2.4, 1.2, 0.1, false, 0.1);
-      else box(board, k, x, y - 0.6, 0, 2.7, 2.7, 0.16);
+      else {
+        box(board, k, x, y - 0.6, 0, 2.7, 2.7, 0.16);
+        if (k === 'grass') growGrass(board, x - 1.3, x + 1.3, y - 1.9, y + 0.7, 0.16, 60, 7);
+        if (k === 'flagGrass') growGrass(board, x - 1.3, x + 1.3, y - 1.9, y + 0.7, 0.16, 12, 0, 'flagGrass');
+      }
       labels.push({ key: k, pos: new THREE.Vector3(x, y - 1.9, 0) });
     });
   });
@@ -478,8 +579,8 @@ scene.add(street);
 scene.add(board);
 
 const VIEWS = {
-  street: { show: street, pos: [-6, -46, 16], target: [1, 3, 4.5] },
-  board: { show: board, pos: [0, -33, 31], target: [0, -0.5, 0] },
+  street: { show: street, pos: [-6, -50, 15], target: [1, 0, 2.5] },
+  board: { show: board, pos: [0, -46, 44], target: [0, -7, 0] },
 };
 let view = 'street';
 function setView(name) {
@@ -515,15 +616,19 @@ function resize() {
 }
 window.addEventListener('resize', resize);
 
+const clock = new THREE.Clock();
 function frame() {
+  G.uTime.value = clock.getElapsedTime();
   controls.update();
   renderer.setRenderTarget(rtColor);
   renderer.render(scene, camera);
+  camera.layers.disable(GROW_LAYER);
   scene.overrideMaterial = normalMat;
   const bg = scene.background;
   renderer.setRenderTarget(rtNormal);
   renderer.render(scene, camera);
   scene.overrideMaterial = null;
+  camera.layers.enable(GROW_LAYER);
   scene.background = bg;
   renderer.setRenderTarget(null);
   post.uniforms.tColor.value = rtColor.texture;

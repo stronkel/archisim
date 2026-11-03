@@ -17,6 +17,7 @@ uniform float uRelief;  // relief on/off
 uniform int uMap;       // 0 by face, 1 around an axis (towers, cones)
 uniform vec3 uCenter;
 uniform float uRadius;
+uniform float uTime;   // seconds, for water
 varying vec3 vWorld;
 varying vec3 vWN;
 
@@ -226,31 +227,53 @@ Look slabs(vec2 uv, vec3 base) {
   return Look(mix(uJoint, c, m), h * 0.006);
 }
 
-// 12 Grass: painted patches in three greens, and little strokes.
+// 12 Grass: soft painted patches in three greens, darker clumps of
+// clover, and little strokes of blades seen from above, each its own
+// slant and tone. (The tufts, bushes and flowers are 3D, apart.)
 Look grass(vec2 uv, vec3 base) {
-  float n = noise(uv * 0.35) * 0.5 + noise(uv * 1.1) * 0.3 + noise(uv * 3.0) * 0.2;
-  float t = tones(smoothstep(0.25, 0.75, n), 3.0);
-  vec3 c = mix(base * 0.8, mix(base * 1.12, uBase2, 0.5), t);
-  float blade = smoothstep(0.72, 0.8, noise(vec2(uv.x * 22.0, uv.y * 6.0) + noise(uv * 3.0) * 2.0));
-  c = mix(c, c * 1.18 + vec3(0.02, 0.03, 0.0), blade * 0.7);
-  float dark = smoothstep(0.75, 0.82, noise(vec2(uv.x * 6.0 + 9.0, uv.y * 18.0)));
-  c *= 1.0 - 0.15 * dark;
+  float n = noise(uv * 0.3) * 0.55 + noise(uv * 0.9) * 0.3 + noise(uv * 2.6) * 0.15;
+  vec3 c = mix(base * 0.86, mix(base * 1.1, uBase2, 0.35), tones(smoothstep(0.3, 0.7, n), 3.0));
+  vec3 k = cells(uv * 1.4);
+  c *= 1.0 - 0.12 * (1.0 - smoothstep(0.15, 0.4, k.x)) * step(0.72, k.z);
+  // Strokes: a short dash in each little cell.
+  vec2 g = uv * 9.0;
+  vec2 i = floor(g);
+  float stroke = 0.0, tone = 0.0;
+  for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
+    vec2 cc = i + vec2(float(x), float(y));
+    vec2 o = vec2(hash2(cc), hash2(cc + 17.0));
+    float a = (hash2(cc + 5.0) - 0.5) * 1.4;
+    vec2 d = vec2(sin(a), cos(a));
+    vec2 rel = g - (cc + o);
+    float along = clamp(dot(rel, d), -0.32, 0.32);
+    float dist = length(rel - d * along);
+    float s1 = 1.0 - smoothstep(0.035, 0.07, dist);
+    if (s1 > stroke) { stroke = s1; tone = hash2(cc + 9.0); }
+  }
+  float far = smoothstep(0.004, 0.012, length(fwidth(uv)));
+  stroke *= 1.0 - far;
+  c = mix(c, tone > 0.5 ? c * 1.22 + vec3(0.03, 0.04, 0.0) : c * 0.78, stroke * 0.75);
   return Look(c, 0.0);
 }
 
-// 13 Strata ("acantilado"): soft bands of rock, ledges and vertical streaks.
+// 13 Rock in strata ("roca en estratos"): a cliff of sandstone in soft
+// horizontal layers of different thickness and tone, each a little
+// proud of the one above (light on its top edge, shade under it), with
+// vertical runs of weathering and a few cracks.
 Look strata(vec2 uv, vec3 base) {
-  float z = uv.y + 0.25 * noise(vec2(uv.x * 0.6, 3.0)) + 0.1 * noise(vec2(uv.x * 2.0, 1.0));
+  float z = uv.y + noise(vec2(uv.x * 0.25, 2.0)) * 0.9 + noise(vec2(uv.x * 1.1, 7.0)) * 0.15;
+  z += 0.45 * sin(z * 0.9);                       // layers of different thickness
   float band = floor(z / uDims.y);
   float f = fract(z / uDims.y);
   float id = hash2(vec2(band, 5.0));
-  vec3 c = mix(base, uBase2, tones(id, 3.0) * 0.7);
-  c *= 0.9 + 0.12 * noise(vec2(uv.x * 2.2, uv.y * 0.25));          // streaks
-  c *= 1.0 + 0.12 * smoothstep(0.85, 1.0, f);                      // ledge top
-  c *= 1.0 - 0.18 * (1.0 - smoothstep(0.0, 0.12, f));              // under it
-  float crack = smoothstep(0.03, 0.0, abs(noise(vec2(uv.x * 1.4, uv.y * 0.3)) - 0.5));
-  c *= 1.0 - 0.25 * crack;
-  return Look(c, f * 0.06);
+  vec3 c = mix(base, uBase2, tones(id, 4.0));
+  c *= 1.0 + 0.14 * smoothstep(0.82, 0.97, f);      // the lit top edge
+  c *= 1.0 - 0.22 * (1.0 - smoothstep(0.0, 0.18, f)); // shade under the ledge
+  c *= 0.9 + 0.13 * noise(vec2(uv.x * 2.4, uv.y * 0.18));   // runs of weathering
+  // Some joints between layers are deep: a dark crevice.
+  float deepJoint = step(0.55, hash2(vec2(band, 9.0))) * (1.0 - smoothstep(0.0, 0.07, f));
+  c *= 1.0 - 0.35 * deepJoint;
+  return Look(c, f * 0.07);
 }
 
 // 14 Planks ("tarima"): boards end to end, painted grain.
@@ -288,11 +311,44 @@ Look concrete(vec2 uv, vec3 base) {
   return Look(mix(c * 0.78, c, m), 0.0);
 }
 
-// 17 Water: bands of light.
-Look water(vec2 uv, vec3 base) {
-  float w = noise(uv * vec2(1.5, 0.5) + vec2(noise(uv * 0.8) * 2.0, 0.0));
-  vec3 c = mix(base, uBase2, tones(smoothstep(0.45, 0.85, w), 3.0));
-  return Look(c, 0.0);
+// 17 Sea ("agua de mar"): broad tones of blue, and strokes of lighter
+// blue to white that drift towards the shore and slide along it, broken
+// into dashes, as an illustrator draws waves.
+float waveStrokes(vec2 q, float freq, float speed, float t, float width, float dashes, out float h) {
+  float y = q.y * freq + noise(q * vec2(0.05, 0.2)) * 1.5 - t * speed;
+  float li = floor(y);
+  float f = fract(y);
+  float line = smoothstep(0.0, width * 0.4, f) * (1.0 - smoothstep(width * 0.6, width, f));
+  float dash = smoothstep(dashes, dashes + 0.12, noise(vec2(q.x * 0.4 + li * 13.0 + t * 0.25, li * 1.7)));
+  h = line * dash;
+  return line * dash;
+}
+Look sea(vec2 uv, vec3 base) {
+  float t = uTime;
+  vec2 q = uv + vec2(noise(uv * 0.08 + t * 0.01) * 6.0, 0.0);
+  float w = noise(uv * vec2(0.1, 0.25) + t * vec2(0.02, 0.01)) * 0.7 + noise(uv * 0.5 - t * 0.03) * 0.3;
+  vec3 c = mix(base, mix(base, uBase2, 0.3), smoothstep(0.4, 0.7, w));
+  float h1, h2, h3;
+  float deep = waveStrokes(q * 1.1 + 11.0, 0.28, 0.04, t, 0.3, 0.4, h1);
+  float mid = waveStrokes(q, 0.36, 0.06, t, 0.22, 0.48, h2);
+  float crest = waveStrokes(q * 0.8 + 37.0, 0.3, 0.08, t, 0.12, 0.62, h3);
+  c = mix(c, mix(base, uBase2, 0.55), deep * 0.55);
+  c = mix(c, mix(base, uBase2, 0.85), mid * 0.75);
+  c = mix(c, vec3(0.93, 0.97, 1.0), crest * 0.8);
+  return Look(c, (h1 * 0.5 + h2 + h3) * 0.015);
+}
+
+// 21 Pool ("agua de piscina"): clear turquoise with the bright web of
+// caustics wandering over it.
+Look pool(vec2 uv, vec3 base) {
+  float t = uTime;
+  vec2 p = uv * 1.6 + vec2(noise(uv * 0.9 + t * 0.25), noise(uv * 0.9 - t * 0.2 + 5.0)) * 0.9;
+  vec3 k = cells(p + vec2(t * 0.08, t * 0.05));
+  float web = 1.0 - smoothstep(0.0, 0.09, k.y - k.x);
+  vec3 c = mix(base, uBase2, web * 0.85);
+  c *= 0.96 + 0.06 * noise(uv * 2.0 + t * 0.3);
+  float h = (sin(uv.x * 7.0 + t * 2.0) + sin(uv.y * 6.0 - t * 1.7)) * 0.004;
+  return Look(c, h);
 }
 
 // 18 Glass, painted: a diagonal sheen.
@@ -317,6 +373,300 @@ Look foliage(vec2 uv, vec3 base) {
   vec3 c = mix(base * 0.82, uBase2, t * 0.6);
   c *= 0.9 + 0.15 * (1.0 - smoothstep(0.1, 0.5, k.x));
   return Look(c, (1.0 - smoothstep(0.0, 0.5, k.x)) * 0.03);
+}
+
+
+// ---- Pavings (stone) ---------------------------------------------------------
+
+// Setts in courses on a turned frame.
+Look settsAt(vec2 q, vec3 base, float bw, float bh) {
+  float row = floor(q.y / bh);
+  float u = q.x + mod(row, 2.0) * 0.5 * bw;
+  float e = min(edist(u, bw), edist(q.y, bh));
+  float id = hash2(vec2(floor(u / bw), row));
+  vec3 c = base * (0.8 + 0.28 * tones(id, 4.0));
+  c = mix(c, uBase2, step(0.78, id) * 0.7);
+  c *= 0.95 + 0.07 * noise(q * 20.0);
+  float m = onPiece(e, uDims.z * 0.5);
+  float h = sqrt(smoothstep(uDims.z * 0.5, uDims.z * 0.5 + uDims.w, e));
+  return Look(mix(uJoint, c, m), h * 0.015);
+}
+
+// 22 Setts laid diagonally ("adoquín en diagonal").
+Look settsDiagonal(vec2 uv, vec3 base) {
+  vec2 q = mat2(0.7071, -0.7071, 0.7071, 0.7071) * uv;
+  return settsAt(q, base, uDims.x, uDims.y);
+}
+
+// 23 Setts in fans ("adoquín en abanico"): each fan a circle of arcs,
+// half a fan's width across; the fans in rows 3/8 of a width apart, each
+// row moved half a fan, and the lower fans lying over the upper ones, so
+// that each shows its upper part, bounded by the arcs of the fans below.
+Look settsFan(vec2 uv, vec3 base) {
+  float s = uDims.y;             // a sett
+  vec2 q = uv / s;               // in setts
+  float W = 16.0, R = 8.0, H = 6.0;
+  vec2 centre = vec2(0.0); float row = 0.0; bool found = false;
+  float lowerGap = 99.0;         // how far the point is outside the fans below
+  float r0 = floor((q.y - R) / H);
+  for (int k = 0; k < 4; k++) {
+    float r = r0 + float(k);
+    float off = mod(r, 2.0) * 0.5 * W;
+    float cx = floor((q.x - off) / W + 0.5) * W + off;
+    vec2 c = vec2(cx, r * H);
+    float d = length(q - c);
+    if (!found) {
+      if (d < R) { centre = c; row = r; found = true; }
+      else lowerGap = min(lowerGap, d - R);
+    }
+  }
+  vec2 dd = q - centre;
+  float rr = length(dd);
+  float band = floor(rr);
+  float along = atan(dd.x, dd.y) * (band + 0.5) + hash2(vec2(band, row));
+  float e = min(min(edist(rr, 1.0), edist(along, 1.0) * max(rr, 1.0) / max(band + 0.5, 0.5)), lowerGap) * s;
+  float id = hash2(vec2(floor(along), band + row * 31.0 + centre.x));
+  vec3 c = base * (0.8 + 0.28 * tones(id, 4.0));
+  c = mix(c, uBase2, step(0.8, id) * 0.7);
+  float m = onPiece(e, uDims.z * 0.5);
+  float h = sqrt(smoothstep(uDims.z * 0.5, uDims.z * 0.5 + uDims.w, e));
+  return Look(mix(uJoint, c, m), h * 0.012);
+}
+
+// 24 Cobbles ("empedrado"): rounded river stones packed close, dark gaps.
+Look cobbles(vec2 uv, vec3 base) {
+  vec3 k = cells(uv / uDims.x);
+  float e = (k.y - k.x) * 0.5 * uDims.x;
+  float round_ = 1.0 - smoothstep(0.05, 0.6, k.x);
+  vec3 c = base * (0.78 + 0.32 * tones(k.z, 5.0));
+  c = mix(c, uBase2, step(0.82, k.z) * 0.6);
+  c *= 0.72 + 0.4 * round_;
+  float m = onPiece(e, uDims.z * 0.5);
+  return Look(mix(uJoint, c, m), sqrt(round_) * 0.03 * m);
+}
+
+// 25 Old cobbles ("empedrado antiguo"): bigger, uneven, worn smooth on
+// top, earth and a little moss in the joints.
+Look oldCobbles(vec2 uv, vec3 base) {
+  vec2 q = uv / uDims.x + vec2(noise(uv * 1.3), noise(uv * 1.3 + 4.0)) * 0.35;
+  vec3 k = cells(q * vec2(1.0, 1.3));
+  float e = (k.y - k.x) * 0.5 * uDims.x;
+  vec3 c = base * (0.74 + 0.36 * tones(k.z, 5.0));
+  c = mix(c, uBase2, step(0.75, k.z) * 0.55);
+  float worn = 1.0 - smoothstep(0.0, 0.45, k.x);
+  c *= 0.88 + 0.2 * worn;
+  vec3 joint = mix(uJoint, vec3(0.32, 0.4, 0.2), smoothstep(0.55, 0.75, noise(uv * 2.0)) * 0.7);
+  float m = onPiece(e, uDims.z * 0.5 * (0.7 + 0.6 * noise(uv * 3.0)));
+  return Look(mix(joint, c, m), sqrt(smoothstep(uDims.z * 0.5, uDims.z * 0.5 + uDims.w, e)) * 0.03);
+}
+
+// 26 Opus romanum: four sizes of squares and oblongs in a module that
+// repeats (units of uDims.x; the module 8 × 6).
+Look opus(vec2 uv, vec3 base) {
+  float u = uDims.x;
+  vec2 g = uv / u;
+  vec2 mod_ = floor(g / vec2(8.0, 6.0));
+  vec2 l = g - mod_ * vec2(8.0, 6.0);
+  vec4 r = vec4(0.0);
+  float idx = 0.0;
+  // x, y, w, h of each piece in the module.
+  if (l.x < 4.0 && l.y < 4.0) { r = vec4(0, 0, 4, 4); idx = 1.0; }
+  else if (l.x >= 4.0 && l.y < 2.0) { r = vec4(4, 0, 4, 2); idx = 2.0; }
+  else if (l.x >= 4.0 && l.x < 6.0 && l.y < 4.0) { r = vec4(4, 2, 2, 2); idx = 3.0; }
+  else if (l.x >= 6.0) { r = vec4(6, 2, 2, 4); idx = 4.0; }
+  else if (l.x < 2.0) { r = vec4(0, 4, 2, 2); idx = 5.0; }
+  else if (l.x < 4.0) { r = vec4(2, 4, 2, 2); idx = 6.0; }
+  else { r = vec4(4, 4, 2, 2); idx = 7.0; }
+  vec2 a = l - r.xy, b = r.xy + r.zw - l;
+  float e = min(min(a.x, a.y), min(b.x, b.y)) * u;
+  float id = hash2(mod_ * 7.0 + idx);
+  vec3 c = base * (0.86 + 0.2 * tones(id, 4.0));
+  c = mix(c, uBase2, step(0.7, id) * 0.6);
+  c *= 0.95 + 0.07 * noise(uv * 5.0) + 0.03 * noise(uv * 40.0);
+  float m = onPiece(e, uDims.z * 0.5);
+  return Look(mix(uJoint, c, m), smoothstep(uDims.z * 0.5, uDims.z * 0.5 + uDims.w, e) * 0.008);
+}
+
+// 27 Flagstone ("laja"): irregular flat stones of several colours, wide
+// mortar joints, flat tops with a soft edge.
+Look flagstone(vec2 uv, vec3 base) {
+  vec2 q = uv / uDims.x;
+  vec3 k = cells(q + vec2(noise(q * 0.7), noise(q * 0.7 + 3.0)) * 0.25);
+  float e = (k.y - k.x) * 0.5 * uDims.x;
+  vec3 c = base * (0.82 + 0.26 * tones(k.z, 5.0));
+  c = mix(c, uBase2, step(0.7, fract(k.z * 3.7)) * 0.65);
+  c *= 0.94 + 0.08 * noise(uv * 3.0) + 0.04 * noise(uv * 25.0);
+  float m = onPiece(e, uDims.z * 0.5);
+  return Look(mix(uJoint, c, m), smoothstep(uDims.z * 0.5, uDims.z * 0.5 + uDims.w, e) * 0.012);
+}
+
+// 28 Flagstones in grass ("laja en césped"): stepping stones with grass
+// between them.
+Look flagsInGrass(vec2 uv, vec3 base) {
+  vec2 q = uv / uDims.x;
+  vec3 k = cells(q);
+  float e = (k.y - k.x) * 0.5;                 // in stones
+  float stone = smoothstep(0.17, 0.19, e) ;
+  vec3 c = base * (0.84 + 0.24 * tones(k.z, 4.0));
+  c *= 0.94 + 0.08 * noise(uv * 3.0);
+  Look gr = grass(uv, uJoint);
+  return Look(mix(gr.c, c, stone), stone * 0.02);
+}
+
+// 29 Marble slabs ("mármol"): big slabs, veins running through them,
+// thin joints.
+Look marble(vec2 uv, vec3 base) {
+  float e = min(edist(uv.x, uDims.x), edist(uv.y, uDims.y));
+  vec2 cell = floor(uv / uDims.xy);
+  float id = hash2(cell);
+  vec2 p = uv + id * 7.0;
+  float w = p.x * 1.3 + p.y * 0.7 + noise(p * 1.5) * 3.0 + noise(p * 5.0) * 0.8;
+  float vein = 1.0 - smoothstep(0.0, 0.06, abs(sin(w * 3.1416)));
+  float fine = 1.0 - smoothstep(0.0, 0.03, abs(sin((w + noise(p * 9.0)) * 9.0)));
+  vec3 c = base * (0.97 + 0.04 * tones(id, 3.0)) ;
+  c = mix(c, uBase2, vein * 0.5 + fine * 0.18);
+  float m = onPiece(e, uDims.z * 0.5);
+  return Look(mix(c * 0.8, c, m), 0.0);
+}
+
+// 30 Pebbles ("guijarros"): small oval stones, white, grey and ochre,
+// domed, dark between.
+Look pebbles(vec2 uv, vec3 base) {
+  vec3 k = cells(uv / uDims.x * vec2(1.0, 1.4));
+  float dome = 1.0 - smoothstep(0.0, 0.55, k.x);
+  vec3 tint = k.z > 0.66 ? uBase2 : (k.z > 0.33 ? base : base * 0.7 + vec3(0.12, 0.1, 0.06));
+  vec3 c = tint * (0.75 + 0.35 * dome);
+  float gap = smoothstep(0.03, 0.09, k.y - k.x);
+  return Look(mix(uJoint, c, gap), dome * 0.012 * gap);
+}
+
+// 31 Gravel ("grava"): fine stones in three tones, a little relief.
+Look gravel(vec2 uv, vec3 base) {
+  vec3 k = cells(uv / uDims.x);
+  float t = tones(k.z, 3.0);
+  vec3 c = mix(base * 0.78, uBase2, t * 0.7);
+  float dome = 1.0 - smoothstep(0.0, 0.6, k.x);
+  c *= 0.8 + 0.3 * dome;
+  c = mix(uJoint, c, smoothstep(0.0, 0.12, k.y - k.x));
+  return Look(c, dome * 0.006);
+}
+
+
+// ---- Wall tiles ("alicatados") -----------------------------------------------
+
+// 32 Metro tiles: glazed oblongs twice as long as high, staggered, a soft
+// bevel and a glint along the top edge of each, thin light joints.
+Look metroTiles(vec2 uv, vec3 base) {
+  float bw = uDims.x, bh = uDims.y;
+  float row = floor(uv.y / bh);
+  float u = uv.x + mod(row, 2.0) * 0.5 * bw;
+  float e = min(edist(u, bw), edist(uv.y, bh));
+  float id = hash2(vec2(floor(u / bw), row));
+  vec3 c = base * (0.96 + 0.06 * tones(id, 3.0));
+  float fy = fract(uv.y / bh);
+  c = mix(c, vec3(1.0), smoothstep(0.7, 0.86, fy) * (1.0 - smoothstep(0.86, 0.95, fy)) * 0.25);
+  float m = onPiece(e, uDims.z * 0.5);
+  float h = sqrt(smoothstep(uDims.z * 0.5, uDims.z * 0.5 + uDims.w, e));
+  return Look(mix(uJoint, c, m), h * 0.004);
+}
+
+// 33 Patterned tiles ("azulejo hidráulico / andaluz"): squares with a
+// motif in three colours, each tile the same, mirrored at its middle: a
+// star in the centre, quarter circles at the corners, a ring between.
+Look patternTiles(vec2 uv, vec3 base) {
+  float t = uDims.x;
+  vec2 f = fract(uv / t) - 0.5;          // -0.5..0.5 in the tile
+  vec2 a = abs(f);
+  float r = length(f);
+  float diamond = a.x + a.y;
+  // The star: a diamond and a square turned over it.
+  float star = 1.0 - smoothstep(0.17, 0.18, min(diamond, max(a.x, a.y) * 1.25));
+  float ring = smoothstep(0.27, 0.28, r) * (1.0 - smoothstep(0.31, 0.32, r));
+  float corner = 1.0 - smoothstep(0.2, 0.21, length(a - 0.5));
+  float petals = (1.0 - smoothstep(0.06, 0.07, length(vec2(a.x, a.y) - vec2(0.33, 0.0)))) + (1.0 - smoothstep(0.06, 0.07, length(vec2(a.x, a.y) - vec2(0.0, 0.33))));
+  vec3 cream = vec3(0.93, 0.89, 0.8);
+  vec3 c = cream;
+  c = mix(c, base, clamp(corner + ring + petals, 0.0, 1.0));
+  c = mix(c, uBase2, star);
+  c *= 0.97 + 0.04 * noise(uv * 40.0);
+  float e = min(edist(uv.x, t), edist(uv.y, t));
+  float m = onPiece(e, uDims.z * 0.5);
+  return Look(mix(uJoint, c, m), smoothstep(uDims.z * 0.5, uDims.z * 0.5 + 0.004, e) * 0.003);
+}
+
+// ---- Earth ---------------------------------------------------------------------
+
+// 34 Earth path ("tierra de camino"): trodden earth in soft patches, two
+// paler bands where it is walked, little stones, a few cracks.
+Look earthPath(vec2 uv, vec3 base) {
+  float n = noise(uv * 0.6) * 0.6 + noise(uv * 2.2) * 0.4;
+  vec3 c = mix(base * 0.88, uBase2, tones(smoothstep(0.3, 0.75, n), 3.0) * 0.6);
+  vec3 k = cells(uv * 7.0);
+  float stone = (1.0 - smoothstep(0.1, 0.17, k.x)) * step(0.72, k.z);
+  c = mix(c, mix(uBase2, vec3(0.9, 0.86, 0.78), 0.4), stone * 0.8);
+  vec3 k2 = cells(uv * 1.3);
+  float crack = (1.0 - smoothstep(0.0, 0.025, k2.y - k2.x)) * step(0.5, noise(uv * 0.7));
+  c *= 1.0 - 0.25 * crack;
+  return Look(c, stone * 0.008);
+}
+
+// 35 Albero: the yellow sand of Andalusian paths and squares, fine grain,
+// softly raked.
+Look albero(vec2 uv, vec3 base) {
+  float n = noise(uv * 0.8) * 0.5 + noise(uv * 3.0) * 0.3 + noise(uv * 60.0) * 0.2;
+  vec3 c = base * (0.92 + 0.12 * tones(smoothstep(0.3, 0.75, n), 4.0));
+  vec3 k = cells(uv * 25.0);
+  c = mix(c, c * 0.8, (1.0 - smoothstep(0.05, 0.12, k.x)) * step(0.8, k.z));
+  return Look(c, 0.0);
+}
+
+// 36 Furrows ("tierra en surcos", a field ploughed or sown): ridges and
+// troughs, each ridge lit on one side and shaded on the other, and a row
+// of small shoots along the top of some ridges.
+Look furrows(vec2 uv, vec3 base) {
+  float w = uDims.x;                       // a ridge and its trough
+  float f = fract(uv.y / w);
+  float row = floor(uv.y / w);
+  float ridge = sin(f * 3.14159);
+  vec3 c = mix(base * 0.55, base * 1.1, ridge);
+  c *= 0.9 + 0.14 * noise(uv * vec2(1.5, 6.0)) + 0.06 * noise(uv * 25.0);
+  float sp = w * 0.22;
+  float i = floor(uv.x / sp);
+  vec2 l = vec2(fract(uv.x / sp) - 0.5 + (hash2(vec2(i, row)) - 0.5) * 0.3, (f - 0.5) * w / sp);
+  float sown = step(0.3, hash2(vec2(row, 1.0))) * step(0.15, hash2(vec2(i, row + 7.0)));
+  float shoot = (1.0 - smoothstep(0.16, 0.22, length(l * vec2(1.0, 0.8)))) * sown;
+  vec3 green = mix(uBase2 * 0.8, uBase2 * 1.2, hash2(vec2(i, row)));
+  return Look(mix(c, green, shoot), ridge * 0.05 + shoot * 0.01);
+}
+
+// 37 Kitchen garden ("huerta"): rows of plants, round green tufts along
+// the ridges of earth.
+Look kitchenGarden(vec2 uv, vec3 base) {
+  float w = uDims.x;
+  float f = fract(uv.y / w);
+  float row = floor(uv.y / w);
+  float ridge = sin(f * 3.14159);
+  vec3 c = mix(base * 0.6, base, ridge) * (0.92 + 0.1 * noise(uv * 3.0));
+  float sp = w * 0.55;
+  float i = floor(uv.x / sp + hash2(vec2(row, 3.0)));
+  vec2 l = vec2(fract(uv.x / sp + hash2(vec2(row, 3.0))) - 0.5, (f - 0.5) * w / sp);
+  float size = 0.32 + 0.1 * hash2(vec2(i, row));
+  float plant = 1.0 - smoothstep(size - 0.03, size, length(l));
+  float leafy = noise(uv * 30.0);
+  vec3 green = mix(uBase2 * 0.7, uBase2 * 1.15, leafy) * (0.85 + 0.25 * (0.5 - l.y));
+  c = mix(c, green, plant);
+  return Look(c, plant * (size - length(l)) * 0.12);
+}
+
+// 38 Cracked earth ("tierra cuarteada"): dry plates curling up a little,
+// dark cracks between them.
+Look crackedEarth(vec2 uv, vec3 base) {
+  vec3 k = cells(uv / uDims.x);
+  float e = (k.y - k.x) * 0.5 * uDims.x;
+  vec3 c = base * (0.9 + 0.14 * tones(k.z, 3.0)) * (0.95 + 0.06 * noise(uv * 8.0));
+  c *= 1.0 + 0.08 * smoothstep(0.0, 0.5, k.x);
+  float m = onPiece(e, uDims.z * 0.5);
+  return Look(mix(base * 0.45, c, m), smoothstep(0.0, 0.5, k.x) * 0.006 * m);
 }
 
 Look stylizedNear(vec2 uv, vec3 base);
@@ -352,7 +702,25 @@ Look stylizedNear(vec2 uv, vec3 base) {
   if (uKind == 14) return planks(uv, base);
   if (uKind == 15) return asphalt(uv, base);
   if (uKind == 16) return concrete(uv, base);
-  if (uKind == 17) return water(uv, base);
+  if (uKind == 17) return sea(uv, base);
+  if (uKind == 21) return pool(uv, base);
+  if (uKind == 22) return settsDiagonal(uv, base);
+  if (uKind == 23) return settsFan(uv, base);
+  if (uKind == 24) return cobbles(uv, base);
+  if (uKind == 25) return oldCobbles(uv, base);
+  if (uKind == 26) return opus(uv, base);
+  if (uKind == 27) return flagstone(uv, base);
+  if (uKind == 28) return flagsInGrass(uv, base);
+  if (uKind == 29) return marble(uv, base);
+  if (uKind == 30) return pebbles(uv, base);
+  if (uKind == 31) return gravel(uv, base);
+  if (uKind == 32) return metroTiles(uv, base);
+  if (uKind == 33) return patternTiles(uv, base);
+  if (uKind == 34) return earthPath(uv, base);
+  if (uKind == 35) return albero(uv, base);
+  if (uKind == 36) return furrows(uv, base);
+  if (uKind == 37) return kitchenGarden(uv, base);
+  if (uKind == 38) return crackedEarth(uv, base);
   if (uKind == 18) return glass(uv, base);
   if (uKind == 20) return foliage(uv, base);
   return paint(uv, base);

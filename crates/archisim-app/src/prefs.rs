@@ -74,6 +74,10 @@ pub struct Prefs {
     /// How the 3D view draws the materials' textures: `completas`,
     /// `ligeras` or `no` (none: as the computer goes).
     pub textures_3d: Option<String>,
+    /// The relief of the textures in 3D (bricks' bevels, boards' lips…).
+    pub relief_3d: bool,
+    /// Water moving in 3D.
+    pub water_3d: bool,
 }
 
 impl Default for Prefs {
@@ -90,6 +94,8 @@ impl Default for Prefs {
             price_bank: None,
             textures_3d: None,
             quality_3d: None,
+            relief_3d: true,
+            water_3d: true,
         }
     }
 }
@@ -128,6 +134,8 @@ impl Prefs {
             "banco_de_precios": self.price_bank,
             "texturas_3d": self.textures_3d,
             "calidad_3d": self.quality_3d.map(|q| q.key()),
+            "relieve_3d": self.relief_3d,
+            "agua_en_movimiento": self.water_3d,
         });
         serde_json::to_string_pretty(&v).unwrap_or_default()
     }
@@ -186,6 +194,8 @@ impl Prefs {
                 .get("texturas_3d")
                 .and_then(|x| x.as_str())
                 .map(str::to_string),
+            relief_3d: flag("relieve_3d", d.relief_3d),
+            water_3d: flag("agua_en_movimiento", d.water_3d),
         }
     }
 
@@ -239,6 +249,8 @@ mod tests {
             price_bank: Some("/bancos/bcca.bc3".into()),
             quality_3d: Some(crate::view3d::look::Quality::Pretty),
             textures_3d: Some("ligeras".into()),
+            relief_3d: false,
+            water_3d: false,
         };
         assert_eq!(Prefs::from_json(&p.to_json()), p);
         // Unknown or broken files give the defaults.
