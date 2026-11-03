@@ -50,6 +50,11 @@ Rama `bloque/interfaz-v2`, con pull request. Sin cambios de formato ni de IFC. D
   - lo que está donde.
 
   Las 360 de la aplicación pasan.
+- **Grosores de impresión** (pedido de Antonio, 03/11/2026). «Líneas finas» cambia de nombre y de sentido:
+  - Encendido, cada línea sale con su grosor real a la escala de la vista, como se imprime. Vale para planta, sección, alzado, plano y vista de dibujo.
+  - Por defecto está **apagado**: todas las líneas a un píxel, para trabajar. Está en la barra inferior, en Propiedades de la vista y en Vista; la tecla TL lo cambia.
+  - Sale de la barra del 3D: Técnica deja sus contornos de dos píxeles y la Maqueta los finos. Cuando llegue la gama estilizada, el grosor del contorno lo decidirá el aspecto.
+  - Los botones − y + del zoom dejan sitio a los tramos: se acerca con la rueda, y la cifra del zoom se sigue viendo.
 
 **Pendiente**
 - **V5 · Maqueta con las mismas barras** (catálogo en la columna de fichas, estancias en el carril). Está esperando a que Antonio pruebe V1 a V4, por si cambia algo de las barras.
@@ -73,6 +78,7 @@ Rama `bloque/interfaz-v2`, con pull request. Sin cambios de formato ni de IFC. D
    - con el derecho apretado, pulsa W, A, S, D, Q y E; suéltalo y pulsa M: debe salir el muro;
    - en **Navegación**, baja el giro a 3 y la rueda a 3 y comprueba si se controla mejor.
 6. Selecciona un muro, una ventana y un forjado: tarjetas de medidas arriba. Escribe una longitud o un antepecho.
+7. Planta a 1:50: la vista se abre con líneas finas. Pulsa **Grosores de impresión** abajo y compara con el PDF del plano.
 
 ---
 

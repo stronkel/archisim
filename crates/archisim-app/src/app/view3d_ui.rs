@@ -1036,7 +1036,9 @@ impl ArchiSimApp {
         let (px, ss) = picture_size(size, ctx.pixels_per_point(), v.quality);
         v.edge_step = ss;
         // The Maqueta always with thin lines (Antonio, 29/10/2026).
-        v.thin_lines = self.thin_lines || self.maquette;
+        // Técnica keeps its contours of two pixels, the Maqueta its fine
+        // ones; «Grosores de impresión» is for what prints (§12.3).
+        v.thin_lines = self.maquette;
         // In the Maqueta, the sky, the haze and the grid are drawn with the
         // picture; elsewhere the grid goes under it.
         if self.maquette {

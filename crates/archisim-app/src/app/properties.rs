@@ -839,10 +839,12 @@ impl ArchiSimApp {
             });
             row(
                 ui,
-                "Líneas finas",
-                "Todas las líneas a un píxel (apagado: grosor real a la escala de la vista)",
+                "Grosores de impresión",
+                "El grosor real de cada línea a la escala de la vista, como sale al imprimir (apagado: todas a un píxel)",
                 |ui, _| {
-                    ui.switch(&mut self.thin_lines, "");
+                    let mut print = !self.thin_lines;
+                    ui.switch(&mut print, "");
+                    self.thin_lines = !print;
                 },
             );
             row(ui, "Rejilla", "Cuadrícula de 1 m y 5 m", |ui, _| {

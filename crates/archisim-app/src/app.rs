@@ -928,7 +928,9 @@ impl ArchiSimApp {
             table_new_level: None,
             schedule_level: None,
             show_grid: true,
-            thin_lines: false,
+            // To work with: every line one pixel; the weights of print
+            // are a button away (`docs/INTERFAZ.md` §12.3).
+            thin_lines: true,
             phase_view: Default::default(),
             show_underlay: true,
             other_walls: Vec::new(),

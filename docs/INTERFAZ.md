@@ -307,7 +307,7 @@ Cambian de sitio: Cinta y Plano de referencia → **Guía**, en la barra inferio
 ### 12.3 Una regla para cada barra
 
 - **Arriba, el proyecto**: menús, nombre y fichero, buscador, deshacer, guardar, equipo y un solo botón **Entregar** con todas las salidas (IFC 4.3, IFC4, glTF; planos, carpinterías, superficies, mediciones BC3; render e imagen). Las mismas órdenes siguen en Archivo.
-- **Abajo, la vista y lo que se dibuja sobre ella**, siempre los mismos tramos en el mismo orden: **Vista** (escala o proyección, estilo, atenuar, caja de sección) · **Anotar** (Línea, Relleno, Texto, Cota con sus variantes) · **Ayudas** (Guía y forzados) · coordenadas. Lo que no vale en una vista se ve apagado, no desaparece.
+- **Abajo, la vista y lo que se dibuja sobre ella**, siempre los mismos tramos en el mismo orden: **Vista** (escala o proyección, **Grosores de impresión** —apagado por defecto: líneas finas para trabajar; encendido, como se imprime; no en 3D, donde el contorno es del aspecto—, estilo, atenuar, caja de sección) · **Anotar** (Línea, Relleno, Texto, Cota con sus variantes) · **Ayudas** (Guía y forzados) · coordenadas. Lo que no vale en una vista se ve apagado, no desaparece.
 
 ### 12.4 Presentación
 

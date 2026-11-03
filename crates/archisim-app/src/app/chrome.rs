@@ -498,7 +498,16 @@ impl ArchiSimApp {
             ui.separator();
             ui.switch(&mut self.show_reference_lines, "Líneas de referencia");
             ui.switch(&mut self.show_grid, "Rejilla");
-            ui.switch(&mut self.thin_lines, "Líneas finas (planta, alzados y 3D)");
+            {
+                let mut print = !self.thin_lines;
+                if ui
+                    .switch(&mut print, "Grosores de impresión")
+                    .on_hover_text("Plantas, secciones, alzados y planos con el grosor real de cada línea a su escala, como salen al imprimir; apagado, todas a un píxel para trabajar")
+                    .changed()
+                {
+                    self.thin_lines = !print;
+                }
+            }
             if ui.button("Visibilidad y gráficos…").clicked() {
                 self.views.vg_open = true;
             }
@@ -698,7 +707,6 @@ impl ArchiSimApp {
                     if on != self.v3d.section.is_some() {
                         self.v3d.toggle_section();
                     }
-                    self.thin_lines_chip(ui);
                     self.cutaway_combo(ui);
                     self.navigation_button(ui);
                 }
@@ -782,16 +790,20 @@ impl ArchiSimApp {
         });
     }
 
-    /// ArchiCAD's "Líneas finas": every line one pixel wide, in plan,
-    /// sections, elevations and 3D; off, the true weight at the scale of
-    /// the view (in 3D, contours two pixels wide).
+    /// «Grosores de impresión»: on, every line with its true weight at the
+    /// scale of the view, as it prints; off (the default, to work), every
+    /// line one pixel wide, as ArchiCAD's «Líneas finas». Plans, sections,
+    /// elevations, sheets and drafting views; the 3D view's contours belong
+    /// to its look.
     fn thin_lines_chip(&mut self, ui: &mut Ui) {
+        let mut print = !self.thin_lines;
         chip(
             ui,
-            &mut self.thin_lines,
-            "Líneas finas",
-            "Todas las líneas a un píxel, sin grosor, en planta, alzados, secciones y 3D; apagado, cada línea con su grosor real a la escala de la vista",
+            &mut print,
+            "Grosores de impresión",
+            "Cada línea con su grosor real a la escala de la vista, como sale en el plano; apagado, todas a un píxel para trabajar",
         );
+        self.thin_lines = !print;
     }
 
     /// The scale of the view and the zoom, at the left of the bottom bar.
@@ -809,10 +821,8 @@ impl ArchiSimApp {
             .response
             .on_hover_text("Escala del dibujo: grosores de línea, textos y símbolos");
         self.set_scale(scale as f64);
-        let rect = self.canvas;
-        if icon_button(ui, Icon::Minus, "Alejar", false).clicked() {
-            self.view.zoom_at(rect, rect.center(), 1.0 / 1.25);
-        }
+        // The zoom: the wheel zooms; its figure stays to read (the buttons
+        // made room for the segments, §12.3).
         ui.add_sized(
             [42.0, 20.0],
             egui::Label::new(
@@ -821,10 +831,9 @@ impl ArchiSimApp {
                     .color(p.text),
             ),
         )
-        .on_hover_text("100 %: el papel a su tamaño real en la pantalla");
-        if icon_button(ui, Icon::Plus, "Acercar", false).clicked() {
-            self.view.zoom_at(rect, rect.center(), 1.25);
-        }
+        .on_hover_text(
+            "100 %: el papel a su tamaño real en la pantalla. Acercar y alejar: la rueda",
+        );
         if icon_button(ui, Icon::Fit, "Ajustar a la ventana (Inicio)", false).clicked() {
             self.fit_requested = true;
         }
