@@ -1739,7 +1739,7 @@ fn world_solids(
         material_of,
         plan::{Plan, Side as WSide},
         state::State,
-        types::{dress_cached_with, Era},
+        types::{dress_cached_tweaked, Era, SkinTweak},
     };
     use archisim_core::WorldTypology;
     let n = poly.len();
@@ -1827,16 +1827,30 @@ fn world_solids(
                 light,
             )
         }
-        None => dress_cached_with(
-            &plan,
-            w.typology.props(),
-            w.place as usize,
-            Era::of(w.era as f64),
-            State::of(w.state as f64),
-            floors,
-            w.variant as u64,
-            light,
-        ),
+        None => {
+            use archisim_core::props::fine::buildings::world::skins::Roof;
+            // What it changes of its place's way.
+            let tweak = SkinTweak {
+                roof: w.roof.map(|r| match r {
+                    archisim_core::EnvRoof::Flat => Roof::Flat,
+                    archisim_core::EnvRoof::Gable => Roof::Gable,
+                    archisim_core::EnvRoof::Hip => Roof::Hip,
+                }),
+                pitch: w.pitch.map(|p| p as f64 / 100.0),
+                shop: w.shop,
+            };
+            dress_cached_tweaked(
+                &plan,
+                w.typology.props(),
+                w.place as usize,
+                Era::of(w.era as f64),
+                State::of(w.state as f64),
+                floors,
+                w.variant as u64,
+                light,
+                tweak,
+            )
+        }
     };
     let by_name: std::collections::HashMap<&str, MaterialId> =
         model.materials().map(|x| (x.name.as_str(), x.id)).collect();
@@ -1874,6 +1888,60 @@ fn world_solids(
 
 #[cfg(test)]
 mod tests {
+
+    /// A building of the world changes with its own roof, pitch and
+    /// ground floor (pedido de Antonio del 05/11/2026).
+    #[test]
+    fn a_building_of_the_world_takes_its_own_roof_and_shop() {
+        let mut m = Model::new("T");
+        let l = m.add_level("Planta baja", 0.0);
+        m.ensure_world_materials();
+        let id = m
+            .add_world_building(archisim_core::NewWorldBuilding {
+                level: l,
+                front: Point2::new(0.0, 0.0),
+                facing: archisim_core::Vec2::new(0.0, -1.0),
+                width: 7.0,
+                depth: 12.0,
+                floors: Some(2),
+                pick: archisim_core::WorldPick {
+                    place: 0,
+                    typology: archisim_core::WorldTypology::Street,
+                    programme: 0,
+                },
+            })
+            .unwrap();
+        let count = |m: &Model| -> (usize, f64) {
+            let mass = m.mass(id).unwrap().clone();
+            let s = dressed_solids_detail(m, &mass, true);
+            let top = s
+                .iter()
+                .flat_map(|x| x.triangles.iter().flatten())
+                .map(|p| p[2])
+                .fold(f64::MIN, f64::max);
+            (s.iter().map(|x| x.triangles.len()).sum(), top)
+        };
+        let before = count(&m);
+        let w = m.mass(id).unwrap().dress.unwrap().world.unwrap();
+        let other = if w.own_roof() == archisim_core::EnvRoof::Flat {
+            archisim_core::EnvRoof::Hip
+        } else {
+            archisim_core::EnvRoof::Flat
+        };
+        let set = |m: &mut Model, f: &dyn Fn(&mut archisim_core::WorldDress)| {
+            let mut d = m.mass(id).unwrap().dress.unwrap();
+            let mut w = d.world.unwrap();
+            f(&mut w);
+            d.world = Some(w);
+            m.set_mass_dress(id, Some(d)).unwrap();
+        };
+        set(&mut m, &|w| w.roof = Some(other));
+        let roofed = count(&m);
+        assert_ne!(before, roofed, "the roof changes the model");
+        set(&mut m, &|w| w.shop = Some(!w.own_shop()));
+        assert_ne!(roofed, count(&m), "the shop changes the model");
+    }
+
     use super::*;
     use archisim_core::NewEnvBuilding;
 

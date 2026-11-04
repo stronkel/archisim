@@ -136,3 +136,4 @@ Se puede, con cuidado: cambiar una altura, un nombre, mover una ventana, cambiar
 - Versión 76: en `world`, `era` (0 la tradicional del lugar, 1 de hoy) y `state` (0 en uso, 1 abandonado, 2 en obra); se omiten cuando valen 0. Los ficheros anteriores son tradicionales y en uso.
 - Versión 77: la tipología `facility` (equipamiento o comercio) y su `programme` (0 ayuntamiento … 37 bloque de VPO); se omite cuando vale 0.
 - Versión 78: en `world`, `front`, el número del lado del contorno (en sentido antihorario) que es la fachada principal de un edificio colocado a mano; se omite si no lo tiene (entonces manda la calle o el lado libre más largo).
+- Versión 79: en `world`, lo que el edificio cambia de la manera de su lugar: `roof` (`flat`, `gable`, `hip`), `pitch` (pendiente en %) y `shop` (planta baja comercial o no); se omiten si no los cambia.

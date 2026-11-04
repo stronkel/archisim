@@ -279,6 +279,43 @@ pub(super) fn skin_for(p: &Params) -> Skin {
     )
 }
 
+/// What a building changes of the skin of its place: its roof, its
+/// pitch and its ground floor (a shop or not), each when set.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct SkinTweak {
+    pub roof: Option<super::skins::Roof>,
+    pub pitch: Option<f64>,
+    /// The ground floor a shop (`true`) or the place's own (`false`: a
+    /// door, or the place's if it is not a shop).
+    pub shop: Option<bool>,
+}
+
+impl SkinTweak {
+    pub fn apply(&self, s: &mut Skin) {
+        if let Some(r) = self.roof {
+            s.roof = r;
+        }
+        if let Some(p) = self.pitch {
+            s.pitch = p.clamp(0.05, 1.5);
+        }
+        match self.shop {
+            Some(true) => s.ground = super::skins::Ground::Shop,
+            Some(false) if s.ground == super::skins::Ground::Shop => {
+                s.ground = super::skins::Ground::Door
+            }
+            _ => {}
+        }
+    }
+
+    fn key(&self) -> (u8, u64, u8) {
+        (
+            self.roof.map_or(255, |r| r as u8),
+            self.pitch.map_or(0, f64::to_bits),
+            self.shop.map_or(2, u8::from),
+        )
+    }
+}
+
 /// [`dress`] of an era and in a state.
 #[allow(clippy::too_many_arguments)]
 pub fn dress_with(
@@ -291,7 +328,34 @@ pub fn dress_with(
     seed: u64,
     light: bool,
 ) -> crate::PropMesh {
-    let owned = skin_with(skin, era);
+    dress_tweaked(
+        plan,
+        t,
+        skin,
+        era,
+        state,
+        floors,
+        seed,
+        light,
+        SkinTweak::default(),
+    )
+}
+
+/// As `dress_with`, the skin changed by `tweak`.
+#[allow(clippy::too_many_arguments)]
+pub fn dress_tweaked(
+    plan: &Plan,
+    t: Typology,
+    skin: usize,
+    era: Era,
+    state: State,
+    floors: usize,
+    seed: u64,
+    light: bool,
+    tweak: SkinTweak,
+) -> crate::PropMesh {
+    let mut owned = skin_with(skin, era);
+    tweak.apply(&mut owned);
     let base = &owned;
     let floors = if floors == 0 {
         usual_floors(base, t)
@@ -923,6 +987,32 @@ pub fn dress_cached_with(
     seed: u64,
     light: bool,
 ) -> std::sync::Arc<crate::PropMesh> {
+    dress_cached_tweaked(
+        plan,
+        t,
+        skin,
+        era,
+        state,
+        floors,
+        seed,
+        light,
+        SkinTweak::default(),
+    )
+}
+
+/// As `dress_cached_with`, the skin changed by `tweak`.
+#[allow(clippy::too_many_arguments)]
+pub fn dress_cached_tweaked(
+    plan: &Plan,
+    t: Typology,
+    skin: usize,
+    era: Era,
+    state: State,
+    floors: usize,
+    seed: u64,
+    light: bool,
+    tweak: SkinTweak,
+) -> std::sync::Arc<crate::PropMesh> {
     use std::hash::{Hash, Hasher};
     static CACHE: std::sync::OnceLock<DressCache> = std::sync::OnceLock::new();
     let mut h = std::collections::hash_map::DefaultHasher::new();
@@ -934,12 +1024,15 @@ pub fn dress_cached_with(
         (*s as u8).hash(&mut h);
     }
     (t as u8, skin, era, state as u8, floors, seed, light).hash(&mut h);
+    tweak.key().hash(&mut h);
     let key = h.finish();
     let cache = CACHE.get_or_init(Default::default);
     if let Some(m) = cache.lock().ok().and_then(|c| c.get(&key).cloned()) {
         return m;
     }
-    let m = std::sync::Arc::new(dress_with(plan, t, skin, era, state, floors, seed, light));
+    let m = std::sync::Arc::new(dress_tweaked(
+        plan, t, skin, era, state, floors, seed, light, tweak,
+    ));
     if let Ok(mut c) = cache.lock() {
         if c.len() > 4000 {
             c.clear();

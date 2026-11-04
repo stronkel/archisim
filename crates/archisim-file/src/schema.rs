@@ -1662,6 +1662,14 @@ pub(crate) struct WorldDressOf {
     /// The side that is its front, placed by hand (version 78).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub front: Option<u8>,
+    /// What it changes of its place's way (version 79): its roof (`flat`,
+    /// `gable`, `hip`), its pitch in per cent and its ground floor a shop.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub roof: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pitch: Option<u16>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shop: Option<bool>,
 }
 
 fn is_zero_u8(v: &u8) -> bool {
@@ -1694,6 +1702,9 @@ impl DressOf {
                 state: w.state,
                 programme: w.programme,
                 front: w.front,
+                roof: w.roof.map(|r| r.code().to_string()),
+                pitch: w.pitch,
+                shop: w.shop,
             }),
         }
     }
@@ -1733,6 +1744,9 @@ impl DressOf {
                         .programme
                         .min((archisim_core::world_programmes().len() - 1) as u8),
                     front: w.front,
+                    roof: w.roof.as_deref().and_then(core::EnvRoof::from_code),
+                    pitch: w.pitch,
+                    shop: w.shop,
                 }),
                 None => None,
             },

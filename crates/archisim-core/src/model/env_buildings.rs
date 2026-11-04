@@ -519,6 +519,42 @@ pub struct WorldDress {
     /// The side of its contour (anticlockwise) that is its front, where
     /// there is no street to say it (a building placed by hand).
     pub front: Option<u8>,
+    /// What it changes of its place's way: its roof, its pitch (per cent)
+    /// and its ground floor a shop or not (version 79).
+    pub roof: Option<EnvRoof>,
+    pub pitch: Option<u16>,
+    pub shop: Option<bool>,
+}
+
+impl WorldDress {
+    /// The skin of its place as it is from its era, before its own changes.
+    fn place_skin(&self) -> crate::props::fine::buildings::world::skins::Skin {
+        use crate::props::fine::buildings::world::types::{skin_with, Era};
+        skin_with(self.place as usize, Era::of(self.era as f64))
+    }
+
+    /// Its roof: its own, or its place's.
+    pub fn own_roof(&self) -> EnvRoof {
+        use crate::props::fine::buildings::world::skins::Roof;
+        self.roof.unwrap_or_else(|| match self.place_skin().roof {
+            Roof::Flat => EnvRoof::Flat,
+            Roof::Hip | Roof::Asian => EnvRoof::Hip,
+            _ => EnvRoof::Gable,
+        })
+    }
+
+    /// Its pitch in per cent: its own, or its place's.
+    pub fn own_pitch(&self) -> u16 {
+        self.pitch
+            .unwrap_or_else(|| (self.place_skin().pitch * 100.0).round() as u16)
+    }
+
+    /// Whether its ground floor is a shop: its own say, or its place's.
+    pub fn own_shop(&self) -> bool {
+        use crate::props::fine::buildings::world::skins::Ground;
+        self.shop
+            .unwrap_or_else(|| self.place_skin().ground == Ground::Shop)
+    }
 }
 
 /// A building of the world as the gallery offers it: a typology of a
@@ -926,6 +962,15 @@ impl Dress {
                 if let Some(f) = w.front {
                     s += &format!(";front={f}");
                 }
+                if let Some(r) = w.roof {
+                    s += &format!(";wroof={}", r.code());
+                }
+                if let Some(p) = w.pitch {
+                    s += &format!(";wpitch={p}");
+                }
+                if let Some(b) = w.shop {
+                    s += &format!(";wshop={}", u8::from(b));
+                }
                 s
             })
             .unwrap_or_default()
@@ -970,11 +1015,29 @@ impl Dress {
                         state: it.next().and_then(|e| e.parse().ok()).unwrap_or(0),
                         programme: it.next().and_then(|e| e.parse().ok()).unwrap_or(0),
                         front: None,
+                        roof: None,
+                        pitch: None,
+                        shop: None,
                     });
                 }
                 "front" => {
                     if let Some(w) = &mut d.world {
                         w.front = v.parse().ok();
+                    }
+                }
+                "wroof" => {
+                    if let Some(w) = &mut d.world {
+                        w.roof = EnvRoof::from_code(v);
+                    }
+                }
+                "wpitch" => {
+                    if let Some(w) = &mut d.world {
+                        w.pitch = v.parse().ok();
+                    }
+                }
+                "wshop" => {
+                    if let Some(w) = &mut d.world {
+                        w.shop = Some(v == "1");
                     }
                 }
                 _ => {}
@@ -1087,6 +1150,9 @@ impl Model {
                     state: d.world.map_or(0, |w| w.state),
                     programme: 0,
                     front: d.world.and_then(|w| w.front),
+                    roof: d.world.and_then(|w| w.roof),
+                    pitch: d.world.and_then(|w| w.pitch),
+                    shop: d.world.and_then(|w| w.shop),
                 }
             });
             if d.world.is_some() {
@@ -1120,6 +1186,9 @@ impl Model {
                 state: d.world.map_or(0, |w| w.state),
                 programme,
                 front: d.world.and_then(|w| w.front),
+                roof: d.world.and_then(|w| w.roof),
+                pitch: d.world.and_then(|w| w.pitch),
+                shop: d.world.and_then(|w| w.shop),
             });
             self.set_mass_dress(id, Some(d))?;
             n += 1;
@@ -1235,6 +1304,9 @@ impl Model {
                 0
             },
             front: Some(0),
+            roof: None,
+            pitch: None,
+            shop: None,
         });
         self.set_mass_dress(id, Some(d))?;
         Ok(id)

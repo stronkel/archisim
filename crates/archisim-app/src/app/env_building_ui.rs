@@ -393,6 +393,9 @@ impl ArchiSimApp {
                         state: 0,
                         programme: 0,
                         front: None,
+                        roof: None,
+                        pitch: None,
+                        shop: None,
                     }
                 });
             }
@@ -486,8 +489,80 @@ impl ArchiSimApp {
                         }
                     },
                 );
+                // What it changes of its place's way.
+                row(
+                    ui,
+                    "Cubierta",
+                    "La del lugar o la que se elija",
+                    |ui, wd| {
+                        let now = w.own_roof();
+                        let c = choice(
+                            ui,
+                            "env-world-roof",
+                            wd,
+                            now,
+                            &EnvRoof::ALL.map(|c| (c, c.name())),
+                        );
+                        if c != now {
+                            w.roof = Some(c);
+                            changed = true;
+                        }
+                    },
+                );
+                if w.own_roof() != EnvRoof::Flat {
+                    row(ui, "Pendiente (%)", "", |ui, wd| {
+                        let mut p = w.own_pitch() as i32;
+                        if ui
+                            .add_sized(
+                                [wd - 8.0, 20.0],
+                                egui::DragValue::new(&mut p).range(5..=120),
+                            )
+                            .changed()
+                        {
+                            w.pitch = Some(p as u16);
+                            changed = true;
+                        }
+                    });
+                }
+                row(
+                    ui,
+                    "Bajo comercial",
+                    "Escaparates y rótulo en la planta baja",
+                    |ui, wd| {
+                        let now = w.own_shop();
+                        let c = choice(
+                            ui,
+                            "env-world-shop",
+                            wd,
+                            now,
+                            &[(true, "Sí"), (false, "No")],
+                        );
+                        if c != now {
+                            w.shop = Some(c);
+                            changed = true;
+                        }
+                    },
+                );
+                if (w.roof.is_some() || w.pitch.is_some() || w.shop.is_some())
+                    && ui
+                        .button("Como en su lugar")
+                        .on_hover_text(
+                            "Vuelve a la cubierta, la pendiente y la planta baja de su lugar",
+                        )
+                        .clicked()
+                {
+                    w.roof = None;
+                    w.pitch = None;
+                    w.shop = None;
+                    changed = true;
+                }
+                props::note(
+                    ui,
+                    "Las ventanas, balcones, rejas, zócalo y cornisa los pone el lugar: para cambiarlos, elige otro lugar, otra variante u otra época.",
+                );
                 x.world = Some(w);
             }
+            let world_now = x.world.is_some();
             let metres = |ui: &mut Ui, label: &str, hint: &str, key: &str, v: &mut f64| {
                 let mut c = false;
                 row(ui, label, hint, |ui, w| {
@@ -498,123 +573,125 @@ impl ArchiSimApp {
                 });
                 c
             };
-            changed |= metres(
-                ui,
-                "Ritmo de huecos (mm)",
-                "Distancia entre ejes de ventanas",
-                "bay",
-                &mut x.bay,
-            );
-            changed |= metres(ui, "Ancho de ventana (mm)", "", "ww", &mut x.window_width);
-            changed |= metres(ui, "Alto de ventana (mm)", "", "wh", &mut x.window_height);
-            changed |= metres(
-                ui,
-                "Antepecho (mm)",
-                "Sobre cada planta",
-                "sill",
-                &mut x.sill,
-            );
-            row(
-                ui,
-                "Huecos",
-                "Lo que cierra las ventanas por fuera",
-                |ui, w| {
-                    let c = choice(
-                        ui,
-                        "env-closure",
-                        w,
-                        x.closure,
-                        &Closure::ALL.map(|c| (c, c.name())),
-                    );
-                    if c != x.closure {
-                        x.closure = c;
-                        changed = true;
-                    }
-                },
-            );
-            if matches!(x.closure, Closure::Balconies | Closure::Terraces) {
+            if !world_now {
                 changed |= metres(
                     ui,
-                    "Vuelo (mm)",
-                    "De balcones y terrazas",
-                    "depth",
-                    &mut x.balcony_depth,
+                    "Ritmo de huecos (mm)",
+                    "Distancia entre ejes de ventanas",
+                    "bay",
+                    &mut x.bay,
                 );
-            }
-            row(ui, "Cubierta", "", |ui, w| {
-                let c = choice(
+                changed |= metres(ui, "Ancho de ventana (mm)", "", "ww", &mut x.window_width);
+                changed |= metres(ui, "Alto de ventana (mm)", "", "wh", &mut x.window_height);
+                changed |= metres(
                     ui,
-                    "env-roof",
-                    w,
-                    x.roof,
-                    &EnvRoof::ALL.map(|c| (c, c.name())),
+                    "Antepecho (mm)",
+                    "Sobre cada planta",
+                    "sill",
+                    &mut x.sill,
                 );
-                if c != x.roof {
-                    x.roof = c;
-                    changed = true;
-                }
-            });
-            if x.roof != EnvRoof::Flat {
-                row(ui, "Pendiente (%)", "", |ui, w| {
-                    let mut p = (x.pitch * 100.0).round() as i32;
-                    if ui
-                        .add_sized([w - 8.0, 20.0], egui::DragValue::new(&mut p).range(5..=120))
-                        .changed()
-                    {
-                        x.pitch = p as f64 / 100.0;
-                        changed = true;
-                    }
-                });
                 row(
                     ui,
-                    "Cumbrera girada",
-                    "La cumbrera a escuadra con la de siempre (paralela a la fachada de la calle)",
-                    |ui, _| {
-                        if ui.switch(&mut x.ridge_turned, "").changed() {
+                    "Huecos",
+                    "Lo que cierra las ventanas por fuera",
+                    |ui, w| {
+                        let c = choice(
+                            ui,
+                            "env-closure",
+                            w,
+                            x.closure,
+                            &Closure::ALL.map(|c| (c, c.name())),
+                        );
+                        if c != x.closure {
+                            x.closure = c;
                             changed = true;
                         }
                     },
                 );
-            }
-            changed |= metres(
-                ui,
-                "Zócalo (mm)",
-                "Cero: sin zócalo",
-                "plinth",
-                &mut x.plinth,
-            );
-            row(
-                ui,
-                "Bajo comercial",
-                "Escaparates y rótulo en la planta baja",
-                |ui, w| {
-                    let c = choice(ui, "env-shop", w, x.shop, &[(true, "Sí"), (false, "No")]);
-                    if c != x.shop {
-                        x.shop = c;
+                if matches!(x.closure, Closure::Balconies | Closure::Terraces) {
+                    changed |= metres(
+                        ui,
+                        "Vuelo (mm)",
+                        "De balcones y terrazas",
+                        "depth",
+                        &mut x.balcony_depth,
+                    );
+                }
+                row(ui, "Cubierta", "", |ui, w| {
+                    let c = choice(
+                        ui,
+                        "env-roof",
+                        w,
+                        x.roof,
+                        &EnvRoof::ALL.map(|c| (c, c.name())),
+                    );
+                    if c != x.roof {
+                        x.roof = c;
                         changed = true;
                     }
-                },
-            );
-            row(ui, "Cornisa", "", |ui, w| {
-                let c = choice(
-                    ui,
-                    "env-cornice",
-                    w,
-                    x.cornice,
-                    &[(true, "Sí"), (false, "No")],
-                );
-                if c != x.cornice {
-                    x.cornice = c;
-                    changed = true;
+                });
+                if x.roof != EnvRoof::Flat {
+                    row(ui, "Pendiente (%)", "", |ui, w| {
+                        let mut p = (x.pitch * 100.0).round() as i32;
+                        if ui
+                            .add_sized([w - 8.0, 20.0], egui::DragValue::new(&mut p).range(5..=120))
+                            .changed()
+                        {
+                            x.pitch = p as f64 / 100.0;
+                            changed = true;
+                        }
+                    });
+                    row(
+                        ui,
+                        "Cumbrera girada",
+                        "La cumbrera a escuadra con la de siempre (paralela a la fachada de la calle)",
+                        |ui, _| {
+                            if ui.switch(&mut x.ridge_turned, "").changed() {
+                                changed = true;
+                            }
+                        },
+                    );
                 }
-            });
-            changed |= metres(
-                ui,
-                "Patio (mm)",
-                "Fondo de las crujías alrededor del patio; cero: sin patio",
-                "patio",
-                &mut x.patio,
-            );
+                changed |= metres(
+                    ui,
+                    "Zócalo (mm)",
+                    "Cero: sin zócalo",
+                    "plinth",
+                    &mut x.plinth,
+                );
+                row(
+                    ui,
+                    "Bajo comercial",
+                    "Escaparates y rótulo en la planta baja",
+                    |ui, w| {
+                        let c = choice(ui, "env-shop", w, x.shop, &[(true, "Sí"), (false, "No")]);
+                        if c != x.shop {
+                            x.shop = c;
+                            changed = true;
+                        }
+                    },
+                );
+                row(ui, "Cornisa", "", |ui, w| {
+                    let c = choice(
+                        ui,
+                        "env-cornice",
+                        w,
+                        x.cornice,
+                        &[(true, "Sí"), (false, "No")],
+                    );
+                    if c != x.cornice {
+                        x.cornice = c;
+                        changed = true;
+                    }
+                });
+                changed |= metres(
+                    ui,
+                    "Patio (mm)",
+                    "Fondo de las crujías alrededor del patio; cero: sin patio",
+                    "patio",
+                    &mut x.patio,
+                );
+            }
             if changed {
                 edit = Some(x);
             }
