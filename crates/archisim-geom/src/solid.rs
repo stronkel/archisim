@@ -2612,23 +2612,17 @@ pub fn terrain_holes(model: &Model, outline: &[Point2]) -> Vec<archisim_core::Ex
         },
     );
     let mut holes = model.excavations();
-    // The roads sit in the ground (U1): their whole width, down to under
-    // their pavement where it is lowest.
+    // The roads sit in the ground (U1): their width where they run in
+    // it, down to under their pavement where it is lowest.
     for r in model.roads() {
-        let outline = r.outline();
-        if outline.len() < 3 {
+        if r.outline().len() < 3 {
             continue;
         }
         let base = model.level(r.level).map_or(0.0, |l| l.elevation);
-        let len = r.length();
-        let n = (len / 5.0).ceil().max(1.0) as usize;
-        let low = (0..=n)
-            .map(|k| r.top_at(len * k as f64 / n as f64))
-            .fold(f64::MAX, f64::min);
-        holes.push(archisim_core::Excavation {
-            outline,
-            bottom: base + low - r.section.depth,
-        });
+        for mut h in crate::road_ground::road_holes(model, r) {
+            h.bottom += base;
+            holes.push(h);
+        }
     }
     // And the roundabouts and squares, with the sidewalk round them (U3).
     for c in model.roundabouts() {
@@ -4089,6 +4083,9 @@ pub fn road_solids_with(
             triangles: rails,
         });
     }
+    // Its embankments, viaducts and retaining walls where it leaves the
+    // ground.
+    out.extend(crate::road_ground::road_ground_solids(model, id));
     // Its tree pits: the soil, flush with the sidewalk (U3).
     let pits: Vec<[P3; 3]> = r
         .tree_pits_except(&gaps)

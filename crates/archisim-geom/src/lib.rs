@@ -40,6 +40,7 @@ pub mod junctions;
 pub mod orthophoto;
 pub mod pools;
 pub mod rebar;
+pub mod road_ground;
 pub mod roof_parts;
 pub mod room;
 pub mod sculpt;

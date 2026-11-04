@@ -518,8 +518,13 @@ fn ring_arms(roads: &[&Road], c: &Roundabout) -> Vec<Arm> {
     arms
 }
 
+/// Streets that cross with their tops further apart than this pass one
+/// over the other, without a crossing, metres.
+pub const OVERPASS: f64 = 3.5;
+
 /// The junctions of the roads of a level: at its roundabouts and squares
-/// and wherever roads meet away from them.
+/// and wherever roads meet away from them (but where one passes over the
+/// other, `OVERPASS`).
 pub fn junctions(model: &Model, level: LevelId) -> Vec<Junction> {
     let mut roads: Vec<&Road> = model.roads_on_level(level).collect();
     roads.sort_by_key(|r| r.id.0);
@@ -533,6 +538,14 @@ pub fn junctions(model: &Model, level: LevelId) -> Vec<Junction> {
     }
     for (x, met) in meeting_points(&roads) {
         if rings.iter().any(|c| c.centre.distance(x) < c.radius + 1.0) {
+            continue;
+        }
+        // One passes over the other (a bridge): no crossing.
+        let heights: Vec<f64> = met.iter().map(|&(i, s)| roads[i].top_at(s)).collect();
+        let (lo, hi) = heights
+            .iter()
+            .fold((f64::MAX, f64::MIN), |(a, b), z| (a.min(*z), b.max(*z)));
+        if hi - lo > OVERPASS {
             continue;
         }
         let mut arms: Vec<Arm> = Vec::new();

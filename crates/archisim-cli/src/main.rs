@@ -34,6 +34,7 @@ mod muestrario;
 mod ortofoto;
 mod taller;
 mod tramas;
+mod trazado;
 mod vivero;
 
 use std::path::{Path, PathBuf};
@@ -474,6 +475,10 @@ fn main() -> ExitCode {
         Some("cocina") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
             report(cocina::write(&dir))
+        }
+        Some("trazado") => {
+            let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
+            report(trazado::write(&dir))
         }
         Some("calles") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));

@@ -6,6 +6,41 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-04 (103) · Taller de calles, tanda C1 y primera parte de C2: trazar por tramos y la calle con el terreno
+
+Rama `bloque/calles` (pull request propio sobre `bloque/taller-edificios`). Sin cambios de formato: los tramos son viales de siempre, y los taludes, viaductos y muros se calculan, no se guardan. Plan completo en `docs/CALLES_TALLER.md`.
+
+**Hecho**
+- **Trazar calles por tramos**, como en Cities: Skylines:
+  - la herramienta Vial dibuja ahora por tramos rectos o curvos;
+  - cada clic pone ya el tramo con su sección, y el siguiente sigue de él;
+  - empezar en el extremo de una calle la alarga; empezar o acabar sobre otra hace el cruce;
+  - mientras se mueve el ratón se ve el tramo entero en planta y en 3D, con su longitud y la pendiente del terreno;
+  - «Eje entero», o elegir un borde como referencia, dibuja como antes.
+- **La rasante sigue el terreno**, suavizada y sin pasar de la pendiente máxima (8 % por defecto, en Propiedades).
+- **La calle y el terreno**:
+  - talud de terraplén donde va por encima;
+  - viaducto con tablero, pilas y pretiles a más de 6 m;
+  - muros de contención donde va metida;
+  - el terreno solo se recorta donde la calle va en él;
+  - dos calles que se cruzan a más de 3,5 m de altura de diferencia no hacen cruce: una pasa por encima.
+- `archisim trazado out/`: una avenida casi llana que cruza un valle en viaducto, una calle que sube al 8 % con una curva y otra por el fondo del valle que pasa por debajo.
+
+**Pendiente** (en `docs/CALLES_TALLER.md`)
+- **C2**: túneles, puentes con estribos, rampas y enlaces, pasarelas.
+- **C3**: el catálogo de vías y las de cada lugar.
+- **C4**: el detalle de bordillos, imbornales, señales y semáforos.
+- **C5**: calles y edificios que se adaptan, y manzanas.
+- Después, la vegetación estilizada: primero una prueba con 6 especies.
+
+**Qué debe probar Antonio**
+1. Un proyecto con terreno, herramienta Vial (W). Clic, clic, clic: cada tramo aparece al momento y el siguiente sigue del último. Doble clic o Intro termina.
+2. Empieza otro en el extremo de esa calle (la alarga) y otro en su costado (cruce en T).
+3. En Propiedades, «Tramos curvos»: un clic tira de la curva y el siguiente la acaba.
+4. `cargo run --release -p archisim-cli -- trazado out/` y abre `out/trazado.archisim`: mira el viaducto, los taludes y los muros, y la calle que pasa por debajo.
+
+---
+
 ## 2026-11-04 (102) · Taller de edificios, tanda 16: colocar los edificios del mundo a mano, y lo técnico que quedaba abierto
 
 Misma rama y mismo pull request (#160). Formato `.archisim` versión 78 (la fachada principal del edificio colocado a mano). Al unir #158 y #159 (versiones 72 a 74), las versiones de esta rama pasaron a ser 75 a 78: los ficheros guardados con la rama antes de la unión, con edificios del mundo, se deben volver a generar.
