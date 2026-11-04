@@ -6,6 +6,40 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-04 (102) · Taller de edificios, tanda 16: colocar los edificios del mundo a mano, y lo técnico que quedaba abierto
+
+Misma rama y mismo pull request (#160). Formato `.archisim` versión 78 (la fachada principal del edificio colocado a mano). Al unir #158 y #159 (versiones 72 a 74), las versiones de esta rama pasaron a ser 75 a 78: los ficheros guardados con la rama antes de la unión, con edificios del mundo, se deben volver a generar.
+
+**Hecho**
+- **Colocar edificios como en CityRT**, sin traer el entorno ni dibujar parcelas:
+  - herramienta «Edificio del mundo» (disciplina Entorno, atajo EM) con su galería en Propiedades, y en la Maqueta, Exterior → «Edificios y calles»;
+  - tarjetas con el edificio en 3D, por grupos, y el lugar elegible (por defecto, el del proyecto);
+  - medidas habituales por tipología y programa, que se pueden cambiar antes de colocar (Fachada, Fondo, Plantas; «Medidas habituales» las devuelve) o después;
+  - un clic: si hay una calle cerca (25 m), la fachada se pone en el borde de la acera mirando a la calle; si no, como esté girado (Espacio, 90°); con «Dos clics», la fachada se marca de un punto a otro;
+  - mientras se mueve el ratón se ve el volumen que se va a poner.
+- **Lo técnico que quedaba abierto**:
+  - casas profundas entre medianeras (más de 12 m): faldón a la calle de 5 m y plano detrás, en lugar de toda plana;
+  - la fachada principal: la del edificio colocado a mano manda; si no, la que da a la calle; si no, el lado libre más largo;
+  - tejas de lejos: escalón cada dos hiladas en la versión ligera de los edificios con estilo, y bandas en los del mundo;
+  - plaza de toros y corral un tercio más ligeros (pomos, flores y frutas con pocas caras, balaustres cuadrados);
+  - ortofoto con su imagen de verdad en la vista 3D (con niveles de detalle, hasta 4096 píxeles de lado), en el glTF (su PNG como textura) y en el render;
+  - MDS por recuadro: «Descargar el entorno» con Terreno pide también el modelo de superficies al WCS del IGN (`wcs-mds.idee.es`), con el nombre MDS05.asc para que se lea como superficie;
+  - tarjetas 3D de piezas detalladas con líneas finas (antes los tejados salían negros).
+- Lo de interfaz que estaba en la lista (Aristas, Líneas ocultas, tarjetas de tamaños, «Parecidos», panel del Sol, árboles de cerca) ya llegó con #158 y #159.
+
+**Pendiente**
+- El WCS del MDS no se ha podido probar desde aquí (no hay red hacia el IGN): si falla, sale en la lista de lo que no llegó, con su dirección.
+- Pasar del taller a la biblioteca: cuando Antonio lo apruebe.
+
+**Qué debe probar Antonio**
+1. Abre un proyecto vacío, Entorno → «Edificio del mundo»: mira las tarjetas, elige «Entre medianeras» y haz clic en el terreno; gira con Espacio antes de otro clic.
+2. Dibuja una calle (Entorno → Vial) y coloca edificios a su lado: deben ponerse con la fachada en la acera y mirando a la calle.
+3. En la Maqueta (F4), Exterior → «Edificios y calles»: lo mismo desde el catálogo.
+4. Con un proyecto georreferenciado, «Descargar el entorno» con Terreno y Ortofoto: mira que la ortofoto se ve nítida de cerca y que llega el MDS.
+5. `cargo run --release -p archisim-cli -- entorno out/` y mira de lejos los tejados.
+
+---
+
 ## 2026-11-04 (101) · Taller de edificios, tandas 13 a 15: plazas de cada lugar, parques, lo que remata un pueblo y la arquitectura popular
 
 Misma rama y mismo pull request (#160). Sin cambios de formato: son programas nuevos del «Equipamiento del mundo» (ya son 38).

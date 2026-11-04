@@ -119,6 +119,18 @@ Los ejes 1 y 2 dan el volumen; los ejes 3, 4 y 5 dan la piel. Hay detalles que h
 13. **Tanda 15, arquitectura popular que faltaba** (hecha, en revisión): hórreo (gallego, y asturiano en la montaña), palloza, casa de piedra de sierra, casa-patio de una planta y bloque de VPO de ladrillo.
    - Son programas del mismo «Equipamiento del mundo» (del 19 al 37) y llevan la piel del lugar. Se ven con `archisim equipamientos out/ <lugares>`; fotos con `ARCHISIM_HOJAS=6,7,8,9,10` para las hojas nuevas.
    - Al traer el entorno se reconocen también hospitales, hoteles, ermitas, estaciones, faros y cementerios.
+14. **Tanda 16, colocar los edificios a mano, como en CityRT** (hecha, en revisión): para cuando no se quiere traer el entorno ni dibujar parcelas.
+   - Herramienta «Edificio del mundo» (Entorno, atajo EM) y, en la Maqueta, Exterior → «Edificios y calles»: una galería en tarjetas con el edificio en 3D, agrupada (viviendas, arquitectura popular, equipamientos, deporte, comercio y hostelería, plazas y parques, transporte y puerto, monumentos), con el lugar elegible.
+   - Cada tipología trae sus medidas habituales (entre medianeras: el ancho del lugar × 12 m; bloque 22 × 14; aislada 10 × 8; torre 24 × 24; casa patio 16 × 18; los equipamientos, las de su programa) y sus plantas; se cambian antes de colocar (Fachada, Fondo, Plantas) o después, como cualquier volumen.
+   - Un clic lo pone: si hay una calle a menos de 25 m, con la fachada en el borde de la acera mirándola; si no, como esté girado (Espacio gira 90°). Con «Dos clics», el primero y el segundo marcan la fachada.
+   - La fachada principal se guarda en el edificio (formato 78) y manda sobre la que se deduce de las calles.
+   - Las calles se dibujan con la herramienta de siempre (también en la ficha «Calle» junto a la galería).
+15. **Remates técnicos** (hechos con la tanda 16):
+   - Las casas profundas entre medianeras ya no quedan con cubierta plana: un faldón a la calle y el resto plano detrás.
+   - Las tejas se ven también de lejos: la versión ligera lleva un escalón cada dos hiladas (U6) o bandas (edificios del mundo).
+   - La plaza de toros (de 95.000 a 62.000 triángulos) y el corral (de 124.000 a 81.000) más ligeros: pomos, flores y frutas de pocas caras, balaustres cuadrados.
+   - La ortofoto se ve como imagen de verdad, píxel a píxel, en la vista 3D, en el glTF y en el render.
+   - El modelo de superficies (MDS) del recuadro del proyecto se pide al WCS del IGN con el terreno, para las plantas de los edificios.
 
 Cuando Antonio apruebe una tanda, la integración será que los estilos de U6 (y U7, al traer el Catastro) usen estos modelos sobre la planta y las plantas que tenga cada masa.
 
