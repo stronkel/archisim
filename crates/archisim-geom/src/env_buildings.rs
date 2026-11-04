@@ -30,6 +30,10 @@ const BARS: f64 = 0.13;
 const TILES: f64 = 0.06;
 /// The highest a tiled roof climbs over its eaves; past it, flat.
 const MAX_RIDGE: f64 = 4.5;
+/// Deeper than this from the street, a house between party walls has its
+/// slope only over the first bay (`FRONT_BAY`), a flat roof behind.
+const DEEP_HOUSE: f64 = 12.0;
+const FRONT_BAY: f64 = 5.0;
 
 /// The corners of the box round a contour.
 fn bounds_2d(poly: &[Point2]) -> (Point2, Point2) {
@@ -313,6 +317,60 @@ pub fn dressed_solids_detail(model: &Model, m: &Mass, light: bool) -> Vec<Solid>
     let tiled = match d.roof {
         EnvRoof::Flat => false,
         EnvRoof::Gable | EnvRoof::Hip if court.is_some() => false,
+        EnvRoof::Gable | EnvRoof::Hip
+            if lean_to(&poly, &sides, &|i| party(i), door_side.or(longest_free)).is_some() =>
+        {
+            // A deep house between party walls: one slope over the bay on
+            // the street, a flat roof behind.
+            let (a, inward) =
+                lean_to(&poly, &sides, &|i| party(i), door_side.or(longest_free)).unwrap();
+            let split = |front: bool| -> Vec<Vec<Point2>> {
+                let k = FRONT_BAY;
+                let (lo, hi) = bounds_2d(&poly);
+                let big = (hi - lo).length() + 10.0;
+                let along = inward.perp_left();
+                let base = a + inward * k;
+                let far = if front { -big } else { big };
+                let half = vec![
+                    base + along * -big,
+                    base + along * big,
+                    base + along * big + inward * far,
+                    base + along * -big + inward * far,
+                ];
+                crate::junctions::intersection(
+                    &[(crate::ensure_ccw(poly.clone()), Vec::new())],
+                    &[(crate::ensure_ccw(half), Vec::new())],
+                )
+                .into_iter()
+                .map(|(o, _)| o)
+                .filter(|o| o.len() >= 3 && signed_area(o).abs() > 0.5)
+                .collect()
+            };
+            let mut any = false;
+            for piece in split(true) {
+                let (ps, pp) = piece_sides(&piece, &sides, &|i| party(i));
+                if ps.len() == piece.len() {
+                    any |= pitched_roof_with(
+                        &mut out,
+                        d,
+                        &piece,
+                        &ps,
+                        &|i| pp[i],
+                        (z0, top),
+                        inward.perp_left(),
+                        m.id.0,
+                        Some((a, inward)),
+                    );
+                }
+            }
+            for piece in split(false) {
+                let (ps, _) = piece_sides(&piece, &sides, &|i| party(i));
+                if ps.len() == piece.len() {
+                    flat_roof(&mut out, d, &piece, &ps, None, top, (floors, m.id.0));
+                }
+            }
+            any
+        }
         EnvRoof::Gable | EnvRoof::Hip => {
             // The ridge along the street front (or the longest free
             // side, or the longest), turned if asked.
@@ -1148,6 +1206,78 @@ fn pitched_roof(
     axis: Vec2,
     seed: u64,
 ) -> bool {
+    pitched_roof_with(out, d, poly, sides, party, (z0, top), axis, seed, None)
+}
+
+/// Where a house between party walls is deeper than `DEEP_HOUSE` from its
+/// street front: a point of the front and the way in.
+fn lean_to(
+    poly: &[Point2],
+    sides: &[Side],
+    party: &dyn Fn(usize) -> bool,
+    door_side: Option<usize>,
+) -> Option<(Point2, Vec2)> {
+    let i = door_side?;
+    if !(0..sides.len()).any(party) {
+        return None;
+    }
+    let s = sides[i];
+    let inward = -s.out;
+    let depth = poly
+        .iter()
+        .map(|p| (*p - s.a).dot(inward))
+        .fold(0.0, f64::max);
+    (depth > DEEP_HOUSE).then_some((s.a, inward))
+}
+
+/// The sides of a piece cut from the contour, and which of them lie on a
+/// party wall of the whole.
+fn piece_sides(
+    piece: &[Point2],
+    whole: &[Side],
+    party: &dyn Fn(usize) -> bool,
+) -> (Vec<Side>, Vec<bool>) {
+    let n = piece.len();
+    let mut out = Vec::new();
+    let mut on_party = Vec::new();
+    for i in 0..n {
+        let (a, b) = (piece[i], piece[(i + 1) % n]);
+        let Some(u) = (b - a).normalized() else {
+            continue;
+        };
+        let mid = a + (b - a) * 0.5;
+        let p = whole.iter().enumerate().any(|(k, s)| {
+            party(k) && {
+                let q = mid - s.a;
+                let t = q.dot(s.u);
+                t > -0.05 && t < s.len + 0.05 && q.dot(s.out).abs() < 0.05
+            }
+        });
+        out.push(Side {
+            a,
+            u,
+            out: -u.perp_left(),
+            len: a.distance(b),
+        });
+        on_party.push(p);
+    }
+    (out, on_party)
+}
+
+/// [`pitched_roof`], or with `lean` (a point of the street front and the
+/// way in) one slope rising from the street.
+#[allow(clippy::too_many_arguments)]
+fn pitched_roof_with(
+    out: &mut Out,
+    d: &Dress,
+    poly: &[Point2],
+    sides: &[Side],
+    party: &dyn Fn(usize) -> bool,
+    (z0, top): (f64, f64),
+    axis: Vec2,
+    seed: u64,
+    lean: Option<(Point2, Vec2)>,
+) -> bool {
     let across = axis.perp_left();
     let c0 = poly[0];
     let (mut u0, mut u1, mut n0, mut n1) = (f64::MAX, f64::MIN, f64::MAX, f64::MIN);
@@ -1162,12 +1292,15 @@ fn pitched_roof(
     let (hw, cn) = ((n1 - n0) / 2.0, (n0 + n1) / 2.0);
     let (hl, cu) = ((u1 - u0) / 2.0, (u0 + u1) / 2.0);
     // Planes as (slope, height at c0) over the eaves.
-    let mut planes: Vec<(Vec2, f64)> = vec![
-        (across * -pitch, pitch * (hw + cn)),
-        (across * pitch, pitch * (hw - cn)),
-    ];
+    let mut planes: Vec<(Vec2, f64)> = match lean {
+        Some((a, inward)) => vec![(inward * pitch, pitch * (c0 - a).dot(inward))],
+        None => vec![
+            (across * -pitch, pitch * (hw + cn)),
+            (across * pitch, pitch * (hw - cn)),
+        ],
+    };
     let free = !(0..sides.len()).any(party);
-    let hip = d.roof == EnvRoof::Hip && free;
+    let hip = d.roof == EnvRoof::Hip && free && lean.is_none();
     if hip {
         planes.push((axis * -pitch, pitch * (hl + cu)));
         planes.push((axis * pitch, pitch * (hl - cu)));
@@ -1954,6 +2087,26 @@ mod tests {
         let s = dressed_solids(&m, mass);
         let (lo, hi) = bounds(&s);
         assert!(hi[2] < mass.height + 6.0, "{}", hi[2]);
+        // One slope over the first bay from the street, flat behind.
+        let roof_over = |y0: f64, y1: f64| {
+            s.iter()
+                .flat_map(|x| x.triangles.iter())
+                .flat_map(|t| t.iter())
+                .filter(|p| p[1] > y0 && p[1] < y1)
+                .map(|p| p[2])
+                .fold(f64::MIN, f64::max)
+        };
+        assert!(
+            roof_over(2.0, 5.0) > mass.height + 1.0,
+            "{}",
+            roof_over(2.0, 5.0)
+        );
+        // (the aerial and the chimneys of the flat roof stand over it)
+        assert!(
+            roof_over(10.0, 38.0) < mass.height + 2.6,
+            "{}",
+            roof_over(10.0, 38.0)
+        );
         assert!(lo[0] > -1.0 && hi[0] < 7.0 && lo[1] > -2.0 && hi[1] < 41.0);
     }
 
