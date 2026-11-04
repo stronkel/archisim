@@ -136,6 +136,9 @@ pub fn camera_seen(lo: glam::Vec3, hi: glam::Vec3, aspect: f32, seen: [f32; 2]) 
     c
 }
 
+/// Corners of a model above which its card is drawn with thin lines.
+const THIN_ABOVE: usize = 4_000;
+
 /// Draws a model alone, with a transparent background, as RGBA bytes
 /// (premultiplied), seen from `seen` (yaw and pitch, in degrees).
 pub fn draw_seen(
@@ -151,6 +154,15 @@ pub fn draw_seen(
         return None;
     }
     let camera = camera_seen(scene.lo, scene.hi, px[0] as f32 / px[1] as f32, seen);
+    // A building on a card has thousands of small edges (tiles, bars,
+    // frames): drawn thick, they would blacken it; thin, it reads.
+    let vertices: usize = scene
+        .opaque
+        .iter()
+        .map(|c| c.mesh.vertices.len())
+        .chain(scene.groups.iter().map(|g| g.opaque.vertices.len()))
+        .sum();
+    r.thin_lines = vertices > THIN_ABOVE;
     r.set_scene(device, &scene);
     r.set_clip(None);
     r.set_cut(None);

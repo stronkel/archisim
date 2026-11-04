@@ -357,3 +357,72 @@ fn paint_card(ui: &Ui, r: Rect, name: &str, thumbs: &HashMap<String, Thumb>) {
         );
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Every card of the gallery of a place has its building in 3D (with
+    /// `ARCHISIM_GALERIA_OUT`, a sheet of them all, to look at).
+    #[test]
+    fn the_gallery_draws_every_building() {
+        let Some((device, queue, view_formats)) = crate::view3d::gpu_tests::gpu() else {
+            eprintln!("No graphics adapter: 3D drawing test skipped.");
+            return;
+        };
+        let out = std::env::var_os("ARCHISIM_GALERIA_OUT").map(std::path::PathBuf::from);
+        let mut r = crate::view3d::render::Renderer::new(
+            &device,
+            view_formats,
+            crate::view3d::render::TextureMode::Full,
+        );
+        let (cw, ch) = (220u32, 104u32);
+        // Without a sheet asked, a few of each group are enough.
+        let picks: Vec<WorldPick> = gallery(0)
+            .into_iter()
+            .flat_map(|(_, g)| {
+                let n = if out.is_some() { g.len() } else { 2 };
+                g.into_iter().take(n)
+            })
+            .collect();
+        let cols = 6u32;
+        let rows = (picks.len() as u32).div_ceil(cols);
+        let mut sheet = vec![255u8; (cols * cw * rows * ch * 4) as usize];
+        for (i, p) in picks.iter().enumerate() {
+            let (model, _) = world_model(*p).unwrap_or_else(|| panic!("{}", p.label()));
+            let (w, h, px) = super::super::thumbs3d::draw_seen(
+                &mut r,
+                &device,
+                &queue,
+                &model,
+                [cw, ch],
+                [55.0, 26.0],
+            )
+            .unwrap_or_else(|| panic!("{}", p.label()));
+            let opaque = px.chunks(4).filter(|c| c[3] > 200).count();
+            assert!(opaque > 1500, "{}: {opaque}", p.label());
+            let (x0, y0) = ((i as u32 % cols) * cw, (i as u32 / cols) * ch);
+            for y in 0..h {
+                for x in 0..w {
+                    let s = ((y * w + x) * 4) as usize;
+                    let d = (((y0 + y) * cols * cw + x0 + x) * 4) as usize;
+                    let a = px[s + 3] as u32;
+                    for k in 0..3 {
+                        sheet[d + k] = ((px[s + k] as u32 * a + 255 * (255 - a)) / 255) as u8;
+                    }
+                    sheet[d + 3] = 255;
+                }
+            }
+        }
+        if let Some(dir) = out {
+            std::fs::create_dir_all(&dir).unwrap();
+            resvg::tiny_skia::Pixmap::from_vec(
+                sheet,
+                resvg::tiny_skia::IntSize::from_wh(cols * cw, rows * ch).unwrap(),
+            )
+            .unwrap()
+            .save_png(dir.join("galeria-edificios.png"))
+            .unwrap();
+        }
+    }
+}
