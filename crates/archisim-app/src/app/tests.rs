@@ -9741,7 +9741,7 @@ fn buildings_of_the_world_put_with_a_click() {
     assert!(poly.iter().all(|q| q.y >= edge - 1e-6));
     assert!(h.app.ed.selection.contains(&Element::Mass(mass.id)));
     // The front on its street.
-    assert_eq!(h.model().street_sides(mass.id)[0], true);
+    assert!(h.model().street_sides(mass.id)[0]);
     // Away from the street, turned a quarter with Space.
     h.app.world_settings.take(archisim_core::WorldPick {
         place: 0,

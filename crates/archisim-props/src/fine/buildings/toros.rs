@@ -101,11 +101,13 @@ pub fn bullring(b: &mut Builder, p: &Params) {
             c[0] + (r_gallery + 0.3) * a0.cos(),
             c[1] + (r_gallery + 0.3) * a0.sin(),
         ];
-        b.cyl(
+        b.cone(
             "trim",
             [col[0], col[1], z_gallery],
             [col[0], col[1], h - 1.05],
             0.14,
+            0.14,
+            10,
         );
         b.rbox(
             "trim",
@@ -129,17 +131,18 @@ pub fn bullring(b: &mut Builder, p: &Params) {
             (a0, a1),
             (z_gallery + 0.85, z_gallery + 0.95),
         );
+        // The balusters: square, seen from the ring or the street.
         for t in 1..8 {
             let a = a0 + (a1 - a0) * t as f64 / 8.0;
             let q = [
                 c[0] + (r_gallery + 0.3) * a.cos(),
                 c[1] + (r_gallery + 0.3) * a.sin(),
             ];
-            b.cyl(
+            b.rbox(
                 "trim",
-                [q[0], q[1], z_gallery],
-                [q[0], q[1], z_gallery + 0.85],
-                0.04,
+                [q[0] - 0.04, q[1] - 0.04, z_gallery],
+                [q[0] + 0.04, q[1] + 0.04, z_gallery + 0.85],
+                0.0,
             );
         }
         // The roof of the gallery: tiles falling to the ring.

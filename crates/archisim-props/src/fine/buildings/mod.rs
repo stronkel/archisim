@@ -678,7 +678,7 @@ pub fn hung_pot(b: &mut Builder, f: &Face, s: f64, z: f64, seed: u64) {
     );
     for k in 0..4 {
         let a = std::f64::consts::TAU * (k as f64 + unit(seed, 2 + k)) / 4.0;
-        b.ellipsoid(
+        b.ellipsoid_n(
             "flowers",
             [
                 c[0] + 0.1 * a.cos(),
@@ -686,6 +686,7 @@ pub fn hung_pot(b: &mut Builder, f: &Face, s: f64, z: f64, seed: u64) {
                 z + 0.27 + 0.04 * unit(seed, 9 + k),
             ],
             [0.04, 0.04, 0.035],
+            8,
         );
     }
 }
@@ -710,7 +711,7 @@ pub fn standing_pot(b: &mut Builder, c: P3, size: f64, seed: u64) {
     if unit(seed, 3) > 0.4 {
         for k in 0..3 {
             let a = std::f64::consts::TAU * (k as f64 + unit(seed, 4 + k)) / 3.0;
-            b.ellipsoid(
+            b.ellipsoid_n(
                 "flowers",
                 [
                     c[0] + 0.13 * size * a.cos(),
@@ -718,6 +719,7 @@ pub fn standing_pot(b: &mut Builder, c: P3, size: f64, seed: u64) {
                     c[2] + 0.55 * size,
                 ],
                 [0.045 * size, 0.045 * size, 0.04 * size],
+                8,
             );
         }
     }
@@ -1255,10 +1257,11 @@ pub fn panel_door(
         } else {
             e - 0.12
         };
-        b.ellipsoid(
+        b.ellipsoid_n(
             "brass",
             f.at(kx, z0 + 1.05, ld.1 + 0.028),
             [0.03, 0.03, 0.03],
+            8,
         );
     }
 }

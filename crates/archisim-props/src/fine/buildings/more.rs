@@ -305,7 +305,7 @@ pub fn fruit_tree(b: &mut Builder, base: [f64; 2], h: f64, seed: u64, fruit: boo
         if fruit {
             for j in 0..4 {
                 let t = std::f64::consts::TAU * (j as f64 + unit(seed, 30 + k * 4 + j)) / 4.0;
-                b.ellipsoid(
+                b.ellipsoid_n(
                     "fruit",
                     [
                         cc[0] + rr * 0.92 * t.cos(),
@@ -313,6 +313,7 @@ pub fn fruit_tree(b: &mut Builder, base: [f64; 2], h: f64, seed: u64, fruit: boo
                         cc[2] + rr * 0.2 * (unit(seed, 50 + j) - 0.5),
                     ],
                     [0.06, 0.06, 0.06],
+                    8,
                 );
             }
         }

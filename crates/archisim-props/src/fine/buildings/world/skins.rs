@@ -31,6 +31,9 @@ pub enum Cover {
     Seam,
     /// Nothing over the slab (seen from afar).
     Plain,
+    /// Tiles seen from afar: a step every few courses, so the slope
+    /// still reads as tiled.
+    Bands,
 }
 
 /// The outline of a gable to the street.

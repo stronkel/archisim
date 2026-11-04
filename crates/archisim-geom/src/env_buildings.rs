@@ -1359,9 +1359,11 @@ fn pitched_roof_with(
                     (z, z + slab)
                 }),
             );
-            if !out.light && gk.length() > 1e-9 {
+            if gk.length() > 1e-9 {
                 tile_courses(out, mat.roof, &outer, *gk, &|q| top + lowest(q) + slab);
-                faces.push((*gk, outer));
+                if !out.light {
+                    faces.push((*gk, outer));
+                }
             }
         }
     }
@@ -1516,7 +1518,9 @@ fn pitched_roof_with(
 fn tile_courses(out: &mut Out, m: MaterialId, face: &[Point2], g: Vec2, z: &dyn Fn(Point2) -> f64) {
     let Some(up) = g.normalized() else { return };
     let k = (1.0 + g.dot(g)).sqrt();
-    let course = 0.34 / k;
+    // From afar (the light version) one step every two courses, made of a
+    // single plate: still a line across the roof at every step.
+    let course = if out.light { 0.68 } else { 0.34 } / k;
     let ds: Vec<f64> = face
         .iter()
         .map(|p| (*p - Point2::new(0.0, 0.0)).dot(up))
@@ -1547,7 +1551,12 @@ fn tile_courses(out: &mut Out, m: MaterialId, face: &[Point2], g: Vec2, z: &dyn 
     for i in 0..n {
         let lo = d0 + course * i as f64;
         let hi = (lo + course).min(d1);
-        for (a, b, za, zb) in [(lo, lo + nose, low, high), (lo + nose, hi, high, low)] {
+        let steps: &[(f64, f64, f64, f64)] = if out.light {
+            &[(lo, hi, 0.05, low)]
+        } else {
+            &[(lo, lo + nose, low, high), (lo + nose, hi, high, low)]
+        };
+        for &(a, b, za, zb) in steps {
             if b - a < 1e-6 {
                 continue;
             }
@@ -2175,7 +2184,8 @@ mod tests {
                 let s = dressed_solids(&m, &mass);
                 let roof = mass.dress.unwrap().materials.roof;
                 let mut covered = 0.0;
-                // The light version: the full one lays courses over it.
+                // The light version: its bands of courses lie over the
+                // slab, once more over it.
                 for t in dressed_solids_detail(&m, &mass, true)
                     .iter()
                     .filter(|s| s.material == roof)
@@ -2191,7 +2201,7 @@ mod tests {
                 // All of it, and the eaves round it.
                 let area = signed_area(&outline).abs();
                 assert!(
-                    covered > area * 0.99 && covered < area * 1.5,
+                    covered > area * 0.99 && covered < area * 3.0,
                     "{k} {turned}: {covered} of {area}"
                 );
                 let tiles: Vec<Solid> = s.iter().filter(|s| s.material == roof).cloned().collect();

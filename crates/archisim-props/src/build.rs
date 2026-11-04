@@ -325,7 +325,12 @@ impl Builder {
 
     /// An ellipsoid with these half-axes.
     pub fn ellipsoid(&mut self, role: &'static str, c: P3, r: P3) {
-        let seg = ROUND;
+        self.ellipsoid_n(role, c, r, ROUND);
+    }
+
+    /// A small ellipsoid of few sides (a knob, a flower, a fruit on a
+    /// building seen from the street): `seg` round, `seg / 2` up.
+    pub fn ellipsoid_n(&mut self, role: &'static str, c: P3, r: P3, seg: usize) {
         let rows = seg / 2;
         let profile: Vec<(f64, f64)> = (0..=rows)
             .map(|i| {

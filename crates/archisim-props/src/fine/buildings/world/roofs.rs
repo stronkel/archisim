@@ -41,7 +41,10 @@ pub fn roof(b: &mut Builder, r: &RoofPlan, l: &Look) {
     let plain;
     let r = if r.light {
         plain = RoofPlan {
-            cover: Cover::Plain,
+            cover: match r.cover {
+                Cover::Courses | Cover::Curved | Cover::Bands => Cover::Bands,
+                _ => Cover::Plain,
+            },
             ..r.clone()
         };
         &plain
@@ -959,6 +962,23 @@ pub fn covered(b: &mut Builder, role: &'static str, pts: &[P3], cover: Cover) {
                 }
                 t += 0.24;
                 k += 1;
+            }
+        }
+        Cover::Bands => {
+            let lo = lifted.iter().map(|p| dot(p, up)).fold(f64::MAX, f64::min);
+            let hi = lifted.iter().map(|p| dot(p, up)).fold(f64::MIN, f64::max);
+            let mut t = lo + 0.02;
+            while t < hi - 0.1 {
+                let part = clip(&lifted, up, t, (t + 0.6).min(hi));
+                if part.len() >= 3 {
+                    let sink = -0.005;
+                    let part: Vec<P3> = part
+                        .iter()
+                        .map(|p| [p[0] + n[0] * sink, p[1] + n[1] * sink, p[2] + n[2] * sink])
+                        .collect();
+                    plate_n(b, role, &part, n, 0.03);
+                }
+                t += 0.72;
             }
         }
         Cover::Plain => {}
