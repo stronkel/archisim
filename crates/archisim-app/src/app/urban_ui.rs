@@ -48,9 +48,47 @@ impl RoadReference {
     }
 }
 
+/// How the road tool lays a street.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum RoadDraw {
+    /// Stretch by stretch, straight, each click lays one (as in a city
+    /// builder), going on from the last.
+    #[default]
+    Straight,
+    /// Stretch by stretch, curved: a click pulls the curve, the next ends
+    /// it.
+    Curve,
+    /// The whole axis (or an edge) by its points, finished at the end.
+    Polyline,
+}
+
+impl RoadDraw {
+    pub const ALL: [RoadDraw; 3] = [RoadDraw::Straight, RoadDraw::Curve, RoadDraw::Polyline];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            RoadDraw::Straight => "Tramos rectos",
+            RoadDraw::Curve => "Tramos curvos",
+            RoadDraw::Polyline => "Eje entero",
+        }
+    }
+
+    pub fn by_stretches(self) -> bool {
+        self != RoadDraw::Polyline
+    }
+}
+
+/// How close to the end or axis of a street a click is taken to it, past
+/// its half width, metres.
+pub const ROAD_SNAP: f64 = 1.5;
+
 /// What the road tool draws.
 #[derive(Debug, Clone, PartialEq)]
 pub struct RoadSettings {
+    pub draw: RoadDraw,
+    /// The street follows the ground, its grade under `max_grade`.
+    pub follow_ground: bool,
+    pub max_grade: f64,
     pub reference: RoadReference,
     pub section: RoadSection,
     pub top_offset: f64,
@@ -68,6 +106,9 @@ impl RoadSettings {
                 .map_or(MaterialId(0), |m| m.id)
         };
         RoadSettings {
+            draw: RoadDraw::Straight,
+            follow_ground: true,
+            max_grade: 0.08,
             reference: RoadReference::Axis,
             section: RoadSection::default(),
             top_offset: 0.0,
@@ -466,15 +507,121 @@ impl ArchiSimApp {
     // ---- Road tool ----------------------------------------------------------
 
     pub(super) fn road_click(&mut self, p: Point2) {
+        if !self.road_settings.draw.by_stretches() {
+            if self.road_points.last().is_some_and(|l| l.approx_eq(p)) {
+                self.finish_road();
+            } else {
+                self.road_points.push(p);
+            }
+            return;
+        }
         if self.road_points.last().is_some_and(|l| l.approx_eq(p)) {
             self.finish_road();
-        } else {
+            return;
+        }
+        let (p, on_street) = self.road_snap(p);
+        if self.road_points.is_empty() {
+            // Starting at a free end goes on with that street.
+            self.road_chain = on_street.and_then(|(id, end)| end.map(|e| (id, e)));
             self.road_points.push(p);
+            return;
+        }
+        if self.road_settings.draw == RoadDraw::Curve && self.road_points.len() == 1 {
+            // The pull of the curve.
+            self.road_points.push(p);
+            return;
+        }
+        let Some(points) = self.road_stretch_points(p) else {
+            return;
+        };
+        let level = self.ed.level;
+        let s = self.road_settings.clone();
+        let chain = self.road_chain;
+        let r = self.ed.transact("Tramo de calle", |m| {
+            m.add_road_stretch(archisim_core::RoadStretch {
+                level,
+                points,
+                continues: chain,
+                section: s.section.clone(),
+                top_offset: s.top_offset,
+                pavement: s.pavement,
+                kerb_material: s.kerb,
+                sidewalk_material: s.sidewalk,
+                follow_ground: s.follow_ground.then_some(s.max_grade),
+            })
+        });
+        match r {
+            Ok(id) => {
+                // The free end of what was laid: where the next stretch
+                // goes on from (the start, if it lengthened a street
+                // backwards).
+                let at_end = chain.is_none_or(|(c, e)| c != id || e);
+                self.ed.selection = [Element::Road(id)].into_iter().collect();
+                if on_street.is_some() {
+                    // It ended on another street: a crossing; the chain
+                    // stops there.
+                    self.road_points.clear();
+                    self.road_chain = None;
+                    self.say("Tramo unido a la otra calle: el cruce se hace solo.".to_string());
+                } else {
+                    self.road_points = vec![p];
+                    self.road_chain = Some((id, at_end));
+                }
+            }
+            Err(e) => self.complain(format!("No se puede poner el tramo: {e}.")),
         }
     }
 
+    /// A click taken to a street near it: to its free end (the street and
+    /// which end) or to its axis (the street, no end).
+    pub(super) fn road_snap(
+        &self,
+        p: Point2,
+    ) -> (Point2, Option<(archisim_core::RoadId, Option<bool>)>) {
+        let model = self.ed.model();
+        let level = self.ed.level;
+        let reach = (self.road_settings.section.width() / 2.0).max(ROAD_SNAP);
+        // Not the end the chain is going on from.
+        let own = self.road_chain;
+        if let Some((id, at_end, q)) = archisim_core::road_end_near(model, level, p, reach) {
+            if own != Some((id, at_end)) || self.road_points.is_empty() {
+                return (q, Some((id, Some(at_end))));
+            }
+        }
+        if let Some((id, q)) = archisim_core::road_axis_near(model, level, p, 0.0) {
+            if own.is_none_or(|(c, _)| c != id) {
+                return (q, Some((id, None)));
+            }
+        }
+        (p, None)
+    }
+
+    /// The axis of the stretch from the last click to `p`: straight, or
+    /// the curve pulled by the click before.
+    pub(super) fn road_stretch_points(&self, p: Point2) -> Option<Vec<Point2>> {
+        let a = *self.road_points.first()?;
+        if a.distance(p) < 0.5 {
+            return None;
+        }
+        Some(match (self.road_settings.draw, self.road_points.get(1)) {
+            (RoadDraw::Curve, Some(c)) => archisim_core::curve_points(a, *c, p, 2.0),
+            _ => vec![a, p],
+        })
+    }
+
     pub(super) fn finish_road(&mut self) {
+        if self.road_settings.draw.by_stretches() {
+            // The chain ends; what was laid stays.
+            self.road_points.clear();
+            self.road_chain = None;
+            return;
+        }
         let drawn = std::mem::take(&mut self.road_points);
+        self.build_road_polyline(drawn);
+    }
+
+    /// A whole street from the line drawn (its axis or an edge).
+    pub(super) fn build_road_polyline(&mut self, drawn: Vec<Point2>) {
         if drawn.len() < 2 {
             return;
         }
@@ -485,7 +632,7 @@ impl ArchiSimApp {
             return;
         };
         let r = self.ed.transact("Crear vial", |m| {
-            m.add_road(NewRoad {
+            let id = m.add_road(NewRoad {
                 name: m.next_road_name(),
                 level,
                 axis,
@@ -497,7 +644,13 @@ impl ArchiSimApp {
                 pavement: s.pavement,
                 kerb_material: s.kerb,
                 sidewalk_material: s.sidewalk,
-            })
+            })?;
+            if s.follow_ground {
+                if let Some(profile) = m.road_profile_following(id, s.max_grade) {
+                    m.edit_road(id, |r| r.profile = profile)?;
+                }
+            }
+            Ok(id)
         });
         match r {
             Ok(id) => {
@@ -552,6 +705,62 @@ impl ArchiSimApp {
                         format!("{} m²", comma(archisim_core::signed_area(&pts).abs(), 2)),
                     );
                 }
+            }
+            Tool::Road if self.road_settings.draw.by_stretches() => {
+                let (snapped, on_street) = self.road_snap(c.point);
+                // Where the click would go: a ring on the end or axis of a
+                // street it would join.
+                if on_street.is_some() {
+                    painter.circle_stroke(self.view.to_screen(rect, snapped), 7.0, ink);
+                }
+                if self.road_points.is_empty() {
+                    return;
+                }
+                let s = &self.road_settings;
+                let points = if s.draw == RoadDraw::Curve && self.road_points.len() == 1 {
+                    // Pulling: the straight line to the cursor, dashed.
+                    dashed(
+                        painter,
+                        self.view.to_screen(rect, self.road_points[0]),
+                        self.view.to_screen(rect, snapped),
+                        ACCENT,
+                    );
+                    return;
+                } else {
+                    match self.road_stretch_points(snapped) {
+                        Some(p) => p,
+                        None => return,
+                    }
+                };
+                self.paint_road_bands(painter, rect, &points, &s.section);
+                painter.add(Shape::line(self.polygon(rect, &points), ink));
+                let len: f64 = points.windows(2).map(|x| x[0].distance(x[1])).sum();
+                // The grade it would have over the ground.
+                let model = self.ed.model();
+                let z = |q: Point2| {
+                    model
+                        .terrains_on_level(self.ed.level)
+                        .find_map(|t| t.height_at(q))
+                };
+                let grade = match (z(points[0]), z(*points.last().unwrap_or(&points[0]))) {
+                    (Some(a), Some(b)) if len > 0.5 => {
+                        let g = (b - a) / len * 100.0;
+                        let over = s.follow_ground && g.abs() > s.max_grade * 100.0;
+                        format!(
+                            " · terreno {}{} %{}",
+                            if g >= 0.0 { "+" } else { "" },
+                            comma(g, 1),
+                            if over { " (se suaviza)" } else { "" }
+                        )
+                    }
+                    _ => String::new(),
+                };
+                self.draw_label(
+                    painter,
+                    rect,
+                    snapped,
+                    format!("L {} m{grade}", comma(len, 2)),
+                );
             }
             Tool::Road => {
                 if self.road_points.is_empty() {
@@ -619,6 +828,15 @@ impl ArchiSimApp {
                 "Clic: siguiente esquina de la linde · Clic en la primera o Intro: cerrar · Esc: quitar la última"
             }
             Tool::Plot => "Clic: primera esquina de la linde · Esc: flecha",
+            Tool::Road if self.road_settings.draw == RoadDraw::Curve && self.road_points.len() == 1 => {
+                "Clic: hacia dónde tira la curva · Esc: quitarlo"
+            }
+            Tool::Road if self.road_settings.draw.by_stretches() && !self.road_points.is_empty() => {
+                "Clic: fin del tramo (se pone ya; el siguiente sigue de él) · Doble clic, clic derecho o Intro: terminar · Esc: quitar"
+            }
+            Tool::Road if self.road_settings.draw.by_stretches() => {
+                "Clic: comienzo de la calle (en el extremo de otra, la alarga; sobre otra, hace un cruce) · Esc: flecha"
+            }
             Tool::Road if !self.road_points.is_empty() => match self.road_settings.reference {
                 RoadReference::Axis => "Clic: siguiente punto del eje · Doble clic o Intro: terminar · Esc: quitar el último",
                 _ => "Clic: siguiente punto del borde · Doble clic o Intro: terminar · Esc: quitar el último",
@@ -663,11 +881,60 @@ impl ArchiSimApp {
         let model = self.ed.model();
         let mut s = self.road_settings.clone();
         group(ui, "tool-road-ref", "Dibujo", |ui| {
-            text_row(ui, "Línea dibujada", "", s.reference.name());
-            props::note(
+            row(
                 ui,
-                "Eje o bordes de las aceras: se elige en «Referencia», en la barra bajo las pestañas.",
+                "Cómo",
+                "Por tramos, como en un juego de ciudades, o el eje entero",
+                |ui, w| {
+                    ComboBox::from_id_salt("tool-road-draw")
+                        .width(w - 8.0)
+                        .selected_text(s.draw.name())
+                        .show_ui(ui, |ui| {
+                            for d in RoadDraw::ALL {
+                                ui.selectable_value(&mut s.draw, d, d.name());
+                            }
+                        });
+                },
             );
+            if s.draw.by_stretches() {
+                props::note(
+                    ui,
+                    "Cada clic pone un tramo con su sección y el siguiente sigue de él. Empezando en el extremo de una calle, la alarga; acabando sobre otra, hace el cruce.",
+                );
+            } else {
+                text_row(ui, "Línea dibujada", "", s.reference.name());
+                props::note(
+                    ui,
+                    "Eje o bordes de las aceras: se elige en «Referencia», en la barra bajo las pestañas.",
+                );
+            }
+            super::widgets::switch(
+                ui,
+                &mut s.follow_ground,
+                "Sigue el terreno (rasante suavizada)",
+            );
+            if s.follow_ground {
+                row(
+                    ui,
+                    "Pendiente máxima (%)",
+                    "Donde el terreno es más empinado, la calle va en desmonte o en terraplén",
+                    |ui, w| {
+                        let mut g = s.max_grade * 100.0;
+                        if ui
+                            .add_sized(
+                                [w - 8.0, 20.0],
+                                egui::DragValue::new(&mut g)
+                                    .range(1.0..=20.0)
+                                    .speed(0.2)
+                                    .suffix(" %"),
+                            )
+                            .changed()
+                        {
+                            s.max_grade = g / 100.0;
+                        }
+                    },
+                );
+            }
         });
         group(ui, "tool-road", "Sección tipo", |ui| {
             let mut saved = None;

@@ -214,10 +214,7 @@ impl ArchiSimApp {
                 self.railing_points = l.points;
                 self.finish_railing();
             }
-            Tool::Road => {
-                self.road_points = l.points;
-                self.finish_road();
-            }
+            Tool::Road => self.build_road_polyline(l.points),
             Tool::Planting => {
                 self.planting_points = l.points;
                 self.finish_planting(l.closed);

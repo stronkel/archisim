@@ -362,6 +362,9 @@ pub struct ArchiSimApp {
     pub elevator_settings: elevator_ui::ElevatorSettings,
     /// The axis of the road being drawn and what the road tool draws.
     pub road_points: Vec<Point2>,
+    /// The street the road tool is going on from, at its end (`true`)
+    /// or its start.
+    pub road_chain: Option<(archisim_core::RoadId, bool)>,
     pub road_settings: urban_ui::RoadSettings,
     pub roundabout_settings: roundabout_ui::RoundaboutSettings,
     pub world_settings: world_ui::WorldSettings,
@@ -796,6 +799,7 @@ impl ArchiSimApp {
             pool_settings: Default::default(),
             elevator_settings: Default::default(),
             road_points: Vec::new(),
+            road_chain: None,
             road_settings,
             roundabout_settings: Default::default(),
             world_settings: Default::default(),
@@ -1048,6 +1052,7 @@ impl ArchiSimApp {
             self.pool_tool.finish();
             self.pool_tool.finish();
             self.road_points.clear();
+            self.road_chain = None;
             self.marking_points.clear();
             self.planting_points.clear();
             self.draw_method = Default::default();
@@ -1102,6 +1107,7 @@ impl ArchiSimApp {
         self.concept.finish();
         self.plot_tool.finish();
         self.road_points.clear();
+        self.road_chain = None;
         self.road_settings = urban_ui::RoadSettings::new(ed.model());
         self.planting_points.clear();
         self.planting_settings = Default::default();

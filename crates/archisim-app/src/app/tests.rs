@@ -9769,3 +9769,49 @@ fn buildings_of_the_world_put_with_a_click() {
     assert!((r[0].distance(r[1]) - 20.0).abs() < 1e-6, "{r:?}");
     assert_eq!(h.model().masses().count(), 3);
 }
+
+/// Streets laid stretch by stretch: each click lays one that goes on
+/// from the last; a stretch started on another street's side joins it.
+#[test]
+fn streets_laid_stretch_by_stretch() {
+    let mut h = Harness::new(Editor::new_project());
+    let canvas = h.app.canvas;
+    h.app
+        .view
+        .fit_exact(canvas, p(-20.0, -40.0), p(80.0, 60.0), 0.0);
+    h.type_text("w");
+    assert_eq!(h.app.tool, Tool::Road);
+    assert!(h.app.road_settings.draw.by_stretches());
+    h.click_at(p(0.0, 0.0));
+    h.move_to(p(40.0, 0.0));
+    h.click_at(p(40.0, 0.0));
+    // The first stretch is there already.
+    assert_eq!(h.model().roads().count(), 1);
+    h.move_to(p(40.0, 30.0));
+    h.click_at(p(40.0, 30.0));
+    let r = h.model().roads().next().unwrap().clone();
+    assert_eq!(r.axis.len(), 3, "{:?}", r.axis);
+    assert!((r.length() - 70.0).abs() < 1e-6);
+    h.key(Key::Enter);
+    assert!(h.app.road_points.is_empty());
+    // A new street from the side of the first: its start on its axis.
+    h.click_at(p(20.0, 1.0));
+    h.move_to(p(20.0, -30.0));
+    h.click_at(p(20.0, -30.0));
+    h.key(Key::Enter);
+    assert_eq!(h.model().roads().count(), 2);
+    let b = h.model().roads().find(|x| x.id != r.id).unwrap();
+    assert!(b.axis[0].y.abs() < 1e-6, "{:?}", b.axis);
+    // A curved stretch: a pull and an end.
+    h.app.road_settings.draw = super::urban_ui::RoadDraw::Curve;
+    h.click_at(p(0.0, 40.0));
+    h.click_at(p(30.0, 40.0));
+    h.move_to(p(30.0, 55.0));
+    h.click_at(p(30.0, 55.0));
+    let c = h
+        .model()
+        .roads()
+        .find(|x| x.axis.len() > 4)
+        .expect("a curved street");
+    assert!(c.length() > 33.0);
+}

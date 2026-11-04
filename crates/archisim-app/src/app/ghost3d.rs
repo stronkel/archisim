@@ -35,6 +35,7 @@ enum Would {
     Slab(NewSlab),
     Object(NewObject),
     World(archisim_core::NewWorldBuilding),
+    Road(archisim_core::RoadStretch),
 }
 
 impl ArchiSimApp {
@@ -131,6 +132,26 @@ impl ArchiSimApp {
                 })
             }
             Tool::World => Would::World(self.world_would(c.point)?),
+            Tool::Road if self.road_settings.draw.by_stretches() => {
+                if self.road_settings.draw == super::urban_ui::RoadDraw::Curve
+                    && self.road_points.len() < 2
+                {
+                    return None;
+                }
+                let (p, _) = self.road_snap(c.point);
+                let s = &self.road_settings;
+                Would::Road(archisim_core::RoadStretch {
+                    level,
+                    points: self.road_stretch_points(p)?,
+                    continues: self.road_chain,
+                    section: s.section.clone(),
+                    top_offset: s.top_offset,
+                    pavement: s.pavement,
+                    kerb_material: s.kerb,
+                    sidewalk_material: s.sidewalk,
+                    follow_ground: s.follow_ground.then_some(s.max_grade),
+                })
+            }
             _ => return None,
         })
     }
@@ -258,6 +279,10 @@ fn build_ghost(model: &Model, would: Would) -> Option<Vec<Solid>> {
             let id = m.add_world_building(spec).ok()?;
             m.set_mass_dress(id, None).ok()?;
             solid::mass_solids(&m, id)
+        }
+        Would::Road(spec) => {
+            let id = m.add_road_stretch(spec).ok()?;
+            solid::road_solids(&m, id)
         }
     })
 }
@@ -430,6 +455,7 @@ fn build_plan_ghost(model: &Model, would: Would) -> Option<(Model, Vec<Element>)
         Would::Slab(spec) => vec![Element::Slab(m.add_slab(spec).ok()?)],
         Would::Object(spec) => vec![Element::Object(m.add_object(spec).ok()?)],
         Would::World(spec) => vec![Element::Mass(m.add_world_building(spec).ok()?)],
+        Would::Road(spec) => vec![Element::Road(m.add_road_stretch(spec).ok()?)],
     };
     Some((m, made))
 }

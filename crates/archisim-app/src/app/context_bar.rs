@@ -996,7 +996,14 @@ impl ArchiSimApp {
                         ReferenceLine::InteriorFace,
                     ][i];
                 }
-                Tool::Road => self.road_settings.reference = RoadReference::ALL[i],
+                Tool::Road => {
+                    self.road_settings.reference = RoadReference::ALL[i];
+                    // By an edge, the street is drawn whole (its stretches
+                    // go by the axis).
+                    if RoadReference::ALL[i] != RoadReference::Axis {
+                        self.road_settings.draw = super::urban_ui::RoadDraw::Polyline;
+                    }
+                }
                 _ => {}
             }
         }
