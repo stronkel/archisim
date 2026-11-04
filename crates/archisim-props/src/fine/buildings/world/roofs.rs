@@ -32,10 +32,22 @@ pub struct RoofPlan {
     pub top: Top,
     /// A block: the box of the stair on a flat roof.
     pub block: bool,
+    /// Seen from afar: plain slopes, nothing small.
+    pub light: bool,
 }
 
 /// Builds the roof.
 pub fn roof(b: &mut Builder, r: &RoofPlan, l: &Look) {
+    let plain;
+    let r = if r.light {
+        plain = RoofPlan {
+            cover: Cover::Plain,
+            ..r.clone()
+        };
+        &plain
+    } else {
+        r
+    };
     match r.form {
         Roof::Flat => flat(b, r, l),
         Roof::Gable => gable(b, r, l),
@@ -43,6 +55,7 @@ pub fn roof(b: &mut Builder, r: &RoofPlan, l: &Look) {
         Roof::Hip => hip(b, r, l),
         Roof::Mansard => mansard(b, r, l),
         Roof::Asian => asian(b, r),
+        Roof::Pent => pent(b, r, l),
     }
     if r.extras & CHIMNEYS != 0 {
         chimneys(b, r, l);
@@ -87,7 +100,7 @@ fn flat(b: &mut Builder, r: &RoofPlan, l: &Look) {
     );
     let high = if r.extras & ALGARVE != 0 { 0.7 } else { 1.0 };
     for (i, f) in faces(x, y).iter().enumerate() {
-        if i == 0 && r.top == Top::Balustrade {
+        if i == 0 && r.top == Top::Balustrade && !r.light {
             balustrade(b, f, z, l);
             continue;
         }
@@ -161,7 +174,7 @@ fn flat(b: &mut Builder, r: &RoofPlan, l: &Look) {
 }
 
 /// A balustrade on a parapet: plinth, balusters and the rail.
-fn balustrade(b: &mut Builder, f: &Face, z: f64, l: &Look) {
+pub(super) fn balustrade(b: &mut Builder, f: &Face, z: f64, l: &Look) {
     f.bx(b, l.trim, (0.0, f.len), (z, z + 0.18), (-0.25, 0.02));
     f.bx(
         b,
@@ -589,7 +602,7 @@ fn mansard(b: &mut Builder, r: &RoofPlan, l: &Look) {
                 [x.1, ym, zr],
                 [x.0, ym, zr],
             ],
-            Cover::Seam,
+            seam(r),
         );
         covered(
             b,
@@ -600,7 +613,7 @@ fn mansard(b: &mut Builder, r: &RoofPlan, l: &Look) {
                 [x.0, ym, zr],
                 [x.1, ym, zr],
             ],
-            Cover::Seam,
+            seam(r),
         );
         // The party walls up to the roof's profile.
         let len = y.1 - y.0;
@@ -641,7 +654,7 @@ fn mansard(b: &mut Builder, r: &RoofPlan, l: &Look) {
             covered(b, l.roof, &p, r.cover);
         }
         for p in hip_planes((ix, jx), (iy, jy), zb, low) {
-            covered(b, l.roof, &p, Cover::Seam);
+            covered(b, l.roof, &p, seam(r));
         }
     }
     // The cornice band at the break.
@@ -654,6 +667,15 @@ fn mansard(b: &mut Builder, r: &RoofPlan, l: &Look) {
 /// raised at its ends and the corners turned up.
 fn asian(b: &mut Builder, r: &RoofPlan) {
     let eaves = r.eaves.max(0.8);
+    if r.light {
+        let ze = r.z - eaves * r.pitch;
+        let x = (r.x.0 - eaves, r.x.1 + eaves);
+        let y = (r.y.0 - eaves, r.y.1 + eaves);
+        for p in hip_planes(x, y, ze, r.pitch) {
+            covered(b, "tiles", &p, Cover::Plain);
+        }
+        return;
+    }
     hipped_roof(b, r.x, r.y, r.z, r.pitch, eaves);
     let (x, y) = (r.x, r.y);
     let ze = r.z - eaves * r.pitch;
@@ -815,7 +837,7 @@ fn dormer(
             [x, yb, zt + rise],
             [a, yb, zt],
         ],
-        Cover::Seam,
+        seam(r),
     );
     covered(
         b,
@@ -826,7 +848,7 @@ fn dormer(
             [e, yb, zt],
             [x, yb, zt + rise],
         ],
-        Cover::Seam,
+        seam(r),
     );
     front.prism(
         b,
@@ -841,6 +863,18 @@ fn dormer(
 fn chimneys(b: &mut Builder, r: &RoofPlan, l: &Look) {
     let (x, y, z) = (r.x, r.y, r.z);
     let ym = (y.0 + y.1) / 2.0;
+    if r.form == Roof::Pent {
+        let zh = z + (y.1 - y.0) * r.pitch * 0.6;
+        for c in [[x.0 + 0.32, y.0 + 0.6], [x.1 - 0.32, y.0 + 0.6]] {
+            b.rbox(
+                l.wall,
+                [c[0] - 0.3, c[1] - 0.5, z],
+                [c[0] + 0.3, c[1] + 0.5, zh + 0.9],
+                0.0,
+            );
+        }
+        return;
+    }
     let ridge = match r.form {
         Roof::Flat => z + 1.0,
         Roof::Mansard => z + 2.7 + 0.3 * (y.1 - 0.8 - ym),
@@ -873,7 +907,11 @@ fn chimneys(b: &mut Builder, r: &RoofPlan, l: &Look) {
             [c[0] + half[0] + 0.05, c[1] + half[1] + 0.05, z1 + 0.1],
             0.0,
         );
-        let pots = 2 + (unit(r.seed, 950 + i as u64) * 2.5) as usize;
+        let pots = if r.light {
+            0
+        } else {
+            2 + (unit(r.seed, 950 + i as u64) * 2.5) as usize
+        };
         for k in 0..pots {
             let py = c[1] - half[1] + 0.2 + (2.0 * half[1] - 0.4) * (k as f64 + 0.5) / pots as f64;
             b.cone(
@@ -923,6 +961,7 @@ pub fn covered(b: &mut Builder, role: &'static str, pts: &[P3], cover: Cover) {
                 k += 1;
             }
         }
+        Cover::Plain => {}
         Cover::Seam => {
             let lo = lifted
                 .iter()
@@ -1017,7 +1056,7 @@ fn clip(poly: &[P3], v: P3, lo: f64, hi: f64) -> Vec<P3> {
 }
 
 /// A solar water heater: a frame leaning south, its tubes and the tank.
-fn solar_heater(b: &mut Builder, c: [f64; 2], z: f64) {
+pub(super) fn solar_heater(b: &mut Builder, c: [f64; 2], z: f64) {
     for dx in [-0.8, 0.8] {
         b.cone(
             "metal",
@@ -1059,7 +1098,7 @@ fn solar_heater(b: &mut Builder, c: [f64; 2], z: f64) {
 
 /// The wooden water tank of a New York roof on its steel legs, with its
 /// cone.
-fn water_tower(b: &mut Builder, c: [f64; 2], z: f64) {
+pub(super) fn water_tower(b: &mut Builder, c: [f64; 2], z: f64) {
     let h = 2.4;
     for (dx, dy) in [(-1.1, -1.1), (1.1, -1.1), (1.1, 1.1), (-1.1, 1.1)] {
         b.cyl(
@@ -1106,7 +1145,7 @@ fn water_tower(b: &mut Builder, c: [f64; 2], z: f64) {
 
 /// The chimney of the Algarve: a white shaft and its lantern of lattice
 /// with a little roof and a finial.
-fn algarve_chimney(b: &mut Builder, c: [f64; 2], z: f64, l: &Look) {
+pub(super) fn algarve_chimney(b: &mut Builder, c: [f64; 2], z: f64, l: &Look) {
     b.rbox(
         l.wall,
         [c[0] - 0.35, c[1] - 0.35, z],
@@ -1153,4 +1192,67 @@ fn algarve_chimney(b: &mut Builder, c: [f64; 2], z: f64, l: &Look) {
         0.025,
         6,
     );
+}
+
+/// The cover of the small slopes: seams, or nothing from afar.
+fn seam(r: &RoofPlan) -> Cover {
+    if r.light {
+        Cover::Plain
+    } else {
+        Cover::Seam
+    }
+}
+
+/// One slope falling from the back (a party wall) to the front.
+fn pent(b: &mut Builder, r: &RoofPlan, l: &Look) {
+    let (x, y, z) = (r.x, r.y, r.z);
+    let pitch = r.pitch * 0.6;
+    let zh = z + (y.1 - y.0) * pitch;
+    let e = r.eaves;
+    let ze = z - e * pitch;
+    let cover = if r.cover == Cover::Curved {
+        Cover::Courses
+    } else {
+        r.cover
+    };
+    covered(
+        b,
+        l.roof,
+        &[
+            [x.0, y.1 + e, ze],
+            [x.1, y.1 + e, ze],
+            [x.1, y.0, zh],
+            [x.0, y.0, zh],
+        ],
+        cover,
+    );
+    let len = y.1 - y.0;
+    Face {
+        o: [x.0, y.0],
+        u: [0.0, 1.0],
+        len,
+    }
+    .prism(
+        b,
+        l.wall,
+        &[(0.0, z), (len, z), (0.0, zh + 0.03)],
+        (-0.3, 0.0),
+    );
+    Face {
+        o: [x.1, y.1],
+        u: [0.0, -1.0],
+        len,
+    }
+    .prism(
+        b,
+        l.wall,
+        &[(0.0, z), (len, z), (len, zh + 0.03)],
+        (-0.3, 0.0),
+    );
+    Face {
+        o: [x.1, y.0],
+        u: [-1.0, 0.0],
+        len: x.1 - x.0,
+    }
+    .bx(b, l.wall, (0.0, x.1 - x.0), (z, zh + 0.03), (-0.3, 0.0));
 }

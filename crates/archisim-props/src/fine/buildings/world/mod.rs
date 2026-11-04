@@ -12,6 +12,7 @@
 //! from them by role, and the recipe of each typology lists them all.
 
 pub mod facade;
+pub mod plan;
 pub mod roofs;
 pub mod skins;
 pub mod types;
@@ -247,6 +248,88 @@ mod tests {
             }
         }
         bad.dedup();
+        for b in &bad {
+            println!("{b}");
+        }
+        assert!(bad.is_empty(), "{} problems", bad.len());
+    }
+
+    /// Buildings over plans that are not rectangles (an L, a corner with
+    /// a chamfer, a slanted plot), in every skin and typology, full and
+    /// light: made, with their materials, nothing in the air, and the
+    /// light ones much lighter.
+    #[test]
+    fn plans_of_any_shape() {
+        use plan::{Plan, Side};
+        use types::{dress, Typology};
+        let plans = [
+            Plan {
+                poly: vec![
+                    [0.0, 0.0],
+                    [16.0, 0.0],
+                    [16.0, 7.0],
+                    [7.0, 7.0],
+                    [7.0, 18.0],
+                    [0.0, 18.0],
+                ],
+                sides: vec![
+                    Side::Free,
+                    Side::Street,
+                    Side::Free,
+                    Side::Street,
+                    Side::Free,
+                    Side::Party,
+                ],
+            },
+            Plan {
+                poly: vec![
+                    [0.0, 0.0],
+                    [20.0, 0.0],
+                    [20.0, 12.0],
+                    [17.0, 15.0],
+                    [0.0, 15.0],
+                ],
+                sides: vec![
+                    Side::Party,
+                    Side::Street,
+                    Side::Street,
+                    Side::Street,
+                    Side::Party,
+                ],
+            },
+            Plan {
+                poly: vec![[0.0, 0.0], [12.0, 2.0], [11.0, 13.0], [-1.0, 11.0]],
+                sides: vec![Side::Back, Side::Party, Side::Street, Side::Party],
+            },
+        ];
+        let mut bad = Vec::new();
+        for (k, plan) in plans.iter().enumerate() {
+            for (i, sk) in SKINS.iter().enumerate() {
+                for t in [Typology::Townhouse, Typology::Block, Typology::House] {
+                    let full = dress(plan, t, i, 0, 3, false);
+                    let light = dress(plan, t, i, 0, 3, true);
+                    for m in [&full, &light] {
+                        for (role, _) in &m.parts {
+                            if material_of(role).is_none() {
+                                bad.push(format!("plan {k} {} {t:?}: role «{role}»", sk.key));
+                            }
+                        }
+                        let loose =
+                            check::loose_pieces(m, check::anchors_for("fine_world_block"), 0.004);
+                        if let Some(l) = loose.first() {
+                            bad.push(format!(
+                                "plan {k} {} {t:?}: {} loose, {} {:.3} off at x {:.2}..{:.2} y {:.2}..{:.2} z {:.2}..{:.2}",
+                                sk.key, loose.len(), l.role, l.gap, l.lo[0], l.hi[0], l.lo[1], l.hi[1], l.lo[2], l.hi[2]
+                            ));
+                        }
+                    }
+                    let (a, e) = (full.triangle_count(), light.triangle_count());
+                    if e * 10 > a * 6 {
+                        bad.push(format!("plan {k} {} {t:?}: light {e} of {a}", sk.key));
+                    }
+                }
+            }
+        }
         for b in &bad {
             println!("{b}");
         }

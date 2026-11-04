@@ -2492,6 +2492,86 @@ fn world_pictures() {
     }
 }
 
+/// The world's buildings over plans that are not rectangles: for each
+/// place, the three typologies over the three sample plans, full and
+/// light (`NN-<lugar>-plantas.png`). `ARCHISIM_PLANTAS_OUT=carpeta`;
+/// `ARCHISIM_MUNDO` keeps some places.
+#[test]
+fn world_plan_pictures() {
+    let Some(dir) = std::env::var_os("ARCHISIM_PLANTAS_OUT") else {
+        return;
+    };
+    let dir = Path::new(&dir);
+    std::fs::create_dir_all(dir).unwrap();
+    let Some(gpu) = super::gpu_tests::gpu() else {
+        eprintln!("No graphics adapter: pictures skipped.");
+        return;
+    };
+    let wanted = std::env::var("ARCHISIM_MUNDO").unwrap_or_default();
+    let wanted: Vec<&str> = wanted.split(',').filter(|k| !k.is_empty()).collect();
+    let mut r = Renderer::new(&gpu.0, gpu.2, TextureMode::Full);
+    let size = [1100u32, 800u32];
+    let aspect = size[0] as f32 / size[1] as f32;
+    let skins = archisim_core::props::fine::buildings::world::SKINS;
+    for (i, sk) in skins.iter().enumerate() {
+        if !wanted.is_empty() && !wanted.contains(&sk.key) {
+            continue;
+        }
+        let m = archisim_library::building_workshop::sample_project(i).unwrap();
+        let only = |keep: &[usize]| {
+            let mut one = m.clone();
+            let objects: Vec<_> = one.objects().map(|o| o.id).collect();
+            for (k, o) in objects.into_iter().enumerate() {
+                if !keep.contains(&k) {
+                    one.remove_object(o).unwrap();
+                }
+            }
+            one
+        };
+        // Full: 0..9 (typology × plan); light: 9..18.
+        let yaw_close: f32 = std::env::var("ARCHISIM_PLANTAS_GIRO")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(140.0);
+        let shots = [
+            (only(&[0, 1, 2, 3, 4, 5, 6, 7, 8]), 150.0, 30.0, 1.2),
+            (only(&[9, 10, 11, 12, 13, 14, 15, 16, 17]), 150.0, 30.0, 1.2),
+            (only(&[0]), yaw_close, 22.0, 1.1),
+            (only(&[4]), yaw_close, 22.0, 1.1),
+        ];
+        let pics: Vec<Pixmap> = shots
+            .iter()
+            .map(|(m, yaw, pitch, zoom)| {
+                building_picture(
+                    &mut r,
+                    &gpu,
+                    m,
+                    |lo, hi| camera(lo, hi, aspect, *yaw, *pitch, *zoom),
+                    size,
+                    Light::Day,
+                )
+            })
+            .collect();
+        let top = side_by_side(&pics[0], &pics[1]);
+        let bottom = side_by_side(&pics[2], &pics[3]);
+        let mut sheet = Pixmap::new(top.width(), top.height() + bottom.height() + 12).unwrap();
+        sheet.fill(resvg::tiny_skia::Color::WHITE);
+        for (pic, y) in [(&top, 0), (&bottom, top.height() + 12)] {
+            sheet.draw_pixmap(
+                0,
+                y as i32,
+                pic.as_ref(),
+                &PixmapPaint::default(),
+                Transform::identity(),
+                None,
+            );
+        }
+        sheet
+            .save_png(dir.join(format!("{:02}-{}-plantas.png", i, sk.key)))
+            .unwrap();
+    }
+}
+
 /// A picture as the Maqueta shows it, the shadows drawn for the scene's
 /// own box (a long street casts its shadows finer than the studio's).
 fn building_picture(

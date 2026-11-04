@@ -48,7 +48,11 @@ pub const RECIPES: &[&str] = &[
     include_str!("../taller/edificio_mundo_entre_medianeras.asfam"),
     include_str!("../taller/edificio_mundo_bloque.asfam"),
     include_str!("../taller/edificio_mundo_aislada.asfam"),
+    include_str!("../taller/edificio_mundo_muestra.asfam"),
 ];
+
+/// The family of the samples over plans that are not rectangles.
+pub const WORLD_SAMPLE: &str = "Muestra de planta del mundo (taller)";
 
 /// The families of the buildings of the world (tanda 6): one typology
 /// each, dressed by the skin of a place.
@@ -869,6 +873,50 @@ pub fn world_pieces(only: &[&str]) -> Vec<WorldPiece> {
         y -= 45.0;
     }
     out
+}
+
+/// The samples over plans that are not rectangles, for a place: the three
+/// typologies over the three plans, full (north) and light (south).
+pub fn sample_pieces(skin: usize) -> Vec<WorldPiece> {
+    let mut out = Vec::new();
+    for lod in 0..2 {
+        for t in 0..3 {
+            for plan in 0..3 {
+                out.push(WorldPiece {
+                    skin,
+                    family: WORLD_SAMPLE,
+                    name: format!("Muestra · lugar {skin} · tipología {t} · planta {plan} · versión {lod} (taller)"),
+                    values: vec![
+                        ("skin", skin as f64),
+                        ("variant", 1.0),
+                        ("typology", t as f64),
+                        ("plan", plan as f64),
+                        ("lod", lod as f64),
+                    ],
+                    at: (30.0 * plan as f64, -30.0 * t as f64 - 110.0 * lod as f64),
+                    size: (20.0, 18.0),
+                });
+            }
+        }
+    }
+    out
+}
+
+/// The samples of a place as a project.
+pub fn sample_project(skin: usize) -> Result<Model, ModelError> {
+    let mut m = crate::new_project("Muestras de plantas del mundo");
+    let level = m.levels()[0].id;
+    for p in sample_pieces(skin) {
+        let t = type_with(&mut m, p.family, &p.name, &p.values)?;
+        m.add_object(NewObject {
+            object_type: t,
+            level,
+            position: Point2::new(p.at.0, p.at.1),
+            rotation: 0.0,
+            base_offset: 0.0,
+        })?;
+    }
+    Ok(m)
 }
 
 /// The world's workshop as a project (see [`world_pieces`]).

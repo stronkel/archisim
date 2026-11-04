@@ -6,6 +6,32 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-04 (95) · Taller de edificios: plantas poligonales y versión ligera
+
+Misma rama `bloque/taller-edificios` y mismo pull request (#160). Sin cambios de formato ni de IFC.
+
+**Hecho**
+- Los edificios del mundo se levantan sobre cualquier planta, no solo rectángulos (`world::plan`). Cada lado del polígono es:
+  - la fachada a la calle;
+  - una trasera vestida;
+  - un lado libre con ventanas;
+  - la trasera de una casa de calle;
+  - o una medianera ciega.
+- El núcleo rellena el polígono, y la cubierta es plana sobre todo él o inclinada sobre los rectángulos que lo forman: una L son dos cubiertas que se cruzan, como se construye. Contra una medianera larga, la cubierta es a un agua. Las tres tipologías de la tanda 6 ya van por este camino.
+- La versión ligera, para verlos de lejos (`lod`):
+  - es la misma silueta y los mismos colores;
+  - las ventanas son vidrio sobre su marco, y las barandillas, una chapa;
+  - las tejas son el faldón;
+  - no lleva ménsulas, lamas, cuarterones ni lo que se cuelga.
+  - Pesa entre la mitad y la cuarta parte.
+- La familia «Muestra de planta del mundo» pone las tres tipologías sobre tres plantas: una L en esquina, una esquina achaflanada y un solar en ángulo, completas y ligeras. Las fotos salen con `world_plan_pictures`.
+- Prueba nueva: las tres plantas en los 24 lugares y las tres tipologías, completas y ligeras, se construyen con todos sus materiales y nada en el aire, y la ligera pesa como mucho el 60 %.
+
+**Qué debe probar Antonio**
+- Coloca un objeto «Muestra de planta del mundo» y cambia «Planta», «Tipología», «Lugar» y «Versión».
+
+---
+
 ## 2026-11-04 (94) · Taller de edificios, tanda 6: pieles por lugar
 
 Misma rama `bloque/taller-edificios` y mismo pull request (#160). Sin cambios de formato ni de IFC.

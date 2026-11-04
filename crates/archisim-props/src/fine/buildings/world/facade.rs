@@ -35,6 +35,9 @@ pub struct Front {
     pub party: bool,
     /// How deep the walk under an arcade or the pilotis is.
     pub recess: f64,
+    /// The light version, for buildings seen from afar: the same
+    /// silhouette and colours without bars, slats, panes and what hangs.
+    pub light: bool,
     /// Steps up to a raised door (a deck brings its own).
     pub steps: bool,
     /// Nothing under the ground floor (on stilts).
@@ -94,6 +97,7 @@ impl Front {
                 Ground::Pilotis => 5.5,
                 _ => 0.0,
             },
+            light: false,
             steps: true,
             open_below: false,
             sash: sk.sash,
@@ -434,10 +438,14 @@ pub fn front(b: &mut Builder, fr: &Front, sk: &Skin, l: &Look) -> Made {
             Kind::Entrance => {
                 let leaves = if h.s.1 - h.s.0 > 1.1 { 2 } else { 1 };
                 let fan = if h.z.1 - h.z.0 > 2.6 { 0.45 } else { 0.0 };
-                panel_door(b, &f, h, leaves, fan, l.door, "iron", REVEAL);
+                if fr.light {
+                    simple_door(b, &f, h, l.door);
+                } else {
+                    panel_door(b, &f, h, leaves, fan, l.door, "iron", REVEAL);
+                }
                 if fr.lift > 0.05 {
                     if fr.steps {
-                        stoop(b, &f, (h.s.0 - 0.15, h.s.1 + 0.15), fr.lift, l);
+                        stoop(b, &f, (h.s.0 - 0.15, h.s.1 + 0.15), fr.lift, l, fr.light);
                     }
                 } else {
                     f.bx(
@@ -449,7 +457,7 @@ pub fn front(b: &mut Builder, fr: &Front, sk: &Skin, l: &Look) -> Made {
                     );
                 }
                 frame_head(b, fr, l, h, o.storey, true);
-                if fr.has(PLANTS) && ok(fr, 50 + o.axis as u64, 0.6) {
+                if fr.has(PLANTS) && !fr.light && ok(fr, 50 + o.axis as u64, 0.6) {
                     standing_pot(b, f.at(h.s.1 + 0.35, 0.0, 0.3), 0.9, fr.seed + 5);
                 }
                 if fr.has(ALGARVE) {
@@ -458,7 +466,9 @@ pub fn front(b: &mut Builder, fr: &Front, sk: &Skin, l: &Look) -> Made {
             }
             Kind::Shop => {
                 if fr.ground == Ground::Lattice {
-                    lattice(b, &f, h, axes[door_axis], l);
+                    lattice(b, &f, h, axes[door_axis], l, fr.light);
+                } else if fr.light {
+                    simple_shop(b, &f, h, l.frame);
                 } else {
                     let down = if ok(fr, 60, 0.3) { 0.6 } else { 0.0 };
                     shop_front(b, &f, h, down, true, l.frame, REVEAL);
@@ -471,6 +481,10 @@ pub fn front(b: &mut Builder, fr: &Front, sk: &Skin, l: &Look) -> Made {
                 garage_door(b, &f, h, l);
             }
             Kind::Low => {
+                if fr.light {
+                    simple_window(b, &f, h, l.frame);
+                    continue;
+                }
                 let win = Win {
                     leaves: 1,
                     reveal: REVEAL,
@@ -513,6 +527,27 @@ fn glaze(b: &mut Builder, fr: &Front, sk: &Skin, l: &Look, o: &Opening, step: f6
     let f = &fr.f;
     let h = o.h;
     let key = 100 + (o.storey * 17 + o.axis) as u64;
+    if fr.light {
+        simple_window(b, f, h, l.frame);
+        if matches!(fr.shut, Shut::Louvred | Shut::Board) {
+            let lw = (h.s.1 - h.s.0) / 2.0 + 0.03;
+            if (step - ww) / 2.0 > lw + 0.08 {
+                for s in [
+                    (h.s.0 - lw - 0.04, h.s.0 - 0.04),
+                    (h.s.1 + 0.04, h.s.1 + lw + 0.04),
+                ] {
+                    f.bx(b, l.shutter, s, h.z, (0.0, 0.035));
+                }
+            }
+        }
+        if o.storey > 0 || o.kind == Kind::Window {
+            frame_head(b, fr, l, h, o.storey, false);
+        }
+        if fr.has(ALGARVE) {
+            surround(b, f, h, l.accent, 0.2, 0.012);
+        }
+        return;
+    }
     let roller = fr.shut == Shut::Roller;
     let blind = if roller {
         [0.0, 0.25, 0.5, 0.8][(unit(fr.seed, key) * 4.0) as usize % 4]
@@ -755,7 +790,9 @@ fn frame_head(b: &mut Builder, fr: &Front, l: &Look, h: Hole, storey: usize, ent
         Head::Arch => {
             let r = (s1 - s0) / 2.0;
             arch_fill(b, f, l.wall, (s0, s1), z1 - r, (-fr.thick, 0.0));
-            voussoirs_of(b, f, (s0, s1), z1 - r, l.trim, 0.14);
+            if !fr.light {
+                voussoirs_of(b, f, (s0, s1), z1 - r, l.trim, 0.14);
+            }
         }
         Head::Keystone => {
             surround(b, f, h, l.trim, 0.13, 0.015);
@@ -771,7 +808,7 @@ fn frame_head(b: &mut Builder, fr: &Front, l: &Look, h: Hole, storey: usize, ent
 }
 
 /// The steps up to a raised ground floor, with their cheeks and rails.
-fn stoop(b: &mut Builder, f: &Face, s: (f64, f64), lift: f64, l: &Look) {
+fn stoop(b: &mut Builder, f: &Face, s: (f64, f64), lift: f64, l: &Look, light: bool) {
     let n = (lift / 0.18).ceil().max(1.0) as usize;
     let rise = lift / n as f64;
     let run = 0.3;
@@ -785,7 +822,7 @@ fn stoop(b: &mut Builder, f: &Face, s: (f64, f64), lift: f64, l: &Look) {
             (-0.02, out - run * j as f64),
         );
     }
-    if lift > 0.5 {
+    if lift > 0.5 && !light {
         for (edge, sgn) in [(s.0, -1.0), (s.1, 1.0)] {
             let a = edge;
             let e = edge + sgn * 0.25;
@@ -850,9 +887,13 @@ fn garage_door(b: &mut Builder, f: &Face, h: Hole, l: &Look) {
 
 /// The wooden lattice of a machiya's ground floor, its sliding door and
 /// the curtain over it.
-fn lattice(b: &mut Builder, f: &Face, h: Hole, door_c: f64, l: &Look) {
+fn lattice(b: &mut Builder, f: &Face, h: Hole, door_c: f64, l: &Look, light: bool) {
     let door = (door_c - 0.6, door_c + 0.6);
     let (z0, z1) = h.z;
+    if light {
+        f.bx(b, l.door, h.s, (z0, z1), (-0.1, -0.03));
+        return;
+    }
     // Paper behind, rails, slats.
     f.bx(b, "curtain", h.s, (z0, z1), (-0.2, -0.18));
     f.bx(b, l.door, h.s, (z1 - 0.12, z1), (-0.1, 0.02));
@@ -946,7 +987,19 @@ fn arcade(b: &mut Builder, fr: &Front, sk: &Skin, l: &Look, axes: &[f64], step: 
         for k in 0..n {
             let s = 0.5 + 1.3 + 2.6 * k as f64;
             let p = f.at(s, 0.0, -rec / 2.0 - 0.1);
-            car(b, [p[0], p[1]], unit(fr.seed, 70 + k as u64));
+            // The car is made along y: turned to face the street.
+            let start = b.mark();
+            car(b, [0.0, 0.0], unit(fr.seed, 70 + k as u64));
+            let o = f.out();
+            let a = o[1].atan2(o[0]) - std::f64::consts::FRAC_PI_2;
+            let (sn, cs) = a.sin_cos();
+            b.transform_from(start, |q| {
+                [
+                    p[0] + q[0] * cs - q[1] * sn,
+                    p[1] + q[0] * sn + q[1] * cs,
+                    q[2],
+                ]
+            });
         }
         return;
     }
@@ -964,7 +1017,9 @@ fn arcade(b: &mut Builder, fr: &Front, sk: &Skin, l: &Look, axes: &[f64], step: 
     let hs: Vec<Hole> = holes.iter().map(|h| h.0).collect();
     wall(b, l.base, &fi, (0.0, zg - 0.3), fr.thick, &hs);
     for (h, i) in holes {
-        if i == axes.len() / 2 && axes.len() > 2 {
+        if fr.light {
+            simple_shop(b, &fi, h, l.frame);
+        } else if i == axes.len() / 2 && axes.len() > 2 {
             panel_door(b, &fi, h, 2, 0.4, l.door, "iron", REVEAL);
         } else {
             let down = if unit(fr.seed, 80 + i as u64) < 0.25 {
@@ -1013,8 +1068,10 @@ fn balconies(
         Balc::Iron => {
             for o in ops.iter().filter(|o| o.kind == Kind::Door) {
                 let s = (o.h.s.0 - 0.28, o.h.s.1 + 0.28);
-                balcony(b, &f, s, o.h.z.0, 0.5, l.trim, "iron", true);
-                if fr.has(PLANTS) && unit(fr.seed, 200 + o.axis as u64 + o.storey as u64 * 7) > 0.4
+                balcony_of(b, fr.light, &f, s, o.h.z.0, 0.5, l.trim, true);
+                if fr.has(PLANTS)
+                    && !fr.light
+                    && unit(fr.seed, 200 + o.axis as u64 + o.storey as u64 * 7) > 0.4
                 {
                     standing_pot(
                         b,
@@ -1034,15 +1091,19 @@ fn balconies(
             for k in 1..fr.floors {
                 let zf = fr.z(k) + 0.02;
                 if main.contains(&k) {
-                    balcony(b, &f, (0.12, len - 0.12), zf, 0.6, l.trim, "iron", false);
-                    let m = (len / 1.4).round().max(2.0) as usize;
-                    for i in 0..=m {
+                    balcony_of(b, fr.light, &f, (0.12, len - 0.12), zf, 0.6, l.trim, false);
+                    let m = if fr.light {
+                        0
+                    } else {
+                        (len / 1.4).round().max(2.0) as usize
+                    };
+                    for i in (0..=m).filter(|_| m > 0) {
                         let x = (0.3 + (len - 0.6) * i as f64 / m as f64).clamp(0.3, len - 0.3);
                         corbel(b, &f, x, zf - 0.16, 0.5, l.trim);
                     }
                 } else {
                     for o in ops.iter().filter(|o| o.storey == k && o.kind == Kind::Door) {
-                        railing(b, &f, "iron", o.h.s, o.h.z.0, 0.03, 0.95, 0.1);
+                        rail(b, fr.light, &f, "iron", o.h.s, o.h.z.0, 0.03, 0.95, 0.1);
                     }
                 }
             }
@@ -1054,7 +1115,21 @@ fn balconies(
                 let roof_z0 = fr.z(2) - 0.22;
                 let out = 0.85;
                 let posts = roof_z0 - 0.3 * (out - 0.06) / 1.05 - 0.02;
-                wooden_balcony(b, &f, s, zf, out, l.door, Some(posts));
+                if fr.light {
+                    f.bx(b, l.door, s, (zf - 0.08, zf), (-0.01, out));
+                    f.bx(b, l.door, s, (zf, zf + 0.95), (out - 0.07, out - 0.03));
+                    for x in [s.0 + 0.07, s.1 - 0.07] {
+                        f.bx(
+                            b,
+                            l.door,
+                            (x - 0.07, x + 0.07),
+                            (zf, posts),
+                            (out - 0.13, out + 0.01),
+                        );
+                    }
+                } else {
+                    wooden_balcony(b, &f, s, zf, out, l.door, Some(posts));
+                }
                 f.leaning(
                     b,
                     l.roof,
@@ -1065,7 +1140,7 @@ fn balconies(
                 );
                 // Brackets under the balcony.
                 let m = ((len - 0.6) / 1.2).round().max(1.0) as usize;
-                for i in 0..=m {
+                for i in (0..=m).filter(|_| !fr.light) {
                     let x = (0.4 + (len - 0.8) * i as f64 / m as f64).clamp(0.4, len - 0.4);
                     corbel(b, &f, x, zf - 0.26, out, l.door);
                 }
@@ -1073,7 +1148,7 @@ fn balconies(
         }
         Balc::Gallery => {
             for k in 1..fr.floors {
-                gallery(b, &f, (0.3, len - 0.3), fr.z(k), fh, l);
+                gallery(b, &f, (0.3, len - 0.3), fr.z(k), fh, l, fr.light);
             }
         }
         Balc::FireEscape => {
@@ -1099,8 +1174,9 @@ fn balconies(
                 }
                 let c = (o.h.s.0 + o.h.s.1) / 2.0;
                 let zf = fr.z(o.storey);
-                mashrabiya(
+                mashrabiya_of(
                     b,
+                    fr.light,
                     &f,
                     (c - (ww / 2.0 + 0.35), c + (ww / 2.0 + 0.35)),
                     (zf + 0.25, zf + fh - 0.3),
@@ -1113,7 +1189,17 @@ fn balconies(
                 .iter()
                 .filter(|o| o.storey >= 1 && o.kind == Kind::Window)
             {
-                cage(b, &f, o.h, fr.seed + o.axis as u64 * 13 + o.storey as u64);
+                if fr.light {
+                    f.bx(
+                        b,
+                        "metal",
+                        (o.h.s.0 - 0.06, o.h.s.1 + 0.06),
+                        (o.h.z.0 - 0.1, o.h.z.0 - 0.06),
+                        (0.0, 0.38),
+                    );
+                } else {
+                    cage(b, &f, o.h, fr.seed + o.axis as u64 * 13 + o.storey as u64);
+                }
             }
         }
         Balc::Glazed => {
@@ -1160,7 +1246,7 @@ fn corbel(b: &mut Builder, f: &Face, x: f64, z: f64, out: f64, role: &'static st
 
 /// A glazed gallery over a floor: its floor, the solid apron, white
 /// frames with small panes up top, glass, and its roof.
-fn gallery(b: &mut Builder, f: &Face, s: (f64, f64), zf: f64, fh: f64, l: &Look) {
+fn gallery(b: &mut Builder, f: &Face, s: (f64, f64), zf: f64, fh: f64, l: &Look, light: bool) {
     let out = 0.62;
     let (z0, z1) = (zf, zf + fh - 0.2);
     let fr = l.frame;
@@ -1171,7 +1257,9 @@ fn gallery(b: &mut Builder, f: &Face, s: (f64, f64), zf: f64, fh: f64, l: &Look)
     for z in [z0 + 0.9, z1 - 0.45] {
         f.bx(b, fr, s, (z - 0.03, z + 0.03), (out - 0.07, out));
     }
-    let n = ((s.1 - s.0) / 0.48).round().max(1.0) as usize;
+    let n = ((s.1 - s.0) / if light { 1.6 } else { 0.48 })
+        .round()
+        .max(1.0) as usize;
     for i in 0..=n {
         let x = s.0 + (s.1 - s.0) * i as f64 / n as f64;
         let t = if i == 0 || i == n { 0.04 } else { 0.022 };
@@ -1212,18 +1300,28 @@ fn fire_escape(b: &mut Builder, fr: &Front, s: (f64, f64)) {
         // Landing of bars.
         f.bx(b, "iron", s, (zf - 0.06, zf - 0.02), (0.0, out));
         let mut x = s.0;
-        while x < s.1 {
+        while x < s.1 && !fr.light {
             f.bx(b, "iron", (x, x + 0.015), (zf - 0.02, zf), (0.0, out));
             x += 0.08;
         }
-        railing(b, &f, "iron", s, zf, out - 0.03, 0.95, 0.12);
+        rail(b, fr.light, &f, "iron", s, zf, out - 0.03, 0.95, 0.12);
         for (x, sgn) in [(s.0, 1.0), (s.1, -1.0)] {
             let side = Face {
                 o: [f.at(x, 0.0, 0.0)[0], f.at(x, 0.0, 0.0)[1]],
                 u: f.out(),
                 len: out,
             };
-            railing(b, &side, "iron", (0.0, out), zf, 0.015 * sgn, 0.95, 0.12);
+            rail(
+                b,
+                fr.light,
+                &side,
+                "iron",
+                (0.0, out),
+                zf,
+                0.015 * sgn,
+                0.95,
+                0.12,
+            );
         }
         // Brackets.
         for x in [s.0 + 0.1, s.1 - 0.1] {
@@ -1251,7 +1349,11 @@ fn fire_escape(b: &mut Builder, fr: &Front, s: (f64, f64)) {
                 4,
             );
         }
-        let m = ((zf - zl) / 0.22).round().max(2.0) as usize;
+        let m = if fr.light {
+            1
+        } else {
+            ((zf - zl) / 0.22).round().max(2.0) as usize
+        };
         for j in 1..m {
             let t = j as f64 / m as f64;
             let x = top + (low - top) * t;
@@ -1284,8 +1386,9 @@ fn verandah(b: &mut Builder, fr: &Front, l: &Look) {
         (z1 - 0.16, z1 + 0.02),
         (-0.02, out + 0.05),
     );
-    railing(
+    rail(
         b,
+        fr.light,
         &f,
         "iron",
         (0.25, len - 0.25),
@@ -1294,27 +1397,31 @@ fn verandah(b: &mut Builder, fr: &Front, l: &Look) {
         0.95,
         0.09,
     );
-    grille_plane(
-        b,
-        &f,
-        "iron",
-        (0.25, len - 0.25),
-        (z1 - 0.62, z1 - 0.22),
-        out,
-        0.09,
-        3,
-    );
+    if !fr.light {
+        grille_plane(
+            b,
+            &f,
+            "iron",
+            (0.25, len - 0.25),
+            (z1 - 0.62, z1 - 0.22),
+            out,
+            0.09,
+            3,
+        );
+    }
     let zr = roof_hi - (roof_hi - roof_lo) * (out / (out + 0.15));
-    grille_plane(
-        b,
-        &f,
-        "iron",
-        (0.25, len - 0.25),
-        (zr - 0.45, zr - 0.08),
-        out,
-        0.09,
-        3,
-    );
+    if !fr.light {
+        grille_plane(
+            b,
+            &f,
+            "iron",
+            (0.25, len - 0.25),
+            (zr - 0.45, zr - 0.08),
+            out,
+            0.09,
+            3,
+        );
+    }
     let n = ((len - 0.5) / 2.4).round().max(1.0) as usize;
     for i in 0..=n {
         let x = 0.25 + (len - 0.5) * i as f64 / n as f64;
@@ -1423,8 +1530,9 @@ fn flat_balcony(b: &mut Builder, fr: &Front, l: &Look, s: (f64, f64), z: f64, pi
             side.bx(b, l.wall, (0.0, out - 0.1), (z, z + 1.0), d);
         }
     } else {
-        railing(
+        rail(
             b,
+            fr.light,
             &f,
             "iron",
             (s.0 + 0.04, s.1 - 0.04),
@@ -1496,7 +1604,7 @@ fn slab_balcony(b: &mut Builder, fr: &Front, l: &Look, zf: f64, axes: &[f64], st
             (0.0, out - 0.08),
         );
     }
-    for (i, &c) in axes.iter().enumerate() {
+    for (i, &c) in axes.iter().enumerate().filter(|_| !fr.light) {
         let k = (zf * 10.0) as u64 + i as u64;
         if unit(fr.seed, 400 + k) < 0.55 {
             let p = f.at(c + step * 0.3, zf + 0.02, out * 0.45);
@@ -1600,6 +1708,10 @@ fn bay_window(b: &mut Builder, fr: &Front, sk: &Skin, l: &Look, s: (f64, f64), s
                 z: (zf + 0.75, (zf + 0.75 + sk.win.1).min(ztop - 0.3)),
             };
             wall(b, l.trim, sf, (zf.max(z0), ztop), 0.12, &[h]);
+            if fr.light {
+                simple_window_at(b, sf, h, l.frame, 0.05);
+                continue;
+            }
             let win = Win {
                 leaves: 1,
                 reveal: 0.06,
@@ -1628,7 +1740,7 @@ fn belts_and_corners(b: &mut Builder, fr: &Front, l: &Look, ops: &[Opening]) {
             f.bx(b, l.trim, (0.0, len), (z - 0.16, z - 0.02), (-0.01, 0.06));
         }
     }
-    if fr.has(QUOINS) && !fr.party {
+    if fr.has(QUOINS) && !fr.party && !fr.light {
         let mut z = 0.0;
         let mut long = true;
         while z < top - 0.3 {
@@ -1651,7 +1763,7 @@ fn belts_and_corners(b: &mut Builder, fr: &Front, l: &Look, ops: &[Opening]) {
         }
         f.bx(b, l.accent, (0.0, len), (0.0, 0.5), (-0.01, 0.012));
     }
-    if fr.has(RUSTIC) && !fr.plain {
+    if fr.has(RUSTIC) && !fr.plain && !fr.light {
         // Channels on the piers of the ground floor.
         let zg = fr.z(1) - 0.05;
         let mut cuts: Vec<(f64, f64)> = ops
@@ -1729,8 +1841,12 @@ fn cornice(b: &mut Builder, fr: &Front, l: &Look, top: f64) {
                 (top - 0.2, top - 0.12),
                 (-0.01, 0.42),
             );
-            let n = (len / 0.75).round().max(2.0) as usize;
-            for i in 0..=n {
+            let n = if fr.light {
+                0
+            } else {
+                (len / 0.75).round().max(2.0) as usize
+            };
+            for i in (0..=n).filter(|_| n > 0) {
                 let x = (len * i as f64 / n as f64).clamp(0.12, len - 0.12);
                 let side = Face {
                     o: [f.at(x, 0.0, 0.0)[0], f.at(x, 0.0, 0.0)[1]],
@@ -1767,7 +1883,7 @@ fn cornice(b: &mut Builder, fr: &Front, l: &Look, top: f64) {
                 (-0.01, 0.48),
             );
             let mut x = 0.1;
-            while x < len - 0.1 {
+            while x < len - 0.1 && !fr.light {
                 f.bx(
                     b,
                     l.trim,
@@ -1791,7 +1907,7 @@ fn hangings(b: &mut Builder, fr: &Front, l: &Look, ops: &[Opening], step: f64, w
     for (j, o) in ops.iter().enumerate() {
         let h = o.h;
         let key = 800 + j as u64 * 11;
-        let windowish = o.kind == Kind::Window && o.storey > 0;
+        let windowish = o.kind == Kind::Window && o.storey > 0 && !fr.light;
         if fr.has(FLOWERS) && windowish && unit(fr.seed, key) < 0.55 {
             f.bx(
                 b,
@@ -1841,7 +1957,7 @@ fn hangings(b: &mut Builder, fr: &Front, l: &Look, ops: &[Opening], step: f64, w
                 fr.seed + j as u64,
             );
         }
-        if fr.has(PLANTS) && o.kind == Kind::Entrance && unit(fr.seed, key + 3) < 0.6 {
+        if fr.has(PLANTS) && !fr.light && o.kind == Kind::Entrance && unit(fr.seed, key + 3) < 0.6 {
             // A climber over the door.
             let c = f.at(h.s.1 + 0.3, h.z.1 + 0.3, 0.12);
             b.blob(
@@ -1915,4 +2031,126 @@ pub fn ccw(mut poly: Vec<[f64; 2]>) -> Vec<[f64; 2]> {
         poly.reverse();
     }
     poly
+}
+
+/// A window seen from afar: its frame and its glass.
+fn simple_window(b: &mut Builder, f: &Face, h: Hole, frame: &'static str) {
+    simple_window_at(b, f, h, frame, REVEAL);
+}
+
+/// [`simple_window`] `reveal` back from the face.
+fn simple_window_at(b: &mut Builder, f: &Face, h: Hole, frame: &'static str, reveal: f64) {
+    // The frame as one board behind the glass, showing round it.
+    f.bx(b, frame, h.s, h.z, (-reveal - 0.04, -reveal - 0.02));
+    f.bx(
+        b,
+        "glass",
+        (h.s.0 + 0.07, h.s.1 - 0.07),
+        (h.z.0 + 0.08, h.z.1 - 0.07),
+        (-reveal - 0.02, -reveal - 0.01),
+    );
+}
+
+#[allow(dead_code)]
+fn framed_window(b: &mut Builder, f: &Face, h: Hole, frame: &'static str) {
+    let d = (-REVEAL - 0.06, -REVEAL);
+    f.bx(b, frame, h.s, (h.z.0, h.z.0 + 0.07), d);
+    f.bx(b, frame, h.s, (h.z.1 - 0.06, h.z.1), d);
+    f.bx(b, frame, (h.s.0, h.s.0 + 0.06), h.z, d);
+    f.bx(b, frame, (h.s.1 - 0.06, h.s.1), h.z, d);
+    if h.s.1 - h.s.0 > 0.8 {
+        let c = (h.s.0 + h.s.1) / 2.0;
+        f.bx(b, frame, (c - 0.03, c + 0.03), h.z, d);
+    }
+    f.bx(b, "glass", h.s, h.z, (-REVEAL - 0.045, -REVEAL - 0.035));
+}
+
+/// A door seen from afar.
+fn simple_door(b: &mut Builder, f: &Face, h: Hole, role: &'static str) {
+    f.bx(b, role, h.s, h.z, (-REVEAL - 0.06, -REVEAL));
+}
+
+/// A shop front seen from afar: its glass, its frame and its sign.
+fn simple_shop(b: &mut Builder, f: &Face, h: Hole, frame: &'static str) {
+    let top = h.z.1 - 0.55;
+    f.bx(b, "sign", h.s, (top, h.z.1), (-REVEAL, -REVEAL + 0.04));
+    f.bx(
+        b,
+        frame,
+        h.s,
+        (h.z.0, h.z.0 + 0.1),
+        (-REVEAL - 0.06, -REVEAL),
+    );
+    f.bx(b, frame, h.s, (top - 0.06, top), (-REVEAL - 0.06, -REVEAL));
+    f.bx(
+        b,
+        "glass",
+        h.s,
+        (h.z.0 + 0.1, top - 0.06),
+        (-REVEAL - 0.04, -REVEAL - 0.03),
+    );
+}
+
+/// A railing; seen from afar, a thin plate of its colour.
+#[allow(clippy::too_many_arguments)]
+fn rail(
+    b: &mut Builder,
+    light: bool,
+    f: &Face,
+    role: &'static str,
+    s: (f64, f64),
+    z: f64,
+    d: f64,
+    high: f64,
+    step: f64,
+) {
+    if light {
+        f.bx(b, role, s, (z, z + high), (d - 0.012, d + 0.012));
+    } else {
+        railing(b, f, role, s, z, d, high, step);
+    }
+}
+
+/// A balcony on its slab; seen from afar, its railings are plates.
+#[allow(clippy::too_many_arguments)]
+fn balcony_of(
+    b: &mut Builder,
+    light: bool,
+    f: &Face,
+    s: (f64, f64),
+    floor: f64,
+    out: f64,
+    slab: &'static str,
+    brackets: bool,
+) {
+    if !light {
+        balcony(b, f, s, floor, out, slab, "iron", brackets);
+        return;
+    }
+    f.bx(b, slab, s, (floor - 0.12, floor), (-0.02, out));
+    let d = out - 0.05;
+    f.bx(
+        b,
+        "iron",
+        (s.0 + 0.04, s.1 - 0.04),
+        (floor, floor + 1.0),
+        (d - 0.012, d + 0.012),
+    );
+    for x in [s.0 + 0.04, s.1 - 0.04] {
+        let side = Face {
+            o: [f.at(x, 0.0, 0.0)[0], f.at(x, 0.0, 0.0)[1]],
+            u: f.out(),
+            len: d,
+        };
+        side.bx(b, "iron", (0.0, d), (floor, floor + 1.0), (-0.012, 0.012));
+    }
+}
+
+/// A closed bay of lattice; seen from afar, a box of its wood.
+fn mashrabiya_of(b: &mut Builder, light: bool, f: &Face, s: (f64, f64), z: (f64, f64), l: &Look) {
+    if light {
+        f.bx(b, l.door, s, (z.0 - 0.12, z.1 + 0.1), (-0.02, 0.55));
+    } else {
+        mashrabiya(b, f, s, z, l);
+    }
 }

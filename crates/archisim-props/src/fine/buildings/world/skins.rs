@@ -16,6 +16,8 @@ pub enum Roof {
     Mansard,
     /// Four slopes of dark tiles with deep eaves and raised ridge ends.
     Asian,
+    /// One slope, against a party wall (only for parts of a plan).
+    Pent,
 }
 
 /// What covers a pitched roof.
@@ -27,6 +29,8 @@ pub enum Cover {
     Courses,
     /// Sheet metal: seams down the slope.
     Seam,
+    /// Nothing over the slab (seen from afar).
+    Plain,
 }
 
 /// The outline of a gable to the street.

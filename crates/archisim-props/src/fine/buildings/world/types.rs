@@ -5,8 +5,9 @@
 
 use super::super::more::{fruit_tree, palm};
 use super::super::*;
-use super::facade::{front, Front, REVEAL};
-use super::roofs::{faces, roof, RoofPlan};
+use super::facade::{Front, REVEAL};
+use super::plan::{building, Plan, Shape, Side};
+use super::roofs::faces;
 use super::skins::*;
 use super::{look, recolour, Look};
 use crate::build::Builder;
@@ -39,82 +40,225 @@ fn floors_of(p: &Params, usual: usize, max: usize) -> usize {
 }
 
 /// The roles the shared pieces draw in, given the building's.
-fn finish(b: &mut Builder, l: &Look) {
+pub fn finish(b: &mut Builder, l: &Look) {
     recolour(b, "tiles", l.roof);
     recolour(b, "roof", l.roof);
     recolour(b, "wall", l.wall);
     recolour(b, "trim", l.trim);
 }
 
-/// The core inside, under the walk of an arcade if there is one.
-fn cores(b: &mut Builder, w: f64, d: f64, fr: &Front, top: f64) {
-    let t = fr.thick;
-    let x = w / 2.0 - t;
-    let from = if fr.stilts() { fr.lift } else { 0.0 };
-    if fr.recess > 0.0 && !fr.plain {
-        let zg = fr.z(1) - 0.3;
-        b.rbox("interior", [-x, t, from], [x, d - fr.recess - t, zg], 0.0);
-        b.rbox("interior", [-x, t, zg], [x, d - t, top], 0.0);
-    } else {
-        b.rbox("interior", [-x, t, from], [x, d - t, top], 0.0);
+/// The three typologies.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Typology {
+    /// The house between party walls of a street.
+    Townhouse,
+    /// The block of flats.
+    Block,
+    /// The detached house.
+    House,
+}
+
+/// The skin of a place as a typology wears it: the block and the house
+/// take what the place says of them.
+pub fn adapted(base: &Skin, t: Typology) -> Skin {
+    let mut sk = *base;
+    match t {
+        Typology::Townhouse => {}
+        Typology::Block => {
+            if !base.block.walls.is_empty() {
+                sk.walls = base.block.walls;
+            }
+            sk.balc = base.block.balc;
+            sk.ground = match base.block.ground {
+                Ground::Stoop | Ground::Lattice => Ground::Door,
+                g => g,
+            };
+            sk.top = base.block.top;
+            sk.extras = (base.extras & !(PENT | HOIST)) | base.block.extras;
+            if sk.balc == Balc::Bay && sk.ground == Ground::Garage {
+                sk.ground = Ground::Shop;
+            }
+        }
+        Typology::House => {
+            let h = base.house;
+            if !h.walls.is_empty() {
+                sk.walls = h.walls;
+            }
+            sk.shut = h.shut;
+            sk.balc = h.balc;
+            sk.ground = Ground::Door;
+            sk.extras = h.extras;
+            sk.storey = (3.0, 2.9);
+            sk.head = match base.head {
+                Head::Pediment => Head::Hood,
+                x => x,
+            };
+            sk.top = if h.roof == Roof::Flat {
+                Top::Band
+            } else {
+                Top::None
+            };
+        }
     }
+    sk
+}
+
+/// The usual floors of a typology in a place.
+pub fn usual_floors(base: &Skin, t: Typology) -> usize {
+    match t {
+        Typology::Townhouse => base.floors,
+        Typology::Block => base.block.floors,
+        Typology::House => base.house.floors,
+    }
+}
+
+/// How a typology of a place builds over its plan, and its look.
+pub fn shape_of(
+    base: &Skin,
+    t: Typology,
+    floors: usize,
+    seed: u64,
+    light: bool,
+) -> (Skin, Look, Shape) {
+    let sk = adapted(base, t);
+    let l = look(&sk, seed, t == Typology::House);
+    let shape = Shape {
+        floors,
+        seed,
+        light,
+        roof: sk.roof,
+        cover: sk.cover,
+        pitch: sk.pitch,
+        eaves: sk.eaves,
+        gable: sk.gable,
+        top: sk.top,
+        extras: sk.extras,
+        block: false,
+        pavement: true,
+        sparse_free: false,
+        lift: None,
+        steps: true,
+        open_below: false,
+    };
+    match t {
+        Typology::Townhouse => (sk, l, shape),
+        Typology::Block => {
+            let form = base.block.roof;
+            let (cover, pitch) = if form == Roof::Flat {
+                (sk.cover, sk.pitch)
+            } else if sk.roof == Roof::Flat {
+                (Cover::Curved, 0.4)
+            } else {
+                (sk.cover, sk.pitch.min(0.8))
+            };
+            let roof_mat = if form == Roof::Flat {
+                if sk.roof == Roof::Flat {
+                    sk.roof_mat
+                } else {
+                    "r_gravel"
+                }
+            } else if sk.roof == Roof::Flat {
+                "r_curved"
+            } else {
+                l.roof
+            };
+            (
+                sk,
+                Look {
+                    roof: roof_mat,
+                    ..l
+                },
+                Shape {
+                    roof: form,
+                    cover,
+                    pitch,
+                    eaves: sk.eaves.max(0.3),
+                    gable: Gable::Plain,
+                    block: true,
+                    sparse_free: true,
+                    ..shape
+                },
+            )
+        }
+        Typology::House => {
+            let h = base.house;
+            let raised = h.raised;
+            let deck = matches!(h.porch, Porch::Veranda | Porch::Wraparound);
+            (
+                sk,
+                Look {
+                    roof: if h.roof_mat.is_empty() {
+                        l.roof
+                    } else {
+                        h.roof_mat
+                    },
+                    ..l
+                },
+                Shape {
+                    roof: h.roof,
+                    cover: h.cover,
+                    pitch: h.pitch,
+                    eaves: if h.roof == Roof::Asian { 0.9 } else { 0.5 },
+                    gable: Gable::Plain,
+                    sparse_free: true,
+                    pavement: false,
+                    lift: Some(raised),
+                    steps: !deck,
+                    open_below: raised > 0.5,
+                    ..shape
+                },
+            )
+        }
+    }
+}
+
+/// A building of a typology of a place over any plan (the light version
+/// for afar), as a model: what the surroundings brought from a map wear.
+pub fn dress(
+    plan: &Plan,
+    t: Typology,
+    skin: usize,
+    floors: usize,
+    seed: u64,
+    light: bool,
+) -> crate::PropMesh {
+    let base = skin_of(skin as f64);
+    let floors = if floors == 0 {
+        usual_floors(base, t)
+    } else {
+        floors
+    };
+    let (sk, l, shape) = shape_of(base, t, floors, seed, light);
+    let mut b = Builder::default();
+    building(&mut b, plan, &sk, &l, &shape);
+    finish(&mut b, &l);
+    crate::PropMesh {
+        positions: b.positions,
+        parts: b.parts.into_iter().collect(),
+        soft: b.soft.into_iter().collect(),
+        fine: b.fine.into_iter().collect(),
+    }
+}
+
+fn light_of(p: &Params) -> bool {
+    p.get("lod", 0.0) > 0.5
 }
 
 /// The house between party walls of a street.
 pub fn townhouse(b: &mut Builder, p: &Params) {
-    let sk = skin_of(p.get("skin", 0.0));
+    let base = skin_of(p.get("skin", 0.0));
     let seed = seed_of(p);
     let w = p.get("width", 0.0);
     let w = if w <= 0.0 {
-        usual_width(sk)
+        usual_width(base)
     } else {
         w.clamp(4.0, 30.0)
     };
     let d = p.get("depth", 12.0).clamp(7.0, 25.0);
-    let floors = floors_of(p, sk.floors, 10);
-    let l = look(sk, seed, false);
-    let [fface, right, bface, left] = Face::sides(w, d);
-    let mut fr = Front::of(fface, sk, floors, seed);
-    if fr.ground == Ground::Pilotis {
-        fr.recess = (d * 0.5).min(6.0);
-    }
-    if floors < 2 && matches!(fr.ground, Ground::Arcade | Ground::Pilotis) {
-        fr.ground = Ground::Door;
-        fr.recess = 0.0;
-    }
-    let made = front(b, &fr, sk, &l);
-    let top = made.top;
-    let back = fr.plain_of(bface, true, false);
-    front(b, &back, sk, &l);
-    for f in [right, left] {
-        wall(b, l.wall, &f, (0.0, top), 0.3, &[]);
-    }
-    cores(b, w, d, &fr, top);
-    let form = match sk.roof {
-        Roof::Hip | Roof::Asian => Roof::Gable,
-        r => r,
-    };
-    roof(
-        b,
-        &RoofPlan {
-            x: (-w / 2.0, w / 2.0),
-            y: (0.0, d),
-            z: top,
-            form,
-            cover: sk.cover,
-            pitch: sk.pitch,
-            eaves: sk.eaves,
-            party: true,
-            dormers: made.axes.iter().map(|a| a - w / 2.0).collect(),
-            gable: sk.gable,
-            seed,
-            extras: sk.extras,
-            top: sk.top,
-            block: false,
-        },
-        &l,
-    );
-    b.rbox("paving", [-w / 2.0, d, 0.0], [w / 2.0, d + 2.2, 0.03], 0.0);
+    let floors = floors_of(p, base.floors, 10);
+    let (sk, l, shape) = shape_of(base, Typology::Townhouse, floors, seed, light_of(p));
+    let plan = Plan::rect(w, d, [Side::Back, Side::Party, Side::Street, Side::Party]);
+    building(b, &plan, &sk, &l, &shape);
     finish(b, &l);
 }
 
@@ -122,105 +266,12 @@ pub fn townhouse(b: &mut Builder, p: &Params) {
 pub fn block(b: &mut Builder, p: &Params) {
     let base = skin_of(p.get("skin", 0.0));
     let seed = seed_of(p);
-    let mut sk = *base;
-    if !base.block.walls.is_empty() {
-        sk.walls = base.block.walls;
-    }
-    sk.balc = base.block.balc;
-    sk.ground = match base.block.ground {
-        Ground::Stoop | Ground::Lattice => Ground::Door,
-        g => g,
-    };
-    sk.top = base.block.top;
-    sk.extras = (base.extras & !(PENT | HOIST)) | base.block.extras;
-    if sk.balc == Balc::Bay && sk.ground == Ground::Garage {
-        sk.ground = Ground::Shop;
-    }
-    let sk = &sk;
     let w = p.get("width", 22.0).clamp(10.0, 60.0);
     let d = p.get("depth", 14.0).clamp(9.0, 24.0);
     let floors = floors_of(p, base.block.floors, 16);
-    let l = look(sk, seed, false);
-    let [fface, right, bface, left] = Face::sides(w, d);
-    let mut fr = Front::of(fface, sk, floors, seed);
-    fr.party = false;
-    if fr.ground == Ground::Pilotis {
-        fr.recess = (d * 0.45).min(6.0);
-    }
-    let made = front(b, &fr, sk, &l);
-    let top = made.top;
-    let back = Front {
-        f: bface,
-        ground: Ground::Door,
-        recess: 0.0,
-        seed: seed + 3,
-        extras: fr.extras & !(SIGNS | AWNINGS),
-        balc: if fr.balc == Balc::FireEscape {
-            Balc::None
-        } else {
-            fr.balc
-        },
-        ..fr
-    };
-    front(b, &back, sk, &l);
-    for f in [right, left] {
-        let side = fr.plain_of(f, false, true);
-        front(b, &side, sk, &l);
-    }
-    cores(b, w, d, &fr, top);
-    let form = base.block.roof;
-    let (cover, pitch) = if form == Roof::Flat {
-        (sk.cover, sk.pitch)
-    } else if sk.roof == Roof::Flat {
-        (Cover::Curved, 0.4)
-    } else {
-        (sk.cover, sk.pitch.min(0.8))
-    };
-    let flat_mat = if sk.roof_mat.starts_with("r_") || sk.roof_mat == "w_white" {
-        sk.roof_mat
-    } else {
-        "r_gravel"
-    };
-    let l = Look {
-        roof: if form == Roof::Flat {
-            if sk.roof == Roof::Flat {
-                flat_mat
-            } else {
-                "r_gravel"
-            }
-        } else if sk.roof == Roof::Flat {
-            "r_curved"
-        } else {
-            l.roof
-        },
-        ..l
-    };
-    roof(
-        b,
-        &RoofPlan {
-            x: (-w / 2.0, w / 2.0),
-            y: (0.0, d),
-            z: top,
-            form,
-            cover,
-            pitch,
-            eaves: sk.eaves.max(0.3),
-            party: false,
-            dormers: made.axes.iter().map(|a| a - w / 2.0).collect(),
-            gable: Gable::Plain,
-            seed,
-            extras: sk.extras,
-            top: sk.top,
-            block: true,
-        },
-        &l,
-    );
-    b.rbox(
-        "paving",
-        [-w / 2.0 - 2.0, d, 0.0],
-        [w / 2.0 + 2.0, d + 3.0, 0.03],
-        0.0,
-    );
+    let (sk, l, shape) = shape_of(base, Typology::Block, floors, seed, light_of(p));
+    let plan = Plan::rect(w, d, [Side::Rear, Side::Free, Side::Street, Side::Free]);
+    building(b, &plan, &sk, &l, &shape);
     finish(b, &l);
 }
 
@@ -229,93 +280,31 @@ pub fn house(b: &mut Builder, p: &Params) {
     let base = skin_of(p.get("skin", 0.0));
     let seed = seed_of(p);
     let h = base.house;
-    let mut sk = *base;
-    if !h.walls.is_empty() {
-        sk.walls = h.walls;
-    }
-    sk.shut = h.shut;
-    sk.balc = h.balc;
-    sk.ground = Ground::Door;
-    sk.extras = h.extras;
-    sk.storey = (3.0, 2.9);
-    sk.head = match base.head {
-        Head::Pediment => Head::Hood,
-        x => x,
-    };
-    sk.top = if h.roof == Roof::Flat {
-        Top::Band
-    } else {
-        Top::None
-    };
-    let sk = &sk;
     let w = p.get("width", 10.0).clamp(6.0, 20.0);
     let d = p.get("depth", 8.0).clamp(6.0, 16.0);
     let floors = floors_of(p, h.floors, 3);
-    let l = look(sk, seed, true);
-    let l = Look {
-        roof: if h.roof_mat.is_empty() {
-            l.roof
-        } else {
-            h.roof_mat
-        },
-        ..l
-    };
+    let (sk, l, shape) = shape_of(base, Typology::House, floors, seed, light_of(p));
+    let plan = Plan::rect(w, d, [Side::Back, Side::Free, Side::Street, Side::Free]);
+    let built = building(b, &plan, &sk, &l, &shape);
     let raised = h.raised;
-    let deck = matches!(h.porch, Porch::Veranda | Porch::Wraparound);
-    let [fface, right, bface, left] = Face::sides(w, d);
-    let mut fr = Front::of(fface, sk, floors, seed);
-    fr.party = false;
-    fr.ground = Ground::Door;
-    fr.recess = 0.0;
-    fr.lift = raised;
-    fr.steps = !deck;
-    fr.open_below = raised > 0.5;
-    let made = front(b, &fr, sk, &l);
-    let top = made.top;
-    let back = fr.plain_of(bface, true, false);
-    front(b, &back, sk, &l);
-    for f in [right, left] {
-        let side = fr.plain_of(f, false, true);
-        front(b, &side, sk, &l);
-    }
-    cores(b, w, d, &fr, top);
-    let roof_form = h.roof;
-    roof(
-        b,
-        &RoofPlan {
-            x: (-w / 2.0, w / 2.0),
-            y: (0.0, d),
-            z: top,
-            form: roof_form,
-            cover: h.cover,
-            pitch: h.pitch,
-            eaves: if roof_form == Roof::Asian { 0.9 } else { 0.5 },
-            party: false,
-            dormers: if h.extras & DORMERS != 0 {
-                made.axes.iter().map(|a| a - w / 2.0).collect()
-            } else {
-                Vec::new()
-            },
-            gable: Gable::Plain,
-            seed,
-            extras: h.extras,
-            top: sk.top,
-            block: false,
-        },
-        &l,
-    );
     if raised > 0.5 {
         stilts(b, w, d, raised, &l);
     }
-    // The door's axis, as the front put it.
-    let n = made.axes.len();
-    let door_x = made.axes[if n % 2 == 1 {
+    // The street's front (side 2) and its door, as the front put them.
+    let fr = built.fronts[2].expect("the house's front");
+    let axes = &built.axes[2];
+    let n = axes.len();
+    let door_s = axes[if n % 2 == 1 {
         n / 2
-    } else if unit(seed, 11) > 0.5 {
+    } else if unit(fr.seed, 11) > 0.5 {
         0
     } else {
         n - 1
-    }] - w / 2.0;
+    }];
+    // The face of side 2 runs from right to left seen from outside:
+    // its `s` from x = -w/2.
+    let fface = Face::sides(w, d)[0];
+    let door_x = door_s - w / 2.0;
     porch(
         b,
         h.porch,
@@ -325,10 +314,12 @@ pub fn house(b: &mut Builder, p: &Params) {
         raised,
         &fr,
         &l,
-        roof_form == Roof::Flat,
-        door_x + w / 2.0,
+        h.roof == Roof::Flat,
+        door_s,
     );
-    plot(b, h.fence, w, d, door_x, raised, seed, &l, h.extras);
+    if !shape.light {
+        plot(b, h.fence, w, d, door_x, raised, seed, &l, h.extras);
+    }
     finish(b, &l);
 }
 
@@ -713,4 +704,66 @@ fn plot(
         palm(b, [px.1 - 1.4, d + 3.2], 6.5 + 2.0 * unit(seed, 32), seed);
     }
     let _ = REVEAL;
+}
+
+/// The sample plans of the workshop: an L on a corner, a corner with a
+/// chamfer, a slanted plot between party walls.
+pub fn sample_plans() -> Vec<Plan> {
+    vec![
+        Plan {
+            poly: vec![
+                [-8.0, 0.0],
+                [8.0, 0.0],
+                [8.0, 7.0],
+                [-1.0, 7.0],
+                [-1.0, 18.0],
+                [-8.0, 18.0],
+            ],
+            sides: vec![
+                Side::Free,
+                Side::Street,
+                Side::Free,
+                Side::Street,
+                Side::Free,
+                Side::Party,
+            ],
+        },
+        Plan {
+            poly: vec![
+                [-10.0, 0.0],
+                [10.0, 0.0],
+                [10.0, 12.0],
+                [7.0, 15.0],
+                [-10.0, 15.0],
+            ],
+            sides: vec![
+                Side::Party,
+                Side::Street,
+                Side::Street,
+                Side::Street,
+                Side::Party,
+            ],
+        },
+        Plan {
+            poly: vec![[-6.0, 0.0], [6.0, 2.0], [5.0, 13.0], [-7.0, 11.0]],
+            sides: vec![Side::Back, Side::Party, Side::Street, Side::Party],
+        },
+    ]
+}
+
+/// A sample of the workshop: a typology of a place over one of the sample
+/// plans (`plan`, `typology` 0 street, 1 block, 2 house; `lod` 1 light).
+pub fn sample(b: &mut Builder, p: &Params) {
+    let plans = sample_plans();
+    let plan = &plans[(p.get("plan", 0.0).round().max(0.0) as usize).min(plans.len() - 1)];
+    let t = match p.get("typology", 0.0).round() as i64 {
+        1 => Typology::Block,
+        2 => Typology::House,
+        _ => Typology::Townhouse,
+    };
+    let base = skin_of(p.get("skin", 0.0));
+    let floors = floors_of(p, usual_floors(base, t), 16);
+    let (sk, l, shape) = shape_of(base, t, floors, seed_of(p), light_of(p));
+    building(b, plan, &sk, &l, &shape);
+    finish(b, &l);
 }
