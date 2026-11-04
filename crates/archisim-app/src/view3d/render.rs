@@ -87,6 +87,10 @@ struct Globals {
     /// What a cut shows: xyz a flat colour (linear), w = 1 to use it;
     /// otherwise each material its own cut colour (`CapStyle`).
     caps: [f32; 4],
+    /// The orthophoto: its corner and the inverse of its sides, and
+    /// whether there is one (`ortho_colour` in the shader).
+    ortho_a: [f32; 4],
+    ortho_b: [f32; 4],
 }
 
 /// What a cut shows in 3D (pedido por Antonio el 26/10/2026: lo cortado se
@@ -175,6 +179,15 @@ struct Targets {
 }
 
 pub struct Renderer {
+    /// The orthophoto's picture (group 3 of the model's passes): its bind
+    /// group, what it holds (the picture and where it lies) and the one
+    /// still to be sent to the card.
+    ortho_layout: wgpu::BindGroupLayout,
+    ortho_sampler: wgpu::Sampler,
+    ortho_bind: wgpu::BindGroup,
+    ortho_key: Option<OrthoKey>,
+    ortho_pending: Option<Option<archisim_core::Orthophoto>>,
+    ortho_globals: ([f32; 4], [f32; 4]),
     /// The textures' pictures (`TextureMode::Pictures`; otherwise one
     /// pixel), and whether they are still to be sent to the card.
     pictures: wgpu::Texture,
@@ -450,12 +463,45 @@ impl Renderer {
             compare: Some(wgpu::CompareFunction::LessEqual),
             ..Default::default()
         });
+        // The group 3 of the model's passes: the orthophoto's picture.
+        let ortho_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("orthophoto"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+            ],
+        });
+        let ortho_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("orthophoto"),
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::MipmapFilterMode::Linear,
+            ..Default::default()
+        });
+        let ortho_bind = ortho_bind_group(device, &ortho_layout, &ortho_sampler, None);
         let model_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("model"),
             bind_group_layouts: &[
                 Some(&globals_layout),
                 Some(&shadow_layout),
                 Some(&pictures_layout),
+                Some(&ortho_layout),
             ],
             immediate_size: 0,
         });
@@ -686,6 +732,12 @@ impl Renderer {
             cache: None,
         });
         Self {
+            ortho_layout,
+            ortho_sampler,
+            ortho_bind,
+            ortho_key: None,
+            ortho_pending: None,
+            ortho_globals: ([0.0; 4], [0.0; 4]),
             pictures_pending: textures == TextureMode::Pictures,
             pictures,
             pictures_bind,
@@ -830,6 +882,11 @@ impl Renderer {
     /// Uploads the scene's triangles.
     pub fn set_scene(&mut self, device: &wgpu::Device, scene: &Scene) {
         self.uploads += 1;
+        let key = scene.orthophoto.as_ref().map(OrthoKey::of);
+        if key != self.ortho_key {
+            self.ortho_key = key;
+            self.ortho_pending = Some(scene.orthophoto.clone());
+        }
         self.bounds = (scene.lo, scene.hi);
         let wire = self.style == 3;
         self.wired = wire;
@@ -936,6 +993,22 @@ impl Renderer {
         if self.pictures_pending {
             self.pictures_pending = false;
             upload_pictures(queue, &self.pictures);
+        }
+        if let Some(ortho) = self.ortho_pending.take() {
+            let picture = ortho
+                .as_ref()
+                .and_then(|o| Some((o, archisim_geom::decals::pixels_of(&o.image.png)?)));
+            self.ortho_globals = picture
+                .as_ref()
+                .map_or(([0.0; 4], [0.0; 4]), |(o, _)| ortho_globals(o));
+            let limit = device.limits().max_texture_dimension_2d as usize;
+            let picture = picture.map(|(_, px)| ortho_picture(&px, limit.min(ORTHO_MAX)));
+            self.ortho_bind = ortho_bind_group(
+                device,
+                &self.ortho_layout,
+                &self.ortho_sampler,
+                picture.map(|p| (queue, p)),
+            );
         }
         let size = [size[0].clamp(1, 8192), size[1].clamp(1, 8192)];
         let aspect = size[0] as f32 / size[1] as f32;
@@ -1056,6 +1129,8 @@ impl Renderer {
                     1.0,
                 ],
             },
+            ortho_a: self.ortho_globals.0,
+            ortho_b: self.ortho_globals.1,
         };
         queue.write_buffer(&self.globals, 0, bytemuck::bytes_of(&globals));
         self.targets(device, size);
@@ -1212,6 +1287,7 @@ impl Renderer {
             pass.set_bind_group(0, &self.globals_bind, &[]);
             pass.set_bind_group(1, shadow_bind, &[]);
             pass.set_bind_group(2, &self.pictures_bind, &[]);
+            pass.set_bind_group(3, &self.ortho_bind, &[]);
             if self.style == 3 && self.wired {
                 // The wireframe: every edge, of what is in front and
                 // behind, and nothing else.
@@ -1298,6 +1374,7 @@ impl Renderer {
             pass.set_bind_group(0, &self.globals_bind, &[]);
             pass.set_bind_group(1, shadow_bind, &[]);
             pass.set_bind_group(2, &self.pictures_bind, &[]);
+            pass.set_bind_group(3, &self.ortho_bind, &[]);
             let wireframe = self.style == 3 && self.wired;
             let over = self
                 .overlay
@@ -1612,6 +1689,162 @@ fn level_for(radius: f32, dist: f32, levels: usize) -> usize {
     level.min(levels.saturating_sub(1))
 }
 
+/// The largest side of the orthophoto's picture on the card, pixels.
+const ORTHO_MAX: usize = 4096;
+
+/// What the orthophoto's picture on the card was made from: its picture
+/// and where it lies.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct OrthoKey {
+    png: usize,
+    place: [f64; 6],
+}
+
+impl OrthoKey {
+    fn of(o: &archisim_core::Orthophoto) -> Self {
+        Self {
+            png: std::sync::Arc::as_ptr(&o.image.png) as usize,
+            place: [o.origin[0], o.origin[1], o.u[0], o.u[1], o.v[0], o.v[1]],
+        }
+    }
+}
+
+/// The orthophoto's corner and the inverse of its sides, for the shader:
+/// a plan point `p` falls on the picture at `(a·d, b·d)`, `d = p − o`.
+fn ortho_globals(o: &archisim_core::Orthophoto) -> ([f32; 4], [f32; 4]) {
+    let det = o.u[0] * o.v[1] - o.u[1] * o.v[0];
+    if det.abs() < 1e-12 {
+        return ([0.0; 4], [0.0; 4]);
+    }
+    (
+        [
+            o.origin[0] as f32,
+            o.origin[1] as f32,
+            (o.v[1] / det) as f32,
+            (-o.v[0] / det) as f32,
+        ],
+        [(-o.u[1] / det) as f32, (o.u[0] / det) as f32, 1.0, 0.0],
+    )
+}
+
+/// The orthophoto's picture with its levels of detail, each a quarter
+/// of the one before (the first no larger than `max` a side).
+struct OrthoPicture {
+    levels: Vec<(usize, usize, Vec<u8>)>,
+}
+
+fn ortho_picture(px: &archisim_geom::decals::Pixels, max: usize) -> OrthoPicture {
+    let (mut w, mut h, mut rgba) = (px.width.max(1), px.height.max(1), px.rgba.clone());
+    // Halved until it fits.
+    while w > max || h > max {
+        (w, h, rgba) = half(w, h, &rgba);
+    }
+    let mut levels = vec![(w, h, rgba)];
+    loop {
+        let (w, h, rgba) = levels.last().unwrap();
+        if *w == 1 && *h == 1 {
+            break;
+        }
+        let next = half(*w, *h, rgba);
+        levels.push(next);
+    }
+    OrthoPicture { levels }
+}
+
+/// A picture at half its size (as the card halves its levels), each
+/// pixel the mean of the (up to) four
+/// under it.
+fn half(w: usize, h: usize, rgba: &[u8]) -> (usize, usize, Vec<u8>) {
+    let (m, n) = ((w / 2).max(1), (h / 2).max(1));
+    let mut out = vec![0u8; m * n * 4];
+    for j in 0..n {
+        for i in 0..m {
+            for k in 0..4 {
+                let mut sum = 0u32;
+                let mut count = 0u32;
+                for (x, y) in [
+                    (2 * i, 2 * j),
+                    (2 * i + 1, 2 * j),
+                    (2 * i, 2 * j + 1),
+                    (2 * i + 1, 2 * j + 1),
+                ] {
+                    if x < w && y < h {
+                        sum += rgba[(y * w + x) * 4 + k] as u32;
+                        count += 1;
+                    }
+                }
+                out[(j * m + i) * 4 + k] = ((sum + count / 2) / count.max(1)) as u8;
+            }
+        }
+    }
+    (m, n, out)
+}
+
+/// The bind group of the orthophoto's picture (one empty pixel without
+/// one), sent to the card.
+fn ortho_bind_group(
+    device: &wgpu::Device,
+    layout: &wgpu::BindGroupLayout,
+    sampler: &wgpu::Sampler,
+    picture: Option<(&wgpu::Queue, OrthoPicture)>,
+) -> wgpu::BindGroup {
+    let (w, h, levels) = picture.as_ref().map_or((1, 1, 1), |(_, p)| {
+        (p.levels[0].0, p.levels[0].1, p.levels.len())
+    });
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("orthophoto"),
+        size: wgpu::Extent3d {
+            width: w as u32,
+            height: h as u32,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: levels as u32,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8UnormSrgb,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    });
+    if let Some((queue, p)) = &picture {
+        for (mip, (w, h, rgba)) in p.levels.iter().enumerate() {
+            queue.write_texture(
+                wgpu::TexelCopyTextureInfo {
+                    texture: &texture,
+                    mip_level: mip as u32,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                },
+                rgba,
+                wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(4 * *w as u32),
+                    rows_per_image: Some(*h as u32),
+                },
+                wgpu::Extent3d {
+                    width: *w as u32,
+                    height: *h as u32,
+                    depth_or_array_layers: 1,
+                },
+            );
+        }
+    }
+    let view = texture.create_view(&Default::default());
+    device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("orthophoto"),
+        layout,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::TextureView(&view),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: wgpu::BindingResource::Sampler(sampler),
+            },
+        ],
+    })
+}
+
 /// Mip levels of the textures' pictures.
 fn picture_levels() -> u32 {
     archisim_render::textures::SIZE.trailing_zeros() + 1
@@ -1782,4 +2015,45 @@ pub fn sun_view_proj(sun: glam::Vec3, (lo, hi): (glam::Vec3, glam::Vec3)) -> gla
     // In front of the eye the view's z is negative.
     let (near, far) = ((-b.z - 1.0).max(0.01), -a.z + 1.0);
     directx::orthographic(a.x, b.x, a.y, b.y, near, far) * view
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_orthophoto_is_looked_up_where_it_lies() {
+        let o = archisim_core::Orthophoto {
+            image: archisim_core::DecalImage {
+                source: "o.png".into(),
+                png: std::sync::Arc::new(Vec::new()),
+                aspect: 1.0,
+            },
+            origin: [10.0, 20.0],
+            u: [30.0, 10.0],
+            v: [-5.0, 40.0],
+            on_roads: false,
+        };
+        let (a, b) = ortho_globals(&o);
+        let uv = |p: [f64; 2]| {
+            let d = [(p[0] - a[0] as f64) as f32, (p[1] - a[1] as f64) as f32];
+            (a[2] * d[0] + a[3] * d[1], b[0] * d[0] + b[1] * d[1])
+        };
+        let near =
+            |x: (f32, f32), y: (f32, f32)| (x.0 - y.0).abs() < 1e-4 && (x.1 - y.1).abs() < 1e-4;
+        assert!(near(uv([10.0, 20.0]), (0.0, 0.0)));
+        assert!(near(uv([40.0, 30.0]), (1.0, 0.0)));
+        assert!(near(uv([5.0, 60.0]), (0.0, 1.0)));
+        assert_eq!(b[2], 1.0);
+        // Its levels halve as the card's do, down to one pixel.
+        let px = archisim_geom::decals::Pixels {
+            width: 640,
+            height: 300,
+            rgba: vec![128; 640 * 300 * 4],
+        };
+        let p = ortho_picture(&px, 4096);
+        assert_eq!(p.levels.len(), 10);
+        assert_eq!((p.levels[1].0, p.levels[1].1), (320, 150));
+        assert_eq!((p.levels[9].0, p.levels[9].1), (1, 1));
+    }
 }

@@ -232,7 +232,17 @@ struct Scene {
     lamps: Vec<Lamp>,
     /// The pictures of the textures used, by `TextureKind::number`.
     tiles: Vec<Option<std::sync::Arc<textures::Tile>>>,
+    /// The orthophoto's picture and where it lies, for the faces marked
+    /// with [`ORTHO_TEX`].
+    ortho: Option<(
+        std::sync::Arc<archisim_geom::decals::Pixels>,
+        archisim_core::Orthophoto,
+    )>,
 }
+
+/// The texture number of the orthophoto's faces: their colour is its
+/// picture's at each point, not their corners'.
+const ORTHO_TEX: u8 = 255;
 
 fn srgb_to_linear(c: u8) -> f64 {
     let c = c as f64 / 255.0;
@@ -327,7 +337,10 @@ impl Scene {
                 let texture = (opt.textures && !glass && per_vertex.is_none() && !piece)
                     .then(|| texture_of(model, painted.unwrap_or(s.material), is_object))
                     .flatten();
+                let ortho = opt.textures
+                    && matches!(s.owner, archisim_geom::solid::SolidOwner::Orthophoto);
                 let (tex, scale) = match texture {
+                    _ if ortho => (ORTHO_TEX, 0.0),
                     Some((kind, scale)) => {
                         let k = kind.number() as usize;
                         if k < tiles.len() && tiles[k].is_none() {
@@ -406,6 +419,9 @@ impl Scene {
             light: opt.light,
             lamps,
             tiles,
+            ortho: model.orthophoto().and_then(|o| {
+                Some((archisim_geom::decals::pixels_of(&o.image.png)?, o.clone()))
+            }),
         };
         scene.build_bvh();
         scene
@@ -718,6 +734,9 @@ impl Scene {
         if tri.tex == 0 {
             return tri.albedo;
         }
+        if tri.tex == ORTHO_TEX {
+            return self.ortho_at(p).unwrap_or(tri.albedo);
+        }
         let Some(tile) = self.tiles.get(tri.tex as usize).and_then(|t| t.as_ref()) else {
             return tri.albedo;
         };
@@ -728,6 +747,33 @@ impl Scene {
             c = c.map(|v| v * (1.0 + k));
         }
         c.map(|v| srgb_to_linear((v.clamp(0.0, 1.0) * 255.0).round() as u8))
+    }
+}
+
+impl Scene {
+    /// The orthophoto's colour at a plan point (linear), its four nearest
+    /// pixels blended.
+    fn ortho_at(&self, p: V3) -> Option<V3> {
+        let (px, o) = self.ortho.as_ref()?;
+        let det = o.u[0] * o.v[1] - o.u[1] * o.v[0];
+        if det.abs() < 1e-12 || px.width == 0 || px.height == 0 {
+            return None;
+        }
+        let (dx, dy) = (p[0] - o.origin[0], p[1] - o.origin[1]);
+        let a = (dx * o.v[1] - dy * o.v[0]) / det;
+        let b = (o.u[0] * dy - o.u[1] * dx) / det;
+        // Pixel centres, rows from the top.
+        let x = (a * px.width as f64 - 0.5).clamp(0.0, (px.width - 1) as f64);
+        let y = ((1.0 - b) * px.height as f64 - 0.5).clamp(0.0, (px.height - 1) as f64);
+        let (x0, y0) = (x.floor() as usize, y.floor() as usize);
+        let (x1, y1) = ((x0 + 1).min(px.width - 1), (y0 + 1).min(px.height - 1));
+        let (fx, fy) = (x - x0 as f64, y - y0 as f64);
+        let at = |i: usize, j: usize, k: usize| srgb_to_linear(px.rgba[(j * px.width + i) * 4 + k]);
+        Some(std::array::from_fn(|k| {
+            let top = at(x0, y0, k) * (1.0 - fx) + at(x1, y0, k) * fx;
+            let bottom = at(x0, y1, k) * (1.0 - fx) + at(x1, y1, k) * fx;
+            top * (1.0 - fy) + bottom * fy
+        }))
     }
 }
 

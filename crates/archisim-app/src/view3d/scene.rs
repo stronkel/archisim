@@ -341,7 +341,15 @@ pub struct Scene {
     /// The lamps: where their light comes from (the middle of what glows)
     /// and how far it reaches, metres.
     pub lamps: Vec<[f32; 4]>,
+    /// The orthophoto laid on the ground: its picture drawn pixel by
+    /// pixel on the faces marked for it (`ORTHO_TEX`), not only the
+    /// colours of its grid's corners.
+    pub orthophoto: Option<archisim_core::Orthophoto>,
 }
+
+/// The size of the texture's piece that marks the orthophoto's corners:
+/// the shader looks the picture up on them.
+pub const ORTHO_TEX: f32 = -1.0;
 
 /// Where a triangle goes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -579,6 +587,7 @@ impl Scene {
         let mut s = Scene {
             lo: Vec3::splat(f32::INFINITY),
             hi: Vec3::splat(f32::NEG_INFINITY),
+            orthophoto: model.orthophoto().cloned(),
             ..Default::default()
         };
         // The furniture shared by type (never while isolating a clash,
@@ -1701,6 +1710,8 @@ fn add_solids(
         let piece = matches!(solid.owner, SolidOwner::Facade(_));
         let own_tex = if dimmed || ghost || grass || piece {
             [0.0, 0.0]
+        } else if matches!(solid.owner, SolidOwner::Orthophoto) {
+            [0.0, ORTHO_TEX]
         } else {
             texture_of(solid.material)
         };

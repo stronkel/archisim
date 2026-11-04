@@ -21,6 +21,8 @@ use crate::textures;
 struct Look {
     material: MaterialId,
     vertex_colours: bool,
+    /// The orthophoto: its picture as the texture, laid by its place.
+    ortho: bool,
 }
 
 /// The triangles of a part: positions, flat normals, texture points and
@@ -204,10 +206,17 @@ fn add_triangles(
             } else {
                 painted_material(model, s, t).unwrap_or(s.material)
             };
-            let vc = corners.as_ref().and_then(|c| c.get(i));
+            let ortho = matches!(s.owner, SolidOwner::Orthophoto)
+                .then(|| model.orthophoto())
+                .flatten();
+            let vc = corners
+                .as_ref()
+                .and_then(|c| c.get(i))
+                .filter(|_| ortho.is_none());
             let look = Look {
                 material,
                 vertex_colours: vc.is_some(),
+                ortho: ortho.is_some(),
             };
             let e1 = [t[1][0] - t[0][0], t[1][1] - t[0][1], t[1][2] - t[0][2]];
             let e2 = [t[2][0] - t[0][0], t[2][1] - t[0][1], t[2][2] - t[0][2]];
@@ -232,6 +241,7 @@ fn add_triangles(
                 part.pos.push(gl(*p));
                 part.normal.push(gl(n));
                 let uv = match texture {
+                    _ if ortho.is_some() => ortho.map_or([0.0, 0.0], |o| ortho_point(o, *p)),
                     Some((kind, scale)) => {
                         let q = textures::texture_point(*p, n, scale, kind);
                         let per = textures::period(kind);
@@ -245,6 +255,19 @@ fn add_triangles(
             }
         }
     }
+}
+
+/// Where a point falls on the orthophoto's picture: glTF's texture point
+/// (from its top left corner).
+fn ortho_point(o: &archisim_core::Orthophoto, p: [f64; 3]) -> [f32; 2] {
+    let det = o.u[0] * o.v[1] - o.u[1] * o.v[0];
+    if det.abs() < 1e-12 {
+        return [0.0, 0.0];
+    }
+    let (dx, dy) = (p[0] - o.origin[0], p[1] - o.origin[1]);
+    let a = (dx * o.v[1] - dy * o.v[0]) / det;
+    let b = (o.u[0] * dy - o.u[1] * dx) / det;
+    [a as f32, (1.0 - b) as f32]
 }
 
 /// Writes the nodes as a `.glb`: the elements each with its own mesh, and
@@ -421,8 +444,11 @@ fn write(
     if !images.is_empty() {
         doc["images"] = json!(images);
         doc["textures"] = json!(gl_textures);
-        doc["samplers"] =
-            json!([{"magFilter": 9729, "minFilter": 9987, "wrapS": 10497, "wrapT": 10497}]);
+        // The textures repeat; the orthophoto's picture does not.
+        doc["samplers"] = json!([
+            {"magFilter": 9729, "minFilter": 9987, "wrapS": 10497, "wrapT": 10497},
+            {"magFilter": 9729, "minFilter": 9987, "wrapS": 33071, "wrapT": 33071}
+        ]);
     }
     let mut text = serde_json::to_vec(&doc).unwrap_or_default();
     while !text.len().is_multiple_of(4) {
@@ -480,6 +506,23 @@ fn material_json(
         colour[3] = 0.25;
         pbr["roughnessFactor"] = json!(0.05);
         out["alphaMode"] = json!("BLEND");
+    }
+    if let Some(o) = model.orthophoto().filter(|_| look.ortho) {
+        let png = &o.image.png;
+        let off = bin.len();
+        bin.extend(png.iter());
+        views.push(json!({"buffer": 0, "byteOffset": off, "byteLength": png.len()}));
+        while !bin.len().is_multiple_of(4) {
+            bin.push(0);
+        }
+        images.push(json!({"bufferView": views.len() - 1, "mimeType": "image/png", "name": "Ortofoto"}));
+        textures_out.push(json!({"source": images.len() - 1, "sampler": 1}));
+        pbr["baseColorTexture"] = json!({"index": textures_out.len() - 1});
+        pbr["baseColorFactor"] = json!([1.0, 1.0, 1.0, 1.0]);
+        pbr["roughnessFactor"] = json!(0.95);
+        let mut out = json!({"name": "Ortofoto", "doubleSided": false});
+        out["pbrMetallicRoughness"] = pbr;
+        return out;
     }
     let texture = (!glass && !look.vertex_colours)
         .then(|| crate::texture_of(model, look.material, true))

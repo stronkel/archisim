@@ -62,9 +62,38 @@ struct Globals {
     // What a cut shows: xyz a flat colour, w = 1 to use it; otherwise the
     // material's cut colour (each layer of a wall its own).
     caps: vec4<f32>,
+    // The orthophoto (scene.rs `ORTHO_TEX`): xy its corner in plan, zw
+    // and ortho_b.xy the inverse of its sides (plan to 0…1); ortho_b.z = 1
+    // with a picture.
+    ortho_a: vec4<f32>,
+    ortho_b: vec4<f32>,
 };
 
 @group(0) @binding(0) var<uniform> g: Globals;
+
+// The orthophoto's picture (one pixel without one).
+@group(3) @binding(0) var ortho_picture: texture_2d<f32>;
+@group(3) @binding(1) var ortho_sampler: sampler;
+
+// The orthophoto's colour at a point (linear), worked out for every
+// pixel, where they still run together (its level of detail); used only
+// on the faces marked for it.
+fn ortho_colour(world: vec3<f32>) -> vec3<f32> {
+    let d = world.xy - g.ortho_a.xy;
+    let uv = vec2<f32>(
+        g.ortho_a.z * d.x + g.ortho_a.w * d.y,
+        1.0 - (g.ortho_b.x * d.x + g.ortho_b.y * d.y),
+    );
+    let size = vec2<f32>(textureDimensions(ortho_picture));
+    let q = uv * size;
+    let px = max(length(dpdx(q)), length(dpdy(q)));
+    let lod = max(log2(max(px, 1e-6)), 0.0);
+    return textureSampleLevel(ortho_picture, ortho_sampler, uv, lod).rgb;
+}
+
+fn is_ortho(tex: vec2<f32>) -> bool {
+    return tex.x < 0.5 && tex.y < -0.5 && g.ortho_b.z > 0.5;
+}
 
 // The shadow map of the model's passes (the contour pass has its own
 // picture at binding 0 of its group 1).
@@ -1264,7 +1293,12 @@ fn fs_model(i: VertexOut, @builtin(front_facing) front: bool) -> ModelOut {
     tex_level = tex_lod(i.world, i.normal, i.tex);
     // The texture and its relief, worked out here, where every pixel still
     // runs together (derivatives).
-    let base = textured(i.color.rgb, i.world, i.normal, i.tex);
+    let ortho = ortho_colour(i.world);
+    let base = select(
+        textured(i.color.rgb, i.world, i.normal, i.tex),
+        ortho,
+        is_ortho(i.tex),
+    );
     let bent = relief_normal(i.world, i.normal);
     if (stretched(i.picked)) {
         discard;
