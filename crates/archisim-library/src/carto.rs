@@ -45,6 +45,12 @@ pub struct CartoOptions {
     /// Dress the streets and gardens: trees, lights, benches, bins, cars,
     /// people, hedges ([`crate::street_life`]).
     pub street_life: bool,
+    /// Make the dressed buildings as the world's (tanda 7): the typology
+    /// for their style and party walls in the skin of their place.
+    pub world: bool,
+    /// The place of the world for them (its number); none: where the
+    /// project stands, by its georeference.
+    pub place: Option<u8>,
 }
 
 /// The kind of place a building stands in, for its style.
@@ -249,6 +255,8 @@ impl Default for CartoOptions {
             styles: true,
             zone: None,
             street_life: true,
+            world: true,
+            place: None,
         }
     }
 }
@@ -727,6 +735,20 @@ pub fn import_carto(
         }
         if opts.styles {
             dress_brought(m, &made, opts.zone, &mut report)?;
+            if opts.world {
+                let ids: Vec<_> = made.iter().map(|x| x.0).collect();
+                let place = opts.place.unwrap_or_else(|| m.world_place());
+                let n = m.dress_as_world(&ids, Some(place))?;
+                if n > 0 {
+                    let name = archisim_core::world_places()
+                        .get(place as usize)
+                        .copied()
+                        .unwrap_or("");
+                    report.notes.push(format!(
+                        "{n} edificios hechos como los del mundo, con la piel de {name}"
+                    ));
+                }
+            }
         }
     }
     if !read.surfaces.is_empty() && report.buildings == 0 {

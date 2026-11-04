@@ -204,6 +204,9 @@ pub fn dressed_solids_detail(model: &Model, m: &Mass, light: bool) -> Vec<Solid>
     }
     let z0 = model.level(m.level).map_or(0.0, |l| l.elevation) + m.base_offset;
     let floors = m.floors().max(1);
+    if let Some(w) = d.world {
+        return world_solids(model, m, d, &poly, w, z0, floors, light);
+    }
     let fh = m.floor_height.unwrap_or(m.height / floors as f64);
     let top = z0 + m.height;
     let party = model.party_sides(m.id);
@@ -1575,6 +1578,91 @@ fn clip_half(poly: &[Point2], g: Vec2, k: f64) -> Vec<Point2> {
     out
 }
 
+/// A building of the surroundings made as one of the world's: its plan
+/// with its party walls and its fronts to the street, the typology in the
+/// skin of its place (`archisim_core::props::fine::buildings::world`), its
+/// pieces in the project's materials by their names.
+#[allow(clippy::too_many_arguments)]
+fn world_solids(
+    model: &Model,
+    m: &Mass,
+    d: &Dress,
+    poly: &[Point2],
+    w: archisim_core::WorldDress,
+    z0: f64,
+    floors: usize,
+    light: bool,
+) -> Vec<Solid> {
+    use archisim_core::props::fine::buildings::world::{
+        material_of,
+        plan::{Plan, Side as WSide},
+        types::dress_cached,
+    };
+    use archisim_core::WorldTypology;
+    let n = poly.len();
+    let party = model.party_sides(m.id);
+    let street = model.street_sides(m.id);
+    let party = |i: usize| party.get(i).copied().unwrap_or(false);
+    let on_street = |i: usize| street.get(i).copied().unwrap_or(false);
+    let len = |i: usize| poly[i].distance(poly[(i + 1) % n]);
+    // A front to the street: the street's, or the longest free side.
+    let main = (0..n)
+        .filter(|i| on_street(*i) && !party(*i))
+        .max_by(|a, b| len(*a).total_cmp(&len(*b)))
+        .or_else(|| {
+            (0..n)
+                .filter(|i| !party(*i))
+                .max_by(|a, b| len(*a).total_cmp(&len(*b)))
+        });
+    let sides: Vec<WSide> = (0..n)
+        .map(|i| {
+            if party(i) {
+                WSide::Party
+            } else if on_street(i) || Some(i) == main {
+                WSide::Street
+            } else {
+                match w.typology {
+                    WorldTypology::Street => WSide::Back,
+                    WorldTypology::Block | WorldTypology::House => WSide::Free,
+                }
+            }
+        })
+        .collect();
+    let o = poly[0];
+    let plan = Plan {
+        poly: poly.iter().map(|p| [p.x - o.x, p.y - o.y]).collect(),
+        sides,
+    };
+    let mesh = dress_cached(
+        &plan,
+        w.typology.props(),
+        w.place as usize,
+        floors,
+        w.variant as u64,
+        light,
+    );
+    let by_name: std::collections::HashMap<&str, MaterialId> =
+        model.materials().map(|x| (x.name.as_str(), x.id)).collect();
+    let place = |q: [f32; 3]| -> P3 { [o.x + q[0] as f64, o.y + q[1] as f64, z0 + q[2] as f64] };
+    let mut by: BTreeMap<MaterialId, Vec<[P3; 3]>> = BTreeMap::new();
+    for (role, tris) in &mesh.parts {
+        let material = material_of(role)
+            .and_then(|name| by_name.get(name).copied())
+            .unwrap_or(d.materials.wall);
+        by.entry(material).or_default().extend(
+            tris.iter()
+                .map(|t| t.map(|i| place(mesh.positions[i as usize]))),
+        );
+    }
+    by.into_iter()
+        .map(|(material, triangles)| Solid {
+            owner: SolidOwner::Mass(m.id),
+            material,
+            triangles,
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1679,6 +1767,59 @@ mod tests {
         let (light, top_light) = count(&m);
         assert!(light * 2 < full, "{light} of {full}");
         assert!((top - top_light).abs() < 1e-9);
+    }
+
+    /// A row of houses made as the world's (tanda 7): each one of the
+    /// street's houses in the skin of its place, in the project's
+    /// materials, blind on its party walls, lighter from afar.
+    #[test]
+    fn houses_made_as_the_worlds() {
+        let mut m = Model::new("T");
+        let l = m.add_level("Planta baja", 0.0);
+        let mut ids = Vec::new();
+        for i in 0..3 {
+            let x = i as f64 * 7.0;
+            ids.push(
+                m.add_env_building(NewEnvBuilding {
+                    name: format!("Casa {i}"),
+                    level: l,
+                    outline: rect(x, 0.0, x + 7.0, 12.0),
+                    style: BuildingStyle::Andalusian,
+                    floors: Some(3),
+                    floor_height: None,
+                    base_offset: 0.0,
+                })
+                .unwrap(),
+            );
+        }
+        // The town house of Paris (6).
+        assert_eq!(m.dress_as_world(&ids, Some(6)).unwrap(), 3);
+        let mid = m.mass(ids[1]).unwrap();
+        let w = mid.dress.unwrap().world.unwrap();
+        assert_eq!(w.typology, archisim_core::WorldTypology::Street);
+        let full = dressed_solids_detail(&m, mid, false);
+        let light = dressed_solids_detail(&m, mid, true);
+        let count = |s: &[Solid]| s.iter().map(|s| s.triangles.len()).sum::<usize>();
+        assert!(count(&full) > 5_000, "{}", count(&full));
+        assert!(
+            count(&light) * 10 < count(&full) * 6,
+            "{} of {}",
+            count(&light),
+            count(&full)
+        );
+        // Its materials are the world's, by name: the zinc of the mansard.
+        let zinc = m.materials().find(|x| x.name == "Zinc").unwrap().id;
+        assert!(full.iter().any(|s| s.material == zinc));
+        // Blind on its party walls: no glass out of x 7..14.
+        let glass = m.materials().find(|x| x.name == "Vidrio claro").unwrap().id;
+        for t in full
+            .iter()
+            .filter(|s| s.material == glass)
+            .flat_map(|s| &s.triangles)
+            .flatten()
+        {
+            assert!(t[0] > 7.0 + 0.1 && t[0] < 14.0 - 0.1, "{t:?}");
+        }
     }
 
     #[test]

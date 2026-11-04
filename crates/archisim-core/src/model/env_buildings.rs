@@ -496,6 +496,91 @@ pub struct Dress {
     /// (along the street front; with no street, along the longest side).
     pub ridge_turned: bool,
     pub materials: DressMaterials,
+    /// Dressed as a building of the world (taller de edificios, tanda 7):
+    /// a typology in the skin of a place, made by
+    /// `archisim_props::fine::buildings::world`; the rest of the dress is then
+    /// only for what the world does not say.
+    pub world: Option<WorldDress>,
+}
+
+/// A building of the surroundings made as one of the world's: its place
+/// (the number of its skin), its typology and its variant.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WorldDress {
+    pub place: u8,
+    pub typology: WorldTypology,
+    pub variant: u16,
+}
+
+/// The typologies of the world's buildings.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WorldTypology {
+    /// A house between party walls of a street.
+    Street,
+    /// A block of flats.
+    Block,
+    /// A detached house.
+    House,
+}
+
+impl WorldTypology {
+    pub const ALL: [WorldTypology; 3] = [
+        WorldTypology::Street,
+        WorldTypology::Block,
+        WorldTypology::House,
+    ];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            WorldTypology::Street => "Casa entre medianeras",
+            WorldTypology::Block => "Bloque de viviendas",
+            WorldTypology::House => "Vivienda aislada",
+        }
+    }
+
+    pub fn code(self) -> &'static str {
+        match self {
+            WorldTypology::Street => "street",
+            WorldTypology::Block => "block",
+            WorldTypology::House => "house",
+        }
+    }
+
+    pub fn from_code(code: &str) -> Option<WorldTypology> {
+        Self::ALL.into_iter().find(|t| t.code() == code)
+    }
+
+    /// The typology of the world for a style of the surroundings and how
+    /// many of its sides are party walls (none for what the world does not
+    /// make yet: offices, warehouses, facilities).
+    pub fn for_style(style: BuildingStyle, party: usize, floors: u32) -> Option<WorldTypology> {
+        use BuildingStyle as S;
+        match style {
+            S::Offices | S::Warehouse | S::Facility => None,
+            S::Detached | S::SemiDetached => Some(WorldTypology::House),
+            _ if party >= 1 => Some(WorldTypology::Street),
+            _ if floors <= 2 => Some(WorldTypology::House),
+            _ => Some(WorldTypology::Block),
+        }
+    }
+
+    /// As the props' typology.
+    pub fn props(self) -> archisim_props::fine::buildings::world::types::Typology {
+        use archisim_props::fine::buildings::world::types::Typology as T;
+        match self {
+            WorldTypology::Street => T::Townhouse,
+            WorldTypology::Block => T::Block,
+            WorldTypology::House => T::House,
+        }
+    }
+}
+
+/// The places of the world: their names, in the order of their numbers.
+pub fn world_places() -> Vec<&'static str> {
+    archisim_props::fine::buildings::world::SKINS
+        .iter()
+        .map(|s| s.name)
+        .collect()
 }
 
 /// Shortest and longest bays.
@@ -522,6 +607,7 @@ impl Dress {
             patio: 0.0,
             ridge_turned: false,
             materials,
+            world: None,
         };
         match style {
             BuildingStyle::Andalusian => Dress {
@@ -656,6 +742,9 @@ impl Dress {
             && (0.0..=2.0).contains(&self.pitch)
             && (0.0..=3.0).contains(&self.plinth)
             && (0.0..=20.0).contains(&self.patio)
+            && self.world.is_none_or(|w| {
+                (w.place as usize) < archisim_props::fine::buildings::world::SKINS.len()
+            })
             && [
                 self.bay,
                 self.window_width,
@@ -692,8 +781,11 @@ impl Dress {
             self.plinth,
             self.cornice as u8,
             self.patio,
-            self.ridge_turned as u8,
-        )
+                        self.ridge_turned as u8,
+        ) + &self
+            .world
+            .map(|w| format!(";world={},{},{}", w.place, w.typology.code(), w.variant))
+            .unwrap_or_default()
     }
 
     /// Reads what `encode` wrote, with these materials.
@@ -725,6 +817,14 @@ impl Dress {
                 "cornice" => d.cornice = v == "1",
                 "patio" => d.patio = num()?,
                 "ridge" => d.ridge_turned = v == "1",
+                "world" => {
+                    let mut it = v.split(',');
+                    d.world = Some(WorldDress {
+                        place: it.next()?.parse().ok()?,
+                        typology: WorldTypology::from_code(it.next()?)?,
+                        variant: it.next()?.parse().ok()?,
+                    });
+                }
                 _ => {}
             }
         }
@@ -786,6 +886,56 @@ impl Model {
             );
         }
         id
+    }
+
+    /// The materials of the world's buildings, found in the project by
+    /// their names or made.
+    pub fn ensure_world_materials(&mut self) {
+        for (_, name, category, rgb) in archisim_props::fine::buildings::world::MATERIALS {
+            self.env_material(name, category, *rgb);
+        }
+    }
+
+    /// The place of the world where the project stands (by its
+    /// georeference; none, the south of Spain).
+    pub fn world_place(&self) -> u8 {
+        self.georeference()
+            .and_then(|g| g.lat_lon())
+            .map_or(0, |(lat, lon)| {
+                archisim_props::fine::buildings::world::skins::skin_at(lat, lon) as u8
+            })
+    }
+
+    /// Dresses buildings of the surroundings as the world's: each the
+    /// typology its style and party walls ask for (those the world does
+    /// not make keep their dress), in `place` (none: where the project
+    /// stands), its variant by its number.
+    pub fn dress_as_world(
+        &mut self,
+        ids: &[MassId],
+        place: Option<u8>,
+    ) -> Result<usize, ModelError> {
+        let place = place.unwrap_or_else(|| self.world_place());
+        self.ensure_world_materials();
+        let mut n = 0;
+        for &id in ids {
+            let Some(m) = self.mass(id) else { continue };
+            let Some(mut d) = m.dress else { continue };
+            let floors = m.floors();
+            let party = self.party_sides(id).iter().filter(|p| **p).count();
+            d.world = WorldTypology::for_style(d.style, party, floors as u32).map(|typology| {
+                WorldDress {
+                    place,
+                    typology,
+                    variant: (id.0 % 97) as u16 + 1,
+                }
+            });
+            if d.world.is_some() {
+                n += 1;
+            }
+            self.set_mass_dress(id, Some(d))?;
+        }
+        Ok(n)
     }
 
     /// The finishes of a style, found in the project by their names or

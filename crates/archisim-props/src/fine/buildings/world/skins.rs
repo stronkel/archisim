@@ -1316,3 +1316,105 @@ pub fn skin_of(n: f64) -> &'static Skin {
 pub fn skin_by_key(key: &str) -> Option<&'static Skin> {
     SKINS.iter().find(|s| s.key == key)
 }
+
+/// The places of the world, as boxes of latitude and longitude (degrees),
+/// the first that holds a point wins: the skin of where a building stands.
+/// A box of latitudes and longitudes and the place it is.
+type PlaceBox = ((f64, f64), (f64, f64), &'static str);
+
+const PLACES: &[PlaceBox] = &[
+    // Spain, by regions; the Canaries take the south's.
+    ((27.5, 29.5), (-18.5, -13.0), "andalucia"),
+    ((35.8, 38.6), (-7.6, -1.6), "andalucia"),
+    ((41.8, 44.0), (-9.5, -1.5), "norte"),
+    ((37.8, 42.9), (-1.6, 4.5), "mediterraneo"),
+    ((38.6, 40.2), (1.0, 4.5), "mediterraneo"),
+    ((35.8, 44.0), (-7.6, -1.6), "castilla"),
+    // Portugal: the Algarve, the rest.
+    ((36.8, 37.45), (-9.1, -7.3), "algarve"),
+    ((36.8, 42.2), (-9.6, -6.2), "lisboa"),
+    // The Low Countries (Belgium, the Netherlands), the islands of
+    // Britain, France, Italy (with Malta).
+    ((49.5, 51.5), (2.5, 6.4), "paises_bajos"),
+    ((51.3, 53.6), (3.3, 7.1), "paises_bajos"),
+    ((49.8, 61.0), (-11.0, 2.0), "reino_unido"),
+    ((42.3, 49.0), (-5.0, 8.3), "paris"),
+    ((49.0, 51.2), (-5.0, 6.3), "paris"),
+    ((35.7, 47.1), (6.6, 18.6), "italia"),
+    // The North, Central Europe, the East.
+    ((54.5, 71.5), (4.0, 32.0), "nordico"),
+    ((63.0, 67.0), (-25.0, -13.0), "nordico"),
+    ((45.7, 55.1), (5.8, 17.2), "centroeuropa"),
+    ((34.5, 42.0), (19.3, 45.0), "grecia"),
+    ((41.0, 60.0), (13.0, 50.0), "este"),
+    // North Africa and the Middle East.
+    ((15.0, 37.5), (-17.5, 63.0), "magreb"),
+    // North America: New York and Chicago, San Francisco, California,
+    // the rest.
+    ((37.0, 47.5), (-90.0, -66.0), "nueva_york"),
+    ((37.5, 38.0), (-122.6, -122.3), "san_francisco"),
+    ((32.4, 42.0), (-124.6, -114.0), "california"),
+    ((24.0, 72.0), (-170.0, -52.0), "eeuu"),
+    // Latin America.
+    ((-56.0, 32.7), (-118.0, -34.0), "latam"),
+    // East Asia.
+    ((30.0, 46.0), (128.0, 146.0), "japon"),
+    ((24.0, 30.0), (122.0, 132.0), "japon"),
+    ((33.0, 39.0), (124.0, 130.0), "corea"),
+    ((18.0, 54.0), (97.0, 135.0), "china"),
+];
+
+/// The skin of a place by its latitude and longitude (degrees): its
+/// number in [`SKINS`]. Where there is none, the tropics' (or the south
+/// of Spain's when nothing is known).
+pub fn skin_at(lat: f64, lon: f64) -> usize {
+    let key = PLACES
+        .iter()
+        .find(|((a, b), (c, d), _)| (*a..=*b).contains(&lat) && (*c..=*d).contains(&lon))
+        .map_or("tropico", |p| p.2);
+    SKINS.iter().position(|s| s.key == key).unwrap_or(0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn places_by_where_they_are() {
+        for (lat, lon, key) in [
+            (37.26, -6.95, "andalucia"),
+            (37.21, -7.08, "andalucia"),
+            (37.02, -7.93, "algarve"),
+            (38.72, -9.14, "lisboa"),
+            (40.42, -3.70, "castilla"),
+            (43.26, -2.93, "norte"),
+            (41.39, 2.17, "mediterraneo"),
+            (28.1, -15.4, "andalucia"),
+            (48.86, 2.35, "paris"),
+            (50.85, 4.35, "paises_bajos"),
+            (52.37, 4.90, "paises_bajos"),
+            (50.94, 6.96, "centroeuropa"),
+            (51.51, -0.13, "reino_unido"),
+            (41.90, 12.50, "italia"),
+            (59.33, 18.07, "nordico"),
+            (48.21, 16.37, "centroeuropa"),
+            (50.08, 14.44, "centroeuropa"),
+            (52.23, 21.01, "este"),
+            (37.98, 23.73, "grecia"),
+            (33.57, -7.59, "magreb"),
+            (40.71, -74.0, "nueva_york"),
+            (41.88, -87.63, "nueva_york"),
+            (37.77, -122.42, "san_francisco"),
+            (34.05, -118.24, "california"),
+            (39.74, -104.99, "eeuu"),
+            (19.43, -99.13, "latam"),
+            (-34.6, -58.38, "latam"),
+            (35.68, 139.69, "japon"),
+            (37.57, 126.98, "corea"),
+            (31.23, 121.47, "china"),
+            (-27.47, 153.03, "tropico"),
+        ] {
+            assert_eq!(SKINS[skin_at(lat, lon)].key, key, "{lat}, {lon}");
+        }
+    }
+}

@@ -369,6 +369,78 @@ impl ArchiSimApp {
             let mut x = d;
             let mut changed = false;
             let who = ids[0];
+            // Made as one of the world's buildings (tanda 7).
+            let mut world_on = x.world.is_some();
+            row(
+                ui,
+                "Edificio del mundo",
+                "Hecho como los edificios del taller: la tipología en la piel de su lugar",
+                |ui, _| {
+                    if ui.switch(&mut world_on, "").changed() {
+                        changed = true;
+                    }
+                },
+            );
+            if world_on != x.world.is_some() {
+                x.world = world_on.then(|| {
+                    let floors = first.floors() as u32;
+                    archisim_core::WorldDress {
+                        place: model.world_place(),
+                        typology: archisim_core::WorldTypology::for_style(x.style, 1, floors)
+                            .unwrap_or(archisim_core::WorldTypology::Block),
+                        variant: (who.0 % 97) as u16 + 1,
+                    }
+                });
+            }
+            if let Some(mut w) = x.world {
+                let places = archisim_core::world_places();
+                let options: Vec<(u8, &str)> = places
+                    .iter()
+                    .enumerate()
+                    .map(|(i, n)| (i as u8, *n))
+                    .collect();
+                row(
+                    ui,
+                    "Lugar",
+                    "La piel: de dónde es el edificio",
+                    |ui, wd| {
+                        let c = choice(ui, "env-world-place", wd, w.place, &options);
+                        if c != w.place {
+                            w.place = c;
+                            changed = true;
+                        }
+                    },
+                );
+                row(ui, "Tipología", "", |ui, wd| {
+                    let c = choice(
+                        ui,
+                        "env-world-typology",
+                        wd,
+                        w.typology,
+                        &archisim_core::WorldTypology::ALL.map(|t| (t, t.name())),
+                    );
+                    if c != w.typology {
+                        w.typology = c;
+                        changed = true;
+                    }
+                });
+                row(
+                    ui,
+                    "Variante",
+                    "Cambia colores, persianas y detalles",
+                    |ui, wd| {
+                        let mut v = w.variant as i32;
+                        if ui
+                            .add_sized([wd - 8.0, 20.0], egui::DragValue::new(&mut v).range(1..=99))
+                            .changed()
+                        {
+                            w.variant = v as u16;
+                            changed = true;
+                        }
+                    },
+                );
+                x.world = Some(w);
+            }
             let metres = |ui: &mut Ui, label: &str, hint: &str, key: &str, v: &mut f64| {
                 let mut c = false;
                 row(ui, label, hint, |ui, w| {
@@ -526,6 +598,9 @@ impl ArchiSimApp {
             self.report(r.map(|_| ()), &format!("Estilo: {}.", s.name()));
         } else if let Some(x) = edit {
             let r = self.ed.transact("Edificio del entorno", |m| {
+                if x.world.is_some() {
+                    m.ensure_world_materials();
+                }
                 for id in &list {
                     // The measurements to all, each keeping its finishes
                     // and style.
@@ -537,6 +612,17 @@ impl ArchiSimApp {
                         Some(Dress {
                             style: own.style,
                             materials: own.materials,
+                            // Each keeps its own variant.
+                            world: x.world.map(|w| archisim_core::WorldDress {
+                                variant: own.world.map_or(w.variant, |o| {
+                                    if list.len() > 1 {
+                                        o.variant
+                                    } else {
+                                        w.variant
+                                    }
+                                }),
+                                ..w
+                            }),
                             ..x
                         }),
                     )?;

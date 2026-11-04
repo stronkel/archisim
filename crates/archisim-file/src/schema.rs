@@ -1604,6 +1604,19 @@ pub(crate) struct DressOf {
     pub ridge_turned: bool,
     /// Walls, trim, roof, joinery, glass and metal.
     pub materials: [u64; 6],
+    /// Made as one of the world's buildings (version 72).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub world: Option<WorldDressOf>,
+}
+
+/// A building of the surroundings made as one of the world's (version
+/// 72): the number of its place, its typology and its variant.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct WorldDressOf {
+    pub place: u8,
+    pub typology: String,
+    pub variant: u16,
 }
 
 impl DressOf {
@@ -1624,6 +1637,11 @@ impl DressOf {
             patio: d.patio,
             ridge_turned: d.ridge_turned,
             materials: d.materials.all().map(|m| m.0),
+            world: d.world.map(|w| WorldDressOf {
+                place: w.place,
+                typology: w.typology.code().into(),
+                variant: w.variant,
+            }),
         }
     }
 
@@ -1650,6 +1668,15 @@ impl DressOf {
             cornice: self.cornice,
             patio: self.patio,
             ridge_turned: self.ridge_turned,
+            world: match self.world {
+                Some(w) => Some(core::WorldDress {
+                    place: w.place,
+                    typology: core::WorldTypology::from_code(&w.typology)
+                        .ok_or_else(|| bad("typology", &w.typology))?,
+                    variant: w.variant,
+                }),
+                None => None,
+            },
             materials: core::DressMaterials {
                 wall,
                 trim,

@@ -6,6 +6,30 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-04 (96) · Taller de edificios, tanda 7: los edificios del entorno, con la piel de su lugar
+
+Misma rama `bloque/taller-edificios` y mismo pull request (#160). **Formato `.archisim` versión 72.** El IFC guarda el lugar en el pset del edificio del entorno.
+
+**Hecho**
+- Un edificio del entorno (U6) puede hacerse como uno de los del mundo: su planta tal cual, con sus medianeras ciegas y sus fachadas a la calle, en la tipología y la piel de su lugar. Se guarda en el `dress` (`world`: lugar, tipología y variante).
+- **Al traer el entorno** (Catastro, OpenStreetMap, LiDAR), cada edificio vestido toma:
+  - la tipología: entre medianeras si tiene medianeras, aislada si es chalet o pareada, bloque si es exento de más de dos plantas. Oficinas, naves y equipamientos siguen como estaban, hasta que tengan tipología propia;
+  - la piel del lugar por la georreferencia del proyecto: el Catastro de Huelva o Sevilla da Andalucía, uno de París da París…;
+  - la variante por su número, así que la calle no sale repetida.
+- **A mano**, en Propiedades → «Edificio del entorno» → «Edificio del mundo»: el interruptor, «Lugar» (los 24), «Tipología» y «Variante». Con varios seleccionados, cada uno conserva su variante.
+- **De lejos**, la versión ligera, con el mismo límite de siempre (más de 150 edificios: completos solo cerca).
+- **Pruebas:**
+  - una fila de casas de París sale con su mansarda de zinc, sin vidrio en las medianeras y más ligera de lejos;
+  - el lugar sale de la latitud y la longitud en 31 ciudades;
+  - el `dress` del mundo se guarda en el `.archisim` y en el texto del IFC.
+- Probado con el pueblo de ensayo del Catastro: 64 edificios con la piel de Andalucía. El IFC valida y, al importarlo, los edificios conservan su lugar.
+
+**Qué debe probar Antonio**
+1. Archivo → Traer el entorno, con un sitio cualquiera. Los edificios deben salir con la piel del lugar, y el aviso dice cuántos y de dónde.
+2. Selecciona uno y, en Propiedades, cambia «Lugar», «Tipología» y «Variante». Selecciona varios y cámbiales el lugar a la vez.
+
+---
+
 ## 2026-11-04 (95) · Taller de edificios: plantas poligonales y versión ligera
 
 Misma rama `bloque/taller-edificios` y mismo pull request (#160). Sin cambios de formato ni de IFC.

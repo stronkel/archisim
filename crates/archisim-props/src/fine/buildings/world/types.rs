@@ -767,3 +767,40 @@ pub fn sample(b: &mut Builder, p: &Params) {
     building(b, plan, &sk, &l, &shape);
     finish(b, &l);
 }
+
+type DressCache = std::sync::Mutex<std::collections::HashMap<u64, std::sync::Arc<crate::PropMesh>>>;
+
+/// [`dress`], kept: the same plan and choices make the same model once.
+pub fn dress_cached(
+    plan: &Plan,
+    t: Typology,
+    skin: usize,
+    floors: usize,
+    seed: u64,
+    light: bool,
+) -> std::sync::Arc<crate::PropMesh> {
+    use std::hash::{Hash, Hasher};
+    static CACHE: std::sync::OnceLock<DressCache> = std::sync::OnceLock::new();
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    for p in &plan.poly {
+        p[0].to_bits().hash(&mut h);
+        p[1].to_bits().hash(&mut h);
+    }
+    for s in &plan.sides {
+        (*s as u8).hash(&mut h);
+    }
+    (t as u8, skin, floors, seed, light).hash(&mut h);
+    let key = h.finish();
+    let cache = CACHE.get_or_init(Default::default);
+    if let Some(m) = cache.lock().ok().and_then(|c| c.get(&key).cloned()) {
+        return m;
+    }
+    let m = std::sync::Arc::new(dress(plan, t, skin, floors, seed, light));
+    if let Ok(mut c) = cache.lock() {
+        if c.len() > 4000 {
+            c.clear();
+        }
+        c.insert(key, m.clone());
+    }
+    m
+}

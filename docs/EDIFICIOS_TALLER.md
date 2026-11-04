@@ -54,7 +54,7 @@ Los ejes 1 y 2 dan el volumen; los ejes 3, 4 y 5 dan la piel. Hay detalles que h
 4. **Tanda 4, regiones de España** (hecha, en revisión): casa castellana con soportales, caserío vasco, casa con galería gallega, masía catalana, casa canaria, casa payesa ibicenca. Quedan: casa montañesa con solana, hórreo y palloza, barraca valenciana, casa manchega, casas colgadas, casa de piedra de sierra.
 5. **Tanda 5, ciudad y comercio** (hecha, en revisión): torre de oficinas, oficinas de los 70, parque empresarial, cafetería de esquina, comercio con viviendas en cuatro versiones, hotel urbano, supermercado.
 6. **Tanda 6, pieles por lugar** (hecha, en revisión): tres tipologías (casa entre medianeras, bloque exento y vivienda aislada) vestidas con la piel de 24 lugares (§4).
-7. **Tanda 7, por sitio:** al traer el entorno (Catastro, OpenStreetMap, LiDAR), cada masa toma la tipología por su uso y sus plantas y la piel por la zona geográfica de la georreferencia; todo editable a mano después.
+7. **Tanda 7, por sitio** (hecha, en revisión): al traer el entorno (Catastro, OpenStreetMap, LiDAR), cada edificio toma la tipología por su estilo, sus plantas y sus medianeras, y la piel por la zona de la georreferencia. Antes se hicieron las plantas poligonales y la versión ligera. Todo se puede cambiar a mano en Propiedades, en «Edificio del mundo»: lugar, tipología y variante.
 
 Cuando Antonio apruebe una tanda, la integración será que los estilos de U6 (y U7, al traer el Catastro) usen estos modelos sobre la planta y las plantas que tenga cada masa.
 
