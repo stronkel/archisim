@@ -147,6 +147,7 @@ impl ArchiSimApp {
             | Tool::Brush
             | Tool::Road
             | Tool::Roundabout
+            | Tool::World
             | Tool::Decal
             | Tool::Marking
             | Tool::Planting
@@ -476,6 +477,7 @@ impl ArchiSimApp {
             | Tool::Pool
             | Tool::Road
             | Tool::Roundabout
+            | Tool::World
             | Tool::Decal
             | Tool::Marking
             | Tool::Planting
@@ -491,6 +493,7 @@ impl ArchiSimApp {
                     Tool::Planting => self.planting_points.clone(),
                     Tool::Pipe | Tool::Duct => self.run_points.clone(),
                     Tool::Device | Tool::Elevator | Tool::Roundabout | Tool::Decal => Vec::new(),
+                    Tool::World => self.world_settings.first.into_iter().collect(),
                     Tool::Marking => self.marking_points.clone(),
                     Tool::TeamZone => self.team_ui.zone_start.into_iter().collect(),
                     _ => self.concept_points(),
@@ -509,6 +512,7 @@ impl ArchiSimApp {
                     | Tool::TeamZone
                     | Tool::Roundabout
                     | Tool::Decal => None,
+                    Tool::World => self.world_settings.first,
                     Tool::Marking => self.marking_points.last().copied(),
                     _ => self.concept_anchor(),
                 };
@@ -624,6 +628,10 @@ impl ArchiSimApp {
             self.toggle_ortho();
         }
         if space && self.flip_stair_turn() {
+            return;
+        }
+        if space && self.tool == Tool::World {
+            self.world_turn();
             return;
         }
         if self.command_keys(&events, enter, escape, backspace, space) {
@@ -868,6 +876,7 @@ impl ArchiSimApp {
                     }
                 }
                 Tool::Roundabout | Tool::Decal => self.set_tool(Tool::Arrow),
+                Tool::World => self.world_escape(),
                 Tool::Marking => {
                     if self.marking_points.pop().is_none() {
                         self.set_tool(Tool::Arrow);
@@ -1243,6 +1252,13 @@ impl ArchiSimApp {
                 if response.clicked_by(PointerButton::Primary) {
                     if let Some(c) = self.cursor {
                         self.roundabout_click(c.point);
+                    }
+                }
+            }
+            Tool::World => {
+                if response.clicked_by(PointerButton::Primary) {
+                    if let Some(c) = self.cursor {
+                        self.world_click(c.point);
                     }
                 }
             }

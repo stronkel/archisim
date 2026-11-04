@@ -1656,9 +1656,12 @@ pub(crate) struct WorldDressOf {
     /// Its state (version 73): 0 in use, 1 abandoned, 2 being built.
     #[serde(default, skip_serializing_if = "is_zero_u8")]
     pub state: u8,
-    /// A facility's programme (version 74).
+    /// A facility's programme (version 77).
     #[serde(default, skip_serializing_if = "is_zero_u8")]
     pub programme: u8,
+    /// The side that is its front, placed by hand (version 78).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub front: Option<u8>,
 }
 
 fn is_zero_u8(v: &u8) -> bool {
@@ -1690,6 +1693,7 @@ impl DressOf {
                 era: w.era,
                 state: w.state,
                 programme: w.programme,
+                front: w.front,
             }),
         }
     }
@@ -1728,6 +1732,7 @@ impl DressOf {
                     programme: w
                         .programme
                         .min((archisim_core::world_programmes().len() - 1) as u8),
+                    front: w.front,
                 }),
                 None => None,
             },

@@ -392,6 +392,7 @@ impl ArchiSimApp {
                         era: 0,
                         state: 0,
                         programme: 0,
+                        front: None,
                     }
                 });
             }

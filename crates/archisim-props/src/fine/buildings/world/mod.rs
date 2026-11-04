@@ -153,6 +153,31 @@ pub fn material_of(role: &str) -> Option<&'static str> {
     MATERIALS.iter().find(|m| m.0 == role).map(|m| m.1)
 }
 
+/// The usual plan of a building of the world of `skin`: a typology, or a
+/// facility's `programme` when `typology` is none. Its front, its depth,
+/// its floors and the heights of its ground floor and of the others.
+pub fn usual_plan(
+    skin: usize,
+    typology: Option<types::Typology>,
+    programme: usize,
+) -> (f64, f64, usize, (f64, f64)) {
+    use types::Typology as T;
+    let sk = &SKINS[skin.min(SKINS.len() - 1)];
+    let (w, d, floors) = match typology {
+        Some(T::Townhouse) | Some(T::Row) => (types::usual_width(sk), 12.0, sk.floors),
+        Some(T::Block) => (22.0, 14.0, sk.block.floors),
+        Some(T::House) => (10.0, 8.0, sk.house.floors),
+        Some(T::Tower) => (24.0, 24.0, sk.tower.floors),
+        Some(T::Courtyard) => (16.0, 18.0, types::usual_floors(sk, T::Courtyard)),
+        None => {
+            let p = civic::PROGRAMMES[programme.min(civic::PROGRAMMES.len() - 1)];
+            let (w, d) = p.size(sk);
+            (w, d, p.floors(sk))
+        }
+    };
+    (w, d, floors.max(1), sk.storey)
+}
+
 /// The roles a building of the world is made of, as the skin chose them
 /// for one building (its seed).
 #[derive(Clone, Copy, Debug)]

@@ -9695,3 +9695,77 @@ fn saved_cameras_and_the_walk() {
     assert!((h.app.v3d.camera.target - before.target).length() < 1e-4);
     assert!(h.app.ed.selection.is_empty());
 }
+
+/// Buildings of the world put by hand, as in CityRT (tanda 16): with a
+/// click by a street the building stands with its front on the street's
+/// edge, looking at it; away from streets, where Space turned it; with two
+/// clicks, its front from one end to the other.
+#[test]
+fn buildings_of_the_world_put_with_a_click() {
+    let mut h = Harness::new(Editor::new_project());
+    let canvas = h.app.canvas;
+    h.app
+        .view
+        .fit_exact(canvas, p(-80.0, -80.0), p(80.0, 80.0), 0.0);
+    h.app.set_discipline(super::toolbox::Discipline::Site);
+    h.type_text("w");
+    h.click_at(p(-70.0, 0.0));
+    h.click_at(p(70.0, 0.0));
+    h.key(Key::Enter);
+    h.key(Key::Escape);
+    h.app.set_tool(Tool::World);
+    h.frame();
+    // A town hall, by the street, north of it.
+    let pick = archisim_core::WorldPick {
+        place: 0,
+        typology: archisim_core::WorldTypology::Facility,
+        programme: 0,
+    };
+    h.app.world_settings.take(pick);
+    h.app.world_settings.placed = true;
+    h.frame();
+    h.click_at(p(10.0, 14.0));
+    let mass = h.model().masses().last().unwrap().clone();
+    let w = mass.dress.unwrap().world.unwrap();
+    assert_eq!(w.typology, archisim_core::WorldTypology::Facility);
+    assert_eq!(w.front, Some(0));
+    let archisim_core::MassShape::Prism(poly) = &mass.shape else {
+        panic!()
+    };
+    // Its front on the street's edge (north of the axis), the rest behind.
+    let edge = h.model().roads().next().unwrap().extent_at(10.0).0;
+    assert!(
+        (poly[0].y - edge).abs() < 1e-6 && (poly[1].y - edge).abs() < 1e-6,
+        "{poly:?}"
+    );
+    assert!(poly.iter().all(|q| q.y >= edge - 1e-6));
+    assert!(h.app.ed.selection.contains(&Element::Mass(mass.id)));
+    // The front on its street.
+    assert_eq!(h.model().street_sides(mass.id)[0], true);
+    // Away from the street, turned a quarter with Space.
+    h.app.world_settings.take(archisim_core::WorldPick {
+        place: 0,
+        typology: archisim_core::WorldTypology::House,
+        programme: 0,
+    });
+    h.frame();
+    h.key(Key::Space);
+    h.click_at(p(-40.0, -60.0));
+    let house = h.model().masses().last().unwrap().clone();
+    let archisim_core::MassShape::Prism(q) = &house.shape else {
+        panic!()
+    };
+    // Turned a quarter: its front looks to +x.
+    assert!((q[0].x - q[1].x).abs() < 1e-6, "{q:?}");
+    // With two clicks, the front from one end to the other.
+    h.app.world_settings.two_clicks = true;
+    h.frame();
+    h.click_at(p(20.0, -50.0));
+    h.click_at(p(40.0, -50.0));
+    let last = h.model().masses().last().unwrap().clone();
+    let archisim_core::MassShape::Prism(r) = &last.shape else {
+        panic!()
+    };
+    assert!((r[0].distance(r[1]) - 20.0).abs() < 1e-6, "{r:?}");
+    assert_eq!(h.model().masses().count(), 3);
+}

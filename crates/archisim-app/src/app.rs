@@ -113,6 +113,8 @@ pub enum Tool {
     Road,
     /// Roundabouts and squares, by their centre (U3).
     Roundabout,
+    /// Buildings of the world put by hand, as in CityRT (tanda 16).
+    World,
     /// Road markings (U4).
     Marking,
     /// Plants along a line or over an area.
@@ -169,6 +171,7 @@ impl Tool {
                 | Tool::Pool
                 | Tool::Road
                 | Tool::Roundabout
+                | Tool::World
                 | Tool::Decal
                 | Tool::Marking
                 | Tool::Planting
@@ -216,6 +219,7 @@ impl Tool {
             "ps" => Some(Tool::Pool),
             "as" => Some(Tool::Elevator),
             "gl" => Some(Tool::Roundabout),
+            "em" => Some(Tool::World),
             "pe" => Some(Tool::Decal),
             "mv" => Some(Tool::Marking),
             _ => None,
@@ -360,6 +364,7 @@ pub struct ArchiSimApp {
     pub road_points: Vec<Point2>,
     pub road_settings: urban_ui::RoadSettings,
     pub roundabout_settings: roundabout_ui::RoundaboutSettings,
+    pub world_settings: world_ui::WorldSettings,
     pub decal_settings: decal_ui::DecalSettings,
     pub marking_settings: marking_ui::MarkingSettings,
     pub marking_points: Vec<Point2>,
@@ -793,6 +798,7 @@ impl ArchiSimApp {
             road_points: Vec::new(),
             road_settings,
             roundabout_settings: Default::default(),
+            world_settings: Default::default(),
             decal_settings: Default::default(),
             marking_settings: Default::default(),
             marking_points: Vec::new(),
@@ -2753,6 +2759,7 @@ mod vivero_ui;
 mod wall_profile_ui;
 mod wall_tools_ui;
 mod widgets;
+mod world_ui;
 pub use tabs::{TabKind, ViewTab};
 pub use types_ui::{TypesDialog, TypesTab};
 pub use view3d_ui::{View3dState, ViewMode};

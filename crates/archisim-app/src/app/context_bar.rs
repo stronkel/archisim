@@ -367,6 +367,7 @@ impl ArchiSimApp {
                 ),
                 Tool::Road => ("Vial", None, "Varita", ""),
                 Tool::Roundabout => ("Glorieta", None, "Varita", ""),
+                Tool::World => ("Edificio del mundo", None, "", ""),
                 Tool::Decal => ("Pegatina", None, "Varita", ""),
                 Tool::Marking => ("Marca vial", None, "Varita", ""),
                 Tool::Planting => ("Plantación", None, "Varita", ""),

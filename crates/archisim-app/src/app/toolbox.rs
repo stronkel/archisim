@@ -748,6 +748,20 @@ const SITE: &[Tile] = &[
         "Edificios del entorno con estilo, y el entorno traído de la cartografía gratuita",
         &[
             tile(
+                Pick::Tool(Tool::World),
+                Glyph::EnvBuilding,
+                "Edificio del mundo",
+                "EM",
+                "Galería de edificios de cada lugar en 3D: viviendas, equipamientos, comercio, plazas, parques, estaciones… Un clic los pone con sus medidas habituales, con la fachada a la calle más cercana",
+            ),
+            tile(
+                Pick::Tool(Tool::Road),
+                Glyph::Road,
+                "Calle",
+                "W",
+                "Calles con sus aceras y cruces: clics por su eje, doble clic para acabar",
+            ),
+            tile(
                 Pick::EnvBuilding,
                 Glyph::EnvBuilding,
                 "Edificio del entorno",

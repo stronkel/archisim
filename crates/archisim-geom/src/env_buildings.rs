@@ -1739,10 +1739,16 @@ fn world_solids(
     let party = |i: usize| party.get(i).copied().unwrap_or(false);
     let on_street = |i: usize| street.get(i).copied().unwrap_or(false);
     let len = |i: usize| poly[i].distance(poly[(i + 1) % n]);
-    // A front to the street: the street's, or the longest free side.
-    let main = (0..n)
+    // A front to the street: the street's, the one placed by hand, or
+    // the longest free side.
+    let by_hand = w.front.map(|f| f as usize).filter(|f| *f < n && !party(*f));
+    let streets = (0..n)
         .filter(|i| on_street(*i) && !party(*i))
-        .max_by(|a, b| len(*a).total_cmp(&len(*b)))
+        .max_by(|a, b| len(*a).total_cmp(&len(*b)));
+    // The one by hand wins if it is on the street or there is no street.
+    let main = by_hand
+        .filter(|f| on_street(*f) || streets.is_none())
+        .or(streets)
         .or_else(|| {
             (0..n)
                 .filter(|i| !party(*i))

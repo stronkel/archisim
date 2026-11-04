@@ -516,6 +516,93 @@ pub struct WorldDress {
     pub era: u8,
     pub state: u8,
     pub programme: u8,
+    /// The side of its contour (anticlockwise) that is its front, where
+    /// there is no street to say it (a building placed by hand).
+    pub front: Option<u8>,
+}
+
+/// A building of the world as the gallery offers it: a typology of a
+/// place, or a facility with its programme.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct WorldPick {
+    pub place: u8,
+    pub typology: WorldTypology,
+    pub programme: u8,
+}
+
+impl WorldPick {
+    /// Its usual plan: front, depth, floors and floor height.
+    pub fn usual(self) -> (f64, f64, u32, f64) {
+        let (t, prog) = if self.typology == WorldTypology::Facility {
+            (None, self.programme as usize)
+        } else {
+            (Some(self.typology.props()), 0)
+        };
+        let (w, d, floors, (g, o)) =
+            archisim_props::fine::buildings::world::usual_plan(self.place as usize, t, prog);
+        let fh = (g + o * (floors.saturating_sub(1)) as f64) / floors.max(1) as f64;
+        (w, d, floors as u32, fh.clamp(2.5, 8.0))
+    }
+
+    /// Its name, as a constant.
+    pub fn label(self) -> &'static str {
+        use archisim_props::fine::buildings::world::civic::PROGRAMMES;
+        if self.typology == WorldTypology::Facility {
+            PROGRAMMES
+                .get(self.programme as usize)
+                .map_or(self.typology.name(), |p| p.name())
+        } else {
+            self.typology.name()
+        }
+    }
+
+    /// Its name: the typology's, or the programme's.
+    pub fn name(self) -> String {
+        if self.typology == WorldTypology::Facility {
+            world_programmes()
+                .get(self.programme as usize)
+                .map_or_else(|| self.typology.name().to_string(), |n| n.to_string())
+        } else {
+            self.typology.name().to_string()
+        }
+    }
+
+    /// The style of the surroundings it is dressed over (for its
+    /// materials and as a fallback).
+    pub fn style(self) -> BuildingStyle {
+        match self.typology {
+            WorldTypology::Street => BuildingStyle::Andalusian,
+            WorldTypology::Block => BuildingStyle::Block1960s,
+            WorldTypology::House => BuildingStyle::Detached,
+            WorldTypology::Tower => BuildingStyle::Offices,
+            WorldTypology::Courtyard => BuildingStyle::Courtyard,
+            WorldTypology::Facility => BuildingStyle::Facility,
+        }
+    }
+}
+
+/// A rectangle `width` × `depth` whose front (its side 0, anticlockwise)
+/// has its middle at `front` and looks to `facing`.
+pub fn world_footprint(front: Point2, facing: Vec2, width: f64, depth: f64) -> Vec<Point2> {
+    let n = facing.normalized().unwrap_or(Vec2::new(0.0, 1.0));
+    let u = Vec2::new(-n.y, n.x);
+    let p0 = front - u * (width / 2.0);
+    let p1 = front + u * (width / 2.0);
+    vec![p0, p1, p1 - n * depth, p0 - n * depth]
+}
+
+/// A building of the world placed by hand.
+#[derive(Debug, Clone)]
+pub struct NewWorldBuilding {
+    pub level: LevelId,
+    /// The middle of its front, and where the front looks.
+    pub front: Point2,
+    pub facing: Vec2,
+    pub width: f64,
+    pub depth: f64,
+    /// None: the usual.
+    pub floors: Option<u32>,
+    pub pick: WorldPick,
 }
 
 /// The programmes of the world's facilities: their names, in the order of
@@ -534,7 +621,7 @@ pub const WORLD_ERAS: [(u8, &str); 2] = [(0, "Tradicional del lugar"), (1, "De h
 pub const WORLD_STATES: [(u8, &str); 3] = [(0, "En uso"), (1, "Abandonado"), (2, "En obra")];
 
 /// The typologies of the world's buildings.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum WorldTypology {
     /// A house between party walls of a street.
     Street,
@@ -836,6 +923,9 @@ impl Dress {
                 if w.programme != 0 {
                     s += &format!(",{}", w.programme);
                 }
+                if let Some(f) = w.front {
+                    s += &format!(";front={f}");
+                }
                 s
             })
             .unwrap_or_default()
@@ -879,7 +969,13 @@ impl Dress {
                         era: it.next().and_then(|e| e.parse().ok()).unwrap_or(0),
                         state: it.next().and_then(|e| e.parse().ok()).unwrap_or(0),
                         programme: it.next().and_then(|e| e.parse().ok()).unwrap_or(0),
+                        front: None,
                     });
+                }
+                "front" => {
+                    if let Some(w) = &mut d.world {
+                        w.front = v.parse().ok();
+                    }
                 }
                 _ => {}
             }
@@ -990,6 +1086,7 @@ impl Model {
                     era: d.world.map_or(0, |w| w.era),
                     state: d.world.map_or(0, |w| w.state),
                     programme: 0,
+                    front: d.world.and_then(|w| w.front),
                 }
             });
             if d.world.is_some() {
@@ -1022,6 +1119,7 @@ impl Model {
                 era: d.world.map_or(0, |w| w.era),
                 state: d.world.map_or(0, |w| w.state),
                 programme,
+                front: d.world.and_then(|w| w.front),
             });
             self.set_mass_dress(id, Some(d))?;
             n += 1;
@@ -1098,6 +1196,72 @@ impl Model {
         })?;
         self.set_mass_dress(id, Some(dress))?;
         Ok(id)
+    }
+
+    /// Places a building of the world by hand: a rectangle with its front
+    /// where it was asked, dressed as the typology or the facility of its
+    /// place.
+    pub fn add_world_building(&mut self, spec: NewWorldBuilding) -> Result<MassId, ModelError> {
+        let (_, _, floors, fh) = spec.pick.usual();
+        let floors = spec.floors.unwrap_or(floors).clamp(1, MAX_ENV_FLOORS);
+        if !(spec.width >= 1.0 && spec.depth >= 1.0) {
+            return Err(ModelError::InvalidDress);
+        }
+        let outline = world_footprint(spec.front, spec.facing, spec.width, spec.depth);
+        let id = self.add_env_building(NewEnvBuilding {
+            name: spec.pick.name(),
+            level: spec.level,
+            outline,
+            style: spec.pick.style(),
+            floors: Some(floors),
+            floor_height: Some(fh),
+            base_offset: 0.0,
+        })?;
+        self.ensure_world_materials();
+        let mut d = self
+            .mass(id)
+            .and_then(|m| m.dress)
+            .ok_or(ModelError::InvalidDress)?;
+        let seed = (spec.front.x * 7.0 + spec.front.y * 13.0).abs() as u64;
+        d.world = Some(WorldDress {
+            place: spec.pick.place,
+            typology: spec.pick.typology,
+            variant: (seed % 97) as u16 + 1,
+            era: 0,
+            state: 0,
+            programme: if spec.pick.typology == WorldTypology::Facility {
+                spec.pick.programme
+            } else {
+                0
+            },
+            front: Some(0),
+        });
+        self.set_mass_dress(id, Some(d))?;
+        Ok(id)
+    }
+
+    /// Where a building put at `p` on `level` would have its front: on the
+    /// edge of the nearest street (within `reach` of it), looking at the
+    /// street. The middle of its front and where it looks.
+    pub fn world_front_at(&self, level: LevelId, p: Point2, reach: f64) -> Option<(Point2, Vec2)> {
+        let mut best: Option<(f64, Point2, Vec2)> = None;
+        for r in self.roads_on_level(level) {
+            let s = r.station_of(p);
+            let (q, dir) = r.axis_at(s);
+            let left = dir.perp_left();
+            let (el, er) = r.extent_at(s);
+            let side = (p - q).dot(left);
+            let (front, facing, edge) = if side >= 0.0 {
+                (q + left * el, -left, el)
+            } else {
+                (q - left * er, left, er)
+            };
+            let gap = (p - q).length() - edge;
+            if gap <= reach && best.as_ref().is_none_or(|b| gap < b.0) {
+                best = Some((gap, front, facing));
+            }
+        }
+        best.map(|(_, f, n)| (f, n))
     }
 
     /// Dresses a mass (or undresses it with `None`). Only a contour mass
@@ -1404,5 +1568,43 @@ mod tests {
         assert_eq!(roman(9), "IX");
         assert_eq!(roman(14), "XIV");
         assert_eq!(roman(48), "XLVIII");
+    }
+
+    #[test]
+    fn a_building_of_the_world_is_placed_by_hand() {
+        let mut m = Model::new("T");
+        let l = m.add_level("Planta baja", 0.0);
+        let pick = WorldPick {
+            place: 0,
+            typology: WorldTypology::Facility,
+            programme: 0,
+        };
+        let (w, d, floors, fh) = pick.usual();
+        assert!(w > 5.0 && d > 5.0 && floors >= 1 && fh > 2.0);
+        let id = m
+            .add_world_building(NewWorldBuilding {
+                level: l,
+                front: Point2::new(0.0, 0.0),
+                facing: Vec2::new(0.0, -1.0),
+                width: w,
+                depth: d,
+                floors: None,
+                pick,
+            })
+            .unwrap();
+        let mass = m.mass(id).unwrap();
+        let world = mass.dress.unwrap().world.unwrap();
+        assert_eq!(world.typology, WorldTypology::Facility);
+        assert_eq!(world.front, Some(0));
+        assert_eq!(mass.floors() as u32, floors);
+        // Behind its front: it looks to −y, so it stands at y > 0.
+        let MassShape::Prism(p) = &mass.shape else {
+            panic!()
+        };
+        assert!(p.iter().all(|q| q.y >= -1e-9));
+        assert!(signed_area(p) > 0.0);
+        // The text kept in the IFC keeps its front.
+        let d2 = Dress::decode(&mass.dress.unwrap().encode(), mass.dress.unwrap().materials);
+        assert_eq!(d2.unwrap().world.unwrap().front, Some(0));
     }
 }

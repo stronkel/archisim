@@ -358,6 +358,7 @@ impl ArchiSimApp {
             Tool::Pool => self.pool_tool_properties(ui),
             Tool::Road => self.road_tool_properties(ui),
             Tool::Roundabout => self.roundabout_tool_properties(ui),
+            Tool::World => self.world_tool_properties(ui),
             Tool::Decal => self.decal_tool_properties(ui),
             Tool::Marking => self.marking_tool_properties(ui),
             Tool::Planting => self.planting_tool_properties(ui),

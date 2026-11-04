@@ -78,6 +78,7 @@ impl CatalogGroup {
             ],
             Self::Outside => &[
                 "Jardín y terraza",
+                "Edificios y calles",
                 "Vegetación",
                 "Mobiliario urbano",
                 "Piscinas y deporte",
@@ -258,6 +259,8 @@ pub enum CatalogAct {
     Brush,
     Volume,
     Form(crate::editor::MassMode),
+    /// A building of the world, put with a click (tanda 16).
+    World(archisim_core::WorldPick),
 }
 
 /// One card of the catalog.
@@ -786,6 +789,22 @@ impl ArchiSimApp {
                     card(CatalogAct::Railing, "Barandilla", Glyph::Railing),
                 ]
             }
+            (CatalogGroup::Outside, "Edificios y calles") => {
+                let place = if self.world_settings.placed {
+                    self.world_settings.pick.place
+                } else {
+                    self.ed.model().world_place()
+                };
+                let mut v = vec![card(CatalogAct::Road, "Calle", Glyph::Road)];
+                for (g, list) in super::world_ui::gallery(place) {
+                    for pick in list {
+                        let mut c = card(CatalogAct::World(pick), pick.label(), Glyph::EnvBuilding);
+                        c.sub = g.to_string();
+                        v.push(c);
+                    }
+                }
+                v
+            }
             (CatalogGroup::Outside, "Terreno y caminos") => vec![
                 card(CatalogAct::Brush, "Pincel", Glyph::Brush),
                 card(CatalogAct::Terrain, "Terreno", Glyph::Terrain),
@@ -918,6 +937,7 @@ impl ArchiSimApp {
             }
             CatalogAct::Planting => self.tool == Tool::Planting,
             CatalogAct::Road => self.tool == Tool::Road,
+            CatalogAct::World(pick) => self.tool == Tool::World && self.world_settings.pick == pick,
             CatalogAct::Pool => self.tool == Tool::Pool,
             CatalogAct::Terrain => self.tool == Tool::Terrain,
             CatalogAct::Brush => self.tool == Tool::Brush,
@@ -1014,6 +1034,11 @@ impl ArchiSimApp {
             CatalogAct::Collected(name) => self.take_collected(name),
             CatalogAct::Planting => self.pick(Pick::Tool(Tool::Planting)),
             CatalogAct::Road => self.pick(Pick::Tool(Tool::Road)),
+            CatalogAct::World(pick) => {
+                self.world_settings.take(pick);
+                self.world_settings.placed = true;
+                self.set_tool(Tool::World);
+            }
             CatalogAct::Pool => self.pick(Pick::Tool(Tool::Pool)),
             CatalogAct::Terrain => self.pick(Pick::Tool(Tool::Terrain)),
             CatalogAct::Brush => {

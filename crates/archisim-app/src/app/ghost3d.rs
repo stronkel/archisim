@@ -34,6 +34,7 @@ enum Would {
     Beam(NewBeam),
     Slab(NewSlab),
     Object(NewObject),
+    World(archisim_core::NewWorldBuilding),
 }
 
 impl ArchiSimApp {
@@ -129,6 +130,7 @@ impl ArchiSimApp {
                     base_offset,
                 })
             }
+            Tool::World => Would::World(self.world_would(c.point)?),
             _ => return None,
         })
     }
@@ -249,6 +251,13 @@ fn build_ghost(model: &Model, would: Would) -> Option<Vec<Solid>> {
         Would::Object(spec) => {
             let id = m.add_object(spec).ok()?;
             solid::object_solids(&m, id)
+        }
+        Would::World(spec) => {
+            // Its volume only: dressing it at each step of the cursor would
+            // be slow.
+            let id = m.add_world_building(spec).ok()?;
+            m.set_mass_dress(id, None).ok()?;
+            solid::mass_solids(&m, id)
         }
     })
 }
@@ -420,6 +429,7 @@ fn build_plan_ghost(model: &Model, would: Would) -> Option<(Model, Vec<Element>)
         Would::Beam(spec) => vec![Element::Beam(m.add_beam(spec).ok()?)],
         Would::Slab(spec) => vec![Element::Slab(m.add_slab(spec).ok()?)],
         Would::Object(spec) => vec![Element::Object(m.add_object(spec).ok()?)],
+        Would::World(spec) => vec![Element::Mass(m.add_world_building(spec).ok()?)],
     };
     Some((m, made))
 }

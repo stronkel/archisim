@@ -215,6 +215,18 @@ impl super::ArchiSimApp {
                         crate::type_preview::object_model(lib, ty)
                     })
             }
+            CatalogAct::World(pick) => {
+                let key = format!(
+                    "world:{}:{}:{}",
+                    pick.place,
+                    pick.typology.code(),
+                    pick.programme
+                );
+                self.thumbs3d
+                    .get_seen(ctx, gpu, key, [55.0, 26.0], move || {
+                        super::world_ui::world_model(pick)
+                    })
+            }
             CatalogAct::Stair(c) => {
                 let key = format!("stair:{c:?}");
                 self.thumbs3d.get(ctx, gpu, key, || stair_model(c))
