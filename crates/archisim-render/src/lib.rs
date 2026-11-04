@@ -337,8 +337,8 @@ impl Scene {
                 let texture = (opt.textures && !glass && per_vertex.is_none() && !piece)
                     .then(|| texture_of(model, painted.unwrap_or(s.material), is_object))
                     .flatten();
-                let ortho = opt.textures
-                    && matches!(s.owner, archisim_geom::solid::SolidOwner::Orthophoto);
+                let ortho =
+                    opt.textures && matches!(s.owner, archisim_geom::solid::SolidOwner::Orthophoto);
                 let (tex, scale) = match texture {
                     _ if ortho => (ORTHO_TEX, 0.0),
                     Some((kind, scale)) => {
@@ -419,9 +419,9 @@ impl Scene {
             light: opt.light,
             lamps,
             tiles,
-            ortho: model.orthophoto().and_then(|o| {
-                Some((archisim_geom::decals::pixels_of(&o.image.png)?, o.clone()))
-            }),
+            ortho: model
+                .orthophoto()
+                .and_then(|o| Some((archisim_geom::decals::pixels_of(&o.image.png)?, o.clone()))),
         };
         scene.build_bvh();
         scene

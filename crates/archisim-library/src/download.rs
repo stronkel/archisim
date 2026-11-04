@@ -26,6 +26,9 @@ pub enum Source {
     Terrain,
     /// The PNOA's orthophoto (a PNG of the rectangle).
     Orthophoto,
+    /// The IGN's surface model (MDS05, from the LiDAR): with the terrain,
+    /// the floors of the buildings.
+    Surface,
 }
 
 impl Source {
@@ -38,6 +41,7 @@ impl Source {
             Source::Osm => "OpenStreetMap: calles y árboles",
             Source::Terrain => "IGN: terreno (MDT)",
             Source::Orthophoto => "IGN: ortofoto del PNOA",
+            Source::Surface => "IGN: modelo de superficies (MDS, LiDAR)",
         }
     }
 }
@@ -92,6 +96,10 @@ pub const ORTHO_PIXELS: u32 = 2048;
 /// height = −10000 + (R·65536 + G·256 + B) · 0,1 m), in the web map's
 /// tiles.
 pub const IGN_HEIGHTS: &str = "https://xyz-mdt.idee.es/1.0.0/raster-dem";
+/// The IGN's surface model by rectangle (WCS of the MDS, 5 m, which it
+/// reprojects to any UTM zone): its coverage of 5 m.
+pub const IGN_SURFACE: &str = "https://wcs-mds.idee.es/mds";
+pub const SURFACE_COVERAGE: &str = "MDS";
 /// Zoom of those tiles: 15, its finest (some 4 m a pixel in Spain).
 pub const TERRAIN_ZOOM: u32 = 15;
 /// Spacing of the terrain grid made from them, metres.
@@ -272,6 +280,31 @@ pub fn plan(m: &Model, opts: &CartoOptions) -> Result<Vec<Request>, String> {
             ),
         });
     }
+    // The surface model, with the terrain: the height of what stands on
+    // it gives the floors of the buildings (brought or already there).
+    if opts.terrain {
+        let (nx, ny) = (
+            ((b[2] - b[0]) / TERRAIN_CELL).ceil().max(1.0) as u32,
+            ((b[3] - b[1]) / TERRAIN_CELL).ceil().max(1.0) as u32,
+        );
+        let v1 = format!(
+            "{IGN_SURFACE}?SERVICE=WCS&VERSION=1.0.0&REQUEST=GetCoverage&COVERAGE={SURFACE_COVERAGE}&CRS=EPSG:{code}&BBOX={:.0},{:.0},{:.0},{:.0}&WIDTH={nx}&HEIGHT={ny}&FORMAT=application/asc",
+            b[0], b[1], b[2], b[3]
+        );
+        let v2 = format!(
+            "{IGN_SURFACE}?SERVICE=WCS&VERSION=2.0.1&REQUEST=GetCoverage&COVERAGEID={SURFACE_COVERAGE}&SUBSETTINGCRS=http://www.opengis.net/def/crs/EPSG/0/{code}&OUTPUTCRS=http://www.opengis.net/def/crs/EPSG/0/{code}&SUBSET=x({:.0},{:.0})&SUBSET=y({:.0},{:.0})&FORMAT=application/asc",
+            b[0], b[2], b[1], b[3]
+        );
+        out.push(Request {
+            bbox: Some(b),
+            attempts: vec![(v1.clone(), None), (v2, None)],
+            tile: None,
+            source: Source::Surface,
+            // Named as the CNIG names it, so that it is read as a surface.
+            name: "MDS05.asc".into(),
+            url: v1,
+        });
+    }
     if opts.terrain {
         for (x, y) in tiles_over(b, zone, north, TERRAIN_ZOOM) {
             out.push(Request {
@@ -388,7 +421,7 @@ pub fn answer_text(source: Source, body: &str) -> Result<String, String> {
         return Err(msg.trim().to_string());
     }
     match source {
-        Source::Terrain => {
+        Source::Terrain | Source::Surface => {
             let at = body
                 .find("ncols")
                 .or_else(|| body.find("NCOLS"))
@@ -507,7 +540,24 @@ mod tests {
             },
         )
         .unwrap();
-        assert!(!few.is_empty() && few.iter().all(|r| r.source == Source::Terrain));
+        assert!(
+            !few.is_empty()
+                && few
+                    .iter()
+                    .all(|r| matches!(r.source, Source::Terrain | Source::Surface))
+        );
+        // The surface model of the same rectangle, by its WCS (5 m), named
+        // so that it is read as a surface.
+        let mds = few.iter().find(|r| r.source == Source::Surface).unwrap();
+        assert!(crate::carto::is_surface_model(&mds.name));
+        assert!(
+            mds.url.starts_with(IGN_SURFACE)
+                && mds.url.contains("BBOX=439850,4473850,440150,4474150")
+                && mds.url.contains("WIDTH=60&HEIGHT=60"),
+            "{}",
+            mds.url
+        );
+        assert_eq!(mds.attempts.len(), 2);
         // Without a georeference there is nothing to ask.
         assert!(plan(&Model::new("T"), &opts).is_err());
     }

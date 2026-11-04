@@ -515,7 +515,9 @@ fn material_json(
         while !bin.len().is_multiple_of(4) {
             bin.push(0);
         }
-        images.push(json!({"bufferView": views.len() - 1, "mimeType": "image/png", "name": "Ortofoto"}));
+        images.push(
+            json!({"bufferView": views.len() - 1, "mimeType": "image/png", "name": "Ortofoto"}),
+        );
         textures_out.push(json!({"source": images.len() - 1, "sampler": 1}));
         pbr["baseColorTexture"] = json!({"index": textures_out.len() - 1});
         pbr["baseColorFactor"] = json!([1.0, 1.0, 1.0, 1.0]);

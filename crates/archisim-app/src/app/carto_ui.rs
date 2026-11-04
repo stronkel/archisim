@@ -92,7 +92,7 @@ pub const WHERE_FROM: [(&str, &str); 4] = [
     ),
     (
         "Altura de los edificios (LiDAR)",
-        "Centro de Descargas del CNIG → Modelos digitales de elevaciones → MDS05 (modelo de superficies) en ASC de la misma hoja. Con su nombre (MDS…) se reconoce: el MDS menos el MDT da la altura, y de ella las plantas, de los edificios que se traen o de los que ya hay.",
+        "Centro de Descargas del CNIG → Modelos digitales de elevaciones → MDS05 (modelo de superficies) en ASC de la misma hoja (o, sin ficheros, «Descargar el entorno» con Terreno lo pide al servicio WCS del MDS del IGN para el recuadro del proyecto). Con su nombre (MDS…) se reconoce: el MDS menos el MDT da la altura, y de ella las plantas, de los edificios que se traen o de los que ya hay.",
     ),
 ];
 
