@@ -26,11 +26,11 @@ pub fn usual_width(sk: &Skin) -> f64 {
     }
 }
 
-fn seed_of(p: &Params) -> u64 {
+pub(super) fn seed_of(p: &Params) -> u64 {
     p.get("variant", 1.0).round().max(0.0) as u64
 }
 
-fn floors_of(p: &Params, usual: usize, max: usize) -> usize {
+pub(super) fn floors_of(p: &Params, usual: usize, max: usize) -> usize {
     let n = p.get("floors", 0.0).round();
     if n < 1.0 {
         usual
@@ -56,6 +56,12 @@ pub enum Typology {
     Block,
     /// The detached house.
     House,
+    /// The tower.
+    Tower,
+    /// The house round a courtyard.
+    Courtyard,
+    /// A row of houses of the street with their front gardens.
+    Row,
 }
 
 /// The skin of a place as a typology wears it: the block and the house
@@ -63,8 +69,8 @@ pub enum Typology {
 pub fn adapted(base: &Skin, t: Typology) -> Skin {
     let mut sk = *base;
     match t {
-        Typology::Townhouse => {}
-        Typology::Block => {
+        Typology::Townhouse | Typology::Row | Typology::Courtyard => {}
+        Typology::Block | Typology::Tower => {
             if !base.block.walls.is_empty() {
                 sk.walls = base.block.walls;
             }
@@ -109,6 +115,9 @@ pub fn usual_floors(base: &Skin, t: Typology) -> usize {
         Typology::Townhouse => base.floors,
         Typology::Block => base.block.floors,
         Typology::House => base.house.floors,
+        Typology::Tower => base.tower.floors,
+        Typology::Courtyard => base.house.floors.clamp(1, 2),
+        Typology::Row => base.floors.min(3),
     }
 }
 
@@ -141,8 +150,8 @@ pub fn shape_of(
         open_below: false,
     };
     match t {
-        Typology::Townhouse => (sk, l, shape),
-        Typology::Block => {
+        Typology::Townhouse | Typology::Row | Typology::Courtyard => (sk, l, shape),
+        Typology::Block | Typology::Tower => {
             let form = base.block.roof;
             let (cover, pitch) = if form == Roof::Flat {
                 (sk.cover, sk.pitch)
@@ -228,10 +237,27 @@ pub fn dress(
     } else {
         floors
     };
-    let (sk, l, shape) = shape_of(base, t, floors, seed, light);
     let mut b = Builder::default();
-    building(&mut b, plan, &sk, &l, &shape);
-    finish(&mut b, &l);
+    match t {
+        Typology::Tower => {
+            let l = super::towers::tower_on(&mut b, plan, base, floors, seed, light);
+            finish(&mut b, &l);
+        }
+        Typology::Courtyard => {
+            let l = super::towers::courtyard_on(&mut b, plan, base, floors, seed, light);
+            finish(&mut b, &l);
+        }
+        _ => {
+            let t = if t == Typology::Row {
+                Typology::Townhouse
+            } else {
+                t
+            };
+            let (sk, l, shape) = shape_of(base, t, floors, seed, light);
+            building(&mut b, plan, &sk, &l, &shape);
+            finish(&mut b, &l);
+        }
+    }
     crate::PropMesh {
         positions: b.positions,
         parts: b.parts.into_iter().collect(),
@@ -240,7 +266,7 @@ pub fn dress(
     }
 }
 
-fn light_of(p: &Params) -> bool {
+pub(super) fn light_of(p: &Params) -> bool {
     p.get("lod", 0.0) > 0.5
 }
 
@@ -759,13 +785,29 @@ pub fn sample(b: &mut Builder, p: &Params) {
     let t = match p.get("typology", 0.0).round() as i64 {
         1 => Typology::Block,
         2 => Typology::House,
+        3 => Typology::Tower,
+        4 => Typology::Courtyard,
         _ => Typology::Townhouse,
     };
     let base = skin_of(p.get("skin", 0.0));
-    let floors = floors_of(p, usual_floors(base, t), 16);
-    let (sk, l, shape) = shape_of(base, t, floors, seed_of(p), light_of(p));
-    building(b, plan, &sk, &l, &shape);
-    finish(b, &l);
+    let floors = floors_of(p, usual_floors(base, t), 60);
+    let m = dress(
+        plan,
+        t,
+        p.get("skin", 0.0).round().max(0.0) as usize,
+        floors,
+        seed_of(p),
+        light_of(p),
+    );
+    let at = b.positions.len() as u32;
+    b.positions.extend(m.positions);
+    for (role, tris) in m.parts {
+        b.parts
+            .entry(role)
+            .or_default()
+            .extend(tris.into_iter().map(|t| t.map(|i| i + at)));
+    }
+    b.fine.extend(m.fine);
 }
 
 type DressCache = std::sync::Mutex<std::collections::HashMap<u64, std::sync::Arc<crate::PropMesh>>>;

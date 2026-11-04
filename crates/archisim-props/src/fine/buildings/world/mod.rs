@@ -15,6 +15,7 @@ pub mod facade;
 pub mod plan;
 pub mod roofs;
 pub mod skins;
+pub mod towers;
 pub mod types;
 
 pub use skins::{skin_of, Skin, SKINS};
@@ -26,6 +27,8 @@ use crate::build::Builder;
 /// its material, and a project brought from a map makes the ones it lacks
 /// (`Model::ensure_world_materials`).
 pub const MATERIALS: &[(&str, &str, &str, [u8; 3])] = &[
+    ("g_reflect", "Vidrio reflectante", "glass", [104, 140, 166]),
+    ("g_opaque", "Vidrio opaco gris", "other", [64, 74, 84]),
     ("w_white", "Cal blanca", "stone", [238, 234, 226]),
     ("w_cream", "Monocapa crema", "render", [226, 208, 172]),
     ("w_yellow", "Estuco amarillo", "render", [239, 207, 106]),
@@ -228,7 +231,7 @@ mod tests {
                     p.set("variant", variant);
                     let m = make(kind, &p).unwrap();
                     let n = m.triangle_count();
-                    if !(1_000..=250_000).contains(&n) {
+                    if !(1_000..=400_000).contains(&n) {
                         bad.push(format!("{} {kind}: {n} triangles", sk.key));
                     }
                     for (role, _) in &m.parts {
@@ -314,7 +317,13 @@ mod tests {
         let mut bad = Vec::new();
         for (k, plan) in plans.iter().enumerate() {
             for (i, sk) in SKINS.iter().enumerate() {
-                for t in [Typology::Townhouse, Typology::Block, Typology::House] {
+                for t in [
+                    Typology::Townhouse,
+                    Typology::Block,
+                    Typology::House,
+                    Typology::Tower,
+                    Typology::Courtyard,
+                ] {
                     let full = dress(plan, t, i, 0, 3, false);
                     let light = dress(plan, t, i, 0, 3, true);
                     for m in [&full, &light] {

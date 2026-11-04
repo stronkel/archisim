@@ -1623,7 +1623,10 @@ fn world_solids(
             } else {
                 match w.typology {
                     WorldTypology::Street => WSide::Back,
-                    WorldTypology::Block | WorldTypology::House => WSide::Free,
+                    WorldTypology::Block | WorldTypology::House | WorldTypology::Tower => {
+                        WSide::Free
+                    }
+                    WorldTypology::Courtyard => WSide::Back,
                 }
             }
         })

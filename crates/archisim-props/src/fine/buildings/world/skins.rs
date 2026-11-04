@@ -227,6 +227,27 @@ pub struct House {
     pub extras: u32,
 }
 
+/// How a place builds its towers.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum TowerStyle {
+    /// Flats piled up, with the place's balconies.
+    Residential,
+    /// A curtain wall of glass.
+    Glass,
+    /// Brick and stone stepping back as it rises, a crown and a spire (New
+    /// York, Chicago).
+    Deco,
+}
+
+/// The tower of a place.
+#[derive(Clone, Copy, Debug)]
+pub struct TowerSkin {
+    pub style: TowerStyle,
+    pub floors: usize,
+    /// Its walls (empty: the block's, or the skin's).
+    pub walls: &'static [&'static str],
+}
+
 /// The skin of a place.
 #[derive(Clone, Copy, Debug)]
 pub struct Skin {
@@ -273,6 +294,7 @@ pub struct Skin {
     pub extras: u32,
     pub block: Block,
     pub house: House,
+    pub tower: TowerSkin,
 }
 
 impl Skin {
@@ -339,6 +361,11 @@ const BASE: Skin = Skin {
     extras: 0,
     block: NO_BLOCK,
     house: NO_HOUSE,
+    tower: TowerSkin {
+        style: TowerStyle::Residential,
+        floors: 14,
+        walls: &[],
+    },
 };
 
 /// The skins, in the order they are offered.
@@ -354,6 +381,11 @@ pub const SKINS: &[Skin] = &[
         shutters: &["f_green"],
         doors: &["f_brown", "f_green"],
         pitch: 0.4,
+        tower: TowerSkin {
+            style: TowerStyle::Residential,
+            floors: 12,
+            walls: &["w_white", "w_cream"],
+        },
         ..ANDALUSIA
     },
     Skin {
@@ -463,6 +495,11 @@ pub const SKINS: &[Skin] = &[
             extras: TREE,
             ..NO_HOUSE
         },
+        tower: TowerSkin {
+            style: TowerStyle::Residential,
+            floors: 18,
+            walls: &["w_white", "w_cream"],
+        },
         ..BASE
     },
     Skin {
@@ -495,6 +532,11 @@ pub const SKINS: &[Skin] = &[
             floors: 2,
             extras: TREE,
             ..NO_HOUSE
+        },
+        tower: TowerSkin {
+            style: TowerStyle::Residential,
+            floors: 14,
+            walls: &[],
         },
         ..BASE
     },
@@ -570,6 +612,11 @@ pub const SKINS: &[Skin] = &[
             extras: TREE | CHIMNEYS,
             ..NO_HOUSE
         },
+        tower: TowerSkin {
+            style: TowerStyle::Glass,
+            floors: 22,
+            walls: &[],
+        },
         ..BASE
     },
     Skin {
@@ -607,6 +654,11 @@ pub const SKINS: &[Skin] = &[
             shut: Shut::Louvred,
             extras: TREE,
             ..NO_HOUSE
+        },
+        tower: TowerSkin {
+            style: TowerStyle::Residential,
+            floors: 14,
+            walls: &[],
         },
         ..BASE
     },
@@ -654,6 +706,11 @@ pub const SKINS: &[Skin] = &[
             extras: CHIMNEYS | TREE,
             ..NO_HOUSE
         },
+        tower: TowerSkin {
+            style: TowerStyle::Glass,
+            floors: 26,
+            walls: &[],
+        },
         ..BASE
     },
     Skin {
@@ -694,6 +751,11 @@ pub const SKINS: &[Skin] = &[
             fence: Fence::Picket,
             extras: FLOWERS | TREE,
             ..NO_HOUSE
+        },
+        tower: TowerSkin {
+            style: TowerStyle::Glass,
+            floors: 20,
+            walls: &[],
         },
         ..BASE
     },
@@ -783,6 +845,11 @@ pub const SKINS: &[Skin] = &[
             extras: CORNER_BOARDS | TREE,
             ..NO_HOUSE
         },
+        tower: TowerSkin {
+            style: TowerStyle::Residential,
+            floors: 12,
+            walls: &[],
+        },
         ..BASE
     },
     Skin {
@@ -826,6 +893,11 @@ pub const SKINS: &[Skin] = &[
             extras: TREE,
             ..NO_HOUSE
         },
+        tower: TowerSkin {
+            style: TowerStyle::Deco,
+            floors: 34,
+            walls: &["k_dark", "s_brown", "k_yellow", "s_lime"],
+        },
         ..BASE
     },
     Skin {
@@ -867,6 +939,11 @@ pub const SKINS: &[Skin] = &[
             extras: CORNER_BOARDS | CHIMNEYS | TREE,
             ..NO_HOUSE
         },
+        tower: TowerSkin {
+            style: TowerStyle::Glass,
+            floors: 24,
+            walls: &[],
+        },
         ..BASE
     },
     Skin {
@@ -905,6 +982,11 @@ pub const SKINS: &[Skin] = &[
             floors: 1,
             extras: PALM,
             ..NO_HOUSE
+        },
+        tower: TowerSkin {
+            style: TowerStyle::Glass,
+            floors: 18,
+            walls: &[],
         },
         ..BASE
     },
@@ -991,6 +1073,11 @@ pub const SKINS: &[Skin] = &[
             extras: PALM | PLANTS,
             ..NO_HOUSE
         },
+        tower: TowerSkin {
+            style: TowerStyle::Residential,
+            floors: 18,
+            walls: &["w_cream", "c_concrete"],
+        },
         ..BASE
     },
     Skin {
@@ -1032,6 +1119,11 @@ pub const SKINS: &[Skin] = &[
             extras: TREE,
             ..NO_HOUSE
         },
+        tower: TowerSkin {
+            style: TowerStyle::Glass,
+            floors: 30,
+            walls: &[],
+        },
         ..BASE
     },
     Skin {
@@ -1072,6 +1164,11 @@ pub const SKINS: &[Skin] = &[
             extras: AC | TREE,
             ..NO_HOUSE
         },
+        tower: TowerSkin {
+            style: TowerStyle::Glass,
+            floors: 24,
+            walls: &[],
+        },
         ..BASE
     },
     Skin {
@@ -1111,6 +1208,11 @@ pub const SKINS: &[Skin] = &[
             floors: 1,
             extras: TREE,
             ..NO_HOUSE
+        },
+        tower: TowerSkin {
+            style: TowerStyle::Residential,
+            floors: 22,
+            walls: &["c_tile_white", "w_pearl"],
         },
         ..BASE
     },
@@ -1184,6 +1286,11 @@ pub const SKINS: &[Skin] = &[
             extras: PALM,
             ..NO_HOUSE
         },
+        tower: TowerSkin {
+            style: TowerStyle::Glass,
+            floors: 22,
+            walls: &[],
+        },
         ..BASE
     },
     Skin {
@@ -1223,6 +1330,11 @@ pub const SKINS: &[Skin] = &[
             floors: 1,
             extras: TREE,
             ..NO_HOUSE
+        },
+        tower: TowerSkin {
+            style: TowerStyle::Residential,
+            floors: 16,
+            walls: &["c_panel"],
         },
         ..BASE
     },

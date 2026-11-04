@@ -56,6 +56,15 @@ Los ejes 1 y 2 dan el volumen; los ejes 3, 4 y 5 dan la piel. Hay detalles que h
 6. **Tanda 6, pieles por lugar** (hecha, en revisión): tres tipologías (casa entre medianeras, bloque exento y vivienda aislada) vestidas con la piel de 24 lugares (§4).
 7. **Tanda 7, por sitio** (hecha, en revisión): al traer el entorno (Catastro, OpenStreetMap, LiDAR), cada edificio toma la tipología por su estilo, sus plantas y sus medianeras, y la piel por la zona de la georreferencia. Antes se hicieron las plantas poligonales y la versión ligera. Todo se puede cambiar a mano en Propiedades, en «Edificio del mundo»: lugar, tipología y variante.
 
+8. **Tanda 8, más tipologías con piel** (hecha, en revisión):
+   - la **torre** de cada lugar, de tres maneras:
+     - viviendas apiladas con los balcones del sitio (Andalucía, Levante, Latinoamérica, Corea, el Este…);
+     - muro cortina de vidrio con su vestíbulo y la pantalla de sus máquinas (París, Londres, Centroeuropa, Estados Unidos, China, Japón, Dubái);
+     - el ladrillo y la piedra de Nueva York, que se retranquean hasta su corona y su aguja, con el depósito de agua;
+   - la **casa patio**: crujías de delante y de detrás enteras y las laterales entre ellas, con la piel de la vivienda del lugar (patio andaluz, riad, siheyuan, casona colonial) y el patio empedrado con su pozo, sus macetas y su naranjo;
+   - las **casas en hilera**, cada una de su color, con jardín delantero, camino y la valla, el seto o la verja del sitio.
+   - Al traer el entorno, la torre sale con diez plantas o más (u oficinas desde seis) y la casa patio con el estilo «casa patio».
+
 Cuando Antonio apruebe una tanda, la integración será que los estilos de U6 (y U7, al traer el Catastro) usen estos modelos sobre la planta y las plantas que tenga cada masa.
 
 ## 4. Las pieles por lugar (tanda 6)

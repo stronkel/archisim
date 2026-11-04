@@ -521,13 +521,19 @@ pub enum WorldTypology {
     Block,
     /// A detached house.
     House,
+    /// A tower.
+    Tower,
+    /// A house round a courtyard.
+    Courtyard,
 }
 
 impl WorldTypology {
-    pub const ALL: [WorldTypology; 3] = [
+    pub const ALL: [WorldTypology; 5] = [
         WorldTypology::Street,
         WorldTypology::Block,
         WorldTypology::House,
+        WorldTypology::Tower,
+        WorldTypology::Courtyard,
     ];
 
     pub fn name(self) -> &'static str {
@@ -535,6 +541,8 @@ impl WorldTypology {
             WorldTypology::Street => "Casa entre medianeras",
             WorldTypology::Block => "Bloque de viviendas",
             WorldTypology::House => "Vivienda aislada",
+            WorldTypology::Tower => "Torre",
+            WorldTypology::Courtyard => "Casa patio",
         }
     }
 
@@ -543,6 +551,8 @@ impl WorldTypology {
             WorldTypology::Street => "street",
             WorldTypology::Block => "block",
             WorldTypology::House => "house",
+            WorldTypology::Tower => "tower",
+            WorldTypology::Courtyard => "courtyard",
         }
     }
 
@@ -556,7 +566,10 @@ impl WorldTypology {
     pub fn for_style(style: BuildingStyle, party: usize, floors: u32) -> Option<WorldTypology> {
         use BuildingStyle as S;
         match style {
+            S::Offices if floors >= 6 => Some(WorldTypology::Tower),
             S::Offices | S::Warehouse | S::Facility => None,
+            S::Courtyard => Some(WorldTypology::Courtyard),
+            _ if floors >= 10 => Some(WorldTypology::Tower),
             S::Detached | S::SemiDetached => Some(WorldTypology::House),
             _ if party >= 1 => Some(WorldTypology::Street),
             _ if floors <= 2 => Some(WorldTypology::House),
@@ -571,6 +584,8 @@ impl WorldTypology {
             WorldTypology::Street => T::Townhouse,
             WorldTypology::Block => T::Block,
             WorldTypology::House => T::House,
+            WorldTypology::Tower => T::Tower,
+            WorldTypology::Courtyard => T::Courtyard,
         }
     }
 }

@@ -49,6 +49,9 @@ pub const RECIPES: &[&str] = &[
     include_str!("../taller/edificio_mundo_bloque.asfam"),
     include_str!("../taller/edificio_mundo_aislada.asfam"),
     include_str!("../taller/edificio_mundo_muestra.asfam"),
+    include_str!("../taller/edificio_mundo_torre.asfam"),
+    include_str!("../taller/edificio_mundo_patio.asfam"),
+    include_str!("../taller/edificio_mundo_hilera.asfam"),
 ];
 
 /// The family of the samples over plans that are not rectangles.
@@ -59,6 +62,9 @@ pub const WORLD_SAMPLE: &str = "Muestra de planta del mundo (taller)";
 pub const WORLD_TOWNHOUSE: &str = "Casa entre medianeras del mundo (taller)";
 pub const WORLD_BLOCK: &str = "Bloque de viviendas del mundo (taller)";
 pub const WORLD_HOUSE: &str = "Vivienda aislada del mundo (taller)";
+pub const WORLD_TOWER: &str = "Torre del mundo (taller)";
+pub const WORLD_COURTYARD: &str = "Casa patio del mundo (taller)";
+pub const WORLD_ROW: &str = "Casas en hilera del mundo (taller)";
 
 /// A building of the workshop: its family, its type's name, its values
 /// (numbers), and the style of today's building it stands opposite, with
@@ -870,7 +876,57 @@ pub fn world_pieces(only: &[&str]) -> Vec<WorldPiece> {
             at: (x + hw / 2.0, y + 3.0),
             size: (hw, hd),
         });
-        y -= 45.0;
+        x += hw + 12.0;
+        // Tanda 8: the tower, the courtyard house and the row.
+        let (tw, td) = (24.0, 20.0);
+        out.push(WorldPiece {
+            skin: i,
+            family: WORLD_TOWER,
+            name: format!("Torre · {} (taller)", sk.name),
+            values: vec![
+                ("skin", i as f64),
+                ("variant", 1.0),
+                ("width", tw),
+                ("depth", td),
+                ("floors", sk.tower.floors as f64),
+            ],
+            at: (x + tw / 2.0, y - 6.0),
+            size: (tw, td),
+        });
+        x += tw + 8.0;
+        let (cw, cd) = (16.0, 18.0);
+        out.push(WorldPiece {
+            skin: i,
+            family: WORLD_COURTYARD,
+            name: format!("Casa patio · {} (taller)", sk.name),
+            values: vec![
+                ("skin", i as f64),
+                ("variant", 1.0),
+                ("width", cw),
+                ("depth", cd),
+                ("floors", sk.house.floors.clamp(1, 2) as f64),
+            ],
+            at: (x + cw / 2.0, y - 4.0),
+            size: (cw, cd),
+        });
+        x += cw + 8.0;
+        let unit = (usual_width(sk)).min(9.0);
+        let (rw, rd) = (unit * 4.0, 10.0);
+        out.push(WorldPiece {
+            skin: i,
+            family: WORLD_ROW,
+            name: format!("Casas en hilera · {} (taller)", sk.name),
+            values: vec![
+                ("skin", i as f64),
+                ("variant", 1.0),
+                ("width", rw),
+                ("depth", rd),
+                ("floors", sk.floors.clamp(2, 3) as f64),
+            ],
+            at: (x + rw / 2.0, y),
+            size: (rw, rd),
+        });
+        y -= 60.0;
     }
     out
 }
@@ -945,7 +1001,7 @@ mod tests {
     #[test]
     fn the_world_is_made() {
         let m = world_project(&["andalucia", "paris", "japon"]).unwrap();
-        assert_eq!(m.objects().count(), 15);
+        assert_eq!(m.objects().count(), 24);
         for t in m.object_types().filter(|t| t.name.ends_with("(taller)")) {
             let (mesh, _) = m.type_prop(t.id).expect("a model");
             let family = m.family(t.family).unwrap().name().to_string();

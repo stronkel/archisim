@@ -6,6 +6,26 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-04 (97) · Taller de edificios, tanda 8: torres, casas patio y casas en hilera
+
+Misma rama y mismo pull request (#160). Sin cambios de formato: el `dress` de la versión 72 admite las tipologías nuevas. Los ficheros guardados con estas tipologías solo los abre esta versión o una posterior.
+
+**Hecho**
+- **Torre del mundo**, de tres maneras según el lugar:
+  - viviendas apiladas con los balcones del sitio;
+  - muro cortina de vidrio con su vestíbulo, su marquesina y la pantalla de lamas de las máquinas;
+  - la de Nueva York y Chicago: basamento, fuste y corona retranqueados, aguja y depósito de agua.
+- **Casa patio del mundo**: las crujías de delante y de detrás enteras y las laterales entre ellas. Lleva la piel de la vivienda del lugar (patio andaluz, riad, siheyuan, casona colonial) y el patio con pozo, macetas y naranjo. Sobre una planta cualquiera, una crujía por lado.
+- **Casas en hilera del mundo**: cada casa de su color, con jardín delantero, camino y la valla, el seto o la verja del sitio.
+- Al traer el entorno, la torre sale con diez plantas o más (u oficinas desde seis) y la casa patio con el estilo «casa patio».
+- En el taller, cada lugar tiene ya ocho edificios: `archisim mundo out/`. Las fotos salen en una segunda hoja por lugar (`NN-<lugar>-mas.png`).
+
+**Qué debe probar Antonio**
+1. Ejecuta `cargo run --release -p archisim-cli -- mundo out/ nueva_york china andalucia magreb` y mira las torres, los patios y las hileras de cada lugar.
+2. Dime si la torre de Andalucía (de viviendas, 12 plantas) te parece bien o si la quieres de otra manera, por ejemplo como las torres de la costa.
+
+---
+
 ## 2026-11-04 (96) · Taller de edificios, tanda 7: los edificios del entorno, con la piel de su lugar
 
 Misma rama `bloque/taller-edificios` y mismo pull request (#160). **Formato `.archisim` versión 72.** El IFC guarda el lugar en el pset del edificio del entorno.
