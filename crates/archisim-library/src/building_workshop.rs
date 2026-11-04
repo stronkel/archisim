@@ -52,6 +52,7 @@ pub const RECIPES: &[&str] = &[
     include_str!("../taller/edificio_mundo_torre.asfam"),
     include_str!("../taller/edificio_mundo_patio.asfam"),
     include_str!("../taller/edificio_mundo_hilera.asfam"),
+    include_str!("../taller/edificio_mundo_equipamiento.asfam"),
 ];
 
 /// The family of the samples over plans that are not rectangles.
@@ -65,6 +66,10 @@ pub const WORLD_HOUSE: &str = "Vivienda aislada del mundo (taller)";
 pub const WORLD_TOWER: &str = "Torre del mundo (taller)";
 pub const WORLD_COURTYARD: &str = "Casa patio del mundo (taller)";
 pub const WORLD_ROW: &str = "Casas en hilera del mundo (taller)";
+
+/// The family of the facilities and the commerce of the world (tandas 10
+/// and 11).
+pub const WORLD_FACILITY: &str = "Equipamiento del mundo (taller)";
 
 /// A building of the workshop: its family, its type's name, its values
 /// (numbers), and the style of today's building it stands opposite, with
@@ -1036,6 +1041,56 @@ pub fn sample_pieces(skin: usize) -> Vec<WorldPiece> {
     out
 }
 
+/// The facilities of a place (tandas 10 and 11): the nineteen
+/// programmes in rows, each on its usual plot, the third row today's and
+/// in another state.
+pub fn facility_pieces(skin: usize) -> Vec<WorldPiece> {
+    use archisim_core::props::fine::buildings::world::{civic::PROGRAMMES, SKINS};
+    let sk = &SKINS[skin.min(SKINS.len() - 1)];
+    let mut out = Vec::new();
+    let (mut x, mut y, mut row_d) = (0.0, 0.0, 0.0f64);
+    for prog in PROGRAMMES {
+        let (w, d) = prog.size(sk);
+        if x > 0.0 && x + w > 170.0 {
+            x = 0.0;
+            y -= row_d + 14.0;
+            row_d = 0.0;
+        }
+        out.push(WorldPiece {
+            skin,
+            family: WORLD_FACILITY,
+            name: format!("{} · {} (taller)", prog.name(), sk.name),
+            values: vec![
+                ("skin", skin as f64),
+                ("variant", 1.0),
+                ("programme", prog.index() as f64),
+            ],
+            at: (x + w / 2.0, y - d),
+            size: (w, d),
+        });
+        x += w + 10.0;
+        row_d = row_d.max(d);
+    }
+    out
+}
+
+/// The facilities of a place as a project.
+pub fn facility_project(skin: usize) -> Result<Model, ModelError> {
+    let mut m = crate::new_project("Equipamientos del mundo");
+    let level = m.levels()[0].id;
+    for p in facility_pieces(skin) {
+        let t = type_with(&mut m, p.family, &p.name, &p.values)?;
+        m.add_object(NewObject {
+            object_type: t,
+            level,
+            position: Point2::new(p.at.0, p.at.1),
+            rotation: 0.0,
+            base_offset: 0.0,
+        })?;
+    }
+    Ok(m)
+}
+
 /// The samples of a place as a project.
 pub fn sample_project(skin: usize) -> Result<Model, ModelError> {
     let mut m = crate::new_project("Muestras de plantas del mundo");
@@ -1087,6 +1142,26 @@ mod tests {
                 .iter()
                 .find(|r| r.lines().next().is_some_and(|l| l.contains(&family)))
                 .unwrap();
+            for (role, _) in &mesh.parts {
+                assert!(
+                    recipe.contains(&format!("    {role} material")),
+                    "{}: the role «{role}» has no material",
+                    t.name
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn the_facilities_are_made() {
+        let m = facility_project(0).unwrap();
+        assert_eq!(m.objects().count(), 19);
+        let recipe = RECIPES
+            .iter()
+            .find(|r| r.lines().next().is_some_and(|l| l.contains(WORLD_FACILITY)))
+            .unwrap();
+        for t in m.object_types().filter(|t| t.name.ends_with("(taller)")) {
+            let (mesh, _) = m.type_prop(t.id).expect("a model");
             for (role, _) in &mesh.parts {
                 assert!(
                     recipe.contains(&format!("    {role} material")),

@@ -6,6 +6,32 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-04 (99) · Taller de edificios, tandas 10 y 11: equipamientos y comercio de cada lugar
+
+Misma rama y mismo pull request (#160). Sin cambios de formato.
+
+**Hecho**
+- Familia nueva **«Equipamiento del mundo»** con diecinueve programas, cada uno con la piel del lugar que se elija entre los 30, y de época tradicional o de hoy, en uso, abandonado o en obra:
+  - ayuntamiento, colegio, biblioteca, parque de bomberos y comisaría;
+  - polideportivo, gimnasio, estadio y fábrica;
+  - quiosco, tienda, mercadillo, galería comercial y centro comercial;
+  - chiringuito, restaurante, taberna y plaza;
+  - el edificio emblemático de cada lugar: Giralda, campanarios, molinos, iglesias de dos torres, misión, cúpula con pórtico, torre del reloj, templo, pagoda, mezquita, iglesia de madera o rascacielos.
+- `archisim equipamientos out/ [lugares…]` hace un proyecto por lugar con los diecinueve.
+- Lo abandonado ya no quita macetas, árboles, aires ni farolas (dejaba piezas en el aire); quita flores, frutas, ropa, visillos, persianas y coches.
+- Material nuevo en la paleta: arena de playa.
+
+**Pendiente**
+- Al traer el entorno, los edificios aún no toman un programa.
+- Pasar del taller a la biblioteca: cuando Antonio lo apruebe.
+
+**Qué debe probar Antonio**
+1. `cargo run --release -p archisim-cli -- equipamientos out/ andalucia castilla mancha paris japon` y abre `out/equipamientos-andalucia.archisim` (y los demás).
+2. Mira si cada equipamiento se reconoce y lleva el carácter de su lugar, sobre todo el ayuntamiento, la plaza y el edificio emblemático.
+3. En el catálogo, «Taller · Edificios del mundo» → «Equipamiento del mundo»: cambia «Programa», «Lugar», «Época» y «Estado» y mira el 3D.
+
+---
+
 ## 2026-11-04 (98) · Taller de edificios, tanda 9: época, estado y seis regiones más de España
 
 Misma rama y mismo pull request (#160). **Formato `.archisim` versión 73** (la época y el estado del edificio del mundo).

@@ -68,10 +68,49 @@ Los ejes 1 y 2 dan el volumen; los ejes 3, 4 y 5 dan la piel. Hay detalles que h
 9. **Tanda 9, época, estado y más regiones** (hecha, en revisión):
    - **Época**: cada lugar tiene su versión **de hoy**: cubierta plana (los nórdicos, Japón, Centroeuropa y la montaña, inclinada de zinc), huecos grandes con correderas, terrazas de losa, sin molduras ni rejas. Conserva el color del sitio (blanco en el sur, hormigón y madera en el norte) y la persiana enrollable en España.
    - **Estado**:
-     - **abandonado**: ventanas tapiadas con tablero o vacías, sin macetas, ropa, rótulos ni aires, el revoco envejecido, la humedad subiendo por el zócalo y hierbas al pie;
+     - **abandonado**: ventanas tapiadas con tablero o vacías, sin flores, ropa ni visillos, el revoco envejecido, la humedad subiendo por el zócalo y hierbas al pie;
      - **en obra**: estructura de hormigón con los pilares de la última planta esperando con sus barras, ladrillo en la mitad de abajo con los huecos de las ventanas, andamio con plataformas y red a la calle, valla de obra y, desde tres plantas, la grúa torre.
    - **Seis lugares más de España**: montaña cantábrica (casa montañesa con solana), Valencia y su huerta (con la barraca de cubierta de paja como vivienda aislada), La Mancha, Cuenca (casas colgadas con balcones de madera), Extremadura y Baleares (piedra de marés, arcos y persianas mallorquinas). Al traer el entorno, cada uno sale por su zona.
    - Época y estado se eligen en las recetas («Época», «Estado») y en Propiedades → «Edificio del mundo».
+
+10. **Tandas 10 y 11, equipamientos y comercio de cada lugar** (hechas, en revisión): una sola familia, «Equipamiento del mundo», con el parámetro «Programa» y los diecinueve programas de abajo. Todos llevan la piel del lugar elegido: sus colores, ventanas, cubiertas y remates. Los que son un edificio de calle se hacen con la misma fachada que las viviendas del lugar. Las naves, las gradas, los puestos y los monumentos se dibujan aparte con sus colores. Cada uno puede ser de hoy, abandonado o en obra, como las viviendas.
+   - **Equipamientos**:
+     - ayuntamiento: balcón de honor con tres banderas, rótulo, ático con reloj y espadaña con campana, o torrecilla fuera del mundo hispano; soportales donde el lugar los tiene;
+     - colegio: pabellón con ventanas anchas y patio con pista, canastas, valla, mástiles y árboles;
+     - biblioteca: planta baja acristalada, marquesina, rótulo y aparcabicis;
+     - parque de bomberos: nave de autobombas con portones rojos, oficinas con la fachada del lugar, torre de maniobras y explanada;
+     - comisaría: rótulo azul, bandera, bolardos y coches;
+     - polideportivo: zócalo, chapa, banda de luz y bóveda de chapa, con vestíbulo acristalado;
+     - gimnasio: de calle, con gran rótulo;
+     - estadio: campo con sus líneas y porterías, gradas por los cuatro lados, tribuna cubierta y torres de focos;
+     - fábrica: nave de ladrillo con dientes de sierra, muelle de carga, oficinas del lugar y chimenea.
+   - **Comercio**:
+     - quiosco: octogonal, con sus revistas;
+     - tienda: con toldos y género en la acera;
+     - mercadillo: puestos con lonas a rayas, fruta, ropa y cacharros;
+     - galería comercial: pasaje con tiendas a los dos lados y bóveda de vidrio sobre arcos de hierro;
+     - centro comercial: caja con atrio de vidrio, rótulos y aparcamiento con coches, farolas y árboles.
+   - **Hostelería**:
+     - chiringuito: tarima sobre la arena, chamizo de tablas con barra, techo de paja y mesas con sombrilla;
+     - restaurante: con terraza, jardineras y sombrillas;
+     - taberna: con su rótulo colgado, el farol y toneles como mesas.
+   - **Plaza**: fuente en el centro, árboles, bancos, farolas y templete de música.
+   - **Edificio emblemático de cada lugar**:
+     - Andalucía: torre como la Giralda, con su cuerpo de campanas y la linterna;
+     - Italia, Levante, Valencia y Baleares: campanario con chapitel de teja;
+     - Castilla, Extremadura, Cuenca, la montaña y el Algarve: torre con aguja de piedra;
+     - Galicia, Lisboa y la América colonial: iglesia de dos torres con cúpulas; Centroeuropa, con agujas; el Este, con cebollas;
+     - California: misión con espadaña de tres campanas y soportal;
+     - La Mancha: tres molinos; Países Bajos: molino con su balconada;
+     - París, Estados Unidos y San Francisco: cúpula sobre tambor con pórtico de columnas;
+     - Londres y el trópico: torre del reloj;
+     - Grecia: templo;
+     - China, Japón y Corea: pagoda de cinco cubiertas;
+     - Magreb: mezquita con su alminar;
+     - países nórdicos: iglesia de madera;
+     - Nueva York: rascacielos de los años 30.
+   - Para verlos: `archisim equipamientos out/ andalucia japon` (un proyecto por lugar). Fotos con `ARCHISIM_EQUIPAMIENTOS_OUT=carpeta cargo test --release -p archisim-app -- facility_pictures` (cinco hojas por lugar; `ARCHISIM_MUNDO` para elegir lugares).
+   - Pendiente: al traer el entorno, los edificios aún no toman un programa (un colegio del Catastro sigue saliendo como bloque). Se hará cuando Antonio dé el visto bueno a los modelos.
 
 Cuando Antonio apruebe una tanda, la integración será que los estilos de U6 (y U7, al traer el Catastro) usen estos modelos sobre la planta y las plantas que tenga cada masa.
 
@@ -103,4 +142,5 @@ Una **piel** dice con qué y cómo construye un lugar; las **tipologías** son e
   - las pieles son datos en `archisim_props::fine::buildings::world::skins` (`SKINS`);
   - la fachada está en `world::facade`, la cubierta en `world::roofs` y las tipologías en `world::types`;
   - los materiales, uno por papel, están en `world::MATERIALS`;
-  - la época de hoy es `skins::contemporary` y los estados están en `world::state` (`abandon`, `site_on`).
+  - la época de hoy es `skins::contemporary` y los estados están en `world::state` (`abandon`, `site_on`);
+  - los equipamientos están en `world::civic` (`Programme`, `facility`) y los edificios emblemáticos en `world::landmarks` (`kind_of` por lugar).

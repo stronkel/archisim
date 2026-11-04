@@ -41,25 +41,18 @@ fn hash(a: i64, b: i64, c: i64, seed: u64) -> u64 {
 /// as boards or as dark holes).
 const LIFE: &[&str] = &[
     "flowers",
-    "pot",
-    "leaves",
     "fruit",
     "cloth_a",
     "cloth_b",
     "cloth_c",
     "line",
-    "sign",
-    "sign_b",
     "curtain",
     "blind",
-    "lamp",
     "car_a",
     "car_b",
     "car_c",
     "car_glass",
     "tyre",
-    "palm",
-    "trunk",
 ];
 
 /// Leaves the model of a standing building abandoned.
@@ -118,7 +111,7 @@ pub fn abandon(b: &mut Builder, plan: &Plan, seed: u64) {
             let h = hash(i as i64, k, 7, seed);
             let r = 0.15 + (h % 100) as f64 / 400.0;
             let off = 0.12 + r * 0.5;
-            let c = [a[0] + ux * s + nx * off, a[1] + uy * s + ny * off, r * 0.5];
+            let c = [a[0] + ux * s + nx * off, a[1] + uy * s + ny * off, r * 0.9];
             b.ellipsoid("leaves", c, [r, r, r * 0.9]);
             s += 0.8 + (h % 7) as f64 * 0.35;
         }
@@ -476,6 +469,15 @@ fn recipe_plan(kind: &str, p: &crate::Params, skin: &Skin) -> (Plan, usize) {
                 p.get("depth", 10.0).clamp(7.0, 20.0),
                 s(Side::Back, Side::Free, Side::Street, Side::Free),
                 floors_of(p, skin.floors.clamp(2, 3), 5),
+            )
+        }
+        "fine_world_facility" => {
+            let (w, d, floors) = super::civic::recipe_plan(p, skin);
+            (
+                w,
+                d,
+                s(Side::Back, Side::Free, Side::Street, Side::Free),
+                floors,
             )
         }
         _ => {

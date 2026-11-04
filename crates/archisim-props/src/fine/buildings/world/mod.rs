@@ -11,7 +11,9 @@
 //! Every material is a role of its own name ([`MATERIALS`]): a skin picks
 //! from them by role, and the recipe of each typology lists them all.
 
+pub mod civic;
 pub mod facade;
+pub mod landmarks;
 pub mod plan;
 pub mod roofs;
 pub mod skins;
@@ -32,6 +34,9 @@ pub const MATERIALS: &[(&str, &str, &str, [u8; 3])] = &[
     ("g_opaque", "Vidrio opaco gris", "other", [64, 74, 84]),
     ("w_faded", "Revoco envejecido", "stone", [198, 190, 172]),
     ("w_damp", "Mancha de humedad", "stone", [146, 136, 116]),
+    ("water", "Agua de fuente", "water", [128, 192, 222]),
+    ("court", "Pista verde", "other", [52, 112, 82]),
+    ("sand", "Arena de playa", "other", [222, 204, 160]),
     ("s_mares", "Piedra de marés", "stone", [212, 178, 128]),
     ("r_thatch", "Cubierta de paja", "other", [190, 164, 104]),
     ("w_white", "Cal blanca", "stone", [238, 234, 226]),
@@ -326,6 +331,68 @@ mod tests {
                 }
             }
         }
+        for b in &bad {
+            println!("{b}");
+        }
+        assert!(bad.is_empty(), "{} problems", bad.len());
+    }
+
+    /// Every facility of every place, full and light: made, with their
+    /// materials and nothing in the air.
+    #[test]
+    fn facilities_of_every_place() {
+        let mut bad = Vec::new();
+        for (i, sk) in SKINS.iter().enumerate() {
+            for prog in civic::PROGRAMMES {
+                for (lod, era, state) in [
+                    (0.0, 0.0, 0.0),
+                    (1.0, 0.0, 0.0),
+                    (0.0, 1.0, 0.0),
+                    (0.0, 0.0, 1.0),
+                    (0.0, 0.0, 2.0),
+                ] {
+                    let mut p = Params::default();
+                    p.set("skin", i as f64);
+                    p.set("programme", prog.index() as f64);
+                    p.set("lod", lod);
+                    p.set("era", era);
+                    p.set("state", state);
+                    let kind = "fine_world_facility";
+                    let m = make(kind, &p).unwrap();
+                    let n = m.triangle_count();
+                    let what = format!(
+                        "{} {} lod {lod} era {era} state {state}",
+                        sk.key,
+                        prog.name()
+                    );
+                    if !(200..=400_000).contains(&n) {
+                        bad.push(format!("{what}: {n} triangles"));
+                    }
+                    for (role, _) in &m.parts {
+                        if material_of(role).is_none() {
+                            bad.push(format!("{what}: role «{role}» has no material"));
+                        }
+                    }
+                    let loose = check::loose_pieces(&m, check::anchors_for(kind), 0.004);
+                    if let Some(l) = loose.first() {
+                        bad.push(format!(
+                            "{what}: {} loose, {} {:.3} off at x {:.2}..{:.2} y {:.2}..{:.2} z {:.2}..{:.2}",
+                            loose.len(),
+                            l.role,
+                            l.gap,
+                            l.lo[0],
+                            l.hi[0],
+                            l.lo[1],
+                            l.hi[1],
+                            l.lo[2],
+                            l.hi[2]
+                        ));
+                    }
+                }
+            }
+        }
+        bad.sort();
+        bad.dedup();
         for b in &bad {
             println!("{b}");
         }

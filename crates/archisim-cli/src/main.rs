@@ -120,6 +120,12 @@ Uso:
       El taller de edificios: cada edificio nuevo del entorno, en revisión,
       frente al edificio del mismo tipo que hace hoy ArchiSim:
       edificios.archisim y edificios.ifc.
+  archisim equipamientos [carpeta] [lugares…]
+      Los equipamientos y el comercio de cada lugar (ayuntamiento, colegio,
+      biblioteca, bomberos, comisaría, polideportivo, gimnasio, estadio,
+      fábrica, quiosco, tienda, mercadillo, galería, centro comercial,
+      chiringuito, restaurante, taberna, plaza y su edificio emblemático):
+      equipamientos-<lugar>.archisim y .ifc por lugar.
   archisim mundo [carpeta] [lugares…]
       Los edificios del mundo: por cada lugar (andalucia, paris, japon…),
       tres casas de su calle, su bloque y su vivienda aislada, en una fila:
@@ -446,6 +452,11 @@ fn main() -> ExitCode {
         Some("edificios") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
             report(taller::write_buildings(&dir))
+        }
+        Some("equipamientos") => {
+            let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
+            let only: Vec<&str> = args.iter().skip(2).map(String::as_str).collect();
+            report(taller::write_facilities(&dir, &only))
         }
         Some("mundo") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));

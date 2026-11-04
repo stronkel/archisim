@@ -2566,6 +2566,89 @@ fn world_pictures() {
     }
 }
 
+/// The facilities and the commerce of each place (tandas 10 and 11):
+/// four sheets per place (`NN-<lugar>-equipamientos-K.png`).
+/// `ARCHISIM_EQUIPAMIENTOS_OUT=carpeta`; `ARCHISIM_MUNDO` keeps some places.
+#[test]
+fn facility_pictures() {
+    let Some(dir) = std::env::var_os("ARCHISIM_EQUIPAMIENTOS_OUT") else {
+        return;
+    };
+    let dir = Path::new(&dir);
+    std::fs::create_dir_all(dir).unwrap();
+    let Some(gpu) = super::gpu_tests::gpu() else {
+        eprintln!("No graphics adapter: pictures skipped.");
+        return;
+    };
+    let wanted = std::env::var("ARCHISIM_MUNDO").unwrap_or_default();
+    let wanted: Vec<&str> = wanted.split(',').filter(|k| !k.is_empty()).collect();
+    let mut r = Renderer::new(&gpu.0, gpu.2, TextureMode::Full);
+    let size = [1000u32, 760u32];
+    let aspect = size[0] as f32 / size[1] as f32;
+    let skins = archisim_core::props::fine::buildings::world::SKINS;
+    // The programmes of each sheet (their order in the project).
+    let sheets: [&[usize]; 5] = [
+        &[0, 1, 2, 3],
+        &[4, 5, 6, 8],
+        &[7, 13, 11, 12],
+        &[9, 10, 15, 16],
+        &[14, 17, 18, 18],
+    ];
+    for (i, sk) in skins.iter().enumerate() {
+        if !wanted.is_empty() && !wanted.contains(&sk.key) {
+            continue;
+        }
+        let m = archisim_library::building_workshop::facility_project(i).unwrap();
+        let only = |keep: usize| {
+            let mut one = m.clone();
+            let objects: Vec<_> = one.objects().map(|o| o.id).collect();
+            for (k, o) in objects.into_iter().enumerate() {
+                if k != keep {
+                    one.remove_object(o).unwrap();
+                }
+            }
+            one
+        };
+        for (n, sheet) in sheets.iter().enumerate() {
+            let pics: Vec<Pixmap> = sheet
+                .iter()
+                .enumerate()
+                .map(|(j, &k)| {
+                    let (yaw, pitch) = if j == 3 && k == 18 {
+                        (215.0, 12.0)
+                    } else {
+                        (150.0, 22.0)
+                    };
+                    building_picture(
+                        &mut r,
+                        &gpu,
+                        &only(k),
+                        |lo, hi| camera(lo, hi, aspect, yaw, pitch, 1.1),
+                        size,
+                        Light::Day,
+                    )
+                })
+                .collect();
+            let top = side_by_side(&pics[0], &pics[1]);
+            let bottom = side_by_side(&pics[2], &pics[3]);
+            let mut out = Pixmap::new(top.width(), top.height() + bottom.height() + 12).unwrap();
+            out.fill(resvg::tiny_skia::Color::WHITE);
+            for (pic, y) in [(&top, 0), (&bottom, top.height() + 12)] {
+                out.draw_pixmap(
+                    0,
+                    y as i32,
+                    pic.as_ref(),
+                    &PixmapPaint::default(),
+                    Transform::identity(),
+                    None,
+                );
+            }
+            out.save_png(dir.join(format!("{:02}-{}-equipamientos-{}.png", i, sk.key, n + 1)))
+                .unwrap();
+        }
+    }
+}
+
 /// The world's buildings over plans that are not rectangles: for each
 /// place, the three typologies over the three sample plans, full and
 /// light (`NN-<lugar>-plantas.png`). `ARCHISIM_PLANTAS_OUT=carpeta`;

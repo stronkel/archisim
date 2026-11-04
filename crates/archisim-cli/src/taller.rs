@@ -77,6 +77,39 @@ pub fn write_buildings(dir: &Path) -> Res {
 /// The buildings of the world (tanda 6): every place's house of the
 /// street, block and detached house, a row each (`only`: some places by
 /// their key).
+/// The facilities of the places asked for (by key), a project each.
+pub fn write_facilities(dir: &Path, only: &[&str]) -> Res {
+    use archisim_core::props::fine::buildings::world::SKINS;
+    std::fs::create_dir_all(dir)?;
+    for (i, sk) in SKINS.iter().enumerate() {
+        if !only.is_empty() && !only.contains(&sk.key) {
+            continue;
+        }
+        if only.is_empty() && i > 0 && SKINS[..i].iter().any(|s| s.key == sk.key) {
+            continue;
+        }
+        let m = archisim_library::building_workshop::facility_project(i)?;
+        let name = format!("equipamientos-{}", sk.key);
+        let path = dir.join(format!("{name}.{}", archisim_file::EXTENSION));
+        archisim_file::save(&m, &path)?;
+        std::fs::write(
+            dir.join(format!("{name}.ifc")),
+            crate::ifc_text(&m, &name, None),
+        )?;
+        let total: usize = m
+            .object_types()
+            .filter_map(|t| m.type_prop(t.id).map(|p| p.0.triangle_count()))
+            .sum();
+        println!(
+            "{}: {} edificios ({total} triángulos), en {}",
+            sk.name,
+            m.objects().count(),
+            path.display()
+        );
+    }
+    Ok(())
+}
+
 pub fn write_world(dir: &Path, only: &[&str]) -> Res {
     let m = archisim_library::building_workshop::world_project(only)?;
     std::fs::create_dir_all(dir)?;

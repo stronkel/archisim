@@ -91,6 +91,7 @@ pub const KINDS: &[(&str, &[&str])] = &[
     ("fine_world_tower", &["Único"]),
     ("fine_world_courtyard", &["Único"]),
     ("fine_world_row", &["Único"]),
+    ("fine_world_facility", &["Único"]),
     ("built_in_wardrobe", &["Empotrado"]),
     ("door", &door::COLLECTIONS),
     ("sliding_door", &door::COLLECTIONS),
@@ -666,6 +667,9 @@ pub fn make(kind: &str, b: &mut Builder, p: &Params) -> bool {
         }
         "fine_world_courtyard" => {
             buildings::world::state::recipe(kind, b, p, buildings::world::towers::courtyard)
+        }
+        "fine_world_facility" => {
+            buildings::world::state::recipe(kind, b, p, buildings::world::civic::recipe)
         }
         "fine_world_row" => {
             buildings::world::state::recipe(kind, b, p, buildings::world::towers::row)
