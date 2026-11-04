@@ -1379,6 +1379,236 @@ pub const SKINS: &[Skin] = &[
         },
         ..BASE
     },
+    // The regions of Spain of the second round (appended: the numbers of
+    // the places are kept in the projects).
+    Skin {
+        key: "montana",
+        name: "Montaña cantábrica (casa montañesa)",
+        region: "España",
+        walls: &["s_rubble", "s_ashlar"],
+        base: &["s_rubble"],
+        trims: &["s_ashlar", "w_white"],
+        frames: &["f_white", "f_brown"],
+        shutters: &["f_brown", "f_green"],
+        doors: &["f_brown"],
+        pitch: 0.55,
+        eaves: 0.7,
+        panes: (1, 2),
+        win: (0.9, 1.4),
+        bay: 2.4,
+        shut: Shut::Board,
+        head: Head::Band,
+        balc: Balc::Covered,
+        ground: Ground::Door,
+        top: Top::None,
+        storey: (3.0, 2.8),
+        floors: 2,
+        extras: QUOINS | FLOWERS | CHIMNEYS,
+        block: Block {
+            walls: &["w_white", "w_cream"],
+            balc: Balc::Gallery,
+            roof: Roof::Hip,
+            floors: 5,
+            ..NO_BLOCK
+        },
+        house: House {
+            walls: &["s_rubble"],
+            balc: Balc::Covered,
+            fence: Fence::Wall,
+            extras: CHIMNEYS | TREE,
+            ..NO_HOUSE
+        },
+        ..BASE
+    },
+    Skin {
+        key: "valencia",
+        name: "Valencia y su huerta",
+        region: "España",
+        walls: &["w_white", "w_blue", "w_cream", "w_white"],
+        base: &["f_blue", "w_grey"],
+        trims: &["w_white", "w_blue"],
+        frames: &["f_blue", "f_green", "f_brown"],
+        shutters: &["f_blue", "f_green"],
+        doors: &["f_blue", "f_brown", "f_green"],
+        pitch: 0.4,
+        panes: (1, 2),
+        win: (1.0, 1.7),
+        bay: 2.5,
+        shut: Shut::Louvred,
+        balc: Balc::Iron,
+        ground: Ground::Door,
+        top: Top::Tiles,
+        storey: (3.4, 3.0),
+        floors: 3,
+        extras: PLANTS | GRILLES | BELT,
+        block: Block {
+            walls: &["w_cream", "w_ochre"],
+            balc: Balc::Glazed,
+            floors: 8,
+            extras: TANK | AC,
+            ..NO_BLOCK
+        },
+        house: House {
+            walls: &["w_white"],
+            roof: Roof::GableToStreet,
+            cover: Cover::Courses,
+            roof_mat: "r_thatch",
+            pitch: 1.6,
+            fence: Fence::Hedge,
+            floors: 1,
+            extras: PLANTS | TREE,
+            ..NO_HOUSE
+        },
+        ..BASE
+    },
+    Skin {
+        key: "mancha",
+        name: "La Mancha",
+        region: "España",
+        walls: &["w_white"],
+        base: &["f_blue", "w_almagra"],
+        trims: &["f_blue", "w_white"],
+        frames: &["f_brown", "f_green", "f_blue"],
+        shutters: &["f_green", "f_brown"],
+        doors: &["f_brown", "f_green"],
+        pitch: 0.35,
+        eaves: 0.25,
+        win: (0.9, 1.3),
+        bay: 2.8,
+        shut: Shut::Board,
+        head: Head::Band,
+        balc: Balc::None,
+        ground: Ground::Door,
+        top: Top::Tiles,
+        storey: (3.2, 2.8),
+        floors: 1,
+        extras: GRILLES | PLANTS,
+        block: Block {
+            walls: &["w_white", "w_cream"],
+            balc: Balc::Iron,
+            floors: 5,
+            extras: TANK,
+            ..NO_BLOCK
+        },
+        house: House {
+            fence: Fence::Wall,
+            floors: 1,
+            extras: TREE,
+            ..NO_HOUSE
+        },
+        ..BASE
+    },
+    Skin {
+        key: "colgadas",
+        name: "Cuenca (casas colgadas)",
+        region: "España",
+        walls: &["w_cream", "w_ochre", "w_white"],
+        base: &["s_rubble"],
+        trims: &["s_lime", "w_white"],
+        frames: &["f_brown"],
+        shutters: &["f_brown"],
+        doors: &["f_brown"],
+        pitch: 0.4,
+        eaves: 0.5,
+        win: (0.9, 1.5),
+        bay: 2.2,
+        shut: Shut::Board,
+        balc: Balc::Covered,
+        ground: Ground::Door,
+        top: Top::Tiles,
+        storey: (3.0, 2.8),
+        floors: 5,
+        extras: PLANTS,
+        block: Block {
+            walls: &["w_cream", "w_ochre"],
+            balc: Balc::Iron,
+            floors: 6,
+            ..NO_BLOCK
+        },
+        house: House {
+            walls: &["w_cream", "s_rubble"],
+            balc: Balc::Covered,
+            fence: Fence::Wall,
+            extras: TREE,
+            ..NO_HOUSE
+        },
+        ..BASE
+    },
+    Skin {
+        key: "extremadura",
+        name: "Extremadura",
+        region: "España",
+        walls: &["w_white"],
+        base: &["s_granite", "w_almagra"],
+        trims: &["s_granite"],
+        frames: &["f_green", "f_brown"],
+        shutters: &["f_green"],
+        doors: &["f_brown", "f_green"],
+        pitch: 0.4,
+        win: (1.0, 1.5),
+        bay: 2.6,
+        shut: Shut::Roller,
+        head: Head::Band,
+        balc: Balc::Iron,
+        ground: Ground::Door,
+        top: Top::Tiles,
+        storey: (3.2, 2.9),
+        floors: 2,
+        extras: GRILLES | PLANTS | CHIMNEYS | QUOINS,
+        block: Block {
+            walls: &["w_white", "w_cream"],
+            balc: Balc::Iron,
+            floors: 5,
+            extras: TANK | AC,
+            ..NO_BLOCK
+        },
+        house: House {
+            fence: Fence::Wall,
+            floors: 1,
+            extras: CHIMNEYS | TREE,
+            ..NO_HOUSE
+        },
+        ..BASE
+    },
+    Skin {
+        key: "baleares",
+        name: "Baleares",
+        region: "España",
+        walls: &["s_mares", "w_cream", "w_white"],
+        base: &["s_mares"],
+        trims: &["s_mares", "w_white"],
+        frames: &["f_green", "f_brown"],
+        shutters: &["f_green"],
+        doors: &["f_brown", "f_green"],
+        pitch: 0.4,
+        eaves: 0.35,
+        win: (1.0, 1.8),
+        bay: 2.4,
+        shut: Shut::Louvred,
+        head: Head::Arch,
+        balc: Balc::Iron,
+        ground: Ground::Door,
+        top: Top::Tiles,
+        storey: (3.4, 3.0),
+        floors: 3,
+        extras: PLANTS | FLOWERS,
+        block: Block {
+            walls: &["w_white", "w_cream"],
+            balc: Balc::Glazed,
+            floors: 6,
+            extras: TANK,
+            ..NO_BLOCK
+        },
+        house: House {
+            walls: &["s_mares", "w_white"],
+            porch: Porch::Arcade,
+            fence: Fence::Wall,
+            shut: Shut::Louvred,
+            extras: PALM | TREE,
+            ..NO_HOUSE
+        },
+        ..BASE
+    },
 ];
 
 const ANDALUSIA: Skin = Skin {
@@ -1437,6 +1667,12 @@ type PlaceBox = ((f64, f64), (f64, f64), &'static str);
 const PLACES: &[PlaceBox] = &[
     // Spain, by regions; the Canaries take the south's.
     ((27.5, 29.5), (-18.5, -13.0), "andalucia"),
+    ((38.6, 40.2), (1.0, 4.5), "baleares"),
+    ((39.95, 40.2), (-2.3, -2.0), "colgadas"),
+    ((38.6, 40.8), (-1.5, 0.6), "valencia"),
+    ((38.3, 40.5), (-7.6, -4.6), "extremadura"),
+    ((38.6, 40.0), (-4.6, -1.5), "mancha"),
+    ((42.7, 43.3), (-7.0, -3.5), "montana"),
     ((35.8, 38.6), (-7.6, -1.6), "andalucia"),
     ((41.8, 44.0), (-9.5, -1.5), "norte"),
     ((37.8, 42.9), (-1.6, 4.5), "mediterraneo"),
@@ -1485,6 +1721,87 @@ pub fn skin_at(lat: f64, lon: f64) -> usize {
         .find(|((a, b), (c, d), _)| (*a..=*b).contains(&lat) && (*c..=*d).contains(&lon))
         .map_or("tropico", |p| p.2);
     SKINS.iter().position(|s| s.key == key).unwrap_or(0)
+}
+
+/// A place's skin as built today: the same place's light and colours,
+/// big windows without bars, flat roofs (the North and Japan keep their
+/// slopes, in metal), plain fronts with terraces, wood and concrete.
+pub fn contemporary(base: &Skin) -> Skin {
+    let walls: &'static [&'static str] = match base.key {
+        "nordico" => &["b_dark", "b_cedar", "w_white"],
+        "japon" | "corea" => &["c_concrete", "b_dark", "w_white"],
+        "reino_unido" | "paises_bajos" | "nueva_york" => &["k_dark", "c_concrete", "w_white"],
+        "andalucia" | "algarve" | "grecia" | "mancha" | "extremadura" | "baleares" => {
+            &["w_white", "w_pearl"]
+        }
+        "magreb" | "california" | "latam" => &["w_cream", "w_white", "c_concrete"],
+        _ => &["w_white", "c_concrete", "w_pearl"],
+    };
+    let pitched = matches!(base.key, "nordico" | "japon" | "centroeuropa" | "montana");
+    let spain = base.region == "España";
+    Skin {
+        walls,
+        base: &[],
+        trims: &["c_concrete", "b_cedar", "f_black"],
+        accents: &[],
+        frames: &["f_black", "f_alu", "f_bronze"],
+        shutters: &["b_cedar"],
+        roof_mat: if pitched { "r_zinc" } else { "r_gravel" },
+        roof: if pitched { Roof::Gable } else { Roof::Flat },
+        cover: Cover::Seam,
+        pitch: if pitched { 0.7 } else { base.pitch },
+        eaves: 0.15,
+        sash: Sash::Sliding,
+        leaves: 2,
+        panes: (1, 1),
+        win: ((base.win.0 * 1.6).min(2.6), base.win.1 + 0.5),
+        bay: base.bay + 0.6,
+        shut: if spain { Shut::Roller } else { Shut::None },
+        head: Head::Plain,
+        balc: match base.balc {
+            Balc::None | Balc::Bay | Balc::Mashrabiya => Balc::None,
+            _ => Balc::Slab,
+        },
+        ground: match base.ground {
+            Ground::Lattice | Ground::Stoop => Ground::Door,
+            g => g,
+        },
+        lift: 0.0,
+        top: Top::None,
+        gable: Gable::Plain,
+        extras: base.extras & (AC | PLANTS | PALM | TREE | SIGNS),
+        block: Block {
+            walls: &[],
+            balc: Balc::Slab,
+            roof: Roof::Flat,
+            top: Top::None,
+            extras: base.block.extras & (AC | TANK | SOLAR),
+            ..base.block
+        },
+        house: House {
+            walls: &[],
+            roof: if pitched { Roof::Gable } else { Roof::Flat },
+            cover: Cover::Seam,
+            roof_mat: if pitched { "r_zinc" } else { "" },
+            pitch: if pitched { 0.7 } else { 0.4 },
+            porch: Porch::None,
+            fence: Fence::Hedge,
+            shut: if spain { Shut::Roller } else { Shut::None },
+            balc: Balc::None,
+            raised: 0.0,
+            extras: base.house.extras & (PALM | TREE),
+            ..base.house
+        },
+        tower: TowerSkin {
+            style: if base.tower.style == TowerStyle::Deco {
+                TowerStyle::Glass
+            } else {
+                base.tower.style
+            },
+            ..base.tower
+        },
+        ..*base
+    }
 }
 
 #[cfg(test)]

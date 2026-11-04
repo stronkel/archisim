@@ -1596,7 +1596,8 @@ fn world_solids(
     use archisim_core::props::fine::buildings::world::{
         material_of,
         plan::{Plan, Side as WSide},
-        types::dress_cached,
+        state::State,
+        types::{dress_cached_with, Era},
     };
     use archisim_core::WorldTypology;
     let n = poly.len();
@@ -1636,10 +1637,12 @@ fn world_solids(
         poly: poly.iter().map(|p| [p.x - o.x, p.y - o.y]).collect(),
         sides,
     };
-    let mesh = dress_cached(
+    let mesh = dress_cached_with(
         &plan,
         w.typology.props(),
         w.place as usize,
+        Era::of(w.era as f64),
+        State::of(w.state as f64),
         floors,
         w.variant as u64,
         light,

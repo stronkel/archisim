@@ -15,6 +15,7 @@ pub mod facade;
 pub mod plan;
 pub mod roofs;
 pub mod skins;
+pub mod state;
 pub mod towers;
 pub mod types;
 
@@ -29,6 +30,10 @@ use crate::build::Builder;
 pub const MATERIALS: &[(&str, &str, &str, [u8; 3])] = &[
     ("g_reflect", "Vidrio reflectante", "glass", [104, 140, 166]),
     ("g_opaque", "Vidrio opaco gris", "other", [64, 74, 84]),
+    ("w_faded", "Revoco envejecido", "stone", [198, 190, 172]),
+    ("w_damp", "Mancha de humedad", "stone", [146, 136, 116]),
+    ("s_mares", "Piedra de marés", "stone", [212, 178, 128]),
+    ("r_thatch", "Cubierta de paja", "other", [190, 164, 104]),
     ("w_white", "Cal blanca", "stone", [238, 234, 226]),
     ("w_cream", "Monocapa crema", "render", [226, 208, 172]),
     ("w_yellow", "Estuco amarillo", "render", [239, 207, 106]),
@@ -260,6 +265,67 @@ mod tests {
             }
         }
         bad.dedup();
+        for b in &bad {
+            println!("{b}");
+        }
+        assert!(bad.is_empty(), "{} problems", bad.len());
+    }
+
+    /// Every typology of every place as built today, abandoned and being
+    /// built: made, with their materials and nothing in the air.
+    #[test]
+    fn eras_and_states() {
+        let kinds = [
+            "fine_world_townhouse",
+            "fine_world_block",
+            "fine_world_house",
+            "fine_world_tower",
+            "fine_world_courtyard",
+            "fine_world_row",
+        ];
+        let mut bad = Vec::new();
+        for (i, sk) in SKINS.iter().enumerate() {
+            for kind in kinds {
+                for (era, state) in [(1.0, 0.0), (0.0, 1.0), (0.0, 2.0), (1.0, 1.0)] {
+                    let mut p = Params::default();
+                    p.set("skin", i as f64);
+                    p.set("era", era);
+                    p.set("state", state);
+                    let m = make(kind, &p).unwrap();
+                    let n = m.triangle_count();
+                    let what = format!("{} {kind} era {era} state {state}", sk.key);
+                    // A tower of forty floors, near, has many.
+                    let most = if kind == "fine_world_tower" {
+                        500_000
+                    } else {
+                        400_000
+                    };
+                    if !(300..=most).contains(&n) {
+                        bad.push(format!("{what}: {n} triangles"));
+                    }
+                    for (role, _) in &m.parts {
+                        if material_of(role).is_none() {
+                            bad.push(format!("{what}: role «{role}» has no material"));
+                        }
+                    }
+                    let loose = check::loose_pieces(&m, check::anchors_for(kind), 0.004);
+                    if let Some(l) = loose.first() {
+                        bad.push(format!(
+                            "{what}: {} loose, {} {:.3} off at x {:.2}..{:.2} y {:.2}..{:.2} z {:.2}..{:.2}",
+                            loose.len(),
+                            l.role,
+                            l.gap,
+                            l.lo[0],
+                            l.hi[0],
+                            l.lo[1],
+                            l.hi[1],
+                            l.lo[2],
+                            l.hi[2]
+                        ));
+                    }
+                }
+            }
+        }
         for b in &bad {
             println!("{b}");
         }

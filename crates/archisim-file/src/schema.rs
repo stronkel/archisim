@@ -1421,10 +1421,6 @@ pub(crate) struct PieceOf {
     pub price: f64,
 }
 
-fn is_zero_u8(v: &u8) -> bool {
-    *v == 0
-}
-
 /// Overheads, profit and VAT (version 34).
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -1617,6 +1613,16 @@ pub(crate) struct WorldDressOf {
     pub place: u8,
     pub typology: String,
     pub variant: u16,
+    /// When it is from (version 73): 0 the place's old way, 1 today's.
+    #[serde(default, skip_serializing_if = "is_zero_u8")]
+    pub era: u8,
+    /// Its state (version 73): 0 in use, 1 abandoned, 2 being built.
+    #[serde(default, skip_serializing_if = "is_zero_u8")]
+    pub state: u8,
+}
+
+fn is_zero_u8(v: &u8) -> bool {
+    *v == 0
 }
 
 impl DressOf {
@@ -1641,6 +1647,8 @@ impl DressOf {
                 place: w.place,
                 typology: w.typology.code().into(),
                 variant: w.variant,
+                era: w.era,
+                state: w.state,
             }),
         }
     }
@@ -1674,6 +1682,8 @@ impl DressOf {
                     typology: core::WorldTypology::from_code(&w.typology)
                         .ok_or_else(|| bad("typology", &w.typology))?,
                     variant: w.variant,
+                    era: w.era.min(1),
+                    state: w.state.min(2),
                 }),
                 None => None,
             },

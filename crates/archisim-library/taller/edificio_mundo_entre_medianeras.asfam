@@ -1,15 +1,17 @@
 family "Casa entre medianeras del mundo (taller)"
   category street
   host none
-  version 1
+  version 2
   description "Casa de una calle entre medianeras vestida con la piel de un lugar: sus colores y piedras, sus ventanas y lo que las cierra, sus balcones, cómo es la planta baja, la cornisa y la cubierta (modelo del taller, en revisión)"
   folder "Taller · Edificios del mundo"
 
 type_params
   section "Lugar"
-    skin integer = 0 range 0..23 label "Lugar (0 Andalucía, 1 Castilla y Madrid, 2 Galicia y el Cantábrico, 3 Cataluña y Levante, 4 Lisboa y Portugal, 5 Algarve, 6 París, 7 Italia, 8 Reino Unido, 9 Centroeuropa, 10 Países Bajos y Bélgica, 11 Países nórdicos, 12 Nueva York y Chicago, 13 Estados Unidos rural, 14 California, 15 San Francisco, 16 Latinoamérica colonial, 17 China, 18 Japón, 19 Corea, 20 Grecia y el Mediterráneo oriental, 21 Magreb y Oriente Medio, 22 Europa del Este, 23 Australia y el trópico)"
+    skin integer = 0 range 0..29 label "Lugar (0 Andalucía, 1 Castilla y Madrid, 2 Galicia y el Cantábrico, 3 Cataluña y Levante, 4 Lisboa y Portugal, 5 Algarve, 6 París, 7 Italia, 8 Reino Unido, 9 Centroeuropa, 10 Países Bajos y Bélgica, 11 Países nórdicos, 12 Nueva York y Chicago, 13 Estados Unidos rural, 14 California, 15 San Francisco, 16 Latinoamérica colonial, 17 China, 18 Japón, 19 Corea, 20 Grecia y el Mediterráneo oriental, 21 Magreb y Oriente Medio, 22 Europa del Este, 23 Australia y el trópico, 24 Montaña cantábrica (casa montañesa), 25 Valencia y su huerta, 26 La Mancha, 27 Cuenca (casas colgadas), 28 Extremadura, 29 Baleares)"
     variant integer = 1 range 0..99 label "Variante (cambia colores, persianas y detalles)"
     lod integer = 0 range 0..1 label "Versión (0 completa, 1 ligera, de lejos)"
+    era integer = 0 range 0..1 label "Época (0 la tradicional del lugar, 1 de hoy)"
+    state integer = 0 range 0..2 label "Estado (0 en uso, 1 abandonado, 2 en obra)"
   section "Dimensiones"
     width length = 8.00 range 4.00..30.00 label "Fachada"
     depth length = 12.00 range 7.00..25.00 label "Fondo"
@@ -17,6 +19,10 @@ type_params
   section "Materiales"
     g_reflect material = "Vidrio reflectante" label "Vidrio reflectante"
     g_opaque material = "Vidrio opaco gris" label "Vidrio opaco gris"
+    w_faded material = "Revoco envejecido" label "Revoco envejecido"
+    w_damp material = "Mancha de humedad" label "Mancha de humedad"
+    s_mares material = "Piedra de marés" label "Piedra de marés"
+    r_thatch material = "Cubierta de paja" label "Cubierta de paja"
     w_white material = "Cal blanca" label "Cal blanca"
     w_cream material = "Monocapa crema" label "Monocapa crema"
     w_yellow material = "Estuco amarillo" label "Estuco amarillo"

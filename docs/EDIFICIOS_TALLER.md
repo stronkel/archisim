@@ -65,6 +65,14 @@ Los ejes 1 y 2 dan el volumen; los ejes 3, 4 y 5 dan la piel. Hay detalles que h
    - las **casas en hilera**, cada una de su color, con jardín delantero, camino y la valla, el seto o la verja del sitio.
    - Al traer el entorno, la torre sale con diez plantas o más (u oficinas desde seis) y la casa patio con el estilo «casa patio».
 
+9. **Tanda 9, época, estado y más regiones** (hecha, en revisión):
+   - **Época**: cada lugar tiene su versión **de hoy**: cubierta plana (los nórdicos, Japón, Centroeuropa y la montaña, inclinada de zinc), huecos grandes con correderas, terrazas de losa, sin molduras ni rejas. Conserva el color del sitio (blanco en el sur, hormigón y madera en el norte) y la persiana enrollable en España.
+   - **Estado**:
+     - **abandonado**: ventanas tapiadas con tablero o vacías, sin macetas, ropa, rótulos ni aires, el revoco envejecido, la humedad subiendo por el zócalo y hierbas al pie;
+     - **en obra**: estructura de hormigón con los pilares de la última planta esperando con sus barras, ladrillo en la mitad de abajo con los huecos de las ventanas, andamio con plataformas y red a la calle, valla de obra y, desde tres plantas, la grúa torre.
+   - **Seis lugares más de España**: montaña cantábrica (casa montañesa con solana), Valencia y su huerta (con la barraca de cubierta de paja como vivienda aislada), La Mancha, Cuenca (casas colgadas con balcones de madera), Extremadura y Baleares (piedra de marés, arcos y persianas mallorquinas). Al traer el entorno, cada uno sale por su zona.
+   - Época y estado se eligen en las recetas («Época», «Estado») y en Propiedades → «Edificio del mundo».
+
 Cuando Antonio apruebe una tanda, la integración será que los estilos de U6 (y U7, al traer el Catastro) usen estos modelos sobre la planta y las plantas que tenga cada masa.
 
 ## 4. Las pieles por lugar (tanda 6)
@@ -81,8 +89,8 @@ Una **piel** dice con qué y cómo construye un lugar; las **tipologías** son e
   - la cornisa;
   - la cubierta: plana con pretil o balaustrada, a dos aguas, hastial a la calle escalonado o de campana, a cuatro aguas, mansarda con buhardillas o la oriental. Va de teja curva, en hiladas (pizarra, teja plana, tejuela) o de chapa con sus juntas;
   - lo que cada sitio pone en la fachada y en la azotea: aires acondicionados, ropa tendida, jardineras, depósitos, chimeneas con sus cañones, la chimenea algarvía, el depósito de madera de Nueva York, los calentadores solares, rótulos verticales…
-- **Los 24 lugares:**
-  - España: Andalucía; Castilla y Madrid; Galicia y el Cantábrico; Cataluña y Levante.
+- **Los lugares:**
+  - España: Andalucía; Castilla y Madrid; Galicia y el Cantábrico; Cataluña y Levante; y desde la tanda 9 montaña cantábrica, Valencia, La Mancha, Cuenca, Extremadura y Baleares (30 lugares en total).
   - Península: Lisboa y Portugal; Algarve.
   - Europa: París; Italia; Reino Unido; Centroeuropa; Países Bajos y Bélgica; Países nórdicos.
   - América: Nueva York y Chicago; Estados Unidos rural; California; San Francisco; Latinoamérica colonial.
@@ -94,4 +102,5 @@ Una **piel** dice con qué y cómo construye un lugar; las **tipologías** son e
 - **Para el programador:**
   - las pieles son datos en `archisim_props::fine::buildings::world::skins` (`SKINS`);
   - la fachada está en `world::facade`, la cubierta en `world::roofs` y las tipologías en `world::types`;
-  - los materiales, uno por papel, están en `world::MATERIALS`.
+  - los materiales, uno por papel, están en `world::MATERIALS`;
+  - la época de hoy es `skins::contemporary` y los estados están en `world::state` (`abandon`, `site_on`).

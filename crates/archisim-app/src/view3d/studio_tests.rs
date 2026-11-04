@@ -2526,6 +2526,43 @@ fn world_pictures() {
         sheet
             .save_png(dir.join(format!("{:02}-{}-mas.png", i, sk.key)))
             .unwrap();
+        // Built today, abandoned and being built (tanda 9).
+        let era = [
+            (only(&[8, 9, 10]), 205.0, 22.0, 1.1),
+            (only(&[11]), 140.0, 12.0, 1.0),
+            (only(&[12]), 145.0, 16.0, 1.05),
+            (only(&[13]), 140.0, 22.0, 1.15),
+        ];
+        let pics: Vec<Pixmap> = era
+            .iter()
+            .map(|(m, yaw, pitch, zoom)| {
+                building_picture(
+                    &mut r,
+                    &gpu,
+                    m,
+                    |lo, hi| camera(lo, hi, aspect, *yaw, *pitch, *zoom),
+                    size,
+                    Light::Day,
+                )
+            })
+            .collect();
+        let top = side_by_side(&pics[0], &pics[1]);
+        let bottom = side_by_side(&pics[2], &pics[3]);
+        let mut sheet = Pixmap::new(top.width(), top.height() + bottom.height() + 12).unwrap();
+        sheet.fill(resvg::tiny_skia::Color::WHITE);
+        for (pic, y) in [(&top, 0), (&bottom, top.height() + 12)] {
+            sheet.draw_pixmap(
+                0,
+                y as i32,
+                pic.as_ref(),
+                &PixmapPaint::default(),
+                Transform::identity(),
+                None,
+            );
+        }
+        sheet
+            .save_png(dir.join(format!("{:02}-{}-epoca.png", i, sk.key)))
+            .unwrap();
     }
 }
 

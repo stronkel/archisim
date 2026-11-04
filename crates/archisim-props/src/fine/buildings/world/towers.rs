@@ -8,7 +8,9 @@ use super::super::more::{curtain_wall, fruit_tree, well};
 use super::super::*;
 use super::plan::{area, building, face_of, inset, prism_poly, Plan, Shape, Side};
 use super::skins::*;
-use super::types::{finish, floors_of, light_of, seed_of, shape_of, usual_width, Typology};
+use super::types::{
+    finish, floors_of, light_of, seed_of, shape_of, skin_for, usual_width, Typology,
+};
 use super::{look, recolour, Look};
 use crate::build::Builder;
 use crate::Params;
@@ -28,6 +30,11 @@ pub fn tower_on(
     }
     match base.tower.style {
         TowerStyle::Residential => {
+            // Arches over every window of thirty floors are too many: the
+            // tower's are bands.
+            if sk.head == super::skins::Head::Arch {
+                sk.head = super::skins::Head::Band;
+            }
             let (sk2, l, shape) = shape_of(&sk, Typology::Tower, floors, seed, light);
             let shape = Shape {
                 roof: Roof::Flat,
@@ -386,7 +393,8 @@ pub fn courtyard_on(
 
 /// The tower of a recipe: a rectangle, free on its four sides.
 pub fn tower(b: &mut Builder, p: &Params) {
-    let base = skin_of(p.get("skin", 0.0));
+    let owned = skin_for(p);
+    let base = &owned;
     let w = p.get("width", 24.0).clamp(12.0, 60.0);
     let d = p.get("depth", 20.0).clamp(12.0, 60.0);
     let floors = floors_of(p, base.tower.floors, 60);
@@ -397,7 +405,8 @@ pub fn tower(b: &mut Builder, p: &Params) {
 
 /// The courtyard house of a recipe: a rectangle between party walls.
 pub fn courtyard(b: &mut Builder, p: &Params) {
-    let base = skin_of(p.get("skin", 0.0));
+    let owned = skin_for(p);
+    let base = &owned;
     let w = p.get("width", 16.0).clamp(10.0, 40.0);
     let d = p.get("depth", 18.0).clamp(10.0, 40.0);
     let floors = floors_of(p, base.house.floors.clamp(1, 2), 3);
@@ -409,7 +418,8 @@ pub fn courtyard(b: &mut Builder, p: &Params) {
 /// A row of houses of the street, each its own colour, with their front
 /// gardens and their fences.
 pub fn row(b: &mut Builder, p: &Params) {
-    let base = skin_of(p.get("skin", 0.0));
+    let owned = skin_for(p);
+    let base = &owned;
     let seed = seed_of(p);
     let w = p.get("width", 0.0);
     let unit = usual_width(base).min(9.0);

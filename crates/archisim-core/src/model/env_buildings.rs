@@ -504,13 +504,23 @@ pub struct Dress {
 }
 
 /// A building of the surroundings made as one of the world's: its place
-/// (the number of its skin), its typology and its variant.
+/// (the number of its skin), its typology and its variant; when it is
+/// from (`era`: 0 the place's old way, 1 today's) and its state (`state`:
+/// 0 in use, 1 abandoned, 2 being built).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct WorldDress {
     pub place: u8,
     pub typology: WorldTypology,
     pub variant: u16,
+    pub era: u8,
+    pub state: u8,
 }
+
+/// The eras of the world's buildings, as the dress keeps them.
+pub const WORLD_ERAS: [(u8, &str); 2] = [(0, "Tradicional del lugar"), (1, "De hoy")];
+
+/// The states of the world's buildings, as the dress keeps them.
+pub const WORLD_STATES: [(u8, &str); 3] = [(0, "En uso"), (1, "Abandonado"), (2, "En obra")];
 
 /// The typologies of the world's buildings.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -799,7 +809,13 @@ impl Dress {
                         self.ridge_turned as u8,
         ) + &self
             .world
-            .map(|w| format!(";world={},{},{}", w.place, w.typology.code(), w.variant))
+            .map(|w| {
+                let mut s = format!(";world={},{},{}", w.place, w.typology.code(), w.variant);
+                if w.era != 0 || w.state != 0 {
+                    s += &format!(",{},{}", w.era, w.state);
+                }
+                s
+            })
             .unwrap_or_default()
     }
 
@@ -838,6 +854,8 @@ impl Dress {
                         place: it.next()?.parse().ok()?,
                         typology: WorldTypology::from_code(it.next()?)?,
                         variant: it.next()?.parse().ok()?,
+                        era: it.next().and_then(|e| e.parse().ok()).unwrap_or(0),
+                        state: it.next().and_then(|e| e.parse().ok()).unwrap_or(0),
                     });
                 }
                 _ => {}
@@ -943,6 +961,8 @@ impl Model {
                     place,
                     typology,
                     variant: (id.0 % 97) as u16 + 1,
+                    era: d.world.map_or(0, |w| w.era),
+                    state: d.world.map_or(0, |w| w.state),
                 }
             });
             if d.world.is_some() {

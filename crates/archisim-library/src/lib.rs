@@ -2364,6 +2364,10 @@ pub const COZY_PALETTE: &[(&str, &str, [u8; 3])] = &[
     ("Lacado rojo", "wood", [152, 48, 42]),
     ("Lacado amarillo", "wood", [222, 180, 62]),
     ("Ladrillo de Londres", "brick", [190, 164, 118]),
+    ("Piedra de marés", "stone", [212, 178, 128]),
+    ("Revoco envejecido", "stone", [198, 190, 172]),
+    ("Mancha de humedad", "stone", [146, 136, 116]),
+    ("Cubierta de paja", "other", [190, 164, 104]),
 ];
 
 /// The steel of the reinforcement (E11): the project's, or added.

@@ -6,6 +6,30 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-04 (98) · Taller de edificios, tanda 9: época, estado y seis regiones más de España
+
+Misma rama y mismo pull request (#160). **Formato `.archisim` versión 73** (la época y el estado del edificio del mundo).
+
+**Hecho**
+- **Época «de hoy»** para los 30 lugares: cubierta plana (inclinada de zinc en el norte, Japón y la montaña), huecos grandes con correderas, terrazas de losa, sin molduras ni rejas, con el color del sitio y la persiana enrollable en España.
+- **Estado «abandonado»**: ventanas tapiadas o vacías, nada en balcones ni fachada, revoco envejecido, humedad en el zócalo, hierbas al pie.
+- **Estado «en obra»**: estructura de hormigón con las esperas de la última planta, ladrillo en la mitad de abajo, andamio con red a la calle, valla y grúa torre desde tres plantas.
+- **Seis lugares nuevos de España**: montaña cantábrica (solana), Valencia (la barraca como vivienda aislada), La Mancha, Cuenca (casas colgadas), Extremadura y Baleares (marés). Al traer el entorno salen por su zona, antes que los generales de España.
+- Las torres de viviendas ya no llevan un arco sobre cada ventana (eran demasiados triángulos): bandas.
+- En Propiedades → «Edificio del entorno» → «Edificio del mundo», dos listas nuevas: «Época» y «Estado». En las recetas del taller, los parámetros «Época» y «Estado».
+- Taller: cada lugar tiene una tercera fila (`archisim mundo out/`): entre medianeras, bloque y aislada de hoy; entre medianeras y bloque abandonados; bloque en obra. Fotos en `NN-<lugar>-epoca.png`.
+
+**Pendiente**
+- Siguiente: equipamientos y comercio por región (fábricas, escuelas, bibliotecas, ayuntamientos, bomberos, policía, polideportivos, estadios, quioscos, tiendas, mercadillos, galerías y centros comerciales, gimnasios, chiringuitos, restaurantes, tabernas, plazas y edificios emblemáticos).
+- Pasar del taller a la biblioteca: solo cuando Antonio lo apruebe.
+
+**Qué debe probar Antonio**
+1. `cargo run --release -p archisim-cli -- mundo out/ andalucia montana valencia mancha colgadas extremadura baleares` y abre `out/mundo.archisim`: la tercera fila de cada lugar son las versiones de hoy, abandonadas y en obra.
+2. Mira si la casa montañesa, la barraca, la casa manchega, las colgadas, la extremeña y la balear te parecen de su sitio, y dime qué cambiarías de cada una.
+3. Con un entorno traído, selecciona unos edificios, ponlos «En obra» o «Abandonado» en Propiedades y mira el 3D.
+
+---
+
 ## 2026-11-04 (97) · Taller de edificios, tanda 8: torres, casas patio y casas en hilera
 
 Misma rama y mismo pull request (#160). Sin cambios de formato: el `dress` de la versión 72 admite las tipologías nuevas. Los ficheros guardados con estas tipologías solo los abre esta versión o una posterior.

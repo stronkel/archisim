@@ -9,6 +9,7 @@ use super::facade::{Front, REVEAL};
 use super::plan::{building, Plan, Shape, Side};
 use super::roofs::faces;
 use super::skins::*;
+use super::state::State;
 use super::{look, recolour, Look};
 use crate::build::Builder;
 use crate::Params;
@@ -231,13 +232,82 @@ pub fn dress(
     seed: u64,
     light: bool,
 ) -> crate::PropMesh {
+    dress_with(
+        plan,
+        t,
+        skin,
+        Era::Old,
+        State::Standing,
+        floors,
+        seed,
+        light,
+    )
+}
+
+/// When a building of a place is from: the old one of the place or the
+/// one built today.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Era {
+    Old,
+    Today,
+}
+
+impl Era {
+    pub fn of(n: f64) -> Era {
+        if n.round() as i64 == 1 {
+            Era::Today
+        } else {
+            Era::Old
+        }
+    }
+}
+
+/// The skin of a place in an era.
+pub fn skin_with(skin: usize, era: Era) -> Skin {
     let base = skin_of(skin as f64);
+    match era {
+        Era::Old => *base,
+        Era::Today => super::skins::contemporary(base),
+    }
+}
+
+/// The skin a recipe asks for (`skin` and `era`).
+pub(super) fn skin_for(p: &Params) -> Skin {
+    skin_with(
+        p.get("skin", 0.0).round().max(0.0) as usize,
+        Era::of(p.get("era", 0.0)),
+    )
+}
+
+/// [`dress`] of an era and in a state.
+#[allow(clippy::too_many_arguments)]
+pub fn dress_with(
+    plan: &Plan,
+    t: Typology,
+    skin: usize,
+    era: Era,
+    state: State,
+    floors: usize,
+    seed: u64,
+    light: bool,
+) -> crate::PropMesh {
+    let owned = skin_with(skin, era);
+    let base = &owned;
     let floors = if floors == 0 {
         usual_floors(base, t)
     } else {
         floors
     };
     let mut b = Builder::default();
+    if state == State::Building {
+        super::state::site_on(&mut b, plan, base, floors, seed, light);
+        return crate::PropMesh {
+            positions: b.positions,
+            parts: b.parts.into_iter().collect(),
+            soft: b.soft.into_iter().collect(),
+            fine: b.fine.into_iter().collect(),
+        };
+    }
     match t {
         Typology::Tower => {
             let l = super::towers::tower_on(&mut b, plan, base, floors, seed, light);
@@ -258,6 +328,9 @@ pub fn dress(
             finish(&mut b, &l);
         }
     }
+    if state == State::Abandoned {
+        super::state::abandon(&mut b, plan, seed);
+    }
     crate::PropMesh {
         positions: b.positions,
         parts: b.parts.into_iter().collect(),
@@ -272,7 +345,8 @@ pub(super) fn light_of(p: &Params) -> bool {
 
 /// The house between party walls of a street.
 pub fn townhouse(b: &mut Builder, p: &Params) {
-    let base = skin_of(p.get("skin", 0.0));
+    let owned = skin_for(p);
+    let base = &owned;
     let seed = seed_of(p);
     let w = p.get("width", 0.0);
     let w = if w <= 0.0 {
@@ -290,7 +364,8 @@ pub fn townhouse(b: &mut Builder, p: &Params) {
 
 /// The block of flats, free on its four sides.
 pub fn block(b: &mut Builder, p: &Params) {
-    let base = skin_of(p.get("skin", 0.0));
+    let owned = skin_for(p);
+    let base = &owned;
     let seed = seed_of(p);
     let w = p.get("width", 22.0).clamp(10.0, 60.0);
     let d = p.get("depth", 14.0).clamp(9.0, 24.0);
@@ -303,7 +378,8 @@ pub fn block(b: &mut Builder, p: &Params) {
 
 /// The detached house in its plot.
 pub fn house(b: &mut Builder, p: &Params) {
-    let base = skin_of(p.get("skin", 0.0));
+    let owned = skin_for(p);
+    let base = &owned;
     let seed = seed_of(p);
     let h = base.house;
     let w = p.get("width", 10.0).clamp(6.0, 20.0);
@@ -789,12 +865,14 @@ pub fn sample(b: &mut Builder, p: &Params) {
         4 => Typology::Courtyard,
         _ => Typology::Townhouse,
     };
-    let base = skin_of(p.get("skin", 0.0));
-    let floors = floors_of(p, usual_floors(base, t), 60);
-    let m = dress(
+    let owned = skin_for(p);
+    let floors = floors_of(p, usual_floors(&owned, t), 60);
+    let m = dress_with(
         plan,
         t,
         p.get("skin", 0.0).round().max(0.0) as usize,
+        Era::of(p.get("era", 0.0)),
+        State::of(p.get("state", 0.0)),
         floors,
         seed_of(p),
         light_of(p),
@@ -821,6 +899,30 @@ pub fn dress_cached(
     seed: u64,
     light: bool,
 ) -> std::sync::Arc<crate::PropMesh> {
+    dress_cached_with(
+        plan,
+        t,
+        skin,
+        Era::Old,
+        State::Standing,
+        floors,
+        seed,
+        light,
+    )
+}
+
+/// [`dress_with`], kept.
+#[allow(clippy::too_many_arguments)]
+pub fn dress_cached_with(
+    plan: &Plan,
+    t: Typology,
+    skin: usize,
+    era: Era,
+    state: State,
+    floors: usize,
+    seed: u64,
+    light: bool,
+) -> std::sync::Arc<crate::PropMesh> {
     use std::hash::{Hash, Hasher};
     static CACHE: std::sync::OnceLock<DressCache> = std::sync::OnceLock::new();
     let mut h = std::collections::hash_map::DefaultHasher::new();
@@ -831,13 +933,13 @@ pub fn dress_cached(
     for s in &plan.sides {
         (*s as u8).hash(&mut h);
     }
-    (t as u8, skin, floors, seed, light).hash(&mut h);
+    (t as u8, skin, era, state as u8, floors, seed, light).hash(&mut h);
     let key = h.finish();
     let cache = CACHE.get_or_init(Default::default);
     if let Some(m) = cache.lock().ok().and_then(|c| c.get(&key).cloned()) {
         return m;
     }
-    let m = std::sync::Arc::new(dress(plan, t, skin, floors, seed, light));
+    let m = std::sync::Arc::new(dress_with(plan, t, skin, era, state, floors, seed, light));
     if let Ok(mut c) = cache.lock() {
         if c.len() > 4000 {
             c.clear();

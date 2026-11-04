@@ -651,13 +651,25 @@ pub fn make(kind: &str, b: &mut Builder, p: &Params) -> bool {
         "fine_shop_and_flats" => buildings::commerce::shop_and_flats(b, p),
         "fine_urban_hotel" => buildings::commerce::urban_hotel(b, p),
         "fine_supermarket" => buildings::commerce::supermarket(b, p),
-        "fine_world_townhouse" => buildings::world::types::townhouse(b, p),
-        "fine_world_block" => buildings::world::types::block(b, p),
-        "fine_world_house" => buildings::world::types::house(b, p),
+        "fine_world_townhouse" => {
+            buildings::world::state::recipe(kind, b, p, buildings::world::types::townhouse)
+        }
+        "fine_world_block" => {
+            buildings::world::state::recipe(kind, b, p, buildings::world::types::block)
+        }
+        "fine_world_house" => {
+            buildings::world::state::recipe(kind, b, p, buildings::world::types::house)
+        }
         "fine_world_sample" => buildings::world::types::sample(b, p),
-        "fine_world_tower" => buildings::world::towers::tower(b, p),
-        "fine_world_courtyard" => buildings::world::towers::courtyard(b, p),
-        "fine_world_row" => buildings::world::towers::row(b, p),
+        "fine_world_tower" => {
+            buildings::world::state::recipe(kind, b, p, buildings::world::towers::tower)
+        }
+        "fine_world_courtyard" => {
+            buildings::world::state::recipe(kind, b, p, buildings::world::towers::courtyard)
+        }
+        "fine_world_row" => {
+            buildings::world::state::recipe(kind, b, p, buildings::world::towers::row)
+        }
         "built_in_wardrobe" => built_in::wardrobe(b, p),
         "door" => door::door(b, p),
         "sliding_door" => door::sliding_door(b, p),

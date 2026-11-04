@@ -389,6 +389,8 @@ impl ArchiSimApp {
                         typology: archisim_core::WorldTypology::for_style(x.style, 1, floors)
                             .unwrap_or(archisim_core::WorldTypology::Block),
                         variant: (who.0 % 97) as u16 + 1,
+                        era: 0,
+                        state: 0,
                     }
                 });
             }
@@ -435,6 +437,30 @@ impl ArchiSimApp {
                             .changed()
                         {
                             w.variant = v as u16;
+                            changed = true;
+                        }
+                    },
+                );
+                row(
+                    ui,
+                    "Época",
+                    "La de siempre del lugar o como se construye hoy allí",
+                    |ui, wd| {
+                        let c = choice(ui, "env-world-era", wd, w.era, &archisim_core::WORLD_ERAS);
+                        if c != w.era {
+                            w.era = c;
+                            changed = true;
+                        }
+                    },
+                );
+                row(
+                    ui,
+                    "Estado",
+                    "En uso, abandonado (ventanas tapiadas o vacías) o en obra (estructura, andamio y grúa)",
+                    |ui, wd| {
+                        let c = choice(ui, "env-world-state", wd, w.state, &archisim_core::WORLD_STATES);
+                        if c != w.state {
+                            w.state = c;
                             changed = true;
                         }
                     },

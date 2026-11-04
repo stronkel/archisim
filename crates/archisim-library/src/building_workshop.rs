@@ -926,7 +926,85 @@ pub fn world_pieces(only: &[&str]) -> Vec<WorldPiece> {
             at: (x + rw / 2.0, y),
             size: (rw, rd),
         });
-        y -= 60.0;
+        // Tanda 9: the place as built today, abandoned and being built.
+        let yy = y - 40.0;
+        let mut x = 0.0;
+        let era: [(&str, &str, f64, f64, f64, f64, usize); 6] = [
+            (
+                "Entre medianeras de hoy",
+                WORLD_TOWNHOUSE,
+                1.0,
+                0.0,
+                w,
+                d,
+                sk.floors,
+            ),
+            (
+                "Bloque de hoy",
+                WORLD_BLOCK,
+                1.0,
+                0.0,
+                bw,
+                bd,
+                sk.block.floors,
+            ),
+            (
+                "Vivienda aislada de hoy",
+                WORLD_HOUSE,
+                1.0,
+                0.0,
+                hw,
+                hd,
+                sk.house.floors,
+            ),
+            (
+                "Entre medianeras abandonada",
+                WORLD_TOWNHOUSE,
+                0.0,
+                1.0,
+                w,
+                d,
+                sk.floors,
+            ),
+            (
+                "Bloque abandonado",
+                WORLD_BLOCK,
+                0.0,
+                1.0,
+                bw,
+                bd,
+                sk.block.floors,
+            ),
+            (
+                "Bloque en obra",
+                WORLD_BLOCK,
+                0.0,
+                2.0,
+                bw,
+                bd,
+                sk.block.floors,
+            ),
+        ];
+        for (what, family, e, st, pw, pd, floors) in era {
+            out.push(WorldPiece {
+                skin: i,
+                family,
+                name: format!("{what} · {} (taller)", sk.name),
+                values: vec![
+                    ("skin", i as f64),
+                    ("variant", 2.0),
+                    ("era", e),
+                    ("state", st),
+                    ("width", pw),
+                    ("depth", pd),
+                    ("floors", floors as f64),
+                ],
+                at: (x + pw / 2.0, yy),
+                size: (pw, pd),
+            });
+            x += pw + 10.0;
+        }
+        y -= 90.0;
     }
     out
 }
@@ -1001,7 +1079,7 @@ mod tests {
     #[test]
     fn the_world_is_made() {
         let m = world_project(&["andalucia", "paris", "japon"]).unwrap();
-        assert_eq!(m.objects().count(), 24);
+        assert_eq!(m.objects().count(), 42);
         for t in m.object_types().filter(|t| t.name.ends_with("(taller)")) {
             let (mesh, _) = m.type_prop(t.id).expect("a model");
             let family = m.family(t.family).unwrap().name().to_string();
