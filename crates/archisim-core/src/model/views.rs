@@ -65,6 +65,24 @@ pub struct ViewTemplate {
     pub style: ViewStyle,
 }
 
+/// A saved point of view of the 3D view (the Cámara tile of
+/// Presentación): where it looks, from how far, how tilted and turned,
+/// and whether in perspective; a walk at eye height is a camera close to
+/// the point it looks at.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SavedCamera {
+    pub id: CameraId,
+    pub name: String,
+    /// The point looked at, metres.
+    pub target: [f64; 3],
+    /// Tilt over the horizontal and turn, radians (the 3D view's).
+    pub pitch: f64,
+    pub yaw: f64,
+    /// From the eye to the point looked at, metres.
+    pub distance: f64,
+    pub perspective: bool,
+}
+
 /// A reference plane: a named line to draw against (Revit's reference
 /// plane), seen dashed in every plan and snapped to. Not built, not in
 /// the IFC.
@@ -311,6 +329,92 @@ impl Model {
             .ok_or(ModelError::UnknownRefPlane(id))
     }
 
+    // ---- Saved cameras --------------------------------------------------------
+
+    pub fn cameras(&self) -> impl Iterator<Item = &SavedCamera> {
+        self.cameras.values()
+    }
+
+    pub fn camera(&self, id: CameraId) -> Option<&SavedCamera> {
+        self.cameras.get(&id)
+    }
+
+    fn check_camera(&self, c: &SavedCamera) -> Result<(), ModelError> {
+        let finite = c.target.iter().all(|v| v.is_finite())
+            && c.pitch.is_finite()
+            && c.yaw.is_finite()
+            && c.distance.is_finite();
+        if !finite {
+            return Err(ModelError::NotFinite("camera"));
+        }
+        if c.distance <= 0.0 {
+            return Err(ModelError::NonPositive("camera distance"));
+        }
+        if c.name.trim().is_empty() {
+            return Err(ModelError::EmptyName);
+        }
+        Ok(())
+    }
+
+    /// Saves a point of view; an empty name gets the next free one
+    /// («Cámara 1»…).
+    pub fn add_camera(&mut self, mut c: SavedCamera) -> Result<CameraId, ModelError> {
+        if c.name.trim().is_empty() {
+            let taken = |n: &str| self.cameras.values().any(|k| k.name == n);
+            c.name = (1..)
+                .map(|i| format!("Cámara {i}"))
+                .find(|n| !taken(n))
+                .unwrap_or_default();
+        }
+        c.name = c.name.trim().to_string();
+        c.id = CameraId(0);
+        self.check_camera(&c)?;
+        c.id = CameraId(self.take_id());
+        let id = c.id;
+        self.cameras.insert(id, c);
+        Ok(id)
+    }
+
+    pub fn edit_camera(
+        &mut self,
+        id: CameraId,
+        f: impl FnOnce(&mut SavedCamera),
+    ) -> Result<(), ModelError> {
+        let mut c = self
+            .cameras
+            .get(&id)
+            .cloned()
+            .ok_or(ModelError::UnknownCamera(id))?;
+        f(&mut c);
+        c.id = id;
+        self.check_camera(&c)?;
+        self.cameras.insert(id, c);
+        Ok(())
+    }
+
+    pub fn remove_camera(&mut self, id: CameraId) -> Result<SavedCamera, ModelError> {
+        self.cameras
+            .remove(&id)
+            .ok_or(ModelError::UnknownCamera(id))
+    }
+
+    pub(super) fn restore_cameras(
+        &mut self,
+        cameras: Vec<SavedCamera>,
+        claim: &mut structure::Claim<'_>,
+    ) -> Result<(), RestoreError> {
+        for c in cameras {
+            claim(c.id.0, None)
+                .and_then(|_| self.check_camera(&c))
+                .map_err(|error| RestoreError {
+                    element: format!("camera {}", c.id.0),
+                    error,
+                })?;
+            self.cameras.insert(c.id, c);
+        }
+        Ok(())
+    }
+
     /// Takes a presentation style away from every saved view, level plan
     /// and template.
     pub(super) fn forget_presentation(&mut self, id: PresentationStyleId) {
@@ -326,6 +430,7 @@ impl Model {
         self.view_templates
             .values_mut()
             .for_each(|t| clear(&mut t.style));
+        self.sections.values_mut().for_each(|x| clear(&mut x.style));
     }
 
     pub(super) fn restore_views(
@@ -396,6 +501,30 @@ mod tests {
                 style: style.clone(),
             })
             .unwrap();
+        // A saved camera, named by itself.
+        let cam = SavedCamera {
+            id: CameraId(0),
+            name: String::new(),
+            target: [1.0, 2.0, 0.0],
+            pitch: 0.5,
+            yaw: -1.0,
+            distance: 20.0,
+            perspective: true,
+        };
+        let c = m.add_camera(cam.clone()).unwrap();
+        assert_eq!(m.camera(c).unwrap().name, "Cámara 1");
+        assert!(m
+            .add_camera(SavedCamera {
+                distance: 0.0,
+                ..cam.clone()
+            })
+            .is_err());
+        m.edit_camera(c, |k| k.name = "Fachada sur".into()).unwrap();
+        assert_eq!(m.camera(c).unwrap().name, "Fachada sur");
+        let back = Model::from_parts(m.to_parts()).unwrap();
+        assert_eq!(back.camera(c), m.camera(c));
+        m.remove_camera(c).unwrap();
+        assert!(m.camera(c).is_none());
         // Names are unique.
         let mut dup = m.plan_view(v).unwrap().clone();
         assert!(m.add_plan_view(dup.clone()).is_err());
@@ -415,7 +544,7 @@ mod tests {
         let t = m
             .add_view_template(ViewTemplate {
                 id: ViewTemplateId(0),
-                name: "AD5".into(),
+                name: "Blanco y negro".into(),
                 style: ViewStyle::ad5(),
             })
             .unwrap();

@@ -118,14 +118,14 @@ impl ArchiSimApp {
 
     /// A presentation board of the active level on A3: title, plan, 3D
     /// view, section, areas and the sun, in the active view's style (or
-    /// the studio's, AD5).
+    /// «Blanco y negro»).
     pub(super) fn new_presentation_sheet(&mut self) {
         let model = self.ed.model();
         let number = model.next_sheet_number();
         let style = self.view_style.presentation.or_else(|| {
             model
                 .presentation_styles()
-                .find(|s| s.name == "AD5")
+                .find(|s| s.name == "Blanco y negro" || s.name == "AD5")
                 .or_else(|| model.presentation_styles().next())
                 .map(|s| s.id)
         });
@@ -668,6 +668,7 @@ impl ArchiSimApp {
             &format!("Plano {} · {}", sheet.number, sheet.size_name()),
         );
         let mut new = sheet.clone();
+        let mut open_blocks: Option<Option<archisim_core::TitleBlockId>> = None;
         group(ui, "sheet-id", "Plano", |ui| {
             row(ui, "Número", "Único en el proyecto", |ui, w| {
                 if let Some(t) = text_edit_committed(
@@ -732,6 +733,33 @@ impl ArchiSimApp {
             row(ui, "Marco y cajetín", "", |ui, _| {
                 ui.switch(&mut new.title_block, "");
             });
+            let blocks: Vec<(Option<archisim_core::TitleBlockId>, String)> = {
+                let m = self.ed.model();
+                let default = m
+                    .default_title_block()
+                    .and_then(|t| m.title_block(t))
+                    .map_or_else(|| "el de la norma".to_string(), |t| t.name.clone());
+                std::iter::once((None, format!("Por defecto ({default})")))
+                    .chain(m.title_blocks().map(|t| (Some(t.id), t.name.clone())))
+                    .collect()
+            };
+            row(
+                ui,
+                "Cajetín",
+                "El cajetín de este plano: el del proyecto por defecto o cualquiera de los suyos (Clásico, Hilo, Faro o uno propio)",
+                |ui, w| {
+                    let refs: Vec<(Option<archisim_core::TitleBlockId>, &str)> =
+                        blocks.iter().map(|(a, b)| (*a, b.as_str())).collect();
+                    new.title_type = choice(ui, "sheet-title-type", w - 30.0, new.title_type, &refs);
+                    if ui
+                        .small_button("✎")
+                        .on_hover_text("Editar los cajetines del proyecto o hacer uno propio")
+                        .clicked()
+                    {
+                        open_blocks = Some(new.title_type);
+                    }
+                },
+            );
             let styles: Vec<(Option<archisim_core::PresentationStyleId>, String)> =
                 std::iter::once((None, "Técnica (sin estilo)".to_string()))
                     .chain(
@@ -751,7 +779,33 @@ impl ArchiSimApp {
                     new.presentation = choice(ui, "sheet-presentation", w, new.presentation, &refs);
                 },
             );
+            row(
+                ui,
+                "Estilo en sus vistas",
+                "Todas las vistas del plano con el estilo del plano (si no, cada una con el suyo)",
+                |ui, _| {
+                    ui.switch(&mut new.restyle_views, "");
+                },
+            );
+            row(
+                ui,
+                "Disciplina",
+                "Las vistas del plano que no tienen disciplina propia se dibujan para esta: un plano de Arquitectura deja fuera las instalaciones",
+                |ui, w| {
+                    let opts: Vec<(Option<archisim_core::ElementDiscipline>, &str)> =
+                        std::iter::once((None, "Todas"))
+                            .chain(archisim_core::ElementDiscipline::ALL.iter().map(|d| {
+                                (Some(*d), super::presentation_ui::discipline_label(*d))
+                            }))
+                            .collect();
+                    new.discipline = choice(ui, "sheet-discipline", w, new.discipline, &opts);
+                },
+            );
         });
+        if let Some(t) = open_blocks {
+            self.title_blocks_ui.open = true;
+            self.title_blocks_ui.selected = t.or(self.ed.model().default_title_block());
+        }
         if new != sheet {
             let r = self.ed.set_sheet(new);
             self.report(r, "Plano cambiado.");
@@ -1175,20 +1229,34 @@ impl ArchiSimApp {
                 active == Some(kind),
                 10.0,
             )
-            .on_hover_text("Abrir el plano");
+            .on_hover_text("Abrir el plano. Clic derecho: renombrar o borrar");
             if r.clicked() {
                 open = Some(kind);
             }
             r.context_menu(|ui| {
-                if ui.button("Borrar el plano").clicked() {
-                    remove = Some(s.id);
-                    ui.close();
+                if let Some(a) =
+                    super::navigator::row_menu(ui, ("sheet", s.id.0), &s.name, "Borrar el plano")
+                {
+                    remove = Some((s.id, a));
                 }
             });
         }
-        if let Some(id) = remove {
-            let r = self.ed.remove_sheet(id);
-            self.report(r, "Plano borrado.");
+        match remove {
+            Some((id, super::navigator::RowAct::Delete)) => {
+                let r = self.ed.remove_sheet(id);
+                self.report(r, "Plano borrado.");
+            }
+            Some((id, super::navigator::RowAct::Rename(n))) => {
+                let r = match self.ed.model().sheet(id).cloned() {
+                    Some(mut s) if !n.is_empty() => {
+                        s.name = n;
+                        self.ed.set_sheet(s)
+                    }
+                    _ => Err("el plano necesita un nombre".into()),
+                };
+                self.report(r, "Plano renombrado.");
+            }
+            None => {}
         }
         open
     }

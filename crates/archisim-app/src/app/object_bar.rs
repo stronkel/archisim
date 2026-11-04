@@ -194,7 +194,8 @@ impl ArchiSimApp {
     }
 
     /// The bar of the selection, at the bottom left over the catalogue.
-    pub(super) fn object_bar(&mut self, ctx: &egui::Context, bottom: f32) {
+    pub(super) fn object_bar(&mut self, ctx: &egui::Context, area: Rect) {
+        let bottom = area.bottom();
         if self.ed.selection.is_empty() || self.tool != Tool::Arrow {
             self.bar_swatches = None;
             return;
@@ -235,7 +236,8 @@ impl ArchiSimApp {
         let mut act = None;
         // The materials that do not fit in the bar.
         let mut hidden: Vec<(String, String, u64, [u8; 3])> = Vec::new();
-        let origin = Pos2::new(16.0, bottom - 16.0);
+        // Over the 3D view only, never over the rail or the catalog.
+        let origin = Pos2::new(area.left() + 12.0, bottom - 12.0);
         let area = egui::Area::new(Id::unique("object-bar"))
             .order(egui::Order::Foreground)
             .pivot(egui::Align2::LEFT_BOTTOM)
@@ -340,7 +342,7 @@ impl ArchiSimApp {
                                             .sum::<f32>()
                                         + 3.0 * 17.0
                                         + 140.0;
-                                    let fit = (((ctx.content_rect().width() - used) / 64.0).floor() as usize).max(3);
+                                    let fit = (((area.width() - 24.0 - used) / 64.0).floor() as usize).max(3);
                                     let shown = if materials.len() > fit { fit - 1 } else { materials.len() };
                                     for (key, name, _, rgb) in &materials[..shown] {
                                         let open = self.bar_swatches.as_deref() == Some(key.as_str());

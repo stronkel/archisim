@@ -129,8 +129,9 @@ type Drawn = (
     Option<CutRule>,
     bool,
     u64,
-    // Quality, sun, thin lines, caps, relief and the water's clock.
-    (Quality, Option<[i32; 3]>, bool, CapStyle, bool, u32),
+    // Quality, sun, thin lines, caps, relief with the style of the faces
+    // (`relief | style << 1`) and the water's clock.
+    (Quality, Option<[i32; 3]>, bool, CapStyle, u8, u32),
     Option<crate::view3d::look::Atmosphere>,
 );
 
@@ -180,6 +181,12 @@ pub struct View3dState {
     pub thin_lines: bool,
     /// The relief of the textures (bricks' bevels, boards' lips…).
     pub relief: bool,
+    /// How the faces are drawn: 0 as their material, 1 «Aristas», 2
+    /// «Líneas ocultas» (`Renderer::style`).
+    pub style: u8,
+    /// Walking through the house (Recorrido): the height of the eyes,
+    /// metres; W A S D walk level at it and the right button looks round.
+    pub walk_eye: Option<f32>,
     /// Water moving (the picture is drawn again while water is in view).
     pub water_motion: bool,
     /// The scene has water seen through (worked out with the scene).
@@ -249,6 +256,8 @@ impl Default for View3dState {
             edge_step: 2,
             thin_lines: true,
             relief: true,
+            style: 0,
+            walk_eye: None,
             water_motion: true,
             has_water: false,
             clock: std::time::Instant::now(),
@@ -552,7 +561,11 @@ impl View3dState {
             overlay_uploaded: 0,
             fill_for: None,
         });
-        if gpu.uploaded != self.scene_serial {
+        // The wireframe's edges are made with the scene, only while it is
+        // shown: switching to or from it uploads the scene again.
+        gpu.renderer.style = self.style;
+        let wire_changed = gpu.renderer.wired() != (self.style == 3);
+        if gpu.uploaded != self.scene_serial || wire_changed {
             crate::crash::stage("3D: subir la escena a la tarjeta gráfica");
             gpu.renderer.set_scene(&gpu.state.device, &self.scene);
             gpu.uploaded = self.scene_serial;
@@ -595,7 +608,7 @@ impl View3dState {
                 self.sun.map(|s| (s * 1000.0).round().as_ivec3().to_array()),
                 self.thin_lines,
                 self.caps,
-                self.relief,
+                u8::from(self.relief) | (self.style << 1),
                 tick,
             ),
             self.atmosphere.clone(),
@@ -613,6 +626,7 @@ impl View3dState {
             gpu.renderer.set_atmosphere(self.atmosphere.clone());
             gpu.renderer.thin_lines = self.thin_lines;
             gpu.renderer.relief = self.relief;
+            gpu.renderer.style = self.style;
             gpu.renderer.time = tick as f32 / 20.0;
             gpu.renderer.render(
                 &gpu.state.device,
@@ -761,6 +775,7 @@ impl View3dState {
         gpu.renderer.set_atmosphere(self.atmosphere.clone());
         gpu.renderer.thin_lines = self.thin_lines;
         gpu.renderer.relief = self.relief;
+        gpu.renderer.style = self.style;
         gpu.renderer.render(
             &gpu.state.device,
             &gpu.state.queue,
@@ -917,14 +932,14 @@ impl ArchiSimApp {
             if nav.invert {
                 d.y = -d.y;
             }
-            if maquette {
+            if maquette && v.walk_eye.is_none() {
                 // The Maqueta's camera looks down at the ground, between
                 // 30° and 70° (§12.5).
                 let (lo, hi) = (30.0_f32.to_radians(), 70.0_f32.to_radians());
                 let wanted = (v.camera.pitch + d.y * 0.008).clamp(lo, hi);
                 d.y = (wanted - v.camera.pitch) / 0.008;
             }
-            if v.flying {
+            if v.flying || v.walk_eye.is_some() {
                 // Looking around from where one is, as in a game.
                 let eye = v.camera.eye();
                 v.camera.orbit_about(d, eye);

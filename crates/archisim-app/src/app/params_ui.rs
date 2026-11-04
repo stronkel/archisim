@@ -74,7 +74,7 @@ impl Draft {
             name: String::new(),
             kind: 0,
             options: String::new(),
-            group: "AD5_Datos".into(),
+            group: "Proyecto_Datos".into(),
             categories: vec![ParamCategory::Doors],
             by_type: true,
             default: String::new(),
@@ -295,7 +295,7 @@ impl ArchiSimApp {
                 ui.end_row();
             }
             ui.label("Grupo (conjunto IFC)").on_hover_text(
-                "El conjunto de propiedades del IFC donde va, y el grupo en Propiedades: «AD5_Datos», o uno de IFC como «Pset_DoorCommon»",
+                "El conjunto de propiedades del IFC donde va, y el grupo en Propiedades: «Proyecto_Datos», o uno de IFC como «Pset_DoorCommon»",
             );
             ui.text_edit_singleline(&mut d.group);
             ui.end_row();

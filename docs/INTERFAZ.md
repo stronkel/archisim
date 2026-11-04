@@ -316,7 +316,7 @@ Lo que se enseña al cliente, al ayuntamiento o en un concurso, aparte de los pl
 ### 12.5 La vista 3D
 
 - **Cubo de vistas** discreto: semitransparente, sin recuadro, arriba a la derecha. Sus caras llevan a planta y alzados (perspectivados, con las verticales rectas), sus esquinas a las cuatro vistas de esquina; al pasar el ratón se ve entero y aparecen girar 90° y la vista de inicio.
-- **Aspecto** arriba a la izquierda: Sombreado (sin texturas), Texturas y Realista (sombras finas y penumbra de los rincones). Aristas y Líneas ocultas, cuando tengan su propio sombreado.
+- **Aspecto** arriba a la izquierda, seis botones: Alámbrico (solo las aristas, se ve a través), Líneas ocultas (blanco con las aristas, lo de detrás tapado), Colores planos (cada material en su color, sin luz ni texturas), Sombreado (con luz, sin texturas), Texturas y Realista (sombras finas y penumbra de los rincones).
 - **Una cámara por modo** (sin selector):
   - **Técnica, cámara libre**: el derecho mantenido gira alrededor de lo que hay bajo el cursor (marcado con un punto naranja); con el derecho apretado, W A S D vuelan, Q y E bajan y suben, Mayús acelera; al soltar, las letras vuelven a ser órdenes.
   - **Maqueta, cámara de maqueta**: mira siempre a un punto del suelo, con la inclinación entre 30° y 70°; W A S D la mueven por el suelo sin pulsar nada.
@@ -339,5 +339,8 @@ Las mismas barras en el mismo sitio. La columna de fichas pasa a ser el catálog
 | V1 ✅ | Colores por disciplina, fichas agrupadas, Presentación, herramientas recolocadas |
 | V2 ✅ | Barras: Entregar arriba; Vista · Anotar · Ayudas abajo |
 | V3 ✅ | Vista 3D: cubo, aspecto, cámara libre con vuelo, navegación |
-| V4 ✅ (primera vuelta) | Propiedades: banda de color y medidas en tarjetas de muros, huecos y forjados |
-| V5 | Maqueta con las mismas barras y su cámara |
+| V4 ✅ | Propiedades: banda de color y medidas en tarjetas de muros, huecos y forjados; después, de pilares, vigas, cubiertas, escaleras y barandillas, y los tipos parecidos en tarjetas bajo el tipo |
+| V5 ✅ | Maqueta con las mismas barras (arriba la del proyecto con Entregar; abajo Vista · Anotar · Ayudas), las estancias en el carril (Construir, Salón, Comedor, Cocina, Baño, Dormitorio, Despacho, Decoración, Deporte, Hostelería y comercio, Diseño, Otros, Exterior), el catálogo en la columna y, sobre el 3D, la fila de planta, cuadrícula, imagen, luz y Encuadrar |
+| V6 ✅ | Presentación completa: Cámara guarda el punto de vista (en el navegador, «Cámaras»: clic para volver, clic derecho para renombrar, actualizar o borrar; formato versión 72), Recorrido a 1,60 m (W A S D andan, el derecho mira, Esc vuelve), panel del Sol (recorrido del sol en verano, equinoccio e invierno, día y hora con deslizadores), y los aspectos Alámbrico, Líneas ocultas y Colores planos |
+
+Pendiente: grabar el recorrido como vídeo y las cámaras en las láminas de presentación.

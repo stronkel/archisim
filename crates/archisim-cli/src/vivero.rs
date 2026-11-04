@@ -177,10 +177,10 @@ pub fn write(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
         ("silueta", "silueta", "líneas"),
         ("ramitos", "ramitos", "líneas"),
         ("ramas y borde", "ramas-y-borde", "líneas"),
-        ("AD5 círculos", "ad5-circulos", "transparente"),
-        ("AD5 racimos", "ad5-racimos", "transparente"),
-        ("AD5 estrella", "ad5-estrella", "transparente"),
-        ("AD5 copa", "ad5-copa", "transparente"),
+        ("dibujo: círculos", "dibujo-circulos", "transparente"),
+        ("dibujo: racimos", "dibujo-racimos", "transparente"),
+        ("dibujo: estrella", "dibujo-estrella", "transparente"),
+        ("dibujo: copa", "dibujo-copa", "transparente"),
     ] {
         let mut t = m.clone();
         let ids: Vec<_> = t.object_types().map(|x| x.id).collect();

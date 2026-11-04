@@ -14,6 +14,45 @@ use super::theme::Palette;
 use super::widgets::{list_row, strong_font};
 use super::*;
 
+/// What the context menu of a view or sheet in the navigator asked for.
+pub(super) enum RowAct {
+    Rename(String),
+    Delete,
+}
+
+/// The context menu of a row of the navigator: a name to edit with
+/// «Renombrar», and «Borrar …» (`what`: "vista", "plano"…).
+pub(super) fn row_menu(
+    ui: &mut Ui,
+    key: impl std::hash::Hash + std::fmt::Debug,
+    name: &str,
+    delete: &str,
+) -> Option<RowAct> {
+    let mut act = None;
+    let edit_id = egui::Id::unique(("nav-rename", key));
+    let mut text: String = ui
+        .ctx()
+        .data(|d| d.get_temp(edit_id))
+        .unwrap_or_else(|| name.to_string());
+    ui.label("Nombre:");
+    let resp = ui.text_edit_singleline(&mut text);
+    ui.ctx().data_mut(|d| d.insert_temp(edit_id, text.clone()));
+    if (resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)))
+        || ui.button("Renombrar").clicked()
+    {
+        act = Some(RowAct::Rename(text.trim().to_string()));
+        ui.ctx().data_mut(|d| d.remove_temp::<String>(edit_id));
+        ui.close();
+    }
+    ui.separator();
+    if ui.button(delete).clicked() {
+        act = Some(RowAct::Delete);
+        ui.ctx().data_mut(|d| d.remove_temp::<String>(edit_id));
+        ui.close();
+    }
+    act
+}
+
 /// A type row of the model tree.
 struct TypeRow {
     /// Doors, windows and objects: the type, to save it in the library.
@@ -145,7 +184,7 @@ impl ArchiSimApp {
         let mut levels_dialog = false;
         let mut new_level_at: Option<egui::Rect> = None;
         let mut make_elevations = false;
-        let mut sections: Vec<(archisim_core::SectionId, String, bool)> = self
+        let mut sections: Vec<(archisim_core::SectionId, String, bool, String)> = self
             .ed
             .model()
             .sections()
@@ -154,11 +193,13 @@ impl ArchiSimApp {
                     s.id,
                     s.title(),
                     s.kind == archisim_core::SectionKind::Elevation,
+                    s.name.clone(),
                 )
             })
             .collect();
         // Sections first, then elevations, each by name.
         sections.sort_by(|a, b| a.2.cmp(&b.2).then(a.1.cmp(&b.1)));
+        let mut section_act: Option<(archisim_core::SectionId, RowAct)> = None;
         nav_section(ui, "nav-views", "VISTAS", |ui| {
             sub_header(ui, "Plantas", Some(("Plantas…", &mut levels_dialog)));
             for (i, (id, name, elevation)) in levels.iter().enumerate() {
@@ -223,25 +264,10 @@ impl ArchiSimApp {
                         vname,
                     );
                     r.context_menu(|ui| {
-                        let edit_id = egui::Id::unique(("rename-view", vid.0));
-                        let mut text: String = ui
-                            .ctx()
-                            .data(|d| d.get_temp(edit_id))
-                            .unwrap_or_else(|| vname.clone());
-                        ui.label("Nombre:");
-                        let resp = ui.text_edit_singleline(&mut text);
-                        ui.ctx().data_mut(|d| d.insert_temp(edit_id, text.clone()));
-                        if (resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)))
-                            || ui.button("Renombrar").clicked()
-                        {
-                            rename_view = Some((*vid, text.clone()));
-                            ui.ctx().data_mut(|d| d.remove_temp::<String>(edit_id));
-                            ui.close();
-                        }
-                        ui.separator();
-                        if ui.button("Borrar vista").clicked() {
-                            delete_view = Some(*vid);
-                            ui.close();
+                        match row_menu(ui, ("view", vid.0), vname, "Borrar vista") {
+                            Some(RowAct::Rename(n)) => rename_view = Some((*vid, n)),
+                            Some(RowAct::Delete) => delete_view = Some(*vid),
+                            None => {}
                         }
                     });
                 }
@@ -274,6 +300,11 @@ impl ArchiSimApp {
                 open = Some(TabKind::ThreeD);
             }
             super::sheet_drop::drag_source(ui, &r, super::sheet_drop::Drop::ThreeD, "La vista 3D");
+            // The saved cameras (Presentación › Cámara).
+            if self.ed.model().cameras().next().is_some() {
+                sub_header(ui, "Cámaras", None);
+                self.cameras_rows(ui);
+            }
             sub_header(
                 ui,
                 "Secciones y alzados",
@@ -286,7 +317,7 @@ impl ArchiSimApp {
                     "Herramienta Sección (S) o «Crear alzados»",
                 );
             }
-            for (id, title, elevation) in &sections {
+            for (id, title, elevation, raw) in &sections {
                 let kind = TabKind::Section(*id);
                 let r = super::widgets::list_row_draggable(
                     ui,
@@ -301,7 +332,7 @@ impl ArchiSimApp {
                     active == Some(kind),
                     10.0,
                 )
-                .on_hover_text("Abrir la vista; arrástrala a un plano para colocarla a su escala");
+                .on_hover_text("Abrir la vista; arrástrala a un plano para colocarla a su escala. Clic derecho: renombrar o borrar");
                 if r.clicked() {
                     open = Some(kind);
                 }
@@ -311,6 +342,16 @@ impl ArchiSimApp {
                     super::sheet_drop::Drop::Section(*id),
                     title,
                 );
+                let delete = if *elevation {
+                    "Borrar alzado"
+                } else {
+                    "Borrar sección"
+                };
+                r.context_menu(|ui| {
+                    if let Some(a) = row_menu(ui, ("section", id.0), raw, delete) {
+                        section_act = Some((*id, a));
+                    }
+                });
             }
         });
         if levels_dialog {
@@ -335,6 +376,17 @@ impl ArchiSimApp {
         if make_elevations {
             self.create_elevations();
         }
+        match section_act {
+            Some((id, RowAct::Rename(n))) => {
+                let r = self.ed.rename_section(id, &n);
+                self.report(r, "Vista renombrada.");
+            }
+            Some((id, RowAct::Delete)) => {
+                let r = self.ed.remove_section(id);
+                self.report(r, "Vista borrada, también de los planos donde estaba.");
+            }
+            None => {}
+        }
         if let Some(kind) = open {
             self.open_view(kind);
         }
@@ -346,6 +398,8 @@ impl ArchiSimApp {
         let mut new_drafting = false;
         let mut presentation = false;
         let mut open = None;
+        let mut drafting_act: Option<(archisim_core::DraftViewId, RowAct)> = None;
+        let mut carpentry = false;
         nav_section(ui, "nav-sheets", "PLANOS", |ui| {
             sub_header(ui, "Planos", Some(("+ Nuevo plano", &mut new)));
             open = self.nav_sheet_rows(ui, active);
@@ -377,7 +431,7 @@ impl ArchiSimApp {
                     10.0,
                 )
                 .on_hover_text(
-                    "Abrir la vista de dibujo; arrástrala a un plano para colocarla a su escala",
+                    "Abrir la vista de dibujo; arrástrala a un plano para colocarla a su escala. Clic derecho: renombrar o borrar",
                 );
                 if r.clicked() {
                     open = Some(kind);
@@ -388,6 +442,20 @@ impl ArchiSimApp {
                     super::sheet_drop::Drop::Drafting(*id),
                     name,
                 );
+                r.context_menu(|ui| {
+                    if let Some(a) =
+                        row_menu(ui, ("drafting", id.0), name, "Borrar vista de dibujo")
+                    {
+                        drafting_act = Some((*id, a));
+                    }
+                });
+            }
+            if ui
+                .small_button("+ Plano de carpinterías")
+                .on_hover_text("Planos A3 con cada tipo de puerta y ventana del proyecto: su alzado desde fuera con medidas, su sección y sus datos (apertura, carpintería, antepecho, unidades y situación), que siguen al modelo")
+                .clicked()
+            {
+                carpentry = true;
             }
             if ui
                 .small_button("+ Plano de presentación")
@@ -405,6 +473,49 @@ impl ArchiSimApp {
         }
         if presentation {
             self.new_presentation_sheet();
+        }
+        if carpentry {
+            match self.ed.transact("Plano de carpinterías", |m| {
+                archisim_plan::carpentry::add_carpentry_sheets(m)
+            }) {
+                Ok(sheets) if sheets.is_empty() => {
+                    self.say("El proyecto no tiene tipos de puerta ni de ventana.")
+                }
+                Ok(sheets) => {
+                    let n = sheets.len();
+                    self.say(format!(
+                        "{n} {} de carpinterías: cada tipo con su alzado, su sección y sus datos.",
+                        if n == 1 { "plano" } else { "planos" }
+                    ));
+                    if let Some(s) = sheets.first() {
+                        self.open_view(TabKind::Sheet(*s));
+                    }
+                }
+                Err(e) => self.complain(format!("No se pudo hacer el plano: {e}.")),
+            }
+        }
+        match drafting_act {
+            Some((id, RowAct::Rename(n))) => {
+                let r = match self.ed.model().draft_view(id).cloned() {
+                    Some(mut v) if !n.is_empty() => {
+                        v.name = n;
+                        self.ed
+                            .transact("Renombrar vista de dibujo", |m| m.set_drafting_view(v))
+                    }
+                    _ => Err("la vista necesita un nombre".into()),
+                };
+                self.report(r, "Vista renombrada.");
+            }
+            Some((id, RowAct::Delete)) => {
+                let r = self.ed.transact("Borrar vista de dibujo", |m| {
+                    m.remove_draft_view(id).map(drop)
+                });
+                self.report(
+                    r,
+                    "Vista de dibujo borrada, también de los planos donde estaba.",
+                );
+            }
+            None => {}
         }
         if let Some(kind) = open {
             self.open_view(kind);
@@ -926,6 +1037,8 @@ fn sub_header(ui: &mut Ui, title: &str, button: Option<(&str, &mut bool)>) {
         "Crear un plano (A1 apaisado) y abrirlo"
     } else if title == "Vistas de dibujo" {
         "Una vista solo de dibujo (un detalle, un esquema) a 1:20; se coloca en los planos"
+    } else if title == "Cámaras" {
+        "Los puntos de vista guardados del 3D (Presentación › Cámara)"
     } else {
         "Los cuatro alzados alrededor del edificio (los que falten)"
     };

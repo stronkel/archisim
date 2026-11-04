@@ -718,10 +718,50 @@ impl ArchiSimApp {
         let mut open = true;
         let mut g = self.ed.model().graphics;
         let before = g;
+        let mut take = None;
+        let mut open_blocks = false;
         super::widgets::dialog("Normas gráficas")
             .open(&mut open)
             .default_width(460.0)
             .show(ctx, |ui| {
+                // The studio standards, in cards: one click takes the
+                // weights, the lettering, the title block and their
+                // presentation styles and view templates.
+                use archisim_library::standards::Standard;
+                let now = Standard::of(self.ed.model());
+                ui.label(egui::RichText::new("Norma por defecto del proyecto").strong())
+                    .on_hover_text("La de las vistas sin estilo. Cada planta, sección o vista de un plano puede llevar otra eligiendo su Estilo en Propiedades (Hilo · rayado, Faro…)");
+                ui.horizontal(|ui| {
+                    for st in Standard::ALL {
+                        let on = now == Some(st);
+                        let r = ui
+                            .add_sized(
+                                [140.0, 28.0],
+                                egui::Button::selectable(on, egui::RichText::new(st.name()).strong()),
+                            )
+                            .on_hover_text(st.description());
+                        if r.clicked() && !on {
+                            take = Some(st);
+                        }
+                    }
+                });
+                if let Some(st) = now {
+                    ui.label(egui::RichText::new(st.description()).small().weak());
+                } else {
+                    ui.label(egui::RichText::new("A medida: los grosores no son los de ninguna norma.").small().weak());
+                }
+                ui.add_space(8.0);
+                ui.horizontal(|ui| {
+                    ui.label("Cajetines de los planos:");
+                    if ui
+                        .button("Cajetines…")
+                        .on_hover_text("El de por defecto, los propios (con logotipo, filas, sello y color) y cuál lleva cada plano")
+                        .clicked()
+                    {
+                        open_blocks = true;
+                    }
+                });
+                ui.add_space(6.0);
                 ui.horizontal(|ui| {
                     ui.label("Tipografía de textos, cotas y rótulos:");
                     for f in archisim_core::TextFont::ALL {
@@ -765,6 +805,19 @@ impl ArchiSimApp {
             });
         if !open {
             self.show_graphics = false;
+        }
+        if open_blocks {
+            self.title_blocks_ui.open = true;
+        }
+        if let Some(st) = take {
+            match self.ed.apply_standard(st) {
+                Ok((styles, templates)) => self.say(format!(
+                    "Norma «{}»: grosores, letra y cajetín de los planos; {styles} estilos de presentación y {templates} plantillas de vista nuevos.",
+                    st.name()
+                )),
+                Err(e) => self.complain(format!("No se puede: {e}.")),
+            }
+            return;
         }
         if g != before {
             let r = self.ed.set_graphics(g);

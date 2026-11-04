@@ -29,6 +29,8 @@ pub struct SectionLine {
     /// Draws its heights: the chain of floor-to-floor heights and, in a
     /// section, the clear height of each room it cuts.
     pub heights: bool,
+    /// What its view shows and how (version 74).
+    pub style: crate::graphics::ViewStyle,
 }
 
 impl SectionLine {
@@ -88,6 +90,7 @@ impl Model {
                 end: spec.end,
                 depth: spec.depth,
                 heights: true,
+                style: Default::default(),
             },
         );
         Ok(id)

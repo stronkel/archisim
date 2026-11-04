@@ -43,6 +43,14 @@ typed_id!(
     RefPlaneId
 );
 typed_id!(
+    /// Identifies a [`crate::SavedCamera`] (a saved point of view of the 3D).
+    CameraId
+);
+typed_id!(
+    /// Identifies a [`crate::TitleBlock`] (a title block of the project).
+    TitleBlockId
+);
+typed_id!(
     /// Identifies a [`crate::ConceptEdge`] (a loose edge of the concept phase).
     EdgeId
 );

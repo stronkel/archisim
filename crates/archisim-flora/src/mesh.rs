@@ -185,14 +185,50 @@ impl Plant {
             .filter(|c| c.kind == ClumpKind::Leaves)
             .map(|c| leaves_wanted(c, foliage, lod))
             .sum();
-        // What the wood and the cores (20 triangles each) already take
+        // What the wood and the cores already take
         // comes off the budget: a plant stays under 80 000 triangles near
         // and 16 000 at middle distance.
         let cap = match lod {
             Lod::Full => 78_000.0,
             _ => 15_000.0,
         };
-        let used = (m.triangle_count() + clumps.len() * 20) as f64;
+        // Under the leaves, a few big round cores (clumps merged by
+        // cells, 80 faces each) keep the crown from being seen through and
+        // give it its puffs: the leaves clothe them, instead of each clump
+        // being a little ball of its own.
+        let leafy_crown = lod != Lod::Low
+            && matches!(
+                self.species.foliage,
+                crate::Foliage::Broad
+                    | crate::Foliage::Fine
+                    | crate::Foliage::Needles
+                    | crate::Foliage::Scales
+            );
+        let cores: Vec<Clump> = if leafy_crown {
+            let leaf_clumps: Vec<Clump> = clumps
+                .iter()
+                .filter(|c| c.kind == ClumpKind::Leaves)
+                .cloned()
+                .collect();
+            let cell = self.species.clump
+                * match lod {
+                    Lod::Full => 2.2,
+                    _ => 3.0,
+                };
+            merge(&leaf_clumps, cell, 0.9)
+        } else {
+            Vec::new()
+        };
+        let flower_cores = if lod == Lod::Full {
+            clumps
+                .iter()
+                .filter(|c| c.kind == ClumpKind::Flowers)
+                .count()
+        } else {
+            0
+        };
+        let used =
+            (m.triangle_count() + (cores.len() + flower_cores) * 80 + clumps.len() * 4) as f64;
         let budget = leaf_budget(lod).min(((cap - used) / 17.0).max(200.0));
         let leaf_share = if wanted > 0.0 {
             (budget / wanted).min(1.0)
@@ -253,31 +289,20 @@ impl Plant {
                 continue;
             }
             if leafy {
-                // A smaller core for the airy olive and for flowers.
-                let airy = c.kind == ClumpKind::Flowers || self.species.foliage == Foliage::Fine;
-                let core = Clump {
-                    radius: c.radius
-                        * if airy {
-                            0.3
-                        } else if self.species.foliage == Foliage::Scales {
-                            0.72
-                        } else {
-                            0.5
-                        },
-                    ..c.clone()
-                };
+                // Flowers: a small core of their own; leaves are round the
+                // crown's cores (above).
+                if c.kind == ClumpKind::Flowers && lod == Lod::Full {
+                    let core = Clump {
+                        radius: c.radius * 0.3,
+                        ..c.clone()
+                    };
+                    blob(&mut m, &core, part, shade(color, 0.78), true);
+                }
                 let share = if c.kind == ClumpKind::Flowers {
                     flower_share
                 } else {
                     leaf_share
                 };
-                blob(
-                    &mut m,
-                    &core,
-                    part,
-                    shade(color, if airy { 0.78 } else { 0.58 }),
-                    false,
-                );
                 leaves(
                     &mut m,
                     c,
@@ -298,6 +323,21 @@ impl Plant {
             if lod == Lod::Full && c.kind == ClumpKind::Leaves {
                 fringe(&mut m, c, part, color, self.species.foliage);
             }
+        }
+        let airy = self.species.foliage == Foliage::Fine;
+        for c in &cores {
+            let core = Clump {
+                radius: c.radius * if airy { 0.5 } else { 0.8 },
+                ..c.clone()
+            };
+            let color = tinted(colors.leaves, c.tint, c.light);
+            blob(
+                &mut m,
+                &core,
+                Part::Leaves,
+                shade(color, if airy { 0.8 } else { 0.74 }),
+                true,
+            );
         }
         for f in &self.fronds {
             frond(&mut m, f, colors, lod);
@@ -515,7 +555,7 @@ fn blob(m: &mut FloraMesh, c: &Clump, part: Part, color: Rgb, fine: bool) {
     let mut rng = Rng::new(c.seed);
     let ax = norm(c.axis);
     let start = m.positions.len() as u32;
-    let lumpy = if fine { 0.12 } else { 0.22 };
+    let lumpy = if fine { 0.06 } else { 0.22 };
     for p in v {
         let k = 1.0 + rng.signed() * lumpy;
         let mut q = mul(*p, c.radius * k);
@@ -602,7 +642,7 @@ fn leaves(
     for _ in 0..n {
         // Out from the middle, more up than down.
         let mut d = norm([rng.signed(), rng.signed(), rng.signed() * 0.8 + 0.25]);
-        let mut at = mul(d, r * rng.range(0.7, 1.04));
+        let mut at = mul(d, r * rng.range(0.9, 1.15));
         if (c.stretch - 1.0).abs() > 1e-6 {
             let along = dot(at, ax);
             at = add(at, mul(ax, along * (c.stretch - 1.0)));

@@ -178,6 +178,7 @@ impl ArchiSimApp {
         let r = ui.add(button).on_hover_text(
             "Todo lo que sale del proyecto: modelo IFC, planos y documentos, mediciones e imágenes",
         );
+        super::missions_ui::mark(ui.ctx(), "bar:Entregar", r.rect);
         icons::paint(
             ui.painter(),
             Rect::from_center_size(
@@ -511,6 +512,21 @@ impl ArchiSimApp {
             if ui.button("Visibilidad y gráficos…").clicked() {
                 self.views.vg_open = true;
             }
+            if ui
+                .button("Normas gráficas…")
+                .on_hover_text("Grosores de línea y textos por defecto del proyecto y su norma (Clásica, Hilo, Faro); cada vista puede llevar otra en su Estilo")
+                .clicked()
+            {
+                self.show_graphics = true;
+            }
+            if ui
+                .button("Cajetines…")
+                .on_hover_text("Los cajetines del proyecto: el de por defecto y los propios, con logotipo, filas, sello y color")
+                .clicked()
+            {
+                self.title_blocks_ui.open = true;
+            }
+
             ui.switch(&mut self.show_underlay, "Calco de la planta inferior");
             ui.switch(&mut self.v3d.camera.perspective, "Perspectiva en 3D");
             ui.menu_button("Navegación 3D", |ui| self.navigation_controls(ui));
@@ -716,7 +732,13 @@ impl ArchiSimApp {
                 ViewMode::Plan | ViewMode::Sheet(_) | ViewMode::Drafting(_)
             );
             ui.separator();
+            let at = ui.cursor().min;
             caption(ui, "Anotar");
+            super::missions_ui::mark(
+                ui.ctx(),
+                "bar:Anotar",
+                Rect::from_min_size(at, Vec2::new(40.0, 20.0)),
+            );
             if drawn {
                 self.drawing_segments(ui);
             } else {

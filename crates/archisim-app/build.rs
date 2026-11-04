@@ -11,7 +11,7 @@ fn main() {
         res.set_icon("assets/icon.ico")
             .set("ProductName", "ArchiSim")
             .set("FileDescription", "ArchiSim · herramienta BIM")
-            .set("CompanyName", "AD5")
+            .set("CompanyName", "ArchiSim")
             .set("ProductVersion", &version)
             .set("FileVersion", &version)
             .set("OriginalFilename", "ArchiSim.exe");

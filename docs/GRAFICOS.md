@@ -70,3 +70,19 @@ Botón con tres líneas de grosor creciente en la barra inferior, junto a los fo
 - Sustituciones por elemento (un muro concreto en rojo) y por filtro (todos los muros de un tipo).
 - Más tipografías.
 - Falsos techos como elementos, con su altura y su trama, para la planta de techos.
+
+
+## Normas por vista y cajetines (noviembre de 2026, formato 74)
+
+Lo que pidió Antonio al ver las normas Hilo y Faro: que se elijan **por vista**, como los estilos Bosque o Terracota, y que los planos lleven el cajetín que quieran.
+
+- **Estilo de la vista** (Propiedades de la planta, sección, alzado o vista de un plano → Presentación → Estilo). Además del papel, la paleta, el macizado y el grueso de líneas, un estilo puede llevar:
+  - sus **grosores y textos**: los del proyecto, los de una norma (Clásica, Hilo, Faro) o retocados;
+  - un **color de acento** y las categorías que resalta (cotas, etiquetas, locales, cotas de nivel, marcas de sección, ejes…), que se pinta encima de la paleta: cotas y textos en rojo sobre un dibujo en grises.
+  Los proyectos nuevos traen «Hilo · rayado», «Hilo · macizado negro», «Hilo · macizado blanco», «Hilo · color», «Faro», «Faro · gris claro» y «Faro · blanco y negro». La norma de **Normas gráficas** queda como la de las vistas sin estilo.
+- **Disciplina de la vista** (en el mismo grupo). Arquitectura deja fuera las instalaciones; Estructura e Instalaciones dejan fuera la urbanización y ponen lo demás en gris; Urbanización deja fuera las instalaciones y la estructura del edificio. Se guarda con la vista; la atenuación del navegador sigue siendo de la sesión. Hay plantillas de vista «Arquitectura», «Estructura», «Instalaciones» y «Urbanización».
+- **Secciones y alzados** guardan su estilo y su disciplina (antes solo los tenía la pestaña). Al colocar una vista en un plano, toma el estilo de su planta o de su sección.
+- **Planos**: cada uno elige su **cajetín**, su **disciplina** (para sus vistas que no tienen) y si su **estilo vale para todas sus vistas**.
+- **Cajetines** (Vista → Cajetines…, o el lápiz junto al cajetín del plano): el proyecto guarda los suyos — Clásico, Hilo, Faro y los propios —, cada uno con su composición, ancho, color de acento, estudio, **logotipo PNG**, monograma, sello y **filas de datos** (rótulo y qué muestran: proyecto, promotor, fecha, escala, un texto propio…). Uno es el de por defecto. El PDF lleva las imágenes.
+- **Plano de carpinterías** (navegador → Planos → «+ Plano de carpinterías»): planos A3 con cada tipo de puerta y ventana como una vista del plano — alzado desde fuera con ancho y alto, sección y datos —, en dos columnas y a una escala por plano (1:50 si caben). Las vistas son del plano como las demás: se mueven, se borran y siguen al modelo.
+- **Borrar y renombrar** secciones, alzados, vistas de dibujo y planos con el clic derecho en el navegador.

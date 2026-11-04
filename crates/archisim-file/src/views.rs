@@ -137,3 +137,141 @@ impl RefPlaneOf {
         }
     }
 }
+
+/// A saved camera of the 3D (version 72).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct CameraOf {
+    pub id: u64,
+    pub name: String,
+    pub target: [f64; 3],
+    pub pitch: f64,
+    pub yaw: f64,
+    pub distance: f64,
+    #[serde(default = "yes", skip_serializing_if = "is_true")]
+    pub perspective: bool,
+}
+
+fn yes() -> bool {
+    true
+}
+
+fn is_true(v: &bool) -> bool {
+    *v
+}
+
+impl CameraOf {
+    pub fn out(c: &core::SavedCamera) -> Self {
+        Self {
+            id: c.id.0,
+            name: c.name.clone(),
+            target: c.target,
+            pitch: c.pitch,
+            yaw: c.yaw,
+            distance: c.distance,
+            perspective: c.perspective,
+        }
+    }
+
+    pub fn into_core(self) -> core::SavedCamera {
+        core::SavedCamera {
+            id: core::CameraId(self.id),
+            name: self.name,
+            target: self.target,
+            pitch: self.pitch,
+            yaw: self.yaw,
+            distance: self.distance,
+            perspective: self.perspective,
+        }
+    }
+}
+
+/// A title block of the project (version 74).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct TitleBlockOf {
+    pub id: u64,
+    pub name: String,
+    pub design: String,
+    pub accent: [u8; 3],
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub studio: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub monogram: String,
+    /// The logo, a PNG in base64, and the file it came from.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub logo: Option<String>,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub logo_source: String,
+    /// The rows: label and what it shows.
+    pub rows: Vec<(String, String)>,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub stamp: String,
+    pub width: f64,
+}
+
+impl TitleBlockOf {
+    pub fn out(t: &core::TitleBlock) -> Self {
+        Self {
+            id: t.id.0,
+            name: t.name.clone(),
+            design: t.design.code().to_string(),
+            accent: t.accent,
+            studio: t.studio.clone(),
+            monogram: t.monogram.clone(),
+            logo: t.logo.as_ref().map(|l| core::base64_encode(&l.png)),
+            logo_source: t
+                .logo
+                .as_ref()
+                .map(|l| l.source.clone())
+                .unwrap_or_default(),
+            rows: t
+                .rows
+                .iter()
+                .map(|r| (r.label.clone(), r.value.code()))
+                .collect(),
+            stamp: t.stamp.clone(),
+            width: t.width,
+        }
+    }
+
+    pub fn into_core(self) -> Result<core::TitleBlock, FileError> {
+        let element = format!("title block {}", self.id);
+        let bad = |m: String| FileError::Value {
+            element: element.clone(),
+            message: m,
+        };
+        let logo = match self.logo {
+            None => None,
+            Some(b) => {
+                let png =
+                    core::base64_decode(&b).ok_or_else(|| bad("logo is not base64".into()))?;
+                Some(
+                    core::decal_image(&self.logo_source, png)
+                        .ok_or_else(|| bad("logo is not a PNG".into()))?,
+                )
+            }
+        };
+        Ok(core::TitleBlock {
+            id: core::TitleBlockId(self.id),
+            name: self.name,
+            design: core::TitleBlockDesign::from_code(&self.design)
+                .ok_or_else(|| bad(format!("unknown design «{}»", self.design)))?,
+            accent: self.accent,
+            studio: self.studio,
+            monogram: self.monogram,
+            logo,
+            rows: self
+                .rows
+                .into_iter()
+                .map(|(label, v)| {
+                    core::TitleValue::from_code(&v)
+                        .map(|value| core::TitleRow { label, value })
+                        .ok_or_else(|| bad(format!("unknown row «{v}»")))
+                })
+                .collect::<Result<_, _>>()?,
+            stamp: self.stamp,
+            width: self.width,
+        })
+    }
+}

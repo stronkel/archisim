@@ -126,6 +126,21 @@ pub enum Glyph {
     Areas,
     Present,
     Deliver,
+    /// The Maqueta's rooms (V5): building, a sofa, a dining table, a
+    /// kitchen, a bath, a bed, a desk, a lamp, a dumbbell, a shop counter,
+    /// a designer's chair and the outside.
+    Build,
+    Sofa,
+    Dining,
+    Kitchen,
+    Bath,
+    Bed,
+    Desk,
+    Decor,
+    Sport,
+    Shop,
+    Design,
+    Outside,
 }
 
 impl Glyph {
@@ -424,6 +439,42 @@ impl Glyph {
                 r##"<rect x="2" y="3" width="16" height="11" rx="1"/><path d="M10 14v3M6 18h8"/><path d="M5 11l3-3 2 2 4-4" stroke-width="1"/>"##
             }
             Glyph::Deliver => r##"<path d="M10 2.5v9M6 8l4 4 4-4M3 14v3h14v-3"/>"##,
+            Glyph::Build => {
+                r##"<path d="M3 9l7-6 7 6M5 7.5V17h10V7.5"/><rect x="8" y="11" width="4" height="6"/>"##
+            }
+            Glyph::Sofa => {
+                r##"<path d="M4 10V7a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v3"/><path d="M2.5 10.5a1.5 1.5 0 0 1 3 0V12h9v-1.5a1.5 1.5 0 0 1 3 0V15h-15z"/><path d="M4 15v2M16 15v2" stroke-width="1"/>"##
+            }
+            Glyph::Dining => {
+                r##"<path d="M3 9h14M5 9v8M15 9v8"/><path d="M7.5 9V6.5M12.5 9V6.5" stroke-width="1"/><circle cx="10" cy="5" r="2" stroke-width="1"/>"##
+            }
+            Glyph::Kitchen => {
+                r##"<rect x="3" y="7" width="14" height="10"/><path d="M3 10h14M10 10v7" stroke-width="1"/><circle cx="6.5" cy="4.5" r="1.4" stroke-width="1"/><circle cx="12" cy="4.5" r="1.4" stroke-width="1"/><path d="M8.5 13.5h-1M12.5 13.5h-1"/>"##
+            }
+            Glyph::Bath => {
+                r##"<path d="M2.5 10h15v2.5a4 4 0 0 1-4 4h-7a4 4 0 0 1-4-4z"/><path d="M5 10V4.5a1.5 1.5 0 0 1 3 0" stroke-width="1"/><path d="M5.5 16.5l-1 1.5M14.5 16.5l1 1.5" stroke-width="1"/>"##
+            }
+            Glyph::Bed => {
+                r##"<path d="M2.5 16V5M2.5 12h15v4M17.5 12V9.5a2 2 0 0 0-2-2H9v4.5"/><rect x="4" y="8.5" width="3.5" height="3" rx="1" stroke-width="1"/>"##
+            }
+            Glyph::Desk => {
+                r##"<path d="M2.5 10h15M4 10v7M16 10v7M11 10v4h5" /><rect x="6" y="3.5" width="7" height="4.5" rx="0.6" stroke-width="1"/><path d="M9.5 8v2" stroke-width="1"/>"##
+            }
+            Glyph::Decor => {
+                r##"<path d="M6.5 3h7l2 6h-11z"/><path d="M10 9v6M7 17h6" /><path d="M10 15l-2 2M10 15l2 2" stroke-width="0.8"/>"##
+            }
+            Glyph::Sport => {
+                r##"<path d="M6 10h8"/><rect x="3" y="6" width="3" height="8" rx="0.8"/><rect x="14" y="6" width="3" height="8" rx="0.8"/><path d="M2 8.5v3M18 8.5v3" stroke-width="1"/>"##
+            }
+            Glyph::Shop => {
+                r##"<path d="M3 8l1.5-4h11L17 8"/><path d="M3 8c0 1.2 1 2 2.3 2s2.3-.8 2.3-2c0 1.2 1 2 2.4 2s2.3-.8 2.3-2c0 1.2 1 2 2.4 2S17 9.2 17 8"/><path d="M4.5 10v7h11v-7M8 17v-4h4v4" stroke-width="1"/>"##
+            }
+            Glyph::Design => {
+                r##"<path d="M5 3c4 0 6 3 6 7v3"/><path d="M4 13h10l-1 4M6 13l-1 4" /><path d="M5 3c-1 2-1 6 1 10" stroke-width="1"/>"##
+            }
+            Glyph::Outside => {
+                r##"<circle cx="7.5" cy="7.5" r="4.5"/><path d="M7.5 12v5" /><path d="M2 17h16" /><circle cx="15" cy="4.5" r="1.8" stroke-width="1"/><path d="M12.5 14.5c1-2 3-2 4 0" stroke-width="1"/>"##
+            }
             Glyph::HeadSplatter => {
                 r##"<circle cx="7" cy="7" r="2.5"/><circle cx="13.5" cy="8" r="1.8"/><circle cx="9" cy="13.5" r="2"/><circle cx="15" cy="14" r="1.2"/><circle cx="4" cy="13" r="1"/>"##
             }
@@ -545,6 +596,18 @@ impl Glyph {
         Glyph::Areas,
         Glyph::Present,
         Glyph::Deliver,
+        Glyph::Build,
+        Glyph::Sofa,
+        Glyph::Dining,
+        Glyph::Kitchen,
+        Glyph::Bath,
+        Glyph::Bed,
+        Glyph::Desk,
+        Glyph::Decor,
+        Glyph::Sport,
+        Glyph::Shop,
+        Glyph::Design,
+        Glyph::Outside,
     ];
 }
 

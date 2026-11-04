@@ -15,6 +15,11 @@ const MAX_TONES: usize = 6;
 #[derive(Default)]
 pub struct PresentationUi {
     pub open: bool,
+    /// The panel of the sun (the Sol tile of Presentación).
+    pub sun_open: bool,
+    /// The sun being moved with the sliders: written to the project when
+    /// they are let go (one undo step, not one a frame).
+    sun_draft: Option<archisim_core::Sun>,
     pub selected: Option<PresentationStyleId>,
     /// The style being edited; written to the project when the mouse and
     /// the keyboard leave it (one undo step per change, not per frame).
@@ -100,7 +105,9 @@ impl ArchiSimApp {
                 ui.add_space(6.0);
                 if ui
                     .button("Estilos de partida")
-                    .on_hover_text("Añade AD5, Terracota, Bosque, Azul y Monocromo si faltan")
+                    .on_hover_text(
+                        "Añade Blanco y negro, Terracota, Bosque, Azul y Monocromo si faltan",
+                    )
                     .clicked()
                 {
                     action = Some("starters");
@@ -248,12 +255,100 @@ impl ArchiSimApp {
                 ui.switch(&mut d.shadows, "arrojadas sobre el suelo");
                 ui.end_row();
 
+                ui.label("Grosores y textos")
+                    .on_hover_text("Los grosores de línea y la altura de los textos de la vista: los de la norma del proyecto (Normas gráficas) o los de una norma propia del estilo");
+                ui.horizontal(|ui| {
+                    use archisim_library::standards::Standard;
+                    let now = match d.pens {
+                        None => 0,
+                        Some(p) => Standard::ALL
+                            .iter()
+                            .position(|s| {
+                                let g = s.graphics();
+                                g.fine == p.fine && g.coarse == p.coarse
+                            })
+                            .map_or(4, |i| i + 1),
+                    };
+                    let names = ["Del proyecto", "Clásica", "Hilo", "Faro", "Propios"];
+                    let mut pick = now;
+                    egui::ComboBox::from_id_salt("style-pens")
+                        .selected_text(names[now])
+                        .show_ui(ui, |ui| {
+                            for (i, n) in names.iter().enumerate().take(4) {
+                                ui.selectable_value(&mut pick, i, *n);
+                            }
+                        });
+                    if pick != now {
+                        d.pens = (pick > 0).then(|| {
+                            let g = Standard::ALL[pick - 1].graphics();
+                            archisim_core::StylePens {
+                                fine: g.fine,
+                                coarse: g.coarse,
+                            }
+                        });
+                    }
+                    if let Some(p) = &mut d.pens {
+                        ui.label("corte");
+                        ui.add(
+                            egui::DragValue::new(&mut p.fine.cut)
+                                .range(0.05..=2.0)
+                                .speed(0.01)
+                                .suffix(" mm"),
+                        )
+                        .on_hover_text("Lo cortado a 1:50 (a 1:100, la norma de escalas pequeñas)");
+                        ui.label("texto");
+                        ui.add(
+                            egui::DragValue::new(&mut p.fine.text)
+                                .range(1.0..=6.0)
+                                .speed(0.05)
+                                .suffix(" mm"),
+                        );
+                    }
+                });
+                ui.end_row();
+
                 ui.label("Grueso de las líneas");
                 ui.add(
                     egui::Slider::new(&mut d.line_scale, 0.3..=2.0)
                         .step_by(0.05)
                         .custom_formatter(|v, _| format!("× {v:.2}")),
                 );
+                ui.end_row();
+
+                ui.label("Color de acento")
+                    .on_hover_text("Un color que resalta las anotaciones sobre la paleta: cotas y textos en rojo sobre un dibujo en grises, por ejemplo");
+                ui.vertical(|ui| {
+                    ui.horizontal(|ui| {
+                        let mut on = d.accent.is_some();
+                        if ui.switch(&mut on, "").changed() {
+                            d.accent = on.then_some(d.accent.unwrap_or([214, 72, 44]));
+                            if on && d.accent_on.is_empty() {
+                                d.accent_on = archisim_library::standards::ACCENTED
+                                    .into_iter()
+                                    .collect();
+                            }
+                        }
+                        if let Some(c) = &mut d.accent {
+                            ui.color_edit_button_srgb(c);
+                        } else {
+                            ui.label(RichText::new("sin acento").weak());
+                        }
+                    });
+                    if d.accent.is_some() {
+                        ui.horizontal_wrapped(|ui| {
+                            for c in archisim_core::Category::ALL {
+                                let mut on = d.accent_on.contains(&c);
+                                if ui.toggle_value(&mut on, c.label()).changed() {
+                                    if on {
+                                        d.accent_on.insert(c);
+                                    } else {
+                                        d.accent_on.remove(&c);
+                                    }
+                                }
+                            }
+                        });
+                    }
+                });
                 ui.end_row();
             });
         // A strip of what the style turns the usual colours into.
@@ -276,6 +371,10 @@ impl ArchiSimApp {
             if let Some(p) = d.poche {
                 ui.label("muro:");
                 swatch(ui, p, 22.0);
+            }
+            if let Some(a) = d.accent {
+                ui.label("acento:");
+                swatch(ui, a, 22.0);
             }
         });
         let in_use = self
@@ -386,7 +485,7 @@ impl ArchiSimApp {
         props::row(
             ui,
             "Estilo",
-            "Papel, paleta, muros macizados y grueso de líneas de un estilo de presentación",
+            "Papel, paleta, muros macizados, grosores de línea, tamaño de los textos y color de acento de la vista (Hilo, Faro, Bosque…)",
             |ui, w| {
                 let refs: Vec<(Option<PresentationStyleId>, &str)> =
                     opts.iter().map(|(a, b)| (*a, b.as_str())).collect();
@@ -394,9 +493,188 @@ impl ArchiSimApp {
                     props::choice(ui, "view-presentation", w, style.presentation, &refs);
             },
         );
+        props::row(
+            ui,
+            "Disciplina",
+            "Para qué es la vista: Arquitectura deja fuera las instalaciones; Estructura e Instalaciones dejan fuera la urbanización y lo demás en gris; Urbanización deja fuera las instalaciones y la estructura del edificio",
+            |ui, w| {
+                let opts: Vec<(Option<archisim_core::ElementDiscipline>, &str)> =
+                    std::iter::once((None, "Todas"))
+                        .chain(
+                            archisim_core::ElementDiscipline::ALL
+                                .iter()
+                                .map(|d| (Some(*d), discipline_label(*d))),
+                        )
+                        .collect();
+                style.discipline =
+                    props::choice(ui, "view-discipline", w, style.discipline, &opts);
+            },
+        );
         ui.small_button("Estilos de presentación…")
             .on_hover_text("Crear y cambiar los estilos del proyecto")
             .clicked()
+    }
+
+    /// The panel of the sun (§12.4, the Sol tile of Presentación): its
+    /// path over the project for midsummer, the equinox and midwinter, the
+    /// day and the solar hour on sliders, and the three days architects
+    /// look at, with the sun's height and bearing.
+    pub(super) fn sun_dialog(&mut self, ctx: &egui::Context) {
+        if !self.presentation.sun_open {
+            return;
+        }
+        let mut open = true;
+        super::widgets::dialog("Sol")
+            .id(egui::Id::unique("sun-panel"))
+            .open(&mut open)
+            .default_width(300.0)
+            .resizable(false)
+            .show(ctx, |ui| self.sun_contents(ui));
+        self.presentation.sun_open = open;
+    }
+
+    fn sun_contents(&mut self, ui: &mut Ui) {
+        let p = super::theme::Palette::current(ui.ctx());
+        let model = self.ed.model();
+        let lat = model.latitude();
+        let north = model.true_north();
+        let georef = model.georeference().is_some();
+        let mut sun = self.presentation.sun_draft.unwrap_or(model.sun());
+        // The path of the sun, in plan: the horizon a circle, the zenith in
+        // the middle; north where the project's north is.
+        let size = ui.available_width().min(280.0);
+        let (rect, _) = ui.allocate_exact_size(Vec2::new(size, size), egui::Sense::hover());
+        let painter = ui.painter_at(rect);
+        let c = rect.center();
+        let r = size * 0.42;
+        painter.circle_filled(c, r, p.raised);
+        painter.circle_stroke(c, r, Stroke::new(1.0, p.line));
+        for k in [1.0 / 3.0, 2.0 / 3.0] {
+            painter.circle_stroke(c, r * k as f32, Stroke::new(0.5, p.line));
+        }
+        // A bearing from north (clockwise) and a height to the screen.
+        let at = |alt: f64, az: f64| -> Pos2 {
+            let b = (az + north) as f32;
+            let d = r * (1.0 - (alt / std::f64::consts::FRAC_PI_2) as f32).clamp(0.0, 1.0);
+            Pos2::new(c.x + d * b.sin(), c.y - d * b.cos())
+        };
+        for (label, b) in [("N", 0.0), ("E", 90.0), ("S", 180.0), ("O", 270.0)] {
+            let q = at(-0.12, f64::to_radians(b));
+            painter.text(
+                q,
+                egui::Align2::CENTER_CENTER,
+                label,
+                egui::FontId::proportional(11.0),
+                if label == "N" { p.accent } else { p.muted },
+            );
+        }
+        let days = [
+            (172u16, Color32::from_rgb(220, 140, 40)),
+            (80, Color32::from_rgb(200, 170, 60)),
+            (355, Color32::from_rgb(110, 140, 190)),
+        ];
+        for (day, col) in days {
+            let pts: Vec<Pos2> = (0..=96)
+                .map(|i| archisim_core::Sun {
+                    day,
+                    hour: i as f64 / 4.0,
+                })
+                .map(|s| s.position(lat))
+                .filter(|(alt, _)| *alt > 0.0)
+                .map(|(alt, az)| at(alt, az))
+                .collect();
+            if pts.len() > 1 {
+                painter.add(egui::Shape::line(pts, Stroke::new(1.5, col)));
+            }
+        }
+        let (alt, az) = sun.position(lat);
+        if alt > 0.0 {
+            let q = at(alt, az);
+            painter.line_segment([c, q], Stroke::new(1.0, p.muted));
+            painter.circle_filled(q, 7.0, Color32::from_rgb(255, 196, 40));
+            painter.circle_stroke(q, 7.0, Stroke::new(1.0, Color32::from_rgb(200, 130, 20)));
+        }
+        ui.horizontal(|ui| {
+            for (day, col, name) in [
+                (172u16, days[0].1, "Verano"),
+                (80, days[1].1, "Equinoccio"),
+                (355, days[2].1, "Invierno"),
+            ] {
+                let (dot, _) = ui.allocate_exact_size(Vec2::splat(9.0), egui::Sense::hover());
+                ui.painter().circle_filled(dot.center(), 4.0, col);
+                if ui
+                    .small_button(name)
+                    .on_hover_text("Ese día, a mediodía solar")
+                    .clicked()
+                {
+                    sun = archisim_core::Sun { day, hour: 12.0 };
+                    self.presentation.sun_draft = None;
+                    let r = self.ed.set_sun(sun);
+                    self.report(r, "Sol cambiado.");
+                }
+            }
+        });
+        ui.add_space(6.0);
+        let (d, m) = day_month(sun.day);
+        let mut day = sun.day as f64;
+        let rd = ui.add(
+            egui::Slider::new(&mut day, 1.0..=365.0)
+                .step_by(1.0)
+                .show_value(false)
+                .text(format!("{d} de {}", MONTH_NAMES[m as usize - 1])),
+        );
+        let mut hour = sun.hour;
+        let h = hour.floor();
+        let clock = format!(
+            "{:02}:{:02} solar",
+            h as u32,
+            ((hour - h) * 60.0).round() as u32
+        );
+        let rh = ui.add(
+            egui::Slider::new(&mut hour, 4.0..=21.0)
+                .step_by(0.25)
+                .show_value(false)
+                .text(clock),
+        );
+        let moved = rd.changed() || rh.changed();
+        if moved {
+            sun = archisim_core::Sun {
+                day: (day.round() as u16).clamp(1, 365),
+                hour: hour.clamp(0.0, 24.0),
+            };
+            self.presentation.sun_draft = Some(sun);
+        }
+        let let_go =
+            (rd.drag_stopped() || rh.drag_stopped()) || (moved && !rd.dragged() && !rh.dragged());
+        if let_go {
+            if let Some(s) = self.presentation.sun_draft.take() {
+                let r = self.ed.set_sun(s);
+                self.report(
+                    r,
+                    "Sol cambiado: las sombras de las vistas de presentación y del 3D lo siguen.",
+                );
+            }
+        }
+        ui.add_space(4.0);
+        let text = if alt > 0.0 {
+            format!(
+                "Altura {:.0}° · desde el norte {:.0}°",
+                alt.to_degrees(),
+                az.to_degrees()
+            )
+        } else {
+            "El sol está bajo el horizonte".to_string()
+        };
+        ui.label(RichText::new(text).color(p.text));
+        ui.label(
+            RichText::new(if georef {
+                format!("Latitud {lat:.2}°, de la georreferencia del proyecto")
+            } else {
+                format!("Latitud {lat:.2}° (Madrid): sin georreferencia en el proyecto")
+            })
+            .small()
+            .color(p.muted),
+        );
     }
 
     /// The sun of the shadows in the project's properties: the day (as
@@ -452,6 +730,21 @@ impl ArchiSimApp {
 
 const MONTH_DAYS: [u16; 12] = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 
+const MONTH_NAMES: [&str; 12] = [
+    "enero",
+    "febrero",
+    "marzo",
+    "abril",
+    "mayo",
+    "junio",
+    "julio",
+    "agosto",
+    "septiembre",
+    "octubre",
+    "noviembre",
+    "diciembre",
+];
+
 /// Day and month of a day of the year.
 fn day_month(n: u16) -> (u16, u16) {
     let mut left = n.clamp(1, 365);
@@ -481,6 +774,17 @@ fn parse_hour(t: &str) -> Option<f64> {
     let (h, m): (f64, f64) = (h.trim().parse().ok()?, m.trim().parse().ok()?);
     let v = h + m / 60.0;
     ((0.0..=24.0).contains(&v) && (0.0..60.0).contains(&m)).then_some(v)
+}
+
+/// A view discipline's name.
+pub(super) fn discipline_label(d: archisim_core::ElementDiscipline) -> &'static str {
+    use archisim_core::ElementDiscipline as D;
+    match d {
+        D::Architecture => "Arquitectura",
+        D::Structure => "Estructura",
+        D::Services => "Instalaciones",
+        D::Site => "Urbanización",
+    }
 }
 
 #[cfg(test)]

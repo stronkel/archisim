@@ -693,6 +693,39 @@ impl ArchiSimApp {
                 .map(|l| (l.id, l.name.clone()))
                 .collect()
         };
+        // The measures at a glance (§12.6): the height comes from the levels
+        // or its own, the rest are typed.
+        if let Some((k, v)) = props::measure_tiles(
+            ui,
+            ("stair", id.0),
+            &[
+                props::Measure {
+                    label: "Altura",
+                    hint: "Lo que sube, de planta a planta",
+                    value: s.height,
+                    editable: false,
+                },
+                props::Measure {
+                    label: "Ancho",
+                    hint: "De tramos y mesetas",
+                    value: s.width,
+                    editable: true,
+                },
+                props::Measure {
+                    label: "Huella",
+                    hint: "La que se busca en cada tramo",
+                    value: s.going,
+                    editable: true,
+                },
+            ],
+        ) {
+            let r = self.ed.edit_stair("Cambiar escalera", id, |s| match k {
+                1 => s.width = v,
+                _ => s.going = v,
+            });
+            self.report(r, "Escalera cambiada.");
+            return;
+        }
         group(ui, "stair-size", "Dimensiones", |ui| {
             let mut sizes = vec![
                 ("Ancho (mm)", "De tramos y mesetas", s.width, 0),

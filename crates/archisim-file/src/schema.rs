@@ -144,6 +144,14 @@ pub(crate) struct ProjectFile {
     pub view_templates: Vec<crate::views::ViewTemplateOf>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub ref_planes: Vec<crate::views::RefPlaneOf>,
+    /// Saved cameras of the 3D (version 72).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cameras: Vec<crate::views::CameraOf>,
+    /// Title blocks and the sheets' default one (version 74).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub title_blocks: Vec<crate::views::TitleBlockOf>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_title_block: Option<u64>,
     /// Plot area for the masses' figures, m² (version 18).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plot_area: Option<f64>,
@@ -1006,6 +1014,9 @@ pub(crate) struct Section {
     /// Draws its heights (version 10; absent: yes).
     #[serde(default = "yes_heights", skip_serializing_if = "is_yes")]
     pub heights: bool,
+    /// What its view shows and how (version 74).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub style: Option<crate::drafting::Style>,
 }
 
 /// A setting-out grid line (version 16).
@@ -1496,6 +1507,14 @@ pub(crate) struct PresentationStyleOf {
     pub line_scale: f64,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub shadows: bool,
+    /// Its own pens, fine and coarse (version 74).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pens: Option<[crate::drafting::Pens; 2]>,
+    /// The accent colour and the categories it picks out (version 74).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub accent: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub accent_on: Vec<String>,
 }
 
 impl PresentationStyleOf {
@@ -1509,6 +1528,14 @@ impl PresentationStyleOf {
             poche: s.poche.map(hex),
             line_scale: s.line_scale,
             shadows: s.shadows,
+            pens: s.pens.map(|p| {
+                [
+                    crate::drafting::Pens::out(&p.fine),
+                    crate::drafting::Pens::out(&p.coarse),
+                ]
+            }),
+            accent: s.accent.map(hex),
+            accent_on: s.accent_on.iter().map(|c| c.code().to_string()).collect(),
         }
     }
 
@@ -1527,6 +1554,16 @@ impl PresentationStyleOf {
             poche: self.poche.map(|c| parse_hex(&element, &c)).transpose()?,
             line_scale: self.line_scale,
             shadows: self.shadows,
+            pens: self.pens.map(|[fine, coarse]| core::StylePens {
+                fine: fine.into_core(),
+                coarse: coarse.into_core(),
+            }),
+            accent: self.accent.map(|c| parse_hex(&element, &c)).transpose()?,
+            accent_on: self
+                .accent_on
+                .iter()
+                .filter_map(|c| core::Category::from_code(c))
+                .collect(),
         })
     }
 }
@@ -3363,6 +3400,8 @@ impl ProjectFile {
                     end: xy(s.end),
                     depth: s.depth,
                     heights: s.heights,
+                    style: (s.style != core::ViewStyle::default())
+                        .then(|| crate::drafting::Style::out(&s.style)),
                 })
                 .collect(),
             grids: p
@@ -3571,6 +3610,13 @@ impl ProjectFile {
                 .iter()
                 .map(crate::views::RefPlaneOf::out)
                 .collect(),
+            cameras: p.cameras.iter().map(crate::views::CameraOf::out).collect(),
+            title_blocks: p
+                .title_blocks
+                .iter()
+                .map(crate::views::TitleBlockOf::out)
+                .collect(),
+            default_title_block: p.default_title_block.map(|t| t.0),
             paint_zones: p
                 .paint_zones
                 .iter()
@@ -4181,19 +4227,27 @@ impl ProjectFile {
             sections: self
                 .sections
                 .iter()
-                .map(|s| core::SectionLine {
-                    id: core::SectionId(s.id),
-                    name: s.name.clone(),
-                    kind: match s.kind {
-                        SectionKind::Section => core::SectionKind::Section,
-                        SectionKind::Elevation => core::SectionKind::Elevation,
-                    },
-                    start: pt(s.start),
-                    end: pt(s.end),
-                    depth: s.depth,
-                    heights: s.heights,
+                .map(|s| -> Result<core::SectionLine, FileError> {
+                    Ok(core::SectionLine {
+                        id: core::SectionId(s.id),
+                        name: s.name.clone(),
+                        kind: match s.kind {
+                            SectionKind::Section => core::SectionKind::Section,
+                            SectionKind::Elevation => core::SectionKind::Elevation,
+                        },
+                        start: pt(s.start),
+                        end: pt(s.end),
+                        depth: s.depth,
+                        heights: s.heights,
+                        style: s
+                            .style
+                            .clone()
+                            .map(|st| st.into_core(&format!("section {}", s.id)))
+                            .transpose()?
+                            .unwrap_or_default(),
+                    })
                 })
-                .collect(),
+                .collect::<Result<_, FileError>>()?,
             grids: self
                 .grids
                 .iter()
@@ -4435,6 +4489,9 @@ impl ProjectFile {
             level_styles: Vec::new(),
             view_templates: Vec::new(),
             ref_planes: Vec::new(),
+            cameras: Vec::new(),
+            title_blocks: Vec::new(),
+            default_title_block: None,
             plot_area: None,
             plots: Vec::new(),
             roads: Vec::new(),
@@ -4852,6 +4909,13 @@ impl ProjectFile {
         for r in self.ref_planes {
             parts.ref_planes.push(r.into_core());
         }
+        for c in self.cameras {
+            parts.cameras.push(c.into_core());
+        }
+        for t in self.title_blocks {
+            parts.title_blocks.push(t.into_core()?);
+        }
+        parts.default_title_block = self.default_title_block.map(core::TitleBlockId);
         for a in self.appearances {
             let element = format!("appearance of material {}", a.material);
             let texture = match a.texture {

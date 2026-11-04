@@ -884,7 +884,7 @@ fn ifc_text_in(
         &ExportOptions {
             file_name: format!("{stem}.ifc"),
             author: "ArchiSim".into(),
-            organization: "AD5".into(),
+            organization: "ArchiSim".into(),
             timestamp,
             schema,
         },

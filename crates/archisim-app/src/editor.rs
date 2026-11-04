@@ -943,6 +943,18 @@ impl Editor {
     }
 
     /// The project's line weights by scale.
+    /// Takes a studio standard (its pens, lettering, title block, accent,
+    /// presentation styles and view templates): how many styles and
+    /// templates it added.
+    pub fn apply_standard(
+        &mut self,
+        s: archisim_library::standards::Standard,
+    ) -> EditResult<(usize, usize)> {
+        self.transact(&format!("Norma gráfica «{}»", s.name()), |m| {
+            Ok(s.apply(m))
+        })
+    }
+
     pub fn set_graphics(&mut self, g: archisim_core::GraphicStandard) -> EditResult {
         if !g.is_valid() {
             return Err("los grosores tienen que ser mayores que cero".into());

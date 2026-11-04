@@ -130,6 +130,38 @@ impl ArchiSimApp {
             &format!("Barandilla de {} m", fmt_m(r.length())),
             "IfcRailing",
         );
+        // The measures at a glance (§12.6).
+        if let Some((k, v)) = props::measure_tiles(
+            ui,
+            ("railing", id.0),
+            &[
+                props::Measure {
+                    label: "Longitud",
+                    hint: "Por su eje",
+                    value: r.length(),
+                    editable: false,
+                },
+                props::Measure {
+                    label: "Altura",
+                    hint: "Del pie al pasamanos",
+                    value: r.height,
+                    editable: true,
+                },
+                props::Measure {
+                    label: "Desfase",
+                    hint: "Respecto a la planta",
+                    value: r.base_offset,
+                    editable: true,
+                },
+            ],
+        ) {
+            let res = self.ed.edit_railing("Barandilla", id, |r| match k {
+                1 => r.height = v,
+                _ => r.base_offset = v,
+            });
+            self.report(res, "Barandilla cambiada.");
+            return;
+        }
         group(ui, "railing-data", "Barandilla", |ui| {
             type Set = fn(&mut archisim_core::Railing, f64);
             let fields: [(&str, &str, f64, Set); 3] = [

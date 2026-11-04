@@ -1261,6 +1261,9 @@ pub fn build() -> Result<Document, ModelError> {
                 style: look,
             },
         )?;
+        // The carpentry sheet: each door and window type with its
+        // elevation, section and data.
+        archisim_plan::carpentry::add_carpentry_sheets(m)?;
         Ok(())
     })?;
 
@@ -1271,7 +1274,7 @@ pub fn build() -> Result<Document, ModelError> {
         let finish = m.add_user_parameter(NewUserParameter {
             name: "Acabado de suelo".into(),
             kind: UserKind::Choice(vec!["Gres".into(), "Tarima".into(), "Microcemento".into()]),
-            group: "AD5_Acabados".into(),
+            group: "Proyecto_Acabados".into(),
             categories: vec![ParamCategory::Rooms],
             by_type: false,
             default: Value::Text("Gres".into()),
@@ -1280,7 +1283,7 @@ pub fn build() -> Result<Document, ModelError> {
         let code = m.add_user_parameter(NewUserParameter {
             name: "Código de medición".into(),
             kind: UserKind::Text,
-            group: "AD5_Mediciones".into(),
+            group: "Proyecto_Mediciones".into(),
             categories: vec![ParamCategory::Walls],
             by_type: true,
             default: Value::Text(String::new()),
@@ -1362,7 +1365,11 @@ pub fn build() -> Result<Document, ModelError> {
             cut_plane: 1.1,
             style,
         };
-        m.add_plan_view(view("Planta baja — AD5", PlanKind::Floor, ViewStyle::ad5()))?;
+        m.add_plan_view(view(
+            "Planta baja — blanco y negro",
+            PlanKind::Floor,
+            ViewStyle::ad5(),
+        ))?;
         let mut masonry = ViewStyle::default();
         for c in [
             C::Objects,
@@ -1620,7 +1627,9 @@ mod tests {
         assert_eq!(m.prices().count(), 29);
         assert_eq!(m.user_parameters().count(), 2);
         assert_eq!(m.sections().count(), 6);
-        assert_eq!(m.sheets().len(), 3);
+        // A-01 to A-03 and the two carpentry sheets.
+        assert_eq!(m.sheets().len(), 5);
+        assert!(m.viewports().any(|v| v.opening_type.is_some()));
         assert!(m.viewports().any(|v| v.style.presentation.is_some()));
         assert_eq!(m.viewports().filter(|v| v.section.is_some()).count(), 3);
         assert_eq!(m.rooms().count(), 4);

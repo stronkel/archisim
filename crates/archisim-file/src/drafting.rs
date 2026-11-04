@@ -545,7 +545,7 @@ pub(crate) struct Pens {
 }
 
 impl Pens {
-    fn out(p: &core::Pens) -> Self {
+    pub(crate) fn out(p: &core::Pens) -> Self {
         Self {
             cut: p.cut,
             frame: p.frame,
@@ -558,7 +558,7 @@ impl Pens {
         }
     }
 
-    fn into_core(self) -> core::Pens {
+    pub(crate) fn into_core(self) -> core::Pens {
         core::Pens {
             cut: self.cut,
             frame: self.frame,
@@ -583,6 +583,13 @@ pub(crate) struct Graphics {
     /// Lettering of texts and dimensions (version 27; sans if missing).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub font: Option<String>,
+    /// The sheets' title block (version 73; classic if missing).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title_block: Option<String>,
+    /// The colour of the sheets' titles and stamps (version 73; black if
+    /// missing).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub accent: Option<[u8; 3]>,
 }
 
 impl Graphics {
@@ -592,6 +599,9 @@ impl Graphics {
             coarse: Pens::out(&g.coarse),
             coarse_from: g.coarse_from,
             font: (g.font != core::TextFont::default()).then(|| g.font.code().to_string()),
+            title_block: (g.title_block != core::TitleBlockDesign::default())
+                .then(|| g.title_block.code().to_string()),
+            accent: (g.accent != [0, 0, 0]).then_some(g.accent),
         }
     }
 
@@ -607,6 +617,16 @@ impl Graphics {
                     message: format!("unknown font «{f}»"),
                 })?,
             },
+            title_block: match &self.title_block {
+                None => core::TitleBlockDesign::default(),
+                Some(d) => {
+                    core::TitleBlockDesign::from_code(d).ok_or_else(|| FileError::Value {
+                        element: "graphics".into(),
+                        message: format!("unknown title block «{d}»"),
+                    })?
+                }
+            },
+            accent: self.accent.unwrap_or([0, 0, 0]),
         })
     }
 }
@@ -675,9 +695,17 @@ pub(crate) struct Sheet {
     /// Presentation style of the sheet itself (version 22).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub presentation: Option<u64>,
+    /// The sheet's style also for its views, its discipline and its
+    /// title block (version 74).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub restyle_views: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub discipline: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title_type: Option<u64>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Style {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -698,10 +726,13 @@ pub(crate) struct Style {
     /// How categories are drawn (version 27).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub overrides: Vec<OverrideOf>,
+    /// The view's discipline (version 74).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub discipline: Option<String>,
 }
 
 /// A category drawn otherwise in a view (version 27): only what changes.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct OverrideOf {
     pub category: String,
@@ -793,6 +824,7 @@ impl Default for Style {
             hidden_disciplines: Vec::new(),
             presentation: None,
             overrides: Vec::new(),
+            discipline: None,
         }
     }
 }
@@ -823,6 +855,7 @@ impl Style {
                 .iter()
                 .map(|(c, g)| OverrideOf::out(*c, g))
                 .collect(),
+            discipline: s.discipline.map(|d| d.code().to_string()),
         }
     }
 
@@ -866,6 +899,14 @@ impl Style {
                 .into_iter()
                 .map(|o| o.into_core(element))
                 .collect::<Result<_, _>>()?,
+            discipline: self
+                .discipline
+                .as_deref()
+                .map(|c| {
+                    core::ElementDiscipline::from_code(c)
+                        .ok_or_else(|| bad(format!("unknown discipline «{c}»")))
+                })
+                .transpose()?,
         })
     }
 
@@ -877,6 +918,7 @@ impl Style {
             && self.hidden_disciplines.is_empty()
             && self.presentation.is_none()
             && self.overrides.is_empty()
+            && self.discipline.is_none()
     }
 }
 
@@ -911,6 +953,9 @@ pub(crate) struct Viewport {
     /// A view only for drawing instead of a plan (version 48).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub drafting: Option<u64>,
+    /// A door or window type, in elevation with its data (version 74).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub opening_type: Option<u64>,
 }
 
 /// A view only for drawing (version 48): its name, scale and underlays.
@@ -1066,6 +1111,9 @@ pub(crate) fn sheets_out(sheets: &[core::Sheet]) -> Vec<Sheet> {
             title_block: s.title_block,
             revision: s.revision.clone(),
             presentation: s.presentation.map(|p| p.0),
+            restyle_views: s.restyle_views,
+            discipline: s.discipline.map(|d| d.code().to_string()),
+            title_type: s.title_type.map(|t| t.0),
         })
         .collect()
 }
@@ -1082,6 +1130,12 @@ pub(crate) fn sheets_in(sheets: Vec<Sheet>) -> Vec<core::Sheet> {
             title_block: s.title_block,
             revision: s.revision,
             presentation: s.presentation.map(core::PresentationStyleId),
+            restyle_views: s.restyle_views,
+            discipline: s
+                .discipline
+                .as_deref()
+                .and_then(core::ElementDiscipline::from_code),
+            title_type: s.title_type.map(core::TitleBlockId),
         })
         .collect()
 }
@@ -1103,6 +1157,7 @@ pub(crate) fn viewports_out(v: &[core::Viewport]) -> Vec<Viewport> {
             title: v.title.clone(),
             show_title: v.show_title,
             drafting: v.drafting.map(|d| d.0),
+            opening_type: v.opening_type.map(|d| d.0),
         })
         .collect()
 }
@@ -1126,6 +1181,7 @@ pub(crate) fn viewports_in(v: Vec<Viewport>) -> Result<Vec<core::Viewport>, File
                 title: v.title,
                 show_title: v.show_title,
                 drafting: v.drafting.map(core::DraftViewId),
+                opening_type: v.opening_type.map(core::OpeningTypeId),
             })
         })
         .collect()

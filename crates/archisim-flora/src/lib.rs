@@ -25,6 +25,11 @@ macro_rules! names {
             /// The value of a name (ignoring case).
             pub fn from_name(s: &str) -> Option<Self> {
                 let s = s.trim().to_lowercase();
+                // The studio drawings were named «AD5 …» before.
+                let s = match s.strip_prefix("ad5 ") {
+                    Some(rest) => format!("dibujo: {rest}"),
+                    None => s,
+                };
                 Self::ALL.iter().copied().find(|v| v.name().to_lowercase() == s)
             }
         }

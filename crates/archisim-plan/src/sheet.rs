@@ -7,7 +7,9 @@
 
 use std::fmt::Write as _;
 
-use archisim_core::{LevelId, Model, Point2, SectionId, Sheet, SheetId, ViewRef, Viewport};
+use archisim_core::{
+    LevelId, Model, Point2, SectionId, Sheet, SheetId, TitleBlock, TitleValue, ViewRef, Viewport,
+};
 
 use crate::lettering::{text_path, text_width, Align};
 use crate::{num, render_plan, PlanOptions};
@@ -24,6 +26,10 @@ pub const FRAME: f64 = 10.0;
 /// Size of the title block, millimetres.
 pub const TITLE_W: f64 = 180.0;
 pub const TITLE_H: f64 = 56.0;
+/// Width of the column of the «Hilo» title block and of the strip of
+/// «Faro», millimetres.
+pub const THREAD_W: f64 = 64.0;
+pub const BEACON_W: f64 = 62.0;
 
 /// Options of a sheet drawing.
 #[derive(Debug, Clone, Default)]
@@ -94,6 +100,11 @@ pub(crate) fn drawing_extent(d: &crate::section::SectionDrawing, scale: f64) -> 
 /// The part of the model a view shows (its crop, or its whole level or
 /// section). A section view placed from the app always has its crop.
 pub fn viewport_crop(model: &Model, v: &Viewport) -> (Point2, Point2) {
+    if let Some(t) = v.opening_type {
+        if let Some((r, _)) = crate::carpentry::card(model, t, v.scale) {
+            return r;
+        }
+    }
     let whole = || match (v.axo, v.section) {
         _ if v.drafting.is_some() => v.drafting.map(|d| {
             crate::drafting_views::drafting_region(
@@ -134,6 +145,9 @@ pub fn viewport_title(model: &Model, v: &Viewport) -> String {
     if v.title.trim().is_empty() {
         if v.axo.is_some() {
             return "VISTA 3D".into();
+        }
+        if let Some(t) = v.opening_type {
+            return crate::carpentry::card_title(model, t);
         }
         if let Some(d) = v.drafting.and_then(|d| model.draft_view(d)) {
             return d.name.to_uppercase();
@@ -225,12 +239,443 @@ fn sheet_scale(model: &Model, id: SheetId) -> String {
     }
 }
 
-/// The frame and the title block (cajetín) of a sheet.
-fn draw_frame(s: &mut String, model: &Model, sheet: &Sheet) {
+/// A text ending at `at` (its right end on the baseline).
+fn text_right(s: &mut String, t: &str, at: Point2, h_mm: f64, color: &str) {
+    let w = text_width(t, h_mm) * MM;
+    text(s, t, at - Point2::new(w, 0.0), h_mm, Align::Left, color);
+}
+
+/// A text along a direction (`dir`, a unit vector on the paper).
+fn text_along(
+    s: &mut String,
+    t: &str,
+    at: Point2,
+    dir: Point2,
+    h_mm: f64,
+    align: Align,
+    color: &str,
+) {
+    if t.trim().is_empty() {
+        return;
+    }
+    let h = h_mm * MM;
+    let _ = writeln!(
+        s,
+        r#"<path d="{}" {}/>"#,
+        text_path(t, at, dir, h, align),
+        crate::lettering::paint(h, color)
+    );
+}
+
+/// A line in a colour.
+fn line_in(s: &mut String, a: Point2, b: Point2, w_mm: f64, color: &str) {
+    let _ = writeln!(
+        s,
+        r#"<path d="M{},{} L{},{}" stroke="{color}" stroke-width="{}" stroke-linecap="square"/>"#,
+        num(a.x),
+        num(-a.y),
+        num(b.x),
+        num(-b.y),
+        num(w_mm * MM)
+    );
+}
+
+/// A rectangle outlined in a colour.
+fn rect_in(s: &mut String, a: Point2, b: Point2, w_mm: f64, color: &str) {
+    let _ = writeln!(
+        s,
+        r#"<path d="M{},{} L{},{} L{},{} L{},{} Z" fill="none" stroke="{color}" stroke-width="{}"/>"#,
+        num(a.x),
+        num(-a.y),
+        num(b.x),
+        num(-a.y),
+        num(b.x),
+        num(-b.y),
+        num(a.x),
+        num(-b.y),
+        num(w_mm * MM)
+    );
+}
+
+/// A circle outlined in a colour (centre and radius in paper metres).
+fn circle_in(s: &mut String, c: Point2, r: f64, w_mm: f64, color: &str) {
+    let _ = writeln!(
+        s,
+        r#"<circle cx="{}" cy="{}" r="{}" fill="none" stroke="{color}" stroke-width="{}"/>"#,
+        num(c.x),
+        num(-c.y),
+        num(r),
+        num(w_mm * MM)
+    );
+}
+
+/// A colour as SVG.
+fn hex(c: archisim_core::Rgb) -> String {
+    format!("#{:02x}{:02x}{:02x}", c[0], c[1], c[2])
+}
+
+/// The studio's name: the title block's, the project's or ArchiSim's.
+fn studio_name(model: &Model, tb: &TitleBlock) -> String {
+    for s in [tb.studio.trim(), model.info().studio.trim()] {
+        if !s.is_empty() {
+            return s.to_string();
+        }
+    }
+    "ArchiSim".into()
+}
+
+/// What a row of a title block shows on a sheet.
+pub fn title_value(model: &Model, sheet: &Sheet, v: &TitleValue) -> String {
+    let info = model.info();
+    match v {
+        TitleValue::Project => model.project_name.clone(),
+        TitleValue::Client => info.client.clone(),
+        TitleValue::Site => info.site.clone(),
+        TitleValue::Author => info.author.clone(),
+        TitleValue::Studio => info.studio.clone(),
+        TitleValue::Number => info.number.clone(),
+        TitleValue::Phase => info.phase.clone(),
+        TitleValue::Date => info.date.clone(),
+        TitleValue::SheetName => sheet.name.clone(),
+        TitleValue::SheetNumber => sheet.number.clone(),
+        TitleValue::Scale => sheet_scale(model, sheet.id),
+        TitleValue::Revision => sheet.revision.clone(),
+        TitleValue::Text(t) => t.clone(),
+    }
+}
+
+/// Whether the stamp shows: while the project is not for building.
+fn stamped(model: &Model, tb: &TitleBlock) -> bool {
+    !tb.stamp.trim().is_empty() && !model.info().phase.to_lowercase().contains("ejecuci")
+}
+
+/// A PNG fitted (keeping its proportion) in a box of the paper (paper
+/// metres, lower-left and upper-right).
+fn image_in(s: &mut String, logo: &archisim_core::DecalImage, lo: Point2, hi: Point2) {
+    let (bw, bh) = (hi.x - lo.x, hi.y - lo.y);
+    if bw <= 0.0 || bh <= 0.0 {
+        return;
+    }
+    let aspect = logo.aspect.max(1e-6);
+    let (w, h) = if bw / bh > aspect {
+        (bh * aspect, bh)
+    } else {
+        (bw, bw / aspect)
+    };
+    let (x, y) = (lo.x + (bw - w) / 2.0, lo.y + (bh - h) / 2.0);
+    let _ = writeln!(
+        s,
+        r#"<image x="{}" y="{}" width="{}" height="{}" preserveAspectRatio="none" href="data:image/png;base64,{}"/>"#,
+        num(x),
+        num(-(y + h)),
+        num(w),
+        num(h),
+        archisim_core::base64_encode(&logo.png)
+    );
+}
+
+/// The frame and the title block of a sheet, in its title block's layout.
+fn draw_frame(s: &mut String, model: &Model, sheet: &Sheet, tb: &TitleBlock) {
+    match tb.design {
+        archisim_core::TitleBlockDesign::Classic => draw_classic_frame(s, model, sheet, tb),
+        archisim_core::TitleBlockDesign::Thread => draw_thread_frame(s, model, sheet, tb),
+        archisim_core::TitleBlockDesign::Beacon => draw_beacon_frame(s, model, sheet, tb),
+    }
+}
+
+/// «Hilo»: hairlines; a narrow column at the bottom right, headed by the
+/// studio's monogram (or logo), each datum under its small grey label,
+/// and the sheet number large at its foot.
+fn draw_thread_frame(s: &mut String, model: &Model, sheet: &Sheet, tb: &TitleBlock) {
     let (w, h) = (sheet.width, sheet.height);
     let p = |x: f64, y: f64| Point2::new(x * MM, y * MM);
+    let hair = 0.13;
+    let acc = hex(tb.accent);
+    rect(s, p(FRAME_LEFT, FRAME), p(w - FRAME, h - FRAME), 0.25);
+    let cw = tb.width;
+    let x0 = w - FRAME - cw;
+    let x1 = w - FRAME;
+    let y0 = FRAME;
+    let info = model.info();
+    // From the foot up: the number, then the rows, then the monogram.
+    let foot = 22.0;
+    let row = 9.0;
+    let top = y0 + foot + row * tb.rows.len() as f64 + 34.0;
+    rect(s, p(x0, y0), p(x1, top), hair);
+    // The number and the revision.
+    text(
+        s,
+        "Nº PLANO",
+        p(x0 + 3.0, y0 + foot - 4.0),
+        1.6,
+        Align::Left,
+        GREY,
+    );
+    text(
+        s,
+        &fit(&sheet.number, 11.0, cw - 22.0),
+        p(x0 + 3.0, y0 + 4.0),
+        11.0,
+        Align::Left,
+        &acc,
+    );
+    text_right(s, "REV.", p(x1 - 3.0, y0 + foot - 4.0), 1.6, GREY);
+    text_right(s, &sheet.revision, p(x1 - 3.0, y0 + 4.0), 4.0, INK);
+    let mut y = y0 + foot;
+    for r in tb.rows.iter().rev() {
+        let th = match r.value {
+            TitleValue::Project => 3.0,
+            TitleValue::SheetName => 2.6,
+            TitleValue::Scale => 2.4,
+            _ => 2.2,
+        };
+        line(s, p(x0, y), p(x1, y), hair);
+        text(
+            s,
+            &r.label,
+            p(x0 + 3.0, y + row - 3.4),
+            1.6,
+            Align::Left,
+            GREY,
+        );
+        text(
+            s,
+            &fit(&title_value(model, sheet, &r.value), th, cw - 6.0),
+            p(x0 + 3.0, y + 1.6),
+            th,
+            Align::Left,
+            INK,
+        );
+        y += row;
+    }
+    line(s, p(x0, y), p(x1, y), hair);
+    let studio = studio_name(model, tb);
+    match &tb.logo {
+        // The logo over the studio's name.
+        Some(logo) => image_in(s, logo, p(x0 + 4.0, y + 8.0), p(x1 - 4.0, top - 3.0)),
+        // The monogram: its letters, or the studio's first letter, large,
+        // with a full stop.
+        None => {
+            let mono = if tb.monogram.trim().is_empty() {
+                let first: String = studio.chars().take(1).collect::<String>().to_uppercase();
+                format!("{first}.")
+            } else {
+                tb.monogram.trim().to_string()
+            };
+            let size = (16.0_f64).min((cw - 8.0) / text_width(&mono, 1.0).max(1e-9));
+            text(s, &mono, p(x0 + 4.0, y + 12.0), size, Align::Left, &acc);
+        }
+    }
+    text(
+        s,
+        &fit(&studio, 2.0, cw - 8.0),
+        p(x0 + 4.0, y + 5.0),
+        2.0,
+        Align::Left,
+        GREY,
+    );
+    if !info.number.trim().is_empty() {
+        text_right(
+            s,
+            &fit(&format!("Exp. {}", info.number), 1.6, cw / 2.0),
+            p(x1 - 3.0, y + 5.0),
+            1.6,
+            GREY,
+        );
+    }
+    // The stamp, over the column.
+    if stamped(model, tb) {
+        let t = tb.stamp.trim();
+        let size = 2.4;
+        let tw = text_width(t, size) + 6.0;
+        rect_in(s, p(x1 - tw, top + 3.0), p(x1, top + 9.0), 0.25, &acc);
+        text(s, t, p(x1 - tw / 2.0, top + 4.8), size, Align::Centre, &acc);
+    }
+}
+
+/// «Faro»: a strip down the right edge: the studio's name upright (or its
+/// logo), the project, its data, the revisions, a stamp in the accent
+/// colour while it is not the construction project, and the sheet's name
+/// and number large at the foot.
+fn draw_beacon_frame(s: &mut String, model: &Model, sheet: &Sheet, tb: &TitleBlock) {
+    let (w, h) = (sheet.width, sheet.height);
+    let p = |x: f64, y: f64| Point2::new(x * MM, y * MM);
+    let acc = hex(tb.accent);
+    let thin = 0.18;
+    rect(s, p(FRAME_LEFT, FRAME), p(w - FRAME, h - FRAME), 0.35);
+    let sw = tb.width;
+    let x0 = w - FRAME - sw;
+    let x1 = w - FRAME;
+    let (y0, y1) = (FRAME, h - FRAME);
+    line(s, p(x0, y0), p(x0, y1), 0.35);
+    let info = model.info();
+    let up = Point2::new(0.0, 1.0);
+    let logo_h = (y1 - y0) * 0.22;
+    match &tb.logo {
+        Some(logo) => image_in(
+            s,
+            logo,
+            p(x0 + 4.0, y1 - logo_h + 4.0),
+            p(x1 - 4.0, y1 - 4.0),
+        ),
+        None => {
+            // The studio, upright, as large as fits.
+            let studio = studio_name(model, tb).to_uppercase();
+            let size = ((logo_h - 6.0) / text_width(&studio, 1.0).max(1e-9)).clamp(3.0, 9.0);
+            text_along(
+                s,
+                &fit(&studio, size, logo_h - 6.0),
+                p(x0 + sw / 2.0 + size / 2.0, y1 - logo_h + 3.0),
+                up,
+                size,
+                Align::Left,
+                INK,
+            );
+        }
+    }
+    let mut y = y1 - logo_h;
+    line(s, p(x0, y), p(x1, y), thin);
+    // The project.
+    let label = |s: &mut String, t: &str, y: f64| {
+        text(s, t, p(x0 + 3.0, y - 4.0), 1.8, Align::Left, &acc);
+    };
+    label(s, "PROYECTO", y);
+    text(
+        s,
+        &fit(&model.project_name.to_uppercase(), 3.2, sw - 6.0),
+        p(x0 + 3.0, y - 9.5),
+        3.2,
+        Align::Left,
+        INK,
+    );
+    text(
+        s,
+        &fit(&info.site, 2.2, sw - 6.0),
+        p(x0 + 3.0, y - 14.0),
+        2.2,
+        Align::Left,
+        INK,
+    );
+    text(
+        s,
+        &fit(&info.client, 2.2, sw - 6.0),
+        p(x0 + 3.0, y - 18.0),
+        2.2,
+        Align::Left,
+        GREY,
+    );
+    y -= 22.0;
+    line(s, p(x0, y), p(x1, y), thin);
+    for r in &tb.rows {
+        text(s, &r.label, p(x0 + 3.0, y - 4.5), 1.8, Align::Left, &acc);
+        text_right(
+            s,
+            &fit(&title_value(model, sheet, &r.value), 2.4, sw / 2.0),
+            p(x1 - 3.0, y - 4.8),
+            2.4,
+            INK,
+        );
+        y -= 7.0;
+        line(s, p(x0, y), p(x1, y), thin);
+    }
+    // The revisions: the sheet's, and room for more.
+    text(s, "REV.", p(x0 + 3.0, y - 4.5), 1.8, Align::Left, &acc);
+    text(
+        s,
+        "DESCRIPCIÓN",
+        p(x0 + 14.0, y - 4.5),
+        1.8,
+        Align::Left,
+        &acc,
+    );
+    y -= 7.0;
+    for k in 0..4 {
+        line(s, p(x0, y), p(x1, y), thin * 0.7);
+        if k == 0 && !sheet.revision.trim().is_empty() {
+            text(
+                s,
+                &sheet.revision,
+                p(x0 + 3.0, y - 4.6),
+                2.4,
+                Align::Left,
+                INK,
+            );
+            text(
+                s,
+                &fit(&info.phase, 2.0, sw - 18.0),
+                p(x0 + 14.0, y - 4.4),
+                2.0,
+                Align::Left,
+                INK,
+            );
+        }
+        y -= 6.0;
+    }
+    line(s, p(x0, y), p(x1, y), thin);
+    // The stamp, upright, while the project is not for building.
+    let foot = 34.0;
+    let stamp_lo = y0 + foot + 4.0;
+    if stamped(model, tb) && y - 6.0 > stamp_lo + 30.0 {
+        let (a, b) = (
+            p(x0 + sw / 2.0 - 5.0, stamp_lo),
+            p(x0 + sw / 2.0 + 5.0, y - 6.0),
+        );
+        rect_in(s, a, b, 0.35, &acc);
+        let room = (y - 6.0 - stamp_lo) - 6.0;
+        let t = tb.stamp.trim();
+        let size = (room / text_width(t, 1.0).max(1e-9)).clamp(2.5, 5.0);
+        text_along(
+            s,
+            &fit(t, size, room),
+            p(x0 + sw / 2.0 + size / 2.0, (stamp_lo + y - 6.0) / 2.0),
+            up,
+            size,
+            Align::Centre,
+            &acc,
+        );
+    }
+    // The sheet: its name and its number, large.
+    line(s, p(x0, y0 + foot), p(x1, y0 + foot), thin);
+    text(
+        s,
+        &fit(&sheet.name.to_uppercase(), 2.4, sw - 6.0),
+        p(x0 + 3.0, y0 + foot - 5.0),
+        2.4,
+        Align::Left,
+        INK,
+    );
+    text(
+        s,
+        &format!("ESCALA {}", sheet_scale(model, sheet.id)),
+        p(x0 + 3.0, y0 + foot - 9.0),
+        1.8,
+        Align::Left,
+        &acc,
+    );
+    text_right(
+        s,
+        &fit(&sheet.number, 14.0, sw - 6.0),
+        p(x1 - 3.0, y0 + 4.0),
+        14.0,
+        INK,
+    );
+}
+
+/// The frame and the classic title block (cajetín) of a sheet: studio
+/// (or logo) and project, site and phase, the sheet's name and a row of
+/// cells with the title block's rows.
+fn draw_classic_frame(s: &mut String, model: &Model, sheet: &Sheet, tb: &TitleBlock) {
+    let (w, h) = (sheet.width, sheet.height);
+    let p = |x: f64, y: f64| Point2::new(x * MM, y * MM);
+    // The labels grey, unless the title block has a colour of its own.
+    let acc = if tb.accent.iter().all(|c| *c < 40) {
+        GREY.to_string()
+    } else {
+        hex(tb.accent)
+    };
+    let tw = tb.width.max(120.0);
     rect(s, p(FRAME_LEFT, FRAME), p(w - FRAME, h - FRAME), 0.5);
-    let x0 = w - FRAME - TITLE_W;
+    let x0 = w - FRAME - tw;
     let y0 = FRAME;
     let x1 = w - FRAME;
     let y1 = FRAME + TITLE_H;
@@ -244,37 +689,62 @@ fn draw_frame(s: &mut String, model: &Model, sheet: &Sheet) {
         line(s, p(x0, y), p(x1, y), 0.25);
     }
     line(s, p(x0 + 55.0, y1), p(x0 + 55.0, r1), 0.25);
-    let cells = [0.0, 30.0, 62.0, 112.0, 132.0, TITLE_W];
+    // The cells: the sheet number wider; the others share the rest.
+    let n = tb.rows.len().max(1);
+    let wide = tb
+        .rows
+        .last()
+        .is_some_and(|r| r.value == TitleValue::SheetNumber);
+    let wide_w = if wide && n > 1 { 48.0 } else { 0.0 };
+    let each = (tw - wide_w) / (n - usize::from(wide && n > 1)).max(1) as f64;
+    let mut cells = vec![0.0];
+    for i in 0..n {
+        let last = i + 1 == n;
+        let cw = if last && wide && n > 1 { wide_w } else { each };
+        cells.push(cells[i] + cw);
+    }
     for c in &cells[1..cells.len() - 1] {
         line(s, p(x0 + c, r3), p(x0 + c, y0), 0.25);
     }
     let info = model.info();
     let small = 1.8;
     let label = |s: &mut String, t: &str, x: f64, y: f64| {
-        text(s, t, p(x + 1.5, y - 1.5 - small), small, Align::Left, GREY);
+        text(s, t, p(x + 1.5, y - 1.5 - small), small, Align::Left, &acc);
     };
-    // Studio.
-    let studio = if info.studio.trim().is_empty() {
-        "ArchiSim"
-    } else {
-        info.studio.as_str()
-    };
-    // As large as fits (a long name gets smaller letters, down to 3 mm).
-    let w = text_width(studio, 1.0).max(1e-9);
-    let h = (50.0 / w).clamp(3.0, 6.0);
-    text(
-        s,
-        &fit(studio, h, 50.0),
-        p(x0 + 27.5, r1 + 5.0),
-        h,
-        Align::Centre,
-        INK,
-    );
+    // Studio, or its logo.
+    let studio = studio_name(model, tb);
+    match &tb.logo {
+        Some(logo) => image_in(s, logo, p(x0 + 2.0, r1 + 1.5), p(x0 + 53.0, y1 - 1.5)),
+        None => {
+            // As large as fits (a long name gets smaller letters, down to
+            // 3 mm).
+            let w = text_width(&studio, 1.0).max(1e-9);
+            let h = (50.0 / w).clamp(3.0, 6.0);
+            text(
+                s,
+                &fit(&studio, h, 50.0),
+                p(x0 + 27.5, r1 + 5.0),
+                h,
+                Align::Centre,
+                INK,
+            );
+            if !info.number.trim().is_empty() {
+                text(
+                    s,
+                    &fit(&format!("Exp. {}", info.number), 1.8, 50.0),
+                    p(x0 + 27.5, r1 + 1.5),
+                    1.8,
+                    Align::Centre,
+                    GREY,
+                );
+            }
+        }
+    }
     // Project and client.
     label(s, "PROYECTO", x0 + 55.0, y1);
     text(
         s,
-        &fit(&model.project_name, 3.5, TITLE_W - 60.0),
+        &fit(&model.project_name, 3.5, tw - 60.0),
         p(x0 + 57.0, r1 + 6.5),
         3.5,
         Align::Left,
@@ -283,7 +753,7 @@ fn draw_frame(s: &mut String, model: &Model, sheet: &Sheet) {
     if !info.client.trim().is_empty() {
         text(
             s,
-            &fit(&format!("Promotor: {}", info.client), 2.2, TITLE_W - 60.0),
+            &fit(&format!("Promotor: {}", info.client), 2.2, tw - 60.0),
             p(x0 + 57.0, r1 + 1.8),
             2.2,
             Align::Left,
@@ -291,73 +761,133 @@ fn draw_frame(s: &mut String, model: &Model, sheet: &Sheet) {
         );
     }
     // Site and phase.
+    let split = (tw * 0.65).round();
     label(s, "EMPLAZAMIENTO", x0, r1);
     text(
         s,
-        &fit(&info.site, 2.5, 110.0),
+        &fit(&info.site, 2.5, split - 8.0),
         p(x0 + 2.0, r2 + 2.0),
         2.5,
         Align::Left,
         INK,
     );
-    label(s, "FASE", x0 + 120.0, r1);
+    label(s, "FASE", x0 + split + 2.0, r1);
     text(
         s,
-        &fit(&info.phase, 2.5, 56.0),
-        p(x0 + 122.0, r2 + 2.0),
+        &fit(&info.phase, 2.5, tw - split - 4.0),
+        p(x0 + split + 4.0, r2 + 2.0),
         2.5,
         Align::Left,
         INK,
     );
-    line(s, p(x0 + 118.0, r1), p(x0 + 118.0, r2), 0.25);
+    line(s, p(x0 + split, r1), p(x0 + split, r2), 0.25);
     // Sheet name.
     label(s, "PLANO", x0, r2);
     text(
         s,
-        &fit(&sheet.name, 4.0, TITLE_W - 6.0),
+        &fit(&sheet.name, 4.0, tw - 6.0),
         p(x0 + 2.0, r3 + 3.0),
         4.0,
         Align::Left,
         INK,
     );
     // Data cells.
-    let scale = sheet_scale(model, sheet.id);
-    let data = [
-        ("ESCALA", scale.as_str(), 3.0),
-        ("FECHA", info.date.as_str(), 2.5),
-        ("AUTOR", info.author.as_str(), 2.5),
-        ("REV.", sheet.revision.as_str(), 3.0),
-        ("Nº PLANO", sheet.number.as_str(), 7.0),
-    ];
-    for (i, (name, value, th)) in data.iter().enumerate() {
+    for (i, r) in tb.rows.iter().enumerate() {
         let cx0 = x0 + cells[i];
         let cw = cells[i + 1] - cells[i];
-        label(s, name, cx0, r3);
+        let th = match r.value {
+            TitleValue::SheetNumber => 7.0,
+            TitleValue::Scale | TitleValue::Revision => 3.0,
+            _ => 2.5,
+        };
+        label(s, &r.label, cx0, r3);
         text(
             s,
-            &fit(value, *th, cw - 3.0),
+            &fit(&title_value(model, sheet, &r.value), th, cw - 3.0),
             p(cx0 + cw / 2.0, y0 + 3.5),
-            *th,
+            th,
             Align::Centre,
             INK,
         );
     }
-    if !info.number.trim().is_empty() {
-        text(
-            s,
-            &fit(&format!("Exp. {}", info.number), 1.8, 50.0),
-            p(x0 + 27.5, r1 + 1.5),
-            1.8,
-            Align::Centre,
-            GREY,
-        );
+    // The stamp, above the block.
+    if stamped(model, tb) {
+        let t = tb.stamp.trim();
+        let size = 2.6;
+        let sw = text_width(t, size) + 6.0;
+        rect_in(s, p(x1 - sw, y1 + 3.0), p(x1, y1 + 9.5), 0.35, &acc);
+        text(s, t, p(x1 - sw / 2.0, y1 + 5.0), size, Align::Centre, &acc);
     }
 }
 
-/// The title of a view: its name underlined, and its scale.
-fn draw_view_title(s: &mut String, model: &Model, v: &Viewport) {
+/// The title of a view, in the title block's layout; `n` is its number
+/// on the sheet (from 1).
+fn draw_view_title(s: &mut String, model: &Model, tb: &TitleBlock, v: &Viewport, n: usize) {
     let (lo, _) = viewport_rect(model, v);
     let t = viewport_title(model, v);
+    match tb.design {
+        archisim_core::TitleBlockDesign::Thread => {
+            // Spaced capitals, a hairline, the scale under in grey.
+            let up = t.to_uppercase();
+            let h = 3.0;
+            let at = Point2::new(lo.x, lo.y - 7.0 * MM);
+            text(s, &up, at, h, Align::Left, INK);
+            let w = text_width(&up, h).max(30.0);
+            line(
+                s,
+                at - Point2::new(0.0, 1.4 * MM),
+                at + Point2::new(w * MM, -1.4 * MM),
+                0.13,
+            );
+            text(
+                s,
+                &format!("ESCALA 1:{}", v.scale),
+                at - Point2::new(0.0, 4.6 * MM),
+                1.8,
+                Align::Left,
+                GREY,
+            );
+            return;
+        }
+        archisim_core::TitleBlockDesign::Beacon => {
+            // Its number in a circle, the name in capitals and the scale
+            // under it, in the accent colour.
+            let acc = hex(tb.accent);
+            let r = 4.0 * MM;
+            let c = Point2::new(lo.x + r, lo.y - 9.0 * MM);
+            circle_in(s, c, r, 0.35, &acc);
+            text(
+                s,
+                &n.to_string(),
+                c - Point2::new(0.0, 1.5 * MM),
+                3.0,
+                Align::Centre,
+                &acc,
+            );
+            let up = t.to_uppercase();
+            let h = 4.0;
+            let at = Point2::new(c.x + r + 3.0 * MM, c.y - 0.2 * MM);
+            text(s, &up, at, h, Align::Left, &acc);
+            let w = text_width(&up, h);
+            line_in(
+                s,
+                at - Point2::new(0.0, 1.6 * MM),
+                at + Point2::new(w * MM, -1.6 * MM),
+                0.35,
+                &acc,
+            );
+            text(
+                s,
+                &format!("ESCALA 1:{}", v.scale),
+                at - Point2::new(0.0, 5.0 * MM),
+                2.0,
+                Align::Left,
+                &acc,
+            );
+            return;
+        }
+        archisim_core::TitleBlockDesign::Classic => {}
+    }
     let h = 4.0;
     let at = Point2::new(lo.x, lo.y - 8.0 * MM);
     text(s, &t, at, h, Align::Left, INK);
@@ -380,7 +910,39 @@ fn draw_view_title(s: &mut String, model: &Model, v: &Viewport) {
 
 /// The plan, section or elevation of a view, as an SVG fragment placed
 /// and cut on the sheet.
-fn draw_viewport(s: &mut String, model: &Model, v: &Viewport, px_per_mm: Option<f64>) {
+fn draw_viewport(
+    s: &mut String,
+    model: &Model,
+    sheet: &Sheet,
+    v: &Viewport,
+    px_per_mm: Option<f64>,
+) {
+    // The view's style with the sheet's discipline and, if it says so,
+    // the sheet's presentation style.
+    let styled;
+    let v = if sheet.discipline.is_some() || sheet.restyle_views {
+        styled = Viewport {
+            style: sheet.view_style(&v.style),
+            ..v.clone()
+        };
+        &styled
+    } else {
+        v
+    };
+    // A door or window type, with its data.
+    if let Some(t) = v.opening_type {
+        if let Some((crop, body)) = crate::carpentry::card(model, t, v.scale) {
+            let svg = format!(
+                r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="{} {} {} {}">{body}</svg>"#,
+                num(crop.0.x),
+                num(-crop.1.y),
+                num(crop.1.x - crop.0.x),
+                num(crop.1.y - crop.0.y)
+            );
+            place_view_svg(s, &svg, v, crop);
+        }
+        return;
+    }
     // A view only for drawing (E7).
     if let Some(d) = v.drafting {
         let crop = viewport_crop(model, v);
@@ -397,7 +959,7 @@ fn draw_viewport(s: &mut String, model: &Model, v: &Viewport, px_per_mm: Option<
         return;
     }
     if let Some(axo) = v.axo {
-        let mut d = crate::axo::axo_drawing(model, &axo, v.style.focus);
+        let mut d = crate::axo::axo_drawing(model, &axo, v.style.effective().focus);
         if let Some(p) = crate::presentation::style_of(model, &v.style).filter(|p| p.shadows) {
             d = d.with_shadows(model, &axo, crate::presentation::shadow_colour(p));
         }
@@ -506,18 +1068,19 @@ pub fn render_sheet(model: &Model, id: SheetId, options: &SheetOptions) -> Strin
     // What is the sheet's own (view titles, tables, title block, drafting)
     // goes in `own`, styled at the end; the views keep their style.
     let mut own = String::new();
+    let tb = model.sheet_title_block(sheet);
     let visible = |a: Point2, b: Point2| match options.region {
         Some((lo, hi)) => !(a.x > hi.x || a.y > hi.y || b.x < lo.x || b.y < lo.y),
         None => true,
     };
-    for v in model.viewports_on(id) {
+    for (n, v) in model.viewports_on(id).enumerate() {
         let (a, b) = viewport_rect(model, v);
         if visible(a, b - Point2::new(0.0, 0.0)) {
-            draw_viewport(&mut s, model, v, options.px_per_mm);
+            draw_viewport(&mut s, model, sheet, v, options.px_per_mm);
         }
         if v.show_title {
             own.push_str("<g id=\"view-titles\">\n");
-            draw_view_title(&mut own, model, v);
+            draw_view_title(&mut own, model, &tb, v, n + 1);
             own.push_str("</g>\n");
         }
     }
@@ -532,7 +1095,7 @@ pub fn render_sheet(model: &Model, id: SheetId, options: &SheetOptions) -> Strin
     }
     if sheet.title_block {
         own.push_str("<g id=\"title-block\">\n");
-        draw_frame(&mut own, model, sheet);
+        draw_frame(&mut own, model, sheet, &tb);
         own.push_str("</g>\n");
     }
     if !options.without_drafts {
@@ -549,7 +1112,12 @@ pub fn render_sheet(model: &Model, id: SheetId, options: &SheetOptions) -> Strin
         );
     }
     match look {
-        Some(p) => s.push_str(&crate::presentation::apply_fragment(&own, p)),
+        // The title block's accent stays as it is over the palette.
+        Some(p) => s.push_str(&crate::presentation::apply_fragment_keeping(
+            &own,
+            p,
+            &[tb.accent],
+        )),
         None => s.push_str(&own),
     }
     s.push_str("</svg>\n");

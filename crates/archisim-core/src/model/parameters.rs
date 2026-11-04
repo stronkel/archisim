@@ -173,7 +173,7 @@ pub struct UserParameter {
     /// The name shown and written to IFC, e.g. "Resistencia al fuego".
     pub name: String,
     pub kind: UserKind,
-    /// The IFC property set it goes in, e.g. "AD5_Datos" (also the group in
+    /// The IFC property set it goes in, e.g. "Proyecto_Datos" (also the group in
     /// the properties).
     pub group: String,
     pub categories: Vec<ParamCategory>,
@@ -647,7 +647,7 @@ fn value_text(v: &Value) -> String {
 /// parameter:
 ///
 /// ```text
-/// parameter "Resistencia al fuego" guid "0x…" kind choice("EI2 30-C5", "EI2 60-C5") group "AD5_Datos" categories doors by_type yes default "EI2 30-C5"
+/// parameter "Resistencia al fuego" guid "0x…" kind choice("EI2 30-C5", "EI2 60-C5") group "Proyecto_Datos" categories doors by_type yes default "EI2 30-C5"
 /// ```
 pub fn shared_parameters_text(defs: &[SharedParameter]) -> String {
     let mut s = String::from("# Parámetros compartidos de ArchiSim\n");
@@ -811,7 +811,7 @@ mod tests {
         NewUserParameter {
             name: "Resistencia al fuego".into(),
             kind: UserKind::Choice(vec!["—".into(), "EI2 30-C5".into(), "EI2 60-C5".into()]),
-            group: "AD5_Datos".into(),
+            group: "Proyecto_Datos".into(),
             categories: vec![ParamCategory::Doors],
             by_type: true,
             default: Value::Text("—".into()),
@@ -907,7 +907,7 @@ mod tests {
             .add_user_parameter(NewUserParameter {
                 name: "Observaciones".into(),
                 kind: UserKind::Text,
-                group: "AD5_Datos".into(),
+                group: "Proyecto_Datos".into(),
                 categories: vec![ParamCategory::Doors, ParamCategory::Walls],
                 by_type: false,
                 default: Value::Text(String::new()),

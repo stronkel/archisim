@@ -39,7 +39,7 @@ Misma rama y mismo pull request (#160). Sin cambios de formato: son programas nu
 
 ## 2026-11-04 (100) · Taller de edificios, tanda 12: el entorno con sus equipamientos, y remates
 
-Misma rama y mismo pull request (#160). **Formato `.archisim` versión 74** (el programa del edificio del mundo).
+Misma rama y mismo pull request (#160). **Formato `.archisim` versión 77** (el programa del edificio del mundo; numerado 74 antes de unir #158 y #159).
 
 **Hecho**
 - **Al traer el entorno**, los edificios que son equipamientos o comercios salen como tales:
@@ -92,7 +92,7 @@ Misma rama y mismo pull request (#160). Sin cambios de formato.
 
 ## 2026-11-04 (98) · Taller de edificios, tanda 9: época, estado y seis regiones más de España
 
-Misma rama y mismo pull request (#160). **Formato `.archisim` versión 73** (la época y el estado del edificio del mundo).
+Misma rama y mismo pull request (#160). **Formato `.archisim` versión 76** (la época y el estado del edificio del mundo; numerado 73 antes de unir #158 y #159).
 
 **Hecho**
 - **Época «de hoy»** para los 30 lugares: cubierta plana (inclinada de zinc en el norte, Japón y la montaña), huecos grandes con correderas, terrazas de losa, sin molduras ni rejas, con el color del sitio y la persiana enrollable en España.
@@ -116,7 +116,7 @@ Misma rama y mismo pull request (#160). **Formato `.archisim` versión 73** (la 
 
 ## 2026-11-04 (97) · Taller de edificios, tanda 8: torres, casas patio y casas en hilera
 
-Misma rama y mismo pull request (#160). Sin cambios de formato: el `dress` de la versión 72 admite las tipologías nuevas. Los ficheros guardados con estas tipologías solo los abre esta versión o una posterior.
+Misma rama y mismo pull request (#160). Sin cambios de formato: el `dress` de la versión 75 (antes 72) admite las tipologías nuevas. Los ficheros guardados con estas tipologías solo los abre esta versión o una posterior.
 
 **Hecho**
 - **Torre del mundo**, de tres maneras según el lugar:
@@ -136,7 +136,7 @@ Misma rama y mismo pull request (#160). Sin cambios de formato: el `dress` de la
 
 ## 2026-11-04 (96) · Taller de edificios, tanda 7: los edificios del entorno, con la piel de su lugar
 
-Misma rama `bloque/taller-edificios` y mismo pull request (#160). **Formato `.archisim` versión 72.** El IFC guarda el lugar en el pset del edificio del entorno.
+Misma rama `bloque/taller-edificios` y mismo pull request (#160). **Formato `.archisim` versión 75** (numerado 72 antes de unir #158 y #159). El IFC guarda el lugar en el pset del edificio del entorno.
 
 **Hecho**
 - Un edificio del entorno (U6) puede hacerse como uno de los del mundo: su planta tal cual, con sus medianeras ciegas y sus fachadas a la calle, en la tipología y la piel de su lugar. Se guarda en el `dress` (`world`: lugar, tipología y variante).
@@ -370,6 +370,185 @@ Rama `bloque/taller-edificios`, con pull request. Sin cambios de formato ni de I
    - colores por defecto;
    - lo que falta o sobra en cada tipo;
    - si el «aire español» se reconoce.
+## 2026-11-03 (91) · Normas por vista, cajetines por plano, plano de carpinterías y borrar vistas
+
+Rama `bloque/normas-por-vista` (sale de `bloque/interfaz-v5`), con pull request. Formato `.archisim` versión 74.
+
+Antonio no encontraba las Normas gráficas y pidió:
+- que las normas y sus colores se elijan **por vista**, como Bosque o Terracota, afectando a líneas, textos y muros;
+- **cajetines por plano**, personalizables y propios;
+- que un plano de Arquitectura **oculte las instalaciones**, con su esquema de color (grises, pasteles, acento rojo en líneas y textos como 30X40);
+- que el **plano de carpinterías** lleve sus alzados;
+- poder **borrar** planos de presentación, secciones y alzados.
+
+**Hecho**
+- **Esquemas por vista.**
+  - Los estilos de presentación pueden llevar sus **grosores y textos** (del proyecto, Clásica, Hilo, Faro o retocados) y un **color de acento** con las categorías que resalta (cotas, etiquetas, locales, cotas de nivel, marcas, ejes).
+  - Hilo y Faro son ahora estilos que se eligen por vista. Hay «Hilo · rayado», «· macizado negro», «· macizado blanco» y «· color», y «Faro», «Faro · gris claro» y «Faro · blanco y negro».
+  - En Normas gráficas queda la norma por defecto del proyecto (la de las vistas sin estilo).
+  - Normas gráficas, Cajetines y Estilos de presentación están ahora en el menú **Vista**.
+- **Disciplina de la vista.** En Propiedades → Presentación, junto al Estilo:
+  - Arquitectura deja fuera las instalaciones;
+  - Estructura e Instalaciones dejan fuera la urbanización y lo demás en gris;
+  - Urbanización deja fuera instalaciones y estructura.
+
+  Hay plantillas de vista con esos nombres.
+- **Secciones y alzados** guardan su estilo, su disciplina y su plantilla (antes solo lo tenía la pestaña). Al colocar una vista en un plano, toma el estilo de su planta o sección.
+- **Planos.** Cada uno elige su **Cajetín**, su **Disciplina** (para sus vistas que no tienen) y «Estilo en sus vistas» (todas con el del plano).
+- **Cajetines** (Vista → Cajetines…, o el lápiz junto al cajetín en el plano):
+  - el proyecto guarda Clásico, Hilo, Faro y los propios;
+  - de cada uno se cambia composición, ancho, color, estudio, **logotipo PNG**, monograma, sello y las **filas de datos** (rótulo y qué muestran, también textos propios);
+  - se ve una vista previa de la esquina de un A3;
+  - uno es el de por defecto.
+
+  El PDF lleva ahora las imágenes PNG (antes se perdían).
+- **Plano de carpinterías** (navegador → Planos → «+ Plano de carpinterías»):
+  - planos A3 de verdad, con cada tipo de puerta y ventana como una vista: alzado desde fuera con ancho y alto, sección y datos (tipo, medidas, apertura, carpintería, antepecho, unidades, situación);
+  - en dos columnas y a una escala por plano (1:50 si caben);
+  - siguen al modelo, se mueven y se borran como las demás vistas;
+  - la demo lo trae (C-01 y C-02).
+- **Borrar y renombrar** secciones, alzados, vistas de dibujo y planos (también los de presentación) con el clic derecho en el navegador. Al borrar una sección o vista de dibujo, se va también de los planos.
+
+**Pendiente**
+- Arrastrar un tipo de puerta o ventana suelto del navegador a un plano.
+- En secciones y alzados, el color de acento aún no resalta las cotas (sus anotaciones no van por categorías).
+
+**Qué debe probar Antonio**
+1. `cargo run --release -p archisim-cli -- demo out/` y abrir `out/demo-planos.pdf`: los planos C-01 y C-02 de carpinterías.
+2. Abrir `out/demo.archisim`. En una planta, Propiedades → Presentación:
+   - Estilo «Faro»: grises con cotas y locales en rojo, corte más grueso;
+   - «Hilo · color»: líneas finas y tonos pastel;
+   - Disciplina «Arquitectura»: desaparecen las instalaciones.
+3. Abrir un alzado y cambiarle el Estilo: se queda guardado al cerrar y abrir.
+4. Abrir el plano A-01, Propiedades → Cajetín «Faro», y luego el lápiz:
+   - hacer uno propio con «Nuevo a partir de este»;
+   - cambiar el color, poner un logotipo PNG y una fila «COLEGIADO»;
+   - exportar el PDF.
+5. En el navegador, clic derecho sobre un alzado, una sección o un plano: Renombrar y Borrar.
+
+---
+
+## 2026-11-03 (90) · Maqueta más limpia, aspectos del 3D que se notan, normas gráficas Hilo y Faro, sin «AD5»
+
+Misma rama `bloque/interfaz-v5` (pull request #158). Formato `.archisim` versión 73 (cajetín y color de acento de las normas gráficas).
+
+Antonio pidió, con una captura y dos guías de plantillas de Revit:
+- que la ficha del objeto de la Maqueta no tape el carril ni el catálogo;
+- que el aviso negro de la cámara salga solo al cambiar de modo;
+- entender los aspectos del 3D y tener un alámbrico, porque Sombreado, Texturas y Realista no cambiaban nada;
+- adoptar el estilo de esas dos plantillas con otros nombres;
+- quitar las referencias a AD5 que verá gente de fuera.
+
+**Hecho**
+- **Ficha del objeto** (Maqueta): va dentro de la vista 3D, abajo a la izquierda, y se ajusta a su ancho.
+- **Aviso de la cámara**: sale al cambiar de modo de cámara, unos 6 segundos, y se desvanece.
+- **Aspecto del 3D**: seis botones, cada uno con su explicación al pasar el ratón:
+  - **Alámbrico**: solo las aristas de todo, se ve a través;
+  - **Líneas ocultas**: blanco con aristas, lo de detrás queda tapado (lo que antes se llamaba así);
+  - **Colores planos**: cada material en su color, sin luz ni texturas (lo que antes se llamaba «Aristas»);
+  - **Sombreado**, **Texturas** y **Realista**.
+
+  El fallo: los tres últimos cambiaban un ajuste que solo se leía al abrir el programa. Ahora cambian de verdad, y el aspecto elegido se guarda en las preferencias.
+- **Normas gráficas del estudio.** En Normas gráficas, «Norma del estudio» con tres botones. La Clásica sigue siendo la de siempre y la de los proyectos nuevos.
+  - **Hilo** (de la primera guía): líneas muy finas (corte 0,35, vista 0,13, cotas 0,09), letra de 2 mm.
+    - Cajetín «Hilo»: una columna estrecha abajo a la derecha, con monograma, filas con rótulos grises y el número de plano grande.
+    - Títulos de vista en mayúsculas con raya fina y escala en gris.
+    - Estilos de presentación «Hilo · rayado», «Hilo · macizado negro», «Hilo · macizado blanco» y «Hilo · color» (tonos pastel), con sus cuatro plantillas de vista.
+  - **Faro** (de la segunda guía): líneas más gruesas (corte 0,6), letra de 2,5 mm y un color de acento rojo.
+    - Cajetín «Faro»: una franja a toda la altura del plano a la derecha, con el nombre del estudio de pie, datos del proyecto, tabla de revisiones, sello «NO VÁLIDO PARA OBRA» mientras la fase no sea de ejecución, y número grande.
+    - Títulos de vista con número en un círculo.
+    - Estilos «Faro» y «Faro · gris claro», y la plantilla «Faro · planta» con las cotas, etiquetas y locales en el color de acento.
+  - El cajetín y el color de acento se pueden cambiar también por separado.
+- **Sin «AD5»** en lo que ve el usuario:
+  - el estilo y la plantilla «AD5» se llaman **«Blanco y negro»**;
+  - los grupos de parámetros se llaman `Proyecto_Datos`, `Proyecto_Acabados` y `Proyecto_Mediciones`;
+  - los cuatro dibujos de árbol se llaman «dibujo: círculos», «dibujo: racimos», «dibujo: estrella» y «dibujo: copa»;
+  - la empresa del instalador y la organización del IFC se llaman «ArchiSim».
+
+  Los proyectos antiguos se siguen abriendo con sus nombres de antes.
+
+**Pendiente**
+- Decidir si una de las normas nuevas debe ser la de los proyectos nuevos.
+- En la demo, la tabla de superficies del plano cae sobre la franja del cajetín Faro (por dónde la coloca la demo, no por el cajetín).
+
+**Qué debe probar Antonio**
+1. `cargo run --release -p archisim-app -- out/demo.archisim`, F4 para la Maqueta, seleccionar un mueble: la ficha queda dentro del 3D. El aviso de la cámara se va solo.
+2. En la vista 3D, los seis botones de Aspecto: Alámbrico deja ver a través; Sombreado, Texturas y Realista se distinguen.
+3. Normas gráficas → Norma del estudio → Hilo (o Faro), y abrir un plano: cajetín, plumillas y títulos de vista. En una planta, plantilla de vista «Faro · planta» o «Hilo · planta …».
+4. Comprobar que no queda «AD5» en estilos, plantillas, parámetros ni dibujos de árbol.
+
+---
+
+## 2026-11-03 (89) · Árboles de cerca, edificios del entorno, Maqueta con las mismas barras (V5) y Presentación completa (V6)
+
+Rama `bloque/interfaz-v5`, con pull request. Formato `.archisim` versión 72 (cámaras guardadas).
+
+Antonio aprobó V1 a V4 de la interfaz y pidió:
+- mejorar los árboles vistos de cerca y los edificios del entorno;
+- seguir con lo pendiente desde V5.
+
+**Hecho**
+- **Árboles de cerca.**
+  - Antes, cada mata de hojas tenía un núcleo de 20 caras que se veía como un hexágono oscuro, con las hojas sueltas a su alrededor.
+  - Ahora las matas se funden por celdas en unos pocos **cogollos redondos** (80 caras, sombreado suave), con las hojas pegadas a su superficie. La copa se lee como los árboles estilizados de la gama: abombada, con hojas que rompen el contorno.
+  - Con muchas plantas en el proyecto, todas bajaban de detalle, también las de delante. Ahora **las 12 plantas más cercanas al origen** (a menos de 60 m) se dibujan con todas sus hojas de cerca, y con la versión del proyecto de lejos.
+- **Edificios del entorno.** Los zócalos, impostas y cornisas de piedra ya no llevan la mampostería, que en una banda estrecha parecía un enlosado: llevan **sillería**. Las cubiertas planas llevan **grava**. Afecta a los edificios que se traen o se ponen a partir de ahora; los materiales que ya están en un proyecto no cambian.
+- **V5 · Maqueta con las mismas barras.**
+  - Arriba, la barra del proyecto con Entregar; abajo, Vista · Anotar · Ayudas, como en Técnica. Los muros recortados se eligen en la lista de abajo, con lo que muestran los cortes.
+  - El **carril** son las estancias, cada una con su dibujo:
+    - Construir (en el color de Arquitectura);
+    - Salón, Comedor, Cocina, Baño, Dormitorio, Despacho, Decoración, Deporte, Hostelería y comercio, Diseño y Otros (en el de Presentación);
+    - Exterior (en el de Urbanismo).
+  - La **columna** es el catálogo de la estancia: colección, temas en pastillas (en Construir y Exterior), clases (Bajos, Altos…) y tarjetas de dos en dos.
+  - Sobre el 3D, una fila con la planta (▼ ▲), Cuadrícula, Imagen, Luz y Encuadrar.
+- **V4, segunda vuelta.**
+  - Tarjetas de medidas también en:
+    - pilares (ancho, fondo, altura);
+    - vigas (longitud, canto, ancho);
+    - cubiertas (espesor, alero, desfase);
+    - escaleras (altura, ancho, huella);
+    - barandillas (longitud, altura, desfase).
+  - Bajo el tipo de cualquier elemento, **«Parecidos»**: cuatro tipos de su carpeta, o los de al lado en la lista, con su dibujo, para cambiar con un clic.
+- **V6 · Presentación.**
+  - **Cámara** guarda el punto de vista del 3D. Las cámaras salen en el navegador, en «Cámaras»: un clic vuelve a mirar desde ella; con clic derecho se renombra, se actualiza con la vista o se borra.
+  - **Recorrido** pone los ojos a 1,60 m sobre la planta activa, donde miraba la vista:
+    - W A S D andan a paso de persona y Mayús corre;
+    - el botón derecho mira alrededor;
+    - Cámara guarda el punto de vista;
+    - Esc vuelve a la vista de antes.
+  - **Sol** abre su panel:
+    - el recorrido del sol en planta para verano, equinoccio e invierno, con el norte del proyecto;
+    - el sol de ahora;
+    - día y hora solar con deslizadores (se apunta al soltar);
+    - botones para los tres días, la altura y el rumbo del sol, y la latitud.
+  - **Aspecto** del 3D: además de Sombreado, Texturas y Realista, **Aristas** (caras en su color pálido y plano, todas las aristas en tinta) y **Líneas ocultas** (papel blanco y las aristas que se ven).
+- Pruebas nuevas:
+  - `maquette_has_the_same_bars_and_rooms_in_the_rail`;
+  - `saved_cameras_and_the_walk`;
+  - cámaras guardadas y leídas en `archisim-core` y `archisim-file`;
+  - fotos de los aspectos con `ARCHISIM_VISTAS_ESTILO=aristas|ocultas` en `project_pictures`.
+
+**Pendiente**
+- Grabar el recorrido como vídeo y poner las cámaras en las láminas de presentación.
+- Tarjetas de medidas de objetos, zapatas, muros cortina y terreno.
+- Pasar los edificios del entorno ya traídos a la piedra y la grava nuevas (por ahora, solo los nuevos).
+
+**Qué debe probar Antonio**
+1. `cargo run -p archisim-cli -- demo out/` y `cargo run --release -p archisim-app -- out/demo.archisim`.
+2. **Árboles:**
+   - En la vista 3D, acércate a los árboles de la demo: copas abombadas con hojas, sin hexágonos.
+   - Con `archisim vivero out/` y `out/vivero.archisim`, mira de cerca el pino piñonero y el olivo, que están junto al origen.
+3. **Entorno:** con `archisim entorno out/`, mira las cornisas y zócalos de piedra y las cubiertas planas.
+4. **Maqueta (Técnica · Maqueta, arriba a la derecha):**
+   - pasa por las estancias del carril y mira las tarjetas de la columna;
+   - Entregar arriba, y Vista · Anotar · Ayudas abajo;
+   - la fila de planta, cuadrícula, imagen y luz sobre el 3D.
+5. **Presentación (carril, pantalla con gráfica):**
+   - en la vista 3D pulsa Cámara: sale en el navegador, en «Cámaras»; gira la vista y pincha la cámara;
+   - pulsa Recorrido y anda por la casa con W A S D y el botón derecho; Esc;
+   - pulsa Sol y mueve día y hora: las sombras cambian al soltar.
+6. **Aspecto** (arriba a la izquierda del 3D): Aristas y Líneas ocultas.
+7. Selecciona un pilar, una viga, una cubierta y una escalera: las tarjetas de medidas y los «Parecidos» bajo el tipo.
 
 ---
 

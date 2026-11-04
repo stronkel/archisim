@@ -53,6 +53,22 @@ impl Pens {
         tick: 0.25,
         text: 2.0,
     };
+
+    /// Whether every weight and size is a positive number.
+    pub fn is_valid(&self) -> bool {
+        [
+            self.cut,
+            self.frame,
+            self.view,
+            self.thin,
+            self.hatch,
+            self.dimension,
+            self.tick,
+            self.text,
+        ]
+        .iter()
+        .all(|v| v.is_finite() && *v > 0.0)
+    }
 }
 
 /// The lettering of texts, dimensions, room stamps and title blocks.
@@ -87,8 +103,63 @@ impl TextFont {
     }
 }
 
-/// The project's graphic standard: pens for fine and coarse scales, and
-/// the lettering.
+/// How the sheets are framed: the title block («cajetín») and the titles
+/// of the views on them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Hash)]
+pub enum TitleBlockDesign {
+    /// A block of cells across the bottom right, titles underlined.
+    #[default]
+    Classic,
+    /// «Hilo»: hairlines, a narrow column at the bottom right headed by
+    /// the studio's monogram, labels in small grey capitals, the sheet
+    /// number large; titles in spaced capitals with the scale under.
+    Thread,
+    /// «Faro»: a strip down the right edge with the studio's name upright,
+    /// the project, revisions and a stamp in the accent colour, and the
+    /// sheet number large at its foot; titles with their number in a
+    /// circle, in the accent colour.
+    Beacon,
+}
+
+impl TitleBlockDesign {
+    pub const ALL: [TitleBlockDesign; 3] = [
+        TitleBlockDesign::Classic,
+        TitleBlockDesign::Thread,
+        TitleBlockDesign::Beacon,
+    ];
+
+    pub fn code(self) -> &'static str {
+        match self {
+            TitleBlockDesign::Classic => "classic",
+            TitleBlockDesign::Thread => "thread",
+            TitleBlockDesign::Beacon => "beacon",
+        }
+    }
+
+    pub fn from_code(code: &str) -> Option<TitleBlockDesign> {
+        TitleBlockDesign::ALL.into_iter().find(|d| d.code() == code)
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            TitleBlockDesign::Classic => "Clásico",
+            TitleBlockDesign::Thread => "Hilo",
+            TitleBlockDesign::Beacon => "Faro",
+        }
+    }
+
+    /// The width of its block, column or strip, paper millimetres.
+    pub fn default_width(self) -> f64 {
+        match self {
+            TitleBlockDesign::Classic => 180.0,
+            TitleBlockDesign::Thread => 64.0,
+            TitleBlockDesign::Beacon => 62.0,
+        }
+    }
+}
+
+/// The project's graphic standard: pens for fine and coarse scales, the
+/// lettering, and how its sheets are framed.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct GraphicStandard {
     pub fine: Pens,
@@ -96,6 +167,11 @@ pub struct GraphicStandard {
     /// Scales from 1:`coarse_from` down use the coarse pens.
     pub coarse_from: f64,
     pub font: TextFont,
+    /// The title block and the titles of the views (version 73).
+    pub title_block: TitleBlockDesign,
+    /// The colour of the sheets' titles, stamps and marks (black in the
+    /// classic sheets).
+    pub accent: crate::Rgb,
 }
 
 impl Default for GraphicStandard {
@@ -105,6 +181,8 @@ impl Default for GraphicStandard {
             coarse: Pens::COARSE,
             coarse_from: 100.0,
             font: TextFont::default(),
+            title_block: TitleBlockDesign::default(),
+            accent: [0, 0, 0],
         }
     }
 }
@@ -121,21 +199,10 @@ impl GraphicStandard {
 
     /// Whether every weight is a positive number.
     pub fn is_valid(&self) -> bool {
-        let ok = |p: &Pens| {
-            [
-                p.cut,
-                p.frame,
-                p.view,
-                p.thin,
-                p.hatch,
-                p.dimension,
-                p.tick,
-                p.text,
-            ]
-            .iter()
-            .all(|v| v.is_finite() && *v > 0.0)
-        };
-        ok(&self.fine) && ok(&self.coarse) && self.coarse_from.is_finite() && self.coarse_from > 0.0
+        self.fine.is_valid()
+            && self.coarse.is_valid()
+            && self.coarse_from.is_finite()
+            && self.coarse_from > 0.0
     }
 }
 
@@ -417,9 +484,37 @@ pub struct ViewStyle {
     pub presentation: Option<crate::PresentationStyleId>,
     /// How each category is drawn, where it is not as usual.
     pub overrides: std::collections::BTreeMap<Category, GraphicOverride>,
+    /// The discipline the view is drawn for (Revit's view discipline,
+    /// version 74): an architecture view leaves out the services; a
+    /// structure or services view leaves out the site and the rest in
+    /// grey; a site view leaves out the building's services and
+    /// structure. Kept with the view, unlike `focus` and
+    /// `hidden_disciplines`, which follow the session.
+    pub discipline: Option<crate::ElementDiscipline>,
 }
 
 impl ViewStyle {
+    /// The style as drawn: with what its discipline leaves out and greys
+    /// added to the session's.
+    pub fn effective(&self) -> std::borrow::Cow<'_, ViewStyle> {
+        use crate::{DisciplineFocus as F, ElementDiscipline as D};
+        let Some(d) = self.discipline else {
+            return std::borrow::Cow::Borrowed(self);
+        };
+        let mut s = self.clone();
+        let (hide, grey): (&[D], bool) = match d {
+            D::Architecture => (&[D::Services], false),
+            D::Structure => (&[D::Services, D::Site], true),
+            D::Services => (&[D::Site], true),
+            D::Site => (&[D::Services, D::Structure], true),
+        };
+        s.hidden_disciplines.extend(hide.iter().copied());
+        if grey && s.focus == F::None {
+            s.focus = F::Only(d);
+        }
+        std::borrow::Cow::Owned(s)
+    }
+
     pub fn shows(&self, c: Category) -> bool {
         !self.hidden.contains(&c)
     }
@@ -438,7 +533,7 @@ impl ViewStyle {
         }
     }
 
-    /// The view template «AD5»: everything cut or seen in white with
+    /// The view template «Blanco y negro»: everything cut or seen in white with
     /// black lines, walls with their air gap only, the garden and the
     /// site in pastel colours.
     pub fn ad5() -> ViewStyle {
@@ -507,6 +602,22 @@ pub struct PresentationStyle {
     /// Shadows cast by the project's sun on the ground (plans and
     /// axonometrics).
     pub shadows: bool,
+    /// The style's own line weights and text sizes (for fine and coarse
+    /// scales), instead of the project's graphic standard (version 74).
+    pub pens: Option<StylePens>,
+    /// A colour that picks out some categories (their lines and texts),
+    /// over the palette: the red dimensions and texts of a sheet in
+    /// greys (version 74).
+    pub accent: Option<crate::Rgb>,
+    pub accent_on: BTreeSet<Category>,
+}
+
+/// A presentation style's own pens: one set for fine scales and one for
+/// coarse ones, as the graphic standard.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct StylePens {
+    pub fine: Pens,
+    pub coarse: Pens,
 }
 
 impl PresentationStyle {
@@ -519,6 +630,9 @@ impl PresentationStyle {
             poche: None,
             line_scale: 1.0,
             shadows: false,
+            pens: None,
+            accent: None,
+            accent_on: BTreeSet::new(),
         }
     }
 
@@ -528,6 +642,39 @@ impl PresentationStyle {
             && self.line_scale > 0.0
             && self.line_scale <= 10.0
             && self.palette.len() <= 8
+            && self
+                .pens
+                .is_none_or(|p| p.fine.is_valid() && p.coarse.is_valid())
+    }
+
+    /// The pens of a drawing at 1:`scale` in this style, if it has its
+    /// own; the project's standard says from which scale they are coarse.
+    pub fn pens_at(&self, standard: &GraphicStandard, scale: f64) -> Option<Pens> {
+        self.pens.map(|p| {
+            if scale >= standard.coarse_from - 1e-9 {
+                p.coarse
+            } else {
+                p.fine
+            }
+        })
+    }
+
+    /// The view's look with this style's accent: every category it picks
+    /// out drawn in the accent, unless the view already gives it a colour.
+    pub fn accented(&self, style: &ViewStyle) -> Option<ViewStyle> {
+        let accent = self.accent?;
+        if self.accent_on.is_empty() {
+            return None;
+        }
+        let mut s = style.clone();
+        for c in &self.accent_on {
+            let mut g = s.graphics(*c);
+            if g.line.is_none() {
+                g.line = Some(accent);
+                s.set_graphics(*c, g);
+            }
+        }
+        Some(s)
     }
 
     /// The tone a colour is turned to, by its lightness.
@@ -581,6 +728,30 @@ pub fn presentation_styles_text(styles: &[PresentationStyle]) -> String {
         s.push_str(&format!(" lines {}", st.line_scale));
         if st.shadows {
             s.push_str(" shadows");
+        }
+        if let Some(p) = st.pens {
+            // Fine then coarse, each in the order of `Pens`.
+            s.push_str(" pens");
+            for q in [p.fine, p.coarse] {
+                for v in [
+                    q.cut,
+                    q.frame,
+                    q.view,
+                    q.thin,
+                    q.hatch,
+                    q.dimension,
+                    q.tick,
+                    q.text,
+                ] {
+                    s.push_str(&format!(" {v}"));
+                }
+            }
+        }
+        if let Some(c) = st.accent {
+            s.push_str(&format!(" accent {}", hex(c)));
+            for c in &st.accent_on {
+                s.push_str(&format!(" {}", c.code()));
+            }
         }
         s.push('\n');
     }
@@ -638,6 +809,43 @@ pub fn parse_presentation_styles(text: &str) -> Result<Vec<PresentationStyle>, S
                     );
                 }
                 "shadows" => st.shadows = true,
+                "pens" => {
+                    let mut v = [0.0; 16];
+                    for x in &mut v {
+                        i += 1;
+                        *x = words
+                            .get(i)
+                            .and_then(|w| w.parse().ok())
+                            .ok_or_else(|| bad("grosores"))?;
+                    }
+                    let pens = |v: &[f64]| Pens {
+                        cut: v[0],
+                        frame: v[1],
+                        view: v[2],
+                        thin: v[3],
+                        hatch: v[4],
+                        dimension: v[5],
+                        tick: v[6],
+                        text: v[7],
+                    };
+                    st.pens = Some(StylePens {
+                        fine: pens(&v[..8]),
+                        coarse: pens(&v[8..]),
+                    });
+                }
+                "accent" => {
+                    i += 1;
+                    st.accent = Some(
+                        words
+                            .get(i)
+                            .and_then(|w| colour(w))
+                            .ok_or_else(|| bad("color de acento"))?,
+                    );
+                    while let Some(c) = words.get(i + 1).and_then(|w| Category::from_code(w)) {
+                        st.accent_on.insert(c);
+                        i += 1;
+                    }
+                }
                 "lines" => {
                     i += 1;
                     st.line_scale = words
@@ -697,10 +905,62 @@ mod tests {
         a.poche = Some([47, 79, 62]);
         a.line_scale = 0.8;
         a.shadows = true;
+        a.pens = Some(StylePens {
+            fine: Pens::FINE,
+            coarse: Pens::COARSE,
+        });
+        a.accent = Some([214, 72, 44]);
+        a.accent_on = [Category::Dimensions, Category::Tags].into_iter().collect();
         let b = PresentationStyle::new("Técnico");
         let text = presentation_styles_text(&[a.clone(), b.clone()]);
         let back = parse_presentation_styles(&text).unwrap();
         assert_eq!(back, vec![a, b]);
         assert!(parse_presentation_styles("style \"X\" paper rojo").is_err());
+    }
+
+    #[test]
+    fn a_style_brings_its_pens_accent_and_discipline() {
+        let mut p = PresentationStyle::new("Faro");
+        let g = GraphicStandard::default();
+        assert_eq!(p.pens_at(&g, 50.0), None);
+        let mut fine = Pens::FINE;
+        fine.cut = 0.6;
+        p.pens = Some(StylePens {
+            fine,
+            coarse: Pens::COARSE,
+        });
+        assert_eq!(p.pens_at(&g, 50.0).unwrap().cut, 0.6);
+        assert_eq!(p.pens_at(&g, 100.0), Some(Pens::COARSE));
+        // The accent goes where the view has no colour of its own.
+        p.accent = Some([200, 0, 0]);
+        p.accent_on = [Category::Dimensions, Category::Tags].into_iter().collect();
+        let mut v = ViewStyle::default();
+        v.set_graphics(
+            Category::Tags,
+            GraphicOverride {
+                line: Some([0, 0, 200]),
+                ..Default::default()
+            },
+        );
+        let a = p.accented(&v).unwrap();
+        assert_eq!(a.graphics(Category::Dimensions).line, Some([200, 0, 0]));
+        assert_eq!(a.graphics(Category::Tags).line, Some([0, 0, 200]));
+        // An architecture view leaves out the services.
+        let v = ViewStyle {
+            discipline: Some(crate::ElementDiscipline::Architecture),
+            ..Default::default()
+        };
+        assert!(v
+            .effective()
+            .hidden_disciplines
+            .contains(&crate::ElementDiscipline::Services));
+        let v = ViewStyle {
+            discipline: Some(crate::ElementDiscipline::Structure),
+            ..Default::default()
+        };
+        assert_eq!(
+            v.effective().focus,
+            crate::DisciplineFocus::Only(crate::ElementDiscipline::Structure)
+        );
     }
 }

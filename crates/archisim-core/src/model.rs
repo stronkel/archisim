@@ -58,6 +58,7 @@ mod stairs;
 mod structure;
 mod sun;
 mod sweeps;
+mod title_blocks;
 mod urban;
 mod views;
 mod wall_profile;
@@ -103,6 +104,7 @@ pub use stairs::*;
 pub use structure::*;
 pub use sun::*;
 pub use sweeps::*;
+pub use title_blocks::*;
 pub use urban::*;
 pub use views::*;
 pub use wall_profile::*;
@@ -1113,6 +1115,8 @@ pub enum ModelError {
     UnknownPlanView(PlanViewId),
     UnknownViewTemplate(ViewTemplateId),
     UnknownRefPlane(RefPlaneId),
+    UnknownCamera(CameraId),
+    UnknownTitleBlock(crate::ids::TitleBlockId),
     UnknownTag(TagId),
     UnknownTable(TableId),
     /// A drafting element or annotation is not well formed.
@@ -1300,6 +1304,8 @@ impl fmt::Display for ModelError {
                 write!(f, "view template {id} does not exist")
             }
             ModelError::UnknownRefPlane(id) => write!(f, "reference plane {id} does not exist"),
+            ModelError::UnknownCamera(id) => write!(f, "camera {id} does not exist"),
+            ModelError::UnknownTitleBlock(id) => write!(f, "title block {id} does not exist"),
             ModelError::UnknownTag(id) => write!(f, "tag {id} does not exist"),
             ModelError::UnknownTable(id) => write!(f, "schedule {id} on a sheet does not exist"),
             ModelError::InvalidShape(what) => write!(f, "{what}"),
@@ -1475,6 +1481,11 @@ pub struct ModelParts {
     pub level_styles: Vec<(LevelId, crate::graphics::ViewStyle)>,
     pub view_templates: Vec<ViewTemplate>,
     pub ref_planes: Vec<RefPlane>,
+    /// Saved points of view of the 3D (version 72).
+    pub cameras: Vec<SavedCamera>,
+    /// Title blocks and the sheets' default one (version 74).
+    pub title_blocks: Vec<TitleBlock>,
+    pub default_title_block: Option<crate::ids::TitleBlockId>,
     /// When the shadows of presentation drawings are cast.
     pub sun: Sun,
     /// Prices of the budget's items, by their keys.
@@ -1615,6 +1626,9 @@ pub struct Model {
     level_styles: BTreeMap<LevelId, crate::graphics::ViewStyle>,
     view_templates: BTreeMap<ViewTemplateId, ViewTemplate>,
     ref_planes: BTreeMap<RefPlaneId, RefPlane>,
+    cameras: BTreeMap<CameraId, SavedCamera>,
+    title_blocks: BTreeMap<crate::ids::TitleBlockId, TitleBlock>,
+    default_title_block: Option<crate::ids::TitleBlockId>,
     sun: Sun,
     prices: BTreeMap<String, PriceConcept>,
     budget: BudgetSettings,
@@ -1710,6 +1724,9 @@ impl Model {
             level_styles: BTreeMap::new(),
             view_templates: BTreeMap::new(),
             ref_planes: BTreeMap::new(),
+            cameras: BTreeMap::new(),
+            title_blocks: BTreeMap::new(),
+            default_title_block: None,
             sun: Sun::default(),
             prices: BTreeMap::new(),
             budget: BudgetSettings::default(),
@@ -3431,9 +3448,13 @@ impl Model {
                 "{users} door(s) or window(s) use this type"
             )));
         }
-        self.opening_types
+        let t = self
+            .opening_types
             .remove(&id)
-            .ok_or(ModelError::UnknownOpeningType(id))
+            .ok_or(ModelError::UnknownOpeningType(id))?;
+        // Its views on the sheets go with it.
+        self.viewports.retain(|_, v| v.opening_type != Some(id));
+        Ok(t)
     }
 
     /// Changes the name, mark and description of a type.
@@ -4368,6 +4389,9 @@ impl Model {
                 .collect(),
             view_templates: self.view_templates.values().cloned().collect(),
             ref_planes: self.ref_planes.values().cloned().collect(),
+            cameras: self.cameras.values().cloned().collect(),
+            title_blocks: self.title_blocks.values().cloned().collect(),
+            default_title_block: self.default_title_block,
             sun: self.sun,
             prices: self
                 .prices
@@ -4733,6 +4757,8 @@ impl Model {
             parts.ref_planes,
             &mut claim,
         )?;
+        model.restore_cameras(parts.cameras, &mut claim)?;
+        model.restore_title_blocks(parts.title_blocks, parts.default_title_block, &mut claim)?;
         model.set_sun(parts.sun).map_err(|error| RestoreError {
             element: "sun".into(),
             error,

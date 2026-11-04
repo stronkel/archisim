@@ -622,6 +622,46 @@ impl ArchiSimApp {
         if card.select_all {
             self.select_instances(same_type, "pilares");
         }
+        // The measures at a glance (§12.6): the section is the type's.
+        let (sw, sd) = self
+            .ed
+            .model()
+            .member_type(c.member_type)
+            .map_or((0.0, 0.0), |t| t.profile.size());
+        let free = matches!(c.top, WallTop::Unconnected);
+        if let Some((_, v)) = props::measure_tiles(
+            ui,
+            ("column", id),
+            &[
+                props::Measure {
+                    label: "Ancho",
+                    hint: "De la sección, del tipo",
+                    value: sw,
+                    editable: false,
+                },
+                props::Measure {
+                    label: "Fondo",
+                    hint: "De la sección, del tipo",
+                    value: sd,
+                    editable: false,
+                },
+                props::Measure {
+                    label: "Altura",
+                    hint: if free {
+                        "Altura del pilar desconectado"
+                    } else {
+                        "Sale de las plantas: para escribirla, desconéctalo en Restricciones"
+                    },
+                    value: c.height,
+                    editable: free,
+                },
+            ],
+        ) {
+            let r = self
+                .ed
+                .edit_columns("Altura del pilar", &[id], |c| c.height = v);
+            self.report(r, "Altura cambiada.");
+        }
         let above = self.levels_above(c.level);
         group(ui, "column-constraints", "Restricciones", |ui| {
             self.level_row(
@@ -763,6 +803,47 @@ impl ArchiSimApp {
         }
         if card.select_all {
             self.select_instances(same_type, "vigas");
+        }
+        // The measures at a glance (§12.6).
+        let (sw, sd) = self
+            .ed
+            .model()
+            .member_type(b.member_type)
+            .map_or((0.0, 0.0), |t| t.profile.size());
+        if let Some((_, v)) = props::measure_tiles(
+            ui,
+            ("beam", id),
+            &[
+                props::Measure {
+                    label: "Longitud",
+                    hint: "Desde el inicio; el final se desplaza",
+                    value: b.length(),
+                    editable: true,
+                },
+                props::Measure {
+                    label: "Canto",
+                    hint: "De la sección, del tipo",
+                    value: sd,
+                    editable: false,
+                },
+                props::Measure {
+                    label: "Ancho",
+                    hint: "De la sección, del tipo",
+                    value: sw,
+                    editable: false,
+                },
+            ],
+        ) {
+            if v > 0.0 {
+                let r = self.ed.edit_beams("Longitud de viga", &[id], |b| {
+                    if let Some(u) = (b.end - b.start).normalized() {
+                        b.end = b.start + u * v;
+                    }
+                });
+                self.report(r, "Longitud cambiada.");
+            } else {
+                self.complain("La longitud debe ser mayor que cero.");
+            }
         }
         group(ui, "beam-constraints", "Restricciones", |ui| {
             self.level_row(

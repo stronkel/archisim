@@ -379,14 +379,20 @@ impl ArchiSimApp {
 
     /// The brush's panel floating over the 3D of the Maqueta, at its
     /// left, while the brush is in hand.
-    pub(super) fn brush_panel_maquette(&mut self, ctx: &egui::Context, top: f32, bottom: f32) {
+    pub(super) fn brush_panel_maquette(
+        &mut self,
+        ctx: &egui::Context,
+        left: f32,
+        top: f32,
+        bottom: f32,
+    ) {
         if self.tool != Tool::Brush {
             return;
         }
         let p = Palette::current(ctx);
         egui::Area::new(egui::Id::unique("brush-panel"))
             .order(egui::Order::Foreground)
-            .fixed_pos(Pos2::new(14.0, top + 14.0))
+            .fixed_pos(Pos2::new(left + 14.0, top + 14.0))
             .show(ctx, |ui| {
                 egui::Frame::new()
                     .fill(p.panel)

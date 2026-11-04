@@ -99,10 +99,10 @@ mod tests {
     fn styles_are_named_once_and_removed_from_views() {
         let mut m = Model::new("T");
         let s = m
-            .add_presentation_style(PresentationStyle::new("AD5"))
+            .add_presentation_style(PresentationStyle::new("Estudio"))
             .unwrap();
         assert!(m
-            .add_presentation_style(PresentationStyle::new("AD5"))
+            .add_presentation_style(PresentationStyle::new("Estudio"))
             .is_err());
         let mut bad = PresentationStyle::new("Malo");
         bad.line_scale = -1.0;

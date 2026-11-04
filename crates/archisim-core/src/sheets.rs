@@ -55,8 +55,32 @@ pub struct Sheet {
     /// Revision shown in the title block ("0", "A"…).
     pub revision: String,
     /// How the sheet itself is presented (paper, title block, tables and
-    /// texts); each view on it keeps its own style.
+    /// texts); each view on it keeps its own style, unless
+    /// `restyle_views`.
     pub presentation: Option<crate::PresentationStyleId>,
+    /// The sheet's style also for every view on it (version 74).
+    pub restyle_views: bool,
+    /// The discipline of the sheet: its views without one of their own
+    /// are drawn for it (version 74).
+    pub discipline: Option<crate::ElementDiscipline>,
+    /// Its title block; `None` takes the project's default (version 74).
+    pub title_type: Option<crate::ids::TitleBlockId>,
+}
+
+impl Sheet {
+    /// How a view on this sheet is drawn: its own style with the sheet's
+    /// discipline (when it has none) and, with `restyle_views`, the
+    /// sheet's presentation style.
+    pub fn view_style(&self, own: &ViewStyle) -> ViewStyle {
+        let mut s = own.clone();
+        if s.discipline.is_none() {
+            s.discipline = self.discipline;
+        }
+        if self.restyle_views {
+            s.presentation = self.presentation;
+        }
+        s
+    }
 }
 
 impl Sheet {
@@ -117,6 +141,10 @@ pub struct Viewport {
     /// A view only for drawing instead of a plan (E7). Its crop is in its
     /// own metres.
     pub drafting: Option<crate::ids::DraftViewId>,
+    /// A door or window type instead of a plan (version 74): its
+    /// elevation from outside, its section and its data, as the carpentry
+    /// sheets draw them.
+    pub opening_type: Option<crate::ids::OpeningTypeId>,
 }
 
 /// Where an axonometric view looks from: the direction the eye stands in,
@@ -214,6 +242,9 @@ impl Model {
                 title_block: true,
                 revision: String::new(),
                 presentation: None,
+                restyle_views: false,
+                discipline: None,
+                title_type: None,
             },
         );
         Ok(id)
@@ -225,6 +256,11 @@ impl Model {
             return Err(ModelError::UnknownSheet(sheet.id));
         }
         self.check_sheet(&sheet.number, sheet.width, sheet.height, Some(sheet.id))?;
+        if let Some(t) = sheet.title_type {
+            if self.title_block(t).is_none() {
+                return Err(ModelError::UnknownTitleBlock(t));
+            }
+        }
         let id = sheet.id;
         self.sheets.insert(
             id,
@@ -314,6 +350,13 @@ impl Model {
     pub fn add_viewport(&mut self, spec: NewViewport) -> Result<ViewportId, ModelError> {
         self.check_viewport(&spec)?;
         let id = ViewportId(self.take_id());
+        // It looks as its view does: the section's own style, or the
+        // level's plan's.
+        let style = match (spec.axo, spec.section) {
+            (Some(_), _) => ViewStyle::default(),
+            (None, Some(s)) => self.section(s).map(|s| s.style.clone()).unwrap_or_default(),
+            (None, None) => self.level_style(spec.level),
+        };
         self.viewports.insert(
             id,
             Viewport {
@@ -326,11 +369,12 @@ impl Model {
                 cut_plane: spec.cut_plane,
                 crop: spec.crop,
                 centre: spec.centre,
-                style: ViewStyle::default(),
+                style,
                 ceiling: false,
                 title: String::new(),
                 show_title: true,
                 drafting: None,
+                opening_type: None,
             },
         );
         Ok(id)
@@ -366,6 +410,40 @@ impl Model {
         })?;
         if let Some(v) = self.viewports.get_mut(&id) {
             v.drafting = Some(view);
+        }
+        Ok(id)
+    }
+
+    /// Places a door or window type on a sheet (its elevation, section and
+    /// data) at 1:`scale`, centred at `centre` (paper metres).
+    pub fn add_opening_viewport(
+        &mut self,
+        sheet: SheetId,
+        opening_type: crate::ids::OpeningTypeId,
+        centre: Point2,
+        scale: f64,
+    ) -> Result<ViewportId, ModelError> {
+        if self.opening_type(opening_type).is_none() {
+            return Err(ModelError::UnknownOpeningType(opening_type));
+        }
+        let level = self
+            .levels()
+            .first()
+            .map(|l| l.id)
+            .ok_or(ModelError::LastLevel)?;
+        let id = self.add_viewport(NewViewport {
+            sheet,
+            level,
+            section: None,
+            axo: None,
+            scale,
+            cut_plane: 1.1,
+            crop: None,
+            centre,
+        })?;
+        if let Some(v) = self.viewports.get_mut(&id) {
+            v.opening_type = Some(opening_type);
+            v.style = ViewStyle::default();
         }
         Ok(id)
     }

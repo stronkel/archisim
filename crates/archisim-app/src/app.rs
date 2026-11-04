@@ -614,7 +614,12 @@ pub struct ArchiSimApp {
     /// The graphic standard dialog is open.
     pub show_graphics: bool,
     /// The «Estilos de presentación» window.
+    /// The camera before a walk through the house (Recorrido), to go back
+    /// to when it ends.
+    walk_return: Option<crate::view3d::camera::Camera>,
     pub presentation: presentation_ui::PresentationUi,
+    /// The panel of the project's title blocks.
+    pub title_blocks_ui: title_blocks_ui::TitleBlocksUi,
     /// The sheet picture and what it was drawn for.
     sheet_image: Option<(sheet_ui::SheetKey, egui::TextureHandle)>,
     /// The picture of the view for drawing shown (E7).
@@ -916,7 +921,9 @@ impl ArchiSimApp {
             cut_plane: archisim_plan::PlanOptions::default().cut_plane,
             view_style: Default::default(),
             show_graphics: false,
+            walk_return: None,
             presentation: Default::default(),
+            title_blocks_ui: Default::default(),
             sheet_image: None,
             drafting_image: None,
             sheet_sel: None,
@@ -1863,7 +1870,14 @@ impl ArchiSimApp {
         {
             self.context_menu = None;
         }
-        if self.maquette {
+        if self.v3d.walk_eye.is_some() && self.mode == ViewMode::ThreeD {
+            // Walking through the house: Esc stops; W A S D walk.
+            if ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Escape)) {
+                self.toggle_walk();
+            } else {
+                self.maquette_walk(&ctx);
+            }
+        } else if self.maquette {
             // Before the shortcuts: W A S D Q E walk here.
             self.maquette_walk(&ctx);
         } else if self.mode == ViewMode::ThreeD
@@ -2058,6 +2072,8 @@ impl ArchiSimApp {
         self.wall_profile_dialog(&ctx);
         self.graphics_dialog(&ctx);
         self.presentation_dialog(&ctx);
+        self.title_blocks_dialog(&ctx);
+        self.sun_dialog(&ctx);
         self.render_window(&ctx);
         self.price_pick_window(&ctx);
         self.symbol_pick_window(&ctx);
@@ -2399,7 +2415,7 @@ impl ArchiSimApp {
                 .show(ctx, |ui| {
                     ui.heading(format!("ArchiSim {}", env!("CARGO_PKG_VERSION")));
                     ui.label("Herramienta BIM de autoría. IFC4 como modelo de datos.");
-                    ui.label("Versión de desarrollo · AD5");
+                    ui.label("Versión de desarrollo");
                 });
         }
     }
@@ -2641,6 +2657,7 @@ mod bottom_segments;
 mod brush_ui;
 mod budget_ui;
 mod cad_ui;
+mod camera_ui;
 mod cards;
 mod carto_download_ui;
 mod carto_ui;
@@ -2722,6 +2739,7 @@ mod terrain_ui;
 pub mod theme;
 mod thumbs;
 mod thumbs3d;
+mod title_blocks_ui;
 mod toolbox;
 mod tools3d;
 mod type_views;

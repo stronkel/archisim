@@ -12,145 +12,20 @@
 
 use std::fmt::Write as _;
 
-use archisim_core::{Model, OpeningType, Point2};
+use archisim_core::{Model, Point2};
 use archisim_plan::lettering::{self, Align};
 
 use crate::paper::{self, metres, text, INK, MARGIN, PAPER};
 
 use crate::type_drawing::{opening_elevation, opening_section, Drawing, Item, Pen};
 
+pub(crate) use archisim_plan::carpentry::{entries, how_it_opens, levels_text, sills_text, Entry};
+
 /// Types on a sheet: columns and rows.
 const COLS: usize = 3;
 const ROWS: usize = 2;
 /// Paper millimetres per metre at 1:50.
 const MM_PER_M: f64 = 20.0;
-
-/// One type on the sheets, with where it is used.
-pub(crate) struct Entry<'a> {
-    pub t: &'a OpeningType,
-    pub count: usize,
-    pub family: String,
-    /// Units by level, in the order of the levels.
-    pub levels: Vec<(String, usize)>,
-    /// The sills it is placed at, from the lowest, without repeats.
-    pub sills: Vec<f64>,
-    /// Where it is: "Cocina", "Cocina / Salón" for a door between two
-    /// rooms, and how many there.
-    pub rooms: Vec<(String, usize)>,
-}
-
-/// The door and window types of the project, doors first, then windows,
-/// by mark: the ones it uses, or all of them if it uses none.
-pub(crate) fn entries(model: &Model) -> Vec<Entry<'_>> {
-    let mut entries: Vec<Entry> = model
-        .opening_types()
-        .filter(|t| !t.is_void())
-        .map(|t| entry(model, t))
-        .collect();
-    if entries.iter().any(|e| e.count > 0) {
-        entries.retain(|e| e.count > 0);
-    }
-    entries.sort_by(|a, b| {
-        (a.t.is_window(), natural(&a.t.mark), &a.t.name).cmp(&(
-            b.t.is_window(),
-            natural(&b.t.mark),
-            &b.t.name,
-        ))
-    });
-    entries
-}
-
-fn entry<'a>(model: &'a Model, t: &'a OpeningType) -> Entry<'a> {
-    let mut by_level: Vec<(f64, String, usize)> = Vec::new();
-    let mut sills: Vec<f64> = Vec::new();
-    let mut rooms: Vec<(String, usize)> = Vec::new();
-    let mut count = 0;
-    for o in model.openings().filter(|o| o.opening_type == t.id) {
-        count += 1;
-        let Some(w) = model.wall(o.wall) else {
-            continue;
-        };
-        if let Some(l) = model.level(w.level) {
-            match by_level.iter_mut().find(|(_, n, _)| *n == l.name) {
-                Some(e) => e.2 += 1,
-                None => by_level.push((l.elevation, l.name.clone(), 1)),
-            }
-        }
-        let sill = (o.sill * 100.0).round() / 100.0;
-        if !sills.iter().any(|s| (s - sill).abs() < 1e-6) {
-            sills.push(sill);
-        }
-        // The rooms a step to each side of its centre.
-        let thickness = model
-            .wall_type(w.wall_type)
-            .map_or(0.2, |wt| wt.thickness());
-        let (ext, int) = w.face_offsets(thickness);
-        let names: Vec<String> = match w.opening_frame(o.along, t.width) {
-            Some((p, u)) => {
-                let n = u.perp_left();
-                [ext + 0.15, int - 0.15]
-                    .iter()
-                    .filter_map(|off| {
-                        let q = p + n * *off;
-                        model
-                            .rooms_on_level(w.level)
-                            .find(|r| r.contains(q))
-                            .map(|r| r.name.clone())
-                    })
-                    .collect()
-            }
-            None => Vec::new(),
-        };
-        let mut names = names;
-        names.sort();
-        names.dedup();
-        if names.is_empty() {
-            continue;
-        }
-        let place = names.join(" / ");
-        match rooms.iter_mut().find(|(n, _)| *n == place) {
-            Some(e) => e.1 += 1,
-            None => rooms.push((place, 1)),
-        }
-    }
-    by_level.sort_by(|a, b| a.0.total_cmp(&b.0));
-    sills.sort_by(f64::total_cmp);
-    rooms.sort();
-    Entry {
-        t,
-        count,
-        family: model
-            .family(t.family)
-            .map(|f| f.def().name.clone())
-            .unwrap_or_default(),
-        levels: by_level.into_iter().map(|(_, n, c)| (n, c)).collect(),
-        sills,
-        rooms,
-    }
-}
-
-/// The sills in words: "0,90 m", "0,90 y 1,10 m", "sin antepecho".
-pub(crate) fn sills_text(sills: &[f64]) -> String {
-    match sills {
-        [] => String::new(),
-        [s] if s.abs() < 0.005 => "sin antepecho".to_string(),
-        [s] => format!("{} m", metres(*s)),
-        _ => {
-            let v: Vec<String> = sills.iter().map(|s| metres(*s)).collect();
-            let (last, rest) = v.split_last().unwrap();
-            format!("{} y {last} m", rest.join(", "))
-        }
-    }
-}
-
-/// Units by level in words: "Planta baja 3, Planta primera 2".
-pub(crate) fn levels_text(levels: &[(String, usize)]) -> String {
-    levels
-        .iter()
-        .map(|(n, c)| format!("{n} {c}"))
-        .collect::<Vec<_>>()
-        .join(", ")
-}
 
 /// The sheets, as SVG documents, and their titles.
 pub fn carpentry_sheets(model: &Model) -> Vec<(String, String)> {
@@ -166,13 +41,6 @@ pub fn carpentry_sheets(model: &Model) -> Vec<(String, String)> {
             (sheet(model, chunk, &project, i + 1, pages), title)
         })
         .collect()
-}
-
-/// A mark's letters and number, for sorting P-2 before P-10.
-pub(crate) fn natural(mark: &str) -> (String, u64) {
-    let letters: String = mark.chars().filter(|c| c.is_alphabetic()).collect();
-    let digits: String = mark.chars().filter(|c| c.is_ascii_digit()).collect();
-    (letters, digits.parse().unwrap_or(0))
 }
 
 fn sheet(model: &Model, entries: &[Entry], project: &str, n: usize, of: usize) -> String {
@@ -317,50 +185,6 @@ fn cell(s: &mut String, model: &Model, e: &Entry, x0: f64, y0: f64, cw: f64, ch:
     }
 }
 
-/// How a door or window opens, in words.
-pub(crate) fn how_it_opens(t: &OpeningType) -> String {
-    use archisim_core::{DoorOperation as D, OpeningKind};
-    if let OpeningKind::Door(op) = t.kind {
-        return match op {
-            D::SingleSwing => "1 hoja abatible",
-            D::DoubleSwing => "2 hojas abatibles",
-            D::Sliding => "corredera",
-            D::Folding => "plegable",
-            D::Pivot => "pivotante",
-            D::Overhead => "seccional o basculante",
-            D::Rolling => "enrollable",
-        }
-        .to_string();
-    }
-    if t.panels.is_empty() {
-        return String::new();
-    }
-    let word = |p: &str| match p {
-        "SIDEHUNGLEFTHAND" | "SIDEHUNGRIGHTHAND" => "practicable",
-        "TILTANDTURNLEFTHAND" | "TILTANDTURNRIGHTHAND" => "oscilobatiente",
-        "SLIDINGHORIZONTAL" => "corredera",
-        "SLIDINGVERTICAL" => "guillotina",
-        "FIXEDCASEMENT" => "fija",
-        "TOPHUNG" | "BOTTOMHUNG" => "abatible",
-        "PIVOTVERTICAL" | "PIVOTHORIZONTAL" => "pivotante",
-        _ => "otra",
-    };
-    let words: Vec<&str> = t.panels.iter().map(|p| word(p)).collect();
-    let n = words.len();
-    let first = words[0];
-    if words.iter().all(|w| *w == first) {
-        if n == 1 {
-            format!("1 hoja {first}")
-        } else if first == "guillotina" {
-            format!("{n} hojas de guillotina")
-        } else {
-            format!("{n} hojas {first}s")
-        }
-    } else {
-        words.join(" + ")
-    }
-}
-
 /// A horizontal dimension from `a` to `b` at height `y`.
 fn dim_h(s: &mut String, a: f64, b: f64, y: f64, label: &str) {
     let _ = write!(
@@ -488,6 +312,43 @@ pub(crate) fn drawing(s: &mut String, d: &Drawing, x: f64, y: f64, k: f64) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn carpentry_sheets_have_a_card_per_type_inside_the_paper() {
+        let mut m = archisim_library::new_project("Carpinterías");
+        let sheets = archisim_plan::carpentry::add_carpentry_sheets(&mut m).unwrap();
+        let types = m.opening_types().filter(|t| !t.is_void()).count();
+        let cards: usize = sheets.iter().map(|s| m.viewports_on(*s).count()).sum();
+        assert_eq!(cards, types);
+        for s in &sheets {
+            let sheet = m.sheet(*s).unwrap();
+            assert_eq!(
+                sheet.discipline,
+                Some(archisim_core::ElementDiscipline::Architecture)
+            );
+            for v in m.viewports_on(*s) {
+                let (lo, hi) = archisim_plan::sheet::viewport_rect(&m, v);
+                assert!(
+                    lo.x > 0.02 && hi.x < 0.41 && lo.y > 0.01 && hi.y < 0.287,
+                    "{lo:?} {hi:?}"
+                );
+                // Clear of the classic title block at the bottom right.
+                assert!(lo.y > 0.066 || hi.x < 0.23, "{lo:?} {hi:?}");
+            }
+            let svg = archisim_plan::sheet::render_sheet(&m, *s, &Default::default());
+            assert!(svg.contains("class=\"viewport\""));
+        }
+        // A type that goes takes its cards with it.
+        let t = m
+            .viewports_on(sheets[0])
+            .next()
+            .unwrap()
+            .opening_type
+            .unwrap();
+        m.remove_opening_type(t).unwrap();
+        let after: usize = sheets.iter().map(|s| m.viewports_on(*s).count()).sum();
+        assert_eq!(after, cards - 1);
+    }
+
     #[test]
     fn every_type_has_its_place_on_the_sheets() {
         // A new project uses none: all its types are drawn.
