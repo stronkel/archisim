@@ -6,6 +6,33 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-04 (100) · Taller de edificios, tanda 12: el entorno con sus equipamientos, y remates
+
+Misma rama y mismo pull request (#160). **Formato `.archisim` versión 74** (el programa del edificio del mundo).
+
+**Hecho**
+- **Al traer el entorno**, los edificios que son equipamientos o comercios salen como tales:
+  - por las etiquetas de OpenStreetMap: ayuntamiento, colegio, biblioteca, bomberos, comisaría, mercado, restaurante, bar, templo, polideportivo, gimnasio, estadio, quiosco y fábrica;
+  - por el uso del Catastro: industrial a fábrica, y comercial según su tamaño (quiosco, tienda o centro comercial).
+  - el informe dice cuántos se han hecho así.
+- En las propiedades de un edificio del entorno, tipología nueva **«Equipamiento o comercio»** con su **«Programa»** (los diecinueve).
+- **Remates:**
+  - la pluma de la grúa de las obras es de celosía (cordones, diagonales, torreta y tirantes, y el carro del gancho);
+  - el quiosco cambia con el lugar (ocho clases: de prensa español, lisboeta, parisino, oriental, americano, nórdico, magrebí y del trópico);
+  - en Japón y Corea, el ayuntamiento, la biblioteca y los demás públicos van encalados con la madera oscura en carpintería y recercados;
+  - el bloque «de hoy» de Andalucía, Algarve, Grecia, La Mancha, Extremadura y Baleares, blanco de cal con carpintería blanca o negra y recercados de madera u ocre, sin el gris.
+
+**Pendiente**
+- Pasar del taller a la biblioteca: cuando Antonio lo apruebe.
+
+**Qué debe probar Antonio**
+1. Archivo → Traer el entorno de un sitio con colegio, mercado o polideportivo (por ejemplo, el centro de un pueblo): mira en 3D que esos edificios salen como equipamientos y que el aviso final dice cuántos.
+2. Selecciona uno de los edificios traídos y, en Propiedades, pon «Tipología: Equipamiento o comercio» y cambia el «Programa».
+3. `cargo run --release -p archisim-cli -- equipamientos out/ andalucia paris japon nueva_york` y compara los quioscos; en Japón, el ayuntamiento y la biblioteca.
+4. `cargo run --release -p archisim-cli -- mundo out/ andalucia` con la época «de hoy» en el bloque, y una obra con grúa.
+
+---
+
 ## 2026-11-04 (99) · Taller de edificios, tandas 10 y 11: equipamientos y comercio de cada lugar
 
 Misma rama y mismo pull request (#160). Sin cambios de formato.

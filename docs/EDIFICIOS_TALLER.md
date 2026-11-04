@@ -110,7 +110,9 @@ Los ejes 1 y 2 dan el volumen; los ejes 3, 4 y 5 dan la piel. Hay detalles que h
      - países nórdicos: iglesia de madera;
      - Nueva York: rascacielos de los años 30.
    - Para verlos: `archisim equipamientos out/ andalucia japon` (un proyecto por lugar). Fotos con `ARCHISIM_EQUIPAMIENTOS_OUT=carpeta cargo test --release -p archisim-app -- facility_pictures` (cinco hojas por lugar; `ARCHISIM_MUNDO` para elegir lugares).
-   - Pendiente: al traer el entorno, los edificios aún no toman un programa (un colegio del Catastro sigue saliendo como bloque). Se hará cuando Antonio dé el visto bueno a los modelos.
+   - El quiosco cambia con el lugar (tanda 12): de prensa con las trampillas abiertas en España; con cono en Lisboa, Italia y Grecia; verde con cúpula y faldón festoneado en París, Centroeuropa y el Este; con cubierta oriental en China, Japón y Corea; caja de metal con su banda luminosa en América; de madera con pirámide en el norte; encalado con cupulita en el Magreb; de paja en el trópico.
+   - En Japón y Corea, los edificios públicos se encalan y dejan la madera oscura para la carpintería y los recercados (antes salían negros).
+   - **Al traer el entorno** (tanda 12), cada edificio toma su programa por las etiquetas de OpenStreetMap o el uso del Catastro: ayuntamiento, colegio (también guardería e instituto), biblioteca, bomberos, comisaría, mercado, restaurante y café, bar, templo; polideportivo, gimnasio y estadio; quiosco, fábrica (industrial de más de 300 m²); y el comercio por su tamaño: quiosco por debajo de 25 m², tienda hasta dos plantas y centro comercial por encima de 2.500 m². Se puede cambiar a mano: en las propiedades del edificio, tipología «Equipamiento o comercio» y «Programa».
 
 Cuando Antonio apruebe una tanda, la integración será que los estilos de U6 (y U7, al traer el Catastro) usen estos modelos sobre la planta y las plantas que tenga cada masa.
 

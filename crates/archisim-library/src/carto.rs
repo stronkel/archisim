@@ -155,6 +155,73 @@ impl BuildingUse {
     }
 }
 
+/// The facility of the world a building is, by its OpenStreetMap tags
+/// (`building`, `amenity`, `leisure`, `shop`) or its cadastral use, and
+/// its footprint (m²): its programme's number in
+/// [`archisim_core::world_programmes`], none for housing and offices.
+pub fn programme_for(
+    building: &str,
+    amenity: Option<&str>,
+    leisure: Option<&str>,
+    shop: Option<&str>,
+    use_: BuildingUse,
+    footprint: f64,
+    floors: u32,
+) -> Option<u8> {
+    let by_amenity = amenity.and_then(|a| match a {
+        "townhall" => Some(0),
+        "school" | "kindergarten" | "college" => Some(1),
+        "library" => Some(2),
+        "fire_station" => Some(3),
+        "police" => Some(4),
+        "marketplace" => Some(11),
+        "restaurant" | "cafe" | "fast_food" => Some(15),
+        "pub" | "bar" | "biergarten" => Some(16),
+        "place_of_worship" => Some(18),
+        _ => None,
+    });
+    let by_leisure = leisure.and_then(|l| match l {
+        "sports_centre" | "sports_hall" => Some(5),
+        "fitness_centre" => Some(6),
+        "stadium" => Some(7),
+        _ => None,
+    });
+    let by_building = match building {
+        "kiosk" => Some(9),
+        "industrial" | "factory" | "manufacture" => Some(8),
+        "sports_hall" | "sports_centre" => Some(5),
+        "stadium" => Some(7),
+        "church" | "cathedral" | "temple" | "mosque" | "shrine" => Some(18),
+        "school" | "kindergarten" => Some(1),
+        "fire_station" => Some(3),
+        "townhall" => Some(0),
+        _ => None,
+    };
+    let shopping = |big: bool| {
+        if big {
+            Some(13)
+        } else if floors <= 2 {
+            Some(10)
+        } else {
+            None
+        }
+    };
+    by_amenity
+        .or(by_leisure)
+        .or(by_building)
+        .or_else(|| match (shop, use_) {
+            (Some(_), _) | (None, BuildingUse::Retail) => {
+                if footprint < 25.0 {
+                    Some(9)
+                } else {
+                    shopping(footprint > 2500.0)
+                }
+            }
+            (None, BuildingUse::Industry) if footprint > 300.0 => Some(8),
+            _ => None,
+        })
+}
+
 /// The style that suits a building: by its use, its floors, its
 /// footprint, how many of its sides are party walls, and the zone.
 pub fn style_for(
@@ -615,7 +682,10 @@ pub fn import_carto(
 
     // Buildings: the cadastre's, or OpenStreetMap's when there is none.
     let concept = material(m, "Volumen de concepto", "concept", [222, 222, 214]);
-    let mut buildings: Vec<(String, Vec<Point2>, u32, BuildingUse)> = Vec::new();
+    // Each building with its OpenStreetMap tags for its programme
+    // (building, amenity, leisure, shop).
+    type Tags = (String, Option<String>, Option<String>, Option<String>);
+    let mut buildings: Vec<(String, Vec<Point2>, u32, BuildingUse, Tags)> = Vec::new();
     // The uses of the buildings, by reference (their parts carry none).
     let uses: std::collections::HashMap<String, BuildingUse> = read
         .cadastre
@@ -658,7 +728,13 @@ pub fn import_carto(
                     let base = f.reference.split('_').next().unwrap_or_default();
                     uses.get(base).copied().unwrap_or(BuildingUse::Unknown)
                 };
-                buildings.push((name_of("Edificio", &f.reference), outline, floors, use_));
+                buildings.push((
+                    name_of("Edificio", &f.reference),
+                    outline,
+                    floors,
+                    use_,
+                    (String::new(), None, None, None),
+                ));
             }
         }
     }
@@ -683,18 +759,27 @@ pub fn import_carto(
                     w.tag("amenity"),
                     w.tag("tourism"),
                 );
+                let tag = |k: &str| w.tag(k).map(str::to_string);
                 buildings.push((
                     name_of("Edificio", w.tag("name").unwrap_or("")),
                     outline,
                     floors,
                     use_,
+                    (
+                        w.tag("building").unwrap_or("").to_string(),
+                        tag("amenity"),
+                        tag("leisure"),
+                        tag("shop"),
+                    ),
                 ));
             }
         }
     }
     if opts.buildings {
         let mut made: Vec<(archisim_core::MassId, u32, BuildingUse)> = Vec::new();
-        for (name, mut outline, floors, use_) in buildings {
+        let mut programmes: std::collections::BTreeMap<u8, Vec<archisim_core::MassId>> =
+            Default::default();
+        for (name, mut outline, floors, use_, tags) in buildings {
             dedup_ring(&mut outline);
             if outline.len() < 3 || signed_area(&outline).abs() < 4.0 {
                 continue;
@@ -730,6 +815,17 @@ pub fn import_carto(
                 floor_height: Some(fh),
                 material: concept,
             })?;
+            if let Some(p) = programme_for(
+                &tags.0,
+                tags.1.as_deref(),
+                tags.2.as_deref(),
+                tags.3.as_deref(),
+                use_,
+                signed_area(&outline_of(m, id)).abs(),
+                floors,
+            ) {
+                programmes.entry(p).or_default().push(id);
+            }
             made.push((id, floors, use_));
             report.buildings += 1;
         }
@@ -739,6 +835,16 @@ pub fn import_carto(
                 let ids: Vec<_> = made.iter().map(|x| x.0).collect();
                 let place = opts.place.unwrap_or_else(|| m.world_place());
                 let n = m.dress_as_world(&ids, Some(place))?;
+                // The facilities and the shops, by their tags and uses.
+                let mut facilities = 0;
+                for (p, ids) in &programmes {
+                    facilities += m.dress_as_facility(ids, *p, Some(place))?;
+                }
+                if facilities > 0 {
+                    report.notes.push(format!(
+                        "{facilities} edificios hechos como equipamientos o comercios del mundo"
+                    ));
+                }
                 if n > 0 {
                     let name = archisim_core::world_places()
                         .get(place as usize)
@@ -1319,6 +1425,14 @@ fn nearest_z(points: &[SurveyPoint], p: Point2) -> Option<f64> {
 
 /// Gives each building brought the style that suits it (U7), once they
 /// are all there (so that their party walls are known).
+/// The outline of a building of the surroundings just made.
+fn outline_of(m: &Model, id: archisim_core::MassId) -> Vec<Point2> {
+    match m.mass(id).map(|x| &x.shape) {
+        Some(MassShape::Prism(p)) => p.clone(),
+        _ => Vec::new(),
+    }
+}
+
 fn dress_brought(
     m: &mut Model,
     made: &[(archisim_core::MassId, u32, BuildingUse)],
@@ -1685,6 +1799,83 @@ mod tests {
             .find(|x| x.section.single_level)
             .expect("the pedestrian one");
         assert!(single.length() > 150.0, "{}", single.length());
+    }
+
+    #[test]
+    fn schools_and_shops_come_as_facilities() {
+        // Three buildings in Seville: a school, a supermarket and a house.
+        let osm = r#"<osm version="0.6">
+<node id="1" lat="37.38800" lon="-5.99600"/><node id="2" lat="37.38800" lon="-5.99550"/>
+<node id="3" lat="37.38830" lon="-5.99550"/><node id="4" lat="37.38830" lon="-5.99600"/>
+<node id="5" lat="37.38700" lon="-5.99600"/><node id="6" lat="37.38700" lon="-5.99560"/>
+<node id="7" lat="37.38730" lon="-5.99560"/><node id="8" lat="37.38730" lon="-5.99600"/>
+<node id="9" lat="37.38750" lon="-5.99500"/><node id="10" lat="37.38750" lon="-5.99490"/>
+<node id="11" lat="37.38760" lon="-5.99490"/><node id="12" lat="37.38760" lon="-5.99500"/>
+<way id="20"><nd ref="1"/><nd ref="2"/><nd ref="3"/><nd ref="4"/><nd ref="1"/><tag k="building" v="school"/><tag k="amenity" v="school"/></way>
+<way id="21"><nd ref="5"/><nd ref="6"/><nd ref="7"/><nd ref="8"/><nd ref="5"/><tag k="building" v="retail"/><tag k="shop" v="supermarket"/></way>
+<way id="22"><nd ref="9"/><nd ref="10"/><nd ref="11"/><nd ref="12"/><nd ref="9"/><tag k="building" v="house"/></way>
+</osm>"#;
+        let mut m = crate::new_project("Prueba");
+        let r = import_carto(
+            &mut m,
+            &[("a.osm".into(), osm.into())],
+            &CartoOptions::default(),
+        )
+        .unwrap();
+        assert_eq!(r.buildings, 3, "{r:?}");
+        let programmes: Vec<Option<u8>> = m
+            .masses()
+            .map(|x| {
+                x.dress
+                    .and_then(|d| d.world)
+                    .filter(|w| w.typology == archisim_core::WorldTypology::Facility)
+                    .map(|w| w.programme)
+            })
+            .collect();
+        assert!(programmes.contains(&Some(1)), "{programmes:?}");
+        assert!(programmes.contains(&Some(10)), "{programmes:?}");
+        assert_eq!(programmes.iter().filter(|p| p.is_none()).count(), 1);
+        assert!(r.notes.iter().any(|n| n.contains("equipamientos")), "{r:?}");
+    }
+
+    #[test]
+    fn programmes_by_tags_and_uses() {
+        let p = |b, a, l, s, u, f| programme_for(b, a, l, s, u, f, 2);
+        assert_eq!(
+            p(
+                "yes",
+                Some("townhall"),
+                None,
+                None,
+                BuildingUse::Housing,
+                600.0
+            ),
+            Some(0)
+        );
+        assert_eq!(
+            p(
+                "yes",
+                None,
+                Some("stadium"),
+                None,
+                BuildingUse::Housing,
+                9000.0
+            ),
+            Some(7)
+        );
+        assert_eq!(
+            p("kiosk", None, None, None, BuildingUse::Housing, 8.0),
+            Some(9)
+        );
+        assert_eq!(
+            p("", None, None, None, BuildingUse::Retail, 4000.0),
+            Some(13)
+        );
+        assert_eq!(
+            p("", None, None, None, BuildingUse::Industry, 1200.0),
+            Some(8)
+        );
+        assert_eq!(p("", None, None, None, BuildingUse::Housing, 200.0), None);
     }
 
     #[test]

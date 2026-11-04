@@ -506,7 +506,8 @@ pub struct Dress {
 /// A building of the surroundings made as one of the world's: its place
 /// (the number of its skin), its typology and its variant; when it is
 /// from (`era`: 0 the place's old way, 1 today's) and its state (`state`:
-/// 0 in use, 1 abandoned, 2 being built).
+/// 0 in use, 1 abandoned, 2 being built); a facility's programme
+/// (`programme`, its number in [`world_programmes`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct WorldDress {
     pub place: u8,
@@ -514,6 +515,16 @@ pub struct WorldDress {
     pub variant: u16,
     pub era: u8,
     pub state: u8,
+    pub programme: u8,
+}
+
+/// The programmes of the world's facilities: their names, in the order of
+/// their numbers.
+pub fn world_programmes() -> Vec<&'static str> {
+    archisim_props::fine::buildings::world::civic::PROGRAMMES
+        .iter()
+        .map(|p| p.name())
+        .collect()
 }
 
 /// The eras of the world's buildings, as the dress keeps them.
@@ -535,15 +546,18 @@ pub enum WorldTypology {
     Tower,
     /// A house round a courtyard.
     Courtyard,
+    /// A facility or a shop (its programme in the dress).
+    Facility,
 }
 
 impl WorldTypology {
-    pub const ALL: [WorldTypology; 5] = [
+    pub const ALL: [WorldTypology; 6] = [
         WorldTypology::Street,
         WorldTypology::Block,
         WorldTypology::House,
         WorldTypology::Tower,
         WorldTypology::Courtyard,
+        WorldTypology::Facility,
     ];
 
     pub fn name(self) -> &'static str {
@@ -553,6 +567,7 @@ impl WorldTypology {
             WorldTypology::House => "Vivienda aislada",
             WorldTypology::Tower => "Torre",
             WorldTypology::Courtyard => "Casa patio",
+            WorldTypology::Facility => "Equipamiento o comercio",
         }
     }
 
@@ -563,6 +578,7 @@ impl WorldTypology {
             WorldTypology::House => "house",
             WorldTypology::Tower => "tower",
             WorldTypology::Courtyard => "courtyard",
+            WorldTypology::Facility => "facility",
         }
     }
 
@@ -596,6 +612,7 @@ impl WorldTypology {
             WorldTypology::House => T::House,
             WorldTypology::Tower => T::Tower,
             WorldTypology::Courtyard => T::Courtyard,
+            WorldTypology::Facility => T::Block,
         }
     }
 }
@@ -769,6 +786,8 @@ impl Dress {
             && (0.0..=20.0).contains(&self.patio)
             && self.world.is_none_or(|w| {
                 (w.place as usize) < archisim_props::fine::buildings::world::SKINS.len()
+                    && (w.programme as usize)
+                        < archisim_props::fine::buildings::world::civic::PROGRAMMES.len()
             })
             && [
                 self.bay,
@@ -811,8 +830,11 @@ impl Dress {
             .world
             .map(|w| {
                 let mut s = format!(";world={},{},{}", w.place, w.typology.code(), w.variant);
-                if w.era != 0 || w.state != 0 {
+                if w.era != 0 || w.state != 0 || w.programme != 0 {
                     s += &format!(",{},{}", w.era, w.state);
+                }
+                if w.programme != 0 {
+                    s += &format!(",{}", w.programme);
                 }
                 s
             })
@@ -856,6 +878,7 @@ impl Dress {
                         variant: it.next()?.parse().ok()?,
                         era: it.next().and_then(|e| e.parse().ok()).unwrap_or(0),
                         state: it.next().and_then(|e| e.parse().ok()).unwrap_or(0),
+                        programme: it.next().and_then(|e| e.parse().ok()).unwrap_or(0),
                     });
                 }
                 _ => {}
@@ -963,12 +986,42 @@ impl Model {
                     variant: (id.0 % 97) as u16 + 1,
                     era: d.world.map_or(0, |w| w.era),
                     state: d.world.map_or(0, |w| w.state),
+                    programme: 0,
                 }
             });
             if d.world.is_some() {
                 n += 1;
             }
             self.set_mass_dress(id, Some(d))?;
+        }
+        Ok(n)
+    }
+
+    /// Makes the buildings `ids` of the surroundings the world's facility
+    /// `programme` (its number in [`world_programmes`]) with the skin of
+    /// `place` (the project's if none), keeping their era and state.
+    pub fn dress_as_facility(
+        &mut self,
+        ids: &[MassId],
+        programme: u8,
+        place: Option<u8>,
+    ) -> Result<usize, ModelError> {
+        let place = place.unwrap_or_else(|| self.world_place());
+        self.ensure_world_materials();
+        let mut n = 0;
+        for &id in ids {
+            let Some(m) = self.mass(id) else { continue };
+            let Some(mut d) = m.dress else { continue };
+            d.world = Some(WorldDress {
+                place: d.world.map_or(place, |w| w.place),
+                typology: WorldTypology::Facility,
+                variant: d.world.map_or((id.0 % 97) as u16 + 1, |w| w.variant),
+                era: d.world.map_or(0, |w| w.era),
+                state: d.world.map_or(0, |w| w.state),
+                programme,
+            });
+            self.set_mass_dress(id, Some(d))?;
+            n += 1;
         }
         Ok(n)
     }

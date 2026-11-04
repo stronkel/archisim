@@ -1624,9 +1624,10 @@ fn world_solids(
             } else {
                 match w.typology {
                     WorldTypology::Street => WSide::Back,
-                    WorldTypology::Block | WorldTypology::House | WorldTypology::Tower => {
-                        WSide::Free
-                    }
+                    WorldTypology::Block
+                    | WorldTypology::House
+                    | WorldTypology::Tower
+                    | WorldTypology::Facility => WSide::Free,
                     WorldTypology::Courtyard => WSide::Back,
                 }
             }
@@ -1637,19 +1638,73 @@ fn world_solids(
         poly: poly.iter().map(|p| [p.x - o.x, p.y - o.y]).collect(),
         sides,
     };
-    let mesh = dress_cached_with(
-        &plan,
-        w.typology.props(),
-        w.place as usize,
-        Era::of(w.era as f64),
-        State::of(w.state as f64),
-        floors,
-        w.variant as u64,
-        light,
-    );
+    // A facility stands on the rectangle round the plan, its front on the
+    // main side; the rest on the plan itself.
+    let facility_frame = (w.typology == WorldTypology::Facility).then(|| {
+        let i = main.unwrap_or(0);
+        let (a, e) = (poly[i], poly[(i + 1) % n]);
+        let c = poly.iter().fold(Point2::new(0.0, 0.0), |s, p| {
+            Point2::new(s.x + p.x / n as f64, s.y + p.y / n as f64)
+        });
+        let len = a.distance(e).max(1e-6);
+        let u = [(e.x - a.x) / len, (e.y - a.y) / len];
+        let mut nrm = [u[1], -u[0]];
+        if (c.x - a.x) * nrm[0] + (c.y - a.y) * nrm[1] > 0.0 {
+            nrm = [-nrm[0], -nrm[1]];
+        }
+        let along = [nrm[1], -nrm[0]];
+        let (mut s0, mut s1, mut t0) = (f64::MAX, f64::MIN, 0.0f64);
+        for p in poly {
+            let (dx, dy) = (p.x - a.x, p.y - a.y);
+            let s = dx * along[0] + dy * along[1];
+            s0 = s0.min(s);
+            s1 = s1.max(s);
+            t0 = t0.min(dx * nrm[0] + dy * nrm[1]);
+        }
+        (a, along, nrm, s0, s1, -t0)
+    });
+    let mesh = match facility_frame {
+        Some((_, _, _, s0, s1, depth)) => {
+            archisim_core::props::fine::buildings::world::civic::facility_cached(
+                archisim_core::props::fine::buildings::world::civic::Programme::of(
+                    w.programme as f64,
+                ),
+                w.place as usize,
+                Era::of(w.era as f64),
+                State::of(w.state as f64),
+                (s1 - s0).max(3.0),
+                depth.max(3.0),
+                floors,
+                w.variant as u64,
+                light,
+            )
+        }
+        None => dress_cached_with(
+            &plan,
+            w.typology.props(),
+            w.place as usize,
+            Era::of(w.era as f64),
+            State::of(w.state as f64),
+            floors,
+            w.variant as u64,
+            light,
+        ),
+    };
     let by_name: std::collections::HashMap<&str, MaterialId> =
         model.materials().map(|x| (x.name.as_str(), x.id)).collect();
-    let place = |q: [f32; 3]| -> P3 { [o.x + q[0] as f64, o.y + q[1] as f64, z0 + q[2] as f64] };
+    let place = |q: [f32; 3]| -> P3 {
+        match facility_frame {
+            Some((a, u, nrm, s0, s1, depth)) => {
+                let (x, y) = ((s0 + s1) / 2.0 + q[0] as f64, q[1] as f64 - depth);
+                [
+                    a.x + u[0] * x + nrm[0] * y,
+                    a.y + u[1] * x + nrm[1] * y,
+                    z0 + q[2] as f64,
+                ]
+            }
+            None => [o.x + q[0] as f64, o.y + q[1] as f64, z0 + q[2] as f64],
+        }
+    };
     let mut by: BTreeMap<MaterialId, Vec<[P3; 3]>> = BTreeMap::new();
     for (role, tris) in &mesh.parts {
         let material = material_of(role)

@@ -164,8 +164,22 @@ pub fn facility(
     light: bool,
     today: bool,
 ) -> Look {
+    // The public services are whitewashed where the houses are timber.
+    let public = matches!(
+        p,
+        Programme::TownHall
+            | Programme::School
+            | Programme::Library
+            | Programme::FireStation
+            | Programme::Police
+            | Programme::SportsHall
+    );
+    let mut washed = *sk;
+    if public {
+        whitewash(&mut washed);
+    }
     let c = Ctx {
-        sk,
+        sk: &washed,
         w,
         d,
         floors: floors.max(1),
@@ -264,12 +278,27 @@ fn civic(base: &Skin, t: Typology) -> Skin {
         | WATER_TOWER
         | PENT);
     s.balc = Balc::None;
+    whitewash(&mut s);
     s.ground = match s.ground {
         Ground::Arcade => Ground::Arcade,
         Ground::Stoop => Ground::Stoop,
         _ => Ground::Door,
     };
     s
+}
+
+/// The public buildings of the dark timber towns are whitewashed, the
+/// timber left to the frames and the trims (Japan's town halls).
+fn whitewash(s: &mut Skin) {
+    if !s.walls.is_empty() && s.walls.iter().all(|w| w.starts_with("b_dark")) {
+        s.walls = &["w_white", "w_cream"];
+        if s.base.iter().all(|w| w.starts_with("b_dark")) {
+            s.base = &["c_concrete"];
+        }
+        if s.trims.iter().all(|t| t.starts_with("w_")) {
+            s.trims = &["b_dark"];
+        }
+    }
 }
 
 /// The shape of a building of the street with the skin's own roof.
@@ -1782,72 +1811,216 @@ fn factory(b: &mut Builder, c: &Ctx) -> Look {
 
 // ------------------------------------------------------------ commerce
 
+/// The kiosks of the world: how each place sells its newspapers.
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum KioskKind {
+    /// Octagonal under a cone (Lisbon, Italy, Greece).
+    Octagon,
+    /// Dark green with a scalloped dome (Paris, central Europe).
+    Dome,
+    /// Square under a flared roof of dark tiles (China, Japan, Korea).
+    Pagoda,
+    /// A newsstand: a metal box with its magazines out and a lit band
+    /// (America).
+    Newsstand,
+    /// The Spanish press kiosk: square, with its shutters open as eaves.
+    Press,
+    /// Under a thatched cone (the tropics).
+    Thatch,
+    /// Square in timber under a pyramid (the north of Europe).
+    Pyramid,
+    /// Square, whitewashed, under a small dome (the Maghreb).
+    Qubba,
+}
+
+fn kiosk_kind(sk: &Skin) -> KioskKind {
+    use KioskKind::*;
+    match sk.key {
+        "paris" | "centroeuropa" | "este" => Dome,
+        "china" | "japon" | "corea" => Pagoda,
+        "nueva_york" | "eeuu" | "california" | "san_francisco" | "latam" => Newsstand,
+        "tropico" => Thatch,
+        "nordico" | "paises_bajos" | "reino_unido" | "montana" => Pyramid,
+        "magreb" => Qubba,
+        "lisboa" | "algarve" | "italia" | "grecia" => Octagon,
+        _ => Press,
+    }
+}
+
 fn kiosk(b: &mut Builder, c: &Ctx) -> Look {
     let l = look(c.sk, c.seed, false);
+    let kind = kiosk_kind(c.sk);
     let r = c.w.min(c.d) / 2.0;
-    let sides = 8;
+    let cy = c.d / 2.0;
+    let square = !matches!(
+        kind,
+        KioskKind::Octagon | KioskKind::Dome | KioskKind::Thatch
+    );
+    let sides = if square { 4 } else { 8 };
+    // A square's corners at 45°, so its sides face the street.
     let ring = |rr: f64| -> Vec<[f64; 2]> {
+        let rr = if square {
+            rr * std::f64::consts::SQRT_2
+        } else {
+            rr
+        };
         (0..sides)
             .map(|k| {
                 let a = 2.0 * PI * (k as f64 + 0.5) / sides as f64;
-                [rr * a.cos(), c.d / 2.0 + rr * a.sin()]
+                [rr * a.cos(), cy + rr * a.sin()]
             })
             .collect()
     };
+    // The colour of the box, as the place paints its kiosks.
+    let structure = match kind {
+        KioskKind::Dome => "f_green",
+        KioskKind::Pagoda => "f_red",
+        KioskKind::Newsstand => "f_alu",
+        KioskKind::Press => "f_greyblue",
+        KioskKind::Thatch | KioskKind::Pyramid => "b_cedar",
+        KioskKind::Qubba => "w_white",
+        KioskKind::Octagon => l.frame,
+    };
     let body = ring(r * 0.92);
-    let structure = l.frame;
     b.slab(structure, &ring(r), 0.0, 0.25);
     b.slab(structure, &body, 0.25, 1.05);
     // The glass and the newspapers, the posts between.
-    b.slab("glass", &ring(r * 0.88), 1.05, 2.25);
-    b.slab("interior", &ring(r * 0.8), 1.05, 2.25);
+    let top = if kind == KioskKind::Dome { 2.5 } else { 2.25 };
+    b.slab("glass", &ring(r * 0.88), 1.05, top);
+    b.slab("interior", &ring(r * 0.8), 1.05, top);
     for p in &body {
         b.rbox(
             structure,
             [p[0] - 0.05, p[1] - 0.05, 1.0],
-            [p[0] + 0.05, p[1] + 0.05, 2.35],
+            [p[0] + 0.05, p[1] + 0.05, top + 0.1],
             0.0,
         );
     }
-    b.slab(structure, &body, 2.25, 2.55);
+    b.slab(structure, &body, top, top + 0.3);
+    let eave = top + 0.3;
     if !c.light {
         // The magazines on the shutters' ledge, round the front half.
-        for (k, p) in body.iter().enumerate().take(sides / 2 + 1).skip(1) {
+        let front: Vec<[f64; 2]> = if square {
+            // Along the front side, three to a side.
+            let (a, e) = (body[0], body[1]);
+            (1..4)
+                .map(|k| {
+                    let t = k as f64 / 4.0;
+                    [a[0] + (e[0] - a[0]) * t, a[1] + (e[1] - a[1]) * t]
+                })
+                .collect()
+        } else {
+            body.iter().take(sides / 2 + 1).skip(1).copied().collect()
+        };
+        for (k, p) in front.iter().enumerate() {
             let role = ["cloth_a", "cloth_b", "cloth_c"][k % 3];
+            let q = [p[0] * 1.02, cy + (p[1] - cy) * 1.06];
             b.rbox(
                 role,
-                [p[0] * 1.02 - 0.18, p[1] - 0.12, 0.9],
-                [p[0] * 1.02 + 0.18, p[1] + 0.12, 1.25],
+                [q[0] - 0.18, q[1] - 0.12, 0.9],
+                [q[0] + 0.18, q[1] + 0.12, 1.25],
                 0.0,
             );
         }
     }
-    // The roof: eaves and a dome or a cone, as the place does.
-    let roof_role = if c.sk.roof == Roof::Asian {
-        "roof"
-    } else {
-        structure
-    };
-    b.cone(
-        roof_role,
-        [0.0, c.d / 2.0, 2.55],
-        [0.0, c.d / 2.0, 2.7],
-        r * 1.25,
-        r * 1.25,
-        sides,
-    );
-    b.cone(
-        roof_role,
-        [0.0, c.d / 2.0, 2.7],
-        [0.0, c.d / 2.0, 3.6],
-        r * 1.25,
-        0.12,
-        sides,
-    );
-    b.ellipsoid("brass", [0.0, c.d / 2.0, 3.7], [0.12, 0.12, 0.14]);
+    let at = |zz: f64| [0.0, cy, zz];
+    match kind {
+        KioskKind::Octagon => {
+            b.cone(
+                structure,
+                at(eave),
+                at(eave + 0.15),
+                r * 1.25,
+                r * 1.25,
+                sides,
+            );
+            b.cone(
+                structure,
+                at(eave + 0.15),
+                at(eave + 1.05),
+                r * 1.25,
+                0.12,
+                sides,
+            );
+            b.ellipsoid("brass", at(eave + 1.15), [0.12, 0.12, 0.14]);
+        }
+        KioskKind::Dome => {
+            // The scalloped valance, the dome and its finial.
+            b.cone(structure, at(eave), at(eave + 0.12), r * 1.2, r * 1.2, 16);
+            if !c.light {
+                for k in 0..16 {
+                    let a = 2.0 * PI * (k as f64 + 0.5) / 16.0;
+                    let q = [r * 1.14 * a.cos(), cy + r * 1.14 * a.sin()];
+                    b.ellipsoid(structure, [q[0], q[1], eave + 0.02], [0.14, 0.14, 0.1]);
+                }
+            }
+            b.ellipsoid(structure, at(eave + 0.12), [r * 1.05, r * 1.05, r * 0.85]);
+            b.cyl(
+                "brass",
+                at(eave + 0.1 + r * 0.8),
+                at(eave + 0.4 + r * 0.85),
+                0.05,
+            );
+            b.ellipsoid("brass", at(eave + 0.45 + r * 0.85), [0.1, 0.1, 0.12]);
+        }
+        KioskKind::Pagoda => {
+            // Flared: a wide low slope over a steep one, a ridge knob.
+            let rr = r * std::f64::consts::SQRT_2;
+            b.cone("roof", at(eave), at(eave + 0.3), rr * 1.55, rr * 1.0, 4);
+            b.cone("roof", at(eave + 0.3), at(eave + 1.2), rr * 1.0, 0.15, 4);
+            b.ellipsoid("brass", at(eave + 1.25), [0.1, 0.1, 0.12]);
+        }
+        KioskKind::Newsstand => {
+            // A flat lid over the counter and a lit band of magazines.
+            let lid = ring(r * 1.3);
+            b.slab(structure, &lid, eave, eave + 0.12);
+            b.slab("sign", &ring(r * 0.95), eave + 0.12, eave + 0.55);
+        }
+        KioskKind::Press => {
+            // The shutters raised as eaves on the four sides, a flat lid.
+            b.slab(structure, &ring(r * 0.95), eave, eave + 0.2);
+            if !c.light {
+                for k in 0..4 {
+                    let (a, e) = (body[k], body[(k + 1) % 4]);
+                    let n = {
+                        let m = [(a[0] + e[0]) / 2.0, (a[1] + e[1]) / 2.0 - cy];
+                        let l = (m[0] * m[0] + m[1] * m[1]).sqrt().max(1e-9);
+                        [m[0] / l, m[1] / l]
+                    };
+                    let mid = [(a[0] + e[0]) / 2.0, (a[1] + e[1]) / 2.0];
+                    let half = [(e[0] - a[0]) / 2.0, (e[1] - a[1]) / 2.0];
+                    // Out and slightly up, hinged at the eave.
+                    let out = 0.35;
+                    b.obox(
+                        structure,
+                        [mid[0] + n[0] * out, mid[1] + n[1] * out, eave + 0.05 + 0.1],
+                        [half[0], half[1], 0.0],
+                        [n[0] * out, n[1] * out, 0.1],
+                        [0.0, 0.0, 0.025],
+                    );
+                }
+            }
+        }
+        KioskKind::Thatch => {
+            b.cone("r_thatch", at(eave), at(eave + 1.4), r * 1.5, 0.1, 12);
+        }
+        KioskKind::Pyramid => {
+            let rr = r * std::f64::consts::SQRT_2;
+            b.cone(l.roof, at(eave), at(eave + 1.1), rr * 1.3, 0.08, 4);
+        }
+        KioskKind::Qubba => {
+            b.slab(structure, &ring(r * 1.05), eave, eave + 0.15);
+            b.ellipsoid(structure, at(eave + 0.15), [r * 0.85, r * 0.85, r * 0.7]);
+        }
+    }
     // The sign over the counter.
+    let apothem = if square {
+        0.92
+    } else {
+        0.92 * (PI / 8.0).cos()
+    };
     let f = Face {
-        o: [-r * 0.6, c.d / 2.0 + r * 0.82],
+        o: [-r * 0.6, cy + r * apothem - 0.04],
         u: [1.0, 0.0],
         len: r * 1.2,
     };
@@ -1855,7 +2028,7 @@ fn kiosk(b: &mut Builder, c: &Ctx) -> Look {
         b,
         &f,
         (0.0, f.len),
-        (2.28, 2.52),
+        (top + 0.03, top + 0.27),
         "sign",
         "f_white",
         6,
@@ -2606,4 +2779,99 @@ fn square(b: &mut Builder, c: &Ctx) -> Look {
         }
     }
     l
+}
+
+/// A facility as a model over a `w` × `d` plot, its front to y = `d`: of
+/// an era and in a state (what a building of the surroundings made as a
+/// facility wears).
+#[allow(clippy::too_many_arguments)]
+pub fn facility_mesh(
+    p: Programme,
+    skin: usize,
+    era: super::types::Era,
+    state: super::state::State,
+    w: f64,
+    d: f64,
+    floors: usize,
+    seed: u64,
+    light: bool,
+) -> crate::PropMesh {
+    use super::plan::Side;
+    use super::state::State;
+    let sk = super::types::skin_with(skin, era);
+    let mut b = Builder::default();
+    let plan = Plan::rect(w, d, [Side::Back, Side::Free, Side::Street, Side::Free]);
+    if state == State::Building {
+        super::state::site_on(&mut b, &plan, &sk, floors.max(1), seed, light);
+    } else {
+        let l = facility(
+            &mut b,
+            p,
+            &sk,
+            w,
+            d,
+            floors,
+            seed,
+            light,
+            era == super::types::Era::Today,
+        );
+        super::types::finish(&mut b, &l);
+        if state == State::Abandoned {
+            super::state::abandon(&mut b, &plan, seed);
+        }
+    }
+    crate::PropMesh {
+        positions: b.positions,
+        parts: b.parts.into_iter().collect(),
+        soft: b.soft.into_iter().collect(),
+        fine: b.fine.into_iter().collect(),
+    }
+}
+
+type FacilityCache =
+    std::sync::Mutex<std::collections::HashMap<u64, std::sync::Arc<crate::PropMesh>>>;
+
+/// [`facility_mesh`], kept: the same choices make the same model once.
+#[allow(clippy::too_many_arguments)]
+pub fn facility_cached(
+    p: Programme,
+    skin: usize,
+    era: super::types::Era,
+    state: super::state::State,
+    w: f64,
+    d: f64,
+    floors: usize,
+    seed: u64,
+    light: bool,
+) -> std::sync::Arc<crate::PropMesh> {
+    use std::hash::{Hash, Hasher};
+    static CACHE: std::sync::OnceLock<FacilityCache> = std::sync::OnceLock::new();
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    (
+        p.index(),
+        skin,
+        era,
+        state as u8,
+        w.to_bits(),
+        d.to_bits(),
+        floors,
+        seed,
+        light,
+    )
+        .hash(&mut h);
+    let key = h.finish();
+    let cache = CACHE.get_or_init(Default::default);
+    if let Some(m) = cache.lock().ok().and_then(|c| c.get(&key).cloned()) {
+        return m;
+    }
+    let m = std::sync::Arc::new(facility_mesh(
+        p, skin, era, state, w, d, floors, seed, light,
+    ));
+    if let Ok(mut c) = cache.lock() {
+        if c.len() > 2000 {
+            c.clear();
+        }
+        c.insert(key, m.clone());
+    }
+    m
 }

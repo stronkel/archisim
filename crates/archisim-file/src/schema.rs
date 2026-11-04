@@ -1619,6 +1619,9 @@ pub(crate) struct WorldDressOf {
     /// Its state (version 73): 0 in use, 1 abandoned, 2 being built.
     #[serde(default, skip_serializing_if = "is_zero_u8")]
     pub state: u8,
+    /// A facility's programme (version 74).
+    #[serde(default, skip_serializing_if = "is_zero_u8")]
+    pub programme: u8,
 }
 
 fn is_zero_u8(v: &u8) -> bool {
@@ -1649,6 +1652,7 @@ impl DressOf {
                 variant: w.variant,
                 era: w.era,
                 state: w.state,
+                programme: w.programme,
             }),
         }
     }
@@ -1684,6 +1688,7 @@ impl DressOf {
                     variant: w.variant,
                     era: w.era.min(1),
                     state: w.state.min(2),
+                    programme: w.programme.min(18),
                 }),
                 None => None,
             },

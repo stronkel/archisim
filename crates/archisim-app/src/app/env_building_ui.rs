@@ -391,6 +391,7 @@ impl ArchiSimApp {
                         variant: (who.0 % 97) as u16 + 1,
                         era: 0,
                         state: 0,
+                        programme: 0,
                     }
                 });
             }
@@ -441,6 +442,25 @@ impl ArchiSimApp {
                         }
                     },
                 );
+                if w.typology == archisim_core::WorldTypology::Facility {
+                    let progs: Vec<(u8, &str)> = archisim_core::world_programmes()
+                        .into_iter()
+                        .enumerate()
+                        .map(|(i, n)| (i as u8, n))
+                        .collect();
+                    row(
+                        ui,
+                        "Programa",
+                        "Qué equipamiento o comercio es: ayuntamiento, colegio, mercado, estadio…",
+                        |ui, wd| {
+                            let c = choice(ui, "env-world-programme", wd, w.programme, &progs);
+                            if c != w.programme {
+                                w.programme = c;
+                                changed = true;
+                            }
+                        },
+                    );
+                }
                 row(
                     ui,
                     "Época",

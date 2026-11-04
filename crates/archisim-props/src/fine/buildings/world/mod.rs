@@ -365,7 +365,13 @@ mod tests {
                         sk.key,
                         prog.name()
                     );
-                    if !(200..=400_000).contains(&n) {
+                    // A kiosk from afar is a box and its roof.
+                    let least = if prog == civic::Programme::Kiosk {
+                        100
+                    } else {
+                        200
+                    };
+                    if !(least..=400_000).contains(&n) {
                         bad.push(format!("{what}: {n} triangles"));
                     }
                     for (role, _) in &m.parts {

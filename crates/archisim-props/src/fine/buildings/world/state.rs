@@ -390,13 +390,72 @@ pub fn site_on(b: &mut Builder, plan: &Plan, skin: &Skin, floors: usize, seed: u
         let jib = 25.0;
         let zj = h + 2.3;
         let along = |s: f64, zz: f64| [p[0] + cx * s, p[1] + cy * s, zz];
-        b.obox(
-            "f_yellow",
-            along(jib / 2.0 - 7.0, zj + 0.6),
-            [cx * (jib + 7.0) / 2.0, cy * (jib + 7.0) / 2.0, 0.0],
-            [-cy * 0.6, cx * 0.6, 0.0],
-            [0.0, 0.0, 0.6],
-        );
+        if light {
+            b.obox(
+                "f_yellow",
+                along(jib / 2.0 - 7.0, zj + 0.6),
+                [cx * (jib + 7.0) / 2.0, cy * (jib + 7.0) / 2.0, 0.0],
+                [-cy * 0.6, cx * 0.6, 0.0],
+                [0.0, 0.0, 0.6],
+            );
+        } else {
+            // A triangular lattice: two chords below, one on top, and
+            // the diagonals between them every metre and a half.
+            let side = |s: f64, k: f64, zz: f64| {
+                let q = along(s, zz);
+                [q[0] - cy * k, q[1] + cx * k, zz]
+            };
+            let (s0, s1, w, r) = (-7.0, jib, 0.6, 0.05);
+            for k in [-w, w] {
+                b.cyl("f_yellow", side(s0, k, zj + r), side(s1, k, zj + r), r);
+            }
+            b.cyl(
+                "f_yellow",
+                side(s0, 0.0, zj + 1.2),
+                side(s1, 0.0, zj + 1.2),
+                r,
+            );
+            let step = 1.5;
+            let mut s = s0;
+            let mut up = true;
+            while s < s1 - 1e-6 {
+                let e = (s + step).min(s1);
+                let (sa, se) = if up { (s, e) } else { (e, s) };
+                for k in [-w, w] {
+                    b.cyl(
+                        "f_yellow",
+                        side(sa, k, zj + r),
+                        side(se, 0.0, zj + 1.2),
+                        0.03,
+                    );
+                }
+                b.cyl("f_yellow", side(s, -w, zj + r), side(s, w, zj + r), 0.03);
+                up = !up;
+                s = e;
+            }
+            for k in [-w, w] {
+                b.cyl(
+                    "f_yellow",
+                    side(s1, k, zj + r),
+                    side(s1, 0.0, zj + 1.2),
+                    0.03,
+                );
+            }
+            b.cyl("f_yellow", side(s1, -w, zj + r), side(s1, w, zj + r), 0.03);
+            // The peak over the cab with its ties to the two ends.
+            let peak = along(0.0, zj + 5.0);
+            b.cyl("f_yellow", side(0.0, 0.0, zj + 1.2), peak, 0.06);
+            b.cyl("iron", peak, side(s1 * 0.55, 0.0, zj + 1.2), 0.02);
+            b.cyl("iron", peak, side(s0, 0.0, zj + 1.2), 0.02);
+            // The trolley the hook hangs from.
+            b.obox(
+                "iron",
+                along(jib * 0.6, zj),
+                [cx * 0.4, cy * 0.4, 0.0],
+                [-cy * (w + 0.05), cx * (w + 0.05), 0.0],
+                [0.0, 0.0, 0.08],
+            );
+        }
         b.rbox(
             "c_concrete",
             {
@@ -411,7 +470,7 @@ pub fn site_on(b: &mut Builder, plan: &Plan, skin: &Skin, floors: usize, seed: u
         );
         // The hook hanging from the jib.
         let s = jib * 0.6;
-        b.cyl("iron", along(s, zj + 0.02), along(s, zj - 8.0), 0.02);
+        b.cyl("iron", along(s, zj - 0.06), along(s, zj - 8.0), 0.02);
         b.rbox(
             "f_yellow",
             {

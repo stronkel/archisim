@@ -1731,20 +1731,29 @@ pub fn contemporary(base: &Skin) -> Skin {
         "nordico" => &["b_dark", "b_cedar", "w_white"],
         "japon" | "corea" => &["c_concrete", "b_dark", "w_white"],
         "reino_unido" | "paises_bajos" | "nueva_york" => &["k_dark", "c_concrete", "w_white"],
-        "andalucia" | "algarve" | "grecia" | "mancha" | "extremadura" | "baleares" => {
-            &["w_white", "w_pearl"]
-        }
+        "andalucia" | "algarve" | "grecia" | "mancha" | "extremadura" | "baleares" => &["w_white"],
         "magreb" | "california" | "latam" => &["w_cream", "w_white", "c_concrete"],
         _ => &["w_white", "c_concrete", "w_pearl"],
     };
     let pitched = matches!(base.key, "nordico" | "japon" | "centroeuropa" | "montana");
     let spain = base.region == "España";
+    // The whitewashed towns build white today too: white frames, timber
+    // and a band of ochre against the lime, no grey concrete.
+    let whitewashed = walls == ["w_white"];
     Skin {
         walls,
         base: &[],
-        trims: &["c_concrete", "b_cedar", "f_black"],
+        trims: if whitewashed {
+            &["b_cedar", "w_ochre", "w_white"]
+        } else {
+            &["c_concrete", "b_cedar", "f_black"]
+        },
         accents: &[],
-        frames: &["f_black", "f_alu", "f_bronze"],
+        frames: if whitewashed {
+            &["f_white", "f_black", "f_alu"]
+        } else {
+            &["f_black", "f_alu", "f_bronze"]
+        },
         shutters: &["b_cedar"],
         roof_mat: if pitched { "r_zinc" } else { "r_gravel" },
         roof: if pitched { Roof::Gable } else { Roof::Flat },
