@@ -1688,7 +1688,9 @@ impl DressOf {
                     variant: w.variant,
                     era: w.era.min(1),
                     state: w.state.min(2),
-                    programme: w.programme.min(18),
+                    programme: w
+                        .programme
+                        .min((archisim_core::world_programmes().len() - 1) as u8),
                 }),
                 None => None,
             },

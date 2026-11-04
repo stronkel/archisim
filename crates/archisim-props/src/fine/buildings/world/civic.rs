@@ -40,10 +40,29 @@ pub enum Programme {
     Tavern,
     Square,
     Landmark,
+    Park,
+    Promenade,
+    Alameda,
+    Garden,
+    Cemetery,
+    Hermitage,
+    Lighthouse,
+    Harbour,
+    TrainStation,
+    BusStation,
+    Hospital,
+    Hotel,
+    Bridge,
+    GuardHouse,
+    Granary,
+    Palloza,
+    StoneHouse,
+    PatioHouse,
+    SocialHousing,
 }
 
 /// The programmes in their order (their number is kept in the recipes).
-pub const PROGRAMMES: [Programme; 19] = [
+pub const PROGRAMMES: [Programme; 38] = [
     Programme::TownHall,
     Programme::School,
     Programme::Library,
@@ -63,6 +82,25 @@ pub const PROGRAMMES: [Programme; 19] = [
     Programme::Tavern,
     Programme::Square,
     Programme::Landmark,
+    Programme::Park,
+    Programme::Promenade,
+    Programme::Alameda,
+    Programme::Garden,
+    Programme::Cemetery,
+    Programme::Hermitage,
+    Programme::Lighthouse,
+    Programme::Harbour,
+    Programme::TrainStation,
+    Programme::BusStation,
+    Programme::Hospital,
+    Programme::Hotel,
+    Programme::Bridge,
+    Programme::GuardHouse,
+    Programme::Granary,
+    Programme::Palloza,
+    Programme::StoneHouse,
+    Programme::PatioHouse,
+    Programme::SocialHousing,
 ];
 
 impl Programme {
@@ -96,6 +134,25 @@ impl Programme {
             Programme::Tavern => "Taberna",
             Programme::Square => "Plaza",
             Programme::Landmark => "Edificio emblemático",
+            Programme::Park => "Parque",
+            Programme::Promenade => "Paseo marítimo",
+            Programme::Alameda => "Alameda",
+            Programme::Garden => "Jardín",
+            Programme::Cemetery => "Cementerio",
+            Programme::Hermitage => "Ermita",
+            Programme::Lighthouse => "Faro",
+            Programme::Harbour => "Lonja y puerto",
+            Programme::TrainStation => "Estación de tren",
+            Programme::BusStation => "Estación de autobuses",
+            Programme::Hospital => "Hospital",
+            Programme::Hotel => "Hotel",
+            Programme::Bridge => "Puente de piedra",
+            Programme::GuardHouse => "Casa cuartel",
+            Programme::Granary => "Hórreo",
+            Programme::Palloza => "Palloza",
+            Programme::StoneHouse => "Casa de piedra de sierra",
+            Programme::PatioHouse => "Casa-patio de una planta",
+            Programme::SocialHousing => "Bloque de VPO",
         }
     }
 
@@ -119,8 +176,33 @@ impl Programme {
             Programme::BeachBar => (14.0, 12.0),
             Programme::Restaurant => (14.0, 16.0),
             Programme::Tavern => (super::types::usual_width(sk).max(6.0), 12.0),
-            Programme::Square => (32.0, 32.0),
+            Programme::Square => {
+                if super::places::square_kind(sk) == super::places::SquareKind::Mayor {
+                    (40.0, 40.0)
+                } else {
+                    (32.0, 32.0)
+                }
+            }
             Programme::Landmark => (24.0, 30.0),
+            Programme::Park => (40.0, 32.0),
+            Programme::Promenade => (40.0, 24.0),
+            Programme::Alameda => (60.0, 18.0),
+            Programme::Garden => (40.0, 36.0),
+            Programme::Cemetery => (44.0, 40.0),
+            Programme::Hermitage => (12.0, 20.0),
+            Programme::Lighthouse => (20.0, 26.0),
+            Programme::Harbour => (44.0, 36.0),
+            Programme::TrainStation => (60.0, 30.0),
+            Programme::BusStation => (44.0, 30.0),
+            Programme::Hospital => (54.0, 28.0),
+            Programme::Hotel => (odd_width(sk, 22.0), 16.0),
+            Programme::Bridge => (24.0, 40.0),
+            Programme::GuardHouse => (26.0, 24.0),
+            Programme::Granary => (12.0, 7.0),
+            Programme::Palloza => (18.0, 18.0),
+            Programme::StoneHouse => (14.0, 12.0),
+            Programme::PatioHouse => (16.0, 16.0),
+            Programme::SocialHousing => (30.0, 14.0),
         }
     }
 
@@ -136,6 +218,19 @@ impl Programme {
             Programme::Shop | Programme::Tavern => sk.floors.clamp(1, 4),
             Programme::Restaurant => 1,
             Programme::Arcade => 2,
+            Programme::Square => {
+                if super::places::square_kind(sk) == super::places::SquareKind::Mayor {
+                    3
+                } else {
+                    1
+                }
+            }
+            Programme::TrainStation => 2,
+            Programme::Hospital => 4,
+            Programme::Hotel => 7,
+            Programme::GuardHouse => 2,
+            Programme::StoneHouse => 2,
+            Programme::SocialHousing => 5,
             _ => 1,
         }
     }
@@ -173,6 +268,10 @@ pub fn facility(
             | Programme::FireStation
             | Programme::Police
             | Programme::SportsHall
+            | Programme::Hospital
+            | Programme::GuardHouse
+            | Programme::TrainStation
+            | Programme::BusStation
     );
     let mut washed = *sk;
     if public {
@@ -205,8 +304,27 @@ pub fn facility(
         Programme::BeachBar => beach_bar(b, &c),
         Programme::Restaurant => restaurant(b, &c),
         Programme::Tavern => tavern(b, &c),
-        Programme::Square => square(b, &c),
+        Programme::Square => super::places::square(b, &c),
         Programme::Landmark => super::landmarks::landmark(b, sk, w, d, seed, light),
+        Programme::Park => super::places::park(b, &c),
+        Programme::Promenade => super::places::promenade(b, &c),
+        Programme::Alameda => super::places::alameda(b, &c),
+        Programme::Garden => super::places::garden(b, &c),
+        Programme::Cemetery => super::town::cemetery(b, &c),
+        Programme::Hermitage => super::town::hermitage(b, &c),
+        Programme::Lighthouse => super::town::lighthouse(b, &c),
+        Programme::Harbour => super::town::harbour(b, &c),
+        Programme::TrainStation => super::town::train_station(b, &c),
+        Programme::BusStation => super::town::bus_station(b, &c),
+        Programme::Hospital => super::town::hospital(b, &c),
+        Programme::Hotel => super::town::hotel(b, &c),
+        Programme::Bridge => super::town::bridge(b, &c),
+        Programme::GuardHouse => super::town::guard_house(b, &c),
+        Programme::Granary => super::vernacular::granary(b, &c),
+        Programme::Palloza => super::vernacular::palloza(b, &c),
+        Programme::StoneHouse => super::vernacular::stone_house(b, &c),
+        Programme::PatioHouse => super::vernacular::patio_house(b, &c),
+        Programme::SocialHousing => super::vernacular::social_housing(b, &c),
     }
 }
 
@@ -264,7 +382,7 @@ pub(super) struct Ctx<'a> {
 
 /// The place's skin for a public building: no balconies, nothing hung,
 /// no shops below.
-fn civic(base: &Skin, t: Typology) -> Skin {
+pub(super) fn civic(base: &Skin, t: Typology) -> Skin {
     let mut s = adapted(base, t);
     s.extras &= !(AC
         | LAUNDRY
@@ -289,7 +407,7 @@ fn civic(base: &Skin, t: Typology) -> Skin {
 
 /// The public buildings of the dark timber towns are whitewashed, the
 /// timber left to the frames and the trims (Japan's town halls).
-fn whitewash(s: &mut Skin) {
+pub(super) fn whitewash(s: &mut Skin) {
     if !s.walls.is_empty() && s.walls.iter().all(|w| w.starts_with("b_dark")) {
         s.walls = &["w_white", "w_cream"];
         if s.base.iter().all(|w| w.starts_with("b_dark")) {
@@ -302,7 +420,7 @@ fn whitewash(s: &mut Skin) {
 }
 
 /// The shape of a building of the street with the skin's own roof.
-fn shape_of(sk: &Skin, floors: usize, seed: u64, light: bool, pavement: bool) -> Shape {
+pub(super) fn shape_of(sk: &Skin, floors: usize, seed: u64, light: bool, pavement: bool) -> Shape {
     Shape {
         floors,
         seed,
@@ -324,7 +442,7 @@ fn shape_of(sk: &Skin, floors: usize, seed: u64, light: bool, pavement: bool) ->
 }
 
 /// A building of the street of skin `sk` over `plan`.
-fn dressed(
+pub(super) fn dressed(
     b: &mut Builder,
     plan: &Plan,
     sk: &Skin,
@@ -340,7 +458,7 @@ fn dressed(
 
 /// The street front of a building made with [`building`] over a rectangle
 /// (its side 2).
-fn street_front(built: &Built, w: f64, d: f64) -> (Face, f64) {
+pub(super) fn street_front(built: &Built, w: f64, d: f64) -> (Face, f64) {
     let f = built.fronts[2].map(|f| f.f).unwrap_or(Face {
         o: [-w / 2.0, d],
         u: [1.0, 0.0],
@@ -551,7 +669,7 @@ pub(super) fn walls_box(
 }
 
 /// Windows in a row of holes.
-fn windows(
+pub(super) fn windows(
     b: &mut Builder,
     f: &Face,
     holes: &[Hole],
@@ -580,7 +698,13 @@ fn windows(
 
 /// Holes of windows along a face: `n` of them, `ww` wide, from `z0` to
 /// `z1`, leaving `skip` (a span) free.
-fn row_of(len: f64, n: usize, ww: f64, z: (f64, f64), skip: Option<(f64, f64)>) -> Vec<Hole> {
+pub(super) fn row_of(
+    len: f64,
+    n: usize,
+    ww: f64,
+    z: (f64, f64),
+    skip: Option<(f64, f64)>,
+) -> Vec<Hole> {
     let step = len / n as f64;
     (0..n)
         .map(|i| step * (i as f64 + 0.5))
@@ -593,7 +717,7 @@ fn row_of(len: f64, n: usize, ww: f64, z: (f64, f64), skip: Option<(f64, f64)>) 
 }
 
 /// A flat roof over a rectangle at `z` with its parapet.
-fn flat_top(
+pub(super) fn flat_top(
     b: &mut Builder,
     x: (f64, f64),
     y: (f64, f64),
@@ -620,7 +744,7 @@ fn flat_top(
 }
 
 /// Steps up to a door: `n` of them, `rise` each, out of the face.
-fn steps(b: &mut Builder, f: &Face, s: (f64, f64), n: usize, role: &'static str) {
+pub(super) fn steps(b: &mut Builder, f: &Face, s: (f64, f64), n: usize, role: &'static str) {
     for k in 0..n {
         let out = 0.32 * (n - k) as f64;
         f.bx(
@@ -634,7 +758,7 @@ fn steps(b: &mut Builder, f: &Face, s: (f64, f64), n: usize, role: &'static str)
 }
 
 /// A canopy (marquesina) over a door, on two posts or hung.
-fn canopy(
+pub(super) fn canopy(
     b: &mut Builder,
     f: &Face,
     s: (f64, f64),
@@ -710,7 +834,7 @@ pub(super) fn table_set(
 }
 
 /// A planter with its hedge.
-fn planter(b: &mut Builder, lo: [f64; 2], hi: [f64; 2], role: &'static str) {
+pub(super) fn planter(b: &mut Builder, lo: [f64; 2], hi: [f64; 2], role: &'static str) {
     b.rbox(role, [lo[0], lo[1], 0.0], [hi[0], hi[1], 0.45], 0.0);
     b.rbox(
         "hedge",
@@ -721,7 +845,7 @@ fn planter(b: &mut Builder, lo: [f64; 2], hi: [f64; 2], role: &'static str) {
 }
 
 /// A barrel standing at `c` (a table of a tavern).
-fn barrel(b: &mut Builder, c: [f64; 2], h: f64) {
+pub(super) fn barrel(b: &mut Builder, c: [f64; 2], h: f64) {
     b.cone(
         "b_cedar",
         [c[0], c[1], 0.0],
@@ -2686,11 +2810,26 @@ fn tavern(b: &mut Builder, c: &Ctx) -> Look {
 
 // ---------------------------------------------------------------- square
 
-fn square(b: &mut Builder, c: &Ctx) -> Look {
+/// The plaza de armas: lawns in four quarters round a fountain, trees and
+/// benches round the edges, the bandstand in a corner.
+pub(super) fn bandstand_square(b: &mut Builder, c: &Ctx) -> Look {
     let l = look(c.sk, c.seed, false);
     let (x0, x1) = (-c.w / 2.0, c.w / 2.0);
     let cy = c.d / 2.0;
     b.rbox("paving", [x0, 0.0, 0.0], [x1, c.d, 0.03], 0.0);
+    for (ax, ay) in [
+        (x0 + 1.0, 1.0),
+        (1.5, 1.0),
+        (x0 + 1.0, cy + 1.5),
+        (1.5, cy + 1.5),
+    ] {
+        b.rbox(
+            "lawn",
+            [ax, ay, 0.03],
+            [ax + c.w / 2.0 - 2.5, ay + c.d / 2.0 - 2.5, 0.08],
+            0.0,
+        );
+    }
     // The kerb round it.
     for f in roofs::faces((x0, x1), (0.0, c.d)) {
         f.bx(b, "c_concrete", (0.0, f.len), (0.0, 0.15), (-0.3, 0.0));
@@ -2705,10 +2844,10 @@ fn square(b: &mut Builder, c: &Ctx) -> Look {
         r + 0.2,
         20,
     );
-    b.cone("water", [0.0, cy, 0.4], [0.0, cy, 0.5], r, r, 20);
+    b.cone("water", [0.0, cy, 0.4], [0.0, cy, 0.56], r, r, 20);
     b.cone(l.trim, [0.0, cy, 0.5], [0.0, cy, 1.8], 0.35, 0.25, 12);
     b.cone(l.trim, [0.0, cy, 1.8], [0.0, cy, 2.1], 1.1, 0.9, 16);
-    b.cone("water", [0.0, cy, 2.0], [0.0, cy, 2.12], 0.85, 0.85, 16);
+    b.cone("water", [0.0, cy, 2.0], [0.0, cy, 2.11], 0.85, 0.85, 16);
     b.cone(l.trim, [0.0, cy, 2.1], [0.0, cy, 3.0], 0.18, 0.12, 10);
     b.ellipsoid(l.trim, [0.0, cy, 3.1], [0.2, 0.2, 0.2]);
     // Trees and benches round the edges, lamp posts at the corners.

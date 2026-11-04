@@ -14,12 +14,15 @@
 pub mod civic;
 pub mod facade;
 pub mod landmarks;
+pub mod places;
 pub mod plan;
 pub mod roofs;
 pub mod skins;
 pub mod state;
 pub mod towers;
+pub mod town;
 pub mod types;
+pub mod vernacular;
 
 pub use skins::{skin_of, Skin, SKINS};
 
@@ -371,7 +374,13 @@ mod tests {
                     } else {
                         200
                     };
-                    if !(least..=400_000).contains(&n) {
+                    // The plaza mayor is four rows of houses.
+                    let most = if prog == civic::Programme::Square {
+                        500_000
+                    } else {
+                        400_000
+                    };
+                    if !(least..=most).contains(&n) {
                         bad.push(format!("{what}: {n} triangles"));
                     }
                     for (role, _) in &m.parts {

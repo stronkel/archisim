@@ -114,6 +114,12 @@ Los ejes 1 y 2 dan el volumen; los ejes 3, 4 y 5 dan la piel. Hay detalles que h
    - En Japón y Corea, los edificios públicos se encalan y dejan la madera oscura para la carpintería y los recercados (antes salían negros).
    - **Al traer el entorno** (tanda 12), cada edificio toma su programa por las etiquetas de OpenStreetMap o el uso del Catastro: ayuntamiento, colegio (también guardería e instituto), biblioteca, bomberos, comisaría, mercado, restaurante y café, bar, templo; polideportivo, gimnasio y estadio; quiosco, fábrica (industrial de más de 300 m²); y el comercio por su tamaño: quiosco por debajo de 25 m², tienda hasta dos plantas y centro comercial por encima de 2.500 m². Se puede cambiar a mano: en las propiedades del edificio, tipología «Equipamiento o comercio» y «Programa».
 
+11. **Tanda 13, plazas y espacios públicos** (hecha, en revisión): la plaza ya es la de cada lugar (plaza mayor porticada, plaza de naranjos, piazza, plaza del mercado, plaza de armas, explanada de templo, green americano y plaza de la medina) y hay cuatro programas nuevos: parque de barrio con juegos, paseo marítimo, alameda y jardín con invernadero.
+12. **Tanda 14, lo que remata un pueblo** (hecha, en revisión): cementerio, ermita, faro, lonja y puerto, estación de tren, estación de autobuses, hospital, hotel, puente de piedra y casa cuartel.
+13. **Tanda 15, arquitectura popular que faltaba** (hecha, en revisión): hórreo (gallego, y asturiano en la montaña), palloza, casa de piedra de sierra, casa-patio de una planta y bloque de VPO de ladrillo.
+   - Son programas del mismo «Equipamiento del mundo» (del 19 al 37) y llevan la piel del lugar. Se ven con `archisim equipamientos out/ <lugares>`; fotos con `ARCHISIM_HOJAS=6,7,8,9,10` para las hojas nuevas.
+   - Al traer el entorno se reconocen también hospitales, hoteles, ermitas, estaciones, faros y cementerios.
+
 Cuando Antonio apruebe una tanda, la integración será que los estilos de U6 (y U7, al traer el Catastro) usen estos modelos sobre la planta y las plantas que tenga cada masa.
 
 ## 4. Las pieles por lugar (tanda 6)
@@ -145,4 +151,5 @@ Una **piel** dice con qué y cómo construye un lugar; las **tipologías** son e
   - la fachada está en `world::facade`, la cubierta en `world::roofs` y las tipologías en `world::types`;
   - los materiales, uno por papel, están en `world::MATERIALS`;
   - la época de hoy es `skins::contemporary` y los estados están en `world::state` (`abandon`, `site_on`);
-  - los equipamientos están en `world::civic` (`Programme`, `facility`) y los edificios emblemáticos en `world::landmarks` (`kind_of` por lugar).
+  - los equipamientos están en `world::civic` (`Programme`, `facility`) y los edificios emblemáticos en `world::landmarks` (`kind_of` por lugar);
+  - las plazas por lugar, los parques, paseos, alamedas y jardines en `world::places` (`square_kind`), lo que remata un pueblo en `world::town` y la arquitectura popular en `world::vernacular`; la receta la escribe `scripts/make_world_recipes.py`.

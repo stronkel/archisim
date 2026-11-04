@@ -2587,13 +2587,24 @@ fn facility_pictures() {
     let aspect = size[0] as f32 / size[1] as f32;
     let skins = archisim_core::props::fine::buildings::world::SKINS;
     // The programmes of each sheet (their order in the project).
-    let sheets: [&[usize]; 5] = [
+    let sheets: [&[usize]; 10] = [
         &[0, 1, 2, 3],
         &[4, 5, 6, 8],
         &[7, 13, 11, 12],
         &[9, 10, 15, 16],
         &[14, 17, 18, 18],
+        &[19, 20, 21, 22],
+        &[23, 24, 25, 26],
+        &[27, 28, 29, 30],
+        &[31, 32, 33, 34],
+        &[35, 36, 37, 17],
     ];
+    // ARCHISIM_HOJAS=6,7 for some sheets only.
+    let pages = std::env::var("ARCHISIM_HOJAS").unwrap_or_default();
+    let pages: Vec<usize> = pages
+        .split(',')
+        .filter_map(|k| k.trim().parse().ok())
+        .collect();
     for (i, sk) in skins.iter().enumerate() {
         if !wanted.is_empty() && !wanted.contains(&sk.key) {
             continue;
@@ -2610,6 +2621,9 @@ fn facility_pictures() {
             one
         };
         for (n, sheet) in sheets.iter().enumerate() {
+            if !pages.is_empty() && !pages.contains(&(n + 1)) {
+                continue;
+            }
             let pics: Vec<Pixmap> = sheet
                 .iter()
                 .enumerate()

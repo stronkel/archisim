@@ -178,6 +178,9 @@ pub fn programme_for(
         "restaurant" | "cafe" | "fast_food" => Some(15),
         "pub" | "bar" | "biergarten" => Some(16),
         "place_of_worship" => Some(18),
+        "hospital" => Some(29),
+        "bus_station" => Some(28),
+        "grave_yard" => Some(23),
         _ => None,
     });
     let by_leisure = leisure.and_then(|l| match l {
@@ -195,6 +198,11 @@ pub fn programme_for(
         "school" | "kindergarten" => Some(1),
         "fire_station" => Some(3),
         "townhall" => Some(0),
+        "chapel" => Some(24),
+        "hospital" => Some(29),
+        "hotel" => Some(30),
+        "train_station" => Some(27),
+        "lighthouse" => Some(25),
         _ => None,
     };
     let shopping = |big: bool| {
@@ -218,6 +226,7 @@ pub fn programme_for(
                 }
             }
             (None, BuildingUse::Industry) if footprint > 300.0 => Some(8),
+            (None, BuildingUse::Hotel) => Some(30),
             _ => None,
         })
 }
@@ -1876,6 +1885,15 @@ mod tests {
             Some(8)
         );
         assert_eq!(p("", None, None, None, BuildingUse::Housing, 200.0), None);
+        assert_eq!(
+            p("hospital", None, None, None, BuildingUse::Public, 3000.0),
+            Some(29)
+        );
+        assert_eq!(
+            p("chapel", None, None, None, BuildingUse::Public, 60.0),
+            Some(24)
+        );
+        assert_eq!(p("", None, None, None, BuildingUse::Hotel, 600.0), Some(30));
     }
 
     #[test]

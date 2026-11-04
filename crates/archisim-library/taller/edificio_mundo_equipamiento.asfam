@@ -2,7 +2,7 @@ family "Equipamiento del mundo (taller)"
   category street
   host none
   version 2
-  description "Equipamientos y comercio de cada lugar con su piel: ayuntamiento, colegio, biblioteca, bomberos, comisaría, polideportivo, gimnasio, estadio, fábrica, quiosco, tienda, mercadillo, galería comercial, centro comercial, chiringuito, restaurante, taberna, plaza y el edificio emblemático del lugar (modelo del taller, en revisión)"
+  description "Equipamientos y comercio de cada lugar con su piel: ayuntamiento, colegio, biblioteca, bomberos, comisaría, polideportivo, gimnasio, estadio, fábrica, quiosco, tienda, mercadillo, galería comercial, centro comercial, chiringuito, restaurante, taberna, la plaza y el edificio emblemático del lugar; parques, paseos, alamedas y jardines; cementerio, ermita, faro, lonja, estaciones, hospital, hotel, puente y casa cuartel; hórreo, palloza, casa de piedra, casa-patio y VPO (modelo del taller, en revisión)"
   folder "Taller · Edificios del mundo"
 
 type_params
@@ -13,7 +13,7 @@ type_params
     era integer = 0 range 0..1 label "Época (0 la tradicional del lugar, 1 de hoy)"
     state integer = 0 range 0..2 label "Estado (0 en uso, 1 abandonado, 2 en obra)"
   section "Dimensiones"
-    programme integer = 0 range 0..18 label "Programa (0 Ayuntamiento, 1 Colegio, 2 Biblioteca, 3 Parque de bomberos, 4 Comisaría, 5 Polideportivo, 6 Gimnasio, 7 Estadio, 8 Fábrica, 9 Quiosco, 10 Tienda, 11 Mercadillo, 12 Galería comercial, 13 Centro comercial, 14 Chiringuito, 15 Restaurante, 16 Taberna, 17 Plaza, 18 Edificio emblemático del lugar)"
+    programme integer = 0 range 0..37 label "Programa (0 Ayuntamiento, 1 Colegio, 2 Biblioteca, 3 Parque de bomberos, 4 Comisaría, 5 Polideportivo, 6 Gimnasio, 7 Estadio, 8 Fábrica, 9 Quiosco, 10 Tienda, 11 Mercadillo, 12 Galería comercial, 13 Centro comercial, 14 Chiringuito, 15 Restaurante, 16 Taberna, 17 Plaza del lugar, 18 Edificio emblemático del lugar, 19 Parque, 20 Paseo marítimo, 21 Alameda, 22 Jardín, 23 Cementerio, 24 Ermita, 25 Faro, 26 Lonja y puerto, 27 Estación de tren, 28 Estación de autobuses, 29 Hospital, 30 Hotel, 31 Puente de piedra, 32 Casa cuartel, 33 Hórreo, 34 Palloza, 35 Casa de piedra de sierra, 36 Casa-patio de una planta, 37 Bloque de VPO)"
     width length = 0.00 range 0.00..200.00 label "Ancho (0: el habitual)"
     depth length = 0.00 range 0.00..200.00 label "Fondo (0: el habitual)"
     floors integer = 0 range 0..12 label "Plantas (0: las habituales)"

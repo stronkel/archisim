@@ -1155,7 +1155,10 @@ mod tests {
     #[test]
     fn the_facilities_are_made() {
         let m = facility_project(0).unwrap();
-        assert_eq!(m.objects().count(), 19);
+        assert_eq!(
+            m.objects().count(),
+            archisim_core::props::fine::buildings::world::civic::PROGRAMMES.len()
+        );
         let recipe = RECIPES
             .iter()
             .find(|r| r.lines().next().is_some_and(|l| l.contains(WORLD_FACILITY)))

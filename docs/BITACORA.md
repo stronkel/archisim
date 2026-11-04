@@ -6,6 +6,37 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-04 (101) · Taller de edificios, tandas 13 a 15: plazas de cada lugar, parques, lo que remata un pueblo y la arquitectura popular
+
+Misma rama y mismo pull request (#160). Sin cambios de formato: son programas nuevos del «Equipamiento del mundo» (ya son 38).
+
+**Hecho**
+- **La plaza de cada lugar** (antes era la misma en todos):
+  - plaza mayor porticada en Castilla, La Mancha, Extremadura, Cuenca, Galicia y la montaña: cuatro filas de casas con soportales y balcones, y una estatua en el centro;
+  - plaza de naranjos en Andalucía, Valencia, Baleares, Algarve y Levante: naranjos en alcorques, bancos de azulejo y fuente baja;
+  - piazza en Italia, Grecia y Lisboa: enlosado con bandas que salen de la fuente, figuras y obelisco;
+  - plaza del mercado en París, Reino Unido, Centroeuropa, Países Bajos, el norte y el Este: adoquín, columna sobre gradas y puestos;
+  - plaza de armas en Latinoamérica, California y el trópico: céspedes en cruz, fuente y templete;
+  - explanada de templo en China, Japón y Corea: grava, puerta, linternas de piedra, pila con su tejadillo, pinos y la sala al fondo;
+  - green en Nueva York y Estados Unidos: césped con caminos en aspa, estatua, bandera y árboles;
+  - plaza de la medina en el Magreb: palmeras y fuente de azulejo.
+- **Parques y paseos**: parque de barrio con columpios, tobogán, balancín y arenero; paseo marítimo con barandilla, escalera a la playa, palmeras y farolas; alameda con dos filas de árboles y fuente; jardín con parterres de boj y rosas, estanque, pérgola e invernadero.
+- **Lo que remata un pueblo**: cementerio con tapia, puerta de rejas, avenida de cipreses, nichos, tumbas y capilla; ermita con espadaña, porche y cruz; faro con sus bandas, linterna y la casa del farero; lonja y puerto con muelle, norays, la nave de la lonja y barcas; estación de tren con andén, marquesina, vías y un tren; estación de autobuses; hospital de cubierta plana con marquesina y la cruz; hotel con marquesina, banderas y rótulo; puente de piedra de cuatro arcos sobre el río; casa cuartel con su patio, su rótulo y la bandera.
+- **Arquitectura popular**: hórreo gallego de piedra (pies, muelas, tablillas, cruz y pináculo) y asturiano de madera (pegollos, corredor y cubierta a cuatro aguas) en la montaña; palloza de muro redondo con cubierta de paja; casa de piedra de sierra con su cerca; casa-patio de una planta; bloque de VPO de ladrillo.
+- Los edificios públicos nuevos (hospital, casa cuartel y estaciones) también salen encalados en los pueblos de madera.
+- Al traer el entorno, también se reconocen hospitales, hoteles (por etiqueta o por uso del Catastro), ermitas, estaciones de tren y de autobuses, faros y cementerios.
+- Arreglado de paso: los pomos de algunas puertas de madera quedaban despegados medio centímetro de la hoja.
+
+**Pendiente**
+- Pasar del taller a la biblioteca: cuando Antonio lo apruebe.
+
+**Qué debe probar Antonio**
+1. `cargo run --release -p archisim-cli -- equipamientos out/ castilla andalucia paris japon norte montana` y abre los proyectos: mira la plaza de cada lugar y la fila de lo nuevo (de «Parque» a «Bloque de VPO»).
+2. En el catálogo, «Taller · Edificios del mundo» → «Equipamiento del mundo»: el «Programa» llega ya hasta el 37.
+3. Mira sobre todo si la plaza mayor, la plaza de naranjos, el hórreo y la palloza se reconocen como tales.
+
+---
+
 ## 2026-11-04 (100) · Taller de edificios, tanda 12: el entorno con sus equipamientos, y remates
 
 Misma rama y mismo pull request (#160). **Formato `.archisim` versión 74** (el programa del edificio del mundo).

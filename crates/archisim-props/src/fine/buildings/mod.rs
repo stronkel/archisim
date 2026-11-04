@@ -1257,7 +1257,7 @@ pub fn panel_door(
         };
         b.ellipsoid(
             "brass",
-            f.at(kx, z0 + 1.05, ld.1 + 0.035),
+            f.at(kx, z0 + 1.05, ld.1 + 0.028),
             [0.03, 0.03, 0.03],
         );
     }
