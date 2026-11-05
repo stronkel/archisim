@@ -214,6 +214,10 @@ pub(crate) struct ProjectFile {
     /// 80).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub framings: Vec<FramingOf>,
+    /// The structural actions: site data and loads placed by hand
+    /// (version 81).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub structure: Option<StructureOf>,
     /// The circuits of electrical mechanisms given by hand, `[device,
     /// circuit]` (version 51; 0: on none).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -4081,6 +4085,7 @@ impl ProjectFile {
                 .iter()
                 .map(|(id, f)| FramingOf::out(*id, f))
                 .collect(),
+            structure: StructureOf::out(&p.structural_site, &p.structural_loads),
             device_circuits: p
                 .device_circuits
                 .iter()
@@ -4656,6 +4661,14 @@ impl ProjectFile {
                 .into_iter()
                 .map(FramingOf::into_core)
                 .collect::<Result<_, _>>()?,
+            structural_site: match &self.structure {
+                Some(st) => st.site()?,
+                None => core::StructuralSite::default(),
+            },
+            structural_loads: match self.structure {
+                Some(st) => st.loads()?,
+                None => Vec::new(),
+            },
             device_circuits: self
                 .device_circuits
                 .into_iter()
@@ -5756,5 +5769,152 @@ impl ReinforcementOf {
             },
         };
         (self.element, r)
+    }
+}
+
+/// The structural actions of the project (version 81).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct StructureOf {
+    pub snow_zone: u8,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub altitude: Option<f64>,
+    pub wind_zone: String,
+    pub roughness: u8,
+    #[serde(default)]
+    pub seismic_ab: f64,
+    #[serde(default = "one")]
+    pub seismic_k: f64,
+    #[serde(default = "soil")]
+    pub soil: f64,
+    #[serde(default = "normal")]
+    pub importance: String,
+    #[serde(default = "bearing")]
+    pub bearing: f64,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub loads: Vec<LoadOf>,
+}
+
+fn one() -> f64 {
+    1.0
+}
+fn soil() -> f64 {
+    1.3
+}
+fn normal() -> String {
+    "normal".into()
+}
+fn bearing() -> f64 {
+    200.0
+}
+
+/// A load placed by hand: `point` (one point), `line` (two) or `area`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct LoadOf {
+    pub id: u64,
+    pub name: String,
+    pub level: u64,
+    #[serde(default)]
+    pub height: f64,
+    pub shape: String,
+    pub points: Vec<[f64; 2]>,
+    pub case: String,
+    pub value: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub direction: Option<[f64; 2]>,
+}
+
+impl StructureOf {
+    /// `None` when there is nothing but the defaults.
+    fn out(site: &core::StructuralSite, loads: &[core::StructuralLoad]) -> Option<Self> {
+        if *site == core::StructuralSite::default() && loads.is_empty() {
+            return None;
+        }
+        Some(StructureOf {
+            snow_zone: site.snow_zone,
+            altitude: site.altitude,
+            wind_zone: site.wind_zone.code().into(),
+            roughness: site.roughness,
+            seismic_ab: site.seismic_ab,
+            seismic_k: site.seismic_k,
+            soil: site.soil,
+            importance: site.importance.code().into(),
+            bearing: site.bearing,
+            loads: loads
+                .iter()
+                .map(|l| {
+                    let (shape, pts) = match &l.shape {
+                        core::LoadShape::Point { at } => ("point", vec![*at]),
+                        core::LoadShape::Line { start, end } => ("line", vec![*start, *end]),
+                        core::LoadShape::Area { outline } => ("area", outline.clone()),
+                    };
+                    LoadOf {
+                        id: l.id,
+                        name: l.name.clone(),
+                        level: l.level.0,
+                        height: l.height,
+                        shape: shape.into(),
+                        points: pts.iter().map(|p| [p.x, p.y]).collect(),
+                        case: l.case.code().into(),
+                        value: l.value,
+                        direction: l.direction.map(|d| [d.x, d.y]),
+                    }
+                })
+                .collect(),
+        })
+    }
+
+    fn site(&self) -> Result<core::StructuralSite, FileError> {
+        let bad = |what: &str, v: &str| FileError::Value {
+            element: "structure".into(),
+            message: format!("{what} «{v}»"),
+        };
+        Ok(core::StructuralSite {
+            snow_zone: self.snow_zone,
+            altitude: self.altitude,
+            wind_zone: core::WindZone::from_code(&self.wind_zone)
+                .ok_or_else(|| bad("wind zone", &self.wind_zone))?,
+            roughness: self.roughness,
+            seismic_ab: self.seismic_ab,
+            seismic_k: self.seismic_k,
+            soil: self.soil,
+            importance: core::Importance::from_code(&self.importance)
+                .ok_or_else(|| bad("importance", &self.importance))?,
+            bearing: self.bearing,
+        })
+    }
+
+    fn loads(self) -> Result<Vec<core::StructuralLoad>, FileError> {
+        self.loads
+            .into_iter()
+            .map(|l| {
+                let bad = |message: String| FileError::Value {
+                    element: format!("structural load {}", l.id),
+                    message,
+                };
+                let pts: Vec<Point2> = l.points.iter().map(|p| Point2::new(p[0], p[1])).collect();
+                let shape = match (l.shape.as_str(), pts.len()) {
+                    ("point", 1) => core::LoadShape::Point { at: pts[0] },
+                    ("line", 2) => core::LoadShape::Line {
+                        start: pts[0],
+                        end: pts[1],
+                    },
+                    ("area", n) if n >= 3 => core::LoadShape::Area { outline: pts },
+                    (s, n) => return Err(bad(format!("shape «{s}» with {n} points"))),
+                };
+                Ok(core::StructuralLoad {
+                    id: l.id,
+                    name: l.name,
+                    level: core::LevelId(l.level),
+                    height: l.height,
+                    shape,
+                    case: core::LoadCase::from_code(&l.case)
+                        .ok_or_else(|| bad(format!("case «{}»", l.case)))?,
+                    value: l.value,
+                    direction: l.direction.map(|d| core::Vec2::new(d[0], d[1])),
+                })
+            })
+            .collect()
     }
 }

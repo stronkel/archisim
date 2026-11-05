@@ -1,0 +1,16 @@
+[package]
+name = "archisim-struct"
+description = "Structural analysis: actions of the Spanish code (DB-SE-AE, NCSE-02), combinations, load takedown, a 3D frame solver and the checks of the members"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+archisim-core.workspace = true
+archisim-geom.workspace = true
+
+[dev-dependencies]
+archisim-library.workspace = true

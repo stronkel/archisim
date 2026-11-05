@@ -20,6 +20,7 @@ members = [
     "crates/archisim-ids",
     "crates/archisim-coord",
     "crates/archisim-cte",
+    "crates/archisim-struct",
     "crates/archisim-team",
     "crates/archisim-cli",
     "crates/archisim-app",
@@ -54,6 +55,7 @@ archisim-ids = { path = "crates/archisim-ids" }
 archisim-bcf = { path = "crates/archisim-bcf" }
 archisim-coord = { path = "crates/archisim-coord" }
 archisim-cte = { path = "crates/archisim-cte" }
+archisim-struct = { path = "crates/archisim-struct" }
 archisim-team = { path = "crates/archisim-team" }
 
 # The plan view rasterises the 1:50 drawing on every change; keep the SVG

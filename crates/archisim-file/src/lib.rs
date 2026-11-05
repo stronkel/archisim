@@ -48,7 +48,7 @@ use serde_json::Value;
 /// Value of the `format` field.
 pub const FORMAT: &str = "ArchiSim";
 /// File layout written by this version of ArchiSim.
-pub const CURRENT_VERSION: u32 = 80;
+pub const CURRENT_VERSION: u32 = 81;
 /// File name extension, without the dot.
 pub const EXTENSION: &str = "archisim";
 /// Length unit of every number in the file.
@@ -376,8 +376,9 @@ pub fn migrate(value: Value, from: u64) -> Result<Value, FileError> {
             // building of the world changes of its place's way (`roof`,
             // `pitch`, `shop`); older ones change nothing. 79 → 80: the
             // framing of wall and slab types (`framings`); older files have
-            // none.
-            9..=79 => {
+            // none. 80 → 81: the structural actions (`structure`: site data
+            // and loads placed by hand); older files take the defaults.
+            9..=80 => {
                 let mut v = if version == 32 {
                     legacy_dormers(value)
                 } else {
@@ -2997,6 +2998,42 @@ mod tests {
     /// A planting (version 25) keeps its line, its rules and the plants
     /// it made, with their seeds and sizes; a plant taken out by hand
     /// stays out.
+    #[test]
+    fn structural_actions_are_kept() {
+        let mut m = archisim_core::Model::new("Cargas");
+        let level = m.add_level("Planta baja", 0.0);
+        let mut site = *m.structural_site();
+        site.snow_zone = 2;
+        site.wind_zone = archisim_core::WindZone::C;
+        site.seismic_ab = 0.1;
+        m.set_structural_site(site).unwrap();
+        m.add_structural_load(archisim_core::StructuralLoad {
+            id: 0,
+            name: "Depósito".into(),
+            level,
+            height: 0.0,
+            shape: archisim_core::LoadShape::Area {
+                outline: vec![
+                    archisim_core::Point2::new(0.0, 0.0),
+                    archisim_core::Point2::new(1.0, 0.0),
+                    archisim_core::Point2::new(1.0, 1.0),
+                ],
+            },
+            case: archisim_core::LoadCase::Dead,
+            value: 10.0,
+            direction: None,
+        })
+        .unwrap();
+        let text = to_string(&m);
+        assert!(text.contains("\"structure\""));
+        let back = from_str(&text).unwrap();
+        assert_eq!(back.structural_site(), m.structural_site());
+        assert_eq!(
+            back.structural_loads().collect::<Vec<_>>(),
+            m.structural_loads().collect::<Vec<_>>()
+        );
+    }
+
     #[test]
     fn framings_are_kept() {
         let mut m = sample();

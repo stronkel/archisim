@@ -284,6 +284,7 @@ dependencies = [
  "archisim-mesh",
  "archisim-plan",
  "archisim-render",
+ "archisim-struct",
  "archisim-team",
  "resvg",
 ]
@@ -433,6 +434,15 @@ dependencies = [
  "archisim-library",
  "png",
  "serde_json",
+]
+
+[[package]]
+name = "archisim-struct"
+version = "0.78.0"
+dependencies = [
+ "archisim-core",
+ "archisim-geom",
+ "archisim-library",
 ]
 
 [[package]]

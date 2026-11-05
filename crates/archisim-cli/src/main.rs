@@ -212,6 +212,7 @@ Uso:
       muestrario.svg. Carpeta por defecto: ./out
 
   archisim cte <proyecto.archisim> [informe.csv]
+  archisim estructura <proyecto.archisim>   acciones, descenso de cargas y cálculo de la estructura
       Comprueba el proyecto con el Código Técnico: ocupación y evacuación
       (DB-SI 3), accesibilidad (DB-SUA 9), escaleras y rampas (DB-SUA 1) y
       superficies, según el uso del edificio guardado en el proyecto.
@@ -575,6 +576,13 @@ fn main() -> ExitCode {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out/biblioteca"));
             report(run_library(&dir, args.get(2).map(Path::new)))
         }
+        Some("estructura") => match args.get(1) {
+            Some(project) => report(run_structure(Path::new(project))),
+            None => {
+                eprintln!("Falta el proyecto: archisim estructura <proyecto.archisim>");
+                ExitCode::FAILURE
+            }
+        },
         Some("cte") => match args.get(1) {
             Some(project) => report(run_cte(Path::new(project), args.get(2).map(Path::new))),
             None => {
@@ -749,6 +757,14 @@ fn run_library(dir: &Path, project: Option<&Path>) -> Result<(), Box<dyn std::er
         "{n} familias con sus tipos y los tipos de muro y forjado en {}",
         dir.display()
     );
+    Ok(())
+}
+
+fn run_structure(project: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let model = archisim_file::open(project)
+        .map_err(|e| format!("no se puede abrir {}: {e}", project.display()))?;
+    let model = model.flattened().map_err(|e| format!("{e}"))?;
+    print!("{}", archisim_struct::actions_report(&model));
     Ok(())
 }
 

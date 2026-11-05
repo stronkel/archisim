@@ -30,6 +30,7 @@ mod foundations;
 mod framing;
 mod layered_library;
 mod library;
+mod loads;
 mod markings;
 mod meshes;
 mod modules;
@@ -80,6 +81,7 @@ pub use foundations::*;
 pub use framing::*;
 pub use layered_library::*;
 pub use library::*;
+pub use loads::*;
 pub use markings::*;
 pub use meshes::*;
 pub use modules::*;
@@ -1540,6 +1542,10 @@ pub struct ModelParts {
     pub reinforcements: Vec<(u64, Reinforcement)>,
     /// The framing of wall and slab types, by type id.
     pub framings: Vec<(u64, Framing)>,
+    /// The site data of the structural actions.
+    pub structural_site: StructuralSite,
+    /// The loads placed by hand.
+    pub structural_loads: Vec<StructuralLoad>,
     /// The circuits of mechanisms given by hand (E13).
     pub device_circuits: Vec<(DeviceId, u8)>,
     /// Underlays of the levels' plans (E7).
@@ -1664,6 +1670,10 @@ pub struct Model {
     /// The framing of wall and slab types (steel and timber frame), by the
     /// type's id.
     pub(crate) framings: BTreeMap<u64, Framing>,
+    /// The site data of the structural actions (snow, wind, earthquake).
+    pub(crate) structural_site: StructuralSite,
+    /// The loads placed by hand, by id.
+    pub(crate) structural_loads: BTreeMap<u64, StructuralLoad>,
     /// The circuit of a mechanism given by hand (E13), by its id.
     pub(crate) device_circuits: BTreeMap<u64, u8>,
     pub(crate) drafts: BTreeMap<DraftId, Draft>,
@@ -1763,6 +1773,8 @@ impl Model {
             draft_views: BTreeMap::new(),
             reinforcements: BTreeMap::new(),
             framings: BTreeMap::new(),
+            structural_site: StructuralSite::default(),
+            structural_loads: BTreeMap::new(),
             device_circuits: BTreeMap::new(),
             level_underlays: BTreeMap::new(),
             viewports: BTreeMap::new(),
@@ -4433,6 +4445,8 @@ impl Model {
             draft_views: self.draft_views.values().cloned().collect(),
             reinforcements: self.reinforcements().map(|(id, r)| (id, *r)).collect(),
             framings: self.framings().map(|(id, f)| (id, f.clone())).collect(),
+            structural_site: self.structural_site,
+            structural_loads: self.structural_loads.values().cloned().collect(),
             device_circuits: self.device_circuits().collect(),
             level_underlays: self
                 .level_underlays
@@ -4769,6 +4783,11 @@ impl Model {
             &mut claim,
         )?;
         model.restore_cameras(parts.cameras, &mut claim)?;
+        model.restore_structural_loads(
+            parts.structural_site,
+            parts.structural_loads,
+            &mut claim,
+        )?;
         model.restore_title_blocks(parts.title_blocks, parts.default_title_block, &mut claim)?;
         model.set_sun(parts.sun).map_err(|error| RestoreError {
             element: "sun".into(),
