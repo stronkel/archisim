@@ -194,6 +194,9 @@ pub struct Takedown {
     pub notes: Vec<String>,
     /// The loads put on the floors and roofs and by hand, by case, kN.
     pub applied: BTreeMap<Case, f64>,
+    /// What reached each plate (of `plates`) from above: walls, columns
+    /// and loads placed by hand (point, case, kN).
+    pub plate_incoming: Vec<Vec<(Point2, Case, f64)>>,
 }
 
 impl Takedown {
@@ -221,25 +224,78 @@ impl Takedown {
     }
 }
 
+/// Where a plate comes from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PlateSource {
+    Slab(archisim_core::SlabId),
+    /// A roof and the side of its footprint the plane rises from.
+    Roof(archisim_core::RoofId, usize),
+}
+
 /// A floor or roof plane to take down.
-struct Plate {
-    name: String,
-    level: LevelId,
-    outline: Vec<Point2>,
-    holes: Vec<Vec<Point2>>,
+pub struct Plate {
+    pub source: PlateSource,
+    pub name: String,
+    pub level: LevelId,
+    pub outline: Vec<Point2>,
+    pub holes: Vec<Vec<Point2>>,
     /// Height of its top face at a point, above project zero.
-    top: Box<dyn Fn(Point2) -> f64>,
-    thickness: f64,
-    dead: f64,
+    pub top: Box<dyn Fn(Point2) -> f64>,
+    pub thickness: f64,
+    /// Weight per m² of plan, tiles included, kN/m².
+    pub dead: f64,
     /// Pitch, radians.
-    pitch: f64,
-    roof: bool,
-    walkable: bool,
+    pub pitch: f64,
+    pub roof: bool,
+    pub walkable: bool,
     /// One-way span direction (light frame).
-    span: Option<Vec2>,
-    tiles: bool,
+    pub span: Option<Vec2>,
+    pub tiles: bool,
     /// A slab on the ground (solera).
-    base: bool,
+    pub base: bool,
+}
+
+/// The loads per m² of plan at a point of plate `i`: dead, the live load
+/// of the use there and the snow if it is open to the sky; with the
+/// snow per m² of the plate.
+pub fn area_loads(
+    model: &Model,
+    plates: &[Plate],
+    i: usize,
+    rooms: &[&archisim_core::Room],
+    p: Point2,
+) -> Vec<(Case, f64)> {
+    let pl = &plates[i];
+    let building = model.code_settings().building_use;
+    let site = model.structural_site();
+    let snow = roof_snow(site, model.site_altitude(), pl.pitch);
+    let mut out = vec![(Case::Dead, pl.dead)];
+    let z = (pl.top)(p);
+    let covered = plates
+        .iter()
+        .enumerate()
+        .any(|(j, o)| j != i && (o.top)(p) > z + 0.5 && geo::inside(p, &o.outline));
+    let room = rooms.iter().find(|r| geo::inside(p, &r.outline));
+    let (cat, q) = match room {
+        Some(r) => {
+            let c = room_category(r, building);
+            (c, c.uniform())
+        }
+        None if pl.roof || (!covered && !pl.base) => {
+            weights::roof_live(pl.pitch.to_degrees(), pl.walkable)
+        }
+        None => {
+            let c = crate::actions::category_of_use(building);
+            (c, c.uniform())
+        }
+    };
+    if q > 0.0 {
+        out.push((Case::Live(cat), q));
+    }
+    if !covered && snow > 0.0 {
+        out.push((Case::Snow, snow));
+    }
+    out
 }
 
 /// Something that sends its load down: what the order of the takedown
@@ -251,16 +307,21 @@ enum Item {
 }
 
 /// A support of a plate: a carrier along a line (or at a point).
-struct Support {
-    carrier: Carrier,
-    path: Vec<Point2>,
+pub struct Support {
+    pub carrier: Carrier,
+    pub path: Vec<Point2>,
+}
+
+/// What holds a plate up (every wall, beam and column under it).
+pub fn plate_supports(model: &Model, td: &Takedown, pl: &Plate) -> Vec<Support> {
+    supports_of(model, td, pl, &Default::default())
 }
 
 fn level_z(model: &Model, l: LevelId) -> f64 {
     model.level(l).map_or(0.0, |l| l.elevation)
 }
 
-fn plates(model: &Model) -> Vec<Plate> {
+pub fn plates(model: &Model) -> Vec<Plate> {
     let mut out = Vec::new();
     for s in model.slabs() {
         let Some(t) = model.slab_type(s.slab_type) else {
@@ -279,6 +340,7 @@ fn plates(model: &Model) -> Vec<Plate> {
         let pitch = slope.map_or(0.0, |sl| sl.slope.abs().atan());
         let name_l = t.name.to_lowercase();
         out.push(Plate {
+            source: PlateSource::Slab(s.id),
             name: t.name.clone(),
             level: s.level,
             outline: s.outline.clone(),
@@ -306,6 +368,7 @@ fn plates(model: &Model) -> Vec<Plate> {
             let off = r.base_offset;
             let pitch = slope.slope.abs().atan();
             out.push(Plate {
+                source: PlateSource::Roof(r.id, plane.side),
                 name: t.name.clone(),
                 level: r.level,
                 outline: plane.outline.clone(),
@@ -313,7 +376,12 @@ fn plates(model: &Model) -> Vec<Plate> {
                 top: Box::new(move |p| z0 + off + slope.rise_at(p)),
                 thickness: t.thickness(),
                 dead: weights::slab_type_weight(model, r.roof_type)
-                    * (1.0 + pitch.tan().powi(2)).sqrt(),
+                    * (1.0 + pitch.tan().powi(2)).sqrt()
+                    + if r.covering.tiles.is_some() {
+                        TILES
+                    } else {
+                        0.0
+                    },
                 pitch,
                 roof: true,
                 walkable: false,
@@ -348,6 +416,7 @@ pub fn takedown(model: &Model) -> Takedown {
     let lowest = if lowest.is_finite() { lowest } else { 0.0 };
     let mut td = Takedown::default();
     let plates = plates(model);
+    td.plate_incoming = vec![Vec::new(); plates.len()];
     // The carriers.
     for w in model.walls() {
         let base = level_z(model, w.level) + w.base_offset;
@@ -496,7 +565,7 @@ pub fn takedown(model: &Model) -> Takedown {
                     name: pl.name.clone(),
                     level: pl.level,
                     area: 0.0,
-                    dead: pl.dead + if pl.tiles { TILES } else { 0.0 },
+                    dead: pl.dead,
                     uses: BTreeMap::new(),
                     snow: roof_snow(&site, altitude, pl.pitch),
                     exposed: 0.0,
@@ -509,40 +578,23 @@ pub fn takedown(model: &Model) -> Takedown {
                 let rooms: Vec<_> = model.rooms_on_level(pl.level).collect();
                 for p in geo::grid(&pl.outline, &pl.holes, STEP) {
                     surface.area += cell;
-                    loads.push((p, Case::Dead, surface.dead * cell));
-                    let z = (pl.top)(p);
-                    let covered = plates
-                        .iter()
-                        .enumerate()
-                        .any(|(j, o)| j != i && (o.top)(p) > z + 0.5 && geo::inside(p, &o.outline));
-                    let room = rooms.iter().find(|r| geo::inside(p, &r.outline));
-                    let (cat, q) = match room {
-                        Some(r) => {
-                            let c = room_category(r, building);
-                            (c, c.uniform())
+                    for (case, q) in area_loads(model, &plates, i, &rooms, p) {
+                        loads.push((p, case, q * cell));
+                        match case {
+                            Case::Live(cat) => {
+                                let u = surface.uses.entry(cat).or_default();
+                                u.0 += cell;
+                                u.1 += q * cell;
+                            }
+                            Case::Snow => surface.exposed += cell,
+                            _ => {}
                         }
-                        None if pl.roof || (!covered && !pl.base) => {
-                            weights::roof_live(pl.pitch.to_degrees(), pl.walkable)
-                        }
-                        None => {
-                            let c = crate::actions::category_of_use(building);
-                            (c, c.uniform())
-                        }
-                    };
-                    if q > 0.0 {
-                        loads.push((p, Case::Live(cat), q * cell));
-                        let u = surface.uses.entry(cat).or_default();
-                        u.0 += cell;
-                        u.1 += q * cell;
-                    }
-                    if !covered && surface.snow > 0.0 {
-                        surface.exposed += cell;
-                        loads.push((p, Case::Snow, surface.snow * cell));
                     }
                 }
                 for (_, case, kn) in &loads {
                     *td.applied.entry(*case).or_default() += kn;
                 }
+                td.plate_incoming[i] = incoming[i].clone();
                 loads.append(&mut incoming[i]);
                 let on_ground = supports.is_empty()
                     && pl
@@ -639,6 +691,19 @@ fn supports_of(
 
 /// Where a load at `p` on a plate goes: (carrier, along it, share).
 fn distribute(p: Point2, span: Option<Vec2>, supports: &[Support]) -> Vec<(Carrier, f64, f64)> {
+    // Right over a support: straight into it.
+    let over = supports
+        .iter()
+        .filter(|s| s.path.len() > 1)
+        .map(|s| {
+            let (d, a) = geo::to_path(p, &s.path);
+            (d, a, s.carrier)
+        })
+        .filter(|(d, _, _)| *d < 0.12)
+        .min_by(|a, b| a.0.total_cmp(&b.0));
+    if let Some((_, a, k)) = over {
+        return vec![(k, a, 1.0)];
+    }
     if let Some(d) = span {
         let hit = |dir: Vec2| {
             supports

@@ -22,11 +22,14 @@ pub mod actions;
 pub mod analysis;
 pub mod analytical;
 pub mod cases;
+pub mod cold;
 pub mod frame;
 pub mod geo;
 pub mod gravity;
+pub mod lightframe;
 pub mod sections;
 pub mod text;
+pub mod timber;
 pub mod weights;
 pub mod wind;
 
@@ -64,5 +67,10 @@ pub fn structure_report(model: &archisim_core::Model) -> String {
     let a = analysis::analyse(model);
     s.push('\n');
     s.push_str(&text::analysis_text(model, &a));
+    let checks = lightframe::check(model, &a.takedown, a.wind.as_ref());
+    if !checks.is_empty() {
+        s.push('\n');
+        s.push_str(&text::lightframe_text(model, &checks));
+    }
     s
 }

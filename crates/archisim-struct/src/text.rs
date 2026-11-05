@@ -364,3 +364,52 @@ pub fn analysis_text(model: &Model, a: &crate::analysis::Analysis) -> String {
     }
     s
 }
+
+/// The checks of the light frames written out.
+pub fn lightframe_text(model: &Model, checks: &[crate::lightframe::Check]) -> String {
+    use crate::lightframe::{Status, Subject};
+    let mut s = String::new();
+    if checks.is_empty() {
+        return s;
+    }
+    let _ = writeln!(
+        s,
+        "Entramados ligeros (EN 1993-1-3, EN 1995-1-1, DB-SE-M, DB-SI)"
+    );
+    let mut subjects: Vec<Subject> = checks.iter().map(|c| c.subject).collect();
+    subjects.sort();
+    subjects.dedup();
+    for sub in subjects {
+        let title = match sub {
+            Subject::Wall(id) => format!("Muro {}", id.0),
+            Subject::Floor(id) => format!("Forjado {}", id.0),
+            Subject::Roof(id) => format!("Cubierta {}", id.0),
+            Subject::Building => "Edificio".into(),
+        };
+        let _ = model;
+        let _ = writeln!(s, "  {title}");
+        for c in checks.iter().filter(|c| c.subject == sub) {
+            let mark = match c.status {
+                Status::Pass => "cumple   ",
+                Status::Warn => "revisar  ",
+                Status::Fail => "NO CUMPLE",
+                Status::Info => "         ",
+            };
+            let ratio = if matches!(c.status, Status::Info) || c.ratio == 0.0 {
+                String::new()
+            } else {
+                format!(" [{}]", dec(c.ratio, 2))
+            };
+            let _ = writeln!(
+                s,
+                "    {mark} {}{ratio} — {}{}",
+                c.what,
+                c.rule,
+                c.advice
+                    .as_ref()
+                    .map_or(String::new(), |a| format!(". Propuesta: {a}"))
+            );
+        }
+    }
+    s
+}

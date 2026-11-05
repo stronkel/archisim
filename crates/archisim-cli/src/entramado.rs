@@ -147,7 +147,12 @@ fn house(
             layer(plaster, 0.015, LayerFunction::Finish),
         ],
     )?;
-    m.set_type_framing(it.0, Some(Framing::for_depth(material, 0.1)))?;
+    let mut bearing = Framing::for_depth(material, 0.1);
+    if material == FrameMaterial::Timber {
+        // Thin timber studs carry the floor closer together.
+        bearing.spacing = 0.4;
+    }
+    m.set_type_framing(it.0, Some(bearing))?;
     let inner = m.add_wall(NewWall {
         wall_type: it,
         level: pb,

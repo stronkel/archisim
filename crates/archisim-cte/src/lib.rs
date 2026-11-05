@@ -91,7 +91,7 @@ impl Section {
             Section::Services => "Agua y saneamiento (DB-HS 4 y HS 5)",
             Section::Structure => "Armado (Código Estructural)",
             Section::Electrical => "Electricidad (REBT, ITC-BT-25)",
-            Section::Framing => "Entramado ligero (predimensionado)",
+            Section::Framing => "Entramado ligero (EN 1993-1-3, EN 1995-1-1, DB-SE-M)",
             Section::Areas => "Superficies",
         }
     }
