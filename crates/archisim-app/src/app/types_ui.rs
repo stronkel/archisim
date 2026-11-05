@@ -208,6 +208,8 @@ pub(super) enum Action {
     WallSweeps(WallTypeId, Vec<archisim_core::WallSweep>),
     /// «Envolver en extremos» and «Envolver en huecos».
     WallWrap(WallTypeId, archisim_core::Wrap, archisim_core::Wrap),
+    /// The light frame of a wall or slab type (`None`: none).
+    TypeFraming(u64, Option<archisim_core::Framing>),
     /// The façade of a wall type (E9).
     WallFacade(WallTypeId, Option<archisim_core::Facade>),
     /// The edge of a slab type.
@@ -1528,6 +1530,11 @@ impl ArchiSimApp {
                 },
             );
         });
+        if let Some(f) =
+            super::framing_ui::framing_group(ui, self.ed.model(), id.0, &t.layers, false)
+        {
+            actions.push(Action::TypeFraming(id.0, f));
+        }
         if t.function == WallFunction::Exterior || t.facade.is_some() {
             self.facade_group(ui, &t, actions);
         }
@@ -1600,6 +1607,11 @@ impl ArchiSimApp {
                 actions.push(Action::SlabEdge(id, e));
             }
         });
+        if let Some(f) =
+            super::framing_ui::framing_group(ui, self.ed.model(), id.0, &t.layers, true)
+        {
+            actions.push(Action::TypeFraming(id.0, f));
+        }
     }
 
     /// The layers of a wall or slab type, editable: material, thickness and
@@ -2004,6 +2016,23 @@ impl ArchiSimApp {
                 self.report(
                     r,
                     &format!("Tipo de forjado modificado ({n} forjado{}).", plural(n)),
+                );
+            }
+            Action::TypeFraming(id, f) => {
+                let on = f.is_some();
+                let r = self.ed.transact("Entramado ligero", |m| {
+                    if let Some(f) = &f {
+                        archisim_library::frame_material(m, f.material);
+                    }
+                    m.set_type_framing(id, f)
+                });
+                self.report(
+                    r,
+                    if on {
+                        "Entramado del tipo cambiado: lo siguen todos sus elementos. Míralo en 3D con «Entramado a la vista» y saca el despiece en Archivo → Exportar."
+                    } else {
+                        "El tipo ya no es de entramado."
+                    },
                 );
             }
             Action::WallWrap(id, ends, inserts) => {

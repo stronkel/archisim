@@ -33,6 +33,7 @@ pub mod elevators;
 pub mod env_buildings;
 pub mod facade;
 pub mod forms;
+pub mod framing;
 pub mod growth;
 pub mod index;
 pub mod joins;

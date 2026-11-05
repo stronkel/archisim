@@ -243,6 +243,82 @@ fn rebar(model: &Model) -> Vec<Item> {
 }
 
 /// The name of an element with reinforcement.
+/// The light frames (steel frame and timber frame): kg of each steel
+/// section and m³ of each timber one, piece by piece as the cut list, and
+/// m² of the boards over them.
+fn framing(model: &Model) -> Vec<Item> {
+    use archisim_geom::framing::{all_members, cut_list};
+    let members: Vec<_> = all_members(model)
+        .into_iter()
+        .filter(|m| model.phase(m.owner.id()) == Phase::New)
+        .collect();
+    if members.is_empty() {
+        return Vec::new();
+    }
+    let list = cut_list(model, &members);
+    let mut items = Vec::new();
+    for (i, t) in list.totals.iter().enumerate() {
+        let steel = t.material == archisim_core::FrameMaterial::Steel;
+        let mut item = Item {
+            code: format!("E{:02}", i + 1),
+            key: format!("entramado:{}", t.section),
+            unit: if steel { "kg" } else { "m3" },
+            summary: if steel {
+                format!(
+                    "Perfil de acero galvanizado conformado en frío {}",
+                    t.section
+                )
+            } else {
+                format!("Madera aserrada estructural {}", t.section)
+            },
+            lines: Vec::new(),
+        };
+        for l in list.lines.iter().filter(|l| l.section == t.section) {
+            let len = l.length_mm as f64 / 1000.0;
+            item.lines.push(Measured {
+                comment: format!(
+                    "{} ({} de {} m)",
+                    l.role.name(l.material),
+                    l.count,
+                    dec(len, 3)
+                ),
+                units: l.count as f64,
+                length: len,
+                width: 0.0,
+                height: 0.0,
+                quantity: if steel {
+                    (l.kg() * 100.0).round() / 100.0
+                } else {
+                    (l.m3() * 10000.0).round() / 10000.0
+                },
+            });
+        }
+        items.push(item);
+    }
+    for (i, b) in list.boards.iter().enumerate() {
+        items.push(Item {
+            code: format!("T{:02}", i + 1),
+            key: format!("tablero:{}", b.name),
+            unit: "m2",
+            summary: format!(
+                "Tablero {} sobre entramado ({} tableros con un {} % de recortes)",
+                b.name,
+                b.boards,
+                (archisim_geom::framing::BOARD_WASTE * 100.0).round()
+            ),
+            lines: vec![Measured {
+                comment: "Caras de los muros, forjados y cubiertas de entramado".into(),
+                units: 1.0,
+                length: 0.0,
+                width: 0.0,
+                height: 0.0,
+                quantity: (b.area * 100.0).round() / 100.0,
+            }],
+        });
+    }
+    items
+}
+
 fn archisim_cte_name(model: &Model, id: u64) -> String {
     use archisim_core::{BeamId, ColumnId, FootingId, SlabId};
     if model.column(ColumnId(id)).is_some() {
@@ -540,6 +616,7 @@ pub fn measurements(model: &Model) -> Vec<(&'static str, &'static str, Vec<Item>
         ("12", "Movimiento de tierras", earthworks(model)),
         ("13", "Fachadas: piezas", facade_pieces(model)),
         ("14", "Acero en barras", rebar(model)),
+        ("15", "Entramados ligeros", framing(model)),
     ];
     chapters.retain(|(_, _, items)| !items.is_empty());
     chapters

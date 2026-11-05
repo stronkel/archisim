@@ -3912,6 +3912,12 @@ pub fn model_solids_except_detailed(
     for d in model.devices() {
         out.extend(device_solids(model, d.id));
     }
+    // The bare frames of the framed walls, floors and roofs, in place of
+    // their layers («Entramado a la vista»).
+    if crate::framing::frames_shown() && model.framings().next().is_some() {
+        out.retain(|s| !crate::framing::is_framed(model, s.owner));
+        out.extend(crate::framing::frame_solids(model));
+    }
     out.retain(|s| !s.triangles.is_empty());
     out
 }

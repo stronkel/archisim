@@ -210,6 +210,10 @@ pub(crate) struct ProjectFile {
     /// 50).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub reinforcements: Vec<ReinforcementOf>,
+    /// The framing of wall and slab types: steel and timber frame (version
+    /// 80).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub framings: Vec<FramingOf>,
     /// The circuits of electrical mechanisms given by hand, `[device,
     /// circuit]` (version 51; 0: on none).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -4072,6 +4076,11 @@ impl ProjectFile {
                 .iter()
                 .map(|(id, r)| ReinforcementOf::out(*id, r))
                 .collect(),
+            framings: p
+                .framings
+                .iter()
+                .map(|(id, f)| FramingOf::out(*id, f))
+                .collect(),
             device_circuits: p
                 .device_circuits
                 .iter()
@@ -4642,6 +4651,11 @@ impl ProjectFile {
                 .into_iter()
                 .map(ReinforcementOf::into_core)
                 .collect(),
+            framings: self
+                .framings
+                .into_iter()
+                .map(FramingOf::into_core)
+                .collect::<Result<_, _>>()?,
             device_circuits: self
                 .device_circuits
                 .into_iter()
@@ -5525,6 +5539,106 @@ mod tests {
         assert_eq!(parse_hex("#E8C4B"), None);
         assert_eq!(parse_hex("#GGC4B2"), None);
         assert_eq!(parse_hex("#ÁÁÁ"), None);
+    }
+}
+
+/// The framing of a wall type or slab type (version 80).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct FramingOf {
+    /// The wall type or slab type framed.
+    #[serde(rename = "type")]
+    pub type_id: u64,
+    /// `steel` or `timber`.
+    pub material: String,
+    pub stud: SectionOf,
+    pub track: SectionOf,
+    pub spacing: f64,
+    #[serde(default)]
+    pub noggins: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sheathing: Option<SheathingOf>,
+}
+
+/// A section of a frame, m (`lip` and `thickness` 0 for timber).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct SectionOf {
+    pub name: String,
+    pub depth: f64,
+    pub width: f64,
+    #[serde(default)]
+    pub lip: f64,
+    #[serde(default)]
+    pub thickness: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct SheathingOf {
+    pub name: String,
+    pub thickness: f64,
+    pub board: [f64; 2],
+}
+
+impl SectionOf {
+    fn out(s: &core::FrameSection) -> Self {
+        SectionOf {
+            name: s.name.clone(),
+            depth: s.depth,
+            width: s.width,
+            lip: s.lip,
+            thickness: s.thickness,
+        }
+    }
+
+    fn into_core(self) -> core::FrameSection {
+        core::FrameSection {
+            name: self.name,
+            depth: self.depth,
+            width: self.width,
+            lip: self.lip,
+            thickness: self.thickness,
+        }
+    }
+}
+
+impl FramingOf {
+    fn out(id: u64, f: &core::Framing) -> Self {
+        FramingOf {
+            type_id: id,
+            material: f.material.code().into(),
+            stud: SectionOf::out(&f.stud),
+            track: SectionOf::out(&f.track),
+            spacing: f.spacing,
+            noggins: f.noggins,
+            sheathing: f.sheathing.as_ref().map(|s| SheathingOf {
+                name: s.name.clone(),
+                thickness: s.thickness,
+                board: [s.board.0, s.board.1],
+            }),
+        }
+    }
+
+    fn into_core(self) -> Result<(u64, core::Framing), FileError> {
+        let material =
+            core::FrameMaterial::from_code(&self.material).ok_or_else(|| FileError::Value {
+                element: format!("framing of type {}", self.type_id),
+                message: format!("material «{}»", self.material),
+            })?;
+        Ok((
+            self.type_id,
+            core::Framing {
+                material,
+                stud: self.stud.into_core(),
+                track: self.track.into_core(),
+                spacing: self.spacing,
+                noggins: self.noggins,
+                sheathing: self.sheathing.map(|s| core::Sheathing {
+                    name: s.name,
+                    thickness: s.thickness,
+                    board: (s.board[0], s.board[1]),
+                }),
+            },
+        ))
     }
 }
 

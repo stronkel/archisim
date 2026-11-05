@@ -139,6 +139,8 @@ type Drawn = (
 pub struct View3dState {
     pub camera: Camera,
     pub fit_requested: bool,
+    /// The light frames shown bare («Entramado a la vista»).
+    pub frames: bool,
     scene: Scene,
     /// What the scene was built from: model revision, selection, the
     /// phases shown and the state of the linked models.
@@ -241,6 +243,7 @@ impl Default for View3dState {
             orbit_pivot: None,
             flying: false,
             cube_hover: false,
+            frames: false,
             scene: Scene::default(),
             scene_key: None,
             gpu: None,
@@ -365,6 +368,11 @@ impl View3dState {
         self.overlay.is_some()
     }
 
+    /// Builds the scene again at the next frame (keeping the camera).
+    pub fn reset_scene(&mut self) {
+        self.scene_key = None;
+    }
+
     /// Forgets the scene, for a project just opened.
     pub fn reset(&mut self) {
         self.scene_key = None;
@@ -402,13 +410,20 @@ impl View3dState {
                 })
                 .collect();
             let shown = archisim_plan::phases::phase_model(model, phases);
-            self.scene = Scene::build_with(
-                shown.as_ref().unwrap_or(model),
-                selection,
-                &linked,
-                coord.isolate,
-                disciplines,
-            );
+            let build = || {
+                Scene::build_with(
+                    shown.as_ref().unwrap_or(model),
+                    selection,
+                    &linked,
+                    coord.isolate,
+                    disciplines,
+                )
+            };
+            self.scene = if self.frames {
+                archisim_geom::framing::with_frames_shown(build)
+            } else {
+                build()
+            };
             self.scene_key = Some(key);
             self.scene_serial += 1;
             self.sun = model

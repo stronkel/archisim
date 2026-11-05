@@ -252,6 +252,18 @@ impl ArchiSimApp {
                     self.export_document(crate::documents::Document::Bars);
                 }
                 if ui
+                    .add(shortcut_button("Despiece de entramados…", "PDF"))
+                    .clicked()
+                {
+                    self.export_document(crate::documents::Document::Framing);
+                }
+                if ui
+                    .add(shortcut_button("Despiece de entramados…", "Excel"))
+                    .clicked()
+                {
+                    self.export_framing_xlsx();
+                }
+                if ui
                     .add(shortcut_button("Mediciones y presupuesto…", "BC3"))
                     .clicked()
                 {
@@ -404,6 +416,20 @@ impl ArchiSimApp {
                 .clicked()
             {
                 self.export_document(crate::documents::Document::Bars);
+            }
+            if ui
+                .button("Despiece de entramados (PDF)…")
+                .on_hover_text("Lista de corte de los entramados ligeros (steel frame y madera) por perfil y longitud, barras y tableros que comprar, fijaciones y los paneles prefabricados de muro dibujados a 1:50")
+                .clicked()
+            {
+                self.export_document(crate::documents::Document::Framing);
+            }
+            if ui
+                .button("Despiece de entramados (Excel)…")
+                .on_hover_text("El mismo despiece en un libro de Excel: lista de corte, totales y compra, paneles y cada pieza con sus coordenadas")
+                .clicked()
+            {
+                self.export_framing_xlsx();
             }
             if ui
                 .button("Exportar mediciones (BC3)…")
@@ -722,6 +748,21 @@ impl ArchiSimApp {
                     );
                     if on != self.v3d.section.is_some() {
                         self.v3d.toggle_section();
+                    }
+                    // Light frames (steel frame, timber frame): their bare
+                    // studs, joists and rafters in place of their layers.
+                    if self.ed.model().framings().next().is_some() {
+                        let mut bare = self.v3d.frames;
+                        chip(
+                            ui,
+                            &mut bare,
+                            "Entramado a la vista",
+                            "Los muros, forjados y cubiertas de entramado ligero (steel frame o madera) se ven por su esqueleto: montantes, canales, dinteles, viguetas y cabios",
+                        );
+                        if bare != self.v3d.frames {
+                            self.v3d.frames = bare;
+                            self.v3d.reset_scene();
+                        }
                     }
                     self.cutaway_combo(ui);
                     self.navigation_button(ui);

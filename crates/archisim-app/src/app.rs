@@ -2697,6 +2697,7 @@ mod elevator_ui;
 mod env_building_ui;
 mod facade_ui;
 mod foundation_ui;
+mod framing_ui;
 mod ghost3d;
 mod glyphs;
 mod grips3d;

@@ -990,7 +990,12 @@ fn project_pictures() {
         return;
     };
     let m = archisim_file::open(std::path::Path::new(&path)).unwrap();
-    let scene = Scene::build(&m, &BTreeSet::new());
+    // The light frames bare (`ARCHISIM_VISTAS_ENTRAMADO`).
+    let scene = if std::env::var_os("ARCHISIM_VISTAS_ENTRAMADO").is_some() {
+        archisim_geom::framing::with_frames_shown(|| Scene::build(&m, &BTreeSet::new()))
+    } else {
+        Scene::build(&m, &BTreeSet::new())
+    };
     let size = [1200u32, 760u32];
     let dir = std::path::PathBuf::from(dir);
     std::fs::create_dir_all(&dir).unwrap();

@@ -21,6 +21,7 @@ mod demo;
 mod diseno;
 mod edificio;
 mod entorno;
+mod entramado;
 mod equipo;
 mod escaleras;
 mod fachadas;
@@ -159,6 +160,11 @@ Uso:
       planas, ventanas de cubierta, tejas de cada clase, caballetes,
       canalones y bajantes: cubiertas.archisim, cubiertas.ifc, planta de
       cubiertas y axonometría en SVG. Por defecto: ./out
+  archisim entramado [carpeta]
+      Entramados ligeros: dos casas, una de steel frame y otra de madera,
+      con muros, forjado y cubierta de entramado: entramado.archisim,
+      entramado.ifc, el despiece (lista de corte y paneles) en SVG y PNG,
+      entramado.xlsx para Excel y entramado.bc3. Por defecto: ./out
   archisim armado [carpeta]
       Hormigón armado: un pórtico de cuatro pilares sobre zapatas, vigas,
       una zapata corrida y un forjado con hueco, todos con su armado:
@@ -475,6 +481,10 @@ fn main() -> ExitCode {
         Some("cocina") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
             report(cocina::write(&dir))
+        }
+        Some("entramado") => {
+            let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
+            report(entramado::write(&dir))
         }
         Some("trazado") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));

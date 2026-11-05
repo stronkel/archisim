@@ -224,6 +224,33 @@ impl ArchiSimApp {
         }
     }
 
+    /// The breakdown of the light frames as an Excel workbook: the cut
+    /// list, the totals with what to buy, the panels and every piece.
+    pub(super) fn export_framing_xlsx(&mut self) {
+        let model = self.ed.shown();
+        let Some(book) = archisim_export::xlsx::framing_workbook(&model) else {
+            self.complain("El proyecto no tiene tipos de muro, forjado o cubierta con entramado: actívalo en Tipos y materiales → Entramado ligero.".to_string());
+            return;
+        };
+        let mut d = rfd::FileDialog::new()
+            .set_title("Despiece de entramados (Excel)")
+            .add_filter("Excel", &["xlsx"])
+            .set_file_name(format!(
+                "{}-despiece-entramados.xlsx",
+                self.file_name_stem()
+            ));
+        if let Some(dir) = self.start_dir() {
+            d = d.set_directory(dir);
+        }
+        let Some(path) = d.save_file() else {
+            return;
+        };
+        match std::fs::write(&path, book) {
+            Ok(()) => self.say(format!("Despiece de entramados en {}.", path.display())),
+            Err(e) => self.complain(format!("No se pudo exportar: {e}.")),
+        }
+    }
+
     /// A document of A3 sheets (the carpentry sheets, the carpentry
     /// report or the table of areas) as a PDF.
     pub(super) fn export_document(&mut self, doc: crate::documents::Document) {

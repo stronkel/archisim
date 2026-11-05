@@ -6,6 +6,62 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-05 (104) · Calles, segunda vuelta; edificios del mundo que no cambiaban; entramados ligeros (steel frame y madera)
+
+Rama `bloque/calles` (#161). Formato `.archisim` versiones 79 (lo que cambia un edificio del mundo de la manera de su lugar) y 80 (entramados de los tipos).
+
+**Hecho**
+- **Edificios del mundo que no cambiaban**: en una «Casa andaluza entre medianeras» (o cualquier edificio del mundo), «Bajo comercial» y la cubierta (plana, a dos aguas, a cuatro) no hacían nada. Ahora:
+  - con «Edificio del mundo» activado, Propiedades enseña Cubierta, Pendiente y Bajo comercial;
+  - cada uno cambia el modelo y «Como en su lugar» lo devuelve a lo de su lugar;
+  - las opciones de los edificios con estilo que no aplican a estos ya no salen.
+- **Calles más naturales** (`docs/CALLES_TALLER.md`):
+  - el terreno se modela con la calle: baja o sube hasta ella con taludes suaves que se funden con el terreno, afinado a 2 m junto a la calle, sin escalones ni muros pegados;
+  - solo el viaducto queda como pieza propia;
+  - modo «Curva continua», el de por defecto: cada tramo sale tangente al anterior y se curva hacia el ratón;
+  - marcas viales de serie: líneas de carril en cada calle nueva y pasos de peatones en los brazos de cada cruce con acera (se cambian o se quitan como cualquier marca);
+  - tarjetas de los tipos de calle en 3D.
+- **Entramados ligeros** (`docs/ENTRAMADOS.md`):
+  - steel frame y madera C24, como propiedad del tipo de muro, de forjado o de cubierta: grupo «Entramado ligero» en Tipos y materiales, con perfiles genéricos, separación, travesaños y tablero;
+  - muros en paneles prefabricados de hasta 6 m, con montantes, canales, refuerzos de hueco, dinteles en cajón, antepechos, montantes cortos y travesaños; encuentros en T y en L;
+  - forjados con viguetas, zunchos y riostras; cubiertas con cabios y zunchos de faldón;
+  - en 3D, «Entramado a la vista» enseña el esqueleto;
+  - el despiece en Archivo → Exportar:
+    - PDF en A3: lista de corte, compra de barras y tableros, fijaciones y cada panel a 1:50;
+    - Excel: lista de corte, totales, paneles y piezas;
+    - BC3: capítulo 15 «Entramados ligeros».
+  - `archisim entramado out/`: dos casas de dos plantas, una de cada sistema, con todo su despiece.
+
+**Pendiente**
+- **Entramados**:
+  - muros curvos y hastiales bajo cubierta (hoy se entraman como rectángulos);
+  - el entramado en el IFC como `IfcMember`;
+  - montantes en planta a 1:20 y en sección;
+  - forjados en cajones prefabricados;
+  - cerchas, y dinteles calculados por luz;
+  - catálogos de fabricante.
+- **Calles**:
+  - estribos donde empieza el viaducto (hoy se ve el corte del terreno);
+  - túneles, rampas y pasarelas;
+  - tandas C3 a C5.
+- Vegetación estilizada: la prueba de 6 especies.
+
+**Qué debe probar Antonio**
+1. **Entramados**:
+   - `cargo run --release -p archisim-cli -- entramado out/`;
+   - abre `out/entramado.archisim`, ve a 3D y activa «Entramado a la vista» en la barra de abajo;
+   - abre `out/entramado-despiece.png` y `out/entramado.xlsx`.
+2. **En tu proyecto**:
+   - Tipos y materiales → un tipo de muro → «Entramado ligero»: actívalo y elige sistema, perfiles y separación;
+   - dibuja muros de ese tipo con una puerta y una ventana y míralos en 3D con «Entramado a la vista»;
+   - Archivo → Exportar → Despiece de entramados (PDF y Excel): ¿es el despiece que haríais en el estudio? ¿Falta alguna pieza o algún dato?
+3. **Edificios del mundo**: una casa andaluza entre medianeras → «Bajo comercial» y Cubierta plana, a dos aguas o a cuatro: el modelo cambia.
+4. **Calles**:
+   - `archisim trazado out/`: el terreno se funde con las calles, sin escalones;
+   - herramienta Vial en «Curva continua» sobre un terreno: los pasos de peatones salen en los cruces y las líneas de carril en cada calle.
+
+---
+
 ## 2026-11-04 (103) · Taller de calles, tanda C1 y primera parte de C2: trazar por tramos y la calle con el terreno
 
 Rama `bloque/calles` (pull request propio sobre `bloque/taller-edificios`). Sin cambios de formato: los tramos son viales de siempre, y los taludes, viaductos y muros se calculan, no se guardan. Plan completo en `docs/CALLES_TALLER.md`.

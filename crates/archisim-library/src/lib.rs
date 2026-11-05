@@ -2383,6 +2383,20 @@ pub fn rebar_material(m: &mut Model) -> MaterialId {
     }
 }
 
+/// The material of the members of a light frame (steel frame or timber
+/// frame), added to the project if it has none.
+pub fn frame_material(m: &mut Model, kind: archisim_core::FrameMaterial) -> MaterialId {
+    use archisim_core::FrameMaterial;
+    let (name, cat, colour) = match kind {
+        FrameMaterial::Steel => (archisim_core::FRAME_STEEL, "steel", [176, 182, 188]),
+        FrameMaterial::Timber => (archisim_core::FRAME_TIMBER, "wood", [214, 178, 122]),
+    };
+    if let Some(id) = m.materials().find(|x| x.name == name).map(|x| x.id) {
+        return id;
+    }
+    material_named(m, name, cat, colour, CutPattern::Solid)
+}
+
 /// A material of the cosy palette, added to the project if it has none of
 /// that name.
 pub fn palette_material(m: &mut Model, name: &str) -> Option<MaterialId> {

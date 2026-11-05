@@ -16,3 +16,4 @@ pub mod paths;
 pub mod pdf;
 pub mod png;
 pub mod symbol;
+pub mod xlsx;

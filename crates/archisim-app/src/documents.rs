@@ -27,6 +27,8 @@ pub enum Document {
     Areas,
     /// The bar schedule of the reinforcement (`bar_schedule`).
     Bars,
+    /// The breakdown of the light frames: cut list and panels.
+    Framing,
 }
 
 impl Document {
@@ -36,6 +38,7 @@ impl Document {
             Document::CarpentryReport => "Memoria de carpinterías",
             Document::Areas => "Cuadro de superficies",
             Document::Bars => "Despiece de armaduras",
+            Document::Framing => "Despiece de entramados",
         }
     }
 
@@ -46,6 +49,7 @@ impl Document {
             Document::CarpentryReport => "memoria-carpinterias",
             Document::Areas => "superficies",
             Document::Bars => "despiece-armaduras",
+            Document::Framing => "despiece-entramados",
         }
     }
 
@@ -56,6 +60,12 @@ impl Document {
             Document::CarpentryReport => carpentry_report_sheets(model),
             Document::Areas => areas_sheets(model),
             Document::Bars => crate::bar_schedule::bar_schedule_sheets(model),
+            Document::Framing => archisim_plan::framing::breakdown_pages(model)
+                .unwrap_or_default()
+                .into_iter()
+                .enumerate()
+                .map(|(i, svg)| (svg, format!("Despiece de entramados {}", i + 1)))
+                .collect(),
         }
     }
 }

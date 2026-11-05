@@ -27,6 +27,7 @@ mod env_buildings;
 mod facades;
 mod flora;
 mod foundations;
+mod framing;
 mod layered_library;
 mod library;
 mod markings;
@@ -76,6 +77,7 @@ pub use env_buildings::*;
 pub use facades::*;
 pub use flora::*;
 pub use foundations::*;
+pub use framing::*;
 pub use layered_library::*;
 pub use library::*;
 pub use markings::*;
@@ -1536,6 +1538,8 @@ pub struct ModelParts {
     /// The reinforcement of columns, beams, footings and slabs (E11), by
     /// element id.
     pub reinforcements: Vec<(u64, Reinforcement)>,
+    /// The framing of wall and slab types, by type id.
+    pub framings: Vec<(u64, Framing)>,
     /// The circuits of mechanisms given by hand (E13).
     pub device_circuits: Vec<(DeviceId, u8)>,
     /// Underlays of the levels' plans (E7).
@@ -1657,6 +1661,9 @@ pub struct Model {
     pub(crate) draw_layers: BTreeMap<DrawLayerId, DrawLayer>,
     /// The reinforcement of elements, by their id (E11).
     pub(crate) reinforcements: BTreeMap<u64, Reinforcement>,
+    /// The framing of wall and slab types (steel and timber frame), by the
+    /// type's id.
+    pub(crate) framings: BTreeMap<u64, Framing>,
     /// The circuit of a mechanism given by hand (E13), by its id.
     pub(crate) device_circuits: BTreeMap<u64, u8>,
     pub(crate) drafts: BTreeMap<DraftId, Draft>,
@@ -1755,6 +1762,7 @@ impl Model {
             sheets: BTreeMap::new(),
             draft_views: BTreeMap::new(),
             reinforcements: BTreeMap::new(),
+            framings: BTreeMap::new(),
             device_circuits: BTreeMap::new(),
             level_underlays: BTreeMap::new(),
             viewports: BTreeMap::new(),
@@ -4424,6 +4432,7 @@ impl Model {
             sheets: self.sheets.values().cloned().collect(),
             draft_views: self.draft_views.values().cloned().collect(),
             reinforcements: self.reinforcements().map(|(id, r)| (id, *r)).collect(),
+            framings: self.framings().map(|(id, f)| (id, f.clone())).collect(),
             device_circuits: self.device_circuits().collect(),
             level_underlays: self
                 .level_underlays
@@ -4826,6 +4835,14 @@ impl Model {
                 .set_device_circuit(id, Some(n))
                 .map_err(|error| RestoreError {
                     element: format!("circuit of device {}", id.0),
+                    error,
+                })?;
+        }
+        for (id, f) in parts.framings {
+            model
+                .set_type_framing(id, Some(f))
+                .map_err(|error| RestoreError {
+                    element: format!("framing of type {id}"),
                     error,
                 })?;
         }

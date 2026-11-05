@@ -27,11 +27,13 @@ Este documento ordena ese trabajo en tandas, como `EDIFICIOS_TALLER.md`. Rama `b
    - Mientras se mueve el ratón se ve el tramo con sus franjas en planta, entero en 3D y con la pendiente del terreno que salva.
    - **Sigue el terreno**: la rasante sigue el terreno, suavizada y sin pasar de la pendiente máxima (8 % por defecto). Donde el terreno es más empinado, la calle va en desmonte o en terraplén.
    - El modo de antes, el eje entero por sus puntos (o por el borde de una acera), sigue como «Eje entero».
+   - **Segunda vuelta (05/11/2026)**, tras la revisión de Antonio («más natural y fluido, como Cities: Skylines»):
+     - modo nuevo **«Curva continua»**, el de por defecto: cada tramo sale tangente al anterior y se curva hacia el ratón, sin quiebros;
+     - **marcas viales de serie**: las líneas de separación de carriles salen solas en cada calle nueva, y los **pasos de peatones** en los brazos de cada cruce con aceras; se cambian o se quitan como cualquier marca;
+     - las **tarjetas de los tipos de calle** se ven en 3D (un trozo de calle de 12 m con sus franjas).
 2. **Tanda C2, la calle y el terreno** (primera parte hecha, en revisión):
-   - **Terraplén**: con sus taludes (3 de base por 2 de altura) donde la calle va por encima del terreno.
-   - **Viaducto**: por encima de 6 m, con tablero, pilas cada 24 m y pretiles.
-   - **Muro de contención**: a cada lado donde la calle va por debajo del terreno.
-   - El terreno solo se recorta donde la calle va metida en él.
+   - **El terreno se modela con la calle** (segunda vuelta, 05/11/2026): en lugar de taludes y muros pegados, el propio terreno baja o sube hasta la calle, con taludes suaves (1:1,5 en terraplén, 1:1 en desmonte) que se funden con el terreno hasta 30 m a cada lado; la malla se afina a 2 m junto a las calles, así que no hay escalones. Varias calles juntas se respetan entre sí.
+   - **Viaducto**: por encima de 6 m, con tablero, pilas cada 24 m y pretiles; bajo él el terreno sigue su forma.
    - **Pasos a distinto nivel**: dos calles que se cruzan con más de 3,5 m de diferencia no hacen cruce (una pasa por encima).
    - Para verlo: `archisim trazado out/`.
    - Falta:
@@ -39,7 +41,8 @@ Este documento ordena ese trabajo en tandas, como `EDIFICIOS_TALLER.md`. Rama `b
      - puentes de un vano sobre el agua o sobre otra calle, con estribos;
      - rampas y enlaces;
      - pasarelas peatonales;
-     - el talud de desmonte en lugar del muro, a elegir.
+     - estribos donde empieza el viaducto (hoy se ve el corte del terreno);
+     - muros de contención a elegir donde no cabe el talud.
 3. **Tanda C3, catálogo de vías**:
    - **Más tipos**:
      - peatonales: de plaza, escalonadas, en rampa, porticadas, entarimadas;
@@ -89,7 +92,10 @@ Primero una prueba con 6 especies junto a las de hoy; se sustituye solo cuando A
   - En la app, `urban_ui::RoadDraw`, `RoadSettings::follow_ground`/`max_grade`, `ArchiSimApp::road_chain`, `road_snap`, `road_stretch_points`, `build_road_polyline`.
   - El 3D de lo que se va a poner: `ghost3d::Would::Road`.
 - **Terreno**:
-  - `archisim-geom::road_ground`: `road_ground_solids` (taludes, viaducto con pilas y pretiles, muros) y `road_holes` (el agujero en el terreno solo donde la calle va metida).
-  - Los sólidos se añaden en `solid::road_solids_with`; los agujeros, en `solid::terrain_holes`.
+  - `archisim-geom::road_ground`: `Shaper` (las calles cerca de un punto, `RoadLine` con sus `Sample`), `shape` (bajo el pavimento de cualquier calle, salvo viaducto; si no, entre el talud de terraplén y el de desmonte de la más cercana, `REACH` 30 m), `shaped_ground` (la malla afinada por aristas a `FINE_EDGE` 2 m, sin grietas) y `road_ground_solids` (solo el viaducto: tablero, pilas, pretiles).
+  - `solid::terrain_solids` modela el terreno y rehace sus lados con las aristas sueltas de arriba; las calles ya no agujerean el terreno.
   - Los cruces se saltan con `crossroads::OVERPASS`.
+- **Marcas de serie**: `Model::add_road_stretch` pone el material de las marcas si la sección no lo tiene; `Model::crossings_at` pone las cebras (`ZEBRA_WIDTH`, `ZEBRA_SETBACK`) en los brazos con acera de un cruce.
+- **Curva continua**: `urban_ui::RoadDraw::Smooth` (control en `a + dir · d/2`).
+- **Tarjetas en 3D**: `street_types_ui::street_model`, `ArchiSimApp::street_thumbs`; fotos de todas con `ARCHISIM_CALLES_OUT` en `every_street_type_in_3d`.
 - **Proyecto de ejemplo**: `archisim trazado out/`.
