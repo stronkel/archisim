@@ -2555,6 +2555,10 @@ pub fn terrain_solids(model: &Model, id: archisim_core::TerrainId) -> Vec<Solid>
         .iter()
         .map(|[a, b, c]| [p3(*a), p3(*b), p3(*c)])
         .collect();
+    // Shaped to its streets: lowered under them and sloping to their
+    // edges, made finer round them.
+    let whole =
+        crate::road_ground::shaped_ground(&whole, &crate::road_ground::Shaper::of(model, t.level));
     let holes = terrain_holes(model, &poly);
     let surface = crate::pools::cut_surface(&whole, &holes);
     let mut out = surface.clone();
@@ -2562,11 +2566,23 @@ pub fn terrain_solids(model: &Model, id: archisim_core::TerrainId) -> Vec<Solid>
     for [a, b, c] in triangulate(&poly) {
         out.push([low(ring[a]), low(ring[c]), low(ring[b])]);
     }
-    let n = ring.len();
-    for k in 0..n {
-        let (a, b) = (ring[k], ring[(k + 1) % n]);
-        out.push([low(a), low(b), p3(b)]);
-        out.push([low(a), p3(b), p3(a)]);
+    // Its sides: down from each edge of the top that no other triangle
+    // shares (the top may have been made finer along its border).
+    type Key = (i64, i64);
+    let mut edges: std::collections::BTreeMap<(Key, Key), (P3, P3)> = Default::default();
+    let key = |p: P3| ((p[0] * 1e4).round() as i64, (p[1] * 1e4).round() as i64);
+    for t in &whole {
+        for k in 0..3 {
+            let (a, b) = (t[k], t[(k + 1) % 3]);
+            if edges.remove(&(key(b), key(a))).is_none() {
+                edges.insert((key(a), key(b)), (a, b));
+            }
+        }
+    }
+    let down = |p: P3| [p[0], p[1], floor];
+    for (a, b) in edges.into_values() {
+        out.push([down(a), down(b), b]);
+        out.push([down(a), b, a]);
     }
     let mut solids = vec![Solid {
         owner: SolidOwner::Terrain(id),
@@ -2612,18 +2628,8 @@ pub fn terrain_holes(model: &Model, outline: &[Point2]) -> Vec<archisim_core::Ex
         },
     );
     let mut holes = model.excavations();
-    // The roads sit in the ground (U1): their width where they run in
-    // it, down to under their pavement where it is lowest.
-    for r in model.roads() {
-        if r.outline().len() < 3 {
-            continue;
-        }
-        let base = model.level(r.level).map_or(0.0, |l| l.elevation);
-        for mut h in crate::road_ground::road_holes(model, r) {
-            h.bottom += base;
-            holes.push(h);
-        }
-    }
+    // The roads do not cut the ground: it is shaped to them
+    // (`road_ground::Shaper`).
     // And the roundabouts and squares, with the sidewalk round them (U3).
     for c in model.roundabouts() {
         let base = model.level(c.level).map_or(0.0, |l| l.elevation);

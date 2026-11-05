@@ -1,10 +1,9 @@
 //! How a street meets the ground when its grade does not follow it (as a
-//! city builder does): where it runs over the ground, an embankment with
-//! its slopes down to it (3 across, 2 down) or, higher up, a viaduct on
-//! piers with its deck and parapets; where it runs under the ground, a
-//! retaining wall at each side holding it back. Worked out from the
-//! street's profile and the ground at its edges, station by station; none
-//! of it is stored.
+//! city builder does): the ground itself is shaped round it — lowered
+//! under it, and meeting its edges in smooth slopes of fill (3 across, 2
+//! down) or of cut (1 to 1) — and, where it runs high over the ground, a
+//! viaduct on piers with its deck and parapets. Worked out from the
+//! street's profile; none of it is stored.
 
 use archisim_core::{MaterialId, Model, Point2, Road, RoadId};
 
@@ -12,14 +11,17 @@ use crate::solid::{prism, Solid, SolidOwner, P3};
 
 /// Spacing of the stations along the street, metres.
 pub const STEP: f64 = 4.0;
-/// Over the ground by more than this, the street is an embankment.
-pub const FILL_FROM: f64 = 0.25;
-/// Over the ground by more than this, it is a viaduct.
+/// Over the ground by more than this, the street is a viaduct (the
+/// ground is not raised to it).
 pub const VIADUCT_FROM: f64 = 6.0;
-/// Under the ground by more than this at an edge, a retaining wall.
-pub const WALL_FROM: f64 = 0.3;
 /// The slope of an embankment: across per metre down.
 pub const FILL_SLOPE: f64 = 1.5;
+/// The slope of a cut: across per metre up.
+pub const CUT_SLOPE: f64 = 1.0;
+/// How far from a street's edge the ground is shaped, metres.
+pub const REACH: f64 = 30.0;
+/// The longest side of the ground's triangles near a street, metres.
+pub const FINE_EDGE: f64 = 2.0;
 /// Spacing of the piers of a viaduct, metres.
 pub const PIER_SPAN: f64 = 24.0;
 /// The depth of the deck of a viaduct under the street's pavement.
@@ -85,78 +87,9 @@ fn material_of(model: &Model, cats: &[&str], or: MaterialId) -> MaterialId {
         .map_or(or, |m| m.id)
 }
 
-/// The quad `a b c d` as two triangles.
-fn quad(out: &mut Vec<[P3; 3]>, a: P3, b: P3, c: P3, d: P3) {
-    out.push([a, b, c]);
-    out.push([a, c, d]);
-}
-
-/// The toe of an embankment from an edge at height `top`, going out along
-/// `dir`: where its slope meets the ground (found in a few steps).
-fn toe(model: &Model, r: &Road, edge: Point2, dir: archisim_core::Vec2, top: f64) -> (Point2, f64) {
-    let mut z = ground_at(model, r, edge).unwrap_or(top - 1.0);
-    let mut q = edge;
-    for _ in 0..4 {
-        let w = ((top - z) * FILL_SLOPE).max(0.0);
-        q = edge + dir * w;
-        z = ground_at(model, r, q).unwrap_or(z);
-    }
-    (q, z.min(top))
-}
-
-/// The hole a street makes in the ground: only where it runs in it (its
-/// stretches over the ground stand on embankments or piers), down to under
-/// its pavement where it is lowest there; its bottom over its level.
-pub fn road_holes(model: &Model, r: &Road) -> Vec<archisim_core::Excavation> {
-    let base = model.level(r.level).map_or(0.0, |l| l.elevation);
-    let whole = r.outline();
-    let st = stations(model, r);
-    let kh = if r.section.single_level {
-        0.0
-    } else {
-        r.section.kerb_height
-    };
-    let in_ground = |x: &Station| {
-        let road = x.top - kh - r.section.depth - FILL_FROM;
-        [x.ground_left, x.ground_mid, x.ground_right]
-            .iter()
-            .any(|g| g.is_none_or(|g| g > road))
-    };
-    let flags: Vec<bool> = st.iter().map(in_ground).collect();
-    if flags.iter().all(|f| *f) || !r.sloped() {
-        let low = st.iter().map(|x| x.top - kh).fold(f64::MAX, f64::min);
-        return vec![archisim_core::Excavation {
-            outline: whole,
-            bottom: low - r.section.depth - base,
-        }];
-    }
-    let mut quads: Vec<crate::junctions::Shape> = Vec::new();
-    let mut low = f64::MAX;
-    for (i, w) in st.windows(2).enumerate() {
-        if !(flags[i] || flags[i + 1]) {
-            continue;
-        }
-        let (a, b) = (&w[0], &w[1]);
-        low = low.min(a.top - kh).min(b.top - kh);
-        // A little past the edges, as the outline of the whole street.
-        let poly = crate::ensure_ccw(vec![a.right, b.right, b.left, a.left]);
-        quads.push((poly, Vec::new()));
-    }
-    if quads.is_empty() {
-        return Vec::new();
-    }
-    crate::junctions::union(&quads, &[])
-        .into_iter()
-        .filter(|(o, _)| o.len() >= 3)
-        .map(|(outline, _)| archisim_core::Excavation {
-            outline,
-            bottom: low - r.section.depth - base,
-        })
-        .collect()
-}
-
-/// What the ground needs round a street: its embankments, viaducts and
-/// retaining walls.
+/// What a street needs where it runs high over the ground: its viaduct,
+/// deck, piers and parapets (the rest of the ground is shaped to it,
+/// [`Shaper`]).
 pub fn road_ground_solids(model: &Model, id: RoadId) -> Vec<Solid> {
     let Some(r) = model.road(id) else {
         return Vec::new();
@@ -168,10 +101,6 @@ pub fn road_ground_solids(model: &Model, id: RoadId) -> Vec<Solid> {
     if st.len() < 2 {
         return Vec::new();
     }
-    let earth = model
-        .terrains_on_level(r.level)
-        .next()
-        .map_or(r.sidewalk_material, |t| t.material);
     let concrete = material_of(model, &["concrete"], r.kerb_material);
     let metal = material_of(model, &["metal", "steel"], concrete);
     let fill_of = |x: &Station, g: Option<f64>| g.map_or(0.0, |g| x.top - g);
@@ -179,7 +108,6 @@ pub fn road_ground_solids(model: &Model, id: RoadId) -> Vec<Solid> {
         fill_of(x, x.ground_mid).max(fill_of(x, x.ground_left).min(fill_of(x, x.ground_right)))
             > VIADUCT_FROM
     };
-    let mut slopes: Vec<[P3; 3]> = Vec::new();
     let mut walls: Vec<[P3; 3]> = Vec::new();
     let mut deck: Vec<[P3; 3]> = Vec::new();
     let mut rails: Vec<[P3; 3]> = Vec::new();
@@ -188,55 +116,21 @@ pub fn road_ground_solids(model: &Model, id: RoadId) -> Vec<Solid> {
         let (a, b) = (&w[0], &w[1]);
         let high = viaduct(a) || viaduct(b);
         for left in [true, false] {
-            let (ea, eb, ga, gb) = if left {
-                (a.left, b.left, a.ground_left, b.ground_left)
+            let (ea, eb) = if left {
+                (a.left, b.left)
             } else {
-                (a.right, b.right, a.ground_right, b.ground_right)
+                (a.right, b.right)
             };
             let (oa, ob) = if left {
                 (a.out_left, b.out_left)
             } else {
                 (a.out_right, b.out_right)
             };
-            let fa = fill_of(a, ga);
-            let fb = fill_of(b, gb);
             if high {
                 // A parapet along the deck's edge: a low wall and a rail.
                 let (ia, ib) = (ea + (oa - ea) * -0.25, eb + (ob - eb) * -0.25);
                 walls.extend(strip_wall(ia, ib, a.top, b.top, 0.25, 0.75));
                 rails.extend(strip_wall(ia, ib, a.top + 0.75, b.top + 0.75, 0.06, 0.3));
-            } else if fa > FILL_FROM || fb > FILL_FROM {
-                // The embankment's slope: from the edge down and out.
-                let da = (oa - ea).normalized().unwrap_or_default();
-                let db = (ob - eb).normalized().unwrap_or_default();
-                let (ta, za) = toe(model, r, ea, da, a.top - depth);
-                let (tb, zb) = toe(model, r, eb, db, b.top - depth);
-                let pa = [ea.x, ea.y, a.top - 0.02];
-                let pb = [eb.x, eb.y, b.top - 0.02];
-                let qa = [ta.x, ta.y, za - 0.15];
-                let qb = [tb.x, tb.y, zb - 0.15];
-                // Facing out and up.
-                if left {
-                    quad(&mut slopes, pa, qa, qb, pb);
-                } else {
-                    quad(&mut slopes, pa, pb, qb, qa);
-                }
-            } else if -fa > WALL_FROM || -fb > WALL_FROM {
-                // Held back: a wall from under the street up past the
-                // ground at the edge.
-                let za = ga.unwrap_or(a.top) + 0.3;
-                let zb = gb.unwrap_or(b.top) + 0.3;
-                let (o0, o1) = (ea + (oa - ea) * 0.3, eb + (ob - eb) * 0.3);
-                walls.extend(between(
-                    ea,
-                    eb,
-                    o1,
-                    o0,
-                    a.top - depth,
-                    b.top - depth,
-                    za,
-                    zb,
-                ));
             }
         }
         if high {
@@ -277,12 +171,7 @@ pub fn road_ground_solids(model: &Model, id: RoadId) -> Vec<Solid> {
         s += PIER_SPAN;
     }
     let mut out = Vec::new();
-    for (material, triangles) in [
-        (earth, slopes),
-        (concrete, walls),
-        (concrete, deck),
-        (metal, rails),
-    ] {
+    for (material, triangles) in [(concrete, walls), (concrete, deck), (metal, rails)] {
         if !triangles.is_empty() {
             out.push(Solid {
                 owner: SolidOwner::Road(id),
@@ -327,6 +216,280 @@ fn between(
             (za0, za1.max(za0 + 0.01))
         }
     })
+}
+
+/// A street as the ground sees it: its axis and, station by station, its
+/// top (the sidewalks'), the bottom of its pavement, its edges and whether
+/// it runs on a viaduct there.
+struct RoadLine {
+    axis: Vec<Point2>,
+    /// Distance along the axis of each of its points.
+    at: Vec<f64>,
+    len: f64,
+    samples: Vec<Sample>,
+    lo: Point2,
+    hi: Point2,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct Sample {
+    top: f64,
+    under: f64,
+    left: f64,
+    right: f64,
+    viaduct: bool,
+}
+
+/// How the ground is shaped round the streets of a level: lowered under
+/// them and meeting their edges in slopes of fill or cut.
+pub struct Shaper {
+    roads: Vec<RoadLine>,
+}
+
+impl Shaper {
+    /// The streets of `level` (heights over the model's zero).
+    pub fn of(model: &Model, level: archisim_core::LevelId) -> Shaper {
+        let roads = model
+            .roads_on_level(level)
+            .filter(|r| r.axis.len() >= 2)
+            .map(|r| {
+                let st = stations(model, r);
+                let kh = if r.section.single_level {
+                    0.0
+                } else {
+                    r.section.kerb_height
+                };
+                let fill_of = |x: &Station, g: Option<f64>| g.map_or(0.0, |g| x.top - g);
+                let samples = st
+                    .iter()
+                    .map(|x| Sample {
+                        top: x.top,
+                        under: x.top - kh - r.section.depth - 0.12,
+                        left: x.left.distance(x.right) / 2.0,
+                        right: x.left.distance(x.right) / 2.0,
+                        viaduct: fill_of(x, x.ground_mid)
+                            .max(fill_of(x, x.ground_left).min(fill_of(x, x.ground_right)))
+                            > VIADUCT_FROM,
+                    })
+                    .collect::<Vec<_>>();
+                // The real extents to each side (the axis need not be in
+                // the middle).
+                let samples = samples
+                    .into_iter()
+                    .zip(&st)
+                    .enumerate()
+                    .map(|(k, (mut x, _))| {
+                        let s = r.length() * k as f64 / (st.len() - 1).max(1) as f64;
+                        let (l, rr) = r.extent_at(s);
+                        x.left = l;
+                        x.right = rr;
+                        x
+                    })
+                    .collect();
+                let mut at = vec![0.0];
+                for w in r.axis.windows(2) {
+                    at.push(at.last().copied().unwrap_or(0.0) + w[0].distance(w[1]));
+                }
+                let (mut lo, mut hi) = (
+                    Point2::new(f64::MAX, f64::MAX),
+                    Point2::new(f64::MIN, f64::MIN),
+                );
+                for p in &r.axis {
+                    lo = Point2::new(lo.x.min(p.x), lo.y.min(p.y));
+                    hi = Point2::new(hi.x.max(p.x), hi.y.max(p.y));
+                }
+                let pad = r.section.width() + REACH;
+                RoadLine {
+                    axis: r.axis.clone(),
+                    len: *at.last().unwrap_or(&0.0),
+                    at,
+                    samples,
+                    lo: Point2::new(lo.x - pad, lo.y - pad),
+                    hi: Point2::new(hi.x + pad, hi.y + pad),
+                }
+            })
+            .collect();
+        Shaper { roads }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.roads.is_empty()
+    }
+
+    /// Whether `p` is near a street (where the ground may change).
+    pub fn near(&self, p: Point2) -> bool {
+        self.roads
+            .iter()
+            .any(|r| p.x >= r.lo.x && p.x <= r.hi.x && p.y >= r.lo.y && p.y <= r.hi.y)
+            && !self.nearby(p).is_empty()
+    }
+
+    /// Each street near `p`: its sample at the point of its axis nearest
+    /// `p` and the distance of `p` out of its edge (negative: under it).
+    /// Past a street's ends the distance is measured from its end, so the
+    /// ground rounds them off.
+    fn nearby(&self, p: Point2) -> Vec<(Sample, f64)> {
+        let mut out = Vec::new();
+        for r in &self.roads {
+            if p.x < r.lo.x || p.x > r.hi.x || p.y < r.lo.y || p.y > r.hi.y {
+                continue;
+            }
+            let mut best: Option<(Sample, f64)> = None;
+            for (i, w) in r.axis.windows(2).enumerate() {
+                let ab = w[1] - w[0];
+                let l2 = ab.dot(ab);
+                if l2 < 1e-12 {
+                    continue;
+                }
+                let t = ((p - w[0]).dot(ab) / l2).clamp(0.0, 1.0);
+                let q = w[0] + ab * t;
+                let d = q.distance(p);
+                let s = r.at[i] + t * l2.sqrt();
+                let sample = sample_at(r, s);
+                let left_side = ab.x * (p.y - w[0].y) - ab.y * (p.x - w[0].x) > 0.0;
+                let half = if left_side { sample.left } else { sample.right };
+                let e = d - half;
+                if best.is_none_or(|b| e < b.1) {
+                    best = Some((sample, e));
+                }
+            }
+            if let Some(b) = best {
+                if b.1 <= REACH {
+                    out.push(b);
+                }
+            }
+        }
+        out
+    }
+
+    /// The height of the ground at `p` that was `z`, shaped to the
+    /// streets: below the pavement of any street over it (but a viaduct),
+    /// and between the slopes of fill and cut of the nearest one.
+    pub fn shape(&self, p: Point2, z: f64) -> f64 {
+        let near = self.nearby(p);
+        if near.is_empty() {
+            return z;
+        }
+        let mut under = false;
+        let mut z1 = z;
+        for (x, e) in &near {
+            if *e <= 0.0 && !x.viaduct {
+                z1 = z1.min(x.under);
+                under = true;
+            }
+        }
+        if under {
+            return z1;
+        }
+        // The nearest street that the ground meets (not over a viaduct's
+        // deck).
+        let Some((x, e)) = near
+            .iter()
+            .filter(|(x, e)| !(x.viaduct && *e <= 0.0))
+            .min_by(|a, b| a.1.total_cmp(&b.1))
+            .copied()
+        else {
+            return z;
+        };
+        let e = e.max(0.0);
+        let high = x.top + e / CUT_SLOPE;
+        let low = if x.viaduct {
+            f64::MIN
+        } else {
+            x.top - e / FILL_SLOPE
+        };
+        z.clamp(low, high)
+    }
+}
+
+fn sample_at(r: &RoadLine, s: f64) -> Sample {
+    let n = r.samples.len();
+    if n == 1 || r.len <= 0.0 {
+        return r.samples[0];
+    }
+    let f = (s / r.len).clamp(0.0, 1.0) * (n - 1) as f64;
+    let i = (f.floor() as usize).min(n - 2);
+    let t = f - i as f64;
+    let (a, b) = (r.samples[i], r.samples[i + 1]);
+    let mix = |u: f64, v: f64| u + (v - u) * t;
+    Sample {
+        top: mix(a.top, b.top),
+        under: mix(a.under, b.under),
+        left: mix(a.left, b.left),
+        right: mix(a.right, b.right),
+        viaduct: a.viaduct || b.viaduct,
+    }
+}
+
+/// The triangles of the ground made finer near the streets (sides of at
+/// most [`FINE_EDGE`]) and shaped to them. An edge is split by itself
+/// alone, so two triangles that share it split it alike: no cracks.
+pub fn shaped_ground(tris: &[[P3; 3]], shaper: &Shaper) -> Vec<[P3; 3]> {
+    if shaper.is_empty() {
+        return tris.to_vec();
+    }
+    let split = |a: P3, b: P3| -> bool {
+        let d = ((a[0] - b[0]).powi(2) + (a[1] - b[1]).powi(2)).sqrt();
+        d > FINE_EDGE && shaper.near(Point2::new((a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0))
+    };
+    let mid = |a: P3, b: P3| {
+        [
+            (a[0] + b[0]) / 2.0,
+            (a[1] + b[1]) / 2.0,
+            (a[2] + b[2]) / 2.0,
+        ]
+    };
+    let mut flat = Vec::new();
+    let mut stack: Vec<([P3; 3], u32)> = tris.iter().map(|t| (*t, 0)).collect();
+    while let Some((t, depth)) = stack.pop() {
+        let [a, b, c] = t;
+        if depth > 12 {
+            flat.push(t);
+            continue;
+        }
+        let (sab, sbc, sca) = (split(a, b), split(b, c), split(c, a));
+        let d = depth + 1;
+        match (sab, sbc, sca) {
+            (false, false, false) => flat.push(t),
+            (true, true, true) => {
+                let (m, n, o) = (mid(a, b), mid(b, c), mid(c, a));
+                stack.extend([
+                    ([a, m, o], d),
+                    ([m, b, n], d),
+                    ([o, n, c], d),
+                    ([m, n, o], d),
+                ]);
+            }
+            // One edge: two triangles from its midpoint to the far corner.
+            (true, false, false) => {
+                let m = mid(a, b);
+                stack.extend([([a, m, c], d), ([m, b, c], d)]);
+            }
+            (false, true, false) => {
+                let m = mid(b, c);
+                stack.extend([([b, m, a], d), ([m, c, a], d)]);
+            }
+            (false, false, true) => {
+                let m = mid(c, a);
+                stack.extend([([c, m, b], d), ([m, a, b], d)]);
+            }
+            // Two edges: the corner they share cut off, the rest halved.
+            (true, true, false) => {
+                let (m, n) = (mid(a, b), mid(b, c));
+                stack.extend([([m, b, n], d), ([a, m, n], d), ([a, n, c], d)]);
+            }
+            (false, true, true) => {
+                let (m, n) = (mid(b, c), mid(c, a));
+                stack.extend([([n, m, c], d), ([b, m, n], d), ([b, n, a], d)]);
+            }
+            (true, false, true) => {
+                let (m, n) = (mid(c, a), mid(a, b));
+                stack.extend([([m, a, n], d), ([c, m, n], d), ([c, n, b], d)]);
+            }
+        }
+    }
+    let shape = |p: P3| [p[0], p[1], shaper.shape(Point2::new(p[0], p[1]), p[2])];
+    flat.into_iter().map(|t| t.map(shape)).collect()
 }
 
 #[cfg(test)]
@@ -387,9 +550,8 @@ mod tests {
                 .map(|x| x.triangles.len())
                 .sum()
         };
-        // Concrete: deck, piers, parapets and walls; earth: slopes.
+        // Concrete: deck, piers and parapets.
         assert!(by(conc) > 0, "no concrete");
-        assert!(by(earth) > 0, "no embankment");
         // Piers reach down near the valley's floor.
         let low = s
             .iter()
@@ -397,8 +559,33 @@ mod tests {
             .map(|p| p[2])
             .fold(f64::MAX, f64::min);
         assert!(low < -8.0, "{low}");
-        // The solid of the street carries them.
-        let all = crate::solid::road_solids(&m, id);
-        assert!(all.iter().any(|x| x.material == earth));
+        // The ground is shaped to it: under it, below its pavement; at
+        // its edge, at its top; far away, as it was.
+        let shaper = Shaper::of(&m, l);
+        let r = m.road(id).unwrap();
+        let top = r.top_at(20.0);
+        assert!(shaper.shape(Point2::new(20.0, 0.0), 50.0) < top);
+        let at_edge = shaper.shape(Point2::new(20.0, r.extent_at(20.0).0 + 0.01), 50.0);
+        assert!(
+            (at_edge - top - r.section.kerb_height).abs() < 0.2,
+            "{at_edge} {top}"
+        );
+        assert_eq!(shaper.shape(Point2::new(20.0, 39.0), 3.0), 3.0);
+        // The terrain's own triangles are made fine round it.
+        let t = m.terrains().next().unwrap();
+        let p3 = |i: usize| [t.points[i].at.x, t.points[i].at.y, t.points[i].z];
+        let tris: Vec<[P3; 3]> = t
+            .triangles()
+            .iter()
+            .map(|[a, b, c]| [p3(*a), p3(*b), p3(*c)])
+            .collect();
+        let fine = shaped_ground(&tris, &shaper);
+        assert!(
+            fine.len() > tris.len() * 20,
+            "{} {}",
+            fine.len(),
+            tris.len()
+        );
+        let _ = earth;
     }
 }

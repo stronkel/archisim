@@ -53,22 +53,31 @@ impl RoadReference {
 pub enum RoadDraw {
     /// Stretch by stretch, straight, each click lays one (as in a city
     /// builder), going on from the last.
-    #[default]
     Straight,
     /// Stretch by stretch, curved: a click pulls the curve, the next ends
     /// it.
     Curve,
+    /// Stretch by stretch, each one leaving the last along its direction
+    /// (a smooth curve with one click, as in a city builder).
+    #[default]
+    Smooth,
     /// The whole axis (or an edge) by its points, finished at the end.
     Polyline,
 }
 
 impl RoadDraw {
-    pub const ALL: [RoadDraw; 3] = [RoadDraw::Straight, RoadDraw::Curve, RoadDraw::Polyline];
+    pub const ALL: [RoadDraw; 4] = [
+        RoadDraw::Smooth,
+        RoadDraw::Straight,
+        RoadDraw::Curve,
+        RoadDraw::Polyline,
+    ];
 
     pub fn name(self) -> &'static str {
         match self {
             RoadDraw::Straight => "Tramos rectos",
             RoadDraw::Curve => "Tramos curvos",
+            RoadDraw::Smooth => "Curva continua",
             RoadDraw::Polyline => "Eje entero",
         }
     }
@@ -106,7 +115,7 @@ impl RoadSettings {
                 .map_or(MaterialId(0), |m| m.id)
         };
         RoadSettings {
-            draw: RoadDraw::Straight,
+            draw: RoadDraw::Smooth,
             follow_ground: true,
             max_grade: 0.08,
             reference: RoadReference::Axis,
@@ -180,13 +189,14 @@ fn section_rows(
     salt: u64,
     s: &RoadSection,
     saved: &mut Option<archisim_core::SavedStreet>,
+    thumbs: &std::collections::HashMap<String, super::thumbs::Thumb>,
 ) -> Option<RoadSection> {
     let mut out = s.clone();
     let mut changed = false;
     let _ = salt;
     // The street type, as cards drawn in section (U3).
     let picked = super::cards::card_row(ui, "Tipo de vía", |ui, w| {
-        super::street_types_ui::street_type_cards(ui, w, s)
+        super::street_types_ui::street_type_cards(ui, w, s, thumbs)
     });
     match picked {
         Some(super::street_types_ui::PickedStreet::Type(p)) => {
@@ -523,6 +533,7 @@ impl ArchiSimApp {
         if self.road_points.is_empty() {
             // Starting at a free end goes on with that street.
             self.road_chain = on_street.and_then(|(id, end)| end.map(|e| (id, e)));
+            self.road_start_join = on_street.filter(|(_, end)| end.is_none()).map(|_| p);
             self.road_points.push(p);
             return;
         }
@@ -537,8 +548,14 @@ impl ArchiSimApp {
         let level = self.ed.level;
         let s = self.road_settings.clone();
         let chain = self.road_chain;
+        let joins: Vec<Point2> = self
+            .road_start_join
+            .take()
+            .into_iter()
+            .chain(on_street.map(|_| p))
+            .collect();
         let r = self.ed.transact("Tramo de calle", |m| {
-            m.add_road_stretch(archisim_core::RoadStretch {
+            let id = m.add_road_stretch(archisim_core::RoadStretch {
                 level,
                 points,
                 continues: chain,
@@ -548,7 +565,12 @@ impl ArchiSimApp {
                 kerb_material: s.kerb,
                 sidewalk_material: s.sidewalk,
                 follow_ground: s.follow_ground.then_some(s.max_grade),
-            })
+            })?;
+            // Zebra crossings where it meets other streets.
+            for q in &joins {
+                m.crossings_at(level, *q)?;
+            }
+            Ok(id)
         });
         match r {
             Ok(id) => {
@@ -562,6 +584,7 @@ impl ArchiSimApp {
                     // stops there.
                     self.road_points.clear();
                     self.road_chain = None;
+                    self.road_start_join = None;
                     self.say("Tramo unido a la otra calle: el cruce se hace solo.".to_string());
                 } else {
                     self.road_points = vec![p];
@@ -605,6 +628,19 @@ impl ArchiSimApp {
         }
         Some(match (self.road_settings.draw, self.road_points.get(1)) {
             (RoadDraw::Curve, Some(c)) => archisim_core::curve_points(a, *c, p, 2.0),
+            (RoadDraw::Smooth, _) => {
+                // Leaving the street it goes on from along its direction,
+                // turning towards the click.
+                match self.road_chain.and_then(|(id, end)| {
+                    archisim_core::road_end_direction(self.ed.model(), id, end)
+                }) {
+                    Some(dir) if dir.dot((p - a).normalized()?) < 0.999 => {
+                        let c = a + dir * (a.distance(p) * 0.5);
+                        archisim_core::curve_points(a, c, p, 2.0)
+                    }
+                    _ => vec![a, p],
+                }
+            }
             _ => vec![a, p],
         })
     }
@@ -614,6 +650,7 @@ impl ArchiSimApp {
             // The chain ends; what was laid stays.
             self.road_points.clear();
             self.road_chain = None;
+            self.road_start_join = None;
             return;
         }
         let drawn = std::mem::take(&mut self.road_points);
@@ -831,6 +868,9 @@ impl ArchiSimApp {
             Tool::Road if self.road_settings.draw == RoadDraw::Curve && self.road_points.len() == 1 => {
                 "Clic: hacia dónde tira la curva · Esc: quitarlo"
             }
+            Tool::Road if self.road_settings.draw == RoadDraw::Smooth && !self.road_points.is_empty() => {
+                "Clic: fin del tramo, que sale del anterior en su misma dirección y gira suave hacia el clic · Doble clic o Intro: terminar"
+            }
             Tool::Road if self.road_settings.draw.by_stretches() && !self.road_points.is_empty() => {
                 "Clic: fin del tramo (se pone ya; el siguiente sigue de él) · Doble clic, clic derecho o Intro: terminar · Esc: quitar"
             }
@@ -876,7 +916,34 @@ impl ArchiSimApp {
         });
     }
 
+    /// The 3D pictures of the street types' cards that are ready.
+    fn street_thumbs(
+        &mut self,
+        ctx: &egui::Context,
+    ) -> std::collections::HashMap<String, super::thumbs::Thumb> {
+        self.thumbs3d.begin();
+        let gpu = self.gpu.as_ref();
+        let mut out = std::collections::HashMap::new();
+        for t in archisim_core::street_types() {
+            let sec = t.section.clone();
+            if let Some(th) = self.thumbs3d.get_seen(
+                ctx,
+                gpu,
+                format!("street:{}", t.name),
+                [20.0, 38.0],
+                move || super::street_types_ui::street_model(&sec),
+            ) {
+                out.insert(t.name.to_string(), th);
+            }
+        }
+        if self.thumbs3d.pending {
+            ctx.request_repaint();
+        }
+        out
+    }
+
     pub(super) fn road_tool_properties(&mut self, ui: &mut Ui) {
+        let thumbs = self.street_thumbs(ui.ctx());
         props::title(ui, "Herramienta Vial · lo que vas a dibujar");
         let model = self.ed.model();
         let mut s = self.road_settings.clone();
@@ -938,7 +1005,7 @@ impl ArchiSimApp {
         });
         group(ui, "tool-road", "Sección tipo", |ui| {
             let mut saved = None;
-            if let Some(sec) = section_rows(ui, 0, &s.section, &mut saved) {
+            if let Some(sec) = section_rows(ui, 0, &s.section, &mut saved, &thumbs) {
                 s.section = sec;
             }
             row(ui, "Rasante (mm)", "La calzada sobre la planta", |ui, w| {
@@ -1044,6 +1111,7 @@ impl ArchiSimApp {
     }
 
     pub(super) fn road_properties(&mut self, ui: &mut Ui, id: RoadId) {
+        let thumbs = self.street_thumbs(ui.ctx());
         let model = self.ed.model();
         let Some(r) = model.road(id).cloned() else {
             return;
@@ -1080,7 +1148,7 @@ impl ArchiSimApp {
         });
         group(ui, "road-section", "Sección tipo", |ui| {
             let mut saved = None;
-            if let Some(sec) = section_rows(ui, id.0, &r.section, &mut saved) {
+            if let Some(sec) = section_rows(ui, id.0, &r.section, &mut saved, &thumbs) {
                 let res = match saved {
                     // A type of the library: its materials too.
                     Some(t) => self.ed.transact("Tipo de calle de la biblioteca", |m| {

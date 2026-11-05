@@ -9782,6 +9782,7 @@ fn streets_laid_stretch_by_stretch() {
     h.type_text("w");
     assert_eq!(h.app.tool, Tool::Road);
     assert!(h.app.road_settings.draw.by_stretches());
+    h.app.road_settings.draw = super::urban_ui::RoadDraw::Straight;
     h.click_at(p(0.0, 0.0));
     h.move_to(p(40.0, 0.0));
     h.click_at(p(40.0, 0.0));
@@ -9814,4 +9815,29 @@ fn streets_laid_stretch_by_stretch() {
         .find(|x| x.axis.len() > 4)
         .expect("a curved street");
     assert!(c.length() > 33.0);
+    h.key(Key::Enter);
+    // Smooth: the second stretch leaves the first along its direction.
+    h.app.road_settings.draw = super::urban_ui::RoadDraw::Smooth;
+    h.click_at(p(-10.0, 50.0));
+    h.click_at(p(10.0, 50.0));
+    h.click_at(p(25.0, 60.0));
+    h.key(Key::Enter);
+    let d = h
+        .model()
+        .roads()
+        .find(|x| {
+            x.axis
+                .first()
+                .is_some_and(|q| q.distance(p(-10.0, 50.0)) < 1e-6)
+        })
+        .expect("the smooth street");
+    let n = d.axis.len();
+    assert!(n > 4, "{:?}", d.axis);
+    // No kink where the stretches meet: the turn there is small.
+    let turn = |i: usize| {
+        let u = (d.axis[i] - d.axis[i - 1]).normalized().unwrap();
+        let v = (d.axis[i + 1] - d.axis[i]).normalized().unwrap();
+        u.dot(v)
+    };
+    assert!(turn(1) > 0.95, "{}", turn(1));
 }

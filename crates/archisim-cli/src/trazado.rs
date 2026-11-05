@@ -120,6 +120,8 @@ pub fn build() -> Res<Model> {
         ],
         Some(Point2::new(150.0, 85.0)),
     )?;
+    // The zebras of the junction where the street up the hill starts.
+    m.crossings_at(pb, Point2::new(150.0, 0.0))?;
     // Along the valley's floor, under the viaduct.
     lay(
         &mut m,

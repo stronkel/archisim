@@ -177,7 +177,12 @@ pub enum PickedStreet {
 
 /// The street type of a section as a card, and every type when clicked;
 /// the one picked.
-pub fn street_type_cards(ui: &mut Ui, width: f32, s: &RoadSection) -> Option<PickedStreet> {
+pub fn street_type_cards(
+    ui: &mut Ui,
+    width: f32,
+    s: &RoadSection,
+    thumbs: &std::collections::HashMap<String, super::thumbs::Thumb>,
+) -> Option<PickedStreet> {
     let types = street_types();
     let saved = library_streets();
     let builtin = |n: &str| types.iter().any(|t| t.name == n);
@@ -227,7 +232,17 @@ pub fn street_type_cards(ui: &mut Ui, width: f32, s: &RoadSection) -> Option<Pic
         } else {
             section_of(n)
         };
-        if let Some(sec) = sec {
+        // Its picture in 3D when it is ready, else its section.
+        if let Some(t) = thumbs.get(n) {
+            let k = (r.width() / t.size.x).min(r.height() / t.size.y);
+            let rect = Rect::from_center_size(r.center(), t.size * k);
+            ui.painter().image(
+                t.tex,
+                rect,
+                Rect::from_min_max(Pos2::new(0.0, 0.0), Pos2::new(1.0, 1.0)),
+                Color32::WHITE,
+            );
+        } else if let Some(sec) = sec {
             paint_section(ui, r, &sec);
         }
     })?;
@@ -238,4 +253,104 @@ pub fn street_type_cards(ui: &mut Ui, width: f32, s: &RoadSection) -> Option<Pic
         .into_iter()
         .find(|t| saved_name(t) == picked)
         .map(PickedStreet::Saved)
+}
+
+/// A short stretch of a street of `section` alone, for its card in 3D:
+/// 16 m long, with its paint, on its own level.
+pub fn street_model(
+    section: &RoadSection,
+) -> Option<(archisim_core::Model, archisim_core::LevelId)> {
+    use archisim_core::{CutPattern, Model, NewRoad, Point2};
+    let mut m = Model::new("Calle");
+    let level = m.add_level("Planta baja", 0.0);
+    let asphalt = m.add_material("Asfalto", "asphalt", [70, 72, 78], CutPattern::Solid);
+    let kerb = m.add_material("Bordillo", "stone", [196, 194, 188], CutPattern::Solid);
+    let walk = m.add_material("Baldosa", "ceramic", [222, 206, 176], CutPattern::Solid);
+    let green = m.add_material("Césped", "grass", [118, 150, 80], CutPattern::Solid);
+    let bike = m.add_material("Carril bici", "asphalt", [176, 76, 64], CutPattern::Solid);
+    let mut sec = section.clone();
+    sec.markings = Some(m.marking_material([245, 245, 240]));
+    sec.planting = sec.planting.map(|_| green).or(Some(green));
+    sec.bike = sec.bike.map(|_| bike).or(Some(bike));
+    sec.crossings.clear();
+    sec.buildouts.clear();
+    let id = m
+        .add_road(NewRoad {
+            name: "Calle".into(),
+            level,
+            axis: vec![Point2::new(0.0, 0.0), Point2::new(12.0, 0.0)],
+            section: sec,
+            top_offset: 0.0,
+            profile: Vec::new(),
+            changes: Vec::new(),
+            pavement: asphalt,
+            kerb_material: kerb,
+            sidewalk_material: walk,
+        })
+        .ok()?;
+    let _ = id;
+    Some((m, level))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Every street type has its card in 3D (with `ARCHISIM_CALLES_OUT`,
+    /// a sheet of them all, to look at).
+    #[test]
+    fn every_street_type_in_3d() {
+        let Some((device, queue, view_formats)) = crate::view3d::gpu_tests::gpu() else {
+            eprintln!("No graphics adapter: 3D drawing test skipped.");
+            return;
+        };
+        let out = std::env::var_os("ARCHISIM_CALLES_OUT").map(std::path::PathBuf::from);
+        let mut r = crate::view3d::render::Renderer::new(
+            &device,
+            view_formats,
+            crate::view3d::render::TextureMode::Full,
+        );
+        let types = street_types();
+        let n = if out.is_some() { types.len() } else { 3 };
+        let (cw, ch) = (220u32, 104u32);
+        let cols = 6u32;
+        let rows = (n as u32).div_ceil(cols);
+        let mut sheet = vec![255u8; (cols * cw * rows * ch * 4) as usize];
+        for (i, t) in types.iter().take(n).enumerate() {
+            let (model, _) = street_model(&t.section).unwrap();
+            let (w, h, px) = super::super::thumbs3d::draw_seen(
+                &mut r,
+                &device,
+                &queue,
+                &model,
+                [cw, ch],
+                [20.0, 38.0],
+            )
+            .unwrap_or_else(|| panic!("{}", t.name));
+            let opaque = px.chunks(4).filter(|c| c[3] > 200).count();
+            assert!(opaque > 1500, "{}: {opaque}", t.name);
+            let (x0, y0) = ((i as u32 % cols) * cw, (i as u32 / cols) * ch);
+            for y in 0..h {
+                for x in 0..w {
+                    let s = ((y * w + x) * 4) as usize;
+                    let d = (((y0 + y) * cols * cw + x0 + x) * 4) as usize;
+                    let a = px[s + 3] as u32;
+                    for k in 0..3 {
+                        sheet[d + k] = ((px[s + k] as u32 * a + 255 * (255 - a)) / 255) as u8;
+                    }
+                    sheet[d + 3] = 255;
+                }
+            }
+        }
+        if let Some(dir) = out {
+            std::fs::create_dir_all(&dir).unwrap();
+            resvg::tiny_skia::Pixmap::from_vec(
+                sheet,
+                resvg::tiny_skia::IntSize::from_wh(cols * cw, rows * ch).unwrap(),
+            )
+            .unwrap()
+            .save_png(dir.join("tipos-de-calle.png"))
+            .unwrap();
+        }
+    }
 }

@@ -157,6 +157,18 @@ pub fn graded_heights(ground: &[(f64, f64)], max_grade: f64) -> Vec<(f64, f64)> 
 /// ground, metres.
 pub const PROFILE_STEP: f64 = 10.0;
 
+/// The zebra crossings laid at the junctions: their width along the
+/// street and how far back from the edge of the street crossed.
+pub const ZEBRA_WIDTH: f64 = 4.0;
+pub const ZEBRA_SETBACK: f64 = 1.5;
+
+/// Whether a section has sidewalks with kerbs to cross between (not a
+/// road without them, nor a pedestrian street).
+fn crossable(s: &RoadSection) -> bool {
+    s.strips.iter().any(|x| x.band == RoadBand::Carriageway)
+        && s.strips.iter().any(|x| x.band == RoadBand::Sidewalk)
+}
+
 impl Model {
     /// The profile of a street that follows the ground with its grade
     /// under `max_grade` (none if there is no ground under it).
@@ -185,9 +197,69 @@ impl Model {
         )
     }
 
+    /// Zebra crossings at the junction at `p`: on every street of `level`
+    /// that passes through it (or ends at it), on each of its arms, set
+    /// back from the edge of the widest of the others. Streets without
+    /// sidewalks get none; where there is one already, none more. Returns
+    /// how many it laid.
+    pub fn crossings_at(&mut self, level: LevelId, p: Point2) -> Result<usize, ModelError> {
+        let meeting: Vec<(RoadId, f64, f64, f64)> = self
+            .roads_on_level(level)
+            .filter_map(|r| {
+                let s = r.station_of(p);
+                (r.axis_at(s).0.distance(p) < 0.6)
+                    .then(|| (r.id, s, r.length(), r.section.width() / 2.0))
+            })
+            .collect();
+        if meeting.len() < 2 {
+            return Ok(0);
+        }
+        let mut laid = 0;
+        for &(id, s0, len, _) in &meeting {
+            let other = meeting
+                .iter()
+                .filter(|m| m.0 != id)
+                .map(|m| m.3)
+                .fold(0.0, f64::max);
+            let off = other + ZEBRA_SETBACK + ZEBRA_WIDTH / 2.0;
+            let Some(r) = self.road(id) else { continue };
+            if !crossable(&r.section) {
+                continue;
+            }
+            let wanted: Vec<f64> = [s0 - off, s0 + off]
+                .into_iter()
+                .filter(|a| *a > ZEBRA_WIDTH / 2.0 && *a < len - ZEBRA_WIDTH / 2.0)
+                .filter(|a| r.section.crossings.iter().all(|c| (c.at - a).abs() > 3.0))
+                .collect();
+            if wanted.is_empty() {
+                continue;
+            }
+            laid += wanted.len();
+            self.edit_road(id, |r| {
+                for at in wanted {
+                    r.section.crossings.push(Crossing {
+                        at: (at * 100.0).round() / 100.0,
+                        width: ZEBRA_WIDTH,
+                    });
+                }
+            })?;
+        }
+        Ok(laid)
+    }
+
     /// Lays a stretch: lengthens the street it goes on from (if it has the
-    /// same section) or makes a new one. Returns the street.
+    /// same section) or makes a new one. Returns the street. Its section
+    /// gets the white road paint if it has none (lane lines and zebras).
     pub fn add_road_stretch(&mut self, s: RoadStretch) -> Result<RoadId, ModelError> {
+        let mut s = s;
+        if s.section.markings.is_none()
+            && s.section
+                .strips
+                .iter()
+                .any(|x| x.band == RoadBand::Carriageway)
+        {
+            s.section.markings = Some(self.marking_material([245, 245, 240]));
+        }
         let mut pts: Vec<Point2> = Vec::with_capacity(s.points.len());
         for p in &s.points {
             if pts.last().is_none_or(|l: &Point2| l.distance(*p) > 0.05) {
@@ -197,9 +269,15 @@ impl Model {
         if pts.len() < 2 {
             return Err(ModelError::NonPositive("stretch length"));
         }
+        // The same section but for its crossings, which are the street's.
         let same = s.continues.filter(|(id, _)| {
-            self.road(*id)
-                .is_some_and(|r| r.section == s.section && r.changes.is_empty())
+            self.road(*id).is_some_and(|r| {
+                let mut a = r.section.clone();
+                a.crossings.clear();
+                let mut b = s.section.clone();
+                b.crossings.clear();
+                a == b && r.changes.is_empty()
+            })
         });
         let id = match same {
             Some((id, at_end)) => {
@@ -209,6 +287,11 @@ impl Model {
                         r.axis.extend(pts.iter().skip(1).copied());
                     } else {
                         let mut a: Vec<Point2> = pts.iter().skip(1).rev().copied().collect();
+                        // What was there moves along by what is added.
+                        let added: f64 = pts.windows(2).map(|w| w[0].distance(w[1])).sum();
+                        for c in &mut r.section.crossings {
+                            c.at += added;
+                        }
                         a.extend(r.axis.iter().copied());
                         r.axis = a;
                         // Its stations moved: the profile is made again
@@ -331,6 +414,20 @@ mod tests {
         assert_eq!(id, a);
         assert!((q.y).abs() < 1e-9);
         assert!(road_end_direction(&m, a, true).is_some());
+        // Painted: lane lines and zebras.
+        assert!(m.road(a).unwrap().section.markings.is_some());
+        // A street from the side of the first: zebras on its arms.
+        let mut t = stretch(
+            l,
+            mat,
+            vec![Point2::new(25.0, 0.0), Point2::new(25.0, -40.0)],
+        );
+        t.follow_ground = None;
+        m.add_road_stretch(t).unwrap();
+        let n = m.crossings_at(l, Point2::new(25.0, 0.0)).unwrap();
+        assert!(n >= 2, "{n}");
+        // Not twice.
+        assert_eq!(m.crossings_at(l, Point2::new(25.0, 0.0)).unwrap(), 0);
     }
 
     #[test]
