@@ -6,7 +6,7 @@ use archisim_core::{bar_area, Model, Profile, Reinforcement};
 
 use crate::analysis::{Analysis, Envelope};
 use crate::analytical::Owner;
-use crate::concrete;
+use crate::concrete::Rc;
 use crate::lightframe::{Check, Status, Subject};
 use crate::sections::Kind;
 use crate::text::dec;
@@ -52,6 +52,7 @@ fn status(u: f64) -> Status {
 }
 
 fn beam_checks(model: &Model, e: &Envelope, id: archisim_core::BeamId, out: &mut Vec<Check>) {
+    let rc = Rc::of(model);
     let Some((name, b, h)) = rect(model, e.owner) else {
         return;
     };
@@ -61,11 +62,8 @@ fn beam_checks(model: &Model, e: &Envelope, id: archisim_core::BeamId, out: &mut
     let hog = (-e.min[4]).max(0.0);
     let v = e.max[2].abs().max(e.min[2].abs());
     let subject = Subject::Beam(id);
-    let amin = concrete::min_beam_steel(b, h);
-    let (Some(bot), Some(top)) = (
-        concrete::bending_steel(sag, b, d),
-        concrete::bending_steel(hog, b, d),
-    ) else {
+    let amin = rc.min_beam_steel(b, h);
+    let (Some(bot), Some(top)) = (rc.bending_steel(sag, b, d), rc.bending_steel(hog, b, d)) else {
         out.push(Check {
             subject,
             what: format!(
@@ -83,8 +81,8 @@ fn beam_checks(model: &Model, e: &Envelope, id: archisim_core::BeamId, out: &mut
     let bot = bot.max(amin);
     let top = top.max(0.3 * amin);
     let rho = bot / (b * d);
-    let per_m = concrete::stirrups(v, b, d, rho);
-    let crush = v / concrete::vrd_max(b, d);
+    let per_m = rc.stirrups(v, b, d, rho);
+    let crush = v / rc.vrd_max(b, d);
     let need = format!(
         "{name}: M+ {} kN·m pide {} cm² abajo, M− {} kN·m pide {} cm² arriba, V {} kN pide {} cm²/m de cercos",
         dec(sag, 1),
@@ -132,9 +130,9 @@ fn beam_checks(model: &Model, e: &Envelope, id: archisim_core::BeamId, out: &mut
                 advice: (u > 1.0).then(|| {
                     format!(
                         "abajo {}, arriba {}, cercos {}",
-                        concrete::bars_for(bot, 2).label(),
-                        concrete::bars_for(top, 2).label(),
-                        concrete::stirrups_for(per_m, (0.75 * d).min(0.30)).label()
+                        rc.bars_for(bot, 2).label(),
+                        rc.bars_for(top, 2).label(),
+                        rc.stirrups_for(per_m, (0.75 * d).min(0.30)).label()
                     )
                 }),
             });
@@ -143,9 +141,9 @@ fn beam_checks(model: &Model, e: &Envelope, id: archisim_core::BeamId, out: &mut
             subject,
             what: format!(
                 "{need}: abajo {}, arriba {}, cercos {}",
-                concrete::bars_for(bot, 2).label(),
-                concrete::bars_for(top, 2).label(),
-                concrete::stirrups_for(per_m, (0.75 * d).min(0.30)).label()
+                rc.bars_for(bot, 2).label(),
+                rc.bars_for(top, 2).label(),
+                rc.stirrups_for(per_m, (0.75 * d).min(0.30)).label()
             ),
             rule: "Armado de la viga (Código Estructural, art. 42 y 44)",
             ratio: 0.0,
@@ -156,17 +154,53 @@ fn beam_checks(model: &Model, e: &Envelope, id: archisim_core::BeamId, out: &mut
 }
 
 fn column_checks(model: &Model, e: &Envelope, id: archisim_core::ColumnId, out: &mut Vec<Check>) {
+    let rc = Rc::of(model);
     let Some((name, b, h)) = rect(model, e.owner) else {
         return;
     };
     let n = (-e.min[0]).max(0.0);
-    let my = e.max[4].abs().max(e.min[4].abs());
-    let mz = e.max[5].abs().max(e.min[5].abs());
+    let mut my = e.max[4].abs().max(e.min[4].abs());
+    let mut mz = e.max[5].abs().max(e.min[5].abs());
     let subject = Subject::Column(id);
+    // Slenderness (Código Estructural, art. 43; EN 1992-1-1, 5.8): braced,
+    // buckling length its height; past λlim = 20·A·B·C/√n (A 0,7, B 1,1,
+    // C 0,7), the second-order eccentricity of the nominal curvature.
+    let lo = model.column(id).map_or(3.0, |c| c.height);
+    let n_rel = n / (b * h * rc.fcd()).max(1e-9);
+    let lim = 10.78 / n_rel.max(0.01).sqrt();
+    let eyd = rc.fyd() / 200e6;
+    let mut slender = Vec::new();
+    for (dim, m) in [(h, &mut my), (b, &mut mz)] {
+        let lambda = lo / (dim / 12f64.sqrt());
+        if lambda > lim {
+            let e2 = eyd / (0.45 * (dim - 0.045)) * lo * lo / 10.0;
+            *m += n * e2;
+            slender.push(format!(
+                "λ {} > {}: e2 {} cm",
+                dec(lambda, 0),
+                dec(lim, 0),
+                dec(e2 * 100.0, 1)
+            ));
+        }
+        if lambda > 100.0 {
+            out.push(Check {
+                subject,
+                what: format!(
+                    "{name}: esbeltez {} con {} m de altura",
+                    dec(lambda, 0),
+                    dec(lo, 2)
+                ),
+                rule: "Esbeltez de pilares de hormigón (λ ≤ 100, EN 1992-1-1 5.8)",
+                ratio: lambda / 100.0,
+                status: Status::Fail,
+                advice: Some("más sección".into()),
+            });
+        }
+    }
     // The section's sides go with its local axes either way: the worse.
     let (bars, u_need) = {
-        let a = concrete::column_bars(n, my, mz, b, h);
-        let c = concrete::column_bars(n, my, mz, h, b);
+        let a = rc.column_bars(n, my, mz, b, h);
+        let c = rc.column_bars(n, my, mz, h, b);
         if c.0.area() > a.0.area() {
             c
         } else {
@@ -174,17 +208,22 @@ fn column_checks(model: &Model, e: &Envelope, id: archisim_core::ColumnId, out: 
         }
     };
     let what = format!(
-        "{name}: N {} kN, My {} kN·m, Mz {} kN·m",
+        "{name}: N {} kN, My {} kN·m, Mz {} kN·m{}",
         dec(n, 1),
         dec(my, 1),
-        dec(mz, 1)
+        dec(mz, 1),
+        if slender.is_empty() {
+            String::new()
+        } else {
+            format!(" (segundo orden: {})", slender.join("; "))
+        }
     );
     let check = |a: f64, cover: f64| -> f64 {
         let ey = (h / 20.0).max(0.02);
         let ez = (b / 20.0).max(0.02);
         let (my, mz) = (my.max(n * ey), mz.max(n * ez));
-        concrete::column_check(n, my, mz, b, h, a, cover)
-            .max(concrete::column_check(n, my, mz, h, b, a, cover))
+        rc.column_check(n, my, mz, b, h, a, cover)
+            .max(rc.column_check(n, my, mz, h, b, a, cover))
     };
     match model.reinforcement(id.0) {
         Some(Reinforcement::Column {

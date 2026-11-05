@@ -445,3 +445,32 @@ pub fn quake_text(q: &crate::seismic::Quake) -> String {
     }
     s
 }
+
+/// The modal analysis written out.
+pub fn modal_text(q: &crate::seismic::Quake, m: &crate::seismic::Modal) -> String {
+    let mut s = String::new();
+    let _ = writeln!(
+        s,
+        "  Análisis modal espectral del pórtico (NCSE-02, 3.6.2):"
+    );
+    for (i, (t, x, y)) in m.modes.iter().enumerate() {
+        let _ = writeln!(
+            s,
+            "    modo {}: T {} s, masa X {} %, Y {} %",
+            i + 1,
+            dec(*t, 3),
+            dec(x * 100.0, 1),
+            dec(y * 100.0, 1)
+        );
+    }
+    for (i, (z, _, _)) in q.storeys.iter().enumerate() {
+        let _ = writeln!(
+            s,
+            "    planta a {} m: X {} kN, Y {} kN",
+            dec(*z, 2),
+            dec(m.forces[0][i], 1),
+            dec(m.forces[1][i], 1)
+        );
+    }
+    s
+}

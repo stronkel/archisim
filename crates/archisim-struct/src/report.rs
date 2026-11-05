@@ -83,12 +83,14 @@ pub fn blocks(model: &Model, a: &Analysis, checks: &[lightframe::Check]) -> Vec<
     // 1. Normativa y método.
     out.push(Block::Heading(1, "1. Normativa y método".into()));
     out.push(Block::Para(
-        "Normativa: CTE DB-SE (bases de cálculo), DB-SE-AE (acciones), DB-SE-A (acero), DB-SE-M (madera), DB-SE-C (cimientos), DB-SE-F (fábrica), DB-SI 6 (resistencia al fuego), NCSE-02 (sismo) y Código Estructural; Eurocódigos EN 1993-1-3 (perfiles de chapa conformada en frío), EN 1993-1-5 (anchos eficaces) y EN 1995-1-1 (madera), en lo que el CTE remite a ellos.".into(),
+        "Normativa: CTE DB-SE (bases de cálculo), DB-SE-AE (acciones), DB-SE-A (acero), DB-SE-M (madera), DB-SE-C (cimientos), DB-SE-F (fábrica), DB-SI 6 (resistencia al fuego), NCSE-02 (sismo) y Código Estructural; Eurocódigos EN 1992-1-1 (hormigón), EN 1993-1-1 (acero), EN 1993-1-8 (uniones), EN 1993-1-3 (perfiles de chapa conformada en frío), EN 1993-1-5 (anchos eficaces) y EN 1995-1-1 (madera), en lo que el CTE remite a ellos.".into(),
     ));
     out.push(Block::Para(
         "Método: las cargas de cada forjado y cubierta se reparten a lo que las sostiene (en los entramados, en la dirección de las viguetas o cabios; en el resto, por áreas tributarias) y bajan por muros, vigas y pilares hasta el terreno. El pórtico de pilares y vigas se calcula en 3D, en régimen elástico lineal y en primer orden, por el método de la rigidez. Cada vigueta y cabio de los entramados se calcula como viga continua sobre sus apoyos, y cada montante con la carga de su muro y el viento de su fachada. Las combinaciones son las de DB-SE 4.2 con los coeficientes de la tabla 4.1 y los ψ de la tabla 4.2.".into(),
     ));
     // 2. Materiales.
+    let mats = site.materials;
+    let rc = crate::concrete::Rc::of(model);
     out.push(Block::Heading(1, "2. Materiales y coeficientes".into()));
     out.push(Block::Table {
         columns: vec![
@@ -105,22 +107,55 @@ pub fn blocks(model: &Model, a: &Analysis, checks: &[lightframe::Check]) -> Vec<
                 "1,05 / 1,05 / 1,25".into(),
             ],
             vec![
-                "Madera C24".into(),
+                "Madera C24 (entramados)".into(),
                 "fm 24, fc,0 21, ft,0 14,5, fv 4, fc,90 2,5 N/mm²".into(),
                 "E0,mean 11 000, E0,05 7 400 N/mm²".into(),
                 "1,30; kmod por duración".into(),
             ],
             vec![
-                "Hormigón HA-25".into(),
-                "fck 25 N/mm²".into(),
-                "Ecm 27 300 N/mm²".into(),
+                format!("Hormigón HA-{:.0}", mats.concrete_fck),
+                format!("fck {:.0} N/mm²", mats.concrete_fck),
+                format!("Ecm {} N/mm²", dec(rc.ecm() / 1000.0, 0)),
                 "1,50".into(),
             ],
             vec![
-                "Acero B500S (armaduras)".into(),
-                "fyk 500 N/mm²".into(),
+                format!("Acero B{:.0}S (armaduras)", mats.rebar_fyk),
+                format!("fyk {:.0} N/mm²", mats.rebar_fyk),
                 "Es 200 000 N/mm²".into(),
                 "1,15".into(),
+            ],
+            vec![
+                format!("Acero S{:.0} (perfiles laminados)", mats.steel_fy),
+                format!("fy {:.0} N/mm²", mats.steel_fy),
+                "E 210 000 N/mm²".into(),
+                "1,05".into(),
+            ],
+            vec![
+                format!("Madera {} (vigas y pilares)", mats.timber.code()),
+                {
+                    let v = crate::frame_members::timber_values(mats.timber);
+                    format!(
+                        "fm {}, fc,0 {}, fv {} N/mm²",
+                        dec(v[0], 1),
+                        dec(v[2], 1),
+                        dec(v[4], 1)
+                    )
+                },
+                {
+                    let v = crate::frame_members::timber_values(mats.timber);
+                    format!("E0,mean {} N/mm²", dec(v[5], 0))
+                },
+                if mats.timber.glulam() {
+                    "1,25".into()
+                } else {
+                    "1,30".into()
+                },
+            ],
+            vec![
+                "Fábrica (muros de carga)".into(),
+                format!("fk {} N/mm²", dec(mats.masonry_fk, 1)),
+                "—".into(),
+                "2,50".into(),
             ],
         ],
     });
@@ -305,6 +340,51 @@ pub fn blocks(model: &Model, a: &Analysis, checks: &[lightframe::Check]) -> Vec<
                 })
                 .collect(),
         });
+        if let Some(m) = &a.model.modal {
+            out.push(Block::Para(
+                "El pórtico toma el sismo: análisis modal espectral (NCSE-02, 3.6.2). Las masas de cada planta en sus nudos, los modos por iteración en subespacio sobre la rigidez del pórtico y los cortantes de planta de los modos combinados por la raíz de la suma de cuadrados; las fuerzas de planta que dan esos cortantes sustituyen a las del método simplificado.".into(),
+            ));
+            out.push(Block::Table {
+                columns: vec![
+                    ("Modo".into(), 0.8),
+                    ("Periodo".into(), 1.2),
+                    ("Masa movilizada X".into(), 1.5),
+                    ("Masa movilizada Y".into(), 1.5),
+                ],
+                rows: m
+                    .modes
+                    .iter()
+                    .enumerate()
+                    .map(|(i, (t, x, y))| {
+                        vec![
+                            format!("{}", i + 1),
+                            format!("{} s", dec(*t, 3)),
+                            format!("{} %", dec(x * 100.0, 1)),
+                            format!("{} %", dec(y * 100.0, 1)),
+                        ]
+                    })
+                    .collect(),
+            });
+            out.push(Block::Table {
+                columns: vec![
+                    ("Planta, cota".into(), 1.5),
+                    ("Fuerza X (modal)".into(), 1.5),
+                    ("Fuerza Y (modal)".into(), 1.5),
+                ],
+                rows: q
+                    .storeys
+                    .iter()
+                    .enumerate()
+                    .map(|(i, (z, _, _))| {
+                        vec![
+                            format!("{} m", dec(*z, 2)),
+                            format!("{} kN", dec(m.forces[0][i], 1)),
+                            format!("{} kN", dec(m.forces[1][i], 1)),
+                        ]
+                    })
+                    .collect(),
+            });
+        }
         out.push(Block::Para(
             "Las fuerzas van al pórtico en las direcciones en que no hay muros de carga, y a los muros arriostrados cuando superan el viento mayorado.".into(),
         ));
@@ -542,12 +622,12 @@ pub fn blocks(model: &Model, a: &Analysis, checks: &[lightframe::Check]) -> Vec<
     // 8. Limitaciones.
     out.push(Block::Heading(1, "8. Alcance y limitaciones".into()));
     for p in [
-        "El cálculo es elástico, lineal y de primer orden; no incluye el efecto P-Δ ni la plastificación.",
-        "El descenso de cargas reparte las de los forjados de hormigón por áreas tributarias; sus armados se calculan aparte con un emparrillado de barras (pasos de 0,5 m o más) y Wood–Armer. No se comprueba el punzonamiento en los pilares.",
-        "El sismo sigue el método simplificado de NCSE-02 (3.7), válido para edificios regulares en planta y alzado de hasta 20 plantas (pórticos) o 6 (muros); no se aplican sus reglas de detalle (capítulo 4).",
-        "La cimentación se comprueba con la carga centrada en servicio y la presión admisible del terreno del emplazamiento; el estudio geotécnico la confirma.",
-        "Los muros de fábrica se comprueban con fk 4 N/mm² y γM 2,5 (DB-SE-F); se ajustan a la pieza y el mortero del proyecto.",
-        "Las uniones se suponen como se indica (rígidas en hormigón, articuladas en acero y madera); su diseño y el de los anclajes al cimiento se completan en el proyecto.",
+        "El cálculo es elástico y lineal. El segundo orden se valora con el índice de estabilidad θ de cada planta (EN 1993-1-1, 5.2.1): por debajo de 0,10 se desprecia, hasta 0,30 se indica la amplificación de las acciones horizontales. Los pilares se suponen intraslacionales (longitud de pandeo, su altura); los de hormigón esbeltos llevan la excentricidad de segundo orden de la curvatura nominal.",
+        "El descenso de cargas reparte las de los forjados de hormigón por áreas tributarias; sus armados se calculan aparte con un emparrillado de barras (pasos de 0,5 m o más) y Wood–Armer, y el punzonamiento en cada pilar sin armadura de punzonamiento.",
+        "El sismo sigue el método simplificado de NCSE-02 (3.7); si el pórtico lo toma, su análisis modal espectral. No se aplican las reglas de detalle sísmicas (capítulo 4).",
+        "La cimentación se comprueba con la carga centrada en servicio y la presión admisible del emplazamiento; las losas de cimentación, sobre muelles (balasto 120·σadm). El estudio geotécnico confirma ambos valores.",
+        "Los muros de sótano llevan el empuje al reposo con 10 kN/m² de sobrecarga; no se comprueban el vuelco ni el deslizamiento de los muros de contención exentos.",
+        "Las uniones se suponen como se indica (rígidas en hormigón, articuladas en acero y madera); las uniones atornilladas de cortante y las placas de anclaje se comprueban con los tornillos y la placa propuestos (capítulo 7).",
         "El arriostramiento de los entramados sigue el método A de EN 1995-1-1, 9.2.4.2; en steel frame, con la resistencia de las fijaciones al tablero y a la chapa.",
         "La resistencia al fuego de los entramados es orientativa: se justifica con el ensayo o el certificado del sistema.",
     ] {

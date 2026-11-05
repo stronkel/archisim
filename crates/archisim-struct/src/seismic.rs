@@ -2,6 +2,13 @@
 //! acceleration (2.2), the fundamental period (3.7.2.2), the elastic
 //! spectrum (2.3) and the equivalent static force of each storey for the
 //! first mode, in each direction.
+//!
+//! Where the frame takes the earthquake, its modal spectral analysis
+//! (NCSE-02, 3.6.2): the masses of each storey at its nodes, the first
+//! modes by subspace iteration on the frame's stiffness, the spectrum's
+//! acceleration for each period, and the storey shears of the modes
+//! combined by the square root of the sum of squares; the forces that
+//! give those shears replace the simplified ones.
 
 use archisim_core::{Importance, Model};
 
@@ -31,6 +38,19 @@ fn ductility(model: &Model) -> f64 {
         2.0
     } else {
         1.0
+    }
+}
+
+/// The normalised spectrum α(T) (NCSE-02, 2.3).
+pub fn alpha(k: f64, c: f64, t: f64) -> f64 {
+    let ta = k * c / 10.0;
+    let tb = k * c / 2.5;
+    if t < ta {
+        1.0 + 1.5 * t / ta
+    } else if t <= tb {
+        2.5
+    } else {
+        k * c / t
     }
 }
 
@@ -105,15 +125,7 @@ pub fn quake(model: &Model, td: &Takedown) -> Quake {
         0.06 * n * (height / (2.0 * l + height)).sqrt() * (height / (l + height)).sqrt()
     };
     let k = site.seismic_k;
-    let ta = k * c / 10.0;
-    let tb = k * c / 2.5;
-    let alpha = if period < ta {
-        1.0 + 1.5 * period / ta
-    } else if period <= tb {
-        2.5
-    } else {
-        k * c / period
-    };
+    let alpha = alpha(k, c, period);
     let beta = 1.0 / ductility(model);
     // First mode shape: sin(π h / 2H).
     let phi = |z: f64| (std::f64::consts::PI * (z - ground) / (2.0 * height)).sin();
@@ -149,6 +161,249 @@ pub fn quake(model: &Model, td: &Takedown) -> Quake {
         beta,
         storeys: forces,
     }
+}
+
+/// The modal analysis of the frame.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Modal {
+    /// Each mode: period (s) and the share of the mass it moves in X and
+    /// in Y.
+    pub modes: Vec<(f64, f64, f64)>,
+    /// The storey forces in X and in Y (same order as `Quake::storeys`),
+    /// kN.
+    pub forces: [Vec<f64>; 2],
+}
+
+/// Eigenvalues and vectors of a small symmetric matrix (cyclic Jacobi).
+fn jacobi(mut a: Vec<Vec<f64>>) -> (Vec<f64>, Vec<Vec<f64>>) {
+    let n = a.len();
+    let mut v = vec![vec![0.0; n]; n];
+    for i in 0..n {
+        v[i][i] = 1.0;
+    }
+    for _ in 0..100 {
+        let mut off = 0.0;
+        for p in 0..n {
+            for q in p + 1..n {
+                off += a[p][q] * a[p][q];
+            }
+        }
+        if off < 1e-24 {
+            break;
+        }
+        for p in 0..n {
+            for q in p + 1..n {
+                if a[p][q].abs() < 1e-30 {
+                    continue;
+                }
+                let theta = (a[q][q] - a[p][p]) / (2.0 * a[p][q]);
+                let t = theta.signum() / (theta.abs() + (theta * theta + 1.0).sqrt());
+                let t = if theta == 0.0 { 1.0 } else { t };
+                let c = 1.0 / (t * t + 1.0).sqrt();
+                let s = t * c;
+                for k in 0..n {
+                    let (akp, akq) = (a[k][p], a[k][q]);
+                    a[k][p] = c * akp - s * akq;
+                    a[k][q] = s * akp + c * akq;
+                }
+                for k in 0..n {
+                    let (apk, aqk) = (a[p][k], a[q][k]);
+                    a[p][k] = c * apk - s * aqk;
+                    a[q][k] = s * apk + c * aqk;
+                }
+                for k in 0..n {
+                    let (vkp, vkq) = (v[k][p], v[k][q]);
+                    v[k][p] = c * vkp - s * vkq;
+                    v[k][q] = s * vkp + c * vkq;
+                }
+            }
+        }
+    }
+    ((0..n).map(|i| a[i][i]).collect(), v)
+}
+
+/// The modal spectral analysis of a frame for an earthquake: `None` if
+/// there is nothing to move.
+pub fn modal(model: &Model, frame: &crate::frame::Frame, q: &Quake) -> Option<Modal> {
+    const G: f64 = 9.81;
+    let site = model.structural_site();
+    let free = |n: usize| !frame.supports.iter().any(|(s, _)| *s == n);
+    // Masses (t) at the nodes of each storey, and the storey of each.
+    let mut mass: Vec<(usize, f64, usize)> = Vec::new();
+    for (si, &(z, w, _)) in q.storeys.iter().enumerate() {
+        let at: Vec<usize> = (0..frame.nodes.len())
+            .filter(|&n| (frame.nodes[n][2] - z).abs() < 0.6 && free(n))
+            .collect();
+        if at.is_empty() {
+            continue;
+        }
+        let m = w / G / at.len() as f64;
+        mass.extend(at.into_iter().map(|n| (n, m, si)));
+    }
+    if mass.is_empty() || frame.supports.is_empty() {
+        return None;
+    }
+    let dofs = 2 * mass.len();
+    let solver = crate::frame::Solver::new(frame);
+    // K⁻¹·f for forces on the mass dofs; the movements at them.
+    let solve = |f: &[f64]| -> Vec<f64> {
+        let loads: Vec<crate::frame::Load> = mass
+            .iter()
+            .enumerate()
+            .map(|(k, (n, _, _))| crate::frame::Load::Node {
+                node: *n,
+                f: [f[2 * k], f[2 * k + 1], 0.0, 0.0, 0.0, 0.0],
+            })
+            .collect();
+        let sol = solver.solve(&loads);
+        mass.iter()
+            .flat_map(|(n, _, _)| [sol.displacements[*n][0], sol.displacements[*n][1]])
+            .collect()
+    };
+    let mdiag: Vec<f64> = mass.iter().flat_map(|(_, m, _)| [*m, *m]).collect();
+    let mul_m = |x: &[f64]| -> Vec<f64> { x.iter().zip(&mdiag).map(|(a, m)| a * m).collect() };
+    let dot = |a: &[f64], b: &[f64]| -> f64 { a.iter().zip(b).map(|(x, y)| x * y).sum() };
+    // Start vectors: the two directions and some mixes.
+    let p = 6.min(dofs);
+    let mut x: Vec<Vec<f64>> = (0..p)
+        .map(|j| {
+            (0..dofs)
+                .map(|i| {
+                    let node = i / 2;
+                    let dir = i % 2;
+                    match j {
+                        0 => (dir == 0) as u8 as f64,
+                        1 => (dir == 1) as u8 as f64,
+                        _ => ((node * (j + 3) + dir * 7) % 11) as f64 - 5.0,
+                    }
+                })
+                .collect()
+        })
+        .collect();
+    let mut lambda = vec![0.0; p];
+    for _ in 0..25 {
+        let y: Vec<Vec<f64>> = x.iter().map(|xi| solve(&mul_m(xi))).collect();
+        let my: Vec<Vec<f64>> = y.iter().map(|yi| mul_m(yi)).collect();
+        let mx: Vec<Vec<f64>> = x.iter().map(|xi| mul_m(xi)).collect();
+        // K̂ = Yᵀ·K·Y = Yᵀ·M·X, M̂ = Yᵀ·M·Y.
+        let kh: Vec<Vec<f64>> = (0..p)
+            .map(|a| (0..p).map(|b| dot(&y[a], &mx[b])).collect())
+            .collect();
+        let mh: Vec<Vec<f64>> = (0..p)
+            .map(|a| (0..p).map(|b| dot(&y[a], &my[b])).collect())
+            .collect();
+        // M̂ = L·Lᵀ; L⁻¹·K̂·L⁻ᵀ.
+        let mut l = vec![vec![0.0; p]; p];
+        for i in 0..p {
+            for j in 0..=i {
+                let s: f64 = (0..j).map(|k| l[i][k] * l[j][k]).sum();
+                if i == j {
+                    let d = mh[i][i] - s;
+                    if d <= 1e-30 {
+                        return None;
+                    }
+                    l[i][j] = d.sqrt();
+                } else {
+                    l[i][j] = (mh[i][j] - s) / l[j][j];
+                }
+            }
+        }
+        let inv_l = |b: &[f64]| -> Vec<f64> {
+            let mut z = vec![0.0; p];
+            for i in 0..p {
+                let s: f64 = (0..i).map(|k| l[i][k] * z[k]).sum();
+                z[i] = (b[i] - s) / l[i][i];
+            }
+            z
+        };
+        // A = L⁻¹ K̂ L⁻ᵀ, column by column.
+        let mut tmp = vec![vec![0.0; p]; p];
+        for c in 0..p {
+            let col: Vec<f64> = (0..p).map(|r| kh[r][c]).collect();
+            let z = inv_l(&col);
+            for r in 0..p {
+                tmp[r][c] = z[r];
+            }
+        }
+        let mut a = vec![vec![0.0; p]; p];
+        for r in 0..p {
+            let z = inv_l(&tmp[r]);
+            a[r][..p].copy_from_slice(&z[..p]);
+        }
+        // Symmetrise.
+        for r in 0..p {
+            for c in r + 1..p {
+                let m = 0.5 * (a[r][c] + a[c][r]);
+                a[r][c] = m;
+                a[c][r] = m;
+            }
+        }
+        let (vals, vecs) = jacobi(a);
+        // q = L⁻ᵀ·v.
+        let mut order: Vec<usize> = (0..p).collect();
+        order.sort_by(|&i, &j| vals[i].total_cmp(&vals[j]));
+        let mut nx = Vec::new();
+        for &k in &order {
+            let v: Vec<f64> = (0..p).map(|r| vecs[r][k]).collect();
+            let mut qv = vec![0.0; p];
+            for i in (0..p).rev() {
+                let s: f64 = (i + 1..p).map(|r| l[r][i] * qv[r]).sum();
+                qv[i] = (v[i] - s) / l[i][i];
+            }
+            let mut xi = vec![0.0; dofs];
+            for (j, yj) in y.iter().enumerate() {
+                for (d, val) in xi.iter_mut().enumerate() {
+                    *val += qv[j] * yj[d];
+                }
+            }
+            nx.push(xi);
+        }
+        x = nx;
+        lambda = order.iter().map(|&k| vals[k]).collect();
+    }
+    let total: f64 = mdiag.iter().sum::<f64>() / 2.0;
+    let ns = q.storeys.len();
+    let mut shears = [vec![0.0; ns], vec![0.0; ns]];
+    let mut modes = Vec::new();
+    for (k, phi) in x.iter().enumerate() {
+        if lambda[k] <= 0.0 {
+            continue;
+        }
+        let omega = lambda[k].sqrt();
+        let t = 2.0 * std::f64::consts::PI / omega;
+        let mphi = mul_m(phi);
+        let gen = dot(phi, &mphi);
+        let mut shares = [0.0; 2];
+        for dir in 0..2 {
+            let gamma: f64 = (0..mass.len()).map(|i| mphi[2 * i + dir]).sum::<f64>() / gen;
+            shares[dir] = gamma * gamma * gen / total;
+            // Spectral acceleration (m/s²) and the storey forces of this
+            // mode in that direction.
+            let sa = q.ac * alpha(site.seismic_k, site.soil, t) * q.beta * G;
+            let mut f = vec![0.0; ns];
+            for (i, (_, m, si)) in mass.iter().enumerate() {
+                f[*si] += m * phi[2 * i + dir] * gamma * sa;
+            }
+            // Storey shears from the top down, squared and summed.
+            let mut v = 0.0;
+            for si in (0..ns).rev() {
+                v += f[si];
+                shears[dir][si] += v * v;
+            }
+        }
+        modes.push((t, shares[0], shares[1]));
+    }
+    // Back to forces: the differences of the combined shears.
+    let mut forces = [vec![0.0; ns], vec![0.0; ns]];
+    for dir in 0..2 {
+        let v: Vec<f64> = shears[dir].iter().map(|s| s.sqrt()).collect();
+        for si in 0..ns {
+            let above = if si + 1 < ns { v[si + 1] } else { 0.0 };
+            forces[dir][si] = (v[si] - above).max(0.0);
+        }
+    }
+    modes.sort_by(|a, b| b.0.total_cmp(&a.0));
+    Some(Modal { modes, forces })
 }
 
 #[cfg(test)]
@@ -241,14 +496,33 @@ mod tests {
             "{:?}",
             an.cases
         );
-        // What the earthquake puts on the frame comes back at its supports.
+        // The frame's modes: one storey, so one mode in each direction
+        // carries all the mass, with T = 2π·√(m/k).
         let q = quake(&m, &an.takedown);
-        let total: f64 = q.storeys.iter().map(|s| s.2).sum();
-        let back: f64 = an.solutions[&crate::Case::Quake(true)]
-            .reactions
+        let modal = an.model.modal.clone().expect("modal analysis");
+        assert!(
+            modal.modes.iter().any(|m| m.1 > 0.95) && modal.modes.iter().any(|m| m.2 > 0.95),
+            "{modal:?}"
+        );
+        let total: f64 = modal.forces[0].iter().sum();
+        let sol = &an.solutions[&crate::Case::Quake(true)];
+        let top = an
+            .model
+            .frame
+            .nodes
             .iter()
-            .map(|r| r.1[0])
-            .sum();
+            .position(|n| n[2] > 2.9)
+            .unwrap();
+        let k = total / sol.displacements[top][0];
+        let w: f64 = q.storeys.iter().map(|s| s.1).sum();
+        let t = 2.0 * std::f64::consts::PI * (w / 9.81 / k).sqrt();
+        let tx = modal.modes.iter().find(|m| m.1 > 0.5).unwrap().0;
+        assert!((tx - t).abs() < 0.05 * t, "{tx} {t}");
+        // Its force is the spectrum's at that period on the whole mass.
+        let expect = q.ac * alpha(site.seismic_k, site.soil, tx) * q.beta * w;
+        assert!((total - expect).abs() < 0.03 * expect, "{total} {expect}");
+        // What the earthquake puts on the frame comes back at its supports.
+        let back: f64 = sol.reactions.iter().map(|r| r.1[0]).sum();
         assert!(
             (total + back).abs() < 1e-3 * total.max(1.0),
             "{total} {back}"

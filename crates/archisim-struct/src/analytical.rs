@@ -26,6 +26,16 @@ use crate::frame::{Bar, Fixity, Frame, Load, FIXED, PINNED, V3};
 use crate::geo;
 use crate::gravity::{Carrier, Takedown, BIN};
 use crate::sections::{section_of, Kind};
+
+/// A section with the project's concrete.
+fn section_in(model: &Model, p: archisim_core::Profile, kind: Kind) -> crate::frame::Section {
+    let mut s = section_of(p, kind);
+    if kind == Kind::Concrete {
+        s.e = crate::concrete::Rc::of(model).ecm();
+        s.g = s.e / 2.4;
+    }
+    s
+}
 use crate::wind::BuildingWind;
 
 /// Which element a bar is a piece of.
@@ -69,6 +79,8 @@ pub struct Analytical {
     pub kinds: BTreeMap<Owner, Kind>,
     /// The wind directions the frame takes (the others go to the walls).
     pub wind_on_frame: Vec<WindDir>,
+    /// The modal spectral analysis, when the frame takes the earthquake.
+    pub modal: Option<crate::seismic::Modal>,
     pub notes: Vec<String>,
 }
 
@@ -340,7 +352,7 @@ pub fn build(model: &Model, td: &Takedown, wind: Option<&BuildingWind>) -> Analy
         let Some(mt) = model.member_type(col.member_type) else {
             continue;
         };
-        let sec = section_of(mt.profile, c.kind);
+        let sec = section_in(model, mt.profile, c.kind);
         // The section's depth (its y) turned by the column's rotation.
         let up = [-col.rotation.sin(), col.rotation.cos(), 0.0];
         let mid = nodes.add([c.pos.x, c.pos.y, (c.base + c.top) / 2.0]);
@@ -372,7 +384,7 @@ pub fn build(model: &Model, td: &Takedown, wind: Option<&BuildingWind>) -> Analy
         let Some(mt) = model.member_type(beam.member_type) else {
             continue;
         };
-        let sec = section_of(mt.profile, b.kind);
+        let sec = section_in(model, mt.profile, b.kind);
         let pinned = matches!(b.kind, Kind::Steel | Kind::Timber | Kind::Aluminium);
         let last = b.cuts.len().saturating_sub(1);
         let supported = |n: usize| {
@@ -547,12 +559,20 @@ pub fn build(model: &Model, td: &Takedown, wind: Option<&BuildingWind>) -> Analy
     // walls take it.
     let quake = crate::seismic::quake(model, td);
     if quake.applies && !out.frame.bars.is_empty() {
+        let takes = |dir: WindDir| walls_along(model, dir) <= 0.2 * building_width(model);
+        if takes(WindDir::PosX) || takes(WindDir::PosY) {
+            out.modal = crate::seismic::modal(model, &out.frame, &quake);
+        }
         for (x, dir) in [(true, WindDir::PosX), (false, WindDir::PosY)] {
-            if walls_along(model, dir) > 0.2 * building_width(model) {
+            if !takes(dir) {
                 continue;
             }
             let [dx, dy] = dir.vector();
-            for &(z, _, force) in &quake.storeys {
+            for (si, &(z, _, simple)) in quake.storeys.iter().enumerate() {
+                let force = out
+                    .modal
+                    .as_ref()
+                    .map_or(simple, |m| m.forces[if x { 0 } else { 1 }][si]);
                 let at: Vec<usize> = (0..out.frame.nodes.len())
                     .filter(|&n| {
                         (out.frame.nodes[n][2] - z).abs() < 0.6

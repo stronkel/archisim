@@ -2,13 +2,17 @@
 //! load-bearing wall needs for what it brings to the ground, against the
 //! admissible pressure of the site, and the check of the footings drawn.
 //! Centred loads (the moments at the column bases are not taken), the
-//! footing and the earth over it as 10 % more; rigid footings.
+//! footing and the earth over it as 10 % more; rigid footings. Their
+//! bottom steel by bending at a section 0,15 of the column or wall
+//! inside its face (Código Estructural, art. 58), with the ground's
+//! ultimate reaction, against the mesh drawn or as a proposal.
 
 use std::collections::BTreeMap;
 
 use archisim_core::{FootingKind, Model};
 
 use crate::cases::Case;
+use crate::concrete::Rc;
 use crate::gravity::{Carrier, Takedown};
 use crate::lightframe::{Check, Status, Subject};
 use crate::text::dec;
@@ -36,8 +40,107 @@ pub fn service_loads(model: &Model, td: &Takedown) -> BTreeMap<Carrier, (f64, f6
     out
 }
 
+/// The same in the ultimate combination (1,35 G + 1,5 the rest), kN.
+pub fn ultimate_loads(td: &Takedown) -> BTreeMap<Carrier, f64> {
+    let mut out: BTreeMap<Carrier, f64> = BTreeMap::new();
+    for g in &td.ground {
+        let Some(c) = g.from else { continue };
+        let f = match g.case {
+            Case::Dead => 1.35,
+            Case::Wind(_) | Case::Quake(_) => 0.0,
+            _ => 1.5,
+        };
+        *out.entry(c).or_default() += f * g.kn;
+    }
+    out
+}
+
+/// The bottom steel of a footing, m²/m: net ultimate pressure `q`
+/// (kN/m²) over the overhang `v` from the face of what it carries, of
+/// width `post`, and its depth `h`.
+pub fn footing_steel(rc: &Rc, q: f64, v: f64, post: f64, h: f64) -> Option<f64> {
+    let lever = v.max(0.0) + 0.15 * post;
+    let m = q * lever * lever / 2.0;
+    let d = (h - 0.06).max(0.1);
+    rc.bending_steel(m, 1.0, d).map(|a| a.max(0.0009 * h))
+}
+
+fn per_m(sp: &archisim_core::Spaced) -> f64 {
+    archisim_core::bar_area(sp.diameter) / sp.spacing.max(0.01)
+}
+
+/// The steel check of a drawn footing.
+#[allow(clippy::too_many_arguments)]
+fn steel_check(
+    model: &Model,
+    f: &archisim_core::Footing,
+    name: &str,
+    nu: f64,
+    area: f64,
+    v: f64,
+    post: f64,
+    out: &mut Vec<Check>,
+) {
+    let rc = Rc::of(model);
+    let q = nu / area.max(1e-6);
+    let need = footing_steel(&rc, q, v, post, f.depth);
+    let has = match model.reinforcement(f.id.0) {
+        Some(archisim_core::Reinforcement::Footing { bottom, .. }) => {
+            Some((per_m(&bottom[0]).min(per_m(&bottom[1])), bottom))
+        }
+        _ => None,
+    };
+    let (what, ratio, status, advice) = match (need, has) {
+        (None, _) => (
+            format!("{name}: el canto no basta a flexión"),
+            2.0,
+            Status::Fail,
+            Some("más canto".to_string()),
+        ),
+        (Some(a), Some((h, b))) => {
+            let u = a / h.max(1e-9);
+            (
+                format!(
+                    "{name}: pide {} cm²/m abajo; tiene {} y {} ({} cm²/m)",
+                    dec(a * 1e4, 2),
+                    b[0].label(),
+                    b[1].label(),
+                    dec(h * 1e4, 2)
+                ),
+                u,
+                if u <= 1.0 { Status::Pass } else { Status::Fail },
+                (u > 1.0).then(|| {
+                    format!(
+                        "{} en las dos direcciones",
+                        crate::slab::mesh_for(a).label()
+                    )
+                }),
+            )
+        }
+        (Some(a), None) => (
+            format!(
+                "{name}: pide {} cm²/m abajo: {} en las dos direcciones",
+                dec(a * 1e4, 2),
+                crate::slab::mesh_for(a).label()
+            ),
+            0.0,
+            Status::Info,
+            Some("la zapata no tiene armado dibujado: este es el que pide".to_string()),
+        ),
+    };
+    out.push(Check {
+        subject: Subject::Footing(f.id.0),
+        what,
+        rule: "Armado de la zapata (Código Estructural, art. 58)",
+        ratio,
+        status,
+        advice,
+    });
+}
+
 pub fn check(model: &Model, td: &Takedown) -> Vec<Check> {
     let sigma = model.structural_site().bearing.max(1.0);
+    let ultimate = ultimate_loads(td);
     let loads = service_loads(model, td);
     let mut out = Vec::new();
     let mut drawn: BTreeMap<Carrier, &archisim_core::Footing> = BTreeMap::new();
@@ -90,7 +193,26 @@ pub fn check(model: &Model, td: &Takedown) -> Vec<Check> {
                                 format!("zapata de {}×{} m", dec(side, 2), dec(side, 2))
                             }),
                         });
-                        rigid(f.width.max(length), f.depth, 0.3, f.id.0, &name, &mut out);
+                        let post = model
+                            .column(*id)
+                            .and_then(|c| model.member_type(c.member_type))
+                            .map_or(0.3, |t| {
+                                let (a, b) = t.profile.size();
+                                a.max(b)
+                            });
+                        rigid(f.width.max(length), f.depth, post, f.id.0, &name, &mut out);
+                        let nu = ultimate.get(c).copied().unwrap_or(1.45 * kn);
+                        let v = (f.width.max(length) - post) / 2.0;
+                        steel_check(
+                            model,
+                            f,
+                            &format!("Zapata de {name}"),
+                            nu,
+                            area,
+                            v,
+                            post,
+                            &mut out,
+                        );
                     }
                     None => out.push(Check {
                         subject: Subject::Footing(id.0),
@@ -137,6 +259,18 @@ pub fn check(model: &Model, td: &Takedown) -> Vec<Check> {
                             advice: (u > 1.0).then(|| format!("{} m de ancho", dec(width, 2))),
                         });
                         rigid(f.width, f.depth, thick, f.id.0, &name, &mut out);
+                        let nu = ultimate.get(c).copied().unwrap_or(1.45 * kn) / len.max(0.1);
+                        let v = (f.width - thick) / 2.0;
+                        steel_check(
+                            model,
+                            f,
+                            &format!("Zapata corrida de {name}"),
+                            nu,
+                            f.width,
+                            v,
+                            thick,
+                            &mut out,
+                        );
                     }
                     None => {
                         // Only the walls that bear something on the ground:

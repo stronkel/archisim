@@ -145,12 +145,73 @@ impl ArchiSimApp {
                 });
                 ui.end_row();
                 ui.label("Terreno");
-                ui.add(
-                    egui::DragValue::new(&mut new.bearing)
-                        .range(25.0..=1000.0)
-                        .speed(5.0)
-                        .suffix(" kN/m² de tensión admisible"),
-                );
+                ui.horizontal(|ui| {
+                    ui.add(
+                        egui::DragValue::new(&mut new.bearing)
+                            .range(25.0..=1000.0)
+                            .speed(5.0)
+                            .suffix(" kN/m² admisibles"),
+                    );
+                    ui.label("φ");
+                    ui.add(
+                        egui::DragValue::new(&mut new.soil_friction)
+                            .range(15.0..=45.0)
+                            .speed(0.5)
+                            .suffix("°"),
+                    )
+                    .on_hover_text(
+                        "Ángulo de rozamiento interno: empuje sobre los muros de sótano",
+                    );
+                    ui.label("γ");
+                    ui.add(
+                        egui::DragValue::new(&mut new.soil_weight)
+                            .range(12.0..=24.0)
+                            .speed(0.5)
+                            .suffix(" kN/m³"),
+                    );
+                });
+                ui.end_row();
+                ui.label("Materiales");
+                ui.horizontal_wrapped(|ui| {
+                    let m = &mut new.materials;
+                    egui::ComboBox::from_id_salt("calc-fck")
+                        .selected_text(format!("HA-{:.0}", m.concrete_fck))
+                        .show_ui(ui, |ui| {
+                            for f in archisim_core::StructuralMaterials::CONCRETES {
+                                ui.selectable_value(&mut m.concrete_fck, f, format!("HA-{f:.0}"));
+                            }
+                        });
+                    egui::ComboBox::from_id_salt("calc-fyk")
+                        .selected_text(format!("B{:.0}S", m.rebar_fyk))
+                        .show_ui(ui, |ui| {
+                            for f in archisim_core::StructuralMaterials::REBARS {
+                                ui.selectable_value(&mut m.rebar_fyk, f, format!("B{f:.0}S"));
+                            }
+                        });
+                    egui::ComboBox::from_id_salt("calc-fy")
+                        .selected_text(format!("S{:.0}", m.steel_fy))
+                        .show_ui(ui, |ui| {
+                            for f in archisim_core::StructuralMaterials::STEELS {
+                                ui.selectable_value(&mut m.steel_fy, f, format!("S{f:.0}"));
+                            }
+                        });
+                    egui::ComboBox::from_id_salt("calc-timber")
+                        .selected_text(m.timber.code())
+                        .show_ui(ui, |ui| {
+                            for t in archisim_core::TimberClass::ALL {
+                                ui.selectable_value(&mut m.timber, t, t.code());
+                            }
+                        });
+                    ui.label("fábrica fk");
+                    ui.add(
+                        egui::DragValue::new(&mut m.masonry_fk)
+                            .range(0.5..=20.0)
+                            .speed(0.1)
+                            .max_decimals(1)
+                            .suffix(" N/mm²"),
+                    )
+                    .on_hover_text("DB-SE-F, tabla 4.4: según la pieza y el mortero");
+                });
                 ui.end_row();
             });
         if new != site {

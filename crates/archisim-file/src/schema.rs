@@ -5772,7 +5772,8 @@ impl ReinforcementOf {
     }
 }
 
-/// The structural actions of the project (version 81).
+/// The structural actions of the project (version 81; the ground and
+/// the materials, version 82).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct StructureOf {
@@ -5791,8 +5792,45 @@ pub(crate) struct StructureOf {
     pub importance: String,
     #[serde(default = "bearing")]
     pub bearing: f64,
+    /// Version 82: the ground for basement walls and the materials.
+    #[serde(default = "friction")]
+    pub soil_friction: f64,
+    #[serde(default = "soil_weight")]
+    pub soil_weight: f64,
+    #[serde(default = "fck")]
+    pub concrete_fck: f64,
+    #[serde(default = "fyk")]
+    pub rebar_fyk: f64,
+    #[serde(default = "steel_fy")]
+    pub steel_fy: f64,
+    #[serde(default = "timber")]
+    pub timber: String,
+    #[serde(default = "masonry_fk")]
+    pub masonry_fk: f64,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub loads: Vec<LoadOf>,
+}
+
+fn friction() -> f64 {
+    30.0
+}
+fn soil_weight() -> f64 {
+    18.0
+}
+fn fck() -> f64 {
+    25.0
+}
+fn fyk() -> f64 {
+    500.0
+}
+fn steel_fy() -> f64 {
+    275.0
+}
+fn timber() -> String {
+    "C24".into()
+}
+fn masonry_fk() -> f64 {
+    4.0
 }
 
 fn one() -> f64 {
@@ -5841,6 +5879,13 @@ impl StructureOf {
             soil: site.soil,
             importance: site.importance.code().into(),
             bearing: site.bearing,
+            soil_friction: site.soil_friction,
+            soil_weight: site.soil_weight,
+            concrete_fck: site.materials.concrete_fck,
+            rebar_fyk: site.materials.rebar_fyk,
+            steel_fy: site.materials.steel_fy,
+            timber: site.materials.timber.code().into(),
+            masonry_fk: site.materials.masonry_fk,
             loads: loads
                 .iter()
                 .map(|l| {
@@ -5882,6 +5927,16 @@ impl StructureOf {
             importance: core::Importance::from_code(&self.importance)
                 .ok_or_else(|| bad("importance", &self.importance))?,
             bearing: self.bearing,
+            soil_friction: self.soil_friction,
+            soil_weight: self.soil_weight,
+            materials: core::StructuralMaterials {
+                concrete_fck: self.concrete_fck,
+                rebar_fyk: self.rebar_fyk,
+                steel_fy: self.steel_fy,
+                timber: core::TimberClass::from_code(&self.timber)
+                    .ok_or_else(|| bad("timber class", &self.timber))?,
+                masonry_fk: self.masonry_fk,
+            },
         })
     }
 

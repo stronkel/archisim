@@ -80,6 +80,92 @@ impl Importance {
     }
 }
 
+/// Strength classes of timber (EN 338, EN 14080).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum TimberClass {
+    C18,
+    #[default]
+    C24,
+    C30,
+    GL24h,
+    GL28h,
+    GL32h,
+}
+
+impl TimberClass {
+    pub const ALL: [TimberClass; 6] = [
+        TimberClass::C18,
+        TimberClass::C24,
+        TimberClass::C30,
+        TimberClass::GL24h,
+        TimberClass::GL28h,
+        TimberClass::GL32h,
+    ];
+
+    pub fn code(self) -> &'static str {
+        match self {
+            TimberClass::C18 => "C18",
+            TimberClass::C24 => "C24",
+            TimberClass::C30 => "C30",
+            TimberClass::GL24h => "GL24h",
+            TimberClass::GL28h => "GL28h",
+            TimberClass::GL32h => "GL32h",
+        }
+    }
+
+    pub fn from_code(s: &str) -> Option<TimberClass> {
+        TimberClass::ALL.into_iter().find(|t| t.code() == s)
+    }
+
+    /// Glued laminated (γM 1,25 and kh up to 1,1).
+    pub fn glulam(self) -> bool {
+        matches!(
+            self,
+            TimberClass::GL24h | TimberClass::GL28h | TimberClass::GL32h
+        )
+    }
+}
+
+/// The materials of the structure, for the checks.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct StructuralMaterials {
+    /// Concrete fck, N/mm² (HA-25 … HA-50).
+    pub concrete_fck: f64,
+    /// Reinforcing steel fyk, N/mm² (B400S, B500S).
+    pub rebar_fyk: f64,
+    /// Structural steel fy, N/mm² (S235, S275, S355).
+    pub steel_fy: f64,
+    pub timber: TimberClass,
+    /// Masonry compressive strength fk, N/mm² (DB-SE-F, table 4.4).
+    pub masonry_fk: f64,
+}
+
+impl Default for StructuralMaterials {
+    fn default() -> Self {
+        StructuralMaterials {
+            concrete_fck: 25.0,
+            rebar_fyk: 500.0,
+            steel_fy: 275.0,
+            timber: TimberClass::C24,
+            masonry_fk: 4.0,
+        }
+    }
+}
+
+impl StructuralMaterials {
+    pub const CONCRETES: [f64; 6] = [25.0, 30.0, 35.0, 40.0, 45.0, 50.0];
+    pub const REBARS: [f64; 2] = [400.0, 500.0];
+    pub const STEELS: [f64; 3] = [235.0, 275.0, 355.0];
+
+    pub fn is_valid(&self) -> bool {
+        (20.0..=90.0).contains(&self.concrete_fck)
+            && (400.0..=600.0).contains(&self.rebar_fyk)
+            && (200.0..=460.0).contains(&self.steel_fy)
+            && self.masonry_fk.is_finite()
+            && (0.5..=20.0).contains(&self.masonry_fk)
+    }
+}
+
 /// Where the building is, for its actions.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct StructuralSite {
@@ -102,6 +188,11 @@ pub struct StructuralSite {
     /// Admissible bearing pressure of the ground, kN/m² (DB-SE-C), for
     /// the footings.
     pub bearing: f64,
+    /// Angle of internal friction of the ground, degrees, and its weight,
+    /// kN/m³: the earth pressure on basement walls.
+    pub soil_friction: f64,
+    pub soil_weight: f64,
+    pub materials: StructuralMaterials,
 }
 
 impl Default for StructuralSite {
@@ -116,6 +207,9 @@ impl Default for StructuralSite {
             soil: 1.3,
             importance: Importance::Normal,
             bearing: 200.0,
+            soil_friction: 30.0,
+            soil_weight: 18.0,
+            materials: StructuralMaterials::default(),
         }
     }
 }
@@ -133,6 +227,9 @@ impl StructuralSite {
             && (1.0..=2.0).contains(&self.soil)
             && self.bearing.is_finite()
             && self.bearing > 0.0
+            && (15.0..=45.0).contains(&self.soil_friction)
+            && (12.0..=24.0).contains(&self.soil_weight)
+            && self.materials.is_valid()
     }
 }
 

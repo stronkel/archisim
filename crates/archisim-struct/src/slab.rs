@@ -5,14 +5,25 @@
 //! metre at the nodes go to the reinforcement by Wood–Armer (m ± |mxy|),
 //! and the deflection under the quasi-permanent loads, times 3 for
 //! cracking and creep, against the span / 400.
+//!
+//! A foundation slab (raft) is the same grillage on springs (Winkler):
+//! the modulus of subgrade reaction from the admissible pressure
+//! (ks = 120·σadm, Bowles), its loads the walls and columns that stand on
+//! it, and the pressure under it in service against σadm.
+//!
+//! Punching at each column (Código Estructural, art. 46; EN 1992-1-1,
+//! 6.4): the control perimeter u1 at 2d, β 1,15 inside, 1,4 at an edge,
+//! 1,5 at a corner, against vRd,c with the top steel; and the face of the
+//! column against 0,5·ν·fcd.
 
 use archisim_core::{bar_area, Spaced, Vec2};
 use archisim_core::{LayerFunction, Model, Point2, Reinforcement, SlabId};
 
 use crate::cases::{combinations, Case, Kind};
-use crate::concrete;
+use crate::concrete::Rc;
 use crate::frame::{Bar, Frame, Load, Section, Solver, PINNED};
 use crate::geo;
+use crate::gravity::Carrier;
 use crate::gravity::{self, PlateSource, Takedown};
 use crate::lightframe::{Check, Status, Subject};
 use crate::sections::Kind as MatKind;
@@ -38,6 +49,32 @@ pub struct SlabResult {
     pub deflection: f64,
     pub limit: f64,
     pub thickness: f64,
+    /// A raft: the largest pressure on the ground in service, kN/m².
+    pub raft: Option<f64>,
+    pub punching: Vec<Punch>,
+}
+
+/// Punching at one column.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Punch {
+    pub column: archisim_core::ColumnId,
+    /// Design load through the slab, kN.
+    pub ved: f64,
+    pub beta: f64,
+    /// Control perimeter at 2d, m.
+    pub u1: f64,
+    /// Stresses at u1 and the strength without reinforcement, N/mm².
+    pub v_ed: f64,
+    pub v_rd: f64,
+    /// At the face of the column, utilisation of 0,5·ν·fcd.
+    pub face: f64,
+    /// Inside, edge or corner.
+    pub place: &'static str,
+}
+
+/// The modulus of subgrade reaction from the admissible pressure, kN/m³.
+pub fn subgrade(bearing: f64) -> f64 {
+    120.0 * bearing
 }
 
 fn concrete_slab(model: &Model, id: SlabId) -> Option<f64> {
@@ -67,7 +104,7 @@ pub fn analyse(model: &Model, td: &Takedown) -> Vec<SlabResult> {
         let PlateSource::Slab(id) = pl.source else {
             continue;
         };
-        if pl.base || pl.span.is_some() || pl.pitch > 0.05 || pl.outline.len() < 3 {
+        if (pl.base && !pl.raft) || pl.span.is_some() || pl.pitch > 0.05 || pl.outline.len() < 3 {
             continue;
         }
         let Some(h) = concrete_slab(model, id) else {
@@ -130,7 +167,8 @@ fn grillage(
     if frame.nodes.len() < 4 {
         return None;
     }
-    let (e, g) = MatKind::Concrete.moduli();
+    let e = Rc::of(model).ecm();
+    let g = e / 2.4;
     let section = Section {
         a: s * h,
         iy: s * h.powi(3) / 12.0,
@@ -184,16 +222,50 @@ fn grillage(
             }
         }
     }
-    let count = held.iter().filter(|h| **h).count();
-    if count < 3 {
-        return None;
+    let cell = s * s;
+    let ks = pl.raft.then(|| subgrade(model.structural_site().bearing));
+    if let Some(ks) = ks {
+        // A raft lies on the ground: a spring under each node (and weak
+        // ones in its plane).
+        held.iter_mut().for_each(|h| *h = false);
+        frame.springs = (0..frame.nodes.len())
+            .map(|n| (n, [1.0, 1.0, ks * cell, 0.0, 0.0, 1.0]))
+            .collect();
+    } else {
+        let count = held.iter().filter(|h| **h).count();
+        if count < 3 {
+            return None;
+        }
+        frame.supports = held
+            .iter()
+            .enumerate()
+            .filter(|(_, h)| **h)
+            .map(|(n, _)| (n, PINNED))
+            .collect();
     }
-    frame.supports = held
-        .iter()
-        .enumerate()
-        .filter(|(_, h)| **h)
-        .map(|(n, _)| (n, PINNED))
-        .collect();
+    // The columns: under it (reactions) or on it, for a raft (their loads).
+    let mut columns: Vec<(archisim_core::ColumnId, usize)> = Vec::new();
+    if pl.raft {
+        let z = (pl.top)(pl.outline[0]);
+        for c in model.columns() {
+            let base = model.level(c.level).map_or(0.0, |l| l.elevation) + c.base_offset;
+            if (base - z).abs() < 0.3 && geo::inside(c.position, &pl.outline) {
+                if let Some(n) = nearest_node(&frame, c.position, s) {
+                    columns.push((c.id, n));
+                }
+            }
+        }
+    } else {
+        for sp in &supports {
+            if let (Carrier::Column(id), 1) = (sp.carrier, sp.path.len()) {
+                if let Some(n) = nearest_node(&frame, sp.path[0], s) {
+                    if held[n] {
+                        columns.push((id, n));
+                    }
+                }
+            }
+        }
+    }
     // In-plane movements and the turn about z of the free nodes are held
     // by the bars; springs keep the solver steady.
     // Loads: each node takes its cell.
@@ -217,7 +289,6 @@ fn grillage(
     };
     let rooms: Vec<_> = model.rooms_on_level(pl.level).collect();
     let mut by_case: std::collections::BTreeMap<Case, Vec<Load>> = Default::default();
-    let cell = s * s;
     for (n, p) in frame.nodes.iter().enumerate() {
         let pt = Point2::new(p[0], p[1]);
         for (case, q) in gravity::area_loads(model, plates, i, &rooms, pt) {
@@ -272,6 +343,41 @@ fn grillage(
     let mut bottom = [0.0f64; 2];
     let mut top = [0.0f64; 2];
     let mut defl = 0.0f64;
+    let mut pressure = 0.0f64;
+    // The load each column puts through the slab, ultimate, kN.
+    let mut ved = vec![0.0f64; columns.len()];
+    for combo in combos.iter().filter(|c| c.kind == Kind::Ultimate) {
+        for (k, (id, n)) in columns.iter().enumerate() {
+            let here = model
+                .column(*id)
+                .map_or(Point2::new(frame.nodes[*n][0], frame.nodes[*n][1]), |c| {
+                    c.position
+                });
+            let v: f64 = cases
+                .iter()
+                .enumerate()
+                .map(|(ci, c)| {
+                    let f = combo.factor(*c);
+                    if ks.is_some() {
+                        // On a raft: what reaches the node of the column.
+                        f * td.plate_incoming.get(i).map_or(0.0, |inc| {
+                            inc.iter()
+                                .filter(|(p, cs, _)| cs == c && p.distance(here) < 0.3)
+                                .map(|(_, _, kn)| kn)
+                                .sum::<f64>()
+                        })
+                    } else {
+                        f * sols[ci]
+                            .reactions
+                            .iter()
+                            .find(|(m, _)| m == n)
+                            .map_or(0.0, |(_, r)| r[2])
+                    }
+                })
+                .sum();
+            ved[k] = ved[k].max(v);
+        }
+    }
     for combo in &combos {
         match combo.kind {
             Kind::Ultimate => {
@@ -287,6 +393,17 @@ fn grillage(
                         bottom[d] = bottom[d].max(m[d] + m[2].abs());
                         top[d] = top[d].max(-(m[d] - m[2].abs()));
                     }
+                }
+            }
+            Kind::Characteristic if ks.is_some() => {
+                let ks = ks.unwrap_or(0.0);
+                for n in 0..nn {
+                    let w: f64 = cases
+                        .iter()
+                        .enumerate()
+                        .map(|(ci, c)| combo.factor(*c) * sols[ci].displacements[n][2])
+                        .sum();
+                    pressure = pressure.max(-w * ks);
                 }
             }
             Kind::QuasiPermanent => {
@@ -322,7 +439,31 @@ fn grillage(
     let span = (2.0 * far).max(s);
     let d = h - 0.035;
     let amin = 0.0018 * h;
-    let steel = |m: f64| concrete::bending_steel(m, 1.0, d).map_or(f64::INFINITY, |a| a.max(amin));
+    let rc = Rc::of(model);
+    let steel = |m: f64| {
+        rc.bending_steel(m, 1.0, d)
+            .map_or(f64::INFINITY, |a| a.max(amin))
+    };
+    let need_top = [steel(top[0]), steel(top[1])];
+    // Punching.
+    let punching = columns
+        .iter()
+        .zip(&ved)
+        .filter(|(_, v)| **v > 0.0)
+        .filter_map(|((id, _), v)| {
+            let c = model.column(*id)?;
+            let (c1, c2) = model.member_type(c.member_type)?.profile.size();
+            let n = pl.outline.len();
+            let near = (0..n)
+                .filter(|&k| {
+                    geo::to_segment(c.position, pl.outline[k], pl.outline[(k + 1) % n]).0
+                        < c1.max(c2) / 2.0 + 2.0 * d
+                })
+                .count();
+            let rho = (need_top[0].max(need_top[1]) / d).clamp(0.002, 0.02);
+            Some(punch(&rc, *id, *v, c1, c2, d, near, rho))
+        })
+        .collect();
     Some(SlabResult {
         slab: SlabId(0),
         spacing: s,
@@ -330,26 +471,93 @@ fn grillage(
         bottom,
         top,
         need_bottom: [steel(bottom[0]), steel(bottom[1])],
-        need_top: [steel(top[0]), steel(top[1])],
+        need_top,
         deflection: 3.0 * defl,
         limit: span / 400.0,
         thickness: h,
+        raft: ks.map(|_| pressure),
+        punching,
     })
+}
+
+fn nearest_node(frame: &Frame, p: Point2, s: f64) -> Option<usize> {
+    frame
+        .nodes
+        .iter()
+        .enumerate()
+        .map(|(n, q)| (n, Point2::new(q[0], q[1]).distance(p)))
+        .min_by(|a, b| a.1.total_cmp(&b.1))
+        .filter(|(_, d)| *d < s)
+        .map(|(n, _)| n)
+}
+
+/// Punching of a column `c1` × `c2` through a slab of depth `d` with `near`
+/// free edges close by and top steel ratio `rho`.
+#[allow(clippy::too_many_arguments)]
+pub fn punch(
+    rc: &Rc,
+    column: archisim_core::ColumnId,
+    ved: f64,
+    c1: f64,
+    c2: f64,
+    d: f64,
+    near: usize,
+    rho: f64,
+) -> Punch {
+    let pi = std::f64::consts::PI;
+    let (beta, u1, u0, place) = match near {
+        0 => (
+            1.15,
+            2.0 * (c1 + c2) + 4.0 * pi * d,
+            2.0 * (c1 + c2),
+            "interior",
+        ),
+        1 => (
+            1.4,
+            c1 + 2.0 * c2 + 2.0 * pi * d,
+            c2 + 3.0 * d.min(c1 / 2.0) + c1,
+            "de borde",
+        ),
+        _ => (1.5, c1 + c2 + pi * d, (3.0 * d).min(c1 + c2), "de esquina"),
+    };
+    let dmm = d * 1000.0;
+    let xi = (1.0 + (200.0 / dmm).sqrt()).min(2.0);
+    let g = crate::concrete::GAMMA_C;
+    let vrd = (0.18 / g * xi * (100.0 * rho * rc.fck).cbrt())
+        .max(0.075 / g * xi.powf(1.5) * rc.fck.sqrt());
+    // kN/m² → N/mm².
+    let v_ed = beta * ved / (u1 * d) / 1000.0;
+    let nu = 0.6 * (1.0 - rc.fck / 250.0);
+    let face = beta * ved / (u0 * d) / (0.5 * nu * rc.fcd());
+    Punch {
+        column,
+        ved,
+        beta,
+        u1,
+        v_ed,
+        v_rd: vrd,
+        face,
+        place,
+    }
 }
 
 fn per_m(sp: &Spaced) -> f64 {
     bar_area(sp.diameter) / sp.spacing.max(0.01)
 }
 
-/// The mesh that gives `area` per metre: Ø8 to Ø16, spacing to 5 cm.
+/// The mesh that gives `area` per metre: Ø8 to Ø20, at 15 cm or more if
+/// it can, else at 10 cm or more; spacing to 5 cm, 25 cm at most.
 pub fn mesh_for(area: f64) -> Spaced {
-    for dm in [0.008, 0.010, 0.012, 0.016] {
-        let sp = ((bar_area(dm) / area.max(1e-9)) * 20.0).floor() / 20.0;
-        if sp >= 0.10 {
-            return Spaced::new(dm, sp.min(0.25));
+    const D: [f64; 5] = [0.008, 0.010, 0.012, 0.016, 0.020];
+    for least in [0.15, 0.10] {
+        for dm in D {
+            let sp = ((bar_area(dm) / area.max(1e-9)) * 20.0).floor() / 20.0;
+            if sp >= least {
+                return Spaced::new(dm, sp.min(0.25));
+            }
         }
     }
-    Spaced::new(0.016, 0.10)
+    Spaced::new(0.020, 0.10)
 }
 
 pub fn check(model: &Model, td: &Takedown) -> Vec<Check> {
@@ -434,6 +642,51 @@ pub fn check(model: &Model, td: &Takedown) -> Vec<Check> {
                 ),
             }),
         }
+        for p in &r.punching {
+            let u = (p.v_ed / p.v_rd.max(1e-9)).max(p.face);
+            out.push(Check {
+                subject,
+                what: format!(
+                    "{name}, pilar {} ({}): VEd {} kN, β {}, u1 {} m, vEd {} N/mm² sobre vRd,c {} N/mm²; en la cara, {} de 0,5·ν·fcd",
+                    p.column.0,
+                    p.place,
+                    dec(p.ved, 1),
+                    dec(p.beta, 2),
+                    dec(p.u1, 2),
+                    dec(p.v_ed, 3),
+                    dec(p.v_rd, 3),
+                    dec(p.face, 2)
+                ),
+                rule: "Punzonamiento (Código Estructural, art. 46)",
+                ratio: u,
+                status: if u <= 1.0 { Status::Pass } else { Status::Fail },
+                advice: (u > 1.0).then(|| {
+                    if p.face > 1.0 {
+                        "más canto o un capitel: la biela de la cara del pilar no basta".into()
+                    } else {
+                        "armadura de punzonamiento (cercos o crucetas), más canto o un ábaco".into()
+                    }
+                }),
+            });
+        }
+        if let Some(pressure) = r.raft {
+            let sigma = model.structural_site().bearing;
+            let u = pressure / sigma.max(1e-6);
+            out.push(Check {
+                subject,
+                what: format!(
+                    "{name} (losa de cimentación, balasto {} kN/m³): presión máxima en servicio {} kN/m² sobre {} admisibles",
+                    dec(subgrade(sigma), 0),
+                    dec(pressure, 0),
+                    dec(sigma, 0)
+                ),
+                rule: "Presión de la losa sobre el terreno (DB-SE-C, 4.3)",
+                ratio: u,
+                status: if u <= 1.0 { Status::Pass } else { Status::Fail },
+                advice: (u > 1.0).then(|| "más canto (reparte mejor), más losa o mejorar el terreno".into()),
+            });
+            continue;
+        }
         let u = r.deflection / r.limit.max(1e-6);
         out.push(Check {
             subject,
@@ -455,6 +708,112 @@ pub fn check(model: &Model, td: &Takedown) -> Vec<Check> {
 mod tests {
     use super::*;
     use archisim_core::*;
+
+    /// A flat slab on nine columns 6 m apart, on a raft.
+    fn flat_slab(m: &mut Model, raft: bool) {
+        let l0 = m.add_level("Planta baja", 0.0);
+        let l1 = m.add_level("Planta 1", 3.0);
+        let lib = archisim_library::add_library(m).unwrap();
+        let concrete = m
+            .materials()
+            .find(|x| x.name.to_lowercase().contains("hormigón armado"))
+            .or_else(|| {
+                m.materials()
+                    .find(|x| x.name.to_lowercase().contains("hormigón"))
+            })
+            .unwrap()
+            .id;
+        let flat = m
+            .add_slab_type(
+                "Losa maciza 25",
+                SlabFunction::Floor,
+                vec![Layer {
+                    material: concrete,
+                    thickness: 0.25,
+                    function: LayerFunction::Structure,
+                }],
+            )
+            .unwrap();
+        for i in 0..3 {
+            for j in 0..3 {
+                m.add_column(NewColumn {
+                    member_type: lib.column,
+                    level: l0,
+                    position: Point2::new(i as f64 * 6.0, j as f64 * 6.0),
+                    rotation: 0.0,
+                    base_offset: 0.0,
+                    top: WallTop::Unconnected,
+                    height: 3.0,
+                })
+                .unwrap();
+            }
+        }
+        let square = |a: f64| {
+            vec![
+                Point2::new(-a, -a),
+                Point2::new(12.0 + a, -a),
+                Point2::new(12.0 + a, 12.0 + a),
+                Point2::new(-a, 12.0 + a),
+            ]
+        };
+        m.add_slab(NewSlab {
+            slab_type: flat,
+            level: l1,
+            outline: square(0.5),
+            top_offset: 0.0,
+        })
+        .unwrap();
+        if raft {
+            let rt = m
+                .add_slab_type(
+                    "Losa de cimentación 60",
+                    SlabFunction::BaseSlab,
+                    vec![Layer {
+                        material: concrete,
+                        thickness: 0.6,
+                        function: LayerFunction::Structure,
+                    }],
+                )
+                .unwrap();
+            m.add_slab(NewSlab {
+                slab_type: rt,
+                level: l0,
+                outline: square(1.0),
+                top_offset: 0.0,
+            })
+            .unwrap();
+        }
+    }
+
+    #[test]
+    fn a_flat_slab_punches_and_a_raft_bears() {
+        let mut m = Model::new("Losa sobre pilares");
+        flat_slab(&mut m, true);
+        let td = crate::takedown(&m);
+        let r = analyse(&m, &td);
+        let floor = r.iter().find(|r| r.raft.is_none()).expect("the floor");
+        // Nine columns: one inside, four at edges, four at corners.
+        assert_eq!(floor.punching.len(), 9, "{:?}", floor.punching);
+        let inside = floor
+            .punching
+            .iter()
+            .find(|p| p.place == "interior")
+            .unwrap();
+        // The inner column takes some 6 × 6 m of floor: 300–700 kN.
+        assert!((200.0..900.0).contains(&inside.ved), "{inside:?}");
+        assert!(inside.v_ed > 0.3 && inside.v_rd > 0.3, "{inside:?}");
+        let raft = r.iter().find(|r| r.raft.is_some()).expect("the raft");
+        let p = raft.raft.unwrap();
+        // The building's weight over 196 m² of raft: tens of kN/m².
+        assert!((5.0..200.0).contains(&p), "{p}");
+        assert_eq!(raft.punching.len(), 9);
+        let c = check(&m, &td);
+        assert!(c.iter().any(|c| c.rule.starts_with("Punzonamiento")));
+        assert!(c.iter().any(|c| c.rule.starts_with("Presión de la losa")));
+        // The columns stand on the raft: no footings asked for them.
+        let f = crate::foundations::check(&m, &td);
+        assert!(f.is_empty(), "{f:?}");
+    }
 
     #[test]
     fn a_slab_on_four_walls() {

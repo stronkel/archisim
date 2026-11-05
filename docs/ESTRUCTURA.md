@@ -1,6 +1,6 @@
 # Cálculo de la estructura
 
-ArchiSim calcula la estructura del modelo tal como está dibujado. No hay que dibujar otro modelo: no se añaden elementos ni se guarda nada aparte de dos cosas, los datos del emplazamiento y las cargas puestas a mano (formato `.archisim` versión 81).
+ArchiSim calcula la estructura del modelo tal como está dibujado. No hay que dibujar otro modelo: no se añaden elementos ni se guarda nada aparte de tres cosas, los datos del emplazamiento, los materiales de la estructura y las cargas puestas a mano (formato `.archisim` versiones 81 y 82).
 
 Es una ayuda al cálculo, pensada para que el estudio no necesite otro programa en las obras habituales (viviendas, entramados ligeros, pórticos de hormigón sencillos). El anejo lo firma el técnico, que revisa y asume sus hipótesis.
 
@@ -15,7 +15,8 @@ Código: crate `archisim-struct`, que depende solo de `archisim-core` y `archisi
 - **Cimientos**: DB-SE-C.
 - **Fuego**: DB-SI 6.
 - **Sismo**: NCSE-02.
-- **Hormigón armado**: Código Estructural.
+- **Hormigón armado**: Código Estructural y EN 1992-1-1.
+- **Uniones de acero**: EN 1993-1-8.
 
 ## 2. Emplazamiento y acciones
 
@@ -25,7 +26,8 @@ Colaboración → **Cálculo de la estructura…**:
 - **Nieve**: la zona de clima invernal.
 - **Viento**: zona A, B o C y grado de aspereza del entorno (I a V).
 - **Sismo**: ab/g, K, C e importancia de la construcción.
-- **Terreno**: presión admisible.
+- **Terreno**: presión admisible, ángulo de rozamiento φ y peso γ (para los muros de sótano).
+- **Materiales**: hormigón (HA-25 a HA-50), acero de armar (B400S, B500S), acero laminado (S235, S275, S355), madera de vigas y pilares (C18, C24, C30, GL24h, GL28h, GL32h) y resistencia de la fábrica fk (DB-SE-F, tabla 4.4). Por defecto, HA-25, B500S, S275, C24 y 4 N/mm². Los entramados ligeros siguen en C24 y S350GD.
 
 De dónde salen las acciones:
 
@@ -38,6 +40,9 @@ De dónde salen las acciones:
 Las cargas puestas a mano (puntuales, lineales o por superficie) se suman a su caso: permanente, uso, nieve o viento.
 
 ## 3. Descenso de cargas
+
+Los muros y pilares de la planta más baja atraviesan la solera hasta su zapata; solo una losa de cimentación los recoge (un forjado sobre el terreno que se llama «cimentación» o que tiene 30 cm o más de hormigón).
+
 
 1. Cada forjado y cubierta se trocea en celdas de 25 cm.
 2. Cada celda manda su carga a lo que la sostiene:
@@ -57,6 +62,8 @@ Las cargas puestas a mano (puntuales, lineales o por superficie) se suman a su c
   - los pies de pilar, empotrados.
 - El viento y el sismo van al pórtico solo en las direcciones en las que no hay muros de carga.
 - Resultados: envolventes de esfuerzos, flechas (integridad, confort y apariencia; DB-SE 4.3.3) y reacciones.
+- **Desplomes** con el viento: el de cada planta contra h/250 y el total contra H/500 (DB-SE 4.3.3.2).
+- **Segundo orden**: el índice de estabilidad θ = P·Δ/(V·h) de cada planta con el viento y el sismo (EN 1993-1-1, 5.2.1). Por debajo de 0,10 se desprecia; hasta 0,30 se avisa con la amplificación 1/(1 − θ) de las acciones horizontales; por encima, el pórtico necesita arriostramiento.
 
 ## 5. Sismo (NCSE-02)
 
@@ -76,7 +83,16 @@ Dónde actúa:
 - **En el pórtico**: casos «Sismo X» y «Sismo Y», con sus combinaciones sísmicas en los dos sentidos.
 - **En los muros arriostrados de los entramados**: se toma el mayor entre el sismo y el viento mayorado.
 
-Límite: el método simplificado vale para edificios regulares (hasta 20 plantas en pórticos, 6 en muros). No se aplican las reglas de detalle del capítulo 4 de la norma.
+**Análisis modal espectral** (NCSE-02, 3.6.2), cuando el pórtico toma el sismo:
+
+- las masas de cada planta se reparten en sus nudos;
+- los modos salen por iteración en subespacio sobre la rigidez del pórtico (seis), con su periodo y la masa que mueven en X y en Y;
+- cada modo lleva la aceleración del espectro en su periodo;
+- los cortantes de planta de los modos se combinan por la raíz de la suma de cuadrados, y las fuerzas de planta que dan esos cortantes sustituyen a las del método simplificado.
+
+Comprobado contra el oscilador de un grado de libertad: una planta con cuatro pilares da T = 2π·√(m/k) y la fuerza del espectro en ese periodo.
+
+Límite: no se aplican las reglas de detalle del capítulo 4 de la norma.
 
 ## 6. Comprobaciones
 
@@ -90,20 +106,39 @@ De cada elemento se da la pieza o la sección más desfavorable de cada regla, c
 - **Muros arriostrados**: EN 1995-1-1, 9.2.4.2, método A, con sus anclajes de tracción.
 - **Fuego**: DB-SI 6, orientativo.
 
-### Hormigón armado (HA-25, B500S)
+### Acero laminado (DB-SE-A, EN 1993-1-1)
+
+- Perfiles en I y H, tubos rectangulares y circulares, macizos; UPN, T y angulares en elástico.
+- Compresión con pandeo por flexión (curvas a, b y c según el perfil), flexión en los dos ejes, cortante e interacción lineal.
+- **Vuelco lateral** de las vigas de perfil abierto que no tienen un forjado encima (C1 1,13).
+- Los pilares se suponen intraslacionales: el desplazamiento del pórtico se mira en el segundo orden.
+
+### Madera de vigas y pilares (DB-SE-M, EN 1995-1-1)
+
+Secciones rectangulares de madera aserrada o laminada, de la clase elegida: flexión, cortante, compresión con pandeo (βc 0,2 o 0,1) y tracción, con el kmod de cada combinación.
+
+### Uniones de acero (EN 1993-1-8)
+
+- **Placas de anclaje** de los pilares de acero que apoyan en una zapata: placa 100 mm más ancha que el perfil por cada lado, compresión del hormigón con fjd = ⅔·1,5·fcd, espesor para esa presión, pernos 4.6 para la tracción que deja el momento y cortante por rozamiento y por los pernos.
+- **Uniones articuladas** de las vigas en I: una chapa con una fila de tornillos 8.8 a cortante simple, los que pida el cortante del apoyo y si caben en el alma.
+
+### Hormigón armado (Código Estructural)
 
 - **Vigas** (sección rectangular):
   - flexión con bloque rectangular y x/d ≤ 0,45;
   - cortante (Vrd,c, cercos y bielas);
   - cuantía mínima.
 - **Pilares**: compresión con flexión esviada, por compatibilidad de deformaciones, con la excentricidad mínima (h/20 o 2 cm), la cuantía mínima (0,4 %) y la máxima (4 %).
+- **Esbeltez de pilares**: con λ por encima de λlim = 20·A·B·C/√n (A 0,7, B 1,1, C 0,7), se suma la excentricidad de segundo orden de la curvatura nominal (EN 1992-1-1, 5.8.8). Por encima de λ 100, no cumple.
 - Si el elemento tiene **armado dibujado** (Estructura → Armado), se compara con él. Si no, se da el que pide, por ejemplo «abajo 4Ø16, arriba 3Ø12, cercos Ø8 c/24».
 - **Losas y forjados de hormigón**: se calculan con un **emparrillado**:
   - barras cada 50 cm o más, en la dirección del primer lado del contorno y en la perpendicular, cada una con la inercia y la torsión de su franja;
   - apoyos en los muros, vigas y pilares de debajo;
   - el armado sale por Wood–Armer (m ± |mxy|);
   - la flecha a largo plazo es la elástica × 3 (fisuración y fluencia), contra L/400;
-  - el armado se compara con la malla dibujada (dirección del primer lado y la perpendicular) o se propone.
+  - el armado se compara con la malla dibujada (dirección del primer lado y la perpendicular) o se propone;
+  - **punzonamiento** en cada pilar (art. 46): perímetro u1 a 2d, β 1,15 en pilares interiores, 1,4 de borde y 1,5 de esquina, contra vRd,c con la armadura superior; y la cara del pilar contra 0,5·ν·fcd.
+- **Losas de cimentación**: el mismo emparrillado sobre muelles (balasto ks = 120·σadm). Cargas: los muros y pilares que se apoyan en ella. Resultados: presión máxima en servicio contra la admisible, armado y punzonamiento.
 
 ### Muros de fábrica
 
@@ -111,7 +146,7 @@ DB-SE-F 5.2. La carga del metro más cargado en la base se compara con Φ·t·fd
 
 - excentricidad de 0,05·t más la accidental hef/450;
 - esbeltez máxima 27;
-- fk 4 N/mm² y γM 2,5.
+- fk de los materiales del proyecto y γM 2,5.
 
 ### Cimentación
 
@@ -120,6 +155,14 @@ DB-SE-F 5.2. La carga del metro más cargado en la base se compara con Φ·t·fd
 - Carga de servicio centrada, más un 10 % por el peso de la zapata y la tierra.
 - Se compara con la presión admisible del emplazamiento. Si no hay zapata dibujada, se da su tamaño.
 - **Zapata rígida**: vuelo ≤ 2 cantos.
+- **Armado de las zapatas** (art. 58): flexión en una sección 0,15 del pilar o del muro por dentro de su cara, con la reacción del terreno en la combinación última (1,35 G + 1,5 lo demás). Se compara con la malla dibujada o se propone.
+
+### Muros de sótano
+
+- Los muros exteriores con tierras contra ellos: la altura de tierras sale del terreno donde lo hay y de ±0,00 donde no.
+- Empuje al reposo K0 = 1 − sen φ con el peso del terreno y 10 kN/m² de sobrecarga.
+- Si un forjado apoya arriba, el muro está apeado ahí; si no, trabaja en ménsula.
+- Flexión en la base y en el vano, armadura de cada cara y cortante sin cercos. Si el muro no es de hormigón, aviso.
 
 ## 7. Dónde se ve
 
@@ -140,9 +183,9 @@ DB-SE-F 5.2. La carga del metro más cargado en la base se compara con Φ·t·fd
 
 ## 8. Lo que no hace (todavía)
 
-- Segundo orden (P-Δ), plasticidad y pandeo global del pórtico.
-- Punzonamiento de losas en los pilares.
-- Uniones de acero y madera, y anclajes al cimiento.
-- Armado de zapatas a flexión. Zapatas flexibles, losas de cimentación y muros de sótano con empujes.
-- Hormigón distinto de HA-25 y acero distinto de B500S. Secciones de hormigón que no son rectangulares.
-- Análisis modal espectral (el sismo es el método simplificado) y las reglas de detalle sísmicas.
+- Plasticidad y pandeo global del pórtico; el segundo orden se valora con θ, no se calcula.
+- Armadura de punzonamiento (se avisa cuando hace falta).
+- Vuelco y deslizamiento de muros de contención exentos; zapatas flexibles.
+- Uniones rígidas de acero, uniones de madera (salvo las de los entramados) y anclajes de pilares de madera.
+- Secciones de hormigón que no son rectangulares.
+- Reglas de detalle sísmicas (NCSE-02, capítulo 4).

@@ -1,8 +1,8 @@
 //! Load-bearing masonry walls in compression (DB-SE-F, 5.2): the
 //! heaviest metre at the base against Φ·t·fd, with the eccentricity of
 //! the floors and the accidental one and the slenderness limit.
-//! Brick with fk 4 N/mm² and γM 2,5 (category II of execution), the
-//! values of a perforated brick with M-7,5 mortar.
+//! fk of the project's materials (4 N/mm² by default: a perforated brick
+//! with M-7,5 mortar) and γM 2,5 (category II of execution).
 
 use archisim_core::{LayerFunction, Model};
 
@@ -12,7 +12,6 @@ use crate::lightframe::{Check, Status, Subject};
 use crate::sections::Kind;
 use crate::text::dec;
 
-pub const FK: f64 = 4.0;
 pub const GAMMA_M: f64 = 2.5;
 
 pub fn check(model: &Model, td: &Takedown) -> Vec<Check> {
@@ -57,21 +56,23 @@ pub fn check(model: &Model, td: &Takedown) -> Vec<Check> {
         let slender = hef / th;
         let e = 0.05 * th + hef / 450.0;
         let phi = (1.0 - 2.0 * e / th).max(0.0);
-        let fd = FK / GAMMA_M * 1000.0;
+        let fk = model.structural_site().materials.masonry_fk;
+        let fd = fk / GAMMA_M * 1000.0;
         let nrd = phi * th * fd;
         let u = (worst / nrd.max(1e-6)).max(if slender > 27.0 { slender / 27.0 } else { 0.0 });
         out.push(Check {
             subject: Subject::Wall(w.id),
             what: format!(
-                "{}: {} kN/m en la base, resiste {} kN/m (Φ {}, t {} m, esbeltez {})",
+                "{}: {} kN/m en la base, resiste {} kN/m (fk {} N/mm², Φ {}, t {} m, esbeltez {})",
                 t.name,
                 dec(worst, 1),
                 dec(nrd, 1),
+                dec(fk, 1),
                 dec(phi, 2),
                 dec(th, 3),
                 dec(slender, 1)
             ),
-            rule: "Fábrica a compresión (DB-SE-F, 5.2; fk 4 N/mm², γM 2,5)",
+            rule: "Fábrica a compresión (DB-SE-F, 5.2; γM 2,5)",
             ratio: u,
             status: if u <= 1.0 { Status::Pass } else { Status::Fail },
             advice: (u > 1.0).then(|| {

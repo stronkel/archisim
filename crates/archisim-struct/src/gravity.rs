@@ -253,6 +253,32 @@ pub struct Plate {
     pub tiles: bool,
     /// A slab on the ground (solera).
     pub base: bool,
+    /// A foundation slab (raft): a slab on the ground that is the
+    /// foundation of what stands on it — named so, or with 30 cm or more
+    /// of concrete.
+    pub raft: bool,
+}
+
+/// Whether a slab type is a foundation slab (see `Plate::raft`).
+pub fn is_raft_type(model: &Model, t: &archisim_core::SlabType) -> bool {
+    if t.function != SlabFunction::BaseSlab {
+        return false;
+    }
+    let n = t.name.to_lowercase();
+    if n.contains("cimentaci") || n.contains("losa de cim") || n.contains("raft") {
+        return true;
+    }
+    let concrete: f64 = t
+        .layers
+        .iter()
+        .filter(|l| {
+            l.function == archisim_core::LayerFunction::Structure
+                && crate::sections::Kind::of(model.material(l.material))
+                    == crate::sections::Kind::Concrete
+        })
+        .map(|l| l.thickness)
+        .sum();
+    concrete >= 0.30
 }
 
 /// The loads per m² of plan at a point of plate `i`: dead, the live load
@@ -352,6 +378,7 @@ pub fn plates(model: &Model) -> Vec<Plate> {
             pitch,
             roof: t.function == SlabFunction::Roof,
             base: t.function == SlabFunction::BaseSlab,
+            raft: is_raft_type(model, t),
             walkable: name_l.contains("transitable") && !name_l.contains("no transitable"),
             span,
             tiles: false,
@@ -388,6 +415,7 @@ pub fn plates(model: &Model) -> Vec<Plate> {
                 span: if framed { slope.direction() } else { None },
                 tiles: r.covering.tiles.is_some(),
                 base: false,
+                raft: false,
             });
         }
     }
@@ -763,11 +791,22 @@ fn deliver(
         cc.delivered = total.clone();
     }
     let base = c.base;
+    let lowest = model
+        .levels()
+        .iter()
+        .map(|l| l.elevation)
+        .fold(f64::INFINITY, f64::min);
+    // On the lowest floor a wall or column goes through the slab on the
+    // ground (solera) to its footing; only a foundation slab (raft)
+    // takes it.
+    let at_bottom = lowest.is_finite() && base <= lowest + 0.6;
     // A point at the base: where does it go?
     let target = |p: Point2, td: &Takedown| -> Target {
         // A plate whose top is at the base.
         if let Some(i) = plates.iter().position(|pl| {
-            ((pl.top)(p) - base).abs() < 0.15 && geo::near_polygon(p, &pl.outline, 0.15)
+            (pl.raft || !at_bottom)
+                && ((pl.top)(p) - base).abs() < 0.15
+                && geo::near_polygon(p, &pl.outline, 0.15)
         }) {
             return Target::Plate(i);
         }

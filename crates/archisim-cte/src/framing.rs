@@ -28,6 +28,9 @@ pub fn check(model: &Model, report: &mut Report) {
         all.extend(
             archisim_struct::members::check(model, &a)
                 .into_iter()
+                .chain(archisim_struct::frame_members::check(model, &a))
+                .chain(archisim_struct::connections::check(model, &a))
+                .chain(archisim_struct::stability::check(model, &a))
                 .map(|c| (Section::Structure, c)),
         );
         rest(model, &a.takedown, &mut all);
@@ -94,6 +97,7 @@ fn rest(
         .into_iter()
         .chain(archisim_struct::masonry::check(model, td))
         .chain(archisim_struct::foundations::check(model, td))
+        .chain(archisim_struct::retaining::check(model))
     {
         all.push((Section::Structure, c));
     }

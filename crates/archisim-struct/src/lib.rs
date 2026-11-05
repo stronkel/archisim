@@ -31,17 +31,21 @@ pub mod analytical;
 pub mod cases;
 pub mod cold;
 pub mod concrete;
+pub mod connections;
 pub mod foundations;
 pub mod frame;
+pub mod frame_members;
 pub mod geo;
 pub mod gravity;
 pub mod lightframe;
 pub mod masonry;
 pub mod members;
 pub mod report;
+pub mod retaining;
 pub mod sections;
 pub mod seismic;
 pub mod slab;
+pub mod stability;
 pub mod text;
 pub mod timber;
 pub mod weights;
@@ -84,6 +88,9 @@ pub fn structure_report(model: &archisim_core::Model) -> String {
     let q = seismic::quake(model, &a.takedown);
     s.push('\n');
     s.push_str(&text::quake_text(&q));
+    if let Some(m) = &a.model.modal {
+        s.push_str(&text::modal_text(&q, m));
+    }
     let checks = all_checks(model, &a);
     if !checks.is_empty() {
         s.push('\n');
@@ -97,8 +104,12 @@ pub fn structure_report(model: &archisim_core::Model) -> String {
 pub fn all_checks(model: &archisim_core::Model, a: &analysis::Analysis) -> Vec<lightframe::Check> {
     let mut out = lightframe::check(model, &a.takedown, a.wind.as_ref());
     out.extend(members::check(model, a));
+    out.extend(frame_members::check(model, a));
+    out.extend(connections::check(model, a));
+    out.extend(stability::check(model, a));
     out.extend(slab::check(model, &a.takedown));
     out.extend(masonry::check(model, &a.takedown));
     out.extend(foundations::check(model, &a.takedown));
+    out.extend(retaining::check(model));
     out
 }

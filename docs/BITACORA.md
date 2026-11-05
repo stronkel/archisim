@@ -6,6 +6,54 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-05 (108) · Estructura: lo que faltaba del cálculo
+
+Rama `bloque/calles` (#161). Formato `.archisim` versión 82: el emplazamiento de la estructura guarda también el terreno para los muros de sótano y los materiales. Los proyectos de la 81 se abren con los valores de antes.
+
+**Hecho**
+1. **Materiales del proyecto** (Colaboración → Cálculo de la estructura → Materiales):
+   - hormigón HA-25 a HA-50 y acero B400S o B500S, que usan vigas, pilares, losas, zapatas y muros;
+   - acero laminado S235, S275 o S355;
+   - madera C18 a GL32h para vigas y pilares;
+   - resistencia de la fábrica fk.
+   - Los entramados ligeros siguen en C24 y S350GD.
+2. **Pórtico de acero y madera**:
+   - perfiles laminados y tubos con pandeo, flexión en los dos ejes, cortante y vuelco lateral de las vigas sin forjado encima;
+   - vigas y pilares de madera con el kmod de cada combinación.
+   - **Pilares de hormigón esbeltos**: se suma la excentricidad de segundo orden.
+   - **Desplomes** con el viento (h/250 por planta, H/500 en total) y **segundo orden** con el índice θ de cada planta.
+3. **Cimentación y losas**:
+   - **punzonamiento** en cada pilar que apoya una losa (interior, de borde o de esquina);
+   - **armado de las zapatas**;
+   - **losas de cimentación** sobre muelles (presión en servicio, armado y punzonamiento);
+   - **muros de sótano** con el empuje de las tierras.
+   - Los muros y pilares de planta baja ya no descargan en la solera sino en su zapata, así que salen las zapatas corridas de los muros.
+4. **Sismo modal espectral** del pórtico: modos, periodos, masa movilizada y fuerzas por planta. Comprobado contra el cálculo a mano de una planta.
+5. **Uniones de acero**:
+   - placas de anclaje de los pilares, con su espesor y sus pernos;
+   - uniones atornilladas de las vigas, con cuántos tornillos y si caben en el alma.
+- Todo sale en el anejo (capítulos 2, 3.5, 7 y 8) y en la Comprobación CTE.
+
+**Pendiente**
+- Armadura de punzonamiento (hoy solo avisa).
+- Uniones rígidas de acero y uniones de madera.
+- Vuelco y deslizamiento de muros de contención exentos.
+- Secciones de hormigón que no sean rectangulares.
+- Reglas de detalle sísmicas.
+
+**Qué debe probar Antonio**
+1. Abre `out/demo.archisim` → Colaboración → **Cálculo de la estructura…**:
+   - cambia el hormigón a HA-30 y mira que cambia el armado que piden la viga y la losa;
+   - cambia la fábrica a 6 N/mm² y mira la resistencia de los muros.
+2. En el mismo proyecto, en Estructura → Pilar, dibuja cuatro pilares de acero «Pilar HEB 160». Encima, cuatro vigas «Viga IPE 300» y un forjado.
+   - Pon sismo ab/g 0,12.
+   - En el capítulo 7 del anejo mira: los pilares de acero con su pandeo, las vigas, las placas de anclaje y las uniones atornilladas, y el índice de estabilidad θ del edificio.
+   - En el capítulo 3.5, los modos y sus periodos.
+3. Haz un tipo de forjado «Losa de cimentación 60» (función: solera, 60 cm de hormigón) y ponlo bajo unos pilares en planta baja. Debe salir la presión de la losa sobre el terreno y el punzonamiento de cada pilar; las zapatas de esos pilares ya no se piden.
+4. Con una planta de sótano (cota −3,00) y muros de hormigón alrededor, mira el apartado «Muro de sótano»: el armado de cada cara.
+
+---
+
 ## 2026-11-05 (107) · Estructura: cálculo completo sobre el modelo dibujado
 
 Rama `bloque/calles` (#161). Formato `.archisim` versión 81: guarda el emplazamiento de la estructura y las cargas puestas a mano. Los proyectos antiguos se abren igual. Crate nuevo `archisim-struct`; todo descrito en `docs/ESTRUCTURA.md`.
