@@ -4,13 +4,96 @@
 //! noggins and boards. What it gives (the members in 3D, the cut list and
 //! the panels) is worked out from the model by `archisim_geom::framing`.
 
+use std::path::PathBuf;
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
+
 use archisim_core::{
-    steel_studs, steel_tracks, timber_sections, FrameMaterial, FrameSection, Framing, Layer, Model,
-    Sheathing,
+    parse_section_catalogue, steel_studs, steel_tracks, timber_sections, FrameMaterial,
+    FrameSection, Framing, Layer, Model, Sheathing,
 };
 use eframe::egui::{self, Ui};
 
 use super::props;
+
+/// The library folder with the studio's own section catalogues (a
+/// supplier's profiles, say): text files with one section a line, read by
+/// `parse_section_catalogue`. The program itself carries only generic
+/// sections, without brands.
+pub const FOLDER: &str = "Perfiles de entramado";
+
+/// How often the folder is looked at again.
+const LOOK_AGAIN: Duration = Duration::from_secs(5);
+
+pub fn catalogue_folder() -> PathBuf {
+    crate::editor::library::library_dir().join(FOLDER)
+}
+
+/// The sections of every catalogue in the library folder, by file name
+/// order (read again every few seconds, not every frame).
+pub fn library_sections() -> Vec<(FrameMaterial, FrameSection)> {
+    type Cache = Option<(Instant, Vec<(FrameMaterial, FrameSection)>)>;
+    static CACHE: Mutex<Cache> = Mutex::new(None);
+    let mut cache = CACHE.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some((at, list)) = cache.as_ref() {
+        if at.elapsed() < LOOK_AGAIN {
+            return list.clone();
+        }
+    }
+    let mut files: Vec<PathBuf> = std::fs::read_dir(catalogue_folder())
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| {
+            p.extension().is_some_and(|x| {
+                ["csv", "txt", "tsv"]
+                    .iter()
+                    .any(|e| x.eq_ignore_ascii_case(e))
+            })
+        })
+        .collect();
+    files.sort();
+    let list: Vec<_> = files
+        .iter()
+        .filter_map(|p| std::fs::read(p).ok())
+        .flat_map(|b| parse_section_catalogue(&String::from_utf8_lossy(&b)))
+        .collect();
+    *cache = Some((Instant::now(), list.clone()));
+    list
+}
+
+/// The generic sections of `material` followed by those of the
+/// catalogues: studs (or joists) and tracks. Lipped steel sections of a
+/// catalogue go first among the studs, plain U first among the tracks;
+/// both lists carry all of them.
+pub fn sections_for(
+    material: FrameMaterial,
+    extra: &[(FrameMaterial, FrameSection)],
+) -> (Vec<FrameSection>, Vec<FrameSection>) {
+    let (mut studs, mut tracks) = match material {
+        FrameMaterial::Steel => (steel_studs(), steel_tracks()),
+        FrameMaterial::Timber => (timber_sections(), timber_sections()),
+    };
+    let mine: Vec<&FrameSection> = extra
+        .iter()
+        .filter(|(m, _)| *m == material)
+        .map(|(_, s)| s)
+        .collect();
+    let add = |list: &mut Vec<FrameSection>, first: bool| {
+        let (a, b): (Vec<&FrameSection>, Vec<&FrameSection>) = mine
+            .iter()
+            .partition(|s| material == FrameMaterial::Timber || (s.lip > 0.0) == first);
+        for s in a.into_iter().chain(b) {
+            if !list.iter().any(|x| x.name == s.name) {
+                list.push(s.clone());
+            }
+        }
+    };
+    add(&mut studs, true);
+    add(&mut tracks, false);
+    (studs, tracks)
+}
 
 /// The boards that can go over a frame.
 fn boards() -> Vec<Sheathing> {
@@ -47,6 +130,7 @@ pub fn framing_group(
     id: u64,
     layers: &[Layer],
     floor: bool,
+    extra: &[(FrameMaterial, FrameSection)],
 ) -> Option<Option<Framing>> {
     let mut out = None;
     let now = model.type_framing(id).cloned();
@@ -100,10 +184,14 @@ pub fn framing_group(
                 out = Some(Some(g));
                 return;
             }
-            let (studs, tracks): (Vec<FrameSection>, Vec<FrameSection>) = match f.material {
-                FrameMaterial::Steel => (steel_studs(), steel_tracks()),
-                FrameMaterial::Timber => (timber_sections(), timber_sections()),
-            };
+            let (mut studs, mut tracks) = sections_for(f.material, extra);
+            // A section that came from a catalogue no longer in the
+            // library is still shown, as it is.
+            for (list, now) in [(&mut studs, &f.stud), (&mut tracks, &f.track)] {
+                if !list.iter().any(|s| s.name == now.name) {
+                    list.push(now.clone());
+                }
+            }
             let pick =
                 |ui: &mut Ui, salt: &str, w: f32, list: &[FrameSection], now: &FrameSection| {
                     let at = list
@@ -193,10 +281,41 @@ pub fn framing_group(
                     .color(super::theme::Palette::current(ui.ctx()).bad),
                 );
             }
+            ui.label(
+                egui::RichText::new(format!(
+                    "Predimensionado de los perfiles en Colaboración → Comprobación CTE. Tus catálogos de perfiles, en la carpeta «{FOLDER}» de la biblioteca."
+                ))
+                .small()
+                .color(super::theme::Palette::current(ui.ctx()).muted),
+            );
             if next != f {
                 out = Some(Some(next));
             }
         },
     );
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn catalogue_sections_join_the_generic_ones() {
+        let extra = parse_section_catalogue(
+            "C-90;acero;90;40;12;1\nU-92;acero;92;35;0;1\nPino 45x95;madera;95;45\n",
+        );
+        let (studs, tracks) = sections_for(FrameMaterial::Steel, &extra);
+        let n = steel_studs().len();
+        assert_eq!(studs.len(), n + 2);
+        assert_eq!(studs[n].name, "C-90", "lipped first among the studs");
+        assert_eq!(
+            tracks[steel_tracks().len()].name,
+            "U-92",
+            "plain U first among the tracks"
+        );
+        let (wood, _) = sections_for(FrameMaterial::Timber, &extra);
+        assert!(wood.iter().any(|s| s.name == "Pino 45x95"));
+        assert!(!wood.iter().any(|s| s.name == "C-90"));
+    }
 }

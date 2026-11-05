@@ -21,6 +21,7 @@ pub mod access;
 pub mod electrical;
 pub mod evacuation;
 pub mod fire;
+pub mod framing;
 pub mod occupancy;
 pub mod region;
 pub mod services;
@@ -62,12 +63,14 @@ pub enum Section {
     Structure,
     /// REBT, ITC-BT-25: the circuits of the dwellings (E13).
     Electrical,
+    /// The light frames, predimensioned.
+    Framing,
     /// Floor areas.
     Areas,
 }
 
 impl Section {
-    pub const ALL: [Section; 8] = [
+    pub const ALL: [Section; 9] = [
         Section::Evacuation,
         Section::Fire,
         Section::Accessibility,
@@ -75,6 +78,7 @@ impl Section {
         Section::Services,
         Section::Electrical,
         Section::Structure,
+        Section::Framing,
         Section::Areas,
     ];
 
@@ -87,6 +91,7 @@ impl Section {
             Section::Services => "Agua y saneamiento (DB-HS 4 y HS 5)",
             Section::Structure => "Armado (Código Estructural)",
             Section::Electrical => "Electricidad (REBT, ITC-BT-25)",
+            Section::Framing => "Entramado ligero (predimensionado)",
             Section::Areas => "Superficies",
         }
     }
@@ -107,6 +112,12 @@ pub enum Subject {
     Run(RunId),
     /// A column, beam, footing or slab with reinforcement (by its id).
     Reinforced(u64),
+    /// A framed wall.
+    Wall(archisim_core::WallId),
+    /// A framed roof.
+    Roof(archisim_core::RoofId),
+    /// A framed floor.
+    Floor(SlabId),
 }
 
 /// One result.
@@ -283,6 +294,9 @@ pub fn subject_name(model: &Model, s: Subject) -> String {
             .map(|r| format!("{} {} ({})", r.system.name(), r.size_text(), r.id.0))
             .unwrap_or_default(),
         Subject::Reinforced(id) => structure::element_name(model, id),
+        Subject::Wall(w) => format!("Muro {}", w.0),
+        Subject::Roof(r) => format!("Cubierta {}", r.0),
+        Subject::Floor(s) => format!("Forjado {}", s.0),
     }
 }
 
@@ -314,6 +328,7 @@ pub fn check(model: &Model) -> Report {
     services::check(model, &mut report);
     structure::check(model, &mut report);
     electrical::check(model, &mut report);
+    framing::check(model, &mut report);
     report
 }
 

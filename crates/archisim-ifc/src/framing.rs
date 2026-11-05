@@ -151,6 +151,25 @@ impl Exporter<'_> {
                         real(m.length())
                     )),
                 ];
+                // The profile, for a structural program to rebuild it.
+                let s = &m.section;
+                let mut dims = vec![("Depth", s.depth), ("Width", s.width)];
+                if s.is_steel() {
+                    if s.lip > 0.0 {
+                        dims.push(("Lip", s.lip));
+                    }
+                    dims.push(("Thickness", s.thickness));
+                }
+                for (key, v) in dims {
+                    props.push(self.w.add(format!(
+                        "IFCPROPERTYSINGLEVALUE('{key}',$,IFCPOSITIVELENGTHMEASURE({}),$)",
+                        real(v)
+                    )));
+                }
+                props.push(self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('Grade',$,IFCLABEL({}),$)",
+                    string(if s.is_steel() { "S350GD" } else { "C24" })
+                )));
                 if let Some(p) = m.panel {
                     props.push(self.w.add(format!(
                         "IFCPROPERTYSINGLEVALUE('Panel',$,IFCINTEGER({}),$)",

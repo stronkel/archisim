@@ -388,12 +388,12 @@ fn wall_end_trims(model: &Model, id: WallId, line: &WallLine) -> [f64; 2] {
 }
 
 /// The section of a header over a hole `span` wide: two of the studs'
-/// section on edge, deeper as the span grows (about a tenth of the span
-/// in timber and a twelfth in steel), no deeper than `room`.
+/// section on edge, deeper as the span grows (about an eighth of the span
+/// in timber and a tenth in steel), no deeper than `room`.
 pub fn header_section(f: &Framing, span: f64, room: f64) -> FrameSection {
     let want = match f.material {
-        FrameMaterial::Steel => span / 12.0,
-        FrameMaterial::Timber => span / 10.0,
+        FrameMaterial::Steel => span / 10.0,
+        FrameMaterial::Timber => span / 8.0,
     };
     if want <= f.stud.depth {
         return f.stud.clone();

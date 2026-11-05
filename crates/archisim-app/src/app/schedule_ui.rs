@@ -251,6 +251,30 @@ impl ArchiSimApp {
         }
     }
 
+    /// The axes of every framing member as 3D lines in a DXF, one layer by
+    /// section and role, for a structural program to read.
+    pub(super) fn export_framing_dxf(&mut self) {
+        let model = self.ed.shown();
+        let Some(text) = archisim_export::framing_dxf::framing_dxf(&model) else {
+            self.complain("El proyecto no tiene tipos de muro, forjado o cubierta con entramado: actívalo en Tipos y materiales → Entramado ligero.".to_string());
+            return;
+        };
+        let mut d = rfd::FileDialog::new()
+            .set_title("Ejes del entramado (DXF 3D)")
+            .add_filter("DXF", &["dxf"])
+            .set_file_name(format!("{}-ejes-entramado.dxf", self.file_name_stem()));
+        if let Some(dir) = self.start_dir() {
+            d = d.set_directory(dir);
+        }
+        let Some(path) = d.save_file() else {
+            return;
+        };
+        match std::fs::write(&path, text) {
+            Ok(()) => self.say(format!("Ejes del entramado en {}.", path.display())),
+            Err(e) => self.complain(format!("No se pudo exportar: {e}.")),
+        }
+    }
+
     /// A document of A3 sheets (the carpentry sheets, the carpentry
     /// report or the table of areas) as a PDF.
     pub(super) fn export_document(&mut self, doc: crate::documents::Document) {

@@ -264,6 +264,12 @@ impl ArchiSimApp {
                     self.export_framing_xlsx();
                 }
                 if ui
+                    .add(shortcut_button("Ejes del entramado…", "DXF 3D"))
+                    .clicked()
+                {
+                    self.export_framing_dxf();
+                }
+                if ui
                     .add(shortcut_button("Mediciones y presupuesto…", "BC3"))
                     .clicked()
                 {
@@ -430,6 +436,13 @@ impl ArchiSimApp {
                 .clicked()
             {
                 self.export_framing_xlsx();
+            }
+            if ui
+                .button("Ejes del entramado (DXF 3D)…")
+                .on_hover_text("Cada pieza del entramado como una línea 3D por su eje, en una capa por perfil y papel, para llevarla a un programa de cálculo de estructuras")
+                .clicked()
+            {
+                self.export_framing_dxf();
             }
             if ui
                 .button("Exportar mediciones (BC3)…")

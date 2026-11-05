@@ -1530,9 +1530,14 @@ impl ArchiSimApp {
                 },
             );
         });
-        if let Some(f) =
-            super::framing_ui::framing_group(ui, self.ed.model(), id.0, &t.layers, false)
-        {
+        if let Some(f) = super::framing_ui::framing_group(
+            ui,
+            self.ed.model(),
+            id.0,
+            &t.layers,
+            false,
+            &super::framing_ui::library_sections(),
+        ) {
             actions.push(Action::TypeFraming(id.0, f));
         }
         if t.function == WallFunction::Exterior || t.facade.is_some() {
@@ -1607,9 +1612,14 @@ impl ArchiSimApp {
                 actions.push(Action::SlabEdge(id, e));
             }
         });
-        if let Some(f) =
-            super::framing_ui::framing_group(ui, self.ed.model(), id.0, &t.layers, true)
-        {
+        if let Some(f) = super::framing_ui::framing_group(
+            ui,
+            self.ed.model(),
+            id.0,
+            &t.layers,
+            true,
+            &super::framing_ui::library_sections(),
+        ) {
             actions.push(Action::TypeFraming(id.0, f));
         }
     }

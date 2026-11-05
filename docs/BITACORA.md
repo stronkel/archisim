@@ -6,6 +6,29 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-05 (106) · Entramados: predimensionado, salida al cálculo y catálogos sin marcas
+
+Rama `bloque/calles` (#161). Sin cambios de formato.
+
+**Hecho**
+- **Predimensionado** en la Comprobación CTE (apartado nuevo «Entramado ligero (predimensionado)»): montantes a compresión con pandeo y viento, dinteles, viguetas y cabios a flexión y flecha L/300, con las cargas del DB-SE-AE y los Eurocódigos 3 (chapa fina) y 5. Si no cumple, propone el perfil más ligero que cumpliría o dice que falta un apoyo. Los muros portantes cuentan como apoyo de las viguetas.
+- **Dinteles** un poco más generosos: luz/8 en madera y luz/10 en acero.
+- **Ejes del entramado (DXF 3D)** en Archivo → Exportar, para los programas de cálculo; en el IFC, cada pieza lleva su perfil (canto, ala, pestaña, espesor, calidad).
+- **Catálogos sin marcas**: el programa solo trae perfiles genéricos; los de un fabricante van en la carpeta «Perfiles de entramado» de la biblioteca del estudio, como un CSV (ENTRAMADOS.md §3 ter), y salen en las listas de perfiles.
+- La demo del entramado lleva un tabique portante por casa y escribe `entramado-ejes.dxf`.
+
+**Pendiente**
+- Ficheros para las perfiladoras y centros de corte, cuando se sepa qué máquina.
+- El cálculo completo (uniones, arriostramiento, sismo, fuego) sigue en el programa de cálculo.
+
+**Qué debe probar Antonio**
+1. `cargo run --release -p archisim-cli -- entramado out/` y luego `cargo run --release -p archisim-cli -- cte out/entramado.archisim`: mira el apartado «Entramado ligero»; cada línea con su aprovechamiento.
+2. Abre `out/entramado.archisim` en la app → Colaboración → Comprobación CTE. Pulsa una línea del entramado y mira que selecciona su muro o forjado. Borra el tabique portante de una casa y vuelve a comprobar: las viguetas de esa casa deben fallar y pedir un apoyo intermedio.
+3. Abre `out/entramado-ejes.dxf` en AutoCAD: líneas 3D por capas de perfil y pieza.
+4. Haz un CSV con tres perfiles de SFSystem (formato en ENTRAMADOS.md §3 ter), déjalo en la carpeta «Perfiles de entramado» de tu biblioteca y mira que salen en Tipos y materiales → Entramado ligero.
+
+---
+
 ## 2026-11-05 (105) · Entramados, segunda vuelta: lo que faltaba
 
 Rama `bloque/calles` (#161). Sin cambios de formato: todo sale de los tipos con entramado de la versión 80.

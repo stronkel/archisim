@@ -12,6 +12,7 @@ pub mod bc3;
 pub mod bc3_read;
 pub mod dxf;
 pub mod dxf_read;
+pub mod framing_dxf;
 pub mod paths;
 pub mod pdf;
 pub mod png;

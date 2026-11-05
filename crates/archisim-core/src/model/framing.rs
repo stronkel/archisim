@@ -176,6 +176,61 @@ pub fn timber_sections() -> Vec<FrameSection> {
     .collect()
 }
 
+/// Reads a catalogue of sections, one a line, fields separated by `;` (or
+/// tabs or commas): name; material (`acero`/`steel` or `madera`/`timber`);
+/// depth; flange width; lip (0 for a U); thickness — all in millimetres
+/// (lip and thickness are left out, or 0, for timber). Lines starting
+/// with `#` and a header line that is not a section are skipped. This is
+/// how a supplier's catalogue enters the project: as a file of the
+/// studio's library, never inside the program.
+pub fn parse_section_catalogue(text: &str) -> Vec<(FrameMaterial, FrameSection)> {
+    let mut out = Vec::new();
+    for line in text.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let sep = if line.contains(';') {
+            ';'
+        } else if line.contains('\t') {
+            '\t'
+        } else {
+            ','
+        };
+        let f: Vec<&str> = line.split(sep).map(|x| x.trim()).collect();
+        if f.len() < 4 {
+            continue;
+        }
+        let material = match f[1].to_lowercase().as_str() {
+            "acero" | "steel" | "lsf" => FrameMaterial::Steel,
+            "madera" | "timber" | "wood" => FrameMaterial::Timber,
+            _ => continue,
+        };
+        let num = |i: usize| {
+            f.get(i)
+                .and_then(|x| x.replace(',', ".").parse::<f64>().ok())
+                .unwrap_or(0.0)
+        };
+        let (d, w) = (num(2), num(3));
+        if d <= 0.0 || w <= 0.0 || f[0].is_empty() {
+            continue;
+        }
+        let mut section = match material {
+            FrameMaterial::Steel => {
+                let t = num(5);
+                if t <= 0.0 {
+                    continue;
+                }
+                FrameSection::steel(d, w, num(4), t)
+            }
+            FrameMaterial::Timber => FrameSection::timber(w, d),
+        };
+        section.name = f[0].to_string();
+        out.push((material, section));
+    }
+    out
+}
+
 /// The boards over the frame (OSB, plywood, gypsum).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Sheathing {
@@ -365,6 +420,18 @@ impl Model {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_catalogue_is_read_from_text() {
+        let text = "# perfiles del proveedor\nnombre;material;canto;ala;pestaña;espesor\nC-90-10;acero;90;40;12;1,0\nU-92;steel;92;35;0;1\nPino 45x145;madera;145;45\nmal;acero;90;40\n";
+        let list = parse_section_catalogue(text);
+        assert_eq!(list.len(), 3, "{list:?}");
+        assert_eq!(list[0].1.name, "C-90-10");
+        assert!((list[0].1.thickness - 0.001).abs() < 1e-9 && list[0].1.lip > 0.0);
+        assert_eq!(list[1].1.lip, 0.0);
+        assert_eq!(list[2].0, FrameMaterial::Timber);
+        assert!((list[2].1.depth - 0.145).abs() < 1e-9 && (list[2].1.width - 0.045).abs() < 1e-9);
+    }
 
     #[test]
     fn sections_weigh_and_framings_are_kept() {

@@ -6,6 +6,8 @@ Antonio pidió el 05/11/2026 una herramienta de steel frame y de madera para las
 - el despiece con lista de corte, paneles prefabricados, y Excel y BC3;
 - perfiles genéricos, sin catálogo de fabricante.
 
+El mismo día pidió que ArchiSim haga también lo de Tricalc LSF y que el programa publicado no lleve marcas de otras empresas (el estudio trabaja con perfiles de SFSystem, sin estar asociado). Decidido: un predimensionado mientras se dibuja, la salida hacia los programas de cálculo y los catálogos de fabricante como ficheros propios del estudio (§3 ter).
+
 ## 1. Cómo se usa
 
 - **El entramado es del tipo.** En Tipos y materiales, cada tipo de muro y de forjado tiene un grupo «Entramado ligero». Las cubiertas usan tipos de forjado.
@@ -17,6 +19,7 @@ Antonio pidió el 05/11/2026 una herramienta de steel frame y de madera para las
     - **travesaños** a media altura (sí o no);
     - **tablero** de arriostramiento: OSB de 12 o 15 mm, fenólico de 18, yeso o placa de cemento.
   - Al activarlo se proponen los perfiles que caben en la capa de estructura del tipo. Si el perfil tiene más canto que la capa, se avisa.
+  - En las listas de perfiles salen los genéricos y, detrás, los de los catálogos del estudio (§3 ter).
 - **Se dibuja como siempre.** Los muros, forjados y cubiertas de ese tipo se dibujan con las herramientas de siempre. El entramado sale solo y sigue a cada cambio: mover un muro, abrir una ventana, cambiar la altura.
 - **En 3D**, con «Entramado a la vista» (barra de abajo, solo si el proyecto tiene entramados): los elementos con entramado se ven por su esqueleto en lugar de sus capas.
 - **El despiece**, en Archivo → Exportar:
@@ -29,6 +32,8 @@ Antonio pidió el 05/11/2026 una herramienta de steel frame y de madera para las
     - Una partida por perfil: kg de acero o m³ de madera, con una línea por pieza.
     - Una partida por tablero, en m².
     - Las claves son `entramado:<perfil>` y `tablero:<nombre>`, y a ellas se les asignan los precios del banco.
+  - **Ejes del entramado (DXF 3D)**: cada pieza como una línea 3D por su eje, en metros, con una capa por perfil y papel («C 100×40×10×1 - MONTANTE»), para llevarlo a un programa de cálculo de estructuras.
+- **El predimensionado**, en Colaboración → Comprobación CTE, apartado «Entramado ligero (predimensionado)» (también `archisim cte <proyecto>`): §3 ter.
 
 ## 2. Qué se coloca
 
@@ -39,7 +44,7 @@ Antonio pidió el 05/11/2026 una herramienta de steel frame y de madera para las
 - **En cada puerta y ventana**:
   - un montante de refuerzo de toda la altura a cada lado;
   - un montante de apoyo del dintel;
-  - un dintel de dos piezas de canto, una en cada cara, en cajón; su canto crece con la luz (una décima parte de la luz en madera, una doceava en acero), hasta lo que cabe bajo la carrera;
+  - un dintel de dos piezas de canto, una en cada cara, en cajón; su canto crece con la luz (una octava parte de la luz en madera, una décima en acero), hasta lo que cabe bajo la carrera;
   - un canal de antepecho bajo las ventanas;
   - montantes cortos a la separación encima del dintel y debajo del antepecho.
 - **Travesaños** a media altura entre montantes, salvo donde hay un hueco.
@@ -81,11 +86,45 @@ Antonio pidió el 05/11/2026 una herramienta de steel frame y de madera para las
 - **Sección a 1:50 o más detalle**: los montantes, viguetas, cabios y tirantes cortados.
 - **IFC**: cada pieza es un `IfcMember` (montantes `STUD`, canales y zunchos `PLATE`, travesaños `STRUT`, cabios `RAFTER`, tirantes `CHORD`, viguetas y dinteles `MEMBER`) con su cuerpo, su material y `ArchiSim_FramePart` (pieza, perfil, longitud y panel), parte de su muro o forjado. Al importar el IFC se quitan: el entramado sale otra vez del tipo.
 
+## 3 ter. Predimensionado y catálogos
+
+**Qué comprueba.** Por cada tipo con entramado, en cada muro, forjado y cubierta de ese tipo, la pieza más cargada:
+- **montantes**: compresión con pandeo y, en los muros exteriores, flexión por viento;
+- **dinteles**: flexión y flecha con la luz del hueco y lo que baja por el muro;
+- **viguetas y cabios**: flexión y flecha (L/300) con su luz libre. Un muro portante debajo cuenta como apoyo intermedio.
+
+Cada línea da el aprovechamiento (1,00 es el límite) y, si no cumple, el perfil más ligero de la lista que cumpliría, o qué hace falta («un apoyo intermedio»). Al pulsar la línea se selecciona el elemento.
+
+**Con qué cargas** (hay que confirmarlas en cada proyecto):
+- forjados: 1,5 kN/m² de carga permanente y 2,0 kN/m² de uso (vivienda);
+- cubiertas: 1,0 kN/m² de carga permanente y 0,4 kN/m² de nieve;
+- muros: 0,5 kN/m² de su cara, y 0,8 kN/m² de viento en los exteriores;
+- combinaciones del DB-SE: 1,35 G + 1,5 Q, y con el viento como principal en los exteriores;
+- acero S350GD, con los anchos eficaces de las chapas finas (Eurocódigo 3, partes 1-3 y 1-5); madera C24 (Eurocódigo 5).
+
+**Qué no es.** Es un predimensionado para saber, mientras se dibuja, si los perfiles están en su orden. No sustituye al cálculo firmado: no mira las uniones, el arriostramiento de los paneles por sus tableros, las cargas puntuales ni el fuego. Para eso, el DXF de ejes y el IFC van al programa de cálculo.
+
+**El IFC** lleva en cada pieza, además, su perfil: canto, ala, pestaña, espesor y calidad (S350GD o C24).
+
+**Catálogos de fabricante, sin marcas en el programa.** ArchiSim solo trae perfiles genéricos (C y U por medidas, madera C24). Los de un fabricante los pone el estudio en su biblioteca, en la carpeta **«Perfiles de entramado»**, como un fichero de texto (`.csv` o `.txt`) que se puede hacer con Excel. Una línea por perfil, separada por punto y coma:
+
+```
+# nombre;material;canto;ala;pestaña;espesor (mm)
+C-90-1,0;acero;90;40;12;1,0
+U-92-1,0;acero;92;35;0;1,0
+Pino 45×145;madera;145;45
+```
+
+- El material es `acero` o `madera`; la pestaña es 0 en los U; la madera no lleva pestaña ni espesor.
+- Los perfiles con pestaña salen primero en Montantes y los U primero en Canales; todos están en las dos listas.
+- El fichero no viaja con el programa: es del estudio, como los símbolos de planta. Un proyecto guarda las medidas de los perfiles que usa, así que se abre igual en otro ordenador aunque no tenga el catálogo.
+
 ## 4. Pendiente
 
-- **Catálogos de fabricante**: perfiles de un fabricante concreto, cuando el estudio diga cuál y pase su catálogo.
+- **Ficheros para las máquinas** (perfiladoras de acero, centros de corte de madera): cuando se sepa qué máquina usa el taller, porque cada una lee su formato.
+- **Cálculo completo**: uniones, arriostramiento por tableros, sismo y fuego quedan para el programa de cálculo.
 - **El entramado del tipo en el IFC**: se escriben las piezas, pero aún no la definición del entramado en el tipo, así que un IFC importado no recupera el entramado.
-- **Dinteles calculados**: el canto sale de una regla de proporción (luz/10 en madera, luz/12 en acero); no es un cálculo estructural.
+- **Dinteles calculados**: el canto sale de una regla de proporción (luz/8 en madera, luz/10 en acero); no es un cálculo estructural.
 
 ## 5. Para el programador
 
@@ -104,8 +143,11 @@ Antonio pidió el 05/11/2026 una herramienta de steel frame y de madera para las
 - **Papel**: `archisim-plan::framing::breakdown_pages` (hojas A3) y `breakdown_svg` (una hoja larga).
 - **Excel**: `archisim-export::xlsx` (`workbook`, `Sheet`, `Cell`; un zip sin comprimir) y `framing_workbook`.
 - **Mediciones**: capítulo 15 en `archisim-plan::schedules::framing`.
+- **Predimensionado**: `archisim-cte::framing` (`check`, `resistance`, `wall_loads`, `clear_span`; sección `Section::Framing`, sujetos `Subject::Wall`/`Floor`/`Roof`).
+- **Catálogos**: `archisim_core::parse_section_catalogue`; en la app `framing_ui::library_sections` (carpeta `FOLDER`, leída cada 5 s) y `sections_for`.
+- **DXF de ejes**: `archisim-export::framing_dxf` (R12, LINE en 3D); en la app `export_framing_dxf`.
 - **App**:
   - `app/framing_ui::framing_group` en `types_ui`, con `Action::TypeFraming`;
   - `View3dState::frames` con el chip de la barra de abajo;
   - `Document::Framing` y `export_framing_xlsx`.
-- **Ejemplo**: `archisim entramado out/`. Para fotos: `ARCHISIM_VISTAS_ENTRAMADO=1` en `project_pictures`.
+- **Ejemplo**: `archisim entramado out/` (con un tabique portante por casa; escribe también `entramado-ejes.dxf`). Para fotos: `ARCHISIM_VISTAS_ENTRAMADO=1` en `project_pictures`.

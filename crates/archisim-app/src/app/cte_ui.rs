@@ -228,6 +228,9 @@ impl ArchiSimApp {
                 let m = self.ed.model();
                 archisim_geom::rebar::owner_of(m, id).map(crate::pick::of_solid)
             }
+            Subject::Wall(w) => Some(Element::Wall(w)),
+            Subject::Roof(r) => Some(Element::Roof(r)),
+            Subject::Floor(s) => Some(Element::Slab(s)),
             Subject::Building | Subject::Level(_) => None,
         };
         if let Some(level) = i.level {

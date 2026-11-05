@@ -136,6 +136,30 @@ fn house(
             opening(m, wall, lib.window_one_leaf, 3.5, 0.9)?;
         }
     }
+    // A bearing wall across the middle of the ground floor: the joists of
+    // the first floor rest on it (half their span).
+    let it = m.add_wall_type(
+        format!("Tabique portante {tag} 100"),
+        WallFunction::Interior,
+        vec![
+            layer(plaster, 0.015, LayerFunction::Finish),
+            layer(wool, 0.1, LayerFunction::Structure),
+            layer(plaster, 0.015, LayerFunction::Finish),
+        ],
+    )?;
+    m.set_type_framing(it.0, Some(Framing::for_depth(material, 0.1)))?;
+    let inner = m.add_wall(NewWall {
+        wall_type: it,
+        level: pb,
+        start: at + Point2::new(0.0, d / 2.0),
+        end: at + Point2::new(w, d / 2.0),
+        bulge: 0.0,
+        reference: ReferenceLine::Center,
+        height: 2.8,
+        base_offset: 0.0,
+        top: WallTop::Unconnected,
+    })?;
+    opening(m, inner, lib.interior_door, 4.5, 0.0)?;
     let inside = corners.to_vec();
     m.add_slab(NewSlab {
         slab_type: st,
@@ -207,6 +231,8 @@ pub fn write(dir: &Path) -> Res {
     )?;
     let book = archisim_export::xlsx::framing_workbook(&m).ok_or("nada con entramado")?;
     std::fs::write(dir.join("entramado.xlsx"), book)?;
+    let dxf = archisim_export::framing_dxf::framing_dxf(&m).ok_or("nada con entramado")?;
+    std::fs::write(dir.join("entramado-ejes.dxf"), dxf)?;
     let date = archisim_export::bc3::bc3_date(&archisim_ifc::utc_now());
     std::fs::write(
         dir.join("entramado.bc3"),
@@ -258,6 +284,10 @@ pub fn write(dir: &Path) -> Res {
         dir.join("entramado-despiece.svg").display()
     );
     println!("  Excel: {}", dir.join("entramado.xlsx").display());
+    println!(
+        "  Ejes 3D (DXF): {}",
+        dir.join("entramado-ejes.dxf").display()
+    );
     println!("  BC3: {}", dir.join("entramado.bc3").display());
     println!("  IFC: {}", dir.join("entramado.ifc").display());
     Ok(())
