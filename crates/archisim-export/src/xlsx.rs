@@ -281,7 +281,9 @@ fn zip_stored(files: &[(String, Vec<u8>)]) -> Vec<u8> {
 /// list, the totals with the bars and boards to buy, the panels, and every
 /// member with its element and panel. `None` if nothing is framed.
 pub fn framing_workbook(model: &archisim_core::Model) -> Option<Vec<u8>> {
-    use archisim_geom::framing::{all_members, cut_list, wall_panels, BAR_STEEL, BAR_TIMBER};
+    use archisim_geom::framing::{
+        all_members, cut_list, deck_panels, wall_panels, BAR_STEEL, BAR_TIMBER,
+    };
     let members = all_members(model);
     if members.is_empty() {
         return None;
@@ -383,22 +385,39 @@ pub fn framing_workbook(model: &archisim_core::Model) -> Option<Vec<u8>> {
         name: "Paneles".into(),
         rows: vec![vec![
             "Panel".into(),
-            "Muro".into(),
+            "Clase".into(),
+            "Elemento".into(),
             "Longitud (m)".into(),
-            "Altura (m)".into(),
+            "Altura o ancho (m)".into(),
             "Piezas".into(),
             "Peso (kg)".into(),
         ]],
-        widths: vec![10.0, 10.0, 13.0, 11.0, 9.0, 11.0],
+        widths: vec![10.0, 22.0, 10.0, 13.0, 17.0, 9.0, 11.0],
     };
     for p in wall_panels(model) {
         panels.rows.push(vec![
             p.mark.clone().into(),
+            "Panel de muro".into(),
             (p.wall.0 as f64).into(),
             r3(p.length()).into(),
             r3(p.height()).into(),
             p.members.len().into(),
             (p.weight(model).round()).into(),
+        ]);
+    }
+    for c in deck_panels(model) {
+        let kind = match c.owner {
+            archisim_geom::solid::SolidOwner::Roof(_) => "Cajón de cubierta",
+            _ => "Cajón de forjado",
+        };
+        panels.rows.push(vec![
+            c.mark.clone().into(),
+            kind.into(),
+            (c.owner.id() as f64).into(),
+            r3(c.length).into(),
+            r3(c.width).into(),
+            c.members.len().into(),
+            (c.weight(model).round()).into(),
         ]);
     }
     let mut pieces = Sheet {
@@ -427,7 +446,7 @@ pub fn framing_workbook(model: &archisim_core::Model) -> Option<Vec<u8>> {
         };
         pieces.rows.push(vec![
             owner.into(),
-            m.panel.map_or(Cell::Empty, |p| (p + 1).into()),
+            m.panel.map_or(Cell::Empty, |p| (p % 1000 + 1).into()),
             m.role.name(m.material).into(),
             m.section.name.clone().into(),
             (m.length() * 1000.0).round().into(),

@@ -1458,6 +1458,33 @@ fn draw_layers(
         }
     }
 
+    // The studs of a light frame where the plane cuts them, at a scale of
+    // detail: each C or each timber, white with its outline.
+    if k <= DETAIL_K {
+        if let Some(w) = model.wall(g.wall) {
+            if model.type_framing(w.wall_type.0).is_some() {
+                let z = model.level(w.level).map_or(0.0, |l| l.elevation) + cut_plane;
+                let mut d = String::new();
+                for m in archisim_geom::framing::wall_members(model, g.wall) {
+                    for q in archisim_geom::framing::member_cut(&m, [0.0, 0.0, z], [0.0, 0.0, 1.0])
+                    {
+                        let poly: Vec<Point2> = q.iter().map(|p| Point2::new(p[0], p[1])).collect();
+                        d.push_str(&path(&poly));
+                        d.push(' ');
+                    }
+                }
+                if !d.is_empty() {
+                    let _ = writeln!(
+                        s,
+                        r#"<path class="frame-cut" d="{}" fill="white" stroke="{INK}" stroke-width="{}"/>"#,
+                        d.trim_end(),
+                        num(pens().thin * k)
+                    );
+                }
+            }
+        }
+    }
+
     // Jamb details: (jamb position, +1 if the wall continues towards
     // growing t, the opening whose jamb it is).
     let mut jambs = Vec::new();

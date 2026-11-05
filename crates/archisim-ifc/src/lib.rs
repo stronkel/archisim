@@ -48,6 +48,7 @@ mod decals;
 mod elevators;
 mod facades;
 mod foundations;
+mod framing;
 pub mod import;
 mod members;
 mod objects;
@@ -2131,6 +2132,7 @@ impl<'a> Exporter<'a> {
         self.write_railings(&materials, &storeys, &mut contained);
         self.write_accessories(&materials, &storeys, &mut contained);
         self.write_facade_parts(&materials, &storeys);
+        self.write_frame_members(&materials, &storeys, &mut contained);
         self.write_roof_parts(&materials, &storeys, &mut contained);
         self.write_objects(&materials, &storeys, &mut contained);
         self.write_worktops(&materials, &storeys, &mut contained);

@@ -49,6 +49,9 @@ pub struct SectionDrawing {
     /// The bars of the elements cut, at a fine scale (E17): the element,
     /// the bars cut (centre and radius) and those seen along the cut.
     rebar: Vec<RebarCut>,
+    /// The members of the light frames cut, at a fine scale: the element
+    /// and the outline of each plate.
+    frames: Vec<(SolidOwner, Vec<Vec<Point2>>)>,
     pub lo: Point2,
     pub hi: Point2,
     pub title: String,
@@ -906,6 +909,8 @@ pub fn section_drawing(model: &Model, sec: &SectionLine) -> SectionDrawing {
     facade_detail(model, sec, &mut faces, &mut d.fine_lines, &d.cuts);
     // The bars of the elements cut (E17).
     d.rebar = rebar_detail(model, sec, &d.cuts);
+    // The studs, joists and rafters of the light frames cut.
+    d.frames = frame_detail(model, sec, &d.cuts);
     mark_hidden(&mut faces, lo, hi);
     // Far to near. The faces are large: sort their order, not them.
     let mut order: Vec<(f64, u32)> = faces
@@ -1067,6 +1072,46 @@ fn facade_detail(
             }
         }
     }
+}
+
+/// The members of the light frames that the section cuts, each plate's
+/// outline on the plane, by element.
+fn frame_detail(
+    model: &Model,
+    sec: &SectionLine,
+    cuts: &[CutPiece],
+) -> Vec<(SolidOwner, Vec<Vec<Point2>>)> {
+    let (Some(u), Some(look)) = (sec.along(), sec.looks()) else {
+        return Vec::new();
+    };
+    if model.framings().next().is_none() {
+        return Vec::new();
+    }
+    let o = sec.start;
+    let to2 = |p: P3| Point2::new(Point2::new(p[0] - o.x, p[1] - o.y).dot(u), p[2]);
+    let mut by: std::collections::BTreeMap<SolidOwner, Vec<Vec<Point2>>> = Default::default();
+    for m in archisim_geom::framing::all_members(model) {
+        if !cuts.iter().any(|c| c.3 == m.owner) {
+            continue;
+        }
+        let plates = archisim_geom::framing::member_cut(&m, [o.x, o.y, 0.0], [look.x, look.y, 0.0]);
+        if plates.is_empty() {
+            continue;
+        }
+        // Only within the length of the section line.
+        let inside = plates.iter().flatten().all(|p| {
+            let x = to2(*p).x;
+            x >= -1e-6 && x <= sec.start.distance(sec.end) + 1e-6
+        });
+        if !inside {
+            continue;
+        }
+        let e = by.entry(m.owner).or_default();
+        for q in plates {
+            e.push(q.iter().map(|p| to2(*p)).collect());
+        }
+    }
+    by.into_iter().collect()
 }
 
 /// The bars of every element with reinforcement that the section cuts:
@@ -2028,6 +2073,26 @@ fn render_section_inner(model: &Model, d: &SectionDrawing, options: &PlanOptions
                 joints.trim_end(),
                 num(pens().thin * k)
             );
+        }
+        for (owner, plates) in &d.frames {
+            if crate::dim::is_hidden(owner.id()) {
+                continue;
+            }
+            let mut d = String::new();
+            for q in plates {
+                if visible(q) {
+                    d.push_str(&path(q));
+                    d.push(' ');
+                }
+            }
+            if !d.is_empty() {
+                let _ = writeln!(
+                    s,
+                    r#"<path class="frame-cut" d="{}" fill="white" stroke="{INK}" stroke-width="{}"/>"#,
+                    d.trim_end(),
+                    num(pens().thin * k)
+                );
+            }
         }
         for (owner, dots, lines) in &d.rebar {
             if crate::dim::is_hidden(owner.id()) {

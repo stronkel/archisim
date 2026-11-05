@@ -127,7 +127,8 @@ fn house(
         let ground = level == pb;
         if i % 4 == 0 && ground {
             opening(m, wall, lib.entrance_door, 2.0, 0.0)?;
-            opening(m, wall, lib.window_two_leaves, 6.0, 0.9)?;
+            // A wide sliding door: a deeper header.
+            opening(m, wall, lib.sliding_door, 6.0, 0.0)?;
         } else if long {
             opening(m, wall, lib.window_two_leaves, 2.4, 0.9)?;
             opening(m, wall, lib.window_one_leaf, 6.4, 0.9)?;
@@ -142,13 +143,31 @@ fn house(
         outline: inside.clone(),
         top_offset: 0.0,
     })?;
-    m.add_roof(NewRoof {
+    let roof = m.add_roof(NewRoof {
         roof_type: rt,
         level: p1,
         outline: inside,
         slopes: vec![Some(0.5), None, Some(0.5), None],
         base_offset: 2.8,
         overhang: 0.4,
+    })?;
+    // The walls of the upper floor up to the roof: the gables.
+    for (level, wall) in &walls {
+        if *level == p1 {
+            m.set_wall_roof(*wall, Some(roof))?;
+        }
+    }
+    // A curved garden wall in front, of the same type.
+    m.add_wall(NewWall {
+        wall_type: wt,
+        level: pb,
+        start: at + Point2::new(9.0, -4.0),
+        end: at + Point2::new(0.0, -4.0),
+        bulge: -0.25,
+        reference: ReferenceLine::Center,
+        height: 2.2,
+        base_offset: 0.0,
+        top: WallTop::Unconnected,
     })?;
     Ok(())
 }
@@ -160,6 +179,14 @@ pub fn build() -> Res<Model> {
     let lib = archisim_library::add_library(&mut m)?;
     house(&mut m, Point2::new(0.0, 0.0), FrameMaterial::Steel, &lib)?;
     house(&mut m, Point2::new(14.0, 0.0), FrameMaterial::Timber, &lib)?;
+    // A section across both houses, looking north.
+    m.add_section(archisim_core::NewSection {
+        name: "A".into(),
+        kind: archisim_core::SectionKind::Section,
+        start: Point2::new(-1.0, 3.3),
+        end: Point2::new(24.0, 3.3),
+        depth: 4.0,
+    })?;
     Ok(m)
 }
 
@@ -185,6 +212,24 @@ pub fn write(dir: &Path) -> Res {
         dir.join("entramado.bc3"),
         archisim_export::bc3::bc3(&m, &date, env!("CARGO_PKG_VERSION")),
     )?;
+    // The ground floor at 1:20 and the section at 1:20: the studs, joists
+    // and rafters cut.
+    let options = archisim_plan::PlanOptions {
+        scale: 20.0,
+        ..Default::default()
+    };
+    let level = m.levels()[0].id;
+    std::fs::write(
+        dir.join("entramado-planta-20.svg"),
+        archisim_plan::render_plan(&m, level, &options),
+    )?;
+    if let Some(sec) = m.sections().find(|s| s.name == "A") {
+        let d = archisim_plan::section::section_drawing(&m, sec);
+        std::fs::write(
+            dir.join("entramado-seccion-20.svg"),
+            archisim_plan::section::render_section(&m, &d, &options),
+        )?;
+    }
     let members = archisim_geom::framing::all_members(&m);
     let list = archisim_geom::framing::cut_list(&m, &members);
     let panels = archisim_geom::framing::wall_panels(&m);
@@ -216,4 +261,28 @@ pub fn write(dir: &Path) -> Res {
     println!("  BC3: {}", dir.join("entramado.bc3").display());
     println!("  IFC: {}", dir.join("entramado.ifc").display());
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn the_frames_are_drawn_cut_at_1_20() {
+        let m = super::build().unwrap();
+        let options = archisim_plan::PlanOptions {
+            scale: 20.0,
+            ..Default::default()
+        };
+        let plan = archisim_plan::render_plan(&m, m.levels()[0].id, &options);
+        assert!(plan.contains("frame-cut"));
+        let sec = m.sections().next().unwrap();
+        let d = archisim_plan::section::section_drawing(&m, sec);
+        let svg = archisim_plan::section::render_section(&m, &d, &options);
+        assert!(svg.contains("frame-cut"));
+        // Not at 1:100.
+        let far = archisim_plan::PlanOptions {
+            scale: 100.0,
+            ..Default::default()
+        };
+        assert!(!archisim_plan::render_plan(&m, m.levels()[0].id, &far).contains("frame-cut"));
+    }
 }

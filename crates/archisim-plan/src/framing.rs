@@ -8,7 +8,9 @@
 use std::fmt::Write as _;
 
 use archisim_core::{Model, Point2};
-use archisim_geom::framing::{all_members, cut_list, panel_elevation, wall_panels, Role};
+use archisim_geom::framing::{
+    all_members, cut_list, deck_panels, panel_elevation, wall_panels, Role,
+};
 
 use crate::lettering::{paint, text_path, Align};
 
@@ -62,6 +64,9 @@ fn fill(role: Role) -> &'static str {
         Role::Header | Role::SillTrack => "#c8553d",
         Role::Cripple => "#e6c98a",
         Role::Noggin => "#7fa37a",
+        Role::Joist | Role::Rafter => "#d8c7a6",
+        Role::Rim | Role::RoofRim | Role::Blocking => "#9aa7b4",
+        Role::Tie => "#c8553d",
         _ => "#cfd6dd",
     }
 }
@@ -152,6 +157,7 @@ fn breakdown(model: &Model) -> Option<(String, f64)> {
     }
     let list = cut_list(model, &members);
     let panels = wall_panels(model);
+    let cassettes = deck_panels(model);
     let mut s = String::new();
     let mut y = MARGIN + 6.0;
     text(
@@ -167,10 +173,11 @@ fn breakdown(model: &Model) -> Option<(String, f64)> {
     text(
         &mut s,
         &format!(
-            "{} · {} piezas · {} paneles de muro",
+            "{} · {} piezas · {} paneles de muro · {} cajones de forjado y cubierta",
             model.project_name,
             members.len(),
-            panels.len()
+            panels.len(),
+            cassettes.len()
         ),
         MARGIN,
         y,
@@ -333,67 +340,119 @@ fn breakdown(model: &Model) -> Option<(String, f64)> {
         y += 4.5;
     }
     y += 8.0;
-    // The panels.
-    if !panels.is_empty() {
-        text(
-            &mut s,
-            "PANELES PREFABRICADOS (alzado desde el exterior, 1:50)",
-            MARGIN,
-            y,
-            3.5,
-            Align::Left,
-            INK,
-        );
+    // The panels, and then the cassettes.
+    struct Block {
+        mark: String,
+        w: f64,
+        h: f64,
+        items: Vec<(Role, [f64; 2], [f64; 2], f64)>,
+        caption: String,
+        /// Elevation (up is up) or plan (across is down).
+        up: bool,
+    }
+    let mut groups: Vec<(&str, Vec<Block>)> = Vec::new();
+    groups.push((
+        "PANELES PREFABRICADOS DE MURO (alzado desde el exterior, 1:50)",
+        panels
+            .iter()
+            .map(|p| Block {
+                mark: p.mark.clone(),
+                w: p.length(),
+                h: p.height(),
+                items: panel_elevation(p),
+                caption: format!(
+                    "{} × {} m · {} piezas · {} kg",
+                    dec(p.length(), 2),
+                    dec(p.height(), 2),
+                    p.members.len(),
+                    dec(p.weight(model), 0)
+                ),
+                up: true,
+            })
+            .collect(),
+    ));
+    groups.push((
+        "CAJONES PREFABRICADOS DE FORJADO Y CUBIERTA (vistos desde arriba, 1:50)",
+        cassettes
+            .iter()
+            .map(|c| Block {
+                mark: c.mark.clone(),
+                w: c.length,
+                h: c.width,
+                items: c.plan(),
+                caption: format!(
+                    "{} × {} m · {} piezas · {} kg",
+                    dec(c.length, 2),
+                    dec(c.width, 2),
+                    c.members.len(),
+                    dec(c.weight(model), 0)
+                ),
+                up: false,
+            })
+            .collect(),
+    ));
+    for (title, blocks) in &groups {
+        if blocks.is_empty() {
+            continue;
+        }
+        y = room(y, 70.0);
+        text(&mut s, title, MARGIN, y, 3.5, Align::Left, INK);
         y += 8.0;
+        let mut x = MARGIN;
+        let mut row_h: f64 = 0.0;
+        for b in blocks {
+            let (w, h) = (b.w * PANEL_K, b.h * PANEL_K);
+            if x > MARGIN && x + w > WIDTH - MARGIN {
+                x = MARGIN;
+                y += row_h + 22.0;
+                row_h = 0.0;
+            }
+            if x == MARGIN {
+                y = room(y - 6.0, h + 14.0) + 6.0;
+            }
+            let bottom = y + h;
+            for (role, a, c, width) in &b.items {
+                let to = |q: &[f64; 2]| {
+                    if b.up {
+                        (x + q[0] * PANEL_K, bottom - q[1] * PANEL_K)
+                    } else {
+                        (x + q[0] * PANEL_K, y + q[1] * PANEL_K)
+                    }
+                };
+                let (pa, pc) = (to(a), to(c));
+                let (dx, dy) = (pc.0 - pa.0, pc.1 - pa.1);
+                let l = (dx * dx + dy * dy).sqrt();
+                let half = (width * PANEL_K / 2.0).max(0.1);
+                let (nx, ny) = if l < 1e-9 {
+                    (half, 0.0)
+                } else {
+                    (-dy / l * half, dx / l * half)
+                };
+                let _ = writeln!(
+                    s,
+                    r#"<path d="M{},{} L{},{} L{},{} L{},{} Z" fill="{}" stroke="{INK}" stroke-width="0.12"/>"#,
+                    n(pa.0 + nx),
+                    n(pa.1 + ny),
+                    n(pc.0 + nx),
+                    n(pc.1 + ny),
+                    n(pc.0 - nx),
+                    n(pc.1 - ny),
+                    n(pa.0 - nx),
+                    n(pa.1 - ny),
+                    fill(*role)
+                );
+            }
+            // Its mark, size and weight.
+            text(&mut s, &b.mark, x, y - 2.0, 3.5, Align::Left, INK);
+            text(&mut s, &b.caption, x, bottom + 5.0, 2.5, Align::Left, GREY);
+            line(&mut s, (x, bottom + 1.5), (x + w, bottom + 1.5), 0.15, GREY);
+            x += w + 14.0;
+            row_h = row_h.max(h);
+        }
+        y += row_h + 20.0;
     }
-    let mut x = MARGIN;
-    let mut row_h: f64 = 0.0;
-    for p in &panels {
-        let (w, h) = (p.length() * PANEL_K, p.height() * PANEL_K);
-        if x > MARGIN && x + w > WIDTH - MARGIN {
-            x = MARGIN;
-            y += row_h + 22.0;
-            row_h = 0.0;
-        }
-        if x == MARGIN {
-            y = room(y - 6.0, h + 14.0) + 6.0;
-        }
-        let bottom = y + h;
-        for (role, a, b, width) in panel_elevation(model, p) {
-            let (ax, ay) = (x + a[0] * PANEL_K, bottom - a[1] * PANEL_K);
-            let (bx, by) = (x + b[0] * PANEL_K, bottom - b[1] * PANEL_K);
-            let half = width * PANEL_K / 2.0;
-            let (x0, x1, y0, y1) = if (ax - bx).abs() < 1e-6 {
-                (ax - half, ax + half, ay.min(by), ay.max(by))
-            } else {
-                (ax.min(bx), ax.max(bx), ay - half, ay + half)
-            };
-            let _ = writeln!(
-                s,
-                r#"<rect x="{}" y="{}" width="{}" height="{}" fill="{}" stroke="{INK}" stroke-width="0.12"/>"#,
-                n(x0),
-                n(y0),
-                n((x1 - x0).max(0.2)),
-                n((y1 - y0).max(0.2)),
-                fill(role)
-            );
-        }
-        // Its mark, size and weight.
-        text(&mut s, &p.mark, x, y - 2.0, 3.5, Align::Left, INK);
-        let caption = format!(
-            "{} × {} m · {} piezas · {} kg",
-            dec(p.length(), 2),
-            dec(p.height(), 2),
-            p.members.len(),
-            dec(p.weight(model), 0)
-        );
-        text(&mut s, &caption, x, bottom + 5.0, 2.5, Align::Left, GREY);
-        line(&mut s, (x, bottom + 1.5), (x + w, bottom + 1.5), 0.15, GREY);
-        x += w + 14.0;
-        row_h = row_h.max(h);
-    }
-    if !panels.is_empty() {
-        y = room(y + row_h + 20.0, 6.0);
+    if !panels.is_empty() || !cassettes.is_empty() {
+        y = room(y, 6.0);
         // The key.
         let mut kx = MARGIN;
         for (role, name) in [
@@ -403,6 +462,7 @@ fn breakdown(model: &Model) -> Option<(String, f64)> {
             (Role::Header, "Dintel / antepecho"),
             (Role::Cripple, "Montante corto"),
             (Role::Noggin, "Travesaño"),
+            (Role::Joist, "Vigueta / cabio"),
         ] {
             let _ = writeln!(
                 s,
@@ -412,7 +472,7 @@ fn breakdown(model: &Model) -> Option<(String, f64)> {
                 fill(role)
             );
             text(&mut s, name, kx + 8.0, y, 2.5, Align::Left, INK);
-            kx += 60.0;
+            kx += 55.0;
         }
         y += 6.0;
     }

@@ -6,6 +6,35 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-05 (105) · Entramados, segunda vuelta: lo que faltaba
+
+Rama `bloque/calles` (#161). Sin cambios de formato: todo sale de los tipos con entramado de la versión 80.
+
+**Hecho**
+- **Hastiales y muros con perfil**: los montantes suben hasta la cubierta a la que se recorta el muro (o hasta el borde de su perfil en alzado), y la carrera se parte en la cumbrera. Los tableros cuentan el triángulo del hastial.
+- **Muros curvos**: montantes por el arco y canales en cuerdas de montante a montante.
+- **Dinteles por luz**: el canto del dintel crece con la luz del hueco (luz/10 en madera, luz/12 en acero) hasta lo que cabe.
+- **Cajones prefabricados** de forjado y de cubierta, de 2,4 m de ancho como mucho, con la vigueta doblada en cada junta. Salen en el PDF vistos desde arriba y en la hoja de paneles del Excel.
+- **Cerchas**: en las cubiertas a dos aguas, un tirante al pie de cada pareja de cabios.
+- **Planta a 1:25** (o más cerca): los montantes cortados, cada C o pieza de madera con su contorno. **Sección a 1:50**: montantes, viguetas, cabios y tirantes cortados.
+- **IFC**: cada pieza es un `IfcMember` con su clase (montante, placa, cabio, cordón…), su material y sus datos (pieza, perfil, longitud y panel), dentro de su muro o forjado. El IFC de la demo valida, y al importarlo las piezas no entran como elementos sueltos.
+- `archisim entramado out/` añade los hastiales, un muro curvo por casa, una puerta corredera ancha, la planta a 1:20 y la sección a 1:20.
+
+**Pendiente**
+- **Catálogo de un fabricante**: cuando el estudio diga cuál, hay que meter sus perfiles.
+- **El entramado en el IFC de vuelta**: un IFC importado no recupera el entramado del tipo; hoy solo se escriben las piezas.
+- **Dinteles**: salen de una proporción, no de un cálculo.
+
+**Qué debe probar Antonio**
+1. `cargo run --release -p archisim-cli -- entramado out/`:
+   - abre `out/entramado.archisim` en 3D con «Entramado a la vista»: hastiales hasta la cubierta, tirantes de las cerchas y muros curvos delante;
+   - en `out/entramado-despiece.png`, los cajones de forjado y de cubierta al final;
+   - `out/entramado-planta-20.svg` y `out/entramado-seccion-20.svg`: las C y las piezas de madera cortadas.
+2. Abre `out/entramado.ifc` en ArchiCAD o Revit: cada montante es un elemento («Montante C 150…», «Cabio…»), con el perfil y la longitud en sus propiedades.
+3. En tu proyecto: un muro de entramado bajo una cubierta (Cubierta → recortar muros), un muro curvo y una ventana ancha; mira el 3D, la planta a 1:20 y el despiece.
+
+---
+
 ## 2026-11-05 (104) · Calles, segunda vuelta; edificios del mundo que no cambiaban; entramados ligeros (steel frame y madera)
 
 Rama `bloque/calles` (#161). Formato `.archisim` versiones 79 (lo que cambia un edificio del mundo de la manera de su lugar) y 80 (entramados de los tipos).

@@ -24,6 +24,8 @@ use archisim_core::{FrameMaterial, FrameSection, Framing, Model, Point2, Vec2, W
 
 /// The longest prefabricated wall panel that travels on a lorry, metres.
 pub const PANEL_MAX: f64 = 6.0;
+/// The widest floor or roof cassette that travels without escort, metres.
+pub const CASSETTE_MAX: f64 = 2.4;
 
 /// What a member does.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -49,10 +51,12 @@ pub enum Role {
     Rafter,
     /// The edge members of a roof plane: eaves, verge, ridge, hip.
     RoofRim,
+    /// The tie across the foot of a pair of rafters (with them, a truss).
+    Tie,
 }
 
 impl Role {
-    pub const ALL: [Role; 15] = [
+    pub const ALL: [Role; 16] = [
         Role::BottomTrack,
         Role::TopTrack,
         Role::TopPlate,
@@ -68,6 +72,7 @@ impl Role {
         Role::Blocking,
         Role::Rafter,
         Role::RoofRim,
+        Role::Tie,
     ];
 
     /// Its name, as each trade calls it.
@@ -94,6 +99,7 @@ impl Role {
             Role::Blocking => "Riostra",
             Role::Rafter => "Cabio",
             Role::RoofRim => "Zuncho de faldón",
+            Role::Tie => "Tirante (cercha)",
         }
     }
 
@@ -126,8 +132,11 @@ pub struct Member {
     pub end: P3,
     pub across: P3,
     pub open: P3,
-    /// The prefabricated panel it belongs to (walls), from 0.
+    /// The prefabricated panel it belongs to (walls, floor and roof
+    /// cassettes), from 0.
     pub panel: Option<usize>,
+    /// Where it runs along its wall's drawn line, from the start (walls).
+    pub along: [f64; 2],
 }
 
 impl Member {
@@ -206,24 +215,94 @@ fn frame_band(layers: &[archisim_core::Layer]) -> Option<(f64, f64)> {
     Some((before + layers[k].thickness / 2.0, layers[k].thickness))
 }
 
-/// A straight wall's frame line: its start, its direction, its length,
-/// its normal (to the exterior), the offset of the frame's middle from the
-/// drawn line and the frame's depth.
+/// A wall's frame line: the middle of its frame layer, straight or along
+/// the arc of a curved wall, measured `u` along the drawn line from its
+/// start; with its frame's depth and the wall's top.
 struct WallLine {
-    a: Point2,
-    u: Vec2,
-    n: Vec2,
+    wall: archisim_core::Wall,
     length: f64,
+    /// Offset of the frame's middle from the drawn line (left positive).
     centre: f64,
     depth: f64,
     framed: bool,
+    curved: bool,
+    /// The wall's own top, from project zero, and its base.
+    top: f64,
+    base: f64,
+    /// The undersides of the roof it is trimmed under (`z = a·x + b·y + c`).
+    trims: Vec<[f64; 3]>,
+}
+
+impl WallLine {
+    /// The frame's middle at `u`, `off` more to the left.
+    fn point(&self, u: f64, off: f64) -> Point2 {
+        if self.curved {
+            self.wall
+                .point_at((u / self.length).clamp(-0.5, 1.5), self.centre + off)
+        } else {
+            let d = self.wall.end - self.wall.start;
+            let t = d.normalized().unwrap_or(Vec2::new(1.0, 0.0));
+            self.wall.start + t * u + t.perp_left() * (self.centre + off)
+        }
+    }
+
+    /// The direction of the wall at `u`.
+    fn tangent(&self, u: f64) -> Vec2 {
+        let h = 0.01;
+        (self.wall.point_at((u + h) / self.length, 0.0)
+            - self.wall.point_at((u - h) / self.length, 0.0))
+        .normalized()
+        .unwrap_or(Vec2::new(1.0, 0.0))
+    }
+
+    /// Its exterior side at `u`.
+    fn normal(&self, u: f64) -> Vec2 {
+        self.tangent(u).perp_left()
+    }
+
+    /// The top of the wall at `u` (from project zero): its own, the
+    /// upper edge of its profile, or under the roof it is trimmed under.
+    fn top_at(&self, u: f64) -> f64 {
+        let mut z = match &self.wall.profile {
+            Some(p) => self.base + upper_edge(&p.outline, u).unwrap_or(self.top - self.base),
+            None => self.top,
+        };
+        let p = self.point(u, 0.0);
+        for t in &self.trims {
+            z = z.min(t[0] * p.x + t[1] * p.y + t[2]);
+        }
+        z
+    }
+
+    /// How steep the top is at `u` (rise per run).
+    fn top_slope(&self, u: f64) -> f64 {
+        let h = 0.02;
+        (self.top_at(u + h) - self.top_at(u - h)) / (2.0 * h)
+    }
+}
+
+/// The highest point of a polygon over `x` (an outline in elevation).
+fn upper_edge(outline: &[Point2], x: f64) -> Option<f64> {
+    let n = outline.len();
+    let mut best: Option<f64> = None;
+    for i in 0..n {
+        let (a, b) = (outline[i], outline[(i + 1) % n]);
+        let (lo, hi) = (a.x.min(b.x), a.x.max(b.x));
+        if x < lo - 1e-9 || x > hi + 1e-9 {
+            continue;
+        }
+        let z = if (b.x - a.x).abs() < 1e-9 {
+            a.y.max(b.y)
+        } else {
+            a.y + (b.y - a.y) * (x - a.x) / (b.x - a.x)
+        };
+        best = Some(best.map_or(z, |m: f64| m.max(z)));
+    }
+    best
 }
 
 fn wall_line(model: &Model, id: WallId) -> Option<WallLine> {
     let w = model.wall(id)?;
-    if w.bulge.abs() > 1e-9 {
-        return None;
-    }
     let t = model.wall_type(w.wall_type)?;
     let (ext, _) = w.face_offsets(t.thickness());
     let (mid, layer) = frame_band(&t.layers)?;
@@ -231,49 +310,62 @@ fn wall_line(model: &Model, id: WallId) -> Option<WallLine> {
     let depth = model
         .type_framing(w.wall_type.0)
         .map_or(layer, |f| f.stud.depth.max(f.track.depth));
-    let d = w.end - w.start;
-    let u = d.normalized()?;
+    let length = w.length();
+    if length < 1e-6 {
+        return None;
+    }
+    let level = model.level(w.level).map_or(0.0, |l| l.elevation);
+    let base = level + w.base_offset;
+    let trims = model.wall_trim_planes(id);
+    let top = if trims.is_empty() {
+        base + w.height
+    } else {
+        model.wall_top_z(w)
+    };
     Some(WallLine {
-        a: w.start,
-        u,
-        n: u.perp_left(),
-        length: d.length(),
+        wall: w.clone(),
+        length,
         centre: ext - mid,
         depth,
         framed,
+        curved: w.is_curved(),
+        top,
+        base,
+        trims,
     })
 }
 
 /// How much the frame of `id` is lengthened (positive) or shortened at its
-/// start and end where it meets other walls.
+/// start and end where it meets other walls (straight ones).
 fn wall_end_trims(model: &Model, id: WallId, line: &WallLine) -> [f64; 2] {
-    let Some(w) = model.wall(id) else {
-        return [0.0; 2];
-    };
+    let w = &line.wall;
     let mut out = [0.0; 2];
-    for (k, end) in [(0usize, w.start), (1, w.end)] {
+    for (k, u_end) in [(0usize, 0.0), (1, line.length)] {
         // Pointing out of the wall at this end.
-        let out_dir = if k == 0 { -line.u } else { line.u };
-        let p = end + line.n * line.centre;
+        let t = line.tangent(u_end);
+        let out_dir = if k == 0 { -t } else { t };
+        let p = line.point(u_end, 0.0);
         let mut best: Option<f64> = None;
         for o in model.walls() {
-            if o.id == id || o.level != w.level || !w.allow_join[k] {
+            if o.id == id || o.level != w.level || !w.allow_join[k] || o.is_curved() {
                 continue;
             }
             let Some(ol) = wall_line(model, o.id) else {
                 continue;
             };
+            let (oa, ou) = (o.start, ol.tangent(0.0));
+            let on = ou.perp_left();
             let thick = model.wall_type(o.wall_type).map_or(0.3, |t| t.thickness());
             // Near the other's drawn line, within its length.
-            let along = (p - ol.a).dot(ol.u);
+            let along = (p - oa).dot(ou);
             if along < -thick || along > ol.length + thick {
                 continue;
             }
-            let off = (p - ol.a).dot(ol.n);
+            let off = (p - oa).dot(on);
             if (off - ol.centre).abs() > thick + line.depth {
                 continue;
             }
-            let k_dir = out_dir.dot(ol.n);
+            let k_dir = out_dir.dot(on);
             if k_dir.abs() < 0.3 {
                 continue;
             }
@@ -295,8 +387,45 @@ fn wall_end_trims(model: &Model, id: WallId, line: &WallLine) -> [f64; 2] {
     out
 }
 
-/// The members of a framed wall (none if its type is not framed or it is
-/// curved), panel by panel.
+/// The section of a header over a hole `span` wide: two of the studs'
+/// section on edge, deeper as the span grows (about a tenth of the span
+/// in timber and a twelfth in steel), no deeper than `room`.
+pub fn header_section(f: &Framing, span: f64, room: f64) -> FrameSection {
+    let want = match f.material {
+        FrameMaterial::Steel => span / 12.0,
+        FrameMaterial::Timber => span / 10.0,
+    };
+    if want <= f.stud.depth {
+        return f.stud.clone();
+    }
+    let list: Vec<FrameSection> = match f.material {
+        FrameMaterial::Steel => archisim_core::steel_studs()
+            .into_iter()
+            .filter(|s| (s.thickness - f.stud.thickness.max(0.0015)).abs() < 1e-6)
+            .collect(),
+        FrameMaterial::Timber => archisim_core::timber_sections()
+            .into_iter()
+            .filter(|s| (s.width - f.stud.width).abs() < 1e-6)
+            .collect(),
+    };
+    let fits = |s: &&FrameSection| s.depth <= room + 1e-6;
+    list.iter()
+        .filter(fits)
+        .filter(|s| s.depth >= want - 1e-6)
+        .min_by(|a, b| a.depth.total_cmp(&b.depth))
+        .or_else(|| {
+            list.iter()
+                .filter(fits)
+                .max_by(|a, b| a.depth.total_cmp(&b.depth))
+        })
+        .filter(|s| s.depth > f.stud.depth)
+        .cloned()
+        .unwrap_or_else(|| f.stud.clone())
+}
+
+/// The members of a framed wall (none if its type is not framed), panel
+/// by panel. Straight or curved; its top follows its profile or the roof
+/// it is trimmed under (gables, lean-tos).
 pub fn wall_members(model: &Model, id: WallId) -> Vec<Member> {
     let Some(w) = model.wall(id) else {
         return Vec::new();
@@ -309,12 +438,23 @@ pub fn wall_members(model: &Model, id: WallId) -> Vec<Member> {
     };
     let trims = wall_end_trims(model, id, &line);
     let level_z = model.level(w.level).map_or(0.0, |l| l.elevation);
-    let base = level_z + w.base_offset;
-    let top = base + w.height;
+    let base = line.base;
     let (u0, u1) = (-trims[0], line.length + trims[1]);
-    if u1 - u0 < f.stud.width * 2.0 || top - base < 0.2 {
+    if u1 - u0 < f.stud.width * 2.0 || line.top_at((u0 + u1) / 2.0) - base < 0.2 {
         return Vec::new();
     }
+    let sw = f.stud.width;
+    let steel = f.material == FrameMaterial::Steel;
+    // How high a track or plate lies.
+    let lay = |s: &FrameSection| if s.is_steel() { s.thickness } else { s.width };
+    let tw = lay(&f.track);
+    let plates = if steel { 1.0 } else { 2.0 };
+    let stud_lo = base + tw;
+    // Where the studs stop under the top track(s), square to a sloping top.
+    let stud_hi = |u: f64| {
+        let s = line.top_slope(u);
+        line.top_at(u) - tw * plates * (1.0 + s * s).sqrt()
+    };
     // The holes: along the frame line, and their bottom and top.
     let holes: Vec<(f64, f64, f64, f64)> = model
         .openings_in_wall(id)
@@ -322,17 +462,11 @@ pub fn wall_members(model: &Model, id: WallId) -> Vec<Member> {
             let t = model.opening_type(o.opening_type)?;
             let (a, b) = o.span(t.width);
             let zb = level_z + o.sill;
+            let top = stud_hi(a).min(stud_hi(b));
             Some((a, b, zb.max(base), (zb + t.height).min(top)))
         })
         .filter(|h| h.1 > u0 && h.0 < u1 && h.3 > h.2)
         .collect();
-    let sw = f.stud.width;
-    let steel = f.material == FrameMaterial::Steel;
-    // How high a track or plate lies.
-    let lay = |s: &FrameSection| if s.is_steel() { s.thickness } else { s.width };
-    let plates = if steel { 1 } else { 2 };
-    let stud_lo = base + lay(&f.track);
-    let stud_hi = top - lay(&f.track) * plates as f64;
     let in_hole = |u: f64| {
         holes
             .iter()
@@ -375,80 +509,131 @@ pub fn wall_members(model: &Model, id: WallId) -> Vec<Member> {
     }
     cuts.push(u1);
     let owner = SolidOwner::Wall(id);
-    let at = |u: f64, z: f64| p3(line.a + line.u * u + line.n * line.centre, z);
-    let n3 = v3(line.n);
-    let u3 = v3(line.u);
-    let n3_off = |o: f64| mul(n3, o);
+    let at = |u: f64, z: f64| p3(line.point(u, 0.0), z);
+    let at_off = |u: f64, z: f64, o: f64| p3(line.point(u, o), z);
+    let n3 = |u: f64| v3(line.normal(u));
     let mut out = Vec::new();
-    let mut push = |role: Role, a: P3, b: P3, across: P3, open: P3, panel: usize| {
-        let section = if role.of_track() {
-            f.track.clone()
-        } else {
-            f.stud.clone()
-        };
+    let mut push = |role: Role,
+                    a: (f64, P3),
+                    b: (f64, P3),
+                    across: P3,
+                    open: P3,
+                    panel: usize,
+                    section: Option<FrameSection>| {
+        let section = section.unwrap_or_else(|| {
+            if role.of_track() {
+                f.track.clone()
+            } else {
+                f.stud.clone()
+            }
+        });
         out.push(Member {
             owner,
             role,
             material: f.material,
             section,
-            start: a,
-            end: b,
+            start: a.1,
+            end: b.1,
             across,
             open,
             panel: Some(panel),
+            along: [a.0, b.0],
         });
     };
-    let tw = lay(&f.track);
+    // A track or plate from `pa` to `pb` at `z(u)`: one piece where it
+    // runs straight, broken where the top changes slope and, in a curved
+    // wall, at every stud (chords).
+    let pieces = |pa: f64, pb: f64, follow_top: bool, stations: &[f64]| -> Vec<(f64, f64)> {
+        let mut knots = vec![pa, pb];
+        if line.curved {
+            knots.extend(
+                stations
+                    .iter()
+                    .copied()
+                    .filter(|&s| s > pa + 0.01 && s < pb - 0.01),
+            );
+        }
+        if follow_top {
+            // Where the slope of the top changes.
+            let n = ((pb - pa) / 0.05).ceil().max(1.0) as usize;
+            let step = (pb - pa) / n as f64;
+            let mut last = line.top_slope(pa + step / 2.0);
+            for i in 1..n {
+                let s = line.top_slope(pa + step * (i as f64 + 0.5));
+                if (s - last).abs() > 0.01 {
+                    knots.push(pa + step * i as f64);
+                    last = s;
+                }
+            }
+        }
+        knots.sort_by(|a, b| a.total_cmp(b));
+        knots.dedup_by(|a, b| (*a - *b).abs() < 0.005);
+        // Two knots either side of a corner of the top (sampled): the
+        // corner itself, where the two slopes meet.
+        if follow_top {
+            let mut i = 1;
+            while i + 2 < knots.len() {
+                let (c, d) = (knots[i], knots[i + 1]);
+                if d - c < 0.12 {
+                    let (sl, sr) = (line.top_slope(c - 0.05), line.top_slope(d + 0.05));
+                    if (sl - sr).abs() > 1e-3 {
+                        let u = (line.top_at(d) - line.top_at(c) + sl * c - sr * d) / (sl - sr);
+                        knots[i] = u.clamp(c, d);
+                        knots.remove(i + 1);
+                        continue;
+                    }
+                }
+                i += 1;
+            }
+        }
+        knots.windows(2).map(|w| (w[0], w[1])).collect()
+    };
     for (pi, pair) in cuts.windows(2).enumerate() {
         let (pa, pb) = (pair[0], pair[1]);
-        let mid = |z0: f64, z1: f64| (z0 + z1) / 2.0;
-        // Bottom and top tracks.
-        push(
-            Role::BottomTrack,
-            at(pa, mid(base, base + tw)),
-            at(pb, mid(base, base + tw)),
-            n3,
-            UP,
-            pi,
-        );
-        push(
-            Role::TopTrack,
-            at(
-                pa,
-                mid(
-                    stud_hi + if steel { 0.0 } else { tw },
-                    top - if steel { 0.0 } else { tw },
-                )
-                .max(stud_hi),
-            ),
-            at(
-                pb,
-                mid(
-                    stud_hi + if steel { 0.0 } else { tw },
-                    top - if steel { 0.0 } else { tw },
-                )
-                .max(stud_hi),
-            ),
-            n3,
-            mul(UP, -1.0),
-            pi,
-        );
         // The studs of this panel: both ends (double at the ends of the
         // wall) and the regular ones in between, clear of the holes.
         let mut studs: Vec<(f64, f64, f64, Role)> = vec![
-            (pa + sw / 2.0, stud_lo, stud_hi, Role::Stud),
-            (pb - sw / 2.0, stud_lo, stud_hi, Role::Stud),
+            (pa + sw / 2.0, stud_lo, stud_hi(pa + sw / 2.0), Role::Stud),
+            (pb - sw / 2.0, stud_lo, stud_hi(pb - sw / 2.0), Role::Stud),
         ];
         if pi == 0 {
-            studs.push((pa + sw * 1.5, stud_lo, stud_hi, Role::Stud));
+            studs.push((pa + sw * 1.5, stud_lo, stud_hi(pa + sw * 1.5), Role::Stud));
         }
         if pi + 2 == cuts.len() {
-            studs.push((pb - sw * 1.5, stud_lo, stud_hi, Role::Stud));
+            studs.push((pb - sw * 1.5, stud_lo, stud_hi(pb - sw * 1.5), Role::Stud));
         }
         for &s in &regular {
             if s > pa + sw * 1.4 && s < pb - sw * 1.4 && !in_hole(s) {
-                studs.push((s, stud_lo, stud_hi, Role::Stud));
+                studs.push((s, stud_lo, stud_hi(s), Role::Stud));
             }
+        }
+        let stations: Vec<f64> = studs.iter().map(|s| s.0).collect();
+        // Bottom and top tracks.
+        for (a, b) in pieces(pa, pb, false, &stations) {
+            push(
+                Role::BottomTrack,
+                (a, at(a, base + tw / 2.0)),
+                (b, at(b, base + tw / 2.0)),
+                n3((a + b) / 2.0),
+                UP,
+                pi,
+                None,
+            );
+        }
+        let track_z = |u: f64| {
+            let s = line.top_slope(u);
+            line.top_at(u) - (if steel { tw / 2.0 } else { tw * 1.5 }) * (1.0 + s * s).sqrt()
+        };
+        for (a, b) in pieces(pa, pb, true, &stations) {
+            push(
+                Role::TopTrack,
+                (a, at(a, track_z(a + 0.001))),
+                (b, at(b, track_z(b - 0.001))),
+                n3((a + b) / 2.0),
+                mul(UP, -1.0),
+                pi,
+                None,
+            );
         }
         // Round each hole in this panel.
         let mut header_spans: Vec<(f64, f64, f64, f64)> = Vec::new();
@@ -457,42 +642,53 @@ pub fn wall_members(model: &Model, id: WallId) -> Vec<Member> {
             if b <= a {
                 continue;
             }
+            let room = stud_hi(a).min(stud_hi(b)) - zt;
+            let hs = header_section(&f, b - a, room.max(0.0));
+            let hd = hs.depth.min(room.max(0.0));
             for (side, k) in [(a - sw / 2.0, -1.0), (b + sw / 2.0, 1.0)] {
-                studs.push((side, stud_lo, zt.min(stud_hi), Role::JackStud));
-                studs.push((side + k * sw, stud_lo, stud_hi, Role::KingStud));
+                studs.push((side, stud_lo, zt.min(stud_hi(side)), Role::JackStud));
+                studs.push((
+                    side + k * sw,
+                    stud_lo,
+                    stud_hi(side + k * sw),
+                    Role::KingStud,
+                ));
             }
-            let hd = f.stud.depth;
             header_spans.push((a - sw, b + sw, zb, zt + hd));
             // The header: two members on edge, one at each face of the
             // frame (a box), over the jack studs.
-            let side = (line.depth - f.stud.width) / 2.0;
-            for k in [-1.0, 1.0] {
-                let o = n3_off(k * side);
-                push(
-                    Role::Header,
-                    add(at(a - sw, zt + hd / 2.0), o),
-                    add(at(b + sw, zt + hd / 2.0), o),
-                    UP,
-                    mul(n3, -k),
-                    pi,
-                );
+            if hd > 0.02 {
+                let side = (line.depth - hs.width) / 2.0;
+                for k in [-1.0, 1.0] {
+                    let mid = (a + b) / 2.0;
+                    push(
+                        Role::Header,
+                        (a - sw, at_off(a - sw, zt + hd / 2.0, k * side)),
+                        (b + sw, at_off(b + sw, zt + hd / 2.0, k * side)),
+                        UP,
+                        mul(n3(mid), -k),
+                        pi,
+                        Some(hs.clone()),
+                    );
+                }
             }
             let sill = zb > stud_lo + tw * 2.0;
             if sill {
                 push(
                     Role::SillTrack,
-                    at(a, zb - tw / 2.0),
-                    at(b, zb - tw / 2.0),
-                    n3,
+                    (a, at(a, zb - tw / 2.0)),
+                    (b, at(b, zb - tw / 2.0)),
+                    n3((a + b) / 2.0),
                     UP,
                     pi,
+                    None,
                 );
             }
             // Short studs at the spacing over the header and under the sill.
             for &s in &regular {
                 if s > a + sw && s < b - sw {
-                    if zt + hd < stud_hi - 0.05 {
-                        studs.push((s, zt + hd, stud_hi, Role::Cripple));
+                    if zt + hd < stud_hi(s) - 0.05 {
+                        studs.push((s, zt + hd, stud_hi(s), Role::Cripple));
                     }
                     if sill && zb - tw > stud_lo + 0.05 {
                         studs.push((s, stud_lo, zb - tw, Role::Cripple));
@@ -503,41 +699,72 @@ pub fn wall_members(model: &Model, id: WallId) -> Vec<Member> {
         studs.sort_by(|x, y| x.0.total_cmp(&y.0));
         for &(s, z0, z1, role) in &studs {
             if z1 - z0 > 0.02 {
-                push(role, at(s, z0), at(s, z1), n3, u3, pi);
+                push(
+                    role,
+                    (s, at(s, z0)),
+                    (s, at(s, z1)),
+                    n3(s),
+                    v3(line.tangent(s)),
+                    pi,
+                    None,
+                );
             }
         }
-        // A row of noggins at mid-height between the full-height studs.
+        // A row of noggins at one height, between the full-height studs.
         if f.noggins {
-            let zm = (stud_lo + stud_hi) / 2.0;
+            let low = (0..=40)
+                .map(|i| stud_hi(u0 + (u1 - u0) * i as f64 / 40.0))
+                .fold(f64::INFINITY, f64::min);
+            let zm = (stud_lo + low.max(stud_lo + 0.4)) / 2.0;
             let full: Vec<f64> = studs
                 .iter()
-                .filter(|s| (s.1 - stud_lo).abs() < 1e-6 && (s.2 - stud_hi).abs() < 1e-6)
+                .filter(|s| (s.1 - stud_lo).abs() < 1e-6 && (s.2 - stud_hi(s.0)).abs() < 1e-6)
                 .map(|s| s.0)
                 .collect();
             for pair in full.windows(2) {
                 let (s0, s1) = (pair[0] + sw / 2.0, pair[1] - sw / 2.0);
-                if s1 - s0 < 0.05 {
+                if s1 - s0 < 0.05 || zm > stud_hi(pair[0]).min(stud_hi(pair[1])) - 0.1 {
                     continue;
                 }
                 let blocked = header_spans
                     .iter()
                     .any(|h| s1 > h.0 && s0 < h.1 && zm > h.2 - tw && zm < h.3 + tw);
                 if !blocked {
-                    push(Role::Noggin, at(s0, zm), at(s1, zm), n3, UP, pi);
+                    push(
+                        Role::Noggin,
+                        (s0, at(s0, zm)),
+                        (s1, at(s1, zm)),
+                        n3((s0 + s1) / 2.0),
+                        UP,
+                        pi,
+                        None,
+                    );
                 }
             }
         }
     }
     // The second top plate of timber, over the whole wall.
     if !steel {
-        push(
-            Role::TopPlate,
-            at(u0, top - tw / 2.0),
-            at(u1, top - tw / 2.0),
-            n3,
-            mul(UP, -1.0),
-            cuts.len() - 2,
-        );
+        let all: Vec<f64> = regular.clone();
+        for (a, b) in pieces(u0, u1, true, &all) {
+            let z = |u: f64| {
+                let s = line.top_slope(u);
+                line.top_at(u) - tw / 2.0 * (1.0 + s * s).sqrt()
+            };
+            let panel = cuts
+                .windows(2)
+                .position(|c| (a + b) / 2.0 >= c[0] && (a + b) / 2.0 <= c[1])
+                .unwrap_or(0);
+            push(
+                Role::TopPlate,
+                (a, at(a, z(a + 0.001))),
+                (b, at(b, z(b - 0.001))),
+                n3((a + b) / 2.0),
+                mul(UP, -1.0),
+                panel,
+                None,
+            );
+        }
     }
     out
 }
@@ -591,35 +818,11 @@ fn deck_members(
             across: mul(up, 1.0 / ul),
             open: o3,
             panel: None,
+            along: [0.0; 2],
         }
     };
-    // The rims, set in by half their width.
     let mut rings: Vec<&[Point2]> = vec![outline];
     rings.extend(holes.iter().map(|h| h.as_slice()));
-    let ccw = archisim_core::signed_area(outline) > 0.0;
-    for (ri, ring) in rings.iter().enumerate() {
-        let n = ring.len();
-        for i in 0..n {
-            let (a, b) = (ring[i], ring[(i + 1) % n]);
-            let Some(u) = (b - a).normalized() else {
-                continue;
-            };
-            // Inward: left of a counter-clockwise outline; holes go the
-            // other way round for the same rule, so look outward of them.
-            let mut inward = u.perp_left();
-            if !ccw {
-                inward = -inward;
-            }
-            if ri > 0 {
-                let hole_ccw = archisim_core::signed_area(ring) > 0.0;
-                if hole_ccw == ccw {
-                    inward = -inward;
-                }
-            }
-            let off = inward * (rim_w / 2.0);
-            out.push(mk(rim, a + off, b + off, inward));
-        }
-    }
     // The main members: lines along `dir` across the outline.
     let all: Vec<Point2> = rings.iter().flat_map(|r| r.iter().copied()).collect();
     let (lo, hi) = all
@@ -630,7 +833,7 @@ fn deck_members(
         });
     let origin = Point2::new(0.0, 0.0);
     let mut lines: Vec<Vec<(f64, f64)>> = Vec::new();
-    let mut stations = Vec::new();
+    let mut stations: Vec<f64> = Vec::new();
     let mut t = lo + rim_w + half;
     while t < hi - rim_w - half + 1e-9 {
         stations.push(t);
@@ -642,7 +845,39 @@ fn deck_members(
     {
         stations.push(hi - rim_w - half);
     }
-    for &t in &stations {
+    // Prefabricated cassettes no wider than CASSETTE_MAX: at each seam
+    // the member is doubled, one for each cassette.
+    let mut band_of: Vec<usize> = Vec::new();
+    let mut seams: Vec<f64> = Vec::new();
+    {
+        let mut start = stations.first().copied().unwrap_or(0.0) - half - rim_w;
+        let mut more = Vec::new();
+        let mut prev: Option<f64> = None;
+        for &t in &stations {
+            if let Some(p) = prev {
+                if t + half - start > CASSETTE_MAX && p - start > 0.3 {
+                    // The seam just after the last member that fits, and
+                    // the next cassette's first member beside it.
+                    let c = p + half;
+                    seams.push(c);
+                    if t - (c + half) > 3.0 * half {
+                        more.push((c + half, seams.len()));
+                    }
+                    start = c;
+                }
+            }
+            band_of.push(seams.len());
+            prev = Some(t);
+        }
+        for (t, b) in more {
+            let i = stations.partition_point(|&x| x < t);
+            stations.insert(i, t);
+            band_of.insert(i, b);
+        }
+    }
+    let band_at = |t: f64| seams.iter().filter(|&&c| t > c).count();
+    for (ti, &t) in stations.iter().enumerate() {
+        let band = band_of[ti];
         let base = origin + across_dir * t;
         // Where the line crosses the rings.
         let mut cuts: Vec<f64> = Vec::new();
@@ -666,12 +901,57 @@ fn deck_members(
                 // not: a little short of them.
                 let (s0, s1) = (s0 + rim_w * 1.05, s1 - rim_w * 1.05);
                 if s1 - s0 > 0.1 {
-                    out.push(mk(main, base + dir * s0, base + dir * s1, dir.perp_left()));
+                    let mut m = mk(main, base + dir * s0, base + dir * s1, dir.perp_left());
+                    m.panel = Some(band);
+                    out.push(m);
                     segs.push((s0, s1));
                 }
             }
         }
         lines.push(segs);
+    }
+    // The rims, set in by half their width.
+    let ccw = archisim_core::signed_area(outline) > 0.0;
+    for (ri, ring) in rings.iter().enumerate() {
+        let n = ring.len();
+        for i in 0..n {
+            let (a, b) = (ring[i], ring[(i + 1) % n]);
+            let Some(u) = (b - a).normalized() else {
+                continue;
+            };
+            // Inward: left of a counter-clockwise outline; holes go the
+            // other way round for the same rule, so look outward of them.
+            let mut inward = u.perp_left();
+            if !ccw {
+                inward = -inward;
+            }
+            if ri > 0 {
+                let hole_ccw = archisim_core::signed_area(ring) > 0.0;
+                if hole_ccw == ccw {
+                    inward = -inward;
+                }
+            }
+            let off = inward * (rim_w / 2.0);
+            let (a, b) = (a + off, b + off);
+            // Cut at the seams of the cassettes.
+            let (ta, tb) = (a.dot(across_dir), b.dot(across_dir));
+            let mut ks = vec![0.0, 1.0];
+            for &c in &seams {
+                if (ta - c) * (tb - c) < 0.0 {
+                    ks.push((c - ta) / (tb - ta));
+                }
+            }
+            ks.sort_by(|x, y| x.total_cmp(y));
+            for w in ks.windows(2) {
+                let (p, q) = (a + (b - a) * w[0], a + (b - a) * w[1]);
+                if p.distance(q) < 0.02 {
+                    continue;
+                }
+                let mut m = mk(rim, p, q, inward);
+                m.panel = Some(band_at(((p + q) * 0.5).dot(across_dir)));
+                out.push(m);
+            }
+        }
     }
     // A row of blocking across the middle.
     if f.noggins && lines.len() > 1 {
@@ -688,8 +968,10 @@ fn deck_members(
             if has(&lines[i]) && has(&lines[i + 1]) {
                 let a = origin + across_dir * (stations[i] + half) + dir * sm;
                 let b = origin + across_dir * (stations[i + 1] - half) + dir * sm;
-                if (b - a).length() > 0.05 {
-                    out.push(mk(Role::Blocking, a, b, dir));
+                if (b - a).length() > 0.05 && band_of[i] == band_of[i + 1] {
+                    let mut m = mk(Role::Blocking, a, b, dir);
+                    m.panel = Some(band_of[i]);
+                    out.push(m);
                 }
             }
         }
@@ -752,13 +1034,14 @@ pub fn roof_members(model: &Model, id: archisim_core::RoofId) -> Vec<Member> {
     };
     let base = model.level(r.level).map_or(0.0, |l| l.elevation);
     let mut out = Vec::new();
-    for plane in r.planes() {
+    let planes = r.planes();
+    for (pi, plane) in planes.iter().enumerate() {
         let Some(dir) = plane.slope.direction() else {
             continue;
         };
         let sl = plane.slope;
         let z = |p: Point2| base + r.base_offset + sl.rise_at(p) - sl.vertical(mid);
-        out.extend(deck_members(
+        for mut m in deck_members(
             SolidOwner::Roof(id),
             f,
             &plane.outline,
@@ -767,10 +1050,68 @@ pub fn roof_members(model: &Model, id: archisim_core::RoofId) -> Vec<Member> {
             &z,
             Role::Rafter,
             Role::RoofRim,
-        ));
+        ) {
+            // Each plane's cassettes on their own.
+            m.panel = m.panel.map(|b| pi * ROOF_PLANE_PANELS + b);
+            out.push(m);
+        }
+    }
+    // A gable roof (its planes all run one way, down either side): a tie
+    // at the foot of each pair of rafters, across the footprint, so that
+    // each pair with its tie is a truss.
+    let dirs: Vec<Vec2> = planes.iter().filter_map(|p| p.slope.direction()).collect();
+    if let Some(&d0) = dirs.first() {
+        if dirs.len() >= 2 && dirs.iter().all(|d| d.dot(d0).abs() > 0.999) {
+            let sl = planes[0].slope;
+            let across = d0.perp_left();
+            let rafter_bottom = mid + f.stud.depth / 2.0;
+            let z = base + r.base_offset - sl.vertical(rafter_bottom) - f.stud.depth / 2.0;
+            let rafters: Vec<f64> = out
+                .iter()
+                .filter(|m| {
+                    m.role == Role::Rafter && m.panel.is_some_and(|p| p < ROOF_PLANE_PANELS)
+                })
+                .map(|m| Point2::new(m.start[0], m.start[1]).dot(across))
+                .collect();
+            for t in rafters {
+                let base_pt = across * t;
+                let mut cuts: Vec<f64> = Vec::new();
+                let n = r.outline.len();
+                for i in 0..n {
+                    let (a, b) = (r.outline[i], r.outline[(i + 1) % n]);
+                    let (ta, tb) = (a.dot(across) - t, b.dot(across) - t);
+                    if (ta > 0.0) != (tb > 0.0) {
+                        let k = ta / (ta - tb);
+                        cuts.push((a + (b - a) * k - base_pt).dot(d0));
+                    }
+                }
+                cuts.sort_by(|a, b| a.total_cmp(b));
+                if let (Some(&s0), Some(&s1)) = (cuts.first(), cuts.last()) {
+                    if s1 - s0 > 0.5 {
+                        let (a, b) = (base_pt + d0 * s0, base_pt + d0 * s1);
+                        out.push(Member {
+                            owner: SolidOwner::Roof(id),
+                            role: Role::Tie,
+                            material: f.material,
+                            section: f.stud.clone(),
+                            start: p3(a, z),
+                            end: p3(b, z),
+                            across: UP,
+                            open: v3(across),
+                            panel: None,
+                            along: [0.0; 2],
+                        });
+                    }
+                }
+            }
+        }
     }
     out
 }
+
+/// Cassettes of a roof are numbered plane by plane: plane `i`'s start at
+/// `i · ROOF_PLANE_PANELS`.
+const ROOF_PLANE_PANELS: usize = 1000;
 
 /// Every member of the project, walls first.
 pub fn all_members(model: &Model) -> Vec<Member> {
@@ -795,7 +1136,7 @@ pub fn is_framed(model: &Model, owner: SolidOwner) -> bool {
     match owner {
         SolidOwner::Wall(id) | SolidOwner::Facade(id) => model
             .wall(id)
-            .is_some_and(|w| w.bulge.abs() < 1e-9 && model.type_framing(w.wall_type.0).is_some()),
+            .is_some_and(|w| model.type_framing(w.wall_type.0).is_some()),
         SolidOwner::Slab(id) => model
             .slab(id)
             .is_some_and(|s| model.type_framing(s.slab_type.0).is_some()),
@@ -1092,9 +1433,6 @@ fn sheathed_areas(
         let Some(f) = model.type_framing(w.wall_type.0) else {
             continue;
         };
-        if w.bulge.abs() > 1e-9 {
-            continue;
-        }
         let l = w.length();
         let holes: f64 = model
             .openings_in_wall(w.id)
@@ -1102,8 +1440,21 @@ fn sheathed_areas(
             .map(|t| t.width * t.height)
             .sum();
         let anchors = (l / 1.2).ceil() as usize + 1;
+        // Its face: up to its top, gable or not.
+        let face = match wall_line(model, w.id) {
+            Some(line) => {
+                let n = ((l / 0.1).ceil() as usize).max(1);
+                (0..n)
+                    .map(|i| {
+                        let u = l * (i as f64 + 0.5) / n as f64;
+                        (line.top_at(u) - line.base).max(0.0) * l / n as f64
+                    })
+                    .sum::<f64>()
+            }
+            None => l * w.height,
+        };
         out.push((
-            (l * w.height - holes).max(0.0),
+            (face - holes).max(0.0),
             f.sheathing.clone(),
             f.material,
             anchors,
@@ -1192,10 +1543,7 @@ pub fn wall_panels(model: &Model) -> Vec<Panel> {
             continue;
         }
         n += 1;
-        let Some(line) = wall_line(model, w.id) else {
-            continue;
-        };
-        let along = |p: P3| (Point2::new(p[0], p[1]) - line.a).dot(line.u);
+        let base = model.level(w.level).map_or(0.0, |l| l.elevation) + w.base_offset;
         let count = members.iter().filter_map(|m| m.panel).max().unwrap_or(0) + 1;
         for i in 0..count {
             let mine: Vec<Member> = members
@@ -1203,19 +1551,33 @@ pub fn wall_panels(model: &Model) -> Vec<Panel> {
                 .filter(|m| m.panel == Some(i) && m.role != Role::TopPlate)
                 .cloned()
                 .collect();
-            let Some(bottom) = mine.iter().find(|m| m.role == Role::BottomTrack) else {
+            let bottoms: Vec<&Member> = mine
+                .iter()
+                .filter(|m| m.role == Role::BottomTrack)
+                .collect();
+            if bottoms.is_empty() {
                 continue;
-            };
-            let (from, to) = (along(bottom.start), along(bottom.end));
-            let base = model.level(w.level).map_or(0.0, |l| l.elevation) + w.base_offset;
+            }
+            let from = bottoms
+                .iter()
+                .map(|m| m.along[0].min(m.along[1]))
+                .fold(f64::INFINITY, f64::min);
+            let to = bottoms
+                .iter()
+                .map(|m| m.along[0].max(m.along[1]))
+                .fold(f64::NEG_INFINITY, f64::max);
+            let top = mine
+                .iter()
+                .map(|m| m.start[2].max(m.end[2]) + m.section.thickness.max(0.0))
+                .fold(base, f64::max);
             out.push(Panel {
                 mark: format!("M{n}-{}", i + 1),
                 wall: w.id,
                 index: i,
-                from: from.min(to),
-                to: from.max(to),
+                from,
+                to,
                 bottom: base,
-                top: base + w.height,
+                top: top.max(base + 0.1),
                 members: mine,
             });
         }
@@ -1225,16 +1587,9 @@ pub fn wall_panels(model: &Model) -> Vec<Panel> {
 
 /// A member of a panel in the panel's own elevation: from its left end and
 /// its bottom, m, as seen from the exterior face.
-pub fn panel_elevation(model: &Model, p: &Panel) -> Vec<(Role, [f64; 2], [f64; 2], f64)> {
-    let Some(line) = wall_line(model, p.wall) else {
-        return Vec::new();
-    };
-    let at = |q: P3| {
-        // Seen from outside (the left of the wall), its start is on the
-        // right.
-        let u = p.to - (Point2::new(q[0], q[1]) - line.a).dot(line.u);
-        [u, q[2] - p.bottom]
-    };
+pub fn panel_elevation(p: &Panel) -> Vec<(Role, [f64; 2], [f64; 2], f64)> {
+    // Seen from outside (the left of the wall), its start is on the right.
+    let at = |u: f64, q: P3| [p.to - u, q[2] - p.bottom];
     p.members
         .iter()
         .map(|m| {
@@ -1251,7 +1606,210 @@ pub fn panel_elevation(model: &Model, p: &Panel) -> Vec<(Role, [f64; 2], [f64; 2
             } else {
                 m.section.width
             };
-            (m.role, at(m.start), at(m.end), w)
+            (m.role, at(m.along[0], m.start), at(m.along[1], m.end), w)
+        })
+        .collect()
+}
+
+/// A prefabricated floor or roof cassette: a strip of joists or rafters no
+/// wider than [`CASSETTE_MAX`] with its rims.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Cassette {
+    /// «F2-3»: the second framed floor, its third cassette; «C1-2» for
+    /// roofs.
+    pub mark: String,
+    pub owner: SolidOwner,
+    pub index: usize,
+    /// Along the joists and across them, m.
+    pub length: f64,
+    pub width: f64,
+    pub members: Vec<Member>,
+}
+
+impl Cassette {
+    /// The frame's weight with its boards (on one face), kg.
+    pub fn weight(&self, model: &Model) -> f64 {
+        let frame: f64 = self
+            .members
+            .iter()
+            .map(|m| {
+                if m.section.is_steel() {
+                    m.kg()
+                } else {
+                    m.m3() * FrameMaterial::Timber.density()
+                }
+            })
+            .sum();
+        let ty = match self.owner {
+            SolidOwner::Slab(s) => model.slab(s).map(|s| s.slab_type.0),
+            SolidOwner::Roof(r) => model.roof(r).map(|r| r.roof_type.0),
+            _ => None,
+        };
+        let board = ty
+            .and_then(|t| model.type_framing(t))
+            .and_then(|f| f.sheathing.as_ref())
+            .map_or(0.0, |s| s.thickness * 600.0 * self.length * self.width);
+        frame + board
+    }
+
+    /// Along its joists and across them, m.
+    pub fn size(&self) -> (f64, f64) {
+        let mut size = (0.0f64, 0.0f64);
+        for (_, a, b, w) in self.plan() {
+            let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
+            let l = (dx * dx + dy * dy).sqrt().max(1e-9);
+            let (nx, ny) = (-dy / l * w / 2.0, dx / l * w / 2.0);
+            for q in [a, b] {
+                for sgn in [-1.0, 1.0] {
+                    size.0 = size.0.max(q[0] + nx * sgn);
+                    size.1 = size.1.max(q[1] + ny * sgn);
+                }
+            }
+        }
+        size
+    }
+
+    /// Its members seen from above in its own axes: along the joists and
+    /// across them, from its corner, m; with how wide each is drawn.
+    pub fn plan(&self) -> Vec<(Role, [f64; 2], [f64; 2], f64)> {
+        let Some(main) = self
+            .members
+            .iter()
+            .find(|m| matches!(m.role, Role::Joist | Role::Rafter))
+        else {
+            return Vec::new();
+        };
+        let ex = {
+            let a = sub(main.end, main.start);
+            mul(a, 1.0 / len(a).max(1e-9))
+        };
+        let ey = {
+            let c = cross(UP, ex);
+            mul(c, 1.0 / len(c).max(1e-9))
+        };
+        // Each member as its two ends and its width square to it, in the
+        // cassette's axes.
+        let flat: Vec<(Role, [f64; 2], [f64; 2], f64)> = self
+            .members
+            .iter()
+            .map(|m| {
+                let at = |p: P3| [dot(p, ex), dot(p, ey)];
+                (m.role, at(m.start), at(m.end), m.section.width)
+            })
+            .collect();
+        let mut lo = [f64::INFINITY; 2];
+        for (_, a, b, w) in &flat {
+            let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
+            let l = (dx * dx + dy * dy).sqrt().max(1e-9);
+            let (nx, ny) = (-dy / l * w / 2.0, dx / l * w / 2.0);
+            for q in [a, b] {
+                for sgn in [-1.0, 1.0] {
+                    let c = [q[0] + nx * sgn, q[1] + ny * sgn];
+                    for k in 0..2 {
+                        lo[k] = lo[k].min(c[k]);
+                    }
+                }
+            }
+        }
+        flat.into_iter()
+            .map(|(r, a, b, w)| {
+                (
+                    r,
+                    [a[0] - lo[0], a[1] - lo[1]],
+                    [b[0] - lo[0], b[1] - lo[1]],
+                    w,
+                )
+            })
+            .collect()
+    }
+}
+
+/// The cassettes of the framed floors and roofs, floors first.
+pub fn deck_panels(model: &Model) -> Vec<Cassette> {
+    let mut out = Vec::new();
+    let mut groups: Vec<(char, SolidOwner, Vec<Member>)> = Vec::new();
+    for s in model.slabs() {
+        let ms = slab_members(model, s.id);
+        if !ms.is_empty() {
+            groups.push(('F', SolidOwner::Slab(s.id), ms));
+        }
+    }
+    for r in model.roofs() {
+        let ms = roof_members(model, r.id);
+        if !ms.is_empty() {
+            groups.push(('C', SolidOwner::Roof(r.id), ms));
+        }
+    }
+    let mut count = std::collections::BTreeMap::<char, usize>::new();
+    for (letter, owner, ms) in groups {
+        let n = {
+            let c = count.entry(letter).or_insert(0);
+            *c += 1;
+            *c
+        };
+        let mut keys: Vec<usize> = ms.iter().filter_map(|m| m.panel).collect();
+        keys.sort_unstable();
+        keys.dedup();
+        for (i, key) in keys.into_iter().enumerate() {
+            let mine: Vec<Member> = ms
+                .iter()
+                .filter(|m| m.panel == Some(key))
+                .cloned()
+                .collect();
+            let mut c = Cassette {
+                mark: format!("{letter}{n}-{}", i + 1),
+                owner,
+                index: i,
+                length: 0.0,
+                width: 0.0,
+                members: mine,
+            };
+            let (l, w) = c.size();
+            c.length = l;
+            c.width = w;
+            out.push(c);
+        }
+    }
+    out
+}
+
+/// Where a member crosses a plane (`origin`, `normal`): the outline of
+/// each plate of its section there (corners on the plane). Empty if it
+/// does not cross it.
+pub fn member_cut(m: &Member, origin: P3, normal: P3) -> Vec<[P3; 4]> {
+    let axis = sub(m.end, m.start);
+    let (da, db) = (
+        dot(sub(m.start, origin), normal),
+        dot(sub(m.end, origin), normal),
+    );
+    if da * db > 0.0 || (da - db).abs() < 1e-12 {
+        return Vec::new();
+    }
+    let s = &m.section;
+    let (d, w) = (s.depth / 2.0, s.width / 2.0);
+    let rects: Vec<(f64, f64, f64, f64)> = if s.is_steel() {
+        let t = s.thickness.max(0.0005);
+        let mut r = vec![(-d, d, -w, -w + t), (-d, -d + t, -w, w), (d - t, d, -w, w)];
+        if s.lip > 0.0 {
+            r.push((-d + t, -d + s.lip, w - t, w));
+            r.push((d - s.lip, d - t, w - t, w));
+        }
+        r
+    } else {
+        vec![(-d, d, -w, w)]
+    };
+    let an = dot(axis, normal);
+    let on_plane = |c: P3| {
+        // Slide the corner along the member to the plane.
+        let k = -dot(sub(c, origin), normal) / an;
+        add(c, mul(axis, k))
+    };
+    rects
+        .into_iter()
+        .map(|(d0, d1, w0, w1)| {
+            let c =
+                |dd: f64, ww: f64| on_plane(add(add(m.start, mul(m.across, dd)), mul(m.open, ww)));
+            [c(d0, w0), c(d1, w0), c(d1, w1), c(d0, w1)]
         })
         .collect()
 }
@@ -1419,5 +1977,128 @@ mod tests {
         for s in ms.iter().filter(|x| x.role == Role::Stud) {
             assert!(s.start[0] < a || s.start[0] > b, "{s:?}");
         }
+    }
+
+    #[test]
+    fn gables_follow_the_roof_and_floors_go_in_cassettes() {
+        let mut m = framed_house(FrameMaterial::Timber);
+        let level = m.levels()[0].id;
+        let st = m.slabs().next().unwrap().slab_type;
+        let roof = m
+            .add_roof(NewRoof {
+                roof_type: st,
+                level,
+                outline: vec![
+                    Point2::new(0.0, 0.0),
+                    Point2::new(9.0, 0.0),
+                    Point2::new(9.0, 6.0),
+                    Point2::new(0.0, 6.0),
+                ],
+                // Gables at x = 0 and x = 9: the planes rise from the long
+                // sides.
+                slopes: vec![Some(0.5), None, Some(0.5), None],
+                base_offset: 2.7,
+                overhang: 0.3,
+            })
+            .unwrap();
+        let walls: Vec<WallId> = m.walls().map(|w| w.id).collect();
+        for &w in &walls {
+            m.set_wall_roof(w, Some(roof)).unwrap();
+        }
+        // The gable at x = 9 (from (9,0) to (9,6)): its middle studs rise
+        // to under the ridge, 1,5 m over the eaves.
+        let gable = walls[1];
+        let studs: Vec<Member> = wall_members(&m, gable)
+            .into_iter()
+            .filter(|x| x.role == Role::Stud)
+            .collect();
+        let highest = studs.iter().map(|x| x.end[2]).fold(0.0, f64::max);
+        assert!(highest > 3.6 && highest < 4.3, "{highest}");
+        let lowest = studs.iter().map(|x| x.end[2]).fold(9.0, f64::min);
+        assert!(lowest < 2.9, "{lowest}");
+        // Its top track breaks at the ridge: at least two pieces sloping.
+        let tops: Vec<Member> = wall_members(&m, gable)
+            .into_iter()
+            .filter(|x| x.role == Role::TopTrack)
+            .collect();
+        let rises: Vec<(f64, f64, f64)> = tops
+            .iter()
+            .map(|t| (t.along[0], t.along[1], t.end[2] - t.start[2]))
+            .collect();
+        assert!(
+            tops.len() >= 2 && tops.iter().all(|t| (t.end[2] - t.start[2]).abs() > 0.3),
+            "{rises:?}"
+        );
+        // The floor in cassettes no wider than 2,4 m, with their joists.
+        let cassettes = deck_panels(&m);
+        let floors: Vec<&Cassette> = cassettes
+            .iter()
+            .filter(|c| c.mark.starts_with('F'))
+            .collect();
+        assert!(floors.len() >= 3, "{}", floors.len());
+        assert!(
+            floors.iter().all(|c| c.width <= CASSETTE_MAX + 0.05),
+            "{floors:?}"
+        );
+        // The roof's rafter pairs are tied: trusses.
+        let ties = roof_members(&m, roof)
+            .into_iter()
+            .filter(|x| x.role == Role::Tie)
+            .count();
+        assert!(ties >= 10, "{ties}");
+    }
+
+    #[test]
+    fn curved_walls_are_framed_along_their_arc() {
+        let mut m = framed_house(FrameMaterial::Steel);
+        let level = m.levels()[0].id;
+        let wt = m.walls().next().unwrap().wall_type;
+        let w = m
+            .add_wall(NewWall {
+                wall_type: wt,
+                level,
+                start: Point2::new(0.0, 20.0),
+                end: Point2::new(8.0, 20.0),
+                bulge: 0.4,
+                reference: ReferenceLine::Center,
+                height: 2.7,
+                base_offset: 0.0,
+                top: WallTop::Unconnected,
+            })
+            .unwrap();
+        let ms = wall_members(&m, w);
+        let wall = m.wall(w).unwrap().clone();
+        // Studs at the spacing along the arc, every one on it.
+        let studs: Vec<&Member> = ms.iter().filter(|x| x.role == Role::Stud).collect();
+        assert!(studs.len() as f64 > wall.length() / 0.6, "{}", studs.len());
+        let arc = wall.arc().unwrap();
+        for s in &studs {
+            let r = Point2::new(s.start[0], s.start[1]).distance(arc.centre);
+            assert!((r - arc.radius).abs() < 0.1, "{r} {}", arc.radius);
+        }
+        // The tracks are chords, stud to stud.
+        let bottoms = ms.iter().filter(|x| x.role == Role::BottomTrack).count();
+        assert!(bottoms > 10, "{bottoms}");
+    }
+
+    #[test]
+    fn wide_holes_get_deeper_headers_and_cuts_are_plates() {
+        let f = Framing::for_depth(FrameMaterial::Timber, 0.15);
+        assert!(header_section(&f, 0.9, 1.0).depth <= f.stud.depth + 1e-9);
+        let wide = header_section(&f, 2.4, 1.0);
+        assert!(wide.depth >= 0.24 - 1e-9, "{}", wide.name);
+        let steel = Framing::for_depth(FrameMaterial::Steel, 0.15);
+        assert!(header_section(&steel, 3.0, 1.0).depth >= 0.25 - 1e-9);
+        // A stud cut by a level plane: a C of three plates and two lips.
+        let m = framed_house(FrameMaterial::Steel);
+        let w = m.walls().next().unwrap().id;
+        let stud = wall_members(&m, w)
+            .into_iter()
+            .find(|x| x.role == Role::Stud)
+            .unwrap();
+        let cut = member_cut(&stud, [0.0, 0.0, 1.0], [0.0, 0.0, 1.0]);
+        assert_eq!(cut.len(), 5);
+        assert!(cut.iter().flatten().all(|p| (p[2] - 1.0).abs() < 1e-9));
+        assert!(member_cut(&stud, [0.0, 0.0, 9.0], [0.0, 0.0, 1.0]).is_empty());
     }
 }
