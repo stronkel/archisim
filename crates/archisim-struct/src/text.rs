@@ -255,3 +255,112 @@ pub fn combinations_text(cases: &[Case], altitude: f64) -> String {
     }
     s
 }
+
+/// The frame analysis written out.
+pub fn analysis_text(model: &Model, a: &crate::analysis::Analysis) -> String {
+    use crate::analytical::Owner;
+    let mut s = String::new();
+    let f = &a.model.frame;
+    if f.bars.is_empty() {
+        let _ = writeln!(
+            s,
+            "Pórtico de pilares y vigas: no hay (la estructura son muros y forjados)."
+        );
+        return s;
+    }
+    let _ = writeln!(
+        s,
+        "Pórtico de pilares y vigas: {} nudos, {} barras, {} apoyos; {} casos y {} combinaciones",
+        f.nodes.len(),
+        f.bars.len(),
+        f.supports.len(),
+        a.cases.len(),
+        a.combinations.len()
+    );
+    for case in &a.cases {
+        let (ap, back) = a.frame_balance(*case);
+        if ap.abs() > 1e-6 {
+            let _ = writeln!(
+                s,
+                "  Equilibrio {}: cargas {} kN, reacciones {} kN{}",
+                case.short(),
+                dec(ap, 1),
+                dec(back, 1),
+                if (ap - back).abs() > 1e-3 * ap.abs().max(1.0) {
+                    " — NO CUADRA"
+                } else {
+                    ""
+                }
+            );
+        }
+    }
+    let _ = writeln!(s, "  Esfuerzos de cálculo (envolvente ELU):");
+    for e in &a.envelopes {
+        let kind = a.model.kinds.get(&e.owner).map_or("", |k| k.name());
+        let name = match e.owner {
+            Owner::Column(id) => {
+                let t = model
+                    .column(id)
+                    .and_then(|c| model.member_type(c.member_type))
+                    .map_or(String::new(), |t| t.name.clone());
+                format!("Pilar {} ({t}, {kind})", id.0)
+            }
+            Owner::Beam(id) => {
+                let t = model
+                    .beam(id)
+                    .and_then(|b| model.member_type(b.member_type))
+                    .map_or(String::new(), |t| t.name.clone());
+                format!("Viga {} ({t}, {kind})", id.0)
+            }
+        };
+        let _ = writeln!(
+            s,
+            "    {name}: N {} / {} kN, Vz {} kN, My {} / {} kN·m, Mz {} kN·m; manda {}",
+            dec(e.min[0], 1),
+            dec(e.max[0], 1),
+            dec(e.max[2].max(-e.min[2]), 1),
+            dec(e.min[4], 1),
+            dec(e.max[4], 1),
+            dec(e.max[5].max(-e.min[5]), 1),
+            a.combinations[e.governing].label()
+        );
+    }
+    let _ = writeln!(s, "  Flechas (DB-SE 4.3.3):");
+    for d in &a.deflections {
+        let (li, lc, la) = crate::analysis::Analysis::limits(d, false);
+        let ok = d.integrity <= li && d.comfort <= lc && d.appearance <= la;
+        let name = match d.owner {
+            Owner::Beam(id) => format!("Viga {}", id.0),
+            Owner::Column(id) => format!("Pilar {}", id.0),
+        };
+        let _ = writeln!(
+            s,
+            "    {name}, vano de {} m{}: integridad {} mm (≤ {}), confort {} mm (≤ {}), apariencia {} mm (≤ {}) {}",
+            dec(d.length, 2),
+            if d.cantilever { " en voladizo" } else { "" },
+            dec(d.integrity * 1000.0, 1),
+            dec(li * 1000.0, 1),
+            dec(d.comfort * 1000.0, 1),
+            dec(lc * 1000.0, 1),
+            dec(d.appearance * 1000.0, 1),
+            dec(la * 1000.0, 1),
+            if ok { "cumple" } else { "NO CUMPLE" }
+        );
+    }
+    let _ = writeln!(s, "  Reacciones verticales máximas en los apoyos:");
+    for (node, ult, chr) in &a.reactions {
+        let p = f.nodes[*node];
+        let _ = writeln!(
+            s,
+            "    ({}, {}): ELU {} kN, característica {} kN",
+            dec(p[0], 2),
+            dec(p[1], 2),
+            dec(*ult, 1),
+            dec(*chr, 1)
+        );
+    }
+    for n in &a.notes {
+        let _ = writeln!(s, "  Aviso: {n}");
+    }
+    s
+}

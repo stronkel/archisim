@@ -15,10 +15,17 @@
 //! It is a design aid for the architect; the project's structural
 //! calculation is signed by its author, who must check its hypotheses.
 
+// Matrix code reads better with indices.
+#![allow(clippy::needless_range_loop)]
+
 pub mod actions;
+pub mod analysis;
+pub mod analytical;
 pub mod cases;
+pub mod frame;
 pub mod geo;
 pub mod gravity;
+pub mod sections;
 pub mod text;
 pub mod weights;
 pub mod wind;
@@ -48,5 +55,14 @@ pub fn actions_report(model: &archisim_core::Model) -> String {
     s.push_str(&text::takedown_text(model, &td));
     s.push('\n');
     s.push_str(&text::combinations_text(&cases, model.site_altitude()));
+    s
+}
+
+/// Everything: the actions and the analysis of the frame.
+pub fn structure_report(model: &archisim_core::Model) -> String {
+    let mut s = actions_report(model);
+    let a = analysis::analyse(model);
+    s.push('\n');
+    s.push_str(&text::analysis_text(model, &a));
     s
 }

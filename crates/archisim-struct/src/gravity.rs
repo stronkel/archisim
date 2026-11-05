@@ -50,6 +50,9 @@ pub struct Carried {
     pub received: BTreeMap<Case, Vec<f64>>,
     /// Its own weight, kN per stretch.
     pub own: Vec<f64>,
+    /// The part of `received` that comes from beams and columns (which
+    /// the frame analysis takes from them itself), kN per stretch.
+    pub from_frame: BTreeMap<Case, Vec<f64>>,
     /// What it passes on at its base (received + own), kN per stretch.
     pub delivered: BTreeMap<Case, Vec<f64>>,
 }
@@ -65,14 +68,37 @@ impl Carried {
             base,
             received: BTreeMap::new(),
             own: vec![0.0; n],
+            from_frame: BTreeMap::new(),
             delivered: BTreeMap::new(),
         }
     }
 
     fn add(&mut self, case: Case, along: f64, kn: f64) {
-        let n = bins(self.length);
+        let n = self.own.len().max(1);
         let i = ((along / BIN).floor().max(0.0) as usize).min(n - 1);
         self.received.entry(case).or_insert_with(|| vec![0.0; n])[i] += kn;
+    }
+
+    fn add_from_frame(&mut self, case: Case, along: f64, kn: f64) {
+        let n = self.own.len().max(1);
+        let i = ((along / BIN).floor().max(0.0) as usize).min(n - 1);
+        self.from_frame.entry(case).or_insert_with(|| vec![0.0; n])[i] += kn;
+    }
+
+    /// What it receives from outside the frame of beams and columns, kN
+    /// per stretch.
+    pub fn received_outside_frame(&self, case: Case) -> Vec<f64> {
+        let mut v = self
+            .received
+            .get(&case)
+            .cloned()
+            .unwrap_or_else(|| vec![0.0; self.own.len().max(1)]);
+        if let Some(f) = self.from_frame.get(&case) {
+            for (a, b) in v.iter_mut().zip(f) {
+                *a -= b;
+            }
+        }
+        v
     }
 
     /// The total it receives in a case, kN.
@@ -723,8 +749,12 @@ fn deliver(
                     match target(p, td) {
                         Target::Plate(j) => incoming[j].push((p, *case, *kn)),
                         Target::Carrier(o, a) => {
+                            let framed = is_frame(k) && is_frame(o);
                             if let Some(oc) = td.carriers.get_mut(&o) {
                                 oc.add(*case, a, *kn);
+                                if framed {
+                                    oc.add_from_frame(*case, a, *kn);
+                                }
                             }
                         }
                         Target::Ground => td.ground.push(GroundLoad {
@@ -796,8 +826,12 @@ fn deliver(
                         match t {
                             Target::Plate(pi) => incoming[pi].push((p, *case, part)),
                             Target::Carrier(o, along) => {
+                                let framed = is_frame(o);
                                 if let Some(oc) = td.carriers.get_mut(&o) {
                                     oc.add(*case, along, part);
+                                    if framed {
+                                        oc.add_from_frame(*case, along, part);
+                                    }
                                 }
                             }
                             Target::Ground => td.ground.push(GroundLoad {
@@ -813,6 +847,10 @@ fn deliver(
         }
     }
     let _ = model;
+}
+
+fn is_frame(k: Carrier) -> bool {
+    matches!(k, Carrier::Beam(_) | Carrier::Column(_))
 }
 
 #[derive(Debug, Clone, Copy)]

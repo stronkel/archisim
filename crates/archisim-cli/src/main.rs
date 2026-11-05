@@ -764,7 +764,7 @@ fn run_structure(project: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let model = archisim_file::open(project)
         .map_err(|e| format!("no se puede abrir {}: {e}", project.display()))?;
     let model = model.flattened().map_err(|e| format!("{e}"))?;
-    print!("{}", archisim_struct::actions_report(&model));
+    print!("{}", archisim_struct::structure_report(&model));
     Ok(())
 }
 
