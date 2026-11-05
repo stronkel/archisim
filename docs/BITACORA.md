@@ -6,6 +6,58 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-05 (107) · Estructura: cálculo completo sobre el modelo dibujado
+
+Rama `bloque/calles` (#161). Formato `.archisim` versión 81: guarda el emplazamiento de la estructura y las cargas puestas a mano. Los proyectos antiguos se abren igual. Crate nuevo `archisim-struct`; todo descrito en `docs/ESTRUCTURA.md`.
+
+**Hecho** (los cinco pasos pedidos, en orden)
+1. **Acciones y combinaciones** (DB-SE, DB-SE-AE):
+   - sobrecargas por el uso de cada local;
+   - pesos propios por las capas de cada tipo;
+   - nieve por zona y altitud;
+   - viento por zona, aspereza y altura;
+   - combinaciones ELU, característica, frecuente, casi permanente y sísmica;
+   - descenso de cargas planta a planta hasta el terreno, con su comprobación de equilibrio.
+2. **Pórtico 3D** de pilares y vigas por el método de la rigidez: envolventes de esfuerzos, flechas (DB-SE 4.3.3) y reacciones.
+3. **Entramados completos**:
+   - steel frame (EN 1993-1-3: anchos eficaces, distorsión, pandeo lateral, abolladura del alma en apoyos, tornillos);
+   - madera (EN 1995-1-1);
+   - muros arriostrados con sus anclajes;
+   - fuego DB-SI 6.
+4. **Anejo de cálculo** en PDF A4 y en texto, con ocho capítulos.
+5. Lo último:
+   - **Sismo** por el método simplificado de NCSE-02. Va al pórtico (casos Sismo X e Y) y a los muros arriostrados, que toman el mayor entre sismo y viento.
+   - **Vigas y pilares de hormigón** (Código Estructural): el armado que piden, o la comparación con el armado dibujado.
+   - **Losas de hormigón como emparrillado**: armado por Wood–Armer y flecha a largo plazo.
+   - **Muros de fábrica** a compresión (DB-SE-F).
+   - **Cimentación**: tamaño de zapata por pilar y corrida por muro, o comprobación de las dibujadas contra la presión admisible, y si son rígidas.
+- Todo sale también en la Comprobación CTE:
+  - los entramados en su apartado;
+  - el hormigón, la fábrica y la cimentación en «Estructura (Código Estructural, DB-SE-F, DB-SE-C)».
+- Los PDF pesan menos: las curvas de las letras se trocean según su tamaño en el papel. El anejo del edificio de Florence Street ha pasado de 24 a 6,5 MB, y lo mismo vale para los planos.
+
+**Pendiente**
+- Punzonamiento de losas, uniones de acero y madera, anclajes al cimiento.
+- Armado de zapatas, losas de cimentación, muros de sótano.
+- Segundo orden.
+- Sismo modal espectral y sus reglas de detalle.
+- Otros hormigones y aceros; secciones que no son rectangulares.
+- El fk de la fábrica es fijo (4 N/mm²). Si el estudio usa otra pieza, hay que poder elegirla.
+
+**Qué debe probar Antonio**
+1. `cargo run --release -p archisim-cli -- demo out/` y luego `cargo run --release -p archisim-cli -- estructura out/demo.archisim out/estructura`:
+   - abre `out/estructura/demo-anejo-calculo.pdf`;
+   - en el capítulo 7 mira las vigas, los pilares, la losa de cubierta, los muros de fábrica y las zapatas.
+   - Los dos pilares de la demo no cumplen (1,06): les llega el momento de la viga empotrada. ¿Es lo que esperarías?
+2. Abre `out/demo.archisim` en la app → Colaboración → **Cálculo de la estructura…**:
+   - pon Sismo ab/g 0,16 (zona de Granada) y mira el apartado «Sismo»: fuerza por planta y periodo;
+   - pulsa «Anejo de cálculo (PDF)…».
+3. En la misma demo, selecciona la viga → Estructura → Armado y dibújale 3Ø12 abajo. Vuelve a calcular: debe decir que no cumple y proponer 5Ø16.
+4. `cargo run --release -p archisim-cli -- entramado out/` y luego `cargo run --release -p archisim-cli -- estructura out/entramado.archisim out/estructura`: el capítulo 7 del anejo con los entramados, la cimentación y, si pones sismo, los muros arriostrados con «kN de sismo».
+5. Revisa los coeficientes del capítulo 2 y las hipótesis del capítulo 8 del anejo: es lo que firmarías.
+
+---
+
 ## 2026-11-05 (106) · Entramados: predimensionado, salida al cálculo y catálogos sin marcas
 
 Rama `bloque/calles` (#161). Sin cambios de formato.

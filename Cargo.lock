@@ -236,6 +236,7 @@ dependencies = [
  "archisim-mesh",
  "archisim-plan",
  "archisim-render",
+ "archisim-struct",
  "archisim-team",
  "bytemuck",
  "eframe",
@@ -317,6 +318,7 @@ dependencies = [
  "archisim-core",
  "archisim-geom",
  "archisim-library",
+ "archisim-struct",
 ]
 
 [[package]]
@@ -418,6 +420,7 @@ dependencies = [
  "archisim-core",
  "archisim-draft",
  "archisim-geom",
+ "archisim-struct",
  "resvg",
 ]
 

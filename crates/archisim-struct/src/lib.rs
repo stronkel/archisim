@@ -8,7 +8,14 @@
 //! - `gravity`: the takedown of the vertical loads, from the floors and
 //!   roofs down to the ground;
 //! - `wind`: the wind on the building, storey by storey, and on each
-//!   exterior wall.
+//!   exterior wall;
+//! - `seismic`: the earthquake by NCSE-02's simplified method;
+//! - `frame`, `analytical`, `analysis`: the 3D frame of columns and beams;
+//! - `cold`, `timber`, `lightframe`: the light frames;
+//! - `concrete`, `members`, `slab`: reinforced concrete beams, columns and
+//!   slabs (the slabs as a grillage);
+//! - `masonry`, `foundations`: load-bearing brick and the footings;
+//! - `report`: the calculation report.
 //!
 //! It works on the model as drawn: it adds no elements and stores
 //! nothing but the site data and the loads placed by hand (in the core).
@@ -23,12 +30,18 @@ pub mod analysis;
 pub mod analytical;
 pub mod cases;
 pub mod cold;
+pub mod concrete;
+pub mod foundations;
 pub mod frame;
 pub mod geo;
 pub mod gravity;
 pub mod lightframe;
+pub mod masonry;
+pub mod members;
 pub mod report;
 pub mod sections;
+pub mod seismic;
+pub mod slab;
 pub mod text;
 pub mod timber;
 pub mod weights;
@@ -68,10 +81,24 @@ pub fn structure_report(model: &archisim_core::Model) -> String {
     let a = analysis::analyse(model);
     s.push('\n');
     s.push_str(&text::analysis_text(model, &a));
-    let checks = lightframe::check(model, &a.takedown, a.wind.as_ref());
+    let q = seismic::quake(model, &a.takedown);
+    s.push('\n');
+    s.push_str(&text::quake_text(&q));
+    let checks = all_checks(model, &a);
     if !checks.is_empty() {
         s.push('\n');
         s.push_str(&text::lightframe_text(model, &checks));
     }
     s
+}
+
+/// Every check of the elements: light frames, concrete beams, columns
+/// and slabs, masonry walls and foundations.
+pub fn all_checks(model: &archisim_core::Model, a: &analysis::Analysis) -> Vec<lightframe::Check> {
+    let mut out = lightframe::check(model, &a.takedown, a.wind.as_ref());
+    out.extend(members::check(model, a));
+    out.extend(slab::check(model, &a.takedown));
+    out.extend(masonry::check(model, &a.takedown));
+    out.extend(foundations::check(model, &a.takedown));
+    out
 }

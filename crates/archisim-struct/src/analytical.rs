@@ -503,24 +503,8 @@ pub fn build(model: &Model, td: &Takedown, wind: Option<&BuildingWind>) -> Analy
         if !out.frame.bars.is_empty() {
             for dir in WindDir::ALL {
                 let [dx, dy] = dir.vector();
-                let walls_along: f64 = model
-                    .walls()
-                    .filter(|wl| {
-                        model.wall_type(wl.wall_type).is_some_and(|t| {
-                            t.layers
-                                .iter()
-                                .any(|l| l.function == archisim_core::LayerFunction::Structure)
-                        })
-                    })
-                    .filter(|wl| {
-                        let d = wl.end - wl.start;
-                        let l = d.length();
-                        l > 0.5 && (d.x * dx + d.y * dy).abs() / l > 0.94
-                    })
-                    .map(|wl| wl.start.distance(wl.end))
-                    .sum();
                 let width = (w.hi.x - w.lo.x).max(w.hi.y - w.lo.y);
-                if walls_along > 0.2 * width {
+                if walls_along(model, dir) > 0.2 * width {
                     continue;
                 }
                 for st in w.storeys.iter().filter(|st| st.dir == dir) {
@@ -558,6 +542,36 @@ pub fn build(model: &Model, td: &Takedown, wind: Option<&BuildingWind>) -> Analy
             }
         }
     }
+    // The earthquake (NCSE-02, 3.7): the force of each storey to the
+    // frame's nodes at its floor, in X and in Y, where no load-bearing
+    // walls take it.
+    let quake = crate::seismic::quake(model, td);
+    if quake.applies && !out.frame.bars.is_empty() {
+        for (x, dir) in [(true, WindDir::PosX), (false, WindDir::PosY)] {
+            if walls_along(model, dir) > 0.2 * building_width(model) {
+                continue;
+            }
+            let [dx, dy] = dir.vector();
+            for &(z, _, force) in &quake.storeys {
+                let at: Vec<usize> = (0..out.frame.nodes.len())
+                    .filter(|&n| {
+                        (out.frame.nodes[n][2] - z).abs() < 0.6
+                            && !out.frame.supports.iter().any(|(s, _)| *s == n)
+                    })
+                    .collect();
+                if at.is_empty() || force <= 0.0 {
+                    continue;
+                }
+                let each = force / at.len() as f64;
+                for n in at {
+                    loads.entry(Case::Quake(x)).or_default().push(Load::Node {
+                        node: n,
+                        f: [dx * each, dy * each, 0.0, 0.0, 0.0, 0.0],
+                    });
+                }
+            }
+        }
+    }
     out.loads = loads;
     out.pieces = pieces;
     out.spans = spans;
@@ -566,4 +580,31 @@ pub fn build(model: &Model, td: &Takedown, wind: Option<&BuildingWind>) -> Analy
             .push("El pórtico no tiene apoyos: no se puede calcular.".into());
     }
     out
+}
+
+/// Length of load-bearing walls along a direction, m.
+fn walls_along(model: &Model, dir: WindDir) -> f64 {
+    let [dx, dy] = dir.vector();
+    model
+        .walls()
+        .filter(|wl| {
+            model.wall_type(wl.wall_type).is_some_and(|t| {
+                t.layers
+                    .iter()
+                    .any(|l| l.function == archisim_core::LayerFunction::Structure)
+            })
+        })
+        .filter(|wl| {
+            let d = wl.end - wl.start;
+            let l = d.length();
+            l > 0.5 && (d.x * dx + d.y * dy).abs() / l > 0.94
+        })
+        .map(|wl| wl.start.distance(wl.end))
+        .sum()
+}
+
+/// The building's larger side in plan, m (the frame's when there is no
+/// building wind).
+fn building_width(model: &Model) -> f64 {
+    crate::wind::building_wind(model).map_or(10.0, |w| (w.hi.x - w.lo.x).max(w.hi.y - w.lo.y))
 }

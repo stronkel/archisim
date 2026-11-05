@@ -34,6 +34,11 @@ pub enum Subject {
     Wall(WallId),
     Floor(SlabId),
     Roof(RoofId),
+    /// A beam or a column of the frame (concrete checks).
+    Beam(archisim_core::BeamId),
+    Column(archisim_core::ColumnId),
+    /// A footing (worked out or drawn: the column or wall it carries).
+    Footing(u64),
     Building,
 }
 
@@ -1028,7 +1033,13 @@ fn racking(model: &Model, id: WallId, f: &Framing, kmod: f64) -> (f64, Vec<f64>,
 
 /// The shear walls of each storey against the wind.
 #[allow(clippy::too_many_arguments)]
-fn shear_walls(model: &Model, td: &Takedown, wind: &BuildingWind, out: &mut Vec<Check>) {
+fn shear_walls(
+    model: &Model,
+    td: &Takedown,
+    wind: Option<&BuildingWind>,
+    quake: Option<&crate::seismic::Quake>,
+    out: &mut Vec<Check>,
+) {
     let kmod = timber::Duration::Short.kmod();
     let levels: Vec<(archisim_core::LevelId, f64)> =
         model.levels().iter().map(|l| (l.id, l.elevation)).collect();
@@ -1051,8 +1062,8 @@ fn shear_walls(model: &Model, td: &Takedown, wind: &BuildingWind, out: &mut Vec<
             ]
             .iter()
             .map(|d| {
-                wind.storeys
-                    .iter()
+                wind.iter()
+                    .flat_map(|w| w.storeys.iter())
                     .filter(|s| s.dir == *d && s.to > z + 0.2)
                     .map(|s| {
                         let part = ((s.to - z.max(s.from)) / (s.to - s.from)).clamp(0.0, 1.0);
@@ -1061,10 +1072,19 @@ fn shear_walls(model: &Model, td: &Takedown, wind: &BuildingWind, out: &mut Vec<
                     .sum::<f64>()
             })
             .fold(0.0, f64::max);
-            if v_k <= 0.0 {
+            // The earthquake above it (seismic combination, factor 1).
+            let v_e: f64 = quake.map_or(0.0, |q| {
+                q.storeys
+                    .iter()
+                    .filter(|s| s.0 > z + 0.2)
+                    .map(|s| s.2)
+                    .sum()
+            });
+            if v_k <= 0.0 && v_e <= 0.0 {
                 continue;
             }
-            let v_d = 1.5 * v_k;
+            let by_quake = v_e > 1.5 * v_k;
+            let v_d = (1.5 * v_k).max(v_e);
             // The walls along it and their share (by stiffness: framed by
             // their racking resistance, masonry and concrete far more).
             let mut parts: Vec<(WallId, f64, f64, Option<Framing>)> = Vec::new();
@@ -1112,8 +1132,9 @@ fn shear_walls(model: &Model, td: &Takedown, wind: &BuildingWind, out: &mut Vec<
                 out.push(Check {
                     subject: Subject::Wall(*id),
                     what: format!(
-                        "{name}: {} kN de viento {} (de {} kN en la planta), resiste {} kN con {} paneles, {} kN por fijación a {} mm",
+                        "{name}: {} kN de {} {} (de {} kN en la planta), resiste {} kN con {} paneles, {} kN por fijación a {} mm",
                         dec(share, 1),
+                        if by_quake { "sismo" } else { "viento" },
                         if dir == WindDir::PosX { "en X" } else { "en Y" },
                         dec(v_d, 1),
                         dec(*cap, 1),
@@ -1271,8 +1292,10 @@ pub fn check(model: &Model, td: &Takedown, wind: Option<&BuildingWind>) -> Vec<C
             wall_studs(model, td, wind, w.id, f, &combos, &cases, &mut out);
         }
     }
-    if let Some(wind) = wind {
-        shear_walls(model, td, wind, &mut out);
+    let quake = crate::seismic::quake(model, td);
+    let quake = quake.applies.then_some(&quake);
+    if wind.is_some() || quake.is_some() {
+        shear_walls(model, td, wind, quake, &mut out);
     }
     // Fire: the framed types.
     let top = model

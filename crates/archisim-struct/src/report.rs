@@ -45,7 +45,7 @@ fn kind_name(k: Kind) -> &'static str {
 /// The report.
 pub fn report(model: &Model) -> Vec<Block> {
     let a = analysis::analyse(model);
-    let checks = lightframe::check(model, &a.takedown, a.wind.as_ref());
+    let checks = crate::all_checks(model, &a);
     blocks(model, &a, &checks)
 }
 
@@ -83,7 +83,7 @@ pub fn blocks(model: &Model, a: &Analysis, checks: &[lightframe::Check]) -> Vec<
     // 1. Normativa y método.
     out.push(Block::Heading(1, "1. Normativa y método".into()));
     out.push(Block::Para(
-        "Normativa: CTE DB-SE (bases de cálculo), DB-SE-AE (acciones), DB-SE-A (acero), DB-SE-M (madera), DB-SE-C (cimientos), DB-SI 6 (resistencia al fuego), NCSE-02 (sismo) y Código Estructural; Eurocódigos EN 1993-1-3 (perfiles de chapa conformada en frío), EN 1993-1-5 (anchos eficaces) y EN 1995-1-1 (madera), en lo que el CTE remite a ellos.".into(),
+        "Normativa: CTE DB-SE (bases de cálculo), DB-SE-AE (acciones), DB-SE-A (acero), DB-SE-M (madera), DB-SE-C (cimientos), DB-SE-F (fábrica), DB-SI 6 (resistencia al fuego), NCSE-02 (sismo) y Código Estructural; Eurocódigos EN 1993-1-3 (perfiles de chapa conformada en frío), EN 1993-1-5 (anchos eficaces) y EN 1995-1-1 (madera), en lo que el CTE remite a ellos.".into(),
     ));
     out.push(Block::Para(
         "Método: las cargas de cada forjado y cubierta se reparten a lo que las sostiene (en los entramados, en la dirección de las viguetas o cabios; en el resto, por áreas tributarias) y bajan por muros, vigas y pilares hasta el terreno. El pórtico de pilares y vigas se calcula en 3D, en régimen elástico lineal y en primer orden, por el método de la rigidez. Cada vigueta y cabio de los entramados se calcula como viga continua sobre sus apoyos, y cada montante con la carga de su muro y el viento de su fachada. Las combinaciones son las de DB-SE 4.2 con los coeficientes de la tabla 4.1 y los ψ de la tabla 4.2.".into(),
@@ -271,6 +271,45 @@ pub fn blocks(model: &Model, a: &Analysis, checks: &[lightframe::Check]) -> Vec<
                 })
                 .collect(),
         });
+    }
+    // 3.5 Sismo.
+    let q = crate::seismic::quake(model, &a.takedown);
+    out.push(Block::Heading(2, "3.5 Sismo (NCSE-02)".into()));
+    if q.applies {
+        out.push(Block::Para(format!(
+            "Método simplificado (NCSE-02, 3.7): aceleración de cálculo ac = S·ρ·ab = {}·g con S = {}; periodo fundamental T = {} s; α(T) = {} (K {}, C {}); β = υ/μ = {} (ductilidad {}). Fuerzas por planta del primer modo, con las masas G + ψ·Q de NCSE-02 3.2.",
+            dec(q.ac, 3),
+            dec(q.s, 2),
+            dec(q.period, 2),
+            dec(q.alpha, 2),
+            dec(site.seismic_k, 2),
+            dec(site.soil, 2),
+            dec(q.beta, 2),
+            if q.beta < 1.0 { "baja" } else { "nula" }
+        )));
+        out.push(Block::Table {
+            columns: vec![
+                ("Planta, cota".into(), 1.5),
+                ("Peso".into(), 1.5),
+                ("Fuerza sísmica".into(), 1.5),
+            ],
+            rows: q
+                .storeys
+                .iter()
+                .map(|(z, w, f)| {
+                    vec![
+                        format!("{} m", dec(*z, 2)),
+                        format!("{} kN", dec(*w, 0)),
+                        format!("{} kN", dec(*f, 1)),
+                    ]
+                })
+                .collect(),
+        });
+        out.push(Block::Para(
+            "Las fuerzas van al pórtico en las direcciones en que no hay muros de carga, y a los muros arriostrados cuando superan el viento mayorado.".into(),
+        ));
+    } else {
+        out.push(Block::Para(format!("No se aplica: {}.", q.why)));
     }
     // 4. Combinaciones.
     out.push(Block::Heading(1, "4. Combinaciones".into()));
@@ -470,9 +509,9 @@ pub fn blocks(model: &Model, a: &Analysis, checks: &[lightframe::Check]) -> Vec<
     }
     // 7. Entramados.
     if !checks.is_empty() {
-        out.push(Block::Heading(1, "7. Entramados ligeros".into()));
+        out.push(Block::Heading(1, "7. Comprobación de los elementos".into()));
         out.push(Block::Para(format!(
-            "Comprobaciones de cada elemento con entramado: se da la pieza más desfavorable de cada comprobación. Fijaciones de los tableros a {} mm en los bordes de los paneles.",
+            "Entramados ligeros, vigas, pilares y losas de hormigón, muros de fábrica y cimentación. De cada comprobación se da la pieza más desfavorable. Cuando un elemento de hormigón no tiene armado dibujado se da el que pide; si lo tiene, se compara con él. Fijaciones de los tableros a {} mm en los bordes de los paneles.",
             dec(lightframe::EDGE_SPACING * 1000.0, 0)
         )));
         let mut subjects: Vec<Subject> = checks.iter().map(|c| c.subject).collect();
@@ -504,7 +543,10 @@ pub fn blocks(model: &Model, a: &Analysis, checks: &[lightframe::Check]) -> Vec<
     out.push(Block::Heading(1, "8. Alcance y limitaciones".into()));
     for p in [
         "El cálculo es elástico, lineal y de primer orden; no incluye el efecto P-Δ ni la plastificación.",
-        "Las losas y forjados de hormigón reparten su carga por áreas tributarias; no se calculan sus armados.",
+        "El descenso de cargas reparte las de los forjados de hormigón por áreas tributarias; sus armados se calculan aparte con un emparrillado de barras (pasos de 0,5 m o más) y Wood–Armer. No se comprueba el punzonamiento en los pilares.",
+        "El sismo sigue el método simplificado de NCSE-02 (3.7), válido para edificios regulares en planta y alzado de hasta 20 plantas (pórticos) o 6 (muros); no se aplican sus reglas de detalle (capítulo 4).",
+        "La cimentación se comprueba con la carga centrada en servicio y la presión admisible del terreno del emplazamiento; el estudio geotécnico la confirma.",
+        "Los muros de fábrica se comprueban con fk 4 N/mm² y γM 2,5 (DB-SE-F); se ajustan a la pieza y el mortero del proyecto.",
         "Las uniones se suponen como se indica (rígidas en hormigón, articuladas en acero y madera); su diseño y el de los anclajes al cimiento se completan en el proyecto.",
         "El arriostramiento de los entramados sigue el método A de EN 1995-1-1, 9.2.4.2; en steel frame, con la resistencia de las fijaciones al tablero y a la chapa.",
         "La resistencia al fuego de los entramados es orientativa: se justifica con el ensayo o el certificado del sistema.",
@@ -579,6 +621,21 @@ pub fn subject_name(model: &Model, s: Subject) -> String {
                 format!("Cubierta {} · {t}", id.0)
             })
             .unwrap_or_else(|| format!("Cubierta {}", id.0)),
+        Subject::Beam(id) => {
+            let t = model
+                .beam(id)
+                .and_then(|b| model.member_type(b.member_type))
+                .map_or(String::new(), |t| t.name.clone());
+            format!("Viga {} · {t}", id.0)
+        }
+        Subject::Column(id) => {
+            let t = model
+                .column(id)
+                .and_then(|c| model.member_type(c.member_type))
+                .map_or(String::new(), |t| t.name.clone());
+            format!("Pilar {} · {t}", id.0)
+        }
+        Subject::Footing(id) => format!("Cimentación {id}"),
         Subject::Building => "Edificio".into(),
     }
 }

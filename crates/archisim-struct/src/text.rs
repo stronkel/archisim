@@ -374,7 +374,7 @@ pub fn lightframe_text(model: &Model, checks: &[crate::lightframe::Check]) -> St
     }
     let _ = writeln!(
         s,
-        "Entramados ligeros (EN 1993-1-3, EN 1995-1-1, DB-SE-M, DB-SI)"
+        "Comprobación de los elementos (entramados, hormigón, fábrica y cimentación)"
     );
     let mut subjects: Vec<Subject> = checks.iter().map(|c| c.subject).collect();
     subjects.sort();
@@ -384,6 +384,9 @@ pub fn lightframe_text(model: &Model, checks: &[crate::lightframe::Check]) -> St
             Subject::Wall(id) => format!("Muro {}", id.0),
             Subject::Floor(id) => format!("Forjado {}", id.0),
             Subject::Roof(id) => format!("Cubierta {}", id.0),
+            Subject::Beam(id) => format!("Viga {}", id.0),
+            Subject::Column(id) => format!("Pilar {}", id.0),
+            Subject::Footing(id) => format!("Cimentación {id}"),
             Subject::Building => "Edificio".into(),
         };
         let _ = model;
@@ -410,6 +413,35 @@ pub fn lightframe_text(model: &Model, checks: &[crate::lightframe::Check]) -> St
                     .map_or(String::new(), |a| format!(". Propuesta: {a}"))
             );
         }
+    }
+    s
+}
+
+/// The earthquake written out.
+pub fn quake_text(q: &crate::seismic::Quake) -> String {
+    let mut s = String::new();
+    let _ = writeln!(s, "Sismo (NCSE-02, método simplificado)");
+    if !q.applies {
+        let _ = writeln!(s, "  No se aplica: {}.", q.why);
+        return s;
+    }
+    let _ = writeln!(
+        s,
+        "  ac = {}·g (S {}), periodo T {} s, α(T) {}, β {}",
+        dec(q.ac, 3),
+        dec(q.s, 2),
+        dec(q.period, 2),
+        dec(q.alpha, 2),
+        dec(q.beta, 2)
+    );
+    for (z, w, f) in &q.storeys {
+        let _ = writeln!(
+            s,
+            "  Planta a {} m: peso {} kN, fuerza {} kN",
+            dec(*z, 2),
+            dec(*w, 0),
+            dec(*f, 1)
+        );
     }
     s
 }

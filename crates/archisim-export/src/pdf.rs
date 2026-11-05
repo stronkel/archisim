@@ -149,6 +149,18 @@ fn text_string(s: &str) -> String {
     h
 }
 
+/// A point of a path, in the page's pixels (0,26 mm): to a hundredth,
+/// a few thousandths of a millimetre.
+fn coord(v: f64) -> String {
+    let s = format!("{v:.2}");
+    let s = s.trim_end_matches('0').trim_end_matches('.');
+    if s == "-0" || s.is_empty() {
+        "0".into()
+    } else {
+        s.to_string()
+    }
+}
+
 fn num(v: f64) -> String {
     let s = format!("{v:.4}");
     let s = s.trim_end_matches('0').trim_end_matches('.');
@@ -255,11 +267,11 @@ fn path_ops(s: &mut String, it: &Item) {
     for (pts, closed) in &it.subpaths {
         for (i, p) in pts.iter().enumerate() {
             let op = if i == 0 { "m" } else { "l" };
-            let _ = write!(s, "{} {} {op} ", num(p.0), num(p.1));
+            let _ = write!(s, "{} {} {op} ", coord(p.0), coord(p.1));
         }
         if pts.len() == 1 {
             // A dot: a zero-length line drawn with round caps.
-            let _ = write!(s, "{} {} l ", num(pts[0].0), num(pts[0].1));
+            let _ = write!(s, "{} {} l ", coord(pts[0].0), coord(pts[0].1));
         }
         if *closed {
             s.push_str("h ");

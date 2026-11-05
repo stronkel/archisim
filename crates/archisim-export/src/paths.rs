@@ -350,14 +350,19 @@ fn flatten(path: &usvg::tiny_skia_path::Path, t: Transform) -> Vec<(Vec<P>, bool
 }
 
 /// How many straight pieces a curve needs: about one per 2° of turn,
-/// judged by the length of its control polygon against its chord.
+/// judged by the length of its control polygon against its chord; and
+/// no more than its size on the paper asks for (a letter's curves are a
+/// millimetre long: a few pieces are enough, under 0,05 mm off).
 fn pieces(a: (f32, f32), b: (f32, f32), c: (f32, f32), d: (f32, f32), t: Transform) -> usize {
     let l = |p: (f32, f32), q: (f32, f32)| ((p.0 - q.0).powi(2) + (p.1 - q.1).powi(2)).sqrt();
     let poly = l(a, b) + l(b, c) + l(c, d);
     let chord = l(a, d);
     let bend = if poly > 1e-9 { 1.0 - chord / poly } else { 0.0 };
-    let _ = t;
-    ((bend.sqrt() * 40.0).ceil() as usize).clamp(2, 32)
+    let by_turn = ((bend.sqrt() * 40.0).ceil() as usize).clamp(2, 32);
+    // Its length on the paper, in the tree's pixels (0,26 mm).
+    let scale = (t.sx * t.sy - t.kx * t.ky).abs().sqrt();
+    let by_size = ((poly * scale * 4.0).sqrt().ceil() as usize).max(2);
+    by_turn.min(by_size)
 }
 
 /// Cuts subpaths to a box: open lines piece by piece, filled areas
