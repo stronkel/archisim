@@ -24,10 +24,10 @@ pub fn site_text(model: &Model) -> String {
         s,
         "  Altitud: {} m{}",
         dec(a.altitude, 0),
-        if site.altitude.is_none() {
-            " (de la georreferencia)"
-        } else {
-            ""
+        match (site.altitude, model.georeference()) {
+            (Some(_), _) => "",
+            (None, Some(_)) => " (de la georreferencia)",
+            (None, None) => " (sin georreferencia)",
         }
     );
     let _ = writeln!(

@@ -283,7 +283,7 @@ pub fn framing_group(
             }
             ui.label(
                 egui::RichText::new(format!(
-                    "Predimensionado de los perfiles en Colaboración → Comprobación CTE. Tus catálogos de perfiles, en la carpeta «{FOLDER}» de la biblioteca."
+                    "Comprobación de los perfiles en Colaboración → Cálculo de la estructura. Tus catálogos de perfiles, en la carpeta «{FOLDER}» de la biblioteca."
                 ))
                 .small()
                 .color(super::theme::Palette::current(ui.ctx()).muted),

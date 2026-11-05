@@ -4135,6 +4135,28 @@ fn library_window_loads_types() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// The structural calculation window: it shows the actions of the site
+/// and changes them in one undoable step.
+#[test]
+fn calc_window_shows_the_actions() {
+    let mut h = Harness::new(Editor::new_project());
+    h.app.calc.open = true;
+    h.frame();
+    let mut site = *h.app.ed.model().structural_site();
+    site.snow_zone = 1;
+    site.altitude = Some(800.0);
+    h.app.ed.set_structural_site(site).unwrap();
+    assert_eq!(
+        h.app.ed.undo_label(),
+        Some("Emplazamiento de la estructura")
+    );
+    h.frame();
+    let model = h.app.ed.shown();
+    let text = archisim_struct::structure_report(&model);
+    // Zone 1 at 800 m: 1,2 kN/m².
+    assert!(text.contains("sk = 1,20"), "{text}");
+}
+
 /// The code check window: the building's use is set there (one undoable
 /// step), and a clic on a result selects its element in its plan.
 #[test]

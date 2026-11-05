@@ -80,12 +80,16 @@ pub fn analyse(model: &Model) -> Analysis {
     let wind = building_wind(model);
     let am = analytical::build(model, &td, wind.as_ref());
     let mut cases: Vec<Case> = td.cases.clone();
+    if wind.is_some() {
+        cases.extend(crate::cases::WindDir::ALL.map(Case::Wind));
+    }
     for c in am.loads.keys() {
         if !cases.contains(c) {
             cases.push(*c);
         }
     }
     cases.sort();
+    cases.dedup();
     let combos = combinations(&cases, model.site_altitude());
     let mut notes = am.notes.clone();
     let mut solutions = BTreeMap::new();

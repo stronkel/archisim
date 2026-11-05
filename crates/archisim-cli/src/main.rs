@@ -212,7 +212,7 @@ Uso:
       muestrario.svg. Carpeta por defecto: ./out
 
   archisim cte <proyecto.archisim> [informe.csv]
-  archisim estructura <proyecto.archisim>   acciones, descenso de cargas y cálculo de la estructura
+  archisim estructura <proyecto.archisim> [carpeta]   acciones, descenso de cargas y cálculo de la estructura; con carpeta, el anejo de cálculo en PDF
       Comprueba el proyecto con el Código Técnico: ocupación y evacuación
       (DB-SI 3), accesibilidad (DB-SUA 9), escaleras y rampas (DB-SUA 1) y
       superficies, según el uso del edificio guardado en el proyecto.
@@ -577,7 +577,10 @@ fn main() -> ExitCode {
             report(run_library(&dir, args.get(2).map(Path::new)))
         }
         Some("estructura") => match args.get(1) {
-            Some(project) => report(run_structure(Path::new(project))),
+            Some(project) => report(run_structure(
+                Path::new(project),
+                args.get(2).map(Path::new),
+            )),
             None => {
                 eprintln!("Falta el proyecto: archisim estructura <proyecto.archisim>");
                 ExitCode::FAILURE
@@ -760,11 +763,39 @@ fn run_library(dir: &Path, project: Option<&Path>) -> Result<(), Box<dyn std::er
     Ok(())
 }
 
-fn run_structure(project: &Path) -> Result<(), Box<dyn std::error::Error>> {
+fn run_structure(project: &Path, out: Option<&Path>) -> Result<(), Box<dyn std::error::Error>> {
     let model = archisim_file::open(project)
         .map_err(|e| format!("no se puede abrir {}: {e}", project.display()))?;
     let model = model.flattened().map_err(|e| format!("{e}"))?;
     print!("{}", archisim_struct::structure_report(&model));
+    if let Some(dir) = out {
+        std::fs::create_dir_all(dir)?;
+        let stem = project
+            .file_stem()
+            .map_or("proyecto".into(), |s| s.to_string_lossy().to_string());
+        let blocks = archisim_struct::report::report(&model);
+        let pages = archisim_plan::calc_report::pages(&model, &blocks);
+        let titled: Vec<(String, String)> = pages
+            .iter()
+            .enumerate()
+            .map(|(i, p)| (p.clone(), format!("Anejo de cálculo {}", i + 1)))
+            .collect();
+        let pdf_pages: Vec<archisim_export::pdf::Page> = titled
+            .iter()
+            .map(|(svg, title)| archisim_export::pdf::Page { svg, title })
+            .collect();
+        let pdf = archisim_export::pdf::pdf(&pdf_pages, "Anejo de cálculo de la estructura")?;
+        let path = dir.join(format!("{stem}-anejo-calculo.pdf"));
+        std::fs::write(&path, pdf)?;
+        let txt = dir.join(format!("{stem}-anejo-calculo.txt"));
+        std::fs::write(&txt, archisim_struct::report::to_text(&blocks))?;
+        println!(
+            "\nAnejo de cálculo ({} hojas A4): {}\nEn texto: {}",
+            pages.len(),
+            path.display(),
+            txt.display()
+        );
+    }
     Ok(())
 }
 

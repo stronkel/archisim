@@ -12,6 +12,7 @@ repository.workspace = true
 archisim-core.workspace = true
 archisim-geom.workspace = true
 archisim-draft.workspace = true
+archisim-struct.workspace = true
 
 [dev-dependencies]
 # Rasterises plans in tests to compare drawings pixel by pixel.

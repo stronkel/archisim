@@ -27,6 +27,7 @@ pub mod frame;
 pub mod geo;
 pub mod gravity;
 pub mod lightframe;
+pub mod report;
 pub mod sections;
 pub mod text;
 pub mod timber;

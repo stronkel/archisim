@@ -1042,6 +1042,12 @@ impl Editor {
         })
     }
 
+    pub fn set_structural_site(&mut self, site: archisim_core::StructuralSite) -> EditResult {
+        self.transact("Emplazamiento de la estructura", |m| {
+            m.set_structural_site(site)
+        })
+    }
+
     pub fn set_info(&mut self, info: archisim_core::ProjectInfo) -> EditResult {
         self.transact("Datos del proyecto", |m| {
             m.set_info(info);

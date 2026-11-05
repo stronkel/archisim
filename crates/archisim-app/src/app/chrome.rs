@@ -270,6 +270,12 @@ impl ArchiSimApp {
                     self.export_framing_dxf();
                 }
                 if ui
+                    .add(shortcut_button("Anejo de cálculo de la estructura…", "PDF"))
+                    .clicked()
+                {
+                    self.export_calc_report();
+                }
+                if ui
                     .add(shortcut_button("Mediciones y presupuesto…", "BC3"))
                     .clicked()
                 {
@@ -436,6 +442,13 @@ impl ArchiSimApp {
                 .clicked()
             {
                 self.export_framing_xlsx();
+            }
+            if ui
+                .button("Anejo de cálculo de la estructura (PDF)…")
+                .on_hover_text("Acciones, combinaciones, descenso de cargas, pórtico y comprobaciones de los entramados, en hojas A4")
+                .clicked()
+            {
+                self.export_calc_report();
             }
             if ui
                 .button("Ejes del entramado (DXF 3D)…")

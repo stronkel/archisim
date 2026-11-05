@@ -141,6 +141,14 @@ impl ArchiSimApp {
                 self.cte.open = true;
                 ui.close();
             }
+            if ui
+                .button("Cálculo de la estructura…")
+                .on_hover_text("Acciones del emplazamiento, descenso de cargas, pórtico, entramados y el anejo de cálculo")
+                .clicked()
+            {
+                self.calc.open = true;
+                ui.close();
+            }
             self.team_menu_items(ui);
         });
     }
