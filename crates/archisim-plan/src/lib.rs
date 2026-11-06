@@ -59,6 +59,7 @@ pub mod terrain;
 pub mod type_drawing;
 pub mod type_models;
 pub mod urban;
+pub mod water_schematic;
 
 use std::fmt::Write as _;
 

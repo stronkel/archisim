@@ -2,7 +2,8 @@
 //! the drawing does not give (the network's pressure at the meter and the
 //! pipe), the calculation of the cold and hot networks as text, and
 //! «Poner los diámetros calculados», which gives every pipe the diameter
-//! its flow asks for in one undoable step.
+//! its flow asks for in one undoable step; and the plumbing diagrams
+//! (`archisim_plan::water_schematic`) in PDF or DXF.
 
 use archisim_core::PipeMaterial;
 use eframe::egui::{self, Ui};
@@ -102,6 +103,7 @@ impl ArchiSimApp {
         }
         let (_, text, changes, short) = self.water.results.clone().expect("just made");
         let mut apply = false;
+        let (mut pdf, mut dxf) = (false, false);
         ui.horizontal(|ui| {
             let p = super::theme::Palette::current(ui.ctx());
             if short > 0 {
@@ -116,6 +118,20 @@ impl ArchiSimApp {
                 ui.colored_label(p.good, "Todos los grifos con presión");
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui
+                    .button("Esquemas (DXF)…")
+                    .on_hover_text("El esquema vertical y la distribución de cada planta, un DXF por hoja")
+                    .clicked()
+                {
+                    dxf = true;
+                }
+                if ui
+                    .button("Esquemas (PDF)…")
+                    .on_hover_text("El esquema vertical y la distribución de cada planta en hojas A3, con los diámetros calculados")
+                    .clicked()
+                {
+                    pdf = true;
+                }
                 if ui
                     .add_enabled(
                         !changes.is_empty(),
@@ -142,6 +158,83 @@ impl ArchiSimApp {
         if apply {
             self.apply_water_sizes();
         }
+        if pdf {
+            self.export_water_pdf();
+        }
+        if dxf {
+            self.export_water_dxf();
+        }
+    }
+
+    /// The plumbing diagrams as a PDF of A3 pages.
+    pub(super) fn export_water_pdf(&mut self) {
+        let mut d = rfd::FileDialog::new()
+            .set_title("Esquemas de fontanería (PDF)")
+            .add_filter("PDF", &["pdf"])
+            .set_file_name(format!("{}-fontaneria.pdf", self.file_name_stem()));
+        if let Some(dir) = self.start_dir() {
+            d = d.set_directory(dir);
+        }
+        let Some(path) = d.save_file() else {
+            return;
+        };
+        let model = self.ed.shown();
+        let sheets: Vec<(String, String)> = archisim_plan::water_schematic::pages(&model)
+            .into_iter()
+            .enumerate()
+            .map(|(i, svg)| (svg, format!("FO-{:02}", i + 1)))
+            .collect();
+        if sheets.is_empty() {
+            self.complain("No hay tuberías de agua que lleguen a un aparato.");
+            return;
+        }
+        let r = crate::documents::pdf_of(&sheets, "Esquemas de fontanería")
+            .and_then(|bytes| std::fs::write(&path, bytes).map_err(|e| e.to_string()));
+        match r {
+            Ok(()) => self.say(format!(
+                "Esquemas de fontanería: {} hojas A3 en {}.",
+                sheets.len(),
+                path.display()
+            )),
+            Err(e) => self.complain(format!("No se pudo exportar: {e}.")),
+        }
+    }
+
+    /// The plumbing diagrams in DXF: one file per page.
+    pub(super) fn export_water_dxf(&mut self) {
+        let mut d = rfd::FileDialog::new()
+            .set_title("Esquemas de fontanería (DXF)")
+            .add_filter("DXF", &["dxf"])
+            .set_file_name(format!("{}-fontaneria.dxf", self.file_name_stem()));
+        if let Some(dir) = self.start_dir() {
+            d = d.set_directory(dir);
+        }
+        let Some(path) = d.save_file() else {
+            return;
+        };
+        let model = self.ed.shown();
+        let sheets = archisim_plan::water_schematic::pages(&model);
+        if sheets.is_empty() {
+            self.complain("No hay tuberías de agua que lleguen a un aparato.");
+            return;
+        }
+        let stem = path
+            .file_stem()
+            .map_or("fontaneria".into(), |s| s.to_string_lossy().to_string());
+        for (i, svg) in sheets.iter().enumerate() {
+            let file = path.with_file_name(format!("{stem}-fo-{:02}.dxf", i + 1));
+            if let Err(e) = archisim_export::dxf::page_dxf(&model, svg)
+                .and_then(|t| std::fs::write(&file, t).map_err(|e| e.to_string()))
+            {
+                self.complain(format!("No se pudo exportar: {e}."));
+                return;
+            }
+        }
+        self.say(format!(
+            "Esquemas de fontanería en DXF: {} archivos junto a {}.",
+            sheets.len(),
+            path.display()
+        ));
     }
 
     /// Gives every pipe of the water supply the diameter of the

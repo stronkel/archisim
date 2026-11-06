@@ -6,6 +6,37 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-06 (114) · Esquemas de fontanería
+
+Unida la fontanería (#165) a `main`. Rama `bloque/esquemas-fontaneria`, sin cambios de formato. `docs/INSTALACIONES.md` §4, «Esquemas de fontanería».
+
+Qué se hizo:
+
+1. **Esquemas de fontanería** en hojas A3 (`archisim-plan::water_schematic`), con los diámetros calculados. En rojo lo dibujado menor («Ø20→26») y los grifos sin presión; la fría en continua y la caliente a trazos.
+   - **FO-01, esquema vertical:**
+     - las plantas con su cota y el contador y el acumulador con su presión;
+     - los montantes con el tramo y el diámetro de cada trozo;
+     - en cada planta, una caja por derivación (por vivienda, en Florence Street): qué aparatos alimenta, el diámetro con que arranca y la presión mínima de sus grifos.
+   - **FO-02 en adelante, distribución:** una hoja por planta, con el árbol de cada derivación tramo a tramo hasta cada grifo y su presión.
+2. **Cómo sacarlos:**
+   - PDF desde Archivo → Exportar → Esquemas de fontanería, o desde la ventana del cálculo;
+   - DXF desde la ventana (uno por hoja);
+   - `archisim fontaneria <proyecto> --esquemas <carpeta>`.
+3. El cálculo guarda de qué tramo cuelga cada uno (`Stretch::parent`).
+
+Pendiente:
+- grupo de presión y aljibe dimensionados;
+- el retorno de ACS;
+- saneamiento (HS 5: bajantes y colectores por unidades de desagüe), ventilación (HS 3) y clima / DB-HE.
+
+Qué debe probar Antonio:
+- **Florence Street:** ejecuta `archisim edificio out/edificio` y después `archisim fontaneria out/edificio/edificio.archisim --esquemas out/edificio`. Abre `out/edificio/edificio-fontaneria.pdf`:
+  - FO-01: ¿se entiende como un esquema vertical de proyecto? ¿Echas en falta algo que pongáis siempre (llaves de corte, contadores divisionarios, válvulas de retención)?
+  - FO-03: la distribución de la planta 1. ¿Es legible con tantas viviendas, o preferís una hoja por vivienda?
+- **En la aplicación:** abre el edificio, Colaboración → Cálculo de fontanería → «Esquemas (PDF)…». Pulsa «Poner los diámetros calculados» y vuelve a exportar: los rojos tienen que desaparecer salvo los aparatos sin unir.
+
+---
+
 ## 2026-11-06 (113) · Todo a `main` y cálculo de fontanería (DB-HS 4)
 
 **Unido a `main`** todo lo pendiente: interfaz V5 y V6 (#158), normas por vista (#159), taller de edificios (#160), calles (#161), la cinta al estilo Revit (#162), estructura, entramados e instalaciones (#163). La cinta se hizo en paralelo desde `main`; al unirla solo chocaron añadidos de los dos lados (iconos, pruebas, documentos). La fila sobre el 3D de la Maqueta toma ahora su propia altura. Las entradas 89 a 91 de esta bitácora son las de la cinta.

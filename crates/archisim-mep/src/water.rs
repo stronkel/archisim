@@ -141,6 +141,8 @@ pub struct Stretch {
     pub run: Option<RunId>,
     pub riser: Option<DeviceId>,
     pub level: LevelId,
+    /// The stretch it hangs from (`None`: it leaves the source).
+    pub parent: Option<usize>,
     /// Its length, metres (along the pipe; a riser, its height).
     pub length: f64,
     /// The appliances after it, their flow and the design flow, l/s.
@@ -568,11 +570,13 @@ fn network(model: &Model, system: ServiceSystem, source_pressure: f64) -> Option
                 };
                 let min = minimum(&kinds, ed.riser.is_some());
                 let sized = size_for(material, qc, min);
+                let up = parent[p].and_then(|(_, pe)| stretch_of_edge.get(&pe).copied());
                 stretches.push(Stretch {
                     name: String::new(),
                     run: ed.run,
                     riser: ed.riser,
                     level: g.nodes[*n].level,
+                    parent: up,
                     length: ed.length,
                     appliances: kinds.len(),
                     total_flow: qt,

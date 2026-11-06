@@ -10371,4 +10371,7 @@ fn the_water_window_sizes_the_pipes() {
     assert!(width >= 0.020, "{width}");
     // Nothing more to change.
     assert_eq!(h.app.apply_water_sizes(), 0);
+    // The diagrams: the vertical one and the ground floor's.
+    let pages = archisim_plan::water_schematic::pages(&h.app.ed.shown());
+    assert_eq!(pages.len(), 2);
 }

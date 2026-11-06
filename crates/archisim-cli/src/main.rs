@@ -212,7 +212,7 @@ Uso:
       muestrario.svg. Carpeta por defecto: ./out
 
   archisim cte <proyecto.archisim> [informe.csv]
-  archisim fontaneria <proyecto.archisim> [--diametros salida.archisim]   cálculo del suministro de agua (DB-HS 4); con --diametros, guarda el proyecto con los diámetros calculados
+  archisim fontaneria <proyecto.archisim> [--diametros salida.archisim] [--esquemas carpeta]   cálculo del suministro de agua (DB-HS 4); con --diametros, guarda el proyecto con los diámetros calculados; con --esquemas, el esquema vertical y la distribución por planta en PDF y DXF
   archisim electricidad <proyecto.archisim> [carpeta]   cálculo de la instalación eléctrica (REBT); con carpeta, el esquema unifilar en PDF y DXF
   archisim estructura <proyecto.archisim> [carpeta]   acciones, descenso de cargas y cálculo de la estructura; con carpeta, el anejo de cálculo y los planos de estructura en PDF
       Comprueba el proyecto con el Código Técnico: ocupación y evacuación
@@ -579,12 +579,19 @@ fn main() -> ExitCode {
             report(run_library(&dir, args.get(2).map(Path::new)))
         }
         Some("fontaneria") => match args.get(1) {
-            Some(project) => report(run_water(
-                Path::new(project),
-                (args.get(2).map(String::as_str) == Some("--diametros"))
-                    .then(|| args.get(3).map(Path::new))
-                    .flatten(),
-            )),
+            Some(project) => {
+                let after = |flag: &str| {
+                    args.iter()
+                        .position(|a| a == flag)
+                        .and_then(|i| args.get(i + 1))
+                        .map(Path::new)
+                };
+                report(run_water(
+                    Path::new(project),
+                    after("--diametros"),
+                    after("--esquemas"),
+                ))
+            }
             None => {
                 eprintln!("Falta el proyecto: archisim fontaneria <proyecto.archisim>");
                 ExitCode::FAILURE
@@ -787,11 +794,50 @@ fn run_library(dir: &Path, project: Option<&Path>) -> Result<(), Box<dyn std::er
     Ok(())
 }
 
-fn run_water(project: &Path, sized: Option<&Path>) -> Result<(), Box<dyn std::error::Error>> {
+fn run_water(
+    project: &Path,
+    sized: Option<&Path>,
+    sheets_dir: Option<&Path>,
+) -> Result<(), Box<dyn std::error::Error>> {
     let mut model = archisim_file::open(project)
         .map_err(|e| format!("no se puede abrir {}: {e}", project.display()))?;
     let w = archisim_mep::water::water(&model);
     print!("{}", archisim_mep::water::report(&model, &w));
+    if let Some(dir) = sheets_dir {
+        std::fs::create_dir_all(dir)?;
+        let stem = project
+            .file_stem()
+            .map_or("proyecto".into(), |s| s.to_string_lossy().to_string());
+        let sheets = archisim_plan::water_schematic::pages(&model);
+        let titles: Vec<String> = (0..sheets.len())
+            .map(|i| format!("FO-{:02}", i + 1))
+            .collect();
+        let pdf_pages: Vec<archisim_export::pdf::Page> = sheets
+            .iter()
+            .zip(&titles)
+            .map(|(svg, title)| archisim_export::pdf::Page { svg, title })
+            .collect();
+        if !sheets.is_empty() {
+            let pdf = dir.join(format!("{stem}-fontaneria.pdf"));
+            std::fs::write(
+                &pdf,
+                archisim_export::pdf::pdf(&pdf_pages, "Esquemas de fontanería")?,
+            )?;
+            for (svg, title) in sheets.iter().zip(&titles) {
+                let base = dir.join(format!("{stem}-fontaneria-{}", title.to_lowercase()));
+                std::fs::write(base.with_extension("svg"), svg)?;
+                std::fs::write(
+                    base.with_extension("dxf"),
+                    archisim_export::dxf::page_dxf(&model, svg)?,
+                )?;
+            }
+            println!(
+                "\nEsquemas de fontanería ({} hojas A3): {} (y en SVG y DXF)",
+                sheets.len(),
+                pdf.display()
+            );
+        }
+    }
     if let Some(out) = sized {
         let runs = w.sized_runs();
         for (run, d) in &runs {

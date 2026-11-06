@@ -2,7 +2,7 @@
 
 ArchiSim dibuja las instalaciones (tuberías, conductos y aparatos) y las calcula sobre lo dibujado. Este documento recoge la segunda vuelta: cómo se meten las tuberías, el cálculo eléctrico con su esquema unifilar y el cálculo de fontanería. Lo que sigue (saneamiento HS 5, ventilación HS 3, climatización y DB-HE) se añadirá aquí.
 
-Código: `archisim-core::model::pipe_routing` (uniones, cambio de planta y trazado automático), `archisim-core::model::water` (datos del suministro), crate `archisim-mep` (cálculos, depende solo de `archisim-core`: `electrical` y `water`), `archisim-plan::single_line` (esquema unifilar), `archisim-cte::electrical` y `archisim-cte::services::calculation` (comprobación) y, en la app, `app/services_ui`, `app/electrical_ui` y `app/water_ui`.
+Código: `archisim-core::model::pipe_routing` (uniones, cambio de planta y trazado automático), `archisim-core::model::water` (datos del suministro), crate `archisim-mep` (cálculos, depende solo de `archisim-core`: `electrical` y `water`), `archisim-plan::single_line` (esquema unifilar), `archisim-plan::water_schematic` (esquemas de fontanería), `archisim-cte::electrical` y `archisim-cte::services::calculation` (comprobación) y, en la app, `app/services_ui`, `app/electrical_ui` y `app/water_ui`.
 
 ## 1. Meter las tuberías
 
@@ -82,9 +82,21 @@ En la **Comprobación CTE** (Agua y saneamiento) salen:
 
 «Arreglar lo que no cumple» pone el diámetro calculado en los tramos cortos.
 
-En la línea de órdenes: `archisim fontaneria <proyecto>`, o `archisim fontaneria <proyecto> --diametros salida.archisim` para guardarlo con los diámetros calculados.
+En la línea de órdenes: `archisim fontaneria <proyecto>`, o `archisim fontaneria <proyecto> --diametros salida.archisim` para guardarlo con los diámetros calculados (y `--esquemas <carpeta>` para las hojas, abajo).
 
 El edificio de Florence Street (`archisim edificio`) lleva ahora la red entera: contador y acumulador junto al montante, montante hasta la cubierta, distribuidor en cada rellano, derivación de cada vivienda y todos los aparatos unidos. Son 114 aparatos y 24 viviendas. Con 300 kPa en el contador, los diámetros dibujados dejan 95 grifos por debajo de 100 kPa; con los calculados, el peor llega a 122 kPa.
+
+### Esquemas de fontanería
+
+Hojas A3 sacadas del cálculo, con los **diámetros calculados**. Donde la tubería dibujada es menor se escriben los dos en rojo («Ø20→26»), y también en rojo los grifos sin presión con lo dibujado. El agua fría va en línea continua y la caliente a trazos.
+
+- **FO-01, esquema vertical.** Las plantas una sobre otra, con su cota, y abajo el origen de cada red (contador o acumulador, con su presión). Los montantes suben de planta a planta con el tramo y el diámetro de cada trozo. En cada planta, una caja por cada derivación que sale del montante: qué aparatos alimenta, el tramo y el diámetro con que arranca, y la presión mínima de sus grifos. Las derivaciones grandes se parten hasta llegar a cada vivienda o local húmedo. Agua fría a la izquierda y caliente a la derecha.
+- **FO-02 en adelante, distribución.** Una hoja por planta con aparatos: el árbol de cada derivación, tramo a tramo con su nombre y diámetro, hasta cada grifo con la presión que le llega.
+
+Cómo sacarlos:
+- PDF: Archivo → Exportar → Esquemas de fontanería, o desde la ventana del cálculo.
+- DXF: desde la ventana, un archivo por hoja.
+- En la línea de órdenes, `archisim fontaneria <proyecto> --esquemas <carpeta>` deja el PDF, y un SVG y un DXF por hoja.
 
 ## 5. Lo que no hace (todavía)
 
@@ -92,7 +104,6 @@ El edificio de Florence Street (`archisim edificio`) lleva ahora la red entera: 
 - Caída de tensión por tramos con la carga repartida: se pone toda la carga en el punto más lejano, lo que queda del lado de la seguridad.
 - Cortocircuito y poder de corte (se pone 6 kA).
 - Fontanería:
-  - el esquema vertical de la red;
   - los grupos de presión y los aljibes dimensionados;
   - el retorno del agua caliente, obligatorio con más de 15 m de tubería al grifo más alejado;
   - las pérdidas propias de contadores, filtros y calentadores, que habría que restar a mano;
