@@ -354,6 +354,12 @@ thread_local! {
     /// dialog opened by it appears.
     static LAST_CLICK: std::cell::Cell<(Pos2, egui::Vec2)> =
         const { std::cell::Cell::new((Pos2::new(200.0, 120.0), egui::Vec2::new(1440.0, 900.0))) };
+    /// The frame being drawn, counted by `note_click`.
+    static FRAME: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+    /// Where each open dialog was put when it opened, by title: (last frame
+    /// it was drawn, pivot, position). A click inside it must not move it.
+    static PLACED: std::cell::RefCell<std::collections::HashMap<String, (u64, egui::Align2, Pos2)>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
 }
 
 /// Notes the click of this frame (called once a frame, before any window).
@@ -369,6 +375,7 @@ pub fn note_click(ctx: &egui::Context) {
         let (p, _) = c.get();
         c.set((at.unwrap_or(p), size));
     });
+    FRAME.with(|f| f.set(f.get() + 1));
 }
 
 /// A dialog of the application (concepto de interfaz del 24/10/2026): it
@@ -377,20 +384,39 @@ pub fn note_click(ctx: &egui::Context) {
 /// corner over the tools; it cannot be folded away. After that, egui
 /// remembers where it was moved.
 pub fn dialog<'a>(title: impl Into<egui::WidgetText>) -> egui::Window<'a> {
-    let (at, size) = LAST_CLICK.with(|c| c.get());
-    let right = at.x > size.x / 2.0;
-    let low = at.y > size.y * 0.6;
-    let pivot = match (right, low) {
-        (true, false) => egui::Align2::RIGHT_TOP,
-        (false, false) => egui::Align2::LEFT_TOP,
-        (true, true) => egui::Align2::RIGHT_BOTTOM,
-        (false, true) => egui::Align2::LEFT_BOTTOM,
-    };
-    let gap = if right { -16.0 } else { 16.0 };
+    let title: egui::WidgetText = title.into();
+    let key = title.text().to_string();
+    let frame = FRAME.with(|f| f.get());
+    // Where it goes is decided when it opens (it was not drawn the frame
+    // before) and kept while it stays open: the clicks inside it change
+    // the last click, and with it the side it would open on, so working
+    // out the place again each frame made the window jump.
+    let (pivot, pos) = PLACED.with(|placed| {
+        let mut placed = placed.borrow_mut();
+        let kept = placed
+            .get(&key)
+            .filter(|(last, _, _)| last + 1 >= frame)
+            .map(|(_, pivot, pos)| (*pivot, *pos));
+        let (pivot, pos) = kept.unwrap_or_else(|| {
+            let (at, size) = LAST_CLICK.with(|c| c.get());
+            let right = at.x > size.x / 2.0;
+            let low = at.y > size.y * 0.6;
+            let pivot = match (right, low) {
+                (true, false) => egui::Align2::RIGHT_TOP,
+                (false, false) => egui::Align2::LEFT_TOP,
+                (true, true) => egui::Align2::RIGHT_BOTTOM,
+                (false, true) => egui::Align2::LEFT_BOTTOM,
+            };
+            let gap = if right { -16.0 } else { 16.0 };
+            (pivot, Pos2::new(at.x + gap, at.y))
+        });
+        placed.insert(key, (frame, pivot, pos));
+        (pivot, pos)
+    });
     egui::Window::new(title)
         .collapsible(false)
         .pivot(pivot)
-        .default_pos(Pos2::new(at.x + gap, at.y))
+        .default_pos(pos)
         .constrain(true)
 }
 

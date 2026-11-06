@@ -6,6 +6,45 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-06 (112) · Ventanas que no saltan, entorno grande en 3D y «Arreglar lo que no cumple»
+
+Rama `bloque/instalaciones-calculo` (PR #163), sin cambios de formato. Lo que pidió Antonio antes de seguir con instalaciones:
+
+1. **Las ventanas Cálculo de la estructura y Comprobación CTE se movían solas al hacer clic.** Un diálogo se colocaba junto al último clic en cada fotograma, también con los clics dentro de él. Ahora el sitio se decide al abrirlo y se queda (`widgets::dialog`); prueba `a_dialog_does_not_jump_when_clicked`.
+2. **Traer el entorno de un barrio grande (Poetas Andaluces) colgaba el programa al abrir el 3D.** Probado con un pueblo de ensayo de 920 edificios vestidos, 1 685 setos y la vida de la calle:
+   - el 3D se quedaba sin memoria (más de 5 GB, el sistema lo cerraba): cada edificio cercano al origen —y con el entorno centrado en el proyecto lo eran casi todos— iba con todo su detalle, y la tabla de esquinas de cada modelo se guardaba hasta el final. Ahora van con todo su detalle solo los 40 más cercanos (`DETAIL_BUILDINGS`) y la tabla se suelta al terminar cada modelo: la escena pasa de 4,9 GB y 19 s a 0,8 GB y 9 s;
+   - el césped de los jardines de la vida de la calle hacía la capa del terreno muy lenta (cada triángulo del terreno contra cada jardín). Ahora cada triángulo mira solo los jardines de su alrededor (rejilla de 2 m, `solid::Cells`): el terreno de 72 s a 2,5 s, el IFC de 74 s a 5 s, la axonometría de 80 s a 8 s. Prueba `many_regions_on_a_big_terrain`.
+3. **«Arreglar lo que no cumple…»** en las dos ventanas (solo si algo no cumple). Busca lo más pequeño que hace cumplir sobre una copia del modelo, en otro hilo, y enseña una tabla elemento · qué cambia · antes · después, con cuántas no cumplen ahora y después y la lista de lo que hay que decidir a mano. «Aplicar los cambios» lo hace en un paso de Deshacer.
+   - **Estructura** (`archisim_struct::fix`): vuelta a vuelta, primero el armado que pide el cálculo y, si no basta, el tamaño siguiente; luego se vuelve a calcular. El tamaño siguiente es:
+     - pilar, 5 cm por lado;
+     - viga, 5 cm de canto hasta 1,20 m y luego de ancho;
+     - acero, el perfil siguiente de la serie entre los tipos del proyecto;
+     - zapata, 10 cm por lado con canto rígido.
+
+     Las secciones nuevas son tipos con su tamaño en el nombre («Pilar HA 40×40»).
+   - **CTE** (`archisim_cte::fix`): la estructura igual. Además:
+     - el diámetro de HS 4 o HS 5 en la tubería del aparato;
+     - la pendiente permitida más cercana del saneamiento;
+     - el ancho de las puertas, con un tipo de su familia de 5 en 5 cm («Puerta de paso 1 hoja 95×205»);
+     - el sentido de apertura de las de evacuación.
+
+     Lo que es decisión de proyecto (pasillos, rampas, giros, salidas, escaleras) se queda en la lista.
+
+   En la demo: estructura de 3 comprobaciones que no cumplen a ninguna; CTE de 7 a 1 (queda la rampa del 10 %).
+
+Pendiente:
+- seguir con instalaciones: fontanería (HS 4), saneamiento (HS 5), ventilación (HS 3), clima (DB-HE);
+- en «Arreglar» del CTE, ensanchar pasillos o rehacer rampas y escaleras: piden decidir dónde crecer;
+- probar el entorno con los datos reales de Poetas Andaluces (aquí no se pueden descargar).
+
+Qué debe probar Antonio:
+- **Ventanas:** Colaboración → Cálculo de la estructura y Comprobación CTE. Haz clic en varios sitios dentro de cada ventana: no debe moverse.
+- **Entorno:** Archivo → Traer el entorno de Poetas Andaluces, como lo hacías. Abre la Vista 3D (F3): debe salir en unos segundos. De cerca, los edificios del centro llevan todo su detalle y los demás su versión ligera.
+- **Estructura:** en un proyecto con estructura que no cumpla, Cálculo de la estructura → «Arreglar lo que no cumple…». Mira la tabla y comprueba que las secciones y armados te parecen razonables. Clic en un elemento para verlo en planta. Pulsa «Aplicar los cambios» (debe decir «Todo cumple»), y luego Ctrl+Z para quitarlos de una vez.
+- **CTE:** lo mismo en Comprobación CTE, con una puerta estrecha en un recorrido de evacuación o un lavabo con un desagüe pequeño.
+
+---
+
 ## 2026-11-06 (111) · Instalaciones: meter tuberías, cálculo eléctrico y esquema unifilar
 
 Rama `bloque/instalaciones-calculo`, sobre `bloque/calles` (#161). Formato `.archisim` versión 85: los datos del cálculo eléctrico (grado de electrificación, longitud de la derivación individual, un solo usuario) y los circuitos C6 a C10. Los proyectos de la 84 se abren igual.

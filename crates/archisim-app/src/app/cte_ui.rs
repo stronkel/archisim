@@ -22,6 +22,8 @@ pub struct CteWindow {
     pub route: Option<(LevelId, Vec<Point2>)>,
     /// Show only what does not meet the code (and warnings).
     only_problems: bool,
+    /// «Arreglar lo que no cumple», while it is worked out or shown.
+    fix: Option<super::fix_ui::FixState<archisim_cte::fix::Fix>>,
 }
 
 impl CteWindow {
@@ -36,6 +38,35 @@ impl CteWindow {
             self.report = Some((rev, archisim_cte::check(&ed.shown())));
         }
         &self.report.as_ref().expect("just made").1
+    }
+}
+
+/// The element a result is about.
+fn subject_element(m: &archisim_core::Model, s: Subject) -> Option<Element> {
+    match s {
+        Subject::Room(r) => Some(Element::Room(r)),
+        Subject::Opening(o) => Some(Element::Opening(o)),
+        Subject::Stair(s) => Some(Element::Stair(s)),
+        Subject::Slab(s) => Some(Element::Slab(s)),
+        Subject::Object(o) => Some(Element::Object(o)),
+        Subject::Run(r) => Some(Element::Run(r)),
+        Subject::Reinforced(id) => super::fix_ui::structural_element(m, id).0,
+        Subject::Wall(w) => Some(Element::Wall(w)),
+        Subject::Roof(r) => Some(Element::Roof(r)),
+        Subject::Floor(s) => Some(Element::Slab(s)),
+        Subject::Device(d) => Some(Element::Device(d)),
+        Subject::Building | Subject::Level(_) => None,
+    }
+}
+
+/// The level of what a result is about.
+fn subject_level(m: &archisim_core::Model, s: Subject) -> Option<LevelId> {
+    match s {
+        Subject::Reinforced(id) => super::fix_ui::structural_element(m, id).1,
+        Subject::Opening(o) => m.opening(o).and_then(|o| m.wall(o.wall)).map(|w| w.level),
+        Subject::Run(r) => m.runs().find(|x| x.id == r).map(|r| r.level),
+        Subject::Object(o) => m.objects().find(|x| x.id == o).map(|o| o.level),
+        _ => None,
     }
 }
 
@@ -114,7 +145,7 @@ impl ArchiSimApp {
         );
         ui.separator();
         let report = self.cte.current(&self.ed);
-        let model = self.ed.model();
+        let mut start_fix = false;
         ui.horizontal(|ui| {
             ui.colored_label(p.bad, format!("No cumple: {}", report.count(Status::Fails)));
             ui.colored_label(
@@ -124,8 +155,81 @@ impl ArchiSimApp {
             ui.colored_label(p.good, format!("Cumple: {}", report.count(Status::Passes)));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.switch(&mut self.cte.only_problems, "Solo lo que falla");
+                if ui
+                    .add_enabled(
+                        report.count(Status::Fails) > 0,
+                        egui::Button::new("Arreglar lo que no cumple…"),
+                    )
+                    .on_hover_text("Arregla solo lo que tiene una respuesta clara —la estructura, el diámetro y la pendiente de las tuberías, el ancho y el sentido de las puertas— y te enseña lo que cambia antes de hacerlo; lo demás te lo deja dicho")
+                    .clicked()
+                {
+                    start_fix = true;
+                }
             });
         });
+        if start_fix {
+            self.cte.fix = Some(super::fix_ui::FixState::start(
+                self.ed.revision(),
+                self.ed.model().clone(),
+                ui.ctx().clone(),
+                |m| {
+                    let f = archisim_cte::fix::fix(m);
+                    let rows = f
+                        .lines
+                        .iter()
+                        .map(|l| super::fix_ui::Row {
+                            element: subject_element(m, l.subject),
+                            level: subject_level(m, l.subject),
+                            name: l.name.clone(),
+                            what: l.what,
+                            before: l.before.clone(),
+                            after: l.after.clone(),
+                        })
+                        .collect();
+                    super::fix_ui::Shown {
+                        rows,
+                        fails_before: f.fails_before,
+                        fails_after: f.fails_after,
+                        left: f.left.clone(),
+                        fix: f,
+                    }
+                },
+            ));
+        }
+        let rev = self.ed.revision();
+        if self.cte.fix.as_ref().is_some_and(|f| f.revision() != rev) {
+            self.cte.fix = None;
+        }
+        if let Some(f) = self.cte.fix.as_mut() {
+            f.poll();
+            match super::fix_ui::panel(
+                ui,
+                f,
+                "Solo lo que tiene una respuesta clara: la estructura, el diámetro y la pendiente de las tuberías, el ancho y el sentido de las puertas.",
+            ) {
+                super::fix_ui::Answer::Nothing => {}
+                super::fix_ui::Answer::Back => self.cte.fix = None,
+                super::fix_ui::Answer::Pick(e, l) => self.fix_pick(e, l),
+                super::fix_ui::Answer::Apply => {
+                    if let Some(super::fix_ui::FixState::Ready(_, s)) = self.cte.fix.take() {
+                        let n = s.rows.len();
+                        let r = self.ed.transact("Arreglar lo que no cumple el CTE", |m| {
+                            archisim_cte::fix::apply_all(m, &s.fix)
+                        });
+                        self.report(
+                            r,
+                            &format!(
+                                "{n} cambio{} para cumplir el CTE; quedan {} sin cumplir. Deshacer los quita.",
+                                if n == 1 { "" } else { "s" },
+                                s.fails_after
+                            ),
+                        );
+                    }
+                }
+            }
+            return;
+        }
+        let model = self.ed.model();
         let mut pick: Option<archisim_cte::Item> = None;
         let mut export = false;
         egui::ScrollArea::vertical()
@@ -217,23 +321,7 @@ impl ArchiSimApp {
     }
 
     pub(super) fn cte_pick(&mut self, i: &archisim_cte::Item) {
-        let element = match i.subject {
-            Subject::Room(r) => Some(Element::Room(r)),
-            Subject::Opening(o) => Some(Element::Opening(o)),
-            Subject::Stair(s) => Some(Element::Stair(s)),
-            Subject::Slab(s) => Some(Element::Slab(s)),
-            Subject::Object(o) => Some(Element::Object(o)),
-            Subject::Run(r) => Some(Element::Run(r)),
-            Subject::Reinforced(id) => {
-                let m = self.ed.model();
-                archisim_geom::rebar::owner_of(m, id).map(crate::pick::of_solid)
-            }
-            Subject::Wall(w) => Some(Element::Wall(w)),
-            Subject::Roof(r) => Some(Element::Roof(r)),
-            Subject::Floor(s) => Some(Element::Slab(s)),
-            Subject::Device(d) => Some(Element::Device(d)),
-            Subject::Building | Subject::Level(_) => None,
-        };
+        let element = subject_element(self.ed.model(), i.subject);
         if let Some(level) = i.level {
             self.open_view(TabKind::Plan(level));
         }

@@ -33,7 +33,7 @@ fn mm(v: f64) -> String {
 }
 
 /// The nearest run of a system to an appliance's outline, and how far.
-fn nearest<'a>(
+pub(crate) fn nearest<'a>(
     model: &'a Model,
     level: archisim_core::LevelId,
     systems: &[ServiceSystem],

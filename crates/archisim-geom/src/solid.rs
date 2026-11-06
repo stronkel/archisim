@@ -2648,6 +2648,93 @@ pub fn terrain_holes(model: &Model, outline: &[Point2]) -> Vec<archisim_core::Ex
         .collect()
 }
 
+/// The box of some points in plan: [x min, y min, x max, y max].
+fn bbox_of(points: &[Point2]) -> [f64; 4] {
+    points
+        .iter()
+        .fold([f64::MAX, f64::MAX, f64::MIN, f64::MIN], |b, p| {
+            [b[0].min(p.x), b[1].min(p.y), b[2].max(p.x), b[3].max(p.y)]
+        })
+}
+
+fn boxes_meet(a: [f64; 4], b: [f64; 4]) -> bool {
+    a[0] <= b[2] + 1e-6 && b[0] <= a[2] + 1e-6 && a[1] <= b[3] + 1e-6 && b[1] <= a[3] + 1e-6
+}
+
+/// Things by the square cells of the plan their boxes fall in: what is
+/// near a box is looked for in its cells only (a painted area of a whole
+/// neighbourhood, with hundreds of gardens, over a ground of a hundred
+/// thousand triangles, would otherwise cut every triangle by every garden).
+struct Cells {
+    size: f64,
+    count: usize,
+    map: std::collections::HashMap<(i64, i64), Vec<usize>>,
+}
+
+impl Cells {
+    const SIZE: f64 = 2.0;
+
+    fn of(boxes: impl Iterator<Item = [f64; 4]>) -> Self {
+        let mut c = Cells {
+            size: Self::SIZE,
+            count: 0,
+            map: std::collections::HashMap::new(),
+        };
+        for (i, b) in boxes.enumerate() {
+            for key in c.keys(b) {
+                c.map.entry(key).or_default().push(i);
+            }
+            c.count = i + 1;
+        }
+        c
+    }
+
+    fn huge(&self, b: [f64; 4]) -> bool {
+        let w = ((b[2] - b[0]) / self.size).floor() as i64 + 1;
+        let h = ((b[3] - b[1]) / self.size).floor() as i64 + 1;
+        w.saturating_mul(h) > 40_000
+    }
+
+    fn keys(&self, b: [f64; 4]) -> impl Iterator<Item = (i64, i64)> {
+        let (x0, y0) = (
+            (b[0] / self.size).floor() as i64,
+            (b[1] / self.size).floor() as i64,
+        );
+        let (x1, y1) = (
+            (b[2] / self.size).floor() as i64,
+            (b[3] / self.size).floor() as i64,
+        );
+        // A huge box (a region round the whole neighbourhood) would fill
+        // millions of cells: those are kept whole in one, looked at always.
+        let (x0, y0, x1, y1) = if self.huge(b) {
+            (i64::MIN, i64::MIN, i64::MIN, i64::MIN)
+        } else {
+            (x0, y0, x1, y1)
+        };
+        (x0..=x1).flat_map(move |x| (y0..=y1).map(move |y| (x, y)))
+    }
+
+    /// The things in the cells of a box (an index may come more than once).
+    fn near(&self, b: [f64; 4]) -> Box<dyn Iterator<Item = usize> + '_> {
+        if self.huge(b) {
+            return Box::new(0..self.count);
+        }
+        let always = self
+            .map
+            .get(&(i64::MIN, i64::MIN))
+            .into_iter()
+            .flatten()
+            .copied();
+        Box::new(
+            self.keys(b)
+                .filter_map(|k| self.map.get(&k))
+                .flatten()
+                .copied()
+                .chain(always),
+        )
+    }
+}
+
 /// How thick the layer of a painted area of a terrain is (m): enough not
 /// to flicker with the ground under it.
 pub const PATCH_THICKNESS: f64 = 0.02;
@@ -2669,7 +2756,8 @@ pub fn patch_layer(
         return Vec::new();
     }
     // The edges of the regions, to tell an edge of a piece that is the
-    // region's (it gets a side) from one inside it.
+    // region's (it gets a side) from one inside it; by cells of the plan,
+    // so that each edge looks only at the borders near it.
     let mut borders: Vec<(Point2, Point2)> = Vec::new();
     for (o, holes) in &shapes {
         for ring in std::iter::once(o).chain(holes.iter()) {
@@ -2678,18 +2766,22 @@ pub fn patch_layer(
             }
         }
     }
+    let border_cells = Cells::of(borders.iter().map(|(a, b)| bbox_of(&[*a, *b])));
     let on_border = |a: Point2, b: Point2| {
         let m = (a + b) * 0.5;
-        borders.iter().any(|(p, q)| {
-            let pq = *q - *p;
+        border_cells.near(bbox_of(&[m, m])).any(|i| {
+            let (p, q) = borders[i];
+            let pq = q - p;
             let len = pq.length();
             if len < 1e-9 {
                 return false;
             }
-            let t = (m - *p).dot(pq) / (len * len);
-            (-1e-6..=1.0 + 1e-6).contains(&t) && ((m - *p).cross(pq)).abs() / len < 1e-5
+            let t = (m - p).dot(pq) / (len * len);
+            (-1e-6..=1.0 + 1e-6).contains(&t) && ((m - p).cross(pq)).abs() / len < 1e-5
         })
     };
+    let shape_boxes: Vec<[f64; 4]> = shapes.iter().map(|(o, _)| bbox_of(o)).collect();
+    let shape_cells = Cells::of(shape_boxes.iter().copied());
     // The pieces of each triangle inside the regions, each with the
     // triangle's plane: z = c + gx·(x − x0) + gy·(y − y0).
     struct Piece {
@@ -2718,7 +2810,19 @@ pub fn patch_layer(
             continue;
         }
         let plane = [tri[0][2], -n[0] / n[2], -n[1] / n[2], tri[0][0], tri[0][1]];
-        for shape in crate::junctions::intersection(&[(ensure_ccw(flat), Vec::new())], &shapes) {
+        // Only the regions whose box meets the triangle's.
+        let tb = bbox_of(&flat);
+        let mut near: Vec<usize> = shape_cells
+            .near(tb)
+            .filter(|i| boxes_meet(shape_boxes[*i], tb))
+            .collect();
+        if near.is_empty() {
+            continue;
+        }
+        near.sort_unstable();
+        near.dedup();
+        let local: Vec<crate::junctions::Shape> = near.iter().map(|i| shapes[*i].clone()).collect();
+        for shape in crate::junctions::intersection(&[(ensure_ccw(flat), Vec::new())], &local) {
             pieces.push(Piece { shape, plane });
         }
     }
@@ -2729,6 +2833,7 @@ pub fn patch_layer(
         .iter()
         .flat_map(|p| p.shape.0.iter().chain(p.shape.1.iter().flatten()).copied())
         .collect();
+    let corner_cells = Cells::of(corners.iter().map(|c| bbox_of(&[*c, *c])));
     let split = |ring: &[Point2]| -> Vec<Point2> {
         let mut v = Vec::new();
         for i in 0..ring.len() {
@@ -2739,8 +2844,9 @@ pub fn patch_layer(
             if len2 < 1e-18 {
                 continue;
             }
-            let mut on: Vec<(f64, Point2)> = corners
-                .iter()
+            let mut on: Vec<(f64, Point2)> = corner_cells
+                .near(bbox_of(&[a, b]))
+                .map(|i| &corners[i])
                 .filter_map(|c| {
                     let t = (*c - a).dot(ab) / len2;
                     let off = (*c - a).cross(ab).abs() / len2.sqrt();
@@ -7157,5 +7263,55 @@ mod worktop_tests {
         m.edit_object(d, |o| o.position = Point2::new(6.0, 6.0))
             .unwrap();
         assert!(top_area(&object_solids(&m, d)) > 0.3);
+    }
+}
+
+#[cfg(test)]
+mod patch_tests {
+    use super::*;
+
+    /// Many small regions (the lawns of a whole town) and one large one on
+    /// a big terrain: each piece looks only at the regions near it, and
+    /// the layer still covers exactly the regions.
+    #[test]
+    fn many_regions_on_a_big_terrain() {
+        let mut surface = Vec::new();
+        for i in 0..50 {
+            for j in 0..50 {
+                let (x, y) = (i as f64 * 2.0, j as f64 * 2.0);
+                surface.push([[x, y, 0.0], [x + 2.0, y, 0.0], [x + 2.0, y + 2.0, 0.0]]);
+                surface.push([[x, y, 0.0], [x + 2.0, y + 2.0, 0.0], [x, y + 2.0, 0.0]]);
+            }
+        }
+        let square = |x: f64, y: f64, w: f64, h: f64| {
+            vec![
+                Point2::new(x, y),
+                Point2::new(x + w, y),
+                Point2::new(x + w, y + h),
+                Point2::new(x, y + h),
+            ]
+        };
+        let mut regions = Vec::new();
+        for i in 0..20 {
+            for j in 0..20 {
+                regions.push((
+                    square(0.7 + i as f64 * 3.0, 0.3 + j as f64 * 5.0, 1.5, 1.5),
+                    Vec::new(),
+                ));
+            }
+        }
+        regions.push((square(60.0, 0.0, 40.0, 100.0), Vec::new()));
+        let start = std::time::Instant::now();
+        let layer = patch_layer(&surface, &regions, 0.02);
+        let top: f64 = layer
+            .iter()
+            .filter(|t| t.iter().all(|p| (p[2] - 0.02).abs() < 1e-6))
+            .map(|t| {
+                let (a, b, c) = (t[0], t[1], t[2]);
+                ((b[0] - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (b[1] - a[1])).abs() / 2.0
+            })
+            .sum();
+        assert!((top - (400.0 * 2.25 + 4000.0)).abs() < 0.5, "{top}");
+        assert!(start.elapsed().as_secs() < 60, "{:?}", start.elapsed());
     }
 }

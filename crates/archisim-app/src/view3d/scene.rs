@@ -241,6 +241,10 @@ pub struct Chunk {
 /// With a whole neighbourhood of buildings of the surroundings, those
 /// within this distance of the project's origin keep their detail.
 const DETAIL_AROUND: f64 = 150.0;
+/// And no more than these (a town brought in round the project would put
+/// hundreds within that distance: each with all its detail is some
+/// thirty thousand corners, and they did not fit in memory).
+const DETAIL_BUILDINGS: usize = 40;
 
 /// How many plants, nearest the project's origin and no farther than
 /// [`NEAR_PLANTS_AROUND`], keep every leaf when there are too many for all
@@ -444,6 +448,20 @@ struct Shared {
     glow: Option<(Vec3, f32, f32)>,
 }
 
+impl Shared {
+    /// Its model is made: the corners found are no longer needed (with a
+    /// whole neighbourhood of buildings their table weighs more than the
+    /// model itself).
+    fn done(mut self) -> Self {
+        for b in [&mut self.opaque, &mut self.glass] {
+            b.seen = HashMap::new();
+            b.mesh.vertices.shrink_to_fit();
+            b.mesh.indices.shrink_to_fit();
+        }
+        self
+    }
+}
+
 impl Sink for Shared {
     fn push(&mut self, pass: Pass, tri: [Vertex; 3], _owner: Owner) {
         match pass {
@@ -633,7 +651,7 @@ impl Scene {
                         between: false,
                     };
                     add_solids(model, solids, &look, &mut shared);
-                    groups.push((shared, Group::default()));
+                    groups.push((shared.done(), Group::default()));
                     groups.len() - 1
                 });
                 let (shared, group) = &mut groups[g];
@@ -756,7 +774,7 @@ impl Scene {
                         add_solids(model, solids, &look, &mut plain);
                         shared.simple = Some(plain.opaque.mesh);
                     }
-                    groups.push((shared, Group::default()));
+                    groups.push((shared.done(), Group::default()));
                     groups.len() - 1
                 });
                 let (shared, group) = &mut groups[g];
@@ -818,21 +836,37 @@ impl Scene {
         let crowd = archisim_geom::env_buildings::light_dress(model);
         let mut dressed = std::collections::HashSet::new();
         if !isolate {
+            // Those with every detail: with a whole neighbourhood, the
+            // nearest to the project's origin, no farther than
+            // DETAIL_AROUND and no more than DETAIL_BUILDINGS of them.
+            let centre = |m: &archisim_core::Mass| match &m.shape {
+                archisim_core::MassShape::Prism(p) if !p.is_empty() => Some(
+                    p.iter()
+                        .fold(archisim_core::Point2::new(0.0, 0.0), |a, q| a + *q)
+                        * (1.0 / p.len() as f64),
+                ),
+                _ => None,
+            };
+            let detailed: std::collections::HashSet<archisim_core::MassId> = if crowd {
+                let mut by: Vec<(f64, archisim_core::MassId)> = model
+                    .masses()
+                    .filter(|m| m.dress.is_some())
+                    .filter_map(|m| Some((centre(m)?.length(), m.id)))
+                    .filter(|(d, _)| *d < DETAIL_AROUND)
+                    .collect();
+                by.sort_by(|a, b| a.0.total_cmp(&b.0));
+                by.into_iter()
+                    .take(DETAIL_BUILDINGS)
+                    .map(|(_, id)| id)
+                    .collect()
+            } else {
+                Default::default()
+            };
             for m in model.masses() {
                 if m.dress.is_none() || model.hidden_by_discipline(&disciplines.hidden, m.id.0) {
                     continue;
                 }
-                let near = !crowd
-                    || match &m.shape {
-                        archisim_core::MassShape::Prism(p) if !p.is_empty() => {
-                            let c = p
-                                .iter()
-                                .fold(archisim_core::Point2::new(0.0, 0.0), |a, q| a + *q)
-                                * (1.0 / p.len() as f64);
-                            c.length() < DETAIL_AROUND
-                        }
-                        _ => false,
-                    };
+                let near = !crowd || detailed.contains(&m.id);
                 let full = archisim_geom::env_buildings::dressed_solids_detail(model, m, !near);
                 if full.is_empty() {
                     continue;
@@ -894,7 +928,7 @@ impl Scene {
                 group.instances.push(instance);
                 group.owners.push(Element::Mass(m.id));
                 group.bounds.push((lo, hi));
-                groups.push((shared, group));
+                groups.push((shared.done(), group));
             }
         }
         // The plants nearest the project (its origin) with every leaf,
@@ -974,7 +1008,7 @@ impl Scene {
                     group.instances.push(instance);
                     group.owners.push(Element::Object(id));
                     group.bounds.push((lo, hi));
-                    groups.push((shared, group));
+                    groups.push((shared.done(), group));
                 }
             }
         }

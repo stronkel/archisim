@@ -40,6 +40,7 @@ pub mod concrete;
 pub mod connections;
 pub mod detailing;
 pub mod fire;
+pub mod fix;
 pub mod floors;
 pub mod foundations;
 pub mod frame;

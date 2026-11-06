@@ -199,6 +199,20 @@ El tipo de forjado dice qué es (Tipos y materiales → «Forjado»): losa maciz
 
 «Aplicar el armado propuesto…» (ventana Cálculo de la estructura) da, para cada viga, pilar, zapata y losa maciza, el armado que pide el cálculo con los mínimos sísmicos de la NCSE-02 si hay que tenerlos en cuenta. Se eligen los elementos (marcados de entrada los que no tienen armado) y se escribe en su Armado, en un paso de Deshacer.
 
+### Arreglar lo que no cumple
+
+«Arreglar lo que no cumple…» (ventana Cálculo de la estructura, solo si algo no cumple) busca **lo más pequeño que hace cumplir**, sobre una copia del modelo, vuelta a vuelta:
+
+1. a lo que no cumple y aún no lo ha recibido, el armado que pide el cálculo (el mismo de «Armado propuesto»);
+2. si sigue sin cumplir, el tamaño siguiente:
+   - pilar de hormigón o madera, 5 cm más por lado (hasta 1 m); circular, 5 cm más de diámetro;
+   - viga, 5 cm más de canto (hasta 1,20 m) y después 5 cm más de ancho;
+   - acero, el perfil siguiente de la misma serie entre los tipos del proyecto;
+   - zapata aislada, 10 cm más por lado y el canto que la mantiene rígida (vuelo ≤ 2 cantos); corrida, 10 cm más de ancho;
+3. vuelve a calcular la estructura, porque una sección mayor es más rígida y cambia los esfuerzos de lo de alrededor.
+
+Para cuando nada falla o no se puede hacer más. Antes de cambiar nada enseña una tabla con cada elemento y lo que cambia, antes → después (sección, tamaño, armado), cuántas comprobaciones no cumplen ahora y después, y lo que te toca decidir a ti con el consejo del cálculo: un muro, el canto de un forjado, una zapata de medianera o un encepado. Clic en un elemento para verlo en su planta. «Aplicar los cambios» los hace todos en un paso de Deshacer. Las secciones nuevas se guardan como tipos con su tamaño en el nombre («Pilar HA 35×35»), o se usa el tipo del proyecto que ya la tenga.
+
 ### Fisuración y flecha de las vigas
 
 - **Fisura** en servicio: wk = sr,max·(εsm − εcm) contra 0,3 mm.

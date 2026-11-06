@@ -10027,3 +10027,122 @@ fn electrical_window_works_out_the_board() {
     let cte = archisim_cte::check(&model);
     assert!(cte.items.iter().any(|i| i.rule == "ITC-BT-15"));
 }
+
+/// A dialog stays where it opened: clicking inside it, on the other half
+/// of the window from where it was called, does not move it.
+#[test]
+fn a_dialog_does_not_jump_when_clicked() {
+    let mut h = Harness::new(Editor::new_project());
+    // Opened from the left of the window.
+    h.click_screen(Pos2::new(300.0, 200.0));
+    h.app.calc.open = true;
+    h.frame();
+    h.frame();
+    let id = egui::Id::unique(Some("Cálculo de la estructura"));
+    let before = h.ctx.memory(|m| m.area_rect(id)).unwrap_or_else(|| {
+        let layers: Vec<String> = h.ctx.memory(|m| {
+            m.areas()
+                .visible_layer_ids()
+                .iter()
+                .map(|l| format!("{:?}", l.id))
+                .collect()
+        });
+        panic!("no dialog: {layers:?} open {}", h.app.calc.open)
+    });
+    // Clicks inside it, on its right part (the right half of the window).
+    for x in [
+        before.right() - 30.0,
+        before.center().x,
+        before.left() + 40.0,
+    ] {
+        let at = Pos2::new(x, before.top() + 12.0);
+        h.click_screen(at);
+        h.frame();
+        let now = h.ctx.memory(|m| m.area_rect(id)).expect("the dialog");
+        assert!(
+            (now.min - before.min).length() < 1.0,
+            "the dialog moved from {before:?} to {now:?}"
+        );
+    }
+}
+
+/// «Arreglar lo que no cumple» in the structural calculation: a beam far
+/// too long for its section and its columns get what they need, worked
+/// out in another thread and made in one step that Deshacer undoes.
+#[test]
+fn the_calculation_fixes_what_fails() {
+    use archisim_core::{NewBeam, NewColumn, WallTop};
+    let mut h = Harness::new(Editor::new_project());
+    let l0 = h.app.ed.level;
+    h.app
+        .ed
+        .transact("pórtico", |m| {
+            let l1 = m.add_level("Planta 1", 3.0);
+            let column = m
+                .member_types()
+                .find(|t| t.usage == archisim_core::MemberUsage::Column)
+                .unwrap()
+                .id;
+            let beam = m
+                .member_types()
+                .find(|t| t.usage == archisim_core::MemberUsage::Beam)
+                .unwrap()
+                .id;
+            for x in [0.0, 9.0] {
+                m.add_column(NewColumn {
+                    member_type: column,
+                    level: l0,
+                    position: Point2::new(x, 0.0),
+                    rotation: 0.0,
+                    base_offset: 0.0,
+                    top: WallTop::Unconnected,
+                    height: 3.0,
+                })?;
+            }
+            m.add_beam(NewBeam {
+                member_type: beam,
+                level: l1,
+                start: Point2::new(0.0, 0.0),
+                end: Point2::new(9.0, 0.0),
+                top_offset: 0.0,
+            })?;
+            let floor = m
+                .slab_types()
+                .find(|t| t.name.contains("orjado"))
+                .unwrap()
+                .id;
+            m.add_slab(archisim_core::NewSlab {
+                slab_type: floor,
+                level: l1,
+                outline: vec![
+                    Point2::new(0.0, -2.0),
+                    Point2::new(9.0, -2.0),
+                    Point2::new(9.0, 2.0),
+                    Point2::new(0.0, 2.0),
+                ],
+                top_offset: 0.0,
+            })?;
+            Ok(())
+        })
+        .unwrap();
+    let fails = |m: &Model| {
+        let a = archisim_struct::analysis::analyse(m);
+        archisim_struct::all_checks(m, &a)
+            .iter()
+            .filter(|c| c.status == archisim_struct::lightframe::Status::Fail)
+            .count()
+    };
+    assert!(fails(h.app.ed.model()) > 0);
+    h.app.calc.open = true;
+    let ctx = h.ctx.clone();
+    h.app.start_calc_fix(&ctx);
+    let start = std::time::Instant::now();
+    while !h.app.calc_fix_ready() {
+        assert!(start.elapsed().as_secs() < 300, "the fix never came");
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    h.frame();
+    h.app.apply_calc_fix();
+    assert_eq!(h.app.ed.undo_label(), Some("Arreglar la estructura"));
+    assert_eq!(fails(h.app.ed.model()), 0);
+}

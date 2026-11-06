@@ -488,3 +488,83 @@ fn extinguishers_and_sprinklers_by_si4() {
     fire_device(&mut m, level, DeviceKind::Sprinkler, 6.0, 2.0);
     assert_eq!(counts(&check(&m)), [Status::Passes]);
 }
+
+#[test]
+fn the_fix_mends_pipes_and_doors() {
+    // The bathroom of the HS 4 and HS 5 test.
+    let mut m = archisim_library::new_project("Baño");
+    let l = m.levels()[0].id;
+    let wc = archisim_library::add_object_entry(&mut m, "Inodoro").unwrap();
+    let basin = archisim_library::add_object_entry(&mut m, "Lavabo 60").unwrap();
+    for (t, x) in [(wc, 1.0), (basin, 4.0)] {
+        m.add_object(NewObject {
+            level: l,
+            object_type: t,
+            position: Point2::new(x, 0.5),
+            rotation: 0.0,
+            base_offset: 0.0,
+        })
+        .unwrap();
+    }
+    for (system, x, y, width, slope) in [
+        (ServiceSystem::Drainage, 0.7, 0.2, 0.09, 0.02),
+        (ServiceSystem::Drainage, 3.7, 0.2, 0.04, 0.0),
+        (ServiceSystem::ColdWater, 0.7, 0.9, 0.016, 0.0),
+        (ServiceSystem::ColdWater, 3.7, 0.9, 0.010, 0.0),
+    ] {
+        m.add_run(NewRun {
+            level: l,
+            system,
+            path: vec![Point2::new(x, y), Point2::new(x + 0.6, y)],
+            elevation: 0.3,
+            width,
+            height: width,
+            slope,
+        })
+        .unwrap();
+    }
+    let f = crate::fix::fix(&m);
+    assert_eq!(f.fails_before, 3, "{:?}", f.left);
+    assert_eq!(f.fails_after, 0, "{:?}", f.left);
+    assert_eq!(f.lines.len(), 3, "{:#?}", f.lines);
+    let mut done = m.clone();
+    crate::fix::apply_all(&mut done, &f).unwrap();
+    assert_eq!(check(&done).count(Status::Fails), 0);
+
+    // A dining room for more than 50 with its door opening inwards, and a
+    // door too narrow.
+    let mut m = Model::new("Sala");
+    let level = m.add_level("Planta baja", 0.0);
+    let lib = archisim_library::add_library(&mut m).unwrap();
+    m.set_code_settings(CodeSettings {
+        building_use: BuildingUse::Assembly,
+        ..Default::default()
+    });
+    let t = lib.partition;
+    let south = wall(&mut m, t, level, (0.0, 0.0), (12.0, 0.0));
+    wall(&mut m, t, level, (12.0, 0.0), (12.0, 8.0));
+    wall(&mut m, t, level, (12.0, 8.0), (0.0, 8.0));
+    wall(&mut m, t, level, (0.0, 8.0), (0.0, 0.0));
+    room(&mut m, level, "1", "Comedor", 0.05, 0.05, 11.95, 7.95);
+    let d = door(&mut m, lib.interior_door, south, 6.0, WallSide::Exterior);
+    let r = check(&m);
+    assert!(r.items.iter().any(|i| i.rule == "SI 3, 6.3"));
+    let f = crate::fix::fix(&m);
+    let mut done = m.clone();
+    crate::fix::apply_all(&mut done, &f).unwrap();
+    let r = check(&done);
+    let of_door: Vec<&Item> = r
+        .items
+        .iter()
+        .filter(|i| i.subject == Subject::Opening(d) && i.status == Status::Fails)
+        .collect();
+    assert!(of_door.is_empty(), "{of_door:#?}\n{:#?}", f.lines);
+    assert!(
+        f.lines.iter().any(|l| l.what == "Sentido"),
+        "{:#?}",
+        f.lines
+    );
+    // The type it takes is a copy of its own, wider.
+    let o = done.opening(d).unwrap();
+    assert_ne!(o.opening_type, lib.interior_door);
+}

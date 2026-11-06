@@ -21,6 +21,7 @@ pub mod access;
 pub mod electrical;
 pub mod evacuation;
 pub mod fire;
+pub mod fix;
 pub mod framing;
 pub mod occupancy;
 pub mod region;

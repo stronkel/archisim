@@ -74,6 +74,16 @@ Valores de la tabla 1.1 contrastados en normatia.com (CTE DB-SI 2025) el 31/10/2
 
 Superficie útil de cada local, por uso y por planta; superficie construida de cada planta (lo que encierran las caras exteriores de los muros, con los muros, sin patios de más de 1 m²) y del edificio, con la ocupación.
 
+## Arreglar lo que no cumple
+
+El botón «Arreglar lo que no cumple…» de la ventana arregla solo lo que tiene una respuesta clara y mínima, sobre una copia del modelo, y enseña antes lo que cambia (elemento, qué, antes → después):
+
+- **Estructura y entramados**: lo mismo que en la ventana del cálculo (armado, y si no basta la sección o el tamaño siguiente; `docs/ESTRUCTURA.md`), y el armado que propone el cálculo para lo que tiene un armado dibujado que no cumple una regla de construcción.
+- **Agua y saneamiento**: la tubería más cercana al aparato toma el diámetro de HS 4 tabla 4.2 o HS 5 tabla 4.1 (el mayor de los aparatos a los que sirve); una pendiente fuera de lo permitido pasa a la más cercana que vale (derivación entre 2 % y 5 %, colector colgado 1 %, enterrado 2 %).
+- **Puertas**: la que no tiene el paso libre que pide la evacuación (A ≥ P/200 ≥ 0,80 m) o la accesibilidad (0,80 m de hoja, 0,78 m con la hoja abierta) pasa a un tipo de su misma familia lo bastante ancho, de 5 en 5 cm: uno del proyecto si ya lo hay o una copia del suyo con el ancho en el nombre. La que debe abrir en el sentido de la evacuación se gira con las bisagras en la misma jamba.
+
+Lo demás se queda en la lista «Lo que tienes que decidir tú»: un pasillo estrecho, el giro de una silla de ruedas, una salida o un recorrido demasiado largo, una escalera, los extintores. Los cambios se hacen todos juntos y Deshacer los quita de una vez.
+
 ## Lo que no se comprueba todavía
 
 - Escaleras protegidas y sectores de incendio (SI 1), y la hipótesis de bloqueo de salidas.

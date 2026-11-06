@@ -18,6 +18,8 @@ pub struct CalcWindow {
     /// The reinforcement the calculation asks for, while it is being
     /// chosen: each with whether it goes in.
     proposals: Option<(u64, Vec<(archisim_struct::proposals::Proposal, bool)>)>,
+    /// «Arreglar lo que no cumple», while it is worked out or shown.
+    fix: Option<super::fix_ui::FixState<archisim_struct::fix::Fix>>,
 }
 
 impl ArchiSimApp {
@@ -263,6 +265,7 @@ impl ArchiSimApp {
         }
         let (_, text, fails) = self.calc.results.clone().expect("just made");
         let mut export = false;
+        let mut start_fix = false;
         ui.horizontal(|ui| {
             let p = super::theme::Palette::current(ui.ctx());
             if fails == 0 {
@@ -273,6 +276,13 @@ impl ArchiSimApp {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if ui.button("Anejo de cálculo (PDF)…").clicked() {
                     export = true;
+                }
+                if ui
+                    .add_enabled(fails > 0, egui::Button::new("Arreglar lo que no cumple…"))
+                    .on_hover_text("Busca lo más pequeño que hace cumplir —el armado que pide el cálculo, la sección o el tamaño siguiente— calculando otra vez tras cada cambio, y te enseña lo que cambia antes de hacerlo")
+                    .clicked()
+                {
+                    start_fix = true;
                 }
                 if ui
                     .button("Aplicar el armado propuesto…")
@@ -293,6 +303,28 @@ impl ArchiSimApp {
                 }
             });
         });
+        if start_fix {
+            self.start_calc_fix(ui.ctx());
+        }
+        if self.calc.fix.as_ref().is_some_and(|f| f.revision() != rev) {
+            self.calc.fix = None;
+        }
+        if let Some(f) = self.calc.fix.as_mut() {
+            f.poll();
+            match super::fix_ui::panel(
+                ui,
+                f,
+                "Lo más pequeño que hace cumplir: primero el armado, luego la sección o el tamaño siguiente, y se vuelve a calcular.",
+            ) {
+                super::fix_ui::Answer::Nothing => {}
+                super::fix_ui::Answer::Back => self.calc.fix = None,
+                super::fix_ui::Answer::Pick(e, l) => self.fix_pick(e, l),
+                super::fix_ui::Answer::Apply => {
+                    self.apply_calc_fix();
+                }
+            }
+            return;
+        }
         if self.calc.proposals.as_ref().is_some_and(|p| p.0 != rev) {
             self.calc.proposals = None;
         }
@@ -311,6 +343,68 @@ impl ArchiSimApp {
             });
         if export {
             self.export_calc_report();
+        }
+    }
+
+    /// Starts working out «Arreglar lo que no cumple».
+    pub(super) fn start_calc_fix(&mut self, ctx: &egui::Context) {
+        self.calc.proposals = None;
+        self.calc.fix = Some(super::fix_ui::FixState::start(
+            self.ed.revision(),
+            self.ed.model().clone(),
+            ctx.clone(),
+            |m| {
+                let f = archisim_struct::fix::fix(m);
+                let rows = f
+                    .lines
+                    .iter()
+                    .map(|l| {
+                        let (element, level) = super::fix_ui::structural_element(m, l.element);
+                        super::fix_ui::Row {
+                            element,
+                            level,
+                            name: l.name.clone(),
+                            what: l.what,
+                            before: l.before.clone(),
+                            after: l.after.clone(),
+                        }
+                    })
+                    .collect();
+                super::fix_ui::Shown {
+                    rows,
+                    fails_before: f.fails_before,
+                    fails_after: f.fails_after,
+                    left: f.left.clone(),
+                    fix: f,
+                }
+            },
+        ));
+    }
+
+    /// Whether the fix has been worked out.
+    #[cfg(test)]
+    pub(super) fn calc_fix_ready(&mut self) -> bool {
+        self.calc.fix.as_mut().is_some_and(|f| {
+            f.poll();
+            matches!(f, super::fix_ui::FixState::Ready(..))
+        })
+    }
+
+    /// Makes the fix worked out, in one step.
+    pub(super) fn apply_calc_fix(&mut self) {
+        if let Some(super::fix_ui::FixState::Ready(_, s)) = self.calc.fix.take() {
+            let n = s.rows.len();
+            let r = self.ed.transact("Arreglar la estructura", |m| {
+                archisim_struct::fix::apply_all(m, &s.fix)
+            });
+            self.report(
+                r,
+                &format!(
+                    "Estructura arreglada: {n} cambio{}; quedan {} comprobaciones sin cumplir. Deshacer los quita.",
+                    if n == 1 { "" } else { "s" },
+                    s.fails_after
+                ),
+            );
         }
     }
 
