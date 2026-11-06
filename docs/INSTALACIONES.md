@@ -1,8 +1,8 @@
 # Instalaciones: dibujo y cálculo
 
-ArchiSim dibuja las instalaciones (tuberías, conductos y aparatos) y las calcula sobre lo dibujado. Este documento recoge la segunda vuelta: cómo se meten las tuberías y el cálculo eléctrico con su esquema unifilar. Lo que sigue (fontanería HS 4, saneamiento HS 5, ventilación HS 3, climatización y DB-HE) se añadirá aquí.
+ArchiSim dibuja las instalaciones (tuberías, conductos y aparatos) y las calcula sobre lo dibujado. Este documento recoge la segunda vuelta: cómo se meten las tuberías, el cálculo eléctrico con su esquema unifilar y el cálculo de fontanería. Lo que sigue (saneamiento HS 5, ventilación HS 3, climatización y DB-HE) se añadirá aquí.
 
-Código: `archisim-core::model::pipe_routing` (uniones, cambio de planta y trazado automático), crate `archisim-mep` (cálculos, depende solo de `archisim-core`), `archisim-plan::single_line` (esquema unifilar), `archisim-cte::electrical` (comprobación) y, en la app, `app/services_ui` y `app/electrical_ui`.
+Código: `archisim-core::model::pipe_routing` (uniones, cambio de planta y trazado automático), `archisim-core::model::water` (datos del suministro), crate `archisim-mep` (cálculos, depende solo de `archisim-core`: `electrical` y `water`), `archisim-plan::single_line` (esquema unifilar), `archisim-cte::electrical` y `archisim-cte::services::calculation` (comprobación) y, en la app, `app/services_ui`, `app/electrical_ui` y `app/water_ui`.
 
 ## 1. Meter las tuberías
 
@@ -48,9 +48,53 @@ Una hoja A3 por cuadro: red, CGP, contador, derivación individual con sus condu
 - DXF: desde la ventana (un archivo por cuadro).
 - `archisim electricidad <proyecto> <carpeta>` deja `<proyecto>-unifilar.pdf` y un DXF por hoja.
 
-## 4. Lo que no hace (todavía)
+## 4. Fontanería (DB-HS 4)
+
+Colaboración → **Cálculo de fontanería…**. Lo único que se escribe en la ventana es lo que no sale del dibujo:
+- la **presión en el contador** que garantiza la compañía (por defecto 300 kPa; 100 kPa ≈ 1 bar ≈ 10 m de agua);
+- la **tubería**: multicapa (por defecto), PE-X, PP-R o cobre, con sus medidas comerciales, su rugosidad y su velocidad máxima.
+
+Lo demás sale del dibujo:
+- **La red.** El agua fría se sigue desde el **contador** (o un aljibe o un grupo de presión) y la caliente desde el **termo o acumulador**. Se recorren las tuberías, las tes (una tubería que acaba sobre otra) y los **montantes**, de planta a planta, hasta los aparatos sanitarios. Un aparato está unido si una tubería de ese sistema acaba a menos de 45 cm de él. Si no hay contador o termo dibujado, se empieza en el extremo más bajo y se avisa.
+- **Caudal de cada tramo.** Suma de los caudales instantáneos de los aparatos que alimenta (HS 4, tabla 2.1), con simultaneidad:
+  - en viviendas, UNE 149201: Qc = 0,682·Qt^0,45 − 0,14;
+  - en otros usos, Qc = Qt/√(n − 1).
+  
+  Nunca menos que el aparato mayor ni más que la suma.
+- **Diámetro.** El menor comercial de la tubería elegida que deja el agua por debajo de 2 m/s y no baja de lo que pide el HS 4: el del aparato en su derivación (tabla 4.2) y 20 mm en lo que sirve a dos o más aparatos y en los montantes (tabla 4.3). Si después algún grifo se queda sin presión, el tramo de su camino que más pierde pasa a la medida siguiente, hasta que llegue.
+- **Pérdidas de carga.** Darcy–Weisbach con el factor de fricción de Swamee–Jain (agua fría a 20 °C, caliente a 60 °C), más un 30 % por codos, tes y llaves.
+- **Presión en cada grifo.** La del contador, menos las pérdidas del camino, menos la altura que sube hasta el grifo (la ducha a 2 m del suelo, el inodoro a 0,2, los demás a 1 m). Se compara con:
+  - 100 kPa mínimo en cada grifo (HS 4, 2.1.3);
+  - 150 kPa a la entrada del calentador;
+  - 500 kPa como máximo en el contador (si hay más, reductor de presión).
+  
+  El agua caliente parte de la presión con que la fría llega al termo.
+
+Cada tramo («F1», «F2»… en fría; «C1»… en caliente) se calcula dos veces: **como está dibujado** (esta es la comprobación) y **con el diámetro calculado**. La ventana da la tabla de tramos (longitud, aparatos, Qt, Qc, diámetro, velocidad y pérdida de cada versión) y la presión de cada grifo.
+
+**«Poner los diámetros calculados»** da a cada tubería el mayor diámetro de sus tramos, en un paso de Deshacer. También achica las que estaban de más.
+
+En la **Comprobación CTE** (Agua y saneamiento) salen:
+- la presión de cada grifo y la del calentador;
+- cada tramo con su diámetro dibujado contra el calculado;
+- la velocidad (más de 3,5 m/s en plástico o 2 m/s en cobre no cumple);
+- los aparatos sin unir.
+
+«Arreglar lo que no cumple» pone el diámetro calculado en los tramos cortos.
+
+En la línea de órdenes: `archisim fontaneria <proyecto>`, o `archisim fontaneria <proyecto> --diametros salida.archisim` para guardarlo con los diámetros calculados.
+
+El edificio de Florence Street (`archisim edificio`) lleva ahora la red entera: contador y acumulador junto al montante, montante hasta la cubierta, distribuidor en cada rellano, derivación de cada vivienda y todos los aparatos unidos. Son 114 aparatos y 24 viviendas. Con 300 kPa en el contador, los diámetros dibujados dejan 95 grifos por debajo de 100 kPa; con los calculados, el peor llega a 122 kPa.
+
+## 5. Lo que no hace (todavía)
 
 - Trifásica, viviendas con más de 14 490 W, locales y oficinas (ITC-BT-28 en adelante).
 - Caída de tensión por tramos con la carga repartida: se pone toda la carga en el punto más lejano, lo que queda del lado de la seguridad.
 - Cortocircuito y poder de corte (se pone 6 kA).
-- Fontanería (HS 4), saneamiento (HS 5), ventilación (HS 3), climatización y DB-HE: los siguientes pasos.
+- Fontanería:
+  - el esquema vertical de la red;
+  - los grupos de presión y los aljibes dimensionados;
+  - el retorno del agua caliente, obligatorio con más de 15 m de tubería al grifo más alejado;
+  - las pérdidas propias de contadores, filtros y calentadores, que habría que restar a mano;
+  - los fluxores.
+- Saneamiento (HS 5, bajantes y colectores por unidades de desagüe), ventilación (HS 3), climatización y DB-HE: los siguientes pasos.

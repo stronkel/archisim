@@ -1607,7 +1607,6 @@ fn services(m: &mut Model, lv: &[LevelId]) -> R {
         p(16.5, 1.5),
         0.0,
     )?;
-    let _ = riser;
     for k in 1..=4 {
         let l = lv[k];
         let soffit = 3.2 - 0.32;
@@ -1924,6 +1923,118 @@ fn services(m: &mut Model, lv: &[LevelId]) -> R {
                 height: width,
                 slope: 0.0,
             })?;
+        }
+    }
+    water_network(m, lv, riser)
+}
+
+/// The water supply joined up, so that the calculation of DB-HS 4 can
+/// follow it: the meter and the hot water tank by the riser on the ground
+/// floor, the riser up to the roof, each floor's corridor main from the
+/// riser, each flat's branch from the main, and every sanitary appliance
+/// joined to the nearest pipe («Conectar los aparatos»).
+fn water_network(m: &mut Model, lv: &[LevelId], riser: archisim_core::DeviceId) -> R {
+    use archisim_core::{DeviceKind, NewDevice, NewRun, ServiceSystem};
+    let pb = lv[0];
+    let top = m.level(lv[5]).map_or(16.0, |l| l.elevation);
+    m.edit_device(riser, |d| d.height = top + 0.5)?;
+    let run = |m: &mut Model, level, system, path: Vec<Point2>, width: f64, z: f64| -> R {
+        let mut path = path;
+        path.dedup_by(|a, b| a.distance(*b) < 1e-6);
+        if path.len() < 2 {
+            return Ok(());
+        }
+        m.add_run(NewRun {
+            level,
+            system,
+            path,
+            elevation: z,
+            width,
+            height: width,
+            slope: 0.0,
+        })?;
+        Ok(())
+    };
+    let box_at = |m: &mut Model, kind: DeviceKind, name: &str, at: Point2| -> R {
+        let (width, depth, height, elevation) = kind.defaults();
+        m.add_device(NewDevice {
+            level: pb,
+            kind,
+            name: name.into(),
+            position: at,
+            rotation: 0.0,
+            elevation,
+            width,
+            depth,
+            height,
+        })?;
+        Ok(())
+    };
+    box_at(m, DeviceKind::WaterMeter, "Contador general", p(16.5, 0.6))?;
+    box_at(
+        m,
+        DeviceKind::WaterHeater,
+        "Acumulador de ACS",
+        p(17.4, 1.0),
+    )?;
+    let cold = ServiceSystem::ColdWater;
+    let hot = ServiceSystem::HotWater;
+    // Ground floor: meter → riser → the toilets' pipe; a tee to the tank,
+    // and the hot water from it to the riser and the toilets.
+    run(m, pb, cold, vec![p(16.5, 0.6), p(16.5, 1.5)], 0.032, 2.6)?;
+    run(m, pb, cold, vec![p(16.5, 1.5), p(16.5, 2.4)], 0.025, 2.6)?;
+    run(m, pb, cold, vec![p(16.5, 1.0), p(17.4, 1.0)], 0.025, 2.6)?;
+    run(
+        m,
+        pb,
+        hot,
+        vec![p(17.4, 1.06), p(16.56, 1.06), p(16.56, 1.56)],
+        0.025,
+        2.6,
+    )?;
+    run(m, pb, hot, vec![p(16.56, 1.56), p(16.56, 2.46)], 0.02, 2.6)?;
+    // The flats: from the riser to the corridor's main, and each flat's
+    // branch from it.
+    let starts = [
+        (16.35, 8.4),
+        (15.2, 4.75),
+        (15.2, 3.45),
+        (25.05, 5.2),
+        (26.4, 3.9),
+        (24.9, 2.6),
+    ];
+    for k in 1..=4 {
+        let l = lv[k];
+        for (system, main_y, d, width) in [(cold, 3.4, 0.0, 0.032), (hot, 3.48, 0.06, 0.025)] {
+            run(
+                m,
+                l,
+                system,
+                vec![p(16.5 + d, 1.5 + d), p(16.5 + d, main_y)],
+                width,
+                2.6,
+            )?;
+            for (x, y) in starts {
+                let (x, y) = (x + d, y + d);
+                let cx = x.clamp(16.5 + d, 25.6);
+                run(
+                    m,
+                    l,
+                    system,
+                    vec![p(cx, main_y), p(cx, y), p(x, y)],
+                    0.02,
+                    2.55,
+                )?;
+            }
+        }
+    }
+    // Every appliance to the nearest pipe of each system.
+    for l in lv {
+        for system in [cold, hot] {
+            let (runs, _) = m.route_appliances(*l, system, 2.55);
+            for r in runs {
+                m.add_run(r)?;
+            }
         }
     }
     Ok(())

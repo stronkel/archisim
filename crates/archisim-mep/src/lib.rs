@@ -7,9 +7,14 @@
 //!   tube, length and voltage drop; and the single-line diagram that
 //!   draws it (`archisim-plan::single_line`).
 //!
+//! - `water`: the water supply by DB-HS 4: the cold and hot networks as
+//!   drawn, their flows with simultaneity, the diameter of every stretch,
+//!   its speed and pressure loss, and the pressure left at every tap.
+//!
 //! It works on the board («cuadro»), the mechanisms and the appliances
 //! drawn; it adds no elements. It is a design aid: the installer's
 //! certificate and the project's installation are signed by their
 //! authors.
 
 pub mod electrical;
+pub mod water;

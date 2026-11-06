@@ -240,6 +240,10 @@ pub(crate) struct ProjectFile {
     /// (version 85).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub electrical: Option<ElectricalOf>,
+    /// The data of the water calculation besides the drawing (version
+    /// 86).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub water: Option<WaterOf>,
     /// Rooms (IfcSpace) and tags of doors, windows, walls and rooms
     /// (version 7).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -4132,6 +4136,7 @@ impl ProjectFile {
                 .map(|(d, n)| [d.0, u64::from(*n)])
                 .collect(),
             electrical: ElectricalOf::out(&p.electrical_site),
+            water: WaterOf::out(&p.water_site),
             level_underlays: crate::drafting::level_underlays_out(&p.level_underlays),
             rooms: crate::rooms::rooms_out(&p.rooms),
             tags: crate::rooms::tags_out(&p.tags),
@@ -4748,6 +4753,10 @@ impl ProjectFile {
             electrical_site: match &self.electrical {
                 Some(e) => e.site()?,
                 None => core::ElectricalSite::default(),
+            },
+            water_site: match &self.water {
+                Some(w) => w.site(),
+                None => core::WaterSite::default(),
             },
             level_underlays: crate::drafting::level_underlays_in(self.level_underlays)?,
             rooms: crate::rooms::rooms_in(self.rooms)?,
@@ -6124,6 +6133,34 @@ impl StructureOf {
                 })
             })
             .collect()
+    }
+}
+
+/// The data of the water calculation besides the drawing (version 86).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WaterOf {
+    /// At the meter, kPa.
+    pub pressure: f64,
+    /// «multilayer», «pex», «ppr» or «copper».
+    pub material: String,
+}
+
+impl WaterOf {
+    fn out(site: &core::WaterSite) -> Option<Self> {
+        if *site == core::WaterSite::default() {
+            return None;
+        }
+        Some(WaterOf {
+            pressure: site.pressure,
+            material: site.material.code().into(),
+        })
+    }
+
+    fn site(&self) -> core::WaterSite {
+        core::WaterSite {
+            pressure: self.pressure,
+            material: core::PipeMaterial::from_code(&self.material).unwrap_or_default(),
+        }
     }
 }
 

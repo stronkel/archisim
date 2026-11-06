@@ -10304,3 +10304,71 @@ fn sketch_in_the_ribbon() {
     assert!(h.app.sketch.is_none());
     h.frame();
 }
+
+/// The water supply window: it works out the networks and gives every pipe
+/// the diameter of the calculation in one step.
+#[test]
+fn the_water_window_sizes_the_pipes() {
+    use archisim_core::{DeviceKind, NewDevice, NewObject, NewRun, ServiceSystem};
+    let mut h = Harness::new(Editor::new_project());
+    let l = h.app.ed.level;
+    let main = h
+        .app
+        .ed
+        .transact("baño", |m| {
+            for (name, x) in [
+                ("Inodoro", 1.0),
+                ("Lavabo 60", 2.5),
+                ("Plato de ducha 90×90", 4.0),
+            ] {
+                let t = archisim_library::add_object_entry(m, name)?;
+                m.add_object(NewObject {
+                    level: l,
+                    object_type: t,
+                    position: Point2::new(x, 0.6),
+                    rotation: 0.0,
+                    base_offset: 0.0,
+                })?;
+            }
+            m.add_device(NewDevice {
+                level: l,
+                kind: DeviceKind::WaterMeter,
+                name: "Contador".into(),
+                position: Point2::new(-2.0, 0.0),
+                rotation: 0.0,
+                elevation: 0.3,
+                width: 0.3,
+                depth: 0.2,
+                height: 0.4,
+            })?;
+            let points: Vec<Point2> = m.appliances_on(l).iter().map(|a| a.point).collect();
+            let run = |m: &mut Model, path: Vec<Point2>| {
+                m.add_run(NewRun {
+                    level: l,
+                    system: ServiceSystem::ColdWater,
+                    path,
+                    elevation: 0.3,
+                    width: 0.016,
+                    height: 0.016,
+                    slope: 0.0,
+                })
+            };
+            let main = run(m, vec![Point2::new(-2.0, 0.0), Point2::new(5.0, 0.0)])?;
+            for p in points {
+                run(m, vec![Point2::new(p.x, 0.0), p])?;
+            }
+            Ok(main)
+        })
+        .unwrap();
+    h.app.water.open = true;
+    h.frame();
+    assert!(h.app.apply_water_sizes() > 0);
+    assert_eq!(
+        h.app.ed.undo_label(),
+        Some("Diámetros del cálculo de fontanería")
+    );
+    let width = h.model().runs().find(|r| r.id == main).unwrap().width;
+    assert!(width >= 0.020, "{width}");
+    // Nothing more to change.
+    assert_eq!(h.app.apply_water_sizes(), 0);
+}

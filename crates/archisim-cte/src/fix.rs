@@ -6,7 +6,8 @@
 //!   (`archisim_struct::fix`), and the reinforcement it proposes for the
 //!   elements whose drawn reinforcement breaks a construction rule;
 //! - water and drainage: the pipe nearest an appliance takes the diameter
-//!   HS 4 or HS 5 asks for (the largest of the appliances it serves), and
+//!   HS 4 or HS 5 asks for (the largest of the appliances it serves), each
+//!   stretch of the water supply the one its flow asks for, and
 //!   a drain with too little or too much slope takes the nearest allowed
 //!   (2 % for a branch, 1 % for a hung collector, 2 % for a buried one);
 //! - doors: the door takes a type of its family wide enough for the clear
@@ -281,6 +282,22 @@ pub fn fix(model: &Model) -> Fix {
                 push(&mut m, Change::RunSlope { run, slope }, &mut changes);
             }
             _ => {}
+        }
+    }
+    // The diameters of the water calculation, where a stretch is short.
+    if report.items.iter().any(|i| {
+        i.status == Status::Fails && i.rule == "HS 4, 4.2" && matches!(i.subject, Subject::Run(_))
+    }) {
+        let sized = archisim_mep::water::water(&m).sized_runs();
+        for i in report.items.iter().filter(|i| i.status == Status::Fails) {
+            if let (Subject::Run(r), "HS 4, 4.2") = (i.subject, i.rule) {
+                if let (Some(w), Some(now)) =
+                    (sized.get(&r), m.runs().find(|x| x.id == r).map(|x| x.width))
+                {
+                    let e = widths.entry(r).or_insert(now);
+                    *e = e.max(*w);
+                }
+            }
         }
     }
     for (run, width) in widths {

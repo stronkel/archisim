@@ -210,3 +210,152 @@ pub fn check(model: &Model, report: &mut Report) {
         }
     }
 }
+
+/// The calculation of the water supply (`archisim-mep::water`): the
+/// pressure at every tap and at the heater, the diameter of every
+/// stretch for its flow and the speed of the water.
+pub fn calculation(model: &Model, report: &mut Report) {
+    use archisim_mep::water::{self as wt, Source};
+    let w = wt::water(model);
+    let dec = |v: f64, n: usize| format!("{v:.n$}").replace('.', ",");
+    let first_level = model.levels().first().map(|l| l.id);
+    for n in &w.networks {
+        let mut push = |status: Status,
+                        subject: Subject,
+                        level: Option<archisim_core::LevelId>,
+                        rule: &'static str,
+                        text: String,
+                        value: String,
+                        required: String| {
+            report.items.push(Item {
+                section: Section::Services,
+                status,
+                subject,
+                level,
+                rule,
+                text,
+                value,
+                required,
+                route: Vec::new(),
+            });
+        };
+        let system = n.system.name().to_lowercase();
+        match &n.source {
+            Source::End(level, _) if n.system == ServiceSystem::ColdWater => push(
+                Status::Warning,
+                Subject::Level(*level),
+                Some(*level),
+                "HS 4, 3.2.1.1",
+                "No hay contador dibujado: el agua fría se calcula desde el extremo más bajo de las tuberías".into(),
+                String::new(),
+                String::new(),
+            ),
+            Source::End(level, _) => push(
+                Status::Warning,
+                Subject::Level(*level),
+                Some(*level),
+                "HS 4, 3.2.2",
+                "No hay termo ni calentador dibujado junto al agua caliente: se calcula desde su extremo más bajo".into(),
+                String::new(),
+                String::new(),
+            ),
+            Source::Device(..) => {}
+        }
+        if n.system == ServiceSystem::ColdWater {
+            push(
+                if n.source_pressure <= wt::MAX_PRESSURE {
+                    Status::Passes
+                } else {
+                    Status::Fails
+                },
+                Subject::Building,
+                first_level,
+                "HS 4, 2.1.3",
+                "Presión de la red en el contador (con más de 500 kPa, reductor de presión)".into(),
+                format!("{} kPa", dec(n.source_pressure, 0)),
+                format!("≤ {} kPa", wt::MAX_PRESSURE),
+            );
+        }
+        for t in &n.taps {
+            push(
+                if t.pressure + 1e-6 >= wt::TAP_PRESSURE {
+                    Status::Passes
+                } else {
+                    Status::Fails
+                },
+                Subject::Object(t.object),
+                Some(t.level),
+                "HS 4, 2.1.3",
+                format!("{}: presión del {system} en el grifo", t.kind.name()),
+                format!("{} kPa", dec(t.pressure, 0)),
+                format!("≥ {} kPa", wt::TAP_PRESSURE),
+            );
+        }
+        if let Some((heater, p, _)) = n.heater {
+            let level = model.devices().find(|d| d.id == heater).map(|d| d.level);
+            push(
+                if p + 1e-6 >= wt::HEATER_PRESSURE {
+                    Status::Passes
+                } else {
+                    Status::Fails
+                },
+                Subject::Device(heater),
+                level,
+                "HS 4, 2.1.3",
+                "Presión del agua fría en la entrada del calentador".into(),
+                format!("{} kPa", dec(p, 0)),
+                format!("≥ {} kPa", wt::HEATER_PRESSURE),
+            );
+        }
+        let top_speed = if w.material.is_metal() { 2.0 } else { 3.5 };
+        for s in &n.stretches {
+            let subject = match (s.run, s.riser) {
+                (Some(r), _) => Subject::Run(r),
+                (None, Some(d)) => Subject::Device(d),
+                _ => Subject::Level(s.level),
+            };
+            push(
+                if s.drawn.0 + 1e-4 >= s.sized.0 {
+                    Status::Passes
+                } else {
+                    Status::Fails
+                },
+                subject,
+                Some(s.level),
+                "HS 4, 4.2",
+                format!(
+                    "Tramo {} del {system}: {} aparato{}, Qc = {} l/s",
+                    s.name,
+                    s.appliances,
+                    if s.appliances == 1 { "" } else { "s" },
+                    dec(s.flow, 2)
+                ),
+                format!("Ø{:.0} mm", s.drawn.0 * 1000.0),
+                format!("≥ Ø{:.0} mm", s.sized.0 * 1000.0),
+            );
+            if s.speed > top_speed + 1e-6 {
+                push(
+                    Status::Fails,
+                    subject,
+                    Some(s.level),
+                    "HS 4, 4.2.1",
+                    format!("Tramo {} del {system}: velocidad del agua", s.name),
+                    format!("{} m/s", dec(s.speed, 2)),
+                    format!("≤ {} m/s", dec(top_speed, 2)),
+                );
+            }
+        }
+        for o in &n.loose {
+            let level = model.objects().find(|x| x.id == *o).map(|x| x.level);
+            push(
+                Status::Warning,
+                Subject::Object(*o),
+                level,
+                "HS 4, 3.2.1",
+                format!("Aparato sin unir a la red de {system}: no entra en el cálculo"),
+                String::new(),
+                String::new(),
+            );
+        }
+    }
+}

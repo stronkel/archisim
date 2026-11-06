@@ -68,6 +68,7 @@ mod title_blocks;
 mod urban;
 mod views;
 mod wall_profile;
+mod water;
 mod worktops;
 pub use appearance::*;
 pub use concept::*;
@@ -120,6 +121,7 @@ pub use title_blocks::*;
 pub use urban::*;
 pub use views::*;
 pub use wall_profile::*;
+pub use water::*;
 pub use worktops::*;
 
 /// A floor of the building. IFC: `IfcBuildingStorey`.
@@ -1564,6 +1566,7 @@ pub struct ModelParts {
     pub device_circuits: Vec<(DeviceId, u8)>,
     /// What the electrical calculation needs besides the drawing.
     pub electrical_site: ElectricalSite,
+    pub water_site: WaterSite,
     /// Underlays of the levels' plans (E7).
     pub level_underlays: Vec<(LevelId, Vec<Underlay>)>,
     pub viewports: Vec<crate::sheets::Viewport>,
@@ -1698,6 +1701,7 @@ pub struct Model {
     pub(crate) device_circuits: BTreeMap<u64, u8>,
     /// What the electrical calculation needs besides the drawing.
     pub(crate) electrical_site: ElectricalSite,
+    pub(crate) water_site: WaterSite,
     pub(crate) drafts: BTreeMap<DraftId, Draft>,
     pub(crate) info: crate::sheets::ProjectInfo,
     pub(crate) sheets: BTreeMap<SheetId, crate::sheets::Sheet>,
@@ -1801,6 +1805,7 @@ impl Model {
             footing_piles: BTreeMap::new(),
             structural_site: StructuralSite::default(),
             electrical_site: ElectricalSite::default(),
+            water_site: WaterSite::default(),
             structural_loads: BTreeMap::new(),
             device_circuits: BTreeMap::new(),
             level_underlays: BTreeMap::new(),
@@ -4480,6 +4485,7 @@ impl Model {
             structural_loads: self.structural_loads.values().cloned().collect(),
             device_circuits: self.device_circuits().collect(),
             electrical_site: self.electrical_site,
+            water_site: self.water_site,
             level_underlays: self
                 .level_underlays
                 .iter()
@@ -4824,6 +4830,12 @@ impl Model {
             .set_electrical_site(parts.electrical_site)
             .map_err(|error| RestoreError {
                 element: "electrical site".into(),
+                error,
+            })?;
+        model
+            .set_water_site(parts.water_site)
+            .map_err(|error| RestoreError {
+                element: "water site".into(),
                 error,
             })?;
         model.restore_title_blocks(parts.title_blocks, parts.default_title_block, &mut claim)?;

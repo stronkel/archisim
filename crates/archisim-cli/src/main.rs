@@ -212,6 +212,7 @@ Uso:
       muestrario.svg. Carpeta por defecto: ./out
 
   archisim cte <proyecto.archisim> [informe.csv]
+  archisim fontaneria <proyecto.archisim> [--diametros salida.archisim]   cálculo del suministro de agua (DB-HS 4); con --diametros, guarda el proyecto con los diámetros calculados
   archisim electricidad <proyecto.archisim> [carpeta]   cálculo de la instalación eléctrica (REBT); con carpeta, el esquema unifilar en PDF y DXF
   archisim estructura <proyecto.archisim> [carpeta]   acciones, descenso de cargas y cálculo de la estructura; con carpeta, el anejo de cálculo y los planos de estructura en PDF
       Comprueba el proyecto con el Código Técnico: ocupación y evacuación
@@ -577,6 +578,18 @@ fn main() -> ExitCode {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out/biblioteca"));
             report(run_library(&dir, args.get(2).map(Path::new)))
         }
+        Some("fontaneria") => match args.get(1) {
+            Some(project) => report(run_water(
+                Path::new(project),
+                (args.get(2).map(String::as_str) == Some("--diametros"))
+                    .then(|| args.get(3).map(Path::new))
+                    .flatten(),
+            )),
+            None => {
+                eprintln!("Falta el proyecto: archisim fontaneria <proyecto.archisim>");
+                ExitCode::FAILURE
+            }
+        },
         Some("electricidad") => match args.get(1) {
             Some(project) => report(run_electrical(
                 Path::new(project),
@@ -771,6 +784,26 @@ fn run_library(dir: &Path, project: Option<&Path>) -> Result<(), Box<dyn std::er
         "{n} familias con sus tipos y los tipos de muro y forjado en {}",
         dir.display()
     );
+    Ok(())
+}
+
+fn run_water(project: &Path, sized: Option<&Path>) -> Result<(), Box<dyn std::error::Error>> {
+    let mut model = archisim_file::open(project)
+        .map_err(|e| format!("no se puede abrir {}: {e}", project.display()))?;
+    let w = archisim_mep::water::water(&model);
+    print!("{}", archisim_mep::water::report(&model, &w));
+    if let Some(out) = sized {
+        let runs = w.sized_runs();
+        for (run, d) in &runs {
+            model.edit_run(*run, |r| r.width = *d)?;
+        }
+        archisim_file::save(&model, out)?;
+        println!(
+            "\nDiámetros calculados en {} tuberías: {}",
+            runs.len(),
+            out.display()
+        );
+    }
     Ok(())
 }
 

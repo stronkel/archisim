@@ -568,3 +568,87 @@ fn the_fix_mends_pipes_and_doors() {
     let o = done.opening(d).unwrap();
     assert_ne!(o.opening_type, lib.interior_door);
 }
+
+/// The water supply by HS 4: a 16 mm pipe from the meter to a bathroom of
+/// three appliances is too small for their flow; «Arreglar» gives it the
+/// diameter of the calculation.
+#[test]
+fn water_supply_by_hs4_and_its_fix() {
+    let mut m = archisim_library::new_project("Baño");
+    let l = m.levels()[0].id;
+    for (name, x) in [
+        ("Inodoro", 1.0),
+        ("Lavabo 60", 2.5),
+        ("Plato de ducha 90×90", 4.0),
+    ] {
+        let t = archisim_library::add_object_entry(&mut m, name).unwrap();
+        m.add_object(NewObject {
+            level: l,
+            object_type: t,
+            position: Point2::new(x, 0.6),
+            rotation: 0.0,
+            base_offset: 0.0,
+        })
+        .unwrap();
+    }
+    let points: Vec<Point2> = m.appliances_on(l).iter().map(|a| a.point).collect();
+    assert_eq!(points.len(), 3);
+    m.add_device(NewDevice {
+        level: l,
+        kind: DeviceKind::WaterMeter,
+        name: "Contador".into(),
+        position: Point2::new(-2.0, 0.0),
+        rotation: 0.0,
+        elevation: 0.3,
+        width: 0.3,
+        depth: 0.2,
+        height: 0.4,
+    })
+    .unwrap();
+    let run = |m: &mut Model, path: Vec<Point2>| {
+        m.add_run(NewRun {
+            level: l,
+            system: ServiceSystem::ColdWater,
+            path,
+            elevation: 0.3,
+            width: 0.016,
+            height: 0.016,
+            slope: 0.0,
+        })
+        .unwrap()
+    };
+    let main = run(&mut m, vec![Point2::new(-2.0, 0.0), Point2::new(5.0, 0.0)]);
+    for p in &points {
+        run(&mut m, vec![Point2::new(p.x, 0.0), *p]);
+    }
+    let r = check(&m);
+    let main_items: Vec<&Item> = r
+        .items
+        .iter()
+        .filter(|i| i.rule == "HS 4, 4.2" && i.subject == Subject::Run(main))
+        .collect();
+    assert!(
+        main_items.iter().any(|i| i.status == Status::Fails),
+        "{main_items:#?}"
+    );
+    // Every tap has its pressure checked.
+    assert_eq!(
+        r.items
+            .iter()
+            .filter(|i| i.rule == "HS 4, 2.1.3" && matches!(i.subject, Subject::Object(_)))
+            .count(),
+        3
+    );
+    let f = crate::fix::fix(&m);
+    let mut done = m.clone();
+    crate::fix::apply_all(&mut done, &f).unwrap();
+    let r = check(&done);
+    assert!(
+        !r.items
+            .iter()
+            .any(|i| i.rule.starts_with("HS 4, 4.2") && i.status == Status::Fails),
+        "{:#?}",
+        f.lines
+    );
+    assert!(done.runs().find(|x| x.id == main).unwrap().width >= 0.020);
+}

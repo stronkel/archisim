@@ -157,6 +157,14 @@ impl ArchiSimApp {
                 self.electrical.open = true;
                 ui.close();
             }
+            if ui
+                .button("Cálculo de fontanería…")
+                .on_hover_text("Suministro de agua por el DB-HS 4: caudales con simultaneidad, diámetros, velocidades, pérdidas de carga y presión en cada grifo")
+                .clicked()
+            {
+                self.water.open = true;
+                ui.close();
+            }
             self.team_menu_items(ui);
         });
     }

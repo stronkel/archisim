@@ -55,6 +55,17 @@ Sobre las tuberías dibujadas con la herramienta Tubería, en cada planta:
 
 **A comprobar por Antonio**: los valores de las tablas 4.1 de HS 5 y 4.2 de HS 4 están escritos de memoria del texto del CTE y no los he podido contrastar con el documento oficial desde aquí. Las pendientes sí están contrastadas.
 
+### Cálculo del suministro (HS 4)
+
+Con tuberías de agua dibujadas, la comprobación añade el cálculo de la red (`docs/INSTALACIONES.md` §4):
+- la presión en cada grifo (≥ 100 kPa) y en el calentador (≥ 150 kPa);
+- la del contador (≤ 500 kPa);
+- el diámetro de cada tramo dibujado contra el que pide su caudal con simultaneidad;
+- la velocidad del agua;
+- los aparatos que no están unidos a la red.
+
+«Arreglar lo que no cumple» pone en los tramos cortos el diámetro calculado.
+
 ## Protección contra incendios (SI 4) · H3
 
 Sobre los aparatos de protección contra incendios dibujados (ficha Instalaciones: Rociador, BIE, Extintor, Detección, Emergencia), en cada planta:
@@ -79,7 +90,7 @@ Superficie útil de cada local, por uso y por planta; superficie construida de c
 El botón «Arreglar lo que no cumple…» de la ventana arregla solo lo que tiene una respuesta clara y mínima, sobre una copia del modelo, y enseña antes lo que cambia (elemento, qué, antes → después):
 
 - **Estructura y entramados**: lo mismo que en la ventana del cálculo (armado, y si no basta la sección o el tamaño siguiente; `docs/ESTRUCTURA.md`), y el armado que propone el cálculo para lo que tiene un armado dibujado que no cumple una regla de construcción.
-- **Agua y saneamiento**: la tubería más cercana al aparato toma el diámetro de HS 4 tabla 4.2 o HS 5 tabla 4.1 (el mayor de los aparatos a los que sirve); una pendiente fuera de lo permitido pasa a la más cercana que vale (derivación entre 2 % y 5 %, colector colgado 1 %, enterrado 2 %).
+- **Agua y saneamiento**: la tubería más cercana al aparato toma el diámetro de HS 4 tabla 4.2 o HS 5 tabla 4.1 (el mayor de los aparatos a los que sirve); cada tramo de la red de agua, el que pide su caudal en el cálculo de HS 4; una pendiente fuera de lo permitido pasa a la más cercana que vale (derivación entre 2 % y 5 %, colector colgado 1 %, enterrado 2 %).
 - **Puertas**: la que no tiene el paso libre que pide la evacuación (A ≥ P/200 ≥ 0,80 m) o la accesibilidad (0,80 m de hoja, 0,78 m con la hoja abierta) pasa a un tipo de su misma familia lo bastante ancho, de 5 en 5 cm: uno del proyecto si ya lo hay o una copia del suyo con el ancho en el nombre. La que debe abrir en el sentido de la evacuación se gira con las bisagras en la misma jamba.
 
 Lo demás se queda en la lista «Lo que tienes que decidir tú»: un pasillo estrecho, el giro de una silla de ruedas, una salida o un recorrido demasiado largo, una escalera, los extintores. Los cambios se hacen todos juntos y Deshacer los quita de una vez.

@@ -502,6 +502,7 @@ pub struct ArchiSimApp {
     pub cte: cte_ui::CteWindow,
     pub calc: calc_ui::CalcWindow,
     pub electrical: electrical_ui::ElectricalWindow,
+    pub water: water_ui::WaterWindow,
     /// A topographic survey being imported (its window is open).
     pub survey_import: Option<survey_ui::SurveyImport>,
     /// Cartography being brought around the project (H7; its window is open).
@@ -882,6 +883,7 @@ impl ArchiSimApp {
             cte: Default::default(),
             calc: Default::default(),
             electrical: Default::default(),
+            water: Default::default(),
             survey_import: None,
             carto_import: None,
             carto_download: None,
@@ -2450,6 +2452,7 @@ impl ArchiSimApp {
         self.cte_dialog(ctx);
         self.calc_dialog(ctx);
         self.electrical_dialog(ctx);
+        self.water_dialog(ctx);
         self.coord_dialog(ctx);
         if self.show_about {
             widgets::dialog("Acerca de ArchiSim")
@@ -2801,6 +2804,7 @@ mod views_ui;
 mod vivero_ui;
 mod wall_profile_ui;
 mod wall_tools_ui;
+mod water_ui;
 mod widgets;
 mod world_ui;
 pub use tabs::{TabKind, ViewTab};

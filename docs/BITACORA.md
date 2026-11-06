@@ -6,6 +6,48 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-06 (113) · Todo a `main` y cálculo de fontanería (DB-HS 4)
+
+**Unido a `main`** todo lo pendiente: interfaz V5 y V6 (#158), normas por vista (#159), taller de edificios (#160), calles (#161), la cinta al estilo Revit (#162), estructura, entramados e instalaciones (#163). La cinta se hizo en paralelo desde `main`; al unirla solo chocaron añadidos de los dos lados (iconos, pruebas, documentos). La fila sobre el 3D de la Maqueta toma ahora su propia altura. Las entradas 89 a 91 de esta bitácora son las de la cinta.
+
+Rama `bloque/fontaneria`, formato `.archisim` versión 86 (los datos del suministro; los proyectos de antes toman 300 kPa y multicapa). `docs/INSTALACIONES.md` §4.
+
+Qué se hizo:
+
+1. **Cálculo de fontanería** (Colaboración → Cálculo de fontanería…, crate `archisim-mep::water`):
+   - **la red, leída del dibujo:** el agua fría desde el contador y la caliente desde el termo, por las tuberías, las tes y los montantes, hasta cada aparato;
+   - **caudales:** los de la tabla 2.1 con la simultaneidad de la UNE 149201 para viviendas (Qt/√(n−1) en otros usos);
+   - **diámetros:** el menor comercial que deja el agua por debajo de 2 m/s y respeta las tablas 4.2 y 4.3; si un grifo se queda sin presión, se agranda el tramo que más pierde en su camino;
+   - **pérdidas de carga:** Darcy con Swamee–Jain, más un 30 % por piezas especiales;
+   - **presiones:** en cada grifo (≥ 100 kPa), en el termo (≥ 150) y en el contador (≤ 500).
+   - Cada tramo sale **como está dibujado y como se calcula**.
+   - **«Poner los diámetros calculados»** los aplica en un paso de Deshacer.
+   - **Tuberías:** multicapa, PE-X, PP-R o cobre, con sus medidas comerciales.
+2. **En la Comprobación CTE**: presiones, diámetro de cada tramo, velocidad y aparatos sin unir. **«Arreglar lo que no cumple»** pone los diámetros calculados donde faltan.
+3. **El edificio de Florence Street** lleva ahora la red de agua entera:
+   - contador y acumulador junto al montante, y el montante hasta la cubierta;
+   - distribuidor en cada rellano y derivación de cada vivienda;
+   - los aparatos unidos con «Conectar los aparatos».
+
+   Son 114 aparatos. Con 300 kPa, lo dibujado deja 95 grifos por debajo de 100 kPa; con lo calculado, el peor tiene 122 kPa.
+4. `archisim fontaneria <proyecto> [--diametros salida.archisim]`.
+
+Pendiente:
+- el esquema vertical de fontanería en plano;
+- grupo de presión y aljibe dimensionados;
+- el retorno de ACS;
+- saneamiento (HS 5: bajantes y colectores por unidades de desagüe), ventilación (HS 3) y clima / DB-HE.
+
+Qué debe probar Antonio:
+- **Edificio de referencia:** ejecuta `archisim edificio out/edificio` y abre `out/edificio/edificio.archisim`. Ve a Colaboración → Cálculo de fontanería.
+  - Mira la tabla de tramos: los caudales con simultaneidad y los diámetros calculados (Ø50 en el arranque, Ø40 en el montante, Ø20–26 en las viviendas). ¿Te parecen razonables?
+  - Pulsa «Poner los diámetros calculados». Abre la Comprobación CTE: ya no debe quedar ningún grifo sin presión.
+- **Tu propia vivienda:** dibuja un contador, un termo y las tuberías con la herramienta Tubería, y usa «Conectar los aparatos de esta planta».
+  - Cambia la presión del contador (por ejemplo, 200 kPa) y mira cómo cambia la presión de los grifos de arriba.
+  - Cambia la tubería a cobre y mira cómo cambian los diámetros.
+
+---
+
 ## 2026-11-06 (112) · Ventanas que no saltan, entorno grande en 3D y «Arreglar lo que no cumple»
 
 Rama `bloque/instalaciones-calculo` (PR #163), sin cambios de formato. Lo que pidió Antonio antes de seguir con instalaciones:
