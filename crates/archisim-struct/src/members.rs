@@ -43,6 +43,138 @@ fn rect(model: &Model, owner: Owner) -> Option<(String, f64, f64)> {
     }
 }
 
+/// A round concrete column: its name and diameter.
+fn round(model: &Model, owner: Owner) -> Option<(String, f64)> {
+    let Owner::Column(id) = owner else {
+        return None;
+    };
+    let mt = model.member_type(model.column(id)?.member_type)?;
+    if Kind::of(model.material(mt.material)) != Kind::Concrete {
+        return None;
+    }
+    match mt.profile {
+        Profile::Circle { diameter } => {
+            let name = if mt.name.contains('Ø') {
+                mt.name.clone()
+            } else {
+                format!("{} Ø{} cm", mt.name, dec(diameter * 100.0, 0))
+            };
+            Some((name, diameter))
+        }
+        _ => None,
+    }
+}
+
+/// The checks of a round concrete column: as the square ones, with the
+/// moments added as a vector and the bars round it (six at least).
+fn round_column_checks(
+    model: &Model,
+    e: &Envelope,
+    id: archisim_core::ColumnId,
+    out: &mut Vec<Check>,
+) {
+    let rc = Rc::of(model);
+    let Some((name, dia)) = round(model, e.owner) else {
+        return;
+    };
+    let n = (-e.min[0]).max(0.0);
+    let my = e.max[4].abs().max(e.min[4].abs());
+    let mz = e.max[5].abs().max(e.min[5].abs());
+    let mut m = my.hypot(mz);
+    let subject = Subject::Column(id);
+    // Slenderness with i = D/4.
+    let lo = model.column(id).map_or(3.0, |c| c.height);
+    let area = std::f64::consts::PI * dia * dia / 4.0;
+    let n_rel = n / (area * rc.fcd()).max(1e-9);
+    let lim = 10.78 / n_rel.max(0.01).sqrt();
+    let lambda = lo / (dia / 4.0);
+    let mut slender = String::new();
+    if lambda > lim {
+        let e2 = rc.fyd() / 200e6 / (0.45 * (dia - 0.046)) * lo * lo / 10.0;
+        m += n * e2;
+        slender = format!(
+            " (segundo orden: λ {} > {}: e2 {} cm)",
+            dec(lambda, 0),
+            dec(lim, 0),
+            dec(e2 * 100.0, 1)
+        );
+    }
+    if lambda > 100.0 {
+        out.push(Check {
+            subject,
+            what: format!(
+                "{name}: esbeltez {} con {} m de altura",
+                dec(lambda, 0),
+                dec(lo, 2)
+            ),
+            rule: "Esbeltez de pilares de hormigón (λ ≤ 100, EN 1992-1-1 5.8)",
+            ratio: lambda / 100.0,
+            status: Status::Fail,
+            advice: Some("más diámetro".into()),
+        });
+    }
+    let (bars, u_need) = rc.circle_bars(n, m, dia);
+    let what = format!(
+        "{name}: N {} kN, M {} kN·m (My {} y Mz {} juntos){slender}",
+        dec(n, 1),
+        dec(m, 1),
+        dec(my, 1),
+        dec(mz, 1)
+    );
+    let m_min = m.max(n * (dia / 20.0).max(0.02));
+    match model.reinforcement(id.0) {
+        Some(Reinforcement::Column {
+            cover, bars: has, ..
+        }) => {
+            let c = cover + 0.008 + has.diameter / 2.0;
+            let mut u = rc.circle_check(n, m_min, dia, has, c);
+            let mut notes = String::new();
+            let amin = 0.004 * area;
+            if has.area() < amin {
+                u = u.max(amin / has.area().max(1e-9));
+                notes.push_str(&format!(", menos de la cuantía mínima ({} cm²)", cm2(amin)));
+            }
+            if has.count < 6 {
+                u = u.max(1.01);
+                notes.push_str(", menos de seis barras (art. 54)");
+            }
+            out.push(Check {
+                subject,
+                what: format!(
+                    "{what}; tiene {} ({} cm²){notes}",
+                    has.label(),
+                    cm2(has.area())
+                ),
+                rule: "Compresión y flexión de pilar circular (Código Estructural, art. 42)",
+                ratio: u,
+                status: status(u),
+                advice: (u > 1.0).then(|| format!("{} o más diámetro", bars.label())),
+            });
+        }
+        _ => out.push(Check {
+            subject,
+            what: format!(
+                "{what}: {} en corona ({} cm², aprovechamiento {})",
+                bars.label(),
+                cm2(bars.area()),
+                dec(u_need, 2)
+            ),
+            rule: "Compresión y flexión de pilar circular (Código Estructural, art. 42)",
+            ratio: if u_need > 1.0 { u_need } else { 0.0 },
+            status: if u_need > 1.0 {
+                Status::Fail
+            } else {
+                Status::Info
+            },
+            advice: Some(if u_need > 1.0 {
+                "no llega ni con la cuantía máxima (4 %): más diámetro".into()
+            } else {
+                "el pilar no tiene armado dibujado: este es el que pide".into()
+            }),
+        }),
+    }
+}
+
 fn status(u: f64) -> Status {
     if u <= 1.0 {
         Status::Pass
@@ -281,7 +413,10 @@ pub fn check(model: &Model, an: &Analysis) -> Vec<Check> {
     for e in &an.envelopes {
         match e.owner {
             Owner::Beam(id) => beam_checks(model, e, id, &mut out),
-            Owner::Column(id) => column_checks(model, e, id, &mut out),
+            Owner::Column(id) => {
+                column_checks(model, e, id, &mut out);
+                round_column_checks(model, e, id, &mut out);
+            }
         }
     }
     out
@@ -361,5 +496,22 @@ mod tests {
         let c = c.iter().find(|c| c.subject == Subject::Beam(beam)).unwrap();
         assert!(c.what.contains("tiene"), "{}", c.what);
         assert!(c.ratio > 0.0);
+        // Round columns get their own check, with bars round them.
+        let t = m.member_type(lib.column).unwrap().clone();
+        m.edit_member_type(
+            lib.column,
+            "Pilar circular",
+            t.material,
+            Profile::Circle { diameter: 0.35 },
+        )
+        .unwrap();
+        let an = crate::analysis::analyse(&m);
+        let c = check(&m, &an);
+        let round = c
+            .iter()
+            .find(|c| c.rule.contains("circular"))
+            .unwrap_or_else(|| panic!("{c:?}"));
+        assert!(round.what.contains("Ø"), "{}", round.what);
+        assert!(round.ratio <= 1.0, "{}", round.what);
     }
 }

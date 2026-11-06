@@ -385,7 +385,11 @@ pub fn build(model: &Model, td: &Takedown, wind: Option<&BuildingWind>) -> Analy
             continue;
         };
         let sec = section_in(model, mt.profile, b.kind);
-        let pinned = matches!(b.kind, Kind::Steel | Kind::Timber | Kind::Aluminium);
+        let pinned = match b.kind {
+            Kind::Steel => !model.structural_site().materials.steel_rigid,
+            Kind::Timber | Kind::Aluminium => true,
+            _ => false,
+        };
         let last = b.cuts.len().saturating_sub(1);
         let supported = |n: usize| {
             supports.iter().any(|(s, _)| *s == n)

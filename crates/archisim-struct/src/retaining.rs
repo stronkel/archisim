@@ -6,6 +6,14 @@
 //! (cantilever). The bending at the base and in the span and the shear,
 //! against the concrete of its structural layer (Código Estructural), with
 //! the steel it needs per metre on each face.
+//!
+//! A wall that nothing holds at the top is a retaining wall on its strip
+//! footing (DB-SE-C, 6.3 and table 2.1): active pressure Ka = (1 − sin φ) /
+//! (1 + sin φ) down to the underside of the footing, the wall, the footing
+//! and the earth over the heel against overturning about the toe (γ 1,8)
+//! and sliding with tan(⅔φ) (γ 1,5), and the pressure under the footing
+//! with its eccentricity (the edge to 1,25·σadm). The footing is the one
+//! drawn under the wall or, without one, the narrowest that passes.
 
 use archisim_core::{LayerFunction, Model, Point2, WallFunction};
 
@@ -92,8 +100,19 @@ pub fn check(model: &Model) -> Vec<Check> {
             let z = model.level(s.level).map_or(0.0, |l| l.elevation) + s.top_offset;
             (z - top).abs() < 0.5 && crate::geo::near_polygon(mid, &s.outline, 0.5)
         });
+        if !propped {
+            retaining_checks(model, w, &t.name, earth, concrete, &mut out);
+        }
         let p = k0 * site.soil_weight * earth;
         let q = k0 * SURCHARGE;
+        // A free wall leans: active pressure (it can move), else at rest.
+        let (p, q) = if propped {
+            (p, q)
+        } else {
+            let sn = site.soil_friction.to_radians().sin();
+            let ka = (1.0 - sn) / (1.0 + sn);
+            (ka * site.soil_weight * earth, ka * SURCHARGE)
+        };
         let (mb, ms, v) = earth_forces(earth, 1.35 * p, 1.5 * q, propped);
         let d = concrete - 0.05;
         let amin = 0.0009 * concrete;
@@ -167,6 +186,166 @@ pub fn check(model: &Model) -> Vec<Check> {
     out
 }
 
+/// A retaining wall on its footing, per metre: earth height `h` above the
+/// footing, footing width `b` and depth `hf`, wall thickness `t` and
+/// weight `w_wall` (kN/m), ground φ (degrees), γ and the surcharge.
+/// Returns (overturning safety, sliding safety, edge pressure kN/m²,
+/// eccentricity m).
+#[allow(clippy::too_many_arguments)]
+pub fn retaining(
+    h: f64,
+    b: f64,
+    hf: f64,
+    t: f64,
+    w_wall: f64,
+    phi: f64,
+    gamma: f64,
+    q: f64,
+) -> (f64, f64, f64, f64) {
+    let s = phi.to_radians().sin();
+    let ka = (1.0 - s) / (1.0 + s);
+    let ht = h + hf;
+    let e_tri = 0.5 * ka * gamma * ht * ht;
+    let e_q = ka * q * ht;
+    let m_over = e_tri * ht / 3.0 + e_q * ht / 2.0;
+    let toe = ((b - t) / 2.0).max(0.0);
+    let heel = toe;
+    let w_foot = 25.0 * b * hf;
+    let w_soil = gamma * h * heel + q * heel;
+    let m_stab = w_wall * (toe + t / 2.0) + w_foot * b / 2.0 + w_soil * (b - heel / 2.0);
+    let v = w_wall + w_foot + w_soil;
+    let overturn = m_stab / m_over.max(1e-9);
+    let slide = v * (2.0 / 3.0 * phi.to_radians()).tan() / (e_tri + e_q).max(1e-9);
+    // Resultant from the toe, eccentricity from the centre.
+    let x = (m_stab - m_over) / v.max(1e-9);
+    let e = b / 2.0 - x;
+    let edge = if e.abs() <= b / 6.0 {
+        v / b * (1.0 + 6.0 * e.abs() / b)
+    } else if x > 0.0 {
+        2.0 * v / (3.0 * x)
+    } else {
+        f64::INFINITY
+    };
+    (overturn, slide, edge, e)
+}
+
+/// The checks of a retaining wall.
+#[allow(clippy::too_many_arguments)]
+fn retaining_checks(
+    model: &Model,
+    w: &archisim_core::Wall,
+    name: &str,
+    earth: f64,
+    t: f64,
+    out: &mut Vec<Check>,
+) {
+    let site = model.structural_site();
+    let w_wall = crate::weights::wall_type_weight(model, w.wall_type) * (earth + 0.5);
+    let drawn = model.footings().find(|f| {
+        matches!(f.kind, archisim_core::FootingKind::Strip { wall: Some(id), .. } if id == w.id)
+    });
+    let passes = |b: f64, hf: f64| {
+        let (o, sl, edge, _) = retaining(
+            earth,
+            b,
+            hf,
+            t,
+            w_wall,
+            site.soil_friction,
+            site.soil_weight,
+            SURCHARGE,
+        );
+        o >= 1.8 && sl >= 1.5 && edge <= 1.25 * site.bearing
+    };
+    let hf = drawn.map_or((earth / 8.0).max(0.4), |f| f.depth);
+    let (b, from_drawing) = match drawn {
+        Some(f) => (f.width, true),
+        None => {
+            let mut b = (t + 0.4).max(0.6);
+            while !passes(b, hf) && b < 4.0 * earth.max(1.0) {
+                b += 0.05;
+            }
+            (b, false)
+        }
+    };
+    let (o, sl, edge, e) = retaining(
+        earth,
+        b,
+        hf,
+        t,
+        w_wall,
+        site.soil_friction,
+        site.soil_weight,
+        SURCHARGE,
+    );
+    let rule_o = "Vuelco del muro de contención (DB-SE-C, 6.3; γ 1,8)";
+    let rule_s = "Deslizamiento del muro de contención (DB-SE-C, 6.3; γ 1,5)";
+    let rule_p = "Presión bajo la zapata del muro (DB-SE-C, 4.3; borde ≤ 1,25·σadm)";
+    let foot = format!(
+        "zapata de {} m de ancho y {} de canto",
+        dec(b, 2),
+        dec(hf, 2)
+    );
+    if !from_drawing {
+        out.push(Check {
+            subject: Subject::Wall(w.id),
+            what: format!(
+                "{name}: {} m de tierras sin forjado arriba: muro de contención en ménsula; pide una {foot} centrada",
+                dec(earth, 2)
+            ),
+            rule: rule_o,
+            ratio: 0.0,
+            status: Status::Info,
+            advice: Some("el muro no tiene zapata corrida dibujada".into()),
+        });
+        return;
+    }
+    let mut push = |rule: &'static str, what: String, ratio: f64| {
+        out.push(Check {
+            subject: Subject::Wall(w.id),
+            what,
+            rule,
+            ratio,
+            status: if ratio <= 1.0 {
+                Status::Pass
+            } else {
+                Status::Fail
+            },
+            advice: (ratio > 1.0).then(|| {
+                "una zapata más ancha (sobre todo el talón, del lado de las tierras) o un tacón"
+                    .into()
+            }),
+        });
+    };
+    push(
+        rule_o,
+        format!(
+            "{name} sobre {foot}: {} m de tierras, seguridad al vuelco {}",
+            dec(earth, 2),
+            dec(o, 2)
+        ),
+        1.8 / o.max(1e-9),
+    );
+    push(
+        rule_s,
+        format!(
+            "{name}: seguridad al deslizamiento {} (rozamiento tan ⅔φ)",
+            dec(sl, 2)
+        ),
+        1.5 / sl.max(1e-9),
+    );
+    push(
+        rule_p,
+        format!(
+            "{name}: presión en el borde {} kN/m² (excentricidad {} m) sobre {} admisibles",
+            dec(edge, 0),
+            dec(e, 2),
+            dec(1.25 * site.bearing, 0)
+        ),
+        edge / (1.25 * site.bearing),
+    );
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -182,5 +361,21 @@ mod tests {
         // A cantilever takes it all at the base: 27·9/6 = 40,5.
         let (mb, _, _) = earth_forces(3.0, 27.0, 0.0, false);
         assert!((mb - 40.5).abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_retaining_wall_stands() {
+        // 2 m of earth, φ 30° (Ka 1/3), 18 kN/m³, 25 cm wall of 12,5 kN/m,
+        // footing 0,40 m deep: total height 2,4 m, E = ½·⅓·18·2,4² = 17,3
+        // kN/m plus ⅓·10·2,4 = 8 kN/m.
+        let narrow = retaining(2.0, 0.8, 0.4, 0.25, 12.5, 30.0, 18.0, 10.0);
+        let wide = retaining(2.0, 2.0, 0.4, 0.25, 12.5, 30.0, 18.0, 10.0);
+        assert!(
+            narrow.0 < wide.0 && narrow.1 < wide.1,
+            "{narrow:?} {wide:?}"
+        );
+        assert!(wide.0 > 1.8, "{wide:?}");
+        // A narrow one tips over.
+        assert!(narrow.0 < 1.8, "{narrow:?}");
     }
 }

@@ -6,6 +6,48 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-06 (109) · Estructura: lo que aún no hacía
+
+Rama `bloque/calles` (#161). Formato `.archisim` versión 83: los materiales del cálculo guardan si las uniones de acero son rígidas. Los proyectos de la 82 se abren con uniones articuladas, como antes.
+
+**Hecho**
+1. **Segundo orden calculado**: si el índice θ de una planta está entre 0,10 y 0,30, el viento y el sismo de esa dirección se amplifican por 1/(1 − θ) y el pórtico se vuelve a resolver. Todos los esfuerzos y comprobaciones llevan ya el segundo orden; el anejo dice qué caso se amplificó y cuánto.
+2. **Armadura de punzonamiento**: cuando el hormigón solo no basta y no se pasa de 1,5 veces su resistencia, se propone (perímetros de cercos o pernos, ramas, diámetro y separación) y sale en ámbar. Si se pasa, no cumple.
+3. **Muros de contención exentos**: empuje activo, vuelco (≥ 1,8), deslizamiento (≥ 1,5) y presión en el borde de su zapata corrida; sin zapata dibujada, el ancho que pide.
+   - **Zapatas flexibles** (vuelo mayor de dos cantos): flexión en la cara y cortante a un canto de ella.
+4. **Uniones**:
+   - **Uniones de acero rígidas**: nuevo interruptor «Uniones de acero» en los materiales del cálculo. Con «rígidas», el pórtico de acero se calcula empotrado y cada viga lleva su chapa de testa (filas de tornillos 8.8, chapa extendida si hace falta) y la comprobación del alma del pilar.
+   - **Uniones de madera**: vigas colgadas de una chapa embebida con pasadores, con la hienda de la viga.
+   - **Pies de pilares de madera**: herraje con pasadores y cuatro pernos al hormigón.
+5. **Pilares de hormigón circulares**: con las barras en corona (seis por lo menos), su esbeltez y su armado propuesto o comparado con el dibujado.
+6. **Reglas de construcción sísmicas** (NCSE-02, capítulo 4), contra el armado dibujado:
+   - vigas: 2Ø16 por cara, cuantía y cercos junto a los apoyos;
+   - pilares: lado mínimo, barras por cara y su separación, cuantía y cercos de las zonas críticas;
+   - atado de las zapatas aisladas en dos direcciones.
+
+**Pendiente** (en `docs/ESTRUCTURA.md` §8)
+- No se hace a propósito: la plasticidad (el cálculo es elástico, que es lo prudente).
+- Muros de contención con zapata descentrada o contrafuertes.
+- Uniones soldadas o con cartela calculada.
+- Secciones de hormigón en T o huecas.
+- Paneles de fábrica en zona sísmica.
+
+**Qué debe probar Antonio**
+1. Abre el proyecto de la prueba anterior (los pilares HEB 160 con vigas IPE 300) → Colaboración → **Cálculo de la estructura…** → Materiales: activa **«Uniones de acero: rígidas»**.
+   - En el capítulo 7 del anejo, cada viga debe tener su «Unión rígida con chapa de testa» con las filas de tornillos y el panel del alma del pilar.
+   - Los momentos de las vigas bajan en el centro y aparecen en los apoyos.
+2. Pon el sismo a ab/g 0,23 (Granada).
+   - Los pilares de hormigón de 4 barras deben salir en rojo en «Armado sísmico de pilares», con «menos de tres barras por cara».
+   - Dibuja el armado de un pilar de 30×30 con 8Ø16, cercos Ø8 c/15 y 7 cm en 60 cm de cada extremo: debe cumplir.
+   - Las zapatas aisladas piden vigas de atado en las dos direcciones; dibújalas (Estructura → Cimentación → Viga de atado) y mira que cumplen.
+3. Coloca unos pilares «Pilar HA Ø30» con vigas y forjado encima. En el anejo debe salir «Compresión y flexión de pilar circular» con su armado en corona (p. ej. «6Ø16 en corona»).
+4. Haz un muro de hormigón exento con tierras de 2,5 m contra él y sin forjado arriba.
+   - Sin zapata: debe salir el ancho de zapata que pide.
+   - Con una zapata corrida de ese ancho: vuelco, deslizamiento y presión deben cumplir.
+5. Pon unos pilares «Pilar madera GL24h 20×20» sobre zapatas con vigas «Viga madera GL24h 16×32»: deben salir las uniones con pasadores (con la hienda) y el herraje del pie de cada pilar.
+
+---
+
 ## 2026-11-05 (108) · Estructura: lo que faltaba del cálculo
 
 Rama `bloque/calles` (#161). Formato `.archisim` versión 82: el emplazamiento de la estructura guarda también el terreno para los muros de sótano y los materiales. Los proyectos de la 81 se abren con los valores de antes.

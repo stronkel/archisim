@@ -224,6 +224,117 @@ impl Rc {
         best
     }
 
+    /// The bending strength of a round column of diameter `dia` with
+    /// `count` bars of total area `as_total` evenly round it at `cover`
+    /// to their centre, under an axial force `n` (kN): strain
+    /// compatibility with the rectangular block, the concrete integrated
+    /// in strips (Código Estructural, art. 42).
+    pub fn circle_moment(
+        &self,
+        n: f64,
+        dia: f64,
+        count: u32,
+        as_total: f64,
+        cover: f64,
+    ) -> Option<f64> {
+        let fcd = self.fcd();
+        let fyd = self.fyd();
+        let r = dia / 2.0;
+        let rs = r - cover;
+        let count = count.max(1);
+        let a1 = as_total / f64::from(count);
+        let area = std::f64::consts::PI * r * r;
+        if n > 0.85 * fcd * area + as_total * fyd {
+            return None;
+        }
+        // Bars at their depth from the top of the section; the worst
+        // position of the set is close to one bar on the axis.
+        let bars: Vec<f64> = (0..count)
+            .map(|i| {
+                let a = std::f64::consts::TAU * f64::from(i) / f64::from(count);
+                r - rs * a.cos()
+            })
+            .collect();
+        let strips = 60;
+        let force = |x: f64| -> (f64, f64) {
+            let x = x.max(1e-6);
+            let y = (0.8 * x).min(dia);
+            let (mut nn, mut m) = (0.0, 0.0);
+            for k in 0..strips {
+                let t0 = y * f64::from(k) / f64::from(strips);
+                let t1 = y * f64::from(k + 1) / f64::from(strips);
+                let t = 0.5 * (t0 + t1);
+                let half = (r * r - (r - t).powi(2)).max(0.0).sqrt();
+                let c = 0.85 * fcd * 2.0 * half * (t1 - t0);
+                nn += c;
+                m += c * (r - t);
+            }
+            for di in &bars {
+                let e = 0.0035 * (x - di) / x;
+                let sig = (e * 200e6).clamp(-fyd, fyd);
+                nn += sig * a1;
+                m += sig * a1 * (r - di);
+            }
+            (nn, m)
+        };
+        let (mut lo, mut hi) = (1e-4, 10.0 * dia);
+        if force(lo).0 > n {
+            return Some(force(lo).1.max(0.0));
+        }
+        for _ in 0..80 {
+            let mid = 0.5 * (lo + hi);
+            if force(mid).0 < n {
+                lo = mid;
+            } else {
+                hi = mid;
+            }
+        }
+        Some(force(0.5 * (lo + hi)).1.max(0.0))
+    }
+
+    /// The utilisation of a round column: a round section has no weak
+    /// axis, so the two moments add as a vector.
+    pub fn circle_check(&self, n: f64, m: f64, dia: f64, bars: &Counted, cover: f64) -> f64 {
+        match self.circle_moment(n, dia, bars.count, bars.area(), cover) {
+            Some(mr) if mr > 0.0 => m.abs() / mr,
+            _ => 9.99,
+        }
+    }
+
+    /// The bars a round column asks for (at least six, art. 54): the
+    /// first set that works, with its utilisation.
+    pub fn circle_bars(&self, n: f64, m: f64, dia: f64) -> (Counted, f64) {
+        let area = std::f64::consts::PI * dia * dia / 4.0;
+        let m = m.abs().max(n.max(0.0) * (dia / 20.0).max(0.02));
+        let amin = (0.004 * area).max(0.1 * n.max(0.0) / self.fyd());
+        let mut best = (Counted::new(12, 0.025), f64::INFINITY);
+        for (c, d) in [
+            (6, 0.012),
+            (6, 0.016),
+            (8, 0.016),
+            (6, 0.020),
+            (8, 0.020),
+            (10, 0.020),
+            (8, 0.025),
+            (12, 0.020),
+            (10, 0.025),
+            (12, 0.025),
+        ] {
+            let bars = Counted::new(c, d);
+            if bars.area() < amin || bars.area() > 0.04 * area {
+                continue;
+            }
+            let u = self.circle_check(n, m, dia, &bars, 0.046);
+            if u <= 1.0 {
+                return (bars, u);
+            }
+            if u < best.1 {
+                best = (bars, u);
+            }
+        }
+        best
+    }
+
     /// The utilisation of a column with `as_total` steel.
     #[allow(clippy::too_many_arguments)]
     pub fn column_check(
@@ -270,5 +381,20 @@ mod tests {
         assert!((70.0..100.0).contains(&m), "{m}");
         let (b, u) = rc.column_bars(900.0, 40.0, 10.0, 0.3, 0.3);
         assert!(u <= 1.0, "{} {u}", b.label());
+        // A round column of Ø35 (the area of a 31 × 31) with 6Ø16: about
+        // the strength of the square one with the same steel, a little
+        // less (π/4 of the lever).
+        let round = rc
+            .circle_moment(600.0, 0.35, 6, 6.0 * bar_area(0.016), 0.046)
+            .unwrap();
+        let square = rc
+            .column_moment(600.0, 0.31, 0.31, 6.0 * bar_area(0.016), 0.046)
+            .unwrap();
+        assert!(
+            round > 0.6 * square && round < 1.1 * square,
+            "{round} {square}"
+        );
+        let (b, u) = rc.circle_bars(900.0, 40.0, 0.35);
+        assert!(u <= 1.0 && b.count >= 6, "{} {u}", b.label());
     }
 }

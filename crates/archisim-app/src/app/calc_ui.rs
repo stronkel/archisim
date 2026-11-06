@@ -202,16 +202,32 @@ impl ArchiSimApp {
                                 ui.selectable_value(&mut m.timber, t, t.code());
                             }
                         });
-                    ui.label("fábrica fk");
-                    ui.add(
-                        egui::DragValue::new(&mut m.masonry_fk)
-                            .range(0.5..=20.0)
-                            .speed(0.1)
-                            .max_decimals(1)
-                            .suffix(" N/mm²"),
-                    )
-                    .on_hover_text("DB-SE-F, tabla 4.4: según la pieza y el mortero");
                 });
+                ui.end_row();
+                ui.label("Fábrica");
+                {
+                    let m = &mut new.materials;
+                    ui.horizontal(|ui| {
+                        ui.label("fk");
+                        ui.add(
+                            egui::DragValue::new(&mut m.masonry_fk)
+                                .range(0.5..=20.0)
+                                .speed(0.1)
+                                .max_decimals(1)
+                                .suffix(" N/mm²"),
+                        )
+                        .on_hover_text("DB-SE-F, tabla 4.4: según la pieza y el mortero");
+                    });
+                }
+                ui.end_row();
+                ui.label("Uniones de acero");
+                {
+                    use super::widgets::SwitchExt;
+                    ui.switch(
+                        &mut new.materials.steel_rigid,
+                        "rígidas (chapa de testa atornillada); si no, articuladas",
+                    );
+                }
                 ui.end_row();
             });
         if new != site {

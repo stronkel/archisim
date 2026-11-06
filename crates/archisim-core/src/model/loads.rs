@@ -138,6 +138,9 @@ pub struct StructuralMaterials {
     pub timber: TimberClass,
     /// Masonry compressive strength fk, N/mm² (DB-SE-F, table 4.4).
     pub masonry_fk: f64,
+    /// The ends of the steel beams are rigid (end plates bolted to the
+    /// columns) rather than hinged (fin plates).
+    pub steel_rigid: bool,
 }
 
 impl Default for StructuralMaterials {
@@ -148,6 +151,7 @@ impl Default for StructuralMaterials {
             steel_fy: 275.0,
             timber: TimberClass::C24,
             masonry_fk: 4.0,
+            steel_rigid: false,
         }
     }
 }

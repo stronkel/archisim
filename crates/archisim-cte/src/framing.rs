@@ -30,6 +30,7 @@ pub fn check(model: &Model, report: &mut Report) {
                 .into_iter()
                 .chain(archisim_struct::frame_members::check(model, &a))
                 .chain(archisim_struct::connections::check(model, &a))
+                .chain(archisim_struct::detailing::check(model, &a))
                 .chain(archisim_struct::stability::check(model, &a))
                 .map(|c| (Section::Structure, c)),
         );

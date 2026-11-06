@@ -14,7 +14,12 @@
 //! - `cold`, `timber`, `lightframe`: the light frames;
 //! - `concrete`, `members`, `slab`: reinforced concrete beams, columns and
 //!   slabs (the slabs as a grillage);
-//! - `masonry`, `foundations`: load-bearing brick and the footings;
+//! - `frame_members`, `stability`, `connections`: steel and timber
+//!   members, drift and second order (P-Δ amplified), and the joints;
+//! - `detailing`: the construction rules of NCSE-02 against the
+//!   reinforcement drawn;
+//! - `masonry`, `foundations`, `retaining`: load-bearing brick, the
+//!   footings and the basement and retaining walls;
 //! - `report`: the calculation report.
 //!
 //! It works on the model as drawn: it adds no elements and stores
@@ -32,6 +37,7 @@ pub mod cases;
 pub mod cold;
 pub mod concrete;
 pub mod connections;
+pub mod detailing;
 pub mod foundations;
 pub mod frame;
 pub mod frame_members;
@@ -106,6 +112,7 @@ pub fn all_checks(model: &archisim_core::Model, a: &analysis::Analysis) -> Vec<l
     out.extend(members::check(model, a));
     out.extend(frame_members::check(model, a));
     out.extend(connections::check(model, a));
+    out.extend(detailing::check(model, a));
     out.extend(stability::check(model, a));
     out.extend(slab::check(model, &a.takedown));
     out.extend(masonry::check(model, &a.takedown));

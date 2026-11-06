@@ -65,11 +65,47 @@ pub struct Analysis {
     /// (and the characteristic ones, for the ground): node, (ultimate,
     /// characteristic) vertical, kN.
     pub reactions: Vec<(usize, f64, f64)>,
+    /// The second-order amplification applied to each horizontal case
+    /// (EN 1993-1-1, 5.2.2(5): 1/(1 − 1/αcr) with θ = 1/αcr of its worst
+    /// storey), when it is more than 1.
+    pub amplification: BTreeMap<Case, f64>,
     pub notes: Vec<String>,
 }
 
 /// The loads over one bar, local: (from, to, per metre or force).
 type BarLoads = Vec<(f64, f64, [f64; 3])>;
+
+/// The compression at the base of a column in one solution, kN.
+fn base_axial(am: &analytical::Analytical, sol: Option<&crate::frame::Solution>, o: Owner) -> f64 {
+    let Some(sol) = sol else { return 0.0 };
+    // Its lowest bar and the end of it that is lowest.
+    let mut best: Option<(f64, f64)> = None;
+    for (bi, p) in am.pieces.iter().enumerate() {
+        if p.owner != o {
+            continue;
+        }
+        let bar = &am.frame.bars[bi];
+        let (zi, zj) = (am.frame.nodes[bar.i][2], am.frame.nodes[bar.j][2]);
+        let (z, n) = if zi <= zj {
+            (zi, sol.end_forces[bi][0])
+        } else {
+            (zj, -sol.end_forces[bi][6])
+        };
+        if best.is_none_or(|b| z < b.0) {
+            best = Some((z, n));
+        }
+    }
+    // The force on the lower end along the bar pushes up: compression.
+    best.map_or(0.0, |b| b.1.abs())
+}
+
+fn scale_load(l: &mut crate::frame::Load, k: f64) {
+    match l {
+        crate::frame::Load::Node { f, .. } => f.iter_mut().for_each(|v| *v *= k),
+        crate::frame::Load::Spread { w, .. } => w.iter_mut().for_each(|v| *v *= k),
+        crate::frame::Load::Point { f, .. } => f.iter_mut().for_each(|v| *v *= k),
+    }
+}
 
 /// Number of stations along each piece for the envelopes.
 const STATIONS: usize = 4;
@@ -78,7 +114,7 @@ const STATIONS: usize = 4;
 pub fn analyse(model: &Model) -> Analysis {
     let td = takedown(model);
     let wind = building_wind(model);
-    let am = analytical::build(model, &td, wind.as_ref());
+    let mut am = analytical::build(model, &td, wind.as_ref());
     let mut cases: Vec<Case> = td.cases.clone();
     if wind.is_some() {
         cases.extend(crate::cases::WindDir::ALL.map(Case::Wind));
@@ -93,6 +129,7 @@ pub fn analyse(model: &Model) -> Analysis {
     let combos = combinations(&cases, model.site_altitude());
     let mut notes = am.notes.clone();
     let mut solutions = BTreeMap::new();
+    let mut amplification: BTreeMap<Case, f64> = BTreeMap::new();
     let mut envelopes = Vec::new();
     let mut deflections = Vec::new();
     let mut reactions = Vec::new();
@@ -101,6 +138,40 @@ pub fn analyse(model: &Model) -> Analysis {
         for case in &cases {
             let loads = am.loads.get(case).cloned().unwrap_or_default();
             solutions.insert(*case, solver.solve(&loads));
+        }
+        // Second order: the horizontal actions of a sway frame amplified
+        // by 1/(1 − θ) of its worst storey, θ from the ultimate gravity
+        // loads on the columns (1,35 G + 1,5 Q) and the drift of the
+        // first-order solution. Past θ 0,3 the frame needs bracing and
+        // the amplification stays at that of 0,3 (with a note).
+        let column_load = |o: Owner| -> f64 {
+            let mut n = 1.35 * base_axial(&am, solutions.get(&Case::Dead), o);
+            for (case, sol) in &solutions {
+                if matches!(case, Case::Live(_)) {
+                    n += 1.5 * base_axial(&am, Some(sol), o);
+                }
+            }
+            n
+        };
+        let storeys = crate::stability::storeys_with(&am, &solutions, &column_load);
+        for s in &storeys {
+            let t = s.theta();
+            if t >= 0.1 {
+                let k = 1.0 / (1.0 - t.min(0.3));
+                let e = amplification.entry(s.case).or_insert(1.0);
+                *e = f64::max(*e, k);
+            }
+        }
+        if storeys.iter().any(|s| s.theta() > 0.3) {
+            notes.push("El pórtico es traslacional con θ > 0,30: la amplificación de las acciones horizontales no basta, hay que arriostrarlo (EN 1993-1-1, 5.2.2).".into());
+        }
+        for (case, k) in &amplification {
+            if let Some(ls) = am.loads.get_mut(case) {
+                for l in ls.iter_mut() {
+                    scale_load(l, *k);
+                }
+                solutions.insert(*case, solver.solve(ls));
+            }
         }
         if let Some(s) = solutions.values().next() {
             if !s.loose.is_empty() {
@@ -281,6 +352,7 @@ pub fn analyse(model: &Model) -> Analysis {
         envelopes,
         deflections,
         reactions,
+        amplification,
         notes,
     }
 }

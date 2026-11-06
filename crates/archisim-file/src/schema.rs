@@ -5807,6 +5807,9 @@ pub(crate) struct StructureOf {
     pub timber: String,
     #[serde(default = "masonry_fk")]
     pub masonry_fk: f64,
+    /// Version 83: rigid ends of the steel beams.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub steel_rigid: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub loads: Vec<LoadOf>,
 }
@@ -5886,6 +5889,7 @@ impl StructureOf {
             steel_fy: site.materials.steel_fy,
             timber: site.materials.timber.code().into(),
             masonry_fk: site.materials.masonry_fk,
+            steel_rigid: site.materials.steel_rigid,
             loads: loads
                 .iter()
                 .map(|l| {
@@ -5936,6 +5940,7 @@ impl StructureOf {
                 timber: core::TimberClass::from_code(&self.timber)
                     .ok_or_else(|| bad("timber class", &self.timber))?,
                 masonry_fk: self.masonry_fk,
+                steel_rigid: self.steel_rigid,
             },
         })
     }

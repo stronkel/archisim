@@ -59,7 +59,13 @@ pub fn ultimate_loads(td: &Takedown) -> BTreeMap<Carrier, f64> {
 /// (kN/m²) over the overhang `v` from the face of what it carries, of
 /// width `post`, and its depth `h`.
 pub fn footing_steel(rc: &Rc, q: f64, v: f64, post: f64, h: f64) -> Option<f64> {
-    let lever = v.max(0.0) + 0.15 * post;
+    // Rigid: the section 0,15 of the post inside its face; flexible (an
+    // overhang of more than twice the depth): at the face (art. 58.4.2).
+    let lever = if v > 2.0 * h {
+        v.max(0.0)
+    } else {
+        v.max(0.0) + 0.15 * post
+    };
     let m = q * lever * lever / 2.0;
     let d = (h - 0.06).max(0.1);
     rc.bending_steel(m, 1.0, d).map(|a| a.max(0.0009 * h))
@@ -136,6 +142,27 @@ fn steel_check(
         status,
         advice,
     });
+    // A flexible footing: shear at d from the face, as a slab (art. 58.4.2.1.2).
+    if v > 2.0 * f.depth {
+        let d = (f.depth - 0.06).max(0.1);
+        let vd = q * (v - d).max(0.0);
+        let rho = need.map_or(0.002, |a| (a / d).max(0.002));
+        let vr = rc.vrd_c(1.0, d, rho);
+        let u = vd / vr.max(1e-9);
+        out.push(Check {
+            subject: Subject::Footing(f.id.0),
+            what: format!(
+                "{name} (flexible, vuelo {} m): cortante a un canto útil de la cara {} kN/m, resiste {} kN/m",
+                dec(v, 2),
+                dec(vd, 1),
+                dec(vr, 1)
+            ),
+            rule: "Cortante de la zapata flexible (Código Estructural, art. 58)",
+            ratio: u,
+            status: if u <= 1.0 { Status::Pass } else { Status::Fail },
+            advice: (u > 1.0).then(|| "más canto".into()),
+        });
+    }
 }
 
 pub fn check(model: &Model, td: &Takedown) -> Vec<Check> {
@@ -305,7 +332,8 @@ pub fn check(model: &Model, td: &Takedown) -> Vec<Check> {
 }
 
 /// A footing is rigid if its overhang is no more than twice its depth
-/// (Código Estructural, art. 55); a flexible one needs its own design.
+/// (Código Estructural, art. 55); a flexible one is designed as such (its
+/// bending at the face and its shear, in `steel_check`).
 fn rigid(width: f64, depth: f64, post: f64, id: u64, name: &str, out: &mut Vec<Check>) {
     let v = ((width - post) / 2.0).max(0.0);
     let u = v / (2.0 * depth).max(1e-6);
@@ -316,11 +344,15 @@ fn rigid(width: f64, depth: f64, post: f64, id: u64, name: &str, out: &mut Vec<C
             dec(v, 2),
             dec(depth, 2)
         ),
-        rule: "Zapata rígida, vuelo ≤ 2 cantos (Código Estructural, art. 55)",
-        ratio: u,
-        status: if u <= 1.0 { Status::Pass } else { Status::Warn },
-        advice: (u > 1.0)
-            .then(|| format!("{} m de canto o calcularla como flexible", dec(v / 2.0, 2))),
+        rule: "Zapata rígida o flexible (Código Estructural, art. 55; vuelo ≤ 2 cantos)",
+        ratio: if u <= 1.0 { u } else { 0.0 },
+        status: if u <= 1.0 { Status::Pass } else { Status::Info },
+        advice: (u > 1.0).then(|| {
+            format!(
+                "flexible: se calcula a flexión en la cara y a cortante; con {} m de canto sería rígida",
+                dec(v / 2.0, 2)
+            )
+        }),
     });
 }
 

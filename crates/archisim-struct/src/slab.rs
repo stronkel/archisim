@@ -70,6 +70,54 @@ pub struct Punch {
     pub face: f64,
     /// Inside, edge or corner.
     pub place: &'static str,
+    /// Punching reinforcement when vRd,c is short and 1,5·vRd,c is not
+    /// (Código Estructural, art. 46.4; EN 1992-1-1, 6.4.5): legs per
+    /// perimeter, their diameter (m), perimeters and spacing (m).
+    pub links: Option<(u32, f64, u32, f64)>,
+}
+
+/// The punching reinforcement of a column: (legs per perimeter, bar
+/// diameter, perimeters, spacing) for `v_ed`, `v_rd` (N/mm²) at the
+/// perimeter `u1` (m), with `ved` (kN), `beta`, depth `d` (m) and the
+/// column `c1` × `c2` at `near` free edges.
+#[allow(clippy::too_many_arguments)]
+pub fn punching_links(
+    rc: &Rc,
+    v_ed: f64,
+    v_rd: f64,
+    u1: f64,
+    ved: f64,
+    beta: f64,
+    d: f64,
+    c1: f64,
+    c2: f64,
+    near: usize,
+) -> (u32, f64, u32, f64) {
+    let dmm = d * 1000.0;
+    let sr = (0.75 * d * 20.0).floor() / 20.0;
+    let sr = sr.max(0.05);
+    let fywd = (250.0 + 0.25 * dmm).min(rc.fyk / crate::concrete::GAMMA_S);
+    // mm²: (vEd − 0,75·vRd,c)·u1·d / (1,5·(d/sr)·fywd,ef).
+    let asw = (v_ed - 0.75 * v_rd).max(0.0) * u1 * 1000.0 * dmm / (1.5 * (d / sr) * fywd);
+    let (dia, legs) = [0.008f64, 0.010, 0.012]
+        .into_iter()
+        .map(|db| {
+            let a = std::f64::consts::PI * (db * 1000.0).powi(2) / 4.0;
+            (db, ((asw / a).ceil() as u32).max(4))
+        })
+        .find(|(_, n)| *n <= 16)
+        .unwrap_or((0.012, ((asw / 113.1).ceil() as u32).max(4)));
+    // Out to where no reinforcement is needed: uout = β·VEd/(vRd,c·d),
+    // the last perimeter within 1,5·d of it.
+    let uout = beta * ved / (v_rd * 1000.0 * d);
+    let pi = std::f64::consts::PI;
+    let r = match near {
+        0 => (uout - 2.0 * (c1 + c2)) / (2.0 * pi),
+        1 => (uout - c1 - 2.0 * c2) / pi,
+        _ => (uout - c1 - c2) / (pi / 2.0),
+    };
+    let rows = (((r - 1.5 * d - 0.5 * d) / sr).ceil() as i64 + 1).max(2) as u32;
+    (legs, dia, rows, sr)
 }
 
 /// The modulus of subgrade reaction from the admissible pressure, kN/m³.
@@ -529,6 +577,7 @@ pub fn punch(
     let v_ed = beta * ved / (u1 * d) / 1000.0;
     let nu = 0.6 * (1.0 - rc.fck / 250.0);
     let face = beta * ved / (u0 * d) / (0.5 * nu * rc.fcd());
+    let links = (v_ed > vrd).then(|| punching_links(rc, v_ed, vrd, u1, ved, beta, d, c1, c2, near));
     Punch {
         column,
         ved,
@@ -538,6 +587,7 @@ pub fn punch(
         v_rd: vrd,
         face,
         place,
+        links,
     }
 }
 
@@ -643,7 +693,34 @@ pub fn check(model: &Model, td: &Takedown) -> Vec<Check> {
             }),
         }
         for p in &r.punching {
-            let u = (p.v_ed / p.v_rd.max(1e-9)).max(p.face);
+            let plain = p.v_ed / p.v_rd.max(1e-9);
+            // With reinforcement up to 1,5·vRd,c (kmax), and the face.
+            let reinforced = p.v_ed / (1.5 * p.v_rd).max(1e-9);
+            let (ratio, status, advice) = if plain <= 1.0 && p.face <= 1.0 {
+                (plain.max(p.face), Status::Pass, None)
+            } else if reinforced <= 1.0 && p.face <= 1.0 {
+                let (legs, dia, rows, sr) = p.links.unwrap_or((0, 0.0, 0, 0.0));
+                (
+                    reinforced,
+                    Status::Warn,
+                    Some(format!(
+                        "armadura de punzonamiento: {rows} perímetros de {legs} ramas Ø{} cada {} cm, el primero a menos de 0,5·d de la cara del pilar",
+                        dec(dia * 1000.0, 0),
+                        dec(sr * 100.0, 0)
+                    )),
+                )
+            } else {
+                (
+                    reinforced.max(p.face),
+                    Status::Fail,
+                    Some(if p.face > 1.0 {
+                        "más canto o un capitel: la biela de la cara del pilar no basta".into()
+                    } else {
+                        "más canto o un ábaco: ni con armadura de punzonamiento (1,5·vRd,c) llega"
+                            .into()
+                    }),
+                )
+            };
             out.push(Check {
                 subject,
                 what: format!(
@@ -658,15 +735,9 @@ pub fn check(model: &Model, td: &Takedown) -> Vec<Check> {
                     dec(p.face, 2)
                 ),
                 rule: "Punzonamiento (Código Estructural, art. 46)",
-                ratio: u,
-                status: if u <= 1.0 { Status::Pass } else { Status::Fail },
-                advice: (u > 1.0).then(|| {
-                    if p.face > 1.0 {
-                        "más canto o un capitel: la biela de la cara del pilar no basta".into()
-                    } else {
-                        "armadura de punzonamiento (cercos o crucetas), más canto o un ábaco".into()
-                    }
-                }),
+                ratio,
+                status,
+                advice,
             });
         }
         if let Some(pressure) = r.raft {
@@ -813,6 +884,25 @@ mod tests {
         // The columns stand on the raft: no footings asked for them.
         let f = crate::foundations::check(&m, &td);
         assert!(f.is_empty(), "{f:?}");
+    }
+
+    #[test]
+    fn punching_reinforcement() {
+        // An inner 30 × 30 column under 25 cm of slab (d 0,215 m) with
+        // 600 kN: u1 = 1,2 + 4π·0,215 = 3,90 m, vEd = 1,15·600/(3,90·0,215)
+        // = 0,82 N/mm² over some 0,55: reinforcement, less than 1,5·vRd,c.
+        let rc = Rc::default();
+        let p = punch(&rc, ColumnId(1), 600.0, 0.3, 0.3, 0.215, 0, 0.01);
+        assert!((p.u1 - (1.2 + 4.0 * std::f64::consts::PI * 0.215)).abs() < 1e-9);
+        assert!(p.v_ed > p.v_rd && p.v_ed < 1.5 * p.v_rd, "{p:?}");
+        let (legs, dia, rows, sr) = p.links.unwrap();
+        // Asw = (0,82 − 0,75·vRd,c)·u1·d / (1,5·(d/sr)·fywd,ef), fywd,ef
+        // = 250 + 0,25·215 = 304 N/mm².
+        let asw = (p.v_ed - 0.75 * p.v_rd) * p.u1 * 1000.0 * 215.0 / (1.5 * (0.215 / sr) * 303.75);
+        let has = f64::from(legs) * std::f64::consts::PI * (dia * 1000.0).powi(2) / 4.0;
+        assert!(has >= asw && has < asw + 120.0, "{has} {asw}");
+        assert!((2..12).contains(&rows), "{rows}");
+        assert!((sr - 0.15).abs() < 1e-9);
     }
 
     #[test]

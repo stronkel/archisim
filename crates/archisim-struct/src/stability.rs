@@ -3,8 +3,8 @@
 //! 4.3.3.2: 1/250 of the storey and 1/500 of the whole building) and the
 //! second-order effects (EN 1993-1-1, 5.2.1: αcr from the stability index
 //! θ = P·Δ / (V·h) of each storey; under 0,1 they can be left out, up to
-//! 0,3 the horizontal actions are amplified by 1/(1 − θ), beyond it the
-//! frame needs bracing).
+//! 0,3 the horizontal actions are amplified by 1/(1 − θ) — `analyse`
+//! does it, 5.2.2(5) — and beyond it the frame needs bracing).
 
 use archisim_core::Model;
 
@@ -49,7 +49,23 @@ impl Storey {
 }
 
 pub fn storeys(an: &Analysis) -> Vec<Storey> {
-    let am = &an.model;
+    // The vertical load of each column: its largest ultimate compression.
+    let load_of = |o: Owner| -> f64 {
+        an.envelopes
+            .iter()
+            .find(|e| e.owner == o)
+            .map_or(0.0, |e| (-e.min[0]).max(0.0))
+    };
+    storeys_with(&an.model, &an.solutions, &load_of)
+}
+
+/// The storeys of a frame from its solutions, with the vertical load of
+/// each column given.
+pub fn storeys_with(
+    am: &crate::analytical::Analytical,
+    solutions: &std::collections::BTreeMap<Case, crate::frame::Solution>,
+    load_of: &dyn Fn(Owner) -> f64,
+) -> Vec<Storey> {
     // The columns: base and top node and their pieces.
     let mut cols: std::collections::BTreeMap<Owner, (usize, usize, Vec<usize>)> =
         Default::default();
@@ -69,15 +85,8 @@ pub fn storeys(an: &Analysis) -> Vec<Storey> {
         }
         e.2.push(bi);
     }
-    // The vertical load of each column: its largest ultimate compression.
-    let load_of = |o: Owner| -> f64 {
-        an.envelopes
-            .iter()
-            .find(|e| e.owner == o)
-            .map_or(0.0, |e| (-e.min[0]).max(0.0))
-    };
     let mut out = Vec::new();
-    for (case, sol) in &an.solutions {
+    for (case, sol) in solutions {
         let [dx, dy] = match case {
             Case::Wind(dir) => dir.vector(),
             Case::Quake(true) => [1.0, 0.0],
@@ -216,8 +225,15 @@ pub fn check(model: &Model, an: &Analysis) -> Vec<Check> {
         (
             Status::Warn,
             Some(format!(
-                "efectos de segundo orden: las acciones horizontales se amplifican × {}",
-                dec(worst.amplification(), 2)
+                "efectos de segundo orden: el cálculo ya amplifica {} × {} (EN 1993-1-1, 5.2.2(5))",
+                worst.case.name(),
+                dec(
+                    an.amplification
+                        .get(&worst.case)
+                        .copied()
+                        .unwrap_or(worst.amplification()),
+                    2
+                )
             )),
         )
     } else {
