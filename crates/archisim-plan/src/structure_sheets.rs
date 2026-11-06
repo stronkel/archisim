@@ -26,18 +26,18 @@ use archisim_struct::proposals::Proposal;
 use crate::lettering::{paint, text_path, text_width, Align};
 use crate::{render_plan, PlanOptions};
 
-const W: f64 = 420.0;
-const H: f64 = 297.0;
-const MARGIN: f64 = 10.0;
-const INK: &str = "#1a1a1a";
-const GREY: &str = "#6b6b6b";
-const MARK: &str = "#b3261e";
-const RULE: &str = "#b9b9b9";
+pub(crate) const W: f64 = 420.0;
+pub(crate) const H: f64 = 297.0;
+pub(crate) const MARGIN: f64 = 10.0;
+pub(crate) const INK: &str = "#1a1a1a";
+pub(crate) const GREY: &str = "#6b6b6b";
+pub(crate) const MARK: &str = "#b3261e";
+pub(crate) const RULE: &str = "#b9b9b9";
 /// The title block at the bottom right, mm.
-const BLOCK_W: f64 = 150.0;
-const BLOCK_H: f64 = 28.0;
+pub(crate) const BLOCK_W: f64 = 150.0;
+pub(crate) const BLOCK_H: f64 = 28.0;
 
-fn n(v: f64) -> String {
+pub(crate) fn n(v: f64) -> String {
     let v = (v * 1000.0).round() / 1000.0;
     format!("{v}")
 }
@@ -46,7 +46,7 @@ fn dec(v: f64, d: usize) -> String {
     format!("{v:.d$}").replace('.', ",")
 }
 
-fn text(s: &mut String, t: &str, x: f64, y: f64, h: f64, colour: &str) {
+pub(crate) fn text(s: &mut String, t: &str, x: f64, y: f64, h: f64, colour: &str) {
     if t.trim().is_empty() {
         return;
     }
@@ -58,7 +58,7 @@ fn text(s: &mut String, t: &str, x: f64, y: f64, h: f64, colour: &str) {
     );
 }
 
-fn centred(s: &mut String, t: &str, x: f64, y: f64, h: f64, colour: &str) {
+pub(crate) fn centred(s: &mut String, t: &str, x: f64, y: f64, h: f64, colour: &str) {
     if t.trim().is_empty() {
         return;
     }
@@ -76,7 +76,7 @@ fn centred(s: &mut String, t: &str, x: f64, y: f64, h: f64, colour: &str) {
     );
 }
 
-fn line(s: &mut String, a: (f64, f64), b: (f64, f64), w: f64, colour: &str) {
+pub(crate) fn line(s: &mut String, a: (f64, f64), b: (f64, f64), w: f64, colour: &str) {
     let _ = writeln!(
         s,
         r#"<line x1="{}" y1="{}" x2="{}" y2="{}" stroke="{colour}" stroke-width="{}" stroke-linecap="round"/>"#,
@@ -88,7 +88,7 @@ fn line(s: &mut String, a: (f64, f64), b: (f64, f64), w: f64, colour: &str) {
     );
 }
 
-fn rect(s: &mut String, x: f64, y: f64, w: f64, h: f64, sw: f64, colour: &str) {
+pub(crate) fn rect(s: &mut String, x: f64, y: f64, w: f64, h: f64, sw: f64, colour: &str) {
     let _ = writeln!(
         s,
         r#"<rect x="{}" y="{}" width="{}" height="{}" fill="none" stroke="{colour}" stroke-width="{}"/>"#,
@@ -136,7 +136,7 @@ fn frame(s: &mut String, model: &Model, code: &str, title: &str, scale: Option<f
     centred(s, code, x + BLOCK_W - 15.0, y + 17.0, 6.0, INK);
 }
 
-fn page(body: &str) -> String {
+pub(crate) fn page(body: &str) -> String {
     format!(
         r#"<svg xmlns="http://www.w3.org/2000/svg" width="{w}mm" height="{h}mm" viewBox="0 0 {w} {h}"><rect width="{w}" height="{h}" fill="white"/>
 {body}</svg>"#,
@@ -147,7 +147,7 @@ fn page(body: &str) -> String {
 
 /// A table: columns' widths, a header and rows; drawn from (x, y), each
 /// row `rh` high. Returns its height.
-fn table(
+pub(crate) fn table(
     s: &mut String,
     x: f64,
     y: f64,

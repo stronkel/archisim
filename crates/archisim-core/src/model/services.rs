@@ -1421,8 +1421,9 @@ mod tests {
 
 /// A circuit of a dwelling's electrical installation, as the REBT lists
 /// them (ITC-BT-25, tabla 1): its number, what it feeds, its breaker, the
-/// section of its wires and how many points it may feed at most (0: no
-/// limit given).
+/// section of its wires, its tube, how many points it may feed at most
+/// (0: no limit given), and the power of each point with the factors of
+/// simultaneity and use that give its design current (I = n·Ia·Fs·Fu).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CircuitSpec {
     pub number: u8,
@@ -1432,48 +1433,110 @@ pub struct CircuitSpec {
     /// mm².
     pub section: f64,
     pub max_points: u32,
+    /// The power of a point, W.
+    pub point_power: f64,
+    /// Factor of simultaneity.
+    pub simultaneity: f64,
+    /// Factor of use.
+    pub utilisation: f64,
+    /// The outer diameter of its tube, mm.
+    pub tube: u32,
+    /// Only in a dwelling of high electrification (C6 onwards).
+    pub high_only: bool,
 }
 
-/// The circuits of a dwelling of basic electrification (ITC-BT-25).
-pub const CIRCUITS: [CircuitSpec; 5] = [
+#[allow(clippy::too_many_arguments)]
+const fn circuit(
+    number: u8,
+    name: &'static str,
+    breaker: u32,
+    section: f64,
+    max_points: u32,
+    point_power: f64,
+    simultaneity: f64,
+    utilisation: f64,
+    tube: u32,
+) -> CircuitSpec {
     CircuitSpec {
-        number: 1,
-        name: "Iluminación",
-        breaker: 10,
-        section: 1.5,
-        max_points: 30,
-    },
-    CircuitSpec {
-        number: 2,
-        name: "Tomas de uso general y frigorífico",
-        breaker: 16,
-        section: 2.5,
-        max_points: 20,
-    },
-    CircuitSpec {
-        number: 3,
-        name: "Cocina y horno",
-        breaker: 25,
-        section: 6.0,
-        max_points: 2,
-    },
-    CircuitSpec {
-        number: 4,
-        name: "Lavadora, lavavajillas y termo eléctrico",
-        breaker: 20,
-        section: 4.0,
-        max_points: 3,
-    },
-    CircuitSpec {
-        number: 5,
-        name: "Baño y cuarto de cocina",
-        breaker: 16,
-        section: 2.5,
-        max_points: 6,
-    },
+        number,
+        name,
+        breaker,
+        section,
+        max_points,
+        point_power,
+        simultaneity,
+        utilisation,
+        tube,
+        high_only: number > 5,
+    }
+}
+
+/// The circuits of a dwelling (ITC-BT-25, tabla 1): C1 to C5 in every
+/// one, C6 onwards in one of high electrification.
+pub const CIRCUITS: [CircuitSpec; 10] = [
+    circuit(1, "Iluminación", 10, 1.5, 30, 200.0, 0.75, 0.5, 16),
+    circuit(
+        2,
+        "Tomas de uso general y frigorífico",
+        16,
+        2.5,
+        20,
+        3450.0,
+        0.2,
+        0.25,
+        20,
+    ),
+    circuit(3, "Cocina y horno", 25, 6.0, 2, 5400.0, 0.5, 0.75, 25),
+    circuit(
+        4,
+        "Lavadora, lavavajillas y termo eléctrico",
+        20,
+        4.0,
+        3,
+        3450.0,
+        0.66,
+        0.75,
+        20,
+    ),
+    circuit(
+        5,
+        "Baño y cuarto de cocina",
+        16,
+        2.5,
+        6,
+        3450.0,
+        0.4,
+        0.5,
+        20,
+    ),
+    circuit(
+        6,
+        "Iluminación (circuito adicional)",
+        10,
+        1.5,
+        30,
+        200.0,
+        0.75,
+        0.5,
+        16,
+    ),
+    circuit(
+        7,
+        "Tomas de uso general (circuito adicional)",
+        16,
+        2.5,
+        20,
+        3450.0,
+        0.2,
+        0.25,
+        20,
+    ),
+    circuit(8, "Calefacción eléctrica", 25, 6.0, 0, 5750.0, 1.0, 1.0, 25),
+    circuit(9, "Aire acondicionado", 25, 6.0, 0, 5750.0, 1.0, 1.0, 25),
+    circuit(10, "Secadora", 16, 2.5, 1, 3450.0, 1.0, 0.75, 20),
 ];
 
-/// The spec of circuit `n` (C1 to C5), if it is one of the REBT's.
+/// The spec of circuit `n` (C1 to C10), if it is one of the REBT's.
 pub fn circuit_spec(n: u8) -> Option<&'static CircuitSpec> {
     CIRCUITS.iter().find(|c| c.number == n)
 }
@@ -1485,7 +1548,7 @@ impl Model {
     /// and data sockets, the board, the rest).
     pub fn device_circuit(&self, id: DeviceId) -> Option<u8> {
         let d = self.device(id)?;
-        if !d.kind.is_electric() {
+        if !d.kind.is_electric() && d.kind != DeviceKind::WaterHeater {
             return None;
         }
         if let Some(n) = self.device_circuits.get(&id.0) {
@@ -1494,6 +1557,7 @@ impl Model {
         match d.kind {
             DeviceKind::Light | DeviceKind::Switch | DeviceKind::TwoWaySwitch => Some(1),
             DeviceKind::PowerSocket => Some(3),
+            DeviceKind::WaterHeater => Some(4),
             DeviceKind::Socket => {
                 let wet = self.rooms_on_level(d.level).any(|r| {
                     let words = format!("{} {}", r.name, r.usage).to_lowercase();

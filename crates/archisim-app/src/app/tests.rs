@@ -9869,3 +9869,161 @@ fn streets_laid_stretch_by_stretch() {
     };
     assert!(turn(1) > 0.95, "{}", turn(1));
 }
+
+/// Pipes that join what they touch (instalaciones, segunda vuelta): a
+/// drain from the WC ends on the downpipe by itself and falls towards it;
+/// the branches of the other appliances are drawn by themselves; a cold
+/// water pipe goes up a floor with PageUp, by a riser.
+#[test]
+fn pipes_join_appliances_risers_and_floors() {
+    use archisim_core::{DeviceKind, NewDevice, ServiceSystem};
+    let mut h = Harness::new(Editor::new_project());
+    let canvas = h.app.canvas;
+    h.app
+        .view
+        .fit_exact(canvas, p(-2.0, -2.0), p(8.0, 6.0), 0.0);
+    let level = h.app.ed.level;
+    let wc = h
+        .model()
+        .object_types()
+        .find(|t| t.name == "Inodoro suspendido")
+        .expect("the library's WC")
+        .id;
+    let basin = h
+        .model()
+        .object_types()
+        .find(|t| t.name.starts_with("Lavabo"))
+        .expect("a washbasin")
+        .id;
+    let (w, d, hh, _) = DeviceKind::Downpipe.defaults();
+    h.app
+        .ed
+        .transact("Baño", |m| {
+            for (t, x) in [(wc, 2.0), (basin, 4.0)] {
+                m.add_object(archisim_core::NewObject {
+                    level,
+                    object_type: t,
+                    position: p(x, 2.0),
+                    rotation: 0.0,
+                    base_offset: 0.0,
+                })?;
+            }
+            m.add_device(NewDevice {
+                level,
+                kind: DeviceKind::Downpipe,
+                name: "Bajante".into(),
+                position: p(0.0, 0.0),
+                rotation: 0.0,
+                elevation: 0.0,
+                width: w,
+                depth: d,
+                height: hh,
+            })
+        })
+        .unwrap();
+    h.frame();
+    h.app.service_settings.pipe_system = ServiceSystem::Drainage;
+    h.app.service_settings.pipe_size = 0.11;
+    h.app.set_tool(Tool::Pipe);
+    let wc_point = h
+        .model()
+        .appliances_on(level)
+        .into_iter()
+        .find(|a| a.kind == archisim_core::Appliance::Wc)
+        .unwrap()
+        .point;
+    // Near the WC and near the downpipe: the second click ends the pipe.
+    h.click_at(wc_point + archisim_core::Vec2::new(0.02, 0.0));
+    h.click_at(p(0.03, 0.02));
+    h.frame();
+    let run = h.model().runs().next().expect("the drain").clone();
+    assert!(h.app.run_points.is_empty());
+    assert!(run.path[0].approx_eq(wc_point), "{run:?}");
+    assert!(run.path.last().unwrap().approx_eq(p(0.0, 0.0)));
+    assert!((run.slope - 0.02).abs() < 1e-9);
+    // The washbasin's branch, by itself.
+    h.app.route_appliances();
+    let drains = h
+        .model()
+        .runs()
+        .filter(|r| r.system == ServiceSystem::Drainage)
+        .count();
+    assert_eq!(drains, 2);
+    // A cold water pipe up a floor.
+    h.app.set_tool(Tool::Arrow);
+    let upper = h
+        .app
+        .ed
+        .transact("Planta", |m| Ok(m.add_level("Planta 1", 3.0)))
+        .unwrap();
+    h.frame();
+    h.app.service_settings.pipe_system = ServiceSystem::ColdWater;
+    h.app.service_settings.pipe_size = 0.025;
+    h.app.set_tool(Tool::Pipe);
+    h.click_at(p(6.0, 0.0));
+    h.click_at(p(6.0, 3.0));
+    h.key(Key::PageUp);
+    assert_eq!(h.app.ed.level, upper);
+    assert_eq!(h.app.run_points.len(), 1);
+    assert!(h
+        .model()
+        .devices()
+        .any(|d| d.kind == DeviceKind::Riser && d.position.approx_eq(p(6.0, 3.0))));
+    assert_eq!(
+        h.model()
+            .runs()
+            .filter(|r| r.system == ServiceSystem::ColdWater)
+            .count(),
+        1
+    );
+}
+
+/// The electrical calculation window: with a board and some mechanisms
+/// it works out the installation, and its data change in one step.
+#[test]
+fn electrical_window_works_out_the_board() {
+    use archisim_core::{DeviceKind, NewDevice};
+    let mut h = Harness::new(Editor::new_project());
+    let level = h.app.ed.level;
+    h.app
+        .ed
+        .transact("Mecanismos", |m| {
+            for (kind, x) in [
+                (DeviceKind::Panel, 0.0),
+                (DeviceKind::Light, 3.0),
+                (DeviceKind::Socket, 5.0),
+            ] {
+                let (w, d, hh, z) = kind.defaults();
+                m.add_device(NewDevice {
+                    level,
+                    kind,
+                    name: kind.name().into(),
+                    position: p(x, 1.0),
+                    rotation: 0.0,
+                    elevation: z,
+                    width: w,
+                    depth: d,
+                    height: hh,
+                })?;
+            }
+            Ok(())
+        })
+        .unwrap();
+    h.app.electrical.open = true;
+    h.frame();
+    let mut site = *h.app.ed.model().electrical_site();
+    site.feeder_length = 30.0;
+    h.app
+        .ed
+        .transact("Datos de la instalación eléctrica", |m| {
+            m.set_electrical_site(site)
+        })
+        .unwrap();
+    h.frame();
+    let model = h.app.ed.shown();
+    let text = archisim_mep::electrical::report(&model);
+    assert!(text.contains("30,0 m"), "{text}");
+    assert_eq!(archisim_plan::single_line::pages(&model).len(), 1);
+    let cte = archisim_cte::check(&model);
+    assert!(cte.items.iter().any(|i| i.rule == "ITC-BT-15"));
+}

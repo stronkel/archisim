@@ -19,6 +19,9 @@ pub struct ServiceSettings {
     pub pipe_elevation: f64,
     /// The fall of a drain, from its first point to its last.
     pub drain_slope: f64,
+    /// The drain's fall by its diameter (HS 5: 2,5 % the branches, 2 %
+    /// the collectors) instead of `drain_slope`.
+    pub drain_auto: bool,
     pub duct_system: ServiceSystem,
     pub duct_width: f64,
     pub duct_height: f64,
@@ -36,6 +39,7 @@ impl Default for ServiceSettings {
             pipe_size: 0.025,
             pipe_elevation: 0.3,
             drain_slope: 0.02,
+            drain_auto: true,
             duct_system: ServiceSystem::SupplyAir,
             duct_width: 0.3,
             duct_height: 0.2,
@@ -259,11 +263,162 @@ impl ArchiSimApp {
 
     // ---- Pipes and ducts ----------------------------------------------------
 
+    /// The system the pipe or duct tool draws.
+    fn run_system(&self) -> ServiceSystem {
+        if self.tool == Tool::Duct {
+            self.service_settings.duct_system
+        } else {
+            self.service_settings.pipe_system
+        }
+    }
+
+    /// What a point of the pipe being drawn would join under the cursor:
+    /// a device that serves it, an appliance, another pipe of its system.
+    pub(super) fn run_join(&self, p: Point2) -> Option<archisim_core::Join> {
+        let reach = self.view.to_metres(12.0).clamp(0.02, 0.4);
+        self.ed
+            .model()
+            .pipe_join(self.ed.level, self.run_system(), p, reach)
+    }
+
     pub(super) fn run_click(&mut self, p: Point2) {
+        let join = self.run_join(p);
+        let p = join.map_or(p, |j| j.point);
         if self.run_points.last().is_some_and(|l| l.approx_eq(p)) {
             self.finish_run();
         } else {
             self.run_points.push(p);
+            if let Some(j) = join {
+                let what = self.join_name(j);
+                if self.run_points.len() > 1 && !matches!(j.to, archisim_core::JoinTo::Run(..)) {
+                    // Ending on a device or an appliance ends the pipe.
+                    self.say(format!("Unida a {what}."));
+                    self.finish_run();
+                } else {
+                    self.say(format!("Unida a {what}."));
+                }
+            }
+        }
+    }
+
+    fn join_name(&self, j: archisim_core::Join) -> String {
+        let m = self.ed.model();
+        match j.to {
+            archisim_core::JoinTo::Run(id, _) => m.run(id).map_or("una tubería".into(), |r| {
+                format!("{} {}", r.system.name().to_lowercase(), r.size_text())
+            }),
+            archisim_core::JoinTo::Device(id) => m
+                .device(id)
+                .map_or("un aparato".into(), |d| d.kind.name().to_lowercase()),
+            archisim_core::JoinTo::Appliance(id) => archisim_core::Appliance::of(m, id)
+                .map_or("un aparato sanitario".into(), |a| a.name().to_lowercase()),
+        }
+    }
+
+    /// Takes the pipe being drawn up (or down) a floor: it ends where it
+    /// is, a riser (a downpipe for the drainage) goes between the two
+    /// floors, and the pipe goes on from the same point on the other one.
+    pub(super) fn run_change_level(&mut self, up: bool) {
+        let Some(&p) = self.run_points.last() else {
+            self.complain(
+                "Empieza la tubería antes de cambiar de planta (RePág sube, AvPág baja).",
+            );
+            return;
+        };
+        let system = self.run_system();
+        if self.tool == Tool::Duct {
+            self.complain(
+                "Los conductos no cambian de planta con un montante; dibuja uno en cada planta.",
+            );
+            return;
+        }
+        if self.run_points.len() >= 2 {
+            self.finish_run();
+        }
+        let level = self.ed.level;
+        match self.ed.transact(
+            if up {
+                "Subir la tubería"
+            } else {
+                "Bajar la tubería"
+            },
+            |m| m.change_pipe_level(level, system, p, up),
+        ) {
+            Ok((_, other)) => {
+                let name = self
+                    .ed
+                    .model()
+                    .level(other)
+                    .map_or(String::new(), |l| l.name.clone());
+                self.go_to_level_plan(other);
+                self.run_points = vec![p];
+                let kind = if system == ServiceSystem::Drainage {
+                    "Bajante"
+                } else {
+                    "Montante"
+                };
+                self.say(format!("{kind} hasta {name}: la tubería sigue desde aquí."));
+            }
+            Err(e) => self.complain(format!("No se puede cambiar de planta: {e}.")),
+        }
+    }
+
+    /// Goes on to another level's plan in the same tab, keeping the view.
+    fn go_to_level_plan(&mut self, level: archisim_core::LevelId) {
+        if let Some(t) = self.tabs.get_mut(self.active_tab) {
+            if matches!(t.kind, super::tabs::TabKind::Plan(_)) {
+                t.kind = super::tabs::TabKind::Plan(level);
+            }
+        }
+        self.switch_level(level);
+    }
+
+    /// Draws by themselves the branches from each sanitary appliance of
+    /// the level to the nearest pipe, riser or downpipe of the system.
+    pub(super) fn route_appliances(&mut self) {
+        let s = self.service_settings;
+        let system = s.pipe_system;
+        let level = self.ed.level;
+        let (runs, alone) = self
+            .ed
+            .model()
+            .route_appliances(level, system, s.pipe_elevation);
+        if runs.is_empty() {
+            self.complain(if alone.is_empty() {
+                format!(
+                    "No hay aparatos sanitarios sin {} en esta planta.",
+                    system.name().to_lowercase()
+                )
+            } else {
+                format!(
+                    "{} aparatos no tienen a dónde ir: dibuja antes una tubería de {}, un montante o una bajante.",
+                    alone.len(),
+                    system.name().to_lowercase()
+                )
+            });
+            return;
+        }
+        let n = runs.len();
+        let r = self.ed.transact("Conectar los aparatos", |m| {
+            let mut ids = Vec::new();
+            for r in runs {
+                ids.push(m.add_run(r)?);
+            }
+            Ok(ids)
+        });
+        match r {
+            Ok(ids) => {
+                self.ed.selection = ids.into_iter().map(Element::Run).collect();
+                let mut text = format!(
+                    "{n} derivaciones de {} dibujadas (seleccionadas, para retocarlas).",
+                    system.name().to_lowercase()
+                );
+                if !alone.is_empty() {
+                    text.push_str(&format!(" {} aparatos quedan sin conectar.", alone.len()));
+                }
+                self.say(text);
+            }
+            Err(e) => self.complain(format!("No se pueden dibujar: {e}.")),
         }
     }
 
@@ -291,11 +446,15 @@ impl ArchiSimApp {
                 0.0
             },
         };
+        let mut spec = spec;
+        if !duct && s.pipe_system.falls() && s.drain_auto && !s.pipe_system.is_urban() {
+            spec.slope = archisim_core::usual_drain_slope(s.pipe_size);
+        }
         let what = if duct { "conducto" } else { "tubería" };
-        match self
-            .ed
-            .transact(&format!("Crear {what}"), |m| m.add_run(spec))
-        {
+        match self.ed.transact(&format!("Crear {what}"), |m| {
+            m.fit_run(&mut spec);
+            m.add_run(spec)
+        }) {
             Ok(id) => {
                 self.ed.selection = [Element::Run(id)].into_iter().collect();
                 if let Some(r) = self.ed.model().run(id) {
@@ -374,7 +533,11 @@ impl ArchiSimApp {
         };
         let s = &self.service_settings;
         match self.tool {
+            Tool::Pipe | Tool::Duct if self.run_points.is_empty() => {
+                self.draw_join_ring(painter, rect, c.point);
+            }
             Tool::Pipe | Tool::Duct if !self.run_points.is_empty() => {
+                self.draw_join_ring(painter, rect, c.point);
                 let (system, width) = if self.tool == Tool::Duct {
                     (s.duct_system, s.duct_width)
                 } else {
@@ -423,12 +586,23 @@ impl ArchiSimApp {
         }
     }
 
+    /// A ring on what the pipe would join under the cursor.
+    fn draw_join_ring(&self, painter: &egui::Painter, rect: Rect, p: Point2) {
+        if let Some(j) = self.run_join(p) {
+            let c = self.view.to_screen(rect, j.point);
+            painter.circle_stroke(c, 7.0, Stroke::new(2.0, ACCENT));
+        }
+    }
+
     pub(super) fn services_hint(&self) -> &'static str {
         match self.tool {
-            Tool::Pipe | Tool::Duct if !self.run_points.is_empty() => {
+            Tool::Pipe if !self.run_points.is_empty() => {
+                "Clic: siguiente punto (se une a aparatos y tuberías) · RePág/AvPág: subir o bajar de planta · Doble clic o Intro: terminar · Esc: quitar el último"
+            }
+            Tool::Duct if !self.run_points.is_empty() => {
                 "Clic: siguiente punto · Doble clic, Intro o clic derecho: terminar · Esc: quitar el último"
             }
-            Tool::Pipe => "Clic: comienzo de la tubería (sistema, diámetro y altura, en Propiedades) · Esc: flecha",
+            Tool::Pipe => "Clic: comienzo de la tubería (se une a aparatos, montantes, bajantes y otras tuberías) · Esc: flecha",
             Tool::Duct => "Clic: comienzo del conducto (sistema, sección y altura, en Propiedades) · Esc: flecha",
             Tool::Device => "Clic: donde va el aparato · Espacio: girar 90° · Esc: flecha",
             _ => "",
@@ -503,7 +677,17 @@ impl ArchiSimApp {
                         }
                     },
                 );
-                if s.pipe_system.falls() {
+                if s.pipe_system.falls() && !s.pipe_system.is_urban() {
+                    row(
+                        ui,
+                        "Pendiente automática",
+                        "2,5 % las derivaciones, 2 % los colectores (HS 5); baja siempre hacia la tubería o la bajante a la que llega",
+                        |ui, _| {
+                            super::widgets::switch(ui, &mut s.drain_auto, "");
+                        },
+                    );
+                }
+                if s.pipe_system.falls() && !(s.drain_auto && !s.pipe_system.is_urban()) {
                     row(
                         ui,
                         "Pendiente (%)",
@@ -522,7 +706,29 @@ impl ArchiSimApp {
                 }
             });
         }
+        let mut route = false;
+        if !duct
+            && matches!(
+                s.pipe_system,
+                ServiceSystem::ColdWater | ServiceSystem::HotWater | ServiceSystem::Drainage
+            )
+        {
+            group(ui, "tool-pipe-route", "Trazado automático", |ui| {
+                ui.label(
+                    egui::RichText::new(
+                        "Dibuja las derivaciones de cada aparato sanitario de la planta hasta la tubería, el montante o la bajante más cercanos. Luego se retocan como cualquier tubería.",
+                    )
+                    .small(),
+                );
+                if ui.button("Conectar los aparatos de esta planta").clicked() {
+                    route = true;
+                }
+            });
+        }
         self.service_settings = s;
+        if route {
+            self.route_appliances();
+        }
     }
 
     pub(super) fn device_tool_properties(&mut self, ui: &mut Ui) {

@@ -22,6 +22,7 @@ mod decals;
 mod disciplines;
 mod dormers;
 mod draft_views;
+mod electrical;
 mod elevators;
 mod env_buildings;
 mod facades;
@@ -41,6 +42,7 @@ mod orthophoto;
 mod paint;
 mod parameters;
 mod phases;
+mod pipe_routing;
 mod plantings;
 mod pools;
 mod presentation;
@@ -74,6 +76,7 @@ pub use decals::*;
 pub use disciplines::*;
 pub use dormers::*;
 pub use draft_views::*;
+pub use electrical::*;
 pub use elevators::*;
 pub use env_buildings::*;
 pub use facades::*;
@@ -93,6 +96,7 @@ pub use orthophoto::*;
 pub use paint::*;
 pub use parameters::*;
 pub use phases::*;
+pub use pipe_routing::*;
 pub use plantings::*;
 pub use pools::*;
 pub use prices::*;
@@ -1558,6 +1562,8 @@ pub struct ModelParts {
     pub structural_loads: Vec<StructuralLoad>,
     /// The circuits of mechanisms given by hand (E13).
     pub device_circuits: Vec<(DeviceId, u8)>,
+    /// What the electrical calculation needs besides the drawing.
+    pub electrical_site: ElectricalSite,
     /// Underlays of the levels' plans (E7).
     pub level_underlays: Vec<(LevelId, Vec<Underlay>)>,
     pub viewports: Vec<crate::sheets::Viewport>,
@@ -1690,6 +1696,8 @@ pub struct Model {
     pub(crate) structural_loads: BTreeMap<u64, StructuralLoad>,
     /// The circuit of a mechanism given by hand (E13), by its id.
     pub(crate) device_circuits: BTreeMap<u64, u8>,
+    /// What the electrical calculation needs besides the drawing.
+    pub(crate) electrical_site: ElectricalSite,
     pub(crate) drafts: BTreeMap<DraftId, Draft>,
     pub(crate) info: crate::sheets::ProjectInfo,
     pub(crate) sheets: BTreeMap<SheetId, crate::sheets::Sheet>,
@@ -1792,6 +1800,7 @@ impl Model {
             footing_offsets: BTreeMap::new(),
             footing_piles: BTreeMap::new(),
             structural_site: StructuralSite::default(),
+            electrical_site: ElectricalSite::default(),
             structural_loads: BTreeMap::new(),
             device_circuits: BTreeMap::new(),
             level_underlays: BTreeMap::new(),
@@ -4470,6 +4479,7 @@ impl Model {
             structural_site: self.structural_site,
             structural_loads: self.structural_loads.values().cloned().collect(),
             device_circuits: self.device_circuits().collect(),
+            electrical_site: self.electrical_site,
             level_underlays: self
                 .level_underlays
                 .iter()
@@ -4810,6 +4820,12 @@ impl Model {
             parts.structural_loads,
             &mut claim,
         )?;
+        model
+            .set_electrical_site(parts.electrical_site)
+            .map_err(|error| RestoreError {
+                element: "electrical site".into(),
+                error,
+            })?;
         model.restore_title_blocks(parts.title_blocks, parts.default_title_block, &mut claim)?;
         model.set_sun(parts.sun).map_err(|error| RestoreError {
             element: "sun".into(),

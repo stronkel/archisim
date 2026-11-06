@@ -212,6 +212,7 @@ Uso:
       muestrario.svg. Carpeta por defecto: ./out
 
   archisim cte <proyecto.archisim> [informe.csv]
+  archisim electricidad <proyecto.archisim> [carpeta]   cálculo de la instalación eléctrica (REBT); con carpeta, el esquema unifilar en PDF y DXF
   archisim estructura <proyecto.archisim> [carpeta]   acciones, descenso de cargas y cálculo de la estructura; con carpeta, el anejo de cálculo y los planos de estructura en PDF
       Comprueba el proyecto con el Código Técnico: ocupación y evacuación
       (DB-SI 3), accesibilidad (DB-SUA 9), escaleras y rampas (DB-SUA 1) y
@@ -576,6 +577,16 @@ fn main() -> ExitCode {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out/biblioteca"));
             report(run_library(&dir, args.get(2).map(Path::new)))
         }
+        Some("electricidad") => match args.get(1) {
+            Some(project) => report(run_electrical(
+                Path::new(project),
+                args.get(2).map(Path::new),
+            )),
+            None => {
+                eprintln!("Falta el proyecto: archisim electricidad <proyecto.archisim> [carpeta]");
+                ExitCode::FAILURE
+            }
+        },
         Some("estructura") => match args.get(1) {
             Some(project) => report(run_structure(
                 Path::new(project),
@@ -760,6 +771,46 @@ fn run_library(dir: &Path, project: Option<&Path>) -> Result<(), Box<dyn std::er
         "{n} familias con sus tipos y los tipos de muro y forjado en {}",
         dir.display()
     );
+    Ok(())
+}
+
+fn run_electrical(project: &Path, out: Option<&Path>) -> Result<(), Box<dyn std::error::Error>> {
+    let model = archisim_file::open(project)
+        .map_err(|e| format!("no se puede abrir {}: {e}", project.display()))?;
+    let model = model.flattened().map_err(|e| format!("{e}"))?;
+    print!("{}", archisim_mep::electrical::report(&model));
+    if let Some(dir) = out {
+        std::fs::create_dir_all(dir)?;
+        let stem = project
+            .file_stem()
+            .map_or("proyecto".into(), |s| s.to_string_lossy().to_string());
+        let sheets = archisim_plan::single_line::pages(&model);
+        if sheets.is_empty() {
+            return Ok(());
+        }
+        let titles: Vec<String> = (0..sheets.len())
+            .map(|i| format!("IE-{:02}", i + 1))
+            .collect();
+        let pdf_pages: Vec<archisim_export::pdf::Page> = sheets
+            .iter()
+            .zip(&titles)
+            .map(|(svg, title)| archisim_export::pdf::Page { svg, title })
+            .collect();
+        let pdf = dir.join(format!("{stem}-unifilar.pdf"));
+        std::fs::write(
+            &pdf,
+            archisim_export::pdf::pdf(&pdf_pages, "Esquema unifilar")?,
+        )?;
+        for (svg, title) in sheets.iter().zip(&titles) {
+            let dxf = dir.join(format!("{stem}-unifilar-{}.dxf", title.to_lowercase()));
+            std::fs::write(&dxf, archisim_export::dxf::page_dxf(&model, svg)?)?;
+        }
+        println!(
+            "\nEsquema unifilar ({} hojas A3): {} (y en DXF)",
+            sheets.len(),
+            pdf.display()
+        );
+    }
     Ok(())
 }
 

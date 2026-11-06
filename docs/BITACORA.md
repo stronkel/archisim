@@ -6,6 +6,44 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-06 (111) · Instalaciones: meter tuberías, cálculo eléctrico y esquema unifilar
+
+Rama `bloque/instalaciones-calculo`, sobre `bloque/calles` (#161). Formato `.archisim` versión 85: los datos del cálculo eléctrico (grado de electrificación, longitud de la derivación individual, un solo usuario) y los circuitos C6 a C10. Los proyectos de la 84 se abren igual.
+
+Qué se hizo (puntos 1 y 2 de lo propuesto a Antonio; `docs/INSTALACIONES.md`):
+
+1. **Meter tuberías**:
+   - el clic se engancha a aparatos sanitarios, montantes, bajantes, termos, radiadores y otras tuberías del mismo sistema (con un aro que lo marca), y termina solo al llegar a un aparato;
+   - la tubería toma la altura de la que sale;
+   - el saneamiento lleva su pendiente automática (2,5 % derivaciones, 2 % colectores), baja hacia donde desagua aunque se dibuje al revés y llega a la otra tubería a su altura;
+   - RePág y AvPág suben o bajan de planta poniendo un montante o una bajante;
+   - «Conectar los aparatos de esta planta» dibuja las derivaciones de todos los aparatos hasta la tubería, el montante o la bajante más cercanos.
+2. **Cálculo eléctrico (REBT)** en un crate nuevo, `archisim-mep`. Por cada cuadro:
+   - el grado de electrificación (ITC-BT-10);
+   - los circuitos C1 a C10, con potencia, intensidad, PIA, sección, tubo, longitud y caída de tensión (con la sección que hace falta si la de la tabla no basta);
+   - la derivación individual, el IGA, los diferenciales de 30 mA (uno cada cinco circuitos) y el protector de sobretensiones.
+
+   Va en Colaboración → Cálculo eléctrico, en la Comprobación CTE y en `archisim electricidad`.
+3. **Esquema unifilar** en A3, en PDF y DXF, con el cuadro de circuitos debajo.
+
+Pendiente:
+- fontanería (HS 4: caudales, simultaneidad, pérdidas de carga, esquema vertical);
+- saneamiento (HS 5: unidades de desagüe, bajantes y colectores, pluviales);
+- ventilación (HS 3);
+- climatización y DB-HE;
+- en electricidad: trifásica, locales y cortocircuito;
+- de estructura: ménsulas y la validación con un proyecto de AD5 calculado con Tricalc.
+
+Qué debe probar Antonio:
+
+- En la app, en una planta con baño y cocina con sus aparatos, coloca una **bajante** (ficha Montante de Instalaciones y, en su tipo, Bajante). Elige la herramienta Tubería con sistema Saneamiento y dibuja del inodoro a la bajante: el aro azul marca el enganche, la tubería termina sola al llegar y baja hacia la bajante. Prueba también a dibujarla al revés.
+- Con la herramienta Tubería, pulsa **«Conectar los aparatos de esta planta»**, en sus propiedades: salen las derivaciones de todos los aparatos, seleccionadas para retocarlas. Repítelo con agua fría (con un montante) y con agua caliente.
+- Empieza una tubería de agua fría y pulsa **RePág**: aparece un montante y sigues dibujando en la planta de arriba desde el mismo punto.
+- Coloca un **Cuadro** y unos puntos de luz y tomas. Abre **Colaboración → Cálculo eléctrico…**: cambia la longitud de la derivación individual y el grado de electrificación. Exporta el **esquema unifilar** en PDF y en DXF y míralo como lo entregaría un instalador.
+- Desde la línea de órdenes: `cargo run -p archisim-cli -- instalaciones out/` y `cargo run -p archisim-cli -- electricidad out/instalaciones.archisim out/el`. Abre `out/el/instalaciones-unifilar.pdf`.
+
+---
+
 ## 2026-11-06 (110) · Estructura: lo que faltaba para dejar Tricalc
 
 Rama `bloque/calles` (#161). Formato `.archisim` versión 84 (los proyectos de la 83 se abren igual: sus forjados son losas macizas, sus zapatas centradas y sin pilotes).

@@ -118,6 +118,8 @@ pub enum Subject {
     Roof(archisim_core::RoofId),
     /// A framed floor.
     Floor(SlabId),
+    /// A device of the installations (an electrical board).
+    Device(archisim_core::DeviceId),
 }
 
 /// One result.
@@ -297,6 +299,7 @@ pub fn subject_name(model: &Model, s: Subject) -> String {
         Subject::Wall(w) => format!("Muro {}", w.0),
         Subject::Roof(r) => format!("Cubierta {}", r.0),
         Subject::Floor(s) => format!("Forjado {}", s.0),
+        Subject::Device(d) => model.device(d).map(|d| d.name.clone()).unwrap_or_default(),
     }
 }
 

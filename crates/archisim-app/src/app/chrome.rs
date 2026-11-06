@@ -282,6 +282,12 @@ impl ArchiSimApp {
                     self.export_structure_drawings();
                 }
                 if ui
+                    .add(shortcut_button("Esquema unifilar…", "PDF"))
+                    .clicked()
+                {
+                    self.export_single_line_pdf();
+                }
+                if ui
                     .add(shortcut_button("Mediciones y presupuesto…", "BC3"))
                     .clicked()
                 {

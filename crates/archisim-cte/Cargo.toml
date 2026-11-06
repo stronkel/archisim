@@ -12,6 +12,7 @@ repository.workspace = true
 archisim-core.workspace = true
 archisim-geom.workspace = true
 archisim-struct.workspace = true
+archisim-mep.workspace = true
 
 [dev-dependencies]
 archisim-library.workspace = true

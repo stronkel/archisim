@@ -231,6 +231,7 @@ impl ArchiSimApp {
             Subject::Wall(w) => Some(Element::Wall(w)),
             Subject::Roof(r) => Some(Element::Roof(r)),
             Subject::Floor(s) => Some(Element::Slab(s)),
+            Subject::Device(d) => Some(Element::Device(d)),
             Subject::Building | Subject::Level(_) => None,
         };
         if let Some(level) = i.level {

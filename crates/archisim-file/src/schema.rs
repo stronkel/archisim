@@ -236,6 +236,10 @@ pub(crate) struct ProjectFile {
     /// circuit]` (version 51; 0: on none).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub device_circuits: Vec<[u64; 2]>,
+    /// The data of the electrical calculation besides the drawing
+    /// (version 85).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub electrical: Option<ElectricalOf>,
     /// Rooms (IfcSpace) and tags of doors, windows, walls and rooms
     /// (version 7).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -4127,6 +4131,7 @@ impl ProjectFile {
                 .iter()
                 .map(|(d, n)| [d.0, u64::from(*n)])
                 .collect(),
+            electrical: ElectricalOf::out(&p.electrical_site),
             level_underlays: crate::drafting::level_underlays_out(&p.level_underlays),
             rooms: crate::rooms::rooms_out(&p.rooms),
             tags: crate::rooms::tags_out(&p.tags),
@@ -4740,6 +4745,10 @@ impl ProjectFile {
                 .into_iter()
                 .map(|[d, n]| (core::DeviceId(d), n.min(255) as u8))
                 .collect(),
+            electrical_site: match &self.electrical {
+                Some(e) => e.site()?,
+                None => core::ElectricalSite::default(),
+            },
             level_underlays: crate::drafting::level_underlays_in(self.level_underlays)?,
             rooms: crate::rooms::rooms_in(self.rooms)?,
             tags: crate::rooms::tags_in(self.tags),
@@ -6115,5 +6124,36 @@ impl StructureOf {
                 })
             })
             .collect()
+    }
+}
+
+/// The data of the electrical calculation besides the drawing (version
+/// 85).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ElectricalOf {
+    /// «auto», «basic» or «high».
+    pub grade: String,
+    pub feeder_length: f64,
+    pub single_user: bool,
+}
+
+impl ElectricalOf {
+    fn out(site: &core::ElectricalSite) -> Option<Self> {
+        if *site == core::ElectricalSite::default() {
+            return None;
+        }
+        Some(ElectricalOf {
+            grade: site.grade.code().into(),
+            feeder_length: site.feeder_length,
+            single_user: site.single_user,
+        })
+    }
+
+    fn site(&self) -> Result<core::ElectricalSite, FileError> {
+        Ok(core::ElectricalSite {
+            grade: core::Electrification::from_code(&self.grade).unwrap_or_default(),
+            feeder_length: self.feeder_length,
+            single_user: self.single_user,
+        })
     }
 }

@@ -501,6 +501,7 @@ pub struct ArchiSimApp {
     /// The code check window.
     pub cte: cte_ui::CteWindow,
     pub calc: calc_ui::CalcWindow,
+    pub electrical: electrical_ui::ElectricalWindow,
     /// A topographic survey being imported (its window is open).
     pub survey_import: Option<survey_ui::SurveyImport>,
     /// Cartography being brought around the project (H7; its window is open).
@@ -877,6 +878,7 @@ impl ArchiSimApp {
             params: Default::default(),
             cte: Default::default(),
             calc: Default::default(),
+            electrical: Default::default(),
             survey_import: None,
             carto_import: None,
             carto_download: None,
@@ -2428,6 +2430,7 @@ impl ArchiSimApp {
         self.params_dialog(ctx);
         self.cte_dialog(ctx);
         self.calc_dialog(ctx);
+        self.electrical_dialog(ctx);
         self.coord_dialog(ctx);
         if self.show_about {
             widgets::dialog("Acerca de ArchiSim")
@@ -2697,6 +2700,7 @@ mod discipline_ui;
 mod draft_props;
 mod drafting_view_ui;
 mod dxf_import_ui;
+mod electrical_ui;
 mod elevator_ui;
 mod env_building_ui;
 mod facade_ui;

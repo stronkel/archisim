@@ -233,6 +233,7 @@ dependencies = [
  "archisim-ids",
  "archisim-ifc",
  "archisim-library",
+ "archisim-mep",
  "archisim-mesh",
  "archisim-plan",
  "archisim-render",
@@ -282,6 +283,7 @@ dependencies = [
  "archisim-ids",
  "archisim-ifc",
  "archisim-library",
+ "archisim-mep",
  "archisim-mesh",
  "archisim-plan",
  "archisim-render",
@@ -318,6 +320,7 @@ dependencies = [
  "archisim-core",
  "archisim-geom",
  "archisim-library",
+ "archisim-mep",
  "archisim-struct",
 ]
 
@@ -402,6 +405,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "archisim-mep"
+version = "0.78.0"
+dependencies = [
+ "archisim-core",
+ "archisim-library",
+]
+
+[[package]]
 name = "archisim-mesh"
 version = "0.78.0"
 dependencies = [
@@ -421,6 +432,7 @@ dependencies = [
  "archisim-draft",
  "archisim-geom",
  "archisim-library",
+ "archisim-mep",
  "archisim-struct",
  "resvg",
 ]

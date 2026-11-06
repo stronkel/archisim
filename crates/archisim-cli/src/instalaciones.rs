@@ -327,10 +327,16 @@ mod tests {
         assert_eq!(circuit_of(DeviceKind::TvSocket, 7.6, 3.5), None);
         let mut report = archisim_cte::Report::default();
         archisim_cte::electrical::check(&m, &mut report);
-        assert!(report
-            .items
-            .iter()
-            .all(|i| i.status == archisim_cte::Status::Passes));
+        // Nothing fails: the points of each circuit and its calculation.
+        assert!(
+            report
+                .items
+                .iter()
+                .all(|i| i.status != archisim_cte::Status::Fails),
+            "{:?}",
+            report.items
+        );
+        assert!(report.items.iter().any(|i| i.rule == "ITC-BT-15"));
         // The drain ends at the downpipe with a bend; the water bends at
         // its corners.
         let fittings = archisim_geom::solid::fitting_solids(&m);

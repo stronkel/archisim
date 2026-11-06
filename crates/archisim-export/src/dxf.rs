@@ -87,6 +87,14 @@ pub fn sheet_dxf(model: &Model, sheet: SheetId) -> Result<String, String> {
     Ok(d.finish(model))
 }
 
+/// The DXF of a page drawn as an SVG in paper millimetres (the structure
+/// drawings, the single-line diagrams).
+pub fn page_dxf(model: &Model, svg: &str) -> Result<String, String> {
+    let mut d = Dxf::new(1.0);
+    d.drawing(svg, 0.001, 1000.0)?;
+    Ok(d.finish(model))
+}
+
 /// A closed boundary: points and bulges, millimetres.
 type Loop = (Vec<(f64, f64)>, Vec<f64>);
 

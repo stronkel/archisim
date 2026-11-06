@@ -149,6 +149,14 @@ impl ArchiSimApp {
                 self.calc.open = true;
                 ui.close();
             }
+            if ui
+                .button("Cálculo eléctrico…")
+                .on_hover_text("Instalación eléctrica de la vivienda por el REBT: circuitos, secciones, caídas de tensión, protecciones y el esquema unifilar")
+                .clicked()
+            {
+                self.electrical.open = true;
+                ui.close();
+            }
             self.team_menu_items(ui);
         });
     }

@@ -1,0 +1,15 @@
+[package]
+name = "archisim-mep"
+description = "Building services calculations on the model: the electrical installation of a dwelling by the REBT (circuits, sections, voltage drops, protections) and its single-line diagram"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+archisim-core.workspace = true
+
+[dev-dependencies]
+archisim-library.workspace = true

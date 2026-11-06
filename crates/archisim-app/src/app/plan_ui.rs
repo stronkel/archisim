@@ -630,6 +630,14 @@ impl ArchiSimApp {
         if space && self.flip_stair_turn() {
             return;
         }
+        if self.tool == Tool::Pipe {
+            let (up, down) =
+                ctx.input(|i| (i.key_pressed(Key::PageUp), i.key_pressed(Key::PageDown)));
+            if up || down {
+                self.run_change_level(up);
+                return;
+            }
+        }
         if space && self.tool == Tool::World {
             self.world_turn();
             return;
