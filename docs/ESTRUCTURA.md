@@ -1,6 +1,6 @@
 # Cálculo de la estructura
 
-ArchiSim calcula la estructura del modelo tal como está dibujado. No hay que dibujar otro modelo: no se añaden elementos ni se guarda nada aparte de tres cosas, los datos del emplazamiento, los materiales de la estructura y las cargas puestas a mano (formato `.archisim` versiones 81 y 82).
+ArchiSim calcula la estructura del modelo tal como está dibujado. No hay que dibujar otro modelo: no se añaden elementos ni se guarda nada aparte de tres cosas, los datos del emplazamiento, los materiales de la estructura y las cargas puestas a mano (formato `.archisim` versiones 81 a 83).
 
 Es una ayuda al cálculo, pensada para que el estudio no necesite otro programa en las obras habituales (viviendas, entramados ligeros, pórticos de hormigón sencillos). El anejo lo firma el técnico, que revisa y asume sus hipótesis.
 
@@ -54,11 +54,12 @@ Los muros y pilares de la planta más baja atraviesan la solera hasta su zapata;
 
 ## 4. Pórtico de pilares y vigas
 
-- Se calcula en 3D, en régimen elástico lineal y en primer orden, por el método de la rigidez.
+- Se calcula en 3D, en régimen elástico lineal, por el método de la rigidez (en primer orden, con el segundo orden amplificado si hace falta, abajo).
 - Cada viga se parte en 4 piezas por vano y cada pilar en 2.
 - Uniones:
   - en hormigón, rígidas;
-  - en acero y madera, articuladas en las vigas;
+  - en acero, articuladas o rígidas según se elija en los materiales;
+  - en madera, articuladas en las vigas;
   - los pies de pilar, empotrados.
 - El viento y el sismo van al pórtico solo en las direcciones en las que no hay muros de carga.
 - Resultados: envolventes de esfuerzos, flechas (integridad, confort y apariencia; DB-SE 4.3.3) y reacciones.
@@ -92,7 +93,7 @@ Dónde actúa:
 
 Comprobado contra el oscilador de un grado de libertad: una planta con cuatro pilares da T = 2π·√(m/k) y la fuerza del espectro en ese periodo.
 
-Límite: no se aplican las reglas de detalle del capítulo 4 de la norma.
+Las reglas de construcción del capítulo 4 de la norma se comprueban contra el armado dibujado (§6).
 
 ## 6. Comprobaciones
 
