@@ -36,6 +36,9 @@ pub(crate) struct SketchState {
     settings: crate::cad::CadSettings,
     /// Where the lines were left open at the last Aceptar.
     pub open_ends: Vec<Point2>,
+    /// «Elegir línea» (Revit's «Seleccionar líneas»): a click copies the
+    /// line or edge under it as a sketch line.
+    pub pick: bool,
     /// A wall's sketch is drawn in elevation on a view of its own, made
     /// for it and taken away at the end, with the face and its openings
     /// as reference lines on a grey layer.
@@ -44,6 +47,9 @@ pub(crate) struct SketchState {
     /// (`x` drawn as the wall's length minus `x`).
     mirror: Option<f64>,
 }
+
+/// How much of the rest of the drawing the sketch's veil hides (of 255).
+const SKETCH_VEIL: u8 = 165;
 
 /// The layer of the reference lines of a sketch in elevation.
 pub const SKETCH_REFERENCE_LAYER: &str = "Boceto · referencia";
@@ -117,7 +123,7 @@ fn wall_references(m: &archisim_core::Model, target: SketchTarget) -> Vec<Vec<Po
 }
 
 /// The colour of a sketch, as Revit's.
-const SKETCH: Color32 = Color32::from_rgb(196, 30, 150);
+pub(super) const SKETCH: Color32 = Color32::from_rgb(196, 30, 150);
 /// The sketch layer's name.
 pub const SKETCH_LAYER: &str = "Boceto";
 
@@ -129,7 +135,7 @@ fn sketch_error(e: SketchError) -> ModelError {
 }
 
 /// The tools of the sketch bar: label, command and what it does.
-const SKETCH_TOOLS: &[(&str, &str, &str)] = &[
+pub(super) const SKETCH_TOOLS: &[(&str, &str, &str)] = &[
     ("Línea", "LINEA", "Líneas sueltas, una tras otra"),
     ("Rectángulo", "RECTANG", "Cuatro líneas por dos esquinas"),
     ("Polígono", "POLIGONO", "Polígono regular"),
@@ -137,7 +143,7 @@ const SKETCH_TOOLS: &[(&str, &str, &str)] = &[
     ("Círculo", "CIRCULO", "Círculo por centro y radio"),
 ];
 
-const SKETCH_EDITS: &[(&str, &str, &str)] = &[
+pub(super) const SKETCH_EDITS: &[(&str, &str, &str)] = &[
     (
         "Esquina",
         "EMPALME",
@@ -287,6 +293,7 @@ impl ArchiSimApp {
             view,
             settings,
             open_ends: Vec::new(),
+            pick: false,
             elevation,
             mirror,
         });
@@ -423,17 +430,76 @@ impl ArchiSimApp {
         let Some(st) = self.sketch.as_ref() else {
             return;
         };
+        // Everything else behind a veil, as in Revit, so that the sketch
+        // lines stand out; they are drawn again over it, thicker.
+        painter.rect_filled(
+            rect,
+            0.0,
+            Color32::from_rgba_unmultiplied(255, 255, 255, SKETCH_VEIL),
+        );
+        let stroke = Stroke::new(2.2, SKETCH);
+        for seg in self.sketch_segs(st) {
+            let pts: Vec<egui::Pos2> = seg
+                .tessellate(self.view.to_metres(2.0).max(0.005))
+                .into_iter()
+                .map(|q| self.view.to_screen(rect, q))
+                .collect();
+            painter.add(egui::Shape::line(pts, stroke));
+        }
         for p in &st.open_ends {
             let c = self.view.to_screen(rect, *p);
             painter.circle_stroke(c, 7.0, Stroke::new(2.0, Color32::from_rgb(220, 40, 40)));
         }
     }
 
-    /// The bar of the sketch, at the top of the plan.
-    pub(super) fn sketch_panel(&mut self, ctx: &egui::Context, rect: Rect) {
+    /// «Elegir línea» in the sketch: on or off.
+    pub(super) fn toggle_sketch_pick(&mut self) {
+        self.end_command(true);
+        let on = match self.sketch.as_mut() {
+            Some(st) => {
+                st.pick = !st.pick;
+                st.pick
+            }
+            None => return,
+        };
+        if on {
+            self.say("Elegir línea: clic en una línea del dibujo o en una cara o borde de muro, forjado, pilar, eje o plano de referencia.");
+        }
+    }
+
+    /// Whether a click in the drawing picks a line for the sketch.
+    pub(super) fn sketch_picking(&self) -> bool {
+        self.tool == Tool::Arrow && self.sketch.as_ref().is_some_and(|s| s.pick)
+    }
+
+    /// A click with «Elegir línea» in the sketch: the line or edge under
+    /// it becomes a sketch line.
+    pub(super) fn sketch_pick_click(&mut self, p: Point2) {
         let Some(st) = self.sketch.as_ref() else {
             return;
         };
+        let (view, layer) = (st.view, st.layer);
+        let reach = self.view.to_metres(super::REACH);
+        let Some(line) = self.line_at(p, reach, view, Some(layer)) else {
+            self.complain("Ahí no hay ninguna línea ni borde que elegir.");
+            return;
+        };
+        let r = self.ed.transact("Elegir línea", |m| {
+            for (a, b, bulge) in &line.pieces {
+                let seg = archisim_draft::Seg::from_bulge(*a, *b, *bulge);
+                m.add_draft(NewDraft::new(view, layer, archisim_draft::seg_shape(&seg)))?;
+            }
+            Ok(())
+        });
+        if let Err(e) = r {
+            self.complain(format!("No se puede: {e}."));
+        }
+    }
+
+    /// What is being sketched and what the lines must do, for the options
+    /// bar under the ribbon (where its Aceptar, Cancelar and orders are).
+    pub(super) fn sketch_texts(&self) -> Option<(&'static str, &'static str)> {
+        let st = self.sketch.as_ref()?;
         let what = match st.sketch.target {
             SketchTarget::Slab(_) => "contorno del forjado",
             SketchTarget::Roof(_) => "contorno de la cubierta",
@@ -452,95 +518,37 @@ impl ArchiSimApp {
             SketchTarget::Road(_) => "eje de la calle (una línea abierta)",
             SketchTarget::RoadEdges(_) => "bordillos y líneas de fachada de la calle",
         };
-        let zones = st.sketch.is_zones();
-        let profile = matches!(st.sketch.target, SketchTarget::WallProfile(_));
-        let road_edges = matches!(st.sketch.target, SketchTarget::RoadEdges(_));
-        let road_axis = matches!(st.sketch.target, SketchTarget::Road(_));
-        let holes = st.sketch.takes_holes();
-        let running = self.cad.as_ref().map(|c| c.name());
-        let mut start: Option<&'static str> = None;
-        let mut finish = false;
-        let mut cancel = false;
-        egui::Area::new(egui::Id::unique("sketch-bar"))
-            .fixed_pos(rect.left_top() + Vec2::new(10.0, 10.0))
-            .order(egui::Order::Foreground)
-            .show(ctx, |ui| {
-                egui::Frame::popup(ui.style()).show(ui, |ui| {
-                    ui.set_max_width(rect.width() - 40.0);
-                    ui.horizontal_wrapped(|ui| {
-                        ui.label(
-                            egui::RichText::new(format!("Modo boceto · {what}"))
-                                .strong()
-                                .color(SKETCH),
-                        );
-                        ui.separator();
-                        ui.label(egui::RichText::new("Dibujar").small().weak());
-                        for (label, cmd, hint) in SKETCH_TOOLS {
-                            let on = running == Some(*cmd);
-                            if ui.selectable_label(on, *label).on_hover_text(*hint).clicked() {
-                                start = Some(cmd);
-                            }
-                        }
-                        ui.separator();
-                        ui.label(egui::RichText::new("Modificar").small().weak());
-                        for (label, cmd, hint) in SKETCH_EDITS {
-                            let on = running == Some(*cmd);
-                            if ui.selectable_label(on, *label).on_hover_text(*hint).clicked() {
-                                start = Some(cmd);
-                            }
-                        }
-                        ui.separator();
-                        if ui
-                            .add(
-                                egui::Button::new(
-                                    egui::RichText::new("✔ Aceptar").strong().color(Color32::WHITE),
-                                )
-                                .fill(Color32::from_rgb(46, 125, 50)),
-                            )
-                            .on_hover_text("Intro: el elemento toma el contorno dibujado")
-                            .clicked()
-                        {
-                            finish = true;
-                        }
-                        if ui
-                            .button("✖ Cancelar")
-                            .on_hover_text("Deja el elemento como estaba")
-                            .clicked()
-                        {
-                            cancel = true;
-                        }
-                    });
-                    let note = if road_edges {
-                        "Cuatro líneas abiertas, de un extremo de la calle al otro: bordillo y fachada de cada lado. Donde las muevas, la calle cambia de sección con su transición; la calzada se queda en su sitio."
-                    } else if road_axis {
-                        "Una sola línea abierta, de un extremo de la calle al otro."
-                    } else if profile {
-                        "Las líneas tienen que cerrar contornos: el mayor es el muro en alzado y los de dentro, sus huecos. En gris, sus puertas y ventanas."
-                    } else if zones {
-                        "Cada contorno cerrado que dibujes sobre la cara es una zona que se pinta aparte (Pintar)."
-                    } else if holes {
-                        "Las líneas tienen que cerrar contornos: el mayor es el borde del forjado y los de dentro, sus huecos."
-                    } else {
-                        "Las líneas tienen que cerrar un solo contorno."
-                    };
-                    ui.label(egui::RichText::new(note).size(11.0).weak());
-                });
-            });
-        if let Some(cmd) = start {
-            if cmd == "EMPALME" {
-                // A corner, as Revit's «Recortar/Extender a esquina».
-                self.cad_settings.fillet_radius = 0.0;
-            }
-            if let Some(st) = self.sketch.as_mut() {
-                st.open_ends.clear();
-            }
-            self.start_command(cmd);
+        let note = if matches!(st.sketch.target, SketchTarget::RoadEdges(_)) {
+            "Cuatro líneas abiertas, de un extremo de la calle al otro: bordillo y fachada de cada lado. Donde las muevas, la calle cambia de sección con su transición; la calzada se queda en su sitio."
+        } else if matches!(st.sketch.target, SketchTarget::Road(_)) {
+            "Una sola línea abierta, de un extremo de la calle al otro."
+        } else if matches!(st.sketch.target, SketchTarget::WallProfile(_)) {
+            "Las líneas tienen que cerrar contornos: el mayor es el muro en alzado y los de dentro, sus huecos. En gris, sus puertas y ventanas."
+        } else if st.sketch.is_zones() {
+            "Cada contorno cerrado que dibujes sobre la cara es una zona que se pinta aparte (Pintar)."
+        } else if st.sketch.takes_holes() {
+            "Las líneas tienen que cerrar contornos: el mayor es el borde del forjado y los de dentro, sus huecos."
+        } else {
+            "Las líneas tienen que cerrar un solo contorno."
+        };
+        Some((what, note))
+    }
+
+    /// An order of the sketch's lines, from the ribbon.
+    pub(super) fn sketch_command(&mut self, cmd: &'static str) {
+        if self.cad.as_ref().map(|c| c.name()) == Some(cmd) {
+            self.cad_escape();
+            return;
         }
-        if finish {
-            self.finish_sketch();
-        } else if cancel {
-            self.cancel_sketch();
+        if cmd == "EMPALME" {
+            // A corner, as Revit's «Recortar/Extender a esquina».
+            self.cad_settings.fillet_radius = 0.0;
         }
+        if let Some(st) = self.sketch.as_mut() {
+            st.open_ends.clear();
+            st.pick = false;
+        }
+        self.start_command(cmd);
     }
 }
 

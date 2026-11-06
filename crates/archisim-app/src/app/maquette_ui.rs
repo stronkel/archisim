@@ -277,6 +277,10 @@ struct Card {
 }
 
 /// Width of the catalog's column beside the rail: two cards abreast.
+/// The row over the 3D (plan, grid, picture, light, Encuadrar): as tall
+/// as Técnica's bar under the tabs was.
+const VIEW_ROW_HEIGHT: f32 = 40.0;
+
 const CATALOG_WIDTH: f32 = 270.0;
 /// Size of a card.
 const CARD: Vec2 = Vec2::new(112.0, 108.0);
@@ -416,7 +420,7 @@ impl ArchiSimApp {
             ui.spacing_mut().item_spacing.y = 0.0;
             egui::Panel::top("maquette-view-row")
                 .resizable(false)
-                .exact_size(super::context_bar::CONTEXT_BAR_HEIGHT)
+                .exact_size(VIEW_ROW_HEIGHT)
                 .frame(
                     egui::Frame::new()
                         .fill(p.panel)

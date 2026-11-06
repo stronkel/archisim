@@ -26,9 +26,22 @@ pub fn group(ui: &mut Ui, id: &str, title: &str, add: impl FnOnce(&mut Ui)) {
     let p = Palette::current(ui.ctx());
     // What is only looked at now and then starts folded (§12.6): the
     // identity, the phase, the discipline and the checks.
-    let quiet = ["-identity", "-phase", "-checks", "-discipline"]
-        .iter()
-        .any(|s| id.ends_with(s));
+    // Also the faces, the profile, the layers and the holes, which are
+    // looked at more than changed, so that what is edited fits without
+    // scrolling (Antonio, 6/11/2026).
+    let quiet = [
+        "-identity",
+        "-phase",
+        "-checks",
+        "-discipline",
+        "-tools",
+        "-profile",
+        "-layers",
+        "-holes",
+        "-usages-list",
+    ]
+    .iter()
+    .any(|s| id.ends_with(s));
     let id = ui.make_persistent_id(("prop-group", id));
     let mut state = CollapsingState::load_with_default_open(ui.ctx(), id, !quiet);
     ui.add_space(4.0);
@@ -220,30 +233,47 @@ pub fn type_card<T: PartialEq + Copy>(
         .inner_margin(egui::Margin::same(10));
     frame.show(ui, |ui| {
         ui.set_width(ui.available_width());
-        // The picture, on white paper.
-        if let Some(c) = cur {
-            if let Some(t) = c.thumb {
-                paper(ui, t, Vec2::new(ui.available_width(), 130.0));
-                ui.label(egui::RichText::new(c.caption).small().color(p.muted));
-                ui.add_space(6.0);
-            }
-        }
+        // A small picture on white paper beside the category (the big one
+        // in its tip): the card leaves room for what is edited below.
         ui.horizontal(|ui| {
-            icons::paint(
-                ui.painter(),
-                Rect::from_min_size(ui.cursor().min + Vec2::new(0.0, 1.0), Vec2::splat(16.0)),
-                icon,
-                p.accent,
-            );
-            ui.add_space(22.0);
-            ui.label(
-                egui::RichText::new(category)
-                    .font(strong_font(13.5))
-                    .color(p.text),
-            );
-            if !ifc.is_empty() {
-                chip_label(ui, ifc);
+            if let Some(t) = cur.and_then(|c| c.thumb) {
+                let caption = cur.map(|c| c.caption).unwrap_or_default();
+                paper(ui, t, Vec2::new(86.0, 58.0)).on_hover_ui(|ui| {
+                    paper(ui, t, Vec2::new(320.0, 220.0));
+                    ui.label(egui::RichText::new(caption).small());
+                });
+                ui.add_space(4.0);
             }
+            ui.vertical(|ui| {
+                ui.horizontal(|ui| {
+                    icons::paint(
+                        ui.painter(),
+                        Rect::from_min_size(
+                            ui.cursor().min + Vec2::new(0.0, 1.0),
+                            Vec2::splat(16.0),
+                        ),
+                        icon,
+                        p.accent,
+                    );
+                    ui.add_space(22.0);
+                    ui.label(
+                        egui::RichText::new(category)
+                            .font(strong_font(13.5))
+                            .color(p.text),
+                    );
+                });
+                if !ifc.is_empty() {
+                    chip_label(ui, ifc);
+                }
+                if let Some(c) = cur {
+                    if !c.note.is_empty() {
+                        ui.add(
+                            egui::Label::new(egui::RichText::new(&c.note).small().color(p.muted))
+                                .truncate(),
+                        );
+                    }
+                }
+            });
         });
         ui.add_space(4.0);
         // The type: a large button that opens the gallery.
@@ -283,11 +313,6 @@ pub fn type_card<T: PartialEq + Copy>(
             Icon::ChevronDown,
             p.muted,
         );
-        if let Some(c) = cur {
-            if !c.note.is_empty() {
-                ui.label(egui::RichText::new(&c.note).small().color(p.muted));
-            }
-        }
         if let Some(v) = gallery(ui, &resp, salt, current, items) {
             if Some(v) != current {
                 *chosen = Some(v);
@@ -420,8 +445,8 @@ fn similar_types<T: PartialEq + Copy>(
 }
 
 /// A type picture on white paper, fitted in `max`, centred.
-pub fn paper(ui: &mut Ui, t: Thumb, max: Vec2) {
-    let (outer, _) =
+pub fn paper(ui: &mut Ui, t: Thumb, max: Vec2) -> egui::Response {
+    let (outer, resp) =
         ui.allocate_exact_size(Vec2::new(max.x, max.y.min(t.size.y + 16.0)), Sense::hover());
     ui.painter()
         .rect_filled(outer, CornerRadius::same(6), egui::Color32::WHITE);
@@ -433,6 +458,7 @@ pub fn paper(ui: &mut Ui, t: Thumb, max: Vec2) {
         Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)),
         egui::Color32::WHITE,
     );
+    resp
 }
 
 /// The gallery of types under the type button: a search box and a tile

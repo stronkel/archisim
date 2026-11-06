@@ -23,6 +23,13 @@ pub enum DrawMethod {
     PickLine,
 }
 
+/// The distance from `p` to the segment `a`–`b`.
+fn segment_distance(p: Point2, a: Point2, b: Point2) -> f64 {
+    let ab = b - a;
+    let t = ((p - a).dot(ab) / ab.dot(ab)).clamp(0.0, 1.0);
+    p.distance(a + ab * t)
+}
+
 /// Control points per span when a curve becomes points.
 const PER_SPAN: usize = 8;
 
@@ -70,10 +77,84 @@ impl ArchiSimApp {
                 "Spline: clic en cada punto de la curva · Doble clic, Intro o clic derecho: terminar.",
             ),
             DrawMethod::PickLine => self.say(
-                "Elegir línea: clic en una línea, polilínea, arco o círculo del dibujo 2D (o de un DXF).",
+                "Elegir línea: clic en una línea del dibujo 2D (o de un DXF), o en una cara o borde de muro, forjado, pilar, eje o plano de referencia.",
             ),
             DrawMethod::Normal => {}
         }
+    }
+
+    /// The line nearest `p` within `reach` that «Elegir línea» takes, as
+    /// Revit's «Seleccionar líneas»: a line, polyline, arc or circle of the
+    /// 2D drawing in `view` (not on `skip`), and in a plan also the faces
+    /// of walls, the edges of slabs, roofs, columns, beams and footings,
+    /// and grids and reference planes.
+    pub(super) fn line_at(
+        &self,
+        p: Point2,
+        reach: f64,
+        view: archisim_core::ViewRef,
+        skip: Option<archisim_core::DrawLayerId>,
+    ) -> Option<PickedLine> {
+        let model = self.ed.model();
+        let k = crate::pick::paper_k();
+        let mut best: Option<(f64, PickedLine)> = None;
+        let mut take = |d: f64, l: PickedLine| {
+            if d <= reach && best.as_ref().is_none_or(|(b, _)| d < *b) {
+                best = Some((d, l));
+            }
+        };
+        for d in model.drafts_in(view) {
+            if Some(d.layer) == skip {
+                continue;
+            }
+            let dist = archisim_draft::distance(&d.shape, p, k);
+            if dist <= reach {
+                if let Some(l) = picked_line(&d.shape) {
+                    take(dist, l);
+                }
+            }
+        }
+        let archisim_core::ViewRef::Level(level) = view else {
+            return best.map(|(_, l)| l);
+        };
+        let straight = |a: Point2, b: Point2| PickedLine {
+            pieces: vec![(a, b, 0.0)],
+            closed: false,
+            points: vec![a, b],
+        };
+        for e in crate::pick::elements_on_level(model, level) {
+            let edges: Vec<(Point2, Point2)> = match e {
+                crate::pick::Element::Grid(id) => model
+                    .grid(id)
+                    .map(|g| vec![(g.start, g.end)])
+                    .unwrap_or_default(),
+                crate::pick::Element::RefPlane(id) => model
+                    .ref_plane(id)
+                    .map(|r| vec![(r.start, r.end)])
+                    .unwrap_or_default(),
+                crate::pick::Element::Wall(_)
+                | crate::pick::Element::Slab(_)
+                | crate::pick::Element::Roof(_)
+                | crate::pick::Element::Column(_)
+                | crate::pick::Element::Beam(_)
+                | crate::pick::Element::Footing(_) => {
+                    let Some(o) = crate::pick::outline(&self.ed, e) else {
+                        continue;
+                    };
+                    let n = o.len();
+                    (0..n).map(|i| (o[i], o[(i + 1) % n])).collect()
+                }
+                _ => continue,
+            };
+            for (a, b) in edges {
+                if a.distance(b) < 1e-6 {
+                    continue;
+                }
+                let d = segment_distance(p, a, b);
+                take(d, straight(a, b));
+            }
+        }
+        best.map(|(_, l)| l)
     }
 
     /// A click while drawing a spline or picking a line. Returns whether it
@@ -94,22 +175,11 @@ impl ArchiSimApp {
             }
             DrawMethod::PickLine if self.picks_lines() => {
                 let reach = self.view.to_metres(REACH);
-                let model = self.ed.model();
-                let line = model
-                    .drafts_in(archisim_core::ViewRef::Level(self.ed.level))
-                    .filter(|d| {
-                        archisim_draft::distance(&d.shape, p, crate::pick::paper_k()) <= reach
-                    })
-                    .min_by(|a, b| {
-                        let k = crate::pick::paper_k();
-                        archisim_draft::distance(&a.shape, p, k)
-                            .total_cmp(&archisim_draft::distance(&b.shape, p, k))
-                    })
-                    .and_then(|d| picked_line(&d.shape));
-                match line {
+                let view = archisim_core::ViewRef::Level(self.ed.level);
+                match self.line_at(p, reach, view, None) {
                     Some(l) => self.follow_line(l),
                     None => self.complain(
-                        "Ahí no hay una línea del dibujo 2D: clic sobre una línea, polilínea, arco o círculo.",
+                        "Ahí no hay ninguna línea: clic sobre una línea del dibujo 2D o en una cara o borde de muro, forjado, pilar, eje o plano de referencia.",
                     ),
                 }
                 true

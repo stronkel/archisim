@@ -1568,7 +1568,12 @@ fn command_line_hidden_and_contextual_bar() {
     h.key(Key::Escape);
     // Nothing selected: «Modificar» in grey; a wall selected, its orders.
     h.type_text("m");
-    h.app.choose_method("Cadena");
+    h.app.choose_method("Recta");
+    assert_eq!(
+        h.app.wall_tool.mode,
+        crate::wall_tool::WallMode::Chain,
+        "Recta goes on in a chain while Cadena is on"
+    );
     h.key(Key::Escape);
     draw_outline(&mut h);
     h.key(Key::Escape);
@@ -4262,6 +4267,12 @@ fn grids_and_footings_are_drawn() {
     assert_eq!(strips(&h), 4);
     // A tie beam by two points, chained.
     h.app.choose_method("Viga de atado");
+    // Away from the bottom of the drawing, where the notice of Cimentar
+    // planta is.
+    let canvas = h.app.canvas;
+    h.app
+        .view
+        .fit_exact(canvas, p(-6.0, -8.0), p(18.0, 12.0), 0.0);
     h.click_at(p(3.0, -3.0));
     h.click_at(p(9.0, -3.0));
     h.key(Key::Escape);
@@ -10145,4 +10156,151 @@ fn the_calculation_fixes_what_fails() {
     h.app.apply_calc_fix();
     assert_eq!(h.app.ed.undo_label(), Some("Arreglar la estructura"));
     assert_eq!(fails(h.app.ed.model()), 0);
+}
+
+/// The ribbon (Revit's «Modificar»): the same panels in the same order
+/// whatever is in hand, and after them those of the tool, the sketch or the
+/// selection; the options bar's Cadena; Crear similar; folded, it still
+/// works.
+#[test]
+fn ribbon_panels_follow_what_is_in_hand() {
+    let mut h = Harness::new(Editor::new_project());
+    let titles = |h: &Harness| -> Vec<String> {
+        h.app.ribbon_panels().into_iter().map(|p| p.title).collect()
+    };
+    let fixed = [
+        "Seleccionar",
+        "Portapapeles",
+        "Geometría",
+        "Modificar",
+        "Vista",
+        "Medir",
+        "Crear",
+    ];
+    assert_eq!(titles(&h), fixed);
+    h.frame();
+    // A wall in hand: the panel Dibujar after them, with Cadena in the
+    // options bar.
+    h.type_text("m");
+    assert_eq!(titles(&h)[..7], fixed);
+    assert_eq!(titles(&h)[7], "Dibujar");
+    h.frame();
+    h.app.wall_chain = false;
+    h.app.choose_method("Rectángulo");
+    h.app.choose_method("Recta");
+    assert_eq!(h.app.wall_tool.mode, crate::wall_tool::WallMode::Single);
+    h.app.wall_chain = true;
+    h.app.choose_method("Recta");
+    h.key(Key::Escape);
+    draw_outline(&mut h);
+    h.key(Key::Escape);
+    // A window in hand: Colocación.
+    h.type_text("v");
+    assert_eq!(titles(&h).last().map(String::as_str), Some("Colocación"));
+    h.frame();
+    h.key(Key::Escape);
+    // A wall selected: its own panel, with Editar perfil and its faces;
+    // Crear similar takes the wall tool with its type.
+    let w = h.model().walls().next().unwrap();
+    let (wid, wtype) = (w.id, w.wall_type);
+    h.app.ed.selection = [Element::Wall(wid)].into_iter().collect();
+    h.frame();
+    let panels = h.app.ribbon_panels();
+    let last = panels.last().unwrap();
+    assert_eq!(last.title, "Muro");
+    assert!(last.contextual);
+    let names: Vec<&str> = last.items.iter().map(|i| i.name.as_str()).collect();
+    assert_eq!(
+        names,
+        [
+            "Editar perfil",
+            "Dividir cara exterior",
+            "Dividir cara interior"
+        ]
+    );
+    let modify = panels.iter().find(|p| p.title == "Modificar").unwrap();
+    assert!(
+        modify
+            .items
+            .iter()
+            .find(|i| i.name == "Mover")
+            .unwrap()
+            .enabled
+    );
+    assert!(h.app.click_ribbon("Crear similar"));
+    assert_eq!(h.app.tool, Tool::Wall);
+    assert_eq!(h.app.wall_settings.wall_type, wtype);
+    h.frame();
+    h.key(Key::Escape);
+    // Modificar again: Mover starts the order and shows it on.
+    h.app.ed.selection = [Element::Wall(wid)].into_iter().collect();
+    assert!(h.app.click_ribbon("Mover"));
+    assert_eq!(h.app.cad.as_ref().map(|c| c.name()), Some("DESPLAZA"));
+    let modify = h
+        .app
+        .ribbon_panels()
+        .into_iter()
+        .find(|p| p.title == "Modificar")
+        .unwrap();
+    assert!(modify.items.iter().find(|i| i.name == "Mover").unwrap().on);
+    h.frame();
+    h.key(Key::Escape);
+    // The arrow is on the rail, not in the ribbon again; the drawings have
+    // their colours, Aceptar green and Cancelar red in a sketch.
+    assert!(!h.app.click_ribbon("Modificar"));
+    assert!(h
+        .app
+        .ribbon_panels()
+        .iter()
+        .flat_map(|p| &p.items)
+        .all(|i| i.tint.is_some()));
+    h.frame();
+    // Folded, the ribbon still draws and works.
+    h.app.prefs.ribbon_compact = true;
+    h.frame();
+    h.app.prefs.ribbon_compact = false;
+    h.frame();
+}
+
+/// A slab's contour in sketch mode: Modo (Aceptar, Cancelar) and Dibujar
+/// in the ribbon, the sketch's orders in Modificar, and Cancelar leaves it
+/// as it was.
+#[test]
+fn sketch_in_the_ribbon() {
+    let mut h = Harness::new(Editor::new_project());
+    draw_outline(&mut h);
+    h.key(Key::Escape);
+    h.type_text("f");
+    h.app.choose_method("Varita");
+    h.click_at(p(6.0, 4.0));
+    h.key(Key::Escape);
+    let slab = h.model().slabs().next().expect("a slab").id;
+    h.app.ed.selection = [Element::Slab(slab)].into_iter().collect();
+    h.frame();
+    assert!(h.app.click_ribbon("Editar contorno"));
+    assert!(h.app.sketch.is_some());
+    h.frame();
+    let panels = h.app.ribbon_panels();
+    let titles: Vec<&str> = panels.iter().map(|p| p.title.as_str()).collect();
+    assert_eq!(&titles[titles.len() - 2..], ["Modo", "Dibujar"]);
+    let modify = panels.iter().find(|p| p.title == "Modificar").unwrap();
+    assert!(modify.items.iter().any(|i| i.name == "Esquina"));
+    assert!(h.app.sketch_texts().is_some());
+    let mode = panels.iter().find(|p| p.title == "Modo").unwrap();
+    assert_ne!(mode.items[0].tint, mode.items[1].tint);
+    // Elegir línea: a wall's face becomes a sketch line.
+    let lines = |h: &Harness| h.model().drafts().count();
+    let before = lines(&h);
+    assert!(h.app.click_ribbon("Elegir línea"));
+    assert!(h.app.sketch_picking());
+    let w = h.model().walls().next().unwrap().id;
+    let o = crate::pick::outline(h.model(), Element::Wall(w)).unwrap();
+    let mid = (o[0] + o[1]) * 0.5;
+    h.click_at(mid);
+    assert_eq!(lines(&h), before + 1, "the face, copied into the sketch");
+    h.key(Key::Escape);
+    assert!(!h.app.sketch_picking());
+    assert!(h.app.click_ribbon("Cancelar"));
+    assert!(h.app.sketch.is_none());
+    h.frame();
 }

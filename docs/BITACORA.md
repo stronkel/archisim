@@ -972,6 +972,84 @@ Antonio aprobó V1 a V4 de la interfaz y pidió:
    - pulsa Sol y mueve día y hora: las sombras cambian al soltar.
 6. **Aspecto** (arriba a la izquierda del 3D): Aristas y Líneas ocultas.
 7. Selecciona un pilar, una viga, una cubierta y una escalera: las tarjetas de medidas y los «Parecidos» bajo el tipo.
+## 2026-11-06 (91) · Modo boceto con velo, Elegir línea y Propiedades más cortas
+
+Rama `bloque/cinta` (el mismo pull request #162). Pedido de Antonio tras probar la cinta: «Elegir línea como en Revit»; «al editar un contorno, todo lo demás en transparencia»; y Propiedades: visibilidad repetida, Planta abajo, usos de los locales ocupando mucho, el tipo ocupando la pantalla, desfase y cara superior del forjado repetidos.
+
+**Hecho** (detalle en `docs/INTERFAZ.md` §13.3 y §13.4)
+- **Velo** en modo boceto: lo demás detrás de un velo blanco; las líneas del boceto, encima y más gruesas.
+- **Elegir línea** en el Dibujar del boceto: copia una línea del dibujo o una cara o borde de muro, forjado, cubierta, pilar, viga, zapata, eje o plano de referencia. La Elegir línea de las herramientas también coge ya esas caras y bordes.
+- Propiedades de la vista: **Planta arriba**, sin la tarjeta repetida; **Representación** en una tarjeta (plantilla, presentación, detalle, atenuación, Visibilidad y gráficos, Normas gráficas); las categorías y las capas 2D, solo en Visibilidad y gráficos; **Usos de los locales** en la herramienta Local.
+- Elementos: **tarjeta del tipo compacta** (dibujo pequeño, grande al pasar el ratón); sin repetir las medidas de las tarjetas (en el forjado, una sola **Cara superior**); grupos largos plegados; en el muro, Restricciones y Construcción primero.
+- Pruebas: Elegir línea copia la cara de un muro al boceto y Esc la deja.
+
+**Pendiente**
+- **Propuesta para decidir** (§13.5): ordenar Visibilidad y gráficos, plantillas, estilos de presentación y normas gráficas en tres niveles (proyecto, plantilla, vista), con un solo diálogo «Representación».
+- «Lo de aprecidos» se interpretó como la tarjeta grande del tipo; confirmar con Antonio.
+
+**Qué debe probar Antonio**
+1. Recompila y abre: `cargo run --release -p archisim-app -- out/demo.archisim`.
+2. Sin nada elegido: Planta arriba; Representación con sus botones; ¿echas algo en falta?
+3. Elige un muro, un forjado y una ventana: ¿se edita ya sin desplazar? En el forjado, una sola Cara superior.
+4. Forjado → **Editar contorno**: el resto se ve velado. Pulsa **Elegir línea** (Dibujar) y clic en la cara de un muro: aparece como línea del boceto. Esc para dejar de elegir.
+5. Herramienta Local: Usos de los locales al final, plegado.
+
+---
+
+## 2026-11-06 (90) · La cinta con color
+
+Rama `bloque/cinta` (el mismo pull request #162). Pedido de Antonio al ver la cinta: «a veces no se distinguen bien los iconos; hasta Aceptar y Cancelar de Editar contorno parecen ocultos al estar todo en negro», y «la flecha de Modificar ya está en el carril de la izquierda».
+
+**Hecho**
+- Cada dibujo de la cinta lleva el color de su familia de órdenes, como los iconos de Revit (tabla en `docs/INTERFAZ.md` §13.1): mover y copiar en azul, caras y desfase en violeta, recortar y alargar en verde agua, borrar en rojo, portapapeles en ámbar, crear similar en verde… Los grupos de lo que hay en la mano, en el color de la disciplina.
+- **Aceptar** en verde y **Cancelar** en rojo, cada uno sobre un fondo suave de su color.
+- Lo que no vale ahora queda en gris: el color dice también qué se puede usar.
+- En el tema oscuro, los mismos colores más claros.
+- Fuera el botón grande **Modificar** de Seleccionar: la flecha ya está arriba del todo en el carril (Esc hace lo mismo). Seleccionar se queda con Los de su tipo y Todo.
+- Pruebas: todos los botones tienen color; Aceptar y Cancelar, distintos; Modificar ya no está en la cinta.
+
+**Qué debe probar Antonio**
+1. Recompila y abre: `cargo run --release -p archisim-app -- out/demo.archisim`.
+2. Con un muro elegido: ¿se distinguen ahora las órdenes de Modificar por familias? ¿Algún color chilla o se confunde con otro?
+3. Elige un forjado → **Editar contorno**: ¿se ven ya bien ✓ y ✗?
+4. Prueba también el tema oscuro (botón de media luna arriba).
+
+---
+
+## 2026-11-06 (89) · La cinta al estilo Revit
+
+Rama `bloque/cinta`, con pull request. Sin cambios de formato ni de IFC. Pedido por Antonio con cinco capturas de la pestaña *Modificar* de Revit: «nuestra barra superior es inferior a la de Revit y, cuando hay demasiados elementos, los últimos son difíciles de ver». Diseño en `docs/INTERFAZ.md` §13.
+
+**Hecho**
+- **La cinta** sustituye a la barra contextual de una fila, en el mismo sitio bajo las pestañas.
+  - Grupos con su nombre debajo: **Seleccionar · Portapapeles · Geometría · Modificar · Vista · Medir · Crear**, siempre los mismos y en el mismo orden.
+  - Botones grandes para lo principal (Modificar, Pegar, Crear similar, Editar contorno, Aceptar y Cancelar) y pequeños apilados de tres en tres: las 17 órdenes de Modificar caben en seis columnas.
+  - Detrás, en el color de la disciplina, los grupos de lo que hay en la mano: **Dibujar** (galería de formas), **Colocación** (puertas y ventanas), **Buhardillas**, las maneras de la cota, la cimentación y el pincel; el grupo de lo seleccionado (Editar contorno, **Editar perfil** del muro, dividir sus caras, agrupar el dibujo 2D); y el **modo boceto** con **Modo** (✓ Aceptar, ✗ Cancelar) y Dibujar, con las órdenes del boceto en el grupo Modificar. El cartel flotante del boceto sobre la planta desaparece.
+  - **Cuando no cabe**, como en Revit: primero los grupos menos usados pierden los nombres de sus botones, después se pliegan en un botón con su nombre que los abre debajo. Los de lo que hay en la mano son los últimos. Nada se corta.
+  - **Recoger la cinta** (flecha al final de la barra de opciones): una sola fila con el nombre de cada grupo. Se recuerda en `preferencias.json` (`cinta_recogida`).
+  - Nuevos: **Crear similar** (también con **CS**): la herramienta del elemento elegido, con su tipo (muro, forjado, cubierta, puerta, ventana, pilar, viga, barandilla, muro cortina u objeto); **Los de su tipo**, **Todo**, **Pegar**, **Cortar**, **Copiar**, **Igualar propiedades**, **Ocultar**, **Aislar**, **Mostrar todo** y **Borrar** a la vista (antes solo en el clic derecho o con teclas).
+- **La barra de opciones**, debajo de la cinta, como la de Revit: «**Modificar | Colocar Muro**» y sus ajustes.
+  - Muro: **Altura** (desconectada, planta superior o hasta una planta) con su altura o su desfase, **línea de ubicación**, **Cadena** (sale de la galería y pasa aquí, como en Revit), longitud y ángulo.
+  - Pilar: Altura. Vial: línea de ubicación. Puertas y ventanas: distancia o cuántas. Pincel: tamaño y fuerza.
+  - Una orden en marcha: lo que pide, sus opciones y Terminar. Modo boceto: qué se edita y qué tienen que cerrar las líneas.
+  - Al final, en gris, qué hace ahora un clic.
+- Iconos nuevos: pegar, cortar, copiar, igualar, los de su tipo, todo, ocultar, aislar, mostrar todo, aceptar, cancelar, crear similar y borrar.
+- Pruebas nuevas: `ribbon_panels_follow_what_is_in_hand` (los grupos con nada, con el muro, con una ventana y con un muro elegido; Cadena; Crear similar; Mover encendido mientras corre; la cinta recogida), `sketch_in_the_ribbon` y las de la colocación en columnas de tres y los nombres en dos líneas.
+- Revisado en la ventana real (Xvfb, 1440 × 900, centro de unos 730 px): sin nada, con el muro, con un forjado elegido, en modo boceto y recogida con un grupo abierto.
+
+**Pendiente**
+- Las caras «de arriba» y «de abajo» de un forjado tienen el mismo dibujo; sin sitio para los nombres se distinguen solo por la nota.
+- Desfase y Radio de la barra de opciones de Revit (dibujar paralelo a los clics y redondear las esquinas de la cadena) piden cambios en la herramienta Muro: para otro bloque si Antonio los quiere.
+- La Maqueta sigue con sus barras (V5).
+
+**Qué debe probar Antonio**
+1. `cargo run --release -p archisim-app -- out/demo.archisim` (antes, `cargo run -p archisim-cli -- demo out/`).
+2. Sin nada en la mano: ¿están los grupos y el orden que esperas? Pasa el ratón por los botones pequeños de Modificar: cada uno dice su nombre y su tecla.
+3. Pulsa **Muro**: a la derecha sale **Dibujar** y abajo «Modificar | Colocar Muro» con **Altura**, la línea de ubicación y **Cadena**. Quita Cadena y dibuja: cada muro va suelto. Cambia la Altura a «Desconectada» y escribe 3,00.
+4. Pulsa **Ventana**: grupo **Colocación**.
+5. Elige un forjado: grupo **Forjado** con **Editar contorno**. Entra: **Modo** con ✓ y ✗, **Dibujar**, y en **Modificar** las órdenes del boceto. Cancela.
+6. Elige un muro y pulsa **Crear similar** (o CS): la herramienta Muro con su tipo.
+7. Estrecha la ventana: los grupos pierden los nombres y después se pliegan en un botón que los abre debajo. Con la flecha del final de la barra de opciones, **recoge la cinta** y vuelve a desplegarla.
 
 ---
 

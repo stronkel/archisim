@@ -88,6 +88,8 @@ impl ArchiSimApp {
 
         painter.rect_filled(rect, CornerRadius::ZERO, Color32::WHITE);
         self.draw_drafting_image(&ctx, &painter, rect, id, dv.scale);
+        // A wall's sketch in elevation is drawn here, the rest behind a veil.
+        self.draw_sketch(&painter, rect);
         self.draw_selection(&painter, rect);
         self.draw_cad(&painter, rect);
         if let (Some(a), Some(c)) = (self.window_start, self.cursor) {
@@ -110,9 +112,6 @@ impl ArchiSimApp {
             painter.line_segment([p - Vec2::new(0.0, 10.0), p + Vec2::new(0.0, 10.0)], s);
         }
         self.draw_overlays(&ctx, &painter, rect);
-        // A wall's sketch in elevation is drawn here.
-        self.draw_sketch(&painter, rect);
-        self.sketch_panel(&ctx, rect);
         if response.hovered() {
             ctx.set_cursor_icon(if self.tool == Tool::Cad {
                 CursorIcon::Crosshair
@@ -162,6 +161,15 @@ impl ArchiSimApp {
     ) {
         if self.tool == Tool::Cad {
             self.cad_clicks(ctx, response, rect);
+            return;
+        }
+        // «Elegir línea» of a sketch in elevation: the face's references.
+        if self.sketch_picking() {
+            if response.clicked_by(PointerButton::Primary) {
+                if let Some(c) = self.cursor {
+                    self.sketch_pick_click(c.point);
+                }
+            }
             return;
         }
         let shift = ctx.input(|i| i.modifiers.shift || i.modifiers.command);

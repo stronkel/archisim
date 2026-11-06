@@ -80,6 +80,8 @@ Pestañas de verdad sobre el dibujo, como en el boceto de Antonio (no burbujas f
 
 ### 2.6 Barra contextual (debajo de las pestañas)
 
+> Sustituida el 6/11/2026 por la **cinta y la barra de opciones** al estilo Revit: ver §13. Lo que sigue se conserva como historia.
+
 La pieza nueva, el equivalente de la pestaña *Modificar* de Revit, pero **fija bajo las pestañas, pegada al dibujo**: no aparece arriba del todo ni flota por la pantalla (lo que no convence a Antonio del menú de ArchiCAD: se mueve, cambia de opciones y no es claro). No oculta nada: siempre está ahí, en el mismo sitio.
 
 **Con una herramienta activa**: el nombre de la herramienta, sus **métodos de inserción** y los campos de longitud y ángulo (se rellenan al mover el ratón y se pueden teclear).
@@ -344,3 +346,108 @@ Las mismas barras en el mismo sitio. La columna de fichas pasa a ser el catálog
 | V6 ✅ | Presentación completa: Cámara guarda el punto de vista (en el navegador, «Cámaras»: clic para volver, clic derecho para renombrar, actualizar o borrar; formato versión 72), Recorrido a 1,60 m (W A S D andan, el derecho mira, Esc vuelve), panel del Sol (recorrido del sol en verano, equinoccio e invierno, día y hora con deslizadores), y los aspectos Alámbrico, Líneas ocultas y Colores planos |
 
 Pendiente: grabar el recorrido como vídeo y las cámaras en las láminas de presentación.
+
+## 13. La cinta y la barra de opciones (6 de noviembre de 2026)
+
+Pedida por Antonio con cinco capturas de la pestaña *Modificar* de Revit (en reposo, colocando líneas de detalle, muros, suelos y pilares): «es un factor clave en la forma de modelar y dibujar; la nuestra es inferior y, cuando hay demasiados elementos, los últimos son difíciles de ver». La barra contextual de una fila (§2.6) pasa a ser dos piezas, en el mismo sitio, bajo las pestañas:
+
+### 13.1 La cinta
+
+Grupos con su nombre debajo. Botones **grandes** (las tres filas) para lo principal y **pequeños apilados de tres en tres** para el resto: caben muchas órdenes en poco ancho.
+
+Siempre los mismos grupos, en el mismo orden:
+
+| Grupo | Botones |
+|---|---|
+| Seleccionar | Los de su tipo · Todo (la flecha está arriba del todo en el carril de la izquierda) |
+| Portapapeles | **Pegar** · Cortar · Copiar · Igualar propiedades |
+| Geometría | Pintar · Dividir cara · Redondear (volúmenes) |
+| Modificar | Mover, Copiar, Girar · Reflejar, Escala, Matriz · Alinear caras, Desfase, Alinear · Esquina, Hasta límite, Varios al límite · Recortar, Alargar, Partir · Unir, Borrar |
+| Vista | Ocultar · Aislar · Mostrar todo |
+| Medir | Cinta · Cota |
+| Crear | **Crear similar** (CS) |
+
+Detrás, en el color de la disciplina, los grupos de **lo que hay en la mano**:
+
+| En la mano | Grupos que se añaden |
+|---|---|
+| Muro, forjado, cubierta, local, viga, barandilla… | **Dibujar**: galería de formas (recta, rectángulo, polígono, arco, círculo, varita, spline, elegir línea); lo que no vale, apagado |
+| Puerta, ventana | **Colocación**: libre, por el centro, desde un extremo, repartidas |
+| Cubierta | Dibujar y **Buhardillas** |
+| Cota, cimentación, formas de Concepto, pincel | Sus maneras, con nombre |
+| Modo boceto | **Modo** (✓ Aceptar, ✗ Cancelar) y **Dibujar**; el grupo Modificar pasa a tener las órdenes del boceto (esquina, recortar, alargar, partir, desfase, mover, copiar, borrar) |
+| Algo elegido | Su grupo: Editar contorno o **Editar perfil** (muros) y sus caras para dividir; agrupar y desagrupar el dibujo 2D |
+| Una orden de dibujo 2D | Sus variantes (línea, polilínea…) |
+
+**Colores** (pedido de Antonio, 6/11/2026: «todo en negro no se distingue»): cada dibujo lleva el color de su familia, como los iconos de Revit, y el nombre va en el negro del texto.
+
+| Familia | Color |
+|---|---|
+| Seleccionar | azul pizarra |
+| Portapapeles | ámbar |
+| Geometría (pintar, dividir, redondear) | terracota |
+| Mover, copiar, girar, reflejar, escala, matriz | azul |
+| Alinear caras, desfase, alinear | violeta |
+| Esquina, límites, recortar, alargar, partir, unir | verde agua |
+| Borrar | rojo |
+| Vista | gris azulado |
+| Medir | verde agua |
+| Crear similar | verde |
+| Lo que hay en la mano | el color de la disciplina |
+| **Aceptar** / **Cancelar** del boceto | **verde** / **rojo**, sobre un fondo de su color |
+
+En el tema oscuro, los mismos colores más claros. Lo que no vale ahora se ve gris, así que el color también dice qué se puede usar.
+
+Lo que no vale ahora se ve apagado y su nota dice por qué. La orden que corre se ve encendida; pulsarla otra vez la termina.
+
+**Cuando no cabe**, como en Revit, paso a paso hasta que quepa:
+1. Los grupos fijos pierden los nombres de sus botones pequeños (queda el dibujo; el nombre, en su nota).
+2. Se pliegan en un botón con su nombre (▾), que los abre debajo: Crear, Medir, Vista, Portapapeles y Geometría.
+3. Los grupos de lo que hay en la mano pierden los nombres.
+4. Se pliegan Seleccionar y Modificar.
+5. Por último, los de lo que hay en la mano.
+
+Nada se corta por la derecha.
+
+**Recoger la cinta** (la flecha al final de la barra de opciones; se recuerda en `preferencias.json`): solo los nombres de los grupos, en una fila, que se abren al pulsarlos; si ni así caben, los menos usados se quedan con su dibujo. Para pantallas pequeñas.
+
+### 13.2 La barra de opciones
+
+Debajo de la cinta, una fila: **«Modificar | Colocar Muro»** y los ajustes de lo que hay en la mano, como en Revit.
+
+- Muro: **Altura** (desconectada, planta superior o hasta una planta) con su valor o su desfase, **línea de ubicación** (cara exterior, eje, cara interior), **Cadena**, longitud y ángulo.
+- Pilar: Altura.
+- Vial: línea de ubicación.
+- Puerta y ventana: la distancia o cuántas, según la colocación.
+- Pincel: tamaño y fuerza.
+- Una orden en marcha: lo que pide, sus opciones y Terminar.
+- Modo boceto: qué se edita y qué tienen que hacer las líneas (antes era un cartel flotante sobre la planta).
+- Siempre, al final y en gris: qué hace ahora un clic.
+
+### 13.3 Modo boceto (6/11/2026, segunda vuelta)
+
+- **Velo**: mientras se edita un contorno, todo lo demás queda detrás de un velo blanco y las líneas del boceto se dibujan encima, más gruesas, en magenta. También en el alzado del perfil de un muro.
+- **Elegir línea** en el grupo Dibujar del boceto, como «Seleccionar líneas» de Revit: un clic en una línea del dibujo 2D o en una cara o borde de muro, forjado, cubierta, pilar, viga o zapata, o en un eje o plano de referencia, la copia como línea del boceto. Se queda puesta hasta pulsarla otra vez, Esc o elegir otra orden.
+- La **Elegir línea** de las herramientas (muro, forjado, viga…) toma ahora también esas caras y bordes, no solo el dibujo 2D.
+
+### 13.4 Propiedades más cortas (6/11/2026)
+
+- **Planta** arriba del todo en las propiedades de la vista: nombre, cota y Plantas…; sin la tarjeta de la vista, que repetía el título.
+- **Representación** en una sola tarjeta: Plantilla, Estilo de presentación, Nivel de detalle, Atenuación y los botones **Visibilidad y gráficos…** y **Normas gráficas…**. La lista larga de categorías sale de Propiedades: está en Visibilidad y gráficos, que gana también las **capas de dibujo 2D**.
+- **Usos de los locales** sale de las propiedades de la vista: está en la herramienta Local, plegado.
+- **Tarjeta del tipo** compacta: el dibujo pequeño al lado del nombre (grande al pasar el ratón).
+- Las medidas de las tarjetas (longitud, altura, espesor; canto y **cara superior** del forjado; antepecho) ya no se repiten en los grupos de abajo.
+- Plegados al empezar: caras y división, perfil en alzado, capas, huecos e identidad. En el muro, Restricciones y Construcción van antes que las caras y el perfil.
+
+### 13.5 Propuesta: una sola manera de decidir cómo se dibuja un plano (pendiente de Antonio)
+
+Hoy hay cuatro sitios que se pisan: Visibilidad y gráficos (por vista), plantillas de vista (solo guardan Visibilidad y gráficos), estilos de presentación (papel, paleta, macizado) y normas gráficas (grosores por escala, del proyecto). La propuesta es ordenarlos en tres niveles, como Revit:
+
+| Nivel | Qué decide | Dónde |
+|---|---|---|
+| **Proyecto** · Normas gráficas | Grosores por escala, tipografía, color y trama de corte de cada material | Gestionar → Normas gráficas |
+| **Plantilla de vista** | Todo el aspecto con nombre: escala, nivel de detalle, qué categorías se ven y cómo (VG), estilo de presentación, atenuación, fase | Un solo diálogo «Representación» con pestañas: Categorías · Capas 2D · Presentación · Fases |
+| **Vista** | Qué plantilla usa y, si hace falta, algún retoque suyo | Propiedades: Plantilla ▾ · Editar… · Escala |
+
+El estilo de presentación dejaría de ser una cosa aparte: sería una pestaña de la plantilla. Un plano de albañilería, uno de superficies o uno de presentación para el cliente serían tres plantillas.
+

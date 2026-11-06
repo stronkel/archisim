@@ -629,21 +629,42 @@ impl ArchiSimApp {
         }
     }
 
-    /// What the active plan shows: level of detail, categories and drawing
-    /// layers (Revit's visibility/graphics), and the project's pen table.
+    /// How the active plan is drawn, in a few rows (`docs/INTERFAZ.md`
+    /// §13.3): its presentation style, level of detail and discipline
+    /// focus, and the doors to the rest — Visibilidad y gráficos (each
+    /// category and drawing layer) and the project's Normas gráficas. The
+    /// long list of categories is in Visibilidad y gráficos only.
     pub(super) fn visibility_group(&mut self, ui: &mut Ui) {
-        let layers: Vec<(DrawLayerId, String)> = self.layer_options();
         let mut open_styles = false;
-        group(ui, "view-presentation", "Presentación", |ui| {
-            open_styles = self.presentation_row(ui);
-        });
-        if open_styles {
-            self.presentation.open = true;
-            self.presentation.selected = self.view_style.presentation;
-        }
-        let style = &mut self.view_style;
         let mut open_graphics = false;
-        group(ui, "view-visibility", "Visibilidad", |ui| {
+        let mut open_vg = false;
+        let mut apply = None;
+        let templates: Vec<(archisim_core::ViewTemplateId, String)> = self
+            .ed
+            .model()
+            .view_templates()
+            .map(|t| (t.id, t.name.clone()))
+            .collect();
+        group(ui, "view-representation", "Representación", |ui| {
+            row(
+                ui,
+                "Plantilla",
+                "Da a la vista todo el aspecto guardado en una plantilla: visibilidad, gráficos, presentación y nivel de detalle",
+                |ui, w| {
+                    egui::ComboBox::from_id_salt("view-template")
+                        .width(w - 8.0)
+                        .selected_text("Aplicar…")
+                        .show_ui(ui, |ui| {
+                            for (id, name) in &templates {
+                                if ui.selectable_label(false, name).clicked() {
+                                    apply = Some(*id);
+                                }
+                            }
+                        });
+                },
+            );
+            open_styles = self.presentation_row(ui);
+            let style = &mut self.view_style;
             row(
                 ui,
                 "Nivel de detalle",
@@ -668,45 +689,46 @@ impl ArchiSimApp {
                     style.focus = combo(ui, "view-focus", w, style.focus, &opts);
                 },
             );
-            for c in archisim_core::Category::ALL {
-                row(ui, c.label(), "", |ui, _| {
-                    let mut on = style.shows(c);
-                    if ui.switch(&mut on, "").changed() {
-                        if on {
-                            style.hidden.remove(&c);
-                        } else {
-                            style.hidden.insert(c);
-                        }
-                    }
-                });
+            let hidden = style.hidden.len() + style.hidden_layers.len();
+            let changed = style.overrides.len();
+            if hidden + changed > 0 {
+                props::note(
+                    ui,
+                    &format!(
+                        "En esta vista: {hidden} categoría(s) o capa(s) ocultas, {changed} con su propio dibujo."
+                    ),
+                );
             }
-            if layers.len() > 1 {
-                ui.add_space(2.0);
-                props::note(ui, "Capas de dibujo en esta vista:");
-                for (id, name) in &layers {
-                    row(ui, name, "", |ui, _| {
-                        let mut on = style.shows_layer(*id);
-                        if ui.switch(&mut on, "").changed() {
-                            if on {
-                                style.hidden_layers.remove(id);
-                            } else {
-                                style.hidden_layers.insert(*id);
-                            }
-                        }
-                    });
+            ui.horizontal_wrapped(|ui| {
+                ui.add_space(4.0);
+                let r = ui.button("Visibilidad y gráficos…").on_hover_text(
+                    "Qué se ve y cómo se dibuja cada categoría y capa de dibujo en esta vista (VG)",
+                );
+                super::missions_ui::mark(ui.ctx(), "button:Visibilidad y gráficos…", r.rect);
+                if r.clicked() {
+                    open_vg = true;
                 }
-            }
-            ui.add_space(2.0);
-            if ui
-                .button("Normas gráficas…")
-                .on_hover_text("Grosores de línea del proyecto por escala")
-                .clicked()
-            {
-                open_graphics = true;
-            }
+                if ui
+                    .button("Normas gráficas…")
+                    .on_hover_text("Grosores de línea y tipografía del proyecto, por escala")
+                    .clicked()
+                {
+                    open_graphics = true;
+                }
+            });
         });
+        if open_styles {
+            self.presentation.open = true;
+            self.presentation.selected = self.view_style.presentation;
+        }
         if open_graphics {
             self.show_graphics = true;
+        }
+        if open_vg {
+            self.views.vg_open = true;
+        }
+        if let Some(id) = apply {
+            self.apply_template(id);
         }
     }
 

@@ -61,6 +61,17 @@ pub enum MenuAct {
 }
 
 impl ContextMenu {
+    /// A menu on nothing and at no point: what the ribbon's buttons do
+    /// with the selection (Pegar goes beside what was copied).
+    pub fn bare() -> Self {
+        Self {
+            pos: Pos2::ZERO,
+            element: None,
+            at: None,
+            opened: 0,
+        }
+    }
+
     /// A menu on nothing opened at a point of the plan.
     #[cfg(test)]
     pub fn at_for_tests(at: Point2) -> Self {
@@ -480,7 +491,7 @@ pub(super) fn wall_end_near(
 }
 
 /// «Muro» → «muros», «Pilar» → «pilares».
-fn plural(name: &str) -> String {
+pub(super) fn plural(name: &str) -> String {
     let n = name.to_lowercase();
     match n.chars().last() {
         Some('a' | 'e' | 'i' | 'o' | 'u') => format!("{n}s"),

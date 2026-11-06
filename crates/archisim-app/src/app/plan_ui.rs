@@ -58,12 +58,14 @@ impl ArchiSimApp {
             self.draw_grid(&painter, rect);
         }
         self.draw_plan(&ctx, &painter, rect);
+        // In a sketch, the rest of the plan behind a veil (before what is
+        // drawn over the plan: selection, previews, the order running).
+        self.draw_sketch(&painter, rect);
         self.draw_plan_ghost(&ctx, &painter, rect);
         self.draw_links_in_plan(&painter, rect);
         self.draw_team(&painter, rect);
         self.draw_origin(&painter, rect);
         self.draw_selection(&painter, rect);
-        self.draw_sketch(&painter, rect);
         self.draw_cte_route(&painter, rect);
         self.draw_temp_dims(&painter, rect);
         self.draw_anchor_drag(&painter, rect);
@@ -113,7 +115,6 @@ impl ArchiSimApp {
 
         self.draw_overlays(&ctx, &painter, rect);
         self.temp_edit_ui(&ctx);
-        self.sketch_panel(&ctx, rect);
         self.terrain_z_editor(&ctx, rect);
 
         let icon = match self.tool {
@@ -627,6 +628,11 @@ impl ArchiSimApp {
         if ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, Key::F8)) {
             self.toggle_ortho();
         }
+        // Esc leaves «Elegir línea» of a sketch first.
+        if escape && self.sketch_picking() {
+            self.toggle_sketch_pick();
+            return;
+        }
         if space && self.flip_stair_turn() {
             return;
         }
@@ -1040,6 +1046,15 @@ impl ArchiSimApp {
                     }
                 }
             }
+        }
+        // «Elegir línea» of a sketch.
+        if self.sketch_picking() {
+            if response.clicked_by(PointerButton::Primary) {
+                if let Some(c) = self.cursor {
+                    self.sketch_pick_click(c.point);
+                }
+            }
+            return;
         }
         if self.rebar_pick && self.tool == Tool::Arrow {
             if response.clicked_by(PointerButton::Primary) {
