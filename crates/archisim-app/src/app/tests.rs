@@ -9724,6 +9724,18 @@ fn sketch_in_the_ribbon() {
     assert!(h.app.sketch_texts().is_some());
     let mode = panels.iter().find(|p| p.title == "Modo").unwrap();
     assert_ne!(mode.items[0].tint, mode.items[1].tint);
+    // Elegir línea: a wall's face becomes a sketch line.
+    let lines = |h: &Harness| h.model().drafts().count();
+    let before = lines(&h);
+    assert!(h.app.click_ribbon("Elegir línea"));
+    assert!(h.app.sketch_picking());
+    let w = h.model().walls().next().unwrap().id;
+    let o = crate::pick::outline(h.model(), Element::Wall(w)).unwrap();
+    let mid = (o[0] + o[1]) * 0.5;
+    h.click_at(mid);
+    assert_eq!(lines(&h), before + 1, "the face, copied into the sketch");
+    h.key(Key::Escape);
+    assert!(!h.app.sketch_picking());
     assert!(h.app.click_ribbon("Cancelar"));
     assert!(h.app.sketch.is_none());
     h.frame();

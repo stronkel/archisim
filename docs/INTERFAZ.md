@@ -420,3 +420,31 @@ Debajo de la cinta, una fila: **«Modificar | Colocar Muro»** y los ajustes de 
 - Una orden en marcha: lo que pide, sus opciones y Terminar.
 - Modo boceto: qué se edita y qué tienen que hacer las líneas (antes era un cartel flotante sobre la planta).
 - Siempre, al final y en gris: qué hace ahora un clic.
+
+### 13.3 Modo boceto (6/11/2026, segunda vuelta)
+
+- **Velo**: mientras se edita un contorno, todo lo demás queda detrás de un velo blanco y las líneas del boceto se dibujan encima, más gruesas, en magenta. También en el alzado del perfil de un muro.
+- **Elegir línea** en el grupo Dibujar del boceto, como «Seleccionar líneas» de Revit: un clic en una línea del dibujo 2D o en una cara o borde de muro, forjado, cubierta, pilar, viga o zapata, o en un eje o plano de referencia, la copia como línea del boceto. Se queda puesta hasta pulsarla otra vez, Esc o elegir otra orden.
+- La **Elegir línea** de las herramientas (muro, forjado, viga…) toma ahora también esas caras y bordes, no solo el dibujo 2D.
+
+### 13.4 Propiedades más cortas (6/11/2026)
+
+- **Planta** arriba del todo en las propiedades de la vista: nombre, cota y Plantas…; sin la tarjeta de la vista, que repetía el título.
+- **Representación** en una sola tarjeta: Plantilla, Estilo de presentación, Nivel de detalle, Atenuación y los botones **Visibilidad y gráficos…** y **Normas gráficas…**. La lista larga de categorías sale de Propiedades: está en Visibilidad y gráficos, que gana también las **capas de dibujo 2D**.
+- **Usos de los locales** sale de las propiedades de la vista: está en la herramienta Local, plegado.
+- **Tarjeta del tipo** compacta: el dibujo pequeño al lado del nombre (grande al pasar el ratón).
+- Las medidas de las tarjetas (longitud, altura, espesor; canto y **cara superior** del forjado; antepecho) ya no se repiten en los grupos de abajo.
+- Plegados al empezar: caras y división, perfil en alzado, capas, huecos e identidad. En el muro, Restricciones y Construcción van antes que las caras y el perfil.
+
+### 13.5 Propuesta: una sola manera de decidir cómo se dibuja un plano (pendiente de Antonio)
+
+Hoy hay cuatro sitios que se pisan: Visibilidad y gráficos (por vista), plantillas de vista (solo guardan Visibilidad y gráficos), estilos de presentación (papel, paleta, macizado) y normas gráficas (grosores por escala, del proyecto). La propuesta es ordenarlos en tres niveles, como Revit:
+
+| Nivel | Qué decide | Dónde |
+|---|---|---|
+| **Proyecto** · Normas gráficas | Grosores por escala, tipografía, color y trama de corte de cada material | Gestionar → Normas gráficas |
+| **Plantilla de vista** | Todo el aspecto con nombre: escala, nivel de detalle, qué categorías se ven y cómo (VG), estilo de presentación, atenuación, fase | Un solo diálogo «Representación» con pestañas: Categorías · Capas 2D · Presentación · Fases |
+| **Vista** | Qué plantilla usa y, si hace falta, algún retoque suyo | Propiedades: Plantilla ▾ · Editar… · Escala |
+
+El estilo de presentación dejaría de ser una cosa aparte: sería una pestaña de la plantilla. Un plano de albañilería, uno de superficies o uno de presentación para el cliente serían tres plantillas.
+

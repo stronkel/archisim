@@ -36,6 +36,9 @@ pub(crate) struct SketchState {
     settings: crate::cad::CadSettings,
     /// Where the lines were left open at the last Aceptar.
     pub open_ends: Vec<Point2>,
+    /// «Elegir línea» (Revit's «Seleccionar líneas»): a click copies the
+    /// line or edge under it as a sketch line.
+    pub pick: bool,
     /// A wall's sketch is drawn in elevation on a view of its own, made
     /// for it and taken away at the end, with the face and its openings
     /// as reference lines on a grey layer.
@@ -44,6 +47,9 @@ pub(crate) struct SketchState {
     /// (`x` drawn as the wall's length minus `x`).
     mirror: Option<f64>,
 }
+
+/// How much of the rest of the drawing the sketch's veil hides (of 255).
+const SKETCH_VEIL: u8 = 165;
 
 /// The layer of the reference lines of a sketch in elevation.
 pub const SKETCH_REFERENCE_LAYER: &str = "Boceto · referencia";
@@ -287,6 +293,7 @@ impl ArchiSimApp {
             view,
             settings,
             open_ends: Vec::new(),
+            pick: false,
             elevation,
             mirror,
         });
@@ -423,9 +430,69 @@ impl ArchiSimApp {
         let Some(st) = self.sketch.as_ref() else {
             return;
         };
+        // Everything else behind a veil, as in Revit, so that the sketch
+        // lines stand out; they are drawn again over it, thicker.
+        painter.rect_filled(
+            rect,
+            0.0,
+            Color32::from_rgba_unmultiplied(255, 255, 255, SKETCH_VEIL),
+        );
+        let stroke = Stroke::new(2.2, SKETCH);
+        for seg in self.sketch_segs(st) {
+            let pts: Vec<egui::Pos2> = seg
+                .tessellate(self.view.to_metres(2.0).max(0.005))
+                .into_iter()
+                .map(|q| self.view.to_screen(rect, q))
+                .collect();
+            painter.add(egui::Shape::line(pts, stroke));
+        }
         for p in &st.open_ends {
             let c = self.view.to_screen(rect, *p);
             painter.circle_stroke(c, 7.0, Stroke::new(2.0, Color32::from_rgb(220, 40, 40)));
+        }
+    }
+
+    /// «Elegir línea» in the sketch: on or off.
+    pub(super) fn toggle_sketch_pick(&mut self) {
+        self.end_command(true);
+        let on = match self.sketch.as_mut() {
+            Some(st) => {
+                st.pick = !st.pick;
+                st.pick
+            }
+            None => return,
+        };
+        if on {
+            self.say("Elegir línea: clic en una línea del dibujo o en una cara o borde de muro, forjado, pilar, eje o plano de referencia.");
+        }
+    }
+
+    /// Whether a click in the drawing picks a line for the sketch.
+    pub(super) fn sketch_picking(&self) -> bool {
+        self.tool == Tool::Arrow && self.sketch.as_ref().is_some_and(|s| s.pick)
+    }
+
+    /// A click with «Elegir línea» in the sketch: the line or edge under
+    /// it becomes a sketch line.
+    pub(super) fn sketch_pick_click(&mut self, p: Point2) {
+        let Some(st) = self.sketch.as_ref() else {
+            return;
+        };
+        let (view, layer) = (st.view, st.layer);
+        let reach = self.view.to_metres(super::REACH);
+        let Some(line) = self.line_at(p, reach, view, Some(layer)) else {
+            self.complain("Ahí no hay ninguna línea ni borde que elegir.");
+            return;
+        };
+        let r = self.ed.transact("Elegir línea", |m| {
+            for (a, b, bulge) in &line.pieces {
+                let seg = archisim_draft::Seg::from_bulge(*a, *b, *bulge);
+                m.add_draft(NewDraft::new(view, layer, archisim_draft::seg_shape(&seg)))?;
+            }
+            Ok(())
+        });
+        if let Err(e) = r {
+            self.complain(format!("No se puede: {e}."));
         }
     }
 
@@ -479,6 +546,7 @@ impl ArchiSimApp {
         }
         if let Some(st) = self.sketch.as_mut() {
             st.open_ends.clear();
+            st.pick = false;
         }
         self.start_command(cmd);
     }

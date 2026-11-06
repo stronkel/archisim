@@ -780,27 +780,46 @@ impl ArchiSimApp {
         let level = self.ed.model().level(self.ed.level).cloned();
         let name = level.as_ref().map_or(String::new(), |l| l.name.clone());
         props::title(ui, &format!("Vista · {name}"));
+        // The level first: its name and height (Antonio, 6/11/2026).
+        if let Some(l) = level.clone() {
+            group(ui, "view-level", "Planta", |ui| {
+                row(ui, "Nombre", "", |ui, w| {
+                    if let Some(new) =
+                        text_edit_committed(ui, Id::unique(("level-name", l.id)), &l.name, w - 8.0)
+                    {
+                        let r = self.ed.rename_level(l.id, &new);
+                        self.report(r, "Planta renombrada.");
+                    }
+                });
+                row(
+                    ui,
+                    "Cota (mm)",
+                    "Sobre el ±0,00; todo lo de la planta se mueve con ella",
+                    |ui, w| {
+                        if let Some(v) =
+                            length_field(ui, Id::unique(("level-elev", l.id)), l.elevation, w - 8.0)
+                        {
+                            let r = self.ed.set_level_elevation(l.id, v);
+                            self.report(r, "Cota de la planta cambiada.");
+                        }
+                    },
+                );
+                ui.horizontal(|ui| {
+                    ui.add_space(4.0);
+                    if ui
+                        .button("Plantas…")
+                        .on_hover_text("Añadir, renombrar, cambiar la cota o borrar plantas")
+                        .clicked()
+                    {
+                        self.show_levels = true;
+                    }
+                });
+            });
+        }
         let saved = self
             .active_saved()
             .and_then(|id| self.ed.model().plan_view(id).cloned());
-        match &saved {
-            Some(v) => view_card(
-                ui,
-                Icon::Plan,
-                &v.name,
-                if v.kind == archisim_core::PlanKind::Ceiling {
-                    "Planta de techos guardada"
-                } else {
-                    "Vista de planta guardada"
-                },
-            ),
-            None => view_card(
-                ui,
-                Icon::Plan,
-                &format!("Planta · {name}"),
-                "Vista de planta",
-            ),
-        }
+        // No card of the view: the title and the level say it.
         self.view_actions_group(ui, saved.as_ref());
         group(ui, "view-graphics", "Gráficos", |ui| {
             row(
@@ -859,45 +878,10 @@ impl ArchiSimApp {
                 },
             );
         });
-        self.phase_view_group(ui);
         self.visibility_group(ui);
+        self.phase_view_group(ui);
         let underlay_level = self.ed.level;
         self.level_underlays_group(ui, underlay_level);
-        if let Some(l) = level {
-            group(ui, "view-level", "Planta", |ui| {
-                row(ui, "Nombre", "", |ui, w| {
-                    if let Some(new) =
-                        text_edit_committed(ui, Id::unique(("level-name", l.id)), &l.name, w - 8.0)
-                    {
-                        let r = self.ed.rename_level(l.id, &new);
-                        self.report(r, "Planta renombrada.");
-                    }
-                });
-                row(
-                    ui,
-                    "Cota (mm)",
-                    "Sobre el ±0,00; todo lo de la planta se mueve con ella",
-                    |ui, w| {
-                        if let Some(v) =
-                            length_field(ui, Id::unique(("level-elev", l.id)), l.elevation, w - 8.0)
-                        {
-                            let r = self.ed.set_level_elevation(l.id, v);
-                            self.report(r, "Cota de la planta cambiada.");
-                        }
-                    },
-                );
-                ui.horizontal(|ui| {
-                    ui.add_space(4.0);
-                    if ui
-                        .button("Plantas…")
-                        .on_hover_text("Añadir, renombrar, cambiar la cota o borrar plantas")
-                        .clicked()
-                    {
-                        self.show_levels = true;
-                    }
-                });
-            });
-        }
     }
 
     fn view_3d_properties(&mut self, ui: &mut Ui) {
@@ -1029,7 +1013,6 @@ impl ArchiSimApp {
         });
         self.georeference_group(ui);
         self.orthophoto_group(ui);
-        self.usages_group(ui);
     }
 
     // ---- Elements ---------------------------------------------------------------
@@ -1266,7 +1249,8 @@ impl ArchiSimApp {
         if card.select_all {
             self.select_instances(same_type, "muros");
         }
-        // The measures at a glance (§12.6); all of them, in the groups below.
+        // The measures at a glance (§12.6); the groups below do not repeat
+        // them.
         let free = matches!(w.top, WallTop::Unconnected);
         match props::measure_tiles(
             ui,
@@ -1306,8 +1290,6 @@ impl ArchiSimApp {
             }
             _ => {}
         }
-        self.wall_tools_group(ui, id, &w);
-        self.wall_profile_group(ui, id, &w);
         let above = self.levels_above(w.level);
         group(ui, "wall-constraints", "Restricciones", |ui| {
             self.level_row(
@@ -1343,23 +1325,9 @@ impl ArchiSimApp {
                             }
                         },
                     );
-                    text_row(
-                        ui,
-                        "Altura (mm)",
-                        "Sale de las plantas: cambia sola si cambian sus cotas. Para escribirla, desconecta el muro",
-                        &format!("{} · de las plantas", fmt_mm(w.height)),
-                    );
                 }
-                WallTop::Unconnected => {
-                    row(ui, "Altura desconectada (mm)", "", |ui, wd| {
-                        if let Some(v) =
-                            length_field(ui, Id::unique(("wall-h", id)), w.height, wd - 8.0)
-                        {
-                            let r = self.ed.set_walls_height(&walls, v);
-                            self.report(r, "Altura cambiada.");
-                        }
-                    });
-                }
+                // Its height is written in the tile above.
+                WallTop::Unconnected => {}
             }
             // Trimmed under a roof (straight walls).
             if w.arc().is_none() {
@@ -1447,19 +1415,6 @@ impl ArchiSimApp {
             }
         });
         group(ui, "wall-dimensions", "Dimensiones", |ui| {
-            row(
-                ui,
-                "Longitud (mm)",
-                "Se cambia desde el inicio del muro",
-                |ui, wd| {
-                    if let Some(v) =
-                        length_field(ui, Id::unique(("wall-len", id)), w.length(), wd - 8.0)
-                    {
-                        let r = self.ed.set_wall_length(id, v);
-                        self.report(r, "Longitud cambiada desde el inicio del muro.");
-                    }
-                },
-            );
             if let Some(arc) = w.arc() {
                 row(
                     ui,
@@ -1495,7 +1450,6 @@ impl ArchiSimApp {
                     },
                 );
             }
-            text_row(ui, "Espesor (mm)", "Del tipo", &fmt_mm(thickness));
             text_row(
                 ui,
                 "Inicio (m)",
@@ -1509,6 +1463,8 @@ impl ArchiSimApp {
                 &format!("{}; {}", fmt_m(w.end.x), fmt_m(w.end.y)),
             );
         });
+        self.wall_tools_group(ui, id, &w);
+        self.wall_profile_group(ui, id, &w);
         self.layers_group(ui, w.wall_type);
         self.phase_group(ui, "wall-phase", &[Element::Wall(id)]);
         group(ui, "wall-identity", "Datos de identidad", |ui| {
@@ -1631,12 +1587,6 @@ impl ArchiSimApp {
                 "La de su muro: cambia de planta con él",
                 &level,
             );
-            row(ui, "Antepecho (mm)", "Desde la planta", |ui, w| {
-                if let Some(v) = length_field(ui, Id::unique(("op-sill", id)), o.sill, w - 8.0) {
-                    let r = self.ed.move_opening(id, o.along, v);
-                    self.report(r, "Antepecho cambiado.");
-                }
-            });
             row(
                 ui,
                 "Posición (mm)",
@@ -1858,8 +1808,8 @@ impl ArchiSimApp {
                     editable: false,
                 },
                 props::Measure {
-                    label: "Desfase",
-                    hint: "De la cara superior, sobre la planta",
+                    label: "Cara superior",
+                    hint: "Sobre la planta (desfase); las capas cuelgan hacia abajo",
                     value: s.top_offset,
                     editable: true,
                 },
@@ -1876,23 +1826,9 @@ impl ArchiSimApp {
                 Some(s.level),
                 &[Element::Slab(id)],
             );
-            row(
-                ui,
-                "Cara superior (mm)",
-                "Sobre la planta; las capas cuelgan hacia abajo",
-                |ui, w| {
-                    if let Some(v) =
-                        length_field(ui, Id::unique(("slab-top", id)), s.top_offset, w - 8.0)
-                    {
-                        let r = self.ed.set_slab_offset(id, v);
-                        self.report(r, "Desfase cambiado.");
-                    }
-                },
-            );
         });
         self.slab_slope_group(ui, &s);
         group(ui, "slab-dimensions", "Dimensiones", |ui| {
-            text_row(ui, "Canto (mm)", "Del tipo", &fmt_mm(thickness));
             text_row(
                 ui,
                 "Superficie",
@@ -2308,16 +2244,8 @@ impl ArchiSimApp {
     /// Saved views, templates and «Visibilidad y gráficos» of the active
     /// plan.
     fn view_actions_group(&mut self, ui: &mut Ui, saved: Option<&archisim_core::PlanView>) {
-        let templates: Vec<(archisim_core::ViewTemplateId, String)> = self
-            .ed
-            .model()
-            .view_templates()
-            .map(|t| (t.id, t.name.clone()))
-            .collect();
-        let mut apply = None;
         let mut rename = None;
         let mut duplicate = None;
-        let mut vg = false;
         group(ui, "view-saved", "Vista", |ui| {
             if let Some(v) = saved {
                 row(ui, "Nombre", "El de la vista guardada", |ui, w| {
@@ -2328,32 +2256,8 @@ impl ArchiSimApp {
                     }
                 });
             }
-            row(
-                ui,
-                "Plantilla",
-                "Da a la vista el aspecto de una plantilla (Visibilidad y gráficos)",
-                |ui, w| {
-                    egui::ComboBox::from_id_salt("view-template")
-                        .width(w - 8.0)
-                        .selected_text("Aplicar…")
-                        .show_ui(ui, |ui| {
-                            for (id, name) in &templates {
-                                if ui.selectable_label(false, name).clicked() {
-                                    apply = Some(*id);
-                                }
-                            }
-                        });
-                },
-            );
             ui.horizontal_wrapped(|ui| {
                 ui.add_space(4.0);
-                let r = ui
-                    .button("Visibilidad y gráficos…")
-                    .on_hover_text("Colores, rellenos, transparencia, tramas y grosor de cada categoría en esta vista (VG)");
-                super::missions_ui::mark(ui.ctx(), "button:Visibilidad y gráficos…", r.rect);
-                if r.clicked() {
-                    vg = true;
-                }
                 if ui
                     .button("Guardar vista")
                     .on_hover_text("Otra vista de esta planta con su propio aspecto (albañilería, superficies…)")
@@ -2370,17 +2274,11 @@ impl ArchiSimApp {
                 }
             });
         });
-        if let Some(id) = apply {
-            self.apply_template(id);
-        }
         if let Some((id, t)) = rename {
             self.rename_view(id, &t);
         }
         if let Some(kind) = duplicate {
             self.duplicate_view(kind);
-        }
-        if vg {
-            self.views.vg_open = true;
         }
     }
 }

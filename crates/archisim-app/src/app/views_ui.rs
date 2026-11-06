@@ -292,6 +292,7 @@ impl ArchiSimApp {
         let mut apply = None;
         let mut save_as = None;
         let mut delete_template = None;
+        let layers = self.layer_options();
         super::widgets::dialog(title)
             .id(egui::Id::unique("vg-window"))
             .open(&mut open)
@@ -373,6 +374,30 @@ impl ArchiSimApp {
                                 ui.end_row();
                             }
                         });
+                    // The drawing layers, here too (they were a list in
+                    // the plan's properties).
+                    if layers.len() > 1 {
+                        ui.add_space(10.0);
+                        ui.strong("Capas de dibujo 2D en esta vista");
+                        ui.add_space(4.0);
+                        egui::Grid::new("vg-layers")
+                            .striped(true)
+                            .spacing([10.0, 4.0])
+                            .show(ui, |ui| {
+                                for (id, name) in &layers {
+                                    ui.label(name);
+                                    let mut on = style.shows_layer(*id);
+                                    if ui.switch(&mut on, "").changed() {
+                                        if on {
+                                            style.hidden_layers.remove(id);
+                                        } else {
+                                            style.hidden_layers.insert(*id);
+                                        }
+                                    }
+                                    ui.end_row();
+                                }
+                            });
+                    }
                 });
             });
         if style != self.view_style {

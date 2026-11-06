@@ -73,6 +73,9 @@ impl ArchiSimApp {
                 self.room_settings.height = None;
             }
         });
+        // The project's list of uses, here where they are chosen (they no
+        // longer fill the properties of every plan).
+        self.usages_group(ui);
     }
 
     /// The use of a room, from the project's list (the name follows it if
@@ -128,56 +131,61 @@ impl ArchiSimApp {
     pub(super) fn usages_group(&mut self, ui: &mut Ui) {
         let usages = usages_of(self.ed.model());
         let mut changed: Option<Vec<String>> = None;
-        props::group(ui, "project-usages", "Usos de los locales", |ui| {
-            for (i, u) in usages.iter().enumerate() {
-                ui.horizontal(|ui| {
-                    ui.add_space(8.0);
-                    ui.label(u);
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui
-                            .small_button("✕")
-                            .on_hover_text("Quitar de la lista")
-                            .clicked()
-                        {
+        props::group(
+            ui,
+            "project-usages-list",
+            "Usos de los locales del proyecto",
+            |ui| {
+                for (i, u) in usages.iter().enumerate() {
+                    ui.horizontal(|ui| {
+                        ui.add_space(8.0);
+                        ui.label(u);
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if ui
+                                .small_button("✕")
+                                .on_hover_text("Quitar de la lista")
+                                .clicked()
+                            {
+                                let mut v = usages.clone();
+                                v.remove(i);
+                                changed = Some(v);
+                            }
+                        });
+                    });
+                }
+                row(ui, "Nuevo uso", "Escríbelo y pulsa Intro", |ui, w| {
+                    if let Some(new) =
+                        text_edit_committed(ui, egui::Id::unique("project-usage-new"), "", w - 8.0)
+                    {
+                        let new = new.trim().to_string();
+                        if !new.is_empty() && !usages.contains(&new) {
                             let mut v = usages.clone();
-                            v.remove(i);
+                            v.push(new);
                             changed = Some(v);
                         }
-                    });
+                    }
                 });
-            }
-            row(ui, "Nuevo uso", "Escríbelo y pulsa Intro", |ui, w| {
-                if let Some(new) =
-                    text_edit_committed(ui, egui::Id::unique("project-usage-new"), "", w - 8.0)
-                {
-                    let new = new.trim().to_string();
-                    if !new.is_empty() && !usages.contains(&new) {
-                        let mut v = usages.clone();
-                        v.push(new);
-                        changed = Some(v);
-                    }
-                }
-            });
-            row(
-                ui,
-                "Añadir conjunto",
-                "Usos habituales de otro tipo de edificio",
-                |ui, w| {
-                    let mut opts: Vec<(usize, &str)> = vec![(usize::MAX, "—")];
-                    opts.extend(USAGE_SETS.iter().enumerate().map(|(i, (n, _))| (i, *n)));
-                    let picked = choice(ui, "project-usage-set", w, usize::MAX, &opts);
-                    if let Some((_, set)) = USAGE_SETS.get(picked) {
-                        let mut v = usages.clone();
-                        for u in set.iter() {
-                            if !v.iter().any(|x| x == u) {
-                                v.push(u.to_string());
+                row(
+                    ui,
+                    "Añadir conjunto",
+                    "Usos habituales de otro tipo de edificio",
+                    |ui, w| {
+                        let mut opts: Vec<(usize, &str)> = vec![(usize::MAX, "—")];
+                        opts.extend(USAGE_SETS.iter().enumerate().map(|(i, (n, _))| (i, *n)));
+                        let picked = choice(ui, "project-usage-set", w, usize::MAX, &opts);
+                        if let Some((_, set)) = USAGE_SETS.get(picked) {
+                            let mut v = usages.clone();
+                            for u in set.iter() {
+                                if !v.iter().any(|x| x == u) {
+                                    v.push(u.to_string());
+                                }
                             }
+                            changed = Some(v);
                         }
-                        changed = Some(v);
-                    }
-                },
-            );
-        });
+                    },
+                );
+            },
+        );
         if let Some(v) = changed {
             let r = self.ed.set_room_usages(v);
             self.report(r, "Usos del proyecto cambiados.");

@@ -46,6 +46,8 @@ pub(super) enum Act {
     SketchCmd(&'static str),
     SketchAccept,
     SketchCancel,
+    /// «Elegir línea» in the sketch.
+    SketchPick,
     Pick(Pick),
     CreateSimilar,
 }
@@ -1389,7 +1391,8 @@ impl ArchiSimApp {
             )
             .tint(colours::CANCEL)
             .hint("Salir del modo boceto dejando el elemento como estaba");
-            let draw = super::sketch_ui::SKETCH_TOOLS
+            let picking = self.sketch.as_ref().is_some_and(|st| st.pick);
+            let mut draw: Vec<Item<Act>> = super::sketch_ui::SKETCH_TOOLS
                 .iter()
                 .map(|(label, cmd, hint)| {
                     Item::new(sketch_mark(cmd), *label, Size::Small, Act::SketchCmd(cmd))
@@ -1397,6 +1400,14 @@ impl ArchiSimApp {
                         .hint(*hint)
                 })
                 .collect();
+            // Revit's «Seleccionar líneas»: an existing line or edge,
+            // copied as a sketch line.
+            draw.push(
+                Item::new(Mark::Glyph(Glyph::PickLine), "Elegir línea", Size::Small, Act::SketchPick)
+                    .on(picking)
+                    .hint("Clic en una línea del dibujo o en una cara o borde de muro, forjado, pilar, eje o plano de referencia: se copia como línea del boceto. Otra vez: dejar de elegir")
+                    .mission("sketch:Elegir línea"),
+            );
             return vec![
                 Panel::new("Modo", 10, vec![accept, cancel]).contextual(),
                 Panel::new("Dibujar", 9, draw).contextual(),
@@ -1706,6 +1717,7 @@ impl ArchiSimApp {
             Act::Sketch(t) => self.start_sketch(t),
             Act::SketchCmd(cmd) => self.sketch_command(cmd),
             Act::SketchAccept => self.finish_sketch(),
+            Act::SketchPick => self.toggle_sketch_pick(),
             Act::SketchCancel => self.cancel_sketch(),
             Act::Pick(p) => self.pick(p),
             Act::CreateSimilar => self.create_similar(),

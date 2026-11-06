@@ -6,6 +6,30 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-06 (91) · Modo boceto con velo, Elegir línea y Propiedades más cortas
+
+Rama `bloque/cinta` (el mismo pull request #162). Pedido de Antonio tras probar la cinta: «Elegir línea como en Revit»; «al editar un contorno, todo lo demás en transparencia»; y Propiedades: visibilidad repetida, Planta abajo, usos de los locales ocupando mucho, el tipo ocupando la pantalla, desfase y cara superior del forjado repetidos.
+
+**Hecho** (detalle en `docs/INTERFAZ.md` §13.3 y §13.4)
+- **Velo** en modo boceto: lo demás detrás de un velo blanco; las líneas del boceto, encima y más gruesas.
+- **Elegir línea** en el Dibujar del boceto: copia una línea del dibujo o una cara o borde de muro, forjado, cubierta, pilar, viga, zapata, eje o plano de referencia. La Elegir línea de las herramientas también coge ya esas caras y bordes.
+- Propiedades de la vista: **Planta arriba**, sin la tarjeta repetida; **Representación** en una tarjeta (plantilla, presentación, detalle, atenuación, Visibilidad y gráficos, Normas gráficas); las categorías y las capas 2D, solo en Visibilidad y gráficos; **Usos de los locales** en la herramienta Local.
+- Elementos: **tarjeta del tipo compacta** (dibujo pequeño, grande al pasar el ratón); sin repetir las medidas de las tarjetas (en el forjado, una sola **Cara superior**); grupos largos plegados; en el muro, Restricciones y Construcción primero.
+- Pruebas: Elegir línea copia la cara de un muro al boceto y Esc la deja.
+
+**Pendiente**
+- **Propuesta para decidir** (§13.5): ordenar Visibilidad y gráficos, plantillas, estilos de presentación y normas gráficas en tres niveles (proyecto, plantilla, vista), con un solo diálogo «Representación».
+- «Lo de aprecidos» se interpretó como la tarjeta grande del tipo; confirmar con Antonio.
+
+**Qué debe probar Antonio**
+1. Recompila y abre: `cargo run --release -p archisim-app -- out/demo.archisim`.
+2. Sin nada elegido: Planta arriba; Representación con sus botones; ¿echas algo en falta?
+3. Elige un muro, un forjado y una ventana: ¿se edita ya sin desplazar? En el forjado, una sola Cara superior.
+4. Forjado → **Editar contorno**: el resto se ve velado. Pulsa **Elegir línea** (Dibujar) y clic en la cara de un muro: aparece como línea del boceto. Esc para dejar de elegir.
+5. Herramienta Local: Usos de los locales al final, plegado.
+
+---
+
 ## 2026-11-06 (90) · La cinta con color
 
 Rama `bloque/cinta` (el mismo pull request #162). Pedido de Antonio al ver la cinta: «a veces no se distinguen bien los iconos; hasta Aceptar y Cancelar de Editar contorno parecen ocultos al estar todo en negro», y «la flecha de Modificar ya está en el carril de la izquierda».
