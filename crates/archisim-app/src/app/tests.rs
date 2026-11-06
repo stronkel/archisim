@@ -9680,8 +9680,16 @@ fn ribbon_panels_follow_what_is_in_hand() {
         .unwrap();
     assert!(modify.items.iter().find(|i| i.name == "Mover").unwrap().on);
     h.frame();
-    assert!(h.app.click_ribbon("Modificar"));
-    assert_eq!(h.app.tool, Tool::Arrow);
+    h.key(Key::Escape);
+    // The arrow is on the rail, not in the ribbon again; the drawings have
+    // their colours, Aceptar green and Cancelar red in a sketch.
+    assert!(!h.app.click_ribbon("Modificar"));
+    assert!(h
+        .app
+        .ribbon_panels()
+        .iter()
+        .flat_map(|p| &p.items)
+        .all(|i| i.tint.is_some()));
     h.frame();
     // Folded, the ribbon still draws and works.
     h.app.prefs.ribbon_compact = true;
@@ -9714,6 +9722,8 @@ fn sketch_in_the_ribbon() {
     let modify = panels.iter().find(|p| p.title == "Modificar").unwrap();
     assert!(modify.items.iter().any(|i| i.name == "Esquina"));
     assert!(h.app.sketch_texts().is_some());
+    let mode = panels.iter().find(|p| p.title == "Modo").unwrap();
+    assert_ne!(mode.items[0].tint, mode.items[1].tint);
     assert!(h.app.click_ribbon("Cancelar"));
     assert!(h.app.sketch.is_none());
     h.frame();

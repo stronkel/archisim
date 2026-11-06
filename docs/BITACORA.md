@@ -6,6 +6,26 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-06 (90) · La cinta con color
+
+Rama `bloque/cinta` (el mismo pull request #162). Pedido de Antonio al ver la cinta: «a veces no se distinguen bien los iconos; hasta Aceptar y Cancelar de Editar contorno parecen ocultos al estar todo en negro», y «la flecha de Modificar ya está en el carril de la izquierda».
+
+**Hecho**
+- Cada dibujo de la cinta lleva el color de su familia de órdenes, como los iconos de Revit (tabla en `docs/INTERFAZ.md` §13.1): mover y copiar en azul, caras y desfase en violeta, recortar y alargar en verde agua, borrar en rojo, portapapeles en ámbar, crear similar en verde… Los grupos de lo que hay en la mano, en el color de la disciplina.
+- **Aceptar** en verde y **Cancelar** en rojo, cada uno sobre un fondo suave de su color.
+- Lo que no vale ahora queda en gris: el color dice también qué se puede usar.
+- En el tema oscuro, los mismos colores más claros.
+- Fuera el botón grande **Modificar** de Seleccionar: la flecha ya está arriba del todo en el carril (Esc hace lo mismo). Seleccionar se queda con Los de su tipo y Todo.
+- Pruebas: todos los botones tienen color; Aceptar y Cancelar, distintos; Modificar ya no está en la cinta.
+
+**Qué debe probar Antonio**
+1. Recompila y abre: `cargo run --release -p archisim-app -- out/demo.archisim`.
+2. Con un muro elegido: ¿se distinguen ahora las órdenes de Modificar por familias? ¿Algún color chilla o se confunde con otro?
+3. Elige un forjado → **Editar contorno**: ¿se ven ya bien ✓ y ✗?
+4. Prueba también el tema oscuro (botón de media luna arriba).
+
+---
+
 ## 2026-11-06 (89) · La cinta al estilo Revit
 
 Rama `bloque/cinta`, con pull request. Sin cambios de formato ni de IFC. Pedido por Antonio con cinco capturas de la pestaña *Modificar* de Revit: «nuestra barra superior es inferior a la de Revit y, cuando hay demasiados elementos, los últimos son difíciles de ver». Diseño en `docs/INTERFAZ.md` §13.

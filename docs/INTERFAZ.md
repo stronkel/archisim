@@ -356,7 +356,7 @@ Siempre los mismos grupos, en el mismo orden:
 
 | Grupo | Botones |
 |---|---|
-| Seleccionar | **Modificar** (la flecha) · Los de su tipo · Todo |
+| Seleccionar | Los de su tipo · Todo (la flecha está arriba del todo en el carril de la izquierda) |
 | Portapapeles | **Pegar** · Cortar · Copiar · Igualar propiedades |
 | Geometría | Pintar · Dividir cara · Redondear (volúmenes) |
 | Modificar | Mover, Copiar, Girar · Reflejar, Escala, Matriz · Alinear caras, Desfase, Alinear · Esquina, Hasta límite, Varios al límite · Recortar, Alargar, Partir · Unir, Borrar |
@@ -375,6 +375,25 @@ Detrás, en el color de la disciplina, los grupos de **lo que hay en la mano**:
 | Modo boceto | **Modo** (✓ Aceptar, ✗ Cancelar) y **Dibujar**; el grupo Modificar pasa a tener las órdenes del boceto (esquina, recortar, alargar, partir, desfase, mover, copiar, borrar) |
 | Algo elegido | Su grupo: Editar contorno o **Editar perfil** (muros) y sus caras para dividir; agrupar y desagrupar el dibujo 2D |
 | Una orden de dibujo 2D | Sus variantes (línea, polilínea…) |
+
+**Colores** (pedido de Antonio, 6/11/2026: «todo en negro no se distingue»): cada dibujo lleva el color de su familia, como los iconos de Revit, y el nombre va en el negro del texto.
+
+| Familia | Color |
+|---|---|
+| Seleccionar | azul pizarra |
+| Portapapeles | ámbar |
+| Geometría (pintar, dividir, redondear) | terracota |
+| Mover, copiar, girar, reflejar, escala, matriz | azul |
+| Alinear caras, desfase, alinear | violeta |
+| Esquina, límites, recortar, alargar, partir, unir | verde agua |
+| Borrar | rojo |
+| Vista | gris azulado |
+| Medir | verde agua |
+| Crear similar | verde |
+| Lo que hay en la mano | el color de la disciplina |
+| **Aceptar** / **Cancelar** del boceto | **verde** / **rojo**, sobre un fondo de su color |
+
+En el tema oscuro, los mismos colores más claros. Lo que no vale ahora se ve gris, así que el color también dice qué se puede usar.
 
 Lo que no vale ahora se ve apagado y su nota dice por qué. La orden que corre se ve encendida; pulsarla otra vez la termina.
 

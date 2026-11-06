@@ -33,8 +33,6 @@ pub(super) enum Act {
     Method(MethodAct),
     /// An order of «Modificar» (again while it runs: it ends).
     Order(&'static str),
-    /// Back to the arrow.
-    Arrow,
     SameType,
     /// What the right-click menu does.
     Menu(MenuAct),
@@ -50,6 +48,51 @@ pub(super) enum Act {
     SketchCancel,
     Pick(Pick),
     CreateSimilar,
+}
+
+/// The colours of the ribbon's drawings, by family of orders, as Revit's
+/// icons: so that a drawing is found by its colour as well as its shape.
+mod colours {
+    use eframe::egui::Color32;
+    pub const SELECT: Color32 = Color32::from_rgb(60, 100, 170);
+    pub const CLIPBOARD: Color32 = Color32::from_rgb(184, 117, 20);
+    pub const SHAPE: Color32 = Color32::from_rgb(192, 88, 47);
+    pub const MOVE: Color32 = Color32::from_rgb(47, 111, 181);
+    pub const FACES: Color32 = Color32::from_rgb(110, 85, 194);
+    pub const ENDS: Color32 = Color32::from_rgb(19, 133, 122);
+    pub const DELETE: Color32 = Color32::from_rgb(192, 57, 43);
+    pub const VIEW: Color32 = Color32::from_rgb(76, 106, 146);
+    pub const MEASURE: Color32 = Color32::from_rgb(22, 137, 122);
+    pub const CREATE: Color32 = Color32::from_rgb(46, 139, 87);
+    pub const ACCEPT: Color32 = Color32::from_rgb(46, 125, 50);
+    pub const CANCEL: Color32 = Color32::from_rgb(198, 40, 40);
+}
+
+/// The colour of a button of a fixed panel: by its order, or by its panel.
+fn item_colour(panel: &str, act: &Act) -> Color32 {
+    let order = match act {
+        Act::Order(c) | Act::SketchCmd(c) => Some(*c),
+        Act::Menu(MenuAct::Delete) => Some("BORRA"),
+        _ => None,
+    };
+    match order {
+        Some("DESPLAZA" | "COPIA" | "GIRA" | "REFLEJAR" | "ESCALA" | "MATRIZ") => colours::MOVE,
+        Some("ALINEACARA" | "EQUIDIST" | "ALINEAR") => colours::FACES,
+        Some(
+            "ESQUINA" | "LIMITE1" | "LIMITE" | "RECORTA" | "ALARGA" | "PARTE" | "PARTEPUNTO"
+            | "JUNTAR" | "EMPALME",
+        ) => colours::ENDS,
+        Some("BORRA") => colours::DELETE,
+        _ => match panel {
+            "Seleccionar" => colours::SELECT,
+            "Portapapeles" => colours::CLIPBOARD,
+            "Geometría" => colours::SHAPE,
+            "Vista" => colours::VIEW,
+            "Medir" => colours::MEASURE,
+            "Crear" => colours::CREATE,
+            _ => colours::MOVE,
+        },
+    }
 }
 
 /// The orders of the «Modificar» panel, column by column (three to a
@@ -1103,24 +1146,31 @@ impl ArchiSimApp {
         let running = self.running();
         let mut panels = Vec::new();
 
-        // Seleccionar.
-        let arrow = self.tool == Tool::Arrow && self.sketch.is_none();
+        // Seleccionar (the arrow itself is at the top of the rail, on the
+        // far left).
         panels.push(Panel::new(
             "Seleccionar",
             7,
             vec![
-                Item::new(Mark::Icon(Icon::Arrow), "Modificar", Size::Big, Act::Arrow)
-                    .on(arrow)
-                    .hint("Modificar (Esc): suelta la herramienta o la orden y vuelve a la flecha para elegir"),
-                Item::new(Mark::Glyph(Glyph::SelectSame), "Los de su tipo", Size::Named, Act::SameType)
-                    .enabled(sel.len() == 1)
-                    .hint(if sel.len() == 1 {
-                        "Elige todos los ejemplares del proyecto con el tipo de lo seleccionado"
-                    } else {
-                        "Elige antes un elemento: luego, todos los de su tipo"
-                    }),
-                Item::new(Mark::Glyph(Glyph::SelectAll), "Todo", Size::Named, Act::Menu(MenuAct::SelectAll))
-                    .hint("Todo lo de la vista (Ctrl+A)"),
+                Item::new(
+                    Mark::Glyph(Glyph::SelectSame),
+                    "Los de su tipo",
+                    Size::Named,
+                    Act::SameType,
+                )
+                .enabled(sel.len() == 1)
+                .hint(if sel.len() == 1 {
+                    "Elige todos los ejemplares del proyecto con el tipo de lo seleccionado"
+                } else {
+                    "Elige antes un elemento: luego, todos los de su tipo"
+                }),
+                Item::new(
+                    Mark::Glyph(Glyph::SelectAll),
+                    "Todo",
+                    Size::Named,
+                    Act::Menu(MenuAct::SelectAll),
+                )
+                .hint("Todo lo de la vista (Ctrl+A)"),
             ],
         ));
 
@@ -1300,7 +1350,21 @@ impl ArchiSimApp {
                 })],
         ));
 
-        panels.extend(self.contextual_panels(&sel));
+        let mut contextual = self.contextual_panels(&sel);
+        let own = self.discipline.hue(false).main;
+        for p in &mut contextual {
+            for it in &mut p.items {
+                it.tint.get_or_insert(own);
+            }
+        }
+        panels.extend(contextual);
+        for p in &mut panels {
+            for it in &mut p.items {
+                if it.tint.is_none() {
+                    it.tint = Some(item_colour(&p.title, &it.act));
+                }
+            }
+        }
         panels
     }
 
@@ -1315,6 +1379,7 @@ impl ArchiSimApp {
                 Size::Big,
                 Act::SketchAccept,
             )
+            .tint(colours::ACCEPT)
             .hint("Terminar el modo boceto (Intro): el elemento toma lo dibujado");
             let cancel = Item::new(
                 Mark::Glyph(Glyph::Cancel),
@@ -1322,6 +1387,7 @@ impl ArchiSimApp {
                 Size::Big,
                 Act::SketchCancel,
             )
+            .tint(colours::CANCEL)
             .hint("Salir del modo boceto dejando el elemento como estaba");
             let draw = super::sketch_ui::SKETCH_TOOLS
                 .iter()
@@ -1612,13 +1678,6 @@ impl ArchiSimApp {
                 } else {
                     self.start_command(c);
                 }
-            }
-            Act::Arrow => {
-                if self.tool == Tool::Cad {
-                    self.end_command(true);
-                }
-                self.divide_face_pick = false;
-                self.pick(Pick::Tool(Tool::Arrow));
             }
             Act::SameType => {
                 if let Some(e) = self.ed.selection.iter().next().copied() {

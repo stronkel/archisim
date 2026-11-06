@@ -41,6 +41,16 @@ pub const RIBBON_HEIGHT: f32 =
     TOP_PAD + ROWS as f32 * ROW_H + (ROWS - 1) as f32 * ROW_GAP + LABEL_H + 3.0;
 pub const RIBBON_COMPACT_HEIGHT: f32 = FOLDED_H + 8.0;
 
+/// The colour of a drawing on the panel: as given in the light theme,
+/// lighter in the dark one so it reads on the dark panel.
+fn ink(tint: Option<Color32>, p: &Palette) -> Color32 {
+    match tint {
+        None => p.text,
+        Some(c) if p.panel.r() < 128 => c.lerp_to_gamma(Color32::WHITE, 0.35),
+        Some(c) => c,
+    }
+}
+
 fn font() -> FontId {
     FontId::proportional(12.0)
 }
@@ -70,6 +80,9 @@ pub struct Item<A> {
     pub act: A,
     /// The id a mission may point at (`missions_ui::mark`).
     pub mission: Option<String>,
+    /// The colour of its drawing (as Revit's icons, by family of orders);
+    /// none: the ink of the text.
+    pub tint: Option<Color32>,
 }
 
 impl<A> Item<A> {
@@ -83,7 +96,13 @@ impl<A> Item<A> {
             enabled: true,
             act,
             mission: None,
+            tint: None,
         }
+    }
+
+    pub fn tint(mut self, colour: Color32) -> Self {
+        self.tint = Some(colour);
+        self
     }
 
     pub fn hint(mut self, hint: impl Into<String>) -> Self {
@@ -416,12 +435,13 @@ fn folded_panel<A: Clone>(
         p.text
     };
     ui.painter().rect_filled(rect, CornerRadius::same(7), fill);
-    let mark = panel
-        .items
-        .iter()
-        .find(|it| it.on)
-        .or(panel.items.first())
-        .map(|it| it.mark);
+    let first = panel.items.iter().find(|it| it.on).or(panel.items.first());
+    let mark = first.map(|it| it.mark);
+    let mark_ink = if any_on {
+        p.accent
+    } else {
+        first.map_or(fg, |it| it.tint.map_or(fg, |_| ink(it.tint, p)))
+    };
     let triangle = |c: egui::Pos2| {
         egui::Shape::convex_polygon(
             vec![
@@ -442,7 +462,7 @@ fn folded_panel<A: Clone>(
                     Vec2::splat(ICON),
                 ),
                 m,
-                fg,
+                mark_ink,
             );
         }
         if named {
@@ -465,7 +485,7 @@ fn folded_panel<A: Clone>(
                     Vec2::splat(BIG_ICON),
                 ),
                 m,
-                fg,
+                mark_ink,
             );
         }
         ui.painter().text(
@@ -568,14 +588,23 @@ fn button<A>(ui: &mut Ui, rect: Rect, it: &Item<A>, size: Size, p: &Palette) -> 
             .with(("ribbon", &it.name, rect.min.x as i32, rect.min.y as i32)),
         sense,
     );
-    let (fill, fg) = if it.on {
-        (p.accent_soft, p.accent)
+    // The drawing in its colour; the name in the ink of the text.
+    let (fill, fg, text) = if it.on {
+        (p.accent_soft, p.accent, p.accent)
     } else if !it.enabled {
-        (Color32::TRANSPARENT, p.faint)
+        (Color32::TRANSPARENT, p.faint, p.faint)
     } else if resp.hovered() {
-        (p.raised, p.text)
+        (p.raised, ink(it.tint, p), p.text)
+    } else if size == Size::Big && it.tint.is_some() {
+        // The big ones of a colour stand on a wash of it (Aceptar in
+        // green, Cancelar in red).
+        (
+            ink(it.tint, p).gamma_multiply(0.10),
+            ink(it.tint, p),
+            p.text,
+        )
     } else {
-        (Color32::TRANSPARENT, p.text)
+        (Color32::TRANSPARENT, ink(it.tint, p), p.text)
     };
     ui.painter().rect_filled(rect, CornerRadius::same(6), fill);
     if it.on {
@@ -607,7 +636,7 @@ fn button<A>(ui: &mut Ui, rect: Rect, it: &Item<A>, size: Size, p: &Palette) -> 
                     Align2::CENTER_TOP,
                     l,
                     font(),
-                    fg,
+                    text,
                 );
                 y += 14.0;
             }
@@ -635,7 +664,7 @@ fn button<A>(ui: &mut Ui, rect: Rect, it: &Item<A>, size: Size, p: &Palette) -> 
                 Align2::LEFT_CENTER,
                 &it.name,
                 font(),
-                fg,
+                text,
             );
         }
     }
