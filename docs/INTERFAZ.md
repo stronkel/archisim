@@ -457,5 +457,7 @@ El estilo de presentación dejaría de ser una cosa aparte: sería una pestaña 
 - En Propiedades, **Plantilla** dice la que sigue (o Ninguna) y la cambia; debajo, cuántas vistas la siguen.
 - Las plantillas guardan también nivel de detalle, presentación y disciplina (ya lo hacían); no guardan escala ni plano de corte, que son de cada vista.
 
-**Pendiente**: que las vistas colocadas en los planos puedan elegir plantilla desde sus propiedades (el modelo ya lo admite); llevar las plantillas a la biblioteca entre proyectos.
+**Segunda vuelta** (rama `bloque/plantillas-planos`): las vistas colocadas en los planos eligen y siguen plantilla desde sus propiedades, y su «Representación… (VG)» las edita a ellas.
+
+**Pendiente**: llevar las plantillas a la biblioteca entre proyectos.
 

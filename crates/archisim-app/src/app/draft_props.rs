@@ -754,6 +754,7 @@ impl ArchiSimApp {
         }
         if open_vg {
             self.views.vg_open = true;
+            self.views.vg_viewport = self.views.styling_viewport;
         }
         if let Some(id) = apply {
             self.apply_template(id);

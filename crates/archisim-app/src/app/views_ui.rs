@@ -13,8 +13,8 @@
 
 use super::widgets::SwitchExt as _;
 use archisim_core::{
-    Category, GraphicOverride, LayerLines, LevelId, PlanKind, PlanView, PlanViewId, Rgb, ViewStyle,
-    ViewTemplate, ViewTemplateId,
+    Category, GraphicOverride, LayerLines, LevelId, Model, ModelError, PlanKind, PlanView,
+    PlanViewId, Rgb, ViewStyle, ViewTemplate, ViewTemplateId, ViewportId,
 };
 use eframe::egui::{self, Ui};
 
@@ -40,9 +40,24 @@ pub struct ViewsUi {
     template_name: String,
     /// The page of the window Representación.
     tab: VgTab,
+    /// The view on a sheet whose properties are being shown, if any: the
+    /// window Representación opened from them edits that view.
+    pub styling_viewport: Option<ViewportId>,
+    /// The view on a sheet the window Representación edits (none: the
+    /// active plan).
+    pub vg_viewport: Option<ViewportId>,
+    /// Its look while the mouse is still held.
+    pub(super) vg_pending: Option<(ViewportId, ViewStyle)>,
 }
 
 impl ViewsUi {
+    /// A look for the view on a sheet, as if the mouse had just been let go
+    /// after changing it in the window.
+    #[cfg(test)]
+    pub fn set_pending(&mut self, id: ViewportId, style: ViewStyle) {
+        self.vg_pending = Some((id, style));
+    }
+
     /// Goes to a page of the window Representación.
     #[cfg(test)]
     pub fn set_tab(&mut self, tab: VgTab) {
@@ -135,6 +150,22 @@ fn look_tab(
 
 /// A style without what belongs to the session, not to the view: the
 /// discipline greyed and the disciplines hidden from the navigator.
+/// What a view that follows a template changes in its look goes to the
+/// template, and so to every view that follows it (Revit's view
+/// templates). Nothing happens for a view with a look of its own.
+pub(super) fn to_template(m: &mut Model, style: &ViewStyle) -> Result<(), ModelError> {
+    let Some(mut t) = style.template.and_then(|id| m.view_template(id).cloned()) else {
+        return Ok(());
+    };
+    let mut look = kept(style);
+    look.template = None;
+    if t.style != look {
+        t.style = look;
+        m.set_view_template(t)?;
+    }
+    Ok(())
+}
+
 fn kept(style: &ViewStyle) -> ViewStyle {
     let mut s = style.clone();
     s.focus = archisim_core::DisciplineFocus::None;
@@ -352,18 +383,7 @@ impl ArchiSimApp {
                         // A view that follows a template: what changes in
                         // its look changes the template, and so every view
                         // that follows it (Revit's view templates).
-                        if let Some(mut t) = now
-                            .style
-                            .template
-                            .and_then(|id| m.view_template(id).cloned())
-                        {
-                            let mut look = now.style.clone();
-                            look.template = None;
-                            if t.style != look {
-                                t.style = look;
-                                m.set_view_template(t)?;
-                            }
-                        }
+                        to_template(m, &now.style)?;
                         match saved {
                             Some(id) => {
                                 let mut v = m.plan_view(id).cloned().expect("checked above");
@@ -395,20 +415,61 @@ impl ArchiSimApp {
     /// The window «Visibilidad y gráficos» of the active plan.
     pub(super) fn vg_window(&mut self, ctx: &egui::Context) {
         if !self.views.vg_open {
+            self.views.vg_viewport = None;
             return;
         }
-        let p = Palette::current(ctx);
-        let title = match self.active_saved().and_then(|id| self.saved_view_name(id)) {
-            Some(n) => format!("Representación · {n}"),
-            None => {
-                let l = self
-                    .ed
-                    .model()
-                    .level(self.ed.level)
-                    .map(|l| l.name.clone())
-                    .unwrap_or_default();
-                format!("Representación · {l}")
+        let Some(id) = self.views.vg_viewport else {
+            return self.vg_window_of(ctx, None);
+        };
+        // A view on a sheet: the window edits its look, as the properties
+        // do (the plan's own look is put aside meanwhile).
+        let Some(v) = self.ed.model().viewport(id).cloned() else {
+            self.views.vg_viewport = None;
+            return;
+        };
+        let name = archisim_plan::sheet::viewport_title(self.ed.model(), &v);
+        // While the mouse is held (a slider), the look waits here.
+        let start = match self.views.vg_pending.take() {
+            Some((pid, s)) if pid == id => s,
+            _ => v.style.clone(),
+        };
+        let saved = std::mem::replace(&mut self.view_style, start);
+        self.vg_window_of(ctx, Some(format!("Representación · {name} (en el plano)")));
+        let style = std::mem::replace(&mut self.view_style, saved);
+        if style != v.style && ctx.input(|i| i.pointer.any_down()) {
+            self.views.vg_pending = Some((id, style));
+        } else if style != v.style {
+            let mut new = v;
+            new.style = style;
+            let r = self.ed.transact("Gráficos de la vista del plano", |m| {
+                to_template(m, &new.style)?;
+                m.set_viewport(new)
+            });
+            if let Err(e) = r {
+                self.complain(format!("No se puede guardar la vista: {e}."));
             }
+        }
+        if !self.views.vg_open {
+            self.views.vg_viewport = None;
+        }
+    }
+
+    fn vg_window_of(&mut self, ctx: &egui::Context, title: Option<String>) {
+        let p = Palette::current(ctx);
+        let title = match title {
+            Some(t) => t,
+            None => match self.active_saved().and_then(|id| self.saved_view_name(id)) {
+                Some(n) => format!("Representación · {n}"),
+                None => {
+                    let l = self
+                        .ed
+                        .model()
+                        .level(self.ed.level)
+                        .map(|l| l.name.clone())
+                        .unwrap_or_default();
+                    format!("Representación · {l}")
+                }
+            },
         };
         let mut open = true;
         let mut style = self.view_style.clone();

@@ -6,6 +6,27 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-06 (115) · Plantillas de vista en los planos
+
+Rama `bloque/plantillas-planos`, sobre `bloque/representacion` (#166), con pull request. Sin cambios de formato (la versión 86 ya guardaba la plantilla de las vistas de los planos) ni de IFC.
+
+**Hecho**
+- Una vista colocada en un plano elige su **plantilla** en Propiedades → Representación, como una planta: la sigue, y lo que se cambie en su aspecto cambia la plantilla y todas las vistas que la siguen, en los planos o fuera de ellos.
+- **Representación… (VG)** abierto desde las propiedades de una vista del plano edita esa vista (su título lo dice: «… (en el plano)»), no la planta de la pestaña.
+- Una planta colocada en un plano toma el aspecto de su planta, plantilla incluida, así que la sigue desde el principio.
+- Prueba `views_on_sheets_follow_a_template` (la plantilla, la planta y las dos vistas de dos planos cambian juntas).
+
+**Pendiente**
+- Plantillas en la biblioteca entre proyectos (y decidir si guardan escala y plano de corte).
+
+**Qué debe probar Antonio**
+1. `cargo run --release -p archisim-app -- out/demo.archisim` y abre el plano A-01 en el Navegador.
+2. Pulsa la planta del plano: Propiedades → Representación → **Plantilla** → «Albañilería». El plano se redibuja con ese aspecto.
+3. **Representación… (VG)**: el título acaba en «(en el plano)». Apaga «Barandillas»: desaparecen del plano y de la plantilla.
+4. Pon la Planta baja (la pestaña) también en «Albañilería» y apaga ahí otra categoría: el plano A-01 cambia igual.
+
+---
+
 ## 2026-11-06 (114) · Representación en tres niveles: proyecto, plantilla y vista
 
 Rama `bloque/representacion`, con pull request. **Formato `.archisim` versión 86** (el estilo de una vista guarda la plantilla que sigue). Sin cambios de IFC. Antonio aprobó la propuesta de `docs/INTERFAZ.md` §13.5.
