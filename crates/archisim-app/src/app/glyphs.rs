@@ -126,6 +126,32 @@ pub enum Glyph {
     Areas,
     Present,
     Deliver,
+    /// A clipboard: Pegar.
+    Paste,
+    /// Scissors: Cortar.
+    Cut,
+    /// Two sheets: Copiar al portapapeles.
+    ClipCopy,
+    /// A dropper: Igualar propiedades.
+    MatchProps,
+    /// Two equal pieces and a third ghosted: los de su tipo.
+    SelectSame,
+    /// A dashed frame round everything.
+    SelectAll,
+    /// An eye struck out: Ocultar.
+    Hide,
+    /// A piece between focus corners: Aislar.
+    Isolate,
+    /// An eye with rays: Mostrar todo.
+    ShowAll,
+    /// A tick: Aceptar.
+    Accept,
+    /// A cross: Cancelar.
+    Cancel,
+    /// A piece, its ghost and a plus: Crear similar.
+    CreateSimilar,
+    /// A bin: Borrar.
+    Delete,
 }
 
 impl Glyph {
@@ -424,6 +450,41 @@ impl Glyph {
                 r##"<rect x="2" y="3" width="16" height="11" rx="1"/><path d="M10 14v3M6 18h8"/><path d="M5 11l3-3 2 2 4-4" stroke-width="1"/>"##
             }
             Glyph::Deliver => r##"<path d="M10 2.5v9M6 8l4 4 4-4M3 14v3h14v-3"/>"##,
+            Glyph::Paste => {
+                r##"<rect x="4" y="4" width="12" height="14" rx="1.5"/><rect x="7.5" y="2.5" width="5" height="3" rx="0.8"/><path d="M7 9.5h6M7 12.5h6M7 15.5h4" stroke-width="1"/>"##
+            }
+            Glyph::Cut => {
+                r##"<circle cx="6" cy="15" r="2.3"/><circle cx="14" cy="15" r="2.3"/><path d="M7.4 13.2L14 3M12.6 13.2L6 3"/>"##
+            }
+            Glyph::ClipCopy => {
+                r##"<rect x="7" y="6" width="9" height="11.5" rx="1"/><path d="M4 14V4a1 1 0 0 1 1-1h8"/>"##
+            }
+            Glyph::MatchProps => {
+                r##"<path d="M12.5 3.5l4 4-2 2-4-4z"/><path d="M11.5 7.5L4.5 14.5 4 16.5l2-.5 7-7"/>"##
+            }
+            Glyph::SelectSame => {
+                r##"<rect x="2.5" y="3.5" width="6" height="6"/><rect x="11.5" y="3.5" width="6" height="6"/><rect x="7" y="11.5" width="6" height="6" stroke-dasharray="1.6 1.3"/>"##
+            }
+            Glyph::SelectAll => {
+                r##"<rect x="2.5" y="2.5" width="15" height="15" stroke-dasharray="2 1.6"/><rect x="6" y="6" width="3.5" height="3.5"/><rect x="10.5" y="10.5" width="3.5" height="3.5"/>"##
+            }
+            Glyph::Hide => {
+                r##"<path d="M2 10c2.5-4 5-6 8-6s5.5 2 8 6c-2.5 4-5 6-8 6s-5.5-2-8-6z"/><circle cx="10" cy="10" r="2.5"/><path d="M3.5 16.5l13-13"/>"##
+            }
+            Glyph::Isolate => {
+                r##"<path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4"/><rect x="7" y="7" width="6" height="6"/>"##
+            }
+            Glyph::ShowAll => {
+                r##"<path d="M2 11c2.5-4 5-6 8-6s5.5 2 8 6c-2.5 4-5 6-8 6s-5.5-2-8-6z"/><circle cx="10" cy="11" r="2.5"/><path d="M10 1.5v1.8M4 3l1 1.3M16 3l-1 1.3" stroke-width="1"/>"##
+            }
+            Glyph::Accept => r##"<path d="M3.5 10.5l4.5 4.5 8.5-10" stroke-width="2"/>"##,
+            Glyph::Cancel => r##"<path d="M4.5 4.5l11 11M15.5 4.5l-11 11" stroke-width="2"/>"##,
+            Glyph::CreateSimilar => {
+                r##"<rect x="2.5" y="9" width="9" height="6"/><rect x="5" y="5" width="9" height="6" stroke-dasharray="1.5 1.2"/><path d="M16 11.5v6M13 14.5h6"/>"##
+            }
+            Glyph::Delete => {
+                r##"<path d="M4 6h12M8 6V4h4v2M5.5 6l1 11h7l1-11"/><path d="M8.5 9v5M11.5 9v5" stroke-width="1"/>"##
+            }
             Glyph::HeadSplatter => {
                 r##"<circle cx="7" cy="7" r="2.5"/><circle cx="13.5" cy="8" r="1.8"/><circle cx="9" cy="13.5" r="2"/><circle cx="15" cy="14" r="1.2"/><circle cx="4" cy="13" r="1"/>"##
             }
@@ -545,6 +606,19 @@ impl Glyph {
         Glyph::Areas,
         Glyph::Present,
         Glyph::Deliver,
+        Glyph::Paste,
+        Glyph::Cut,
+        Glyph::ClipCopy,
+        Glyph::MatchProps,
+        Glyph::SelectSame,
+        Glyph::SelectAll,
+        Glyph::Hide,
+        Glyph::Isolate,
+        Glyph::ShowAll,
+        Glyph::Accept,
+        Glyph::Cancel,
+        Glyph::CreateSimilar,
+        Glyph::Delete,
     ];
 }
 

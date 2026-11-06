@@ -1,16 +1,22 @@
-//! The contextual bar (`docs/INTERFAZ.md` §2.6): fixed under the tabs,
-//! always there and always in the same place. With a tool it shows the
-//! tool's insertion methods; with something selected, «Modificar» with its
-//! orders, the same as AutoCAD's keys; with an order running, its step;
-//! with nothing, the orders in grey.
+//! What the ribbon under the tabs holds (`docs/INTERFAZ.md` §13), and the
+//! options bar under it, as Revit's «Modificar» tab: always the same
+//! panels in the same order (Seleccionar, Portapapeles, Geometría,
+//! Modificar, Vista, Medir, Crear), and after them those of what is in hand
+//! — the tool's ways of drawing or placing, the sketch's Aceptar and
+//! Cancelar, the selection's contour and faces. The options bar says what
+//! is in hand («Modificar | Colocar Muro») with its settings (altura, línea
+//! de ubicación, cadena, longitud y ángulo…), the step of the order running
+//! and what a click does now. How it is laid out and drawn is in `ribbon`.
 
-use eframe::egui::{self, Align2, Color32, CornerRadius, FontId, Rect, Sense, Stroke, Ui, Vec2};
+use eframe::egui::{self, Color32, CornerRadius, FontId, Rect, Sense, Stroke, Ui, Vec2};
 
+use super::context_menu::MenuAct;
 use super::glyphs::{self, Glyph};
 use super::icons::{self, Icon};
+use super::ribbon::{Item, Panel, Size};
 use super::theme::Palette;
-use super::toolbox::Mark;
-use super::widgets::strong_font;
+use super::toolbox::{Mark, Pick};
+use super::widgets::{strong_font, SwitchExt};
 use super::{ArchiSimApp, Tool};
 use crate::cad::Input;
 use crate::dim_tool::DimMode;
@@ -18,11 +24,79 @@ use crate::pick::Element;
 use crate::slab_tool::SlabMode;
 use crate::wall_tool::WallMode;
 
-pub const CONTEXT_BAR_HEIGHT: f32 = 40.0;
+/// The options bar under the ribbon.
+pub const OPTIONS_BAR_HEIGHT: f32 = 32.0;
+
+/// What a button of the ribbon does.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(super) enum Act {
+    Method(MethodAct),
+    /// An order of «Modificar» (again while it runs: it ends).
+    Order(&'static str),
+    /// Back to the arrow.
+    Arrow,
+    SameType,
+    /// What the right-click menu does.
+    Menu(MenuAct),
+    Paint,
+    /// Dividir cara on a face picked in 3D.
+    DivideFace3d,
+    Round,
+    /// Its contour, or the zones of one of its faces, in sketch mode.
+    Sketch(crate::sketch::SketchTarget),
+    /// An order of the sketch's lines.
+    SketchCmd(&'static str),
+    SketchAccept,
+    SketchCancel,
+    Pick(Pick),
+    CreateSimilar,
+}
+
+/// The orders of the «Modificar» panel, column by column (three to a
+/// column): moving, mirrored and repeated, faces, ends, lines, deleting.
+const MODIFY_COLUMNS: &[&str] = &[
+    "DESPLAZA",
+    "COPIA",
+    "GIRA",
+    "REFLEJAR",
+    "ESCALA",
+    "MATRIZ",
+    "ALINEACARA",
+    "EQUIDIST",
+    "ALINEAR",
+    "ESQUINA",
+    "LIMITE1",
+    "LIMITE",
+    "RECORTA",
+    "ALARGA",
+    "PARTE",
+    "JUNTAR",
+    "BORRA",
+];
+
+/// The drawing of an order of the sketch.
+fn sketch_mark(command: &str) -> Mark {
+    match command {
+        "LINEA" => Mark::Icon(Icon::GeoSingle),
+        "RECTANG" => Mark::Icon(Icon::GeoRect),
+        "POLIGONO" => Mark::Icon(Icon::GeoPolygon),
+        "ARCO" => Mark::Icon(Icon::GeoArc),
+        "CIRCULO" => Mark::Icon(Icon::GeoCircle),
+        "EMPALME" => Mark::Icon(Icon::Fillet),
+        "RECORTA" => Mark::Icon(Icon::Trim),
+        "ALARGA" => Mark::Icon(Icon::Extend),
+        "PARTEPUNTO" => Mark::Glyph(Glyph::Break),
+        "EQUIDIST" => Mark::Icon(Icon::Offset),
+        "DESPLAZA" => Mark::Icon(Icon::Move),
+        "COPIA" => Mark::Icon(Icon::Copy),
+        "BORRA" => Mark::Glyph(Glyph::Delete),
+        _ => Mark::Icon(Icon::Line),
+    }
+}
 
 /// What a method button does.
 #[derive(Debug, Clone, Copy, PartialEq)]
-enum MethodAct {
+pub(super) enum MethodAct {
     Wall(WallMode),
     /// Slab, roof or room outline: by corners, rectangle or wand.
     Outline(Outline),
@@ -48,7 +122,7 @@ enum MethodAct {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-enum Outline {
+pub(super) enum Outline {
     Polygon,
     Rectangle,
     Wand,
@@ -421,16 +495,9 @@ impl ArchiSimApp {
             m(
                 Mark::Icon(Icon::GeoSingle),
                 "Recta",
-                "Un tramo por dos clics",
+                "Un tramo por dos clics (los muros, seguidos con Cadena, en la barra de opciones)",
                 straight,
-                wall == Some(WallMode::Single) || line_tool,
-            ),
-            m(
-                Mark::Icon(Icon::GeoChain),
-                "Cadena",
-                "Tramos seguidos: cada clic añade uno desde el anterior",
-                wall_act(WallMode::Chain),
-                wall == Some(WallMode::Chain),
+                matches!(wall, Some(WallMode::Single | WallMode::Chain)) || line_tool,
             ),
             m(
                 Mark::Icon(Icon::GeoRect),
@@ -810,6 +877,14 @@ impl ArchiSimApp {
             }
         };
         match act {
+            // A straight wall goes on in a chain if Cadena is on.
+            MethodAct::Wall(WallMode::Single | WallMode::Chain) => {
+                self.wall_tool.set_mode(if self.wall_chain {
+                    WallMode::Chain
+                } else {
+                    WallMode::Single
+                })
+            }
             MethodAct::Wall(mode) => self.wall_tool.set_mode(mode),
             MethodAct::Dormer(k) => {
                 self.roof_settings.dormer = Some(k);
@@ -1001,192 +1076,566 @@ impl ArchiSimApp {
         }
     }
 
-    /// The bar under the tabs.
-    pub(super) fn context_bar(&mut self, ui: &mut Ui) {
-        let p = Palette::current(ui.ctx());
-        ui.horizontal_centered(|ui| {
-            ui.spacing_mut().item_spacing.x = 2.0;
-            if self.tool == Tool::Cad {
-                // A drawing order of the bottom bar: its variants, as the
-                // methods of a tool, then its step.
-                let name = self.cad.as_ref().map(|c| c.name()).unwrap_or_default();
-                if let Some((title, variants)) = super::bottom_segments::segment_of(name) {
-                    bar_title(ui, title, &p);
-                    let mut chosen = None;
-                    for v in variants {
-                        let on = matches!(v.pick, super::toolbox::Pick::Command(c) if c == name);
-                        let r = bar_button(ui, v.mark, v.name, on, true, false)
-                            .on_hover_text(format!("{} ({})", v.name, v.key));
-                        if r.clicked() && !on {
-                            chosen = Some(v.pick);
-                        }
-                    }
-                    bar_separator(ui, &p);
-                    if let Some(pick) = chosen {
-                        self.pick(pick);
-                        return;
-                    }
-                    self.order_step_body(ui);
-                    return;
-                }
-                self.order_step(ui);
-                return;
-            }
-            if let Some((name, methods)) = self.methods() {
-                bar_title(ui, name, &p);
-                // Room for the reference line buttons and the L and ∠
-                // fields after the methods.
-                let refs = if matches!(self.tool, Tool::Wall | Tool::Road) {
-                    150.0
-                } else {
-                    0.0
-                };
-                let room = ui.available_width() - 150.0 - refs;
-                let named = names_fit(ui, methods.iter().map(|m| m.name), room);
-                let mut chosen = None;
-                for m in &methods {
-                    let enabled = m.act != MethodAct::None;
-                    let r = bar_button(ui, m.mark, m.name, m.on, enabled, named);
-                    super::missions_ui::mark(ui.ctx(), format!("method:{}", m.name), r.rect);
-                    let r = if enabled {
-                        r.on_hover_text(format!("{}: {}", m.name, m.hint))
+    /// The ribbon under the tabs (`docs/INTERFAZ.md` §13).
+    pub(super) fn ribbon(&mut self, ui: &mut Ui) {
+        let panels = self.ribbon_panels();
+        let hue = self.discipline.hue(ui.visuals().dark_mode);
+        let compact = self.prefs.ribbon_compact;
+        if let Some(act) = super::ribbon::show(ui, &panels, compact, hue, 0.0) {
+            self.ribbon_act(act);
+        }
+    }
+
+    /// The order running, if it is one of «Modificar».
+    fn running(&self) -> Option<&'static str> {
+        if self.tool != Tool::Cad {
+            return None;
+        }
+        self.cad.as_ref().map(|c| c.name())
+    }
+
+    /// What the ribbon holds now: the panels of «Modificar», always the
+    /// same and in the same order, and after them those of what is in
+    /// hand.
+    pub(super) fn ribbon_panels(&self) -> Vec<Panel<Act>> {
+        let sel: Vec<Element> = self.ed.selection.iter().copied().collect();
+        let some = !sel.is_empty();
+        let running = self.running();
+        let mut panels = Vec::new();
+
+        // Seleccionar.
+        let arrow = self.tool == Tool::Arrow && self.sketch.is_none();
+        panels.push(Panel::new(
+            "Seleccionar",
+            7,
+            vec![
+                Item::new(Mark::Icon(Icon::Arrow), "Modificar", Size::Big, Act::Arrow)
+                    .on(arrow)
+                    .hint("Modificar (Esc): suelta la herramienta o la orden y vuelve a la flecha para elegir"),
+                Item::new(Mark::Glyph(Glyph::SelectSame), "Los de su tipo", Size::Named, Act::SameType)
+                    .enabled(sel.len() == 1)
+                    .hint(if sel.len() == 1 {
+                        "Elige todos los ejemplares del proyecto con el tipo de lo seleccionado"
                     } else {
-                        r.on_hover_text(format!("{}: no vale para esta herramienta", m.name))
-                    };
-                    if r.clicked() && enabled {
-                        chosen = Some(m.act);
-                    }
-                }
-                if let Some(act) = chosen {
-                    self.apply_method(act);
-                }
-                self.reference_buttons(ui);
-                self.place_fields(ui);
-                self.brush_fields(ui);
-                self.length_angle_fields(ui);
-                self.tool_step(ui);
-                return;
+                        "Elige antes un elemento: luego, todos los de su tipo"
+                    }),
+                Item::new(Mark::Glyph(Glyph::SelectAll), "Todo", Size::Named, Act::Menu(MenuAct::SelectAll))
+                    .hint("Todo lo de la vista (Ctrl+A)"),
+            ],
+        ));
+
+        // Portapapeles.
+        let pick_first = "Elige antes lo que quieres";
+        panels.push(Panel::new(
+            "Portapapeles",
+            4,
+            vec![
+                Item::new(Mark::Glyph(Glyph::Paste), "Pegar", Size::Big, Act::Menu(MenuAct::Paste))
+                    .enabled(self.clipboard.is_some())
+                    .hint(if self.clipboard.is_some() {
+                        "Pegar (Ctrl+V): lo copiado, a medio metro; con el clic derecho, donde lo pinches"
+                    } else {
+                        "Pegar (Ctrl+V): copia o corta antes algo"
+                    }),
+                Item::new(Mark::Glyph(Glyph::Cut), "Cortar", Size::Small, Act::Menu(MenuAct::Cut))
+                    .enabled(some)
+                    .hint(if some { "Ctrl+X: para pegarlo en otro sitio o en otra planta".to_string() } else { format!("{pick_first} cortar") }),
+                Item::new(Mark::Glyph(Glyph::ClipCopy), "Copiar al portapapeles", Size::Small, Act::Menu(MenuAct::Copy))
+                    .enabled(some)
+                    .hint(if some { "Ctrl+C: para pegarlo en otro sitio o en otra planta".to_string() } else { format!("{pick_first} copiar") }),
+                Item::new(Mark::Glyph(Glyph::MatchProps), "Igualar propiedades", Size::Small, Act::Order("IGUALARPROP"))
+                    .on(running == Some("IGUALARPROP"))
+                    .hint("Igualar propiedades (MA): pincha el modelo y después los elementos que toman su tipo y sus propiedades"),
+            ],
+        ));
+
+        // Geometría.
+        let masses = sel.iter().any(|e| matches!(e, Element::Mass(_)));
+        panels.push(Panel::new(
+            "Geometría",
+            5,
+            vec![
+                Item::new(Mark::Glyph(Glyph::Paint), "Pintar", Size::Named, Act::Paint)
+                    .on(self.tool == Tool::Paint && !self.divide_face_pick)
+                    .hint("Pintar (PT): un material en la cara que pinches de cualquier elemento (mejor en 3D). Si la cara está dividida, solo esa zona"),
+                Item::new(Mark::Glyph(Glyph::DivideFace), "Dividir cara", Size::Named, Act::DivideFace3d)
+                    .on(self.divide_face_pick)
+                    .hint("Dividir cara (SF): pincha en 3D la cara y dibuja sus zonas en modo boceto; con un elemento elegido, sus caras están en su grupo, a la derecha"),
+                Item::new(Mark::Glyph(Glyph::RoundEdge), "Redondear", Size::Named, Act::Round)
+                    .enabled(masses)
+                    .hint(if masses {
+                        "Redondear las esquinas y las aristas de arriba de los volúmenes (otra vez: aristas vivas)"
+                    } else {
+                        "Redondear: elige antes uno o varios volúmenes de Concepto"
+                    }),
+            ],
+        ));
+
+        // Modificar: in a sketch, the orders of its lines.
+        let mut orders = Vec::new();
+        if self.sketch.is_some() {
+            for (label, cmd, hint) in super::sketch_ui::SKETCH_EDITS {
+                orders.push(
+                    Item::new(sketch_mark(cmd), *label, Size::Small, Act::SketchCmd(cmd))
+                        .on(running == Some(*cmd))
+                        .hint(*hint),
+                );
             }
-            // Modificar: with the selection, or grey without it.
-            let sel: Vec<Element> = self.ed.selection.iter().copied().collect();
-            let label = selection_label(&sel);
-            let title = if label.is_empty() {
-                "Modificar".to_string()
-            } else {
-                format!("Modificar · {label}")
-            };
-            bar_title(ui, &title, &p);
-            let named = names_fit(
-                ui,
-                TRANSFORM.iter().chain(GEOMETRY).chain(BUILDING).map(|o| o.name),
-                ui.available_width() - 11.0,
-            );
-            // One slab, roof or terrain: its contour in sketch mode (G2).
-            let contour = match sel.as_slice() {
-                [Element::Slab(id)] => Some(crate::sketch::SketchTarget::Slab(*id)),
-                [Element::Roof(id)] => Some(crate::sketch::SketchTarget::Roof(*id)),
-                [Element::Terrain(id)] => Some(crate::sketch::SketchTarget::Terrain(*id)),
-                [Element::Road(id)] => Some(crate::sketch::SketchTarget::RoadEdges(*id)),
-                // A wall: its profile in elevation (Revit's «Editar perfil»).
-                [Element::Wall(id)]
-                    if self.ed.model().wall(*id).is_some_and(|w| !w.is_curved()) =>
-                {
-                    Some(crate::sketch::SketchTarget::WallProfile(*id))
+        } else {
+            for command in MODIFY_COLUMNS {
+                if *command == "BORRA" {
+                    orders.push(
+                        Item::new(
+                            Mark::Glyph(Glyph::Delete),
+                            "Borrar",
+                            Size::Small,
+                            Act::Menu(MenuAct::Delete),
+                        )
+                        .enabled(some)
+                        .hint(if some {
+                            "Borrar lo seleccionado (Supr, DE)"
+                        } else {
+                            "Borrar (Supr, DE): elige antes lo que quieres borrar"
+                        }),
+                    );
+                    continue;
                 }
-                _ => None,
-            };
-            if let Some(target) = contour {
-                let r = bar_button(
-                    ui,
-                    Mark::Glyph(Glyph::EditContour),
-                    "Editar contorno",
-                    false,
-                    true,
-                    true,
+                let Some(o) = TRANSFORM
+                    .iter()
+                    .chain(GEOMETRY)
+                    .chain(BUILDING)
+                    .find(|o| o.command == *command)
+                else {
+                    continue;
+                };
+                let enabled = order_applies(o.command, &sel);
+                let hint = if enabled {
+                    format!("({}) {}", o.key, o.hint)
+                } else if sel.is_empty() {
+                    format!("({}) Elige antes lo que quieres modificar", o.key)
+                } else {
+                    format!("({}) No vale para lo seleccionado", o.key)
+                };
+                orders.push(
+                    Item::new(o.mark, o.name, Size::Small, Act::Order(o.command))
+                        .on(running == Some(o.command))
+                        .enabled(enabled || running == Some(o.command))
+                        .hint(hint),
+                );
+            }
+        }
+        panels.push(Panel::new("Modificar", 8, orders));
+
+        // Vista.
+        let hidden = !self.ed.hidden().is_empty();
+        panels.push(Panel::new(
+            "Vista",
+            3,
+            vec![
+                Item::new(
+                    Mark::Glyph(Glyph::Hide),
+                    "Ocultar",
+                    Size::Named,
+                    Act::Menu(MenuAct::Hide),
                 )
-                .on_hover_text("Modo boceto: su contorno en líneas sueltas para dibujar, recortar, alargar o borrar; Aceptar o Cancelar");
-                if r.clicked() {
-                    self.start_sketch(target);
-                }
-                bar_separator(ui, &p);
+                .enabled(some)
+                .hint("Ocultar lo seleccionado en las vistas, por ahora (HH)"),
+                Item::new(
+                    Mark::Glyph(Glyph::Isolate),
+                    "Aislar",
+                    Size::Named,
+                    Act::Menu(MenuAct::Isolate),
+                )
+                .enabled(some)
+                .hint("Ver solo lo seleccionado, por ahora"),
+                Item::new(
+                    Mark::Glyph(Glyph::ShowAll),
+                    "Mostrar todo",
+                    Size::Named,
+                    Act::Menu(MenuAct::ShowAll),
+                )
+                .enabled(hidden)
+                .hint(if hidden {
+                    "Volver a ver lo ocultado (HR)"
+                } else {
+                    "No hay nada oculto"
+                }),
+            ],
+        ));
+
+        // Medir.
+        panels.push(Panel::new(
+            "Medir",
+            2,
+            vec![
+                Item::new(
+                    Mark::Glyph(Glyph::Tape),
+                    "Cinta",
+                    Size::Named,
+                    Act::Pick(Pick::Concept(super::concept_ui::ConceptPick::Tape)),
+                )
+                .on(self.tool == Tool::Tape)
+                .hint("Medir entre dos puntos; deja una guía"),
+                Item::new(
+                    Mark::Glyph(Glyph::Dimension),
+                    "Cota",
+                    Size::Named,
+                    Act::Pick(Pick::Tool(Tool::Dimension)),
+                )
+                .on(self.tool == Tool::Dimension)
+                .hint("Cota alineada (DI)"),
+            ],
+        ));
+
+        // Crear.
+        let similar = self.similar_tool(&sel);
+        panels.push(Panel::new(
+            "Crear",
+            1,
+            vec![Item::new(Mark::Glyph(Glyph::CreateSimilar), "Crear similar", Size::Big, Act::CreateSimilar)
+                .enabled(similar.is_some())
+                .hint(match similar {
+                    Some((_, name)) => format!("Crear similar (CS): la herramienta {name} con el tipo de lo seleccionado"),
+                    None => "Crear similar (CS): elige antes un muro, forjado, puerta, ventana, pilar, viga, cubierta, barandilla, muro cortina u objeto".to_string(),
+                })],
+        ));
+
+        panels.extend(self.contextual_panels(&sel));
+        panels
+    }
+
+    /// The panels of what is in hand: the sketch, the drawing order, the
+    /// tool or the selection.
+    fn contextual_panels(&self, sel: &[Element]) -> Vec<Panel<Act>> {
+        let running = self.running();
+        if self.sketch.is_some() {
+            let accept = Item::new(
+                Mark::Glyph(Glyph::Accept),
+                "Aceptar",
+                Size::Big,
+                Act::SketchAccept,
+            )
+            .hint("Terminar el modo boceto (Intro): el elemento toma lo dibujado");
+            let cancel = Item::new(
+                Mark::Glyph(Glyph::Cancel),
+                "Cancelar",
+                Size::Big,
+                Act::SketchCancel,
+            )
+            .hint("Salir del modo boceto dejando el elemento como estaba");
+            let draw = super::sketch_ui::SKETCH_TOOLS
+                .iter()
+                .map(|(label, cmd, hint)| {
+                    Item::new(sketch_mark(cmd), *label, Size::Small, Act::SketchCmd(cmd))
+                        .on(running == Some(*cmd))
+                        .hint(*hint)
+                })
+                .collect();
+            return vec![
+                Panel::new("Modo", 10, vec![accept, cancel]).contextual(),
+                Panel::new("Dibujar", 9, draw).contextual(),
+            ];
+        }
+        if self.tool == Tool::Cad {
+            let name = running.unwrap_or_default();
+            if let Some((title, variants)) = super::bottom_segments::segment_of(name) {
+                let items = variants
+                    .iter()
+                    .map(|v| {
+                        let on = matches!(v.pick, Pick::Command(c) if c == name);
+                        Item::new(v.mark, v.name, Size::Named, Act::Pick(v.pick))
+                            .on(on)
+                            .hint(format!("{} ({})", v.name, v.key))
+                    })
+                    .collect();
+                return vec![Panel::new(title, 9, items).contextual()];
             }
-            // Pintar any face, and Dividir cara for the top of one element
-            // (G3).
-            let r = bar_button(ui, Mark::Glyph(Glyph::Paint), "Pintar", false, true, true)
-                .on_hover_text("Pintar (PT) — un material en la cara que pinches de cualquier elemento: muros, forjados, cubiertas, pilares, vigas, zapatas, volúmenes (mejor en 3D). Si la cara está dividida, solo esa zona");
-            if r.clicked() {
+            return Vec::new();
+        }
+        if let Some((name, methods)) = self.methods() {
+            // How the methods of this tool are shown: drawings of shapes in
+            // a gallery, or ways of placing with their names.
+            let (title, size) = match self.tool {
+                Tool::Door | Tool::Window => ("Colocación", Size::Named),
+                Tool::Brush => ("Pincel", Size::Named),
+                Tool::Dimension => ("Cota", Size::Named),
+                Tool::Footing => ("Cimentación", Size::Named),
+                Tool::Mass if self.mass_settings.mode.is_form() => ("Formas", Size::Named),
+                _ => ("Dibujar", Size::Small),
+            };
+            let mut main = Vec::new();
+            let mut dormers = Vec::new();
+            for m in methods {
+                let enabled = m.act != MethodAct::None;
+                let hint = if enabled {
+                    m.hint.to_string()
+                } else {
+                    "No vale para esta herramienta".to_string()
+                };
+                let item = Item::new(m.mark, m.name, size, Act::Method(m.act))
+                    .on(m.on)
+                    .enabled(enabled)
+                    .hint(hint)
+                    .mission(format!("method:{}", m.name));
+                if matches!(m.act, MethodAct::Dormer(_)) {
+                    dormers.push(Item {
+                        size: Size::Named,
+                        ..item
+                    });
+                } else {
+                    main.push(item);
+                }
+            }
+            let _ = name;
+            let mut out = vec![Panel::new(title, 9, main).contextual()];
+            if !dormers.is_empty() {
+                out.push(Panel::new("Buhardillas", 9, dormers).contextual());
+            }
+            return out;
+        }
+        if sel.is_empty() {
+            return Vec::new();
+        }
+        // The selection: its contour and its faces.
+        let mut items = Vec::new();
+        let contour = match sel {
+            [Element::Slab(id)] => {
+                Some((crate::sketch::SketchTarget::Slab(*id), "Editar contorno"))
+            }
+            [Element::Roof(id)] => {
+                Some((crate::sketch::SketchTarget::Roof(*id), "Editar contorno"))
+            }
+            [Element::Terrain(id)] => {
+                Some((crate::sketch::SketchTarget::Terrain(*id), "Editar contorno"))
+            }
+            [Element::Road(id)] => {
+                Some((crate::sketch::SketchTarget::RoadEdges(*id), "Editar bordes"))
+            }
+            // A wall: its profile in elevation (Revit's «Editar perfil»).
+            [Element::Wall(id)] if self.ed.model().wall(*id).is_some_and(|w| !w.is_curved()) => {
+                Some((
+                    crate::sketch::SketchTarget::WallProfile(*id),
+                    "Editar perfil",
+                ))
+            }
+            _ => None,
+        };
+        if let Some((target, label)) = contour {
+            items.push(
+                Item::new(Mark::Glyph(Glyph::EditContour), label, Size::Big, Act::Sketch(target))
+                    .hint(if label == "Editar perfil" {
+                        "Modo boceto: el muro en alzado, con sus puertas y ventanas en gris; dibuja su contorno y sus huecos"
+                    } else {
+                        "Modo boceto: su contorno en líneas sueltas para dibujar, recortar, alargar o borrar; Aceptar o Cancelar"
+                    })
+                    .mission("bar:Editar contorno"),
+            );
+        }
+        use crate::sketch::SketchTarget as T;
+        use archisim_core::{FaceRef, FaceSide};
+        let divide = |items: &mut Vec<Item<Act>>, name: &str, t: T, hint: &str| {
+            items.push(
+                Item::new(
+                    Mark::Glyph(Glyph::DivideFace),
+                    name,
+                    Size::Named,
+                    Act::Sketch(t),
+                )
+                .hint(hint),
+            );
+        };
+        match sel {
+            [Element::Wall(w)] => {
+                divide(&mut items, "Dividir cara exterior", T::WallFace(*w, FaceSide::Exterior), "Zonas en la cara exterior, en alzado vista desde fuera; luego se pinta cada una");
+                divide(
+                    &mut items,
+                    "Dividir cara interior",
+                    T::WallFace(*w, FaceSide::Interior),
+                    "Zonas en la cara interior, en alzado; luego se pinta cada una",
+                );
+            }
+            [e @ Element::Roof(_)] => {
+                divide(&mut items, "Dividir intradós", T::Zones(*e, FaceRef::Bottom), "Zonas en la cara de abajo de la cubierta; los faldones y frentes, con Dividir cara en 3D");
+            }
+            [e
+            @ (Element::Slab(_) | Element::Footing(_) | Element::Column(_) | Element::Beam(_))] => {
+                divide(
+                    &mut items,
+                    "Dividir cara de arriba",
+                    T::Zones(*e, FaceRef::Top),
+                    "Zonas en la cara de arriba, en modo boceto; luego se pinta cada una",
+                );
+                divide(
+                    &mut items,
+                    "Dividir cara de abajo",
+                    T::Zones(*e, FaceRef::Bottom),
+                    "Zonas en la cara de abajo; luego se pinta cada una",
+                );
+            }
+            _ => {}
+        }
+        if sel.iter().all(|e| matches!(e, Element::Draft(_))) {
+            items.push(
+                Item::new(
+                    Mark::Glyph(Glyph::Join),
+                    "Agrupar",
+                    Size::Named,
+                    Act::Menu(MenuAct::Group),
+                )
+                .enabled(sel.len() > 1)
+                .hint("Un grupo: un clic lo elige entero"),
+            );
+            items.push(
+                Item::new(
+                    Mark::Glyph(Glyph::Break),
+                    "Desagrupar",
+                    Size::Named,
+                    Act::Menu(MenuAct::Ungroup),
+                )
+                .hint("Cada línea del grupo, por su cuenta"),
+            );
+        }
+        if items.is_empty() {
+            return Vec::new();
+        }
+        let title = match selection_label(sel) {
+            l if l.starts_with("Selección") => "Selección".to_string(),
+            l => l.split(" (").next().unwrap_or("").to_string(),
+        };
+        vec![Panel::new(title, 9, items).contextual()]
+    }
+
+    /// The tool and the type «Crear similar» would take from the
+    /// selection.
+    pub(super) fn similar_tool(&self, sel: &[Element]) -> Option<(Tool, &'static str)> {
+        let m = self.ed.model();
+        let [e] = sel else {
+            return None;
+        };
+        match *e {
+            Element::Wall(id) => m.wall(id).map(|_| (Tool::Wall, "Muro")),
+            Element::Slab(id) => m.slab(id).map(|_| (Tool::Slab, "Forjado")),
+            Element::Roof(id) => m.roof(id).map(|_| (Tool::Roof, "Cubierta")),
+            Element::Column(id) => m.column(id).map(|_| (Tool::Column, "Pilar")),
+            Element::Beam(id) => m.beam(id).map(|_| (Tool::Beam, "Viga")),
+            Element::Object(id) => m.object(id).map(|_| (Tool::Object, "Objeto")),
+            Element::Railing(id) => m.railing(id).map(|_| (Tool::Railing, "Barandilla")),
+            Element::CurtainWall(id) => m
+                .curtain_wall(id)
+                .map(|_| (Tool::CurtainWall, "Muro cortina")),
+            Element::Opening(id) => {
+                let o = m.opening(id)?;
+                let t = m.opening_type(o.opening_type)?;
+                if t.is_door() {
+                    Some((Tool::Door, "Puerta"))
+                } else if t.is_window() {
+                    Some((Tool::Window, "Ventana"))
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
+
+    /// «Crear similar» (Revit's CS): the tool of the element selected,
+    /// with its type.
+    pub(super) fn create_similar(&mut self) {
+        let sel: Vec<Element> = self.ed.selection.iter().copied().collect();
+        let Some((tool, name)) = self.similar_tool(&sel) else {
+            self.complain("Crear similar: elige antes un solo elemento con tipo (muro, forjado, puerta, ventana, pilar, viga, cubierta, barandilla, muro cortina u objeto).");
+            return;
+        };
+        let e = sel[0];
+        self.pick(Pick::Tool(tool));
+        let m = self.ed.model();
+        match e {
+            Element::Wall(id) => {
+                if let Some(w) = m.wall(id) {
+                    self.wall_settings.wall_type = w.wall_type;
+                    self.wall_settings.reference = w.reference;
+                }
+            }
+            Element::Slab(id) => {
+                if let Some(s) = m.slab(id) {
+                    self.slab_settings.slab_type = s.slab_type;
+                }
+            }
+            Element::Roof(id) => {
+                if let Some(r) = m.roof(id) {
+                    self.roof_settings.roof_type = r.roof_type;
+                }
+            }
+            Element::Column(id) => {
+                if let Some(c) = m.column(id) {
+                    self.column_settings.member_type = c.member_type;
+                }
+            }
+            Element::Beam(id) => {
+                if let Some(b) = m.beam(id) {
+                    self.beam_settings.member_type = b.member_type;
+                }
+            }
+            Element::Object(id) => {
+                if let Some(o) = m.object(id) {
+                    self.object_settings.object_type = Some(o.object_type);
+                }
+            }
+            Element::Railing(id) => {
+                if let Some(r) = m.railing(id) {
+                    self.railing_settings.railing_type = r.railing_type;
+                }
+            }
+            Element::CurtainWall(id) => {
+                if let Some(c) = m.curtain_wall(id) {
+                    self.curtain_settings.curtain_type = Some(c.curtain_type);
+                }
+            }
+            Element::Opening(id) => {
+                if let Some(o) = m.opening(id) {
+                    let t = o.opening_type;
+                    self.opening_settings_mut().opening_type = t;
+                }
+            }
+            _ => {}
+        }
+        self.say(format!("{name} con el tipo de lo seleccionado."));
+    }
+
+    /// Does what was clicked in the ribbon.
+    fn ribbon_act(&mut self, act: Act) {
+        match act {
+            Act::Method(m) => self.apply_method(m),
+            Act::Order(c) => {
+                if self.running() == Some(c) {
+                    self.cad_escape();
+                } else {
+                    self.start_command(c);
+                }
+            }
+            Act::Arrow => {
+                if self.tool == Tool::Cad {
+                    self.end_command(true);
+                }
+                self.divide_face_pick = false;
+                self.pick(Pick::Tool(Tool::Arrow));
+            }
+            Act::SameType => {
+                if let Some(e) = self.ed.selection.iter().next().copied() {
+                    let found = self.same_type(e);
+                    let what = super::context_menu::plural(element_name(&e));
+                    self.select_instances(found, &what);
+                }
+            }
+            Act::Menu(m) => {
+                let menu = super::context_menu::ContextMenu::bare();
+                self.menu_act(m, &menu);
+            }
+            Act::Paint => {
+                self.divide_face_pick = false;
                 self.concept_pick(super::concept_ui::ConceptPick::Paint);
             }
-            let divide = match sel.as_slice() {
-                [e @ (Element::Slab(_) | Element::Footing(_) | Element::Column(_) | Element::Beam(_) | Element::Roof(_) | Element::Wall(_))] => Some(*e),
-                _ => None,
-            };
-            let r = bar_button(ui, Mark::Glyph(Glyph::DivideFace), "Dividir cara", false, divide.is_some(), true);
-            let r = if divide.is_some() {
-                r.on_hover_text("Dividir cara — dibuja zonas cerradas sobre una cara, en modo boceto (en planta las de arriba y abajo; en alzado los lados y las caras de los muros); luego se pinta cada una aparte")
-            } else {
-                r.on_hover_text("Dividir cara — elige antes un muro, un forjado, una cubierta, una zapata, un pilar o una viga")
-            };
-            // Which face: a small menu; «otra cara» is picked in 3D.
-            let mut chosen: Option<crate::sketch::SketchTarget> = None;
-            let mut pick_in_3d = false;
-            if let Some(e) = divide {
-                egui::Popup::menu(&r)
-                    .close_behavior(egui::PopupCloseBehavior::CloseOnClick)
-                    .show(|ui| {
-                        ui.set_min_width(190.0);
-                        match e {
-                            Element::Wall(w) => {
-                                if ui.button("Cara exterior").clicked() {
-                                    chosen = Some(crate::sketch::SketchTarget::WallFace(
-                                        w,
-                                        archisim_core::FaceSide::Exterior,
-                                    ));
-                                }
-                                if ui.button("Cara interior").clicked() {
-                                    chosen = Some(crate::sketch::SketchTarget::WallFace(
-                                        w,
-                                        archisim_core::FaceSide::Interior,
-                                    ));
-                                }
-                            }
-                            Element::Roof(_) => {
-                                if ui.button("Cara de abajo (intradós)").clicked() {
-                                    chosen = Some(crate::sketch::SketchTarget::Zones(
-                                        e,
-                                        archisim_core::FaceRef::Bottom,
-                                    ));
-                                }
-                            }
-                            _ => {
-                                if ui.button("Cara de arriba").clicked() {
-                                    chosen = Some(crate::sketch::SketchTarget::Zones(
-                                        e,
-                                        archisim_core::FaceRef::Top,
-                                    ));
-                                }
-                                if ui.button("Cara de abajo").clicked() {
-                                    chosen = Some(crate::sketch::SketchTarget::Zones(
-                                        e,
-                                        archisim_core::FaceRef::Bottom,
-                                    ));
-                                }
-                            }
-                        }
-                        let other = if matches!(e, Element::Roof(_)) {
-                            "Un faldón o un frente (pinchándolo en 3D)…"
-                        } else {
-                            "Otra cara (pinchándola en 3D)…"
-                        };
-                        if ui.button(other).clicked() {
-                            pick_in_3d = true;
-                        }
-                    });
-            }
-            if let Some(t) = chosen {
-                self.start_sketch(t);
-            }
-            if pick_in_3d {
+            Act::DivideFace3d => {
                 self.concept_pick(super::concept_ui::ConceptPick::Paint);
                 self.divide_face_pick = true;
                 if self.mode != super::ViewMode::ThreeD {
@@ -1194,53 +1643,296 @@ impl ArchiSimApp {
                 }
                 self.say("Pincha en 3D la cara que quieres dividir.");
             }
-            bar_separator(ui, &p);
-            let mut run = None;
-            for (i, group) in [TRANSFORM, GEOMETRY, BUILDING].iter().enumerate() {
-                if i > 0 {
-                    bar_separator(ui, &p);
-                }
-                for o in group.iter() {
-                    let enabled = order_applies(o.command, &sel);
-                    let r = bar_button(ui, o.mark, o.name, false, enabled, named);
-                    let r = if enabled {
-                        r.on_hover_text(format!("{} ({}) — {}", o.name, o.key, o.hint))
-                    } else if sel.is_empty() {
-                        r.on_hover_text(format!(
-                            "{} ({}) — selecciona antes lo que quieres modificar",
-                            o.name, o.key
-                        ))
-                    } else {
-                        r.on_hover_text(format!(
-                            "{} ({}) — no vale para lo seleccionado",
-                            o.name, o.key
-                        ))
-                    };
-                    if r.clicked() && enabled {
-                        run = Some(o.command);
+            Act::Round => self.round_selected_edges(),
+            Act::Sketch(t) => self.start_sketch(t),
+            Act::SketchCmd(cmd) => self.sketch_command(cmd),
+            Act::SketchAccept => self.finish_sketch(),
+            Act::SketchCancel => self.cancel_sketch(),
+            Act::Pick(p) => self.pick(p),
+            Act::CreateSimilar => self.create_similar(),
+        }
+    }
+
+    /// Clicks an item of the ribbon by its name, as the mouse would (for
+    /// the tests).
+    #[cfg(test)]
+    pub(super) fn click_ribbon(&mut self, name: &str) -> bool {
+        let found = self
+            .ribbon_panels()
+            .into_iter()
+            .flat_map(|p| p.items)
+            .find(|it| it.name == name && it.enabled);
+        match found {
+            Some(it) => {
+                self.ribbon_act(it.act);
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// The bar under the ribbon (Revit's options bar): what is in hand,
+    /// its settings and what a click does now.
+    pub(super) fn options_bar(&mut self, ui: &mut Ui) {
+        let p = Palette::current(ui.ctx());
+        // The button that folds the ribbon, at the right.
+        let fold = Rect::from_center_size(
+            ui.max_rect().right_center() - Vec2::new(14.0, 0.0),
+            Vec2::new(26.0, 22.0),
+        );
+        // What does not fit is cut before the button, not under it.
+        let inner = Rect::from_min_max(
+            ui.max_rect().min,
+            egui::pos2(fold.left() - 6.0, ui.max_rect().bottom()),
+        );
+        ui.scope_builder(egui::UiBuilder::new().max_rect(inner), |ui| {
+            ui.set_clip_rect(inner.intersect(ui.clip_rect()));
+            ui.horizontal_centered(|ui| {
+                ui.spacing_mut().item_spacing.x = 4.0;
+                if self.tool == Tool::Cad {
+                    if self.cad_prompt().is_none() {
+                        return;
                     }
+                    let name = self.running().unwrap_or_default();
+                    let title = match TRANSFORM
+                        .iter()
+                        .chain(GEOMETRY)
+                        .chain(BUILDING)
+                        .find(|o| o.command == name)
+                    {
+                        Some(o) => o.name.to_string(),
+                        None => super::toolbox::order_name(name).unwrap_or(name).to_string(),
+                    };
+                    bar_title(ui, &format!("Modificar | {title}"), &p);
+                    self.order_step_body(ui);
+                    return;
                 }
-            }
-            // Volumes: their edges rounded at once (bloque 4).
-            if sel.iter().any(|e| matches!(e, Element::Mass(_))) {
-                bar_separator(ui, &p);
-                let r = bar_button(
-                    ui,
-                    Mark::Glyph(Glyph::RoundEdge),
-                    "Redondear",
-                    false,
-                    true,
-                    named,
-                )
-                .on_hover_text("Redondear las esquinas y las aristas de arriba de los volúmenes (otra vez: aristas vivas). Tamaño y cuáles, en Propiedades → Aristas");
-                if r.clicked() {
-                    self.round_selected_edges();
+                if let Some((what, note)) = self.sketch_texts() {
+                    ui.add_space(6.0);
+                    ui.label(
+                        egui::RichText::new(format!("Modo boceto · {what}"))
+                            .font(strong_font(12.5))
+                            .color(super::sketch_ui::SKETCH),
+                    );
+                    ui.add_space(8.0);
+                    ui.add(
+                        egui::Label::new(
+                            egui::RichText::new(note)
+                                .font(FontId::proportional(12.0))
+                                .color(p.muted),
+                        )
+                        .truncate(),
+                    )
+                    .on_hover_text(note);
+                    return;
                 }
-            }
-            if let Some(c) = run {
-                self.start_command(c);
-            }
+                if let Some((name, _)) = self.methods() {
+                    let verb = match self.tool {
+                        Tool::Brush
+                        | Tool::Paint
+                        | Tool::Tape
+                        | Tool::PushPull
+                        | Tool::DivideFace
+                        | Tool::Deform
+                        | Tool::MassOffset => "",
+                        _ => "Colocar ",
+                    };
+                    bar_title(ui, &format!("Modificar | {verb}{name}"), &p);
+                    self.top_fields(ui);
+                    self.reference_buttons(ui);
+                    self.chain_switch(ui);
+                    self.place_fields(ui);
+                    self.brush_fields(ui);
+                    self.length_angle_fields(ui);
+                    self.tool_step(ui);
+                    return;
+                }
+                let sel: Vec<Element> = self.ed.selection.iter().copied().collect();
+                let label = selection_label(&sel);
+                let title = if label.is_empty() {
+                    match self.tool {
+                        Tool::Arrow => "Modificar".to_string(),
+                        _ => format!("Modificar | {}", self.tool_name()),
+                    }
+                } else {
+                    format!("Modificar | {label}")
+                };
+                bar_title(ui, &title, &p);
+                self.tool_step(ui);
+            });
         });
+        // Fold and unfold the ribbon.
+        let compact = self.prefs.ribbon_compact;
+        let resp = ui.interact(fold, ui.scope_id().with("fold-ribbon"), Sense::click());
+        if resp.hovered() {
+            ui.painter()
+                .rect_filled(fold, CornerRadius::same(6), p.raised);
+        }
+        icons::paint(
+            ui.painter(),
+            Rect::from_center_size(fold.center(), Vec2::splat(14.0)),
+            if compact {
+                Icon::ChevronDown
+            } else {
+                Icon::ChevronRight
+            },
+            p.muted,
+        );
+        if resp
+            .on_hover_text(if compact {
+                "Desplegar la cinta: los grupos con sus botones"
+            } else {
+                "Recoger la cinta: solo el nombre de cada grupo, que se abre al pulsarlo (más sitio para el dibujo)"
+            })
+            .clicked()
+        {
+            self.prefs.ribbon_compact = !compact;
+            self.prefs.save();
+        }
+    }
+
+    /// The name of the tool in hand, for the options bar.
+    fn tool_name(&self) -> &'static str {
+        match self.tool {
+            Tool::Paint => "Pintar",
+            Tool::Tape => "Cinta",
+            Tool::TeamZone => "Zona de equipo",
+            _ => "",
+        }
+    }
+
+    /// Altura: where the walls and columns end at the top, as in Revit's
+    /// options bar (the same as in Propiedades).
+    fn top_fields(&mut self, ui: &mut Ui) {
+        use crate::editor::TopChoice;
+        let (top, height, offset) = match self.tool {
+            Tool::Wall => (
+                self.wall_settings.top,
+                self.wall_settings.height,
+                self.wall_settings.top_offset,
+            ),
+            Tool::Column => (
+                self.column_settings.top,
+                self.column_settings.height,
+                self.column_settings.top_offset,
+            ),
+            _ => return,
+        };
+        let p = Palette::current(ui.ctx());
+        let model = self.ed.model();
+        let level = self.ed.level;
+        let next = crate::editor::next_level_above(model, level)
+            .and_then(|l| model.level(l))
+            .map(|l| l.name.clone());
+        let mut options: Vec<(TopChoice, String)> = vec![
+            (TopChoice::Unconnected, "Desconectada".into()),
+            (
+                TopChoice::NextLevel,
+                match &next {
+                    Some(n) => format!("P. superior ({n})"),
+                    None => "P. superior (no hay)".into(),
+                },
+            ),
+        ];
+        options.extend(
+            self.levels_above(level)
+                .into_iter()
+                .map(|(id, name)| (TopChoice::Level(id), format!("Hasta {name}"))),
+        );
+        bar_separator(ui, &p);
+        ui.label(egui::RichText::new("Altura").small().color(p.muted));
+        let shown = options
+            .iter()
+            .find(|(v, _)| *v == top)
+            .map(|(_, n)| n.clone())
+            .unwrap_or_default();
+        let mut chosen = top;
+        egui::ComboBox::from_id_salt("bar-top")
+            .width(118.0)
+            .selected_text(egui::RichText::new(shown).small())
+            .show_ui(ui, |ui| {
+                for (v, n) in &options {
+                    ui.selectable_value(&mut chosen, *v, n);
+                }
+            })
+            .response
+            .on_hover_text("Hasta dónde llega: una planta (sigue sus cambios de cota) o una altura propia (desconectada)");
+        let to_level = match self.tool {
+            Tool::Wall => {
+                let mut s = self.wall_settings;
+                s.top = chosen;
+                matches!(
+                    s.top_on(self.ed.model(), level),
+                    archisim_core::WallTop::Level { .. }
+                )
+            }
+            _ => {
+                let mut s = self.column_settings;
+                s.top = chosen;
+                matches!(
+                    s.top_on(self.ed.model(), level),
+                    archisim_core::WallTop::Level { .. }
+                )
+            }
+        };
+        let (label, value, tip) = if to_level {
+            ("Desfase", offset, "Distancia de la coronación a la planta: negativo, por debajo (el canto del forjado)")
+        } else {
+            ("", height, "Altura desde su base")
+        };
+        if !label.is_empty() {
+            ui.label(egui::RichText::new(label).small().color(p.muted))
+                .on_hover_text(tip);
+        }
+        let typed = super::text_edit_committed(
+            ui,
+            egui::Id::unique(("bar-top-value", to_level)),
+            &crate::units::fmt_len(value),
+            64.0,
+        )
+        .and_then(|t| crate::units::parse_length(&t));
+        let (s_top, s_height, s_offset) = match self.tool {
+            Tool::Wall => (
+                &mut self.wall_settings.top,
+                &mut self.wall_settings.height,
+                &mut self.wall_settings.top_offset,
+            ),
+            _ => (
+                &mut self.column_settings.top,
+                &mut self.column_settings.height,
+                &mut self.column_settings.top_offset,
+            ),
+        };
+        *s_top = chosen;
+        if let Some(v) = typed {
+            if to_level {
+                *s_offset = v;
+            } else if v > 0.0 {
+                *s_height = v;
+            } else {
+                self.complain("La altura debe ser mayor que cero.");
+            }
+        }
+    }
+
+    /// Cadena, for walls: each click goes on from the last one.
+    fn chain_switch(&mut self, ui: &mut Ui) {
+        if self.tool != Tool::Wall
+            || !matches!(self.wall_tool.mode, WallMode::Single | WallMode::Chain)
+        {
+            return;
+        }
+        let mut on = self.wall_tool.mode == WallMode::Chain;
+        ui.add_space(6.0);
+        if ui
+            .switch(&mut on, "Cadena")
+            .on_hover_text("Tramos seguidos: cada clic añade un muro desde el anterior (Intro o Esc para terminar)")
+            .changed()
+        {
+            self.wall_chain = on;
+            self.wall_tool
+                .set_mode(if on { WallMode::Chain } else { WallMode::Single });
+        }
     }
 
     /// What a click does now with the tool in use, in grey at the end of
@@ -1261,27 +1953,6 @@ impl ArchiSimApp {
         )
         .truncate();
         ui.add(label).on_hover_text(hint.replace(" · ", "\n"));
-    }
-
-    /// The step of the order running: its name, what it asks and its
-    /// options; the last answer at the right.
-    fn order_step(&mut self, ui: &mut Ui) {
-        let p = Palette::current(ui.ctx());
-        if self.cad_prompt().is_none() {
-            return;
-        }
-        let name = self.cad.as_ref().map(|c| c.name()).unwrap_or_default();
-        let title = match TRANSFORM
-            .iter()
-            .chain(GEOMETRY)
-            .chain(BUILDING)
-            .find(|o| o.command == name)
-        {
-            Some(o) => format!("Modificar · {}", o.name),
-            None => super::toolbox::order_name(name).unwrap_or(name).to_string(),
-        };
-        bar_title(ui, &title, &p);
-        self.order_step_body(ui);
     }
 
     /// What the order running asks, its options and the last answer.
@@ -1364,112 +2035,5 @@ pub fn paint_mark(painter: &egui::Painter, rect: Rect, mark: Mark, color: Color3
     match mark {
         Mark::Glyph(g) => glyphs::paint(painter, rect, g, color),
         Mark::Icon(i) => icons::paint(painter, rect.shrink(1.0), i, color),
-    }
-}
-
-/// A button of the bar: its drawing and name; accent when on, faint when
-/// it does not apply.
-pub fn bar_button(
-    ui: &mut Ui,
-    mark: Mark,
-    name: &str,
-    on: bool,
-    enabled: bool,
-    named: bool,
-) -> egui::Response {
-    let p = Palette::current(ui.ctx());
-    let font = FontId::proportional(12.0);
-    let w = button_width(ui, name, named);
-    let sense = if enabled {
-        Sense::click()
-    } else {
-        Sense::hover()
-    };
-    let (rect, resp) = ui.allocate_exact_size(Vec2::new(w, 28.0), sense);
-    let (fill, fg) = if on {
-        (p.accent_soft, p.accent)
-    } else if !enabled {
-        (Color32::TRANSPARENT, p.faint)
-    } else if resp.hovered() {
-        (p.raised, p.text)
-    } else {
-        (Color32::TRANSPARENT, p.text)
-    };
-    ui.painter().rect_filled(rect, CornerRadius::same(7), fill);
-    if on {
-        ui.painter().rect_stroke(
-            rect,
-            CornerRadius::same(7),
-            Stroke::new(1.0, p.accent),
-            egui::StrokeKind::Inside,
-        );
-    }
-    let icon_at = if named {
-        rect.left_center() + Vec2::new(8.0 + 9.0, 0.0)
-    } else {
-        rect.center()
-    };
-    paint_mark(
-        ui.painter(),
-        Rect::from_center_size(icon_at, Vec2::splat(18.0)),
-        mark,
-        fg,
-    );
-    if named {
-        ui.painter().text(
-            rect.left_center() + Vec2::new(8.0 + 18.0 + 5.0, 0.0),
-            Align2::LEFT_CENTER,
-            name,
-            font,
-            fg,
-        );
-    }
-    resp
-}
-
-/// Width of a button of the bar, with its name or only its drawing.
-fn button_width(ui: &Ui, name: &str, named: bool) -> f32 {
-    if !named {
-        return 32.0;
-    }
-    let g =
-        ui.painter()
-            .layout_no_wrap(name.to_string(), FontId::proportional(12.0), Color32::WHITE);
-    8.0 + 18.0 + 5.0 + g.size().x + 9.0
-}
-
-/// Whether buttons with these names fit, with their names, in `room`.
-fn names_fit<'a>(ui: &Ui, names: impl IntoIterator<Item = &'a str>, room: f32) -> bool {
-    let need: f32 = names
-        .into_iter()
-        .map(|n| button_width(ui, n, true) + 2.0)
-        .sum();
-    need <= room
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use archisim_core::{DraftId, OpeningId, WallId};
-
-    #[test]
-    fn selection_labels() {
-        let walls = [Element::Wall(WallId(1)), Element::Wall(WallId(2))];
-        assert_eq!(selection_label(&walls), "Muro (2)");
-        let mixed = [Element::Wall(WallId(1)), Element::Opening(OpeningId(2))];
-        assert_eq!(selection_label(&mixed), "Selección (2)");
-        assert_eq!(selection_label(&[]), "");
-    }
-
-    #[test]
-    fn orders_that_apply() {
-        let door = [Element::Opening(OpeningId(1))];
-        assert!(order_applies("DESPLAZA", &door));
-        assert!(!order_applies("ESCALA", &door));
-        assert!(!order_applies("RECORTA", &door));
-        let line = [Element::Draft(DraftId(1))];
-        assert!(order_applies("RECORTA", &line));
-        assert!(order_applies("ESCALA", &line));
-        assert!(!order_applies("DESPLAZA", &[]));
     }
 }

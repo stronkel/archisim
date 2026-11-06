@@ -80,6 +80,8 @@ Pestañas de verdad sobre el dibujo, como en el boceto de Antonio (no burbujas f
 
 ### 2.6 Barra contextual (debajo de las pestañas)
 
+> Sustituida el 6/11/2026 por la **cinta y la barra de opciones** al estilo Revit: ver §13. Lo que sigue se conserva como historia.
+
 La pieza nueva, el equivalente de la pestaña *Modificar* de Revit, pero **fija bajo las pestañas, pegada al dibujo**: no aparece arriba del todo ni flota por la pantalla (lo que no convence a Antonio del menú de ArchiCAD: se mueve, cambia de opciones y no es claro). No oculta nada: siempre está ahí, en el mismo sitio.
 
 **Con una herramienta activa**: el nombre de la herramienta, sus **métodos de inserción** y los campos de longitud y ángulo (se rellenan al mover el ratón y se pueden teclear).
@@ -341,3 +343,61 @@ Las mismas barras en el mismo sitio. La columna de fichas pasa a ser el catálog
 | V3 ✅ | Vista 3D: cubo, aspecto, cámara libre con vuelo, navegación |
 | V4 ✅ (primera vuelta) | Propiedades: banda de color y medidas en tarjetas de muros, huecos y forjados |
 | V5 | Maqueta con las mismas barras y su cámara |
+
+## 13. La cinta y la barra de opciones (6 de noviembre de 2026)
+
+Pedida por Antonio con cinco capturas de la pestaña *Modificar* de Revit (en reposo, colocando líneas de detalle, muros, suelos y pilares): «es un factor clave en la forma de modelar y dibujar; la nuestra es inferior y, cuando hay demasiados elementos, los últimos son difíciles de ver». La barra contextual de una fila (§2.6) pasa a ser dos piezas, en el mismo sitio, bajo las pestañas:
+
+### 13.1 La cinta
+
+Grupos con su nombre debajo. Botones **grandes** (las tres filas) para lo principal y **pequeños apilados de tres en tres** para el resto: caben muchas órdenes en poco ancho.
+
+Siempre los mismos grupos, en el mismo orden:
+
+| Grupo | Botones |
+|---|---|
+| Seleccionar | **Modificar** (la flecha) · Los de su tipo · Todo |
+| Portapapeles | **Pegar** · Cortar · Copiar · Igualar propiedades |
+| Geometría | Pintar · Dividir cara · Redondear (volúmenes) |
+| Modificar | Mover, Copiar, Girar · Reflejar, Escala, Matriz · Alinear caras, Desfase, Alinear · Esquina, Hasta límite, Varios al límite · Recortar, Alargar, Partir · Unir, Borrar |
+| Vista | Ocultar · Aislar · Mostrar todo |
+| Medir | Cinta · Cota |
+| Crear | **Crear similar** (CS) |
+
+Detrás, en el color de la disciplina, los grupos de **lo que hay en la mano**:
+
+| En la mano | Grupos que se añaden |
+|---|---|
+| Muro, forjado, cubierta, local, viga, barandilla… | **Dibujar**: galería de formas (recta, rectángulo, polígono, arco, círculo, varita, spline, elegir línea); lo que no vale, apagado |
+| Puerta, ventana | **Colocación**: libre, por el centro, desde un extremo, repartidas |
+| Cubierta | Dibujar y **Buhardillas** |
+| Cota, cimentación, formas de Concepto, pincel | Sus maneras, con nombre |
+| Modo boceto | **Modo** (✓ Aceptar, ✗ Cancelar) y **Dibujar**; el grupo Modificar pasa a tener las órdenes del boceto (esquina, recortar, alargar, partir, desfase, mover, copiar, borrar) |
+| Algo elegido | Su grupo: Editar contorno o **Editar perfil** (muros) y sus caras para dividir; agrupar y desagrupar el dibujo 2D |
+| Una orden de dibujo 2D | Sus variantes (línea, polilínea…) |
+
+Lo que no vale ahora se ve apagado y su nota dice por qué. La orden que corre se ve encendida; pulsarla otra vez la termina.
+
+**Cuando no cabe**, como en Revit, paso a paso hasta que quepa:
+1. Los grupos fijos pierden los nombres de sus botones pequeños (queda el dibujo; el nombre, en su nota).
+2. Se pliegan en un botón con su nombre (▾), que los abre debajo: Crear, Medir, Vista, Portapapeles y Geometría.
+3. Los grupos de lo que hay en la mano pierden los nombres.
+4. Se pliegan Seleccionar y Modificar.
+5. Por último, los de lo que hay en la mano.
+
+Nada se corta por la derecha.
+
+**Recoger la cinta** (la flecha al final de la barra de opciones; se recuerda en `preferencias.json`): solo los nombres de los grupos, en una fila, que se abren al pulsarlos; si ni así caben, los menos usados se quedan con su dibujo. Para pantallas pequeñas.
+
+### 13.2 La barra de opciones
+
+Debajo de la cinta, una fila: **«Modificar | Colocar Muro»** y los ajustes de lo que hay en la mano, como en Revit.
+
+- Muro: **Altura** (desconectada, planta superior o hasta una planta) con su valor o su desfase, **línea de ubicación** (cara exterior, eje, cara interior), **Cadena**, longitud y ángulo.
+- Pilar: Altura.
+- Vial: línea de ubicación.
+- Puerta y ventana: la distancia o cuántas, según la colocación.
+- Pincel: tamaño y fuerza.
+- Una orden en marcha: lo que pide, sus opciones y Terminar.
+- Modo boceto: qué se edita y qué tienen que hacer las líneas (antes era un cartel flotante sobre la planta).
+- Siempre, al final y en gris: qué hace ahora un clic.

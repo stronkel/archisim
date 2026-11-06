@@ -508,6 +508,9 @@ pub struct ArchiSimApp {
     pub fixture_source: Option<usize>,
     /// «Dividir cara» in 3D: the next click on a face divides it.
     pub divide_face_pick: bool,
+    /// Cadena in the options bar of the wall tool: straight walls go on
+    /// from the last one.
+    pub wall_chain: bool,
     /// Every species of plants of the library, for the gallery.
     pub flora_library: Option<std::sync::Arc<archisim_core::Model>>,
     /// The object types of the library folder (the studio's and the
@@ -864,6 +867,7 @@ impl ArchiSimApp {
             collection_libraries: Vec::new(),
             fixture_source: None,
             divide_face_pick: false,
+            wall_chain: true,
             flora_library: None,
             folder_objects: None,
             priorities_all: false,
@@ -1995,16 +1999,31 @@ impl ArchiSimApp {
             ui.spacing_mut().item_spacing.y = 0.0;
             self.tab_strip(ui);
             if self.mode != ViewMode::Schedule {
-                egui::Panel::top("context-bar")
+                // Revit's ribbon and, under it, its options bar.
+                egui::Panel::top("ribbon")
                     .resizable(false)
-                    .exact_size(context_bar::CONTEXT_BAR_HEIGHT)
+                    .exact_size(if self.prefs.ribbon_compact {
+                        ribbon::RIBBON_COMPACT_HEIGHT
+                    } else {
+                        ribbon::RIBBON_HEIGHT
+                    })
                     .frame(
                         egui::Frame::new()
                             .fill(p.panel)
+                            .inner_margin(egui::Margin::symmetric(6, 0))
+                            .stroke(Stroke::new(1.0, p.line)),
+                    )
+                    .show(ui, |ui| self.ribbon(ui));
+                egui::Panel::top("options-bar")
+                    .resizable(false)
+                    .exact_size(context_bar::OPTIONS_BAR_HEIGHT)
+                    .frame(
+                        egui::Frame::new()
+                            .fill(p.raised)
                             .inner_margin(egui::Margin::symmetric(8, 0))
                             .stroke(Stroke::new(1.0, p.line)),
                     )
-                    .show(ui, |ui| self.context_bar(ui));
+                    .show(ui, |ui| self.options_bar(ui));
             }
             if !matches!(self.mode, ViewMode::ThreeD | ViewMode::Schedule)
                 && self.command_line_shown()
@@ -2697,6 +2716,7 @@ mod railing_ui;
 mod rebar_ui;
 mod render_ui;
 mod revit_keys;
+mod ribbon;
 mod roof_ui;
 mod room_tool_ui;
 mod room_ui;

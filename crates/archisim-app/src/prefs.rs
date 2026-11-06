@@ -80,6 +80,9 @@ pub struct Prefs {
     pub relief_3d: bool,
     /// Water moving in 3D.
     pub water_3d: bool,
+    /// The ribbon folded: only the names of its panels, which open when
+    /// pressed.
+    pub ribbon_compact: bool,
 }
 
 /// How the 3D view moves: speeds from 1 to 10 (5 is as it always was) and
@@ -139,6 +142,7 @@ impl Default for Prefs {
             nav: Navigation::default(),
             relief_3d: true,
             water_3d: true,
+            ribbon_compact: false,
         }
     }
 }
@@ -187,6 +191,7 @@ impl Prefs {
             },
             "relieve_3d": self.relief_3d,
             "agua_en_movimiento": self.water_3d,
+            "cinta_recogida": self.ribbon_compact,
         });
         serde_json::to_string_pretty(&v).unwrap_or_default()
     }
@@ -269,6 +274,7 @@ impl Prefs {
             },
             relief_3d: flag("relieve_3d", d.relief_3d),
             water_3d: flag("agua_en_movimiento", d.water_3d),
+            ribbon_compact: flag("cinta_recogida", d.ribbon_compact),
         }
     }
 
@@ -332,6 +338,7 @@ mod tests {
             },
             relief_3d: false,
             water_3d: false,
+            ribbon_compact: true,
         };
         assert_eq!(Prefs::from_json(&p.to_json()), p);
         assert!((Navigation::factor(5) - 1.0).abs() < 1e-6);

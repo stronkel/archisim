@@ -6,6 +6,43 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-06 (89) · La cinta al estilo Revit
+
+Rama `bloque/cinta`, con pull request. Sin cambios de formato ni de IFC. Pedido por Antonio con cinco capturas de la pestaña *Modificar* de Revit: «nuestra barra superior es inferior a la de Revit y, cuando hay demasiados elementos, los últimos son difíciles de ver». Diseño en `docs/INTERFAZ.md` §13.
+
+**Hecho**
+- **La cinta** sustituye a la barra contextual de una fila, en el mismo sitio bajo las pestañas.
+  - Grupos con su nombre debajo: **Seleccionar · Portapapeles · Geometría · Modificar · Vista · Medir · Crear**, siempre los mismos y en el mismo orden.
+  - Botones grandes para lo principal (Modificar, Pegar, Crear similar, Editar contorno, Aceptar y Cancelar) y pequeños apilados de tres en tres: las 17 órdenes de Modificar caben en seis columnas.
+  - Detrás, en el color de la disciplina, los grupos de lo que hay en la mano: **Dibujar** (galería de formas), **Colocación** (puertas y ventanas), **Buhardillas**, las maneras de la cota, la cimentación y el pincel; el grupo de lo seleccionado (Editar contorno, **Editar perfil** del muro, dividir sus caras, agrupar el dibujo 2D); y el **modo boceto** con **Modo** (✓ Aceptar, ✗ Cancelar) y Dibujar, con las órdenes del boceto en el grupo Modificar. El cartel flotante del boceto sobre la planta desaparece.
+  - **Cuando no cabe**, como en Revit: primero los grupos menos usados pierden los nombres de sus botones, después se pliegan en un botón con su nombre que los abre debajo. Los de lo que hay en la mano son los últimos. Nada se corta.
+  - **Recoger la cinta** (flecha al final de la barra de opciones): una sola fila con el nombre de cada grupo. Se recuerda en `preferencias.json` (`cinta_recogida`).
+  - Nuevos: **Crear similar** (también con **CS**): la herramienta del elemento elegido, con su tipo (muro, forjado, cubierta, puerta, ventana, pilar, viga, barandilla, muro cortina u objeto); **Los de su tipo**, **Todo**, **Pegar**, **Cortar**, **Copiar**, **Igualar propiedades**, **Ocultar**, **Aislar**, **Mostrar todo** y **Borrar** a la vista (antes solo en el clic derecho o con teclas).
+- **La barra de opciones**, debajo de la cinta, como la de Revit: «**Modificar | Colocar Muro**» y sus ajustes.
+  - Muro: **Altura** (desconectada, planta superior o hasta una planta) con su altura o su desfase, **línea de ubicación**, **Cadena** (sale de la galería y pasa aquí, como en Revit), longitud y ángulo.
+  - Pilar: Altura. Vial: línea de ubicación. Puertas y ventanas: distancia o cuántas. Pincel: tamaño y fuerza.
+  - Una orden en marcha: lo que pide, sus opciones y Terminar. Modo boceto: qué se edita y qué tienen que cerrar las líneas.
+  - Al final, en gris, qué hace ahora un clic.
+- Iconos nuevos: pegar, cortar, copiar, igualar, los de su tipo, todo, ocultar, aislar, mostrar todo, aceptar, cancelar, crear similar y borrar.
+- Pruebas nuevas: `ribbon_panels_follow_what_is_in_hand` (los grupos con nada, con el muro, con una ventana y con un muro elegido; Cadena; Crear similar; Mover encendido mientras corre; la cinta recogida), `sketch_in_the_ribbon` y las de la colocación en columnas de tres y los nombres en dos líneas.
+- Revisado en la ventana real (Xvfb, 1440 × 900, centro de unos 730 px): sin nada, con el muro, con un forjado elegido, en modo boceto y recogida con un grupo abierto.
+
+**Pendiente**
+- Las caras «de arriba» y «de abajo» de un forjado tienen el mismo dibujo; sin sitio para los nombres se distinguen solo por la nota.
+- Desfase y Radio de la barra de opciones de Revit (dibujar paralelo a los clics y redondear las esquinas de la cadena) piden cambios en la herramienta Muro: para otro bloque si Antonio los quiere.
+- La Maqueta sigue con sus barras (V5).
+
+**Qué debe probar Antonio**
+1. `cargo run --release -p archisim-app -- out/demo.archisim` (antes, `cargo run -p archisim-cli -- demo out/`).
+2. Sin nada en la mano: ¿están los grupos y el orden que esperas? Pasa el ratón por los botones pequeños de Modificar: cada uno dice su nombre y su tecla.
+3. Pulsa **Muro**: a la derecha sale **Dibujar** y abajo «Modificar | Colocar Muro» con **Altura**, la línea de ubicación y **Cadena**. Quita Cadena y dibuja: cada muro va suelto. Cambia la Altura a «Desconectada» y escribe 3,00.
+4. Pulsa **Ventana**: grupo **Colocación**.
+5. Elige un forjado: grupo **Forjado** con **Editar contorno**. Entra: **Modo** con ✓ y ✗, **Dibujar**, y en **Modificar** las órdenes del boceto. Cancela.
+6. Elige un muro y pulsa **Crear similar** (o CS): la herramienta Muro con su tipo.
+7. Estrecha la ventana: los grupos pierden los nombres y después se pliegan en un botón que los abre debajo. Con la flecha del final de la barra de opciones, **recoge la cinta** y vuelve a desplegarla.
+
+---
+
 ## 2026-11-03 (88) · Interfaz, segunda versión: V1 a V4
 
 Rama `bloque/interfaz-v2`, con pull request. Sin cambios de formato ni de IFC. Diseño en `docs/INTERFAZ.md` §12, decidido con Antonio sobre el prototipo «ArchiSim · interfaz por colores y barras».

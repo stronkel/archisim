@@ -117,7 +117,7 @@ fn wall_references(m: &archisim_core::Model, target: SketchTarget) -> Vec<Vec<Po
 }
 
 /// The colour of a sketch, as Revit's.
-const SKETCH: Color32 = Color32::from_rgb(196, 30, 150);
+pub(super) const SKETCH: Color32 = Color32::from_rgb(196, 30, 150);
 /// The sketch layer's name.
 pub const SKETCH_LAYER: &str = "Boceto";
 
@@ -129,7 +129,7 @@ fn sketch_error(e: SketchError) -> ModelError {
 }
 
 /// The tools of the sketch bar: label, command and what it does.
-const SKETCH_TOOLS: &[(&str, &str, &str)] = &[
+pub(super) const SKETCH_TOOLS: &[(&str, &str, &str)] = &[
     ("Línea", "LINEA", "Líneas sueltas, una tras otra"),
     ("Rectángulo", "RECTANG", "Cuatro líneas por dos esquinas"),
     ("Polígono", "POLIGONO", "Polígono regular"),
@@ -137,7 +137,7 @@ const SKETCH_TOOLS: &[(&str, &str, &str)] = &[
     ("Círculo", "CIRCULO", "Círculo por centro y radio"),
 ];
 
-const SKETCH_EDITS: &[(&str, &str, &str)] = &[
+pub(super) const SKETCH_EDITS: &[(&str, &str, &str)] = &[
     (
         "Esquina",
         "EMPALME",
@@ -429,11 +429,10 @@ impl ArchiSimApp {
         }
     }
 
-    /// The bar of the sketch, at the top of the plan.
-    pub(super) fn sketch_panel(&mut self, ctx: &egui::Context, rect: Rect) {
-        let Some(st) = self.sketch.as_ref() else {
-            return;
-        };
+    /// What is being sketched and what the lines must do, for the options
+    /// bar under the ribbon (where its Aceptar, Cancelar and orders are).
+    pub(super) fn sketch_texts(&self) -> Option<(&'static str, &'static str)> {
+        let st = self.sketch.as_ref()?;
         let what = match st.sketch.target {
             SketchTarget::Slab(_) => "contorno del forjado",
             SketchTarget::Roof(_) => "contorno de la cubierta",
@@ -452,95 +451,36 @@ impl ArchiSimApp {
             SketchTarget::Road(_) => "eje de la calle (una línea abierta)",
             SketchTarget::RoadEdges(_) => "bordillos y líneas de fachada de la calle",
         };
-        let zones = st.sketch.is_zones();
-        let profile = matches!(st.sketch.target, SketchTarget::WallProfile(_));
-        let road_edges = matches!(st.sketch.target, SketchTarget::RoadEdges(_));
-        let road_axis = matches!(st.sketch.target, SketchTarget::Road(_));
-        let holes = st.sketch.takes_holes();
-        let running = self.cad.as_ref().map(|c| c.name());
-        let mut start: Option<&'static str> = None;
-        let mut finish = false;
-        let mut cancel = false;
-        egui::Area::new(egui::Id::unique("sketch-bar"))
-            .fixed_pos(rect.left_top() + Vec2::new(10.0, 10.0))
-            .order(egui::Order::Foreground)
-            .show(ctx, |ui| {
-                egui::Frame::popup(ui.style()).show(ui, |ui| {
-                    ui.set_max_width(rect.width() - 40.0);
-                    ui.horizontal_wrapped(|ui| {
-                        ui.label(
-                            egui::RichText::new(format!("Modo boceto · {what}"))
-                                .strong()
-                                .color(SKETCH),
-                        );
-                        ui.separator();
-                        ui.label(egui::RichText::new("Dibujar").small().weak());
-                        for (label, cmd, hint) in SKETCH_TOOLS {
-                            let on = running == Some(*cmd);
-                            if ui.selectable_label(on, *label).on_hover_text(*hint).clicked() {
-                                start = Some(cmd);
-                            }
-                        }
-                        ui.separator();
-                        ui.label(egui::RichText::new("Modificar").small().weak());
-                        for (label, cmd, hint) in SKETCH_EDITS {
-                            let on = running == Some(*cmd);
-                            if ui.selectable_label(on, *label).on_hover_text(*hint).clicked() {
-                                start = Some(cmd);
-                            }
-                        }
-                        ui.separator();
-                        if ui
-                            .add(
-                                egui::Button::new(
-                                    egui::RichText::new("✔ Aceptar").strong().color(Color32::WHITE),
-                                )
-                                .fill(Color32::from_rgb(46, 125, 50)),
-                            )
-                            .on_hover_text("Intro: el elemento toma el contorno dibujado")
-                            .clicked()
-                        {
-                            finish = true;
-                        }
-                        if ui
-                            .button("✖ Cancelar")
-                            .on_hover_text("Deja el elemento como estaba")
-                            .clicked()
-                        {
-                            cancel = true;
-                        }
-                    });
-                    let note = if road_edges {
-                        "Cuatro líneas abiertas, de un extremo de la calle al otro: bordillo y fachada de cada lado. Donde las muevas, la calle cambia de sección con su transición; la calzada se queda en su sitio."
-                    } else if road_axis {
-                        "Una sola línea abierta, de un extremo de la calle al otro."
-                    } else if profile {
-                        "Las líneas tienen que cerrar contornos: el mayor es el muro en alzado y los de dentro, sus huecos. En gris, sus puertas y ventanas."
-                    } else if zones {
-                        "Cada contorno cerrado que dibujes sobre la cara es una zona que se pinta aparte (Pintar)."
-                    } else if holes {
-                        "Las líneas tienen que cerrar contornos: el mayor es el borde del forjado y los de dentro, sus huecos."
-                    } else {
-                        "Las líneas tienen que cerrar un solo contorno."
-                    };
-                    ui.label(egui::RichText::new(note).size(11.0).weak());
-                });
-            });
-        if let Some(cmd) = start {
-            if cmd == "EMPALME" {
-                // A corner, as Revit's «Recortar/Extender a esquina».
-                self.cad_settings.fillet_radius = 0.0;
-            }
-            if let Some(st) = self.sketch.as_mut() {
-                st.open_ends.clear();
-            }
-            self.start_command(cmd);
+        let note = if matches!(st.sketch.target, SketchTarget::RoadEdges(_)) {
+            "Cuatro líneas abiertas, de un extremo de la calle al otro: bordillo y fachada de cada lado. Donde las muevas, la calle cambia de sección con su transición; la calzada se queda en su sitio."
+        } else if matches!(st.sketch.target, SketchTarget::Road(_)) {
+            "Una sola línea abierta, de un extremo de la calle al otro."
+        } else if matches!(st.sketch.target, SketchTarget::WallProfile(_)) {
+            "Las líneas tienen que cerrar contornos: el mayor es el muro en alzado y los de dentro, sus huecos. En gris, sus puertas y ventanas."
+        } else if st.sketch.is_zones() {
+            "Cada contorno cerrado que dibujes sobre la cara es una zona que se pinta aparte (Pintar)."
+        } else if st.sketch.takes_holes() {
+            "Las líneas tienen que cerrar contornos: el mayor es el borde del forjado y los de dentro, sus huecos."
+        } else {
+            "Las líneas tienen que cerrar un solo contorno."
+        };
+        Some((what, note))
+    }
+
+    /// An order of the sketch's lines, from the ribbon.
+    pub(super) fn sketch_command(&mut self, cmd: &'static str) {
+        if self.cad.as_ref().map(|c| c.name()) == Some(cmd) {
+            self.cad_escape();
+            return;
         }
-        if finish {
-            self.finish_sketch();
-        } else if cancel {
-            self.cancel_sketch();
+        if cmd == "EMPALME" {
+            // A corner, as Revit's «Recortar/Extender a esquina».
+            self.cad_settings.fillet_radius = 0.0;
         }
+        if let Some(st) = self.sketch.as_mut() {
+            st.open_ends.clear();
+        }
+        self.start_command(cmd);
     }
 }
 

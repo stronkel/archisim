@@ -21,6 +21,8 @@ pub enum KeyAct {
     HideSelection,
     ShowAll,
     Shortcuts,
+    /// The tool of the element selected, with its type.
+    CreateSimilar,
 }
 
 /// A shortcut: its two letters, what it does, its name in the list and
@@ -134,6 +136,7 @@ pub const SHORTCUTS: &[(&str, &[Shortcut])] = &[
                 true,
             ),
             key("DE", KeyAct::Command("BORRA"), "Borrar", true),
+            key("CS", KeyAct::CreateSimilar, "Crear similar", true),
         ],
     ),
     (
@@ -227,6 +230,7 @@ impl ArchiSimApp {
                 self.say("Se ve todo otra vez.");
             }
             KeyAct::Shortcuts => self.show_shortcuts = true,
+            KeyAct::CreateSimilar => self.create_similar(),
         }
         self.cmdline.log(format!("{} · {}", s.code, s.name), false);
         true
