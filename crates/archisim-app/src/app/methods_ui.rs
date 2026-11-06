@@ -8,7 +8,7 @@ use archisim_core::{FootingKind, Point2};
 use eframe::egui::{self, Id, Ui};
 
 use super::*;
-use crate::spline::{catmull_rom, picked_line, spline_arcs, PickedLine};
+use crate::spline::{catmull_rom, spline_arcs, PickedLine};
 use crate::wall_tool::Piece;
 
 /// How the tool in use takes its points.
@@ -21,13 +21,6 @@ pub enum DrawMethod {
     Spline,
     /// A click on a line of the 2D drawing.
     PickLine,
-}
-
-/// The distance from `p` to the segment `a`–`b`.
-fn segment_distance(p: Point2, a: Point2, b: Point2) -> f64 {
-    let ab = b - a;
-    let t = ((p - a).dot(ab) / ab.dot(ab)).clamp(0.0, 1.0);
-    p.distance(a + ab * t)
 }
 
 /// Control points per span when a curve becomes points.
@@ -95,66 +88,10 @@ impl ArchiSimApp {
         view: archisim_core::ViewRef,
         skip: Option<archisim_core::DrawLayerId>,
     ) -> Option<PickedLine> {
-        let model = self.ed.model();
-        let k = crate::pick::paper_k();
-        let mut best: Option<(f64, PickedLine)> = None;
-        let mut take = |d: f64, l: PickedLine| {
-            if d <= reach && best.as_ref().is_none_or(|(b, _)| d < *b) {
-                best = Some((d, l));
-            }
-        };
-        for d in model.drafts_in(view) {
-            if Some(d.layer) == skip {
-                continue;
-            }
-            let dist = archisim_draft::distance(&d.shape, p, k);
-            if dist <= reach {
-                if let Some(l) = picked_line(&d.shape) {
-                    take(dist, l);
-                }
-            }
-        }
-        let archisim_core::ViewRef::Level(level) = view else {
-            return best.map(|(_, l)| l);
-        };
-        let straight = |a: Point2, b: Point2| PickedLine {
-            pieces: vec![(a, b, 0.0)],
-            closed: false,
-            points: vec![a, b],
-        };
-        for e in crate::pick::elements_on_level(model, level) {
-            let edges: Vec<(Point2, Point2)> = match e {
-                crate::pick::Element::Grid(id) => model
-                    .grid(id)
-                    .map(|g| vec![(g.start, g.end)])
-                    .unwrap_or_default(),
-                crate::pick::Element::RefPlane(id) => model
-                    .ref_plane(id)
-                    .map(|r| vec![(r.start, r.end)])
-                    .unwrap_or_default(),
-                crate::pick::Element::Wall(_)
-                | crate::pick::Element::Slab(_)
-                | crate::pick::Element::Roof(_)
-                | crate::pick::Element::Column(_)
-                | crate::pick::Element::Beam(_)
-                | crate::pick::Element::Footing(_) => {
-                    let Some(o) = crate::pick::outline(&self.ed, e) else {
-                        continue;
-                    };
-                    let n = o.len();
-                    (0..n).map(|i| (o[i], o[(i + 1) % n])).collect()
-                }
-                _ => continue,
-            };
-            for (a, b) in edges {
-                if a.distance(b) < 1e-6 {
-                    continue;
-                }
-                let d = segment_distance(p, a, b);
-                take(d, straight(a, b));
-            }
-        }
-        best.map(|(_, l)| l)
+        self.line_candidates(p, reach, view, skip, false)
+            .into_iter()
+            .next()
+            .map(|c| c.line)
     }
 
     /// A click while drawing a spline or picking a line. Returns whether it

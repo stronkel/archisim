@@ -61,6 +61,7 @@ impl ArchiSimApp {
         // In a sketch, the rest of the plan behind a veil (before what is
         // drawn over the plan: selection, previews, the order running).
         self.draw_sketch(&painter, rect);
+        self.draw_sketch_candidate(&ctx, &painter, rect);
         self.draw_plan_ghost(&ctx, &painter, rect);
         self.draw_links_in_plan(&painter, rect);
         self.draw_team(&painter, rect);
@@ -1050,8 +1051,9 @@ impl ArchiSimApp {
         // «Elegir línea» of a sketch.
         if self.sketch_picking() {
             if response.clicked_by(PointerButton::Primary) {
-                if let Some(c) = self.cursor {
-                    self.sketch_pick_click(c.point);
+                if let Some(pos) = response.interact_pointer_pos() {
+                    let p = self.view.to_model(rect, pos);
+                    self.sketch_pick_at(p);
                 }
             }
             return;

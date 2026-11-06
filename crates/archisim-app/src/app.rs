@@ -524,6 +524,10 @@ pub struct ArchiSimApp {
     /// Cadena in the options bar of the wall tool: straight walls go on
     /// from the last one.
     pub wall_chain: bool,
+    /// Desfase and core of «Elegir línea» in a sketch.
+    pub pick_settings: sketch_pick::PickSettings,
+    /// What the line under the cursor is, while picking.
+    pick_hint: String,
     /// Every species of plants of the library, for the gallery.
     pub flora_library: Option<std::sync::Arc<archisim_core::Model>>,
     /// The object types of the library folder (the studio's and the
@@ -891,6 +895,8 @@ impl ArchiSimApp {
             fixture_source: None,
             divide_face_pick: false,
             wall_chain: true,
+            pick_settings: Default::default(),
+            pick_hint: String::new(),
             flora_library: None,
             folder_objects: None,
             priorities_all: false,
@@ -2176,6 +2182,11 @@ impl ArchiSimApp {
         if consume(Modifiers::CTRL, Key::Space) {
             self.open_command_search();
         }
+        // Tab while picking a line for a sketch: the next line under the
+        // cursor.
+        if self.sketch_picking() && !in_text && consume(Modifiers::NONE, Key::Tab) {
+            self.next_sketch_candidate();
+        }
         // Tab over several elements in plan, with the arrow: the next of
         // them (Shift+Tab, the one before); a click takes it.
         let overlapping = !self.maquette
@@ -2774,6 +2785,7 @@ mod section_ui;
 mod services_ui;
 mod sheet_drop;
 mod sheet_ui;
+mod sketch_pick;
 mod sketch_ui;
 mod stair_ui;
 mod start_ui;
