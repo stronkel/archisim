@@ -44,9 +44,27 @@ fn kind_name(k: Kind) -> &'static str {
 
 /// The report.
 pub fn report(model: &Model) -> Vec<Block> {
+    let gone = crate::phases::demolished_count(model);
+    let model = &*crate::phases::as_built(model);
     let a = analysis::analyse(model);
     let checks = crate::all_checks(model, &a);
-    blocks(model, &a, &checks)
+    let mut out = blocks(model, &a, &checks);
+    if gone > 0 {
+        let at = out
+            .iter()
+            .position(|b| matches!(b, Block::Heading(1, _)))
+            .unwrap_or(out.len());
+        out.insert(
+            at,
+            Block::Para(format!(
+                "Reforma: el cálculo es el de la estructura tal como queda; \
+                 los {gone} elementos que se derriban no cargan ni se comprueban. \
+                 Los existentes que se conservan se calculan con los materiales \
+                 y el armado dibujados, que deben ser los comprobados en obra."
+            )),
+        );
+    }
+    out
 }
 
 /// The report from an analysis already made.
@@ -716,6 +734,7 @@ pub fn subject_name(model: &Model, s: Subject) -> String {
             format!("Pilar {} · {t}", id.0)
         }
         Subject::Footing(id) => format!("Cimentación {id}"),
+        Subject::Stair(id) => format!("Escalera {}", id.0),
         Subject::Building => "Edificio".into(),
     }
 }

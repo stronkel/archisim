@@ -13,6 +13,7 @@ use crate::{Item, Report, Section, Status, Subject};
 
 /// The checks of the light frames of the model, added to the report.
 pub fn check(model: &Model, report: &mut Report) {
+    let model = &*archisim_struct::phases::as_built(model);
     if model.slabs().next().is_none() && model.columns().next().is_none() {
         return;
     }
@@ -31,6 +32,7 @@ pub fn check(model: &Model, report: &mut Report) {
                 .chain(archisim_struct::frame_members::check(model, &a))
                 .chain(archisim_struct::connections::check(model, &a))
                 .chain(archisim_struct::detailing::check(model, &a))
+                .chain(archisim_struct::fire::check(model, &a))
                 .chain(archisim_struct::stability::check(model, &a))
                 .map(|c| (Section::Structure, c)),
         );
@@ -52,6 +54,7 @@ pub fn check(model: &Model, report: &mut Report) {
             L::Beam(id) => (Subject::Reinforced(id.0), model.beam(id).map(|b| b.level)),
             L::Column(id) => (Subject::Reinforced(id.0), model.column(id).map(|c| c.level)),
             L::Footing(id) => (Subject::Reinforced(id), None),
+            L::Stair(id) => (Subject::Stair(id), model.stair(id).map(|s| s.level)),
             L::Building => (Subject::Building, None),
         };
         let status = match c.status {
@@ -96,6 +99,9 @@ fn rest(
 ) {
     for c in archisim_struct::slab::check(model, td)
         .into_iter()
+        .chain(archisim_struct::floors::check(model, td))
+        .chain(archisim_struct::stairs::stair_checks(model))
+        .chain(archisim_struct::stairs::lintel_checks(model, td))
         .chain(archisim_struct::masonry::check(model, td))
         .chain(archisim_struct::foundations::check(model, td))
         .chain(archisim_struct::retaining::check(model))

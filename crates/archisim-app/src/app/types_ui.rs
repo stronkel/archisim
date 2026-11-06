@@ -210,6 +210,7 @@ pub(super) enum Action {
     WallWrap(WallTypeId, archisim_core::Wrap, archisim_core::Wrap),
     /// The light frame of a wall or slab type (`None`: none).
     TypeFraming(u64, Option<archisim_core::Framing>),
+    FloorSystem(SlabTypeId, Option<archisim_core::FloorSystem>),
     /// The façade of a wall type (E9).
     WallFacade(WallTypeId, Option<archisim_core::Facade>),
     /// The edge of a slab type.
@@ -1612,6 +1613,9 @@ impl ArchiSimApp {
                 actions.push(Action::SlabEdge(id, e));
             }
         });
+        if let Some(f) = super::floor_ui::floor_system_group(ui, self.ed.model(), id) {
+            actions.push(Action::FloorSystem(id, f));
+        }
         if let Some(f) = super::framing_ui::framing_group(
             ui,
             self.ed.model(),
@@ -2026,6 +2030,20 @@ impl ArchiSimApp {
                 self.report(
                     r,
                     &format!("Tipo de forjado modificado ({n} forjado{}).", plural(n)),
+                );
+            }
+            Action::FloorSystem(id, f) => {
+                let on = f.map(|f| f.kind);
+                let r = self
+                    .ed
+                    .transact("Sistema de forjado", |m| m.set_floor_system(id, f));
+                self.report(
+                    r,
+                    match on {
+                        Some(archisim_core::FloorKind::OneWay) => "Forjado unidireccional: la planta dibuja la dirección de las viguetas y el cálculo lo calcula por bandas.",
+                        Some(archisim_core::FloorKind::Waffle) => "Forjado reticular: el cálculo lo calcula con sus nervios y ábacos.",
+                        None => "Losa maciza.",
+                    },
                 );
             }
             Action::TypeFraming(id, f) => {

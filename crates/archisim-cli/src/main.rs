@@ -212,7 +212,7 @@ Uso:
       muestrario.svg. Carpeta por defecto: ./out
 
   archisim cte <proyecto.archisim> [informe.csv]
-  archisim estructura <proyecto.archisim> [carpeta]   acciones, descenso de cargas y cálculo de la estructura; con carpeta, el anejo de cálculo en PDF
+  archisim estructura <proyecto.archisim> [carpeta]   acciones, descenso de cargas y cálculo de la estructura; con carpeta, el anejo de cálculo y los planos de estructura en PDF
       Comprueba el proyecto con el Código Técnico: ocupación y evacuación
       (DB-SI 3), accesibilidad (DB-SUA 9), escaleras y rampas (DB-SUA 1) y
       superficies, según el uso del edificio guardado en el proyecto.
@@ -789,6 +789,26 @@ fn run_structure(project: &Path, out: Option<&Path>) -> Result<(), Box<dyn std::
         std::fs::write(&path, pdf)?;
         let txt = dir.join(format!("{stem}-anejo-calculo.txt"));
         std::fs::write(&txt, archisim_struct::report::to_text(&blocks))?;
+        // The structure drawings, A3.
+        let sheets = archisim_plan::structure_sheets::pages(&model);
+        let titles: Vec<String> = (0..sheets.len())
+            .map(|i| format!("E-{:02}", i + 1))
+            .collect();
+        let pdf_pages: Vec<archisim_export::pdf::Page> = sheets
+            .iter()
+            .zip(&titles)
+            .map(|(svg, title)| archisim_export::pdf::Page { svg, title })
+            .collect();
+        let planos = dir.join(format!("{stem}-planos-estructura.pdf"));
+        std::fs::write(
+            &planos,
+            archisim_export::pdf::pdf(&pdf_pages, "Planos de estructura")?,
+        )?;
+        println!(
+            "Planos de estructura ({} hojas A3): {}",
+            sheets.len(),
+            planos.display()
+        );
         println!(
             "\nAnejo de cálculo ({} hojas A4): {}\nEn texto: {}",
             pages.len(),

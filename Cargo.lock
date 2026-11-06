@@ -420,6 +420,7 @@ dependencies = [
  "archisim-core",
  "archisim-draft",
  "archisim-geom",
+ "archisim-library",
  "archisim-struct",
  "resvg",
 ]

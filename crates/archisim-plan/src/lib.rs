@@ -53,6 +53,7 @@ pub mod section;
 pub mod services;
 pub mod sheet;
 pub mod stairs;
+pub mod structure_sheets;
 pub mod terrain;
 pub mod type_drawing;
 pub mod type_models;
@@ -1729,6 +1730,83 @@ fn draw_slab(s: &mut String, model: &Model, slab: &Slab, si: usize, cut_plane: f
     if let Some(slope) = &slab.slope {
         draw_slope_arrow(s, slab, slope, k);
     }
+    if let Some(f) = model.floor_system(slab.slab_type) {
+        draw_floor_mark(s, model, slab, f, k);
+    }
+}
+
+/// The mark of a one-way floor: a line along its joists, as far as the
+/// floor goes less a margin, with an arrowhead at each end, and the floor
+/// written on it («25+5 / 70»); a waffle floor, only its name.
+fn draw_floor_mark(
+    s: &mut String,
+    model: &Model,
+    slab: &Slab,
+    f: &archisim_core::FloorSystem,
+    k: f64,
+) {
+    let (lo, hi) = bounds(&slab.outline);
+    let c = Point2::new((lo.x + hi.x) / 2.0, (lo.y + hi.y) / 2.0);
+    let th = annotate::TEXT_HEIGHT * k;
+    if f.kind == archisim_core::FloorKind::Waffle {
+        let _ = writeln!(
+            s,
+            r#"<path class="floor-mark" d="{}" {}/>"#,
+            lettering::text_path(
+                &format!("Reticular {}", f.label()),
+                c,
+                Point2::new(1.0, 0.0),
+                th,
+                lettering::Align::Centre
+            ),
+            crate::lettering::paint(th, INK)
+        );
+        return;
+    }
+    let Some(u) = model.joist_direction(slab.id) else {
+        return;
+    };
+    let pieces = clip_segment(c - u * 1e3, c + u * 1e3, &slab.outline);
+    let Some((a, b)) = pieces
+        .iter()
+        .copied()
+        .max_by(|x, y| x.0.distance(x.1).total_cmp(&y.0.distance(y.1)))
+    else {
+        return;
+    };
+    let len = a.distance(b);
+    let inset = (0.1 * len).max(3.0 * k);
+    if len < 2.0 * inset + 4.0 * k {
+        return;
+    }
+    let dir = (b - a).normalized().unwrap_or(u);
+    let (a, b) = (a + dir * inset, b - dir * inset);
+    let head = 2.5 * k;
+    let n = dir.perp_left();
+    let mut d = format!("M{} L{}", pt(a), pt(b));
+    for (tip, back) in [(b, dir * -1.0), (a, dir)] {
+        let base = tip + back * head;
+        let _ = write!(
+            d,
+            " M{} L{} L{} Z",
+            pt(tip),
+            pt(base + n * (head * 0.35)),
+            pt(base - n * (head * 0.35))
+        );
+    }
+    let read = if dir.x < -1e-9 || (dir.x.abs() <= 1e-9 && dir.y < 0.0) {
+        dir * -1.0
+    } else {
+        dir
+    };
+    let mid = a + (b - a) * 0.5 + read.perp_left() * (1.0 * k);
+    let _ = writeln!(
+        s,
+        r#"<g class="floor-mark"><path d="{d}" fill="{INK}" stroke="{INK}" stroke-width="{}"/><path d="{}" {}/></g>"#,
+        num(pens().view * k),
+        lettering::text_path(&f.label(), mid, read, th, lettering::Align::Centre),
+        crate::lettering::paint(th, INK)
+    );
 }
 
 /// The slope arrow of an inclined slab: a thin line from its tail to its
@@ -3251,6 +3329,43 @@ mod tests {
         assert_eq!(svg.matches("id=\"cut-0-wrap-").count(), 2);
         // Two leaves of (1.2 − 2 × 0.06) / 2 = 0.54 m swing into the room.
         assert_eq!(svg.matches(" A0.54,0.54 ").count(), 2);
+    }
+
+    #[test]
+    fn one_way_floors_show_their_joists() {
+        let mut m = Model::new("Forjados");
+        let lvl = m.add_level("Planta baja", 0.0);
+        let hormigon = m.add_material("Hormigón", "concrete", [200, 200, 200], CutPattern::Cross);
+        let st = m
+            .add_slab_type(
+                "Unidireccional",
+                SlabFunction::Floor,
+                vec![Layer {
+                    material: hormigon,
+                    thickness: 0.3,
+                    function: LayerFunction::Structure,
+                }],
+            )
+            .unwrap();
+        m.set_floor_system(st, Some(archisim_core::FloorSystem::one_way()))
+            .unwrap();
+        m.add_slab(NewSlab {
+            slab_type: st,
+            level: lvl,
+            outline: vec![
+                Point2::new(0.0, 0.0),
+                Point2::new(9.0, 0.0),
+                Point2::new(9.0, 5.0),
+                Point2::new(0.0, 5.0),
+            ],
+            top_offset: 0.0,
+        })
+        .unwrap();
+        let svg = render_plan(&m, lvl, &PlanOptions::default());
+        assert!(svg.contains("class=\"floor-mark\""), "{svg}");
+        if let Ok(dir) = std::env::var("ARCHISIM_FORJADOS_OUT") {
+            std::fs::write(format!("{dir}/forjado-unidireccional.svg"), &svg).unwrap();
+        }
     }
 
     #[test]

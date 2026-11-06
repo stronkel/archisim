@@ -2091,6 +2091,20 @@ impl<'a> Exporter<'a> {
                 string(derived_guid(&slab.guid, "material").as_str())
             ));
 
+            // A one-way or waffle floor (and its joists), to read it back.
+            if let Some(f) = model.floor_system(slab.slab_type) {
+                let mut props = vec![self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('System',$,IFCTEXT({}),$)",
+                    string(&encode_floor_system(f))
+                ))];
+                if let Some(a) = model.slab_joists(slab.id) {
+                    props.push(self.w.add(format!(
+                        "IFCPROPERTYSINGLEVALUE('Joists',$,IFCREAL({}),$)",
+                        real(a)
+                    )));
+                }
+                self.pset(sl, &slab.guid, "ArchiSim_FloorSystem", &props);
+            }
             self.common_pset(
                 sl,
                 slab.id.0,
@@ -2295,6 +2309,39 @@ pub(crate) fn wrap_name(w: archisim_core::Wrap) -> &'static str {
         archisim_core::Wrap::Interior => "interior",
         archisim_core::Wrap::Both => "both",
     }
+}
+
+/// A floor system as text: `kind;joist;infill;spacing;rib;depth;topping`.
+pub(crate) fn encode_floor_system(f: &archisim_core::FloorSystem) -> String {
+    format!(
+        "{};{};{};{};{};{};{}",
+        f.kind.code(),
+        f.joist.code(),
+        f.infill.code(),
+        f.spacing,
+        f.rib,
+        f.depth,
+        f.topping
+    )
+}
+
+/// The other way.
+pub(crate) fn decode_floor_system(t: &str) -> Option<archisim_core::FloorSystem> {
+    let p: Vec<&str> = t.split(';').collect();
+    if p.len() != 7 {
+        return None;
+    }
+    let n = |k: usize| p[k].trim().parse::<f64>().ok();
+    let f = archisim_core::FloorSystem {
+        kind: archisim_core::FloorKind::from_code(p[0])?,
+        joist: archisim_core::Joist::from_code(p[1])?,
+        infill: archisim_core::Infill::from_code(p[2])?,
+        spacing: n(3)?,
+        rib: n(4)?,
+        depth: n(5)?,
+        topping: n(6)?,
+    };
+    f.is_valid().then_some(f)
 }
 
 #[cfg(test)]

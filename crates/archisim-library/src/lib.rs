@@ -351,6 +351,29 @@ pub fn add_library(m: &mut Model) -> Result<Library, ModelError> {
             layer(yeso, 0.015, LayerFunction::Finish),
         ],
     )?;
+    // The usual floors here: one-way of precast joists and a waffle.
+    for (name, system) in [
+        (
+            "Forjado unidireccional 25+5",
+            archisim_core::FloorSystem::one_way(),
+        ),
+        (
+            "Forjado reticular 25+5",
+            archisim_core::FloorSystem::waffle(),
+        ),
+    ] {
+        let t = m.add_slab_type(
+            name,
+            SlabFunction::Floor,
+            vec![
+                layer(baldosa, 0.015, LayerFunction::Finish),
+                layer(mortero, 0.030, LayerFunction::Substrate),
+                layer(hormigon, system.depth, LayerFunction::Structure),
+                layer(yeso, 0.015, LayerFunction::Finish),
+            ],
+        )?;
+        m.set_floor_system(t, Some(system))?;
+    }
     let flat_roof = m.add_slab_type(
         "Cubierta plana invertida con grava",
         SlabFunction::Roof,
@@ -2909,7 +2932,8 @@ mod tests {
         assert_eq!(m.levels()[0].elevation, 0.0);
         // The three of always and the eight façades laid piece by piece (E9).
         assert_eq!(m.wall_types().count(), 3 + facades::FACADE_TYPES.len());
-        assert_eq!(m.slab_types().count(), 5);
+        // Five, and the one-way and waffle floors.
+        assert_eq!(m.slab_types().count(), 7);
         // With the studio's: 8 doors and 8 windows more.
         assert_eq!(m.opening_types().filter(|t| t.is_door()).count(), 14);
         assert_eq!(m.opening_types().filter(|t| t.is_window()).count(), 13);

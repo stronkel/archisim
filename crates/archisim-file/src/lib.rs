@@ -48,7 +48,7 @@ use serde_json::Value;
 /// Value of the `format` field.
 pub const FORMAT: &str = "ArchiSim";
 /// File layout written by this version of ArchiSim.
-pub const CURRENT_VERSION: u32 = 83;
+pub const CURRENT_VERSION: u32 = 84;
 /// File name extension, without the dot.
 pub const EXTENSION: &str = "archisim";
 /// Length unit of every number in the file.
@@ -381,7 +381,11 @@ pub fn migrate(value: Value, from: u64) -> Result<Value, FileError> {
             // 82: the ground and the materials of the structure
             // (`structure.soil_friction`… `masonry_fk`); older ones take
             // the defaults. 82 → 83: `structure.steel_rigid` (false before).
-            9..=82 => {
+            // 83 → 84: one-way and waffle floors (`floor_systems`), the
+            // joists of slabs (`slab_joists`), footings off their column
+            // (`footing_offsets`) and pile caps (`footing_piles`); older
+            // floors are solid and older footings centred and on the ground.
+            9..=83 => {
                 let mut v = if version == 32 {
                     legacy_dormers(value)
                 } else {
@@ -1871,7 +1875,7 @@ mod tests {
         let back = from_str(&text).unwrap();
         assert_eq!(back, m);
         // A version 6 file has none of them and still opens.
-        let v6 = to_string(&sample()).replacen("\"version\": 83", "\"version\": 6", 1);
+        let v6 = to_string(&sample()).replacen("\"version\": 84", "\"version\": 6", 1);
         assert_eq!(from_str(&v6).unwrap().columns().count(), 0);
     }
 
@@ -1898,7 +1902,7 @@ mod tests {
         let opened = from_str(&old).unwrap();
         assert_same_project(&opened, &m);
         // Saved again, it is a version 5 file.
-        assert!(to_string(&opened).contains("\"version\": 83"));
+        assert!(to_string(&opened).contains("\"version\": 84"));
     }
 
     /// The project as ArchiSim 0.10–0.13 wrote it (file version 2): door and
@@ -2064,7 +2068,7 @@ mod tests {
         assert_eq!(back, m);
         let plain = to_string(&sample());
         assert!(!plain.contains("wrap_"));
-        let old = from_str(&plain.replacen("\"version\": 83", "\"version\": 40", 1)).unwrap();
+        let old = from_str(&plain.replacen("\"version\": 84", "\"version\": 40", 1)).unwrap();
         for t in old.wall_types() {
             assert_eq!(t.wrap_ends, Wrap::None);
             assert_eq!(
@@ -2100,7 +2104,7 @@ mod tests {
             FacadeSystem::Brick
         );
         let plain = to_string(&sample());
-        let old = from_str(&plain.replacen("\"version\": 83", "\"version\": 48", 1)).unwrap();
+        let old = from_str(&plain.replacen("\"version\": 84", "\"version\": 48", 1)).unwrap();
         assert!(old.wall_types().all(|t| t.facade.is_none()));
     }
 
@@ -2238,7 +2242,7 @@ mod tests {
         assert_eq!(back, m);
         let plain = to_string(&sample());
         assert!(!plain.contains("allow_join"));
-        let old = plain.replacen("\"version\": 83", "\"version\": 39", 1);
+        let old = plain.replacen("\"version\": 84", "\"version\": 39", 1);
         assert!(from_str(&old)
             .unwrap()
             .walls()
@@ -2264,7 +2268,7 @@ mod tests {
         let start = text.find("      \"top\": {").unwrap();
         let end = start + text[start..].find("}\n").unwrap() + 2;
         let old = format!("{}{}", &text[..start], &text[end..])
-            .replacen("\"version\": 83", "\"version\": 3", 1)
+            .replacen("\"version\": 84", "\"version\": 3", 1)
             .replace("\"base_offset\": -0.1,\n", "\"base_offset\": -0.1\n");
         let opened = from_str(&old).unwrap();
         let w = opened.wall(tied.id).unwrap();
@@ -2326,7 +2330,7 @@ mod tests {
         assert!(back.opening_type(void).unwrap().is_void());
         assert_eq!(back.opening_type(void).unwrap().mark, "H-01");
         // Version 5 (ArchiSim 0.19): no holes, no voids.
-        let v5 = to_string(&sample()).replacen("\"version\": 83", "\"version\": 5", 1);
+        let v5 = to_string(&sample()).replacen("\"version\": 84", "\"version\": 5", 1);
         assert!(from_str(&v5).unwrap().slabs().all(|s| s.holes.is_empty()));
     }
 
@@ -2787,7 +2791,7 @@ mod tests {
         assert_same_project(&back, &m);
         assert_eq!(back.wall(curved).unwrap().bulge, -0.4);
         // Version 4 (ArchiSim 0.17–0.18): no bulge anywhere.
-        let v4 = to_string(&sample()).replacen("\"version\": 83", "\"version\": 4", 1);
+        let v4 = to_string(&sample()).replacen("\"version\": 84", "\"version\": 4", 1);
         let opened = from_str(&v4).unwrap();
         assert!(opened.walls().all(|w| w.bulge == 0.0));
         // A bend tighter than the wall is thick is refused on opening.
@@ -2819,7 +2823,7 @@ mod tests {
             })
             .unwrap();
         let wall = m.materials().next().unwrap().id;
-        let text = to_string(&m).replacen("\"version\": 83", "\"version\": 32", 1);
+        let text = to_string(&m).replacen("\"version\": 84", "\"version\": 32", 1);
         let mut v: Value = serde_json::from_str(&text).unwrap();
         let roofs = v["roofs"].as_array_mut().unwrap();
         let at = roofs.iter().position(|r| r["id"] == roof.0).unwrap();
@@ -2852,7 +2856,7 @@ mod tests {
     #[test]
     fn layout_is_readable() {
         let text = to_string(&sample());
-        assert!(text.starts_with("{\n  \"format\": \"ArchiSim\",\n  \"version\": 83,\n"));
+        assert!(text.starts_with("{\n  \"format\": \"ArchiSim\",\n  \"version\": 84,\n"));
         // A wall tied to a level says which, and how far from it; a free
         // wall has no `top`.
         assert!(text.contains("\"top\": {\n        \"level\": "));
@@ -2898,11 +2902,11 @@ mod tests {
             Err(FileError::NotAProject)
         ));
         assert!(matches!(
-            edited("\"version\": 83", "\"version\": 84"),
-            Err(FileError::TooNew { version: 84 })
+            edited("\"version\": 84", "\"version\": 85"),
+            Err(FileError::TooNew { version: 85 })
         ));
         assert!(matches!(
-            edited("\"version\": 83", "\"version\": 0"),
+            edited("\"version\": 84", "\"version\": 0"),
             Err(FileError::UnknownVersion(0))
         ));
         assert!(matches!(
@@ -3058,6 +3062,65 @@ mod tests {
         let back = from_str(&text).unwrap();
         assert_eq!(back.type_framing(wt.0), Some(&steel));
         assert_eq!(back.type_framing(st.0), Some(&wood));
+    }
+
+    #[test]
+    fn floor_systems_are_kept() {
+        let mut m = sample();
+        let st = m.slab_types().next().unwrap().id;
+        let mut f = archisim_core::FloorSystem::waffle();
+        f.infill = archisim_core::Infill::Recoverable;
+        m.set_floor_system(st, Some(f)).unwrap();
+        let slab = m.slabs().next().unwrap().id;
+        m.set_slab_joists(slab, Some(0.5)).unwrap();
+        let back = from_str(&to_string(&m)).unwrap();
+        assert_eq!(back.floor_system(st), Some(&f));
+        assert_eq!(back.slab_joists(slab), Some(0.5));
+    }
+
+    #[test]
+    fn footings_off_their_column_and_piles_are_kept() {
+        use archisim_core::{FootingKind, NewColumn, NewFooting, Piles, Point2, Vec2, WallTop};
+        let mut m = sample();
+        let l = m.levels()[0].id;
+        let mt = m.member_types().next().map(|t| t.id);
+        let Some(mt) = mt else { return };
+        let c = m
+            .add_column(NewColumn {
+                member_type: mt,
+                level: l,
+                position: Point2::new(1.0, 1.0),
+                rotation: 0.0,
+                base_offset: 0.0,
+                top: WallTop::Unconnected,
+                height: 3.0,
+            })
+            .unwrap();
+        let mat = m.materials().next().unwrap().id;
+        let f = m
+            .add_footing(NewFooting {
+                level: l,
+                kind: FootingKind::Pad {
+                    position: Point2::new(1.0, 1.0),
+                    length: 1.5,
+                    rotation: 0.0,
+                    column: Some(c),
+                },
+                material: mat,
+                width: 1.5,
+                depth: 0.6,
+                top_offset: 0.0,
+            })
+            .unwrap();
+        m.set_footing_offset(f, Some(Vec2::new(0.5, 0.0))).unwrap();
+        m.set_footing_piles(f, Some(Piles::new(2, 0.45))).unwrap();
+        let back = from_str(&to_string(&m)).unwrap();
+        assert_eq!(back.footing_offset(f), Some(Vec2::new(0.5, 0.0)));
+        assert_eq!(back.footing_piles(f), Some(&Piles::new(2, 0.45)));
+        match back.footing(f).unwrap().kind {
+            FootingKind::Pad { position, .. } => assert!((position.x - 1.5).abs() < 1e-9),
+            _ => unreachable!(),
+        }
     }
 
     #[test]

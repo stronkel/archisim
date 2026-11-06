@@ -25,6 +25,7 @@ mod draft_views;
 mod elevators;
 mod env_buildings;
 mod facades;
+mod floor_systems;
 mod flora;
 mod foundations;
 mod framing;
@@ -76,6 +77,7 @@ pub use draft_views::*;
 pub use elevators::*;
 pub use env_buildings::*;
 pub use facades::*;
+pub use floor_systems::*;
 pub use flora::*;
 pub use foundations::*;
 pub use framing::*;
@@ -1542,6 +1544,14 @@ pub struct ModelParts {
     pub reinforcements: Vec<(u64, Reinforcement)>,
     /// The framing of wall and slab types, by type id.
     pub framings: Vec<(u64, Framing)>,
+    /// The one-way and waffle floors, by slab type.
+    pub floor_systems: Vec<(SlabTypeId, FloorSystem)>,
+    /// The direction of the joists of the slabs that have it by hand.
+    pub slab_joists: Vec<(SlabId, f64)>,
+    /// Pad footings off their column, in the column's axes.
+    pub footing_offsets: Vec<(FootingId, Vec2)>,
+    /// Pile caps: the piles under pad footings.
+    pub footing_piles: Vec<(FootingId, Piles)>,
     /// The site data of the structural actions.
     pub structural_site: StructuralSite,
     /// The loads placed by hand.
@@ -1670,6 +1680,10 @@ pub struct Model {
     /// The framing of wall and slab types (steel and timber frame), by the
     /// type's id.
     pub(crate) framings: BTreeMap<u64, Framing>,
+    pub(crate) floor_systems: BTreeMap<u64, FloorSystem>,
+    pub(crate) slab_joists: BTreeMap<u64, f64>,
+    pub(crate) footing_offsets: BTreeMap<u64, Vec2>,
+    pub(crate) footing_piles: BTreeMap<u64, Piles>,
     /// The site data of the structural actions (snow, wind, earthquake).
     pub(crate) structural_site: StructuralSite,
     /// The loads placed by hand, by id.
@@ -1773,6 +1787,10 @@ impl Model {
             draft_views: BTreeMap::new(),
             reinforcements: BTreeMap::new(),
             framings: BTreeMap::new(),
+            floor_systems: BTreeMap::new(),
+            slab_joists: BTreeMap::new(),
+            footing_offsets: BTreeMap::new(),
+            footing_piles: BTreeMap::new(),
             structural_site: StructuralSite::default(),
             structural_loads: BTreeMap::new(),
             device_circuits: BTreeMap::new(),
@@ -4445,6 +4463,10 @@ impl Model {
             draft_views: self.draft_views.values().cloned().collect(),
             reinforcements: self.reinforcements().map(|(id, r)| (id, *r)).collect(),
             framings: self.framings().map(|(id, f)| (id, f.clone())).collect(),
+            floor_systems: self.floor_systems().map(|(id, f)| (id, *f)).collect(),
+            slab_joists: self.all_slab_joists().collect(),
+            footing_offsets: self.footing_offsets().collect(),
+            footing_piles: self.all_footing_piles().map(|(id, p)| (id, *p)).collect(),
             structural_site: self.structural_site,
             structural_loads: self.structural_loads.values().cloned().collect(),
             device_circuits: self.device_circuits().collect(),
@@ -4854,6 +4876,38 @@ impl Model {
                 .set_device_circuit(id, Some(n))
                 .map_err(|error| RestoreError {
                     element: format!("circuit of device {}", id.0),
+                    error,
+                })?;
+        }
+        for (id, f) in parts.floor_systems {
+            model
+                .set_floor_system(id, Some(f))
+                .map_err(|error| RestoreError {
+                    element: format!("floor system of type {}", id.0),
+                    error,
+                })?;
+        }
+        for (id, v) in parts.footing_offsets {
+            model
+                .set_footing_offset(id, Some(v))
+                .map_err(|error| RestoreError {
+                    element: format!("offset of footing {}", id.0),
+                    error,
+                })?;
+        }
+        for (id, p) in parts.footing_piles {
+            model
+                .set_footing_piles(id, Some(p))
+                .map_err(|error| RestoreError {
+                    element: format!("piles of footing {}", id.0),
+                    error,
+                })?;
+        }
+        for (id, a) in parts.slab_joists {
+            model
+                .set_slab_joists(id, Some(a))
+                .map_err(|error| RestoreError {
+                    element: format!("joists of slab {}", id.0),
                     error,
                 })?;
         }

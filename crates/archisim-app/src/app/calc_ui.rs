@@ -15,6 +15,9 @@ pub struct CalcWindow {
     /// The results of a revision of the model: (revision, text, number of
     /// checks that fail).
     results: Option<(u64, String, usize)>,
+    /// The reinforcement the calculation asks for, while it is being
+    /// chosen: each with whether it goes in.
+    proposals: Option<(u64, Vec<(archisim_struct::proposals::Proposal, bool)>)>,
 }
 
 impl ArchiSimApp {
@@ -220,6 +223,15 @@ impl ArchiSimApp {
                     });
                 }
                 ui.end_row();
+                ui.label("Edificio");
+                {
+                    use super::widgets::SwitchExt;
+                    ui.switch(
+                        &mut new.single_house,
+                        "vivienda unifamiliar (resistencia al fuego R 30)",
+                    );
+                }
+                ui.end_row();
                 ui.label("Uniones de acero");
                 {
                     use super::widgets::SwitchExt;
@@ -262,8 +274,32 @@ impl ArchiSimApp {
                 if ui.button("Anejo de cálculo (PDF)…").clicked() {
                     export = true;
                 }
+                if ui
+                    .button("Aplicar el armado propuesto…")
+                    .on_hover_text("El armado que pide el cálculo de vigas, pilares, zapatas y losas, con las reglas sísmicas si las hay: eliges a qué elementos se lo pones")
+                    .clicked()
+                {
+                    let shown = self.ed.shown();
+                    let model = archisim_struct::phases::as_built(&shown);
+                    let an = archisim_struct::analysis::analyse(&model);
+                    let list = archisim_struct::proposals::proposals(&model, &an)
+                        .into_iter()
+                        .map(|p| {
+                            let on = p.is_new();
+                            (p, on)
+                        })
+                        .collect();
+                    self.calc.proposals = Some((rev, list));
+                }
             });
         });
+        if self.calc.proposals.as_ref().is_some_and(|p| p.0 != rev) {
+            self.calc.proposals = None;
+        }
+        if self.calc.proposals.is_some() {
+            self.proposals_panel(ui);
+            return;
+        }
         egui::ScrollArea::both()
             .auto_shrink([false, false])
             .max_height(ui.available_height() - 8.0)
@@ -275,6 +311,95 @@ impl ArchiSimApp {
             });
         if export {
             self.export_calc_report();
+        }
+    }
+
+    /// The proposals to choose from: a row each, with what it has now.
+    fn proposals_panel(&mut self, ui: &mut Ui) {
+        let Some((_, list)) = self.calc.proposals.as_mut() else {
+            return;
+        };
+        let p = super::theme::Palette::current(ui.ctx());
+        ui.label(
+            egui::RichText::new(format!(
+                "{} elementos de hormigón con armado propuesto. Marcados, los que no tienen armado dibujado; los que lo tienen se cambian solo si los marcas.",
+                list.len()
+            ))
+            .size(12.0),
+        );
+        let mut apply = false;
+        let mut close = false;
+        ui.horizontal(|ui| {
+            if ui.button("Todos").clicked() {
+                list.iter_mut().for_each(|x| x.1 = true);
+            }
+            if ui.button("Solo los que no tienen armado").clicked() {
+                list.iter_mut().for_each(|x| x.1 = x.0.is_new());
+            }
+            if ui.button("Ninguno").clicked() {
+                list.iter_mut().for_each(|x| x.1 = false);
+            }
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                let n = list.iter().filter(|x| x.1).count();
+                if ui
+                    .add_enabled(n > 0, egui::Button::new(format!("Aplicar a {n}")))
+                    .clicked()
+                {
+                    apply = true;
+                }
+                if ui.button("Volver").clicked() {
+                    close = true;
+                }
+            });
+        });
+        egui::ScrollArea::vertical()
+            .auto_shrink([false, false])
+            .max_height(ui.available_height() - 8.0)
+            .show(ui, |ui| {
+                egui::Grid::new("calc-proposals")
+                    .num_columns(3)
+                    .striped(true)
+                    .spacing([12.0, 4.0])
+                    .show(ui, |ui| {
+                        ui.label("");
+                        ui.strong("Propuesto");
+                        ui.strong("Ahora");
+                        ui.end_row();
+                        for (prop, on) in list.iter_mut() {
+                            ui.checkbox(on, &prop.name);
+                            ui.label(prop.reinforcement.summary());
+                            match &prop.now {
+                                Some(r) => ui.label(r.summary()),
+                                None => ui.colored_label(p.muted, "sin armado"),
+                            };
+                            ui.end_row();
+                        }
+                    });
+            });
+        let chosen: Vec<(u64, archisim_core::Reinforcement)> = list
+            .iter()
+            .filter(|x| x.1)
+            .map(|x| (x.0.element, x.0.reinforcement))
+            .collect();
+        if close {
+            self.calc.proposals = None;
+        }
+        if apply {
+            let n = chosen.len();
+            let r = self.ed.transact("Armado propuesto", |m| {
+                for (id, r) in &chosen {
+                    m.set_reinforcement(*id, Some(*r))?;
+                }
+                Ok(())
+            });
+            self.report(
+                r,
+                &format!(
+                    "Armado puesto en {n} elemento{}: míralo en planta a 1:50, en sección o en 3D, y su despiece en Archivo → Exportar.",
+                    if n == 1 { "" } else { "s" }
+                ),
+            );
+            self.calc.proposals = None;
         }
     }
 
@@ -303,6 +428,37 @@ impl ArchiSimApp {
         match r {
             Ok(()) => self.say(format!(
                 "Anejo de cálculo: {} hojas A4 en {}.",
+                sheets.len(),
+                path.display()
+            )),
+            Err(e) => self.complain(format!("No se pudo exportar: {e}.")),
+        }
+    }
+
+    /// The structure drawings as a PDF of A3 pages.
+    pub(super) fn export_structure_drawings(&mut self) {
+        let mut d = rfd::FileDialog::new()
+            .set_title("Planos de estructura (PDF)")
+            .add_filter("PDF", &["pdf"])
+            .set_file_name(format!("{}-planos-estructura.pdf", self.file_name_stem()));
+        if let Some(dir) = self.start_dir() {
+            d = d.set_directory(dir);
+        }
+        let Some(path) = d.save_file() else {
+            return;
+        };
+        let model = self.ed.shown();
+        let pages = archisim_plan::structure_sheets::pages(&model);
+        let sheets: Vec<(String, String)> = pages
+            .into_iter()
+            .enumerate()
+            .map(|(i, svg)| (svg, format!("E-{:02}", i + 1)))
+            .collect();
+        let r = crate::documents::pdf_of(&sheets, "Planos de estructura")
+            .and_then(|bytes| std::fs::write(&path, bytes).map_err(|e| e.to_string()));
+        match r {
+            Ok(()) => self.say(format!(
+                "Planos de estructura: {} hojas A3 en {}.",
                 sheets.len(),
                 path.display()
             )),

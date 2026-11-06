@@ -103,9 +103,15 @@ pub fn layer_weight(model: &Model, l: &Layer) -> f64 {
 pub fn type_weight(model: &Model, type_id: u64, layers: &[Layer]) -> f64 {
     let frame = model.type_framing(type_id);
     let framed = frame.and(Model::frame_layer(layers));
+    // A one-way or waffle floor weighs as its ribs, topping and blocks,
+    // whatever its structure layer's material.
+    let system = model.floor_system(archisim_core::SlabTypeId(type_id));
+    let floor = system.and(Model::frame_layer(layers));
     let mut g = 0.0;
     for (i, l) in layers.iter().enumerate() {
-        if Some(i) == framed {
+        if Some(i) == floor {
+            g += system.expect("floor").weight();
+        } else if Some(i) == framed {
             let f = frame.expect("framed");
             let members = f.stud.kg_per_m() / f.spacing * 1.1 * 9.81 / 1000.0;
             let infill = 0.5 * l.thickness;

@@ -6,6 +6,33 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-06 (110) · Estructura: lo que faltaba para dejar Tricalc
+
+Rama `bloque/calles` (#161). Formato `.archisim` versión 84 (los proyectos de la 83 se abren igual: sus forjados son losas macizas, sus zapatas centradas y sin pilotes).
+
+Qué se hizo, en el orden acordado:
+
+1. **Forjados unidireccionales y reticulares** como propiedad del tipo de forjado (canto, capa de compresión, intereje, nervio, vigueta prefabricada o en obra, entrevigado). Plantilla: «Forjado unidireccional 25+5» y «Forjado reticular 25+5». Unidireccional por bandas como viga continua con alternancia de sobrecarga, negativos mínimos en los extremos, momento por vigueta para la ficha del fabricante, cortante del nervio y flecha fisurada. Reticular en el emparrillado con nervios en T, ábacos y zuncho de borde. La dirección de las viguetas se dibuja en planta (flechas) y se cambia en el grupo «Viguetas» del forjado.
+2. **Zapatas de medianera y de esquina** (desplazadas de su pilar) con vigas centradoras, **zapatas combinadas** y **encepados de pilotes** (también en 3D, planta e IFC como `IfcPile`).
+3. **Armado propuesto**: un botón aplica a vigas, pilares, zapatas y losas el armado que pide el cálculo.
+4. **Planos de estructura** en A3 (PDF): cuadro de pilares y vigas, cimentación, plantas de forjado con viguetas, negativos y ábacos, despiece de vigas.
+5. **Fisuración y flecha fisurada** de las vigas, **resistencia al fuego** (DB-SI anejo C).
+6. **Losas de escalera, dinteles** y **vigas en T** (ala del forjado en positivos).
+7. **Reforma**: lo que se derriba no carga ni se comprueba; el anejo lo dice.
+
+Pendiente: ménsulas cortas; secciones en L o huecas; **validación contra un proyecto real de AD5 calculado con Tricalc** (hace falta que Antonio pase uno: el `.archisim` o IFC del edificio y el listado de Tricalc con armados, cimentación y flechas).
+
+Qué debe probar Antonio:
+
+- `cargo run -p archisim-cli -- demo out/` y `cargo run -p archisim-cli -- estructura out/demo.archisim out/calc`: abrir `out/calc/demo-planos-estructura.pdf` y `out/calc/demo-anejo-calculo.pdf`. Mirar si los cuadros de pilares y vigas, la cimentación y los forjados se leen como un plano de estructura de estudio.
+- En la app, Tipos y materiales → un tipo de forjado → grupo «Forjado»: pasarlo a unidireccional, ver las flechas de viguetas en planta y girarlas en el grupo «Viguetas» del forjado. Probar luego reticular.
+- Una zapata de medianera: seleccionarla, poner un desplazamiento en el grupo de la zapata y ver en Colaboración → Cálculo de la estructura la viga centradora. Probar también un encepado (grupo «Pilotes»).
+- En esa ventana, «Aplicar el armado propuesto…»: marcar algunos elementos, aplicar y comprobar que el armado aparece en sus propiedades (Ctrl+Z lo quita).
+- Interruptor «Edificio: vivienda unifamiliar» y la sección de fuego del anejo.
+- Reforma: poner un pilar en fase «Demolido» y ver que desaparece del cálculo.
+
+---
+
 ## 2026-11-06 (109) · Estructura: lo que aún no hacía
 
 Rama `bloque/calles` (#161). Formato `.archisim` versión 83: los materiales del cálculo guardan si las uniones de acero son rígidas. Los proyectos de la 82 se abren con uniones articuladas, como antes.

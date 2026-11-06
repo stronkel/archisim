@@ -363,6 +363,11 @@ pub fn plates(model: &Model) -> Vec<Plate> {
                 .first()
                 .and_then(|m| Vec2::new(m.end[0] - m.start[0], m.end[1] - m.start[1]).normalized())
         });
+        // A one-way floor sends its load along its joists.
+        let span = span.or_else(|| {
+            crate::floors::one_way(model, s.id)
+                .and_then(|_| crate::floors::joist_direction(model, s.id))
+        });
         let pitch = slope.map_or(0.0, |sl| sl.slope.abs().atan());
         let name_l = t.name.to_lowercase();
         out.push(Plate {

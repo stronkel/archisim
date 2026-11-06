@@ -980,6 +980,69 @@ fn inclined_slabs_round_trip() {
     assert!(diffs.is_empty(), "{}", diffs.join("\n"));
 }
 
+#[test]
+fn floor_systems_round_trip() {
+    let mut m = model();
+    let s = m.slabs().next().unwrap().clone();
+    let mut f = archisim_core::FloorSystem::one_way();
+    f.infill = archisim_core::Infill::Ceramic;
+    m.set_floor_system(s.slab_type, Some(f)).unwrap();
+    m.set_slab_joists(s.id, Some(1.2)).unwrap();
+    let Imported { model, .. } = import_ifc(&export(&m)).unwrap();
+    let back = model.slabs().find(|t| t.guid == s.guid).unwrap();
+    assert_eq!(model.floor_system(back.slab_type), Some(&f));
+    assert!((model.slab_joists(back.id).unwrap() - 1.2).abs() < 1e-9);
+}
+
+#[test]
+fn party_wall_footings_and_piles_round_trip() {
+    use archisim_core::{FootingKind, NewColumn, NewFooting, Piles, Vec2};
+    let mut m = model();
+    let l = m.levels()[0].id;
+    let mt = m.member_types().next().unwrap().id;
+    let mat = m.materials().next().unwrap().id;
+    let add = |m: &mut Model, x: f64| {
+        let c = m
+            .add_column(NewColumn {
+                member_type: mt,
+                level: l,
+                position: Point2::new(x, 2.0),
+                rotation: 0.0,
+                base_offset: 0.0,
+                top: archisim_core::WallTop::Unconnected,
+                height: 3.0,
+            })
+            .unwrap();
+        m.add_footing(NewFooting {
+            level: l,
+            kind: FootingKind::Pad {
+                position: Point2::new(x, 2.0),
+                length: 1.4,
+                rotation: 0.0,
+                column: Some(c),
+            },
+            material: mat,
+            width: 1.4,
+            depth: 0.6,
+            top_offset: -0.4,
+        })
+        .unwrap()
+    };
+    let a = add(&mut m, 2.0);
+    let b = add(&mut m, 6.0);
+    m.set_footing_offset(a, Some(Vec2::new(0.5, 0.0))).unwrap();
+    m.set_footing_piles(b, Some(Piles::new(2, 0.45))).unwrap();
+    let ifc = export(&m);
+    assert!(ifc.contains("IFCPILE("), "piles written");
+    assert!(ifc.contains(".PILE_CAP."));
+    let Imported { model, report } = import_ifc(&ifc).unwrap();
+    assert!(report.skipped.is_empty(), "{report}");
+    let guid = |id| m.footing(id).unwrap().guid.clone();
+    let back = |id| model.footings().find(|f| f.guid == guid(id)).unwrap().id;
+    assert_eq!(model.footing_offset(back(a)), Some(Vec2::new(0.5, 0.0)));
+    assert_eq!(model.footing_piles(back(b)), Some(&Piles::new(2, 0.45)));
+}
+
 /// A gable roof with the walls under it trimmed: the IFC clips their
 /// bodies under its planes (validated in CI on the demo), and ArchiSim
 /// reads the trims back.

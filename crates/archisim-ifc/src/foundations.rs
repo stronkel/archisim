@@ -52,7 +52,9 @@ impl Exporter<'_> {
                 .w
                 .add(format!("IFCPRODUCTDEFINITIONSHAPE($,$,({body}))"));
             let pl = self.placement(Some(storey_pl), self.origin, None);
+            let piles = model.footing_piles(f.id).copied();
             let predefined = match f.kind {
+                FootingKind::Pad { .. } if piles.is_some() => "PILE_CAP",
                 FootingKind::Pad { .. } => "PAD_FOOTING",
                 FootingKind::Strip { .. } => "STRIP_FOOTING",
                 FootingKind::TieBeam { .. } => "FOOTING_BEAM",
@@ -121,8 +123,74 @@ impl Exporter<'_> {
                     string(guid.as_str())
                 )));
             }
+            if let Some(o) = model.footing_offset(f.id) {
+                for (name, v) in [("OffsetX", o.x), ("OffsetY", o.y)] {
+                    props.push(self.w.add(format!(
+                        "IFCPROPERTYSINGLEVALUE('{name}',$,IFCLENGTHMEASURE({}),$)",
+                        real(v)
+                    )));
+                }
+            }
+            if let Some(p) = piles {
+                props.push(self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('Piles',$,IFCTEXT({}),$)",
+                    string(&format!(
+                        "{};{};{};{}",
+                        p.count, p.diameter, p.length, p.capacity
+                    ))
+                )));
+            }
             self.pset(el, &f.guid, "ArchiSim_Footing", &props);
             contained.entry(f.level).or_default().push(el);
+            // The piles (IfcPile), each a round shaft under the cap; read
+            // back from the cap, so the importer leaves them out.
+            if let Some(p) = piles {
+                let mut shafts = Vec::new();
+                for (k, c) in model.pile_points(f.id).into_iter().enumerate() {
+                    let centre = self.point2(Point2::new(0.0, 0.0));
+                    let pos2 = self.w.add(format!("IFCAXIS2PLACEMENT2D({centre},$)"));
+                    let profile = self.w.add(format!(
+                        "IFCCIRCLEPROFILEDEF(.AREA.,$,{pos2},{})",
+                        real(p.diameter / 2.0)
+                    ));
+                    let loc = self.point3(c.x, c.y, f.top_offset - f.depth - p.length);
+                    let solid_pl = self.w.add(format!("IFCAXIS2PLACEMENT3D({loc},$,$)"));
+                    let solid = self.w.add(format!(
+                        "IFCEXTRUDEDAREASOLID({profile},{solid_pl},{},{})",
+                        self.z,
+                        real(p.length)
+                    ));
+                    let body = self.w.add(format!(
+                        "IFCSHAPEREPRESENTATION({},'Body','SweptSolid',({solid}))",
+                        self.body_ctx
+                    ));
+                    let shape = self
+                        .w
+                        .add(format!("IFCPRODUCTDEFINITIONSHAPE($,$,({body}))"));
+                    let pl = self.placement(Some(storey_pl), self.origin, None);
+                    let guid = derived_guid(&f.guid, &format!("pile-{k}"));
+                    let pile = self.w.add(format!(
+                        "IFCPILE({},$,{},$,$,{pl},{shape},$,.BORED.,$)",
+                        string(guid.as_str()),
+                        string(&format!("Pilote {} de {}", k + 1, f.id.0)),
+                    ));
+                    if let Some(m) = materials.get(&f.material) {
+                        self.w.add(format!(
+                            "IFCRELASSOCIATESMATERIAL({},$,$,$,({pile}),{m})",
+                            string(derived_guid(&guid, "material").as_str())
+                        ));
+                    }
+                    let part = self.w.add(format!(
+                        "IFCPROPERTYSINGLEVALUE('Cap',$,IFCIDENTIFIER({}),$)",
+                        string(f.guid.as_str())
+                    ));
+                    self.pset(pile, &guid, "ArchiSim_PilePart", &[part]);
+                    shafts.push(pile);
+                }
+                if !shafts.is_empty() {
+                    contained.entry(f.level).or_default().extend(shafts);
+                }
+            }
         }
     }
 

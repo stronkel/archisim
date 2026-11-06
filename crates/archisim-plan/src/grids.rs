@@ -167,6 +167,22 @@ pub fn draw_footings(
                 num(3.0 * k),
                 num(1.5 * k)
             );
+            // The piles under a pile cap, dashed too.
+            if let Some(p) = model.footing_piles(f.id) {
+                let r = p.diameter / 2.0;
+                for c in model.pile_points(f.id) {
+                    let _ = writeln!(
+                        s,
+                        r#"<circle class="pile" cx="{}" cy="{}" r="{}" fill="none" stroke="{INK}" stroke-width="{}" stroke-dasharray="{} {}"/>"#,
+                        num(c.x),
+                        num(-c.y),
+                        num(r),
+                        num(pens().view * k),
+                        num(2.0 * k),
+                        num(1.0 * k)
+                    );
+                }
+            }
         });
     }
     s.push_str("</g>\n");

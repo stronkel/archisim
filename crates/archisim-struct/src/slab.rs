@@ -52,6 +52,26 @@ pub struct SlabResult {
     /// A raft: the largest pressure on the ground in service, kN/m².
     pub raft: Option<f64>,
     pub punching: Vec<Punch>,
+    /// A waffle floor: what its ribs and solid heads take.
+    pub waffle: Option<WaffleResult>,
+}
+
+/// The ribs and solid heads (ábacos) of a waffle floor.
+#[derive(Debug, Clone, PartialEq)]
+pub struct WaffleResult {
+    pub system: archisim_core::FloorSystem,
+    /// Sagging and hogging per rib out of the heads, kN·m, along the
+    /// first edge and across.
+    pub rib_bottom: [f64; 2],
+    pub rib_top: [f64; 2],
+    /// Hogging per metre in the heads, kN·m/m.
+    pub head_top: [f64; 2],
+    /// The largest shear in a rib out of the heads, kN.
+    pub rib_shear: f64,
+    /// How far each head reaches from its column's axis, m, and what
+    /// NCSE-like practice asks (0,15 of the span), m.
+    pub head_reach: f64,
+    pub head_need: f64,
 }
 
 /// Punching at one column.
@@ -130,6 +150,9 @@ fn concrete_slab(model: &Model, id: SlabId) -> Option<f64> {
     if model.type_framing(s.slab_type.0).is_some() {
         return None;
     }
+    if let Some(f) = model.floor_system(s.slab_type) {
+        return (f.kind == archisim_core::FloorKind::Waffle).then_some(f.depth);
+    }
     let t = model.slab_type(s.slab_type)?;
     let h: f64 = t
         .layers
@@ -158,7 +181,11 @@ pub fn analyse(model: &Model, td: &Takedown) -> Vec<SlabResult> {
         let Some(h) = concrete_slab(model, id) else {
             continue;
         };
-        if let Some(r) = grillage(model, td, &plates, i, h, altitude) {
+        let waffle = model
+            .slab(id)
+            .and_then(|s| model.floor_system(s.slab_type))
+            .copied();
+        if let Some(r) = grillage(model, td, &plates, i, h, altitude, waffle) {
             out.push(SlabResult { slab: id, ..r });
         }
     }
@@ -172,6 +199,7 @@ fn grillage(
     i: usize,
     h: f64,
     altitude: f64,
+    waffle: Option<archisim_core::FloorSystem>,
 ) -> Option<SlabResult> {
     let pl = &plates[i];
     // Local axes: u along the first edge.
@@ -193,6 +221,10 @@ fn grillage(
     let area = geo::area(&pl.outline);
     let mut s = 0.5f64.max((area / MAX_NODES as f64).sqrt());
     s = (s * 20.0).ceil() / 20.0;
+    // A waffle floor: a bar per rib (or per few ribs on a big floor).
+    if let Some(w) = &waffle {
+        s = w.spacing * (s / w.spacing).ceil().max(1.0);
+    }
     let na = ((a1 - a0) / s).floor() as i64 + 1;
     let nb = ((b1 - b0) / s).floor() as i64 + 1;
     let at = |ia: i64, ib: i64| -> Point2 {
@@ -225,12 +257,72 @@ fn grillage(
         e,
         g,
     };
+    // A waffle's ribs: a T each with its share of topping; its torsion,
+    // that of the rib's web, small.
+    let rib_section = waffle.map(|w| {
+        let k = s / w.spacing;
+        let (i, _) = w.rib_inertia();
+        Section {
+            a: k * w.concrete() * w.spacing,
+            iy: k * i,
+            iz: h * s.powi(3) / 12.0,
+            j: k * w.rib.powi(3) * (h - w.topping) / 3.0,
+            e,
+            g,
+        }
+    });
+    // The supports, to know where the solid heads are.
+    let supports = gravity::plate_supports(model, td, pl);
+    let column_points: Vec<Point2> = supports
+        .iter()
+        .filter(|sp| sp.path.len() == 1)
+        .map(|sp| sp.path[0])
+        .collect();
+    // Each head reaches 0,15 of the span to the nearest column from the
+    // column's axis, in whole ribs.
+    let head_need = column_points
+        .iter()
+        .map(|c| {
+            column_points
+                .iter()
+                .map(|o| o.distance(*c))
+                .filter(|d| *d > 0.5)
+                .fold(f64::INFINITY, f64::min)
+        })
+        .filter(|d| d.is_finite())
+        .fold(0.0, f64::max)
+        * 0.15;
+    let head_reach = waffle.map_or(0.0, |w| {
+        (w.spacing * (head_need / w.spacing).ceil()).max(w.spacing) + w.rib / 2.0
+    });
+    let solid_at = |p: Point2| -> bool {
+        if waffle.is_none() {
+            return true;
+        }
+        let (a, b) = to_l(p);
+        let in_head = column_points.iter().any(|c| {
+            let (ca, cb) = to_l(*c);
+            (a - ca).abs() <= head_reach && (b - cb).abs() <= head_reach
+        });
+        // A solid band round the edge (the floor's edge beam).
+        let n = pl.outline.len();
+        let edge =
+            (0..n).any(|k| geo::to_segment(p, pl.outline[k], pl.outline[(k + 1) % n]).0 < 0.25);
+        in_head || edge
+    };
     // Bars: along u (dir 0) and along v (dir 1).
     let mut dirs: Vec<usize> = Vec::new();
     let mut ends: Vec<[usize; 2]> = Vec::new();
     for (&(ia, ib), &n) in &index {
         for (d, (ja, jb)) in [(0usize, (ia + 1, ib)), (1, (ia, ib + 1))] {
             if let Some(&m) = index.get(&(ja, jb)) {
+                let pn = frame.nodes[n];
+                let pm = frame.nodes[m];
+                let mid = Point2::new((pn[0] + pm[0]) / 2.0, (pn[1] + pm[1]) / 2.0);
+                let section = match rib_section {
+                    Some(r) if !solid_at(mid) => r,
+                    _ => section,
+                };
                 frame.bars.push(Bar {
                     i: n,
                     j: m,
@@ -246,7 +338,6 @@ fn grillage(
     }
     // Supports: the nodes on the walls and beams under it, the nearest to
     // each column.
-    let supports = gravity::plate_supports(model, td, pl);
     let mut held = vec![false; frame.nodes.len()];
     for sp in &supports {
         if sp.path.len() == 1 {
@@ -387,6 +478,32 @@ fn grillage(
             .collect()
     };
     let per_case: Vec<Vec<[f64; 3]>> = sols.iter().map(node_moments).collect();
+    // A waffle: which nodes and bars are in the solid parts, and the
+    // shear of each bar by case.
+    let solid_node: Vec<bool> = frame
+        .nodes
+        .iter()
+        .map(|p| solid_at(Point2::new(p[0], p[1])))
+        .collect();
+    let rib_bar: Vec<bool> = ends
+        .iter()
+        .map(|[a, b]| waffle.is_some() && !solid_node[*a] && !solid_node[*b])
+        .collect();
+    let bar_shear: Vec<Vec<f64>> = sols
+        .iter()
+        .map(|sol| {
+            (0..ends.len())
+                .map(|b| {
+                    let ef = &sol.end_forces[b];
+                    crate::frame::internal(ef, &[], 0.0)[2]
+                })
+                .collect()
+        })
+        .collect();
+    let mut rib_bottom = [0.0f64; 2];
+    let mut rib_top = [0.0f64; 2];
+    let mut head_top = [0.0f64; 2];
+    let mut rib_shear = 0.0f64;
     let combos = combinations(&cases, altitude);
     let mut bottom = [0.0f64; 2];
     let mut top = [0.0f64; 2];
@@ -440,6 +557,29 @@ fn grillage(
                     for d in 0..2 {
                         bottom[d] = bottom[d].max(m[d] + m[2].abs());
                         top[d] = top[d].max(-(m[d] - m[2].abs()));
+                        if let Some(w) = &waffle {
+                            if solid_node[n] {
+                                head_top[d] = head_top[d].max(-(m[d] - m[2].abs()));
+                            } else {
+                                // A rib takes its width of the moment;
+                                // the twist goes to the topping.
+                                rib_bottom[d] = rib_bottom[d].max(m[d] * w.spacing);
+                                rib_top[d] = rib_top[d].max(-m[d] * w.spacing);
+                            }
+                        }
+                    }
+                }
+                if let Some(w) = &waffle {
+                    let ribs = s / w.spacing;
+                    for b in 0..ends.len() {
+                        if rib_bar[b] {
+                            let v: f64 = cases
+                                .iter()
+                                .enumerate()
+                                .map(|(ci, c)| combo.factor(*c) * bar_shear[ci][b])
+                                .sum();
+                            rib_shear = rib_shear.max(v.abs() / ribs);
+                        }
                     }
                 }
             }
@@ -525,7 +665,150 @@ fn grillage(
         thickness: h,
         raft: ks.map(|_| pressure),
         punching,
+        waffle: waffle.map(|system| WaffleResult {
+            system,
+            rib_bottom,
+            rib_top,
+            head_top,
+            rib_shear,
+            head_reach,
+            head_need,
+        }),
     })
+}
+
+/// The ribs and heads of a waffle floor.
+fn waffle_checks(
+    model: &Model,
+    name: &str,
+    w: &WaffleResult,
+    out: &mut Vec<Check>,
+    subject: Subject,
+) {
+    let rc = Rc::of(model);
+    let sys = &w.system;
+    let d = sys.depth - 0.03;
+    let head = format!(
+        "{name} (reticular {}, nervios de {} cm)",
+        sys.label(),
+        dec(sys.rib * 100.0, 0)
+    );
+    let m = w.rib_bottom[0].max(w.rib_bottom[1]);
+    let need = rc.bending_steel(m, sys.spacing, d);
+    let in_topping =
+        need.is_some_and(|a| a * rc.fyd() / (0.8 * sys.spacing * rc.fcd()) <= sys.topping);
+    out.push(match need {
+        Some(a) if in_topping => {
+            let a = a.max(rc.min_beam_steel(sys.rib, sys.depth));
+            Check {
+                subject,
+                what: format!(
+                    "{head}: M+ por nervio {} y {} kN·m: {} abajo en cada nervio ({} cm²)",
+                    dec(w.rib_bottom[0], 1),
+                    dec(w.rib_bottom[1], 1),
+                    crate::floors::rib_bars(a).label(),
+                    dec(a * 1e4, 2)
+                ),
+                rule: "Momento positivo de los nervios (Código Estructural, art. 42)",
+                ratio: 0.0,
+                status: Status::Info,
+                advice: None,
+            }
+        }
+        _ => Check {
+            subject,
+            what: format!(
+                "{head}: M+ por nervio {} kN·m: la capa de compresión no basta",
+                dec(m, 1)
+            ),
+            rule: "Momento positivo de los nervios (Código Estructural, art. 42)",
+            ratio: 1.5,
+            status: Status::Fail,
+            advice: Some("más canto o más capa de compresión".into()),
+        },
+    });
+    let m = w.rib_top[0].max(w.rib_top[1]);
+    if m > 0.5 {
+        out.push(match rc.bending_steel(m, sys.rib, d) {
+            Some(a) => Check {
+                subject,
+                what: format!(
+                    "{head}: M− por nervio fuera de los ábacos {} kN·m: {} arriba en cada nervio",
+                    dec(m, 1),
+                    crate::floors::rib_bars(a).label()
+                ),
+                rule: "Momento negativo de los nervios (Código Estructural, art. 42)",
+                ratio: 0.0,
+                status: Status::Info,
+                advice: None,
+            },
+            None => Check {
+                subject,
+                what: format!("{head}: M− por nervio fuera de los ábacos {} kN·m: el nervio no basta a compresión", dec(m, 1)),
+                rule: "Momento negativo de los nervios (Código Estructural, art. 42)",
+                ratio: 1.2,
+                status: Status::Fail,
+                advice: Some("ábacos mayores o más canto".into()),
+            },
+        });
+    }
+    let mh = w.head_top[0].max(w.head_top[1]);
+    let need = rc
+        .bending_steel(mh, 1.0, d)
+        .map(|a| a.max(0.0018 * sys.depth));
+    out.push(match need {
+        Some(a) => Check {
+            subject,
+            what: format!(
+                "{head}: M− en los ábacos {} kN·m/m: {} arriba en las dos direcciones sobre los pilares",
+                dec(mh, 1),
+                mesh_for(a).label()
+            ),
+            rule: "Armado de los ábacos (Código Estructural, art. 42)",
+            ratio: 0.0,
+            status: Status::Info,
+            advice: None,
+        },
+        None => Check {
+            subject,
+            what: format!("{head}: M− en los ábacos {} kN·m/m: el canto no basta", dec(mh, 1)),
+            rule: "Armado de los ábacos (Código Estructural, art. 42)",
+            ratio: 1.5,
+            status: Status::Fail,
+            advice: Some("más canto".into()),
+        },
+    });
+    let vrd = rc.vrd_c(sys.rib, d, 0.01);
+    let u = w.rib_shear / vrd.max(1e-9);
+    out.push(Check {
+        subject,
+        what: format!(
+            "{head}: cortante de los nervios al salir de los ábacos {} kN sobre Vrd,c {} kN",
+            dec(w.rib_shear, 1),
+            dec(vrd, 1)
+        ),
+        rule: "Cortante de los nervios (Código Estructural, art. 44)",
+        ratio: u,
+        status: if u <= 1.0 { Status::Pass } else { Status::Fail },
+        advice: (u > 1.0).then(|| {
+            "ábacos mayores, nervios más anchos o cercos en los nervios junto al ábaco".into()
+        }),
+    });
+    if w.head_need > 0.0 {
+        let u = w.head_need / w.head_reach.max(1e-9);
+        out.push(Check {
+            subject,
+            what: format!(
+                "{head}: los ábacos llegan a {} m del eje de cada pilar; 0,15 de la luz son {} m",
+                dec(w.head_reach, 2),
+                dec(w.head_need, 2)
+            ),
+            rule: "Tamaño de los ábacos (0,15·L desde el eje del pilar)",
+            ratio: u,
+            status: if u <= 1.0 { Status::Pass } else { Status::Fail },
+            advice: (u > 1.0).then(|| "ábacos mayores".into()),
+        });
+    }
 }
 
 fn nearest_node(frame: &Frame, p: Point2, s: f64) -> Option<usize> {
@@ -630,11 +913,14 @@ pub fn check(model: &Model, td: &Takedown) -> Vec<Check> {
             dir[0],
             dir[1]
         );
-        let fails_concrete = r
-            .need_bottom
-            .iter()
-            .chain(&r.need_top)
-            .any(|a| !a.is_finite());
+        if let Some(w) = &r.waffle {
+            waffle_checks(model, &name, w, &mut out, subject);
+        }
+        let fails_concrete = r.waffle.is_none()
+            && r.need_bottom
+                .iter()
+                .chain(&r.need_top)
+                .any(|a| !a.is_finite());
         if fails_concrete {
             out.push(Check {
                 subject,
@@ -654,6 +940,7 @@ pub fn check(model: &Model, td: &Takedown) -> Vec<Check> {
             mesh_for(r.need_top[1]).label()
         );
         match model.reinforcement(r.slab.0) {
+            _ if r.waffle.is_some() => {}
             Some(Reinforcement::Slab { bottom, top, .. }) => {
                 let tops = top.map_or([0.0; 2], |t| [per_m(&t[0]), per_m(&t[1])]);
                 let mut u = 0.0f64;
@@ -884,6 +1171,36 @@ mod tests {
         // The columns stand on the raft: no footings asked for them.
         let f = crate::foundations::check(&m, &td);
         assert!(f.is_empty(), "{f:?}");
+    }
+
+    #[test]
+    fn a_waffle_floor() {
+        let mut m = Model::new("Reticular");
+        flat_slab(&mut m, false);
+        let t = m
+            .slab_types()
+            .find(|t| t.name == "Losa maciza 25")
+            .unwrap()
+            .id;
+        m.set_floor_system(t, Some(FloorSystem::waffle())).unwrap();
+        let td = crate::takedown(&m);
+        let r = analyse(&m, &td);
+        let w = r[0].waffle.as_ref().expect("a waffle");
+        // Ribs at 80 cm; 6 m spans: heads to 0,9 m, in whole ribs 1,6 + 0,06.
+        assert!((r[0].spacing - 0.8).abs() < 1e-9, "{}", r[0].spacing);
+        assert!((w.head_need - 0.9).abs() < 1e-9, "{w:?}");
+        assert!(w.head_reach >= w.head_need);
+        // Some 5–25 kN·m of sagging per rib on 6 m bays.
+        let mb = w.rib_bottom[0].max(w.rib_bottom[1]);
+        assert!((3.0..30.0).contains(&mb), "{w:?}");
+        assert!(w.head_top[0] > w.rib_top[0] / 0.8, "{w:?}");
+        assert!(w.rib_shear > 1.0, "{w:?}");
+        let c = check(&m, &td);
+        assert!(c
+            .iter()
+            .any(|c| c.rule.starts_with("Momento positivo de los nervios")));
+        assert!(c.iter().any(|c| c.rule.starts_with("Punzonamiento")));
+        assert!(!c.iter().any(|c| c.rule.starts_with("Armado de la losa")));
     }
 
     #[test]

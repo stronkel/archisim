@@ -590,6 +590,9 @@ impl ArchiSimApp {
                 &format!("{:.3}", f.volume()).replace('.', ","),
             );
         });
+        if let FootingKind::Pad { column, .. } = f.kind {
+            self.footing_structure_groups(ui, id, column.is_some());
+        }
         group(ui, "footing-material", "Material", |ui| {
             row(ui, "Material", "", |ui, w| {
                 let v =
@@ -706,6 +709,147 @@ impl ArchiSimApp {
             );
             let d = r.end - r.start;
             text_row(ui, "Dirección", "", &fmt_angle(d.y.atan2(d.x)));
+        });
+    }
+}
+
+impl ArchiSimApp {
+    /// A pad's place against its column (party wall, corner) and its
+    /// piles (`docs/ESTRUCTURA.md` §6, Cimentación).
+    fn footing_structure_groups(&mut self, ui: &mut Ui, id: FootingId, on_column: bool) {
+        let model = self.ed.model();
+        let offset = model
+            .footing_offset(id)
+            .unwrap_or(archisim_core::Vec2::new(0.0, 0.0));
+        let piles = model.footing_piles(id).copied();
+        if on_column {
+            group(ui, "footing-offset", "Posición respecto al pilar", |ui| {
+                for (k, label, hint) in [
+                    (0usize, "Desplazada en x (mm)", "Del centro de la zapata al eje del pilar, en los ejes del pilar: una zapata de medianera se desplaza hacia dentro"),
+                    (1, "Desplazada en y (mm)", ""),
+                ] {
+                    let now = if k == 0 { offset.x } else { offset.y };
+                    row(ui, label, hint, |ui, w| {
+                        if let Some(v) = length_field(ui, Id::unique(("footing-off", id, k)), now, w - 8.0) {
+                            let mut o = offset;
+                            if k == 0 {
+                                o.x = v;
+                            } else {
+                                o.y = v;
+                            }
+                            let r = self.ed.transact("Zapata desplazada", |m| m.set_footing_offset(id, Some(o)));
+                            self.report(r, "Zapata desplazada: para la de medianera, dibuja una viga de atado hasta un pilar interior y hará de viga centradora.");
+                        }
+                    });
+                }
+                if offset.x.hypot(offset.y) > 1e-6 && ui.button("Centrar bajo el pilar").clicked() {
+                    let r = self
+                        .ed
+                        .transact("Zapata centrada", |m| m.set_footing_offset(id, None));
+                    self.report(r, "Zapata centrada bajo su pilar.");
+                }
+            });
+        }
+        group(ui, "footing-piles", "Pilotes", |ui| {
+            let mut on = piles.is_some();
+            row(
+                ui,
+                "Encepado sobre pilotes",
+                "La zapata es el encepado de unos pilotes",
+                |ui, _| {
+                    if super::widgets::switch(ui, &mut on, "").changed() {
+                        let p = on.then(|| archisim_core::Piles::new(2, 0.45));
+                        let r = self.ed.transact("Pilotes", |m| m.set_footing_piles(id, p));
+                        self.report(r, if on { "Encepado de dos pilotes de 45 cm: ajusta su número, diámetro y la carga admisible del estudio geotécnico." } else { "Zapata sin pilotes." });
+                    }
+                },
+            );
+            let Some(p) = piles else {
+                return;
+            };
+            let mut next = p;
+            row(ui, "Pilotes", "", |ui, w| {
+                next.count = choice(
+                    ui,
+                    ("piles-n", id.0),
+                    w,
+                    p.count,
+                    &[
+                        (1, "1"),
+                        (2, "2"),
+                        (3, "3"),
+                        (4, "4"),
+                        (5, "5"),
+                        (6, "6"),
+                        (8, "8"),
+                        (9, "9"),
+                    ],
+                );
+            });
+            row(ui, "Diámetro", "", |ui, w| {
+                let cm = (p.diameter * 100.0).round() as u32;
+                let v = choice(
+                    ui,
+                    ("piles-d", id.0),
+                    w,
+                    cm,
+                    &[
+                        (35, "35 cm"),
+                        (45, "45 cm"),
+                        (55, "55 cm"),
+                        (65, "65 cm"),
+                        (85, "85 cm"),
+                        (100, "100 cm"),
+                    ],
+                );
+                next.diameter = f64::from(v) / 100.0;
+            });
+            row(ui, "Longitud (mm)", "Bajo el encepado", |ui, w| {
+                if let Some(v) = length_field(ui, Id::unique(("piles-l", id)), p.length, w - 8.0) {
+                    next.length = v;
+                }
+            });
+            row(
+                ui,
+                "Carga admisible (kN)",
+                "Por pilote, en servicio, del estudio geotécnico; vacío: solo su tope estructural",
+                |ui, w| {
+                    let shown = if p.capacity > 0.0 {
+                        format!("{:.0}", p.capacity)
+                    } else {
+                        String::new()
+                    };
+                    if let Some(v) =
+                        text_edit_committed(ui, Id::unique(("piles-c", id)), &shown, w - 8.0)
+                    {
+                        let t = v.trim().replace(',', ".");
+                        if t.is_empty() {
+                            next.capacity = 0.0;
+                        } else if let Ok(kn) = t.parse::<f64>() {
+                            next.capacity = kn.max(0.0);
+                        }
+                    }
+                },
+            );
+            text_row(
+                ui,
+                "Tope estructural (kN)",
+                "4 N/mm² sobre su sección (DB-SE-C, tabla 5.1)",
+                &format!("{:.0}", p.structural_top()),
+            );
+            let (cw, cl) = p.cap_size();
+            text_row(
+                ui,
+                "Encepado mínimo",
+                "",
+                &format!("{:.2} × {:.2} m", cw, cl).replace('.', ","),
+            );
+            if next != p && next.is_valid() {
+                let r = self
+                    .ed
+                    .transact("Pilotes", |m| m.set_footing_piles(id, Some(next)));
+                self.report(r, "Pilotes cambiados.");
+            }
         });
     }
 }

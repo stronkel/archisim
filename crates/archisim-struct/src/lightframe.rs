@@ -39,6 +39,8 @@ pub enum Subject {
     Column(archisim_core::ColumnId),
     /// A footing (worked out or drawn: the column or wall it carries).
     Footing(u64),
+    /// A concrete stair.
+    Stair(archisim_core::StairId),
     Building,
 }
 

@@ -1632,15 +1632,21 @@ fn properties_palette_shows_every_state() {
         }
         // The type pictures of walls, slabs, doors and windows were drawn
         // (one per type of the template) and are kept.
-        // (Wall types of the same layers share a picture: the façades of
+        // (Types of the same layers share a picture: the façades of
         // brick in several bonds.)
         let walls: std::collections::HashSet<String> = h
             .model()
             .wall_types()
             .map(|t| format!("{:?}", t.layers))
             .collect();
-        let types =
-            walls.len() + h.model().slab_types().count() + h.model().opening_types().count();
+        // Slab types too: a one-way floor draws as the solid one of its
+        // layers.
+        let slabs: std::collections::HashSet<String> = h
+            .model()
+            .slab_types()
+            .map(|t| format!("{:?}", t.layers))
+            .collect();
+        let types = walls.len() + slabs.len() + h.model().opening_types().count();
         assert!(h.app.thumbs.count() >= types, "{}", h.app.thumbs.count());
         let m = h.model();
         let all: Vec<Element> = crate::pick::elements_on_level(m, h.app.ed.level);

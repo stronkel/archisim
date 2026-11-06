@@ -3932,11 +3932,32 @@ pub fn footing_solids(model: &Model, id: archisim_core::FootingId) -> Vec<Solid>
         return Vec::new();
     }
     let top = model.level(f.level).map_or(0.0, |l| l.elevation) + f.top_offset;
-    vec![Solid {
+    let mut out = vec![Solid {
         owner: SolidOwner::Footing(id),
         material: f.material,
         triangles: prism(&outline, top - f.depth, top),
-    }]
+    }];
+    // The piles of a pile cap: round, sixteen sides, from the cap down.
+    if let Some(p) = model.footing_piles(id) {
+        let bottom = top - f.depth;
+        let r = p.diameter / 2.0;
+        let mut tris = Vec::new();
+        for c in model.pile_points(id) {
+            let ring: Vec<Point2> = (0..16)
+                .map(|k| {
+                    let a = std::f64::consts::TAU * k as f64 / 16.0;
+                    Point2::new(c.x + r * a.cos(), c.y + r * a.sin())
+                })
+                .collect();
+            tris.extend(prism(&ring, bottom - p.length, bottom));
+        }
+        out.push(Solid {
+            owner: SolidOwner::Footing(id),
+            material: f.material,
+            triangles: tris,
+        });
+    }
+    out
 }
 
 /// The solids of a mass: its solid (a contour pushed up, a round form, or

@@ -1,6 +1,6 @@
 # Cálculo de la estructura
 
-ArchiSim calcula la estructura del modelo tal como está dibujado. No hay que dibujar otro modelo: no se añaden elementos ni se guarda nada aparte de tres cosas, los datos del emplazamiento, los materiales de la estructura y las cargas puestas a mano (formato `.archisim` versiones 81 a 83).
+ArchiSim calcula la estructura del modelo tal como está dibujado. No hay que dibujar otro modelo: no se añaden elementos ni se guarda nada aparte de los datos del emplazamiento, los materiales de la estructura, las cargas puestas a mano, el sistema de forjado de cada tipo, la dirección de las viguetas y el desplazamiento y los pilotes de las zapatas (formato `.archisim` versiones 81 a 84).
 
 Es una ayuda al cálculo, pensada para que el estudio no necesite otro programa en las obras habituales (viviendas, entramados ligeros, pórticos de hormigón sencillos). El anejo lo firma el técnico, que revisa y asume sus hipótesis.
 
@@ -182,6 +182,42 @@ Cuando hay que tener en cuenta el sismo, con ductilidad baja (μ = 2) y contra e
 - **Pilares** (ac ≥ 0,12g): lado menor de 25 cm (30 con ac ≥ 0,16g); tres barras por cara (seis si es circular) a 20 cm como mucho (15); cuantía entre 1 % y 6 % con ac ≥ 0,16g; en las **zonas críticas** de los dos extremos, de dos cantos de largo, cercos Ø6 a c/3 y 10 cm con barras de 12–14 o 15 cm con barras de 16 o más (con ac ≥ 0,16g: Ø8, c/4, 7 y 10 cm).
 - **Atado de la cimentación** (4.3.2): con ac ≥ 0,16g, cada zapata aislada atada con vigas de atado en dos direcciones; entre 0,08g y 0,16g, aviso: vale una solera continua de 15 cm al menos.
 
+### Forjados unidireccionales y reticulares
+
+El tipo de forjado dice qué es (Tipos y materiales → «Forjado»): losa maciza (lo de siempre), **unidireccional** o **reticular**, con el canto total, la capa de compresión, el intereje, el ancho del nervio, la vigueta (prefabricada u hormigonada en obra) y el entrevigado (bovedilla de hormigón, cerámica, de poliestireno o casetón recuperable), que dan el peso propio.
+
+- **Unidireccional**: las viguetas van en la dirección que se dibuja en el forjado (grupo «Viguetas») o, si no, en la del lado corto. Se calcula por bandas de 1 m como viga continua sobre los apoyos que cruza, con la sobrecarga vano a vano para los máximos. En los extremos, un negativo de al menos ¼ del positivo del vano. Con vigueta prefabricada se da el momento último que debe resistir cada vigueta (para la ficha del fabricante); con nervio en obra, el armado en T. Negativos por nervio o, si no caben, macizado. Cortante del nervio (Vrd,c) y flecha con la inercia fisurada (0,8 en vano, 0,5 en apoyo) × 3 de fluencia, contra L/300 la total y L/400 la activa.
+- **Reticular**: el emparrillado de siempre con la sección en T de los nervios; **ábacos** macizos en los pilares hasta 0,15·L, en nervios enteros; zuncho macizo de 25 cm en los bordes; cortante de los nervios fuera de los ábacos y punzonamiento en el ábaco.
+
+### Zapatas de medianera y de esquina, combinadas y encepados
+
+- **Descentradas** (medianera o esquina: la zapata movida respecto a su pilar, campos «Desplazamiento» de la zapata): presión por Meyerhof con el ancho reducido B − 2e. La excentricidad se recoge con una **viga centradora** hacia la zapata vecina: la reacción sube a N·L/(L − e) y la viga lleva Md = Nu·e y Vd = Nu·e/(L − e); en esquina, dos vigas.
+- **Combinadas**: una zapata con dos pilares o más se calcula con la resultante y su excentricidad, como viga sobre la reacción uniforme del terreno.
+- **Encepados de pilotes** (grupo «Pilotes» de la zapata: número, diámetro, longitud y tope del pilote): tope estructural 4 N/mm², separación de 3 diámetros, reparto de la carga entre pilotes y el tirante de bielas y tirantes T = Nu/2·(s/2 − a/4)/(0,85·d).
+
+### Armado propuesto
+
+«Aplicar el armado propuesto…» (ventana Cálculo de la estructura) da, para cada viga, pilar, zapata y losa maciza, el armado que pide el cálculo con los mínimos sísmicos de la NCSE-02 si hay que tenerlos en cuenta. Se eligen los elementos (marcados de entrada los que no tienen armado) y se escribe en su Armado, en un paso de Deshacer.
+
+### Fisuración y flecha de las vigas
+
+- **Fisura** en servicio: wk = sr,max·(εsm − εcm) contra 0,3 mm.
+- **Flecha** con la inercia efectiva de Branson y la fluencia λ = 2/(1 + 50ρ′): la total contra L/250 y la activa contra L/400.
+- **Vigas en T**: con forjado encima, el ala eficaz b + 0,1·l0 por lado (l0 = 0,85·L) para el momento positivo, si el bloque comprimido cabe en el ala.
+
+### Resistencia al fuego (DB-SI 6)
+
+La R exigida sale de la tabla 3.1 por el uso y la altura de evacuación (con el interruptor «Vivienda unifamiliar» de la ventana). Pilares, vigas, losas, forjados unidireccionales y reticulares de hormigón con las tablas C.2 a C.5 del anejo C: dimensión mínima y distancia al eje am = recubrimiento + cerco + barra/2. El acero laminado y la madera, aviso: protección por cuenta del proyecto.
+
+### Escaleras y dinteles
+
+- **Losa de escalera**: biapoyada en el tramo recto más largo de la línea de huella, flexión, armado y L/d ≤ 20.
+- **Dinteles** de los huecos en muros de carga: el triángulo de descarga a 60° más los forjados que apoyan dentro; se propone un dintel de 2 UPN o de hormigón. Un hueco nuevo en un muro existente lleva el aviso de **apear**.
+
+### Reforma
+
+El cálculo es el de la estructura tal como queda: lo que se derriba (fase «Demolido») no carga ni se comprueba. Lo existente que se conserva se calcula con los materiales y el armado dibujados, que deben ser los comprobados en obra. El anejo lo dice al principio.
+
 ## 7. Dónde se ve
 
 - **Ventana Cálculo de la estructura** (Colaboración): el emplazamiento, todos los resultados en texto y el botón «Anejo de cálculo (PDF)…».
@@ -198,6 +234,7 @@ Cuando hay que tener en cuenta el sismo, con ductilidad baja (μ = 2) y contra e
   6. Pórtico
   7. Comprobación de los elementos
   8. Alcance y limitaciones
+- **Planos de estructura** (Archivo → Exportar → Planos de estructura…, y en `archisim estructura` como `<proyecto>-planos-estructura.pdf`), en A3: cuadro de pilares y vigas, plano de cimentación con zapatas, vigas centradoras y pilotes, una planta de forjados por nivel con las viguetas, los negativos y los ábacos, y despiece de vigas. Lo que sale del armado propuesto (no dibujado) lleva un asterisco.
 
 ## 8. Lo que no hace (todavía)
 
@@ -205,5 +242,7 @@ Cuando hay que tener en cuenta el sismo, con ductilidad baja (μ = 2) y contra e
 - **Segundo orden**: se amplifica por 1/(1 − θ), no con un análisis no lineal; con θ > 0,30 se pide más rigidez.
 - Muros de contención con la zapata descentrada (más punta o más talón), con tacón o con contrafuertes.
 - Uniones de acero soldadas, con cartela calculada o atornilladas de más de dos filas; uniones de madera de clavija en la madera sin chapa, de tirafondos o de herrajes de catálogo.
-- Secciones de hormigón en T, en L o huecas.
+- Secciones de hormigón en L o huecas (la T solo como ala de las vigas bajo forjado).
+- Ménsulas cortas.
+- Validación contra un proyecto real calculado con otro programa (pendiente de un proyecto de AD5).
 - Paneles de fábrica en zona sísmica (NCSE-02, 4.7) y ductilidades alta y muy alta (μ 3 y 4).

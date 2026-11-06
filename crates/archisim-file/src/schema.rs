@@ -214,6 +214,20 @@ pub(crate) struct ProjectFile {
     /// 80).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub framings: Vec<FramingOf>,
+    /// One-way and waffle floors, by slab type (version 84).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub floor_systems: Vec<FloorSystemOf>,
+    /// The direction of the joists of slabs given by hand, `[slab,
+    /// radians]` (version 84).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub slab_joists: Vec<(u64, f64)>,
+    /// Pad footings off their column, `[footing, [x, y]]` in the
+    /// column's axes (version 84).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub footing_offsets: Vec<(u64, [f64; 2])>,
+    /// Pile caps (version 84).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub footing_piles: Vec<PilesOf>,
     /// The structural actions: site data and loads placed by hand
     /// (version 81).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -4085,6 +4099,28 @@ impl ProjectFile {
                 .iter()
                 .map(|(id, f)| FramingOf::out(*id, f))
                 .collect(),
+            floor_systems: p
+                .floor_systems
+                .iter()
+                .map(|(id, f)| FloorSystemOf::out(*id, f))
+                .collect(),
+            slab_joists: p.slab_joists.iter().map(|(id, a)| (id.0, *a)).collect(),
+            footing_offsets: p
+                .footing_offsets
+                .iter()
+                .map(|(id, v)| (id.0, [v.x, v.y]))
+                .collect(),
+            footing_piles: p
+                .footing_piles
+                .iter()
+                .map(|(id, pl)| PilesOf {
+                    footing: id.0,
+                    count: pl.count,
+                    diameter: pl.diameter,
+                    length: pl.length,
+                    capacity: pl.capacity,
+                })
+                .collect(),
             structure: StructureOf::out(&p.structural_site, &p.structural_loads),
             device_circuits: p
                 .device_circuits
@@ -4661,6 +4697,36 @@ impl ProjectFile {
                 .into_iter()
                 .map(FramingOf::into_core)
                 .collect::<Result<_, _>>()?,
+            floor_systems: self
+                .floor_systems
+                .into_iter()
+                .map(FloorSystemOf::into_core)
+                .collect::<Result<_, _>>()?,
+            slab_joists: self
+                .slab_joists
+                .into_iter()
+                .map(|(id, a)| (core::SlabId(id), a))
+                .collect(),
+            footing_offsets: self
+                .footing_offsets
+                .into_iter()
+                .map(|(id, [x, y])| (core::FootingId(id), core::Vec2::new(x, y)))
+                .collect(),
+            footing_piles: self
+                .footing_piles
+                .into_iter()
+                .map(|p| {
+                    (
+                        core::FootingId(p.footing),
+                        core::Piles {
+                            count: p.count,
+                            diameter: p.diameter,
+                            length: p.length,
+                            capacity: p.capacity,
+                        },
+                    )
+                })
+                .collect(),
             structural_site: match &self.structure {
                 Some(st) => st.site()?,
                 None => core::StructuralSite::default(),
@@ -5555,6 +5621,74 @@ mod tests {
     }
 }
 
+/// The piles under a pad footing (version 84).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct PilesOf {
+    pub footing: u64,
+    pub count: u32,
+    pub diameter: f64,
+    pub length: f64,
+    /// kN in service per pile; 0: the structural top.
+    #[serde(default)]
+    pub capacity: f64,
+}
+
+/// A one-way or waffle floor of a slab type (version 84).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct FloorSystemOf {
+    #[serde(rename = "type")]
+    pub type_id: u64,
+    /// `one_way` or `waffle`.
+    pub kind: String,
+    /// `precast` or `in_situ`.
+    pub joist: String,
+    /// `concrete`, `ceramic`, `polystyrene` or `recoverable`.
+    pub infill: String,
+    pub spacing: f64,
+    pub rib: f64,
+    pub depth: f64,
+    pub topping: f64,
+}
+
+impl FloorSystemOf {
+    fn out(id: core::SlabTypeId, f: &core::FloorSystem) -> Self {
+        FloorSystemOf {
+            type_id: id.0,
+            kind: f.kind.code().into(),
+            joist: f.joist.code().into(),
+            infill: f.infill.code().into(),
+            spacing: f.spacing,
+            rib: f.rib,
+            depth: f.depth,
+            topping: f.topping,
+        }
+    }
+
+    fn into_core(self) -> Result<(core::SlabTypeId, core::FloorSystem), FileError> {
+        let bad = |what: &str, v: &str| FileError::Value {
+            element: format!("floor system of type {}", self.type_id),
+            message: format!("{what} «{v}»"),
+        };
+        Ok((
+            core::SlabTypeId(self.type_id),
+            core::FloorSystem {
+                kind: core::FloorKind::from_code(&self.kind)
+                    .ok_or_else(|| bad("kind", &self.kind))?,
+                joist: core::Joist::from_code(&self.joist)
+                    .ok_or_else(|| bad("joist", &self.joist))?,
+                infill: core::Infill::from_code(&self.infill)
+                    .ok_or_else(|| bad("infill", &self.infill))?,
+                spacing: self.spacing,
+                rib: self.rib,
+                depth: self.depth,
+                topping: self.topping,
+            },
+        ))
+    }
+}
+
 /// The framing of a wall type or slab type (version 80).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -5810,6 +5944,9 @@ pub(crate) struct StructureOf {
     /// Version 83: rigid ends of the steel beams.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub steel_rigid: bool,
+    /// Version 84: a single-family house (R 30).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub single_house: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub loads: Vec<LoadOf>,
 }
@@ -5890,6 +6027,7 @@ impl StructureOf {
             timber: site.materials.timber.code().into(),
             masonry_fk: site.materials.masonry_fk,
             steel_rigid: site.materials.steel_rigid,
+            single_house: site.single_house,
             loads: loads
                 .iter()
                 .map(|l| {
@@ -5942,6 +6080,7 @@ impl StructureOf {
                 masonry_fk: self.masonry_fk,
                 steel_rigid: self.steel_rigid,
             },
+            single_house: self.single_house,
         })
     }
 

@@ -276,6 +276,12 @@ impl ArchiSimApp {
                     self.export_calc_report();
                 }
                 if ui
+                    .add(shortcut_button("Planos de estructura…", "PDF"))
+                    .clicked()
+                {
+                    self.export_structure_drawings();
+                }
+                if ui
                     .add(shortcut_button("Mediciones y presupuesto…", "BC3"))
                     .clicked()
                 {
@@ -449,6 +455,13 @@ impl ArchiSimApp {
                 .clicked()
             {
                 self.export_calc_report();
+            }
+            if ui
+                .button("Planos de estructura (PDF)…")
+                .on_hover_text("Cuadro de características, cuadro de pilares, cimentación con replanteo y cuadro de zapatas, plantas de forjado con negativos y despiece de vigas, en hojas A3")
+                .clicked()
+            {
+                self.export_structure_drawings();
             }
             if ui
                 .button("Ejes del entramado (DXF 3D)…")

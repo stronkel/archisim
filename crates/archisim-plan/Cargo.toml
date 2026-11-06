@@ -17,3 +17,4 @@ archisim-struct.workspace = true
 [dev-dependencies]
 # Rasterises plans in tests to compare drawings pixel by pixel.
 resvg = { version = "0.48", default-features = false }
+archisim-library.workspace = true

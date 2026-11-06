@@ -2700,6 +2700,7 @@ mod dxf_import_ui;
 mod elevator_ui;
 mod env_building_ui;
 mod facade_ui;
+mod floor_ui;
 mod foundation_ui;
 mod framing_ui;
 mod ghost3d;

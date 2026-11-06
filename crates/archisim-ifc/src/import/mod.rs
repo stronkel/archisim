@@ -131,6 +131,7 @@ fn drop_roof_parts(file: &mut step_read::StepFile) {
                         | Some("ArchiSim_OpeningPart")
                         | Some("ArchiSim_WallProfilePart")
                         | Some("ArchiSim_FramePart")
+                        | Some("ArchiSim_PilePart")
                 )
         })
         .map(|(id, _)| *id)
@@ -1990,6 +1991,27 @@ impl<'a> Importer<'a> {
         let slab_type = self
             .slab_type(ifc_type, &type_name, function, layers)
             .map_err(|e| format!("tipo no válido ({})", explain(&e)))?;
+        // A one-way or waffle floor ArchiSim wrote.
+        let text_of = |v: &Value| {
+            v.as_str()
+                .or_else(|| v.as_list().first().and_then(|x| x.as_str()))
+                .map(str::to_string)
+        };
+        if let Some(f) = self
+            .property_own(id, "ArchiSim_FloorSystem", "System")
+            .and_then(text_of)
+            .and_then(|t| crate::decode_floor_system(&t))
+        {
+            if self.model.floor_system(slab_type).is_none() {
+                let _ = self.model.set_floor_system(slab_type, Some(f));
+            }
+        }
+        let joists = self
+            .property_own(id, "ArchiSim_FloorSystem", "Joists")
+            .and_then(|v| {
+                v.as_f64()
+                    .or_else(|| v.as_list().first().and_then(|x| x.as_f64()))
+            });
         let level = self.level_of(id, top - 0.01);
         let elevation = self.elevation(level);
         let sid = self
@@ -2001,6 +2023,9 @@ impl<'a> Importer<'a> {
                 top_offset: snap(top - elevation),
             })
             .map_err(|e| explain(&e))?;
+        if let Some(a) = joists {
+            let _ = self.model.set_slab_joists(sid, Some(a));
+        }
         if let Some(plane) = tilt {
             // The arrow up the slope, from the lowest corner across the
             // whole slab.

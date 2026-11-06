@@ -107,6 +107,46 @@ impl<'a> Importer<'a> {
                 top_offset,
             })
             .map_err(|e| explain(&e))?;
+        // Off its column, and its piles, if ArchiSim wrote them.
+        let real = |v: &crate::step_read::Value| {
+            v.as_f64()
+                .or_else(|| v.as_list().first().and_then(|x| x.as_f64()))
+        };
+        let ox = self
+            .property_own(id, "ArchiSim_Footing", "OffsetX")
+            .and_then(real);
+        let oy = self
+            .property_own(id, "ArchiSim_Footing", "OffsetY")
+            .and_then(real);
+        if ox.is_some() || oy.is_some() {
+            let _ = self.model.set_footing_offset(
+                fid,
+                Some(archisim_core::Vec2::new(
+                    ox.unwrap_or(0.0),
+                    oy.unwrap_or(0.0),
+                )),
+            );
+        }
+        if let Some(t) = self
+            .property_own(id, "ArchiSim_Footing", "Piles")
+            .and_then(|v| {
+                v.as_str()
+                    .or_else(|| v.as_list().first().and_then(|x| x.as_str()))
+            })
+        {
+            let n: Vec<f64> = t.split(';').filter_map(|x| x.trim().parse().ok()).collect();
+            if n.len() == 4 {
+                let _ = self.model.set_footing_piles(
+                    fid,
+                    Some(archisim_core::Piles {
+                        count: n[0] as u32,
+                        diameter: n[1],
+                        length: n[2],
+                        capacity: n[3],
+                    }),
+                );
+            }
+        }
         self.report.footings += 1;
         self.sources.push((fid.0, id));
         self.guids

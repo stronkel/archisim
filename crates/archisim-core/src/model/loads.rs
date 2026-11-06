@@ -197,6 +197,9 @@ pub struct StructuralSite {
     pub soil_friction: f64,
     pub soil_weight: f64,
     pub materials: StructuralMaterials,
+    /// A single-family house (vivienda unifamiliar): the fire resistance
+    /// of its structure is R 30 (DB-SI 6, table 3.1).
+    pub single_house: bool,
 }
 
 impl Default for StructuralSite {
@@ -214,6 +217,7 @@ impl Default for StructuralSite {
             soil_friction: 30.0,
             soil_weight: 18.0,
             materials: StructuralMaterials::default(),
+            single_house: false,
         }
     }
 }

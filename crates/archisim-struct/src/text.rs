@@ -387,6 +387,7 @@ pub fn lightframe_text(model: &Model, checks: &[crate::lightframe::Check]) -> St
             Subject::Beam(id) => format!("Viga {}", id.0),
             Subject::Column(id) => format!("Pilar {}", id.0),
             Subject::Footing(id) => format!("Cimentación {id}"),
+            Subject::Stair(id) => format!("Escalera {}", id.0),
             Subject::Building => "Edificio".into(),
         };
         let _ = model;

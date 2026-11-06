@@ -20,6 +20,7 @@
 //!   reinforcement drawn;
 //! - `masonry`, `foundations`, `retaining`: load-bearing brick, the
 //!   footings and the basement and retaining walls;
+//! - `phases`: in a refurbishment, the structure as it will stand;
 //! - `report`: the calculation report.
 //!
 //! It works on the model as drawn: it adds no elements and stores
@@ -38,6 +39,8 @@ pub mod cold;
 pub mod concrete;
 pub mod connections;
 pub mod detailing;
+pub mod fire;
+pub mod floors;
 pub mod foundations;
 pub mod frame;
 pub mod frame_members;
@@ -46,12 +49,15 @@ pub mod gravity;
 pub mod lightframe;
 pub mod masonry;
 pub mod members;
+pub mod phases;
+pub mod proposals;
 pub mod report;
 pub mod retaining;
 pub mod sections;
 pub mod seismic;
 pub mod slab;
 pub mod stability;
+pub mod stairs;
 pub mod text;
 pub mod timber;
 pub mod weights;
@@ -87,7 +93,14 @@ pub fn actions_report(model: &archisim_core::Model) -> String {
 
 /// Everything: the actions and the analysis of the frame.
 pub fn structure_report(model: &archisim_core::Model) -> String {
+    let gone = phases::demolished_count(model);
+    let model = &*phases::as_built(model);
     let mut s = actions_report(model);
+    if gone > 0 {
+        s.push_str(&format!(
+            "Reforma: {gone} elementos que se derriban quedan fuera del cálculo.\n"
+        ));
+    }
     let a = analysis::analyse(model);
     s.push('\n');
     s.push_str(&text::analysis_text(model, &a));
@@ -115,6 +128,10 @@ pub fn all_checks(model: &archisim_core::Model, a: &analysis::Analysis) -> Vec<l
     out.extend(detailing::check(model, a));
     out.extend(stability::check(model, a));
     out.extend(slab::check(model, &a.takedown));
+    out.extend(floors::check(model, &a.takedown));
+    out.extend(fire::check(model, a));
+    out.extend(stairs::stair_checks(model));
+    out.extend(stairs::lintel_checks(model, &a.takedown));
     out.extend(masonry::check(model, &a.takedown));
     out.extend(foundations::check(model, &a.takedown));
     out.extend(retaining::check(model));

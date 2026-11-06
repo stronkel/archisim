@@ -380,7 +380,15 @@ impl Model {
                     rotation,
                 } => match self.columns.get(&c) {
                     Some(col) => FootingKind::Pad {
-                        position: col.position,
+                        position: {
+                            let o = self
+                                .footing_offsets
+                                .get(&id.0)
+                                .copied()
+                                .unwrap_or(Vec2::new(0.0, 0.0));
+                            let (cs, sn) = (col.rotation.cos(), col.rotation.sin());
+                            col.position + Vec2::new(o.x * cs - o.y * sn, o.x * sn + o.y * cs)
+                        },
                         length,
                         rotation: col.rotation,
                         column: Some(c),
@@ -548,5 +556,209 @@ mod tests {
         let back = Model::from_parts(m.to_parts()).unwrap();
         assert_eq!(back.footing(f), m.footing(f));
         assert_eq!(back.grid(g), m.grid(g));
+    }
+}
+
+/// The piles under a pad footing, which is then their cap (encepado).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Piles {
+    pub count: u32,
+    pub diameter: f64,
+    /// Below the cap, m.
+    pub length: f64,
+    /// What one pile may take in service, kN, from the geotechnical
+    /// report (0: its structural top only, `Piles::structural_top`).
+    pub capacity: f64,
+}
+
+impl Piles {
+    /// Concrete piles cast in place of `diameter`, 12 m long.
+    pub fn new(count: u32, diameter: f64) -> Self {
+        Piles {
+            count,
+            diameter,
+            length: 12.0,
+            capacity: 0.0,
+        }
+    }
+
+    pub fn is_valid(&self) -> bool {
+        (1..=16).contains(&self.count)
+            && (0.25..=2.0).contains(&self.diameter)
+            && self.length > 1.0
+            && self.capacity >= 0.0
+    }
+
+    /// Between pile axes: three diameters.
+    pub fn spacing(&self) -> f64 {
+        3.0 * self.diameter
+    }
+
+    /// The structural top of a pile cast in place: 4 N/mm² over its
+    /// section (DB-SE-C, table 5.1, the usual piles here), kN.
+    pub fn structural_top(&self) -> f64 {
+        4000.0 * std::f64::consts::PI * self.diameter * self.diameter / 4.0
+    }
+
+    /// What one pile may take: the report's or its structural top.
+    pub fn allowed(&self) -> f64 {
+        if self.capacity > 0.0 {
+            self.capacity.min(self.structural_top())
+        } else {
+            self.structural_top()
+        }
+    }
+
+    /// Where the piles are, in the cap's axes (x across its width, y
+    /// along its length): in a line along the longer side for two, a
+    /// triangle for three, a square for four, rows beyond.
+    pub fn layout(&self, width: f64, length: f64) -> Vec<(f64, f64)> {
+        let s = self.spacing();
+        let along_y = length >= width;
+        let place = |a: f64, b: f64| if along_y { (b, a) } else { (a, b) };
+        match self.count {
+            0 | 1 => vec![(0.0, 0.0)],
+            2 => vec![place(-s / 2.0, 0.0), place(s / 2.0, 0.0)],
+            3 => {
+                let h = s * 3f64.sqrt() / 2.0;
+                vec![
+                    place(-s / 2.0, -h / 3.0),
+                    place(s / 2.0, -h / 3.0),
+                    place(0.0, 2.0 * h / 3.0),
+                ]
+            }
+            n => {
+                let cols = (f64::from(n)).sqrt().ceil() as u32;
+                let rows = n.div_ceil(cols);
+                let mut out = Vec::new();
+                for r in 0..rows {
+                    for c in 0..cols {
+                        if out.len() as u32 == n {
+                            break;
+                        }
+                        let a = (f64::from(c) - f64::from(cols - 1) / 2.0) * s;
+                        let b = (f64::from(r) - f64::from(rows - 1) / 2.0) * s;
+                        out.push(place(a, b));
+                    }
+                }
+                out
+            }
+        }
+    }
+
+    /// The smallest cap for them: the piles' extent plus a diameter and
+    /// 15 cm round, (width, length), m.
+    pub fn cap_size(&self) -> (f64, f64) {
+        let pts = self.layout(1.0, 2.0);
+        let (mut x, mut y) = (0.0f64, 0.0f64);
+        for (a, b) in &pts {
+            x = x.max(a.abs());
+            y = y.max(b.abs());
+        }
+        let m = self.diameter + 0.30;
+        (2.0 * x + m, 2.0 * y + m)
+    }
+}
+
+impl Model {
+    /// How far a pad footing's centre is from its column, in the column's
+    /// axes (a footing against a party wall or at a corner).
+    pub fn footing_offset(&self, id: FootingId) -> Option<Vec2> {
+        self.footing_offsets
+            .get(&id.0)
+            .copied()
+            .filter(|_| self.footing(id).is_some())
+    }
+
+    /// The pad footings off their column.
+    pub fn footing_offsets(&self) -> impl Iterator<Item = (FootingId, Vec2)> + '_ {
+        self.footing_offsets
+            .iter()
+            .filter(|(id, _)| self.footing(FootingId(**id)).is_some())
+            .map(|(id, v)| (FootingId(*id), *v))
+    }
+
+    /// Moves a pad footing off its column (or centres it again, `None`),
+    /// and puts it there.
+    pub fn set_footing_offset(&mut self, id: FootingId, v: Option<Vec2>) -> Result<(), ModelError> {
+        let Some(f) = self.footing(id) else {
+            return Err(ModelError::UnknownElement(id.0));
+        };
+        if !matches!(f.kind, FootingKind::Pad { .. }) {
+            return Err(ModelError::UnknownElement(id.0));
+        }
+        match v {
+            Some(v) if v.x.hypot(v.y) > 1e-6 => {
+                if !v.x.is_finite() || !v.y.is_finite() || v.x.hypot(v.y) > 10.0 {
+                    return Err(ModelError::NonPositive("footing offset"));
+                }
+                self.footing_offsets.insert(id.0, v);
+            }
+            _ => {
+                self.footing_offsets.remove(&id.0);
+            }
+        }
+        self.footings_follow_hosts();
+        Ok(())
+    }
+
+    /// The piles under a pad footing.
+    pub fn footing_piles(&self, id: FootingId) -> Option<&Piles> {
+        self.footing_piles
+            .get(&id.0)
+            .filter(|_| self.footing(id).is_some())
+    }
+
+    /// The pile caps.
+    pub fn all_footing_piles(&self) -> impl Iterator<Item = (FootingId, &Piles)> {
+        self.footing_piles
+            .iter()
+            .filter(|(id, _)| self.footing(FootingId(**id)).is_some())
+            .map(|(id, p)| (FootingId(*id), p))
+    }
+
+    /// Puts piles under a pad footing (or takes them away, `None`).
+    pub fn set_footing_piles(&mut self, id: FootingId, p: Option<Piles>) -> Result<(), ModelError> {
+        let Some(f) = self.footing(id) else {
+            return Err(ModelError::UnknownElement(id.0));
+        };
+        if !matches!(f.kind, FootingKind::Pad { .. }) {
+            return Err(ModelError::UnknownElement(id.0));
+        }
+        match p {
+            Some(p) => {
+                if !p.is_valid() {
+                    return Err(ModelError::NonPositive("piles"));
+                }
+                self.footing_piles.insert(id.0, p);
+            }
+            None => {
+                self.footing_piles.remove(&id.0);
+            }
+        }
+        Ok(())
+    }
+}
+
+impl Model {
+    /// Where the piles of a pile cap are, in plan.
+    pub fn pile_points(&self, id: FootingId) -> Vec<Point2> {
+        let (Some(f), Some(p)) = (self.footing(id), self.footing_piles(id)) else {
+            return Vec::new();
+        };
+        let FootingKind::Pad {
+            position,
+            length,
+            rotation,
+            ..
+        } = f.kind
+        else {
+            return Vec::new();
+        };
+        let (c, s) = (rotation.cos(), rotation.sin());
+        p.layout(f.width, length)
+            .into_iter()
+            .map(|(x, y)| Point2::new(position.x + x * c - y * s, position.y + x * s + y * c))
+            .collect()
     }
 }

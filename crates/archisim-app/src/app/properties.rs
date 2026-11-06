@@ -1892,6 +1892,7 @@ impl ArchiSimApp {
             );
         });
         self.slab_slope_group(ui, &s);
+        self.slab_joists_group(ui, s.id);
         group(ui, "slab-dimensions", "Dimensiones", |ui| {
             text_row(ui, "Canto (mm)", "Del tipo", &fmt_mm(thickness));
             text_row(
