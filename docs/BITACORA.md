@@ -6,6 +6,27 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-06 (113) · Elegir línea como en Revit
+
+Rama `bloque/elegir-linea`, con pull request. Sin cambios de formato ni de IFC. Antonio: «la herramienta de selección de línea no funciona del todo como quiero, tiene que ser más similar a Revit; cuando edito un contorno no selecciona bien». (También: la tarjeta compacta del tipo resolvió «lo de parecidos»; la propuesta de tres niveles de representación, aprobada: bloque siguiente.)
+
+**Hecho** (`docs/INTERFAZ.md` §13.3 bis)
+- En el boceto, la línea que tomaría el clic se **resalta en azul** antes de pulsar y la barra de opciones dice qué es y cuántas hay; **Tab** pasa a la siguiente.
+- Los **muros dan su cara entera**, del lado del cursor; **Al núcleo** da la cara de la estructura.
+- **Desfase** hacia el lado del cursor.
+- **Esquinas solas**: la línea elegida y las del boceto con extremos cerca se recortan o alargan hasta encontrarse.
+- No se elige lo oculto (el forjado que se edita) ni las propias líneas del boceto. La «Elegir línea» de las herramientas usa la misma búsqueda.
+- Pruebas: dos caras de muro elegidas se encuentran en su esquina; cruce de rectas.
+
+**Qué debe probar Antonio**
+1. `cargo run --release -p archisim-app -- out/demo.archisim`.
+2. Elige un forjado → **Editar contorno** → **Elegir línea** (Dibujar).
+3. Pasa el ratón por un muro: sale su cara en azul y, abajo, «Cara interior del muro · 1 de 2». Pulsa **Tab** para ir a la otra cara o a lo que haya debajo.
+4. Elige las cuatro caras interiores de una habitación: el contorno se cierra solo en las esquinas.
+5. Prueba **Al núcleo** con un muro de fachada y un **Desfase** de 0,10.
+
+---
+
 ## 2026-11-06 (112) · Ventanas que no saltan, entorno grande en 3D y «Arreglar lo que no cumple»
 
 Rama `bloque/instalaciones-calculo` (PR #163), sin cambios de formato. Lo que pidió Antonio antes de seguir con instalaciones:
