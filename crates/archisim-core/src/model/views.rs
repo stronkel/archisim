@@ -57,12 +57,27 @@ pub struct PlanView {
 }
 
 /// A named look given to views (Revit's view template): what they show
-/// and how each category is drawn.
+/// and how each category is drawn, its detail, presentation style and
+/// discipline. The views that follow it (`ViewStyle::template`) take its
+/// look whenever it changes.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ViewTemplate {
     pub id: ViewTemplateId,
     pub name: String,
     pub style: ViewStyle,
+}
+
+impl ViewTemplate {
+    /// The look of a view that follows it: the template's, with what
+    /// belongs to the session (the discipline greyed and the disciplines
+    /// hidden in the navigator) kept from `old`.
+    pub fn applied(&self, old: &ViewStyle) -> ViewStyle {
+        let mut s = self.style.clone();
+        s.template = Some(self.id);
+        s.focus = old.focus;
+        s.hidden_disciplines = old.hidden_disciplines.clone();
+        s
+    }
 }
 
 /// A saved point of view of the 3D view (the Cámara tile of
@@ -244,14 +259,62 @@ impl Model {
             return Err(ModelError::UnknownViewTemplate(t.id));
         }
         self.check_template(&t, Some(t.id))?;
+        let mut t = t;
+        t.style.template = None;
+        self.restyle_followers(t.id, |old| t.applied(old));
         self.view_templates.insert(t.id, t);
         Ok(())
     }
 
+    /// Every view that follows template `id`: its look as `f` makes it.
+    fn restyle_followers(&mut self, id: ViewTemplateId, f: impl Fn(&ViewStyle) -> ViewStyle) {
+        let follows = |s: &ViewStyle| s.template == Some(id);
+        for v in self.plan_views.values_mut() {
+            if follows(&v.style) {
+                v.style = f(&v.style);
+            }
+        }
+        for s in self.level_styles.values_mut() {
+            if follows(s) {
+                *s = f(s);
+            }
+        }
+        for v in self.viewports.values_mut() {
+            if follows(&v.style) {
+                v.style = f(&v.style);
+            }
+        }
+    }
+
+    /// How many views follow template `id` (plans, saved views and views
+    /// placed on sheets).
+    pub fn template_followers(&self, id: ViewTemplateId) -> usize {
+        let follows = |s: &ViewStyle| s.template == Some(id);
+        self.plan_views
+            .values()
+            .filter(|v| follows(&v.style))
+            .count()
+            + self.level_styles.values().filter(|s| follows(s)).count()
+            + self
+                .viewports
+                .values()
+                .filter(|v| follows(&v.style))
+                .count()
+    }
+
+    /// Removes a template; the views that followed it keep its look as
+    /// their own.
     pub fn remove_view_template(&mut self, id: ViewTemplateId) -> Result<ViewTemplate, ModelError> {
-        self.view_templates
+        let t = self
+            .view_templates
             .remove(&id)
-            .ok_or(ModelError::UnknownViewTemplate(id))
+            .ok_or(ModelError::UnknownViewTemplate(id))?;
+        self.restyle_followers(id, |old| {
+            let mut s = old.clone();
+            s.template = None;
+            s
+        });
+        Ok(t)
     }
 
     // ---- Reference planes ---------------------------------------------------
@@ -483,6 +546,65 @@ impl Model {
 mod tests {
     use super::*;
     use crate::graphics::{Category, GraphicOverride};
+
+    /// The views that follow a template take its look whenever it
+    /// changes; removing it leaves them their look as their own; the file
+    /// keeps who follows what.
+    #[test]
+    fn views_follow_their_template() {
+        let mut m = Model::new("T");
+        let ground = m.add_level("Planta baja", 0.0);
+        let first = m.add_level("Planta 1", 3.0);
+        let mut look = ViewStyle::ad5();
+        look.detail = crate::graphics::Detail::Medium;
+        let t = m
+            .add_view_template(ViewTemplate {
+                id: ViewTemplateId(0),
+                name: "Albañilería".into(),
+                style: look.clone(),
+            })
+            .unwrap();
+        let template = m.view_template(t).unwrap().clone();
+        let own = ViewStyle {
+            focus: crate::DisciplineFocus::Only(crate::ElementDiscipline::Structure),
+            ..Default::default()
+        };
+        m.set_level_style(ground, template.applied(&own)).unwrap();
+        let v = m
+            .add_plan_view(PlanView {
+                id: PlanViewId(0),
+                name: "Planta 1 — albañilería".into(),
+                level: first,
+                kind: PlanKind::Floor,
+                scale: 50.0,
+                cut_plane: 1.1,
+                style: template.applied(&ViewStyle::default()),
+            })
+            .unwrap();
+        assert_eq!(m.template_followers(t), 2);
+        // The template changes: both views with it, each keeping what is
+        // of the session.
+        let mut changed = template.clone();
+        changed.style.detail = crate::graphics::Detail::Coarse;
+        changed.style.hidden.insert(Category::Objects);
+        m.set_view_template(changed).unwrap();
+        for s in [m.level_style(ground), m.plan_view(v).unwrap().style.clone()] {
+            assert_eq!(s.detail, crate::graphics::Detail::Coarse);
+            assert!(!s.shows(Category::Objects));
+            assert_eq!(s.template, Some(t));
+        }
+        assert_eq!(m.level_style(ground).focus, own.focus);
+        assert_eq!(m.view_template(t).unwrap().style.template, None);
+        // Kept in the file.
+        let back = Model::from_parts(m.to_parts()).unwrap();
+        assert_eq!(back.level_style(ground).template, Some(t));
+        // Removed: the views keep the look, following nothing.
+        m.remove_view_template(t).unwrap();
+        let s = m.level_style(ground);
+        assert_eq!(s.template, None);
+        assert_eq!(s.detail, crate::graphics::Detail::Coarse);
+        assert_eq!(m.template_followers(t), 0);
+    }
 
     #[test]
     fn saved_views_templates_and_reference_planes() {

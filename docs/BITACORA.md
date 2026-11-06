@@ -6,6 +6,28 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-06 (114) · Representación en tres niveles: proyecto, plantilla y vista
+
+Rama `bloque/representacion`, con pull request. **Formato `.archisim` versión 86** (el estilo de una vista guarda la plantilla que sigue). Sin cambios de IFC. Antonio aprobó la propuesta de `docs/INTERFAZ.md` §13.5.
+
+**Hecho**
+- Las vistas **siguen** su plantilla de vista, como en Revit: cambiar su aspecto cambia la plantilla y todas las que la siguen; «Ninguna» la deja con aspecto propio; borrar la plantilla deja a las vistas su aspecto.
+- Ventana **Representación** (VG): plantilla arriba (cuál sigue, cuántas más, crear una con este aspecto, borrar) y tres páginas: Categorías del modelo, Capas de dibujo 2D, Vista y presentación (nivel de detalle, disciplina, estilo de presentación). Normas gráficas del proyecto, a un botón.
+- Propiedades → Representación: **Plantilla** con la que sigue y cuántas vistas más; el botón «Representación… (VG)».
+- Pruebas: núcleo (las vistas cambian con su plantilla, conservan lo de la sesión y al borrarla se quedan su aspecto), fichero (versión 86) y aplicación (seguir, cambiar el detalle desde una vista, las tres páginas, dejar de seguir).
+
+**Pendiente**
+- Elegir plantilla en las vistas de los planos; plantillas en la biblioteca entre proyectos.
+
+**Qué debe probar Antonio**
+1. `cargo run --release -p archisim-app -- out/demo.archisim`.
+2. Sin nada elegido: Propiedades → Representación → **Plantilla**: elige «Albañilería». Abre **Representación… (VG)**: arriba dice que la vista la sigue.
+3. Abre otra vista guardada de la planta (Navegador) y ponle también «Albañilería». En una de ellas apaga «Objetos y mobiliario» o cambia el nivel de detalle: la otra cambia igual.
+4. En una de ellas, Plantilla → **Ninguna** y cambia algo: la otra ya no cambia.
+5. Página **Vista y presentación**: nivel de detalle, disciplina y estilo de presentación en un sitio.
+
+---
+
 ## 2026-11-06 (112) · Ventanas que no saltan, entorno grande en 3D y «Arreglar lo que no cumple»
 
 Rama `bloque/instalaciones-calculo` (PR #163), sin cambios de formato. Lo que pidió Antonio antes de seguir con instalaciones:

@@ -38,6 +38,99 @@ pub struct ViewsUi {
     pub vg_open: bool,
     /// Name typed for a new template.
     template_name: String,
+    /// The page of the window Representación.
+    tab: VgTab,
+}
+
+impl ViewsUi {
+    /// Goes to a page of the window Representación.
+    #[cfg(test)]
+    pub fn set_tab(&mut self, tab: VgTab) {
+        self.tab = tab;
+    }
+}
+
+/// The pages of the window Representación.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum VgTab {
+    #[default]
+    Categories,
+    Layers,
+    Look,
+}
+
+/// The page «Vista y presentación»: the level of detail, the view's
+/// discipline and its presentation style.
+fn look_tab(
+    ui: &mut Ui,
+    style: &mut ViewStyle,
+    presentations: &[(Option<archisim_core::PresentationStyleId>, String)],
+    open_styles: &mut bool,
+) {
+    let p = Palette::current(ui.ctx());
+    ui.label(
+        egui::RichText::new(
+            "Lo que vale para toda la vista. Si la vista sigue una plantilla, se guarda en ella.",
+        )
+        .color(p.muted),
+    );
+    ui.add_space(6.0);
+    egui::Grid::new("vg-look")
+        .num_columns(2)
+        .spacing([16.0, 8.0])
+        .show(ui, |ui| {
+            ui.label("Nivel de detalle");
+            egui::ComboBox::from_id_salt("vg-detail")
+                .selected_text(style.detail.label())
+                .width(220.0)
+                .show_ui(ui, |ui| {
+                    for d in archisim_core::Detail::ALL {
+                        ui.selectable_value(&mut style.detail, d, d.label());
+                    }
+                });
+            ui.end_row();
+            ui.label("Disciplina de la vista");
+            let shown = style
+                .discipline
+                .map_or("Todas", super::presentation_ui::discipline_label);
+            egui::ComboBox::from_id_salt("vg-discipline")
+                .selected_text(shown)
+                .width(220.0)
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(&mut style.discipline, None, "Todas");
+                    for d in archisim_core::ElementDiscipline::ALL {
+                        ui.selectable_value(
+                            &mut style.discipline,
+                            Some(d),
+                            super::presentation_ui::discipline_label(d),
+                        );
+                    }
+                });
+            ui.end_row();
+            ui.label("Estilo de presentación");
+            ui.horizontal(|ui| {
+                let shown = presentations
+                    .iter()
+                    .find(|(id, _)| *id == style.presentation)
+                    .map_or("Técnica (sin estilo)", |(_, n)| n.as_str());
+                egui::ComboBox::from_id_salt("vg-presentation")
+                    .selected_text(shown)
+                    .width(220.0)
+                    .show_ui(ui, |ui| {
+                        for (id, name) in presentations {
+                            ui.selectable_value(&mut style.presentation, *id, name);
+                        }
+                    });
+                if ui
+                    .button("Estilos de presentación…")
+                    .on_hover_text("Papel, paleta, muros macizados, grosores, textos y acento de cada estilo del proyecto")
+                    .clicked()
+                {
+                    *open_styles = true;
+                }
+            });
+            ui.end_row();
+        });
 }
 
 /// A style without what belongs to the session, not to the view: the
@@ -171,13 +264,32 @@ impl ArchiSimApp {
         self.report(r, "Vista borrada (la planta sigue).");
     }
 
-    /// Gives the active view a template's look.
-    pub(super) fn apply_template(&mut self, id: ViewTemplateId) {
-        let Some(t) = self.ed.model().view_template(id).cloned() else {
-            return;
-        };
-        self.view_style = shown(&t.style, &self.view_style);
-        self.say(format!("Plantilla «{}» aplicada a la vista.", t.name));
+    /// Makes the active view follow a template (`docs/INTERFAZ.md`
+    /// §13.5): its look becomes the template's, and changes with it.
+    /// `None`: it keeps the look as its own.
+    pub(super) fn apply_template(&mut self, id: Option<ViewTemplateId>) {
+        match id.and_then(|id| self.ed.model().view_template(id).cloned()) {
+            Some(t) => {
+                self.view_style = t.applied(&self.view_style);
+                let n = self.ed.model().template_followers(t.id);
+                self.say(format!(
+                    "La vista sigue la plantilla «{}»{}: lo que cambies en su aspecto cambia la plantilla y todas sus vistas.",
+                    t.name,
+                    if n > 0 { format!(" (con {n} más)") } else { String::new() }
+                ));
+            }
+            None => {
+                self.view_style.template = None;
+                self.say("La vista tiene ya su propio aspecto (el que tenía).");
+            }
+        }
+    }
+
+    /// The template the active view follows, if any.
+    pub(super) fn followed_template(&self) -> Option<ViewTemplate> {
+        self.view_style
+            .template
+            .and_then(|id| self.ed.model().view_template(id).cloned())
     }
 
     /// Keeps the active plan view and the model in step (see the module).
@@ -236,15 +348,32 @@ impl ArchiSimApp {
                     if ctx.input(|i| i.pointer.any_down()) {
                         return;
                     }
-                    let r = self.ed.transact("Gráficos de la vista", |m| match saved {
-                        Some(id) => {
-                            let mut v = m.plan_view(id).cloned().expect("checked above");
-                            v.scale = now.scale;
-                            v.cut_plane = now.cut;
-                            v.style = now.style.clone();
-                            m.set_plan_view(v)
+                    let r = self.ed.transact("Gráficos de la vista", |m| {
+                        // A view that follows a template: what changes in
+                        // its look changes the template, and so every view
+                        // that follows it (Revit's view templates).
+                        if let Some(mut t) = now
+                            .style
+                            .template
+                            .and_then(|id| m.view_template(id).cloned())
+                        {
+                            let mut look = now.style.clone();
+                            look.template = None;
+                            if t.style != look {
+                                t.style = look;
+                                m.set_view_template(t)?;
+                            }
                         }
-                        None => m.set_level_style(level, now.style.clone()),
+                        match saved {
+                            Some(id) => {
+                                let mut v = m.plan_view(id).cloned().expect("checked above");
+                                v.scale = now.scale;
+                                v.cut_plane = now.cut;
+                                v.style = now.style.clone();
+                                m.set_plan_view(v)
+                            }
+                            None => m.set_level_style(level, now.style.clone()),
+                        }
                     });
                     if let Err(e) = r {
                         self.complain(format!("No se puede guardar la vista: {e}."));
@@ -270,7 +399,7 @@ impl ArchiSimApp {
         }
         let p = Palette::current(ctx);
         let title = match self.active_saved().and_then(|id| self.saved_view_name(id)) {
-            Some(n) => format!("Visibilidad y gráficos · {n}"),
+            Some(n) => format!("Representación · {n}"),
             None => {
                 let l = self
                     .ed
@@ -278,7 +407,7 @@ impl ArchiSimApp {
                     .level(self.ed.level)
                     .map(|l| l.name.clone())
                     .unwrap_or_default();
-                format!("Visibilidad y gráficos · {l}")
+                format!("Representación · {l}")
             }
         };
         let mut open = true;
@@ -289,10 +418,25 @@ impl ArchiSimApp {
             .view_templates()
             .map(|t| (t.id, t.name.clone()))
             .collect();
-        let mut apply = None;
+        let mut apply: Option<Option<ViewTemplateId>> = None;
         let mut save_as = None;
         let mut delete_template = None;
+        let mut open_graphics = false;
+        let mut open_styles = false;
         let layers = self.layer_options();
+        let following = self.followed_template();
+        let followers = following
+            .as_ref()
+            .map_or(0, |t| self.ed.model().template_followers(t.id));
+        let presentations: Vec<(Option<archisim_core::PresentationStyleId>, String)> =
+            std::iter::once((None, "Técnica (sin estilo)".to_string()))
+                .chain(
+                    self.ed
+                        .model()
+                        .presentation_styles()
+                        .map(|s| (Some(s.id), s.name.clone())),
+                )
+                .collect();
         super::widgets::dialog(title)
             .id(egui::Id::unique("vg-window"))
             .open(&mut open)
@@ -300,36 +444,30 @@ impl ArchiSimApp {
             .default_height(560.0)
             .resizable(true)
             .show(ctx, |ui| {
-                ui.label(
-                    egui::RichText::new(
-                        "Cómo se dibuja cada categoría en esta vista. Lo que no se toca queda como siempre; «Auto» deja el color propio de cada elemento. Se guarda con la vista y se imprime igual.",
-                    )
-                    .color(p.muted),
-                );
-                ui.add_space(6.0);
+                // The view's template first: the first of the three levels
+                // (project, template, view; `docs/INTERFAZ.md` §13.5).
                 ui.horizontal(|ui| {
-                    ui.label("Plantilla:");
+                    ui.label(egui::RichText::new("Plantilla de vista").strong());
+                    let shown = following
+                        .as_ref()
+                        .map_or("Ninguna: aspecto propio".to_string(), |t| t.name.clone());
                     egui::ComboBox::from_id_salt("vg-template")
-                        .selected_text("Aplicar…")
+                        .selected_text(shown)
+                        .width(220.0)
                         .show_ui(ui, |ui| {
+                            if ui
+                                .selectable_label(following.is_none(), "Ninguna: aspecto propio")
+                                .clicked()
+                            {
+                                apply = Some(None);
+                            }
                             for (id, name) in &templates {
-                                if ui.selectable_label(false, name).clicked() {
-                                    apply = Some(*id);
+                                let on = following.as_ref().is_some_and(|t| t.id == *id);
+                                if ui.selectable_label(on, name).clicked() {
+                                    apply = Some(Some(*id));
                                 }
                             }
                         });
-                    ui.add(
-                        egui::TextEdit::singleline(&mut self.views.template_name)
-                            .hint_text("Nombre de plantilla")
-                            .desired_width(140.0),
-                    );
-                    if ui
-                        .button("Guardar como plantilla")
-                        .on_hover_text("Para dar este aspecto a otras vistas (y a otros proyectos con la biblioteca)")
-                        .clicked()
-                    {
-                        save_as = Some(self.views.template_name.trim().to_string());
-                    }
                     egui::ComboBox::from_id_salt("vg-template-delete")
                         .selected_text("Borrar plantilla…")
                         .show_ui(ui, |ui| {
@@ -339,17 +477,81 @@ impl ArchiSimApp {
                                 }
                             }
                         });
-                    if ui
-                        .button("Restablecer todo")
-                        .on_hover_text("Todas las categorías como siempre")
-                        .clicked()
-                    {
-                        style.overrides.clear();
-                        style.hidden.clear();
+                });
+                match &following {
+                    Some(t) => {
+                        let others = followers.saturating_sub(1);
+                        ui.label(
+                            egui::RichText::new(format!(
+                                "Esta vista sigue «{}»: lo que cambies aquí cambia la plantilla{}. Para cambiar solo esta vista, deja de seguirla (Ninguna).",
+                                t.name,
+                                if others > 0 {
+                                    format!(" y las otras {others} vistas que la siguen")
+                                } else {
+                                    String::new()
+                                }
+                            ))
+                            .color(p.accent),
+                        );
                     }
+                    None => {
+                        ui.horizontal(|ui| {
+                            ui.label(
+                                egui::RichText::new("Aspecto propio de esta vista.").color(p.muted),
+                            );
+                            ui.add(
+                                egui::TextEdit::singleline(&mut self.views.template_name)
+                                    .hint_text("Nombre de la plantilla")
+                                    .desired_width(160.0),
+                            );
+                            if ui
+                                .button("Crear plantilla con este aspecto")
+                                .on_hover_text("La vista pasa a seguirla; dale la misma plantilla a otras vistas para que se dibujen igual")
+                                .clicked()
+                            {
+                                save_as = Some(self.views.template_name.trim().to_string());
+                            }
+                        });
+                    }
+                }
+                ui.add_space(4.0);
+                ui.horizontal(|ui| {
+                    for (t, label) in [
+                        (VgTab::Categories, "Categorías del modelo"),
+                        (VgTab::Layers, "Capas de dibujo 2D"),
+                        (VgTab::Look, "Vista y presentación"),
+                    ] {
+                        if ui.selectable_label(self.views.tab == t, label).clicked() {
+                            self.views.tab = t;
+                        }
+                    }
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui
+                            .button("Normas gráficas…")
+                            .on_hover_text("Del proyecto, para todas las vistas: grosores de línea por escala y letra")
+                            .clicked()
+                        {
+                            open_graphics = true;
+                        }
+                        if ui
+                            .button("Restablecer todo")
+                            .on_hover_text("Todas las categorías y capas como siempre")
+                            .clicked()
+                        {
+                            style.overrides.clear();
+                            style.hidden.clear();
+                            style.hidden_layers.clear();
+                        }
+                    });
                 });
                 ui.separator();
+                let tab = self.views.tab;
                 egui::ScrollArea::vertical().show(ui, |ui| {
+                    if tab == VgTab::Categories {
+                    ui.label(
+                        egui::RichText::new("Cómo se dibuja cada categoría. Lo que no se toca queda como siempre; «Auto» deja el color propio de cada elemento.")
+                            .color(p.muted),
+                    );
                     egui::Grid::new("vg-grid")
                         .striped(true)
                         .spacing([10.0, 4.0])
@@ -374,11 +576,12 @@ impl ArchiSimApp {
                                 ui.end_row();
                             }
                         });
-                    // The drawing layers, here too (they were a list in
-                    // the plan's properties).
-                    if layers.len() > 1 {
-                        ui.add_space(10.0);
-                        ui.strong("Capas de dibujo 2D en esta vista");
+                    }
+                    if tab == VgTab::Layers {
+                        ui.label(
+                            egui::RichText::new("Las capas del dibujo 2D (líneas, textos, rellenos, DXF) que se ven en esta vista.")
+                                .color(p.muted),
+                        );
                         ui.add_space(4.0);
                         egui::Grid::new("vg-layers")
                             .striped(true)
@@ -398,8 +601,18 @@ impl ArchiSimApp {
                                 }
                             });
                     }
+                    if tab == VgTab::Look {
+                        look_tab(ui, &mut style, &presentations, &mut open_styles);
+                    }
                 });
             });
+        if open_graphics {
+            self.show_graphics = true;
+        }
+        if open_styles {
+            self.presentation.open = true;
+            self.presentation.selected = style.presentation;
+        }
         if style != self.view_style {
             self.view_style = style;
         }
@@ -418,18 +631,30 @@ impl ArchiSimApp {
                 let r = self.ed.transact("Guardar plantilla de vista", |m| {
                     let existing = m.view_templates().find(|t| t.name == name).map(|t| t.id);
                     match existing {
-                        Some(id) => m.set_view_template(ViewTemplate { id, ..t }),
-                        None => m.add_view_template(t).map(drop),
+                        Some(id) => m.set_view_template(ViewTemplate { id, ..t }).map(|_| id),
+                        None => m.add_view_template(t),
                     }
                 });
-                self.report(r, &format!("Plantilla «{name}» guardada."));
+                match r {
+                    Ok(id) => {
+                        self.views.template_name.clear();
+                        self.apply_template(Some(id));
+                    }
+                    Err(e) => self.complain(format!("No se puede guardar la plantilla: {e}.")),
+                }
             }
         }
         if let Some(id) = delete_template {
             let r = self.ed.transact("Borrar plantilla de vista", |m| {
                 m.remove_view_template(id).map(drop)
             });
-            self.report(r, "Plantilla borrada (las vistas conservan su aspecto).");
+            if r.is_ok() && self.view_style.template == Some(id) {
+                self.view_style.template = None;
+            }
+            self.report(
+                r,
+                "Plantilla borrada (las vistas que la seguían conservan su aspecto).",
+            );
         }
         self.views.vg_open = open;
     }

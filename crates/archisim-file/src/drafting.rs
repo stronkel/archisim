@@ -729,6 +729,9 @@ pub(crate) struct Style {
     /// The view's discipline (version 74).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub discipline: Option<String>,
+    /// The view template it follows (version 86).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub template: Option<u64>,
 }
 
 /// A category drawn otherwise in a view (version 27): only what changes.
@@ -825,6 +828,7 @@ impl Default for Style {
             presentation: None,
             overrides: Vec::new(),
             discipline: None,
+            template: None,
         }
     }
 }
@@ -856,6 +860,7 @@ impl Style {
                 .map(|(c, g)| OverrideOf::out(*c, g))
                 .collect(),
             discipline: s.discipline.map(|d| d.code().to_string()),
+            template: s.template.map(|t| t.0),
         }
     }
 
@@ -907,6 +912,7 @@ impl Style {
                         .ok_or_else(|| bad(format!("unknown discipline «{c}»")))
                 })
                 .transpose()?,
+            template: self.template.map(core::ViewTemplateId),
         })
     }
 
@@ -919,6 +925,7 @@ impl Style {
             && self.presentation.is_none()
             && self.overrides.is_empty()
             && self.discipline.is_none()
+            && self.template.is_none()
     }
 }
 

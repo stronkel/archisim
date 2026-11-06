@@ -580,7 +580,7 @@ impl ArchiSimApp {
                     self.thin_lines = !print;
                 }
             }
-            if ui.button("Visibilidad y gráficos…").clicked() {
+            if ui.button("Representación… (VG)").clicked() {
                 self.views.vg_open = true;
             }
             if ui
