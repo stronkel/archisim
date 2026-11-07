@@ -11,8 +11,11 @@
 //!   0,1·(0,5·Sc − Soc)) by the built area S and the roof area Sc not
 //!   walked on, against the solar panels drawn.
 //!
+//! The demand is increased by the losses of distribution, storage and
+//! recirculation (HE 4, 4.1), worked out of the drawn hot water network
+//! (`Losses`).
+//!
 //! HE 0 (primary energy) is not worked out: it needs the official tool.
-//! The losses of distribution, storage and return are not added.
 
 use archisim_core::{cold_water, AcsSource, BuildingUse, DeviceKind, Model, RenewablesSite};
 use archisim_geom::junctions::{difference, union, Shape};
@@ -31,6 +34,16 @@ pub const HE4_THRESHOLD: f64 = 100.0;
 pub const HE4_LARGE: f64 = 5000.0;
 /// HE 5 applies above this built area (m²).
 pub const HE5_THRESHOLD: f64 = 1000.0;
+/// The room around the pipes and the store, °C.
+pub const AMBIENT: f64 = 20.0;
+/// Heat lost by a metre of insulated pipe a degree, W/mK (insulation of
+/// the RITE, IT 1.2.4.2.1, on the usual sizes).
+pub const PIPE_PSI: f64 = 0.25;
+/// Times a day the water left in a pipe without return cools down.
+pub const COOLINGS: f64 = 3.0;
+/// The water arrives this much cooler at the end of the loop, °C.
+pub const LOOP_DROP: f64 = 5.0;
+
 /// Heat pumps below this seasonal performance count as no renewable
 /// (Directive 2018/2001, Annex VII, with the Spanish grid).
 pub const MIN_SCOP: f64 = 2.5;
@@ -68,6 +81,86 @@ pub struct DwellingDemand {
     pub persons: f64,
 }
 
+/// The losses of the hot water (HE 4, 4.1), kWh a year each.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct Losses {
+    /// Hot pipe drawn, metres; the part in the loop, kept hot by the
+    /// return (and the return itself), and its water, litres.
+    pub pipe: f64,
+    pub looped: f64,
+    pub dead_water: f64,
+    /// The store: litres, whether given, and its standing loss, W.
+    pub tank: f64,
+    pub tank_given: bool,
+    pub standing: f64,
+    pub distribution: f64,
+    pub storage: f64,
+    pub recirculation: f64,
+}
+
+impl Losses {
+    pub fn total(&self) -> f64 {
+        self.distribution + self.storage + self.recirculation
+    }
+
+    /// A day's losses, kWh.
+    fn daily(&self) -> f64 {
+        self.total() / 365.0
+    }
+}
+
+/// The losses of the hot water drawn.
+pub fn losses(model: &Model, site: &RenewablesSite, daily_stored: f64) -> Losses {
+    let w = crate::water::water(model);
+    let hot: Vec<&crate::water::Stretch> = w
+        .networks
+        .iter()
+        .filter(|n| n.system == archisim_core::ServiceSystem::HotWater)
+        .flat_map(|n| n.stretches.iter())
+        .collect();
+    let pipe: f64 = hot.iter().map(|s| s.length).sum();
+    let hot_t = site.storage_temp;
+    // The loop: from the heater to the farthest tap and back.
+    let looped = w.hot_return.as_ref().map_or(0.0, |r| r.length.min(pipe));
+    let loop_t = hot_t - LOOP_DROP / 2.0;
+    let recirculation = PIPE_PSI * 2.0 * looped * (loop_t - AMBIENT).max(0.0) * 8.76;
+    // The rest: the water left in it cools down after each use.
+    let share = if pipe > 0.0 {
+        ((pipe - looped) / pipe).max(0.0)
+    } else {
+        0.0
+    };
+    let dead_water: f64 = hot
+        .iter()
+        .map(|s| std::f64::consts::PI / 4.0 * s.drawn.1 * s.drawn.1 * s.length * 1000.0)
+        .sum::<f64>()
+        * share;
+    let distribution =
+        dead_water * WH_PER_LITRE_K * (hot_t - AMBIENT).max(0.0) * COOLINGS * 365.0 / 1000.0;
+    // The store: the standing loss of a class C store (Regulation (EU)
+    // 812/2013: 16,66 + 8,33·V^0,4 W at 45 K), at its own temperature.
+    let (tank, tank_given) = match site.tank_volume {
+        Some(v) => (v, true),
+        None => (daily_stored, false),
+    };
+    let standing = if tank > 0.0 {
+        (16.66 + 8.33 * tank.powf(0.4)) * (hot_t - AMBIENT).max(0.0) / 45.0
+    } else {
+        0.0
+    };
+    Losses {
+        pipe,
+        looped,
+        dead_water,
+        tank,
+        tank_given,
+        standing,
+        distribution,
+        storage: standing * 8.76,
+        recirculation,
+    }
+}
+
 /// HE 4, the hot water.
 #[derive(Debug, Clone, PartialEq)]
 pub struct HotWater {
@@ -83,9 +176,13 @@ pub struct HotWater {
     pub daily: f64,
     pub daily_stored: f64,
     pub cold: [f64; 12],
-    /// kWh of each month and of the year.
+    /// kWh of each month and of the year: the water heated, the losses,
+    /// and both (`annual`, what the renewable part is of).
+    pub useful: [f64; 12],
+    pub lost: [f64; 12],
     pub monthly: [f64; 12],
     pub annual: f64,
+    pub losses: Losses,
     /// The renewable part asked (0,6 or 0,7) and the one given.
     pub required: f64,
     pub provided: f64,
@@ -178,17 +275,24 @@ fn hot_water(model: &Model, site: &RenewablesSite) -> HotWater {
         None => (persons_all * LITRES_A_PERSON * factor, false),
     };
     let cold = cold_water(&site.province, site.above_capital);
-    let mut monthly = [0.0; 12];
-    for i in 0..12 {
-        monthly[i] = daily * DAYS[i] * WH_PER_LITRE_K * (60.0 - cold[i]).max(0.0) / 1000.0;
-    }
-    let annual: f64 = monthly.iter().sum();
     let mean_cold = cold.iter().sum::<f64>() / 12.0;
     let daily_stored = if site.storage_temp > mean_cold + 1.0 {
         daily * (60.0 - mean_cold) / (site.storage_temp - mean_cold)
     } else {
         daily
     };
+    let losses = if daily > 0.0 {
+        losses(model, site, daily_stored)
+    } else {
+        Losses::default()
+    };
+    let (mut useful, mut lost, mut monthly) = ([0.0; 12], [0.0; 12], [0.0; 12]);
+    for i in 0..12 {
+        useful[i] = daily * DAYS[i] * WH_PER_LITRE_K * (60.0 - cold[i]).max(0.0) / 1000.0;
+        lost[i] = losses.daily() * DAYS[i];
+        monthly[i] = useful[i] + lost[i];
+    }
+    let annual: f64 = monthly.iter().sum();
     let weak_pump = site.acs_source == AcsSource::HeatPump && site.scop <= MIN_SCOP;
     let provided = match site.acs_source {
         AcsSource::HeatPump if !weak_pump => 1.0 - 1.0 / site.scop,
@@ -204,8 +308,11 @@ fn hot_water(model: &Model, site: &RenewablesSite) -> HotWater {
         daily,
         daily_stored,
         cold,
+        useful,
+        lost,
         monthly,
         annual,
+        losses,
         required: if daily < HE4_LARGE { 0.6 } else { 0.7 },
         provided,
         source: site.acs_source,
@@ -368,6 +475,14 @@ pub fn report(r: &Renewables) -> String {
             dec(h.daily, 0)
         ));
     }
+    let l = &h.losses;
+    s.push_str(&format!(
+        "  Pérdidas: distribución {} kWh, acumulación {} kWh ({} l), recirculación {} kWh\n",
+        dec(l.distribution, 0),
+        dec(l.storage, 0),
+        dec(l.tank, 0),
+        dec(l.recirculation, 0)
+    ));
     s.push_str(&format!(
         "  Energía anual {} kWh; renovable {} % ({}), exigido {} %{}\n",
         dec(h.annual, 0),
@@ -432,7 +547,13 @@ mod tests {
         let h = &r.hot_water;
         assert!(h.applies && h.given);
         // January in Huelva: 1000 l × 31 d × 1,162 Wh × (60 − 12) / 1000.
-        assert!((h.monthly[0] - 1000.0 * 31.0 * 1.162 * 48.0 / 1000.0).abs() < 1e-6);
+        assert!((h.useful[0] - 1000.0 * 31.0 * 1.162 * 48.0 / 1000.0).abs() < 1e-6);
+        // No pipes drawn: only the store's loss, a day's litres at 60 °C.
+        let l = &h.losses;
+        assert_eq!((l.distribution, l.recirculation), (0.0, 0.0));
+        let s = (16.66 + 8.33 * l.tank.powf(0.4)) * 40.0 / 45.0;
+        assert!((l.storage - s * 8.76).abs() < 1e-6 && l.storage > 0.0);
+        assert!((h.annual - h.useful.iter().sum::<f64>() - l.storage).abs() < 1e-6);
         assert_eq!(h.required, 0.6);
         assert!((h.provided - 2.0 / 3.0).abs() < 1e-9);
         assert!(h.passes());

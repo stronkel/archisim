@@ -6245,6 +6245,9 @@ pub struct RenewablesOf {
     /// Litres a day at 60 °C, given.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub acs_demand: Option<f64>,
+    /// The store's litres, given.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tank_volume: Option<f64>,
 }
 
 impl RenewablesOf {
@@ -6263,6 +6266,7 @@ impl RenewablesOf {
             panel_kwp_m2: site.panel_kwp_m2,
             built_area: site.built_area,
             acs_demand: site.acs_demand,
+            tank_volume: site.tank_volume,
         })
     }
 
@@ -6283,6 +6287,7 @@ impl RenewablesOf {
             panel_kwp_m2: self.panel_kwp_m2,
             built_area: self.built_area,
             acs_demand: self.acs_demand,
+            tank_volume: self.tank_volume,
         })
     }
 }

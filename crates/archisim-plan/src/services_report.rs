@@ -949,7 +949,7 @@ pub fn renewables(r: &Renewables) -> Vec<Block> {
     let e = &r.electricity;
     let mut out = vec![
         Block::Para(
-            "Contribución renovable para el agua caliente sanitaria (HE 4) con la demanda del Anejo F (28 l/día por persona a 60 °C, personas por dormitorios, factor de centralización) y el agua fría del Anejo G, y potencia fotovoltaica mínima (HE 5). Sin pérdidas de distribución, acumulación ni recirculación: añádalas si la instalación las tiene. El consumo de energía primaria (HE 0) se justifica con la herramienta oficial.".into(),
+            "Contribución renovable para el agua caliente sanitaria (HE 4) con la demanda del Anejo F (28 l/día por persona a 60 °C, personas por dormitorios, factor de centralización) y el agua fría del Anejo G, y potencia fotovoltaica mínima (HE 5). La demanda se incrementa con las pérdidas de distribución (el agua que queda en las tuberías sin retorno se enfría tres veces al día), de acumulación (pérdida estática de un acumulador de clase C) y de recirculación (ida y retorno del anillo, 0,25 W/mK, todo el año). El consumo de energía primaria (HE 0) se justifica con la herramienta oficial.".into(),
         ),
         Block::Heading(2, "1 Agua caliente sanitaria (HE 4)".into()),
         applies(
@@ -1003,7 +1003,45 @@ pub fn renewables(r: &Renewables) -> Vec<Block> {
                     dec(r.site.above_capital, 0)
                 ),
             ],
-            vec!["Energía anual".into(), format!("{} kWh", dec(h.annual, 0))],
+            vec![
+                "Energía del agua".into(),
+                format!("{} kWh", dec(h.useful.iter().sum::<f64>(), 0)),
+            ],
+            vec![
+                "Pérdidas de distribución".into(),
+                format!(
+                    "{} kWh ({} m de tubería, {} l sin retorno)",
+                    dec(h.losses.distribution, 0),
+                    dec(h.losses.pipe, 0),
+                    dec(h.losses.dead_water, 0)
+                ),
+            ],
+            vec![
+                "Pérdidas de acumulación".into(),
+                format!(
+                    "{} kWh (acumulador de {} l{}, {} W)",
+                    dec(h.losses.storage, 0),
+                    dec(h.losses.tank, 0),
+                    if h.losses.tank_given { "" } else { ", un día" },
+                    dec(h.losses.standing, 0)
+                ),
+            ],
+            vec![
+                "Pérdidas de recirculación".into(),
+                if h.losses.looped > 0.0 {
+                    format!(
+                        "{} kWh (anillo de {} m, ida y vuelta)",
+                        dec(h.losses.recirculation, 0),
+                        dec(h.losses.looped, 0)
+                    )
+                } else {
+                    "sin retorno".into()
+                },
+            ],
+            vec![
+                "Energía anual con pérdidas".into(),
+                format!("{} kWh", dec(h.annual, 0)),
+            ],
             vec![
                 "Fuente renovable".into(),
                 match h.source {
@@ -1028,7 +1066,13 @@ pub fn renewables(r: &Renewables) -> Vec<Block> {
             std::iter::once("T agua fría".to_string())
                 .chain(h.cold.iter().map(|t| dec(*t, 1)))
                 .collect(),
-            std::iter::once("kWh".to_string())
+            std::iter::once("Agua, kWh".to_string())
+                .chain(h.useful.iter().map(|k| dec(*k, 0)))
+                .collect(),
+            std::iter::once("Pérdidas, kWh".to_string())
+                .chain(h.lost.iter().map(|k| dec(*k, 0)))
+                .collect(),
+            std::iter::once("Total, kWh".to_string())
                 .chain(h.monthly.iter().map(|k| dec(*k, 0)))
                 .collect(),
         ],

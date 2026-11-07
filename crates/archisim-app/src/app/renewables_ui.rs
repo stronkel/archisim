@@ -160,6 +160,14 @@ impl ArchiSimApp {
                     "Darla a mano si la de las plantas no es la del proyecto",
                 );
                 ui.end_row();
+                ui.label("Volumen del acumulador");
+                given(
+                    ui,
+                    &mut new.tank_volume,
+                    " l",
+                    "Darlo a mano; si no, se toma la demanda de un día a la temperatura de acumulación",
+                );
+                ui.end_row();
             });
         if new != site {
             let r = self

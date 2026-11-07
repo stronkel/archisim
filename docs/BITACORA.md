@@ -24,15 +24,17 @@ Rama `bloque/energia-renovable`, con pull request; lleva dentro las ramas de las
   - Sus 24 viviendas piden 1.000 l/día; con la bomba de calor de SCOP 3, el 67 % es renovable, y se exige el 60 %.
   - Con 2.006 m² construidos, el HE 5 pide 10 kWp. Las tres filas de cuatro placas daban 4,3 kWp, así que ahora son tres filas de diez sobre la cubierta del pabellón: 54 m², unos 11 kWp.
 - Lo mismo en la Comprobación CTE (sección de energía), en la memoria de instalaciones (capítulo 6, cuando se aplica) y en `archisim renovables <proyecto>`.
-- Pendiente:
-  - las pérdidas de distribución, acumulación y recirculación del HE 4;
-  - el cálculo de la fracción solar (se da a mano).
-- **A comprobar por Antonio** (`docs/INSTALACIONES.md` §8):
-  - la parte renovable de la bomba de calor, 1 − 1/SCOP con el umbral de SCOP 2,5;
-  - cómo se saca la cubierta no transitable;
-  - los 0,2 kWp/m² de las placas.
+- Antonio dio por buenos la bomba de calor (1 − 1/SCOP, umbral 2,5), la cubierta no transitable y los 0,2 kWp/m², y pidió las pérdidas.
+- **Pérdidas del HE 4**, sacadas de la red de agua caliente dibujada:
+  - recirculación del anillo de ida y vuelta, a 0,25 W/mK;
+  - distribución: el agua que queda en la tubería sin retorno se enfría tres veces al día;
+  - acumulación: la pérdida estática de un acumulador de clase C. Su volumen se da en la ventana o, si no se da, es la demanda de un día.
+  
+  En la ventana y la memoria salen las tres, y la tabla de meses separa el agua de las pérdidas. En Florence Street suman 11.400 kWh sobre los 18.800 de agua; la bomba de calor sigue cumpliendo.
+- Pendiente: el cálculo de la fracción solar (se da a mano).
+- **A comprobar por Antonio**: las cifras de las pérdidas (`docs/INSTALACIONES.md` §8).
 - Probar:
-  1. Abrir Florence Street: Colaboración → Energías renovables. Mirar la demanda (viviendas, personas, litros) y la tabla de los doce meses.
+  1. Abrir Florence Street: Colaboración → Energías renovables. Mirar la demanda (viviendas, personas, litros), las tres pérdidas y la tabla de los doce meses. Dar un acumulador de 1.500 l y ver cómo sube la de acumulación.
   2. Cambiar la fuente a «Solar térmica» con 50 %: el HE 4 pasa a no cumplir. Volver a bomba de calor.
   3. Mirar el HE 5: S, Sc y las placas dibujadas frente a la potencia mínima.
   4. Comprobación CTE: las dos filas nuevas en Ahorro de energía.

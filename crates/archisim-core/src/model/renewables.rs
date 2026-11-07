@@ -78,6 +78,8 @@ pub struct RenewablesSite {
     /// The daily hot water at 60 °C, litres, where the one worked out of
     /// the dwellings is not right (other uses, Anejo F table c).
     pub acs_demand: Option<f64>,
+    /// The hot water store, litres, where it is not one day's demand.
+    pub tank_volume: Option<f64>,
 }
 
 impl Default for RenewablesSite {
@@ -93,6 +95,7 @@ impl Default for RenewablesSite {
             panel_kwp_m2: 0.2,
             built_area: None,
             acs_demand: None,
+            tank_volume: None,
         }
     }
 }
@@ -114,6 +117,7 @@ impl RenewablesSite {
             && self.panel_kwp_m2 > 0.0
             && self.built_area.is_none_or(|a| a.is_finite() && a >= 0.0)
             && self.acs_demand.is_none_or(|a| a.is_finite() && a >= 0.0)
+            && self.tank_volume.is_none_or(|a| a.is_finite() && a >= 0.0)
     }
 }
 
