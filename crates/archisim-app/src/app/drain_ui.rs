@@ -17,6 +17,10 @@ pub struct DrainWindow {
     /// The calculation of a revision of the model: (revision, text, the
     /// changes, stretches drawn smaller).
     results: Option<(u64, String, Grow, usize)>,
+    /// The calculation drawn (`report_view`), and whether shown as typed
+    /// text.
+    blocks: Vec<archisim_struct::report::Block>,
+    as_text: bool,
 }
 
 /// What grows: pipes and downpipes, from their diameter to the calculated
@@ -110,6 +114,7 @@ impl ArchiSimApp {
             let d = archisim_mep::drain::drainage(model);
             let text = archisim_mep::drain::report(model, &d);
             let short = d.networks.iter().flat_map(|n| n.short()).count();
+            self.drain.blocks = archisim_plan::services_report::drainage(model, &d);
             self.drain.results = Some((rev, text, Grow::of(model), short));
         }
         let (_, text, grow, short) = self.drain.results.clone().expect("just made");
@@ -156,14 +161,17 @@ impl ArchiSimApp {
                 }
             });
         });
-        egui::ScrollArea::both()
-            .auto_shrink([false, false])
-            .show(ui, |ui| {
-                ui.add(
-                    egui::Label::new(egui::RichText::new(text).monospace().size(11.0))
-                        .wrap_mode(egui::TextWrapMode::Extend),
-                );
-            });
+        let blocks = std::mem::take(&mut self.drain.blocks);
+        super::report_view::result(
+            ui,
+            &blocks,
+            &text,
+            &mut self.drain.as_text,
+            "el saneamiento",
+            "drain",
+            None,
+        );
+        self.drain.blocks = blocks;
         if apply {
             self.apply_drain_sizes();
         }

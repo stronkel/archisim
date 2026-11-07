@@ -18,6 +18,10 @@ pub struct WaterWindow {
     /// pipes whose diameter changes `(run, now, sized)`, taps short of
     /// pressure).
     results: Option<(u64, String, Vec<Resize>, usize)>,
+    /// The calculation drawn (`report_view`), and whether shown as typed
+    /// text.
+    blocks: Vec<archisim_struct::report::Block>,
+    as_text: bool,
 }
 
 /// A pipe whose diameter changes: the run, its diameter and the
@@ -117,6 +121,7 @@ impl ArchiSimApp {
                 .flat_map(|n| &n.taps)
                 .filter(|t| t.pressure < archisim_mep::water::TAP_PRESSURE)
                 .count();
+            self.water.blocks = archisim_plan::services_report::water(model, &w);
             self.water.results = Some((rev, text, changes, short));
         }
         let (_, text, changes, short) = self.water.results.clone().expect("just made");
@@ -165,14 +170,17 @@ impl ArchiSimApp {
                 }
             });
         });
-        egui::ScrollArea::both()
-            .auto_shrink([false, false])
-            .show(ui, |ui| {
-                ui.add(
-                    egui::Label::new(egui::RichText::new(text).monospace().size(11.0))
-                        .wrap_mode(egui::TextWrapMode::Extend),
-                );
-            });
+        let blocks = std::mem::take(&mut self.water.blocks);
+        super::report_view::result(
+            ui,
+            &blocks,
+            &text,
+            &mut self.water.as_text,
+            "el agua",
+            "water",
+            None,
+        );
+        self.water.blocks = blocks;
         if apply {
             self.apply_water_sizes();
         }

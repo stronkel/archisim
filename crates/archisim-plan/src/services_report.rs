@@ -130,7 +130,7 @@ pub fn report(model: &Model) -> Vec<Block> {
 // Electricity
 // ---------------------------------------------------------------------
 
-fn electricity(model: &Model, all: &[Installation]) -> Vec<Block> {
+pub fn electricity(model: &Model, all: &[Installation]) -> Vec<Block> {
     let mut out = vec![Block::Para(
         "Instalación interior de baja tensión, monofásica a 230 V, según el Reglamento Electrotécnico para Baja Tensión: grado de electrificación (ITC-BT-10), circuitos (ITC-BT-25, tabla 1), intensidades admisibles de la UNE-HD 60364-5-52 (método B1, tubo empotrado, PVC, dos conductores cargados), caída de tensión con cobre a 70 °C contra el 3 % (ITC-BT-19) y derivación individual (ITC-BT-15).".into(),
     )];
@@ -254,7 +254,7 @@ fn electricity(model: &Model, all: &[Installation]) -> Vec<Block> {
 // Water supply
 // ---------------------------------------------------------------------
 
-fn water(model: &Model, w: &Water) -> Vec<Block> {
+pub fn water(model: &Model, w: &Water) -> Vec<Block> {
     let mut out = vec![
         Block::Para(format!(
             "Red de agua fría desde el contador y de agua caliente sanitaria desde el acumulador, de {}. Caudales instantáneos de la tabla 2.1 del DB-HS 4 con simultaneidad {}; diámetros comerciales que dejan el agua por debajo de {} m/s y no bajan de las tablas 4.2 y 4.3; pérdidas de carga por Darcy–Weisbach más un {} % por accesorios.",
@@ -406,7 +406,7 @@ fn water(model: &Model, w: &Water) -> Vec<Block> {
 // Drainage
 // ---------------------------------------------------------------------
 
-fn drainage(model: &Model, d: &Drainage) -> Vec<Block> {
+pub fn drainage(model: &Model, d: &Drainage) -> Vec<Block> {
     let mut out = vec![Block::Para(format!(
         "Red separativa de aguas residuales y pluviales en PVC. Unidades de desagüe de uso {} (tabla 4.1); ramales por la tabla 4.3, bajantes por las tablas 4.4 y 4.8, colectores por las 4.5 y 4.9; intensidad de lluvia {} mm/h.",
         if d.public { "público" } else { "privado" },
@@ -514,7 +514,7 @@ fn drainage(model: &Model, d: &Drainage) -> Vec<Block> {
 // Ventilation
 // ---------------------------------------------------------------------
 
-fn ventilation(model: &Model, v: &Ventilation) -> Vec<Block> {
+pub fn ventilation(model: &Model, v: &Ventilation) -> Vec<Block> {
     let site = model.ventilation_site();
     let ducts = match site.system {
         archisim_core::VentSystem::Mechanical => format!(
@@ -781,7 +781,7 @@ fn ventilation(model: &Model, v: &Ventilation) -> Vec<Block> {
 // Envelope and loads
 // ---------------------------------------------------------------------
 
-fn thermal(model: &Model, t: &Thermal) -> Vec<Block> {
+pub fn thermal(model: &Model, t: &Thermal) -> Vec<Block> {
     let mut out = vec![
         Block::Para(
             "Transmitancias U = 1/(Rsi + Σ e/λ + Rse) con las capas de cada tipo; límites de la tabla 3.1.1.a-HE1 por la zona de invierno y coeficiente global K de los locales calefactados contra la tabla 3.1.1.b-HE1 por la compacidad. Cargas de calefacción por transmisión y ventilación; de refrigeración, con el sol por los vidrios, las personas, la luz y los aparatos.".into(),

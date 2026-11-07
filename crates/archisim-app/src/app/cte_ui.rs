@@ -22,6 +22,8 @@ pub struct CteWindow {
     pub route: Option<(LevelId, Vec<Point2>)>,
     /// Show only what does not meet the code (and warnings).
     only_problems: bool,
+    /// The one section shown, picked on its card; `None`, all.
+    section: Option<Section>,
     /// «Arreglar lo que no cumple», while it is worked out or shown.
     fix: Option<super::fix_ui::FixState<archisim_cte::fix::Fix>>,
 }
@@ -146,13 +148,17 @@ impl ArchiSimApp {
         ui.separator();
         let report = self.cte.current(&self.ed);
         let mut start_fix = false;
+        super::report_view::summary(
+            ui,
+            super::report_view::Tally {
+                pass: report.count(Status::Passes),
+                warn: report.count(Status::Warning),
+                fail: report.count(Status::Fails),
+            },
+            "el proyecto",
+        );
+        ui.add_space(4.0);
         ui.horizontal(|ui| {
-            ui.colored_label(p.bad, format!("No cumple: {}", report.count(Status::Fails)));
-            ui.colored_label(
-                ui.visuals().warn_fg_color,
-                format!("Avisos: {}", report.count(Status::Warning)),
-            );
-            ui.colored_label(p.good, format!("Cumple: {}", report.count(Status::Passes)));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.switch(&mut self.cte.only_problems, "Solo lo que falla");
                 if ui
@@ -236,7 +242,102 @@ impl ArchiSimApp {
             .auto_shrink([false, false])
             .max_height(ui.available_height() - 36.0)
             .show(ui, |ui| {
+                // A card per section: its counts and bar; a clic shows it
+                // alone (another clic, all of them).
+                let shown: Vec<Section> = Section::ALL
+                    .into_iter()
+                    .filter(|s| report.items_of(*s).next().is_some())
+                    .collect();
+                // As many cards a row as fit.
+                let per_row = ((ui.available_width() + 6.0) / 226.0).floor().max(1.0) as usize;
+                for row in shown.chunks(per_row) {
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing = egui::vec2(6.0, 6.0);
+                        for &section in row {
+                            let items: Vec<&archisim_cte::Item> =
+                                report.items_of(section).collect();
+                            let count =
+                                |st: Status| items.iter().filter(|i| i.status == st).count();
+                            let t = super::report_view::Tally {
+                                pass: count(Status::Passes),
+                                warn: count(Status::Warning),
+                                fail: count(Status::Fails),
+                            };
+                            let on = self.cte.section == Some(section);
+                            let edge = if t.fail > 0 {
+                                p.bad
+                            } else if t.warn > 0 {
+                                ui.visuals().warn_fg_color
+                            } else {
+                                p.good
+                            };
+                            let r = egui::Frame::new()
+                                .fill(if on {
+                                    edge.gamma_multiply(0.12)
+                                } else {
+                                    p.panel
+                                })
+                                .stroke(Stroke::new(
+                                    if on { 2.0 } else { 1.0 },
+                                    edge.gamma_multiply(0.7),
+                                ))
+                                .corner_radius(egui::CornerRadius::same(10))
+                                .inner_margin(egui::Margin::symmetric(10, 6))
+                                .show(ui, |ui| {
+                                    ui.vertical(|ui| {
+                                        ui.set_width(196.0);
+                                        ui.add(
+                                            egui::Label::new(
+                                                egui::RichText::new(section.title())
+                                                    .strong()
+                                                    .size(12.5)
+                                                    .color(p.text),
+                                            )
+                                            .truncate(),
+                                        );
+                                        ui.horizontal(|ui| {
+                                            if t.fail > 0 {
+                                                super::report_view::pill(
+                                                    ui,
+                                                    &format!("✖ {}", t.fail),
+                                                    p.bad,
+                                                );
+                                            }
+                                            if t.warn > 0 {
+                                                super::report_view::pill(
+                                                    ui,
+                                                    &format!("! {}", t.warn),
+                                                    ui.visuals().warn_fg_color,
+                                                );
+                                            }
+                                            super::report_view::pill(
+                                                ui,
+                                                &format!("✔ {}", t.pass),
+                                                p.good,
+                                            );
+                                        });
+                                        super::report_view::bar(ui, t);
+                                    });
+                                })
+                                .response
+                                .interact(egui::Sense::click())
+                                .on_hover_text(if on {
+                                    "Clic: ver todas"
+                                } else {
+                                    "Clic: ver solo esta"
+                                });
+                            if r.clicked() {
+                                self.cte.section = if on { None } else { Some(section) };
+                            }
+                        }
+                    });
+                    ui.add_space(4.0);
+                }
+                ui.add_space(6.0);
                 for section in Section::ALL {
+                    if self.cte.section.is_some_and(|s| s != section) {
+                        continue;
+                    }
                     let items: Vec<&archisim_cte::Item> = report
                         .items_of(section)
                         .filter(|i| {
@@ -248,58 +349,101 @@ impl ArchiSimApp {
                         continue;
                     }
                     let fails = items.iter().filter(|i| i.status == Status::Fails).count();
-                    egui::CollapsingHeader::new(if fails > 0 {
-                        format!("{} · {fails} no cumple", section.title())
-                    } else {
-                        section.title().to_string()
-                    })
+                    egui::CollapsingHeader::new(
+                        egui::RichText::new(if fails > 0 {
+                            format!(
+                                "{} · {fails} no cumple{}",
+                                section.title(),
+                                if fails == 1 { "" } else { "n" }
+                            )
+                        } else {
+                            section.title().to_string()
+                        })
+                        .strong()
+                        .size(14.0),
+                    )
                     .id_salt(("cte-section", section))
-                    .default_open(true)
+                    .default_open(fails > 0 || self.cte.section.is_some())
+                    // The section picked on its card, open.
+                    .open((self.cte.section == Some(section)).then_some(true))
                     .show(ui, |ui| {
-                        for i in items {
-                            let (mark, color) = match i.status {
-                                Status::Fails => ("✖", p.bad),
-                                Status::Warning => ("!", ui.visuals().warn_fg_color),
-                                Status::Passes => ("✔", p.good),
-                                Status::Info => ("·", p.muted),
-                            };
-                            let who = archisim_cte::subject_name(model, i.subject);
-                            let mut job = egui::text::LayoutJob::default();
-                            let f = egui::TextFormat {
-                                color: p.text,
-                                ..Default::default()
-                            };
-                            job.append(
-                                &format!("{mark} "),
-                                0.0,
-                                egui::TextFormat { color, ..f.clone() },
-                            );
-                            if !matches!(i.subject, Subject::Building | Subject::Level(_)) {
-                                job.append(
-                                    &format!("{who} · "),
-                                    0.0,
-                                    egui::TextFormat {
-                                        color: p.muted,
-                                        ..f.clone()
-                                    },
-                                );
-                            }
-                            job.append(&i.text, 0.0, f.clone());
-                            if !i.value.is_empty() && i.status != Status::Info {
-                                let fig = if i.required.is_empty() {
-                                    format!("  {}", i.value)
-                                } else {
-                                    format!("  {} (exigido {})", i.value, i.required)
-                                };
-                                job.append(&fig, 0.0, egui::TextFormat { color, ..f.clone() });
-                            }
-                            let r = ui
-                                .add(egui::Label::new(job).wrap().sense(egui::Sense::click()))
-                                .on_hover_text(format!("{} · clic: verlo en la planta", i.rule));
-                            if r.clicked() {
-                                pick = Some(i.clone());
-                            }
-                        }
+                        // The text takes what the pill, the element and the
+                        // figures leave.
+                        let text_w =
+                            (ui.available_width() - 80.0 - 150.0 - 260.0 - 40.0).max(260.0);
+                        egui::Grid::new(("cte-items", section))
+                            .striped(true)
+                            .num_columns(4)
+                            .spacing(egui::vec2(10.0, 4.0))
+                            .show(ui, |ui| {
+                                for i in items {
+                                    let (label, colour) = match i.status {
+                                        Status::Fails => ("No cumple", p.bad),
+                                        Status::Warning => ("Revisar", ui.visuals().warn_fg_color),
+                                        Status::Passes => ("Cumple", p.good),
+                                        Status::Info => ("Dato", p.muted),
+                                    };
+                                    ui.add_sized(egui::vec2(80.0, 18.0), |ui: &mut Ui| {
+                                        super::report_view::pill(ui, label, colour)
+                                    });
+                                    let who = if matches!(
+                                        i.subject,
+                                        Subject::Building | Subject::Level(_)
+                                    ) {
+                                        String::new()
+                                    } else {
+                                        archisim_cte::subject_name(model, i.subject)
+                                    };
+                                    ui.add_sized(
+                                        egui::vec2(150.0, 18.0),
+                                        egui::Label::new(
+                                            egui::RichText::new(&who).color(p.muted).size(12.0),
+                                        )
+                                        .truncate(),
+                                    );
+                                    let r =
+                                        ui.vertical(|ui| {
+                                            ui.set_width(text_w);
+                                            ui.add(
+                                                egui::Label::new(
+                                                    egui::RichText::new(&i.text).size(12.5),
+                                                )
+                                                .wrap()
+                                                .sense(egui::Sense::click()),
+                                            )
+                                        })
+                                        .inner
+                                        .on_hover_text(
+                                            format!("{} · clic: verlo en la planta", i.rule),
+                                        );
+                                    if r.clicked() {
+                                        pick = Some(i.clone());
+                                    }
+                                    let fig = match (
+                                        i.value.is_empty() || i.status == Status::Info,
+                                        i.required.is_empty(),
+                                    ) {
+                                        (true, _) => String::new(),
+                                        (false, true) => i.value.clone(),
+                                        (false, false) => {
+                                            format!("{}  ·  exigido {}", i.value, i.required)
+                                        }
+                                    };
+                                    ui.vertical(|ui| {
+                                        ui.set_width(260.0);
+                                        ui.add(
+                                            egui::Label::new(
+                                                egui::RichText::new(fig)
+                                                    .color(colour)
+                                                    .size(12.0)
+                                                    .strong(),
+                                            )
+                                            .wrap(),
+                                        );
+                                    });
+                                    ui.end_row();
+                                }
+                            });
                     });
                 }
             });

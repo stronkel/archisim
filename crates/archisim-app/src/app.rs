@@ -2786,6 +2786,7 @@ mod props;
 mod railing_ui;
 mod rebar_ui;
 mod render_ui;
+mod report_view;
 mod revit_keys;
 mod ribbon;
 mod roof_ui;
