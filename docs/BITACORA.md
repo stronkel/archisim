@@ -6,6 +6,19 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-07 (120) · Planos de instalaciones: campanas, esquemas de ventilación y memoria
+
+Rama `bloque/planos-instalaciones` sobre `main` (0.79), con pull request. Sin cambios de formato ni de IFC. `docs/INSTALACIONES.md` §6 y §8, `docs/CTE.md`.
+
+- **Campana de la cocina (HS 3, 3.1.1).** El cálculo de ventilación reconoce la campana (objeto «Campana extractora» dentro de la cocina) y sigue su conducto del sistema Extracción hasta la salida: 50 l/s por campana, 2,5·q cm² por tramo, conducto propio (colectivo solo de campanas, sin bocas). No cumple sin conducto o compartido con la ventilación general; aviso si la cocina no tiene campana. Tramos «VC…». En la Comprobación CTE, el texto del cálculo y «Poner los tamaños calculados». El piso de ejemplo lleva su campana con un conducto Ø150 a cubierta; Florence Street, un conducto colectivo de campanas por columna de viviendas (6, de Ø300), y las 24 cumplen.
+- **Esquemas de ventilación** VE-01 (vertical: extracción general a la izquierda, campanas a trazos a la derecha) y VE-02… (red de cada planta hasta cada boca y campana), como los de fontanería y saneamiento. PDF y DXF desde la ventana del cálculo, Archivo → Exportar → Esquemas de ventilación y `archisim ventilacion <p> --esquemas carpeta`.
+- **Memoria de instalaciones** en A4 (portada y un capítulo por instalación dibujada: REBT, HS 4, HS 5, HS 3 y HE 1, con sus tablas y comprobaciones), con el mismo formato que el anejo de cálculo de la estructura. Archivo → Exportar → Memoria de instalaciones y `archisim memoria-instalaciones <p> [carpeta]` (PDF y texto). Florence Street: 42 hojas.
+- Pendiente: dónde sale cada conducto (altura sobre cubierta, distancia a ventanas, HS 3 3.2.4); la ventilación natural e híbrida; los garajes.
+- Probar:
+  1. `cargo run -p archisim-cli -- ventilacion --ejemplo out/` y abrir `out/ventilacion-ejemplo.archisim`: en Colaboración → Cálculo de ventilación, «Cocina: campana de 50 l/s por su conducto propio». Mover el conducto de la campana hasta la boca de la cocina: pasa a «NO CUMPLE».
+  2. En la misma ventana, «Esquemas (PDF)…»; y Archivo → Exportar → Memoria de instalaciones.
+  3. `cargo run --release -p archisim-cli -- edificio out/edificio` y `cargo run --release -p archisim-cli -- memoria-instalaciones out/edificio/edificio.archisim out/edificio`.
+
 ## 2026-11-07 (119) · Todo a `main`: versión 0.79
 
 Antonio aprobó unir los PR abiertos: #169 a #172 (saneamiento, remates de fontanería, ventilación y envolvente), #164 (Elegir línea en el boceto), #166 y #168 (plantillas de vista).

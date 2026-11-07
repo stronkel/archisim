@@ -51,6 +51,7 @@ pub mod rooms;
 pub mod schedules;
 pub mod section;
 pub mod services;
+pub mod services_report;
 pub mod sheet;
 pub mod single_line;
 pub mod stairs;

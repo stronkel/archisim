@@ -71,7 +71,7 @@ impl ArchiSimApp {
             self.ventilation.results = Some((rev, text, Grow::of(model, &v), fails));
         }
         let (_, text, grow, fails) = self.ventilation.results.clone().expect("just made");
-        let mut apply = false;
+        let (mut apply, mut pdf, mut dxf) = (false, false, false);
         ui.horizontal(|ui| {
             let p = super::theme::Palette::current(ui.ctx());
             if fails > 0 {
@@ -87,6 +87,20 @@ impl ArchiSimApp {
                 ui.colored_label(p.good, "Todo con su tamaño");
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui
+                    .button("Esquemas (DXF)…")
+                    .on_hover_text("El esquema vertical y la red de cada planta, un DXF por hoja")
+                    .clicked()
+                {
+                    dxf = true;
+                }
+                if ui
+                    .button("Esquemas (PDF)…")
+                    .on_hover_text("El esquema vertical de la extracción y las campanas, y la red de cada planta, en hojas A3")
+                    .clicked()
+                {
+                    pdf = true;
+                }
                 if ui
                     .add_enabled(
                         grow.len() > 0,
@@ -110,6 +124,84 @@ impl ArchiSimApp {
         if apply {
             self.apply_ventilation_sizes();
         }
+        if pdf {
+            self.export_ventilation_pdf();
+        }
+        if dxf {
+            self.export_ventilation_dxf();
+        }
+    }
+
+    /// The ventilation diagrams as a PDF of A3 pages.
+    pub(super) fn export_ventilation_pdf(&mut self) {
+        let mut d = rfd::FileDialog::new()
+            .set_title("Esquemas de ventilación (PDF)")
+            .add_filter("PDF", &["pdf"])
+            .set_file_name(format!("{}-ventilacion.pdf", self.file_name_stem()));
+        if let Some(dir) = self.start_dir() {
+            d = d.set_directory(dir);
+        }
+        let Some(path) = d.save_file() else {
+            return;
+        };
+        let model = self.ed.shown();
+        let sheets: Vec<(String, String)> =
+            archisim_plan::water_schematic::ventilation_pages(&model)
+                .into_iter()
+                .enumerate()
+                .map(|(i, svg)| (svg, format!("VE-{:02}", i + 1)))
+                .collect();
+        if sheets.is_empty() {
+            self.complain("No hay conductos de extracción que lleguen a una boca o a una campana.");
+            return;
+        }
+        let r = crate::documents::pdf_of(&sheets, "Esquemas de ventilación")
+            .and_then(|bytes| std::fs::write(&path, bytes).map_err(|e| e.to_string()));
+        match r {
+            Ok(()) => self.say(format!(
+                "Esquemas de ventilación: {} hojas A3 en {}.",
+                sheets.len(),
+                path.display()
+            )),
+            Err(e) => self.complain(format!("No se pudo exportar: {e}.")),
+        }
+    }
+
+    /// The ventilation diagrams in DXF: one file per page.
+    pub(super) fn export_ventilation_dxf(&mut self) {
+        let mut d = rfd::FileDialog::new()
+            .set_title("Esquemas de ventilación (DXF)")
+            .add_filter("DXF", &["dxf"])
+            .set_file_name(format!("{}-ventilacion.dxf", self.file_name_stem()));
+        if let Some(dir) = self.start_dir() {
+            d = d.set_directory(dir);
+        }
+        let Some(path) = d.save_file() else {
+            return;
+        };
+        let model = self.ed.shown();
+        let sheets = archisim_plan::water_schematic::ventilation_pages(&model);
+        if sheets.is_empty() {
+            self.complain("No hay conductos de extracción que lleguen a una boca o a una campana.");
+            return;
+        }
+        let stem = path
+            .file_stem()
+            .map_or("ventilacion".into(), |s| s.to_string_lossy().to_string());
+        for (i, svg) in sheets.iter().enumerate() {
+            let file = path.with_file_name(format!("{stem}-ve-{:02}.dxf", i + 1));
+            if let Err(e) = archisim_export::dxf::page_dxf(&model, svg)
+                .and_then(|t| std::fs::write(&file, t).map_err(|e| e.to_string()))
+            {
+                self.complain(format!("No se pudo exportar: {e}."));
+                return;
+            }
+        }
+        self.say(format!(
+            "Esquemas de ventilación en DXF: {} archivos junto a {}.",
+            sheets.len(),
+            path.display()
+        ));
     }
 
     /// Gives every inlet, valve, duct and shaft drawn smaller than it

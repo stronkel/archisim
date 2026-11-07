@@ -1,8 +1,8 @@
 # Instalaciones: dibujo y cálculo
 
-ArchiSim dibuja las instalaciones (tuberías, conductos y aparatos) y las calcula sobre lo dibujado. Este documento recoge la segunda vuelta: cómo se meten las tuberías, el cálculo eléctrico con su esquema unifilar, el cálculo de fontanería, el de saneamiento, el de ventilación y la envolvente con las cargas térmicas.
+ArchiSim dibuja las instalaciones (tuberías, conductos y aparatos) y las calcula sobre lo dibujado. Este documento recoge la segunda vuelta: cómo se meten las tuberías, el cálculo eléctrico con su esquema unifilar, el cálculo de fontanería, el de saneamiento, el de ventilación con las campanas, la envolvente con las cargas térmicas, los esquemas y la memoria de instalaciones.
 
-Código: `archisim-core::model::pipe_routing` (uniones, cambio de planta y trazado automático), `archisim-core::model::water` (datos del suministro), crate `archisim-mep` (cálculos, depende de `archisim-core` y `archisim-geom`: `electrical`, `water`, `drain`, `ventilation` y `thermal`), `archisim-plan::single_line` (esquema unifilar), `archisim-plan::water_schematic` (esquemas de fontanería y saneamiento), `archisim-cte::electrical`, `archisim-cte::services::calculation`, `archisim-cte::ventilation` y `archisim-cte::energy` (comprobación) y, en la app, `app/services_ui`, `app/electrical_ui`, `app/water_ui`, `app/drain_ui`, `app/ventilation_ui` y `app/climate_ui`.
+Código: `archisim-core::model::pipe_routing` (uniones, cambio de planta y trazado automático), `archisim-core::model::water` (datos del suministro), crate `archisim-mep` (cálculos, depende de `archisim-core` y `archisim-geom`: `electrical`, `water`, `drain`, `ventilation` y `thermal`), `archisim-plan::single_line` (esquema unifilar), `archisim-plan::water_schematic` (esquemas de fontanería, saneamiento y ventilación), `archisim-plan::services_report` (memoria de instalaciones), `archisim-cte::electrical`, `archisim-cte::services::calculation`, `archisim-cte::ventilation` y `archisim-cte::energy` (comprobación) y, en la app, `app/services_ui`, `app/electrical_ui`, `app/water_ui`, `app/drain_ui`, `app/ventilation_ui` y `app/climate_ui`.
 
 ## 1. Meter las tuberías
 
@@ -187,18 +187,27 @@ Los conductos de cada planta, del sistema **Extracción**, van de cada boca al c
   - paso en cada puerta por la que va el aire: 8·q cm², y 70 cm² como mínimo. El aire de cada seco va, puerta a puerta, al húmedo más cercano que aún lo necesita. Una puerta da su holgura bajo la hoja, que se toma de 1 cm (paso libre × 1 cm); un hueco sin puerta, todo su tamaño. Si no basta, se dice la holgura que haría falta («holgura de 14 mm o rejilla de paso»).
 - **Conductos**, tabla 4.2, extracción mecánica: cada tramo lleva el caudal de las bocas que tiene detrás y necesita 2,5·q cm² (4 m/s). Los tramos («V1», «V2»…) van del extractor hacia las bocas, y se da el tamaño que basta: el mismo alto con más ancho en los rectangulares, el diámetro siguiente en los redondos.
 - **Extractor**: el caudal de su red, en l/s y m³/h. Si no está dibujado, no cumple. La presión que debe dar la pone el fabricante con el trazado.
-- **Cocina**: se recuerda que necesita su extracción propia para la campana (50 l/s, con su conducto; 3.1.1).
+- **Campana de la cocina** (3.1.1): 50 l/s por un conducto propio, que no puede ser el de la ventilación general. La campana es el objeto «Campana extractora» del catálogo, dentro de la cocina; su conducto se dibuja con la herramienta Conducto del sistema Extracción, desde la campana (a menos de 60 cm) hasta un conducto vertical propio que sube a la cubierta y sale por un trozo de conducto. Los conductos de las campanas de varias viviendas pueden ir a un mismo conducto vertical colectivo, sin bocas de otros locales. Cada tramo necesita 2,5·q cm²: 125 cm² para una campana (un Ø150 basta). No cumple la campana sin conducto o la que va a un conducto con bocas; se avisa de la cocina sin campana dibujada. Sus tramos se llaman «VC1», «VC2»…
 - **Trasteros y almacenes de residuos** del edificio, tabla 2.2: 0,7 y 10 l/s por m².
 
 Todo sale en la ventana, en la Comprobación CTE (sección «Ventilación (DB-HS 3)») y en `archisim ventilacion <proyecto>`. **«Poner los tamaños calculados»** alarga los aireadores cortos (con su misma rendija) y agranda las bocas, conductos y conductos verticales cortos, en un paso de Deshacer. Lo mismo hace «Arreglar lo que no cumple» y `archisim ventilacion <proyecto> --tamanos salida.archisim`. Los pasos de las puertas no se tocan: holgura o rejilla, a decidir.
 
-`archisim ventilacion --ejemplo <carpeta>` hace un piso de dos dormitorios con todo dibujado.
+`archisim ventilacion --ejemplo <carpeta>` hace un piso de dos dormitorios con todo dibujado, también la campana con su conducto.
+
+### Esquemas de ventilación
+
+Hojas A3 como las de fontanería y saneamiento:
+- **VE-01, esquema vertical.** A la izquierda, la extracción general: los conductos verticales subiendo planta a planta con su tramo y su sección, en cada planta lo que entra en cada uno (bocas de cocinas y baños con su caudal) y arriba los extractores con su caudal en m³/h. A la derecha, a trazos, los conductos de las campanas hasta su salida en cubierta.
+- **VE-02 en adelante.** Una hoja por planta con el árbol de conductos hasta cada boca (local y l/s) y cada campana.
+
+En rojo, lo dibujado que se queda corto («100 × 100→150 × 100»). PDF desde la ventana del cálculo o en Archivo → Exportar → Esquemas de ventilación; DXF desde la ventana; en la línea de órdenes, `archisim ventilacion <proyecto> --esquemas <carpeta>`.
 
 El edificio de Florence Street lleva su ventilación:
 - un aireador sobre cada ventana de los locales secos, o en la fachada de vidrio de los estares;
 - una boca en cada local húmedo;
 - conductos por el techo hasta un conducto vertical Ø200 junto al baño de cada vivienda, que sube de la planta 1 a la cubierta;
-- un extractor en la cubierta por cada conducto vertical.
+- un extractor en la cubierta por cada conducto vertical;
+- la campana de cada cocina, con su conducto por el techo hasta un conducto vertical colectivo de campanas por cada columna de viviendas (Ø300 para las cuatro cocinas que recoge), que sale a la cubierta. Las 24 campanas cumplen.
 
 Son 24 viviendas y 6 redes de extracción (de 202 a 346 m³/h). Para el cálculo le faltaba un local: el vestíbulo de la vivienda D, que ahora está (y sale en el cuadro de superficies). Con lo dibujado solo no cumplen 12 pasos de puerta: los que llevan más de 9 l/s piden holguras de 11 a 14 mm o rejilla de paso.
 
@@ -262,7 +271,18 @@ Por eso K da 2,27 contra 0,80. Los tipos de ese edificio están hechos para dibu
 
 **A comprobar por Antonio**: los límites de las tablas 3.1.1.a y 3.1.1.b del HE 1 (versión de 2019), las conductividades habituales, la radiación por orientación y las cargas interiores están escritos de memoria. Están juntos al principio de `crates/archisim-mep/src/thermal.rs` y `crates/archisim-core/src/model/thermal.rs`.
 
-## 8. Lo que no hace (todavía)
+## 8. Memoria de instalaciones
+
+Archivo → Exportar → **Memoria de instalaciones** (o `archisim memoria-instalaciones <proyecto> [carpeta]`, que deja el PDF y el mismo texto en `.txt`). Hojas A4, con portada y un capítulo por cada instalación dibujada:
+1. **Instalación eléctrica (REBT)**: por cada cuadro, el grado de electrificación, la potencia, el IGA, la derivación individual y los diferenciales, y el cuadro de circuitos (puntos, potencia, intensidad, PIA, sección, longitud y caída de tensión).
+2. **Suministro de agua (DB-HS 4)**: los datos de partida, la tabla de tramos de agua fría y caliente (caudal, diámetro dibujado y calculado, velocidad y pérdida), el grifo más desfavorable, el grupo de presión, el aljibe y el retorno.
+3. **Evacuación de aguas (DB-HS 5)**: los tramos de cada red con sus UD o su superficie, la pendiente y el diámetro dibujado y exigido, los sumideros y los canalones.
+4. **Calidad del aire interior (DB-HS 3)**: los caudales de cada vivienda, las aberturas de cada local, los pasos de las puertas, los conductos y las campanas.
+5. **Envolvente térmica y cargas (DB-HE 1)**: la zona y las temperaturas, cada tipo de la envolvente con su U y su límite, el K, las cargas de cada local y los equipos.
+
+Lo que no cumple sale marcado como en el anejo de cálculo de la estructura. La portada deja el hueco para el autor: los datos de partida los revisa y asume el técnico que firma.
+
+## 9. Lo que no hace (todavía)
 
 - Trifásica, viviendas con más de 14 490 W, locales y oficinas (ITC-BT-28 en adelante).
 - Caída de tensión por tramos con la carga repartida: se pone toda la carga en el punto más lejano, lo que queda del lado de la seguridad.
@@ -278,9 +298,8 @@ Por eso K da 2,27 contra 0,80. Los tipos de ese edificio están hechos para dibu
   - las bombas de elevación;
   - los canalones de sección cuadrada (se toman como semicirculares).
 - Ventilación:
-  - los esquemas en planos;
   - la ventilación natural e híbrida, con los conductos por zona térmica y plantas (tabla 4.2 de la híbrida);
-  - el conducto propio de la campana, dibujado y calculado;
+  - dónde sale cada conducto (a qué altura sobre la cubierta y a qué distancia de las ventanas, 3.2.4);
   - los garajes (120 l/s por plaza, tabla 2.2) y los edificios que no son de viviendas (RITE).
 - Envolvente y cargas:
   - los puentes térmicos (frentes de forjado, pilares, contorno de huecos) y el método del terreno de la norma UNE-EN ISO 13370;
