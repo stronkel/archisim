@@ -200,21 +200,52 @@ impl Model {
 
     // ---- Styles of the levels' own plans ------------------------------------
 
-    /// What a level's own plan shows and how (the default look if never
-    /// changed).
+    /// What a level's own plan shows and how: its own look, or else the
+    /// plans' template's ([`Model::plan_template`]), or the default look.
     pub fn level_style(&self, level: LevelId) -> ViewStyle {
-        self.level_styles.get(&level).cloned().unwrap_or_default()
+        self.level_styles
+            .get(&level)
+            .cloned()
+            .unwrap_or_else(|| self.plain_level_style())
+    }
+
+    /// The look of a level's plan never changed.
+    fn plain_level_style(&self) -> ViewStyle {
+        self.plan_template
+            .and_then(|t| self.view_templates.get(&t))
+            .map_or_else(ViewStyle::default, |t| t.applied(&ViewStyle::default()))
     }
 
     pub fn set_level_style(&mut self, level: LevelId, style: ViewStyle) -> Result<(), ModelError> {
         if !self.levels.contains_key(&level) {
             return Err(ModelError::UnknownLevel(level));
         }
-        if style == ViewStyle::default() {
+        if style == self.plain_level_style() {
             self.level_styles.remove(&level);
         } else {
             self.level_styles.insert(level, style);
         }
+        Ok(())
+    }
+
+    /// The template the levels' plans follow unless given their own look
+    /// (a new project's: «Arquitectura», without the installations).
+    pub fn plan_template(&self) -> Option<ViewTemplateId> {
+        self.plan_template
+    }
+
+    /// Sets the plans' template. The levels that were drawn as the old one
+    /// keep that look as their own only if it differs.
+    pub fn set_plan_template(&mut self, t: Option<ViewTemplateId>) -> Result<(), ModelError> {
+        if let Some(id) = t {
+            if !self.view_templates.contains_key(&id) {
+                return Err(ModelError::UnknownViewTemplate(id));
+            }
+        }
+        self.plan_template = t;
+        // A level whose own look is now the plain one keeps nothing.
+        let plain = self.plain_level_style();
+        self.level_styles.retain(|_, s| *s != plain);
         Ok(())
     }
 
@@ -305,6 +336,15 @@ impl Model {
     /// Removes a template; the views that followed it keep its look as
     /// their own.
     pub fn remove_view_template(&mut self, id: ViewTemplateId) -> Result<ViewTemplate, ModelError> {
+        // The plans that followed it as the plans' template keep its look.
+        if self.plan_template == Some(id) {
+            let plain = self.plain_level_style();
+            let levels: Vec<LevelId> = self.levels.keys().copied().collect();
+            for l in levels {
+                self.level_styles.entry(l).or_insert_with(|| plain.clone());
+            }
+            self.plan_template = None;
+        }
         let t = self
             .view_templates
             .remove(&id)
@@ -513,12 +553,16 @@ impl Model {
                 })?;
             self.plan_views.insert(v.id, v);
         }
+        // As saved: a level's own look stays its own even when it is the
+        // plain one (the plans' template comes after).
         for (level, style) in level_styles {
-            self.set_level_style(level, style)
-                .map_err(|error| RestoreError {
+            if !self.levels.contains_key(&level) {
+                return Err(RestoreError {
                     element: format!("style of level {}", level.0),
-                    error,
-                })?;
+                    error: ModelError::UnknownLevel(level),
+                });
+            }
+            self.level_styles.insert(level, style);
         }
         for t in templates {
             claim(t.id.0, None)
@@ -690,5 +734,47 @@ mod tests {
         let mut s = ViewStyle::default();
         s.set_graphics(Category::Slabs, GraphicOverride::default());
         assert!(s.overrides.is_empty());
+    }
+}
+
+#[cfg(test)]
+mod plan_template_tests {
+    use super::*;
+
+    #[test]
+    fn the_plans_follow_their_template() {
+        let mut m = Model::new("Plantas");
+        let a = m.add_level("Baja", 0.0);
+        let b = m.add_level("Primera", 3.0);
+        let arq = m
+            .add_view_template(ViewTemplate {
+                id: ViewTemplateId(0),
+                name: "Arquitectura".into(),
+                style: ViewStyle {
+                    discipline: Some(crate::ElementDiscipline::Architecture),
+                    ..Default::default()
+                },
+            })
+            .unwrap();
+        assert_eq!(m.level_style(a).template, None);
+        m.set_plan_template(Some(arq)).unwrap();
+        // Both levels follow it without a look of their own.
+        assert_eq!(m.level_style(a).template, Some(arq));
+        assert!(m.level_styles.is_empty());
+        // One level shown otherwise keeps it; set back, it follows again.
+        let own = ViewStyle::default();
+        m.set_level_style(b, own.clone()).unwrap();
+        assert_eq!(m.level_style(b), own);
+        let plain = m.level_style(a);
+        m.set_level_style(b, plain).unwrap();
+        assert!(m.level_styles.is_empty());
+        // Removing the template leaves the plans with its look.
+        m.remove_view_template(arq).unwrap();
+        assert_eq!(m.plan_template(), None);
+        assert_eq!(
+            m.level_style(a).discipline,
+            Some(crate::ElementDiscipline::Architecture)
+        );
+        assert_eq!(m.level_style(a).template, None);
     }
 }

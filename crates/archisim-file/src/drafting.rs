@@ -732,6 +732,9 @@ pub(crate) struct Style {
     /// The view template it follows (version 90).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub template: Option<u64>,
+    /// The installations shown, by group (version 92); none, all.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub systems: Vec<String>,
 }
 
 /// A category drawn otherwise in a view (version 27): only what changes.
@@ -829,6 +832,7 @@ impl Default for Style {
             overrides: Vec::new(),
             discipline: None,
             template: None,
+            systems: Vec::new(),
         }
     }
 }
@@ -861,6 +865,7 @@ impl Style {
                 .collect(),
             discipline: s.discipline.map(|d| d.code().to_string()),
             template: s.template.map(|t| t.0),
+            systems: s.systems.iter().map(|g| g.code().to_string()).collect(),
         }
     }
 
@@ -913,6 +918,14 @@ impl Style {
                 })
                 .transpose()?,
             template: self.template.map(core::ViewTemplateId),
+            systems: self
+                .systems
+                .iter()
+                .map(|c| {
+                    core::ServiceGroup::from_code(c)
+                        .ok_or_else(|| bad(format!("unknown installation «{c}»")))
+                })
+                .collect::<Result<_, _>>()?,
         })
     }
 
@@ -926,6 +939,7 @@ impl Style {
             && self.overrides.is_empty()
             && self.discipline.is_none()
             && self.template.is_none()
+            && self.systems.is_empty()
     }
 }
 

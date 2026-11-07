@@ -2739,7 +2739,7 @@ mod cte_ui;
 mod curtain_types_ui;
 mod curtain_ui;
 mod decal_ui;
-mod discipline_ui;
+pub(crate) mod discipline_ui;
 mod draft_props;
 mod drafting_view_ui;
 mod drain_ui;

@@ -551,6 +551,62 @@ pub fn of_type_on_level(model: &Model, level: LevelId, t: TypeOf) -> Vec<Element
 ///
 /// Doors and windows win over their walls, and walls over slabs. Among
 /// elements of the same kind, the one whose outline is closest wins.
+/// The category a plan draws an element in (what a view's visibility
+/// says of it); `None`, always drawn.
+pub fn category(model: &archisim_core::Model, e: Element) -> Option<archisim_core::Category> {
+    use archisim_core::Category as C;
+    Some(match e {
+        Element::Dimension(_) => C::Dimensions,
+        Element::Mark(_) => C::LevelMarks,
+        Element::Draft(_) => C::Drafting,
+        Element::Opening(_) => C::Openings,
+        Element::Wall(_) => C::Walls,
+        Element::Slab(_) => C::Slabs,
+        Element::Column(_) | Element::Beam(_) => C::Structure,
+        Element::Section(_) => C::SectionMarks,
+        Element::Roof(_) | Element::Dormer(..) => C::Roofs,
+        Element::Stair(_) => C::Stairs,
+        Element::Terrain(_) => C::Terrain,
+        Element::CurtainWall(_) => C::CurtainWalls,
+        Element::Railing(_) => C::Railings,
+        Element::Object(o) => match model.object(o) {
+            Some(ob) => archisim_plan::object_category(model, ob),
+            None => C::Objects,
+        },
+        Element::Room(_) => C::Rooms,
+        Element::Tag(_) => C::Tags,
+        Element::Footing(_) => C::Foundations,
+        Element::Grid(_) => C::Grids,
+        Element::RefPlane(_) => C::RefPlanes,
+        Element::Mass(_) | Element::Edge(_) => C::Masses,
+        Element::Plot(_) => C::Plots,
+        Element::Road(_) | Element::Roundabout(_) | Element::Marking(_) => C::Roads,
+        Element::Pool(_) => C::Pools,
+        Element::Run(_) | Element::Device(_) => C::Services,
+        Element::Planting(_) => C::Vegetation,
+        _ => return None,
+    })
+}
+
+/// Whether a view with `style` (as drawn: [`archisim_core::ViewStyle::effective`])
+/// lets an element be picked: what it leaves out or draws in grey cannot
+/// be (Revit's underlay), so a crowded plan picks what is worked on.
+pub fn pickable(
+    model: &archisim_core::Model,
+    style: &archisim_core::ViewStyle,
+    e: Element,
+) -> bool {
+    if category(model, e).is_some_and(|c| !style.shows(c)) {
+        return false;
+    }
+    let Some(id) = crate::app::discipline_ui::element_id(e) else {
+        return true;
+    };
+    !model.hidden_by_discipline(&style.hidden_disciplines, id)
+        && !model.dimmed(style.focus, id)
+        && !model.hidden_by_group(&style.systems, id)
+}
+
 pub fn pick<G: Geo + ?Sized>(
     geo: &G,
     level: LevelId,

@@ -16,6 +16,10 @@ use super::*;
 pub fn element_id(e: Element) -> Option<u64> {
     match e {
         Element::Terrain(i) => Some(i.0),
+        // Pipes, ducts and devices: of the services, locked and picked as
+        // such.
+        Element::Run(r) => Some(r.0),
+        Element::Device(d) => Some(d.0),
         other => super::params_ui::raw_id(other),
     }
 }

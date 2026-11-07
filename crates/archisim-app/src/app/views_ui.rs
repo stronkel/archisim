@@ -316,6 +316,155 @@ impl ArchiSimApp {
         }
     }
 
+    /// The pill at the top left of a plan: the template the view follows
+    /// and, on a click, every template to switch to — the disciplines
+    /// first, then each kind of installation — and the one the levels'
+    /// plans follow (`docs/INTERFAZ.md` §13.5).
+    pub(super) fn template_pill(&mut self, ctx: &egui::Context, rect: egui::Rect) {
+        let p = super::theme::Palette::current(ctx);
+        let model = self.ed.model();
+        let templates: Vec<(ViewTemplateId, String)> = model
+            .view_templates()
+            .map(|t| (t.id, t.name.clone()))
+            .collect();
+        let missing = archisim_library::standards::discipline_templates()
+            .iter()
+            .any(|t| !templates.iter().any(|x| x.1 == t.0));
+        let plans = model.plan_template();
+        let following = self.view_style.template;
+        // An installation's template by the installation alone.
+        let shown = following
+            .and_then(|id| templates.iter().find(|t| t.0 == id))
+            .map_or("Aspecto propio".to_string(), |t| {
+                t.1.trim_start_matches("Instalaciones · ").to_string()
+            });
+        let installations = |n: &str| n.starts_with("Instalaciones ·");
+        let disciplines: Vec<&str> = archisim_library::standards::discipline_templates()
+            .iter()
+            .map(|t| t.0)
+            .filter(|n| !installations(n))
+            .collect();
+        let mut pick: Option<Option<ViewTemplateId>> = None;
+        let mut for_plans = false;
+        let mut bring = false;
+        egui::Area::new(egui::Id::unique("template-pill"))
+            .order(egui::Order::Foreground)
+            .fixed_pos(rect.left_top() + egui::vec2(12.0, 12.0))
+            .show(ctx, |ui| {
+                egui::Frame::new()
+                    .fill(p.panel)
+                    .stroke(egui::Stroke::new(1.0, p.line))
+                    .corner_radius(egui::CornerRadius::same(12))
+                    .inner_margin(egui::Margin::symmetric(8, 3))
+                    .show(ui, |ui| {
+                        ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
+                        ui.menu_button(format!("{shown}  ▾"), |ui| {
+                            ui.set_min_width(240.0);
+                            ui.label(egui::RichText::new("Disciplinas").small().weak());
+                            for (id, name) in templates.iter().filter(|t| disciplines.contains(&t.1.as_str())) {
+                                if ui.selectable_label(following == Some(*id), name).clicked() {
+                                    pick = Some(Some(*id));
+                                    ui.close();
+                                }
+                            }
+                            ui.separator();
+                            ui.label(egui::RichText::new("Instalaciones, una a una").small().weak());
+                            for (id, name) in templates.iter().filter(|t| installations(&t.1)) {
+                                let short = name.trim_start_matches("Instalaciones · ");
+                                if ui.selectable_label(following == Some(*id), short).clicked() {
+                                    pick = Some(Some(*id));
+                                    ui.close();
+                                }
+                            }
+                            let others: Vec<&(ViewTemplateId, String)> = templates
+                                .iter()
+                                .filter(|t| !installations(&t.1) && !disciplines.contains(&t.1.as_str()))
+                                .collect();
+                            if !others.is_empty() {
+                                ui.separator();
+                                ui.label(egui::RichText::new("Otras plantillas").small().weak());
+                                for (id, name) in others {
+                                    if ui.selectable_label(following == Some(*id), name).clicked() {
+                                        pick = Some(Some(*id));
+                                        ui.close();
+                                    }
+                                }
+                            }
+                            ui.separator();
+                            if ui
+                                .selectable_label(following.is_none(), "Aspecto propio (todo)")
+                                .on_hover_text("Sin plantilla: la vista enseña lo que diga Visibilidad y gráficos")
+                                .clicked()
+                            {
+                                pick = Some(None);
+                                ui.close();
+                            }
+                            if missing {
+                                ui.separator();
+                                if ui
+                                    .button("Traer las plantillas de disciplina e instalaciones")
+                                    .on_hover_text("Añade al proyecto las que le faltan y, si las plantas no siguen ninguna, pone Arquitectura en todas")
+                                    .clicked()
+                                {
+                                    bring = true;
+                                    ui.close();
+                                }
+                            }
+                            if following.is_some() && following != plans {
+                                ui.separator();
+                                if ui
+                                    .button("Usarla en todas las plantas")
+                                    .on_hover_text("Las plantas que no tienen su propio aspecto siguen esta plantilla")
+                                    .clicked()
+                                {
+                                    for_plans = true;
+                                    ui.close();
+                                }
+                            }
+                        })
+                        .response
+                        .on_hover_text("Plantilla de la vista: qué se ve en ella. Arquitectura deja fuera las instalaciones; cada instalación tiene la suya");
+                    });
+            });
+        if bring {
+            let r = self.ed.transact("Plantillas de disciplina", |m| {
+                let (_, added) = archisim_library::standards::add_schemes(m);
+                if m.plan_template().is_none() {
+                    archisim_library::standards::set_architecture_plans(m);
+                }
+                Ok(added)
+            });
+            match r {
+                Ok(n) => {
+                    // The open plan follows what its level now follows.
+                    self.view_style = self.ed.model().level_style(self.ed.level);
+                    self.say(format!(
+                        "{n} plantilla{} añadida{}; las plantas siguen Arquitectura, sin instalaciones.",
+                        if n == 1 { "" } else { "s" },
+                        if n == 1 { "" } else { "s" }
+                    ));
+                }
+                Err(e) => self.complain(format!("No se puede: {e}.")),
+            }
+        }
+        if let Some(id) = pick {
+            self.apply_template(id);
+        }
+        if for_plans {
+            let id = self.view_style.template;
+            let name = shown.clone();
+            let r = self
+                .ed
+                .transact("Plantilla de las plantas", |m| m.set_plan_template(id));
+            match r {
+                Ok(()) => self.say(format!(
+                    "Todas las plantas siguen «{name}» salvo las que tienen su propio aspecto."
+                )),
+                Err(e) => self.complain(format!("No se puede: {e}.")),
+            }
+        }
+    }
+
     /// The template the active view follows, if any.
     pub(super) fn followed_template(&self) -> Option<ViewTemplate> {
         self.view_style

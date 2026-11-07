@@ -842,6 +842,124 @@ pub struct ServiceDevice {
     pub fixture: Option<ObjectTypeId>,
 }
 
+/// The kinds of installation a view can show one by one (one view
+/// template each): what a run's system or a device's kind belongs to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum ServiceGroup {
+    Electricity,
+    Water,
+    Drainage,
+    Ventilation,
+    Climate,
+    Fire,
+    Urban,
+}
+
+impl ServiceGroup {
+    pub const ALL: [ServiceGroup; 7] = [
+        ServiceGroup::Electricity,
+        ServiceGroup::Water,
+        ServiceGroup::Drainage,
+        ServiceGroup::Ventilation,
+        ServiceGroup::Climate,
+        ServiceGroup::Fire,
+        ServiceGroup::Urban,
+    ];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            ServiceGroup::Electricity => "Electricidad",
+            ServiceGroup::Water => "Fontanería",
+            ServiceGroup::Drainage => "Saneamiento",
+            ServiceGroup::Ventilation => "Ventilación",
+            ServiceGroup::Climate => "Climatización",
+            ServiceGroup::Fire => "Protección contra incendios",
+            ServiceGroup::Urban => "Redes urbanas",
+        }
+    }
+
+    pub fn code(self) -> &'static str {
+        match self {
+            ServiceGroup::Electricity => "electricity",
+            ServiceGroup::Water => "water",
+            ServiceGroup::Drainage => "drainage",
+            ServiceGroup::Ventilation => "ventilation",
+            ServiceGroup::Climate => "climate",
+            ServiceGroup::Fire => "fire",
+            ServiceGroup::Urban => "urban",
+        }
+    }
+
+    pub fn from_code(s: &str) -> Option<ServiceGroup> {
+        ServiceGroup::ALL.into_iter().find(|g| g.code() == s)
+    }
+
+    /// The group of a run's system.
+    pub fn of_system(s: ServiceSystem) -> ServiceGroup {
+        use ServiceSystem as S;
+        match s {
+            S::ColdWater | S::HotWater => ServiceGroup::Water,
+            S::Drainage | S::Rainwater => ServiceGroup::Drainage,
+            S::Heating | S::SupplyAir | S::ReturnAir => ServiceGroup::Climate,
+            S::ExhaustAir => ServiceGroup::Ventilation,
+            S::FireProtection => ServiceGroup::Fire,
+            _ => ServiceGroup::Urban,
+        }
+    }
+
+    /// The group of a device's kind; `None`, a generic piece of equipment
+    /// (shown with any group).
+    pub fn of_device(k: DeviceKind) -> Option<ServiceGroup> {
+        use DeviceKind as D;
+        Some(match k {
+            D::Equipment => return None,
+            k if k.is_urban() => ServiceGroup::Urban,
+            k if k.is_electric() => ServiceGroup::Electricity,
+            D::SolarPanel => ServiceGroup::Electricity,
+            D::Downpipe => ServiceGroup::Drainage,
+            D::Riser
+            | D::Valve
+            | D::WaterMeter
+            | D::Tank
+            | D::Pump
+            | D::WaterHeater
+            | D::SolarCollector => ServiceGroup::Water,
+            D::Radiator | D::Grille | D::Diffuser => ServiceGroup::Climate,
+            k if k.is_ventilation() => ServiceGroup::Ventilation,
+            D::Sprinkler
+            | D::HoseReel
+            | D::Extinguisher
+            | D::SmokeDetector
+            | D::CallPoint
+            | D::Siren
+            | D::EmergencyLight
+            | D::ExitSign => ServiceGroup::Fire,
+            _ => return None,
+        })
+    }
+}
+
+impl Model {
+    /// Whether a view showing only the installation groups `shown` (all
+    /// of them when empty) leaves out the run or device `id`.
+    pub fn hidden_by_group(
+        &self,
+        shown: &std::collections::BTreeSet<ServiceGroup>,
+        id: u64,
+    ) -> bool {
+        if shown.is_empty() {
+            return false;
+        }
+        if let Some(r) = self.run(RunId(id)) {
+            return !shown.contains(&ServiceGroup::of_system(r.system));
+        }
+        if let Some(d) = self.device(DeviceId(id)) {
+            return ServiceGroup::of_device(d.kind).is_some_and(|g| !shown.contains(&g));
+        }
+        false
+    }
+}
+
 /// Data needed to place a device.
 #[derive(Debug, Clone, PartialEq)]
 pub struct NewDevice {

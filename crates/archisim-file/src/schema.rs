@@ -251,6 +251,9 @@ pub(crate) struct ProjectFile {
     /// The ventilation's system and draught zone (version 91).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ventilation: Option<VentilationOf>,
+    /// The template the levels' plans follow (version 92).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plan_template: Option<u64>,
     /// Rooms (IfcSpace) and tags of doors, windows, walls and rooms
     /// (version 7).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -4146,6 +4149,7 @@ impl ProjectFile {
             water: WaterOf::out(&p.water_site),
             thermal: ThermalOf::out(&p.thermal_site),
             ventilation: VentilationOf::out(&p.ventilation_site),
+            plan_template: p.plan_template.map(|t| t.0),
             level_underlays: crate::drafting::level_underlays_out(&p.level_underlays),
             rooms: crate::rooms::rooms_out(&p.rooms),
             tags: crate::rooms::tags_out(&p.tags),
@@ -4771,6 +4775,7 @@ impl ProjectFile {
                 Some(t) => t.site()?,
                 None => core::ThermalSite::default(),
             },
+            plan_template: self.plan_template.map(core::ViewTemplateId),
             ventilation_site: match &self.ventilation {
                 Some(v) => v.site()?,
                 None => core::VentilationSite::default(),

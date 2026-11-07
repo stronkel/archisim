@@ -295,12 +295,48 @@ pub fn discipline_templates() -> Vec<(&'static str, ViewStyle)> {
         discipline: Some(d),
         ..Default::default()
     };
-    vec![
+    let mut v = vec![
         ("Arquitectura", style(D::Architecture)),
         ("Estructura", style(D::Structure)),
         ("Instalaciones", style(D::Services)),
         ("Urbanización", style(D::Site)),
+    ];
+    // One per kind of installation: the rest of them left out.
+    for (name, g) in SERVICE_TEMPLATES {
+        let mut s = style(D::Services);
+        s.systems = [g].into();
+        if g == archisim_core::ServiceGroup::Urban {
+            s.discipline = Some(D::Site);
+        }
+        v.push((name, s));
+    }
+    v
+}
+
+/// The templates of each kind of installation, by name.
+pub const SERVICE_TEMPLATES: [(&str, archisim_core::ServiceGroup); 7] = {
+    use archisim_core::ServiceGroup as G;
+    [
+        ("Instalaciones · Electricidad", G::Electricity),
+        ("Instalaciones · Fontanería", G::Water),
+        ("Instalaciones · Saneamiento", G::Drainage),
+        ("Instalaciones · Ventilación", G::Ventilation),
+        ("Instalaciones · Climatización", G::Climate),
+        ("Instalaciones · Contra incendios", G::Fire),
+        ("Instalaciones · Redes urbanas", G::Urban),
     ]
+};
+
+/// The template the plans of a new project follow: «Arquitectura», which
+/// leaves out the installations (they have their own templates).
+pub fn set_architecture_plans(m: &mut Model) {
+    let id = m
+        .view_templates()
+        .find(|t| t.name == "Arquitectura")
+        .map(|t| t.id);
+    if let Some(id) = id {
+        let _ = m.set_plan_template(Some(id));
+    }
 }
 
 /// The project's title block of a layout, by the layout's name; added
@@ -407,6 +443,15 @@ mod tests {
             .and_then(|t| m.title_block(t))
             .unwrap();
         assert_eq!(tb.design, TitleBlockDesign::Classic);
+        // A template per kind of installation, showing only it.
+        let water = m
+            .view_templates()
+            .find(|t| t.name == "Instalaciones · Fontanería")
+            .unwrap();
+        assert_eq!(
+            water.style.systems,
+            [archisim_core::ServiceGroup::Water].into()
+        );
         // Nothing twice.
         assert_eq!(add_schemes(&mut m), (0, 0));
         assert_eq!(m.title_blocks().count(), 3);

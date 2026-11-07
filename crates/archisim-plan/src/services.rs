@@ -34,13 +34,24 @@ pub fn draw_services(
     k: f64,
     visible: &dyn Fn(&[Point2]) -> bool,
     walls: &[&[Point2]],
+    lamps_shown: bool,
 ) {
-    let runs: Vec<_> = model.runs_on_level(level).collect();
-    let mut devices: Vec<_> = model.devices_on_level(level).collect();
+    // What the view leaves out (its discipline or its installations) is
+    // not drawn at all, not even the circuits joining it.
+    let shown = |id: u64| !crate::dim::is_hidden(id);
+    let runs: Vec<_> = model
+        .runs_on_level(level)
+        .filter(|r| shown(r.id.0))
+        .collect();
+    let mut devices: Vec<_> = model
+        .devices_on_level(level)
+        .filter(|d| shown(d.id.0))
+        .collect();
     // Risers and downpipes of the levels below that pass through this one.
     let elevation = model.level(level).map_or(0.0, |l| l.elevation);
     devices.extend(model.devices().filter(|d| {
-        d.level != level
+        shown(d.id.0)
+            && d.level != level
             && d.kind.is_vertical()
             && model.level(d.level).is_some_and(|l| {
                 let bottom = l.elevation + d.elevation;
@@ -52,7 +63,7 @@ pub fn draw_services(
     let lamps: Vec<archisim_core::ServiceDevice> = model
         .lamp_points()
         .into_iter()
-        .filter(|(_, l)| *l == level)
+        .filter(|(_, l)| lamps_shown && *l == level)
         .filter_map(|(o, _)| {
             let ob = model.object(o)?;
             Some(archisim_core::ServiceDevice {
