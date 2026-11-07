@@ -332,6 +332,20 @@ fn main() -> ExitCode {
                 ExitCode::FAILURE
             }
         },
+        Some("secciones") => match args.get(1) {
+            Some(project) => {
+                let project = PathBuf::from(project);
+                let dir = match args.get(2) {
+                    Some(d) => PathBuf::from(d),
+                    None => project.parent().map(Path::to_path_buf).unwrap_or_default(),
+                };
+                report(run_sections(&project, &dir))
+            }
+            None => {
+                eprintln!("uso: archisim secciones <proyecto.archisim> [carpeta]");
+                ExitCode::FAILURE
+            }
+        },
         Some("exportar") | Some("export") => match args.get(1) {
             Some(project) => {
                 let project = PathBuf::from(project);
@@ -1350,6 +1364,21 @@ fn run_export(project: &Path, dir: &Path) -> Result<(), Box<dyn std::error::Erro
     export_all(&model, dir, &stem)
 }
 
+fn run_sections(project: &Path, dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let model = archisim_file::open(project)
+        .map_err(|e| format!("no se puede abrir {}: {e}", project.display()))?;
+    let stem = project
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .filter(|s| !s.is_empty())
+        .unwrap_or("proyecto")
+        .to_string();
+    if !dir.as_os_str().is_empty() {
+        std::fs::create_dir_all(dir)?;
+    }
+    write_sections(&model, dir, &stem)
+}
+
 fn run_import(ifc: &Path, project: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let bytes =
         std::fs::read(ifc).map_err(|e| format!("no se puede leer {}: {e}", ifc.display()))?;
@@ -1576,19 +1605,27 @@ fn export_all(model: &Model, dir: &Path, stem: &str) -> Result<(), Box<dyn std::
         )?;
         println!("  Planos en PDF: {}", pdf.display());
     }
+    write_sections(model, dir, stem)
+}
+
+/// Every section and elevation of a project, at 1:100 and at 1:50 (with
+/// the names of the pipes cut, the bars and the joints).
+fn write_sections(model: &Model, dir: &Path, stem: &str) -> Result<(), Box<dyn std::error::Error>> {
     for sec in model.sections() {
-        let file = format!("{stem}-{}.svg", slug(&sec.title()));
-        let path = dir.join(&file);
         let drawing = archisim_plan::section::section_drawing(model, sec);
-        let options = PlanOptions {
-            scale: 100.0,
-            ..PlanOptions::default()
-        };
-        std::fs::write(
-            &path,
-            archisim_plan::section::render_section(model, &drawing, &options),
-        )?;
-        println!("  {} 1:100: {}", sec.title(), path.display());
+        for (scale, suffix) in [(100.0, ""), (50.0, "-1a50")] {
+            let file = format!("{stem}-{}{suffix}.svg", slug(&sec.title()));
+            let path = dir.join(&file);
+            let options = PlanOptions {
+                scale,
+                ..PlanOptions::default()
+            };
+            std::fs::write(
+                &path,
+                archisim_plan::section::render_section(model, &drawing, &options),
+            )?;
+            println!("  {} 1:{scale}: {}", sec.title(), path.display());
+        }
     }
     Ok(())
 }
