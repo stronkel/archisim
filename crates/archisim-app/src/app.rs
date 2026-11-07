@@ -505,6 +505,7 @@ pub struct ArchiSimApp {
     pub water: water_ui::WaterWindow,
     pub drain: drain_ui::DrainWindow,
     pub ventilation: ventilation_ui::VentilationWindow,
+    pub climate: climate_ui::ClimateWindow,
     /// A topographic survey being imported (its window is open).
     pub survey_import: Option<survey_ui::SurveyImport>,
     /// Cartography being brought around the project (H7; its window is open).
@@ -888,6 +889,7 @@ impl ArchiSimApp {
             water: Default::default(),
             drain: Default::default(),
             ventilation: Default::default(),
+            climate: Default::default(),
             survey_import: None,
             carto_import: None,
             carto_download: None,
@@ -2459,6 +2461,7 @@ impl ArchiSimApp {
         self.water_dialog(ctx);
         self.drain_dialog(ctx);
         self.ventilation_dialog(ctx);
+        self.climate_dialog(ctx);
         self.coord_dialog(ctx);
         if self.show_about {
             widgets::dialog("Acerca de ArchiSim")
@@ -2715,6 +2718,7 @@ mod cards;
 mod carto_download_ui;
 mod carto_ui;
 mod chrome;
+mod climate_ui;
 mod collection_ui;
 mod concept_ui;
 mod context_bar;

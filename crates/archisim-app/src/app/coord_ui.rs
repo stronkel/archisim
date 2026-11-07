@@ -181,6 +181,14 @@ impl ArchiSimApp {
                 self.ventilation.open = true;
                 ui.close();
             }
+            if ui
+                .button("Envolvente y cargas térmicas…")
+                .on_hover_text("DB-HE 1: transmitancias de la envolvente y su K; cargas de calefacción y refrigeración de cada local, con sus equipos")
+                .clicked()
+            {
+                self.climate.open = true;
+                ui.close();
+            }
             self.team_menu_items(ui);
         });
     }

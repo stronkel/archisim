@@ -244,6 +244,10 @@ pub(crate) struct ProjectFile {
     /// 86).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub water: Option<WaterOf>,
+    /// The data of the thermal calculations besides the drawing (version
+    /// 89).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thermal: Option<ThermalOf>,
     /// Rooms (IfcSpace) and tags of doors, windows, walls and rooms
     /// (version 7).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -4137,6 +4141,7 @@ impl ProjectFile {
                 .collect(),
             electrical: ElectricalOf::out(&p.electrical_site),
             water: WaterOf::out(&p.water_site),
+            thermal: ThermalOf::out(&p.thermal_site),
             level_underlays: crate::drafting::level_underlays_out(&p.level_underlays),
             rooms: crate::rooms::rooms_out(&p.rooms),
             tags: crate::rooms::tags_out(&p.tags),
@@ -4757,6 +4762,10 @@ impl ProjectFile {
             water_site: match &self.water {
                 Some(w) => w.site(),
                 None => core::WaterSite::default(),
+            },
+            thermal_site: match &self.thermal {
+                Some(t) => t.site()?,
+                None => core::ThermalSite::default(),
             },
             level_underlays: crate::drafting::level_underlays_in(self.level_underlays)?,
             rooms: crate::rooms::rooms_in(self.rooms)?,
@@ -6133,6 +6142,66 @@ impl StructureOf {
                 })
             })
             .collect()
+    }
+}
+
+/// The data of the thermal calculations besides the drawing (version 89).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ThermalOf {
+    /// «alpha», «a» … «e».
+    pub winter: String,
+    pub summer: u8,
+    pub winter_air: f64,
+    pub summer_air: f64,
+    pub heated: f64,
+    pub cooled: f64,
+    pub window_u: f64,
+    pub door_u: f64,
+    pub glass_g: f64,
+    /// `[material id, W/mK]`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub conductivity: Vec<(u64, f64)>,
+}
+
+impl ThermalOf {
+    fn out(site: &core::ThermalSite) -> Option<Self> {
+        if *site == core::ThermalSite::default() {
+            return None;
+        }
+        Some(ThermalOf {
+            winter: site.winter.code().into(),
+            summer: site.summer,
+            winter_air: site.winter_air,
+            summer_air: site.summer_air,
+            heated: site.heated,
+            cooled: site.cooled,
+            window_u: site.window_u,
+            door_u: site.door_u,
+            glass_g: site.glass_g,
+            conductivity: site.conductivity.iter().map(|(m, v)| (m.0, *v)).collect(),
+        })
+    }
+
+    fn site(&self) -> Result<core::ThermalSite, FileError> {
+        Ok(core::ThermalSite {
+            winter: core::WinterZone::from_code(&self.winter).ok_or_else(|| FileError::Value {
+                element: "thermal".into(),
+                message: format!("climate zone «{}»", self.winter),
+            })?,
+            summer: self.summer,
+            winter_air: self.winter_air,
+            summer_air: self.summer_air,
+            heated: self.heated,
+            cooled: self.cooled,
+            window_u: self.window_u,
+            door_u: self.door_u,
+            glass_g: self.glass_g,
+            conductivity: self
+                .conductivity
+                .iter()
+                .map(|(m, v)| (core::MaterialId(*m), *v))
+                .collect(),
+        })
     }
 }
 

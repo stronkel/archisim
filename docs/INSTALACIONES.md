@@ -1,8 +1,8 @@
 # Instalaciones: dibujo y cálculo
 
-ArchiSim dibuja las instalaciones (tuberías, conductos y aparatos) y las calcula sobre lo dibujado. Este documento recoge la segunda vuelta: cómo se meten las tuberías, el cálculo eléctrico con su esquema unifilar, el cálculo de fontanería, el de saneamiento y el de ventilación. Lo que sigue (climatización y DB-HE) se añadirá aquí.
+ArchiSim dibuja las instalaciones (tuberías, conductos y aparatos) y las calcula sobre lo dibujado. Este documento recoge la segunda vuelta: cómo se meten las tuberías, el cálculo eléctrico con su esquema unifilar, el cálculo de fontanería, el de saneamiento, el de ventilación y la envolvente con las cargas térmicas.
 
-Código: `archisim-core::model::pipe_routing` (uniones, cambio de planta y trazado automático), `archisim-core::model::water` (datos del suministro), crate `archisim-mep` (cálculos, depende de `archisim-core` y `archisim-geom`: `electrical`, `water`, `drain` y `ventilation`), `archisim-plan::single_line` (esquema unifilar), `archisim-plan::water_schematic` (esquemas de fontanería y saneamiento), `archisim-cte::electrical`, `archisim-cte::services::calculation` y `archisim-cte::ventilation` (comprobación) y, en la app, `app/services_ui`, `app/electrical_ui`, `app/water_ui`, `app/drain_ui` y `app/ventilation_ui`.
+Código: `archisim-core::model::pipe_routing` (uniones, cambio de planta y trazado automático), `archisim-core::model::water` (datos del suministro), crate `archisim-mep` (cálculos, depende de `archisim-core` y `archisim-geom`: `electrical`, `water`, `drain`, `ventilation` y `thermal`), `archisim-plan::single_line` (esquema unifilar), `archisim-plan::water_schematic` (esquemas de fontanería y saneamiento), `archisim-cte::electrical`, `archisim-cte::services::calculation`, `archisim-cte::ventilation` y `archisim-cte::energy` (comprobación) y, en la app, `app/services_ui`, `app/electrical_ui`, `app/water_ui`, `app/drain_ui`, `app/ventilation_ui` y `app/climate_ui`.
 
 ## 1. Meter las tuberías
 
@@ -204,7 +204,65 @@ Son 24 viviendas y 6 redes de extracción (de 202 a 346 m³/h). Para el cálculo
 
 **A comprobar por Antonio**: los valores de las tablas 2.1, 2.2, 4.1 y 4.2 del HS 3 (versión de 2017 y su corrección de 2019) están escritos de memoria y no los he podido contrastar con el documento oficial desde aquí. Están juntos al principio de `crates/archisim-mep/src/ventilation.rs` para corregirlos de una vez. También a decidir: la holgura de 1 cm que se supone bajo las puertas, y si el estudio o despacho debe contar como dormitorio.
 
-## 7. Lo que no hace (todavía)
+## 7. Envolvente (DB-HE 1) y cargas térmicas
+
+Colaboración → **Envolvente y cargas térmicas…**. En la ventana se escribe lo que no sale del dibujo:
+- la **zona climática** del municipio (DB-HE, anejo B; por defecto A4, la de Huelva);
+- las **temperaturas** de cálculo: exterior en invierno y en verano (el botón «Temperaturas de la zona» pone unas habituales) e interior calefactado (21 °C) y refrigerado (25 °C);
+- la **transmitancia de las ventanas** (marco y vidrio juntos; 2,7 W/m²K por defecto) y **de las puertas exteriores** (2,2), y el **factor solar** del vidrio con su protección (0,6);
+- la **conductividad** de cada material de la envolvente. Sale la habitual por su nombre y su clase (lana mineral 0,040; XPS 0,034; ladrillo perforado 0,50; hueco 0,43; hormigón armado 2,5; enlucido de yeso 0,57…). Se puede cambiar por la del producto, y «Habitual» la devuelve.
+
+**La envolvente de cada local** sale de su contorno:
+- **Lados al exterior.** Un lado da al exterior si a 60 cm por fuera no hay otro local de la planta (se mira cada 25 cm a lo largo). Lleva su muro, con las ventanas y puertas que caen en ese lado, o el muro cortina si lo hay.
+- **Lo que se deja fuera:**
+  - los lados contra otro local (calefactado o no);
+  - los muros interiores sin ventanas, que dan a una escalera o un patinillo;
+  - las medianeras.
+  
+  Un muro interior con ventana se toma como de patio de luces.
+- **Arriba**, el forjado de la planta de encima o una cubierta, si no hay otro local encima.
+- **Abajo**, en la planta baja, la solera contra el terreno; en las demás plantas, el forjado que vuela sobre el exterior.
+
+**Transmitancias.** U = 1/(Rsi + Σ e/λ + Rse) con las capas del tipo:
+- resistencias superficiales de 0,13 y 0,04 en muros, 0,10 hacia arriba en cubiertas y 0,17 hacia abajo en suelos;
+- una cámara de aire cuenta 0,17 m²K/W;
+- el suelo sobre el terreno, solo con sus capas, sin el efecto del terreno (queda del lado de la seguridad).
+
+**DB-HE 1.**
+- Cada tipo de la envolvente contra su límite de la tabla 3.1.1.a-HE1, por la letra de invierno:
+  - muros y suelos al exterior: 0,80 · 0,70 · 0,56 · 0,49 · 0,41 · 0,37;
+  - cubiertas: 0,55 · 0,50 · 0,44 · 0,40 · 0,35 · 0,33;
+  - contra el terreno: 0,90 · 0,80 · 0,75 · 0,70 · 0,65 · 0,59;
+  - huecos: 3,2 · 2,7 · 2,3 · 2,1 · 1,8 · 1,8;
+  - puertas: 5,7.
+- El **coeficiente global K** = Σ U·A / Σ A de los locales calefactados, contra la tabla 3.1.1.b-HE1 de vivienda nueva según la compacidad V/A (entre V/A = 1 y 4 en línea recta).
+
+**Cargas de cada local**
+- **Calefacción:**
+  - transmisión U·A·ΔT, con la mitad de la diferencia contra el terreno;
+  - ventilación 1,2·q·ΔT, con el caudal de admisión del DB-HS 3, o media renovación a la hora si el local no es de una vivienda.
+- **Refrigeración:**
+  - la misma transmisión con la diferencia de verano;
+  - el sol por los vidrios: 100 W/m² al norte, 450 al este, 350 al sur, 500 al oeste y 750 en lucernarios, por el factor solar;
+  - las personas: una por cada 10 m² en los locales vivideros, con 75 W sensibles y 55 latentes;
+  - luz y aparatos: 5 + 3 W/m², o 5 + 20 en las cocinas;
+  - la ventilación.
+- **Equipos:**
+  - una unidad interior en cada local vividero (de 2,0 a 7,1 kW) y una bomba de calor por vivienda (o por local, si no es de una vivienda), de 3,5 a 20 kW;
+  - los radiadores dibujados se comparan con la carga de calefacción de su local, a 2000 W por m² de frente.
+
+Todo sale en la ventana, en la Comprobación CTE (sección «Ahorro de energía (DB-HE 1) y cargas térmicas») y en `archisim climatizacion <proyecto>`.
+
+El edificio de Florence Street, en A4: el ladrillo de fachada, el muro cortina, las ventanas y la cubierta transitable cumplen. No cumplen:
+- el hormigón visto y los tabiques de los patios (U de 2,6 a 3,7);
+- la losa vista;
+- la solera sin aislar.
+
+Por eso K da 2,27 contra 0,80. Los tipos de ese edificio están hechos para dibujarlo, no para cumplir el HE. Para que cumpla hay que darles su aislamiento. En total salen 35 kW de calefacción y 100 kW de refrigeración, con una bomba de calor por vivienda y otra por cada local de la planta baja.
+
+**A comprobar por Antonio**: los límites de las tablas 3.1.1.a y 3.1.1.b del HE 1 (versión de 2019), las conductividades habituales, la radiación por orientación y las cargas interiores están escritos de memoria. Están juntos al principio de `crates/archisim-mep/src/thermal.rs` y `crates/archisim-core/src/model/thermal.rs`.
+
+## 8. Lo que no hace (todavía)
 
 - Trifásica, viviendas con más de 14 490 W, locales y oficinas (ITC-BT-28 en adelante).
 - Caída de tensión por tramos con la carga repartida: se pone toda la carga en el punto más lejano, lo que queda del lado de la seguridad.
@@ -224,4 +282,8 @@ Son 24 viviendas y 6 redes de extracción (de 202 a 346 m³/h). Para el cálculo
   - la ventilación natural e híbrida, con los conductos por zona térmica y plantas (tabla 4.2 de la híbrida);
   - el conducto propio de la campana, dibujado y calculado;
   - los garajes (120 l/s por plaza, tabla 2.2) y los edificios que no son de viviendas (RITE).
-- Climatización y DB-HE: el siguiente paso.
+- Envolvente y cargas:
+  - los puentes térmicos (frentes de forjado, pilares, contorno de huecos) y el método del terreno de la norma UNE-EN ISO 13370;
+  - el control solar (q sol;jul), la permeabilidad de los huecos y las condensaciones;
+  - el consumo de energía y las emisiones (HE 0), y las renovables (HE 4 y HE 5);
+  - los conductos y tuberías de la climatización, y las cargas hora a hora.

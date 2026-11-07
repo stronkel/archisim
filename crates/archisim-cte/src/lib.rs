@@ -19,6 +19,7 @@
 
 pub mod access;
 pub mod electrical;
+pub mod energy;
 pub mod evacuation;
 pub mod fire;
 pub mod fix;
@@ -63,6 +64,8 @@ pub enum Section {
     Services,
     /// DB-HS 3: the dwellings' ventilation.
     Ventilation,
+    /// DB-HE 1: the envelope (transmittances and K) and the loads.
+    Energy,
     /// Código Estructural: the reinforcement (E11).
     Structure,
     /// REBT, ITC-BT-25: the circuits of the dwellings (E13).
@@ -74,13 +77,14 @@ pub enum Section {
 }
 
 impl Section {
-    pub const ALL: [Section; 10] = [
+    pub const ALL: [Section; 11] = [
         Section::Evacuation,
         Section::Fire,
         Section::Accessibility,
         Section::StairsAndRamps,
         Section::Services,
         Section::Ventilation,
+        Section::Energy,
         Section::Electrical,
         Section::Structure,
         Section::Framing,
@@ -95,6 +99,7 @@ impl Section {
             Section::StairsAndRamps => "Escaleras y rampas (DB-SUA 1)",
             Section::Services => "Agua y saneamiento (DB-HS 4 y HS 5)",
             Section::Ventilation => "Ventilación (DB-HS 3)",
+            Section::Energy => "Ahorro de energía (DB-HE 1) y cargas térmicas",
             Section::Structure => "Estructura (Código Estructural, DB-SE-F, DB-SE-C)",
             Section::Electrical => "Electricidad (REBT, ITC-BT-25)",
             Section::Framing => "Entramado ligero (EN 1993-1-3, EN 1995-1-1, DB-SE-M)",
@@ -338,6 +343,7 @@ pub fn check(model: &Model) -> Report {
     services::calculation(model, &mut report);
     services::drain_calculation(model, &mut report);
     ventilation::check(model, &mut report);
+    energy::check(model, &mut report);
     structure::check(model, &mut report);
     electrical::check(model, &mut report);
     framing::check(model, &mut report);

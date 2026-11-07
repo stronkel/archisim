@@ -10442,7 +10442,14 @@ fn the_ventilation_window_sizes_the_inlets() {
     let l0 = m.add_level("Planta baja", 0.0);
     let l1 = m.add_level("Cubierta", 3.0);
     let lib = archisim_library::add_library(&mut m).unwrap();
-    archisim_mep::ventilation::example_flat(&mut m, l0, l1, lib.partition, lib.interior_door);
+    archisim_mep::ventilation::example_flat(
+        &mut m,
+        l0,
+        l1,
+        lib.partition,
+        lib.facade,
+        lib.interior_door,
+    );
     let mut h = Harness::new(Editor::with_model(m, None));
     // The second bedroom's inlet is short; it grows, and once.
     let n = h.app.apply_ventilation_sizes();
@@ -10457,4 +10464,38 @@ fn the_ventilation_window_sizes_the_inlets() {
     assert_eq!(h.app.apply_ventilation_sizes(), 0);
     h.app.ventilation.open = true;
     h.frame();
+}
+
+#[test]
+fn the_climate_window_changes_the_zone() {
+    let mut m = archisim_core::Model::new("Piso");
+    let l0 = m.add_level("Planta baja", 0.0);
+    let l1 = m.add_level("Cubierta", 3.0);
+    let lib = archisim_library::add_library(&mut m).unwrap();
+    archisim_mep::ventilation::example_flat(
+        &mut m,
+        l0,
+        l1,
+        lib.partition,
+        lib.facade,
+        lib.interior_door,
+    );
+    let mut h = Harness::new(Editor::with_model(m, None));
+    h.app.climate.open = true;
+    h.frame();
+    let mut site = h.app.ed.model().thermal_site().clone();
+    site.winter = archisim_core::WinterZone::E;
+    h.app
+        .ed
+        .transact("zona", |m| m.set_thermal_site(site))
+        .unwrap();
+    h.frame();
+    // Zone E is stricter: the façade of zone A no longer passes.
+    let t = archisim_mep::thermal::thermal(h.app.ed.model());
+    let wall = t
+        .elements
+        .iter()
+        .find(|e| e.kind == archisim_mep::thermal::Kind::Wall)
+        .unwrap();
+    assert!((wall.limit - 0.37).abs() < 1e-9);
 }

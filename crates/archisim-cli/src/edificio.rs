@@ -3160,5 +3160,21 @@ mod tests {
             .is_some_and(|x| v.dwellings.iter().all(|d| d.level != x.level))));
         assert!(v.loose.is_empty(), "{:?}", v.loose);
         assert!(v.networks.iter().all(|n| n.fan.is_some()));
+        // The envelope and the loads: every flat on its heat pump.
+        let t = archisim_mep::thermal::thermal(m);
+        if std::env::var("ARCHISIM_CLIMA_TEXTO").is_ok() {
+            println!("{}", archisim_mep::thermal::report(m, &t));
+        }
+        assert!(
+            t.groups
+                .iter()
+                .filter(|g| g.name.starts_with("Vivienda"))
+                .count()
+                == 24
+        );
+        assert!(t
+            .elements
+            .iter()
+            .any(|e| e.kind == archisim_mep::thermal::Kind::Curtain));
     }
 }

@@ -64,6 +64,7 @@ mod stairs;
 mod structure;
 mod sun;
 mod sweeps;
+mod thermal;
 mod title_blocks;
 mod urban;
 mod views;
@@ -117,6 +118,7 @@ pub use stairs::*;
 pub use structure::*;
 pub use sun::*;
 pub use sweeps::*;
+pub use thermal::*;
 pub use title_blocks::*;
 pub use urban::*;
 pub use views::*;
@@ -1567,6 +1569,7 @@ pub struct ModelParts {
     /// What the electrical calculation needs besides the drawing.
     pub electrical_site: ElectricalSite,
     pub water_site: WaterSite,
+    pub thermal_site: ThermalSite,
     /// Underlays of the levels' plans (E7).
     pub level_underlays: Vec<(LevelId, Vec<Underlay>)>,
     pub viewports: Vec<crate::sheets::Viewport>,
@@ -1702,6 +1705,7 @@ pub struct Model {
     /// What the electrical calculation needs besides the drawing.
     pub(crate) electrical_site: ElectricalSite,
     pub(crate) water_site: WaterSite,
+    pub(crate) thermal_site: ThermalSite,
     pub(crate) drafts: BTreeMap<DraftId, Draft>,
     pub(crate) info: crate::sheets::ProjectInfo,
     pub(crate) sheets: BTreeMap<SheetId, crate::sheets::Sheet>,
@@ -1806,6 +1810,7 @@ impl Model {
             structural_site: StructuralSite::default(),
             electrical_site: ElectricalSite::default(),
             water_site: WaterSite::default(),
+            thermal_site: ThermalSite::default(),
             structural_loads: BTreeMap::new(),
             device_circuits: BTreeMap::new(),
             level_underlays: BTreeMap::new(),
@@ -4486,6 +4491,7 @@ impl Model {
             device_circuits: self.device_circuits().collect(),
             electrical_site: self.electrical_site,
             water_site: self.water_site,
+            thermal_site: self.thermal_site.clone(),
             level_underlays: self
                 .level_underlays
                 .iter()
@@ -4836,6 +4842,12 @@ impl Model {
             .set_water_site(parts.water_site)
             .map_err(|error| RestoreError {
                 element: "water site".into(),
+                error,
+            })?;
+        model
+            .set_thermal_site(parts.thermal_site)
+            .map_err(|error| RestoreError {
+                element: "thermal site".into(),
                 error,
             })?;
         model.restore_title_blocks(parts.title_blocks, parts.default_title_block, &mut claim)?;

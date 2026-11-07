@@ -213,6 +213,7 @@ Uso:
 
   archisim cte <proyecto.archisim> [informe.csv]
   archisim fontaneria <proyecto.archisim> [--diametros salida.archisim] [--esquemas carpeta]   cálculo del suministro de agua (DB-HS 4); con --diametros, guarda el proyecto con los diámetros calculados; con --esquemas, el esquema vertical y la distribución por planta en PDF y DXF
+  archisim climatizacion <proyecto.archisim>   envolvente por el DB-HE 1 (transmitancias y K) y cargas de calefacción y refrigeración de cada local, con sus equipos
   archisim ventilacion <proyecto.archisim> [--tamanos salida.archisim]   ventilación de las viviendas (DB-HS 3): caudales, aireadores, bocas, pasos y conductos; con --tamanos, agranda lo que se queda corto
   archisim ventilacion --ejemplo <carpeta>   un piso de ejemplo con su ventilación (ventilacion-ejemplo.archisim)
   archisim saneamiento <proyecto.archisim> [--diametros salida.archisim] [--esquemas carpeta]   evacuación de aguas (DB-HS 5): residuales por unidades de desagüe y pluviales por cubierta; con --diametros, agranda lo que se queda corto; con --esquemas, el esquema vertical y la red de cada planta en PDF y DXF
@@ -619,6 +620,13 @@ fn main() -> ExitCode {
                 ExitCode::FAILURE
             }
         },
+        Some("climatizacion") => match args.get(1) {
+            Some(project) => report(run_thermal(Path::new(project))),
+            None => {
+                eprintln!("Falta el proyecto: archisim climatizacion <proyecto.archisim>");
+                ExitCode::FAILURE
+            }
+        },
         Some("ventilacion") => match args.get(1).map(String::as_str) {
             Some("--ejemplo") => report(ventilation_example(Path::new(
                 args.get(2).map_or("out", String::as_str),
@@ -892,6 +900,14 @@ fn run_water(
     Ok(())
 }
 
+fn run_thermal(project: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let model = archisim_file::open(project)
+        .map_err(|e| format!("no se puede abrir {}: {e}", project.display()))?;
+    let t = archisim_mep::thermal::thermal(&model);
+    print!("{}", archisim_mep::thermal::report(&model, &t));
+    Ok(())
+}
+
 fn run_ventilation(project: &Path, sized: Option<&Path>) -> Result<(), Box<dyn std::error::Error>> {
     let mut model = archisim_file::open(project)
         .map_err(|e| format!("no se puede abrir {}: {e}", project.display()))?;
@@ -926,7 +942,14 @@ fn ventilation_example(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let l0 = m.add_level("Planta baja", 0.0);
     let l1 = m.add_level("Cubierta", 3.0);
     let lib = archisim_library::add_library(&mut m)?;
-    archisim_mep::ventilation::example_flat(&mut m, l0, l1, lib.partition, lib.interior_door);
+    archisim_mep::ventilation::example_flat(
+        &mut m,
+        l0,
+        l1,
+        lib.partition,
+        lib.facade,
+        lib.interior_door,
+    );
     let path = dir.join("ventilacion-ejemplo.archisim");
     archisim_file::save(&m, &path)?;
     let v = archisim_mep::ventilation::ventilation(&m);

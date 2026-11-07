@@ -751,7 +751,14 @@ fn ventilation_by_hs3_and_its_fix() {
     let l0 = m.add_level("Planta baja", 0.0);
     let l1 = m.add_level("Cubierta", 3.0);
     let lib = archisim_library::add_library(&mut m).unwrap();
-    archisim_mep::ventilation::example_flat(&mut m, l0, l1, lib.partition, lib.interior_door);
+    archisim_mep::ventilation::example_flat(
+        &mut m,
+        l0,
+        l1,
+        lib.partition,
+        lib.facade,
+        lib.interior_door,
+    );
     let report = check(&m);
     let ours: Vec<&Item> = report
         .items
@@ -785,4 +792,31 @@ fn ventilation_by_hs3_and_its_fix() {
         .fold(f64::MAX, f64::min);
     assert!(inlet > 0.1, "{inlet}");
     assert!(f.lines.iter().any(|l| l.what == "Tamaño"));
+}
+
+#[test]
+fn the_envelope_by_he1() {
+    let mut m = Model::new("Piso");
+    let l0 = m.add_level("Planta baja", 0.0);
+    let l1 = m.add_level("Cubierta", 3.0);
+    let lib = archisim_library::add_library(&mut m).unwrap();
+    archisim_mep::ventilation::example_flat(
+        &mut m,
+        l0,
+        l1,
+        lib.partition,
+        lib.facade,
+        lib.interior_door,
+    );
+    let report = check(&m);
+    let ours: Vec<&Item> = report
+        .items
+        .iter()
+        .filter(|i| i.section == Section::Energy)
+        .collect();
+    // The façade against zone A's 0,70 and the global K.
+    assert!(ours
+        .iter()
+        .any(|i| i.rule == "HE 1, tabla 3.1.1.a" && i.status == Status::Passes));
+    assert!(ours.iter().any(|i| i.rule == "HE 1, tabla 3.1.1.b"));
 }

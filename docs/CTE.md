@@ -97,6 +97,14 @@ Sección propia «Ventilación (DB-HS 3)», del cálculo de `docs/INSTALACIONES.
 
 «Arreglar lo que no cumple» alarga los aireadores cortos y agranda las bocas, los conductos y los conductos verticales cortos. Los pasos de las puertas se quedan en «Lo que tienes que decidir tú»: holgura o rejilla.
 
+## Envolvente (HE 1) y cargas térmicas
+
+Sección «Ahorro de energía (DB-HE 1) y cargas térmicas», del cálculo de `docs/INSTALACIONES.md` §7:
+- cada tipo de la envolvente (muros de fachada, ventanas, puertas, muros cortina, cubiertas, suelos al exterior y contra el terreno) con su U contra el límite de la tabla 3.1.1.a-HE1 de la zona;
+- el coeficiente global K contra la tabla 3.1.1.b-HE1 según la compacidad;
+- los radiadores dibujados que no cubren la carga de su local;
+- como datos, la bomba de calor de cada vivienda con sus cargas.
+
 ## Protección contra incendios (SI 4) · H3
 
 Sobre los aparatos de protección contra incendios dibujados (ficha Instalaciones: Rociador, BIE, Extintor, Detección, Emergencia), en cada planta:

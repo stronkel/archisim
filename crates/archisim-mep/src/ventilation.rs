@@ -197,6 +197,11 @@ impl Class {
         self.bedroom || self.study || self.living
     }
 
+    /// A room lived in: a bedroom, a study or a living or dining room.
+    pub fn dry_room(&self) -> bool {
+        self.dry()
+    }
+
     fn of_dwelling(&self) -> bool {
         !self.common && (self.dry() || self.wet || self.passage)
     }
@@ -1219,6 +1224,7 @@ pub fn example_flat(
     l0: LevelId,
     l1: LevelId,
     partition: WallTypeId,
+    facade: WallTypeId,
     door_type: OpeningTypeId,
 ) {
     let wall = |m: &mut Model, a: (f64, f64), b: (f64, f64)| {
@@ -1244,7 +1250,8 @@ pub fn example_flat(
         ((10.0, 6.0), (0.0, 6.0)),
         ((0.0, 6.0), (0.0, 0.0)),
     ] {
-        wall(m, a, b);
+        let w = wall(m, a, b);
+        m.set_wall_type(w, facade).expect("example flat");
     }
     let corridor_s = wall(m, (0.0, 2.0), (10.0, 2.0));
     let corridor_n = wall(m, (0.0, 3.0), (10.0, 3.0));
@@ -1422,7 +1429,7 @@ mod tests {
         let l0 = m.add_level("Planta baja", 0.0);
         let l1 = m.add_level("Cubierta", 3.0);
         let lib = archisim_library::add_library(&mut m).unwrap();
-        example_flat(&mut m, l0, l1, lib.partition, lib.interior_door);
+        example_flat(&mut m, l0, l1, lib.partition, lib.facade, lib.interior_door);
         m
     }
 

@@ -6,6 +6,34 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-07 (118) · Envolvente (DB-HE 1) y cargas térmicas
+
+Rama `bloque/climatizacion`, encima de `bloque/ventilacion` (formato 89: datos térmicos del proyecto). `docs/INSTALACIONES.md` §7 y `docs/CTE.md`.
+
+Qué se hizo:
+
+1. **Datos del lugar**: zona climática (A4 por defecto), temperaturas de cálculo, U de ventanas y puertas, factor solar y conductividad de cada material (la habitual por su nombre, o la del producto).
+2. **Envolvente de cada local** desde su contorno: muros de fachada con sus huecos, muros cortina, cubiertas, suelos al exterior y soleras. Sin medianeras ni muros a escaleras o patinillos.
+3. **DB-HE 1**: U de cada tipo contra la tabla 3.1.1.a y K global contra la 3.1.1.b por compacidad.
+4. **Cargas**: calefacción y refrigeración de cada local (transmisión, sol, personas, luz, aparatos y la ventilación del HS 3). Unidad interior por local, bomba de calor por vivienda, y comprobación de los radiadores dibujados.
+5. Ventana Colaboración → Envolvente y cargas térmicas, sección nueva de la Comprobación CTE y `archisim climatizacion <proyecto>`.
+6. **Florence Street**, en A4: cumplen fachada de ladrillo, muro cortina, ventanas y cubierta transitable. No cumplen el hormigón visto y los tabiques de los patios, la losa vista ni la solera sin aislar; K = 2,27 contra 0,80. Salen 35 kW de calefacción y 100 kW de refrigeración.
+
+Pendiente:
+- puentes térmicos y suelo por la ISO 13370;
+- control solar, condensaciones y permeabilidad;
+- HE 0, HE 4 y HE 5;
+- conductos y tuberías de la climatización.
+
+Qué debe probar Antonio:
+- **El ejemplo.** `cargo run -p archisim-cli -- ventilacion --ejemplo out/` y abre `out/ventilacion-ejemplo.archisim`. En Colaboración → Envolvente y cargas térmicas:
+  - cambia la zona de A a E y mira cómo la fachada deja de cumplir;
+  - abre «Conductividad de los materiales» y baja la de la lana mineral: baja la U.
+- **Florence Street.** `cargo run --release -p archisim-cli -- climatizacion out/edificio/edificio.archisim`. ¿Te cuadran las cargas de las viviendas y que las bombas de calor salgan de 3,5 kW?
+- **Las tablas y valores**: límites del HE 1, conductividades habituales, radiación por orientación y cargas interiores. Están de memoria, al principio de `crates/archisim-mep/src/thermal.rs`.
+
+---
+
 ## 2026-11-07 (117) · Ventilación de las viviendas (DB-HS 3)
 
 Rama `bloque/ventilacion`, encima de `bloque/fontaneria-remates` (formato 88: cuatro clases de aparato nuevas). `docs/INSTALACIONES.md` §6 y `docs/CTE.md`.
