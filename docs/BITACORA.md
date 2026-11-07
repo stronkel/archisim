@@ -6,6 +6,41 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-07 (115) · Saneamiento (DB-HS 5)
+
+Unidos los esquemas de fontanería (#167) a `main`. Rama `bloque/saneamiento`, formato `.archisim` versión 87. `docs/INSTALACIONES.md` §5.
+
+Qué se hizo:
+
+1. **Pluviales como sistema propio.** Hay un sistema de tubería nuevo, «Pluviales» (aguas de lluvia del edificio), separado de «Saneamiento» (residuales). Las bajantes valen para los dos. El de la red urbana pasa a llamarse «Pluviales (red urbana)».
+2. **Cálculo de saneamiento** (Colaboración → Cálculo de saneamiento; `archisim saneamiento`). Sigue cada red desde la acometida (su punto más bajo):
+   - Residuales, por unidades de desagüe: derivaciones por la tabla 4.1 (uso privado o público), ramales por la 4.3, bajantes por la 4.4 (total, por planta y número de plantas) y colectores por la 4.5, con su pendiente. Nada disminuye aguas abajo.
+   - Pluviales: reparte la lluvia de cada cubierta, terraza o balcón al aire entre sus sumideros; bajantes por la tabla 4.8 y colectores por la 4.9, con la intensidad de lluvia del lugar (dato de la ventana, por defecto 100 mm/h).
+   - Número de sumideros por la tabla 4.6, canalones por la 4.7 y redes mixtas por 4.3 y la tabla 4.9.
+3. **Comprobación CTE** con todos los tramos, sumideros y canalones. «Arreglar lo que no cumple» agranda tuberías y bajantes.
+4. **«Poner los diámetros calculados»** en la ventana: agranda lo corto en un paso de Deshacer.
+5. **Esquemas de saneamiento** en A3 (SA-01 vertical y una hoja por planta), PDF y DXF. Los de fontanería comparten ahora el mismo dibujo. Con muchas bajantes, cada una lleva su rótulo planta a planta.
+6. **Florence Street** tiene su red de residuales (una bajante por núcleo húmedo, colectores enterrados a la acometida) y de pluviales (terraza de cubierta, pabellón y balcones).
+
+Pendiente:
+- ventilación de las bajantes, sifones, longitud de derivaciones y bombas de elevación;
+- remates de fontanería (grupo de presión, aljibe, retorno de ACS);
+- ventilación HS 3, y climatización y DB-HE.
+
+Qué debe probar Antonio:
+- **Las tablas.** Repasa los valores de las tablas del HS 5 al principio de `crates/archisim-mep/src/drain.rs`: los he escrito de memoria y no los he podido contrastar con el documento oficial.
+- **Florence Street:**
+  1. `archisim edificio out/edificio` y después `archisim saneamiento out/edificio/edificio.archisim --esquemas out/edificio`.
+  2. En el informe, 28 tramos salen cortos (←), casi todos los ramales de las cocinas.
+  3. Abre `out/edificio/edificio-saneamiento.pdf`. ¿Te sirve SA-01 así, con cada bajante y lo que le entra en cada planta?
+- **En la aplicación:**
+  1. Abre el edificio y ve a Colaboración → Cálculo de saneamiento.
+  2. Cambia la intensidad de lluvia: mira cómo cambian las pluviales.
+  3. Pulsa «Poner los diámetros calculados»: el contador de tramos cortos baja a cero.
+- **Dibujar:** en tus proyectos, las pluviales se dibujan con la herramienta Tubería en el sistema «Pluviales». Un sumidero es el extremo alto de una tubería.
+
+---
+
 ## 2026-11-06 (114) · Esquemas de fontanería
 
 Unida la fontanería (#165) a `main`. Rama `bloque/esquemas-fontaneria`, sin cambios de formato. `docs/INSTALACIONES.md` §4, «Esquemas de fontanería».

@@ -1,8 +1,8 @@
 # Instalaciones: dibujo y cálculo
 
-ArchiSim dibuja las instalaciones (tuberías, conductos y aparatos) y las calcula sobre lo dibujado. Este documento recoge la segunda vuelta: cómo se meten las tuberías, el cálculo eléctrico con su esquema unifilar y el cálculo de fontanería. Lo que sigue (saneamiento HS 5, ventilación HS 3, climatización y DB-HE) se añadirá aquí.
+ArchiSim dibuja las instalaciones (tuberías, conductos y aparatos) y las calcula sobre lo dibujado. Este documento recoge la segunda vuelta: cómo se meten las tuberías, el cálculo eléctrico con su esquema unifilar, el cálculo de fontanería y el de saneamiento. Lo que sigue (ventilación HS 3, climatización y DB-HE) se añadirá aquí.
 
-Código: `archisim-core::model::pipe_routing` (uniones, cambio de planta y trazado automático), `archisim-core::model::water` (datos del suministro), crate `archisim-mep` (cálculos, depende solo de `archisim-core`: `electrical` y `water`), `archisim-plan::single_line` (esquema unifilar), `archisim-plan::water_schematic` (esquemas de fontanería), `archisim-cte::electrical` y `archisim-cte::services::calculation` (comprobación) y, en la app, `app/services_ui`, `app/electrical_ui` y `app/water_ui`.
+Código: `archisim-core::model::pipe_routing` (uniones, cambio de planta y trazado automático), `archisim-core::model::water` (datos del suministro), crate `archisim-mep` (cálculos, depende solo de `archisim-core`: `electrical`, `water` y `drain`), `archisim-plan::single_line` (esquema unifilar), `archisim-plan::water_schematic` (esquemas de fontanería y saneamiento), `archisim-cte::electrical` y `archisim-cte::services::calculation` (comprobación) y, en la app, `app/services_ui`, `app/electrical_ui`, `app/water_ui` y `app/drain_ui`.
 
 ## 1. Meter las tuberías
 
@@ -98,7 +98,47 @@ Cómo sacarlos:
 - DXF: desde la ventana, un archivo por hoja.
 - En la línea de órdenes, `archisim fontaneria <proyecto> --esquemas <carpeta>` deja el PDF, y un SVG y un DXF por hoja.
 
-## 5. Lo que no hace (todavía)
+## 5. Saneamiento (DB-HS 5)
+
+Colaboración → **Cálculo de saneamiento…**. Se dibujan dos sistemas de tubería: **Saneamiento** (aguas residuales) y **Pluviales**, cada uno con sus **bajantes** (el aparato «Bajante»; con la herramienta Tubería, RePág y AvPág la ponen). Lo único que se escribe en la ventana es la **intensidad de lluvia** del lugar: la del anejo B del HS 5 (tabla B.1, por la zona A o B y la isoyeta). Por defecto es 100 mm/h, la de las tablas.
+
+**Aguas residuales**
+- **La red.** Cada aparato sanitario desagua en el extremo de saneamiento más cercano, a menos de 45 cm. Desde ahí la red se sigue por las tuberías, las tes y las bajantes hasta su punto más bajo, que es la acometida (la arqueta a la red).
+- **Unidades de desagüe**, tabla 4.1. Se toma el uso privado en viviendas y el público en los demás usos (lavabo 1 o 2 UD, inodoro 4 o 5, etc.).
+- **Cada tramo**, por lo que es:
+  - **derivación** de un aparato: su diámetro de la tabla 4.1;
+  - **ramal** que junta varios aparatos: tabla 4.3, con su pendiente (1, 2 o 4 %);
+  - **bajante**: tabla 4.4, con todas las UD que recoge, las que le entran por la planta que más le da y si sirve a más de tres plantas. Lleva el mismo diámetro en toda su altura;
+  - **colector**: lo que viene de una bajante, lo enterrado bajo la planta más baja o lo que llega a la acometida, por la tabla 4.5 con su pendiente.
+- **Ningún tramo disminuye aguas abajo**, y nada que recoja un inodoro baja de Ø110.
+
+**Aguas pluviales**
+- **Superficies al aire.** Se toman las cubiertas, terrazas y balcones al aire: los forjados de las plantas de encima de la baja y las cubiertas, mirando qué queda arriba del todo en cada punto de una rejilla de 50 cm.
+- **Sumideros.** Cada punto lleva su lluvia al sumidero más cercano que no esté por encima de él. Un sumidero es el extremo alto libre de una tubería de pluviales, o la cabeza de una bajante.
+- **Diámetros.** Las bajantes van por la tabla 4.8 y los colectores por la tabla 4.9, con la superficie multiplicada por i/100.
+- **Número de sumideros.** Cada cubierta o terraza de 25 m² o más se comprueba por la tabla 4.6: 2 sumideros por debajo de 100 m², 3 hasta 200, 4 hasta 500 y uno por cada 150 m² por encima. Se avisa también de la superficie que no tiene sumidero a su altura.
+- **Canalones.** Las cubiertas inclinadas con canalón (cubrición de la cubierta) se comprueban por la tabla 4.7, al 1 %, con lo que toma cada bajante; sus bajantes, por la tabla 4.8.
+- **Red mixta.** Si una red de pluviales acaba sobre un desagüe de residuales, los tramos de después llevan las dos aguas. Se dimensionan por la tabla 4.9 con las UD convertidas en superficie (4.3): 90 m² hasta 250 UD y 0,36 m² por UD por encima.
+
+Cada tramo («S1», «S2»… en residuales; «P1»… en pluviales) se calcula con su diámetro dibujado y el exigido, en PVC (diámetro exterior = nominal de las tablas). **«Poner los diámetros calculados»** agranda las tuberías y bajantes que se quedan cortas, en un paso de Deshacer; las que están de más se quedan como están. En la **Comprobación CTE** salen todos los tramos, los sumideros y los canalones, y «Arreglar lo que no cumple» agranda lo corto.
+
+### Esquemas de saneamiento
+
+Igual que los de fontanería:
+- **SA-01, esquema vertical.** Residuales a la izquierda y pluviales, a trazos, a la derecha. Abajo cada acometida con lo que recoge; las bajantes subiendo con el diámetro de cada trozo, y en cada planta lo que entra en cada bajante (diámetro y UD, o los sumideros y su superficie). Con más de cuatro bajantes, cada una lleva su rótulo planta a planta en lugar de cajas.
+- **SA-02 en adelante.** Una hoja por planta con el árbol de cada ramal hasta cada aparato (con sus UD) o sumidero (con su superficie).
+
+PDF en Archivo → Exportar → Esquemas de saneamiento o desde la ventana; DXF desde la ventana. En la línea de órdenes: `archisim saneamiento <proyecto> [--diametros salida.archisim] [--esquemas carpeta]`.
+
+El edificio de Florence Street lleva su red:
+- **Residuales:** una bajante por cada núcleo húmedo de las viviendas, cada aparato unido a la suya por el trazado automático, y colectores enterrados bajo la planta baja hasta la acometida de la fachada. Son 130 aparatos y 344 UD.
+- **Pluviales:** cuatro sumideros en la terraza de la cubierta y cuatro en la del pabellón, con dos bajantes y su propio colector, y los dos balcones de la planta 1 con su sumidero y su bajante.
+
+Con lo dibujado se quedan cortos 28 tramos, casi todos ramales de las cocinas (fregadero, lavavajillas y lavadora por una misma tubería de Ø40). Con los diámetros calculados no queda ninguno.
+
+**A comprobar por Antonio**: los valores de las tablas 4.1 (uso público), 4.3, 4.4, 4.5, 4.6, 4.7, 4.8 y 4.9 del HS 5 están escritos de memoria del texto del CTE y no los he podido contrastar con el documento oficial desde aquí; están juntos al principio de `crates/archisim-mep/src/drain.rs` para corregirlos de una vez.
+
+## 6. Lo que no hace (todavía)
 
 - Trifásica, viviendas con más de 14 490 W, locales y oficinas (ITC-BT-28 en adelante).
 - Caída de tensión por tramos con la carga repartida: se pone toda la carga en el punto más lejano, lo que queda del lado de la seguridad.
@@ -108,4 +148,10 @@ Cómo sacarlos:
   - el retorno del agua caliente, obligatorio con más de 15 m de tubería al grifo más alejado;
   - las pérdidas propias de contadores, filtros y calentadores, que habría que restar a mano;
   - los fluxores.
-- Saneamiento (HS 5, bajantes y colectores por unidades de desagüe), ventilación (HS 3), climatización y DB-HE: los siguientes pasos.
+- Saneamiento:
+  - la ventilación de las bajantes (primaria, secundaria y terciaria, HS 5 3.3.3);
+  - los sifones y botes sifónicos;
+  - la longitud de las derivaciones y la distancia a la bajante (4.1.1);
+  - las bombas de elevación;
+  - los canalones de sección cuadrada (se toman como semicirculares).
+- Ventilación (HS 3), climatización y DB-HE: los siguientes pasos.

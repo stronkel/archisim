@@ -66,6 +66,21 @@ Con tuberías de agua dibujadas, la comprobación añade el cálculo de la red (
 
 «Arreglar lo que no cumple» pone en los tramos cortos el diámetro calculado.
 
+### Cálculo de la evacuación (HS 5)
+
+Con desagües o pluviales dibujados, la comprobación añade el cálculo de las redes (`docs/INSTALACIONES.md` §5):
+- cada tramo con su diámetro dibujado contra el exigido, con su tabla:
+  - derivaciones, tabla 4.1;
+  - ramales, tabla 4.3;
+  - bajantes, tablas 4.4 y 4.8;
+  - colectores, tablas 4.5 y 4.9;
+  - colectores mixtos, 4.3 y tabla 4.9;
+- un aviso si un tramo lleva más de lo que da su tabla;
+- los sumideros de cada cubierta o terraza de 25 m² o más (tabla 4.6), y la superficie que no tiene sumidero a su altura;
+- los canalones de las cubiertas que los llevan (tabla 4.7, al 1 %) y sus bajantes (tabla 4.8).
+
+«Arreglar lo que no cumple» agranda las tuberías y bajantes cortas al diámetro calculado.
+
 ## Protección contra incendios (SI 4) · H3
 
 Sobre los aparatos de protección contra incendios dibujados (ficha Instalaciones: Rociador, BIE, Extintor, Detección, Emergencia), en cada planta:
@@ -90,7 +105,7 @@ Superficie útil de cada local, por uso y por planta; superficie construida de c
 El botón «Arreglar lo que no cumple…» de la ventana arregla solo lo que tiene una respuesta clara y mínima, sobre una copia del modelo, y enseña antes lo que cambia (elemento, qué, antes → después):
 
 - **Estructura y entramados**: lo mismo que en la ventana del cálculo (armado, y si no basta la sección o el tamaño siguiente; `docs/ESTRUCTURA.md`), y el armado que propone el cálculo para lo que tiene un armado dibujado que no cumple una regla de construcción.
-- **Agua y saneamiento**: la tubería más cercana al aparato toma el diámetro de HS 4 tabla 4.2 o HS 5 tabla 4.1 (el mayor de los aparatos a los que sirve); cada tramo de la red de agua, el que pide su caudal en el cálculo de HS 4; una pendiente fuera de lo permitido pasa a la más cercana que vale (derivación entre 2 % y 5 %, colector colgado 1 %, enterrado 2 %).
+- **Agua y saneamiento**: la tubería más cercana al aparato toma el diámetro de HS 4 tabla 4.2 o HS 5 tabla 4.1 (el mayor de los aparatos a los que sirve); cada tramo de la red de agua, el que pide su caudal en el cálculo de HS 4; cada tubería y bajante de saneamiento o pluviales corta, el diámetro del cálculo de HS 5; una pendiente fuera de lo permitido pasa a la más cercana que vale (derivación entre 2 % y 5 %, colector colgado 1 %, enterrado 2 %).
 - **Puertas**: la que no tiene el paso libre que pide la evacuación (A ≥ P/200 ≥ 0,80 m) o la accesibilidad (0,80 m de hoja, 0,78 m con la hoja abierta) pasa a un tipo de su misma familia lo bastante ancho, de 5 en 5 cm: uno del proyecto si ya lo hay o una copia del suyo con el ancho en el nombre. La que debe abrir en el sentido de la evacuación se gira con las bisagras en la misma jamba.
 
 Lo demás se queda en la lista «Lo que tienes que decidir tú»: un pasillo estrecho, el giro de una silla de ruedas, una salida o un recorrido demasiado largo, una escalera, los extintores. Los cambios se hacen todos juntos y Deshacer los quita de una vez.
@@ -103,7 +118,7 @@ Lo demás se queda en la lista «Lo que tienes que decidir tú»: un pasillo est
 - Barandillas: altura según la diferencia de cota (0,90 / 1,10 m).
 - Superficies mínimas de las normas de habitabilidad de cada comunidad o del planeamiento: no son del CTE.
 - Ascensores accesibles, plazas de aparcamiento accesibles y la reserva de plazas.
-- Diámetros de bajantes y colectores por las unidades de desagüe que recogen (HS 5, tablas 4.3 a 4.5), caudales y diámetros de los tramos de la red de agua (HS 4, tablas 2.1 y 4.3), y la distancia de los aparatos a la bajante.
+- La distancia de los aparatos a la bajante y la longitud de las derivaciones (HS 5, 4.1.1), la ventilación de las bajantes (HS 5, 3.3.3) y los sifones y botes sifónicos.
 
 ## Fuentes
 
