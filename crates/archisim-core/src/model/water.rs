@@ -132,6 +132,11 @@ pub struct WaterSite {
     /// B.1, by its zone and isohyet); the tables of rain water are for
     /// 100 mm/h and are scaled by i/100.
     pub rain_intensity: f64,
+    /// What the meter, its filter and valves take from the pressure, kPa
+    /// (the maker's figure; 0: not counted).
+    pub meter_loss: f64,
+    /// What the heater takes from the pressure of the hot water, kPa.
+    pub heater_loss: f64,
 }
 
 impl Default for WaterSite {
@@ -140,6 +145,8 @@ impl Default for WaterSite {
             pressure: 300.0,
             material: PipeMaterial::Multilayer,
             rain_intensity: 100.0,
+            meter_loss: 0.0,
+            heater_loss: 0.0,
         }
     }
 }
@@ -150,6 +157,8 @@ impl WaterSite {
             && self.pressure > 0.0
             && self.rain_intensity.is_finite()
             && self.rain_intensity > 0.0
+            && (0.0..self.pressure).contains(&self.meter_loss)
+            && (0.0..1000.0).contains(&self.heater_loss)
     }
 }
 

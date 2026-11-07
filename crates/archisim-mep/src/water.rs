@@ -218,6 +218,72 @@ impl Network {
     }
 }
 
+/// A pressure group (HS 4, 4.5.2): drawn (a «Grupo de presión» device)
+/// or needed because the supply does not reach a tap or the heater.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PressureGroup {
+    pub drawn: Option<DeviceId>,
+    pub needed: bool,
+    /// The building's simultaneous flow, l/s.
+    pub flow: f64,
+    /// The pressure it must give at its outlet so that the worst tap has
+    /// 100 kPa (and the heater 150), kPa.
+    pub min: f64,
+    /// Its stopping pressure: the least plus 200 kPa.
+    pub max: f64,
+    /// Equal pumps in parallel, one of them standing by.
+    pub pumps: usize,
+}
+
+/// The tank that feeds a pressure group (HS 4, 4.5.1): drawn or needed.
+#[derive(Debug, Clone, PartialEq)]
+pub struct FeedTank {
+    pub drawn: Option<DeviceId>,
+    /// Its volume, litres: the simultaneous flow for `TANK_MINUTES`.
+    pub volume: f64,
+}
+
+/// The hot water return (HS 4, 2.3 and 4.4), when the way to the farthest
+/// tap is 15 m or more.
+#[derive(Debug, Clone, PartialEq)]
+pub struct HotReturn {
+    /// From the heater to the farthest hot tap, metres.
+    pub length: f64,
+    /// The hot water risers (columns), at least one.
+    pub columns: usize,
+    /// What it must carry back, l/h: 250 per column at least.
+    pub flow: f64,
+    /// Its pipe by tabla 4.4: the inch size and the usual multilayer
+    /// outside diameter, metres.
+    pub pipe: (&'static str, f64),
+}
+
+/// The pressure a pressure group adds over its least one, kPa.
+pub const GROUP_SPAN: f64 = 200.0;
+/// Minutes of simultaneous flow a feed tank holds (HS 4, 4.5.1: 15 to
+/// 20).
+pub const TANK_MINUTES: f64 = 15.0;
+/// From this far to the farthest hot tap a return is needed, metres.
+pub const RETURN_LENGTH: f64 = 15.0;
+/// What a return carries back per column at least, l/h.
+pub const RETURN_PER_COLUMN: f64 = 250.0;
+
+/// HS 4, tabla 4.4: the return pipe for a flow (l/h): the inch size and
+/// the usual multilayer outside diameter.
+pub fn return_pipe(flow: f64) -> (&'static str, f64) {
+    const ROWS: [(f64, &str, f64); 6] = [
+        (140.0, "1/2\"", 0.016),
+        (300.0, "3/4\"", 0.020),
+        (600.0, "1\"", 0.026),
+        (1100.0, "1 1/4\"", 0.032),
+        (1800.0, "1 1/2\"", 0.040),
+        (3300.0, "2\"", 0.050),
+    ];
+    ROWS.iter()
+        .find(|r| r.0 >= flow)
+        .map_or(("2\" o más", 0.063), |r| (r.1, r.2))
+}
+
 /// The water supply worked out.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Water {
@@ -225,6 +291,12 @@ pub struct Water {
     pub pressure: f64,
     pub dwelling: bool,
     pub networks: Vec<Network>,
+    /// Losses at the meter and the heater, kPa.
+    pub meter_loss: f64,
+    pub heater_loss: f64,
+    pub group: Option<PressureGroup>,
+    pub tank: Option<FeedTank>,
+    pub hot_return: Option<HotReturn>,
 }
 
 impl Water {
@@ -771,29 +843,123 @@ fn network(model: &Model, system: ServiceSystem, source_pressure: f64) -> Option
 pub fn water(model: &Model) -> Water {
     let site = *model.water_site();
     let mut networks = Vec::new();
-    let cold = network(model, ServiceSystem::ColdWater, site.pressure);
+    let supply = site.pressure - site.meter_loss;
+    let mut cold = network(model, ServiceSystem::ColdWater, supply);
     // The hot water starts at the heater with what the cold water brings
-    // it.
+    // it, less what the heater takes.
     let (heater_in, heater_sized) = cold
         .as_ref()
         .and_then(|c| c.heater.map(|h| (h.1, h.2)))
-        .unwrap_or((site.pressure, site.pressure));
-    if let Some(c) = cold {
-        networks.push(c);
-    }
-    if let Some(mut h) = network(model, ServiceSystem::HotWater, heater_in) {
+        .unwrap_or((supply, supply));
+    let mut hot = network(model, ServiceSystem::HotWater, heater_in - site.heater_loss);
+    if let Some(h) = &mut hot {
         // As sized, from the pressure the sized cold network brings.
         let d = heater_sized - heater_in;
         for t in &mut h.taps {
             t.sized_pressure += d;
         }
-        networks.push(h);
     }
+    // The pressure group: the least it must add so the worst tap (as
+    // sized) has its 100 kPa and the heater its 150.
+    let least = |n: &Option<Network>| {
+        n.as_ref()
+            .and_then(|n| {
+                n.taps
+                    .iter()
+                    .map(|t| t.sized_pressure)
+                    .min_by(f64::total_cmp)
+            })
+            .unwrap_or(f64::INFINITY)
+    };
+    let short = (TAP_PRESSURE - least(&cold))
+        .max(TAP_PRESSURE - least(&hot))
+        .max(
+            cold.as_ref()
+                .and_then(|c| c.heater)
+                .map_or(0.0, |h| HEATER_PRESSURE - h.2),
+        )
+        .max(0.0);
+    let flow: f64 = cold
+        .as_ref()
+        .map(|c| {
+            c.stretches
+                .iter()
+                .filter(|s| s.parent.is_none())
+                .map(|s| s.flow)
+                .sum()
+        })
+        .unwrap_or(0.0);
+    let pump = model
+        .devices()
+        .find(|d| d.kind == DeviceKind::Pump)
+        .map(|d| d.id);
+    let group = (cold.is_some() && (pump.is_some() || short > 0.0)).then(|| {
+        let min = supply + short;
+        PressureGroup {
+            drawn: pump,
+            needed: short > 0.0,
+            flow,
+            min,
+            max: min + GROUP_SPAN,
+            pumps: 2,
+        }
+    });
+    // A group drawn gives its pressure: everything rises by what it adds.
+    if pump.is_some() && short > 0.0 {
+        for n in [&mut cold, &mut hot].into_iter().flatten() {
+            n.source_pressure += short;
+            for t in &mut n.taps {
+                t.pressure += short;
+                t.sized_pressure += short;
+            }
+            if let Some(h) = &mut n.heater {
+                h.1 += short;
+                h.2 += short;
+            }
+        }
+    }
+    let tank_device = model
+        .devices()
+        .find(|d| d.kind == DeviceKind::Tank)
+        .map(|d| d.id);
+    let tank = (cold.is_some() && (tank_device.is_some() || group.is_some())).then_some(FeedTank {
+        drawn: tank_device,
+        volume: flow * TANK_MINUTES * 60.0,
+    });
+    // The return: the way to the farthest hot tap.
+    let hot_return = hot.as_ref().and_then(|h| {
+        let length = h
+            .taps
+            .iter()
+            .map(|t| t.path.iter().map(|i| h.stretches[*i].length).sum::<f64>())
+            .fold(0.0, f64::max);
+        if length < RETURN_LENGTH {
+            return None;
+        }
+        let mut risers: Vec<DeviceId> = h.stretches.iter().filter_map(|s| s.riser).collect();
+        risers.sort();
+        risers.dedup();
+        let columns = risers.len().max(1);
+        let flow = RETURN_PER_COLUMN * columns as f64;
+        Some(HotReturn {
+            length,
+            columns,
+            flow,
+            pipe: return_pipe(flow),
+        })
+    });
+    networks.extend(cold);
+    networks.extend(hot);
     Water {
         material: site.material,
         pressure: site.pressure,
         dwelling: model.code_settings().building_use == BuildingUse::Dwelling,
         networks,
+        meter_loss: site.meter_loss,
+        heater_loss: site.heater_loss,
+        group,
+        tank,
+        hot_return,
     }
 }
 
@@ -820,6 +986,14 @@ pub fn report(model: &Model, w: &Water) -> String {
         dec(DESIGN_SPEED, 1),
         dec(FITTINGS * 100.0, 0)
     );
+    if w.meter_loss > 0.0 || w.heater_loss > 0.0 {
+        let _ = writeln!(
+            s,
+            "  Pérdidas en contador, filtro y llaves: {} kPa · en el calentador: {} kPa",
+            dec(w.meter_loss, 0),
+            dec(w.heater_loss, 0)
+        );
+    }
     if w.networks.is_empty() {
         let _ = writeln!(s, "\n  No hay tuberías de agua fría ni caliente dibujadas.");
         return s;
@@ -918,6 +1092,60 @@ pub fn report(model: &Model, w: &Water) -> String {
             );
         }
     }
+    if let Some(g) = &w.group {
+        let _ = writeln!(
+            s,
+            "\nGrupo de presión (HS 4, 4.5.2){}",
+            match (g.drawn.is_some(), g.needed) {
+                (true, true) => ": dibujado; el cálculo cuenta con lo que da",
+                (true, false) => ": dibujado, aunque la red no lo necesita",
+                (false, _) => ": HACE FALTA, la presión de la red no llega",
+            }
+        );
+        let _ = writeln!(
+            s,
+            "  Caudal {} l/s ({} m³/h) · presión mínima {} kPa · de parada {} kPa · {} bombas iguales (una de reserva)",
+            dec(g.flow, 2),
+            dec(g.flow * 3.6, 1),
+            dec(g.min, 0),
+            dec(g.max, 0),
+            g.pumps
+        );
+        let _ = writeln!(
+            s,
+            "  El volumen del depósito de presión lo da el fabricante con estas presiones."
+        );
+    }
+    if let Some(t) = &w.tank {
+        let _ = writeln!(
+            s,
+            "\nAljibe (HS 4, 4.5.1){}: {} litros ({} min del caudal simultáneo)",
+            if t.drawn.is_some() {
+                ""
+            } else {
+                ", para el grupo de presión"
+            },
+            dec(t.volume, 0),
+            dec(TANK_MINUTES, 0)
+        );
+    }
+    if let Some(r) = &w.hot_return {
+        let _ = writeln!(
+            s,
+            "\nRetorno de ACS (HS 4, 2.3): del acumulador al grifo más lejano hay {} m (≥ {} m)",
+            dec(r.length, 1),
+            dec(RETURN_LENGTH, 0)
+        );
+        let _ = writeln!(
+            s,
+            "  {} columna{} · caudal de retorno ≥ {} l/h · tubería {} (Ø{:.0} multicapa, tabla 4.4), aislada",
+            r.columns,
+            if r.columns == 1 { "" } else { "s" },
+            dec(r.flow, 0),
+            r.pipe.0,
+            r.pipe.1 * 1000.0
+        );
+    }
     s
 }
 
@@ -941,6 +1169,13 @@ pub fn source_name(model: &Model, n: &Network) -> String {
 mod tests {
     use super::*;
     use archisim_core::{NewDevice, NewObject, NewRun};
+
+    #[test]
+    fn return_pipes() {
+        assert_eq!(return_pipe(250.0).0, "3/4\"");
+        assert_eq!(return_pipe(500.0).0, "1\"");
+        assert_eq!(return_pipe(5000.0).0, "2\" o más");
+    }
 
     #[test]
     fn simultaneity_and_sizes() {
@@ -1075,5 +1310,41 @@ mod tests {
         let text = report(&m, &w);
         assert!(text.contains("F1"), "{text}");
         let _ = objects;
+        assert!(w.group.is_none() && w.tank.is_none());
+        // A weak supply less the meter's loss: a pressure group is needed,
+        // and its tank.
+        m.set_water_site(archisim_core::WaterSite {
+            pressure: 150.0,
+            meter_loss: 30.0,
+            ..*m.water_site()
+        })
+        .unwrap();
+        let w = water(&m);
+        let g = w.group.clone().expect("a group");
+        assert!(g.needed && g.drawn.is_none());
+        assert!(g.min > 120.0 && (g.max - g.min - GROUP_SPAN).abs() < 1e-9);
+        assert!(w.tank.as_ref().unwrap().volume > 100.0);
+        assert!(report(&m, &w).contains("HACE FALTA"));
+        // Drawn, it gives its pressure: every tap reaches 100 kPa.
+        m.add_device(NewDevice {
+            level: l0,
+            kind: DeviceKind::Pump,
+            name: "Grupo".into(),
+            position: Point2::new(-1.0, 0.0),
+            rotation: 0.0,
+            elevation: 0.0,
+            width: 0.6,
+            depth: 0.4,
+            height: 0.8,
+        })
+        .unwrap();
+        let w = water(&m);
+        assert!(w.group.as_ref().unwrap().drawn.is_some());
+        let worst = w.networks[0]
+            .taps
+            .iter()
+            .map(|t| t.sized_pressure)
+            .fold(f64::INFINITY, f64::min);
+        assert!((worst - TAP_PRESSURE).abs() < 1e-6, "{worst}");
     }
 }

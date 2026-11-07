@@ -326,7 +326,32 @@ fn water_sheets(w: &Water) -> Sheets {
                 "Diámetros exteriores calculados (mm). En rojo: tubería dibujada menor (dibujado→calculado) y grifos por debajo de {TAP_PRESSURE:.0} kPa con lo dibujado."
             ),
             "Presión mínima en grifos 100 kPa y en calentadores 150 kPa; máxima 500 kPa (HS 4, 2.1.3).".into(),
-        ],
+        ]
+        .into_iter()
+        .chain(w.group.as_ref().map(|g| {
+            format!(
+                "Grupo de presión{}: {} l/s, Pmín {} kPa, Pmáx {} kPa, {} bombas{}.",
+                if g.drawn.is_some() { "" } else { " (a poner)" },
+                dec(g.flow, 2),
+                dec(g.min, 0),
+                dec(g.max, 0),
+                g.pumps,
+                w.tank
+                    .as_ref()
+                    .map_or(String::new(), |t| format!(" · aljibe de {} l", dec(t.volume, 0)))
+            )
+        }))
+        .chain(w.hot_return.as_ref().map(|r| {
+            format!(
+                "Retorno de ACS: {} m al grifo más lejano; {} l/h por {} columna{}, tubería {} aislada (HS 4, 2.3 y tabla 4.4).",
+                dec(r.length, 1),
+                dec(r.flow, 0),
+                r.columns,
+                if r.columns == 1 { "" } else { "s" },
+                r.pipe.0
+            )
+        }))
+        .collect(),
     }
 }
 

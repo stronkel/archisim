@@ -6146,6 +6146,11 @@ pub struct WaterOf {
     /// The rainfall intensity, mm/h (version 87; 100 before).
     #[serde(default = "hundred")]
     pub rain_intensity: f64,
+    /// Losses at the meter and the heater, kPa (version 87; 0 before).
+    #[serde(default)]
+    pub meter_loss: f64,
+    #[serde(default)]
+    pub heater_loss: f64,
 }
 
 fn hundred() -> f64 {
@@ -6161,6 +6166,8 @@ impl WaterOf {
             pressure: site.pressure,
             material: site.material.code().into(),
             rain_intensity: site.rain_intensity,
+            meter_loss: site.meter_loss,
+            heater_loss: site.heater_loss,
         })
     }
 
@@ -6169,6 +6176,8 @@ impl WaterOf {
             pressure: self.pressure,
             material: core::PipeMaterial::from_code(&self.material).unwrap_or_default(),
             rain_intensity: self.rain_intensity,
+            meter_loss: self.meter_loss,
+            heater_loss: self.heater_loss,
         }
     }
 }

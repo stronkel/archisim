@@ -360,6 +360,86 @@ pub fn calculation(model: &Model, report: &mut Report) {
             );
         }
     }
+    let item = |status, subject, rule, text: String, value: String, required: String| Item {
+        section: Section::Services,
+        status,
+        subject,
+        level: first_level,
+        rule,
+        text,
+        value,
+        required,
+        route: Vec::new(),
+    };
+    if let Some(g) = &w.group {
+        let subject = g.drawn.map_or(Subject::Building, Subject::Device);
+        report.items.push(item(
+            if g.drawn.is_some() || !g.needed {
+                Status::Passes
+            } else {
+                Status::Fails
+            },
+            subject,
+            "HS 4, 4.5.2",
+            if g.drawn.is_some() {
+                format!(
+                    "Grupo de presión: {} l/s, presión mínima {} kPa y de parada {} kPa",
+                    dec(g.flow, 2),
+                    dec(g.min, 0),
+                    dec(g.max, 0)
+                )
+            } else {
+                format!(
+                    "Hace falta grupo de presión: la red no da la presión mínima ({} l/s, {} kPa)",
+                    dec(g.flow, 2),
+                    dec(g.min, 0)
+                )
+            },
+            if g.drawn.is_some() {
+                "dibujado".into()
+            } else {
+                "no hay".into()
+            },
+            "grupo de presión".into(),
+        ));
+    }
+    if let Some(t) = &w.tank {
+        report.items.push(item(
+            if t.drawn.is_some() {
+                Status::Passes
+            } else {
+                Status::Warning
+            },
+            t.drawn.map_or(Subject::Building, Subject::Device),
+            "HS 4, 4.5.1",
+            format!(
+                "Aljibe del grupo de presión: {} litros ({} min de caudal)",
+                dec(t.volume, 0),
+                dec(wt::TANK_MINUTES, 0)
+            ),
+            if t.drawn.is_some() {
+                "dibujado".into()
+            } else {
+                "no hay".into()
+            },
+            format!("≥ {} l", dec(t.volume, 0)),
+        ));
+    }
+    if let Some(r) = &w.hot_return {
+        report.items.push(item(
+            Status::Warning,
+            Subject::Building,
+            "HS 4, 2.3",
+            format!(
+                "Red de retorno de ACS: {} m hasta el grifo más lejano; {} l/h, tubería {} aislada",
+                dec(r.length, 1),
+                dec(r.flow, 0),
+                r.pipe.0
+            ),
+            format!("{} m", dec(r.length, 1)),
+            format!("retorno desde {} m", dec(wt::RETURN_LENGTH, 0)),
+        ));
+    }
 }
 
 /// The calculation of the drainage (`archisim-mep::drain`): every

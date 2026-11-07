@@ -62,7 +62,8 @@ Con tuberías de agua dibujadas, la comprobación añade el cálculo de la red (
 - la del contador (≤ 500 kPa);
 - el diámetro de cada tramo dibujado contra el que pide su caudal con simultaneidad;
 - la velocidad del agua;
-- los aparatos que no están unidos a la red.
+- los aparatos que no están unidos a la red;
+- el grupo de presión (no cumple si hace falta y no está dibujado), su aljibe (aviso si no está) y el retorno de ACS (aviso cuando hay 15 m o más al grifo más lejano).
 
 «Arreglar lo que no cumple» pone en los tramos cortos el diámetro calculado.
 

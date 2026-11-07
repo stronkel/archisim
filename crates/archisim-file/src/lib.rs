@@ -3090,6 +3090,8 @@ mod tests {
             pressure: 420.0,
             material: archisim_core::PipeMaterial::Copper,
             rain_intensity: 155.0,
+            meter_loss: 40.0,
+            heater_loss: 20.0,
         })
         .unwrap();
         let back = from_str(&to_string(&m)).unwrap();

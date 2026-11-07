@@ -6,6 +6,29 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-07 (116) · Fontanería: grupo de presión, aljibe, retorno y pérdidas
+
+Rama `bloque/fontaneria-remates`, encima de `bloque/saneamiento` (formato 87, con dos campos más). `docs/INSTALACIONES.md` §4, «Grupo de presión, aljibe y retorno».
+
+Qué se hizo:
+
+1. **Pérdidas** en el contador con su filtro y en el calentador, como datos de la ventana del cálculo de fontanería (kPa del fabricante; 0 por defecto).
+2. **Grupo de presión** (HS 4, 4.5.2): cuando la red no da la presión, o si hay uno dibujado, se dan el caudal, la presión mínima (la que deja el grifo peor en 100 kPa), la de parada (+200 kPa) y dos bombas. Si está dibujado, el cálculo cuenta con lo que da; si hace falta y no está, no cumple.
+3. **Aljibe** (HS 4, 4.5.1): 15 minutos del caudal simultáneo.
+4. **Retorno de ACS** (HS 4, 2.3 y tabla 4.4): cuando hay 15 m o más al grifo de caliente más lejano, el caudal (250 l/h por columna) y la tubería. En Florence Street hay 41,8 m: necesita retorno de 3/4".
+5. Todo sale en la ventana, en la Comprobación CTE y en las notas de FO-01.
+
+Pendiente:
+- dibujar el retorno de ACS como red propia;
+- el volumen del depósito de presión.
+
+Qué debe probar Antonio:
+- **Pérdidas.** En Florence Street, abre Colaboración → Cálculo de fontanería y pon 40 kPa de pérdida en el contador: baja la presión de todos los grifos.
+- **Grupo de presión.** Baja la presión del contador a 150 kPa: tiene que salir «Grupo de presión: HACE FALTA» con su caudal y presiones, y el aljibe. Pon un aparato «Grupo de presión» (ficha Instalaciones → Tipo del aparato) y vuelve a mirar: todos los grifos llegan a 100 kPa.
+- **¿Te valen los criterios?** Presión de parada = mínima + 200 kPa, dos bombas y 15 minutos de aljibe. ¿Es lo que ponéis en AD5?
+
+---
+
 ## 2026-11-07 (115) · Saneamiento (DB-HS 5)
 
 Unidos los esquemas de fontanería (#167) a `main`. Rama `bloque/saneamiento`, formato `.archisim` versión 87. `docs/INSTALACIONES.md` §5.

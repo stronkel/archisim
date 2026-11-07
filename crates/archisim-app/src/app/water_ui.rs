@@ -54,6 +54,24 @@ impl ArchiSimApp {
                 )
                 .on_hover_text("La que garantiza la compañía (pídela por escrito): 100 kPa ≈ 1 bar ≈ 10 m de agua");
                 ui.end_row();
+                ui.label("Pérdida en contador y filtro");
+                ui.add(
+                    egui::DragValue::new(&mut new.meter_loss)
+                        .range(0.0..=200.0)
+                        .speed(1.0)
+                        .suffix(" kPa"),
+                )
+                .on_hover_text("Lo que pierden el contador, el filtro y las llaves de la acometida: el dato del fabricante (0: no se cuenta)");
+                ui.end_row();
+                ui.label("Pérdida en el calentador");
+                ui.add(
+                    egui::DragValue::new(&mut new.heater_loss)
+                        .range(0.0..=200.0)
+                        .speed(1.0)
+                        .suffix(" kPa"),
+                )
+                .on_hover_text("Lo que pierde el agua al pasar por el termo o el acumulador: el dato del fabricante (0: no se cuenta)");
+                ui.end_row();
                 ui.label("Tubería");
                 egui::ComboBox::from_id_salt("water-material")
                     .selected_text(new.material.name())

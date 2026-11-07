@@ -52,7 +52,8 @@ Una hoja A3 por cuadro: red, CGP, contador, derivación individual con sus condu
 
 Colaboración → **Cálculo de fontanería…**. Lo único que se escribe en la ventana es lo que no sale del dibujo:
 - la **presión en el contador** que garantiza la compañía (por defecto 300 kPa; 100 kPa ≈ 1 bar ≈ 10 m de agua);
-- la **tubería**: multicapa (por defecto), PE-X, PP-R o cobre, con sus medidas comerciales, su rugosidad y su velocidad máxima.
+- la **tubería**: multicapa (por defecto), PE-X, PP-R o cobre, con sus medidas comerciales, su rugosidad y su velocidad máxima;
+- las **pérdidas en el contador y el filtro** y **en el calentador**, en kPa: los datos del fabricante, que se restan a la presión a la entrada de cada red (por defecto 0, no se cuentan).
 
 Lo demás sale del dibujo:
 - **La red.** El agua fría se sigue desde el **contador** (o un aljibe o un grupo de presión) y la caliente desde el **termo o acumulador**. Se recorren las tuberías, las tes (una tubería que acaba sobre otra) y los **montantes**, de planta a planta, hasta los aparatos sanitarios. Un aparato está unido si una tubería de ese sistema acaba a menos de 45 cm de él. Si no hay contador o termo dibujado, se empieza en el extremo más bajo y se avisa.
@@ -82,9 +83,22 @@ En la **Comprobación CTE** (Agua y saneamiento) salen:
 
 «Arreglar lo que no cumple» pone el diámetro calculado en los tramos cortos.
 
+**Grupo de presión, aljibe y retorno**
+- **Grupo de presión** (HS 4, 4.5.2). Se calcula si hace falta (con los diámetros calculados, la presión de la red no llega a 100 kPa en algún grifo o a 150 en el calentador) o si hay uno dibujado (aparato «Grupo de presión»). Da:
+  - el caudal: el simultáneo de todo el edificio;
+  - la presión mínima a su salida, la que deja el grifo peor justo en 100 kPa;
+  - la de parada: la mínima más 200 kPa;
+  - dos bombas iguales, una de reserva.
+  
+  Si está dibujado, el cálculo cuenta con lo que da. Si hace falta y no está, la comprobación no cumple. El volumen del depósito de presión lo da el fabricante con esas presiones.
+- **Aljibe** (HS 4, 4.5.1). Con grupo de presión, o con un «Depósito» dibujado, guarda 15 minutos del caudal simultáneo. Si no está dibujado, sale un aviso con su volumen.
+- **Retorno de ACS** (HS 4, 2.3 y tabla 4.4). Cuando del acumulador al grifo de agua caliente más lejano hay 15 m o más de tubería, hace falta una red de retorno. Se da el caudal (250 l/h por columna, al menos), su tubería por la tabla 4.4 (en pulgadas y en multicapa) y que vaya aislada. El retorno no se dibuja como sistema propio todavía, así que sale como aviso.
+
+Los tres salen en la ventana, en la Comprobación CTE y en las notas de la hoja FO-01.
+
 En la línea de órdenes: `archisim fontaneria <proyecto>`, o `archisim fontaneria <proyecto> --diametros salida.archisim` para guardarlo con los diámetros calculados (y `--esquemas <carpeta>` para las hojas, abajo).
 
-El edificio de Florence Street (`archisim edificio`) lleva ahora la red entera: contador y acumulador junto al montante, montante hasta la cubierta, distribuidor en cada rellano, derivación de cada vivienda y todos los aparatos unidos. Son 114 aparatos y 24 viviendas. Con 300 kPa en el contador, los diámetros dibujados dejan 95 grifos por debajo de 100 kPa; con los calculados, el peor llega a 122 kPa.
+El edificio de Florence Street (`archisim edificio`) lleva ahora la red entera: contador y acumulador junto al montante, montante hasta la cubierta, distribuidor en cada rellano, derivación de cada vivienda y todos los aparatos unidos. Son 114 aparatos y 24 viviendas. Con 300 kPa en el contador, los diámetros dibujados dejan 95 grifos por debajo de 100 kPa; con los calculados, el peor llega a 122 kPa. Del acumulador al grifo más lejano hay 41,8 m: necesita retorno (250 l/h, 3/4").
 
 ### Esquemas de fontanería
 
@@ -144,9 +158,8 @@ Con lo dibujado se quedan cortos 28 tramos, casi todos ramales de las cocinas (f
 - Caída de tensión por tramos con la carga repartida: se pone toda la carga en el punto más lejano, lo que queda del lado de la seguridad.
 - Cortocircuito y poder de corte (se pone 6 kA).
 - Fontanería:
-  - los grupos de presión y los aljibes dimensionados;
-  - el retorno del agua caliente, obligatorio con más de 15 m de tubería al grifo más alejado;
-  - las pérdidas propias de contadores, filtros y calentadores, que habría que restar a mano;
+  - el retorno de ACS dibujado como red propia (ahora se dice cuándo hace falta y cómo es);
+  - el volumen del depósito de presión del grupo;
   - los fluxores.
 - Saneamiento:
   - la ventilación de las bajantes (primaria, secundaria y terciaria, HS 5 3.3.3);
