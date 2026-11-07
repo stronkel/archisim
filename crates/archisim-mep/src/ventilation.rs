@@ -9,7 +9,8 @@
 //!   studies), wet («húmedos»: kitchens, bathrooms, toilets, laundry
 //!   rooms) or passages. A living room with its kitchen («estar-cocina»)
 //!   is both: air comes in by its living part and goes out by its kitchen.
-//! - **The flows**, table 2.1, by the number of bedrooms: 8 l/s the main
+//! - **The flows**, table 2.1, by the number of bedrooms (a study or an
+//!   office counts as one): 8 l/s the main
 //!   bedroom (the largest), 4 the others, 6, 8 or 10 each living or dining
 //!   room; out of the wet rooms, 6, 7 or 8 l/s each and 12, 24 or 33 in
 //!   all. What comes in must go out: the larger of the two is the
@@ -113,7 +114,7 @@ pub fn flows(bedrooms: usize) -> Flows {
 pub enum Dry {
     MainBedroom,
     Bedroom,
-    /// A study or office: counted as a bedroom for its flow, not for the
+    /// A study or office: counted as a bedroom, for its flow and for the
     /// kind of dwelling.
     Study,
     Living,
@@ -667,14 +668,22 @@ pub fn ventilation(model: &Model) -> Ventilation {
                 .collect();
             let name = dwelling_name(&names, n, &level.name);
             n += 1;
-            let bedrooms = g.iter().filter(|r| ours[*r].bedroom).count();
+            // A study or office counts as a bedroom (HS 3, table 2.1),
+            // also for the kind of dwelling.
+            let sleeps = |r: &RoomId| ours[r].bedroom || ours[r].study;
+            let bedrooms = g.iter().filter(|r| sleeps(r)).count();
             let f = flows(bedrooms);
+            let area = |r: &RoomId| model.room(*r).map_or(0.0, |x| x.area());
+            // The main bedroom is the largest bedroom, or the largest
+            // study if there is no bedroom.
             let main = g
                 .iter()
                 .filter(|r| ours[*r].bedroom)
-                .max_by(|a, b| {
-                    let area = |r: &RoomId| model.room(*r).map_or(0.0, |x| x.area());
-                    area(a).total_cmp(&area(b))
+                .max_by(|a, b| area(a).total_cmp(&area(b)))
+                .or_else(|| {
+                    g.iter()
+                        .filter(|r| sleeps(r))
+                        .max_by(|a, b| area(a).total_cmp(&area(b)))
                 })
                 .copied();
             let mut vr: Vec<VentRoom> = g
@@ -1431,6 +1440,32 @@ mod tests {
         let lib = archisim_library::add_library(&mut m).unwrap();
         example_flat(&mut m, l0, l1, lib.partition, lib.facade, lib.interior_door);
         m
+    }
+
+    #[test]
+    fn a_study_counts_as_a_bedroom() {
+        let mut m = flat();
+        let mut room = m
+            .rooms()
+            .find(|r| r.name == "Dormitorio 2")
+            .cloned()
+            .unwrap();
+        room.name = "Estudio".into();
+        room.usage = String::new();
+        m.set_room(room).unwrap();
+        let v = ventilation(&m);
+        let d = &v.dwellings[0];
+        // Still a flat of two bedrooms: 8 l/s the living room, not 6.
+        assert_eq!(d.bedrooms, 2);
+        let study = d.rooms.iter().find(|r| r.name == "Estudio").unwrap();
+        assert_eq!(study.dry, Some(Dry::Study));
+        let main = d
+            .rooms
+            .iter()
+            .find(|r| r.dry == Some(Dry::MainBedroom))
+            .unwrap();
+        assert_eq!(main.name, "Dormitorio 1");
+        assert!((d.dry_flow - 20.0).abs() < 1e-9, "{}", d.dry_flow);
     }
 
     #[test]

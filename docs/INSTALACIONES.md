@@ -179,7 +179,7 @@ Los conductos de cada planta, del sistema **Extracción**, van de cada boca al c
   | 2 | 8 l/s | 4 l/s | 8 l/s | 24 l/s | 7 l/s |
   | 3 o más | 8 l/s | 4 l/s | 10 l/s | 33 l/s | 8 l/s |
 
-  - El dormitorio principal es el mayor. El estudio o despacho lleva lo de un dormitorio, pero no cuenta para el tipo de vivienda.
+  - El dormitorio principal es el mayor. El estudio o despacho cuenta como un dormitorio, también para el tipo de vivienda (el CTE no los nombra, pero computan como dormitorio).
   - Lo que entra tiene que salir: el caudal de la vivienda es el mayor de lo que piden los secos y los húmedos, y el otro lado se sube a él en proporción.
 - **Aberturas**, tabla 4.1:
   - admisión en cada seco: 4·q cm²;
@@ -202,7 +202,7 @@ El edificio de Florence Street lleva su ventilación:
 
 Son 24 viviendas y 6 redes de extracción (de 202 a 346 m³/h). Para el cálculo le faltaba un local: el vestíbulo de la vivienda D, que ahora está (y sale en el cuadro de superficies). Con lo dibujado solo no cumplen 12 pasos de puerta: los que llevan más de 9 l/s piden holguras de 11 a 14 mm o rejilla de paso.
 
-**A comprobar por Antonio**: los valores de las tablas 2.1, 2.2, 4.1 y 4.2 del HS 3 (versión de 2017 y su corrección de 2019) están escritos de memoria y no los he podido contrastar con el documento oficial desde aquí. Están juntos al principio de `crates/archisim-mep/src/ventilation.rs` para corregirlos de una vez. También a decidir: la holgura de 1 cm que se supone bajo las puertas, y si el estudio o despacho debe contar como dormitorio.
+**A comprobar por Antonio**: los valores de las tablas 2.1, 2.2, 4.1 y 4.2 del HS 3 (versión de 2017 y su corrección de 2019) están escritos de memoria y no los he podido contrastar con el documento oficial desde aquí. Están juntos al principio de `crates/archisim-mep/src/ventilation.rs` para corregirlos de una vez. Antonio dio por buenas, el 7/11/2026, la holgura de 1 cm bajo las puertas y que el estudio o despacho cuente como dormitorio.
 
 ## 7. Envolvente (DB-HE 1) y cargas térmicas
 

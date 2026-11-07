@@ -6,6 +6,13 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-07 (117 bis) · Ventilación: el estudio cuenta como dormitorio
+
+Respuesta de Antonio a lo que quedó pendiente en la 117: las tablas del HS 5, HS 3 y HE 1 le parecen bien (sin contrastar del todo), la holgura de 1 cm bajo las puertas vale, y el estudio o despacho computa como dormitorio aunque el CTE no lo nombre así.
+
+- Hecho: el estudio o despacho cuenta para el número de dormitorios de la vivienda (tabla 2.1), no solo para su caudal. Si no hay dormitorio, el estudio mayor es el principal. Prueba `a_study_counts_as_a_bedroom`. `docs/INSTALACIONES.md` §6 al día.
+- Pendiente: nada nuevo; #169–#172 esperan el visto bueno.
+- Probar: en el piso de `archisim ventilacion --ejemplo out/`, renombrar «Dormitorio 2» a «Estudio» y ver en Colaboración → Cálculo de ventilación que sigue siendo una vivienda de dos dormitorios (el estar con 8 l/s).
 ## 2026-11-07 (118) · Envolvente (DB-HE 1) y cargas térmicas
 
 Rama `bloque/climatizacion`, encima de `bloque/ventilacion` (formato 89: datos térmicos del proyecto). `docs/INSTALACIONES.md` §7 y `docs/CTE.md`.
