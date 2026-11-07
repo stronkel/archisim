@@ -1,4 +1,5 @@
 //! The ventilation window (Colaboración → Cálculo de ventilación): the
+//! system (mechanical or hybrid) and the zone of table 4.4, the
 //! dwellings' ventilation by the DB-HS 3 as text, and «Poner los tamaños
 //! calculados», which takes every inlet, extract valve, duct and shaft
 //! drawn smaller up to what it needs, in one undoable step.
@@ -61,6 +62,7 @@ impl ArchiSimApp {
             )
             .small(),
         );
+        self.ventilation_site_row(ui);
         ui.separator();
         let rev = self.ed.revision();
         if self.ventilation.results.as_ref().is_none_or(|r| r.0 != rev) {
@@ -78,7 +80,8 @@ impl ArchiSimApp {
                 ui.colored_label(
                     p.bad,
                     format!(
-                        "{fails} abertura{} o tramo{} por debajo de lo exigido",
+                        "{fails} abertura{}, tramo{} o salida{} que no cumplen",
+                        if fails == 1 { "" } else { "s" },
                         if fails == 1 { "" } else { "s" },
                         if fails == 1 { "" } else { "s" }
                     ),
@@ -129,6 +132,69 @@ impl ArchiSimApp {
         }
         if dxf {
             self.export_ventilation_dxf();
+        }
+    }
+
+    /// The system (mechanical or hybrid) and the zone of table 4.4, set
+    /// by hand or from the province.
+    fn ventilation_site_row(&mut self, ui: &mut Ui) {
+        use archisim_core::{DraftZone, VentSystem, DRAFT_ZONES};
+        let site = *self.ed.model().ventilation_site();
+        let mut new = site;
+        ui.horizontal(|ui| {
+            ui.label("Sistema");
+            egui::ComboBox::from_id_salt("vent-system")
+                .selected_text(new.system.name())
+                .show_ui(ui, |ui| {
+                    for s in VentSystem::ALL {
+                        ui.selectable_value(&mut new.system, s, s.name());
+                    }
+                })
+                .response
+                .on_hover_text("HS 3, 3.1.1: híbrida (el conducto tira solo y un aspirador híbrido le ayuda) o mecánica (extractor). Los garajes y las campanas son siempre mecánicos");
+            ui.add_space(12.0);
+            ui.add_enabled_ui(new.system == VentSystem::Hybrid, |ui| {
+                ui.label("Zona térmica");
+                egui::ComboBox::from_id_salt("vent-zone")
+                    .selected_text(new.zone.code())
+                    .width(40.0)
+                    .show_ui(ui, |ui| {
+                        for z in DraftZone::ALL {
+                            ui.selectable_value(&mut new.zone, z, z.code());
+                        }
+                    })
+                    .response
+                    .on_hover_text("HS 3, tabla 4.4: da con las plantas el tiro de los conductos (tabla 4.3)");
+                egui::ComboBox::from_id_salt("vent-province")
+                    .selected_text("Por provincia…")
+                    .height(360.0)
+                    .show_ui(ui, |ui| {
+                        for (p, low, high) in DRAFT_ZONES {
+                            if ui
+                                .selectable_label(false, format!("{p} (hasta 800 m): {}", low.code()))
+                                .clicked()
+                            {
+                                new.zone = low;
+                            }
+                            if let Some(h) = high {
+                                if ui
+                                    .selectable_label(false, format!("{p} (más de 800 m): {}", h.code()))
+                                    .clicked()
+                                {
+                                    new.zone = h;
+                                }
+                            }
+                        }
+                    });
+            });
+        });
+        if new != site {
+            let r = self
+                .ed
+                .transact("Sistema de ventilación", |m| m.set_ventilation_site(new));
+            if let Err(e) = r {
+                self.complain(format!("No se puede cambiar: {e}."));
+            }
         }
     }
 

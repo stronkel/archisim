@@ -22,24 +22,36 @@
 //!   its leaf ([`UNDERCUT`]), an opening without a door its whole size.
 //! - **The ducts.** The extract network is the system «Extracción»: its
 //!   ducts, the extract shafts between floors and the fan at the head.
-//!   Every stretch carries the flow of the valves after it and needs
-//!   2,5·q cm² (mechanical extraction, 4 m/s; table 4.2).
+//!   Every stretch carries the flow of the valves after it. Mechanical
+//!   extraction (4.2.2): 2,5·q cm² beside the rooms, 1,5·q cm² on the
+//!   roof. Hybrid ventilation (4.2.1, [`VentSystem::Hybrid`]): the
+//!   sections of table 4.2 by the draught class of table 4.3, from the
+//!   floors that vent into the duct and the zone of table 4.4.
+//! - **The outlets** (3.2.1): every duct's outlet (its fan, or the top of
+//!   a duct without one) at 3 m at least from windows, outside doors, air
+//!   inlets and terraces; with hybrid ventilation, also 1 m above the roof
+//!   (2 m if it is walked on), above every obstacle at 2 to 10 m and 1,3
+//!   times as high as any nearer.
 //! - **The kitchen** also needs its own extraction for the hood (50 l/s,
-//!   3.1.1): given as a note.
+//!   3.1.1), through a duct of its own.
 //!
 //! Storerooms and refuse rooms of the building (table 2.2) are given
-//! their flow by their area. Buildings that are not dwellings are
-//! ventilated by the RITE (IT 1.1.4.2): not worked out here.
+//! their flow by their area, and garages 120 l/s a parking space (the cars
+//! drawn in them, or one every 25 m²), with the openings of 3.1.4.
+//! Buildings that are not dwellings are ventilated by the RITE
+//! (IT 1.1.4.2): not worked out here.
 //!
-//! **To be checked by Antonio**: the figures of tables 2.1, 2.2, 4.1 and
-//! 4.2 are written from the code as remembered; they are together below.
+//! The figures of tables 2.1, 2.2, 4.1, 4.2, 4.3 and 4.4 and of 3.1.4,
+//! 3.2.1 and 4.2.2 were checked against the text of the code (2022
+//! edition); they are together below.
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use archisim_core::{
-    BuildingUse, DeviceId, DeviceKind, Hand, LevelId, Model, NewDevice, NewObject, NewOpening,
-    NewRoom, NewRun, NewWall, ObjectId, ObjectTypeId, OpeningId, OpeningKind, OpeningTypeId,
-    Point2, ReferenceLine, RoomId, RunId, ServiceSystem, WallSide, WallTop, WallTypeId,
+    BuildingUse, DeviceId, DeviceKind, DraftZone, Hand, LevelId, Model, NewDevice, NewObject,
+    NewOpening, NewRoom, NewRun, NewWall, ObjectId, ObjectTypeId, OpeningId, OpeningKind,
+    OpeningTypeId, Point2, ReferenceLine, RoomId, RunId, ServiceSystem, VentSystem, WallSide,
+    WallTop, WallTypeId,
 };
 
 use crate::water::graph;
@@ -55,9 +67,93 @@ pub const OPENING_PER_LS: f64 = 4.0;
 /// Table 4.1: a passage's area per l/s, cm², and its least.
 pub const PASSAGE_PER_LS: f64 = 8.0;
 pub const PASSAGE_MIN: f64 = 70.0;
-/// Table 4.2: a duct's section per l/s in mechanical extraction, cm²
-/// (4 m/s).
+/// 4.2.2: a mechanical duct's section per l/s beside the rooms, cm²
+/// (formula 4.1), and on the roof (formula 4.2).
 pub const DUCT_PER_LS: f64 = 2.5;
+pub const ROOF_DUCT_PER_LS: f64 = 1.5;
+/// Table 2.2: a garage's flow per parking space, l/s, and the area taken
+/// for a space when no car is drawn, m².
+pub const GARAGE_PER_SPACE: f64 = 120.0;
+pub const GARAGE_SPACE_AREA: f64 = 25.0;
+/// 3.1.4: an admission and an extraction opening every 100 m²; the
+/// extraction ones less than 10 m apart; two networks a floor from 15
+/// spaces; detecting CO above 5 spaces or 100 m².
+pub const GARAGE_OPENING_AREA: f64 = 100.0;
+pub const GARAGE_VENT_SPACING: f64 = 10.0;
+pub const GARAGE_TWO_NETWORKS: usize = 15;
+pub const GARAGE_CO_SPACES: usize = 5;
+/// 3.2.1.4: an outlet's distance to any air coming in, metres.
+pub const OUTLET_GAP: f64 = 3.0;
+/// 3.2.1.5 (hybrid): the outlet above the roof, metres (walked on, the
+/// second), and the obstacles: higher than those at 2 to 10 m, 1,3 times
+/// those nearer.
+pub const HYBRID_ABOVE: f64 = 1.0;
+pub const HYBRID_ABOVE_WALKED: f64 = 2.0;
+pub const OBSTACLE_NEAR: f64 = 2.0;
+pub const OBSTACLE_FAR: f64 = 10.0;
+pub const OBSTACLE_FACTOR: f64 = 1.3;
+
+/// Table 4.3: the draught class (1 to 4) of a hybrid duct by the floors
+/// venting into it (from the lowest to the last, both in) and the zone of
+/// table 4.4.
+pub fn draft_class(floors: usize, zone: DraftZone) -> u8 {
+    const T: [[u8; 4]; 8] = [
+        [3, 3, 4, 4],
+        [2, 3, 3, 4],
+        [2, 2, 3, 3],
+        [2, 2, 2, 3],
+        [1, 2, 2, 3],
+        [1, 1, 2, 3],
+        [1, 1, 1, 2],
+        [1, 1, 1, 1],
+    ];
+    let row = floors.clamp(1, 8) - 1;
+    let col = match zone {
+        DraftZone::W => 0,
+        DraftZone::X => 1,
+        DraftZone::Y => 2,
+        DraftZone::Z => 3,
+    };
+    T[row][col]
+}
+
+/// Table 4.2: the ducts a hybrid stretch needs (their sections, cm²) by
+/// its flow and draught class; `None` above 1 000 l/s, out of the table.
+pub fn hybrid_ducts(flow: f64, class: u8) -> Option<&'static [f64]> {
+    const T: [(f64, [&[f64]; 4]); 5] = [
+        (100.0, [&[225.0], &[400.0], &[625.0], &[625.0]]),
+        (300.0, [&[400.0], &[625.0], &[625.0], &[900.0]]),
+        (500.0, [&[625.0], &[900.0], &[900.0], &[900.0, 900.0]]),
+        (
+            750.0,
+            [&[625.0], &[900.0], &[900.0, 625.0], &[900.0, 900.0, 900.0]],
+        ),
+        (
+            1000.0,
+            [
+                &[900.0],
+                &[900.0, 625.0],
+                &[900.0, 900.0],
+                &[900.0, 900.0, 900.0, 625.0],
+            ],
+        ),
+    ];
+    let c = usize::from(class.clamp(1, 4)) - 1;
+    T.iter()
+        .find(|(top, _)| flow <= *top + 1e-9)
+        .map(|(_, r)| r[c])
+}
+
+/// «1 × 625 cm²», «900 + 625 cm²».
+pub fn ducts_text(ducts: &[f64]) -> String {
+    let same = ducts.windows(2).all(|w| (w[0] - w[1]).abs() < 1e-9);
+    if same && !ducts.is_empty() {
+        format!("{} × {} cm²", ducts.len(), ducts[0].round())
+    } else {
+        let parts: Vec<String> = ducts.iter().map(|d| format!("{}", d.round())).collect();
+        format!("{} cm²", parts.join(" + "))
+    }
+}
 /// 3.1.1: the kitchen hood's own extraction, l/s.
 pub const HOOD_FLOW: f64 = 50.0;
 /// Table 2.2: storerooms, l/s per m²; refuse rooms, l/s per m².
@@ -144,6 +240,9 @@ pub struct Class {
     pub common: bool,
     pub store: bool,
     pub refuse: bool,
+    pub garage: bool,
+    /// A terrace, balcony or gallery: people stay there (3.2.1.4).
+    pub terrace: bool,
 }
 
 impl Class {
@@ -191,6 +290,19 @@ impl Class {
             ]),
             store: any(&["trastero", "almacén", "almacen"]),
             refuse: any(&["basura", "residuos"]),
+            // Of cars: not one of bicycles.
+            garage: any(&["garaje", "aparcamiento", "parking"])
+                && !any(&["bicicleta", "bicis", "motos"]),
+            terrace: any(&[
+                "terraza",
+                "balcón",
+                "balcon",
+                "galería",
+                "galeria",
+                "solárium",
+                "solarium",
+                "azotea",
+            ]),
         }
     }
 
@@ -330,11 +442,55 @@ pub struct Stretch {
     pub needed: f64,
     pub sized: (f64, f64),
     pub sized_text: String,
+    /// Hybrid: the ducts of table 4.2 it needs (more than one: the size
+    /// is not enlarged by itself, ducts are to be added).
+    pub ducts: Vec<f64>,
+    /// On the roof (mechanical: 1,5·q, formula 4.2).
+    pub on_roof: bool,
 }
 
 impl Stretch {
     pub fn short(&self) -> bool {
         self.area + 0.5 < self.needed
+    }
+}
+
+/// Where an extract duct comes out (3.2.1).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Outlet {
+    pub level: LevelId,
+    pub at: Point2,
+    /// Absolute height of the mouth, metres.
+    pub z: f64,
+    pub fan: Option<DeviceId>,
+    /// The nearest air coming in (a window, an outside door, an air inlet,
+    /// a terrace) within 10 m, and how far, metres.
+    pub intake: Option<(String, f64)>,
+    /// Hybrid: the height rules apply.
+    pub hybrid: bool,
+    /// Its height above the roof it stands on, metres.
+    pub above_roof: f64,
+    /// The roof is walked on (rooms or a railing on it).
+    pub walked: bool,
+    /// The obstacle that asks the most (name, distance, height above the
+    /// roof), and what the outlet must reach above the roof.
+    pub obstacle: Option<(String, f64, f64)>,
+    pub required: f64,
+}
+
+impl Outlet {
+    pub fn too_close(&self) -> bool {
+        self.intake
+            .as_ref()
+            .is_some_and(|(_, d)| *d + 1e-6 < OUTLET_GAP)
+    }
+
+    pub fn too_low(&self) -> bool {
+        self.hybrid && self.above_roof + 1e-6 < self.required
+    }
+
+    pub fn fails(&self) -> bool {
+        self.too_close() || self.too_low()
     }
 }
 
@@ -351,6 +507,12 @@ pub struct Network {
     pub hoods: Vec<ObjectId>,
     pub hood_at: Vec<Option<usize>>,
     pub flow: f64,
+    /// Hybrid (dwellings' valves only, with [`VentSystem::Hybrid`]): the
+    /// floors venting into it and its draught class (table 4.3).
+    pub hybrid: Option<(usize, u8)>,
+    /// Garage valves on it, and whether it serves anything else.
+    pub garage_vents: usize,
+    pub outlet: Option<Outlet>,
 }
 
 impl Network {
@@ -364,6 +526,12 @@ impl Network {
     /// independent (3.1.1).
     pub fn shared(&self) -> bool {
         !self.hoods.is_empty() && !self.vents.is_empty()
+    }
+
+    /// A garage's network that serves something else too (3.1.4.2: only
+    /// the garage's).
+    pub fn garage_shared(&self) -> bool {
+        self.garage_vents > 0 && (self.garage_vents < self.vents.len() || !self.hoods.is_empty())
     }
 }
 
@@ -387,9 +555,69 @@ pub struct Hood {
 pub struct Other {
     pub room: RoomId,
     pub name: String,
+    pub level: LevelId,
     pub area: f64,
     pub flow: f64,
     pub what: &'static str,
+    pub garage: bool,
+    /// A garage's spaces, and whether they are the cars drawn (or one
+    /// every 25 m²).
+    pub spaces: usize,
+    pub cars_drawn: bool,
+    pub inlets: Vec<DeviceId>,
+    pub inlet_area: f64,
+    pub vents: Vec<DeviceId>,
+    pub vent_area: f64,
+    /// A garage: the extract networks of its valves, and the farthest any
+    /// valve is from the next one, metres.
+    pub networks: usize,
+    pub vent_gap: f64,
+}
+
+impl Other {
+    pub fn drawn(&self) -> bool {
+        !self.inlets.is_empty() || !self.vents.is_empty()
+    }
+
+    pub fn vent_needed(&self) -> f64 {
+        OPENING_PER_LS * self.flow
+    }
+
+    pub fn inlet_needed(&self) -> f64 {
+        OPENING_PER_LS * self.flow
+    }
+
+    /// Its valves give less than table 4.1 (when drawn).
+    pub fn vent_short(&self) -> bool {
+        !self.vents.is_empty() && self.vent_area + 0.5 < self.vent_needed()
+    }
+
+    pub fn inlet_short(&self) -> bool {
+        !self.inlets.is_empty() && self.inlet_area + 0.5 < self.inlet_needed()
+    }
+
+    /// A garage: the openings of each kind it needs (one every 100 m²).
+    pub fn openings_needed(&self) -> usize {
+        ((self.area / GARAGE_OPENING_AREA) - 1e-9).ceil().max(1.0) as usize
+    }
+
+    /// A garage that fails 3.1.4: too few extraction openings, too far
+    /// apart, or one network where two are needed.
+    pub fn garage_fails(&self) -> usize {
+        // Without valves drawn it may be ventilated naturally, by mixed
+        // openings on two opposite façades: not checked.
+        if !self.garage || self.vents.is_empty() {
+            return 0;
+        }
+        (self.vents.len() < self.openings_needed()) as usize
+            + (self.vent_gap > GARAGE_VENT_SPACING + 1e-6) as usize
+            + (self.spaces >= GARAGE_TWO_NETWORKS && self.networks < 2) as usize
+    }
+
+    /// A garage that must detect carbon monoxide.
+    pub fn needs_co(&self) -> bool {
+        self.garage && (self.spaces > GARAGE_CO_SPACES || self.area > GARAGE_OPENING_AREA)
+    }
 }
 
 /// The whole calculation.
@@ -414,7 +642,7 @@ impl Ventilation {
     pub fn sized_runs(&self, model: &Model) -> Vec<(RunId, f64)> {
         let mut out: BTreeMap<RunId, f64> = BTreeMap::new();
         for s in self.networks.iter().flat_map(|n| &n.stretches) {
-            if let (Some(r), true) = (s.run, s.short()) {
+            if let (Some(r), true) = (s.run, s.short() && s.ducts.len() <= 1) {
                 if model.run(r).is_some() {
                     let e = out.entry(r).or_insert(0.0);
                     *e = e.max(s.sized.0);
@@ -429,7 +657,7 @@ impl Ventilation {
     pub fn sized_devices(&self, model: &Model) -> Vec<(DeviceId, f64, f64)> {
         let mut out: BTreeMap<DeviceId, (f64, f64)> = BTreeMap::new();
         for s in self.networks.iter().flat_map(|n| &n.stretches) {
-            if let (Some(d), true) = (s.shaft, s.short()) {
+            if let (Some(d), true) = (s.shaft, s.short() && s.ducts.len() <= 1) {
                 let e = out.entry(d).or_insert((0.0, 0.0));
                 e.0 = e.0.max(s.sized.0);
                 e.1 = e.1.max(s.sized.1);
@@ -455,6 +683,15 @@ impl Ventilation {
                 }
             }
         }
+        for o in &self.others {
+            if o.vent_short() {
+                let n = o.vents.len().max(1) as f64;
+                for id in &o.vents {
+                    let dia = vent_size(o.vent_needed() / n);
+                    out.insert(*id, (dia, dia));
+                }
+            }
+        }
         out.into_iter()
             .filter(|(id, (w, d))| {
                 model
@@ -474,6 +711,16 @@ impl Ventilation {
                 .filter(|s| s.short())
                 .count()
             + self.hoods.iter().filter(|h| self.hood_fails(h)).count()
+            + self
+                .networks
+                .iter()
+                .filter(|n| n.garage_shared() || n.outlet.as_ref().is_some_and(|o| o.fails()))
+                .count()
+            + self
+                .others
+                .iter()
+                .map(|o| o.vent_short() as usize + o.garage_fails())
+                .sum::<usize>()
     }
 
     /// A hood drawn without its duct, or on a duct with valves.
@@ -645,19 +892,78 @@ pub fn ventilation(model: &Model) -> Ventilation {
             let c = Class::of(&r.usage, &r.name);
             if c.of_dwelling() {
                 ours.insert(r.id, c);
-            } else if c.store || c.refuse {
+            } else if c.store || c.refuse || c.garage {
                 let area = r.area();
-                let (per, what) = if c.refuse {
-                    (REFUSE_PER_M2, "almacén de residuos")
+                let cars = model
+                    .objects()
+                    .filter(|o| o.level == level.id && r.contains(o.position))
+                    .filter(|o| is_car(model, o.id))
+                    .count();
+                let spaces = if cars > 0 {
+                    cars
                 } else {
-                    (STORE_PER_M2, "trastero")
+                    (area / GARAGE_SPACE_AREA).round().max(1.0) as usize
+                };
+                let (flow, what) = if c.garage {
+                    (GARAGE_PER_SPACE * spaces as f64, "aparcamiento")
+                } else if c.refuse {
+                    (REFUSE_PER_M2 * area, "almacén de residuos")
+                } else {
+                    (STORE_PER_M2 * area, "trastero")
+                };
+                let one: BTreeSet<RoomId> = BTreeSet::from([r.id]);
+                let (mut inlets, mut inlet_area, mut vents, mut vent_area) =
+                    (Vec::new(), 0.0, Vec::new(), 0.0);
+                for d in devices.iter().filter(|d| d.level == level.id) {
+                    if !matches!(d.kind, DeviceKind::AirInlet | DeviceKind::ExhaustVent)
+                        || room_of(model, level.id, d.position, &one).is_none()
+                    {
+                        continue;
+                    }
+                    let a = device_area(d.kind, d.width, d.depth, d.height);
+                    if d.kind == DeviceKind::AirInlet {
+                        inlets.push(d.id);
+                        inlet_area += a;
+                    } else {
+                        vents.push(d.id);
+                        vent_area += a;
+                    }
+                }
+                // How far a valve is from the nearest other one: the
+                // largest of these.
+                let at: Vec<Point2> = vents
+                    .iter()
+                    .filter_map(|id| model.device(*id))
+                    .map(|d| d.position)
+                    .collect();
+                let vent_gap = if at.len() < 2 {
+                    0.0
+                } else {
+                    at.iter()
+                        .map(|p| {
+                            at.iter()
+                                .filter(|q| q.distance(*p) > 1e-9)
+                                .map(|q| q.distance(*p))
+                                .fold(f64::MAX, f64::min)
+                        })
+                        .fold(0.0, f64::max)
                 };
                 v.others.push(Other {
                     room: r.id,
                     name: r.name.clone(),
+                    level: level.id,
                     area,
-                    flow: per * area,
+                    flow,
                     what,
+                    garage: c.garage,
+                    spaces: if c.garage { spaces } else { 0 },
+                    cars_drawn: c.garage && cars > 0,
+                    inlets,
+                    inlet_area,
+                    vents,
+                    vent_area,
+                    networks: 0,
+                    vent_gap,
                 });
             }
         }
@@ -837,6 +1143,30 @@ pub fn ventilation(model: &Model) -> Ventilation {
             vent_flow.insert(*id, r.extraction / n);
         }
     }
+    let mut garage_vents: BTreeSet<DeviceId> = BTreeSet::new();
+    for o in &v.others {
+        let n = o.vents.len().max(1) as f64;
+        for id in &o.vents {
+            vent_flow.insert(*id, o.flow / n);
+            if o.garage {
+                garage_vents.insert(*id);
+            }
+        }
+    }
+    // The dwellings' valves, for the hybrid ducts, and the highest floor
+    // with dwellings: above it, the roof.
+    let dwelling_vents: BTreeSet<DeviceId> = v
+        .dwellings
+        .iter()
+        .flat_map(|d| &d.rooms)
+        .flat_map(|r| r.vents.iter().copied())
+        .collect();
+    let top_dwelling = v
+        .dwellings
+        .iter()
+        .filter_map(|d| model.level(d.level))
+        .map(|l| l.elevation)
+        .fold(f64::NEG_INFINITY, f64::max);
     // The kitchens' hoods.
     let mut hoods: Vec<(ObjectId, LevelId, Point2)> = Vec::new();
     for d in &v.dwellings {
@@ -869,7 +1199,22 @@ pub fn ventilation(model: &Model) -> Ventilation {
             });
         }
     }
-    let (mut networks, loose) = extract_networks(model, &vent_flow, &hoods);
+    let (mut networks, loose) = extract_networks(
+        model,
+        &Sources {
+            vent_flow: &vent_flow,
+            hoods: &hoods,
+            dwelling_vents: &dwelling_vents,
+            garage_vents: &garage_vents,
+            top_dwelling,
+        },
+    );
+    for o in v.others.iter_mut().filter(|o| o.garage) {
+        o.networks = networks
+            .iter()
+            .filter(|n| n.vents.iter().any(|d| o.vents.contains(d)))
+            .count();
+    }
     // Named across the building: «V1»… the general ducts, «VC1»… the
     // hoods' ones.
     let (mut general, mut hood) = (0, 0);
@@ -906,6 +1251,21 @@ pub fn is_hood(model: &Model, id: ObjectId) -> bool {
     };
     model.family_prop(t.family).as_deref() == Some("hood")
         || t.name.to_lowercase().contains("campana")
+}
+
+/// Whether an object is a car (of the family that makes cars, `props:car`,
+/// or named so): a garage's space.
+pub fn is_car(model: &Model, id: ObjectId) -> bool {
+    let Some(o) = model.objects().find(|o| o.id == id) else {
+        return false;
+    };
+    let Some(t) = model.object_type(o.object_type) else {
+        return false;
+    };
+    model.family_prop(t.family).as_deref() == Some("car") || {
+        let n = t.name.to_lowercase();
+        n.contains("coche") || n.contains("turismo")
+    }
 }
 
 /// How near a hood must be to its duct, metres (a hood is up to 1,2 m
@@ -987,13 +1347,21 @@ fn route_air(rooms: &[VentRoom], doors: &[&Door]) -> Vec<Passage> {
         .collect()
 }
 
+/// What the extract networks are worked out from.
+struct Sources<'a> {
+    vent_flow: &'a BTreeMap<DeviceId, f64>,
+    hoods: &'a [(ObjectId, LevelId, Point2)],
+    dwelling_vents: &'a BTreeSet<DeviceId>,
+    garage_vents: &'a BTreeSet<DeviceId>,
+    /// The highest floor with dwellings (above it, the roof).
+    top_dwelling: f64,
+}
+
 /// The extract networks: each part of the ducts with valves, from them
 /// to its fan.
-fn extract_networks(
-    model: &Model,
-    vent_flow: &BTreeMap<DeviceId, f64>,
-    hoods: &[(ObjectId, LevelId, Point2)],
-) -> (Vec<Network>, Vec<DeviceId>) {
+fn extract_networks(model: &Model, src: &Sources) -> (Vec<Network>, Vec<DeviceId>) {
+    let (vent_flow, hoods) = (src.vent_flow, src.hoods);
+    let site = *model.ventilation_site();
     let g = graph(model, ServiceSystem::ExhaustAir);
     let mut at_node: BTreeMap<usize, Vec<DeviceId>> = BTreeMap::new();
     let mut loose = Vec::new();
@@ -1045,11 +1413,39 @@ fn extract_networks(
             .iter()
             .find(|(n, _)| with_vents && part.contains(n))
             .copied();
+        // Without a fan, the mouth is the highest free end that is not a
+        // valve's or a hood's (or the highest point).
         let root = fan.map(|(n, _)| n).unwrap_or_else(|| {
-            *part
+            let free: Vec<usize> = part
+                .iter()
+                .copied()
+                .filter(|n| g.adj[*n].len() == 1 && !starts.contains(n))
+                .collect();
+            let pool = if free.is_empty() { &part } else { &free };
+            *pool
                 .iter()
                 .max_by(|a, b| g.nodes[**a].z.total_cmp(&g.nodes[**b].z))
                 .unwrap_or(&start)
+        });
+        let part_vents: Vec<DeviceId> = part
+            .iter()
+            .filter_map(|n| at_node.get(n))
+            .flatten()
+            .copied()
+            .collect();
+        let garage_vents = part_vents
+            .iter()
+            .filter(|d| src.garage_vents.contains(d))
+            .count();
+        // Hybrid: only the dwellings' valves on it (a garage's and a
+        // hood's extraction are mechanical).
+        let hybrid = (site.system == VentSystem::Hybrid
+            && !part_vents.is_empty()
+            && part_vents.iter().all(|d| src.dwelling_vents.contains(d))
+            && !part.iter().any(|n| at_hood.contains_key(n)))
+        .then(|| {
+            let floors = venting_floors(model, &part_vents);
+            (floors, draft_class(floors, site.zone))
         });
         // A tree from the fan.
         let mut up: BTreeMap<usize, usize> = BTreeMap::new(); // node → edge to its parent
@@ -1137,7 +1533,20 @@ fn extract_networks(
             } else {
                 g.nodes[p].level
             };
-            let needed = DUCT_PER_LS * fl;
+            let on_roof = model
+                .level(level)
+                .is_some_and(|l| l.elevation > src.top_dwelling + 1e-6);
+            let ducts: Vec<f64> = match hybrid {
+                Some((_, class)) => hybrid_ducts(fl, class).map_or_else(Vec::new, |d| d.to_vec()),
+                None => Vec::new(),
+            };
+            let needed = match hybrid {
+                Some(_) if !ducts.is_empty() => ducts.iter().sum(),
+                // Above the table: as many 900 cm² ducts as 1 000 l/s.
+                Some(_) => 900.0 * (fl / 1000.0).ceil(),
+                None if on_roof => ROOF_DUCT_PER_LS * fl,
+                None => DUCT_PER_LS * fl,
+            };
             let (area, size, sized, sized_text) = if let Some(r) = run.and_then(|r| model.run(r)) {
                 let area = r.width * r.height * 1e4;
                 let h = if r.height > 0.0 { r.height } else { 0.1 };
@@ -1187,8 +1596,14 @@ fn extract_networks(
                 area,
                 size,
                 needed,
+                sized_text: if ducts.len() > 1 {
+                    format!("{} (añadir conductos)", ducts_text(&ducts))
+                } else {
+                    sized_text
+                },
                 sized,
-                sized_text,
+                ducts,
+                on_roof,
             });
             of_edge.insert(e, stretches.len() - 1);
         }
@@ -1217,6 +1632,20 @@ fn extract_networks(
             .map(|v| vent_flow.get(v).copied().unwrap_or(0.0))
             .sum::<f64>()
             + HOOD_FLOW * net_hoods.len() as f64;
+        // The mouth: the fan's top, or the duct's highest end.
+        let outlet = match fan.and_then(|(_, d)| model.device(d)) {
+            Some(f) => Some((
+                f.level,
+                f.position,
+                crate::water::level_z(model, f.level) + f.elevation + f.height,
+                Some(f.id),
+            )),
+            None => {
+                let n = g.nodes[root];
+                Some((n.level, n.p, n.z, None))
+            }
+        }
+        .map(|(level, at, z, fan)| outlet(model, level, at, z, fan, hybrid.is_some()));
         out.push(Network {
             stretches,
             fan: fan.map(|(_, d)| d),
@@ -1225,9 +1654,227 @@ fn extract_networks(
             hoods: net_hoods,
             hood_at,
             flow: total,
+            hybrid,
+            garage_vents,
+            outlet,
         });
     }
     (out, loose)
+}
+
+/// The floors venting into a hybrid duct: from the lowest with a valve on
+/// it to the highest, both in (4.2.1).
+fn venting_floors(model: &Model, vents: &[DeviceId]) -> usize {
+    let z: Vec<f64> = vents
+        .iter()
+        .filter_map(|d| model.device(*d))
+        .filter_map(|d| model.level(d.level))
+        .map(|l| l.elevation)
+        .collect();
+    let (lo, hi) = (
+        z.iter().copied().fold(f64::MAX, f64::min),
+        z.iter().copied().fold(f64::MIN, f64::max),
+    );
+    model
+        .levels()
+        .iter()
+        .filter(|l| l.elevation >= lo - 1e-6 && l.elevation <= hi + 1e-6)
+        .count()
+        .max(1)
+}
+
+/// The distance in plan from a point to a segment.
+fn to_segment(p: Point2, a: Point2, b: Point2) -> f64 {
+    let ab = b - a;
+    let l2 = ab.dot(ab);
+    if l2 < 1e-12 {
+        return p.distance(a);
+    }
+    let t = ((p - a).dot(ab) / l2).clamp(0.0, 1.0);
+    (a + ab * t).distance(p)
+}
+
+/// The distance from a height to a band of heights.
+fn to_band(z: f64, lo: f64, hi: f64) -> f64 {
+    (lo - z).max(z - hi).max(0.0)
+}
+
+/// The nearest air coming in to a point (a window, an outside door, an
+/// air inlet, a terrace), within 10 m, and how far, metres (3.2.1.4).
+pub fn intake_near(model: &Model, at: Point2, z: f64) -> Option<(String, f64)> {
+    let lz = |l: LevelId| crate::water::level_z(model, l);
+    let level_name = |l: LevelId| model.level(l).map_or("—".to_string(), |l| l.name.clone());
+    let mut intake: Option<(String, f64)> = None;
+    let mut near = |what: String, d: f64| {
+        if d <= OBSTACLE_FAR && intake.as_ref().is_none_or(|(_, b)| d < *b) {
+            intake = Some((what, d));
+        }
+    };
+    // Air inlets.
+    for d in model.devices().filter(|d| d.kind == DeviceKind::AirInlet) {
+        let dz = z - (lz(d.level) + d.elevation + d.height / 2.0);
+        near(
+            format!("aireador ({})", level_name(d.level)),
+            (d.position.distance(at).powi(2) + dz * dz).sqrt(),
+        );
+    }
+    // Windows and outside doors.
+    for o in model.openings() {
+        let (Some(t), Some(wall)) = (model.opening_type(o.opening_type), model.wall(o.wall)) else {
+            continue;
+        };
+        if matches!(t.kind, OpeningKind::Void) {
+            continue;
+        }
+        let Some(g) = archisim_geom::opening_geometry(model, o.id) else {
+            continue;
+        };
+        let mid = (g.exterior_offset + g.interior_offset) / 2.0;
+        let window = matches!(t.kind, OpeningKind::Window(_));
+        if !window {
+            // A door with no room on one side.
+            let tm = (g.t0 + g.t1) / 2.0;
+            let sign = if g.exterior_offset >= g.interior_offset {
+                1.0
+            } else {
+                -1.0
+            };
+            let inside = |p: Point2| model.rooms_on_level(wall.level).any(|r| r.contains(p));
+            if inside(g.point(tm, g.exterior_offset + sign * 0.25))
+                && inside(g.point(tm, g.interior_offset - sign * 0.25))
+            {
+                continue;
+            }
+        }
+        let (a, b) = (g.point(g.t0, mid), g.point(g.t1, mid));
+        let lo = lz(wall.level) + o.sill;
+        let d = to_segment(at, a, b).hypot(to_band(z, lo, lo + t.height));
+        near(
+            format!(
+                "{} «{}» ({})",
+                if window { "ventana" } else { "puerta exterior" },
+                t.name,
+                level_name(wall.level)
+            ),
+            d,
+        );
+    }
+    // Terraces, balconies and galleries: people stand there.
+    for r in model.rooms() {
+        let c = Class::of(&r.usage, &r.name);
+        if !c.terrace {
+            continue;
+        }
+        let n = r.outline.len();
+        let plan = if r.contains(at) {
+            0.0
+        } else {
+            (0..n)
+                .map(|i| to_segment(at, r.outline[i], r.outline[(i + 1) % n]))
+                .fold(f64::MAX, f64::min)
+        };
+        let floor = lz(r.level);
+        near(
+            format!("terraza «{}» ({})", r.name, level_name(r.level)),
+            plan.hypot(to_band(z, floor, floor + 2.0)),
+        );
+    }
+    intake
+}
+
+/// An outlet and what is around it (3.2.1).
+fn outlet(
+    model: &Model,
+    level: LevelId,
+    at: Point2,
+    z: f64,
+    fan: Option<DeviceId>,
+    hybrid: bool,
+) -> Outlet {
+    let lz = |l: LevelId| crate::water::level_z(model, l);
+    let level_name = |l: LevelId| model.level(l).map_or("—".to_string(), |l| l.name.clone());
+    let intake = intake_near(model, at, z);
+    let roof = lz(level);
+    let walked = model.railings_on_level(level).next().is_some()
+        || model.rooms_on_level(level).next().is_some();
+    let mut required = if walked {
+        HYBRID_ABOVE_WALKED
+    } else {
+        HYBRID_ABOVE
+    };
+    let mut obstacle = None;
+    if hybrid {
+        // The walls standing above the roof around it.
+        for w in model.walls() {
+            let base = lz(w.level) + w.base_offset;
+            let top = base + w.height;
+            if top <= roof + 0.05 || base > z {
+                continue;
+            }
+            let d = to_segment(at, w.start, w.end);
+            let h = top - roof;
+            let asks = if d <= OBSTACLE_NEAR {
+                OBSTACLE_FACTOR * h
+            } else if d <= OBSTACLE_FAR {
+                h
+            } else {
+                continue;
+            };
+            if asks > required {
+                required = asks;
+                obstacle = Some((format!("muro ({})", level_name(w.level)), d, h));
+            }
+        }
+    }
+    Outlet {
+        level,
+        at,
+        z,
+        fan,
+        intake,
+        hybrid,
+        above_roof: z - roof,
+        walked,
+        obstacle,
+        required,
+    }
+}
+
+/// What an outlet is, in words.
+pub fn outlet_text(o: &Outlet) -> String {
+    let mut s = match &o.intake {
+        Some((what, d)) => format!(
+            "a {} m de {}{}",
+            dec(*d, 2),
+            what,
+            if o.too_close() {
+                format!(" — NO CUMPLE: a {} m al menos (3.2.1)", dec(OUTLET_GAP, 0))
+            } else {
+                String::new()
+            }
+        ),
+        None => format!(
+            "nada por donde entre el aire a menos de {} m",
+            dec(OBSTACLE_FAR, 0)
+        ),
+    };
+    if o.hybrid {
+        s.push_str(&format!(
+            "; {} m sobre la cubierta{} (≥ {} m{})",
+            dec(o.above_roof, 2),
+            if o.walked { " transitable" } else { "" },
+            dec(o.required, 2),
+            match &o.obstacle {
+                Some((what, d, h)) =>
+                    format!(" por un {what} de {} m a {} m", dec(*h, 2), dec(*d, 1)),
+                None => String::new(),
+            }
+        ));
+        if o.too_low() {
+            s.push_str(" — NO CUMPLE (3.2.1)");
+        }
+    }
+    s
 }
 
 fn dec(v: f64, n: usize) -> String {
@@ -1258,6 +1905,75 @@ pub fn hood_text(v: &Ventilation, h: &Hood) -> String {
             h.network.map_or(0, |i| i + 1)
         ),
     }
+}
+
+/// What a garage, a storeroom or a refuse room has, line by line.
+pub fn other_lines(o: &Other) -> Vec<String> {
+    let mut out = Vec::new();
+    if !o.drawn() {
+        out.push(if o.garage {
+            "sin aireadores ni bocas de extracción dibujados: ventilación natural por aberturas mixtas en dos fachadas opuestas, a comprobar (3.1.4), o mecánica".into()
+        } else {
+            "sin aireadores ni bocas de extracción dibujados".into()
+        });
+        return out;
+    }
+    let no = |b: bool| if b { " — NO CUMPLE" } else { "" };
+    if !o.vents.is_empty() {
+        out.push(format!(
+            "bocas de extracción {} cm² (≥ {}, tabla 4.1){}",
+            dec(o.vent_area, 0),
+            dec(o.vent_needed(), 0),
+            no(o.vent_short())
+        ));
+    }
+    if !o.inlets.is_empty() {
+        out.push(format!(
+            "aberturas de admisión {} cm² (≥ {}){}",
+            dec(o.inlet_area, 0),
+            dec(o.inlet_needed(), 0),
+            if o.inlet_short() {
+                " — a completar con las rejillas de la puerta"
+            } else {
+                ""
+            }
+        ));
+    }
+    if o.garage {
+        let need = o.openings_needed();
+        out.push(format!(
+            "{} boca{} de extracción y {} de admisión (≥ {} de cada una, una cada 100 m², 3.1.4){}",
+            o.vents.len(),
+            if o.vents.len() == 1 { "" } else { "s" },
+            o.inlets.len(),
+            need,
+            no(o.vents.len() < need)
+        ));
+        if o.vents.len() > 1 {
+            out.push(format!(
+                "bocas de extracción a {} m como mucho de la siguiente (< {} m){}",
+                dec(o.vent_gap, 1),
+                dec(GARAGE_VENT_SPACING, 0),
+                no(o.vent_gap > GARAGE_VENT_SPACING + 1e-6)
+            ));
+        }
+        if o.spaces >= GARAGE_TWO_NETWORKS {
+            out.push(format!(
+                "{} red{} de extracción en la planta (≥ 2 con {} plazas o más){}",
+                o.networks,
+                if o.networks == 1 { "" } else { "es" },
+                GARAGE_TWO_NETWORKS,
+                no(o.networks < 2)
+            ));
+        }
+        if o.needs_co() {
+            out.push(
+                "detección de monóxido de carbono que ponga en marcha los extractores a 50 ppm (100 ppm si no hay personal), a prever (3.1.4)"
+                    .into(),
+            );
+        }
+    }
+    out
 }
 
 /// The calculation in words.
@@ -1378,6 +2094,31 @@ pub fn report(model: &Model, v: &Ventilation) -> String {
                 }
             );
         }
+        if let Some((floors, class)) = n.hybrid {
+            let _ = writeln!(
+                s,
+                "  Ventilación híbrida: {} planta{} vierten al conducto, zona {}: tiro T-{} (tablas 4.3 y 4.4); secciones de la tabla 4.2",
+                floors,
+                if floors == 1 { "" } else { "s" },
+                model.ventilation_site().zone.code(),
+                class
+            );
+        }
+        if n.garage_shared() {
+            let _ = writeln!(
+                s,
+                "  — NO CUMPLE: la red del aparcamiento sirve también a otros locales (3.1.4)"
+            );
+        }
+        if let Some(o) = &n.outlet {
+            let _ = writeln!(
+                s,
+                "  Salida ({}, a {} m): {}",
+                level_name(o.level),
+                dec(o.z, 2),
+                outlet_text(o)
+            );
+        }
         for st in &n.stretches {
             let _ = writeln!(
                 s,
@@ -1402,12 +2143,29 @@ pub fn report(model: &Model, v: &Ventilation) -> String {
     for o in &v.others {
         let _ = writeln!(
             s,
-            "\n{} ({}, {} m²): {} l/s (tabla 2.2)",
+            "\n{} ({}, {} m²{}): {} l/s (tabla 2.2)",
             o.name,
             o.what,
             dec(o.area, 1),
+            if o.garage {
+                format!(
+                    ", {} plaza{}{}",
+                    o.spaces,
+                    if o.spaces == 1 { "" } else { "s" },
+                    if o.cars_drawn {
+                        ""
+                    } else {
+                        " a razón de una cada 25 m²"
+                    }
+                )
+            } else {
+                String::new()
+            },
             dec(o.flow, 1)
         );
+        for t in other_lines(o) {
+            let _ = writeln!(s, "  {t}");
+        }
     }
     if !v.loose.is_empty() {
         let _ = writeln!(s, "\n{} bocas de extracción sin conducto.", v.loose.len());
@@ -1743,6 +2501,190 @@ mod tests {
         assert!(v.networks[h.network.unwrap()].shared());
         assert!(v.hood_fails(h));
         assert!(report(&m, &v).contains("conducto propio"));
+    }
+
+    #[test]
+    fn the_hybrid_tables() {
+        // Table 4.3: one floor in Madrid (X) draws T-3; eight anywhere T-1.
+        assert_eq!(draft_class(1, DraftZone::X), 3);
+        assert_eq!(draft_class(9, DraftZone::Z), 1);
+        assert_eq!(draft_class(5, DraftZone::W), 1);
+        assert_eq!(draft_class(7, DraftZone::Z), 2);
+        // Table 4.2.
+        assert_eq!(hybrid_ducts(80.0, 1), Some(&[225.0][..]));
+        assert_eq!(hybrid_ducts(300.0, 4), Some(&[900.0][..]));
+        assert_eq!(hybrid_ducts(600.0, 3), Some(&[900.0, 625.0][..]));
+        assert_eq!(hybrid_ducts(1200.0, 1), None);
+        assert_eq!(ducts_text(&[900.0, 900.0]), "2 × 900 cm²");
+        assert_eq!(ducts_text(&[900.0, 625.0]), "900 + 625 cm²");
+    }
+
+    #[test]
+    fn where_the_ducts_come_out() {
+        let mut m = flat();
+        let l1 = m.levels()[1].id;
+        let v = ventilation(&m);
+        let n = &v.networks[0];
+        let o = n.outlet.as_ref().expect("its outlet");
+        // The fan's top: on the roof at 3 m, 0,55 m high.
+        assert!(o.fan.is_some() && (o.z - 3.55).abs() < 1e-9, "{o:?}");
+        assert!(!o.hybrid && !o.fails(), "{o:?}");
+        // Mechanical: on the roof the duct needs 1,5·q.
+        let roof = n.stretches.iter().find(|s| s.level == l1).unwrap();
+        assert!(roof.on_roof && (roof.needed - 1.5 * roof.flow).abs() < 1e-9);
+        // An inlet 1,4 m away: too close.
+        let inlet = m
+            .add_device(NewDevice {
+                level: l1,
+                kind: DeviceKind::AirInlet,
+                name: "Toma".into(),
+                position: Point2::new(9.5, 4.5),
+                rotation: 0.0,
+                elevation: 0.5,
+                width: 0.4,
+                depth: 0.06,
+                height: 0.02,
+            })
+            .unwrap();
+        let v = ventilation(&m);
+        let o = v.networks[0].outlet.as_ref().unwrap();
+        assert!(o.too_close(), "{o:?}");
+        assert!(v.fails() > 0);
+        assert!(report(&m, &v).contains("a 3 m al menos"));
+        m.remove_device(inlet).unwrap();
+
+        // Hybrid in Madrid: one floor, T-3; 24 l/s want 625 cm², and the
+        // shaft Ø150 (177) is short; the fan 0,55 m over the roof, short
+        // of 1 m.
+        m.set_ventilation_site(archisim_core::VentilationSite {
+            system: VentSystem::Hybrid,
+            zone: DraftZone::X,
+        })
+        .unwrap();
+        let v = ventilation(&m);
+        let n = &v.networks[0];
+        assert_eq!(n.hybrid, Some((1, 3)));
+        let shaft = n.stretches.iter().find(|s| s.shaft.is_some()).unwrap();
+        assert!((shaft.needed - 625.0).abs() < 1e-9 && shaft.short());
+        assert!(n.outlet.as_ref().unwrap().too_low());
+        // Raised to 1,55 m it passes; a parapet 1,2 m high 1 m away asks
+        // 1,3 × 1,2 = 1,56 m.
+        let fan = n.fan.unwrap();
+        m.edit_device(fan, |d| d.elevation = 1.0).unwrap();
+        let v = ventilation(&m);
+        let o = v.networks[0].outlet.as_ref().unwrap();
+        assert!(!o.too_low(), "{o:?}");
+        let lib_wall = m.walls().next().unwrap().wall_type;
+        m.add_wall(NewWall {
+            wall_type: lib_wall,
+            level: l1,
+            start: Point2::new(8.5, 2.0),
+            end: Point2::new(8.5, 5.0),
+            bulge: 0.0,
+            reference: ReferenceLine::Center,
+            height: 1.2,
+            base_offset: 0.0,
+            top: WallTop::Unconnected,
+        })
+        .unwrap();
+        let v = ventilation(&m);
+        let o = v.networks[0].outlet.as_ref().unwrap();
+        assert!((o.required - 1.56).abs() < 1e-9 && o.too_low(), "{o:?}");
+        assert!(outlet_text(o).contains("NO CUMPLE"));
+    }
+
+    #[test]
+    fn a_garage() {
+        let mut m = flat();
+        let below = m.add_level("Sótano", -3.0);
+        let id = m
+            .add_room(NewRoom {
+                level: below,
+                number: "S1".into(),
+                name: "Garaje".into(),
+                outline: vec![
+                    Point2::new(0.0, 0.0),
+                    Point2::new(20.0, 0.0),
+                    Point2::new(20.0, 10.0),
+                    Point2::new(0.0, 10.0),
+                ],
+                holes: Vec::new(),
+                label: Point2::new(10.0, 5.0),
+                bounded: false,
+            })
+            .unwrap();
+        // 200 m², no cars: 8 spaces, 960 l/s; nothing drawn, a note.
+        let v = ventilation(&m);
+        let g = v.others.iter().find(|o| o.room == id).unwrap();
+        assert!(g.garage && g.spaces == 8 && !g.cars_drawn);
+        assert!((g.flow - 960.0).abs() < 1e-9);
+        assert_eq!(g.garage_fails(), 0);
+        assert!(g.needs_co());
+        // Three cars drawn: 360 l/s.
+        let car = archisim_library::add_object_entry(&mut m, "Turismo").unwrap();
+        for x in [3.0, 6.0, 9.0] {
+            m.add_object(NewObject {
+                level: below,
+                object_type: car,
+                position: Point2::new(x, 3.0),
+                rotation: 0.0,
+                base_offset: 0.0,
+            })
+            .unwrap();
+        }
+        // One valve Ø250 on a duct of its own: 2 needed, and short.
+        m.add_device(NewDevice {
+            level: below,
+            kind: DeviceKind::ExhaustVent,
+            name: "Boca".into(),
+            position: Point2::new(15.0, 9.0),
+            rotation: 0.0,
+            elevation: 2.4,
+            width: 0.25,
+            depth: 0.25,
+            height: 0.05,
+        })
+        .unwrap();
+        let v = ventilation(&m);
+        let g = v.others.iter().find(|o| o.room == id).unwrap();
+        assert!(g.cars_drawn && g.spaces == 3, "{g:?}");
+        assert!((g.flow - 360.0).abs() < 1e-9);
+        assert!(g.vent_short());
+        assert_eq!(g.garage_fails(), 1);
+        let text = report(&m, &v);
+        assert!(
+            text.contains("aparcamiento") && text.contains("monóxido"),
+            "{text}"
+        );
+        // Its valve joined to the dwelling's network: shared, it fails.
+        m.add_run(NewRun {
+            level: below,
+            system: ServiceSystem::ExhaustAir,
+            path: vec![Point2::new(15.0, 9.0), Point2::new(9.5, 2.5)],
+            elevation: 2.5,
+            width: 0.4,
+            height: 0.3,
+            slope: 0.0,
+        })
+        .unwrap();
+        m.add_device(NewDevice {
+            level: below,
+            kind: DeviceKind::AirShaft,
+            name: "Conducto".into(),
+            position: Point2::new(9.5, 2.5),
+            rotation: 0.0,
+            elevation: 0.0,
+            width: 0.4,
+            depth: 0.4,
+            height: 3.0,
+        })
+        .unwrap();
+        let v = ventilation(&m);
+        assert!(
+            v.networks.iter().any(|n| n.garage_shared()),
+            "{:?}",
+            v.networks
+        );
     }
 
     #[test]

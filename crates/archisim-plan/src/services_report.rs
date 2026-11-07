@@ -515,11 +515,30 @@ fn drainage(model: &Model, d: &Drainage) -> Vec<Block> {
 // ---------------------------------------------------------------------
 
 fn ventilation(model: &Model, v: &Ventilation) -> Vec<Block> {
+    let site = model.ventilation_site();
+    let ducts = match site.system {
+        archisim_core::VentSystem::Mechanical => format!(
+            "conductos de 4.2.2 ({} cm² por l/s junto a los locales, {} en la cubierta)",
+            dec(vt::DUCT_PER_LS, 1),
+            dec(vt::ROOF_DUCT_PER_LS, 1)
+        ),
+        archisim_core::VentSystem::Hybrid => format!(
+            "conductos de la tabla 4.2 por el tiro de la tabla 4.3, en la zona {} de la tabla 4.4",
+            site.zone.code()
+        ),
+    };
     let mut out = vec![Block::Para(format!(
-        "Ventilación mecánica: el aire entra por los aireadores de los locales secos, pasa bajo las puertas y sale por las bocas de extracción de los húmedos, por los conductos hasta el extractor de cubierta. Caudales de la tabla 2.1, aberturas de la tabla 4.1 ({} cm² por l/s) y conductos de la tabla 4.2 ({} cm² por l/s). Cada cocina lleva además la extracción de su campana, {} l/s por un conducto propio (3.1.1).",
+        "Ventilación {}: el aire entra por los aireadores de los locales secos, pasa bajo las puertas y sale por las bocas de extracción de los húmedos, por los conductos hasta {}. Caudales de la tabla 2.1, aberturas de la tabla 4.1 ({} cm² por l/s) y {}. Cada cocina lleva además la extracción de su campana, {} l/s por un conducto propio (3.1.1). Cada conducto sale a {} m al menos de las ventanas, puertas exteriores, aireadores y terrazas (3.2.1).",
+        site.system.name().to_lowercase(),
+        if site.system == archisim_core::VentSystem::Hybrid {
+            "el aspirador híbrido de cubierta"
+        } else {
+            "el extractor de cubierta"
+        },
         dec(vt::OPENING_PER_LS, 0),
-        dec(vt::DUCT_PER_LS, 1),
-        dec(vt::HOOD_FLOW, 0)
+        ducts,
+        dec(vt::HOOD_FLOW, 0),
+        dec(vt::OUTLET_GAP, 0)
     ))];
     out.push(Block::Heading(2, "1 Caudales de las viviendas".into()));
     out.push(Block::Table {
@@ -665,6 +684,31 @@ fn ventilation(model: &Model, v: &Ventilation) -> Vec<Block> {
             ),
         ));
     }
+    let outlets: Vec<(usize, &vt::Outlet)> = v
+        .networks
+        .iter()
+        .enumerate()
+        .filter_map(|(i, n)| n.outlet.as_ref().map(|o| (i, o)))
+        .collect();
+    let bad: Vec<String> = outlets
+        .iter()
+        .filter(|(_, o)| o.fails())
+        .map(|(i, o)| format!("red {}: {}", i + 1, vt::outlet_text(o)))
+        .collect();
+    if !outlets.is_empty() {
+        out.push(check(
+            !bad.is_empty(),
+            if bad.is_empty() {
+                format!(
+                    "Salidas de los conductos: las {} a {} m al menos de las entradas de aire (3.2.1)",
+                    outlets.len(),
+                    dec(vt::OUTLET_GAP, 0)
+                )
+            } else {
+                format!("Salidas de los conductos (3.2.1): {}", bad.join("; "))
+            },
+        ));
+    }
     let hoods_ok = v.hoods.iter().filter(|h| !v.hood_fails(h)).count();
     let bad: Vec<String> = v
         .hoods
@@ -680,6 +724,56 @@ fn ventilation(model: &Model, v: &Ventilation) -> Vec<Block> {
             bad.join("; ")
         },
     ));
+    if !v.others.is_empty() {
+        out.push(Block::Heading(
+            2,
+            "4 Aparcamientos, trasteros y almacenes de residuos".into(),
+        ));
+        out.push(Block::Table {
+            columns: vec![
+                col("Local", 2.2),
+                col("Clase", 1.6),
+                col("m²", 0.8),
+                col("Plazas", 0.8),
+                col("l/s", 0.8),
+            ],
+            rows: v
+                .others
+                .iter()
+                .map(|o| {
+                    vec![
+                        o.name.clone(),
+                        o.what.to_string(),
+                        dec(o.area, 1),
+                        if o.garage {
+                            o.spaces.to_string()
+                        } else {
+                            "—".into()
+                        },
+                        dec(o.flow, 1),
+                    ]
+                })
+                .collect(),
+        });
+        for o in &v.others {
+            let lines = vt::other_lines(o);
+            let status = if o.vent_short() || o.garage_fails() > 0 {
+                Status::Fail
+            } else if !o.drawn() {
+                if o.garage {
+                    Status::Warn
+                } else {
+                    Status::Info
+                }
+            } else {
+                Status::Pass
+            };
+            out.push(Block::Check {
+                status,
+                text: format!("{}: {}", o.name, lines.join("; ")),
+            });
+        }
+    }
     out
 }
 

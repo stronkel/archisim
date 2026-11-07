@@ -154,13 +154,17 @@ Con lo dibujado se quedan cortos 28 tramos, casi todos ramales de las cocinas (f
 
 ## 6. Ventilación de las viviendas (DB-HS 3)
 
-Colaboración → **Cálculo de ventilación…**. No hay nada que escribir: todo sale del dibujo. Solo en edificios de viviendas (uso del edificio en los datos del CTE); los demás usos se ventilan por el RITE (IT 1.1.4.2), que no se calcula todavía.
+Colaboración → **Cálculo de ventilación…**. Casi todo sale del dibujo. Arriba de la ventana se eligen dos datos (se guardan en el proyecto):
+- el **sistema**: mecánica (por defecto) o híbrida (3.1.1: las viviendas llevan una de las dos);
+- en híbrida, la **zona térmica** de la tabla 4.4 (W, X, Y o Z). Se puede elegir directamente o «Por provincia…», hasta 800 m o por encima. Por defecto es Z, la de Huelva.
+
+Solo se calcula en edificios de viviendas (uso del edificio en los datos del CTE); los demás usos se ventilan por el RITE (IT 1.1.4.2), que no se calcula todavía.
 
 **Qué se dibuja.** Cuatro aparatos nuevos, en el «Tipo» del aparato de la ficha Instalaciones:
 - **Aireador**: en el muro o sobre la ventana de cada local seco. Su abertura libre es ancho × alto: el de serie, 400 × 20 mm, da 80 cm².
 - **Boca de extracción**: en el techo de cada local húmedo. Su abertura es la del círculo de su diámetro (Ø125: 123 cm²).
 - **Conducto de extracción**: el conducto vertical entre plantas (el shunt). Redondo si ancho y fondo son iguales, rectangular si no. Con la herramienta Conducto del sistema Extracción, RePág y AvPág lo ponen como el montante de una tubería.
-- **Extractor**: en la cubierta, a la cabeza del conducto, unido a él por un trozo de conducto.
+- **Extractor**: en la cubierta, a la cabeza del conducto, unido a él por un trozo de conducto. En ventilación híbrida, el mismo aparato hace de **aspirador híbrido**.
 
 Los conductos de cada planta, del sistema **Extracción**, van de cada boca al conducto vertical. Una boca está unida si un conducto acaba a menos de 45 cm.
 
@@ -185,10 +189,50 @@ Los conductos de cada planta, del sistema **Extracción**, van de cada boca al c
   - admisión en cada seco: 4·q cm²;
   - extracción en cada húmedo: 4·q cm²;
   - paso en cada puerta por la que va el aire: 8·q cm², y 70 cm² como mínimo. El aire de cada seco va, puerta a puerta, al húmedo más cercano que aún lo necesita. Una puerta da su holgura bajo la hoja, que se toma de 1 cm (paso libre × 1 cm); un hueco sin puerta, todo su tamaño. Si no basta, se dice la holgura que haría falta («holgura de 14 mm o rejilla de paso»).
-- **Conductos**, tabla 4.2, extracción mecánica: cada tramo lleva el caudal de las bocas que tiene detrás y necesita 2,5·q cm² (4 m/s). Los tramos («V1», «V2»…) van del extractor hacia las bocas, y se da el tamaño que basta: el mismo alto con más ancho en los rectangulares, el diámetro siguiente en los redondos.
-- **Extractor**: el caudal de su red, en l/s y m³/h. Si no está dibujado, no cumple. La presión que debe dar la pone el fabricante con el trazado.
+- **Conductos.** Cada tramo lleva el caudal de las bocas que tiene detrás. Los tramos («V1», «V2»…) van del extractor hacia las bocas, y se da el tamaño que basta: el mismo alto con más ancho en los rectangulares, el diámetro siguiente en los redondos.
+  - **Ventilación mecánica** (4.2.2): 2,5·q cm² en los conductos junto a los locales (fórmula 4.1) y 1,5·q cm² en los de la cubierta, por encima de la última planta con viviendas (fórmula 4.2).
+  - **Ventilación híbrida** (4.2.1): la sección de la tabla 4.2 según el caudal del tramo y la clase de tiro del conducto. La clase sale de la tabla 4.3 con dos datos: las plantas que vierten al conducto (desde la más baja con una boca en él hasta la última, ambas incluidas) y la zona térmica.
+
+    | Plantas | W | X | Y | Z |
+    |---|---|---|---|---|
+    | 1 | T-3 | T-3 | T-4 | T-4 |
+    | 2 | T-2 | T-3 | T-3 | T-4 |
+    | 3 | T-2 | T-2 | T-3 | T-3 |
+    | 4 | T-2 | T-2 | T-2 | T-3 |
+    | 5 | T-1 | T-2 | T-2 | T-3 |
+    | 6 | T-1 | T-1 | T-2 | T-3 |
+    | 7 | T-1 | T-1 | T-1 | T-2 |
+    | 8 o más | T-1 | T-1 | T-1 | T-1 |
+
+    | Caudal del tramo | T-1 | T-2 | T-3 | T-4 |
+    |---|---|---|---|---|
+    | hasta 100 l/s | 225 cm² | 400 | 625 | 625 |
+    | 100 a 300 | 400 | 625 | 625 | 900 |
+    | 300 a 500 | 625 | 900 | 900 | 2 × 900 |
+    | 500 a 750 | 625 | 900 | 900 + 625 | 3 × 900 |
+    | 750 a 1000 | 900 | 900 + 625 | 2 × 900 | 3 × 900 + 625 |
+
+    Cuando la tabla pide más de un conducto, se dice («2 × 900 cm² (añadir conductos)») y no se agranda solo: hay que dibujar los conductos que faltan. Los conductos de los garajes y de las campanas son siempre mecánicos.
+- **Extractor** (o aspirador híbrido): el caudal de su red, en l/s y m³/h. Si no está dibujado, no cumple. La presión que debe dar la pone el fabricante con el trazado.
+- **Salida de cada conducto** (3.2.1). La salida es el extractor (su parte de arriba) o, en un conducto sin extractor como el de las campanas, su extremo libre más alto.
+  - **Siempre:** a 3 m al menos de cualquier entrada de aire: ventanas, puertas exteriores, aireadores y terrazas, balcones o galerías (los locales con ese nombre, de su suelo a 2 m de altura). La distancia se mide en el espacio, al punto más cercano de cada hueco.
+  - **En ventilación híbrida, además:**
+    - 1 m al menos sobre la cubierta, o 2 m si es transitable (hay locales o una barandilla en esa planta);
+    - más alta que los muros que haya a 2–10 m;
+    - 1,3 veces la altura de los que estén a 2 m o menos.
+
+    Se dice qué muro es el que manda.
 - **Campana de la cocina** (3.1.1): 50 l/s por un conducto propio, que no puede ser el de la ventilación general. La campana es el objeto «Campana extractora» del catálogo, dentro de la cocina; su conducto se dibuja con la herramienta Conducto del sistema Extracción, desde la campana (a menos de 60 cm) hasta un conducto vertical propio que sube a la cubierta y sale por un trozo de conducto. Los conductos de las campanas de varias viviendas pueden ir a un mismo conducto vertical colectivo, sin bocas de otros locales. Cada tramo necesita 2,5·q cm²: 125 cm² para una campana (un Ø150 basta). No cumple la campana sin conducto o la que va a un conducto con bocas; se avisa de la cocina sin campana dibujada. Sus tramos se llaman «VC1», «VC2»…
-- **Trasteros y almacenes de residuos** del edificio, tabla 2.2: 0,7 y 10 l/s por m².
+- **Trasteros y almacenes de residuos** del edificio, tabla 2.2: 0,7 y 10 l/s por m². Si tienen bocas dibujadas, se comprueban contra 4·q cm² y su caudal entra en los conductos.
+- **Aparcamientos y garajes** (los locales llamados garaje, aparcamiento o parking; los de bicicletas o motos no). Tabla 2.2: 120 l/s por plaza, contando los coches dibujados dentro o, si no hay ninguno, una plaza cada 25 m². Si tiene bocas dibujadas, se le aplica lo de la ventilación mecánica de 3.1.4:
+  - una boca de extracción y una abertura de admisión por cada 100 m²;
+  - las bocas de extracción a menos de 10 m unas de otras;
+  - desde 15 plazas, dos redes de extracción en la planta, cada una con su extractor;
+  - la red solo para el aparcamiento: no cumple si lleva bocas de otros locales o campanas.
+
+  Se avisa:
+  - de la detección de monóxido de carbono a partir de 5 plazas o 100 m² (que arranque los extractores a 50 ppm, o a 100 ppm sin personal);
+  - si no tiene nada dibujado: puede ir con ventilación natural, por aberturas mixtas en dos fachadas opuestas, que no se comprueba todavía.
 
 Todo sale en la ventana, en la Comprobación CTE (sección «Ventilación (DB-HS 3)») y en `archisim ventilacion <proyecto>`. **«Poner los tamaños calculados»** alarga los aireadores cortos (con su misma rendija) y agranda las bocas, conductos y conductos verticales cortos, en un paso de Deshacer. Lo mismo hace «Arreglar lo que no cumple» y `archisim ventilacion <proyecto> --tamanos salida.archisim`. Los pasos de las puertas no se tocan: holgura o rejilla, a decidir.
 
@@ -206,12 +250,17 @@ El edificio de Florence Street lleva su ventilación:
 - un aireador sobre cada ventana de los locales secos, o en la fachada de vidrio de los estares;
 - una boca en cada local húmedo;
 - conductos por el techo hasta un conducto vertical Ø200 junto al baño de cada vivienda, que sube de la planta 1 a la cubierta;
-- un extractor en la cubierta por cada conducto vertical;
+- un extractor en la cubierta por cada conducto vertical, llevado por un conducto sobre el forjado (no sobre los patios) al sitio más cercano que quede a 3 m de los aireadores y ventanas de la planta 4 y de la puerta del castillete; las salidas de las campanas, igual. Las 12 salidas cumplen;
 - la campana de cada cocina, con su conducto por el techo hasta un conducto vertical colectivo de campanas por cada columna de viviendas (Ø300 para las cuatro cocinas que recoge), que sale a la cubierta. Las 24 campanas cumplen.
 
-Son 24 viviendas y 6 redes de extracción (de 202 a 346 m³/h). Para el cálculo le faltaba un local: el vestíbulo de la vivienda D, que ahora está (y sale en el cuadro de superficies). Con lo dibujado solo no cumplen 12 pasos de puerta: los que llevan más de 9 l/s piden holguras de 11 a 14 mm o rejilla de paso.
+El aparcamiento de bicicletas de la planta baja no se toma por garaje (no son plazas de coche de la tabla 2.2). Son 24 viviendas y 6 redes de extracción (de 202 a 346 m³/h). Para el cálculo le faltaba un local: el vestíbulo de la vivienda D, que ahora está (y sale en el cuadro de superficies). Con lo dibujado solo no cumplen 12 pasos de puerta: los que llevan más de 9 l/s piden holguras de 11 a 14 mm o rejilla de paso.
 
-**A comprobar por Antonio**: los valores de las tablas 2.1, 2.2, 4.1 y 4.2 del HS 3 (versión de 2017 y su corrección de 2019) están escritos de memoria y no los he podido contrastar con el documento oficial desde aquí. Están juntos al principio de `crates/archisim-mep/src/ventilation.rs` para corregirlos de una vez. Antonio dio por buenas, el 7/11/2026, la holgura de 1 cm bajo las puertas y que el estudio o despacho cuente como dormitorio.
+Las tablas 2.1, 2.2, 4.1, 4.2, 4.3 y 4.4 y los apartados 3.1.4, 3.2.1 y 4.2.2 están contrastados con el texto del HS 3 (edición de 2022). Están juntos al principio de `crates/archisim-mep/src/ventilation.rs`. Antonio dio por buenas, el 7/11/2026, la holgura de 1 cm bajo las puertas y que el estudio o despacho cuente como dormitorio.
+
+**A comprobar por Antonio:**
+- las plantas de la tabla 4.3: se cuentan hasta la última planta que vierte al conducto, no hasta la última del edificio; así sale más sección;
+- la plaza de 25 m² cuando no hay coches dibujados;
+- que una cubierta es transitable si hay en ella algún local o una barandilla.
 
 ## 7. Envolvente (DB-HE 1) y cargas térmicas
 
@@ -298,9 +347,10 @@ Lo que no cumple sale marcado como en el anejo de cálculo de la estructura. La 
   - las bombas de elevación;
   - los canalones de sección cuadrada (se toman como semicirculares).
 - Ventilación:
-  - la ventilación natural e híbrida, con los conductos por zona térmica y plantas (tabla 4.2 de la híbrida);
-  - dónde sale cada conducto (a qué altura sobre la cubierta y a qué distancia de las ventanas, 3.2.4);
-  - los garajes (120 l/s por plaza, tabla 2.2) y los edificios que no son de viviendas (RITE).
+  - la ventilación natural de garajes, trasteros y cuartos de basuras (aberturas mixtas en fachadas opuestas, a 25 m de cualquier punto);
+  - en los garajes, los dos tercios de bocas a menos de 0,5 m del techo y los garajes pequeños con aberturas en un mismo muro;
+  - los obstáculos que no son muros (castilletes de cubierta hechos con otros elementos, cubiertas inclinadas cercanas);
+  - los edificios que no son de viviendas (RITE).
 - Envolvente y cargas:
   - los puentes térmicos (frentes de forjado, pilares, contorno de huecos) y el método del terreno de la norma UNE-EN ISO 13370;
   - el control solar (q sol;jul), la permeabilidad de los huecos y las condensaciones;

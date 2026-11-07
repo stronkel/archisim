@@ -89,11 +89,15 @@ Sección propia «Ventilación (DB-HS 3)», del cálculo de `docs/INSTALACIONES.
 - En cada local seco, las aberturas de admisión (aireadores) contra 4·q cm² (tabla 4.1).
 - En cada local húmedo, las bocas de extracción contra 4·q cm².
 - En cada puerta por la que pasa el aire, su paso contra 8·q cm² (70 cm² como mínimo). Si no basta, se dice la holgura bajo la hoja que haría falta o que lleve rejilla de paso.
-- Cada tramo de conducto de extracción contra 2,5·q cm² (tabla 4.2, extracción mecánica).
-- El extractor de cada red con su caudal, o que no cumple si no está dibujado.
+- Cada tramo de conducto de extracción:
+  - en ventilación mecánica, contra 2,5·q cm² junto a los locales y 1,5·q cm² en la cubierta (4.2.2);
+  - en ventilación híbrida, contra la sección de la tabla 4.2 por el tiro de la tabla 4.3 (plantas que vierten al conducto y zona de la tabla 4.4), con el tiro de cada conducto como dato.
+- La salida de cada conducto (3.2.1): a 3 m al menos de ventanas, puertas exteriores, aireadores y terrazas; en híbrida, además, 1 m sobre la cubierta (2 m si es transitable), por encima de los muros a 2–10 m y 1,3 veces la altura de los que estén a menos de 2 m.
+- El extractor (o el aspirador híbrido) de cada red con su caudal, o que no cumple si no está dibujado.
 - La campana de cada cocina (3.1.1): cumple si va por un conducto propio de 50 l/s; no cumple si no tiene conducto o va al de la ventilación general; se avisa si la cocina no tiene campana dibujada.
 - Como aviso, las bocas sin conducto y los locales húmedos que no son de ninguna vivienda.
-- Los trasteros y almacenes de residuos del edificio, con su caudal por superficie (tabla 2.2).
+- Los trasteros y almacenes de residuos del edificio, con su caudal por superficie (tabla 2.2), y sus bocas contra 4·q cm² si están dibujadas.
+- Los aparcamientos (tabla 2.2 y 3.1.4): 120 l/s por plaza (los coches dibujados, o una cada 25 m²); con bocas dibujadas, una cada 100 m², a menos de 10 m entre ellas, dos redes por planta desde 15 plazas y la red solo para el aparcamiento; aviso de la detección de monóxido de carbono a partir de 5 plazas o 100 m², y si no hay nada dibujado (puede ventilarse de forma natural, por aberturas mixtas en dos fachadas opuestas).
 
 «Arreglar lo que no cumple» alarga los aireadores cortos y agranda las bocas, los conductos y los conductos verticales cortos. Los pasos de las puertas se quedan en «Lo que tienes que decidir tú»: holgura o rejilla.
 

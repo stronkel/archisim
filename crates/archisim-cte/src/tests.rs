@@ -778,7 +778,11 @@ fn ventilation_by_hs3_and_its_fix() {
     assert!(ours
         .iter()
         .any(|i| i.status == Status::Fails && i.text.starts_with("Paso")));
-    assert!(ours.iter().any(|i| i.rule == "HS 3, tabla 4.2"));
+    // Mechanical extraction: its ducts by 4.2.2, and where it comes out.
+    assert!(ours.iter().any(|i| i.rule == "HS 3, 4.2.2"));
+    assert!(ours
+        .iter()
+        .any(|i| i.rule == "HS 3, 3.2.1" && i.status == Status::Passes));
     let f = fix::fix(&m);
     let mut after = m.clone();
     for c in &f.changes {
