@@ -254,6 +254,9 @@ pub(crate) struct ProjectFile {
     /// The template the levels' plans follow (version 92).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plan_template: Option<u64>,
+    /// The renewables' data, DB-HE 4 and HE 5 (version 93).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub renewables: Option<RenewablesOf>,
     /// Rooms (IfcSpace) and tags of doors, windows, walls and rooms
     /// (version 7).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -4149,6 +4152,7 @@ impl ProjectFile {
             water: WaterOf::out(&p.water_site),
             thermal: ThermalOf::out(&p.thermal_site),
             ventilation: VentilationOf::out(&p.ventilation_site),
+            renewables: RenewablesOf::out(&p.renewables_site),
             plan_template: p.plan_template.map(|t| t.0),
             level_underlays: crate::drafting::level_underlays_out(&p.level_underlays),
             rooms: crate::rooms::rooms_out(&p.rooms),
@@ -4779,6 +4783,10 @@ impl ProjectFile {
             ventilation_site: match &self.ventilation {
                 Some(v) => v.site()?,
                 None => core::VentilationSite::default(),
+            },
+            renewables_site: match &self.renewables {
+                Some(r) => r.site()?,
+                None => core::RenewablesSite::default(),
             },
             level_underlays: crate::drafting::level_underlays_in(self.level_underlays)?,
             rooms: crate::rooms::rooms_in(self.rooms)?,
@@ -6214,6 +6222,67 @@ impl ThermalOf {
                 .iter()
                 .map(|(m, v)| (core::MaterialId(*m), *v))
                 .collect(),
+        })
+    }
+}
+
+/// The renewables' data besides the drawing (version 93).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RenewablesOf {
+    pub new_building: bool,
+    /// By its name in the Anejo G of HE 4.
+    pub province: String,
+    /// Metres above the provincial capital.
+    pub above_capital: f64,
+    /// «heat_pump», «solar», «other» or «none».
+    pub acs_source: String,
+    pub scop: f64,
+    pub fraction: f64,
+    pub storage_temp: f64,
+    pub panel_kwp_m2: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub built_area: Option<f64>,
+    /// Litres a day at 60 °C, given.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub acs_demand: Option<f64>,
+}
+
+impl RenewablesOf {
+    fn out(site: &core::RenewablesSite) -> Option<Self> {
+        if *site == core::RenewablesSite::default() {
+            return None;
+        }
+        Some(RenewablesOf {
+            new_building: site.new_building,
+            province: site.province.clone(),
+            above_capital: site.above_capital,
+            acs_source: site.acs_source.code().into(),
+            scop: site.scop,
+            fraction: site.fraction,
+            storage_temp: site.storage_temp,
+            panel_kwp_m2: site.panel_kwp_m2,
+            built_area: site.built_area,
+            acs_demand: site.acs_demand,
+        })
+    }
+
+    fn site(&self) -> Result<core::RenewablesSite, FileError> {
+        Ok(core::RenewablesSite {
+            new_building: self.new_building,
+            province: self.province.clone(),
+            above_capital: self.above_capital,
+            acs_source: core::AcsSource::from_code(&self.acs_source).ok_or_else(|| {
+                FileError::Value {
+                    element: "renewables".into(),
+                    message: format!("source «{}»", self.acs_source),
+                }
+            })?,
+            scop: self.scop,
+            fraction: self.fraction,
+            storage_temp: self.storage_temp,
+            panel_kwp_m2: self.panel_kwp_m2,
+            built_area: self.built_area,
+            acs_demand: self.acs_demand,
         })
     }
 }

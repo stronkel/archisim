@@ -10539,6 +10539,51 @@ fn the_climate_window_changes_the_zone() {
     assert!((wall.limit - 0.37).abs() < 1e-9);
 }
 
+/// The renewables window: the flat of the ventilation example asks for
+/// its hot water; a heat pump passes HE 4, a solar fraction too low fails.
+#[test]
+fn the_renewables_window_checks_the_hot_water() {
+    let mut m = archisim_core::Model::new("Piso");
+    let l0 = m.add_level("Planta baja", 0.0);
+    let l1 = m.add_level("Cubierta", 3.0);
+    let lib = archisim_library::add_library(&mut m).unwrap();
+    archisim_mep::ventilation::example_flat(
+        &mut m,
+        l0,
+        l1,
+        lib.partition,
+        lib.facade,
+        lib.interior_door,
+    );
+    let mut h = Harness::new(Editor::with_model(m, None));
+    h.app.renewables.open = true;
+    h.frame();
+    // Two bedrooms, three persons: 84 l a day, below the 100 of HE 4.
+    let r = archisim_mep::renewables::renewables(h.app.ed.model());
+    assert_eq!(r.hot_water.dwellings[0].bedrooms, 2);
+    assert!((r.hot_water.daily - 84.0).abs() < 1e-9 && !r.hot_water.applies);
+    // Given as a larger use, with its heat pump it passes.
+    let mut site = h.app.ed.model().renewables_site().clone();
+    site.acs_demand = Some(300.0);
+    h.app
+        .ed
+        .transact("demanda", |m| m.set_renewables_site(site.clone()))
+        .unwrap();
+    h.frame();
+    let r = archisim_mep::renewables::renewables(h.app.ed.model());
+    assert!(r.hot_water.applies && r.hot_water.passes());
+    site.acs_source = archisim_core::AcsSource::Solar;
+    site.fraction = 0.4;
+    h.app
+        .ed
+        .transact("solar", |m| m.set_renewables_site(site))
+        .unwrap();
+    h.frame();
+    let r = archisim_mep::renewables::renewables(h.app.ed.model());
+    assert!(!r.hot_water.passes());
+    assert_eq!(r.fails(), 1);
+}
+
 /// Three levels of representation (`docs/INTERFAZ.md` §13.5): a view
 /// follows a template; what is changed in its look changes the template and
 /// every view that follows it; leaving it keeps the look as its own.

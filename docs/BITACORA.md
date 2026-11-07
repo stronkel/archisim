@@ -6,6 +6,37 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-07 (124) · Energías renovables: agua caliente (HE 4) y fotovoltaica (HE 5)
+
+Rama `bloque/energia-renovable`, con pull request; lleva dentro las ramas de las entradas 122 y 123 (#176 y #177). **Formato versión 93** (`renewables` en el proyecto). Sin cambios de IFC. `docs/INSTALACIONES.md` §8, `docs/CTE.md`.
+
+- **Ventana Colaboración → Energías renovables…**, con el visor de la entrada 123.
+  - Arriba, los datos que el dibujo no da: si el edificio es nuevo, la provincia y la altura sobre su capital, la temperatura de acumulación, con qué es renovable el agua caliente y la potencia de las placas.
+  - El agua caliente puede ser renovable con bomba de calor (SCOP), solar u otra (fracción), o con nada.
+  - La demanda y la superficie construida pueden darse a mano.
+- **HE 4.**
+  - Demanda del Anejo F: viviendas del dibujo, personas por dormitorios, 28 l por persona y factor de centralización.
+  - Energía de cada mes con el agua fría del Anejo G de las 52 capitales, corregida por la altura.
+  - Exigido: 60 % o 70 % renovable, a partir de 100 l/día.
+- **HE 5.** Potencia mínima por la superficie construida y la cubierta no transitable, contra las placas dibujadas.
+- **HE 0** no se calcula: se dice que va con la herramienta oficial.
+- **Florence Street.**
+  - Sus 24 viviendas piden 1.000 l/día; con la bomba de calor de SCOP 3, el 67 % es renovable, y se exige el 60 %.
+  - Con 2.006 m² construidos, el HE 5 pide 10 kWp. Las tres filas de cuatro placas daban 4,3 kWp, así que ahora son tres filas de diez sobre la cubierta del pabellón: 54 m², unos 11 kWp.
+- Lo mismo en la Comprobación CTE (sección de energía), en la memoria de instalaciones (capítulo 6, cuando se aplica) y en `archisim renovables <proyecto>`.
+- Pendiente:
+  - las pérdidas de distribución, acumulación y recirculación del HE 4;
+  - el cálculo de la fracción solar (se da a mano).
+- **A comprobar por Antonio** (`docs/INSTALACIONES.md` §8):
+  - la parte renovable de la bomba de calor, 1 − 1/SCOP con el umbral de SCOP 2,5;
+  - cómo se saca la cubierta no transitable;
+  - los 0,2 kWp/m² de las placas.
+- Probar:
+  1. Abrir Florence Street: Colaboración → Energías renovables. Mirar la demanda (viviendas, personas, litros) y la tabla de los doce meses.
+  2. Cambiar la fuente a «Solar térmica» con 50 %: el HE 4 pasa a no cumplir. Volver a bomba de calor.
+  3. Mirar el HE 5: S, Sc y las placas dibujadas frente a la potencia mínima.
+  4. Comprobación CTE: las dos filas nuevas en Ahorro de energía.
+
 ## 2026-11-07 (123) · Comprobaciones y cálculos que se leen de un vistazo
 
 Rama `bloque/informes-visuales`, con pull request (independiente del #176). Sin cambios de formato ni de IFC. `docs/CTE.md` («Cómo se lee la ventana»).

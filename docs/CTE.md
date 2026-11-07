@@ -131,6 +131,13 @@ Sección «Ahorro de energía (DB-HE 1) y cargas térmicas», del cálculo de `d
 - los radiadores dibujados que no cubren la carga de su local;
 - como datos, la bomba de calor de cada vivienda con sus cargas.
 
+## Energías renovables (HE 4 y HE 5)
+
+En la misma sección de energía, cuando se aplican (`docs/INSTALACIONES.md` §8):
+- HE 4: la parte renovable del agua caliente contra el 60 % o el 70 % exigido;
+- HE 5: la potencia de las placas dibujadas contra la mínima;
+- como dato, que el HE 0 se justifica con la herramienta oficial.
+
 ## Protección contra incendios (SI 4) · H3
 
 Sobre los aparatos de protección contra incendios dibujados (ficha Instalaciones: Rociador, BIE, Extintor, Detección, Emergencia), en cada planta:

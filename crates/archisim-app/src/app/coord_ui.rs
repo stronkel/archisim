@@ -189,6 +189,14 @@ impl ArchiSimApp {
                 self.climate.open = true;
                 ui.close();
             }
+            if ui
+                .button("Energías renovables…")
+                .on_hover_text("DB-HE 4: agua caliente renovable (demanda, agua fría de la provincia, bomba de calor o solar); DB-HE 5: fotovoltaica mínima")
+                .clicked()
+            {
+                self.renewables.open = true;
+                ui.close();
+            }
             self.team_menu_items(ui);
         });
     }
