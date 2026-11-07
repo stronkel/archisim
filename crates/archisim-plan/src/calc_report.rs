@@ -240,6 +240,14 @@ pub fn pages(model: &Model, blocks: &[Block]) -> Vec<String> {
         }
     }
     let count = p.pages.len();
+    // The footer names the document by its cover.
+    let title = blocks
+        .iter()
+        .find_map(|b| match b {
+            Block::Cover { title, .. } => Some(title.as_str()),
+            _ => None,
+        })
+        .unwrap_or("Anejo de cálculo de la estructura");
     p.pages
         .into_iter()
         .enumerate()
@@ -248,7 +256,7 @@ pub fn pages(model: &Model, blocks: &[Block]) -> Vec<String> {
             text(
                 &mut foot,
                 &format!(
-                    "{} · Anejo de cálculo de la estructura · hoja {}/{}",
+                    "{} · {title} · hoja {}/{}",
                     model.project_name,
                     i + 1,
                     count

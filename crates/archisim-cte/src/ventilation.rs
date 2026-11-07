@@ -110,20 +110,23 @@ pub fn check(model: &Model, report: &mut Report) {
                 format!("≥ {}", cm2(p.needed())),
             );
         }
-        if d.kitchens > 0 {
-            push(
-                Status::Info,
-                Subject::Level(d.level),
-                Some(d.level),
-                "HS 3, 3.1.1",
-                format!(
-                    "{}: la cocina lleva extracción propia para la campana, con su conducto",
-                    d.name
-                ),
-                format!("{} l/s", dec(vt::HOOD_FLOW, 0)),
-                String::new(),
-            );
-        }
+    }
+    for h in &v.hoods {
+        let what = format!("{}: {}", h.dwelling, vt::hood_text(&v, h));
+        let (status, subject) = match h.object {
+            None => (Status::Warning, Subject::Room(h.kitchen)),
+            Some(o) if v.hood_fails(h) => (Status::Fails, Subject::Object(o)),
+            Some(o) => (Status::Passes, Subject::Object(o)),
+        };
+        push(
+            status,
+            subject,
+            Some(h.level),
+            "HS 3, 3.1.1",
+            what,
+            String::new(),
+            format!("{} l/s, conducto propio", dec(vt::HOOD_FLOW, 0)),
+        );
     }
     for n in &v.networks {
         for s in &n.stretches {
@@ -137,16 +140,29 @@ pub fn check(model: &Model, report: &mut Report) {
                 subject,
                 Some(s.level),
                 "HS 3, tabla 4.2",
-                format!(
-                    "Tramo {} de extracción: {} l/s de {} boca{}",
-                    s.name,
-                    dec(s.flow, 1),
-                    s.vents,
-                    if s.vents == 1 { "" } else { "s" }
-                ),
+                if s.hoods > 0 && s.vents == 0 {
+                    format!(
+                        "Tramo {} del conducto de campana: {} l/s de {} campana{}",
+                        s.name,
+                        dec(s.flow, 1),
+                        s.hoods,
+                        if s.hoods == 1 { "" } else { "s" }
+                    )
+                } else {
+                    format!(
+                        "Tramo {} de extracción: {} l/s de {} boca{}",
+                        s.name,
+                        dec(s.flow, 1),
+                        s.vents,
+                        if s.vents == 1 { "" } else { "s" }
+                    )
+                },
                 format!("{} ({})", s.size, cm2(s.area)),
                 format!("≥ {} ({})", cm2(s.needed), s.sized_text),
             );
+        }
+        if n.is_hood_duct() {
+            continue;
         }
         match n.fan {
             Some(f) => push(

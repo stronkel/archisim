@@ -37,9 +37,9 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use archisim_core::{
-    BuildingUse, DeviceId, DeviceKind, Hand, LevelId, Model, NewDevice, NewOpening, NewRoom,
-    NewRun, NewWall, OpeningId, OpeningKind, OpeningTypeId, Point2, ReferenceLine, RoomId, RunId,
-    ServiceSystem, WallSide, WallTop, WallTypeId,
+    BuildingUse, DeviceId, DeviceKind, Hand, LevelId, Model, NewDevice, NewObject, NewOpening,
+    NewRoom, NewRun, NewWall, ObjectId, ObjectTypeId, OpeningId, OpeningKind, OpeningTypeId,
+    Point2, ReferenceLine, RoomId, RunId, ServiceSystem, WallSide, WallTop, WallTypeId,
 };
 
 use crate::water::graph;
@@ -321,6 +321,8 @@ pub struct Stretch {
     pub flow: f64,
     /// Valves after it.
     pub vents: usize,
+    /// Kitchen hoods after it.
+    pub hoods: usize,
     /// Its section as drawn, cm², and its size («200 × 150», «Ø200»).
     pub area: f64,
     pub size: String,
@@ -336,13 +338,48 @@ impl Stretch {
     }
 }
 
-/// An extract network: from the valves to its fan.
+/// An extract network: from the valves (or the kitchen hoods) to its fan
+/// or its outlet.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Network {
     pub stretches: Vec<Stretch>,
     pub fan: Option<DeviceId>,
     pub vents: Vec<DeviceId>,
+    /// The stretch each valve hangs on, by index (as `vents`).
+    pub vent_at: Vec<Option<usize>>,
+    /// The kitchen hoods on it, and the stretch of each.
+    pub hoods: Vec<ObjectId>,
+    pub hood_at: Vec<Option<usize>>,
     pub flow: f64,
+}
+
+impl Network {
+    /// A hoods' duct: only hoods on it (no fan needed, each hood has its
+    /// own).
+    pub fn is_hood_duct(&self) -> bool {
+        !self.hoods.is_empty() && self.vents.is_empty()
+    }
+
+    /// Hoods and valves on one duct: the hoods' extraction must be
+    /// independent (3.1.1).
+    pub fn shared(&self) -> bool {
+        !self.hoods.is_empty() && !self.vents.is_empty()
+    }
+}
+
+/// A kitchen's own extraction for its hood (3.1.1): 50 l/s through a
+/// duct of its own, not shared with the dwelling's ventilation.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Hood {
+    pub kitchen: RoomId,
+    pub kitchen_name: String,
+    pub dwelling: String,
+    pub level: LevelId,
+    /// The hood drawn in the kitchen (an object of the family «Campana
+    /// extractora»).
+    pub object: Option<ObjectId>,
+    /// Its duct's network, by index in `networks`.
+    pub network: Option<usize>,
 }
 
 /// A room of the building with its own flow (table 2.2).
@@ -367,6 +404,8 @@ pub struct Ventilation {
     pub loose: Vec<DeviceId>,
     /// Wet rooms of no dwelling.
     pub lone_wet: Vec<RoomId>,
+    /// Every kitchen of a dwelling and its hood.
+    pub hoods: Vec<Hood>,
 }
 
 impl Ventilation {
@@ -434,6 +473,16 @@ impl Ventilation {
                 .flat_map(|n| &n.stretches)
                 .filter(|s| s.short())
                 .count()
+            + self.hoods.iter().filter(|h| self.hood_fails(h)).count()
+    }
+
+    /// A hood drawn without its duct, or on a duct with valves.
+    pub fn hood_fails(&self, h: &Hood) -> bool {
+        h.object.is_some()
+            && match h.network.and_then(|i| self.networks.get(i)) {
+                None => true,
+                Some(n) => n.shared(),
+            }
     }
 }
 
@@ -788,11 +837,80 @@ pub fn ventilation(model: &Model) -> Ventilation {
             vent_flow.insert(*id, r.extraction / n);
         }
     }
-    let (networks, loose) = extract_networks(model, &vent_flow);
+    // The kitchens' hoods.
+    let mut hoods: Vec<(ObjectId, LevelId, Point2)> = Vec::new();
+    for d in &v.dwellings {
+        for r in d.rooms.iter().filter(|r| r.kitchen) {
+            let Some(room) = model.room(r.room) else {
+                continue;
+            };
+            let object = model
+                .objects()
+                .filter(|o| {
+                    // A hood stands against the wall: on the room's edge.
+                    let inward = (room.label - o.position).normalized().unwrap_or_default();
+                    o.level == d.level
+                        && (room.contains(o.position) || room.contains(o.position + inward * 0.3))
+                })
+                .find(|o| is_hood(model, o.id))
+                .map(|o| o.id);
+            if let Some(id) = object {
+                if let Some(o) = model.objects().find(|o| o.id == id) {
+                    hoods.push((id, o.level, o.position));
+                }
+            }
+            v.hoods.push(Hood {
+                kitchen: r.room,
+                kitchen_name: r.name.clone(),
+                dwelling: d.name.clone(),
+                level: d.level,
+                object,
+                network: None,
+            });
+        }
+    }
+    let (mut networks, loose) = extract_networks(model, &vent_flow, &hoods);
+    // Named across the building: «V1»… the general ducts, «VC1»… the
+    // hoods' ones.
+    let (mut general, mut hood) = (0, 0);
+    for n in &mut networks {
+        let hoods_only = n.is_hood_duct();
+        for st in &mut n.stretches {
+            st.name = if hoods_only {
+                hood += 1;
+                format!("VC{hood}")
+            } else {
+                general += 1;
+                format!("V{general}")
+            };
+        }
+    }
+    for h in &mut v.hoods {
+        h.network = h
+            .object
+            .and_then(|o| networks.iter().position(|n| n.hoods.contains(&o)));
+    }
     v.networks = networks;
     v.loose = loose;
     v
 }
+
+/// Whether an object is a kitchen hood: of the family that makes hoods
+/// (`props:hood`) or named so.
+pub fn is_hood(model: &Model, id: ObjectId) -> bool {
+    let Some(o) = model.objects().find(|o| o.id == id) else {
+        return false;
+    };
+    let Some(t) = model.object_type(o.object_type) else {
+        return false;
+    };
+    model.family_prop(t.family).as_deref() == Some("hood")
+        || t.name.to_lowercase().contains("campana")
+}
+
+/// How near a hood must be to its duct, metres (a hood is up to 1,2 m
+/// wide; its duct leaves from its middle).
+pub const HOOD_REACH: f64 = 0.6;
 
 /// The air's way through the dwelling: what each dry room takes in goes,
 /// door by door, to the nearest wet rooms that still lack it.
@@ -874,6 +992,7 @@ fn route_air(rooms: &[VentRoom], doors: &[&Door]) -> Vec<Passage> {
 fn extract_networks(
     model: &Model,
     vent_flow: &BTreeMap<DeviceId, f64>,
+    hoods: &[(ObjectId, LevelId, Point2)],
 ) -> (Vec<Network>, Vec<DeviceId>) {
     let g = graph(model, ServiceSystem::ExhaustAir);
     let mut at_node: BTreeMap<usize, Vec<DeviceId>> = BTreeMap::new();
@@ -887,6 +1006,13 @@ fn extract_networks(
             None => loose.push(d.id),
         }
     }
+    let mut at_hood: BTreeMap<usize, Vec<ObjectId>> = BTreeMap::new();
+    for (id, level, p) in hoods {
+        if let Some(n) = g.nearest(*level, *p, HOOD_REACH) {
+            at_hood.entry(n).or_default().push(*id);
+        }
+    }
+    let starts: BTreeSet<usize> = at_node.keys().chain(at_hood.keys()).copied().collect();
     let fans: Vec<_> = model
         .devices()
         .filter(|d| d.kind == DeviceKind::Fan)
@@ -894,7 +1020,7 @@ fn extract_networks(
         .collect();
     let mut done = vec![false; g.nodes.len()];
     let mut out = Vec::new();
-    for &start in at_node.keys() {
+    for &start in &starts {
         if done[start] {
             continue;
         }
@@ -913,7 +1039,12 @@ fn extract_networks(
                 }
             }
         }
-        let fan = fans.iter().find(|(n, _)| part.contains(n)).copied();
+        // A fan only for the valves: a hoods' duct goes up to its outlet.
+        let with_vents = part.iter().any(|n| at_node.contains_key(n));
+        let fan = fans
+            .iter()
+            .find(|(n, _)| with_vents && part.contains(n))
+            .copied();
         let root = fan.map(|(n, _)| n).unwrap_or_else(|| {
             *part
                 .iter()
@@ -945,26 +1076,33 @@ fn extract_networks(
                 ed.a
             }
         };
-        // Flow and valves after each node.
-        let mut flow: BTreeMap<usize, (f64, usize)> = BTreeMap::new();
+        // Flow, valves and hoods after each node.
+        let mut flow: BTreeMap<usize, (f64, usize, usize)> = BTreeMap::new();
         for &i in order.iter().rev() {
-            let own: (f64, usize) = at_node.get(&i).map_or((0.0, 0), |vs| {
+            let mut own: (f64, usize, usize) = at_node.get(&i).map_or((0.0, 0, 0), |vs| {
                 (
                     vs.iter()
                         .map(|v| vent_flow.get(v).copied().unwrap_or(0.0))
                         .sum(),
                     vs.len(),
+                    0,
                 )
             });
-            let e = flow.entry(i).or_insert((0.0, 0));
+            if let Some(hs) = at_hood.get(&i) {
+                own.0 += HOOD_FLOW * hs.len() as f64;
+                own.2 += hs.len();
+            }
+            let e = flow.entry(i).or_insert((0.0, 0, 0));
             e.0 += own.0;
             e.1 += own.1;
+            e.2 += own.2;
             let mine = *e;
             if let Some(&pe) = up.get(&i) {
                 let p = other(pe, i);
-                let pf = flow.entry(p).or_insert((0.0, 0));
+                let pf = flow.entry(p).or_insert((0.0, 0, 0));
                 pf.0 += mine.0;
                 pf.1 += mine.1;
+                pf.2 += mine.2;
             }
         }
         let children = |i: usize| up.iter().filter(move |(c, e)| other(**e, **c) == i).count();
@@ -975,20 +1113,23 @@ fn extract_networks(
         for &c in &order[1..] {
             let e = up[&c];
             let p = other(e, c);
-            let carry = (flow.get(&c).copied().unwrap_or((0.0, 0))).0 > 1e-9;
+            let carry = (flow.get(&c).copied().unwrap_or((0.0, 0, 0))).0 > 1e-9;
             if !carry {
                 continue;
             }
-            let goes_on = up
-                .get(&p)
-                .filter(|pe| children(p) == 1 && !at_node.contains_key(&p) && key(**pe) == key(e));
+            let goes_on = up.get(&p).filter(|pe| {
+                children(p) == 1
+                    && !at_node.contains_key(&p)
+                    && !at_hood.contains_key(&p)
+                    && key(**pe) == key(e)
+            });
             let length = g.edges[e].length;
             if let Some(s) = goes_on.and_then(|pe| of_edge.get(pe)).copied() {
                 stretches[s].length += length;
                 of_edge.insert(e, s);
                 continue;
             }
-            let (fl, nv) = flow[&c];
+            let (fl, nv, nh) = flow[&c];
             let parent = up.get(&p).and_then(|pe| of_edge.get(pe)).copied();
             let (run, shaft) = key(e);
             let level = if g.nodes[c].z <= g.nodes[p].z {
@@ -1042,6 +1183,7 @@ fn extract_networks(
                 length,
                 flow: fl,
                 vents: nv,
+                hoods: nh,
                 area,
                 size,
                 needed,
@@ -1050,23 +1192,38 @@ fn extract_networks(
             });
             of_edge.insert(e, stretches.len() - 1);
         }
-        for (i, s) in stretches.iter_mut().enumerate() {
-            s.name = format!("V{}", i + 1);
-        }
         let vents: Vec<DeviceId> = part
             .iter()
             .filter_map(|n| at_node.get(n))
             .flatten()
             .copied()
             .collect();
+        let at_of = |n: usize| up.get(&n).and_then(|e| of_edge.get(e)).copied();
+        let vent_at: Vec<Option<usize>> = part
+            .iter()
+            .filter_map(|n| at_node.get(n).map(|vs| (n, vs)))
+            .flat_map(|(n, vs)| vs.iter().map(move |_| at_of(*n)))
+            .collect();
+        let mut net_hoods = Vec::new();
+        let mut hood_at = Vec::new();
+        for n in &part {
+            for h in at_hood.get(n).into_iter().flatten() {
+                net_hoods.push(*h);
+                hood_at.push(at_of(*n));
+            }
+        }
         let total = vents
             .iter()
             .map(|v| vent_flow.get(v).copied().unwrap_or(0.0))
-            .sum();
+            .sum::<f64>()
+            + HOOD_FLOW * net_hoods.len() as f64;
         out.push(Network {
             stretches,
             fan: fan.map(|(_, d)| d),
             vents,
+            vent_at,
+            hoods: net_hoods,
+            hood_at,
             flow: total,
         });
     }
@@ -1075,6 +1232,32 @@ fn extract_networks(
 
 fn dec(v: f64, n: usize) -> String {
     format!("{v:.n$}").replace('.', ",")
+}
+
+/// What a kitchen's hood is, in words.
+pub fn hood_text(v: &Ventilation, h: &Hood) -> String {
+    match (h.object, h.network.and_then(|i| v.networks.get(i))) {
+        (None, _) => format!(
+            "{}: sin campana dibujada; necesita extracción propia de {} l/s con su conducto (3.1.1)",
+            h.kitchen_name,
+            dec(HOOD_FLOW, 0)
+        ),
+        (Some(_), None) => format!(
+            "{}: campana sin conducto — NO CUMPLE: necesita {} l/s por un conducto propio (3.1.1)",
+            h.kitchen_name,
+            dec(HOOD_FLOW, 0)
+        ),
+        (Some(_), Some(n)) if n.shared() => format!(
+            "{}: la campana va al conducto de la ventilación general — NO CUMPLE: conducto propio (3.1.1)",
+            h.kitchen_name
+        ),
+        (Some(_), Some(_)) => format!(
+            "{}: campana de {} l/s por su conducto propio (red {}, 3.1.1)",
+            h.kitchen_name,
+            dec(HOOD_FLOW, 0),
+            h.network.map_or(0, |i| i + 1)
+        ),
+    }
 }
 
 /// The calculation in words.
@@ -1153,27 +1336,48 @@ pub fn report(model: &Model, v: &Ventilation) -> String {
                 }
             );
         }
-        if d.kitchens > 0 {
-            let _ = writeln!(
-                s,
-                "  Cocina: extracción propia de la campana, {} l/s, con su conducto (3.1.1)",
-                dec(HOOD_FLOW, 0)
-            );
+        for h in v
+            .hoods
+            .iter()
+            .filter(|h| h.dwelling == d.name && h.level == d.level)
+        {
+            let _ = writeln!(s, "  {}", hood_text(v, h));
         }
     }
     for (i, n) in v.networks.iter().enumerate() {
-        let _ = writeln!(
-            s,
-            "\nRed de extracción {}: {} bocas, {} l/s ({} m³/h). Extractor: {}",
-            i + 1,
-            n.vents.len(),
-            dec(n.flow, 1),
-            dec(n.flow * 3.6, 0),
-            match n.fan.and_then(|f| model.device(f)) {
-                Some(f) => format!("«{}», {} m³/h", f.name, dec(n.flow * 3.6, 0)),
-                None => "no está dibujado".into(),
-            }
-        );
+        if n.is_hood_duct() {
+            let _ = writeln!(
+                s,
+                "\nRed de extracción {} (campanas): {} campana{}, {} l/s ({} m³/h), salida por su extremo más alto",
+                i + 1,
+                n.hoods.len(),
+                if n.hoods.len() == 1 { "" } else { "s" },
+                dec(n.flow, 1),
+                dec(n.flow * 3.6, 0),
+            );
+        } else {
+            let _ = writeln!(
+                s,
+                "\nRed de extracción {}: {} bocas{}, {} l/s ({} m³/h). Extractor: {}",
+                i + 1,
+                n.vents.len(),
+                if n.shared() {
+                    format!(
+                        " y {} campana{} — NO CUMPLE: la campana lleva conducto propio (3.1.1)",
+                        n.hoods.len(),
+                        if n.hoods.len() == 1 { "" } else { "s" }
+                    )
+                } else {
+                    String::new()
+                },
+                dec(n.flow, 1),
+                dec(n.flow * 3.6, 0),
+                match n.fan.and_then(|f| model.device(f)) {
+                    Some(f) => format!("«{}», {} m³/h", f.name, dec(n.flow * 3.6, 0)),
+                    None => "no está dibujado".into(),
+                }
+            );
+        }
         for st in &n.stretches {
             let _ = writeln!(
                 s,
@@ -1416,6 +1620,52 @@ pub fn example_flat(
     );
 }
 
+/// The kitchen of [`example_flat`] with its hood (an object of
+/// `hood_type`, of the family «Campana extractora») and the hood's own
+/// duct: along the ceiling to a shaft Ø150 of its own, up to the roof,
+/// where it comes out by a short duct.
+pub fn example_hood(m: &mut Model, l0: LevelId, l1: LevelId, hood_type: ObjectTypeId) {
+    m.add_object(NewObject {
+        level: l0,
+        object_type: hood_type,
+        position: Point2::new(7.0, 0.35),
+        rotation: 0.0,
+        base_offset: 0.0,
+    })
+    .expect("example hood");
+    m.add_device(NewDevice {
+        level: l0,
+        kind: DeviceKind::AirShaft,
+        name: "Conducto de la campana".into(),
+        position: Point2::new(5.6, 0.35),
+        rotation: 0.0,
+        elevation: 0.0,
+        width: 0.15,
+        depth: 0.15,
+        height: 3.0,
+    })
+    .expect("example hood");
+    for (level, path, z) in [
+        (
+            l0,
+            vec![Point2::new(7.0, 0.35), Point2::new(5.6, 0.35)],
+            2.5,
+        ),
+        (l1, vec![Point2::new(5.6, 0.35), Point2::new(5.6, 0.7)], 0.3),
+    ] {
+        m.add_run(NewRun {
+            level,
+            system: ServiceSystem::ExhaustAir,
+            path,
+            elevation: z,
+            width: 0.15,
+            height: 0.15,
+            slope: 0.0,
+        })
+        .expect("example hood");
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1440,6 +1690,59 @@ mod tests {
         let lib = archisim_library::add_library(&mut m).unwrap();
         example_flat(&mut m, l0, l1, lib.partition, lib.facade, lib.interior_door);
         m
+    }
+
+    #[test]
+    fn the_kitchen_hood_has_its_own_duct() {
+        // Without a hood drawn: the kitchen is told, nothing fails.
+        let m = flat();
+        let v = ventilation(&m);
+        assert_eq!(v.hoods.len(), 1);
+        assert!(v.hoods[0].object.is_none());
+        assert!(!v.hood_fails(&v.hoods[0]));
+        // With its hood and its own duct to the roof: 50 l/s, Ø150 is
+        // 177 cm² against 125.
+        let mut m = flat();
+        let l0 = m.levels()[0].id;
+        let l1 = m.levels()[1].id;
+        let hood = archisim_library::add_object_entry(&mut m, "Campana decorativa 60").unwrap();
+        example_hood(&mut m, l0, l1, hood);
+        let v = ventilation(&m);
+        let h = &v.hoods[0];
+        assert!(h.object.is_some());
+        let n = &v.networks[h.network.expect("its duct")];
+        assert!(n.is_hood_duct());
+        assert!(n.fan.is_none());
+        assert!((n.flow - HOOD_FLOW).abs() < 1e-9);
+        assert_eq!(n.hood_at.len(), 1);
+        assert!(n.hood_at[0].is_some());
+        assert!(n.stretches.iter().all(|s| !s.short()), "{:?}", n.stretches);
+        assert!(!v.hood_fails(h));
+        // The general network is still the same, with its fan.
+        assert_eq!(v.networks.len(), 2);
+        let general = v.networks.iter().find(|n| !n.vents.is_empty()).unwrap();
+        assert!(general.fan.is_some());
+        assert_eq!(general.vent_at.len(), general.vents.len());
+        assert!(general.vent_at.iter().all(|s| s.is_some()));
+        // Its duct taken to the general shaft: shared, it fails.
+        let duct = m
+            .runs()
+            .find(|r| r.level == l0 && r.path[0].distance(Point2::new(7.0, 0.35)) < 1e-9)
+            .map(|r| r.id)
+            .unwrap();
+        m.edit_run(duct, |r| {
+            r.path = vec![
+                Point2::new(7.0, 0.35),
+                Point2::new(9.0, 0.35),
+                Point2::new(9.0, 1.0),
+            ];
+        })
+        .unwrap();
+        let v = ventilation(&m);
+        let h = &v.hoods[0];
+        assert!(v.networks[h.network.unwrap()].shared());
+        assert!(v.hood_fails(h));
+        assert!(report(&m, &v).contains("conducto propio"));
     }
 
     #[test]

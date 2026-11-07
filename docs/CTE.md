@@ -91,7 +91,7 @@ Sección propia «Ventilación (DB-HS 3)», del cálculo de `docs/INSTALACIONES.
 - En cada puerta por la que pasa el aire, su paso contra 8·q cm² (70 cm² como mínimo). Si no basta, se dice la holgura bajo la hoja que haría falta o que lleve rejilla de paso.
 - Cada tramo de conducto de extracción contra 2,5·q cm² (tabla 4.2, extracción mecánica).
 - El extractor de cada red con su caudal, o que no cumple si no está dibujado.
-- Como nota, la extracción propia de la campana de cada cocina (50 l/s, 3.1.1).
+- La campana de cada cocina (3.1.1): cumple si va por un conducto propio de 50 l/s; no cumple si no tiene conducto o va al de la ventilación general; se avisa si la cocina no tiene campana dibujada.
 - Como aviso, las bocas sin conducto y los locales húmedos que no son de ninguna vivienda.
 - Los trasteros y almacenes de residuos del edificio, con su caudal por superficie (tabla 2.2).
 
