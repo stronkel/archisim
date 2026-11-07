@@ -67,6 +67,7 @@ mod sweeps;
 mod thermal;
 mod title_blocks;
 mod urban;
+mod ventilation_site;
 mod views;
 mod wall_profile;
 mod water;
@@ -121,6 +122,7 @@ pub use sweeps::*;
 pub use thermal::*;
 pub use title_blocks::*;
 pub use urban::*;
+pub use ventilation_site::*;
 pub use views::*;
 pub use wall_profile::*;
 pub use water::*;
@@ -1570,6 +1572,7 @@ pub struct ModelParts {
     pub electrical_site: ElectricalSite,
     pub water_site: WaterSite,
     pub thermal_site: ThermalSite,
+    pub ventilation_site: VentilationSite,
     /// Underlays of the levels' plans (E7).
     pub level_underlays: Vec<(LevelId, Vec<Underlay>)>,
     pub viewports: Vec<crate::sheets::Viewport>,
@@ -1706,6 +1709,7 @@ pub struct Model {
     pub(crate) electrical_site: ElectricalSite,
     pub(crate) water_site: WaterSite,
     pub(crate) thermal_site: ThermalSite,
+    pub(crate) ventilation_site: VentilationSite,
     pub(crate) drafts: BTreeMap<DraftId, Draft>,
     pub(crate) info: crate::sheets::ProjectInfo,
     pub(crate) sheets: BTreeMap<SheetId, crate::sheets::Sheet>,
@@ -1811,6 +1815,7 @@ impl Model {
             electrical_site: ElectricalSite::default(),
             water_site: WaterSite::default(),
             thermal_site: ThermalSite::default(),
+            ventilation_site: VentilationSite::default(),
             structural_loads: BTreeMap::new(),
             device_circuits: BTreeMap::new(),
             level_underlays: BTreeMap::new(),
@@ -4492,6 +4497,7 @@ impl Model {
             electrical_site: self.electrical_site,
             water_site: self.water_site,
             thermal_site: self.thermal_site.clone(),
+            ventilation_site: self.ventilation_site,
             level_underlays: self
                 .level_underlays
                 .iter()
@@ -4848,6 +4854,12 @@ impl Model {
             .set_thermal_site(parts.thermal_site)
             .map_err(|error| RestoreError {
                 element: "thermal site".into(),
+                error,
+            })?;
+        model
+            .set_ventilation_site(parts.ventilation_site)
+            .map_err(|error| RestoreError {
+                element: "ventilation site".into(),
                 error,
             })?;
         model.restore_title_blocks(parts.title_blocks, parts.default_title_block, &mut claim)?;

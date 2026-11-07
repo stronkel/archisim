@@ -300,6 +300,18 @@ impl ArchiSimApp {
                     self.export_drain_pdf();
                 }
                 if ui
+                    .add(shortcut_button("Esquemas de ventilación…", "PDF"))
+                    .clicked()
+                {
+                    self.export_ventilation_pdf();
+                }
+                if ui
+                    .add(shortcut_button("Memoria de instalaciones…", "PDF"))
+                    .clicked()
+                {
+                    self.export_services_report();
+                }
+                if ui
                     .add(shortcut_button("Mediciones y presupuesto…", "BC3"))
                     .clicked()
                 {
@@ -473,6 +485,13 @@ impl ArchiSimApp {
                 .clicked()
             {
                 self.export_calc_report();
+            }
+            if ui
+                .button("Memoria de instalaciones (PDF)…")
+                .on_hover_text("Electricidad, fontanería, saneamiento, ventilación y envolvente con sus cargas, con las tablas del cálculo, en hojas A4")
+                .clicked()
+            {
+                self.export_services_report();
             }
             if ui
                 .button("Planos de estructura (PDF)…")

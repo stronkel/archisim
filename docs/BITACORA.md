@@ -6,9 +6,9 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
-## 2026-11-07 (120) · Plantillas de vista: escala, plano de corte y biblioteca
+## 2026-11-07 (122) · Plantillas de vista: escala, plano de corte y biblioteca
 
-Rama `bloque/plantillas-biblioteca`, con pull request. **Formato `.archisim` versión 91** (la plantilla guarda su escala y su plano de corte). Sin cambios de IFC. Antonio aprobó la propuesta: la plantilla manda en la escala (encendido por defecto) y en el plano de corte (apagado por defecto), cada uno con su interruptor.
+Rama `bloque/plantillas-biblioteca`, con pull request. **Formato `.archisim` versión 92** (la plantilla guarda su escala y su plano de corte; la 91 es la de la ventilación, #174, unida antes). Sin cambios de IFC. Antonio aprobó la propuesta: la plantilla manda en la escala (encendido por defecto) y en el plano de corte (apagado por defecto), cada uno con su interruptor.
 
 **Hecho**
 - **La plantilla manda en**: en la ventana Representación, bajo la plantilla, dos interruptores: **Escala** (con su escala) y **Plano de corte** (con su altura). Encendidos, las vistas que siguen la plantilla —plantas, vistas guardadas y vistas de los planos— toman su escala y su corte; apagados, cada vista conserva los suyos.
@@ -28,6 +28,55 @@ Rama `bloque/plantillas-biblioteca`, con pull request. **Formato `.archisim` ver
 5. **Guardar en la biblioteca**, abre otro proyecto (o uno nuevo) y en **De la biblioteca…** elige «Superficies»: llega con su escala y su aspecto.
 
 ---
+## 2026-11-07 (121) · Ventilación: salidas de los conductos, ventilación híbrida y garajes
+
+Rama `bloque/ventilacion-salidas`, encima de `bloque/planos-instalaciones` (PR #173): su pull request lleva también los cambios de aquel. **Formato versión 91** (`ventilation`: sistema y zona). Sin cambios de IFC. `docs/INSTALACIONES.md` §6, `docs/CTE.md`, `docs/FORMATO_ARCHISIM.md`.
+
+Las cifras están contrastadas esta vez con el texto del HS 3 (edición de 2022), no de memoria. En ese texto, la altura sobre la cubierta (1 m, 2 m si es transitable, 1,3 veces el obstáculo) solo se exige en ventilación híbrida (3.2.1.5); la distancia de 3 m a las entradas de aire, a todas las salidas (3.2.1.4). Lo que pendía como «3.2.4» es en realidad 3.2.1.
+
+- **Salida de cada conducto** (3.2.1). La salida es el extractor, o el extremo libre más alto de un conducto sin extractor. Se comprueba:
+  - siempre, la distancia en el espacio a la ventana, puerta exterior, aireador o terraza más cercana: 3 m al menos;
+  - en híbrida, además, la altura sobre la cubierta (1 m, o 2 m si es transitable) y sobre los muros a 2–10 m (o 1,3 veces los de menos de 2 m), diciendo cuál manda.
+  - Sale en el cálculo, en la Comprobación CTE («HS 3, 3.2.1») y en la memoria de instalaciones.
+- **Sistema y zona** en la ventana del cálculo: mecánica o híbrida, y en híbrida la zona térmica de la tabla 4.4 (las 52 provincias, hasta 800 m o por encima).
+  - Los conductos híbridos toman la sección de la tabla 4.2, por la clase de tiro de la tabla 4.3: las plantas que vierten al conducto con la zona.
+  - Si la tabla pide dos o más conductos, se dice y no se agranda solo.
+  - El extractor se llama entonces aspirador híbrido.
+  - Los garajes y las campanas siguen siendo mecánicos.
+- **Ventilación mecánica:** 1,5·q cm² en los conductos de la cubierta (fórmula 4.2); junto a los locales, los 2,5·q de siempre.
+- **Garajes** (tabla 2.2 y 3.1.4). Los locales «garaje», «aparcamiento» o «parking» (no los de bicicletas o motos) piden 120 l/s por plaza: los coches dibujados dentro, o una plaza cada 25 m².
+  - Con bocas dibujadas: una boca cada 100 m², a menos de 10 m entre ellas, dos redes por planta desde 15 plazas y la red solo para el garaje.
+  - Avisos: la detección de CO (más de 5 plazas o de 100 m²) y el garaje sin nada dibujado (puede ser natural).
+  - Los trasteros y cuartos de basuras con bocas dibujadas también entran en los conductos y se comprueban sus bocas.
+- **Florence Street.**
+  - Al comprobarlo, 8 de las 12 salidas estaban a menos de 3 m de aireadores de la planta 4, de una ventana o de la puerta del castillete.
+  - Ahora cada extractor y cada salida de campana se lleva por la cubierta, sobre el forjado y no sobre los patios, al sitio más cercano a 3 m de todo; las 12 cumplen.
+  - El aparcamiento de bicicletas ya no se toma por garaje de coches (pedía 360 l/s).
+- Pendiente:
+  - la ventilación natural de garajes y trasteros (aberturas mixtas en fachadas opuestas);
+  - los dos tercios de bocas cerca del techo en los garajes;
+  - los obstáculos que no son muros.
+- Probar:
+  1. `cargo run -p archisim-cli -- ventilacion --ejemplo out/` y abrir `out/ventilacion-ejemplo.archisim`. En Colaboración → Cálculo de ventilación, «Salida (Cubierta…): a … m de …».
+  2. Poner un aireador en la cubierta junto al extractor: la salida pasa a «NO CUMPLE: a 3 m al menos».
+  3. Cambiar el sistema a **Híbrida** y la zona «Por provincia…» a Madrid (hasta 800 m), zona X:
+     - el conducto vertical pide 625 cm² (tiro T-3, una planta);
+     - el extractor, a 0,55 m sobre la cubierta, no llega a 1 m.
+  4. Dibujar un local «Garaje» en una planta de sótano: sale con sus plazas y 120 l/s cada una, el aviso del monóxido y, al poner bocas, sus comprobaciones.
+  5. `cargo run --release -p archisim-cli -- edificio out/edificio`: mirar en la planta de cubierta dónde han quedado los extractores.
+
+## 2026-11-07 (120) · Planos de instalaciones: campanas, esquemas de ventilación y memoria
+
+Rama `bloque/planos-instalaciones` sobre `main` (0.79), con pull request. Sin cambios de formato ni de IFC. `docs/INSTALACIONES.md` §6 y §8, `docs/CTE.md`.
+
+- **Campana de la cocina (HS 3, 3.1.1).** El cálculo de ventilación reconoce la campana (objeto «Campana extractora» dentro de la cocina) y sigue su conducto del sistema Extracción hasta la salida: 50 l/s por campana, 2,5·q cm² por tramo, conducto propio (colectivo solo de campanas, sin bocas). No cumple sin conducto o compartido con la ventilación general; aviso si la cocina no tiene campana. Tramos «VC…». En la Comprobación CTE, el texto del cálculo y «Poner los tamaños calculados». El piso de ejemplo lleva su campana con un conducto Ø150 a cubierta; Florence Street, un conducto colectivo de campanas por columna de viviendas (6, de Ø300), y las 24 cumplen.
+- **Esquemas de ventilación** VE-01 (vertical: extracción general a la izquierda, campanas a trazos a la derecha) y VE-02… (red de cada planta hasta cada boca y campana), como los de fontanería y saneamiento. PDF y DXF desde la ventana del cálculo, Archivo → Exportar → Esquemas de ventilación y `archisim ventilacion <p> --esquemas carpeta`.
+- **Memoria de instalaciones** en A4 (portada y un capítulo por instalación dibujada: REBT, HS 4, HS 5, HS 3 y HE 1, con sus tablas y comprobaciones), con el mismo formato que el anejo de cálculo de la estructura. Archivo → Exportar → Memoria de instalaciones y `archisim memoria-instalaciones <p> [carpeta]` (PDF y texto). Florence Street: 42 hojas.
+- Pendiente: dónde sale cada conducto (altura sobre cubierta, distancia a ventanas, HS 3 3.2.4); la ventilación natural e híbrida; los garajes.
+- Probar:
+  1. `cargo run -p archisim-cli -- ventilacion --ejemplo out/` y abrir `out/ventilacion-ejemplo.archisim`: en Colaboración → Cálculo de ventilación, «Cocina: campana de 50 l/s por su conducto propio». Mover el conducto de la campana hasta la boca de la cocina: pasa a «NO CUMPLE».
+  2. En la misma ventana, «Esquemas (PDF)…»; y Archivo → Exportar → Memoria de instalaciones.
+  3. `cargo run --release -p archisim-cli -- edificio out/edificio` y `cargo run --release -p archisim-cli -- memoria-instalaciones out/edificio/edificio.archisim out/edificio`.
 
 ## 2026-11-07 (119) · Todo a `main`: versión 0.79
 

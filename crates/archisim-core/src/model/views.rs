@@ -66,11 +66,11 @@ pub struct ViewTemplate {
     pub name: String,
     pub style: ViewStyle,
     /// The scale denominator it sets for the views that follow it, if it
-    /// sets one (version 91, Revit's «Escala» in the template; on by
+    /// sets one (version 92, Revit's «Escala» in the template; on by
     /// default: a template's look is made for a scale).
     pub scale: Option<f64>,
     /// The cut plane it sets for the plans that follow it, metres above
-    /// their level, if it sets one (version 91; off by default: a basement
+    /// their level, if it sets one (version 92; off by default: a basement
     /// or a mezzanine may need its own).
     pub cut_plane: Option<f64>,
 }

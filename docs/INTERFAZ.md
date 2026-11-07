@@ -469,5 +469,5 @@ El estilo de presentación dejaría de ser una cosa aparte: sería una pestaña 
 
 **Segunda vuelta** (rama `bloque/plantillas-planos`): las vistas colocadas en los planos eligen y siguen plantilla desde sus propiedades, y su «Representación… (VG)» las edita a ellas.
 
-**Tercera vuelta** (rama `bloque/plantillas-biblioteca`, formato versión 91): la plantilla **manda en** la escala (encendido por defecto) y en el plano de corte (apagado por defecto), con un interruptor cada uno en la ventana Representación; lo que fija sale en gris en Propiedades. Las plantillas se guardan en la biblioteca («Plantillas de vista.asplantillas») y se cargan en otros proyectos, con sus capas por nombre y su estilo de presentación.
+**Tercera vuelta** (rama `bloque/plantillas-biblioteca`, formato versión 92): la plantilla **manda en** la escala (encendido por defecto) y en el plano de corte (apagado por defecto), con un interruptor cada uno en la ventana Representación; lo que fija sale en gris en Propiedades. Las plantillas se guardan en la biblioteca («Plantillas de vista.asplantillas») y se cargan en otros proyectos, con sus capas por nombre y su estilo de presentación.
 

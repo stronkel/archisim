@@ -88,10 +88,10 @@ pub(crate) struct ViewTemplateOf {
     pub name: String,
     #[serde(default, skip_serializing_if = "Style::is_default")]
     pub style: Style,
-    /// The scale it sets for the views that follow it (version 91).
+    /// The scale it sets for the views that follow it (version 92).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scale: Option<f64>,
-    /// The cut plane it sets for the plans that follow it (version 91).
+    /// The cut plane it sets for the plans that follow it (version 92).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cut_plane: Option<f64>,
 }

@@ -217,3 +217,41 @@ impl ArchiSimApp {
             });
     }
 }
+
+impl ArchiSimApp {
+    /// The installations' report («Memoria de instalaciones») as a PDF of
+    /// A4 pages.
+    pub(super) fn export_services_report(&mut self) {
+        let mut d = rfd::FileDialog::new()
+            .set_title("Memoria de instalaciones (PDF)")
+            .add_filter("PDF", &["pdf"])
+            .set_file_name(format!(
+                "{}-memoria-instalaciones.pdf",
+                self.file_name_stem()
+            ));
+        if let Some(dir) = self.start_dir() {
+            d = d.set_directory(dir);
+        }
+        let Some(path) = d.save_file() else {
+            return;
+        };
+        let model = self.ed.shown();
+        let blocks = archisim_plan::services_report::report(&model);
+        let pages = archisim_plan::calc_report::pages(&model, &blocks);
+        let sheets: Vec<(String, String)> = pages
+            .into_iter()
+            .enumerate()
+            .map(|(i, svg)| (svg, format!("Memoria de instalaciones {}", i + 1)))
+            .collect();
+        let r = crate::documents::pdf_of(&sheets, "Memoria de instalaciones")
+            .and_then(|bytes| std::fs::write(&path, bytes).map_err(|e| e.to_string()));
+        match r {
+            Ok(()) => self.say(format!(
+                "Memoria de instalaciones: {} hojas A4 en {}.",
+                sheets.len(),
+                path.display()
+            )),
+            Err(e) => self.complain(format!("No se pudo exportar: {e}.")),
+        }
+    }
+}

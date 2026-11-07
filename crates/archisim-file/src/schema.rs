@@ -248,6 +248,9 @@ pub(crate) struct ProjectFile {
     /// 89).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub thermal: Option<ThermalOf>,
+    /// The ventilation's system and draught zone (version 91).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ventilation: Option<VentilationOf>,
     /// Rooms (IfcSpace) and tags of doors, windows, walls and rooms
     /// (version 7).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -4142,6 +4145,7 @@ impl ProjectFile {
             electrical: ElectricalOf::out(&p.electrical_site),
             water: WaterOf::out(&p.water_site),
             thermal: ThermalOf::out(&p.thermal_site),
+            ventilation: VentilationOf::out(&p.ventilation_site),
             level_underlays: crate::drafting::level_underlays_out(&p.level_underlays),
             rooms: crate::rooms::rooms_out(&p.rooms),
             tags: crate::rooms::tags_out(&p.tags),
@@ -4766,6 +4770,10 @@ impl ProjectFile {
             thermal_site: match &self.thermal {
                 Some(t) => t.site()?,
                 None => core::ThermalSite::default(),
+            },
+            ventilation_site: match &self.ventilation {
+                Some(v) => v.site()?,
+                None => core::VentilationSite::default(),
             },
             level_underlays: crate::drafting::level_underlays_in(self.level_underlays)?,
             rooms: crate::rooms::rooms_in(self.rooms)?,
@@ -6201,6 +6209,39 @@ impl ThermalOf {
                 .iter()
                 .map(|(m, v)| (core::MaterialId(*m), *v))
                 .collect(),
+        })
+    }
+}
+
+/// The ventilation's data besides the drawing (version 91).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VentilationOf {
+    /// «mechanical» or «hybrid».
+    pub system: String,
+    /// «W», «X», «Y» or «Z» (HS 3, table 4.4).
+    pub zone: String,
+}
+
+impl VentilationOf {
+    fn out(site: &core::VentilationSite) -> Option<Self> {
+        if *site == core::VentilationSite::default() {
+            return None;
+        }
+        Some(VentilationOf {
+            system: site.system.code().into(),
+            zone: site.zone.code().into(),
+        })
+    }
+
+    fn site(&self) -> Result<core::VentilationSite, FileError> {
+        let bad = |what: &str, v: &str| FileError::Value {
+            element: "ventilation".into(),
+            message: format!("{what} «{v}»"),
+        };
+        Ok(core::VentilationSite {
+            system: core::VentSystem::from_code(&self.system)
+                .ok_or_else(|| bad("system", &self.system))?,
+            zone: core::DraftZone::from_code(&self.zone).ok_or_else(|| bad("zone", &self.zone))?,
         })
     }
 }
