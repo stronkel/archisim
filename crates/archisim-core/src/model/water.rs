@@ -120,13 +120,18 @@ impl PipeMaterial {
     }
 }
 
-/// What the water calculation needs besides the drawing.
+/// What the water calculations (supply and drainage) need besides the
+/// drawing.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct WaterSite {
     /// The pressure the supply company guarantees at the meter, kPa
     /// (100 kPa ≈ 1 bar ≈ 10 m of water).
     pub pressure: f64,
     pub material: PipeMaterial,
+    /// The rainfall intensity of the place, mm/h (DB-HS 5, anejo B, tabla
+    /// B.1, by its zone and isohyet); the tables of rain water are for
+    /// 100 mm/h and are scaled by i/100.
+    pub rain_intensity: f64,
 }
 
 impl Default for WaterSite {
@@ -134,13 +139,17 @@ impl Default for WaterSite {
         WaterSite {
             pressure: 300.0,
             material: PipeMaterial::Multilayer,
+            rain_intensity: 100.0,
         }
     }
 }
 
 impl WaterSite {
     pub fn is_valid(&self) -> bool {
-        self.pressure.is_finite() && self.pressure > 0.0
+        self.pressure.is_finite()
+            && self.pressure > 0.0
+            && self.rain_intensity.is_finite()
+            && self.rain_intensity > 0.0
     }
 }
 

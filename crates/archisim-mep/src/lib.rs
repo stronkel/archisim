@@ -11,10 +11,16 @@
 //!   drawn, their flows with simultaneity, the diameter of every stretch,
 //!   its speed and pressure loss, and the pressure left at every tap.
 //!
+//! - `drain`: the drainage by DB-HS 5: waste water by units of discharge
+//!   (branches, downpipes and collectors), rain water by the roof each
+//!   inlet takes, mixed collectors, the outlets of every roof and its
+//!   gutters.
+//!
 //! It works on the board («cuadro»), the mechanisms and the appliances
 //! drawn; it adds no elements. It is a design aid: the installer's
 //! certificate and the project's installation are signed by their
 //! authors.
 
+pub mod drain;
 pub mod electrical;
 pub mod water;

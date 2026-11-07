@@ -331,6 +331,7 @@ pub fn check(model: &Model) -> Report {
     access::stairs_and_ramps(model, &mut report);
     services::check(model, &mut report);
     services::calculation(model, &mut report);
+    services::drain_calculation(model, &mut report);
     structure::check(model, &mut report);
     electrical::check(model, &mut report);
     framing::check(model, &mut report);

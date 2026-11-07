@@ -1925,7 +1925,8 @@ fn services(m: &mut Model, lv: &[LevelId]) -> R {
             })?;
         }
     }
-    water_network(m, lv, riser)
+    water_network(m, lv, riser)?;
+    drain_network(m, lv)
 }
 
 /// The water supply joined up, so that the calculation of DB-HS 4 can
@@ -2036,6 +2037,200 @@ fn water_network(m: &mut Model, lv: &[LevelId], riser: archisim_core::DeviceId) 
                 m.add_run(r)?;
             }
         }
+    }
+    Ok(())
+}
+
+/// The drainage (DB-HS 5): a downpipe by every wet room of the flats,
+/// each appliance's drain to it, and under the ground floor the buried
+/// collectors to the sewer at the street; the roof's rain through four
+/// outlets and two downpipes to its own collector (a separate network).
+fn drain_network(m: &mut Model, lv: &[LevelId]) -> R {
+    use archisim_core::{Appliance, DeviceKind, NewDevice, NewRun, ServiceSystem};
+    let pb = lv[0];
+    let roof_z = m.level(lv[5]).map_or(16.2, |l| l.elevation);
+    let run =
+        |m: &mut Model, level, system, path: Vec<Point2>, width: f64, z: f64, slope: f64| -> R {
+            m.add_run(NewRun {
+                level,
+                system,
+                path,
+                elevation: z,
+                width,
+                height: width,
+                slope,
+            })?;
+            Ok(())
+        };
+    let downpipe = |m: &mut Model, name: &str, at: Point2, height: f64| -> R {
+        m.add_device(NewDevice {
+            level: pb,
+            kind: DeviceKind::Downpipe,
+            name: name.into(),
+            position: at,
+            rotation: 0.0,
+            elevation: 0.0,
+            width: 0.11,
+            depth: 0.11,
+            height,
+        })?;
+        Ok(())
+    };
+    // The wet rooms of a typical floor: the appliances around each WC, and
+    // the kitchens on their own.
+    let apps = m.appliances_on(lv[1]);
+    let wcs: Vec<Point2> = apps
+        .iter()
+        .filter(|a| a.kind == Appliance::Wc)
+        .map(|a| a.point)
+        .collect();
+    let mut groups: Vec<Vec<Point2>> = wcs.iter().map(|w| vec![*w]).collect();
+    for a in apps.iter().filter(|a| a.kind != Appliance::Wc) {
+        let near = wcs
+            .iter()
+            .enumerate()
+            .map(|(i, w)| (i, w.distance(a.point)))
+            .filter(|(_, d)| *d < 3.5)
+            .min_by(|x, y| x.1.total_cmp(&y.1));
+        match near {
+            Some((i, _)) => groups[i].push(a.point),
+            None => match groups[wcs.len()..]
+                .iter_mut()
+                .find(|g| g[0].distance(a.point) < 3.5)
+            {
+                Some(g) => g.push(a.point),
+                None => groups.push(vec![a.point]),
+            },
+        }
+    }
+    let spots: Vec<Point2> = groups
+        .iter()
+        .map(|g| {
+            let n = g.len() as f64;
+            let c = g.iter().fold(Point2::new(0.0, 0.0), |s, p| {
+                Point2::new(s.x + p.x / n, s.y + p.y / n)
+            });
+            // Off the appliances, so each one has its own drain to it.
+            Point2::new(c.x, c.y + 0.7)
+        })
+        .collect();
+    let tops = m.level(lv[4]).map_or(13.0, |l| l.elevation) + 3.2 + 1.0;
+    for (i, at) in spots.iter().enumerate() {
+        downpipe(m, &format!("Bajante de residuales {}", i + 1), *at, tops)?;
+    }
+    let waste = ServiceSystem::Drainage;
+    for l in lv {
+        let (runs, _) = m.route_appliances(*l, waste, -0.25);
+        for r in runs {
+            m.add_run(r)?;
+        }
+    }
+    // Under the ground floor: a collector along the front to the sewer.
+    let (y_main, junction, outlet) = (1.0, p(16.0, 1.0), p(16.0, -1.2));
+    let z_junction = -1.2 + 0.02 * junction.distance(outlet);
+    let z_main = |x: f64| z_junction + 0.02 * (x - junction.x).abs();
+    let xs: Vec<f64> = spots.iter().map(|s| s.x).collect();
+    let (x_west, x_east) = (
+        xs.iter().copied().fold(f64::INFINITY, f64::min) - 0.4,
+        xs.iter().copied().fold(f64::NEG_INFINITY, f64::max) + 0.4,
+    );
+    run(m, pb, waste, vec![junction, outlet], 0.16, z_junction, 0.02)?;
+    for x in [x_west, x_east] {
+        run(
+            m,
+            pb,
+            waste,
+            vec![p(x, y_main), junction],
+            0.16,
+            z_main(x),
+            0.02,
+        )?;
+    }
+    for at in &spots {
+        let foot = p(at.x, y_main);
+        run(
+            m,
+            pb,
+            waste,
+            vec![*at, foot],
+            0.11,
+            z_main(at.x) + 0.02 * at.distance(foot),
+            0.02,
+        )?;
+    }
+    // The rain: four outlets on the roof's terrace to the west downpipe,
+    // four on the pavilion's roof to the east one, each downpipe to the
+    // ground and a collector of its own (a separate network).
+    let rain = ServiceSystem::Rainwater;
+    let rain_pipes = [p(9.0, 6.0), p(29.0, 6.0)];
+    let pavilion_z = m.level(lv[6]).map_or(19.4, |l| l.elevation);
+    for (i, (at, level, top, xs)) in [
+        (rain_pipes[0], lv[5], roof_z + 0.2, [5.0, 13.0]),
+        (rain_pipes[1], lv[6], pavilion_z + 0.2, [22.0, 32.0]),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        downpipe(
+            m,
+            &format!("Bajante de pluviales de cubierta {}", i + 1),
+            at,
+            top,
+        )?;
+        for x in xs {
+            for y in [3.0, 9.0] {
+                run(m, level, rain, vec![p(x, y), at], 0.09, -0.15, 0.01)?;
+            }
+        }
+    }
+    // The first floor's balconies: an outlet at each one's downpipe, down
+    // to the ground and to a gully at its foot.
+    for (x, y, out) in [(WEST_EDGE + 0.1, 4.25, -1.0), (EAST_EDGE - 0.1, 7.8, 1.0)] {
+        run(
+            m,
+            lv[1],
+            rain,
+            vec![p(x + out * 0.8, y), p(x, y)],
+            0.09,
+            -0.05,
+            0.01,
+        )?;
+        let h = m.level(lv[1]).map_or(3.4, |l| l.elevation);
+        downpipe(m, "Bajante de pluviales de balcón", p(x, y), h)?;
+        run(
+            m,
+            pb,
+            rain,
+            vec![p(x, y), p(x + out * 1.2, y)],
+            0.09,
+            -0.3,
+            0.02,
+        )?;
+    }
+    let (y_rain, rj, r_out) = (1.6, p(18.0, 1.6), p(18.0, -1.2));
+    let zr = -1.0 + 0.02 * rj.distance(r_out);
+    let zr_main = |x: f64| zr + 0.02 * (x - rj.x).abs();
+    run(m, pb, rain, vec![rj, r_out], 0.125, zr, 0.02)?;
+    for at in rain_pipes {
+        run(
+            m,
+            pb,
+            rain,
+            vec![p(at.x, y_rain), rj],
+            0.11,
+            zr_main(at.x),
+            0.02,
+        )?;
+        let foot = p(at.x, y_rain);
+        run(
+            m,
+            pb,
+            rain,
+            vec![at, foot],
+            0.11,
+            zr_main(at.x) + 0.02 * at.distance(foot),
+            0.02,
+        )?;
     }
     Ok(())
 }

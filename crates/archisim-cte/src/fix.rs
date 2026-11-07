@@ -33,6 +33,11 @@ pub enum Change {
     Structure(archisim_struct::fix::Change),
     /// A pipe's diameter.
     RunWidth { run: RunId, width: f64 },
+    /// A downpipe's diameter.
+    DeviceWidth {
+        device: archisim_core::DeviceId,
+        width: f64,
+    },
     /// A drain's slope.
     RunSlope { run: RunId, slope: f64 },
     /// A door of a type of its family this wide (the opening, in metres).
@@ -85,6 +90,10 @@ pub fn apply(model: &mut Model, change: &Change) -> Result<(), ModelError> {
     match change {
         Change::Structure(c) => archisim_struct::fix::apply(model, c),
         Change::RunWidth { run, width } => model.edit_run(*run, |r| r.width = *width),
+        Change::DeviceWidth { device, width } => model.edit_device(*device, |d| {
+            d.width = *width;
+            d.depth = *width;
+        }),
         Change::RunSlope { run, slope } => model.edit_run(*run, |r| r.slope = *slope),
         Change::DoorWidth { opening, width } => {
             let o = model
@@ -300,6 +309,48 @@ pub fn fix(model: &Model) -> Fix {
             }
         }
     }
+    // The diameters of the drainage calculation (HS 5).
+    let drains_short = |i: &&crate::Item| {
+        i.status == Status::Fails
+            && (i.rule.starts_with("HS 5, tabla 4.") || i.rule.starts_with("HS 5, 4.3"))
+            && i.rule != "HS 5, tabla 4.1"
+            && i.rule != "HS 5, tabla 4.6"
+            && i.rule != "HS 5, tabla 4.7"
+            || i.status == Status::Fails
+                && i.rule == "HS 5, tabla 4.1"
+                && matches!(i.subject, Subject::Run(_))
+    };
+    if report.items.iter().any(|i| drains_short(&i)) {
+        let (runs, pipes) = archisim_mep::drain::drainage(&m).sized_runs();
+        for i in report.items.iter().filter(drains_short) {
+            match i.subject {
+                Subject::Run(r) => {
+                    if let (Some(w), Some(now)) =
+                        (runs.get(&r), m.runs().find(|x| x.id == r).map(|x| x.width))
+                    {
+                        let e = widths.entry(r).or_insert(now);
+                        *e = e.max(*w);
+                    }
+                }
+                Subject::Device(dv) => {
+                    if let Some(w) = pipes.get(&dv) {
+                        let now = m.devices().find(|x| x.id == dv).map_or(0.0, |x| x.width);
+                        if *w > now + 1e-6 {
+                            push(
+                                &mut m,
+                                Change::DeviceWidth {
+                                    device: dv,
+                                    width: *w,
+                                },
+                                &mut changes,
+                            );
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
     for (run, width) in widths {
         push(&mut m, Change::RunWidth { run, width }, &mut changes);
     }
@@ -412,6 +463,23 @@ fn lines(before: &Model, after: &Model, changes: &[Change]) -> Vec<Line> {
                     subject: Subject::Run(*run),
                     name: crate::subject_name(before, Subject::Run(*run)),
                     what: if slope { "Pendiente" } else { "Diámetro" },
+                    before: v(before),
+                    after: v(after),
+                });
+            }
+            Change::DeviceWidth { device, .. } => {
+                if !seen.insert((device.0, 4)) {
+                    continue;
+                }
+                let v = |m: &Model| {
+                    m.devices()
+                        .find(|d| d.id == *device)
+                        .map_or(String::new(), |d| format!("Ø{:.0} mm", d.width * 1000.0))
+                };
+                out.push(Line {
+                    subject: Subject::Device(*device),
+                    name: crate::subject_name(before, Subject::Device(*device)),
+                    what: "Diámetro",
                     before: v(before),
                     after: v(after),
                 });

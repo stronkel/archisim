@@ -294,6 +294,12 @@ impl ArchiSimApp {
                     self.export_water_pdf();
                 }
                 if ui
+                    .add(shortcut_button("Esquemas de saneamiento…", "PDF"))
+                    .clicked()
+                {
+                    self.export_drain_pdf();
+                }
+                if ui
                     .add(shortcut_button("Mediciones y presupuesto…", "BC3"))
                     .clicked()
                 {

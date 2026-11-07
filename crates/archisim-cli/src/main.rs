@@ -213,6 +213,7 @@ Uso:
 
   archisim cte <proyecto.archisim> [informe.csv]
   archisim fontaneria <proyecto.archisim> [--diametros salida.archisim] [--esquemas carpeta]   cálculo del suministro de agua (DB-HS 4); con --diametros, guarda el proyecto con los diámetros calculados; con --esquemas, el esquema vertical y la distribución por planta en PDF y DXF
+  archisim saneamiento <proyecto.archisim> [--diametros salida.archisim] [--esquemas carpeta]   evacuación de aguas (DB-HS 5): residuales por unidades de desagüe y pluviales por cubierta; con --diametros, agranda lo que se queda corto; con --esquemas, el esquema vertical y la red de cada planta en PDF y DXF
   archisim electricidad <proyecto.archisim> [carpeta]   cálculo de la instalación eléctrica (REBT); con carpeta, el esquema unifilar en PDF y DXF
   archisim estructura <proyecto.archisim> [carpeta]   acciones, descenso de cargas y cálculo de la estructura; con carpeta, el anejo de cálculo y los planos de estructura en PDF
       Comprueba el proyecto con el Código Técnico: ocupación y evacuación
@@ -597,6 +598,25 @@ fn main() -> ExitCode {
                 ExitCode::FAILURE
             }
         },
+        Some("saneamiento") => match args.get(1) {
+            Some(project) => {
+                let after = |flag: &str| {
+                    args.iter()
+                        .position(|a| a == flag)
+                        .and_then(|i| args.get(i + 1))
+                        .map(Path::new)
+                };
+                report(run_drainage(
+                    Path::new(project),
+                    after("--diametros"),
+                    after("--esquemas"),
+                ))
+            }
+            None => {
+                eprintln!("Falta el proyecto: archisim saneamiento <proyecto.archisim>");
+                ExitCode::FAILURE
+            }
+        },
         Some("electricidad") => match args.get(1) {
             Some(project) => report(run_electrical(
                 Path::new(project),
@@ -847,6 +867,80 @@ fn run_water(
         println!(
             "\nDiámetros calculados en {} tuberías: {}",
             runs.len(),
+            out.display()
+        );
+    }
+    Ok(())
+}
+
+fn run_drainage(
+    project: &Path,
+    sized: Option<&Path>,
+    sheets_dir: Option<&Path>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut model = archisim_file::open(project)
+        .map_err(|e| format!("no se puede abrir {}: {e}", project.display()))?;
+    let d = archisim_mep::drain::drainage(&model);
+    print!("{}", archisim_mep::drain::report(&model, &d));
+    if let Some(dir) = sheets_dir {
+        std::fs::create_dir_all(dir)?;
+        let stem = project
+            .file_stem()
+            .map_or("proyecto".into(), |s| s.to_string_lossy().to_string());
+        let sheets = archisim_plan::water_schematic::drainage_pages(&model);
+        let titles: Vec<String> = (0..sheets.len())
+            .map(|i| format!("SA-{:02}", i + 1))
+            .collect();
+        let pdf_pages: Vec<archisim_export::pdf::Page> = sheets
+            .iter()
+            .zip(&titles)
+            .map(|(svg, title)| archisim_export::pdf::Page { svg, title })
+            .collect();
+        if !sheets.is_empty() {
+            let pdf = dir.join(format!("{stem}-saneamiento.pdf"));
+            std::fs::write(
+                &pdf,
+                archisim_export::pdf::pdf(&pdf_pages, "Esquemas de saneamiento")?,
+            )?;
+            for (svg, title) in sheets.iter().zip(&titles) {
+                let base = dir.join(format!("{stem}-saneamiento-{}", title.to_lowercase()));
+                std::fs::write(base.with_extension("svg"), svg)?;
+                std::fs::write(
+                    base.with_extension("dxf"),
+                    archisim_export::dxf::page_dxf(&model, svg)?,
+                )?;
+            }
+            println!(
+                "\nEsquemas de saneamiento ({} hojas A3): {} (y en SVG y DXF)",
+                sheets.len(),
+                pdf.display()
+            );
+        }
+    }
+    if let Some(out) = sized {
+        let (runs, pipes) = d.sized_runs();
+        let mut n = 0;
+        for (run, w) in &runs {
+            if model.runs().any(|r| r.id == *run && r.width + 1e-4 < *w) {
+                model.edit_run(*run, |r| r.width = *w)?;
+                n += 1;
+            }
+        }
+        for (pipe, w) in &pipes {
+            if model
+                .devices()
+                .any(|x| x.id == *pipe && x.width + 1e-4 < *w)
+            {
+                model.edit_device(*pipe, |x| {
+                    x.width = *w;
+                    x.depth = *w;
+                })?;
+                n += 1;
+            }
+        }
+        archisim_file::save(&model, out)?;
+        println!(
+            "\nDiámetros calculados en {n} tuberías y bajantes: {}",
             out.display()
         );
     }

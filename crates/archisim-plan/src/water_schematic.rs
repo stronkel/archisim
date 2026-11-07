@@ -1,25 +1,34 @@
-//! The plumbing diagrams (esquemas de fontanería), A3 landscape pages (SVG
-//! in millimetres) drawn from the calculation of `archisim-mep::water`:
+//! The diagrams of the water installations, A3 landscape pages (SVG in
+//! millimetres) drawn from the calculations of `archisim-mep`:
 //!
-//! - FO-01, the vertical diagram (esquema vertical): the levels one over
-//!   another, the source (meter, tank or heater) with its pressure, the
-//!   risers with each stretch between floors and its diameter, and on each
-//!   floor a box for every branch that leaves the risers (a dwelling, a
-//!   wet room): what it feeds, the diameter where it starts and the least
-//!   pressure at its taps. Cold water on the left half, hot on the right.
-//! - one page per level with taps (distribución): the tree of every
-//!   branch of the level, stretch by stretch with its name and diameter,
-//!   down to each tap with the pressure left at it.
+//! - **Plumbing** (`pages`, from `water`): FO-01, the vertical diagram
+//!   (esquema vertical): the levels one over another, the source (meter,
+//!   tank or heater) with its pressure, the risers with each stretch
+//!   between floors and its diameter, and on each floor a box for every
+//!   branch that leaves the risers (a dwelling, a wet room): what it
+//!   feeds, the diameter where it starts and the least pressure at its
+//!   taps; cold water on the left half, hot on the right. Then one page per
+//!   level with taps (distribución): the tree of every branch of the level,
+//!   stretch by stretch with its name and diameter, down to each tap with
+//!   the pressure left at it.
+//! - **Drainage** (`drainage_pages`, from `drain`): SA-01, the same
+//!   vertical diagram with the outlet at the foot, the downpipes and a box
+//!   for every branch with its appliances and units of discharge; waste
+//!   water on the left, rain water on the right (each roof's inlets and
+//!   the area they take). Then one page per level with its branches down
+//!   to every appliance or inlet.
 //!
-//! The diameters written are the calculated ones; where the pipe drawn is
-//! smaller, both are written («Ø20→26») in red, and so are the taps short
-//! of pressure as drawn.
+//! Both are drawn from one form (`Net`: lines, the stretches; leaves, the
+//! taps, appliances or inlets), so they look alike. The diameters written
+//! are the calculated ones; where the pipe drawn is smaller, both are
+//! written («Ø20→26») in red.
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 
 use archisim_core::{Appliance, DeviceId, LevelId, Model, Point2, ServiceSystem};
-use archisim_mep::water::{self as wa, Network, Source, Water, TAP_PRESSURE};
+use archisim_mep::drain::{self as dr, Drainage};
+use archisim_mep::water::{self as wa, Source, Water, TAP_PRESSURE};
 
 use crate::lettering::{paint, text_path, text_width, Align};
 use crate::structure_sheets::{
@@ -27,52 +36,342 @@ use crate::structure_sheets::{
 };
 
 const STROKE: f64 = 0.35;
-/// The dashes of the hot water.
+/// The dashes of the hot water (and of the rain water).
 const HOT_DASH: &str = "2.2 1.1";
 /// Where the drawing ends above the title block.
 const BOTTOM: f64 = H - MARGIN - BLOCK_H - 6.0;
 
-/// The pages: the vertical diagram and one per level with taps. Empty if
-/// there is no water network.
+/// A stretch of a network, as drawn.
+struct Line {
+    name: String,
+    level: LevelId,
+    parent: Option<usize>,
+    /// The riser or downpipe it goes up.
+    riser: Option<DeviceId>,
+    /// «Ø26» or «Ø20→26».
+    diameter: String,
+    red: bool,
+    /// How many leaves it serves.
+    count: usize,
+}
+
+/// What a network ends in: a tap, an appliance's drain, a rain inlet.
+struct Leaf {
+    path: Vec<usize>,
+    /// What it is, for the boxes («Inodoro», «Sumidero»).
+    kind: String,
+    /// Under the leaf on a level's page.
+    label: String,
+    red: bool,
+    /// The number the boxes give: least pressure, units, area.
+    value: f64,
+    /// With the pipes as drawn, for the boxes' red.
+    drawn_red: bool,
+}
+
+/// What a box of the vertical diagram says under its rows.
+#[derive(Clone, Copy)]
+enum Footer {
+    /// «P mín. 122 kPa».
+    Pressure,
+    /// «12 UD».
+    Units,
+    /// «45,0 m²».
+    Area,
+}
+
+/// The source symbol: a circle or a box with a letter.
+#[derive(Clone, Copy)]
+enum Mark {
+    Circle(&'static str),
+    Square(&'static str),
+}
+
+/// One network to draw.
+struct Net {
+    title: &'static str,
+    dashed: bool,
+    right: bool,
+    source_level: Option<LevelId>,
+    source: String,
+    source_from: String,
+    mark: Mark,
+    lines: Vec<Line>,
+    leaves: Vec<Leaf>,
+    loose: usize,
+    loose_text: &'static str,
+    footer: Footer,
+}
+
+/// What the pages of one installation say.
+struct Sheets {
+    prefix: &'static str,
+    vertical: &'static str,
+    level_title: &'static str,
+    discipline: &'static str,
+    left: (&'static str, &'static str),
+    right: (&'static str, &'static str),
+    notes: Vec<String>,
+}
+
+/// The plumbing pages: the vertical diagram and one per level with taps.
+/// Empty if there is no water network.
 pub fn pages(model: &Model) -> Vec<String> {
-    let _font = crate::lettering::use_font(model.graphics.font);
     let w = wa::water(model);
     if w.networks.iter().all(|n| n.stretches.is_empty()) {
         return Vec::new();
     }
-    let trees: Vec<Tree> = w.networks.iter().map(Tree::of).collect();
-    let mut out = vec![vertical_page(model, &w, &trees)];
+    let nets: Vec<Net> = w.networks.iter().map(|n| water_net(model, n)).collect();
+    draw_pages(model, &nets, &water_sheets(&w))
+}
+
+/// The drainage pages: the vertical diagram and one per level with
+/// branches. Empty if there is no drainage network.
+pub fn drainage_pages(model: &Model) -> Vec<String> {
+    let d = dr::drainage(model);
+    if d.networks.iter().all(|n| n.stretches.is_empty()) {
+        return Vec::new();
+    }
+    let nets: Vec<Net> = d.networks.iter().map(|n| drain_net(model, n)).collect();
+    draw_pages(model, &nets, &drain_sheets(&d))
+}
+
+fn draw_pages(model: &Model, nets: &[Net], sheets: &Sheets) -> Vec<String> {
+    let _font = crate::lettering::use_font(model.graphics.font);
+    let trees: Vec<Tree> = nets.iter().map(Tree::of).collect();
+    let mut out = vec![vertical_page(model, &trees, sheets)];
     let mut k = 2;
     for l in model.levels() {
         if trees.iter().any(|t| !t.roots_on(l.id).is_empty()) {
-            out.push(level_page(model, &w, &trees, l.id, &format!("FO-{k:02}")));
+            let code = format!("{}-{k:02}", sheets.prefix);
+            out.push(level_page(model, &trees, l.id, &code, sheets));
             k += 1;
         }
     }
     out
 }
 
+/// «Ø26», or «Ø20→26» if the pipe drawn is smaller; and whether it is.
+fn diameter(drawn: f64, sized: f64) -> (String, bool) {
+    let d = (drawn * 1000.0).round();
+    let z = (sized * 1000.0).round();
+    if d + 0.5 < z {
+        (format!("Ø{d:.0}→{z:.0}"), true)
+    } else {
+        (format!("Ø{z:.0}"), false)
+    }
+}
+
+fn short(a: Appliance) -> &'static str {
+    match a {
+        Appliance::Wc => "Inodoro",
+        other => other.name(),
+    }
+}
+
+fn dec(v: f64, d: usize) -> String {
+    format!("{v:.d$}").replace('.', ",")
+}
+
+fn water_net(model: &Model, net: &wa::Network) -> Net {
+    let hot = net.system == ServiceSystem::HotWater;
+    let lines = net
+        .stretches
+        .iter()
+        .map(|st| {
+            let (diameter, red) = diameter(st.drawn.0, st.sized.0);
+            Line {
+                name: st.name.clone(),
+                level: st.level,
+                parent: st.parent,
+                riser: st.riser,
+                diameter,
+                red,
+                count: st.appliances,
+            }
+        })
+        .collect();
+    let leaves = net
+        .taps
+        .iter()
+        .map(|t| Leaf {
+            path: t.path.clone(),
+            kind: short(t.kind).to_string(),
+            label: format!("{} · {} kPa", short(t.kind), dec(t.sized_pressure, 0)),
+            red: t.sized_pressure < TAP_PRESSURE || t.pressure < TAP_PRESSURE,
+            value: t.sized_pressure,
+            drawn_red: t.pressure < TAP_PRESSURE,
+        })
+        .collect();
+    let source_level = match &net.source {
+        Source::Device(d, _) => model.device(*d).map(|d| d.level),
+        Source::End(l, _) => Some(*l),
+    };
+    let name = match &net.source {
+        Source::Device(..) => wa::source_name(model, net),
+        Source::End(..) => "Extremo de la red".to_string(),
+    };
+    Net {
+        title: if hot {
+            "AGUA CALIENTE SANITARIA"
+        } else {
+            "AGUA FRÍA"
+        },
+        dashed: hot,
+        right: hot,
+        source_level,
+        source: format!("{name} · {} kPa", dec(net.source_pressure, 0)),
+        source_from: wa::source_name(model, net),
+        mark: if hot {
+            Mark::Square("ACS")
+        } else {
+            Mark::Circle("C")
+        },
+        lines,
+        leaves,
+        loose: net.loose.len(),
+        loose_text: "sin unir a esta red",
+        footer: Footer::Pressure,
+    }
+}
+
+fn drain_net(model: &Model, net: &dr::Network) -> Net {
+    let rain = net.system == ServiceSystem::Rainwater;
+    let lines: Vec<Line> = net
+        .stretches
+        .iter()
+        .map(|st| {
+            let (diameter, red) = diameter(st.drawn, st.sized);
+            Line {
+                name: st.name.clone(),
+                level: st.level,
+                parent: st.parent,
+                riser: st.downpipe,
+                diameter,
+                red,
+                count: if rain { 1 } else { st.appliances },
+            }
+        })
+        .collect();
+    let mut leaves: Vec<Leaf> = net
+        .drains
+        .iter()
+        .map(|d| {
+            let red = d.path.last().is_some_and(|i| net.stretches[*i].short());
+            Leaf {
+                path: d.path.clone(),
+                kind: short(d.kind).to_string(),
+                label: format!("{} · {} UD", short(d.kind), d.units),
+                red,
+                value: f64::from(d.units),
+                drawn_red: red,
+            }
+        })
+        .collect();
+    leaves.extend(net.inlets.iter().map(|i| Leaf {
+        path: i.path.clone(),
+        kind: "Sumidero".to_string(),
+        label: format!("Sumidero · {} m²", dec(i.area, 1)),
+        red: false,
+        value: i.area,
+        drawn_red: false,
+    }));
+    let outlet = dr::outlet_name(model, net);
+    Net {
+        title: if rain {
+            "AGUAS PLUVIALES"
+        } else {
+            "AGUAS RESIDUALES"
+        },
+        dashed: rain,
+        right: rain,
+        source_level: Some(net.outlet.0),
+        source: if rain {
+            format!("{outlet} · {} m²", dec(net.area(), 1))
+        } else {
+            format!("{outlet} · {} UD", net.units())
+        },
+        source_from: "la acometida".to_string(),
+        mark: Mark::Square(if rain { "P" } else { "A" }),
+        lines,
+        leaves,
+        loose: 0,
+        loose_text: "",
+        footer: if rain { Footer::Area } else { Footer::Units },
+    }
+}
+
+fn water_sheets(w: &Water) -> Sheets {
+    Sheets {
+        prefix: "FO",
+        vertical: "Esquema vertical de fontanería",
+        level_title: "Distribución de fontanería",
+        discipline: "Fontanería (CTE DB-HS 4) · sin escala",
+        left: ("Agua fría", ""),
+        right: ("Agua caliente sanitaria", ""),
+        notes: vec![
+            format!(
+                "Presión en el contador {} kPa · {} · simultaneidad {} · v ≤ {} m/s · +{} % de pérdidas locales",
+                dec(w.pressure, 0),
+                w.material.name(),
+                if w.dwelling {
+                    "UNE 149201 (viviendas)"
+                } else {
+                    "Qt/√(n−1)"
+                },
+                dec(wa::DESIGN_SPEED, 1),
+                dec(wa::FITTINGS * 100.0, 0)
+            ),
+            format!(
+                "Diámetros exteriores calculados (mm). En rojo: tubería dibujada menor (dibujado→calculado) y grifos por debajo de {TAP_PRESSURE:.0} kPa con lo dibujado."
+            ),
+            "Presión mínima en grifos 100 kPa y en calentadores 150 kPa; máxima 500 kPa (HS 4, 2.1.3).".into(),
+        ],
+    }
+}
+
+fn drain_sheets(d: &Drainage) -> Sheets {
+    Sheets {
+        prefix: "SA",
+        vertical: "Esquema vertical de saneamiento",
+        level_title: "Red de saneamiento",
+        discipline: "Saneamiento (CTE DB-HS 5) · sin escala",
+        left: ("Aguas residuales", ""),
+        right: ("Aguas pluviales", ""),
+        notes: vec![
+            format!(
+                "PVC · unidades de desagüe de uso {} (tabla 4.1) · lluvia {} mm/h (factor {})",
+                if d.public { "público" } else { "privado" },
+                dec(d.intensity, 0),
+                dec(d.factor(), 2)
+            ),
+            "Diámetros exteriores calculados (mm): derivaciones tabla 4.1, ramales 4.3, bajantes 4.4 y 4.8, colectores 4.5 y 4.9. En rojo: tubería dibujada menor (dibujado→calculado).".into(),
+            "Ningún tramo disminuye de diámetro aguas abajo; los colectores mixtos, por la tabla 4.9 con las UD en superficie equivalente (4.3).".into(),
+        ],
+    }
+}
+
 /// A network as a tree of stretches.
 struct Tree<'a> {
-    net: &'a Network,
+    net: &'a Net,
     children: Vec<Vec<usize>>,
-    /// The taps whose last stretch is each one.
+    /// The leaves whose last stretch is each one.
     taps_on: Vec<Vec<usize>>,
     /// The stretches on the way to a riser (and the risers).
     trunk: Vec<bool>,
 }
 
 impl<'a> Tree<'a> {
-    fn of(net: &'a Network) -> Self {
-        let k = net.stretches.len();
+    fn of(net: &'a Net) -> Self {
+        let k = net.lines.len();
         let mut children = vec![Vec::new(); k];
-        for (i, s) in net.stretches.iter().enumerate() {
+        for (i, s) in net.lines.iter().enumerate() {
             if let Some(p) = s.parent {
                 children[p].push(i);
             }
         }
         let mut taps_on = vec![Vec::new(); k];
-        for (t, tap) in net.taps.iter().enumerate() {
+        for (t, tap) in net.leaves.iter().enumerate() {
             if let Some(last) = tap.path.last() {
                 taps_on[*last].push(t);
             }
@@ -80,7 +379,7 @@ impl<'a> Tree<'a> {
         // Children come after their parent: from the end, upwards.
         let mut trunk = vec![false; k];
         for i in (0..k).rev() {
-            if net.stretches[i].riser.is_some() || children[i].iter().any(|c| trunk[*c]) {
+            if net.lines[i].riser.is_some() || children[i].iter().any(|c| trunk[*c]) {
                 trunk[i] = true;
             }
         }
@@ -95,7 +394,7 @@ impl<'a> Tree<'a> {
     /// The branches that leave the trunk (or the source) on a level, or
     /// come down from another level.
     fn roots_on(&self, level: LevelId) -> Vec<usize> {
-        let st = &self.net.stretches;
+        let st = &self.net.lines;
         (0..st.len())
             .filter(|i| !self.trunk[*i] && st[*i].level == level)
             .filter(|i| match st[*i].parent {
@@ -105,16 +404,16 @@ impl<'a> Tree<'a> {
             .collect()
     }
 
-    /// The taps after a stretch.
+    /// The leaves after a stretch.
     fn taps_after(&self, s: usize) -> Vec<usize> {
-        (0..self.net.taps.len())
-            .filter(|t| self.net.taps[*t].path.contains(&s))
+        (0..self.net.leaves.len())
+            .filter(|t| self.net.leaves[*t].path.contains(&s))
             .collect()
     }
 
     /// The boxes of a branch for the vertical diagram: the branch itself,
     /// or, if it is large and splits, each of the branches it splits into
-    /// (with the taps on the split, if any, as one more), split again in
+    /// (with the leaves on the split, if any, as one more), split again in
     /// the same way.
     fn boxes(&self, root: usize) -> Vec<Group> {
         let mut cur = root;
@@ -122,7 +421,7 @@ impl<'a> Tree<'a> {
             cur = self.children[cur][0];
         }
         let parts = self.children[cur].len() + usize::from(!self.taps_on[cur].is_empty());
-        if self.net.stretches[root].appliances <= 6 || parts < 2 {
+        if self.net.lines[root].count <= 6 || parts < 2 {
             return vec![Group {
                 head: root,
                 taps: self.taps_after(root),
@@ -144,12 +443,12 @@ impl<'a> Tree<'a> {
 
     /// The trunk stretch a branch hangs from, if any.
     fn trunk_of(&self, s: usize) -> Option<usize> {
-        let mut p = self.net.stretches[s].parent;
+        let mut p = self.net.lines[s].parent;
         while let Some(i) = p {
             if self.trunk[i] {
                 return Some(i);
             }
-            p = self.net.stretches[i].parent;
+            p = self.net.lines[i].parent;
         }
         None
     }
@@ -159,10 +458,6 @@ impl<'a> Tree<'a> {
 struct Group {
     head: usize,
     taps: Vec<usize>,
-}
-
-fn hot(net: &Network) -> bool {
-    net.system == ServiceSystem::HotWater
 }
 
 fn dash_line(s: &mut String, a: (f64, f64), b: (f64, f64), w: f64, colour: &str, dashed: bool) {
@@ -194,29 +489,7 @@ fn text_up(s: &mut String, t: &str, x: f64, y: f64, h: f64, colour: &str) {
     );
 }
 
-/// «Ø26», or «Ø20→26» if the pipe drawn is smaller; and whether it is.
-fn diameter(st: &wa::Stretch) -> (String, bool) {
-    let d = (st.drawn.0 * 1000.0).round();
-    let z = (st.sized.0 * 1000.0).round();
-    if d + 0.5 < z {
-        (format!("Ø{d:.0}→{z:.0}"), true)
-    } else {
-        (format!("Ø{z:.0}"), false)
-    }
-}
-
-fn short(a: Appliance) -> &'static str {
-    match a {
-        Appliance::Wc => "Inodoro",
-        other => other.name(),
-    }
-}
-
-fn dec(v: f64, d: usize) -> String {
-    format!("{v:.d$}").replace('.', ",")
-}
-
-fn frame(s: &mut String, model: &Model, code: &str, title: &str) {
+fn frame(s: &mut String, model: &Model, code: &str, title: &str, discipline: &str) {
     rect(
         s,
         MARGIN,
@@ -237,62 +510,21 @@ fn frame(s: &mut String, model: &Model, code: &str, title: &str) {
     );
     text(s, &model.project_name, x + 4.0, y + 7.0, 3.5, INK);
     text(s, title, x + 4.0, y + 15.0, 3.0, INK);
-    text(
-        s,
-        "Fontanería (CTE DB-HS 4) · sin escala",
-        x + 4.0,
-        y + 22.5,
-        2.5,
-        GREY,
-    );
+    text(s, discipline, x + 4.0, y + 22.5, 2.5, GREY);
     centred(s, code, x + BLOCK_W - 15.0, y + 17.0, 6.0, INK);
 }
 
 /// The legend and the data of the calculation, under the drawing.
-fn legend(s: &mut String, w: &Water) {
+fn legend(s: &mut String, sheets: &Sheets) {
     let y = H - MARGIN - BLOCK_H + 4.0;
     let x = MARGIN + 6.0;
     line(s, (x, y), (x + 12.0, y), STROKE, INK);
-    text(s, "Agua fría", x + 14.0, y + 1.0, 2.4, INK);
-    dash_line(s, (x + 40.0, y), (x + 52.0, y), STROKE, INK, true);
-    text(s, "Agua caliente sanitaria", x + 54.0, y + 1.0, 2.4, INK);
-    text(
-        s,
-        &format!(
-            "Presión en el contador {} kPa · {} · simultaneidad {} · v ≤ {} m/s · +{} % de pérdidas locales",
-            dec(w.pressure, 0),
-            w.material.name(),
-            if w.dwelling {
-                "UNE 149201 (viviendas)"
-            } else {
-                "Qt/√(n−1)"
-            },
-            dec(wa::DESIGN_SPEED, 1),
-            dec(wa::FITTINGS * 100.0, 0)
-        ),
-        x,
-        y + 7.0,
-        2.2,
-        GREY,
-    );
-    text(
-        s,
-        &format!(
-            "Diámetros exteriores calculados (mm). En rojo: tubería dibujada menor (dibujado→calculado) y grifos por debajo de {TAP_PRESSURE:.0} kPa con lo dibujado."
-        ),
-        x,
-        y + 11.0,
-        2.2,
-        GREY,
-    );
-    text(
-        s,
-        "Presión mínima en grifos 100 kPa y en calentadores 150 kPa; máxima 500 kPa (HS 4, 2.1.3).",
-        x,
-        y + 15.0,
-        2.2,
-        GREY,
-    );
+    text(s, sheets.left.0, x + 14.0, y + 1.0, 2.4, INK);
+    dash_line(s, (x + 46.0, y), (x + 58.0, y), STROKE, INK, true);
+    text(s, sheets.right.0, x + 60.0, y + 1.0, 2.4, INK);
+    for (i, note) in sheets.notes.iter().enumerate() {
+        text(s, note, x, y + 7.0 + 4.0 * i as f64, 2.2, GREY);
+    }
 }
 
 /// The levels with something of the networks, bottom first, and the
@@ -300,17 +532,10 @@ fn legend(s: &mut String, w: &Water) {
 fn level_heights(model: &Model, trees: &[Tree]) -> Vec<(LevelId, f64)> {
     let mut used: Vec<LevelId> = Vec::new();
     for t in trees {
-        for st in &t.net.stretches {
+        for st in &t.net.lines {
             used.push(st.level);
         }
-        if let Source::Device(d, _) = t.net.source {
-            if let Some(dev) = model.device(d) {
-                used.push(dev.level);
-            }
-        }
-        if let Source::End(l, _) = t.net.source {
-            used.push(l);
-        }
+        used.extend(t.net.source_level);
     }
     let levels: Vec<LevelId> = model
         .levels()
@@ -333,12 +558,13 @@ fn level_heights(model: &Model, trees: &[Tree]) -> Vec<(LevelId, f64)> {
         .collect()
 }
 
-fn vertical_page(model: &Model, w: &Water, trees: &[Tree]) -> String {
+fn vertical_page(model: &Model, trees: &[Tree], sheets: &Sheets) -> String {
     let mut s = String::new();
-    frame(&mut s, model, "FO-01", "Esquema vertical de fontanería");
+    let code = format!("{}-01", sheets.prefix);
+    frame(&mut s, model, &code, sheets.vertical, sheets.discipline);
     text(
         &mut s,
-        "ESQUEMA VERTICAL DE FONTANERÍA",
+        &sheets.vertical.to_uppercase(),
         MARGIN + 6.0,
         MARGIN + 10.0,
         4.5,
@@ -382,11 +608,18 @@ fn vertical_page(model: &Model, w: &Water, trees: &[Tree]) -> String {
         (MARGIN + 50.0, W / 2.0 + 6.0),
         (W / 2.0 + 18.0, W - MARGIN - 6.0),
     ];
-    for (t, tree) in trees.iter().enumerate().take(2) {
-        let (x0, x1) = halves[if hot(tree.net) { 1 } else { t.min(1) }];
-        network_half(&mut s, model, tree, x0, x1, &y_of);
+    // Several networks on one half share it.
+    for side in [false, true] {
+        let mine: Vec<&Tree> = trees.iter().filter(|t| t.net.right == side).collect();
+        let (x0, x1) = halves[usize::from(side)];
+        let k = mine.len().max(1) as f64;
+        let w = (x1 - x0) / k;
+        for (i, tree) in mine.iter().enumerate() {
+            let a = x0 + w * i as f64;
+            network_half(&mut s, model, tree, a, a + w - 4.0, &y_of, i == 0);
+        }
     }
-    legend(&mut s, w);
+    legend(&mut s, sheets);
     page(&s)
 }
 
@@ -398,70 +631,66 @@ fn network_half(
     x0: f64,
     x1: f64,
     y_of: &dyn Fn(LevelId) -> f64,
+    first: bool,
 ) {
     let net = tree.net;
-    let dashed = hot(net);
-    let title = if dashed {
-        "AGUA CALIENTE SANITARIA"
-    } else {
-        "AGUA FRÍA"
-    };
-    text(s, title, x0, MARGIN + 18.0, 3.0, INK);
+    let dashed = net.dashed;
+    if first {
+        text(s, net.title, x0, MARGIN + 18.0, 3.0, INK);
+    }
     // A column for each riser.
-    let mut risers: Vec<DeviceId> = net.stretches.iter().filter_map(|s| s.riser).collect();
+    let mut risers: Vec<DeviceId> = net.lines.iter().filter_map(|s| s.riser).collect();
     risers.sort();
     risers.dedup();
+    // Many risers: a column each across the width, and what enters each
+    // one on every floor written by it instead of boxes.
+    let columns = risers.len() > 4;
+    let spacing = if columns {
+        ((x1 - x0 - 12.0) / risers.len() as f64).clamp(9.0, 36.0)
+    } else {
+        9.0
+    };
     let col_of = |d: Option<DeviceId>| {
         let i = d
             .and_then(|d| risers.iter().position(|r| *r == d))
             .unwrap_or(0);
-        x0 + 6.0 + 9.0 * i as f64
+        x0 + 6.0 + spacing * i as f64
     };
     // The source, under its floor.
-    let (src_level, src_name) = match &net.source {
-        Source::Device(d, _) => (
-            model.device(*d).map(|d| d.level),
-            wa::source_name(model, net),
-        ),
-        Source::End(l, _) => (Some(*l), "Extremo de la red".to_string()),
-    };
-    let y_src = src_level.map_or(BOTTOM - 22.0, y_of);
+    let y_src = net.source_level.map_or(BOTTOM - 22.0, y_of);
     let xs = col_of(risers.first().copied());
     let pipe = |y: f64| y - 4.0;
     let sy = y_src + 9.0;
-    if dashed {
-        rect(s, xs - 3.5, sy - 3.0, 7.0, 6.0, STROKE, INK);
-        centred(s, "ACS", xs, sy + 1.0, 2.0, INK);
-    } else {
-        let _ = writeln!(
-            s,
-            r#"<circle cx="{}" cy="{}" r="3" fill="none" stroke="{INK}" stroke-width="{STROKE}"/>"#,
-            n(xs),
-            n(sy)
-        );
-        centred(s, "C", xs, sy + 1.0, 2.2, INK);
+    match net.mark {
+        Mark::Square(t) => {
+            rect(s, xs - 3.5, sy - 3.0, 7.0, 6.0, STROKE, INK);
+            centred(s, t, xs, sy + 1.0, 2.0, INK);
+        }
+        Mark::Circle(t) => {
+            let _ = writeln!(
+                s,
+                r#"<circle cx="{}" cy="{}" r="3" fill="none" stroke="{INK}" stroke-width="{STROKE}"/>"#,
+                n(xs),
+                n(sy)
+            );
+            centred(s, t, xs, sy + 1.0, 2.2, INK);
+        }
     }
-    text(
-        s,
-        &format!("{src_name} · {} kPa", dec(net.source_pressure, 0)),
-        xs + 5.0,
-        sy + 1.0,
-        2.3,
-        INK,
-    );
+    let source = fit_text(std::slice::from_ref(&net.source), x1 - xs - 5.0, 2.3);
+    text(s, &source, xs + 5.0, sy + 1.0, 2.3, INK);
     dash_line(s, (xs, sy - 3.0), (xs, pipe(y_src)), STROKE, INK, dashed);
     // The trunk: risers up the columns, the rest named by the source.
     let mut by_source: Vec<String> = Vec::new();
-    for (i, st) in net.stretches.iter().enumerate() {
+    for (i, st) in net.lines.iter().enumerate() {
         if !tree.trunk[i] {
             continue;
         }
-        let (d, red) = diameter(st);
+        let (d, red) = (&st.diameter, st.red);
         let colour = if red { MARK } else { INK };
         match st.riser {
             Some(r) => {
                 let x = col_of(Some(r));
-                let below = st.parent.map_or(y_src, |p| y_of(net.stretches[p].level));
+                let below = st.parent.map_or(y_src, |p| y_of(net.lines[p].level));
                 let (ya, yb) = (pipe(below), pipe(y_of(st.level)));
                 dash_line(s, (x, ya), (x, yb), 0.5, INK, dashed);
                 // Along the riser, on its left.
@@ -473,7 +702,8 @@ fn network_half(
         }
     }
     if !by_source.is_empty() {
-        text(s, &by_source.join(" · "), xs + 5.0, sy + 5.0, 2.1, GREY);
+        let fits = fit_text(&by_source, x1 - xs - 5.0, 2.1);
+        text(s, &fits, xs + 5.0, sy + 5.0, 2.1, GREY);
     }
     // The boxes of each floor.
     let mut by_level: BTreeMap<i64, (LevelId, Vec<Group>)> = BTreeMap::new();
@@ -485,9 +715,74 @@ fn network_half(
         let groups: Vec<Group> = roots.iter().flat_map(|r| tree.boxes(*r)).collect();
         by_level.insert((l.elevation * 1000.0) as i64, (l.id, groups));
     }
+    let riser_of = |g: &Group| tree.trunk_of(g.head).and_then(|t| net.lines[t].riser);
+    if columns {
+        // The collector at the foot of the risers.
+        let last = col_of(risers.last().copied());
+        dash_line(s, (xs, pipe(y_src)), (last, pipe(y_src)), 0.5, INK, dashed);
+        // What enters each riser on each floor, by it.
+        let h = (spacing / 8.0).clamp(1.5, 2.1);
+        for (level, groups) in by_level.values() {
+            let y = y_of(*level);
+            let mut by_riser: BTreeMap<Option<DeviceId>, Vec<&Group>> = BTreeMap::new();
+            for g in groups {
+                by_riser.entry(riser_of(g)).or_default().push(g);
+            }
+            for (r, gs) in by_riser {
+                let x = col_of(r.or(risers.first().copied()));
+                dash_line(
+                    s,
+                    (x, pipe(y)),
+                    (x + spacing * 0.35, pipe(y)),
+                    STROKE,
+                    INK,
+                    dashed,
+                );
+                let head = &net.lines[gs[0].head];
+                let red = gs.iter().any(|g| net.lines[g.head].red);
+                let taps: Vec<usize> = gs.iter().flat_map(|g| g.taps.iter().copied()).collect();
+                text(
+                    s,
+                    &head.diameter,
+                    x + 1.0,
+                    pipe(y) - 1.2 - h,
+                    h,
+                    if red { MARK } else { INK },
+                );
+                if let Some((foot, red)) = footer(net, &taps) {
+                    let foot = foot.replace("P mín. ", "");
+                    text(
+                        s,
+                        &foot,
+                        x + 1.0,
+                        pipe(y) - 1.0,
+                        h,
+                        if red { MARK } else { GREY },
+                    );
+                }
+            }
+        }
+        return;
+    }
     let start = col_of(risers.last().copied()) + 16.0;
     for (level, groups) in by_level.values() {
         let y = y_of(*level);
+        // Too many for the width: one box per riser.
+        let merged: Vec<Group>;
+        let groups = if groups.len() as f64 * 21.0 > x1 - start {
+            let mut by_riser: BTreeMap<Option<DeviceId>, Group> = BTreeMap::new();
+            for g in groups {
+                let e = by_riser.entry(riser_of(g)).or_insert(Group {
+                    head: g.head,
+                    taps: Vec::new(),
+                });
+                e.taps.extend(g.taps.iter().copied());
+            }
+            merged = by_riser.into_values().collect();
+            &merged
+        } else {
+            groups
+        };
         let k = groups.len().max(1) as f64;
         let gap = 3.0;
         let bw = ((x1 - start - gap * (k - 1.0)) / k).clamp(18.0, 44.0);
@@ -508,16 +803,16 @@ fn network_half(
             }
             let from = col_of(
                 tree.trunk_of(g.head)
-                    .and_then(|t| net.stretches[t].riser)
+                    .and_then(|t| net.lines[t].riser)
                     .or(risers.first().copied()),
             );
             let xc = bx + bw / 2.0;
             // The pipe from the riser along the floor, and up to the box.
             dash_line(s, (from, pipe(y)), (xc, pipe(y)), STROKE, INK, dashed);
             // What it feeds.
-            let mut kinds: BTreeMap<Appliance, usize> = BTreeMap::new();
+            let mut kinds: BTreeMap<&str, usize> = BTreeMap::new();
             for t in &g.taps {
-                *kinds.entry(net.taps[*t].kind).or_default() += 1;
+                *kinds.entry(net.leaves[*t].kind.as_str()).or_default() += 1;
             }
             let rows = kinds.len() as f64;
             let rh = 3.1 * hpx;
@@ -525,8 +820,8 @@ fn network_half(
             let top = pipe(y) - 3.0 - bh;
             dash_line(s, (xc, pipe(y)), (xc, top + bh), STROKE, INK, dashed);
             rect(s, bx, top, bw, bh, 0.3, INK);
-            let st = &net.stretches[g.head];
-            let (d, red) = diameter(st);
+            let st = &net.lines[g.head];
+            let (d, red) = (&st.diameter, st.red);
             text(
                 s,
                 &format!("{} {d}", st.name),
@@ -539,42 +834,33 @@ fn network_half(
             for (r, (a, c)) in kinds.iter().enumerate() {
                 text(
                     s,
-                    &format!("{c} {}", short(*a)),
+                    &format!("{c} {a}"),
                     bx + 1.2,
                     top + 5.0 + rh * (r as f64 + 0.85),
                     2.1 * hpx,
                     INK,
                 );
             }
-            let worst = g
-                .taps
-                .iter()
-                .map(|t| &net.taps[*t])
-                .min_by(|a, b| a.sized_pressure.total_cmp(&b.sized_pressure));
-            if let Some(t) = worst {
-                let short_drawn = g.taps.iter().any(|t| net.taps[*t].pressure < TAP_PRESSURE);
+            if let Some((foot, red)) = footer(net, &g.taps) {
                 text(
                     s,
-                    &format!("P mín. {} kPa", dec(t.sized_pressure, 0)),
+                    &foot,
                     bx + 1.2,
                     top + 5.0 + rh * (rows + 0.85),
                     2.1 * hpx,
-                    if t.sized_pressure < TAP_PRESSURE || short_drawn {
-                        MARK
-                    } else {
-                        GREY
-                    },
+                    if red { MARK } else { GREY },
                 );
             }
         }
     }
-    if !net.loose.is_empty() {
+    if net.loose > 0 {
         text(
             s,
             &format!(
-                "{} aparato{} sin unir a esta red",
-                net.loose.len(),
-                if net.loose.len() == 1 { "" } else { "s" }
+                "{} aparato{} {}",
+                net.loose,
+                if net.loose == 1 { "" } else { "s" },
+                net.loose_text
             ),
             x0,
             MARGIN + 23.0,
@@ -582,6 +868,50 @@ fn network_half(
             MARK,
         );
     }
+}
+
+/// Texts joined by « · », cut with «…» to fit `width` at height `h`.
+fn fit_text(parts: &[String], width: f64, h: f64) -> String {
+    let all = parts.join(" · ");
+    if text_width(&all, h) <= width {
+        return all;
+    }
+    let mut out = String::new();
+    for c in all.chars() {
+        let mut next = out.clone();
+        next.push(c);
+        next.push('…');
+        if text_width(&next, h) > width {
+            break;
+        }
+        out.push(c);
+    }
+    out.push('…');
+    out
+}
+
+/// The last line of a box: the least pressure, the units or the area of
+/// its leaves; and whether it is in red.
+fn footer(net: &Net, taps: &[usize]) -> Option<(String, bool)> {
+    let leaves: Vec<&Leaf> = taps.iter().map(|t| &net.leaves[*t]).collect();
+    if leaves.is_empty() {
+        return None;
+    }
+    let red = leaves.iter().any(|l| l.red || l.drawn_red);
+    Some(match net.footer {
+        Footer::Pressure => {
+            let least = leaves.iter().map(|l| l.value).fold(f64::INFINITY, f64::min);
+            (format!("P mín. {} kPa", dec(least, 0)), red)
+        }
+        Footer::Units => {
+            let all: f64 = leaves.iter().map(|l| l.value).sum();
+            (format!("{} UD", dec(all, 0)), red)
+        }
+        Footer::Area => {
+            let all: f64 = leaves.iter().map(|l| l.value).sum();
+            (format!("{} m²", dec(all, 1)), red)
+        }
+    })
 }
 
 /// A tree laid out: each stretch with its x, its depth and where its
@@ -647,18 +977,29 @@ fn leaves(tree: &Tree, roots: &[usize]) -> usize {
     roots.iter().map(|r| count(tree, *r)).sum()
 }
 
-fn level_page(model: &Model, w: &Water, trees: &[Tree], level: LevelId, code: &str) -> String {
+fn level_page(
+    model: &Model,
+    trees: &[Tree],
+    level: LevelId,
+    code: &str,
+    sheets: &Sheets,
+) -> String {
     let mut s = String::new();
     let name = model.level(level).map_or(String::new(), |l| l.name.clone());
     frame(
         &mut s,
         model,
         code,
-        &format!("Distribución de fontanería · {name}"),
+        &format!("{} · {name}", sheets.level_title),
+        sheets.discipline,
     );
     text(
         &mut s,
-        &format!("DISTRIBUCIÓN DE FONTANERÍA · {}", name.to_uppercase()),
+        &format!(
+            "{} · {}",
+            sheets.level_title.to_uppercase(),
+            name.to_uppercase()
+        ),
         MARGIN + 6.0,
         MARGIN + 10.0,
         4.5,
@@ -681,16 +1022,12 @@ fn level_page(model: &Model, w: &Water, trees: &[Tree], level: LevelId, code: &s
     let mut x = left + ((right - left) - step * total).max(0.0) / 2.0 + step;
     for (tree, roots) in &parts {
         let net = tree.net;
-        let dashed = hot(net);
+        let dashed = net.dashed;
         let x_start = x;
         let lay = lay_out(tree, roots, &mut x, step);
         text(
             &mut s,
-            if dashed {
-                "AGUA CALIENTE SANITARIA"
-            } else {
-                "AGUA FRÍA"
-            },
+            net.title,
             x_start - step * 0.5,
             MARGIN + 18.0,
             3.0,
@@ -700,7 +1037,7 @@ fn level_page(model: &Model, w: &Water, trees: &[Tree], level: LevelId, code: &s
         let leaf_y = top + dy * lay.deepest as f64 + 10.0;
         let y_at = |d: usize| top + dy * d as f64;
         for (st_i, sx) in &lay.x {
-            let st = &net.stretches[*st_i];
+            let st = &net.lines[*st_i];
             let d = lay.depth[st_i];
             let (ya, yb) = (y_at(d), y_at(d + 1));
             dash_line(&mut s, (*sx, ya), (*sx, yb), STROKE, INK, dashed);
@@ -723,7 +1060,7 @@ fn level_page(model: &Model, w: &Water, trees: &[Tree], level: LevelId, code: &s
             } else if let Some(k) = kids.first() {
                 dash_line(&mut s, (*sx, yb), (*k, yb), STROKE, INK, dashed);
             }
-            let (dt, red) = diameter(st);
+            let (dt, red) = (&st.diameter, st.red);
             let label = format!("{} {dt}", st.name);
             let h = 1.8 * hp;
             let len = text_width(&label, h);
@@ -738,14 +1075,14 @@ fn level_page(model: &Model, w: &Water, trees: &[Tree], level: LevelId, code: &s
             if d == 0 {
                 // Where it comes from.
                 let from = match st.parent {
-                    Some(p) => format!("de {}", net.stretches[p].name),
-                    None => format!("de {}", wa::source_name(model, net)),
+                    Some(p) => format!("de {}", net.lines[p].name),
+                    None => format!("de {}", net.source_from),
                 };
                 centred(&mut s, &from, *sx, ya - 1.5, 2.0 * hp, GREY);
             }
         }
         for (t, tx, d) in &lay.taps {
-            let tap = &net.taps[*t];
+            let tap = &net.leaves[*t];
             dash_line(&mut s, (*tx, y_at(*d)), (*tx, leaf_y), STROKE, INK, dashed);
             // The tap: a small triangle.
             let _ = writeln!(
@@ -758,13 +1095,13 @@ fn level_page(model: &Model, w: &Water, trees: &[Tree], level: LevelId, code: &s
                 n(*tx),
                 n(leaf_y + 1.8)
             );
-            let label = format!("{} · {} kPa", short(tap.kind), dec(tap.sized_pressure, 0));
+            let label = &tap.label;
             let h = 1.9 * hp;
-            let len = text_width(&label, h);
-            let red = tap.sized_pressure < TAP_PRESSURE || tap.pressure < TAP_PRESSURE;
+            let len = text_width(label, h);
+            let red = tap.red;
             text_up(
                 &mut s,
-                &label,
+                label,
                 tx + h * 0.4,
                 leaf_y + 3.0 + len,
                 h,
@@ -773,7 +1110,7 @@ fn level_page(model: &Model, w: &Water, trees: &[Tree], level: LevelId, code: &s
         }
         x += step * 2.0;
     }
-    legend(&mut s, w);
+    legend(&mut s, sheets);
     page(&s)
 }
 
@@ -909,6 +1246,69 @@ mod tests {
             std::fs::create_dir_all(&dir).unwrap();
             for (i, p) in pages.iter().enumerate() {
                 std::fs::write(format!("{dir}/fontaneria-{:02}.svg", i + 1), p).unwrap();
+            }
+        }
+    }
+
+    #[test]
+    fn a_house_draws_its_drainage() {
+        let mut m = house();
+        let l0 = m.levels()[0].id;
+        let l1 = m.levels()[1].id;
+        m.add_device(NewDevice {
+            level: l0,
+            kind: DeviceKind::Downpipe,
+            name: "Bajante".into(),
+            position: Point2::new(1.0, 1.5),
+            rotation: 0.0,
+            elevation: 0.0,
+            width: 0.11,
+            depth: 0.11,
+            height: 3.0,
+        })
+        .unwrap();
+        let d = ServiceSystem::Drainage;
+        for l in [l0, l1] {
+            let ps: Vec<Point2> = m.appliances_on(l).iter().map(|a| a.point).collect();
+            m.add_run(NewRun {
+                level: l,
+                system: d,
+                path: vec![Point2::new(6.0, 1.5), Point2::new(1.0, 1.5)],
+                elevation: 0.4,
+                width: 0.11,
+                height: 0.11,
+                slope: 0.02,
+            })
+            .unwrap();
+            for p in ps {
+                m.add_run(NewRun {
+                    level: l,
+                    system: d,
+                    path: vec![p, Point2::new(p.x, 1.5)],
+                    elevation: 0.45,
+                    width: 0.04,
+                    height: 0.04,
+                    slope: 0.02,
+                })
+                .unwrap();
+            }
+        }
+        m.add_run(NewRun {
+            level: l0,
+            system: d,
+            path: vec![Point2::new(1.0, 1.5), Point2::new(1.0, -3.0)],
+            elevation: -0.5,
+            width: 0.11,
+            height: 0.11,
+            slope: 0.02,
+        })
+        .unwrap();
+        let pages = drainage_pages(&m);
+        assert!(pages.len() >= 2, "the vertical diagram and a level");
+        if let Ok(dir) = std::env::var("ARCHISIM_FONTANERIA_OUT") {
+            std::fs::create_dir_all(&dir).unwrap();
+            for (i, p) in pages.iter().enumerate() {
+                std::fs::write(format!("{dir}/saneamiento-{:02}.svg", i + 1), p).unwrap();
             }
         }
     }

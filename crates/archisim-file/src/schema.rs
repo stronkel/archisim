@@ -6143,6 +6143,13 @@ pub struct WaterOf {
     pub pressure: f64,
     /// «multilayer», «pex», «ppr» or «copper».
     pub material: String,
+    /// The rainfall intensity, mm/h (version 87; 100 before).
+    #[serde(default = "hundred")]
+    pub rain_intensity: f64,
+}
+
+fn hundred() -> f64 {
+    100.0
 }
 
 impl WaterOf {
@@ -6153,6 +6160,7 @@ impl WaterOf {
         Some(WaterOf {
             pressure: site.pressure,
             material: site.material.code().into(),
+            rain_intensity: site.rain_intensity,
         })
     }
 
@@ -6160,6 +6168,7 @@ impl WaterOf {
         core::WaterSite {
             pressure: self.pressure,
             material: core::PipeMaterial::from_code(&self.material).unwrap_or_default(),
+            rain_intensity: self.rain_intensity,
         }
     }
 }

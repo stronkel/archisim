@@ -10375,3 +10375,62 @@ fn the_water_window_sizes_the_pipes() {
     let pages = archisim_plan::water_schematic::pages(&h.app.ed.shown());
     assert_eq!(pages.len(), 2);
 }
+
+#[test]
+fn the_drain_window_sizes_the_drains() {
+    use archisim_core::{NewObject, NewRun, ServiceSystem};
+    let mut h = Harness::new(Editor::new_project());
+    let l = h.app.ed.level;
+    let (main, branches) = h
+        .app
+        .ed
+        .transact("baño", |m| {
+            for (name, x) in [("Inodoro", 1.0), ("Lavabo 60", 2.5)] {
+                let t = archisim_library::add_object_entry(m, name)?;
+                m.add_object(NewObject {
+                    level: l,
+                    object_type: t,
+                    position: Point2::new(x, 0.6),
+                    rotation: 0.0,
+                    base_offset: 0.0,
+                })?;
+            }
+            let ps: Vec<Point2> = m.appliances_on(l).iter().map(|a| a.point).collect();
+            let main = m.add_run(NewRun {
+                level: l,
+                system: ServiceSystem::Drainage,
+                path: vec![Point2::new(4.0, 0.0), Point2::new(-2.0, 0.0)],
+                elevation: -0.3,
+                width: 0.05,
+                height: 0.05,
+                slope: 0.02,
+            })?;
+            let mut branches = Vec::new();
+            for p in ps {
+                branches.push(m.add_run(NewRun {
+                    level: l,
+                    system: ServiceSystem::Drainage,
+                    path: vec![p, Point2::new(p.x, 0.0)],
+                    elevation: -0.2,
+                    width: 0.04,
+                    height: 0.04,
+                    slope: 0.02,
+                })?);
+            }
+            Ok((main, branches))
+        })
+        .unwrap();
+    // The WC drains through Ø40 and the collector is Ø50: both grow.
+    let n = h.app.apply_drain_sizes();
+    assert!(n >= 2, "{n}");
+    let m = h.app.ed.model();
+    assert!(m.runs().find(|r| r.id == main).unwrap().width >= 0.110 - 1e-9);
+    assert!(branches
+        .iter()
+        .any(|b| m.runs().find(|r| r.id == *b).unwrap().width >= 0.110 - 1e-9));
+    assert_eq!(h.app.apply_drain_sizes(), 0);
+    let pages = archisim_plan::water_schematic::drainage_pages(&h.app.ed.shown());
+    assert_eq!(pages.len(), 2);
+    h.app.drain.open = true;
+    h.frame();
+}

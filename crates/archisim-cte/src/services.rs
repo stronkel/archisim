@@ -186,7 +186,9 @@ pub fn check(model: &Model, report: &mut Report) {
                 "2,0 % a 5,0 %".into(),
             );
         } else {
-            let buried = r.elevation.min(r.end_elevation()) < 0.0;
+            // Under the floor of the lowest level: in the ground.
+            let buried = Some(r.level) == model.levels().first().map(|l| l.id)
+                && r.elevation.min(r.end_elevation()) < 0.0;
             let need = if buried { 0.02 } else { 0.01 };
             let ok = r.slope + 1e-9 >= need;
             push(
@@ -358,4 +360,149 @@ pub fn calculation(model: &Model, report: &mut Report) {
             );
         }
     }
+}
+
+/// The calculation of the drainage (`archisim-mep::drain`): every
+/// stretch's diameter for what it carries, the outlets of every roof and
+/// the gutters.
+pub fn drain_calculation(model: &Model, report: &mut Report) {
+    use archisim_mep::drain::{self as dr, Kind};
+    let d = dr::drainage(model);
+    let dec = |v: f64, n: usize| format!("{v:.n$}").replace('.', ",");
+    let first_level = model.levels().first().map(|l| l.id);
+    let mut push = |status: Status,
+                    subject: Subject,
+                    level: Option<archisim_core::LevelId>,
+                    rule: &'static str,
+                    text: String,
+                    value: String,
+                    required: String| {
+        report.items.push(Item {
+            section: Section::Services,
+            status,
+            subject,
+            level,
+            rule,
+            text,
+            value,
+            required,
+            route: Vec::new(),
+        });
+    };
+    for n in &d.networks {
+        let rain = n.system == ServiceSystem::Rainwater;
+        for s in &n.stretches {
+            let subject = match (s.run, s.downpipe) {
+                (Some(r), _) => Subject::Run(r),
+                (None, Some(dv)) => Subject::Device(dv),
+                _ => Subject::Level(s.level),
+            };
+            let what = match (rain, s.kind) {
+                (true, Kind::Downpipe) => "bajante de pluviales".to_string(),
+                (true, _) => "colector de pluviales".to_string(),
+                (false, k) => k.name().to_string(),
+            };
+            let carries = if rain || s.area > 0.0 {
+                format!("{} m² de cubierta", dec(s.area, 1))
+            } else {
+                format!("{} UD", s.units)
+            };
+            push(
+                if s.short() {
+                    Status::Fails
+                } else {
+                    Status::Passes
+                },
+                subject,
+                Some(s.level),
+                s.rule,
+                format!("Tramo {}, {what}: {carries}", s.name),
+                mm(s.drawn),
+                format!("≥ {}", mm(s.sized)),
+            );
+            if !s.fits {
+                push(
+                    Status::Warning,
+                    subject,
+                    Some(s.level),
+                    s.rule,
+                    format!(
+                        "Tramo {}: lleva más de lo que da la tabla; hay que repartirlo en más bajantes o colectores",
+                        s.name
+                    ),
+                    String::new(),
+                    String::new(),
+                );
+            }
+        }
+    }
+    for s in d.surfaces.iter().filter(|s| s.checked) {
+        push(
+            if s.outlets >= s.needed {
+                Status::Passes
+            } else {
+                Status::Fails
+            },
+            Subject::Level(s.level),
+            Some(s.level),
+            "HS 5, tabla 4.6",
+            format!("{}: sumideros para {} m²", s.name, dec(s.area, 1)),
+            s.outlets.to_string(),
+            format!("≥ {}", s.needed),
+        );
+        if s.undrained > 1.0 && s.outlets > 0 {
+            push(
+                Status::Warning,
+                Subject::Level(s.level),
+                Some(s.level),
+                "HS 5, 3.2",
+                format!(
+                    "{}: {} m² sin sumidero a su altura",
+                    s.name,
+                    dec(s.undrained, 1)
+                ),
+                String::new(),
+                String::new(),
+            );
+        }
+    }
+    for g in &d.gutters {
+        let roof = model
+            .roofs()
+            .find(|r| r.level == g.level)
+            .map(|r| Subject::Roof(r.id))
+            .unwrap_or(Subject::Level(g.level));
+        push(
+            if g.gutter + 0.002 >= g.gutter_sized {
+                Status::Passes
+            } else {
+                Status::Fails
+            },
+            roof,
+            Some(g.level),
+            "HS 5, tabla 4.7",
+            format!(
+                "{}, lado {}: canalón para {} m² por bajante (al 1 %)",
+                g.roof,
+                g.side + 1,
+                dec(g.area, 1)
+            ),
+            format!("{:.0} mm", g.gutter * 1000.0),
+            format!("≥ {:.0} mm", g.gutter_sized * 1000.0),
+        );
+        push(
+            if g.downpipe + 0.0015 >= g.downpipe_sized {
+                Status::Passes
+            } else {
+                Status::Fails
+            },
+            roof,
+            Some(g.level),
+            "HS 5, tabla 4.8",
+            format!("{}, lado {}: bajantes del canalón", g.roof, g.side + 1),
+            mm(g.downpipe),
+            format!("≥ {}", mm(g.downpipe_sized)),
+        );
+    }
+    let _ = first_level;
 }

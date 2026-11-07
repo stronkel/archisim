@@ -165,6 +165,14 @@ impl ArchiSimApp {
                 self.water.open = true;
                 ui.close();
             }
+            if ui
+                .button("Cálculo de saneamiento…")
+                .on_hover_text("Evacuación de aguas por el DB-HS 5: residuales por unidades de desagüe (derivaciones, ramales, bajantes y colectores) y pluviales por la cubierta de cada sumidero")
+                .clicked()
+            {
+                self.drain.open = true;
+                ui.close();
+            }
             self.team_menu_items(ui);
         });
     }

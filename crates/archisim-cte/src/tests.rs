@@ -652,3 +652,94 @@ fn water_supply_by_hs4_and_its_fix() {
     );
     assert!(done.runs().find(|x| x.id == main).unwrap().width >= 0.020);
 }
+
+#[test]
+fn drainage_by_hs5_and_its_fix() {
+    use archisim_core::{DeviceKind, NewDevice, NewObject, NewRun, ServiceSystem};
+    let mut m = archisim_library::new_project("Casa");
+    let l0 = m.levels()[0].id;
+    let l1 = m.add_level("Planta 1", 3.0);
+    let wc = archisim_library::add_object_entry(&mut m, "Inodoro").unwrap();
+    let basin = archisim_library::add_object_entry(&mut m, "Lavabo 60").unwrap();
+    for (t, x) in [(wc, 2.0), (basin, 3.5)] {
+        m.add_object(NewObject {
+            level: l1,
+            object_type: t,
+            position: Point2::new(x, 0.8),
+            rotation: 0.0,
+            base_offset: 0.0,
+        })
+        .unwrap();
+    }
+    // A thin downpipe and thin pipes: the WC asks Ø110 all the way down.
+    let pipe = m
+        .add_device(NewDevice {
+            level: l0,
+            kind: DeviceKind::Downpipe,
+            name: "Bajante".into(),
+            position: Point2::new(1.0, 0.0),
+            rotation: 0.0,
+            elevation: 0.0,
+            width: 0.075,
+            depth: 0.075,
+            height: 3.0,
+        })
+        .unwrap();
+    let run = |m: &mut Model, level, path: Vec<Point2>, z: f64, w: f64| {
+        m.add_run(NewRun {
+            level,
+            system: ServiceSystem::Drainage,
+            path,
+            elevation: z,
+            width: w,
+            height: w,
+            slope: 0.02,
+        })
+        .unwrap()
+    };
+    let points: Vec<Point2> = m.appliances_on(l1).iter().map(|a| a.point).collect();
+    run(
+        &mut m,
+        l1,
+        vec![Point2::new(5.0, 0.0), Point2::new(1.0, 0.0)],
+        0.4,
+        0.05,
+    );
+    for p in points {
+        run(&mut m, l1, vec![p, Point2::new(p.x, 0.0)], 0.45, 0.04);
+    }
+    let collector = run(
+        &mut m,
+        l0,
+        vec![Point2::new(1.0, 0.0), Point2::new(1.0, -3.0)],
+        -0.5,
+        0.075,
+    );
+    let r = check(&m);
+    let downpipe: Vec<&Item> = r
+        .items
+        .iter()
+        .filter(|i| i.rule == "HS 5, tabla 4.4")
+        .collect();
+    assert!(
+        downpipe
+            .iter()
+            .any(|i| i.status == Status::Fails && i.subject == Subject::Device(pipe)),
+        "{downpipe:#?}"
+    );
+    let f = crate::fix::fix(&m);
+    let mut done = m.clone();
+    crate::fix::apply_all(&mut done, &f).unwrap();
+    let r = check(&done);
+    let still: Vec<&Item> = r
+        .items
+        .iter()
+        .filter(|i| {
+            i.status == Status::Fails
+                && (i.rule.starts_with("HS 5, tabla 4.") || i.rule.starts_with("HS 5, 4.3"))
+        })
+        .collect();
+    assert!(still.is_empty(), "{still:#?}\n{:#?}", f.lines);
+    assert!(done.devices().find(|d| d.id == pipe).unwrap().width >= 0.110 - 1e-9);
+    assert!(done.runs().find(|x| x.id == collector).unwrap().width >= 0.110 - 1e-9);
+}

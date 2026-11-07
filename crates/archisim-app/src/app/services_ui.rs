@@ -352,7 +352,7 @@ impl ArchiSimApp {
                     .map_or(String::new(), |l| l.name.clone());
                 self.go_to_level_plan(other);
                 self.run_points = vec![p];
-                let kind = if system == ServiceSystem::Drainage {
+                let kind = if system.falls() {
                     "Bajante"
                 } else {
                     "Montante"

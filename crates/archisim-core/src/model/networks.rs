@@ -155,7 +155,7 @@ impl Model {
     fn building_ends(system: ServiceSystem) -> (&'static [DeviceKind], &'static [ServiceSystem]) {
         match system {
             ServiceSystem::Sewer => (&[DeviceKind::Downpipe], &[ServiceSystem::Drainage]),
-            ServiceSystem::Stormwater => (&[DeviceKind::Downpipe], &[]),
+            ServiceSystem::Stormwater => (&[DeviceKind::Downpipe], &[ServiceSystem::Rainwater]),
             ServiceSystem::WaterMain => (&[DeviceKind::WaterMeter], &[ServiceSystem::ColdWater]),
             ServiceSystem::PowerLow => (&[DeviceKind::MainFuseBox, DeviceKind::Panel], &[]),
             _ => (&[], &[]),

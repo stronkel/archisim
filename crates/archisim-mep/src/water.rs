@@ -241,27 +241,28 @@ impl Water {
 
 /// A point of the network graph.
 #[derive(Debug, Clone, Copy)]
-struct Node {
-    level: LevelId,
-    p: Point2,
+pub(crate) struct Node {
+    pub(crate) level: LevelId,
+    pub(crate) p: Point2,
     /// Absolute height, metres.
-    z: f64,
+    pub(crate) z: f64,
 }
 
 /// A piece of pipe between two points.
 #[derive(Debug, Clone, Copy)]
-struct Edge {
-    a: usize,
-    b: usize,
-    length: f64,
-    run: Option<RunId>,
-    riser: Option<DeviceId>,
+pub(crate) struct Edge {
+    pub(crate) a: usize,
+    pub(crate) b: usize,
+    pub(crate) length: f64,
+    pub(crate) run: Option<RunId>,
+    /// A riser or a downpipe.
+    pub(crate) riser: Option<DeviceId>,
 }
 
-struct Graph {
-    nodes: Vec<Node>,
-    edges: Vec<Edge>,
-    adj: Vec<Vec<usize>>,
+pub(crate) struct Graph {
+    pub(crate) nodes: Vec<Node>,
+    pub(crate) edges: Vec<Edge>,
+    pub(crate) adj: Vec<Vec<usize>>,
 }
 
 impl Graph {
@@ -301,23 +302,44 @@ impl Graph {
         self.adj[b].push(i);
     }
 
-    fn nearest(&self, level: LevelId, p: Point2, reach: f64) -> Option<usize> {
+    /// Joins node `o` into `into`: its pipes end at `into` from now on
+    /// (`o` stays, alone).
+    fn merge(&mut self, o: usize, into: usize) {
+        let moved = std::mem::take(&mut self.adj[o]);
+        for e in moved {
+            let ed = &mut self.edges[e];
+            if ed.a == o {
+                ed.a = into;
+            }
+            if ed.b == o {
+                ed.b = into;
+            }
+            if ed.a == ed.b {
+                continue;
+            }
+            self.adj[into].push(e);
+        }
+    }
+
+    pub(crate) fn nearest(&self, level: LevelId, p: Point2, reach: f64) -> Option<usize> {
         self.nodes
             .iter()
             .enumerate()
-            .filter(|(_, n)| n.level == level && n.p.distance(p) < reach)
+            .filter(|(i, n)| {
+                n.level == level && n.p.distance(p) < reach && !self.adj[*i].is_empty()
+            })
             .min_by(|a, b| a.1.p.distance(p).total_cmp(&b.1.p.distance(p)))
             .map(|(i, _)| i)
     }
 }
 
-fn level_z(model: &Model, level: LevelId) -> f64 {
+pub(crate) fn level_z(model: &Model, level: LevelId) -> f64 {
     model.level(level).map_or(0.0, |l| l.elevation)
 }
 
 /// The pipes of a system as a graph: their points, the tees where a pipe
-/// ends on another, and the risers.
-fn graph(model: &Model, system: ServiceSystem) -> Graph {
+/// ends on another, and the risers (downpipes for the drains).
+pub(crate) fn graph(model: &Model, system: ServiceSystem) -> Graph {
     let mut g = Graph {
         nodes: Vec::new(),
         edges: Vec::new(),
@@ -376,20 +398,35 @@ fn graph(model: &Model, system: ServiceSystem) -> Graph {
     }
     // The risers: from floor to floor at their place.
     let levels = model.levels();
-    for d in model
-        .devices()
-        .filter(|d| d.kind == DeviceKind::Riser || d.kind == DeviceKind::Downpipe)
-    {
-        if d.kind == DeviceKind::Downpipe && system != ServiceSystem::Drainage {
-            continue;
-        }
+    let vertical = if system.falls() {
+        DeviceKind::Downpipe
+    } else {
+        DeviceKind::Riser
+    };
+    for d in model.devices().filter(|d| d.kind == vertical) {
         let bottom = level_z(model, d.level) + d.elevation;
         let top = bottom + d.height;
-        let mut on: Vec<usize> = levels
+        let mut on: Vec<usize> = Vec::new();
+        for l in levels
             .iter()
             .filter(|l| l.elevation >= bottom - 0.6 && l.elevation <= top + 0.01)
-            .filter_map(|l| g.nearest(l.id, d.position, RISER_REACH))
-            .collect();
+        {
+            let Some(main) = g.nearest(l.id, d.position, RISER_REACH) else {
+                continue;
+            };
+            // Every pipe that reaches it on this floor joins it there.
+            let others: Vec<usize> = (0..g.nodes.len())
+                .filter(|i| {
+                    *i != main
+                        && g.nodes[*i].level == l.id
+                        && g.nodes[*i].p.distance(d.position) < RISER_REACH
+                })
+                .collect();
+            for o in others {
+                g.merge(o, main);
+            }
+            on.push(main);
+        }
         on.sort_by(|a, b| g.nodes[*a].z.total_cmp(&g.nodes[*b].z));
         on.dedup();
         for w in on.windows(2) {

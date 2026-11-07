@@ -174,7 +174,7 @@ impl DeviceKind {
                 system,
                 S::ColdWater | S::HotWater | S::Heating | S::FireProtection
             ),
-            D::Downpipe => system == S::Drainage,
+            D::Downpipe => matches!(system, S::Drainage | S::Rainwater),
             D::WaterHeater | D::Valve | D::WaterMeter | D::Tank | D::Pump => {
                 matches!(system, S::ColdWater | S::HotWater)
             }
@@ -432,7 +432,7 @@ impl Model {
             (*other, levels[i])
         };
         let (low, other_id, rise) = (low.id, other.id, high.elevation - low.elevation);
-        let kind = if system == ServiceSystem::Drainage {
+        let kind = if system.falls() {
             DeviceKind::Downpipe
         } else {
             DeviceKind::Riser

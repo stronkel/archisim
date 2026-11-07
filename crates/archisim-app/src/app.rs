@@ -503,6 +503,7 @@ pub struct ArchiSimApp {
     pub calc: calc_ui::CalcWindow,
     pub electrical: electrical_ui::ElectricalWindow,
     pub water: water_ui::WaterWindow,
+    pub drain: drain_ui::DrainWindow,
     /// A topographic survey being imported (its window is open).
     pub survey_import: Option<survey_ui::SurveyImport>,
     /// Cartography being brought around the project (H7; its window is open).
@@ -884,6 +885,7 @@ impl ArchiSimApp {
             calc: Default::default(),
             electrical: Default::default(),
             water: Default::default(),
+            drain: Default::default(),
             survey_import: None,
             carto_import: None,
             carto_download: None,
@@ -2453,6 +2455,7 @@ impl ArchiSimApp {
         self.calc_dialog(ctx);
         self.electrical_dialog(ctx);
         self.water_dialog(ctx);
+        self.drain_dialog(ctx);
         self.coord_dialog(ctx);
         if self.show_about {
             widgets::dialog("Acerca de ArchiSim")
@@ -2721,6 +2724,7 @@ mod decal_ui;
 mod discipline_ui;
 mod draft_props;
 mod drafting_view_ui;
+mod drain_ui;
 mod dxf_import_ui;
 mod electrical_ui;
 mod elevator_ui;

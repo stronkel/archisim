@@ -16,7 +16,11 @@ use super::*;
 pub enum ServiceSystem {
     ColdWater,
     HotWater,
+    /// The building's waste water (aguas residuales).
     Drainage,
+    /// The building's rain water (aguas pluviales): roofs, terraces and
+    /// patios, by their own downpipes (DB-HS 5, red separativa).
+    Rainwater,
     Heating,
     SupplyAir,
     ReturnAir,
@@ -37,10 +41,11 @@ pub enum ServiceSystem {
 }
 
 impl ServiceSystem {
-    pub const PIPES: [ServiceSystem; 5] = [
+    pub const PIPES: [ServiceSystem; 6] = [
         ServiceSystem::ColdWater,
         ServiceSystem::HotWater,
         ServiceSystem::Drainage,
+        ServiceSystem::Rainwater,
         ServiceSystem::Heating,
         ServiceSystem::FireProtection,
     ];
@@ -86,7 +91,10 @@ impl ServiceSystem {
     pub fn falls(self) -> bool {
         matches!(
             self,
-            ServiceSystem::Drainage | ServiceSystem::Sewer | ServiceSystem::Stormwater
+            ServiceSystem::Drainage
+                | ServiceSystem::Rainwater
+                | ServiceSystem::Sewer
+                | ServiceSystem::Stormwater
         )
     }
 
@@ -111,6 +119,7 @@ impl ServiceSystem {
             ServiceSystem::ColdWater => "cold_water",
             ServiceSystem::HotWater => "hot_water",
             ServiceSystem::Drainage => "drainage",
+            ServiceSystem::Rainwater => "rainwater",
             ServiceSystem::Heating => "heating",
             ServiceSystem::SupplyAir => "supply_air",
             ServiceSystem::ReturnAir => "return_air",
@@ -140,13 +149,14 @@ impl ServiceSystem {
             ServiceSystem::ColdWater => "Agua fría",
             ServiceSystem::HotWater => "Agua caliente",
             ServiceSystem::Drainage => "Saneamiento",
+            ServiceSystem::Rainwater => "Pluviales",
             ServiceSystem::Heating => "Calefacción",
             ServiceSystem::SupplyAir => "Impulsión",
             ServiceSystem::ReturnAir => "Retorno",
             ServiceSystem::ExhaustAir => "Extracción",
             ServiceSystem::FireProtection => "Protección contra incendios",
             ServiceSystem::Sewer => "Saneamiento (red urbana)",
-            ServiceSystem::Stormwater => "Pluviales",
+            ServiceSystem::Stormwater => "Pluviales (red urbana)",
             ServiceSystem::WaterMain => "Abastecimiento",
             ServiceSystem::PowerLow => "Baja tensión",
             ServiceSystem::PowerMedium => "Media tensión",
@@ -162,6 +172,7 @@ impl ServiceSystem {
             ServiceSystem::ColdWater => [30, 110, 220],
             ServiceSystem::HotWater => [215, 45, 45],
             ServiceSystem::Drainage => [125, 85, 50],
+            ServiceSystem::Rainwater => [40, 140, 175],
             ServiceSystem::Heating => [235, 130, 20],
             ServiceSystem::SupplyAir => [70, 170, 210],
             ServiceSystem::ReturnAir => [80, 160, 90],
@@ -184,6 +195,7 @@ impl ServiceSystem {
             ServiceSystem::ColdWater => "DOMESTICCOLDWATER",
             ServiceSystem::HotWater => "DOMESTICHOTWATER",
             ServiceSystem::Drainage => "DRAINAGE",
+            ServiceSystem::Rainwater => "RAINWATER",
             ServiceSystem::Heating => "HEATING",
             ServiceSystem::SupplyAir | ServiceSystem::ReturnAir => "VENTILATION",
             ServiceSystem::ExhaustAir => "EXHAUST",
