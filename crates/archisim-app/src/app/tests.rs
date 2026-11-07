@@ -10288,16 +10288,49 @@ fn sketch_in_the_ribbon() {
     assert!(h.app.sketch_texts().is_some());
     let mode = panels.iter().find(|p| p.title == "Modo").unwrap();
     assert_ne!(mode.items[0].tint, mode.items[1].tint);
-    // Elegir línea: a wall's face becomes a sketch line.
-    let lines = |h: &Harness| h.model().drafts().count();
-    let before = lines(&h);
+    // Elegir línea, as Revit: a wall's whole face becomes a sketch line,
+    // and the next face picked meets it at the corner.
+    let ids = |h: &Harness| -> std::collections::BTreeSet<_> {
+        h.model().drafts().map(|d| d.id).collect()
+    };
+    let before = ids(&h);
     assert!(h.app.click_ribbon("Elegir línea"));
     assert!(h.app.sketch_picking());
-    let w = h.model().walls().next().unwrap().id;
-    let o = crate::pick::outline(h.model(), Element::Wall(w)).unwrap();
-    let mid = (o[0] + o[1]) * 0.5;
-    h.click_at(mid);
-    assert_eq!(lines(&h), before + 1, "the face, copied into the sketch");
+    let model = h.model().clone();
+    let walls: Vec<_> = model.walls().collect();
+    let south = *walls
+        .iter()
+        .filter(|w| (w.start.y - w.end.y).abs() < 1e-6)
+        .min_by(|a, b| a.start.y.total_cmp(&b.start.y))
+        .expect("a south wall");
+    let east = *walls
+        .iter()
+        .filter(|w| (w.start.x - w.end.x).abs() < 1e-6)
+        .max_by(|a, b| a.start.x.total_cmp(&b.start.x))
+        .expect("an east wall");
+    let face = |w: &archisim_core::Wall| {
+        let t = model.wall_type(w.wall_type).unwrap().thickness();
+        let (_, int) = w.face_offsets(t);
+        w.point_at(0.5, int)
+    };
+    h.click_at(face(south));
+    h.click_at(face(east));
+    let new: Vec<_> = h
+        .model()
+        .drafts()
+        .filter(|d| !before.contains(&d.id))
+        .map(|d| d.shape.clone())
+        .collect();
+    assert_eq!(new.len(), 2, "two faces, two sketch lines: {new:?}");
+    let ends = |s: &archisim_core::Shape| match s {
+        archisim_core::Shape::Line { a, b } => [*a, *b],
+        other => panic!("a line, not {other:?}"),
+    };
+    let (e0, e1) = (ends(&new[0]), ends(&new[1]));
+    assert!(
+        e0.iter().any(|p| e1.iter().any(|q| p.approx_eq(*q))),
+        "the two faces meet at their corner: {e0:?} {e1:?}"
+    );
     h.key(Key::Escape);
     assert!(!h.app.sketch_picking());
     assert!(h.app.click_ribbon("Cancelar"));

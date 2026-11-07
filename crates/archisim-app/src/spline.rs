@@ -87,6 +87,7 @@ pub fn bulge_through(a: Point2, m: Point2, b: Point2) -> f64 {
 
 /// A line of the 2D drawing as the tools take it: its pieces (start, end,
 /// bulge), whether it closes, and its points (arcs tessellated).
+#[derive(Debug, Clone)]
 pub struct PickedLine {
     pub pieces: Vec<(Point2, Point2, f64)>,
     pub closed: bool,

@@ -430,6 +430,16 @@ Debajo de la cinta, una fila: **«Modificar | Colocar Muro»** y los ajustes de 
 - **Elegir línea** en el grupo Dibujar del boceto, como «Seleccionar líneas» de Revit: un clic en una línea del dibujo 2D o en una cara o borde de muro, forjado, cubierta, pilar, viga o zapata, o en un eje o plano de referencia, la copia como línea del boceto. Se queda puesta hasta pulsarla otra vez, Esc o elegir otra orden.
 - La **Elegir línea** de las herramientas (muro, forjado, viga…) toma ahora también esas caras y bordes, no solo el dibujo 2D.
 
+### 13.3 bis Elegir línea como en Revit (6/11/2026, tercera vuelta)
+
+Antonio: «no funciona del todo como quiero; cuando edito un contorno no selecciona bien». Ahora, como «Seleccionar líneas» y «Seleccionar muros» de Revit:
+- **Se ve antes de pulsar**: la línea que tomaría el clic se resalta en azul, y la barra de opciones dice qué es («Cara interior del muro · 1 de 3»).
+- **Tab** pasa a la siguiente bajo el cursor (cara exterior, cara interior, eje, línea del dibujo…).
+- Los **muros dan su cara entera**, de un extremo a otro, del lado del cursor; con **Al núcleo** (Revit: «Extender en muro (al núcleo)»), la cara de su capa de estructura.
+- **Desfase** en la barra de opciones: la línea se aparta esa distancia hacia el lado del cursor.
+- **Esquinas solas**: la línea elegida y las del boceto cuyos extremos están cerca (hasta 1 m) se recortan o alargan hasta encontrarse, así que eligiendo las caras de una habitación se cierra su contorno.
+- No se elige lo que está oculto (el propio forjado que se edita) ni las líneas del boceto.
+
 ### 13.4 Propiedades más cortas (6/11/2026)
 
 - **Planta** arriba del todo en las propiedades de la vista: nombre, cota y Plantas…; sin la tarjeta de la vista, que repetía el título.

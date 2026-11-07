@@ -1787,6 +1787,17 @@ impl ArchiSimApp {
                     return;
                 }
                 if let Some((what, note)) = self.sketch_texts() {
+                    if self.sketch_picking() {
+                        ui.add_space(6.0);
+                        ui.label(
+                            egui::RichText::new(format!("Modo boceto · {what}"))
+                                .font(strong_font(12.5))
+                                .color(super::sketch_ui::SKETCH),
+                        );
+                        bar_separator(ui, &p);
+                        self.pick_fields(ui);
+                        return;
+                    }
                     ui.add_space(6.0);
                     ui.label(
                         egui::RichText::new(format!("Modo boceto · {what}"))

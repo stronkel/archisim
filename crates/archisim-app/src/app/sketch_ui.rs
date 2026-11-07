@@ -29,8 +29,8 @@ pub(crate) struct SketchState {
     /// joins everything after it into one step.
     mark: usize,
     /// The layer of the sketch lines and the plan they are drawn on.
-    layer: DrawLayerId,
-    view: ViewRef,
+    pub layer: DrawLayerId,
+    pub view: ViewRef,
     /// The drawing settings before (the sketch draws on its layer, by
     /// layer).
     settings: crate::cad::CadSettings,
@@ -39,6 +39,11 @@ pub(crate) struct SketchState {
     /// «Elegir línea» (Revit's «Seleccionar líneas»): a click copies the
     /// line or edge under it as a sketch line.
     pub pick: bool,
+    /// Which of the lines under the cursor (Tab goes to the next).
+    pub pick_cycle: usize,
+    /// Where the cursor was when it last moved, to start again from the
+    /// nearest line.
+    pub pick_at: Option<Point2>,
     /// A wall's sketch is drawn in elevation on a view of its own, made
     /// for it and taken away at the end, with the face and its openings
     /// as reference lines on a grey layer.
@@ -294,6 +299,8 @@ impl ArchiSimApp {
             settings,
             open_ends: Vec::new(),
             pick: false,
+            pick_cycle: 0,
+            pick_at: None,
             elevation,
             mirror,
         });
@@ -462,38 +469,15 @@ impl ArchiSimApp {
             }
             None => return,
         };
+        self.pick_hint.clear();
         if on {
-            self.say("Elegir línea: clic en una línea del dibujo o en una cara o borde de muro, forjado, pilar, eje o plano de referencia.");
+            self.say("Elegir línea: en azul, la línea que se toma; Tab pasa a la siguiente bajo el cursor.");
         }
     }
 
     /// Whether a click in the drawing picks a line for the sketch.
     pub(super) fn sketch_picking(&self) -> bool {
         self.tool == Tool::Arrow && self.sketch.as_ref().is_some_and(|s| s.pick)
-    }
-
-    /// A click with «Elegir línea» in the sketch: the line or edge under
-    /// it becomes a sketch line.
-    pub(super) fn sketch_pick_click(&mut self, p: Point2) {
-        let Some(st) = self.sketch.as_ref() else {
-            return;
-        };
-        let (view, layer) = (st.view, st.layer);
-        let reach = self.view.to_metres(super::REACH);
-        let Some(line) = self.line_at(p, reach, view, Some(layer)) else {
-            self.complain("Ahí no hay ninguna línea ni borde que elegir.");
-            return;
-        };
-        let r = self.ed.transact("Elegir línea", |m| {
-            for (a, b, bulge) in &line.pieces {
-                let seg = archisim_draft::Seg::from_bulge(*a, *b, *bulge);
-                m.add_draft(NewDraft::new(view, layer, archisim_draft::seg_shape(&seg)))?;
-            }
-            Ok(())
-        });
-        if let Err(e) = r {
-            self.complain(format!("No se puede: {e}."));
-        }
     }
 
     /// What is being sketched and what the lines must do, for the options

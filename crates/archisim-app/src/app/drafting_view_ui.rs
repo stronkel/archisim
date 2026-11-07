@@ -90,6 +90,7 @@ impl ArchiSimApp {
         self.draw_drafting_image(&ctx, &painter, rect, id, dv.scale);
         // A wall's sketch in elevation is drawn here, the rest behind a veil.
         self.draw_sketch(&painter, rect);
+        self.draw_sketch_candidate(&ctx, &painter, rect);
         self.draw_selection(&painter, rect);
         self.draw_cad(&painter, rect);
         if let (Some(a), Some(c)) = (self.window_start, self.cursor) {
@@ -166,8 +167,9 @@ impl ArchiSimApp {
         // «Elegir línea» of a sketch in elevation: the face's references.
         if self.sketch_picking() {
             if response.clicked_by(PointerButton::Primary) {
-                if let Some(c) = self.cursor {
-                    self.sketch_pick_click(c.point);
+                if let Some(pos) = response.interact_pointer_pos() {
+                    let p = self.view.to_model(rect, pos);
+                    self.sketch_pick_at(p);
                 }
             }
             return;
