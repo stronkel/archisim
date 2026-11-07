@@ -10531,6 +10531,7 @@ fn the_climate_window_changes_the_zone() {
         .find(|e| e.kind == archisim_mep::thermal::Kind::Wall)
         .unwrap();
     assert!((wall.limit - 0.37).abs() < 1e-9);
+}
 
 /// Three levels of representation (`docs/INTERFAZ.md` §13.5): a view
 /// follows a template; what is changed in its look changes the template and
