@@ -109,7 +109,9 @@ impl ArchiSimApp {
                                     .speed(0.5)
                                     .suffix(" %"),
                             )
-                            .on_hover_text("La del cálculo de la instalación (p. ej. f-Chart)")
+                            .on_hover_text(
+                                "La del cálculo de la instalación; con captadores solares dibujados se calcula por f-Chart",
+                            )
                             .changed()
                         {
                             new.fraction = pct / 100.0;
@@ -169,6 +171,9 @@ impl ArchiSimApp {
                 );
                 ui.end_row();
             });
+        if new.acs_source == archisim_core::AcsSource::Solar {
+            self.solar_group(ui, &mut new);
+        }
         if new != site {
             let r = self
                 .ed
@@ -196,5 +201,132 @@ impl ArchiSimApp {
             Some(fails),
         );
         self.renewables.blocks = blocks;
+    }
+
+    /// The collectors' data and the site's climate of the f-Chart: η0 and
+    /// a1 of the collectors, and the irradiation and air of each month,
+    /// typed, read from a monthly file of PVGIS or estimated.
+    fn solar_group(&mut self, ui: &mut Ui, new: &mut archisim_core::RenewablesSite) {
+        ui.add_space(6.0);
+        egui::CollapsingHeader::new("Captadores solares y clima (f-Chart)")
+            .default_open(true)
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label("Rendimiento óptico η0");
+                    ui.add(
+                        egui::DragValue::new(&mut new.collector_eta0)
+                            .range(0.3..=0.9)
+                            .speed(0.005)
+                            .max_decimals(3),
+                    )
+                    .on_hover_text("De la ficha del captador (ensayo UNE-EN ISO 9806)");
+                    ui.label("Pérdidas a1");
+                    ui.add(
+                        egui::DragValue::new(&mut new.collector_k1)
+                            .range(0.5..=10.0)
+                            .speed(0.05)
+                            .max_decimals(2)
+                            .suffix(" W/m²K"),
+                    )
+                    .on_hover_text("Coeficiente de pérdidas de la ficha del captador");
+                });
+                ui.horizontal(|ui| {
+                    let estimated = new.irradiation.is_none() || new.ambient.is_none();
+                    if estimated {
+                        ui.weak("Clima estimado por la latitud y el agua fría.");
+                    } else {
+                        ui.weak("Clima del lugar.");
+                    }
+                    if ui
+                        .button("Leer de un fichero de PVGIS…")
+                        .on_hover_text(
+                            "El fichero de «Monthly radiation» de PVGIS, con la radiación horizontal y la temperatura",
+                        )
+                        .clicked()
+                    {
+                        self.read_pvgis_into(new);
+                    }
+                    if ui
+                        .button("Escribirlo a mano")
+                        .on_hover_text("Parte de lo estimado, para corregirlo mes a mes")
+                        .clicked()
+                    {
+                        let (sun, air) =
+                            archisim_mep::solar::estimated_climate(self.ed.model(), new);
+                        let round = |v: [f64; 12], k: f64| v.map(|x| (x * k).round() / k);
+                        new.irradiation = Some(new.irradiation.unwrap_or(round(sun, 100.0)));
+                        new.ambient = Some(new.ambient.unwrap_or(round(air, 10.0)));
+                    }
+                    if !estimated && ui.button("Volver a estimarlo").clicked() {
+                        new.irradiation = None;
+                        new.ambient = None;
+                    }
+                });
+                if let (Some(sun), Some(air)) = (&mut new.irradiation, &mut new.ambient) {
+                    const NAMES: [&str; 12] = [
+                        "ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct",
+                        "nov", "dic",
+                    ];
+                    egui::Grid::new("renewables-climate")
+                        .num_columns(13)
+                        .spacing([6.0, 4.0])
+                        .show(ui, |ui| {
+                            ui.label("");
+                            for n in NAMES {
+                                ui.label(n);
+                            }
+                            ui.end_row();
+                            ui.label("H horizontal, kWh/m²·día");
+                            for v in sun.iter_mut() {
+                                ui.add(
+                                    egui::DragValue::new(v)
+                                        .range(0.0..=12.0)
+                                        .speed(0.02)
+                                        .max_decimals(2),
+                                );
+                            }
+                            ui.end_row();
+                            ui.label("Aire de día, °C");
+                            for v in air.iter_mut() {
+                                ui.add(
+                                    egui::DragValue::new(v)
+                                        .range(-30.0..=50.0)
+                                        .speed(0.1)
+                                        .max_decimals(1),
+                                );
+                            }
+                            ui.end_row();
+                        });
+                }
+            });
+    }
+
+    fn read_pvgis_into(&mut self, new: &mut archisim_core::RenewablesSite) {
+        let mut d = rfd::FileDialog::new()
+            .set_title("Leer el clima de PVGIS")
+            .add_filter("PVGIS (CSV o texto)", &["csv", "txt", "CSV", "TXT"]);
+        if let Some(dir) = self.start_dir() {
+            d = d.set_directory(dir);
+        }
+        let Some(path) = d.pick_file() else {
+            return;
+        };
+        match std::fs::read_to_string(&path)
+            .ok()
+            .and_then(|t| archisim_mep::solar::read_pvgis(&t))
+        {
+            Some((sun, air)) => {
+                new.irradiation = Some(sun);
+                if air.is_some() {
+                    new.ambient = air;
+                } else if new.ambient.is_none() {
+                    let (_, air) = archisim_mep::solar::estimated_climate(self.ed.model(), new);
+                    new.ambient = Some(air.map(|x| (x * 10.0).round() / 10.0));
+                }
+            }
+            None => self.complain(
+                "No se encontró en ese fichero la radiación mensual de PVGIS (columnas «month» y «H(h)_m»).",
+            ),
+        }
     }
 }

@@ -6,6 +6,37 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-08 (127) · Fracción solar por f-Chart (HE 4)
+
+Rama `bloque/fraccion-solar`, con pull request. Va sobre las de las entradas 125 y 126 (#179 y #180). **Formato versión 95**: los datos de los captadores y el clima del lugar en `renewables`. Sin cambios de IFC. `docs/INSTALACIONES.md` §8.
+
+- **Qué hace.** Con «Solar térmica» y captadores solares dibujados, la fracción solar del agua caliente ya no se escribe: se calcula mes a mes por **f-Chart**.
+  - **Captadores.** Su área, inclinación y orientación salen del dibujo. η0 y a1 se toman de la ficha (0,75 y 3,5 W/m²K por defecto).
+  - **Radiación.** Se pasa al plano de los captadores hora a hora, así que vale cualquier orientación.
+  - **Pérdidas y acumulación.** La carga incluye las pérdidas de distribución, acumulación y recirculación. La acumulación cuenta por sus litros por m² de captador.
+  - Sin captadores dibujados vale la fracción que se da, como antes.
+- **El clima.** En la ventana, grupo «Captadores solares y clima (f-Chart)», hay tres maneras de darlo:
+  - leído de un fichero mensual de PVGIS;
+  - escrito a mano mes a mes;
+  - estimado por la latitud y el agua fría. Con la estimación, la Comprobación CTE avisa.
+- **Salidas.**
+  - La memoria lleva la tabla mensual: H horizontal, H en captadores, aire, D1, D2, f y energía solar.
+  - Se avisa de los meses con sobrecalentamiento.
+  - `archisim renovables <proyecto> --pvgis fichero.csv` usa el clima de ese fichero sin tocar el proyecto.
+- **Ejemplo de prueba.** 1.000 l/día en Huelva con 24 m² a 35° al sur: un 86 % solar. Hacia el este baja, y hacia el norte mucho más.
+
+**Pendiente.**
+- PVGIS no se puede descargar desde aquí: el fichero lo baja Antonio de su web.
+- Los captadores de vacío o de curva de rendimiento con a2 se aproximan con un a1 equivalente.
+
+**Qué debe probar Antonio:**
+1. Abre la demo y pon dos o tres «Captadores solares» en la cubierta, orientados al sur.
+2. En Colaboración → Energías renovables, elige «Solar térmica». Debe salir la tabla del f-Chart con la fracción calculada.
+3. En PVGIS (re.jrc.ec.europa.eu, herramienta «Monthly radiation», con «Average temperature» marcada), descarga el CSV de tu municipio y léelo con «Leer de un fichero de PVGIS…». La radiación debe cambiar a la del lugar y el aviso de clima estimado desaparecer.
+4. Gira los captadores hacia el norte: la fracción debe bajar mucho.
+
+---
+
 ## 2026-11-07 (126) · Instalaciones en sección y alzado
 
 Rama `bloque/instalaciones-seccion`, con pull request. Va sobre la de la entrada 125 (#179). Sin cambios de formato ni de IFC. `docs/INSTALACIONES.md` §1.

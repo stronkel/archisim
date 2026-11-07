@@ -80,6 +80,18 @@ pub struct RenewablesSite {
     pub acs_demand: Option<f64>,
     /// The hot water store, litres, where it is not one day's demand.
     pub tank_volume: Option<f64>,
+    /// The solar collectors' efficiency at no loss (η0, the optical
+    /// efficiency F'R(τα)n of their test) and their loss coefficient
+    /// (a1, W/m²K): what the f-Chart of their solar fraction uses (format
+    /// version 95).
+    pub collector_eta0: f64,
+    pub collector_k1: f64,
+    /// The site's climate, where it is known (PVGIS, AEMET): the mean
+    /// daily irradiation on the horizontal of each month, kWh/m², and the
+    /// mean temperature of the air by day, °C. Without them both are
+    /// estimated from the latitude and the cold water.
+    pub irradiation: Option<[f64; 12]>,
+    pub ambient: Option<[f64; 12]>,
 }
 
 impl Default for RenewablesSite {
@@ -96,6 +108,10 @@ impl Default for RenewablesSite {
             built_area: None,
             acs_demand: None,
             tank_volume: None,
+            collector_eta0: 0.75,
+            collector_k1: 3.5,
+            irradiation: None,
+            ambient: None,
         }
     }
 }
@@ -118,6 +134,16 @@ impl RenewablesSite {
             && self.built_area.is_none_or(|a| a.is_finite() && a >= 0.0)
             && self.acs_demand.is_none_or(|a| a.is_finite() && a >= 0.0)
             && self.tank_volume.is_none_or(|a| a.is_finite() && a >= 0.0)
+            && self.collector_eta0 > 0.0
+            && self.collector_eta0 <= 1.0
+            && self.collector_k1.is_finite()
+            && self.collector_k1 >= 0.0
+            && self
+                .irradiation
+                .is_none_or(|m| m.iter().all(|v| v.is_finite() && *v >= 0.0))
+            && self
+                .ambient
+                .is_none_or(|m| m.iter().all(|v| v.is_finite() && v.abs() < 60.0))
     }
 }
 
@@ -441,6 +467,72 @@ pub const COLD_WATER: [(&str, [f64; 12]); 52] = [
 /// The cold water of a province's capital, by month (Huelva's if the name
 /// is not in the table), lowered for a site above it (Anejo G: 0,0066 °C a
 /// metre from October to March, 0,0033 from April to September).
+/// The latitude of each provincial capital, degrees north, by the names
+/// of [`COLD_WATER`]: the sun of the f-Chart where the project has no
+/// georeference.
+pub const CAPITAL_LATITUDE: [(&str, f64); 52] = [
+    ("A Coruña", 43.37),
+    ("Albacete", 38.99),
+    ("Alicante", 38.35),
+    ("Almería", 36.84),
+    ("Ávila", 40.66),
+    ("Badajoz", 38.88),
+    ("Barcelona", 41.39),
+    ("Vizcaya", 43.26),
+    ("Burgos", 42.34),
+    ("Cáceres", 39.47),
+    ("Cádiz", 36.53),
+    ("Castellón", 39.99),
+    ("Ceuta", 35.89),
+    ("Ciudad Real", 38.99),
+    ("Córdoba", 37.89),
+    ("Cuenca", 40.07),
+    ("Girona", 41.98),
+    ("Granada", 37.18),
+    ("Guadalajara", 40.63),
+    ("Huelva", 37.26),
+    ("Huesca", 42.14),
+    ("Jaén", 37.77),
+    ("Las Palmas", 28.10),
+    ("León", 42.60),
+    ("Lleida", 41.62),
+    ("La Rioja", 42.47),
+    ("Lugo", 43.01),
+    ("Madrid", 40.42),
+    ("Málaga", 36.72),
+    ("Melilla", 35.29),
+    ("Murcia", 37.99),
+    ("Ourense", 42.34),
+    ("Asturias", 43.36),
+    ("Palencia", 42.01),
+    ("Baleares", 39.57),
+    ("Navarra", 42.81),
+    ("Pontevedra", 42.43),
+    ("Salamanca", 40.97),
+    ("Guipúzcoa", 43.32),
+    ("Santa Cruz de Tenerife", 28.47),
+    ("Cantabria", 43.46),
+    ("Segovia", 40.95),
+    ("Sevilla", 37.39),
+    ("Soria", 41.76),
+    ("Tarragona", 41.12),
+    ("Teruel", 40.34),
+    ("Toledo", 39.86),
+    ("Valencia", 39.47),
+    ("Valladolid", 41.65),
+    ("Álava", 42.85),
+    ("Zamora", 41.50),
+    ("Zaragoza", 41.65),
+];
+
+/// The latitude of a province's capital (Huelva's for a name not known).
+pub fn capital_latitude(province: &str) -> f64 {
+    CAPITAL_LATITUDE
+        .iter()
+        .find(|(p, _)| p.eq_ignore_ascii_case(province))
+        .map_or(37.26, |(_, l)| *l)
+}
+
 pub fn cold_water(province: &str, above_capital: f64) -> [f64; 12] {
     let base = COLD_WATER
         .iter()
