@@ -207,7 +207,7 @@ El edificio de Florence Street lleva su ventilación:
 - una boca en cada local húmedo;
 - conductos por el techo hasta un conducto vertical Ø200 junto al baño de cada vivienda, que sube de la planta 1 a la cubierta;
 - un extractor en la cubierta por cada conducto vertical;
-- la campana de cada cocina, con su conducto por el techo hasta un conducto vertical colectivo de campanas por cada columna de viviendas (de Ø250 a Ø315 según las cocinas que recoge), que sale a la cubierta.
+- la campana de cada cocina, con su conducto por el techo hasta un conducto vertical colectivo de campanas por cada columna de viviendas (Ø300 para las cuatro cocinas que recoge), que sale a la cubierta. Las 24 campanas cumplen.
 
 Son 24 viviendas y 6 redes de extracción (de 202 a 346 m³/h). Para el cálculo le faltaba un local: el vestíbulo de la vivienda D, que ahora está (y sale en el cuadro de superficies). Con lo dibujado solo no cumplen 12 pasos de puerta: los que llevan más de 9 l/s piden holguras de 11 a 14 mm o rejilla de paso.
 
