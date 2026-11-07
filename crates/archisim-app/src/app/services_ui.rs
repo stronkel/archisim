@@ -316,7 +316,8 @@ impl ArchiSimApp {
     }
 
     /// Takes the pipe being drawn up (or down) a floor: it ends where it
-    /// is, a riser (a downpipe for the drainage) goes between the two
+    /// is, a riser (a downpipe for the drainage, an extract shaft for the
+    /// extract ducts) goes between the two
     /// floors, and the pipe goes on from the same point on the other one.
     pub(super) fn run_change_level(&mut self, up: bool) {
         let Some(&p) = self.run_points.last() else {
@@ -326,9 +327,9 @@ impl ArchiSimApp {
             return;
         };
         let system = self.run_system();
-        if self.tool == Tool::Duct {
+        if self.tool == Tool::Duct && system != archisim_core::ServiceSystem::ExhaustAir {
             self.complain(
-                "Los conductos no cambian de planta con un montante; dibuja uno en cada planta.",
+                "Solo los conductos de extracción cambian de planta (con un conducto vertical); dibuja los demás en cada planta.",
             );
             return;
         }
@@ -352,11 +353,7 @@ impl ArchiSimApp {
                     .map_or(String::new(), |l| l.name.clone());
                 self.go_to_level_plan(other);
                 self.run_points = vec![p];
-                let kind = if system.falls() {
-                    "Bajante"
-                } else {
-                    "Montante"
-                };
+                let kind = system.vertical().name();
                 self.say(format!("{kind} hasta {name}: la tubería sigue desde aquí."));
             }
             Err(e) => self.complain(format!("No se puede cambiar de planta: {e}.")),

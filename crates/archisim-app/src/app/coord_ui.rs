@@ -173,6 +173,14 @@ impl ArchiSimApp {
                 self.drain.open = true;
                 ui.close();
             }
+            if ui
+                .button("Cálculo de ventilación…")
+                .on_hover_text("Ventilación de las viviendas por el DB-HS 3: caudales por local, aireadores, bocas de extracción, pasos por las puertas, conductos y extractor")
+                .clicked()
+            {
+                self.ventilation.open = true;
+                ui.close();
+            }
             self.team_menu_items(ui);
         });
     }

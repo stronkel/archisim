@@ -37,7 +37,7 @@ pub const ROLES: [&str; 11] = [
 ];
 
 /// The kinds that have a model: the codes of the devices' kinds.
-pub const KINDS: [&str; 36] = [
+pub const KINDS: [&str; 40] = [
     "equipment",
     "light",
     "socket",
@@ -74,6 +74,10 @@ pub const KINDS: [&str; 36] = [
     "transformer",
     "main_fuse_box",
     "street_light",
+    "air_inlet",
+    "exhaust_vent",
+    "air_shaft",
+    "fan",
 ];
 
 /// How far a key or a shutter is tilted, radians.
@@ -143,6 +147,10 @@ fn make(kind: &str, w: f64, d: f64, h: f64) -> Option<PropMesh> {
         "transformer" => transformer(&mut b, w, d, h),
         "main_fuse_box" => fuse_box(&mut b, w, d, h),
         "street_light" => street_light(&mut b, w, h),
+        "air_inlet" => grille(&mut b, w, d, h),
+        "exhaust_vent" => exhaust_vent(&mut b, w, h),
+        "air_shaft" => air_shaft(&mut b, w, d, h),
+        "fan" => roof_fan(&mut b, w, d, h),
         _ => return None,
     }
     Some(PropMesh {
@@ -741,6 +749,101 @@ fn boiler(b: &mut Builder, w: f64, d: f64, h: f64) {
 
 /// A riser (copper, its collars each 1.5 m) or a downpipe (its sockets at
 /// the bottom and the top and its clamps between).
+/// An extract valve on the ceiling: its ring against the ceiling (the
+/// top of its box) and the cone that sets its flow.
+fn exhaust_vent(b: &mut Builder, w: f64, h: f64) {
+    let r = w / 2.0;
+    let ring = h.min(0.012);
+    b.cone(
+        "plate",
+        [0.0, 0.0, h - ring],
+        [0.0, 0.0, h],
+        r,
+        r,
+        ROUND * 2,
+    );
+    b.cone(
+        "dark",
+        [0.0, 0.0, h - ring - 0.002],
+        [0.0, 0.0, h - ring],
+        r * 0.75,
+        r * 0.75,
+        ROUND * 2,
+    );
+    b.cone(
+        "plate",
+        [0.0, 0.0, 0.0],
+        [0.0, 0.0, h - ring - 0.002],
+        r * 0.55,
+        r * 0.25,
+        ROUND * 2,
+    );
+}
+
+/// An extract shaft: round (galvanised sheet, its joints every 1,2 m) or
+/// rectangular.
+fn air_shaft(b: &mut Builder, w: f64, d: f64, h: f64) {
+    if (w - d).abs() < 1e-6 {
+        let r = w / 2.0;
+        b.cone("metal", [0.0, 0.0, 0.0], [0.0, 0.0, h], r, r, ROUND * 2);
+        let n = ((h / 1.2).floor() as usize).max(1);
+        for k in 1..=n {
+            let z = (h * k as f64 / (n + 1) as f64).min(h - 0.02);
+            b.cone(
+                "metal",
+                [0.0, 0.0, z - 0.015],
+                [0.0, 0.0, z + 0.015],
+                r * 1.04,
+                r * 1.04,
+                ROUND * 2,
+            );
+        }
+    } else {
+        b.rbox(
+            "metal",
+            [-w / 2.0, -d / 2.0, 0.0],
+            [w / 2.0, d / 2.0, h],
+            0.003,
+        );
+    }
+}
+
+/// A roof extract fan: its base on the curb and the cowl over the motor.
+fn roof_fan(b: &mut Builder, w: f64, d: f64, h: f64) {
+    let base = h * 0.3;
+    b.rbox(
+        "body",
+        [-w / 2.0, -d / 2.0, 0.0],
+        [w / 2.0, d / 2.0, base],
+        0.01,
+    );
+    let r = w.min(d) / 2.0;
+    b.cone(
+        "metal",
+        [0.0, 0.0, base],
+        [0.0, 0.0, base + (h - base) * 0.35],
+        r * 0.95,
+        r * 0.95,
+        ROUND * 2,
+    );
+    b.cone(
+        "dark",
+        [0.0, 0.0, base + (h - base) * 0.35],
+        [0.0, 0.0, base + (h - base) * 0.55],
+        r * 0.8,
+        r * 0.8,
+        ROUND * 2,
+    );
+    b.cone(
+        "metal",
+        [0.0, 0.0, base + (h - base) * 0.55],
+        [0.0, 0.0, h],
+        r * 0.95,
+        r * 0.3,
+        ROUND * 2,
+    );
+}
+
 fn riser(b: &mut Builder, w: f64, h: f64, downpipe: bool) {
     let r = w / 2.0;
     b.cone("pipe", [0.0, 0.0, 0.0], [0.0, 0.0, h], r, r, ROUND * 2);
@@ -1732,6 +1835,10 @@ mod tests {
                 "transformer" => (3.0, 2.5, 2.8),
                 "fuse_box" | "main_fuse_box" => (0.5, 0.25, 0.7),
                 "street_light" => (0.45, 0.45, 6.0),
+                "air_inlet" => (0.4, 0.06, 0.1),
+                "exhaust_vent" => (0.15, 0.15, 0.05),
+                "air_shaft" => (0.2, 0.2, 3.0),
+                "fan" => (0.6, 0.6, 0.55),
                 _ => (0.08, 0.04, 0.08),
             };
             let m = device_model(kind, w, d, h).expect(kind);

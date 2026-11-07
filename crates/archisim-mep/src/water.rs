@@ -470,11 +470,7 @@ pub(crate) fn graph(model: &Model, system: ServiceSystem) -> Graph {
     }
     // The risers: from floor to floor at their place.
     let levels = model.levels();
-    let vertical = if system.falls() {
-        DeviceKind::Downpipe
-    } else {
-        DeviceKind::Riser
-    };
+    let vertical = system.vertical();
     for d in model.devices().filter(|d| d.kind == vertical) {
         let bottom = level_z(model, d.level) + d.elevation;
         let top = bottom + d.height;

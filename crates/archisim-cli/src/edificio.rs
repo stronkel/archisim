@@ -143,6 +143,9 @@ pub fn build() -> Result<Document, ModelError> {
     })?;
     step(&mut doc, "Instalaciones", &mut |m| services(m, &lv))?;
     step(&mut doc, "Locales", &mut |m| rooms(m, &lv))?;
+    step(&mut doc, "Ventilación", &mut |m| {
+        ventilation_network(m, &lv)
+    })?;
     step(&mut doc, "Entorno", &mut |m| site(m, lv[0]))?;
     step(&mut doc, "Documentación", &mut |m| documentation(m, &lv))?;
     Ok(doc)
@@ -1929,6 +1932,225 @@ fn services(m: &mut Model, lv: &[LevelId]) -> R {
     drain_network(m, lv)
 }
 
+/// The dwellings' ventilation (DB-HS 3): an inlet over every window of a
+/// dry room, an extract valve on the ceiling of every wet room (the
+/// living-kitchens too), ducts along the ceiling to a shaft by each flat's
+/// bathroom, the shafts up to the roof and a fan on each one.
+fn ventilation_network(m: &mut Model, lv: &[LevelId]) -> R {
+    use archisim_core::{DeviceKind, NewDevice, NewRun, OpeningKind, ServiceSystem};
+    use archisim_mep::ventilation as vt;
+    let v = vt::ventilation(m);
+    if v.dwellings.is_empty() {
+        return Ok(());
+    }
+    let roof = lv[5];
+    let roof_z = m.level(roof).map_or(16.2, |l| l.elevation);
+    let device = |m: &mut Model,
+                  level,
+                  kind: DeviceKind,
+                  at: Point2,
+                  turn: f64,
+                  z: f64,
+                  size: (f64, f64, f64)| {
+        m.add_device(NewDevice {
+            level,
+            kind,
+            name: kind.name().into(),
+            position: at,
+            rotation: turn,
+            elevation: z,
+            width: size.0,
+            depth: size.1,
+            height: size.2,
+        })
+    };
+    let duct = |m: &mut Model, level, path: Vec<Point2>| {
+        m.add_run(NewRun {
+            level,
+            system: ServiceSystem::ExhaustAir,
+            path,
+            elevation: 2.75,
+            width: 0.15,
+            height: 0.1,
+            slope: 0.0,
+        })
+    };
+    // Each flat's shaft: by the bathroom of the first floor's flat of the
+    // same name, at its corner nearest the corridor (the lowest y of its
+    // outline nearest the middle), through every floor to the roof.
+    let mut shafts: Vec<(String, Point2)> = Vec::new();
+    let first = v.dwellings.iter().map(|d| d.level).min_by(|a, b| {
+        let z = |l: &LevelId| m.level(*l).map_or(0.0, |x| x.elevation);
+        z(a).total_cmp(&z(b))
+    });
+    let letter = |name: &str| name.split(' ').nth(1).unwrap_or("").to_string();
+    for d in v.dwellings.iter().filter(|d| Some(d.level) == first) {
+        let Some(bath) = d
+            .rooms
+            .iter()
+            .filter(|r| r.wet && !r.kitchen)
+            .chain(d.rooms.iter().filter(|r| r.wet))
+            .next()
+        else {
+            continue;
+        };
+        let Some(room) = m.room(bath.room) else {
+            continue;
+        };
+        let c = room.label;
+        let corner = room
+            .outline
+            .iter()
+            .copied()
+            .min_by(|a, b| a.distance(c).total_cmp(&b.distance(c)).reverse())
+            .unwrap_or(c);
+        let at = corner + (c - corner).normalized().unwrap_or_default() * 0.2;
+        let base = m.level(d.level).map_or(0.0, |l| l.elevation);
+        device(
+            m,
+            d.level,
+            DeviceKind::AirShaft,
+            at,
+            0.0,
+            0.0,
+            (0.2, 0.2, roof_z - base),
+        )?;
+        // Out of the shaft's head to the fan beside it, on the roof.
+        let fan = at + Point2::new(0.0, 0.6);
+        let top = duct(m, roof, vec![at, fan])?;
+        m.edit_run(top, |r| {
+            r.width = 0.25;
+            r.height = 0.15;
+        })?;
+        device(m, roof, DeviceKind::Fan, fan, 0.0, 0.0, (0.5, 0.5, 0.5))?;
+        shafts.push((letter(&d.name), at));
+    }
+    let windows: Vec<_> = m
+        .openings()
+        .filter_map(|o| {
+            let t = m.opening_type(o.opening_type)?;
+            if matches!(t.kind, OpeningKind::Void) {
+                return None;
+            }
+            let g = archisim_geom::opening_geometry(m, o.id)?;
+            let w = m.wall(o.wall)?;
+            Some((w.level, g, o.sill + t.height))
+        })
+        .collect();
+    // The middle of the flats' floor.
+    let all: Vec<Point2> = v
+        .dwellings
+        .iter()
+        .flat_map(|d| &d.rooms)
+        .filter_map(|r| m.room(r.room).map(|x| x.label))
+        .collect();
+    let middle =
+        all.iter().fold(Point2::new(0.0, 0.0), |a, p| a + *p) * (1.0 / all.len().max(1) as f64);
+    for d in &v.dwellings {
+        let shaft = shafts
+            .iter()
+            .find(|(l, _)| *l == letter(&d.name))
+            .map(|(_, p)| *p);
+        for r in &d.rooms {
+            let Some(room) = m.room(r.room).cloned() else {
+                continue;
+            };
+            if r.dry.is_some() {
+                // Over the window into the room, in the wall.
+                let mut placed = false;
+                for (level, g, head) in &windows {
+                    if *level != d.level {
+                        continue;
+                    }
+                    let tm = (g.t0 + g.t1) / 2.0;
+                    // To the outside: one side in the room, the other in
+                    // none.
+                    let sides = [
+                        g.point(
+                            tm,
+                            g.interior_offset
+                                - 0.25 * (g.exterior_offset - g.interior_offset).signum(),
+                        ),
+                        g.point(
+                            tm,
+                            g.exterior_offset
+                                + 0.25 * (g.exterior_offset - g.interior_offset).signum(),
+                        ),
+                    ];
+                    let in_room = sides.iter().position(|p| room.contains(*p));
+                    let Some(i) = in_room else {
+                        continue;
+                    };
+                    if m.rooms_on_level(d.level).any(|x| x.contains(sides[1 - i])) {
+                        continue;
+                    }
+                    let at = g.point(tm, (g.interior_offset + g.exterior_offset) / 2.0);
+                    let turn = g.u.y.atan2(g.u.x);
+                    device(
+                        m,
+                        d.level,
+                        DeviceKind::AirInlet,
+                        at,
+                        turn,
+                        (head + 0.05).min(2.7),
+                        (0.4, 0.06, 0.02),
+                    )?;
+                    placed = true;
+                    break;
+                }
+                if !placed {
+                    // In the glazed façade or the outer wall: its edge
+                    // farthest from the middle of the floor, at its head.
+                    let n = room.outline.len();
+                    let edge = (0..n)
+                        .map(|i| (room.outline[i], room.outline[(i + 1) % n]))
+                        .max_by(|a, b| {
+                            let far = |e: &(Point2, Point2)| {
+                                let mid = (e.0 + e.1) * 0.5;
+                                mid.distance(middle) + 0.001 * e.0.distance(e.1)
+                            };
+                            far(a).total_cmp(&far(b))
+                        });
+                    if let Some((a, b)) = edge {
+                        let mid = (a + b) * 0.5;
+                        let u = b - a;
+                        device(
+                            m,
+                            d.level,
+                            DeviceKind::AirInlet,
+                            mid,
+                            u.y.atan2(u.x),
+                            2.6,
+                            (0.4, 0.06, 0.02),
+                        )?;
+                    }
+                }
+            }
+            if r.wet {
+                let at = room.label + Point2::new(0.0, 0.4);
+                device(
+                    m,
+                    d.level,
+                    DeviceKind::ExhaustVent,
+                    at,
+                    0.0,
+                    2.7,
+                    (0.125, 0.125, 0.05),
+                )?;
+                if let Some(s) = shaft {
+                    let path = if (at.x - s.x).abs() < 0.05 || (at.y - s.y).abs() < 0.05 {
+                        vec![at, s]
+                    } else {
+                        vec![at, Point2::new(at.x, s.y), s]
+                    };
+                    duct(m, d.level, path)?;
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 /// The water supply joined up, so that the calculation of DB-HS 4 can
 /// follow it: the meter and the hot water tank by the riser on the ground
 /// floor, the riser up to the roof, each floor's corridor main from the
@@ -2420,7 +2642,7 @@ fn rooms(m: &mut Model, lv: &[LevelId]) -> R {
     for k in 1..=4 {
         let l = lv[k];
         let r = |n: &str| format!("{k}.{n}");
-        let flats: [(&str, &str, &str, [f64; 4], &str); 24] = [
+        let flats: [(&str, &str, &str, [f64; 4], &str); 25] = [
             (
                 "A1",
                 "Estar-cocina A",
@@ -2495,6 +2717,13 @@ fn rooms(m: &mut Model, lv: &[LevelId]) -> R {
                 "Dormitorio 2 D",
                 "Dormitorio",
                 [21.8, 4.7, 24.15, 7.55],
+                wood,
+            ),
+            (
+                "D5",
+                "Vestíbulo D",
+                "Pasillo",
+                [24.25, 4.65, 25.85, 8.95],
                 wood,
             ),
             (
@@ -2912,5 +3141,24 @@ mod tests {
         assert_eq!(beds, 4 * 7);
         assert!(m.walls().count() > 150, "{}", m.walls().count());
         assert!(m.objects().count() > 500, "{}", m.objects().count());
+        // The ventilation: 24 flats, every wet room in one, ducts to a
+        // fan.
+        let v = archisim_mep::ventilation::ventilation(m);
+        if std::env::var("ARCHISIM_VENTILACION_TEXTO").is_ok() {
+            println!("{}", archisim_mep::ventilation::report(m, &v));
+        }
+        assert_eq!(
+            v.dwellings.len(),
+            24,
+            "{:?}",
+            v.dwellings.iter().map(|d| &d.name).collect::<Vec<_>>()
+        );
+        // The toilets of the ground floor and the laundry on the roof are
+        // not of a flat.
+        assert!(v.lone_wet.iter().all(|r| m
+            .room(*r)
+            .is_some_and(|x| v.dwellings.iter().all(|d| d.level != x.level))));
+        assert!(v.loose.is_empty(), "{:?}", v.loose);
+        assert!(v.networks.iter().all(|n| n.fan.is_some()));
     }
 }

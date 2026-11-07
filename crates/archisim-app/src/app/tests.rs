@@ -10434,3 +10434,27 @@ fn the_drain_window_sizes_the_drains() {
     h.app.drain.open = true;
     h.frame();
 }
+
+#[test]
+fn the_ventilation_window_sizes_the_inlets() {
+    use archisim_core::DeviceKind;
+    let mut m = archisim_core::Model::new("Piso");
+    let l0 = m.add_level("Planta baja", 0.0);
+    let l1 = m.add_level("Cubierta", 3.0);
+    let lib = archisim_library::add_library(&mut m).unwrap();
+    archisim_mep::ventilation::example_flat(&mut m, l0, l1, lib.partition, lib.interior_door);
+    let mut h = Harness::new(Editor::with_model(m, None));
+    // The second bedroom's inlet is short; it grows, and once.
+    let n = h.app.apply_ventilation_sizes();
+    assert!(n >= 1, "{n}");
+    assert!(h
+        .app
+        .ed
+        .model()
+        .devices()
+        .filter(|d| d.kind == DeviceKind::AirInlet)
+        .all(|d| d.width > 0.1 + 1e-9));
+    assert_eq!(h.app.apply_ventilation_sizes(), 0);
+    h.app.ventilation.open = true;
+    h.frame();
+}

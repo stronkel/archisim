@@ -71,6 +71,18 @@ impl ServiceSystem {
         Self::DUCTS.contains(&self)
     }
 
+    /// What takes it from floor to floor: a downpipe for what falls, an
+    /// extract shaft for the air, a riser for the rest.
+    pub fn vertical(self) -> DeviceKind {
+        if self.falls() {
+            DeviceKind::Downpipe
+        } else if self.is_duct() {
+            DeviceKind::AirShaft
+        } else {
+            DeviceKind::Riser
+        }
+    }
+
     /// A network under the street.
     pub fn is_urban(self) -> bool {
         Self::URBAN.contains(&self)
@@ -452,10 +464,23 @@ pub enum DeviceKind {
     MainFuseBox,
     /// A street light («farola»).
     StreetLight,
+    /// An air inlet of a dry room («aireador»), over a window or in the
+    /// wall: its face, `width` × `height`, is its gross area.
+    AirInlet,
+    /// An extract valve of a wet room («boca de extracción»), on the
+    /// ceiling.
+    ExhaustVent,
+    /// A vertical extract duct between floors («conducto de extracción»,
+    /// the shaft of the dwellings' ventilation): its `height` is how far
+    /// it goes up; round of diameter `width` when `depth` equals it,
+    /// otherwise `width` × `depth`.
+    AirShaft,
+    /// An extract fan («extractor»), on the roof at the head of a shaft.
+    Fan,
 }
 
 impl DeviceKind {
-    pub const ALL: [DeviceKind; 36] = [
+    pub const ALL: [DeviceKind; 40] = [
         DeviceKind::Equipment,
         DeviceKind::Light,
         DeviceKind::Socket,
@@ -492,6 +517,10 @@ impl DeviceKind {
         DeviceKind::Transformer,
         DeviceKind::MainFuseBox,
         DeviceKind::StreetLight,
+        DeviceKind::AirInlet,
+        DeviceKind::ExhaustVent,
+        DeviceKind::AirShaft,
+        DeviceKind::Fan,
     ];
 
     /// The mechanisms of the electricity and telecommunications.
@@ -511,7 +540,19 @@ impl DeviceKind {
 
     /// A pipe up or down between floors.
     pub fn is_vertical(self) -> bool {
-        matches!(self, DeviceKind::Riser | DeviceKind::Downpipe)
+        matches!(
+            self,
+            DeviceKind::Riser | DeviceKind::Downpipe | DeviceKind::AirShaft
+        )
+    }
+
+    /// The dwellings' ventilation (DB-HS 3): air inlets, extract valves,
+    /// shafts and fans.
+    pub fn is_ventilation(self) -> bool {
+        matches!(
+            self,
+            DeviceKind::AirInlet | DeviceKind::ExhaustVent | DeviceKind::AirShaft | DeviceKind::Fan
+        )
     }
 
     pub fn code(self) -> &'static str {
@@ -552,6 +593,10 @@ impl DeviceKind {
             DeviceKind::Transformer => "transformer",
             DeviceKind::MainFuseBox => "main_fuse_box",
             DeviceKind::StreetLight => "street_light",
+            DeviceKind::AirInlet => "air_inlet",
+            DeviceKind::ExhaustVent => "exhaust_vent",
+            DeviceKind::AirShaft => "air_shaft",
+            DeviceKind::Fan => "fan",
         }
     }
 
@@ -597,6 +642,10 @@ impl DeviceKind {
             DeviceKind::Transformer => "Centro de transformación",
             DeviceKind::MainFuseBox => "Caja general de protección",
             DeviceKind::StreetLight => "Farola",
+            DeviceKind::AirInlet => "Aireador",
+            DeviceKind::ExhaustVent => "Boca de extracción",
+            DeviceKind::AirShaft => "Conducto de extracción",
+            DeviceKind::Fan => "Extractor",
         }
     }
 
@@ -643,6 +692,10 @@ impl DeviceKind {
             DeviceKind::Transformer => (3.0, 2.5, 2.8, 0.0),
             DeviceKind::MainFuseBox => (0.5, 0.25, 0.7, 0.8),
             DeviceKind::StreetLight => (0.3, 0.3, 6.0, 0.0),
+            DeviceKind::AirInlet => (0.4, 0.06, 0.1, 2.15),
+            DeviceKind::ExhaustVent => (0.15, 0.15, 0.05, 2.45),
+            DeviceKind::AirShaft => (0.2, 0.2, 3.0, 0.0),
+            DeviceKind::Fan => (0.6, 0.6, 0.55, 0.0),
         }
     }
 
@@ -684,6 +737,10 @@ impl DeviceKind {
             DeviceKind::Transformer => ("IFCTRANSFORMER", "VOLTAGE"),
             DeviceKind::MainFuseBox => ("IFCPROTECTIVEDEVICE", "FUSEDISCONNECTOR"),
             DeviceKind::StreetLight => ("IFCLIGHTFIXTURE", "DIRECTIONSOURCE"),
+            DeviceKind::AirInlet => ("IFCAIRTERMINAL", "GRILLE"),
+            DeviceKind::ExhaustVent => ("IFCAIRTERMINAL", "REGISTER"),
+            DeviceKind::AirShaft => ("IFCDUCTSEGMENT", "RIGIDSEGMENT"),
+            DeviceKind::Fan => ("IFCFAN", "CENTRIFUGALRADIAL"),
         }
     }
 
@@ -755,6 +812,9 @@ impl DeviceKind {
             DeviceKind::Hydrant => Some(ServiceSystem::WaterMain),
             DeviceKind::Transformer | DeviceKind::MainFuseBox => Some(ServiceSystem::PowerLow),
             DeviceKind::StreetLight => Some(ServiceSystem::StreetLighting),
+            DeviceKind::ExhaustVent | DeviceKind::AirShaft | DeviceKind::Fan => {
+                Some(ServiceSystem::ExhaustAir)
+            }
             _ => None,
         }
     }

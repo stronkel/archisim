@@ -28,6 +28,7 @@ pub mod region;
 pub mod services;
 pub mod structure;
 pub mod surfaces;
+pub mod ventilation;
 
 use archisim_core::{
     Accessibility, BuildingUse, LevelId, Model, ObjectId, OpeningId, Point2, RoomId, RunId, SlabId,
@@ -60,6 +61,8 @@ pub enum Section {
     StairsAndRamps,
     /// DB-HS 4 and HS 5: water supply and drainage.
     Services,
+    /// DB-HS 3: the dwellings' ventilation.
+    Ventilation,
     /// Código Estructural: the reinforcement (E11).
     Structure,
     /// REBT, ITC-BT-25: the circuits of the dwellings (E13).
@@ -71,12 +74,13 @@ pub enum Section {
 }
 
 impl Section {
-    pub const ALL: [Section; 9] = [
+    pub const ALL: [Section; 10] = [
         Section::Evacuation,
         Section::Fire,
         Section::Accessibility,
         Section::StairsAndRamps,
         Section::Services,
+        Section::Ventilation,
         Section::Electrical,
         Section::Structure,
         Section::Framing,
@@ -90,6 +94,7 @@ impl Section {
             Section::Accessibility => "Accesibilidad (DB-SUA 9)",
             Section::StairsAndRamps => "Escaleras y rampas (DB-SUA 1)",
             Section::Services => "Agua y saneamiento (DB-HS 4 y HS 5)",
+            Section::Ventilation => "Ventilación (DB-HS 3)",
             Section::Structure => "Estructura (Código Estructural, DB-SE-F, DB-SE-C)",
             Section::Electrical => "Electricidad (REBT, ITC-BT-25)",
             Section::Framing => "Entramado ligero (EN 1993-1-3, EN 1995-1-1, DB-SE-M)",
@@ -332,6 +337,7 @@ pub fn check(model: &Model) -> Report {
     services::check(model, &mut report);
     services::calculation(model, &mut report);
     services::drain_calculation(model, &mut report);
+    ventilation::check(model, &mut report);
     structure::check(model, &mut report);
     electrical::check(model, &mut report);
     framing::check(model, &mut report);

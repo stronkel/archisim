@@ -1,8 +1,8 @@
 # Instalaciones: dibujo y cálculo
 
-ArchiSim dibuja las instalaciones (tuberías, conductos y aparatos) y las calcula sobre lo dibujado. Este documento recoge la segunda vuelta: cómo se meten las tuberías, el cálculo eléctrico con su esquema unifilar, el cálculo de fontanería y el de saneamiento. Lo que sigue (ventilación HS 3, climatización y DB-HE) se añadirá aquí.
+ArchiSim dibuja las instalaciones (tuberías, conductos y aparatos) y las calcula sobre lo dibujado. Este documento recoge la segunda vuelta: cómo se meten las tuberías, el cálculo eléctrico con su esquema unifilar, el cálculo de fontanería, el de saneamiento y el de ventilación. Lo que sigue (climatización y DB-HE) se añadirá aquí.
 
-Código: `archisim-core::model::pipe_routing` (uniones, cambio de planta y trazado automático), `archisim-core::model::water` (datos del suministro), crate `archisim-mep` (cálculos, depende solo de `archisim-core`: `electrical`, `water` y `drain`), `archisim-plan::single_line` (esquema unifilar), `archisim-plan::water_schematic` (esquemas de fontanería y saneamiento), `archisim-cte::electrical` y `archisim-cte::services::calculation` (comprobación) y, en la app, `app/services_ui`, `app/electrical_ui`, `app/water_ui` y `app/drain_ui`.
+Código: `archisim-core::model::pipe_routing` (uniones, cambio de planta y trazado automático), `archisim-core::model::water` (datos del suministro), crate `archisim-mep` (cálculos, depende de `archisim-core` y `archisim-geom`: `electrical`, `water`, `drain` y `ventilation`), `archisim-plan::single_line` (esquema unifilar), `archisim-plan::water_schematic` (esquemas de fontanería y saneamiento), `archisim-cte::electrical`, `archisim-cte::services::calculation` y `archisim-cte::ventilation` (comprobación) y, en la app, `app/services_ui`, `app/electrical_ui`, `app/water_ui`, `app/drain_ui` y `app/ventilation_ui`.
 
 ## 1. Meter las tuberías
 
@@ -152,7 +152,59 @@ Con lo dibujado se quedan cortos 28 tramos, casi todos ramales de las cocinas (f
 
 **A comprobar por Antonio**: los valores de las tablas 4.1 (uso público), 4.3, 4.4, 4.5, 4.6, 4.7, 4.8 y 4.9 del HS 5 están escritos de memoria del texto del CTE y no los he podido contrastar con el documento oficial desde aquí; están juntos al principio de `crates/archisim-mep/src/drain.rs` para corregirlos de una vez.
 
-## 6. Lo que no hace (todavía)
+## 6. Ventilación de las viviendas (DB-HS 3)
+
+Colaboración → **Cálculo de ventilación…**. No hay nada que escribir: todo sale del dibujo. Solo en edificios de viviendas (uso del edificio en los datos del CTE); los demás usos se ventilan por el RITE (IT 1.1.4.2), que no se calcula todavía.
+
+**Qué se dibuja.** Cuatro aparatos nuevos, en el «Tipo» del aparato de la ficha Instalaciones:
+- **Aireador**: en el muro o sobre la ventana de cada local seco. Su abertura libre es ancho × alto: el de serie, 400 × 20 mm, da 80 cm².
+- **Boca de extracción**: en el techo de cada local húmedo. Su abertura es la del círculo de su diámetro (Ø125: 123 cm²).
+- **Conducto de extracción**: el conducto vertical entre plantas (el shunt). Redondo si ancho y fondo son iguales, rectangular si no. Con la herramienta Conducto del sistema Extracción, RePág y AvPág lo ponen como el montante de una tubería.
+- **Extractor**: en la cubierta, a la cabeza del conducto, unido a él por un trozo de conducto.
+
+Los conductos de cada planta, del sistema **Extracción**, van de cada boca al conducto vertical. Una boca está unida si un conducto acaba a menos de 45 cm.
+
+**Cómo se calcula**
+- **Las viviendas.** Son los locales de cada planta unidos por puertas, sin los comunes: pasillos y escaleras del edificio, portal, garaje, trasteros, cuartos de instalaciones y terrazas. Lo que es cada local se lee de su uso y su nombre:
+  - **secos**: dormitorios, estar, salón, comedor, estudio y despacho;
+  - **húmedos**: cocinas, baños, aseos y lavaderos;
+  - **paso**: pasillos, distribuidores, vestíbulos, recibidores y vestidores.
+  
+  Un «estar-cocina» es las dos cosas: el aire entra por su parte de estar y sale por la cocina. Un hueco sin puerta une dos locales como una puerta.
+- **Caudales**, tabla 2.1, según los dormitorios de la vivienda:
+
+  | Dormitorios | Dormitorio principal | Otros dormitorios | Cada estar o comedor | Húmedos, en total | Cada húmedo |
+  |---|---|---|---|---|---|
+  | 0 o 1 | 8 l/s | — | 6 l/s | 12 l/s | 6 l/s |
+  | 2 | 8 l/s | 4 l/s | 8 l/s | 24 l/s | 7 l/s |
+  | 3 o más | 8 l/s | 4 l/s | 10 l/s | 33 l/s | 8 l/s |
+
+  - El dormitorio principal es el mayor. El estudio o despacho lleva lo de un dormitorio, pero no cuenta para el tipo de vivienda.
+  - Lo que entra tiene que salir: el caudal de la vivienda es el mayor de lo que piden los secos y los húmedos, y el otro lado se sube a él en proporción.
+- **Aberturas**, tabla 4.1:
+  - admisión en cada seco: 4·q cm²;
+  - extracción en cada húmedo: 4·q cm²;
+  - paso en cada puerta por la que va el aire: 8·q cm², y 70 cm² como mínimo. El aire de cada seco va, puerta a puerta, al húmedo más cercano que aún lo necesita. Una puerta da su holgura bajo la hoja, que se toma de 1 cm (paso libre × 1 cm); un hueco sin puerta, todo su tamaño. Si no basta, se dice la holgura que haría falta («holgura de 14 mm o rejilla de paso»).
+- **Conductos**, tabla 4.2, extracción mecánica: cada tramo lleva el caudal de las bocas que tiene detrás y necesita 2,5·q cm² (4 m/s). Los tramos («V1», «V2»…) van del extractor hacia las bocas, y se da el tamaño que basta: el mismo alto con más ancho en los rectangulares, el diámetro siguiente en los redondos.
+- **Extractor**: el caudal de su red, en l/s y m³/h. Si no está dibujado, no cumple. La presión que debe dar la pone el fabricante con el trazado.
+- **Cocina**: se recuerda que necesita su extracción propia para la campana (50 l/s, con su conducto; 3.1.1).
+- **Trasteros y almacenes de residuos** del edificio, tabla 2.2: 0,7 y 10 l/s por m².
+
+Todo sale en la ventana, en la Comprobación CTE (sección «Ventilación (DB-HS 3)») y en `archisim ventilacion <proyecto>`. **«Poner los tamaños calculados»** alarga los aireadores cortos (con su misma rendija) y agranda las bocas, conductos y conductos verticales cortos, en un paso de Deshacer. Lo mismo hace «Arreglar lo que no cumple» y `archisim ventilacion <proyecto> --tamanos salida.archisim`. Los pasos de las puertas no se tocan: holgura o rejilla, a decidir.
+
+`archisim ventilacion --ejemplo <carpeta>` hace un piso de dos dormitorios con todo dibujado.
+
+El edificio de Florence Street lleva su ventilación:
+- un aireador sobre cada ventana de los locales secos, o en la fachada de vidrio de los estares;
+- una boca en cada local húmedo;
+- conductos por el techo hasta un conducto vertical Ø200 junto al baño de cada vivienda, que sube de la planta 1 a la cubierta;
+- un extractor en la cubierta por cada conducto vertical.
+
+Son 24 viviendas y 6 redes de extracción (de 202 a 346 m³/h). Para el cálculo le faltaba un local: el vestíbulo de la vivienda D, que ahora está (y sale en el cuadro de superficies). Con lo dibujado solo no cumplen 12 pasos de puerta: los que llevan más de 9 l/s piden holguras de 11 a 14 mm o rejilla de paso.
+
+**A comprobar por Antonio**: los valores de las tablas 2.1, 2.2, 4.1 y 4.2 del HS 3 (versión de 2017 y su corrección de 2019) están escritos de memoria y no los he podido contrastar con el documento oficial desde aquí. Están juntos al principio de `crates/archisim-mep/src/ventilation.rs` para corregirlos de una vez. También a decidir: la holgura de 1 cm que se supone bajo las puertas, y si el estudio o despacho debe contar como dormitorio.
+
+## 7. Lo que no hace (todavía)
 
 - Trifásica, viviendas con más de 14 490 W, locales y oficinas (ITC-BT-28 en adelante).
 - Caída de tensión por tramos con la carga repartida: se pone toda la carga en el punto más lejano, lo que queda del lado de la seguridad.
@@ -167,4 +219,9 @@ Con lo dibujado se quedan cortos 28 tramos, casi todos ramales de las cocinas (f
   - la longitud de las derivaciones y la distancia a la bajante (4.1.1);
   - las bombas de elevación;
   - los canalones de sección cuadrada (se toman como semicirculares).
-- Ventilación (HS 3), climatización y DB-HE: los siguientes pasos.
+- Ventilación:
+  - los esquemas en planos;
+  - la ventilación natural e híbrida, con los conductos por zona térmica y plantas (tabla 4.2 de la híbrida);
+  - el conducto propio de la campana, dibujado y calculado;
+  - los garajes (120 l/s por plaza, tabla 2.2) y los edificios que no son de viviendas (RITE).
+- Climatización y DB-HE: el siguiente paso.

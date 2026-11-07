@@ -82,6 +82,21 @@ Con desagües o pluviales dibujados, la comprobación añade el cálculo de las 
 
 «Arreglar lo que no cumple» agranda las tuberías y bajantes cortas al diámetro calculado.
 
+## Ventilación de las viviendas (HS 3)
+
+Sección propia «Ventilación (DB-HS 3)», del cálculo de `docs/INSTALACIONES.md` §6. Solo en edificios de viviendas; los demás usos van por el RITE y no se comprueban.
+- El caudal de cada vivienda (tabla 2.1), como dato.
+- En cada local seco, las aberturas de admisión (aireadores) contra 4·q cm² (tabla 4.1).
+- En cada local húmedo, las bocas de extracción contra 4·q cm².
+- En cada puerta por la que pasa el aire, su paso contra 8·q cm² (70 cm² como mínimo). Si no basta, se dice la holgura bajo la hoja que haría falta o que lleve rejilla de paso.
+- Cada tramo de conducto de extracción contra 2,5·q cm² (tabla 4.2, extracción mecánica).
+- El extractor de cada red con su caudal, o que no cumple si no está dibujado.
+- Como nota, la extracción propia de la campana de cada cocina (50 l/s, 3.1.1).
+- Como aviso, las bocas sin conducto y los locales húmedos que no son de ninguna vivienda.
+- Los trasteros y almacenes de residuos del edificio, con su caudal por superficie (tabla 2.2).
+
+«Arreglar lo que no cumple» alarga los aireadores cortos y agranda las bocas, los conductos y los conductos verticales cortos. Los pasos de las puertas se quedan en «Lo que tienes que decidir tú»: holgura o rejilla.
+
 ## Protección contra incendios (SI 4) · H3
 
 Sobre los aparatos de protección contra incendios dibujados (ficha Instalaciones: Rociador, BIE, Extintor, Detección, Emergencia), en cada planta:
@@ -107,6 +122,7 @@ El botón «Arreglar lo que no cumple…» de la ventana arregla solo lo que tie
 
 - **Estructura y entramados**: lo mismo que en la ventana del cálculo (armado, y si no basta la sección o el tamaño siguiente; `docs/ESTRUCTURA.md`), y el armado que propone el cálculo para lo que tiene un armado dibujado que no cumple una regla de construcción.
 - **Agua y saneamiento**: la tubería más cercana al aparato toma el diámetro de HS 4 tabla 4.2 o HS 5 tabla 4.1 (el mayor de los aparatos a los que sirve); cada tramo de la red de agua, el que pide su caudal en el cálculo de HS 4; cada tubería y bajante de saneamiento o pluviales corta, el diámetro del cálculo de HS 5; una pendiente fuera de lo permitido pasa a la más cercana que vale (derivación entre 2 % y 5 %, colector colgado 1 %, enterrado 2 %).
+- **Ventilación**: los aireadores cortos se alargan (con su misma rendija); las bocas, los conductos verticales y los conductos de extracción cortos pasan al tamaño calculado.
 - **Puertas**: la que no tiene el paso libre que pide la evacuación (A ≥ P/200 ≥ 0,80 m) o la accesibilidad (0,80 m de hoja, 0,78 m con la hoja abierta) pasa a un tipo de su misma familia lo bastante ancho, de 5 en 5 cm: uno del proyecto si ya lo hay o una copia del suyo con el ancho en el nombre. La que debe abrir en el sentido de la evacuación se gira con las bisagras en la misma jamba.
 
 Lo demás se queda en la lista «Lo que tienes que decidir tú»: un pasillo estrecho, el giro de una silla de ruedas, una salida o un recorrido demasiado largo, una escalera, los extintores. Los cambios se hacen todos juntos y Deshacer los quita de una vez.

@@ -23,4 +23,5 @@
 
 pub mod drain;
 pub mod electrical;
+pub mod ventilation;
 pub mod water;

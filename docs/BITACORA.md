@@ -6,6 +6,45 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-07 (117) · Ventilación de las viviendas (DB-HS 3)
+
+Rama `bloque/ventilacion`, encima de `bloque/fontaneria-remates` (formato 88: cuatro clases de aparato nuevas). `docs/INSTALACIONES.md` §6 y `docs/CTE.md`.
+
+Qué se hizo:
+
+1. **Aparatos de ventilación**: aireador, boca de extracción, conducto vertical de extracción (sube de planta en planta como un montante; RePág y AvPág con los conductos de Extracción) y extractor. Tienen planta, 3D e IFC (`IfcAirTerminal`, `IfcDuctSegment`, `IfcFan`).
+2. **Cálculo** (Colaboración → Cálculo de ventilación):
+   - las viviendas por las puertas entre sus locales;
+   - los caudales de la tabla 2.1 con el equilibrio entre lo que entra y lo que sale;
+   - los aireadores y las bocas de cada local;
+   - el paso del aire bajo cada puerta;
+   - los conductos y conductos verticales hasta el extractor, con el caudal de cada tramo;
+   - la nota de la campana de cocina;
+   - los trasteros y cuartos de basuras.
+3. **Comprobación CTE**: sección nueva «Ventilación (DB-HS 3)». «Arreglar lo que no cumple» y «Poner los tamaños calculados» agrandan aireadores, bocas y conductos.
+4. **Línea de órdenes**: `archisim ventilacion <proyecto> [--tamanos salida]` y `archisim ventilacion --ejemplo <carpeta>`.
+5. **Florence Street** lleva su ventilación: 24 viviendas y 6 redes con su extractor. Para eso se añadió el vestíbulo de la vivienda D, que faltaba. Solo no cumplen 12 pasos de puerta.
+
+Pendiente:
+- esquemas en planos;
+- ventilación híbrida y natural;
+- el conducto de la campana;
+- garajes;
+- climatización y DB-HE (lo siguiente).
+
+Qué debe probar Antonio:
+- **El ejemplo.** `cargo run -p archisim-cli -- ventilacion --ejemplo out/` y abre `out/ventilacion-ejemplo.archisim`. En Colaboración → Cálculo de ventilación mira:
+  - el caudal de la vivienda (24 l/s: manda lo que piden los húmedos);
+  - el aireador del dormitorio 2, que se queda corto: pulsa «Poner los tamaños calculados» y comprueba que se alarga;
+  - los pasos de las puertas, con la holgura que piden.
+- **Florence Street.** `cargo run --release -p archisim-cli -- ventilacion out/edificio/edificio.archisim`, después de `archisim edificio out/edificio`. Mira una vivienda D: dos dormitorios, el vestíbulo nuevo y sus pasos.
+- **Las tablas.** Revisa 2.1, 2.2, 4.1 y 4.2 al principio de `crates/archisim-mep/src/ventilation.rs`: están de memoria.
+- **Dos criterios a decidir:**
+  - ¿se supone 1 cm de holgura bajo las puertas?
+  - ¿el estudio o despacho cuenta como dormitorio?
+
+---
+
 ## 2026-11-07 (116) · Fontanería: grupo de presión, aljibe, retorno y pérdidas
 
 Rama `bloque/fontaneria-remates`, encima de `bloque/saneamiento` (formato 87, con dos campos más). `docs/INSTALACIONES.md` §4, «Grupo de presión, aljibe y retorno».

@@ -743,3 +743,46 @@ fn drainage_by_hs5_and_its_fix() {
     assert!(done.devices().find(|d| d.id == pipe).unwrap().width >= 0.110 - 1e-9);
     assert!(done.runs().find(|x| x.id == collector).unwrap().width >= 0.110 - 1e-9);
 }
+
+#[test]
+fn ventilation_by_hs3_and_its_fix() {
+    use archisim_core::DeviceKind;
+    let mut m = Model::new("Piso");
+    let l0 = m.add_level("Planta baja", 0.0);
+    let l1 = m.add_level("Cubierta", 3.0);
+    let lib = archisim_library::add_library(&mut m).unwrap();
+    archisim_mep::ventilation::example_flat(&mut m, l0, l1, lib.partition, lib.interior_door);
+    let report = check(&m);
+    let ours: Vec<&Item> = report
+        .items
+        .iter()
+        .filter(|i| i.section == Section::Ventilation)
+        .collect();
+    assert!(ours.iter().any(|i| i.rule == "HS 3, tabla 2.1"));
+    // The small inlet of the second bedroom fails; so do the doors.
+    let inlet_fails = |r: &Report| {
+        r.items.iter().any(|i| {
+            i.section == Section::Ventilation
+                && i.status == Status::Fails
+                && i.text.contains("admisión")
+        })
+    };
+    assert!(inlet_fails(&report));
+    assert!(ours
+        .iter()
+        .any(|i| i.status == Status::Fails && i.text.starts_with("Paso")));
+    assert!(ours.iter().any(|i| i.rule == "HS 3, tabla 4.2"));
+    let f = fix::fix(&m);
+    let mut after = m.clone();
+    for c in &f.changes {
+        fix::apply(&mut after, c).unwrap();
+    }
+    assert!(!inlet_fails(&check(&after)));
+    let inlet = after
+        .devices()
+        .filter(|d| d.kind == DeviceKind::AirInlet)
+        .map(|d| d.width)
+        .fold(f64::MAX, f64::min);
+    assert!(inlet > 0.1, "{inlet}");
+    assert!(f.lines.iter().any(|l| l.what == "Tamaño"));
+}

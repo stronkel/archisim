@@ -180,6 +180,7 @@ impl DeviceKind {
             }
             D::Radiator => system == S::Heating,
             D::Grille | D::Diffuser => system.is_duct(),
+            D::ExhaustVent | D::AirShaft | D::Fan => system == S::ExhaustAir,
             D::Sprinkler | D::HoseReel => system == S::FireProtection,
             D::SolarCollector => matches!(system, S::HotWater | S::Heating),
             _ => false,
@@ -403,7 +404,8 @@ impl Model {
     }
 
     /// Takes a pipe of `system` up (or down) from `level` at `p` to the
-    /// next level: a riser (a downpipe for the drainage) between the two
+    /// next level: a riser (a downpipe for the drainage, an extract shaft for
+    /// the air) between the two
     /// floors, standing on the lower one. Gives the device and the level
     /// the pipe goes on from.
     pub fn change_pipe_level(
@@ -432,11 +434,7 @@ impl Model {
             (*other, levels[i])
         };
         let (low, other_id, rise) = (low.id, other.id, high.elevation - low.elevation);
-        let kind = if system.falls() {
-            DeviceKind::Downpipe
-        } else {
-            DeviceKind::Riser
-        };
+        let kind = system.vertical();
         let (w, d, _, _) = kind.defaults();
         let id = self.add_device(NewDevice {
             level: low,

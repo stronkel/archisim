@@ -5000,13 +5000,18 @@ pub fn solid_color(model: &Model, s: &Solid) -> [u8; 3] {
         SolidOwner::Device(id) => match model.device(id).map(|d| d.kind) {
             Some(archisim_core::DeviceKind::Light) => [250, 230, 150],
             Some(archisim_core::DeviceKind::Radiator) => [245, 245, 240],
-            Some(archisim_core::DeviceKind::Grille | archisim_core::DeviceKind::Diffuser) => {
-                [200, 205, 210]
-            }
-            // Risers and downpipes, in the colour of their system.
-            Some(k @ (archisim_core::DeviceKind::Riser | archisim_core::DeviceKind::Downpipe)) => {
-                k.system().map_or([150, 150, 150], |s| s.color())
-            }
+            Some(
+                archisim_core::DeviceKind::Grille
+                | archisim_core::DeviceKind::Diffuser
+                | archisim_core::DeviceKind::AirInlet
+                | archisim_core::DeviceKind::ExhaustVent,
+            ) => [200, 205, 210],
+            // Risers, downpipes and shafts, in the colour of their system.
+            Some(
+                k @ (archisim_core::DeviceKind::Riser
+                | archisim_core::DeviceKind::Downpipe
+                | archisim_core::DeviceKind::AirShaft),
+            ) => k.system().map_or([150, 150, 150], |s| s.color()),
             Some(archisim_core::DeviceKind::Panel) => [210, 214, 220],
             _ => [235, 235, 230],
         },

@@ -38,6 +38,13 @@ pub enum Change {
         device: archisim_core::DeviceId,
         width: f64,
     },
+    /// A ventilation device's size (an inlet longer, a valve or a shaft
+    /// larger).
+    DeviceSize {
+        device: archisim_core::DeviceId,
+        width: f64,
+        depth: f64,
+    },
     /// A drain's slope.
     RunSlope { run: RunId, slope: f64 },
     /// A door of a type of its family this wide (the opening, in metres).
@@ -93,6 +100,14 @@ pub fn apply(model: &mut Model, change: &Change) -> Result<(), ModelError> {
         Change::DeviceWidth { device, width } => model.edit_device(*device, |d| {
             d.width = *width;
             d.depth = *width;
+        }),
+        Change::DeviceSize {
+            device,
+            width,
+            depth,
+        } => model.edit_device(*device, |d| {
+            d.width = *width;
+            d.depth = *depth;
         }),
         Change::RunSlope { run, slope } => model.edit_run(*run, |r| r.slope = *slope),
         Change::DoorWidth { opening, width } => {
@@ -351,6 +366,31 @@ pub fn fix(model: &Model) -> Fix {
             }
         }
     }
+    // The inlets, valves, ducts and shafts of the ventilation (HS 3).
+    if report.items.iter().any(|i| {
+        i.status == Status::Fails
+            && i.section == crate::Section::Ventilation
+            && (i.rule == "HS 3, tabla 4.1" && matches!(i.subject, Subject::Room(_))
+                || i.rule == "HS 3, tabla 4.2")
+    }) {
+        let v = archisim_mep::ventilation::ventilation(&m);
+        for (r, w) in v.sized_runs(&m) {
+            let now = m.runs().find(|x| x.id == r).map_or(0.0, |x| x.width);
+            let e = widths.entry(r).or_insert(now);
+            *e = e.max(w);
+        }
+        for (device, width, depth) in v.sized_devices(&m) {
+            push(
+                &mut m,
+                Change::DeviceSize {
+                    device,
+                    width,
+                    depth,
+                },
+                &mut changes,
+            );
+        }
+    }
     for (run, width) in widths {
         push(&mut m, Change::RunWidth { run, width }, &mut changes);
     }
@@ -454,15 +494,24 @@ fn lines(before: &Model, after: &Model, changes: &[Change]) -> Vec<Line> {
                     m.runs().find(|r| r.id == *run).map_or(String::new(), |r| {
                         if slope {
                             crate::pct(r.slope)
+                        } else if r.is_duct() {
+                            r.size_text()
                         } else {
                             format!("Ø{:.0} mm", r.width * 1000.0)
                         }
                     })
                 };
+                let duct = before.runs().any(|r| r.id == *run && r.is_duct());
                 out.push(Line {
                     subject: Subject::Run(*run),
                     name: crate::subject_name(before, Subject::Run(*run)),
-                    what: if slope { "Pendiente" } else { "Diámetro" },
+                    what: if slope {
+                        "Pendiente"
+                    } else if duct {
+                        "Sección"
+                    } else {
+                        "Diámetro"
+                    },
                     before: v(before),
                     after: v(after),
                 });
@@ -480,6 +529,34 @@ fn lines(before: &Model, after: &Model, changes: &[Change]) -> Vec<Line> {
                     subject: Subject::Device(*device),
                     name: crate::subject_name(before, Subject::Device(*device)),
                     what: "Diámetro",
+                    before: v(before),
+                    after: v(after),
+                });
+            }
+            Change::DeviceSize { device, .. } => {
+                if !seen.insert((device.0, 5)) {
+                    continue;
+                }
+                let v = |m: &Model| {
+                    m.devices()
+                        .find(|d| d.id == *device)
+                        .map_or(String::new(), |d| {
+                            let mm = |x: f64| (x * 1000.0).round() as i64;
+                            match d.kind {
+                                archisim_core::DeviceKind::AirInlet => {
+                                    format!("{} × {} mm", mm(d.width), mm(d.height))
+                                }
+                                _ if (d.width - d.depth).abs() < 1e-6 => {
+                                    format!("Ø{} mm", mm(d.width))
+                                }
+                                _ => format!("{} × {} mm", mm(d.width), mm(d.depth)),
+                            }
+                        })
+                };
+                out.push(Line {
+                    subject: Subject::Device(*device),
+                    name: crate::subject_name(before, Subject::Device(*device)),
+                    what: "Tamaño",
                     before: v(before),
                     after: v(after),
                 });

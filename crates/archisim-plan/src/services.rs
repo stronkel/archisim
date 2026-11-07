@@ -7,7 +7,7 @@
 
 use std::fmt::Write as _;
 
-use archisim_core::{DeviceKind, LevelId, Model, Point2};
+use archisim_core::{DeviceKind, LevelId, Model, Point2, ServiceSystem};
 
 use crate::lettering::{text_path, Align};
 use crate::{num, path, pens, pt};
@@ -478,7 +478,95 @@ fn draw_device(s: &mut String, d: &archisim_core::ServiceDevice, k: f64) {
                 crate::lettering::paint(h, &colour)
             );
         }
-        DeviceKind::Radiator | DeviceKind::Grille | DeviceKind::Diffuser => {
+        DeviceKind::AirShaft => {
+            // The duct, cut, with a cross and its size.
+            let colour = hex(ServiceSystem::ExhaustAir.color());
+            let round = (d.width - d.depth).abs() < 1e-6;
+            let (hx, hy) = (d.width / 2.0, d.depth / 2.0);
+            if round {
+                let _ = writeln!(
+                    s,
+                    r#"<circle cx="{}" cy="{}" r="{}" fill="white" stroke="{colour}" stroke-width="{}"/>"#,
+                    num(c.x),
+                    num(-c.y),
+                    num(hx.max(1.0 * k)),
+                    num(pens().cut * k)
+                );
+            } else {
+                let o = d.outline();
+                let _ = writeln!(
+                    s,
+                    r#"<path d="{}" fill="white" stroke="{colour}" stroke-width="{}"/>"#,
+                    path(&o),
+                    num(pens().cut * k)
+                );
+            }
+            let q = if round {
+                hx * std::f64::consts::FRAC_1_SQRT_2
+            } else {
+                1.0
+            };
+            let (a, b) = if round { (q, q) } else { (hx, hy) };
+            let _ = writeln!(
+                s,
+                r#"<path d="M{} L{} M{} L{}" stroke="{colour}" stroke-width="{w}"/>"#,
+                pt(rot(-a, -b)),
+                pt(rot(a, b)),
+                pt(rot(-a, b)),
+                pt(rot(a, -b))
+            );
+            let h = 1.8 * k;
+            let mm = |v: f64| (v * 1000.0).round() as i64;
+            let text = if round {
+                format!("V Ø{}", mm(d.width))
+            } else {
+                format!("V {}×{}", mm(d.width), mm(d.depth))
+            };
+            let _ = writeln!(
+                s,
+                r#"<path d="{}" {}/>"#,
+                text_path(
+                    &text,
+                    c + Point2::new(hx.max(hy) + 0.8 * k, -hy - h),
+                    Point2::new(1.0, 0.0),
+                    h,
+                    Align::Left
+                ),
+                crate::lettering::paint(h, &colour)
+            );
+        }
+        DeviceKind::ExhaustVent => {
+            // A round valve with its arrow out of the room.
+            let rr = (d.width / 2.0).max(1.0 * k);
+            circle(s, c, rr, "white");
+            circle(s, c, rr * 0.45, "white");
+            line(s, rot(0.0, -rr * 0.45), rot(0.0, rr * 1.6));
+            line(s, rot(0.0, rr * 1.6), rot(-rr * 0.35, rr * 1.2));
+            line(s, rot(0.0, rr * 1.6), rot(rr * 0.35, rr * 1.2));
+        }
+        DeviceKind::Fan => {
+            let o = d.outline();
+            let _ = writeln!(
+                s,
+                r#"<path d="{}" fill="white" stroke="{ink}" stroke-width="{}"/>"#,
+                path(&o),
+                num(pens().cut * k)
+            );
+            let rr = (d.width.min(d.depth) / 2.0) * 0.8;
+            circle(s, c, rr, "white");
+            // Three blades.
+            for i in 0..3 {
+                let a = std::f64::consts::TAU * i as f64 / 3.0;
+                let b = a + 0.6;
+                line(s, c, rot(rr * 0.9 * a.cos(), rr * 0.9 * a.sin()));
+                line(
+                    s,
+                    rot(rr * 0.9 * a.cos(), rr * 0.9 * a.sin()),
+                    rot(rr * 0.5 * b.cos(), rr * 0.5 * b.sin()),
+                );
+            }
+        }
+        DeviceKind::Radiator | DeviceKind::Grille | DeviceKind::Diffuser | DeviceKind::AirInlet => {
             let o = d.outline();
             let _ = writeln!(
                 s,
@@ -497,7 +585,7 @@ fn draw_device(s: &mut String, d: &archisim_core::ServiceDevice, k: f64) {
                     }
                 }
                 // Its slats, along.
-                DeviceKind::Grille => {
+                DeviceKind::Grille | DeviceKind::AirInlet => {
                     for i in 1..4 {
                         let y = -hy + d.depth * i as f64 / 4.0;
                         line(s, rot(-hx, y), rot(hx, y));

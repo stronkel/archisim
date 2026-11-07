@@ -213,6 +213,8 @@ Uso:
 
   archisim cte <proyecto.archisim> [informe.csv]
   archisim fontaneria <proyecto.archisim> [--diametros salida.archisim] [--esquemas carpeta]   cálculo del suministro de agua (DB-HS 4); con --diametros, guarda el proyecto con los diámetros calculados; con --esquemas, el esquema vertical y la distribución por planta en PDF y DXF
+  archisim ventilacion <proyecto.archisim> [--tamanos salida.archisim]   ventilación de las viviendas (DB-HS 3): caudales, aireadores, bocas, pasos y conductos; con --tamanos, agranda lo que se queda corto
+  archisim ventilacion --ejemplo <carpeta>   un piso de ejemplo con su ventilación (ventilacion-ejemplo.archisim)
   archisim saneamiento <proyecto.archisim> [--diametros salida.archisim] [--esquemas carpeta]   evacuación de aguas (DB-HS 5): residuales por unidades de desagüe y pluviales por cubierta; con --diametros, agranda lo que se queda corto; con --esquemas, el esquema vertical y la red de cada planta en PDF y DXF
   archisim electricidad <proyecto.archisim> [carpeta]   cálculo de la instalación eléctrica (REBT); con carpeta, el esquema unifilar en PDF y DXF
   archisim estructura <proyecto.archisim> [carpeta]   acciones, descenso de cargas y cálculo de la estructura; con carpeta, el anejo de cálculo y los planos de estructura en PDF
@@ -617,6 +619,23 @@ fn main() -> ExitCode {
                 ExitCode::FAILURE
             }
         },
+        Some("ventilacion") => match args.get(1).map(String::as_str) {
+            Some("--ejemplo") => report(ventilation_example(Path::new(
+                args.get(2).map_or("out", String::as_str),
+            ))),
+            Some(project) => {
+                let out = args
+                    .iter()
+                    .position(|a| a == "--tamanos")
+                    .and_then(|i| args.get(i + 1))
+                    .map(Path::new);
+                report(run_ventilation(Path::new(project), out))
+            }
+            None => {
+                eprintln!("Falta el proyecto: archisim ventilacion <proyecto.archisim>");
+                ExitCode::FAILURE
+            }
+        },
         Some("electricidad") => match args.get(1) {
             Some(project) => report(run_electrical(
                 Path::new(project),
@@ -870,6 +889,49 @@ fn run_water(
             out.display()
         );
     }
+    Ok(())
+}
+
+fn run_ventilation(project: &Path, sized: Option<&Path>) -> Result<(), Box<dyn std::error::Error>> {
+    let mut model = archisim_file::open(project)
+        .map_err(|e| format!("no se puede abrir {}: {e}", project.display()))?;
+    let v = archisim_mep::ventilation::ventilation(&model);
+    print!("{}", archisim_mep::ventilation::report(&model, &v));
+    if let Some(out) = sized {
+        let runs = v.sized_runs(&model);
+        let devices = v.sized_devices(&model);
+        for (run, w) in &runs {
+            model.edit_run(*run, |r| r.width = r.width.max(*w))?;
+        }
+        for (d, w, dp) in &devices {
+            model.edit_device(*d, |x| {
+                x.width = *w;
+                x.depth = *dp;
+            })?;
+        }
+        archisim_file::save(&model, out)?;
+        println!(
+            "\nTamaños calculados en {} conductos y {} aparatos: {}",
+            runs.len(),
+            devices.len(),
+            out.display()
+        );
+    }
+    Ok(())
+}
+
+fn ventilation_example(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    std::fs::create_dir_all(dir)?;
+    let mut m = archisim_core::Model::new("Piso ventilado");
+    let l0 = m.add_level("Planta baja", 0.0);
+    let l1 = m.add_level("Cubierta", 3.0);
+    let lib = archisim_library::add_library(&mut m)?;
+    archisim_mep::ventilation::example_flat(&mut m, l0, l1, lib.partition, lib.interior_door);
+    let path = dir.join("ventilacion-ejemplo.archisim");
+    archisim_file::save(&m, &path)?;
+    let v = archisim_mep::ventilation::ventilation(&m);
+    print!("{}", archisim_mep::ventilation::report(&m, &v));
+    println!("\n{}", path.display());
     Ok(())
 }
 
