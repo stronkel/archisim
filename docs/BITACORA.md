@@ -6,6 +6,15 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-07 (119) · Todo a `main`: versión 0.79
+
+Antonio aprobó unir los PR abiertos: #169 a #172 (saneamiento, remates de fontanería, ventilación y envolvente), #164 (Elegir línea en el boceto), #166 y #168 (plantillas de vista).
+
+- Hecho: las ramas unidas en una sola sobre `main`. Solo chocaban la bitácora, las pruebas de la aplicación y la versión del formato: las plantillas de vista usaban la versión 86, que ya era la del cálculo de fontanería, y pasan a la **versión 90** (89 → 90: el estilo de una vista puede seguir una plantilla). Los ficheros guardados con la rama de las plantillas (86) se siguen abriendo con su plantilla: el campo es el mismo y lo que falta del cálculo de fontanería toma lo de por defecto. Versión del programa 0.79.0, que publica los instaladores.
+- Comprobado: fmt, clippy, todas las pruebas, la demo, IFC 4.3 e IFC4, la ida y vuelta y los DXF.
+- Pendiente: el bloque siguiente, planos de instalaciones (esquemas de ventilación en A3, conducto de la campana y memoria de instalaciones).
+- Probar: instalar la 0.79 desde la página de versiones cuando la integración continua la publique y abrir un proyecto de antes; mirar que las vistas con plantilla siguen su plantilla.
+
 ## 2026-11-07 (117 bis) · Ventilación: el estudio cuenta como dormitorio
 
 Respuesta de Antonio a lo que quedó pendiente en la 117: las tablas del HS 5, HS 3 y HE 1 le parecen bien (sin contrastar del todo), la holgura de 1 cm bajo las puertas vale, y el estudio o despacho computa como dormitorio aunque el CTE no lo nombre así.
