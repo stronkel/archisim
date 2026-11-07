@@ -4,6 +4,28 @@
 
 ArchiSim lee el modelo tal como está dibujado y dice qué cumple y qué no del Código Técnico. No sustituye al técnico: comprueba lo que se puede medir en el modelo y avisa de lo que el dibujo no dice.
 
+## Cómo se lee la ventana (7/11/2026)
+
+Arriba, una **tarjeta con el veredicto**: «Todo cumple», «Cumple, con N cosas que revisar» o «N cosas no cumplen», con lo que cumple, lo que hay que revisar y lo que no cumple, y una barra en verde, ámbar y rojo.
+
+Debajo, una **tarjeta por documento básico** (Evacuación, Agua y saneamiento, Ventilación, Estructura…) con sus cifras y su barra. Al pulsarla se ve solo ese documento, abierto; otro clic vuelve a todos.
+
+Cada comprobación es una fila con:
+- su etiqueta de color (Cumple, Revisar, No cumple, Dato);
+- el elemento;
+- lo que se comprueba;
+- el valor frente a lo exigido.
+
+Un clic en la fila lleva a la planta. «Solo lo que falla» y «Arreglar lo que no cumple…» siguen igual.
+
+Las ventanas de cálculo (estructura, eléctrico, fontanería, saneamiento, ventilación y envolvente) enseñan lo mismo que su anejo o la memoria de instalaciones, pero para leer en pantalla:
+- arriba, la tarjeta con el veredicto y la barra;
+- cada apartado en su tarjeta, que se puede plegar y que dice cuánto no cumple;
+- las tablas a rayas, con los textos a la izquierda y las cifras a la derecha;
+- en rojo, con una ✖ al principio de la fila, lo que no cumple o lo dibujado que se queda corto («100 × 100→150 × 100»).
+
+«Ver como texto» devuelve el texto de siempre, para copiarlo.
+
 ## Datos del edificio
 
 Se guardan en el proyecto (formato `.archisim` versión 12) y se cambian en la propia ventana:
@@ -108,6 +130,13 @@ Sección «Ahorro de energía (DB-HE 1) y cargas térmicas», del cálculo de `d
 - el coeficiente global K contra la tabla 3.1.1.b-HE1 según la compacidad;
 - los radiadores dibujados que no cubren la carga de su local;
 - como datos, la bomba de calor de cada vivienda con sus cargas.
+
+## Energías renovables (HE 4 y HE 5)
+
+En la misma sección de energía, cuando se aplican (`docs/INSTALACIONES.md` §8):
+- HE 4: la parte renovable del agua caliente contra el 60 % o el 70 % exigido;
+- HE 5: la potencia de las placas dibujadas contra la mínima;
+- como dato, que el HE 0 se justifica con la herramienta oficial.
 
 ## Protección contra incendios (SI 4) · H3
 

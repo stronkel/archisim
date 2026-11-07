@@ -10,6 +10,7 @@
 use archisim_core::{Electrification, LevelId, Model, ServiceSystem};
 use archisim_mep::drain::{self as dr, Drainage};
 use archisim_mep::electrical::{self as el, Installation};
+use archisim_mep::renewables::{self as rn, Renewables};
 use archisim_mep::thermal::{self as th, Thermal};
 use archisim_mep::ventilation::{self as vt, Ventilation};
 use archisim_mep::water::{self as wa, Water};
@@ -46,6 +47,7 @@ struct All {
     drainage: Drainage,
     ventilation: Ventilation,
     thermal: Thermal,
+    renewables: Renewables,
 }
 
 /// The report's blocks.
@@ -56,6 +58,7 @@ pub fn report(model: &Model) -> Vec<Block> {
         drainage: dr::drainage(model),
         ventilation: vt::ventilation(model),
         thermal: th::thermal(model),
+        renewables: rn::renewables(model),
     };
     let has_water = all.water.networks.iter().any(|n| !n.stretches.is_empty());
     let has_drainage = all
@@ -91,6 +94,12 @@ pub fn report(model: &Model) -> Vec<Block> {
         chapters.push((
             "Envolvente térmica y cargas (DB-HE 1)",
             thermal(model, &all.thermal),
+        ));
+    }
+    if all.renewables.hot_water.applies || all.renewables.electricity.applies {
+        chapters.push((
+            "Energías renovables (DB-HE 4 y HE 5)",
+            renewables(&all.renewables),
         ));
     }
     let mut out = vec![Block::Cover {
@@ -130,7 +139,7 @@ pub fn report(model: &Model) -> Vec<Block> {
 // Electricity
 // ---------------------------------------------------------------------
 
-fn electricity(model: &Model, all: &[Installation]) -> Vec<Block> {
+pub fn electricity(model: &Model, all: &[Installation]) -> Vec<Block> {
     let mut out = vec![Block::Para(
         "Instalación interior de baja tensión, monofásica a 230 V, según el Reglamento Electrotécnico para Baja Tensión: grado de electrificación (ITC-BT-10), circuitos (ITC-BT-25, tabla 1), intensidades admisibles de la UNE-HD 60364-5-52 (método B1, tubo empotrado, PVC, dos conductores cargados), caída de tensión con cobre a 70 °C contra el 3 % (ITC-BT-19) y derivación individual (ITC-BT-15).".into(),
     )];
@@ -254,7 +263,7 @@ fn electricity(model: &Model, all: &[Installation]) -> Vec<Block> {
 // Water supply
 // ---------------------------------------------------------------------
 
-fn water(model: &Model, w: &Water) -> Vec<Block> {
+pub fn water(model: &Model, w: &Water) -> Vec<Block> {
     let mut out = vec![
         Block::Para(format!(
             "Red de agua fría desde el contador y de agua caliente sanitaria desde el acumulador, de {}. Caudales instantáneos de la tabla 2.1 del DB-HS 4 con simultaneidad {}; diámetros comerciales que dejan el agua por debajo de {} m/s y no bajan de las tablas 4.2 y 4.3; pérdidas de carga por Darcy–Weisbach más un {} % por accesorios.",
@@ -406,7 +415,7 @@ fn water(model: &Model, w: &Water) -> Vec<Block> {
 // Drainage
 // ---------------------------------------------------------------------
 
-fn drainage(model: &Model, d: &Drainage) -> Vec<Block> {
+pub fn drainage(model: &Model, d: &Drainage) -> Vec<Block> {
     let mut out = vec![Block::Para(format!(
         "Red separativa de aguas residuales y pluviales en PVC. Unidades de desagüe de uso {} (tabla 4.1); ramales por la tabla 4.3, bajantes por las tablas 4.4 y 4.8, colectores por las 4.5 y 4.9; intensidad de lluvia {} mm/h.",
         if d.public { "público" } else { "privado" },
@@ -514,7 +523,7 @@ fn drainage(model: &Model, d: &Drainage) -> Vec<Block> {
 // Ventilation
 // ---------------------------------------------------------------------
 
-fn ventilation(model: &Model, v: &Ventilation) -> Vec<Block> {
+pub fn ventilation(model: &Model, v: &Ventilation) -> Vec<Block> {
     let site = model.ventilation_site();
     let ducts = match site.system {
         archisim_core::VentSystem::Mechanical => format!(
@@ -781,7 +790,7 @@ fn ventilation(model: &Model, v: &Ventilation) -> Vec<Block> {
 // Envelope and loads
 // ---------------------------------------------------------------------
 
-fn thermal(model: &Model, t: &Thermal) -> Vec<Block> {
+pub fn thermal(model: &Model, t: &Thermal) -> Vec<Block> {
     let mut out = vec![
         Block::Para(
             "Transmitancias U = 1/(Rsi + Σ e/λ + Rse) con las capas de cada tipo; límites de la tabla 3.1.1.a-HE1 por la zona de invierno y coeficiente global K de los locales calefactados contra la tabla 3.1.1.b-HE1 por la compacidad. Cargas de calefacción por transmisión y ventilación; de refrigeración, con el sol por los vidrios, las personas, la luz y los aparatos.".into(),
@@ -916,6 +925,242 @@ fn thermal(model: &Model, t: &Thermal) -> Vec<Block> {
             })
             .collect(),
     });
+    out
+}
+
+const MONTHS: [&str; 12] = [
+    "Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic",
+];
+
+fn applies(on: bool, text: &str) -> Block {
+    Block::Check {
+        status: Status::Info,
+        text: if on {
+            text.into()
+        } else {
+            format!("{text} No se aplica.")
+        },
+    }
+}
+
+/// The renewables: HE 4 (hot water) and HE 5 (electricity).
+pub fn renewables(r: &Renewables) -> Vec<Block> {
+    let h = &r.hot_water;
+    let e = &r.electricity;
+    let mut out = vec![
+        Block::Para(
+            "Contribución renovable para el agua caliente sanitaria (HE 4) con la demanda del Anejo F (28 l/día por persona a 60 °C, personas por dormitorios, factor de centralización) y el agua fría del Anejo G, y potencia fotovoltaica mínima (HE 5). La demanda se incrementa con las pérdidas de distribución (el agua que queda en las tuberías sin retorno se enfría tres veces al día), de acumulación (pérdida estática de un acumulador de clase C) y de recirculación (ida y retorno del anillo, 0,25 W/mK, todo el año). El consumo de energía primaria (HE 0) se justifica con la herramienta oficial.".into(),
+        ),
+        Block::Heading(2, "1 Agua caliente sanitaria (HE 4)".into()),
+        applies(
+            h.applies,
+            "Se aplica a los edificios nuevos o reformados enteros con una demanda de más de 100 l/día.",
+        ),
+    ];
+    if !h.given && !h.dwellings.is_empty() {
+        out.push(Block::Table {
+            columns: vec![
+                col("Vivienda", 2.4),
+                col("Dormitorios", 1.0),
+                col("Personas", 1.0),
+            ],
+            rows: h
+                .dwellings
+                .iter()
+                .map(|d| vec![d.name.clone(), d.bedrooms.to_string(), dec(d.persons, 1)])
+                .collect(),
+        });
+    }
+    out.push(Block::Table {
+        columns: vec![col("Dato", 2.0), col("Valor", 3.0)],
+        rows: vec![
+            vec![
+                "Demanda".into(),
+                if h.given {
+                    format!("{} l/día a 60 °C (dada)", dec(h.daily, 0))
+                } else {
+                    format!(
+                        "{} personas × 28 l × {} = {} l/día a 60 °C",
+                        dec(h.persons, 1),
+                        dec(h.factor, 2),
+                        dec(h.daily, 0)
+                    )
+                },
+            ],
+            vec![
+                "A la temperatura de acumulación".into(),
+                format!(
+                    "{} l/día a {} °C",
+                    dec(h.daily_stored, 0),
+                    dec(r.site.storage_temp, 0)
+                ),
+            ],
+            vec![
+                "Agua fría".into(),
+                format!(
+                    "{} ({} m sobre la capital)",
+                    r.site.province,
+                    dec(r.site.above_capital, 0)
+                ),
+            ],
+            vec![
+                "Energía del agua".into(),
+                format!("{} kWh", dec(h.useful.iter().sum::<f64>(), 0)),
+            ],
+            vec![
+                "Pérdidas de distribución".into(),
+                format!(
+                    "{} kWh ({} m de tubería, {} l sin retorno)",
+                    dec(h.losses.distribution, 0),
+                    dec(h.losses.pipe, 0),
+                    dec(h.losses.dead_water, 0)
+                ),
+            ],
+            vec![
+                "Pérdidas de acumulación".into(),
+                format!(
+                    "{} kWh (acumulador de {} l{}, {} W)",
+                    dec(h.losses.storage, 0),
+                    dec(h.losses.tank, 0),
+                    if h.losses.tank_given { "" } else { ", un día" },
+                    dec(h.losses.standing, 0)
+                ),
+            ],
+            vec![
+                "Pérdidas de recirculación".into(),
+                if h.losses.looped > 0.0 {
+                    format!(
+                        "{} kWh (anillo de {} m, ida y vuelta)",
+                        dec(h.losses.recirculation, 0),
+                        dec(h.losses.looped, 0)
+                    )
+                } else {
+                    "sin retorno".into()
+                },
+            ],
+            vec![
+                "Energía anual con pérdidas".into(),
+                format!("{} kWh", dec(h.annual, 0)),
+            ],
+            vec![
+                "Fuente renovable".into(),
+                match h.source {
+                    archisim_core::AcsSource::HeatPump => {
+                        format!("{}, SCOP {}", h.source.name(), dec(r.site.scop, 1))
+                    }
+                    archisim_core::AcsSource::None => h.source.name().into(),
+                    _ => format!(
+                        "{}, fracción {} %",
+                        h.source.name(),
+                        dec(r.site.fraction * 100.0, 0)
+                    ),
+                },
+            ],
+        ],
+    });
+    out.push(Block::Table {
+        columns: std::iter::once(col("Mes", 1.2))
+            .chain(MONTHS.iter().map(|m| col(m, 0.7)))
+            .collect(),
+        rows: vec![
+            std::iter::once("T agua fría".to_string())
+                .chain(h.cold.iter().map(|t| dec(*t, 1)))
+                .collect(),
+            std::iter::once("Agua, kWh".to_string())
+                .chain(h.useful.iter().map(|k| dec(*k, 0)))
+                .collect(),
+            std::iter::once("Pérdidas, kWh".to_string())
+                .chain(h.lost.iter().map(|k| dec(*k, 0)))
+                .collect(),
+            std::iter::once("Total, kWh".to_string())
+                .chain(h.monthly.iter().map(|k| dec(*k, 0)))
+                .collect(),
+        ],
+    });
+    if h.weak_pump {
+        out.push(check(
+            true,
+            format!(
+                "La bomba de calor tiene un SCOP de {}: con {} o menos no cuenta como renovable.",
+                dec(r.site.scop, 1),
+                dec(rn::MIN_SCOP, 1)
+            ),
+        ));
+    }
+    if h.applies {
+        out.push(check(
+            !h.passes(),
+            format!(
+                "Contribución renovable {} % ({} kWh de {} kWh); exigida {} %",
+                dec(h.provided * 100.0, 0),
+                dec(h.renewable_kwh(), 0),
+                dec(h.annual, 0),
+                dec(h.required * 100.0, 0)
+            ),
+        ));
+    }
+    out.push(Block::Heading(
+        2,
+        "2 Generación de electricidad (HE 5)".into(),
+    ));
+    out.push(applies(
+        e.applies,
+        "Se aplica a los edificios nuevos, ampliaciones o reformas enteras de más de 1.000 m² construidos.",
+    ));
+    out.push(Block::Table {
+        columns: vec![col("Dato", 2.0), col("Valor", 3.0)],
+        rows: vec![
+            vec![
+                "Superficie construida S".into(),
+                format!(
+                    "{} m²{}",
+                    dec(e.built, 0),
+                    if e.built_given { " (dada)" } else { "" }
+                ),
+            ],
+            vec![
+                "Cubierta no transitable Sc".into(),
+                format!("{} m²", dec(e.roof, 0)),
+            ],
+            vec![
+                "Ocupada por captadores térmicos Soc".into(),
+                format!("{} m²", dec(e.collectors, 0)),
+            ],
+            vec![
+                "P1 = Fpr,el · S".into(),
+                format!(
+                    "{} × {} = {} kWp",
+                    dec(e.factor, 3),
+                    dec(e.built, 0),
+                    dec(e.p1, 2)
+                ),
+            ],
+            vec![
+                "P2 = 0,1 · (0,5 · Sc − Soc)".into(),
+                format!("{} kWp", dec(e.p2, 2)),
+            ],
+            vec![
+                "Placas dibujadas".into(),
+                format!(
+                    "{} filas, {} m² × {} kWp/m² = {} kWp",
+                    e.panels,
+                    dec(e.panel_area, 1),
+                    dec(r.site.panel_kwp_m2, 2),
+                    dec(e.installed, 2)
+                ),
+            ],
+        ],
+    });
+    if e.applies {
+        out.push(check(
+            !e.passes(),
+            format!(
+                "Potencia instalada {} kWp; mínima {} kWp",
+                dec(e.installed, 2),
+                dec(e.minimum, 2)
+            ),
+        ));
+    }
     out
 }
 

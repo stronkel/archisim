@@ -50,6 +50,7 @@ mod prices;
 mod props;
 mod railings;
 mod rebar;
+mod renewables;
 mod road_changes;
 mod road_drawing;
 mod road_profile;
@@ -105,6 +106,7 @@ pub use pools::*;
 pub use prices::*;
 pub use railings::*;
 pub use rebar::*;
+pub use renewables::*;
 pub use road_changes::*;
 pub use road_drawing::*;
 pub use road_profile::*;
@@ -1573,6 +1575,7 @@ pub struct ModelParts {
     pub water_site: WaterSite,
     pub thermal_site: ThermalSite,
     pub ventilation_site: VentilationSite,
+    pub renewables_site: RenewablesSite,
     /// The template the levels' plans follow when not given their own
     /// look (version 92).
     pub plan_template: Option<ViewTemplateId>,
@@ -1713,6 +1716,7 @@ pub struct Model {
     pub(crate) water_site: WaterSite,
     pub(crate) thermal_site: ThermalSite,
     pub(crate) ventilation_site: VentilationSite,
+    pub(crate) renewables_site: RenewablesSite,
     pub(crate) plan_template: Option<ViewTemplateId>,
     pub(crate) drafts: BTreeMap<DraftId, Draft>,
     pub(crate) info: crate::sheets::ProjectInfo,
@@ -1820,6 +1824,7 @@ impl Model {
             water_site: WaterSite::default(),
             thermal_site: ThermalSite::default(),
             ventilation_site: VentilationSite::default(),
+            renewables_site: RenewablesSite::default(),
             plan_template: None,
             structural_loads: BTreeMap::new(),
             device_circuits: BTreeMap::new(),
@@ -4503,6 +4508,7 @@ impl Model {
             water_site: self.water_site,
             thermal_site: self.thermal_site.clone(),
             ventilation_site: self.ventilation_site,
+            renewables_site: self.renewables_site.clone(),
             plan_template: self.plan_template,
             level_underlays: self
                 .level_underlays
@@ -4866,6 +4872,12 @@ impl Model {
             .set_ventilation_site(parts.ventilation_site)
             .map_err(|error| RestoreError {
                 element: "ventilation site".into(),
+                error,
+            })?;
+        model
+            .set_renewables_site(parts.renewables_site)
+            .map_err(|error| RestoreError {
+                element: "renewables site".into(),
                 error,
             })?;
         // After the templates (restored above with the views).

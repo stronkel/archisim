@@ -6,6 +6,58 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-07 (124) · Energías renovables: agua caliente (HE 4) y fotovoltaica (HE 5)
+
+Rama `bloque/energia-renovable`, con pull request; lleva dentro las ramas de las entradas 122 y 123 (#176 y #177). **Formato versión 93** (`renewables` en el proyecto). Sin cambios de IFC. `docs/INSTALACIONES.md` §8, `docs/CTE.md`.
+
+- **Ventana Colaboración → Energías renovables…**, con el visor de la entrada 123.
+  - Arriba, los datos que el dibujo no da: si el edificio es nuevo, la provincia y la altura sobre su capital, la temperatura de acumulación, con qué es renovable el agua caliente y la potencia de las placas.
+  - El agua caliente puede ser renovable con bomba de calor (SCOP), solar u otra (fracción), o con nada.
+  - La demanda y la superficie construida pueden darse a mano.
+- **HE 4.**
+  - Demanda del Anejo F: viviendas del dibujo, personas por dormitorios, 28 l por persona y factor de centralización.
+  - Energía de cada mes con el agua fría del Anejo G de las 52 capitales, corregida por la altura.
+  - Exigido: 60 % o 70 % renovable, a partir de 100 l/día.
+- **HE 5.** Potencia mínima por la superficie construida y la cubierta no transitable, contra las placas dibujadas.
+- **HE 0** no se calcula: se dice que va con la herramienta oficial.
+- **Florence Street.**
+  - Sus 24 viviendas piden 1.000 l/día; con la bomba de calor de SCOP 3, el 67 % es renovable, y se exige el 60 %.
+  - Con 2.006 m² construidos, el HE 5 pide 10 kWp. Las tres filas de cuatro placas daban 4,3 kWp, así que ahora son tres filas de diez sobre la cubierta del pabellón: 54 m², unos 11 kWp.
+- Lo mismo en la Comprobación CTE (sección de energía), en la memoria de instalaciones (capítulo 6, cuando se aplica) y en `archisim renovables <proyecto>`.
+- Antonio dio por buenos la bomba de calor (1 − 1/SCOP, umbral 2,5), la cubierta no transitable y los 0,2 kWp/m², y pidió las pérdidas.
+- **Pérdidas del HE 4**, sacadas de la red de agua caliente dibujada:
+  - recirculación del anillo de ida y vuelta, a 0,25 W/mK;
+  - distribución: el agua que queda en la tubería sin retorno se enfría tres veces al día;
+  - acumulación: la pérdida estática de un acumulador de clase C. Su volumen se da en la ventana o, si no se da, es la demanda de un día.
+  
+  En la ventana y la memoria salen las tres, y la tabla de meses separa el agua de las pérdidas. En Florence Street suman 11.400 kWh sobre los 18.800 de agua; la bomba de calor sigue cumpliendo.
+- Pendiente: el cálculo de la fracción solar (se da a mano).
+- **A comprobar por Antonio**: las cifras de las pérdidas (`docs/INSTALACIONES.md` §8).
+- Probar:
+  1. Abrir Florence Street: Colaboración → Energías renovables. Mirar la demanda (viviendas, personas, litros), las tres pérdidas y la tabla de los doce meses. Dar un acumulador de 1.500 l y ver cómo sube la de acumulación.
+  2. Cambiar la fuente a «Solar térmica» con 50 %: el HE 4 pasa a no cumplir. Volver a bomba de calor.
+  3. Mirar el HE 5: S, Sc y las placas dibujadas frente a la potencia mínima.
+  4. Comprobación CTE: las dos filas nuevas en Ahorro de energía.
+
+## 2026-11-07 (123) · Comprobaciones y cálculos que se leen de un vistazo
+
+Rama `bloque/informes-visuales`, con pull request (independiente del #176). Sin cambios de formato ni de IFC. `docs/CTE.md` («Cómo se lee la ventana»).
+
+Pedido de Antonio: las tablas de la Comprobación CTE y de los cálculos de estructura e instalaciones son duras de leer; deberían ser más agradables y visuales.
+
+- **Visor común** (`app/report_view`) para todas las ventanas de cálculo: estructura, eléctrico, fontanería, saneamiento, ventilación y envolvente.
+  - Pinta los mismos bloques que el anejo de cálculo y la memoria de instalaciones, así que la pantalla y el PDF dicen lo mismo.
+  - Arriba, una tarjeta con el veredicto («Todo cumple», «N cosas no cumplen»), lo que cumple, lo que hay que revisar y lo que no, y una barra de colores.
+  - Cada apartado en su tarjeta plegable con su recuento. Las tablas van a rayas, con los textos a la izquierda y las cifras a la derecha, y en rojo lo que no cumple o se queda corto.
+  - Las comprobaciones llevan una etiqueta de color.
+  - «Ver como texto» devuelve el texto de antes.
+- **Comprobación CTE.**
+  - Arriba, la misma tarjeta.
+  - Una tarjeta por documento básico con sus cifras y su barra; al pulsarla se ve solo ese documento, abierto.
+  - Las comprobaciones en filas: etiqueta, elemento, qué se comprueba, y el valor frente a lo exigido.
+- Probar:
+  1. Abrir Florence Street (o cualquier proyecto) y Colaboración → Comprobación CTE. Pulsar la tarjeta de Agua y saneamiento: solo ese documento, con sus filas.
+  2. Colaboración → Cálculo de ventilación y Cálculo de la estructura: la tarjeta de arriba, los apartados plegables y las tablas. Probar «Ver como texto».
 ## 2026-11-07 (122) · Planos limpios: una plantilla por disciplina y por instalación
 
 Rama `bloque/vistas-limpias`, con pull request. **Formato versión 92** (`systems` en el estilo de las vistas y `plan_template` en el proyecto). Sin cambios de IFC. `docs/GRAFICOS.md`, `docs/INTERFAZ.md` §13.5.

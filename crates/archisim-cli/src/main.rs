@@ -214,6 +214,7 @@ Uso:
   archisim cte <proyecto.archisim> [informe.csv]
   archisim fontaneria <proyecto.archisim> [--diametros salida.archisim] [--esquemas carpeta]   cálculo del suministro de agua (DB-HS 4); con --diametros, guarda el proyecto con los diámetros calculados; con --esquemas, el esquema vertical y la distribución por planta en PDF y DXF
   archisim climatizacion <proyecto.archisim>   envolvente por el DB-HE 1 (transmitancias y K) y cargas de calefacción y refrigeración de cada local, con sus equipos
+  archisim renovables <proyecto.archisim>     energías renovables: agua caliente por el DB-HE 4 (demanda, agua fría de la provincia y parte renovable) y fotovoltaica mínima por el HE 5
   archisim ventilacion <proyecto.archisim> [--tamanos salida.archisim] [--esquemas carpeta]   ventilación de las viviendas (DB-HS 3): caudales, aireadores, bocas, pasos, conductos y campanas; con --tamanos, agranda lo que se queda corto; con --esquemas, el esquema vertical y la red de cada planta en PDF y DXF
   archisim memoria-instalaciones <proyecto.archisim> [carpeta]   la memoria de instalaciones (REBT, DB-HS 4, DB-HS 5, DB-HS 3 y DB-HE 1) con las tablas del cálculo, en PDF A4 y en texto
   archisim ventilacion --ejemplo <carpeta>   un piso de ejemplo con su ventilación y la campana con su conducto (ventilacion-ejemplo.archisim)
@@ -621,6 +622,13 @@ fn main() -> ExitCode {
                 ExitCode::FAILURE
             }
         },
+        Some("renovables") => match args.get(1) {
+            Some(project) => report(run_renewables(Path::new(project))),
+            None => {
+                eprintln!("Falta el proyecto: archisim renovables <proyecto.archisim>");
+                ExitCode::FAILURE
+            }
+        },
         Some("climatizacion") => match args.get(1) {
             Some(project) => report(run_thermal(Path::new(project))),
             None => {
@@ -923,6 +931,14 @@ fn run_thermal(project: &Path) -> Result<(), Box<dyn std::error::Error>> {
         .map_err(|e| format!("no se puede abrir {}: {e}", project.display()))?;
     let t = archisim_mep::thermal::thermal(&model);
     print!("{}", archisim_mep::thermal::report(&model, &t));
+    Ok(())
+}
+
+fn run_renewables(project: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let model = archisim_file::open(project)
+        .map_err(|e| format!("no se puede abrir {}: {e}", project.display()))?;
+    let r = archisim_mep::renewables::renewables(&model);
+    print!("{}", archisim_mep::renewables::report(&r));
     Ok(())
 }
 

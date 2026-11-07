@@ -320,7 +320,48 @@ Por eso K da 2,27 contra 0,80. Los tipos de ese edificio están hechos para dibu
 
 **A comprobar por Antonio**: los límites de las tablas 3.1.1.a y 3.1.1.b del HE 1 (versión de 2019), las conductividades habituales, la radiación por orientación y las cargas interiores están escritos de memoria. Están juntos al principio de `crates/archisim-mep/src/thermal.rs` y `crates/archisim-core/src/model/thermal.rs`.
 
-## 8. Memoria de instalaciones
+## 8. Energías renovables (DB-HE 4 y HE 5)
+
+Colaboración → **Energías renovables…** (o `archisim renovables <proyecto>`). Arriba, lo que el dibujo no dice:
+- si el edificio es nuevo (o una ampliación o reforma entera): si no, no se aplican;
+- la provincia y cuántos metros está el municipio por encima de su capital, para el agua fría de cada mes;
+- la temperatura de acumulación;
+- con qué es renovable el agua caliente: bomba de calor (con su SCOP), solar térmica u otra (con su fracción renovable), o ninguna;
+- la potencia de las placas por m² (0,2 kWp/m²: 400 W en 2 m²);
+- a mano, si hace falta, la demanda de agua caliente (otros usos que no son viviendas) y la superficie construida.
+
+**HE 4, agua caliente.**
+- Demanda del Anejo F: las viviendas del dibujo (las mismas que reconoce la ventilación), las personas por sus dormitorios (tabla a: 1 dormitorio 1,5 personas, 2 → 3, 3 → 4, 4 → 5, 5 y 6 → 6, más → 7), 28 l por persona a 60 °C y el factor de centralización por el número de viviendas (tabla b: hasta 3, 1; de 4 a 10, 0,95… más de 100, 0,70).
+- Energía de cada mes con el agua fría de la capital de la provincia (Anejo G), bajada 0,0066 °C por metro de octubre a marzo y 0,0033 de abril a septiembre.
+- Se aplica con más de 100 l/día. Se exige el 60 % renovable por debajo de 5.000 l/día y el 70 % por encima.
+- La bomba de calor cuenta 1 − 1/SCOP de lo que calienta, y nada si su SCOP es de 2,5 o menos.
+- **Pérdidas** (HE 4, 4.1: la demanda «incrementada» con ellas), sacadas de la red de agua caliente dibujada. La parte renovable se pide sobre el agua más las pérdidas:
+  - **Recirculación.** Si la red necesita retorno (15 m o más del acumulador al grifo más lejano), el anillo de ida y vuelta pierde 0,25 W/mK, tubería aislada según el RITE, todo el año, a la temperatura de acumulación menos 2,5 °C, en un local a 20 °C.
+  - **Distribución.** En el resto de la tubería caliente, la que no tiene retorno, el agua que queda dentro se enfría hasta 20 °C tres veces al día.
+  - **Acumulación.** La pérdida estática de un acumulador de clase C del etiquetado energético, 16,66 + 8,33·V^0,4 W a 45 K, a su temperatura.
+  - El acumulador tiene el volumen que se da en la ventana o, si no se da, la demanda de un día.
+
+**HE 5, electricidad.** Se aplica con más de 1.000 m² construidos. Potencia mínima P = mín(Fpr,el · S; 0,1 · (0,5 · Sc − Soc)):
+- S: la superficie construida (la del cuadro de superficies);
+- Fpr,el: 0,005 en viviendas y 0,010 en los demás usos;
+- Sc: la cubierta no transitable, que es la huella de las cubiertas inclinadas y los forjados de cada planta (menos la más baja) sin ningún local encima;
+- Soc: la que ocupan los captadores solares térmicos dibujados.
+
+Se compara con las placas fotovoltaicas dibujadas: su superficie por la potencia por m².
+
+El consumo de energía primaria (**HE 0**) no se calcula: se justifica con la herramienta oficial (HULC o los procedimientos reconocidos). Sale como dato en la Comprobación CTE y en la memoria.
+
+Antonio dio por buenos, el 7/11/2026, la parte renovable de la bomba de calor, la cubierta no transitable y los 0,2 kWp/m².
+
+**A comprobar por Antonio:** las cifras de las pérdidas.
+- 0,25 W/mK de la tubería aislada.
+- Tres enfriamientos al día del agua sin retorno.
+- Acumulador de clase C.
+- Florence Street pierde 6.867 kWh en la recirculación (anillo de 41,8 m), 3.377 kWh en la distribución y 1.158 kWh en el acumulador. Son 11.400 kWh sobre los 18.800 que calientan su agua: el 60 % de más.
+
+Las tablas están al principio de `crates/archisim-core/src/model/renewables.rs` y `crates/archisim-mep/src/renewables.rs`.
+
+## 9. Memoria de instalaciones
 
 Archivo → Exportar → **Memoria de instalaciones** (o `archisim memoria-instalaciones <proyecto> [carpeta]`, que deja el PDF y el mismo texto en `.txt`). Hojas A4, con portada y un capítulo por cada instalación dibujada:
 1. **Instalación eléctrica (REBT)**: por cada cuadro, el grado de electrificación, la potencia, el IGA, la derivación individual y los diferenciales, y el cuadro de circuitos (puntos, potencia, intensidad, PIA, sección, longitud y caída de tensión).
@@ -328,10 +369,11 @@ Archivo → Exportar → **Memoria de instalaciones** (o `archisim memoria-insta
 3. **Evacuación de aguas (DB-HS 5)**: los tramos de cada red con sus UD o su superficie, la pendiente y el diámetro dibujado y exigido, los sumideros y los canalones.
 4. **Calidad del aire interior (DB-HS 3)**: los caudales de cada vivienda, las aberturas de cada local, los pasos de las puertas, los conductos y las campanas.
 5. **Envolvente térmica y cargas (DB-HE 1)**: la zona y las temperaturas, cada tipo de la envolvente con su U y su límite, el K, las cargas de cada local y los equipos.
+6. **Energías renovables (DB-HE 4 y HE 5)**, cuando alguna se aplica: la demanda de agua caliente con sus viviendas, el agua fría, las pérdidas y la energía de cada mes, la parte renovable, y la potencia fotovoltaica mínima contra la dibujada.
 
 Lo que no cumple sale marcado como en el anejo de cálculo de la estructura. La portada deja el hueco para el autor: los datos de partida los revisa y asume el técnico que firma.
 
-## 9. Lo que no hace (todavía)
+## 10. Lo que no hace (todavía)
 
 - Trifásica, viviendas con más de 14 490 W, locales y oficinas (ITC-BT-28 en adelante).
 - Caída de tensión por tramos con la carga repartida: se pone toda la carga en el punto más lejano, lo que queda del lado de la seguridad.
@@ -354,5 +396,6 @@ Lo que no cumple sale marcado como en el anejo de cálculo de la estructura. La 
 - Envolvente y cargas:
   - los puentes térmicos (frentes de forjado, pilares, contorno de huecos) y el método del terreno de la norma UNE-EN ISO 13370;
   - el control solar (q sol;jul), la permeabilidad de los huecos y las condensaciones;
-  - el consumo de energía y las emisiones (HE 0), y las renovables (HE 4 y HE 5);
+  - el consumo de energía y las emisiones (HE 0);
+  - en el HE 4, el cálculo de la fracción solar (f-Chart): se da;
   - los conductos y tuberías de la climatización, y las cargas hora a hora.

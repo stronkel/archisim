@@ -1,7 +1,8 @@
 //! DB-HE 1, the envelope, from the calculation of
 //! `archisim_mep::thermal`: the transmittance of every type of the
 //! envelope against its limit, the global coefficient K, and the loads
-//! and equipment as figures (the radiators drawn, against their room).
+//! and equipment as figures (the radiators drawn, against their room);
+//! and DB-HE 4 and HE 5, the renewables, from `archisim_mep::renewables`.
 
 use archisim_core::Model;
 use archisim_mep::thermal as th;
@@ -13,6 +14,7 @@ fn dec(v: f64, n: usize) -> String {
 }
 
 pub fn check(model: &Model, report: &mut Report) {
+    renewables(model, report);
     let t = th::thermal(model);
     if t.rooms.is_empty() {
         return;
@@ -104,5 +106,74 @@ pub fn check(model: &Model, report: &mut Report) {
                 dec(g.cooling / 1000.0, 2)
             ),
         );
+    }
+}
+
+/// HE 4 and HE 5, where they apply.
+fn renewables(model: &Model, report: &mut Report) {
+    let r = archisim_mep::renewables::renewables(model);
+    let pct = |v: f64| format!("{} %", dec(v * 100.0, 0));
+    let item = |status, rule, text, value, required| Item {
+        section: Section::Energy,
+        status,
+        subject: Subject::Building,
+        level: None,
+        rule,
+        text,
+        value,
+        required,
+        route: Vec::new(),
+    };
+    let h = &r.hot_water;
+    if h.applies {
+        report.items.push(item(
+            if h.passes() {
+                Status::Passes
+            } else {
+                Status::Fails
+            },
+            "HE 4, 3.1",
+            format!(
+                "Agua caliente: {} l/día a 60 °C, {} kWh al año; renovable con {}{}",
+                dec(h.daily, 0),
+                dec(h.annual, 0),
+                h.source.name().to_lowercase(),
+                if h.weak_pump {
+                    " (su SCOP no llega a 2,5: no cuenta)"
+                } else {
+                    ""
+                }
+            ),
+            pct(h.provided),
+            format!("≥ {}", pct(h.required)),
+        ));
+    }
+    let e = &r.electricity;
+    if e.applies {
+        report.items.push(item(
+            if e.passes() {
+                Status::Passes
+            } else {
+                Status::Fails
+            },
+            "HE 5, 3.1",
+            format!(
+                "Fotovoltaica: {} m² construidos, {} m² de cubierta no transitable; {} m² de placas",
+                dec(e.built, 0),
+                dec(e.roof, 0),
+                dec(e.panel_area, 1)
+            ),
+            format!("{} kWp", dec(e.installed, 2)),
+            format!("≥ {} kWp", dec(e.minimum, 2)),
+        ));
+    }
+    if h.applies || e.applies {
+        report.items.push(item(
+            Status::Info,
+            "HE 0",
+            "El consumo de energía primaria (HE 0) se justifica con la herramienta oficial".into(),
+            String::new(),
+            String::new(),
+        ));
     }
 }

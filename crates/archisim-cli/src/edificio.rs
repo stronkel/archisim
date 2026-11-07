@@ -1847,15 +1847,16 @@ fn services(m: &mut Model, lv: &[LevelId]) -> R {
             })?;
         }
     }
-    // On the deck's roof, three rows of solar panels looking south.
+    // On the deck's roof, three rows of ten solar panels looking south:
+    // 54 m², some 11 kWp, over the 10 kWp HE 5 asks for its 2 000 m².
     for y in [3.0, 6.0, 9.0] {
         let (_, d, h, _) = DeviceKind::SolarPanel.defaults();
-        let w = 4.0 * archisim_core::SOLAR_MODULE;
+        let w = 10.0 * archisim_core::SOLAR_MODULE;
         m.add_device(NewDevice {
             level: lv[6],
             kind: DeviceKind::SolarPanel,
             name: "Placas fotovoltaicas".into(),
-            position: p(28.5, y),
+            position: p(29.85, y),
             rotation: PI,
             elevation: 0.0,
             width: w,
