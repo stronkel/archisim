@@ -1,4 +1,5 @@
 //! The ventilation window (Colaboración → Cálculo de ventilación): the
+//! system (mechanical or hybrid) and the zone of table 4.4, the
 //! dwellings' ventilation by the DB-HS 3 as text, and «Poner los tamaños
 //! calculados», which takes every inlet, extract valve, duct and shaft
 //! drawn smaller up to what it needs, in one undoable step.
@@ -61,6 +62,7 @@ impl ArchiSimApp {
             )
             .small(),
         );
+        self.ventilation_site_row(ui);
         ui.separator();
         let rev = self.ed.revision();
         if self.ventilation.results.as_ref().is_none_or(|r| r.0 != rev) {
@@ -71,14 +73,15 @@ impl ArchiSimApp {
             self.ventilation.results = Some((rev, text, Grow::of(model, &v), fails));
         }
         let (_, text, grow, fails) = self.ventilation.results.clone().expect("just made");
-        let mut apply = false;
+        let (mut apply, mut pdf, mut dxf) = (false, false, false);
         ui.horizontal(|ui| {
             let p = super::theme::Palette::current(ui.ctx());
             if fails > 0 {
                 ui.colored_label(
                     p.bad,
                     format!(
-                        "{fails} abertura{} o tramo{} por debajo de lo exigido",
+                        "{fails} abertura{}, tramo{} o salida{} que no cumplen",
+                        if fails == 1 { "" } else { "s" },
                         if fails == 1 { "" } else { "s" },
                         if fails == 1 { "" } else { "s" }
                     ),
@@ -87,6 +90,20 @@ impl ArchiSimApp {
                 ui.colored_label(p.good, "Todo con su tamaño");
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui
+                    .button("Esquemas (DXF)…")
+                    .on_hover_text("El esquema vertical y la red de cada planta, un DXF por hoja")
+                    .clicked()
+                {
+                    dxf = true;
+                }
+                if ui
+                    .button("Esquemas (PDF)…")
+                    .on_hover_text("El esquema vertical de la extracción y las campanas, y la red de cada planta, en hojas A3")
+                    .clicked()
+                {
+                    pdf = true;
+                }
                 if ui
                     .add_enabled(
                         grow.len() > 0,
@@ -110,6 +127,147 @@ impl ArchiSimApp {
         if apply {
             self.apply_ventilation_sizes();
         }
+        if pdf {
+            self.export_ventilation_pdf();
+        }
+        if dxf {
+            self.export_ventilation_dxf();
+        }
+    }
+
+    /// The system (mechanical or hybrid) and the zone of table 4.4, set
+    /// by hand or from the province.
+    fn ventilation_site_row(&mut self, ui: &mut Ui) {
+        use archisim_core::{DraftZone, VentSystem, DRAFT_ZONES};
+        let site = *self.ed.model().ventilation_site();
+        let mut new = site;
+        ui.horizontal(|ui| {
+            ui.label("Sistema");
+            egui::ComboBox::from_id_salt("vent-system")
+                .selected_text(new.system.name())
+                .show_ui(ui, |ui| {
+                    for s in VentSystem::ALL {
+                        ui.selectable_value(&mut new.system, s, s.name());
+                    }
+                })
+                .response
+                .on_hover_text("HS 3, 3.1.1: híbrida (el conducto tira solo y un aspirador híbrido le ayuda) o mecánica (extractor). Los garajes y las campanas son siempre mecánicos");
+            ui.add_space(12.0);
+            ui.add_enabled_ui(new.system == VentSystem::Hybrid, |ui| {
+                ui.label("Zona térmica");
+                egui::ComboBox::from_id_salt("vent-zone")
+                    .selected_text(new.zone.code())
+                    .width(40.0)
+                    .show_ui(ui, |ui| {
+                        for z in DraftZone::ALL {
+                            ui.selectable_value(&mut new.zone, z, z.code());
+                        }
+                    })
+                    .response
+                    .on_hover_text("HS 3, tabla 4.4: da con las plantas el tiro de los conductos (tabla 4.3)");
+                egui::ComboBox::from_id_salt("vent-province")
+                    .selected_text("Por provincia…")
+                    .height(360.0)
+                    .show_ui(ui, |ui| {
+                        for (p, low, high) in DRAFT_ZONES {
+                            if ui
+                                .selectable_label(false, format!("{p} (hasta 800 m): {}", low.code()))
+                                .clicked()
+                            {
+                                new.zone = low;
+                            }
+                            if let Some(h) = high {
+                                if ui
+                                    .selectable_label(false, format!("{p} (más de 800 m): {}", h.code()))
+                                    .clicked()
+                                {
+                                    new.zone = h;
+                                }
+                            }
+                        }
+                    });
+            });
+        });
+        if new != site {
+            let r = self
+                .ed
+                .transact("Sistema de ventilación", |m| m.set_ventilation_site(new));
+            if let Err(e) = r {
+                self.complain(format!("No se puede cambiar: {e}."));
+            }
+        }
+    }
+
+    /// The ventilation diagrams as a PDF of A3 pages.
+    pub(super) fn export_ventilation_pdf(&mut self) {
+        let mut d = rfd::FileDialog::new()
+            .set_title("Esquemas de ventilación (PDF)")
+            .add_filter("PDF", &["pdf"])
+            .set_file_name(format!("{}-ventilacion.pdf", self.file_name_stem()));
+        if let Some(dir) = self.start_dir() {
+            d = d.set_directory(dir);
+        }
+        let Some(path) = d.save_file() else {
+            return;
+        };
+        let model = self.ed.shown();
+        let sheets: Vec<(String, String)> =
+            archisim_plan::water_schematic::ventilation_pages(&model)
+                .into_iter()
+                .enumerate()
+                .map(|(i, svg)| (svg, format!("VE-{:02}", i + 1)))
+                .collect();
+        if sheets.is_empty() {
+            self.complain("No hay conductos de extracción que lleguen a una boca o a una campana.");
+            return;
+        }
+        let r = crate::documents::pdf_of(&sheets, "Esquemas de ventilación")
+            .and_then(|bytes| std::fs::write(&path, bytes).map_err(|e| e.to_string()));
+        match r {
+            Ok(()) => self.say(format!(
+                "Esquemas de ventilación: {} hojas A3 en {}.",
+                sheets.len(),
+                path.display()
+            )),
+            Err(e) => self.complain(format!("No se pudo exportar: {e}.")),
+        }
+    }
+
+    /// The ventilation diagrams in DXF: one file per page.
+    pub(super) fn export_ventilation_dxf(&mut self) {
+        let mut d = rfd::FileDialog::new()
+            .set_title("Esquemas de ventilación (DXF)")
+            .add_filter("DXF", &["dxf"])
+            .set_file_name(format!("{}-ventilacion.dxf", self.file_name_stem()));
+        if let Some(dir) = self.start_dir() {
+            d = d.set_directory(dir);
+        }
+        let Some(path) = d.save_file() else {
+            return;
+        };
+        let model = self.ed.shown();
+        let sheets = archisim_plan::water_schematic::ventilation_pages(&model);
+        if sheets.is_empty() {
+            self.complain("No hay conductos de extracción que lleguen a una boca o a una campana.");
+            return;
+        }
+        let stem = path
+            .file_stem()
+            .map_or("ventilacion".into(), |s| s.to_string_lossy().to_string());
+        for (i, svg) in sheets.iter().enumerate() {
+            let file = path.with_file_name(format!("{stem}-ve-{:02}.dxf", i + 1));
+            if let Err(e) = archisim_export::dxf::page_dxf(&model, svg)
+                .and_then(|t| std::fs::write(&file, t).map_err(|e| e.to_string()))
+            {
+                self.complain(format!("No se pudo exportar: {e}."));
+                return;
+            }
+        }
+        self.say(format!(
+            "Esquemas de ventilación en DXF: {} archivos junto a {}.",
+            sheets.len(),
+            path.display()
+        ));
     }
 
     /// Gives every inlet, valve, duct and shaft drawn smaller than it

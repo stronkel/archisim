@@ -214,8 +214,9 @@ Uso:
   archisim cte <proyecto.archisim> [informe.csv]
   archisim fontaneria <proyecto.archisim> [--diametros salida.archisim] [--esquemas carpeta]   cálculo del suministro de agua (DB-HS 4); con --diametros, guarda el proyecto con los diámetros calculados; con --esquemas, el esquema vertical y la distribución por planta en PDF y DXF
   archisim climatizacion <proyecto.archisim>   envolvente por el DB-HE 1 (transmitancias y K) y cargas de calefacción y refrigeración de cada local, con sus equipos
-  archisim ventilacion <proyecto.archisim> [--tamanos salida.archisim]   ventilación de las viviendas (DB-HS 3): caudales, aireadores, bocas, pasos y conductos; con --tamanos, agranda lo que se queda corto
-  archisim ventilacion --ejemplo <carpeta>   un piso de ejemplo con su ventilación (ventilacion-ejemplo.archisim)
+  archisim ventilacion <proyecto.archisim> [--tamanos salida.archisim] [--esquemas carpeta]   ventilación de las viviendas (DB-HS 3): caudales, aireadores, bocas, pasos, conductos y campanas; con --tamanos, agranda lo que se queda corto; con --esquemas, el esquema vertical y la red de cada planta en PDF y DXF
+  archisim memoria-instalaciones <proyecto.archisim> [carpeta]   la memoria de instalaciones (REBT, DB-HS 4, DB-HS 5, DB-HS 3 y DB-HE 1) con las tablas del cálculo, en PDF A4 y en texto
+  archisim ventilacion --ejemplo <carpeta>   un piso de ejemplo con su ventilación y la campana con su conducto (ventilacion-ejemplo.archisim)
   archisim saneamiento <proyecto.archisim> [--diametros salida.archisim] [--esquemas carpeta]   evacuación de aguas (DB-HS 5): residuales por unidades de desagüe y pluviales por cubierta; con --diametros, agranda lo que se queda corto; con --esquemas, el esquema vertical y la red de cada planta en PDF y DXF
   archisim electricidad <proyecto.archisim> [carpeta]   cálculo de la instalación eléctrica (REBT); con carpeta, el esquema unifilar en PDF y DXF
   archisim estructura <proyecto.archisim> [carpeta]   acciones, descenso de cargas y cálculo de la estructura; con carpeta, el anejo de cálculo y los planos de estructura en PDF
@@ -632,15 +633,32 @@ fn main() -> ExitCode {
                 args.get(2).map_or("out", String::as_str),
             ))),
             Some(project) => {
-                let out = args
-                    .iter()
-                    .position(|a| a == "--tamanos")
-                    .and_then(|i| args.get(i + 1))
-                    .map(Path::new);
-                report(run_ventilation(Path::new(project), out))
+                let after = |flag: &str| {
+                    args.iter()
+                        .position(|a| a == flag)
+                        .and_then(|i| args.get(i + 1))
+                        .map(Path::new)
+                };
+                report(run_ventilation(
+                    Path::new(project),
+                    after("--tamanos"),
+                    after("--esquemas"),
+                ))
             }
             None => {
                 eprintln!("Falta el proyecto: archisim ventilacion <proyecto.archisim>");
+                ExitCode::FAILURE
+            }
+        },
+        Some("memoria-instalaciones") => match args.get(1) {
+            Some(project) => report(run_services_report(
+                Path::new(project),
+                Path::new(args.get(2).map_or("out", String::as_str)),
+            )),
+            None => {
+                eprintln!(
+                    "Falta el proyecto: archisim memoria-instalaciones <proyecto.archisim> [carpeta]"
+                );
                 ExitCode::FAILURE
             }
         },
@@ -908,11 +926,73 @@ fn run_thermal(project: &Path) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn run_ventilation(project: &Path, sized: Option<&Path>) -> Result<(), Box<dyn std::error::Error>> {
+/// The installations' report: a PDF of A4 pages and the same in text.
+fn run_services_report(project: &Path, dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let model = archisim_file::open(project)
+        .map_err(|e| format!("no se puede abrir {}: {e}", project.display()))?;
+    let model = model.flattened().map_err(|e| format!("{e}"))?;
+    std::fs::create_dir_all(dir)?;
+    let stem = project
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("proyecto");
+    let blocks = archisim_plan::services_report::report(&model);
+    let pages = archisim_plan::calc_report::pages(&model, &blocks);
+    let titles: Vec<String> = (0..pages.len())
+        .map(|i| format!("Memoria de instalaciones {}", i + 1))
+        .collect();
+    let pdf_pages: Vec<archisim_export::pdf::Page> = pages
+        .iter()
+        .zip(&titles)
+        .map(|(svg, title)| archisim_export::pdf::Page { svg, title })
+        .collect();
+    let pdf = dir.join(format!("{stem}-memoria-instalaciones.pdf"));
+    std::fs::write(
+        &pdf,
+        archisim_export::pdf::pdf(&pdf_pages, "Memoria de instalaciones")?,
+    )?;
+    let txt = dir.join(format!("{stem}-memoria-instalaciones.txt"));
+    std::fs::write(&txt, archisim_struct::report::to_text(&blocks))?;
+    println!(
+        "Memoria de instalaciones ({} hojas A4): {} (y {})",
+        pages.len(),
+        pdf.display(),
+        txt.display()
+    );
+    Ok(())
+}
+
+fn run_ventilation(
+    project: &Path,
+    sized: Option<&Path>,
+    sheets_dir: Option<&Path>,
+) -> Result<(), Box<dyn std::error::Error>> {
     let mut model = archisim_file::open(project)
         .map_err(|e| format!("no se puede abrir {}: {e}", project.display()))?;
     let v = archisim_mep::ventilation::ventilation(&model);
     print!("{}", archisim_mep::ventilation::report(&model, &v));
+    if let Some(dir) = sheets_dir {
+        let stem = project
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("proyecto");
+        let sheets = archisim_plan::water_schematic::ventilation_pages(&model);
+        if let Some(pdf) = write_sheets(
+            &model,
+            dir,
+            stem,
+            "ventilacion",
+            "VE",
+            "Esquemas de ventilación",
+            &sheets,
+        )? {
+            println!(
+                "\nEsquemas de ventilación ({} hojas A3): {} (y en SVG y DXF)",
+                sheets.len(),
+                pdf.display()
+            );
+        }
+    }
     if let Some(out) = sized {
         let runs = v.sized_runs(&model);
         let devices = v.sized_devices(&model);
@@ -936,6 +1016,43 @@ fn run_ventilation(project: &Path, sized: Option<&Path>) -> Result<(), Box<dyn s
     Ok(())
 }
 
+/// A set of A3 sheets as one PDF and an SVG and a DXF each:
+/// `<stem>-<name>.pdf`, `<stem>-<name>-<code>.svg`. `None` if there are
+/// none.
+fn write_sheets(
+    model: &archisim_core::Model,
+    dir: &Path,
+    stem: &str,
+    name: &str,
+    prefix: &str,
+    title: &str,
+    sheets: &[String],
+) -> Result<Option<PathBuf>, Box<dyn std::error::Error>> {
+    if sheets.is_empty() {
+        return Ok(None);
+    }
+    std::fs::create_dir_all(dir)?;
+    let titles: Vec<String> = (0..sheets.len())
+        .map(|i| format!("{prefix}-{:02}", i + 1))
+        .collect();
+    let pdf_pages: Vec<archisim_export::pdf::Page> = sheets
+        .iter()
+        .zip(&titles)
+        .map(|(svg, title)| archisim_export::pdf::Page { svg, title })
+        .collect();
+    let pdf = dir.join(format!("{stem}-{name}.pdf"));
+    std::fs::write(&pdf, archisim_export::pdf::pdf(&pdf_pages, title)?)?;
+    for (svg, title) in sheets.iter().zip(&titles) {
+        let base = dir.join(format!("{stem}-{name}-{}", title.to_lowercase()));
+        std::fs::write(base.with_extension("svg"), svg)?;
+        std::fs::write(
+            base.with_extension("dxf"),
+            archisim_export::dxf::page_dxf(model, svg)?,
+        )?;
+    }
+    Ok(Some(pdf))
+}
+
 fn ventilation_example(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
     std::fs::create_dir_all(dir)?;
     let mut m = archisim_core::Model::new("Piso ventilado");
@@ -950,6 +1067,8 @@ fn ventilation_example(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
         lib.facade,
         lib.interior_door,
     );
+    let hood = archisim_library::add_object_entry(&mut m, "Campana decorativa 60")?;
+    archisim_mep::ventilation::example_hood(&mut m, l0, l1, hood);
     let path = dir.join("ventilacion-ejemplo.archisim");
     archisim_file::save(&m, &path)?;
     let v = archisim_mep::ventilation::ventilation(&m);

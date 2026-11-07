@@ -2015,15 +2015,53 @@ fn ventilation_network(m: &mut Model, lv: &[LevelId]) -> R {
             0.0,
             (0.2, 0.2, roof_z - base),
         )?;
-        // Out of the shaft's head to the fan beside it, on the roof.
-        let fan = at + Point2::new(0.0, 0.6);
-        let top = duct(m, roof, vec![at, fan])?;
-        m.edit_run(top, |r| {
-            r.width = 0.25;
-            r.height = 0.15;
-        })?;
-        device(m, roof, DeviceKind::Fan, fan, 0.0, 0.0, (0.5, 0.5, 0.5))?;
         shafts.push((letter(&d.name), at));
+    }
+    // Each kitchen's hood, by a duct of its own (3.1.1): from the hood to a
+    // shaft for the hoods of its column of flats, beside the hood of the
+    // lowest one, up to the roof and out.
+    let mut columns: std::collections::BTreeMap<String, Vec<(LevelId, Point2)>> =
+        std::collections::BTreeMap::new();
+    let mut hood_heads: Vec<(Point2, f64)> = Vec::new();
+    for h in &v.hoods {
+        let Some(o) = h.object.and_then(|o| m.objects().find(|x| x.id == o)) else {
+            continue;
+        };
+        columns
+            .entry(letter(&h.dwelling))
+            .or_default()
+            .push((h.level, o.position));
+    }
+    for hoods in columns.values_mut() {
+        let z = |m: &Model, l: LevelId| m.level(l).map_or(0.0, |x| x.elevation);
+        hoods.sort_by(|a, b| z(m, a.0).total_cmp(&z(m, b.0)));
+        let (low, first) = hoods[0];
+        let needed = vt::DUCT_PER_LS * vt::HOOD_FLOW * hoods.len() as f64;
+        let dia = vt::SHAFT_SIZES
+            .into_iter()
+            .find(|d| vt::round_area(*d) >= needed)
+            .unwrap_or(0.63);
+        let at = first + Point2::new(0.37, 0.0);
+        let base = z(m, low);
+        m.add_device(NewDevice {
+            level: low,
+            kind: DeviceKind::AirShaft,
+            name: "Conducto de campanas".into(),
+            position: at,
+            rotation: 0.0,
+            elevation: 0.0,
+            width: dia,
+            depth: dia,
+            height: roof_z - base,
+        })?;
+        for (level, hood) in hoods.iter() {
+            let r = duct(m, *level, vec![*hood, at])?;
+            m.edit_run(r, |r| {
+                r.width = 0.15;
+                r.height = 0.15;
+            })?;
+        }
+        hood_heads.push((at, dia));
     }
     let windows: Vec<_> = m
         .openings()
@@ -2147,6 +2185,60 @@ fn ventilation_network(m: &mut Model, lv: &[LevelId]) -> R {
                 }
             }
         }
+    }
+    // Where each duct comes out on the roof: at 3 m at least from every
+    // window, outside door, air inlet and terrace (3.2.1). The nearest
+    // spot to the shaft's head clear of them, on the roof's slab (not over
+    // a courtyard), by a duct along the roof.
+    let roof_slabs = m.slabs().any(|s| s.level == roof);
+    let on_roof = |m: &Model, p: Point2| {
+        !roof_slabs
+            || m.slabs().any(|s| {
+                s.level == roof
+                    && archisim_core::point_in_polygon(p, &s.outline)
+                    && !s
+                        .holes
+                        .iter()
+                        .any(|h| archisim_core::point_in_polygon(p, h))
+            })
+    };
+    let clear = |m: &Model, head: Point2, z: f64| {
+        let towards = (middle - head)
+            .normalized()
+            .unwrap_or(Point2::new(0.0, 1.0));
+        (2..=30)
+            .flat_map(|k| {
+                (0..16).map(move |j| {
+                    let a = std::f64::consts::PI / 8.0 * f64::from(j);
+                    let (s, c) = a.sin_cos();
+                    let dir =
+                        Point2::new(towards.x * c - towards.y * s, towards.x * s + towards.y * c);
+                    head + dir * (0.3 * f64::from(k))
+                })
+            })
+            .find(|p| {
+                on_roof(m, *p)
+                    && vt::intake_near(m, *p, z).is_none_or(|(_, d)| d >= vt::OUTLET_GAP + 0.2)
+            })
+            .unwrap_or(head + towards * 0.6)
+    };
+    for (_, at) in &shafts {
+        let fan = clear(m, *at, roof_z + 0.5);
+        let top = duct(m, roof, vec![*at, fan])?;
+        m.edit_run(top, |r| {
+            r.width = 0.25;
+            r.height = 0.15;
+        })?;
+        device(m, roof, DeviceKind::Fan, fan, 0.0, 0.0, (0.5, 0.5, 0.5))?;
+    }
+    for (at, dia) in hood_heads {
+        let end = clear(m, at, roof_z + 0.3);
+        let out = duct(m, roof, vec![at, end])?;
+        m.edit_run(out, |r| {
+            r.elevation = 0.3;
+            r.width = dia;
+            r.height = dia;
+        })?;
     }
     Ok(())
 }
@@ -3159,7 +3251,49 @@ mod tests {
             .room(*r)
             .is_some_and(|x| v.dwellings.iter().all(|d| d.level != x.level))));
         assert!(v.loose.is_empty(), "{:?}", v.loose);
-        assert!(v.networks.iter().all(|n| n.fan.is_some()));
+        assert!(v
+            .networks
+            .iter()
+            .filter(|n| !n.is_hood_duct())
+            .all(|n| n.fan.is_some()));
+        // Every kitchen's hood on a duct of its own, big enough.
+        assert_eq!(v.hoods.len(), 24);
+        assert!(
+            v.hoods.iter().all(|h| h.object.is_some()),
+            "{:?}",
+            v.hoods
+                .iter()
+                .filter(|h| h.object.is_none())
+                .map(|h| (&h.dwelling, &h.kitchen_name))
+                .collect::<Vec<_>>()
+        );
+        assert!(v.hoods.iter().all(|h| !v.hood_fails(h)), "{}", {
+            let bad: Vec<String> = v
+                .hoods
+                .iter()
+                .filter(|h| v.hood_fails(h))
+                .map(|h| archisim_mep::ventilation::hood_text(&v, h))
+                .collect();
+            bad.join("\n")
+        });
+        assert!(v
+            .networks
+            .iter()
+            .filter(|n| n.is_hood_duct())
+            .flat_map(|n| &n.stretches)
+            .all(|s| !s.short()));
+        // Every duct comes out at 3 m from the air coming in (3.2.1).
+        let bad: Vec<String> = v
+            .networks
+            .iter()
+            .filter_map(|n| n.outlet.as_ref())
+            .filter(|o| o.fails())
+            .map(archisim_mep::ventilation::outlet_text)
+            .collect();
+        assert!(bad.is_empty(), "{}", bad.join("\n"));
+        assert!(v.networks.iter().all(|n| n.outlet.is_some()));
+        // The bicycles' room is not a garage.
+        assert!(v.others.iter().all(|o| !o.garage));
         // The envelope and the loads: every flat on its heat pump.
         let t = archisim_mep::thermal::thermal(m);
         if std::env::var("ARCHISIM_CLIMA_TEXTO").is_ok() {

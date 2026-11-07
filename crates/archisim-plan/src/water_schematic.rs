@@ -18,7 +18,12 @@
 //!   the area they take). Then one page per level with its branches down
 //!   to every appliance or inlet.
 //!
-//! Both are drawn from one form (`Net`: lines, the stretches; leaves, the
+//! - **Ventilation** (`ventilation_pages`, from `ventilation`): VE-01,
+//!   the extract shafts with what enters them on each floor and their fans
+//!   on the roof; the general extraction on the left, the kitchens' hoods
+//!   by their own ducts on the right. Then one page per level.
+//!
+//! All are drawn from one form (`Net`: lines, the stretches; leaves, the
 //! taps, appliances or inlets), so they look alike. The diameters written
 //! are the calculated ones; where the pipe drawn is smaller, both are
 //! written («Ø20→26») in red.
@@ -28,6 +33,7 @@ use std::fmt::Write as _;
 
 use archisim_core::{Appliance, DeviceId, LevelId, Model, Point2, ServiceSystem};
 use archisim_mep::drain::{self as dr, Drainage};
+use archisim_mep::ventilation::{self as vt, Ventilation};
 use archisim_mep::water::{self as wa, Source, Water, TAP_PRESSURE};
 
 use crate::lettering::{paint, text_path, text_width, Align};
@@ -78,6 +84,8 @@ enum Footer {
     Units,
     /// «45,0 m²».
     Area,
+    /// «24,0 l/s».
+    Flow,
 }
 
 /// The source symbol: a circle or a box with a letter.
@@ -134,6 +142,194 @@ pub fn drainage_pages(model: &Model) -> Vec<String> {
     }
     let nets: Vec<Net> = d.networks.iter().map(|n| drain_net(model, n)).collect();
     draw_pages(model, &nets, &drain_sheets(&d))
+}
+
+/// The ventilation pages (DB-HS 3): VE-01, the vertical diagram with the
+/// extract shafts and, on each floor, what enters them (the valves of the
+/// wet rooms, with their flow); the general extraction on the left and
+/// the kitchens' hoods, by their own ducts, on the right. Then one page
+/// per level with its ducts down to every valve and hood. Empty if there
+/// is no extract duct.
+pub fn ventilation_pages(model: &Model) -> Vec<String> {
+    let v = vt::ventilation(model);
+    if v.networks.iter().all(|n| n.stretches.is_empty()) {
+        return Vec::new();
+    }
+    let mut nets = Vec::new();
+    for hoods in [false, true] {
+        let mine: Vec<&vt::Network> = v
+            .networks
+            .iter()
+            .filter(|n| n.is_hood_duct() == hoods && !n.stretches.is_empty())
+            .collect();
+        if !mine.is_empty() {
+            nets.push(vent_net(model, &v, &mine, hoods));
+        }
+    }
+    draw_pages(model, &nets, &vent_sheets(&v))
+}
+
+/// The general extract networks (or the hoods' ducts) as one: their
+/// stretches one after another.
+fn vent_net(model: &Model, v: &Ventilation, nets: &[&vt::Network], hoods: bool) -> Net {
+    let mut lines: Vec<Line> = Vec::new();
+    let mut leaves: Vec<Leaf> = Vec::new();
+    // A valve's room, for its kind and its flow.
+    let room_of = |d| {
+        v.dwellings
+            .iter()
+            .flat_map(|w| &w.rooms)
+            .find(|r| r.vents.contains(&d))
+    };
+    for n in nets {
+        let base = lines.len();
+        for st in &n.stretches {
+            let red = st.short();
+            lines.push(Line {
+                name: st.name.clone(),
+                level: st.level,
+                parent: st.parent.map(|p| p + base),
+                riser: st.shaft,
+                diameter: if red {
+                    format!("{}→{}", st.size, st.sized_text)
+                } else {
+                    st.size.clone()
+                },
+                red,
+                count: st.vents + st.hoods,
+            });
+        }
+        let path = |at: Option<usize>| {
+            let mut out = Vec::new();
+            let mut cur = at;
+            while let Some(i) = cur {
+                out.push(i + base);
+                cur = n.stretches[i].parent;
+            }
+            out.reverse();
+            out
+        };
+        for (d, at) in n.vents.iter().zip(&n.vent_at) {
+            let room = room_of(*d);
+            let kind = match room {
+                Some(r) if r.kitchen => "Cocina",
+                Some(_) => "Baño o aseo",
+                None => "Boca",
+            };
+            let flow = room.map_or(0.0, |r| r.extraction / r.vents.len().max(1) as f64);
+            let red = room.is_some_and(|r| r.vent_short());
+            leaves.push(Leaf {
+                path: path(*at),
+                kind: kind.to_string(),
+                label: format!(
+                    "{} · {} l/s",
+                    room.map_or("Boca", |r| r.name.as_str()),
+                    dec(flow, 1)
+                ),
+                red,
+                value: flow,
+                drawn_red: red,
+            });
+        }
+        for (h, at) in n.hoods.iter().zip(&n.hood_at) {
+            let hood = v.hoods.iter().find(|x| x.object == Some(*h));
+            let red = hood.is_some_and(|x| v.hood_fails(x));
+            leaves.push(Leaf {
+                path: path(*at),
+                kind: "Campana".to_string(),
+                label: format!(
+                    "Campana {} · {} l/s",
+                    hood.map_or("", |x| x.dwelling.as_str()),
+                    dec(vt::HOOD_FLOW, 0)
+                ),
+                red,
+                value: vt::HOOD_FLOW,
+                drawn_red: red,
+            });
+        }
+    }
+    let flow: f64 = nets.iter().map(|n| n.flow).sum();
+    let fans: Vec<_> = nets
+        .iter()
+        .filter_map(|n| n.fan.and_then(|f| model.device(f)))
+        .collect();
+    let top = model
+        .levels()
+        .iter()
+        .max_by(|a, b| a.elevation.total_cmp(&b.elevation))
+        .map(|l| l.id);
+    let missing = nets.iter().filter(|n| n.fan.is_none()).count();
+    Net {
+        title: if hoods {
+            "CAMPANAS DE COCINA"
+        } else {
+            "EXTRACCIÓN GENERAL"
+        },
+        dashed: hoods,
+        right: hoods,
+        // The fan's level, or where the first duct comes out.
+        source_level: fans
+            .first()
+            .map(|f| f.level)
+            .or_else(|| {
+                nets.iter()
+                    .flat_map(|n| &n.stretches)
+                    .find(|s| s.parent.is_none())
+                    .map(|s| s.level)
+            })
+            .or(top),
+        source: if hoods {
+            format!(
+                "Salida en cubierta · {} conducto{} · {} l/s",
+                nets.len(),
+                if nets.len() == 1 { "" } else { "s" },
+                dec(flow, 0)
+            )
+        } else {
+            format!(
+                "{} extractor{} · {} m³/h",
+                fans.len(),
+                if fans.len() == 1 { "" } else { "es" },
+                dec(flow * 3.6, 0)
+            )
+        },
+        source_from: "la cubierta".to_string(),
+        mark: Mark::Circle(if hoods { "C" } else { "E" }),
+        lines,
+        leaves,
+        loose: if hoods { 0 } else { missing },
+        loose_text: "redes sin extractor dibujado",
+        footer: Footer::Flow,
+    }
+}
+
+fn vent_sheets(v: &Ventilation) -> Sheets {
+    let dwellings = v.dwellings.len();
+    let flow: f64 = v.dwellings.iter().map(|d| d.flow).sum();
+    Sheets {
+        prefix: "VE",
+        vertical: "Esquema vertical de ventilación",
+        level_title: "Red de extracción",
+        discipline: "Ventilación (CTE DB-HS 3) · sin escala",
+        left: ("Extracción general", ""),
+        right: ("Campanas de cocina", ""),
+        notes: vec![
+            format!(
+                "{dwellings} vivienda{} · {} l/s de admisión y extracción en total (tabla 2.1) · extracción mecánica",
+                if dwellings == 1 { "" } else { "s" },
+                dec(flow, 1)
+            ),
+            format!(
+                "Secciones de los conductos a {} cm² por l/s (tabla 4.2); bocas y aireadores a {} cm² por l/s (tabla 4.1). En rojo: lo dibujado menor (dibujado→calculado).",
+                dec(vt::DUCT_PER_LS, 1),
+                dec(vt::OPENING_PER_LS, 0)
+            ),
+            format!(
+                "Cada campana, {} l/s por un conducto propio, independiente de la ventilación general (3.1.1).",
+                dec(vt::HOOD_FLOW, 0)
+            ),
+        ],
+    }
 }
 
 fn draw_pages(model: &Model, nets: &[Net], sheets: &Sheets) -> Vec<String> {
@@ -935,6 +1131,10 @@ fn footer(net: &Net, taps: &[usize]) -> Option<(String, bool)> {
         Footer::Area => {
             let all: f64 = leaves.iter().map(|l| l.value).sum();
             (format!("{} m²", dec(all, 1)), red)
+        }
+        Footer::Flow => {
+            let all: f64 = leaves.iter().map(|l| l.value).sum();
+            (format!("{} l/s", dec(all, 1)), red)
         }
     })
 }
