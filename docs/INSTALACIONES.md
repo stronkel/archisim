@@ -105,7 +105,7 @@ Los tres salen en la ventana, en la Comprobación CTE y en las notas de la hoja 
 
 En la línea de órdenes: `archisim fontaneria <proyecto>`, o `archisim fontaneria <proyecto> --diametros salida.archisim` para guardarlo con los diámetros calculados (y `--esquemas <carpeta>` para las hojas, abajo).
 
-El edificio de Florence Street (`archisim edificio`) lleva ahora la red entera: contador y acumulador junto al montante, montante hasta la cubierta, distribuidor en cada rellano, derivación de cada vivienda y todos los aparatos unidos. Son 114 aparatos y 24 viviendas. Con 300 kPa en el contador, los diámetros dibujados dejan 95 grifos por debajo de 100 kPa; con los calculados, el peor llega a 122 kPa. Del acumulador al grifo más lejano hay 41,8 m: necesita retorno (250 l/h, 3/4") Lo lleva dibujado: del final de cada distribuidor de las plantas 1 a 4 al montante, y en la planta baja del montante al acumulador. Son 57,7 m y cumplen.
+El edificio de Florence Street (`archisim edificio`) lleva ahora la red entera: contador y acumulador junto al montante, montante hasta la cubierta, distribuidor en cada rellano, derivación de cada vivienda y todos los aparatos unidos. Son 114 aparatos y 24 viviendas. Con 300 kPa en el contador, los diámetros dibujados dejan 95 grifos por debajo de 100 kPa; con los calculados, el peor llega a 122 kPa. Del acumulador al grifo más lejano hay 41,8 m: necesita retorno (250 l/h, 3/4"). Lo lleva dibujado: del final de cada distribuidor de las plantas 1 a 4 al montante, y en la planta baja del montante al acumulador. Son 57,7 m y cumplen.
 
 ### Esquemas de fontanería
 
