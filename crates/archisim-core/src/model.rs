@@ -1573,6 +1573,9 @@ pub struct ModelParts {
     pub water_site: WaterSite,
     pub thermal_site: ThermalSite,
     pub ventilation_site: VentilationSite,
+    /// The template the levels' plans follow when not given their own
+    /// look (version 92).
+    pub plan_template: Option<ViewTemplateId>,
     /// Underlays of the levels' plans (E7).
     pub level_underlays: Vec<(LevelId, Vec<Underlay>)>,
     pub viewports: Vec<crate::sheets::Viewport>,
@@ -1710,6 +1713,7 @@ pub struct Model {
     pub(crate) water_site: WaterSite,
     pub(crate) thermal_site: ThermalSite,
     pub(crate) ventilation_site: VentilationSite,
+    pub(crate) plan_template: Option<ViewTemplateId>,
     pub(crate) drafts: BTreeMap<DraftId, Draft>,
     pub(crate) info: crate::sheets::ProjectInfo,
     pub(crate) sheets: BTreeMap<SheetId, crate::sheets::Sheet>,
@@ -1816,6 +1820,7 @@ impl Model {
             water_site: WaterSite::default(),
             thermal_site: ThermalSite::default(),
             ventilation_site: VentilationSite::default(),
+            plan_template: None,
             structural_loads: BTreeMap::new(),
             device_circuits: BTreeMap::new(),
             level_underlays: BTreeMap::new(),
@@ -4498,6 +4503,7 @@ impl Model {
             water_site: self.water_site,
             thermal_site: self.thermal_site.clone(),
             ventilation_site: self.ventilation_site,
+            plan_template: self.plan_template,
             level_underlays: self
                 .level_underlays
                 .iter()
@@ -4862,6 +4868,15 @@ impl Model {
                 element: "ventilation site".into(),
                 error,
             })?;
+        // After the templates (restored above with the views).
+        if let Some(t) = parts.plan_template {
+            model
+                .set_plan_template(Some(t))
+                .map_err(|error| RestoreError {
+                    element: "plan template".into(),
+                    error,
+                })?;
+        }
         model.restore_title_blocks(parts.title_blocks, parts.default_title_block, &mut claim)?;
         model.set_sun(parts.sun).map_err(|error| RestoreError {
             element: "sun".into(),

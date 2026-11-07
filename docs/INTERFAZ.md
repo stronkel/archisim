@@ -469,5 +469,7 @@ El estilo de presentación dejaría de ser una cosa aparte: sería una pestaña 
 
 **Segunda vuelta** (rama `bloque/plantillas-planos`): las vistas colocadas en los planos eligen y siguen plantilla desde sus propiedades, y su «Representación… (VG)» las edita a ellas.
 
-**Pendiente**: llevar las plantillas a la biblioteca entre proyectos.
+**Tercera vuelta** (7/11/2026, rama `bloque/vistas-limpias`, `docs/GRAFICOS.md`): una plantilla por cada instalación; las plantas siguen por defecto Arquitectura (sin instalaciones); una pastilla arriba a la izquierda de la planta cambia de plantilla con un clic; solo se selecciona lo que la vista enseña sin gris; la trama de los pavimentos, solo en presentación.
+
+**Pendiente**: llevar las plantillas a la biblioteca entre proyectos; la misma pastilla en secciones, alzados y la vista 3D.
 

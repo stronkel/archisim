@@ -495,6 +495,9 @@ pub struct ViewStyle {
     /// §13.5): while it does, its look is the template's, and changing
     /// the template changes every view that follows it.
     pub template: Option<crate::ViewTemplateId>,
+    /// The installations it shows, by group (version 92): empty, all of
+    /// them; else only those (a template per installation).
+    pub systems: BTreeSet<crate::ServiceGroup>,
 }
 
 impl ViewStyle {

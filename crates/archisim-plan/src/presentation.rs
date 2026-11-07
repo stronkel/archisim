@@ -273,7 +273,18 @@ mod tests {
         m.set_room(r).unwrap();
         let plain = crate::render_plan(&m, l, &crate::PlanOptions::default());
         assert!(plain.contains("rgb(230,120,90)"), "the brick's own colour");
-        assert!(plain.contains("#e6d2b4"), "the decking's background");
+        // The working plan leaves the floor patterns out; a presentation
+        // view or sheet draws them.
+        assert!(!plain.contains("#e6d2b4"), "no floor pattern while working");
+        let presented = crate::render_plan(
+            &m,
+            l,
+            &crate::PlanOptions {
+                presented: true,
+                ..Default::default()
+            },
+        );
+        assert!(presented.contains("#e6d2b4"), "the decking's background");
         let mut look = PresentationStyle::new("Bosque");
         look.poche = Some([47, 79, 62]);
         let id = m.add_presentation_style(look).unwrap();

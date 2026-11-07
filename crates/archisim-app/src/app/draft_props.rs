@@ -660,6 +660,7 @@ impl ArchiSimApp {
                         .map_or("Ninguna".to_string(), |t| t.name.clone());
                     egui::ComboBox::from_id_salt("view-template")
                         .width(w - 8.0)
+                        .truncate()
                         .selected_text(shown)
                         .show_ui(ui, |ui| {
                             if ui

@@ -626,6 +626,9 @@ pub fn add_library(m: &mut Model) -> Result<Library, ModelError> {
     // The studio standards' schemes and a template per discipline, to be
     // chosen by view and by sheet (last so older ids stay put).
     standards::add_schemes(m);
+    // The plans of a new project without the installations, which have a
+    // template each.
+    standards::set_architecture_plans(m);
     Ok(Library {
         curtain,
         void,

@@ -119,6 +119,9 @@ pub struct PlanOptions {
     pub ceiling: bool,
     /// Leave out the underlays (an underlay's own drawing, E7).
     pub skip_underlays: bool,
+    /// Drawn for presentation (on a sheet with a presentation style):
+    /// the rooms' floor patterns are drawn as in a view with one.
+    pub presented: bool,
 }
 
 /// Width of a hairline on paper, in millimetres, for [`PlanOptions::thin_lines`]
@@ -143,6 +146,7 @@ impl Default for PlanOptions {
             shadows: None,
             ceiling: false,
             skip_underlays: false,
+            presented: false,
         }
     }
 }
@@ -713,7 +717,12 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
         }
     }
     overrides::close(&mut s);
-    if show(archisim_core::Category::Rooms) && !ceiling {
+    // The rooms' floor patterns only in views with a presentation style:
+    // the working plans stay clear (and easy to pick in).
+    if show(archisim_core::Category::Rooms)
+        && !ceiling
+        && (options.style.presentation.is_some() || options.presented)
+    {
         overrides::group(&mut s, archisim_core::Category::Rooms, |s| {
             rooms::draw_floor_fills(s, model, level, k)
         });
@@ -854,8 +863,17 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
             visible(lo, hi)
         };
         let walls: Vec<&[Point2]> = geos.iter().map(|g| g.outline.as_slice()).collect();
+        // The lamps placed as objects are light points of the electricity.
+        let st = &options.style;
+        let lamps_shown = !st
+            .hidden_disciplines
+            .contains(&archisim_core::ElementDiscipline::Services)
+            && (st.systems.is_empty()
+                || st
+                    .systems
+                    .contains(&archisim_core::ServiceGroup::Electricity));
         overrides::group(&mut s, archisim_core::Category::Services, |s| {
-            services::draw_services(s, model, level, k, &vis, &walls)
+            services::draw_services(s, model, level, k, &vis, &walls, lamps_shown)
         });
     }
     if show(archisim_core::Category::Grids) {
@@ -2904,6 +2922,47 @@ mod tests {
         CutPattern as Pattern, DoorOperation, Hand, NewOpening, NewOpeningType, OpeningKind,
         WindowOperation,
     };
+
+    #[test]
+    fn a_view_shows_one_installation_at_a_time() {
+        use archisim_core::{NewRun, ServiceGroup, ServiceSystem};
+        let mut m = Model::new("Instalaciones");
+        let l = m.add_level("Planta baja", 0.0);
+        let run = |m: &mut Model, system, y: f64| {
+            m.add_run(NewRun {
+                level: l,
+                system,
+                path: vec![Point2::new(0.0, y), Point2::new(5.0, y)],
+                elevation: 2.5,
+                width: 0.1,
+                height: 0.1,
+                slope: 0.0,
+            })
+            .unwrap()
+        };
+        run(&mut m, ServiceSystem::ColdWater, 0.0);
+        run(&mut m, ServiceSystem::ExhaustAir, 2.0);
+        let colour = |s: ServiceSystem| {
+            let [r, g, b] = s.color();
+            format!("stroke=\"#{r:02x}{g:02x}{b:02x}\"")
+        };
+        let (water, air) = (ServiceSystem::ColdWater, ServiceSystem::ExhaustAir);
+        let id = |s: ServiceSystem| colour(s);
+        let all = render_plan(&m, l, &PlanOptions::default());
+        assert!(all.contains(&id(water)) && all.contains(&id(air)), "{all}");
+        let mut o = PlanOptions::default();
+        o.style.systems = [ServiceGroup::Water].into();
+        let only = render_plan(&m, l, &o);
+        assert!(only.contains(&id(water)));
+        assert!(!only.contains(&id(air)));
+        // An architecture view, none of them.
+        o.style = archisim_core::ViewStyle {
+            discipline: Some(archisim_core::ElementDiscipline::Architecture),
+            ..Default::default()
+        };
+        let arq = render_plan(&m, l, &o);
+        assert!(!arq.contains(&id(water)) && !arq.contains(&id(air)));
+    }
 
     #[test]
     fn hatching_is_cut_to_any_polygon() {

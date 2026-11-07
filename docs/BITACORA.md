@@ -6,6 +6,27 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-07 (122) · Planos limpios: una plantilla por disciplina y por instalación
+
+Rama `bloque/vistas-limpias`, con pull request. **Formato versión 92** (`systems` en el estilo de las vistas y `plan_template` en el proyecto). Sin cambios de IFC. `docs/GRAFICOS.md`, `docs/INTERFAZ.md` §13.5.
+
+Pedido de Antonio al navegar Florence Street: con todo metido en la planta es casi imposible seleccionar; las tramas de los suelos y las instalaciones deberían ir en plantillas por especialidad, y una por cada instalación.
+
+- **Plantas en Arquitectura.** Las plantas siguen por defecto la plantilla Arquitectura, sin instalaciones, ni circuitos ni puntos de luz. Vale para los proyectos nuevos y para Florence.
+- **Una plantilla por instalación.** Electricidad, Fontanería, Saneamiento, Ventilación, Climatización, Contra incendios y Redes urbanas. Cada una enseña solo esa instalación, con la arquitectura en gris.
+- **Pastilla de plantilla** arriba a la izquierda de la planta: un clic y se cambia. Desde ahí también se fija la de todas las plantas y, en proyectos de antes, se traen las plantillas que faltan.
+- **Solo se selecciona lo que se ve.**
+  - Lo que la vista deja fuera o pone en gris no se coge, ni con un clic ni con ventana.
+  - El candado de Instalaciones del navegador bloquea ya tuberías y aparatos; antes no los veía.
+- **Pavimentos.** La trama de los locales solo sale en vistas y planos con estilo de presentación.
+- Pendiente:
+  - la misma pastilla en secciones, alzados y 3D;
+  - el filtro por instalación en la vista 3D.
+- Probar:
+  1. `cargo run --release -p archisim-cli -- edificio out/edificio` y abrir `out/edificio/edificio.archisim`. En la planta 1, «Arquitectura ▾» arriba a la izquierda: sin tuberías, circuitos ni tramas de suelo, y los muros y puertas se seleccionan sin coger otra cosa.
+  2. En la pastilla, elegir Fontanería: solo las tuberías de agua, con la arquitectura en gris. Una tubería se selecciona; un muro, no. Probar Electricidad y Ventilación.
+  3. Abrir un proyecto de antes, pulsar la pastilla y «Traer las plantillas de disciplina e instalaciones».
+
 ## 2026-11-07 (121) · Ventilación: salidas de los conductos, ventilación híbrida y garajes
 
 Rama `bloque/ventilacion-salidas`, encima de `bloque/planos-instalaciones` (PR #173): su pull request lleva también los cambios de aquel. **Formato versión 91** (`ventilation`: sistema y zona). Sin cambios de IFC. `docs/INSTALACIONES.md` §6, `docs/CTE.md`, `docs/FORMATO_ARCHISIM.md`.

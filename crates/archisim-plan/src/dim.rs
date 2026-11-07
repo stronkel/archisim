@@ -53,6 +53,15 @@ pub(crate) fn begin(model: &Model, style: &ViewStyle) -> Guard {
         if !style.hidden_disciplines.is_empty() {
             h.extend(ids().filter(|id| model.hidden_by_discipline(&style.hidden_disciplines, *id)));
         }
+        if !style.systems.is_empty() {
+            h.extend(
+                model
+                    .runs()
+                    .map(|r| r.id.0)
+                    .chain(model.devices().map(|d| d.id.0))
+                    .filter(|id| model.hidden_by_group(&style.systems, *id)),
+            );
+        }
     });
     Guard
 }

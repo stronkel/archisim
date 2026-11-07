@@ -991,6 +991,7 @@ fn draw_viewport(
         px_per_mm,
         title: false,
         ceiling: v.ceiling,
+        presented: sheet.presentation.is_some(),
         ..PlanOptions::default()
     };
     let plan = match &section {

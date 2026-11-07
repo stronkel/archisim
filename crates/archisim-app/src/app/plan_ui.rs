@@ -115,6 +115,7 @@ impl ArchiSimApp {
         }
 
         self.draw_overlays(&ctx, &painter, rect);
+        self.template_pill(&ctx, rect);
         self.temp_edit_ui(&ctx);
         self.terrain_z_editor(&ctx, rect);
 
@@ -590,10 +591,15 @@ impl ArchiSimApp {
                 self.under_cursor = if self.window_start.is_some() {
                     Vec::new()
                 } else {
-                    crate::pick::pick_all(&self.ed, self.ed.level, raw, reach)
-                        .into_iter()
-                        .filter(|e| !self.ed.hidden().contains(e))
-                        .collect()
+                    {
+                        let style = self.view_style.effective();
+                        let model = self.ed.model();
+                        crate::pick::pick_all(&self.ed, self.ed.level, raw, reach)
+                            .into_iter()
+                            .filter(|e| !self.ed.hidden().contains(e))
+                            .filter(|e| crate::pick::pickable(model, &style, *e))
+                            .collect()
+                    }
                 };
                 // Tab goes on to the next element under the cursor while it
                 // stays where Tab was pressed.
@@ -1482,6 +1488,8 @@ impl ArchiSimApp {
                     if let (Some(a), Some(c)) = (self.window_start.take(), self.cursor) {
                         let mut found = in_window(&self.ed, self.ed.level, a, c.point);
                         found.retain(|e| !self.ed.hidden().contains(e));
+                        let style = self.view_style.effective();
+                        found.retain(|e| crate::pick::pickable(self.ed.model(), &style, *e));
                         if !shift {
                             self.ed.selection.clear();
                         }

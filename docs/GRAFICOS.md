@@ -72,6 +72,27 @@ Botón con tres líneas de grosor creciente en la barra inferior, junto a los fo
 - Falsos techos como elementos, con su altura y su trama, para la planta de techos.
 
 
+## Planos limpios: una plantilla por disciplina y por instalación (7/11/2026, formato 92)
+
+Lo que pidió Antonio al navegar Florence Street: con todo metido es casi imposible seleccionar; la trama de los suelos, las instalaciones y los circuitos deben verse en plantillas propias, una por especialidad y una por cada instalación.
+
+- **Las plantas siguen una plantilla por defecto.** El proyecto guarda la plantilla que siguen las plantas que no tienen su propio aspecto. En los proyectos nuevos (y en Florence Street) es **Arquitectura**, que deja fuera las instalaciones, sus circuitos y sus puntos de luz.
+- **Una plantilla por instalación.** Además de Arquitectura, Estructura, Instalaciones (todas) y Urbanización, hay siete: Instalaciones · Electricidad, · Fontanería, · Saneamiento, · Ventilación, · Climatización, · Contra incendios y · Redes urbanas. Cada una enseña solo esa instalación, con la arquitectura en gris.
+  - Las tuberías y conductos van por su sistema: agua fría y caliente a Fontanería, residuales y pluviales a Saneamiento, calefacción e impulsión y retorno de aire a Climatización, extracción a Ventilación.
+  - Los aparatos van por su clase: mecanismos, cuadros, puntos de luz, lámparas y placas solares a Electricidad; contadores, llaves, montantes, termos, depósitos, bombas y captadores a Fontanería; bajantes a Saneamiento; radiadores, rejillas y difusores a Climatización; aireadores, bocas, conductos de extracción y extractores a Ventilación; rociadores, BIE, extintores, detectores, pulsadores, sirenas, emergencias y señales a Contra incendios.
+- **Cambiar de plantilla desde la vista.** Arriba a la izquierda de cada planta hay una pastilla con la plantilla que sigue («Arquitectura ▾»). Al pulsarla salen:
+  - las disciplinas;
+  - las instalaciones una a una;
+  - las demás plantillas;
+  - «Aspecto propio (todo)»;
+  - «Usarla en todas las plantas», que la hace la plantilla por defecto de las plantas.
+
+  En un proyecto de antes, «Traer las plantillas de disciplina e instalaciones» añade las que le faltan y pone Arquitectura en todas las plantas.
+- **Solo se selecciona lo que se ve.** Lo que la vista deja fuera o pone en gris no se puede seleccionar, ni con un clic ni con ventana. En Arquitectura no se coge una tubería; en Fontanería no se coge un muro. Es como la «subyacente» de Revit. El candado de las disciplinas del navegador ya bloquea también tuberías y aparatos.
+- **La trama de los pavimentos solo en presentación.** Los pavimentos de los locales se dibujan en las vistas con estilo de presentación y en los planos con estilo de presentación; en las plantas de trabajo, no.
+
+Para el programador: `ServiceGroup` (`of_system`, `of_device`) y `Model::hidden_by_group` en `archisim-core::model::services`; `ViewStyle::systems`; `Model::plan_template`/`set_plan_template` (y `level_style`, que sin aspecto propio da el de la plantilla); `PlanOptions::presented`; las plantillas en `archisim_library::standards` (`SERVICE_TEMPLATES`, `set_architecture_plans`); en la app, `views_ui::template_pill` y `pick::pickable`/`pick::category`.
+
 ## Normas por vista y cajetines (noviembre de 2026, formato 74)
 
 Lo que pidió Antonio al ver las normas Hilo y Faro: que se elijan **por vista**, como los estilos Bosque o Terracota, y que los planos lleven el cajetín que quieran.

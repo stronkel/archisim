@@ -5460,10 +5460,16 @@ fn presentation_styles_and_floor_fills() {
     h.app.ed.set_room(r, "Pavimento").unwrap();
     h.app.ed.selection = [Element::Room(room)].into_iter().collect();
     h.frame();
+    // The working plan leaves the floor patterns out; a presentation
+    // style draws them.
     h.app.view_style.presentation = None;
+    let svg = archisim_plan::render_plan(h.model(), level, &h.app.plan_export_options(50.0));
+    assert!(!svg.contains("floor-fills"));
+    h.app.view_style.presentation = Some(id);
     let svg = archisim_plan::render_plan(h.model(), level, &h.app.plan_export_options(50.0));
     assert!(svg.contains("floor-fills"));
     assert!(svg.contains("#d2cdc3"));
+    h.app.view_style.presentation = None;
     // P2: trees drawn as see-through canopies in a presentation view, each
     // its own; in the technical one too since v0.36 (their own drawing by
     // default), unless the type says «según el estilo».
@@ -10682,4 +10688,52 @@ fn views_on_sheets_follow_a_template() {
     h.app.views.vg_open = false;
     h.frame();
     assert_eq!(h.app.views.vg_viewport, None);
+}
+
+/// A new project's plans follow «Arquitectura»: the installations are
+/// neither drawn nor picked there; the template of their kind shows and
+/// picks them (`docs/INTERFAZ.md` §13.5).
+#[test]
+fn installations_are_picked_only_in_their_template() {
+    let mut h = Harness::new(Editor::new_project());
+    let level = h.app.ed.level;
+    let run = h
+        .app
+        .ed
+        .transact("Tubería", |m| {
+            m.add_run(archisim_core::NewRun {
+                level,
+                system: archisim_core::ServiceSystem::ColdWater,
+                path: vec![p(2.0, 2.0), p(8.0, 2.0)],
+                elevation: 0.5,
+                width: 0.03,
+                height: 0.03,
+                slope: 0.0,
+            })
+        })
+        .unwrap();
+    h.frame();
+    let arq = h.model().plan_template().expect("the plans' template");
+    assert_eq!(h.app.view_style.template, Some(arq));
+    h.move_to(p(5.0, 2.0));
+    h.frame();
+    assert!(!h.app.under_cursor.contains(&Element::Run(run)));
+    // Fontanería shows it and lets it be picked; Electricidad does not.
+    let template = |h: &Harness, n: &str| {
+        h.model()
+            .view_templates()
+            .find(|t| t.name == n)
+            .map(|t| t.id)
+            .unwrap()
+    };
+    let water = template(&h, "Instalaciones · Fontanería");
+    h.app.apply_template(Some(water));
+    h.move_to(p(5.0, 2.0));
+    h.frame();
+    assert!(h.app.under_cursor.contains(&Element::Run(run)));
+    let power = template(&h, "Instalaciones · Electricidad");
+    h.app.apply_template(Some(power));
+    h.move_to(p(5.0, 2.0));
+    h.frame();
+    assert!(!h.app.under_cursor.contains(&Element::Run(run)));
 }
