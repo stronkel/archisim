@@ -645,24 +645,52 @@ impl ArchiSimApp {
             .view_templates()
             .map(|t| (t.id, t.name.clone()))
             .collect();
+        let following = self.followed_template();
+        let followers = following
+            .as_ref()
+            .map_or(0, |t| self.ed.model().template_followers(t.id));
         group(ui, "view-representation", "Representación", |ui| {
             row(
                 ui,
                 "Plantilla",
-                "Da a la vista todo el aspecto guardado en una plantilla: visibilidad, gráficos, presentación y nivel de detalle",
+                "La plantilla de vista que sigue: su aspecto (visibilidad, gráficos, presentación, nivel de detalle y disciplina) es el de la plantilla y cambia con ella. Ninguna: aspecto propio",
                 |ui, w| {
+                    let shown = following
+                        .as_ref()
+                        .map_or("Ninguna".to_string(), |t| t.name.clone());
                     egui::ComboBox::from_id_salt("view-template")
                         .width(w - 8.0)
-                        .selected_text("Aplicar…")
+                        .selected_text(shown)
                         .show_ui(ui, |ui| {
+                            if ui
+                                .selectable_label(following.is_none(), "Ninguna: aspecto propio")
+                                .clicked()
+                            {
+                                apply = Some(None);
+                            }
                             for (id, name) in &templates {
-                                if ui.selectable_label(false, name).clicked() {
-                                    apply = Some(*id);
+                                let on = following.as_ref().is_some_and(|t| t.id == *id);
+                                if ui.selectable_label(on, name).clicked() {
+                                    apply = Some(Some(*id));
                                 }
                             }
                         });
                 },
             );
+            if let Some(t) = &following {
+                props::note(
+                    ui,
+                    &format!(
+                        "Sigue «{}»{}: lo que cambies aquí cambia la plantilla.",
+                        t.name,
+                        if followers > 1 {
+                            format!(" con {} vistas más", followers - 1)
+                        } else {
+                            String::new()
+                        }
+                    ),
+                );
+            }
             open_styles = self.presentation_row(ui);
             let style = &mut self.view_style;
             row(
@@ -701,7 +729,7 @@ impl ArchiSimApp {
             }
             ui.horizontal_wrapped(|ui| {
                 ui.add_space(4.0);
-                let r = ui.button("Visibilidad y gráficos…").on_hover_text(
+                let r = ui.button("Representación… (VG)").on_hover_text(
                     "Qué se ve y cómo se dibuja cada categoría y capa de dibujo en esta vista (VG)",
                 );
                 super::missions_ui::mark(ui.ctx(), "button:Visibilidad y gráficos…", r.rect);
@@ -726,6 +754,7 @@ impl ArchiSimApp {
         }
         if open_vg {
             self.views.vg_open = true;
+            self.views.vg_viewport = self.views.styling_viewport;
         }
         if let Some(id) = apply {
             self.apply_template(id);

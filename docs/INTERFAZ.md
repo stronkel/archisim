@@ -449,7 +449,7 @@ Antonio: «no funciona del todo como quiero; cuando edito un contorno no selecci
 - Las medidas de las tarjetas (longitud, altura, espesor; canto y **cara superior** del forjado; antepecho) ya no se repiten en los grupos de abajo.
 - Plegados al empezar: caras y división, perfil en alzado, capas, huecos e identidad. En el muro, Restricciones y Construcción van antes que las caras y el perfil.
 
-### 13.5 Propuesta: una sola manera de decidir cómo se dibuja un plano (pendiente de Antonio)
+### 13.5 Una sola manera de decidir cómo se dibuja un plano (aprobada por Antonio el 6/11/2026; primera vuelta hecha)
 
 Hoy hay cuatro sitios que se pisan: Visibilidad y gráficos (por vista), plantillas de vista (solo guardan Visibilidad y gráficos), estilos de presentación (papel, paleta, macizado) y normas gráficas (grosores por escala, del proyecto). La propuesta es ordenarlos en tres niveles, como Revit:
 
@@ -460,4 +460,14 @@ Hoy hay cuatro sitios que se pisan: Visibilidad y gráficos (por vista), plantil
 | **Vista** | Qué plantilla usa y, si hace falta, algún retoque suyo | Propiedades: Plantilla ▾ · Editar… · Escala |
 
 El estilo de presentación dejaría de ser una cosa aparte: sería una pestaña de la plantilla. Un plano de albañilería, uno de superficies o uno de presentación para el cliente serían tres plantillas.
+
+**Hecho en la primera vuelta** (rama `bloque/representacion`, formato versión 90):
+- Las vistas **siguen** una plantilla (antes solo se copiaba). Mientras la siguen, lo que se cambie en su aspecto (en Propiedades o en la ventana) cambia la plantilla y todas las vistas que la siguen. «Ninguna» la deja con su aspecto como propio. Borrar una plantilla deja a sus vistas su último aspecto.
+- La ventana **Representación** (VG, antes «Visibilidad y gráficos») arriba dice qué plantilla sigue la vista, cuántas más la siguen, y deja crear una plantilla con el aspecto de la vista (que pasa a seguirla). Tres páginas: **Categorías del modelo**, **Capas de dibujo 2D**, **Vista y presentación** (nivel de detalle, disciplina de la vista, estilo de presentación y sus estilos). **Normas gráficas…**, del proyecto, a un botón.
+- En Propiedades, **Plantilla** dice la que sigue (o Ninguna) y la cambia; debajo, cuántas vistas la siguen.
+- Las plantillas guardan también nivel de detalle, presentación y disciplina (ya lo hacían); no guardan escala ni plano de corte, que son de cada vista.
+
+**Segunda vuelta** (rama `bloque/plantillas-planos`): las vistas colocadas en los planos eligen y siguen plantilla desde sus propiedades, y su «Representación… (VG)» las edita a ellas.
+
+**Pendiente**: llevar las plantillas a la biblioteca entre proyectos.
 

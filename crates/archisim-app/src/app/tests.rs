@@ -6209,7 +6209,7 @@ fn views_graphics_and_reference_planes() {
         .find(|t| t.name == "Blanco y negro")
         .map(|t| t.id)
         .expect("«Blanco y negro» template");
-    h.app.apply_template(ad5);
+    h.app.apply_template(Some(ad5));
     h.frame();
     h.frame();
     assert_eq!(
@@ -10531,4 +10531,154 @@ fn the_climate_window_changes_the_zone() {
         .find(|e| e.kind == archisim_mep::thermal::Kind::Wall)
         .unwrap();
     assert!((wall.limit - 0.37).abs() < 1e-9);
+
+/// Three levels of representation (`docs/INTERFAZ.md` §13.5): a view
+/// follows a template; what is changed in its look changes the template and
+/// every view that follows it; leaving it keeps the look as its own.
+#[test]
+fn views_follow_a_template() {
+    let mut h = Harness::new(Editor::new_project());
+    h.frame();
+    let level = h.app.ed.level;
+    let t = h
+        .model()
+        .view_templates()
+        .find(|t| t.name == "Blanco y negro")
+        .map(|t| t.id)
+        .expect("a template in the starter project");
+    h.app.apply_template(Some(t));
+    h.frame();
+    h.frame();
+    assert_eq!(h.model().level_style(level).template, Some(t));
+    // A saved view of the same plan follows it too.
+    h.app.duplicate_view(archisim_core::PlanKind::Floor);
+    h.frame();
+    h.frame();
+    let saved = h.app.active_saved().expect("a saved view");
+    assert_eq!(h.model().plan_view(saved).unwrap().style.template, Some(t));
+    // Its detail changed here: the template and the level's plan with it.
+    h.app.view_style.detail = archisim_core::Detail::Coarse;
+    h.frame();
+    h.frame();
+    assert_eq!(
+        h.model().view_template(t).unwrap().style.detail,
+        archisim_core::Detail::Coarse
+    );
+    assert_eq!(
+        h.model().level_style(level).detail,
+        archisim_core::Detail::Coarse
+    );
+    // The window draws its three pages.
+    for tab in [
+        super::views_ui::VgTab::Categories,
+        super::views_ui::VgTab::Layers,
+        super::views_ui::VgTab::Look,
+    ] {
+        h.app.views.vg_open = true;
+        h.app.views.set_tab(tab);
+        h.frame();
+    }
+    h.app.views.vg_open = false;
+    // Leaving it: the view keeps the look; the template does not follow
+    // its changes any more.
+    h.app.apply_template(None);
+    h.frame();
+    h.app.view_style.detail = archisim_core::Detail::Fine;
+    h.frame();
+    h.frame();
+    assert_eq!(
+        h.model().view_template(t).unwrap().style.detail,
+        archisim_core::Detail::Coarse
+    );
+    assert_eq!(h.model().plan_view(saved).unwrap().style.template, None);
+}
+
+#[test]
+fn views_on_sheets_follow_a_template() {
+    let mut h = Harness::new(Editor::new_project());
+    h.frame();
+    let level = h.app.ed.level;
+    let t = h
+        .model()
+        .view_templates()
+        .find(|t| t.name == "Blanco y negro")
+        .map(|t| t.id)
+        .expect("a template in the starter project");
+    // The level's plan follows the template.
+    h.app.apply_template(Some(t));
+    h.frame();
+    h.frame();
+    assert_eq!(h.model().level_style(level).template, Some(t));
+    // The same plan on two sheets.
+    let mut views = Vec::new();
+    for _ in 0..2 {
+        h.app.new_sheet();
+        h.frame();
+        h.frame();
+        let sheet = h.model().sheets().last().unwrap().id;
+        let v = h
+            .app
+            .ed
+            .add_viewport(archisim_core::NewViewport {
+                sheet,
+                level,
+                section: None,
+                axo: None,
+                scale: 100.0,
+                cut_plane: 1.0,
+                crop: None,
+                centre: p(0.3, 0.3),
+            })
+            .unwrap();
+        views.push(v);
+    }
+    // The first one is chosen; its properties take the template.
+    h.app.sheet_sel = Some(super::sheet_ui::Placed::View(views[0]));
+    h.frame();
+    h.app.views.styling_viewport = Some(views[0]);
+    let v = h.model().viewport(views[0]).unwrap().clone();
+    h.app.view_style = v.style.clone();
+    h.app.apply_template(Some(t));
+    let mut followed = v.clone();
+    followed.style = h.app.view_style.clone();
+    h.app.ed.set_viewport(followed, "Plantilla").unwrap();
+    h.frame();
+    assert_eq!(
+        h.model().viewport(views[0]).unwrap().style.template,
+        Some(t)
+    );
+    // Its look changed from the window Representación: the template, the
+    // plan and the views that follow it change with it.
+    h.app.views.vg_open = true;
+    h.app.views.vg_viewport = Some(views[0]);
+    h.frame();
+    h.app.views.vg_pending = None;
+    let mut look = h.model().viewport(views[0]).unwrap().style.clone();
+    look.detail = archisim_core::Detail::Coarse;
+    h.app.views.set_pending(views[0], look);
+    h.frame();
+    h.frame();
+    assert_eq!(
+        h.model().view_template(t).unwrap().style.detail,
+        archisim_core::Detail::Coarse
+    );
+    assert_eq!(
+        h.model().viewport(views[0]).unwrap().style.detail,
+        archisim_core::Detail::Coarse
+    );
+    assert_eq!(
+        h.model().level_style(level).detail,
+        archisim_core::Detail::Coarse
+    );
+    // The other sheet's view took its plan's look when placed, template
+    // included, so it follows as well.
+    assert_eq!(
+        h.model().viewport(views[1]).unwrap().style.detail,
+        archisim_core::Detail::Coarse
+    );
+    assert_eq!(h.model().template_followers(t), 3);
+    // Closed, the window goes back to the plans.
+    h.app.views.vg_open = false;
+    h.frame();
+    assert_eq!(h.app.views.vg_viewport, None);
 }

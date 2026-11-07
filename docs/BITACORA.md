@@ -228,6 +228,47 @@ Rama `bloque/elegir-linea`, con pull request. Sin cambios de formato ni de IFC. 
 4. Elige las cuatro caras interiores de una habitación: el contorno se cierra solo en las esquinas.
 5. Prueba **Al núcleo** con un muro de fachada y un **Desfase** de 0,10.
 
+## 2026-11-06 (115) · Plantillas de vista en los planos
+
+Rama `bloque/plantillas-planos`, sobre `bloque/representacion` (#166), con pull request. Sin cambios de formato (la versión 90 —86 en la rama— ya guardaba la plantilla de las vistas de los planos) ni de IFC.
+
+**Hecho**
+- Una vista colocada en un plano elige su **plantilla** en Propiedades → Representación, como una planta: la sigue, y lo que se cambie en su aspecto cambia la plantilla y todas las vistas que la siguen, en los planos o fuera de ellos.
+- **Representación… (VG)** abierto desde las propiedades de una vista del plano edita esa vista (su título lo dice: «… (en el plano)»), no la planta de la pestaña.
+- Una planta colocada en un plano toma el aspecto de su planta, plantilla incluida, así que la sigue desde el principio.
+- Prueba `views_on_sheets_follow_a_template` (la plantilla, la planta y las dos vistas de dos planos cambian juntas).
+
+**Pendiente**
+- Plantillas en la biblioteca entre proyectos (y decidir si guardan escala y plano de corte).
+
+**Qué debe probar Antonio**
+1. `cargo run --release -p archisim-app -- out/demo.archisim` y abre el plano A-01 en el Navegador.
+2. Pulsa la planta del plano: Propiedades → Representación → **Plantilla** → «Albañilería». El plano se redibuja con ese aspecto.
+3. **Representación… (VG)**: el título acaba en «(en el plano)». Apaga «Barandillas»: desaparecen del plano y de la plantilla.
+4. Pon la Planta baja (la pestaña) también en «Albañilería» y apaga ahí otra categoría: el plano A-01 cambia igual.
+
+---
+
+## 2026-11-06 (114) · Representación en tres niveles: proyecto, plantilla y vista
+
+Rama `bloque/representacion`, con pull request. **Formato `.archisim` versión 86 en la rama, 90 al unirla a `main` tras las instalaciones** (el estilo de una vista guarda la plantilla que sigue). Sin cambios de IFC. Antonio aprobó la propuesta de `docs/INTERFAZ.md` §13.5.
+
+**Hecho**
+- Las vistas **siguen** su plantilla de vista, como en Revit: cambiar su aspecto cambia la plantilla y todas las que la siguen; «Ninguna» la deja con aspecto propio; borrar la plantilla deja a las vistas su aspecto.
+- Ventana **Representación** (VG): plantilla arriba (cuál sigue, cuántas más, crear una con este aspecto, borrar) y tres páginas: Categorías del modelo, Capas de dibujo 2D, Vista y presentación (nivel de detalle, disciplina, estilo de presentación). Normas gráficas del proyecto, a un botón.
+- Propiedades → Representación: **Plantilla** con la que sigue y cuántas vistas más; el botón «Representación… (VG)».
+- Pruebas: núcleo (las vistas cambian con su plantilla, conservan lo de la sesión y al borrarla se quedan su aspecto), fichero (versión 90) y aplicación (seguir, cambiar el detalle desde una vista, las tres páginas, dejar de seguir).
+
+**Pendiente**
+- Elegir plantilla en las vistas de los planos; plantillas en la biblioteca entre proyectos.
+
+**Qué debe probar Antonio**
+1. `cargo run --release -p archisim-app -- out/demo.archisim`.
+2. Sin nada elegido: Propiedades → Representación → **Plantilla**: elige «Albañilería». Abre **Representación… (VG)**: arriba dice que la vista la sigue.
+3. Abre otra vista guardada de la planta (Navegador) y ponle también «Albañilería». En una de ellas apaga «Objetos y mobiliario» o cambia el nivel de detalle: la otra cambia igual.
+4. En una de ellas, Plantilla → **Ninguna** y cambia algo: la otra ya no cambia.
+5. Página **Vista y presentación**: nivel de detalle, disciplina y estilo de presentación en un sitio.
+
 ---
 
 ## 2026-11-06 (112) · Ventanas que no saltan, entorno grande en 3D y «Arreglar lo que no cumple»

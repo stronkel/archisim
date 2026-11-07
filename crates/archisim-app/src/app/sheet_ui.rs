@@ -1109,8 +1109,11 @@ impl ArchiSimApp {
             }
         });
         // Visibility of this view.
+        // Its template too: the same card as a plan's, on this view.
         let saved = std::mem::replace(&mut self.view_style, new.style.clone());
+        self.views.styling_viewport = Some(v.id);
         self.visibility_group(ui);
+        self.views.styling_viewport = None;
         new.style = std::mem::replace(&mut self.view_style, saved);
         if from_camera {
             let a = self.camera_axo();
@@ -1122,7 +1125,15 @@ impl ArchiSimApp {
             ));
         }
         if new != v {
-            let r = self.ed.set_viewport(new, "Cambiar vista del plano");
+            // A view that follows a template changes the template, and so
+            // every view that follows it, here or in other sheets.
+            let restyled = new.style != v.style;
+            let r = self.ed.transact("Cambiar vista del plano", |m| {
+                if restyled {
+                    super::views_ui::to_template(m, &new.style)?;
+                }
+                m.set_viewport(new)
+            });
             self.report(r, "Vista cambiada.");
         }
         ui.add_space(4.0);

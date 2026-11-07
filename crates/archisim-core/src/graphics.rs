@@ -491,6 +491,10 @@ pub struct ViewStyle {
     /// structure. Kept with the view, unlike `focus` and
     /// `hidden_disciplines`, which follow the session.
     pub discipline: Option<crate::ElementDiscipline>,
+    /// The view template it follows (version 86, `docs/INTERFAZ.md`
+    /// §13.5): while it does, its look is the template's, and changing
+    /// the template changes every view that follows it.
+    pub template: Option<crate::ViewTemplateId>,
 }
 
 impl ViewStyle {
