@@ -6,6 +6,26 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-07 (123) · Comprobaciones y cálculos que se leen de un vistazo
+
+Rama `bloque/informes-visuales`, con pull request (independiente del #176). Sin cambios de formato ni de IFC. `docs/CTE.md` («Cómo se lee la ventana»).
+
+Pedido de Antonio: las tablas de la Comprobación CTE y de los cálculos de estructura e instalaciones son duras de leer; deberían ser más agradables y visuales.
+
+- **Visor común** (`app/report_view`) para todas las ventanas de cálculo: estructura, eléctrico, fontanería, saneamiento, ventilación y envolvente.
+  - Pinta los mismos bloques que el anejo de cálculo y la memoria de instalaciones, así que la pantalla y el PDF dicen lo mismo.
+  - Arriba, una tarjeta con el veredicto («Todo cumple», «N cosas no cumplen»), lo que cumple, lo que hay que revisar y lo que no, y una barra de colores.
+  - Cada apartado en su tarjeta plegable con su recuento. Las tablas van a rayas, con los textos a la izquierda y las cifras a la derecha, y en rojo lo que no cumple o se queda corto.
+  - Las comprobaciones llevan una etiqueta de color.
+  - «Ver como texto» devuelve el texto de antes.
+- **Comprobación CTE.**
+  - Arriba, la misma tarjeta.
+  - Una tarjeta por documento básico con sus cifras y su barra; al pulsarla se ve solo ese documento, abierto.
+  - Las comprobaciones en filas: etiqueta, elemento, qué se comprueba, y el valor frente a lo exigido.
+- Probar:
+  1. Abrir Florence Street (o cualquier proyecto) y Colaboración → Comprobación CTE. Pulsar la tarjeta de Agua y saneamiento: solo ese documento, con sus filas.
+  2. Colaboración → Cálculo de ventilación y Cálculo de la estructura: la tarjeta de arriba, los apartados plegables y las tablas. Probar «Ver como texto».
+
 ## 2026-11-07 (121) · Ventilación: salidas de los conductos, ventilación híbrida y garajes
 
 Rama `bloque/ventilacion-salidas`, encima de `bloque/planos-instalaciones` (PR #173): su pull request lleva también los cambios de aquel. **Formato versión 91** (`ventilation`: sistema y zona). Sin cambios de IFC. `docs/INSTALACIONES.md` §6, `docs/CTE.md`, `docs/FORMATO_ARCHISIM.md`.

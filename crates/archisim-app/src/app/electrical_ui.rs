@@ -13,8 +13,10 @@ use super::*;
 pub struct ElectricalWindow {
     pub open: bool,
     /// The calculation of a revision of the model: (revision, text, number
-    /// of boards).
-    results: Option<(u64, String, usize)>,
+    /// of boards, the blocks drawn).
+    results: Option<(u64, String, usize, Vec<archisim_struct::report::Block>)>,
+    /// Shown as typed text.
+    as_text: bool,
 }
 
 impl ArchiSimApp {
@@ -86,10 +88,11 @@ impl ArchiSimApp {
         if self.electrical.results.as_ref().is_none_or(|r| r.0 != rev) {
             let model = self.ed.shown();
             let text = archisim_mep::electrical::report(&model);
-            let boards = archisim_mep::electrical::installations(&model).len();
-            self.electrical.results = Some((rev, text, boards));
+            let all = archisim_mep::electrical::installations(&model);
+            let blocks = archisim_plan::services_report::electricity(&model, &all);
+            self.electrical.results = Some((rev, text, all.len(), blocks));
         }
-        let (_, text, boards) = self.electrical.results.clone().expect("just made");
+        let (_, text, boards, blocks) = self.electrical.results.clone().expect("just made");
         let (mut pdf, mut dxf) = (false, false);
         ui.horizontal(|ui| {
             ui.label(match boards {
@@ -112,11 +115,15 @@ impl ArchiSimApp {
                 }
             });
         });
-        egui::ScrollArea::vertical()
-            .auto_shrink([false, false])
-            .show(ui, |ui| {
-                ui.add(egui::Label::new(egui::RichText::new(text).monospace()).wrap());
-            });
+        super::report_view::result(
+            ui,
+            &blocks,
+            &text,
+            &mut self.electrical.as_text,
+            "la instalación eléctrica",
+            "electrical",
+            None,
+        );
         if pdf {
             self.export_single_line_pdf();
         }

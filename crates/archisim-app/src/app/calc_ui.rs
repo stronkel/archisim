@@ -15,6 +15,10 @@ pub struct CalcWindow {
     /// The results of a revision of the model: (revision, text, number of
     /// checks that fail).
     results: Option<(u64, String, usize)>,
+    /// The annex's blocks of those results, drawn (`report_view`), and
+    /// whether shown as typed text.
+    blocks: Vec<archisim_struct::report::Block>,
+    as_text: bool,
     /// The reinforcement the calculation asks for, while it is being
     /// chosen: each with whether it goes in.
     proposals: Option<(u64, Vec<(archisim_struct::proposals::Proposal, bool)>)>,
@@ -259,8 +263,22 @@ impl ArchiSimApp {
         let rev = self.ed.revision();
         if self.calc.results.as_ref().is_none_or(|r| r.0 != rev) {
             let model = self.ed.shown();
-            let text = archisim_struct::structure_report(&model);
-            let fails = text.matches("NO CUMPLE").count();
+            // One calculation for both: the annex's blocks, and its text.
+            let blocks = archisim_struct::report::report(&model);
+            let text = archisim_struct::report::to_text(&blocks);
+            let fails = blocks
+                .iter()
+                .filter(|b| {
+                    matches!(
+                        b,
+                        archisim_struct::report::Block::Check {
+                            status: archisim_struct::lightframe::Status::Fail,
+                            ..
+                        }
+                    )
+                })
+                .count();
+            self.calc.blocks = blocks;
             self.calc.results = Some((rev, text, fails));
         }
         let (_, text, fails) = self.calc.results.clone().expect("just made");
@@ -332,15 +350,17 @@ impl ArchiSimApp {
             self.proposals_panel(ui);
             return;
         }
-        egui::ScrollArea::both()
-            .auto_shrink([false, false])
-            .max_height(ui.available_height() - 8.0)
-            .show(ui, |ui| {
-                ui.add(
-                    egui::Label::new(egui::RichText::new(text).monospace().size(11.0))
-                        .wrap_mode(egui::TextWrapMode::Extend),
-                );
-            });
+        let blocks = std::mem::take(&mut self.calc.blocks);
+        super::report_view::result(
+            ui,
+            &blocks,
+            &text,
+            &mut self.calc.as_text,
+            "la estructura",
+            "structure",
+            None,
+        );
+        self.calc.blocks = blocks;
         if export {
             self.export_calc_report();
         }

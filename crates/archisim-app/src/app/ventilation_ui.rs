@@ -15,6 +15,10 @@ pub struct VentilationWindow {
     /// The calculation of a revision of the model: (revision, text, the
     /// changes, what fails).
     results: Option<(u64, String, Grow, usize)>,
+    /// The calculation drawn (`report_view`), and whether shown as typed
+    /// text.
+    blocks: Vec<archisim_struct::report::Block>,
+    as_text: bool,
 }
 
 /// What grows: ducts (their width) and devices (width and depth).
@@ -70,25 +74,12 @@ impl ArchiSimApp {
             let v = archisim_mep::ventilation::ventilation(model);
             let text = archisim_mep::ventilation::report(model, &v);
             let fails = v.fails();
+            self.ventilation.blocks = archisim_plan::services_report::ventilation(model, &v);
             self.ventilation.results = Some((rev, text, Grow::of(model, &v), fails));
         }
         let (_, text, grow, fails) = self.ventilation.results.clone().expect("just made");
         let (mut apply, mut pdf, mut dxf) = (false, false, false);
         ui.horizontal(|ui| {
-            let p = super::theme::Palette::current(ui.ctx());
-            if fails > 0 {
-                ui.colored_label(
-                    p.bad,
-                    format!(
-                        "{fails} abertura{}, tramo{} o salida{} que no cumplen",
-                        if fails == 1 { "" } else { "s" },
-                        if fails == 1 { "" } else { "s" },
-                        if fails == 1 { "" } else { "s" }
-                    ),
-                );
-            } else {
-                ui.colored_label(p.good, "Todo con su tamaño");
-            }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if ui
                     .button("Esquemas (DXF)…")
@@ -116,14 +107,17 @@ impl ArchiSimApp {
                 }
             });
         });
-        egui::ScrollArea::both()
-            .auto_shrink([false, false])
-            .show(ui, |ui| {
-                ui.add(
-                    egui::Label::new(egui::RichText::new(text).monospace().size(11.0))
-                        .wrap_mode(egui::TextWrapMode::Extend),
-                );
-            });
+        let blocks = std::mem::take(&mut self.ventilation.blocks);
+        super::report_view::result(
+            ui,
+            &blocks,
+            &text,
+            &mut self.ventilation.as_text,
+            "la ventilación",
+            "ventilation",
+            Some(fails),
+        );
+        self.ventilation.blocks = blocks;
         if apply {
             self.apply_ventilation_sizes();
         }

@@ -15,6 +15,10 @@ pub struct ClimateWindow {
     /// The calculation of a revision of the model: (revision, text,
     /// what fails, the materials of the envelope).
     results: Option<(u64, String, usize, Vec<archisim_core::MaterialId>)>,
+    /// The calculation drawn (`report_view`), and whether shown as typed
+    /// text.
+    blocks: Vec<archisim_struct::report::Block>,
+    as_text: bool,
 }
 
 /// The materials in the layers of the envelope's wall, slab and roof
@@ -145,6 +149,7 @@ impl ArchiSimApp {
             let t = archisim_mep::thermal::thermal(model);
             let text = archisim_mep::thermal::report(model, &t);
             let mats = envelope_materials(model, &t);
+            self.climate.blocks = archisim_plan::services_report::thermal(model, &t);
             self.climate.results = Some((rev, text, t.fails(), mats));
         }
         let (_, text, fails, mats) = self.climate.results.clone().expect("just made");
@@ -195,26 +200,17 @@ impl ArchiSimApp {
             }
         }
         ui.separator();
-        let p = super::theme::Palette::current(ui.ctx());
-        if fails > 0 {
-            ui.colored_label(
-                p.bad,
-                format!(
-                    "{fails} cosa{} por encima del límite",
-                    if fails == 1 { "" } else { "s" }
-                ),
-            );
-        } else {
-            ui.colored_label(p.good, "La envolvente cumple el DB-HE 1");
-        }
-        egui::ScrollArea::both()
-            .auto_shrink([false, false])
-            .show(ui, |ui| {
-                ui.add(
-                    egui::Label::new(egui::RichText::new(text).monospace().size(11.0))
-                        .wrap_mode(egui::TextWrapMode::Extend),
-                );
-            });
+        let blocks = std::mem::take(&mut self.climate.blocks);
+        super::report_view::result(
+            ui,
+            &blocks,
+            &text,
+            &mut self.climate.as_text,
+            "la envolvente",
+            "climate",
+            Some(fails),
+        );
+        self.climate.blocks = blocks;
     }
 }
 
