@@ -539,7 +539,8 @@ fn water_sheets(w: &Water) -> Sheets {
         }))
         .chain(w.hot_return.as_ref().map(|r| {
             format!(
-                "Retorno de ACS: {} m al grifo más lejano; {} l/h por {} columna{}, tubería {} aislada (HS 4, 2.3 y tabla 4.4).",
+                "Retorno de ACS, {}: {} m al grifo más lejano; {} l/h por {} columna{}, tubería {} aislada (HS 4, 2.3 y tabla 4.4).",
+                r.drawn_text(),
                 dec(r.length, 1),
                 dec(r.flow, 0),
                 r.columns,

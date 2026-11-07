@@ -85,9 +85,12 @@ pub struct DwellingDemand {
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Losses {
     /// Hot pipe drawn, metres; the part in the loop, kept hot by the
-    /// return (and the return itself), and its water, litres.
+    /// return, the return (drawn, or as long as the way out), and the
+    /// water left in the rest, litres.
     pub pipe: f64,
     pub looped: f64,
+    pub back: f64,
+    pub return_drawn: bool,
     pub dead_water: f64,
     /// The store: litres, whether given, and its standing loss, W.
     pub tank: f64,
@@ -120,10 +123,17 @@ pub fn losses(model: &Model, site: &RenewablesSite, daily_stored: f64) -> Losses
         .collect();
     let pipe: f64 = hot.iter().map(|s| s.length).sum();
     let hot_t = site.storage_temp;
-    // The loop: from the heater to the farthest tap and back.
+    // The loop: from the heater to the farthest tap, and back by the
+    // return drawn or, if it is not, by as much again.
     let looped = w.hot_return.as_ref().map_or(0.0, |r| r.length.min(pipe));
+    let back = w
+        .hot_return
+        .as_ref()
+        .and_then(|r| r.drawn.as_ref())
+        .map_or(looped, |d| d.length);
+    let return_drawn = w.hot_return.as_ref().is_some_and(|r| r.drawn.is_some());
     let loop_t = hot_t - LOOP_DROP / 2.0;
-    let recirculation = PIPE_PSI * 2.0 * looped * (loop_t - AMBIENT).max(0.0) * 8.76;
+    let recirculation = PIPE_PSI * (looped + back) * (loop_t - AMBIENT).max(0.0) * 8.76;
     // The rest: the water left in it cools down after each use.
     let share = if pipe > 0.0 {
         ((pipe - looped) / pipe).max(0.0)
@@ -151,6 +161,8 @@ pub fn losses(model: &Model, site: &RenewablesSite, daily_stored: f64) -> Losses
     Losses {
         pipe,
         looped,
+        back,
+        return_drawn,
         dead_water,
         tank,
         tank_given,

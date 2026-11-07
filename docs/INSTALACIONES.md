@@ -92,13 +92,20 @@ En la **Comprobación CTE** (Agua y saneamiento) salen:
   
   Si está dibujado, el cálculo cuenta con lo que da. Si hace falta y no está, la comprobación no cumple. El volumen del depósito de presión lo da el fabricante con esas presiones.
 - **Aljibe** (HS 4, 4.5.1). Con grupo de presión, o con un «Depósito» dibujado, guarda 15 minutos del caudal simultáneo. Si no está dibujado, sale un aviso con su volumen.
-- **Retorno de ACS** (HS 4, 2.3 y tabla 4.4). Cuando del acumulador al grifo de agua caliente más lejano hay 15 m o más de tubería, hace falta una red de retorno. Se da el caudal (250 l/h por columna, al menos), su tubería por la tabla 4.4 (en pulgadas y en multicapa) y que vaya aislada. El retorno no se dibuja como sistema propio todavía, así que sale como aviso.
+- **Retorno de ACS** (HS 4, 2.3 y tabla 4.4). Cuando del acumulador al grifo de agua caliente más lejano hay 15 m o más de tubería, hace falta una red de retorno. Se da el caudal (250 l/h por columna, al menos), su tubería por la tabla 4.4 (en pulgadas y en multicapa) y que vaya aislada.
+  - El retorno se dibuja como sistema propio, **Retorno de ACS** (en morado). Va con la herramienta Tubería, del final de cada distribuidor de agua caliente al montante, por él y hasta el acumulador.
+  - Comprobación:
+    - sin dibujar, sale como aviso;
+    - dibujado, cumple si una de sus puntas llega al acumulador (a menos de 45 cm) y ninguna tubería es más fina que la de la tabla 4.4;
+    - las que lo son salen una a una.
+  - «Poner los diámetros calculados» les da la de la tabla.
+  - Sale en la plantilla Instalaciones · Fontanería.
 
 Los tres salen en la ventana, en la Comprobación CTE y en las notas de la hoja FO-01.
 
 En la línea de órdenes: `archisim fontaneria <proyecto>`, o `archisim fontaneria <proyecto> --diametros salida.archisim` para guardarlo con los diámetros calculados (y `--esquemas <carpeta>` para las hojas, abajo).
 
-El edificio de Florence Street (`archisim edificio`) lleva ahora la red entera: contador y acumulador junto al montante, montante hasta la cubierta, distribuidor en cada rellano, derivación de cada vivienda y todos los aparatos unidos. Son 114 aparatos y 24 viviendas. Con 300 kPa en el contador, los diámetros dibujados dejan 95 grifos por debajo de 100 kPa; con los calculados, el peor llega a 122 kPa. Del acumulador al grifo más lejano hay 41,8 m: necesita retorno (250 l/h, 3/4").
+El edificio de Florence Street (`archisim edificio`) lleva ahora la red entera: contador y acumulador junto al montante, montante hasta la cubierta, distribuidor en cada rellano, derivación de cada vivienda y todos los aparatos unidos. Son 114 aparatos y 24 viviendas. Con 300 kPa en el contador, los diámetros dibujados dejan 95 grifos por debajo de 100 kPa; con los calculados, el peor llega a 122 kPa. Del acumulador al grifo más lejano hay 41,8 m: necesita retorno (250 l/h, 3/4") Lo lleva dibujado: del final de cada distribuidor de las plantas 1 a 4 al montante, y en la planta baja del montante al acumulador. Son 57,7 m y cumplen.
 
 ### Esquemas de fontanería
 
@@ -336,7 +343,7 @@ Colaboración → **Energías renovables…** (o `archisim renovables <proyecto>
 - Se aplica con más de 100 l/día. Se exige el 60 % renovable por debajo de 5.000 l/día y el 70 % por encima.
 - La bomba de calor cuenta 1 − 1/SCOP de lo que calienta, y nada si su SCOP es de 2,5 o menos.
 - **Pérdidas** (HE 4, 4.1: la demanda «incrementada» con ellas), sacadas de la red de agua caliente dibujada. La parte renovable se pide sobre el agua más las pérdidas:
-  - **Recirculación.** Si la red necesita retorno (15 m o más del acumulador al grifo más lejano), el anillo de ida y vuelta pierde 0,25 W/mK, tubería aislada según el RITE, todo el año, a la temperatura de acumulación menos 2,5 °C, en un local a 20 °C.
+  - **Recirculación.** Si la red necesita retorno (15 m o más del acumulador al grifo más lejano), pierden calor todo el año la ida hasta el grifo más lejano y el retorno dibujado. Si el retorno no está dibujado, se toma tan largo como la ida. La pérdida es de 0,25 W/mK (tubería aislada según el RITE), a la temperatura de acumulación menos 2,5 °C, en un local a 20 °C.
   - **Distribución.** En el resto de la tubería caliente, la que no tiene retorno, el agua que queda dentro se enfría hasta 20 °C tres veces al día.
   - **Acumulación.** La pérdida estática de un acumulador de clase C del etiquetado energético, 16,66 + 8,33·V^0,4 W a 45 K, a su temperatura.
   - El acumulador tiene el volumen que se da en la ventana o, si no se da, la demanda de un día.
@@ -357,7 +364,7 @@ Antonio dio por buenos, el 7/11/2026, la parte renovable de la bomba de calor, l
 - 0,25 W/mK de la tubería aislada.
 - Tres enfriamientos al día del agua sin retorno.
 - Acumulador de clase C.
-- Florence Street pierde 6.867 kWh en la recirculación (anillo de 41,8 m), 3.377 kWh en la distribución y 1.158 kWh en el acumulador. Son 11.400 kWh sobre los 18.800 que calientan su agua: el 60 % de más.
+- Florence Street pierde 8.174 kWh en la recirculación (41,8 m de ida y 57,7 m de retorno dibujado), 3.377 kWh en la distribución y 1.158 kWh en el acumulador. Son 12.700 kWh sobre los 18.800 que calientan su agua: el 68 % de más. Sigue siendo renovable al 67 %.
 
 Las tablas están al principio de `crates/archisim-core/src/model/renewables.rs` y `crates/archisim-mep/src/renewables.rs`.
 
@@ -379,7 +386,6 @@ Lo que no cumple sale marcado como en el anejo de cálculo de la estructura. La 
 - Caída de tensión por tramos con la carga repartida: se pone toda la carga en el punto más lejano, lo que queda del lado de la seguridad.
 - Cortocircuito y poder de corte (se pone 6 kA).
 - Fontanería:
-  - el retorno de ACS dibujado como red propia (ahora se dice cuándo hace falta y cómo es);
   - el volumen del depósito de presión del grupo;
   - los fluxores.
 - Saneamiento:

@@ -427,11 +427,18 @@ pub fn calculation(model: &Model, report: &mut Report) {
     }
     if let Some(r) = &w.hot_return {
         report.items.push(item(
-            Status::Warning,
+            if r.drawn.is_none() {
+                Status::Warning
+            } else if r.passes() {
+                Status::Passes
+            } else {
+                Status::Fails
+            },
             Subject::Building,
             "HS 4, 2.3",
             format!(
-                "Red de retorno de ACS: {} m hasta el grifo más lejano; {} l/h, tubería {} aislada",
+                "Red de retorno de ACS ({}): {} m hasta el grifo más lejano; {} l/h, tubería {} aislada",
+                r.drawn_text(),
                 dec(r.length, 1),
                 dec(r.flow, 0),
                 r.pipe.0
@@ -439,6 +446,21 @@ pub fn calculation(model: &Model, report: &mut Report) {
             format!("{} m", dec(r.length, 1)),
             format!("retorno desde {} m", dec(wt::RETURN_LENGTH, 0)),
         ));
+        let drawn: std::collections::BTreeMap<_, _> = r
+            .drawn
+            .iter()
+            .flat_map(|d| d.runs.iter().copied())
+            .collect();
+        for id in r.narrow() {
+            report.items.push(item(
+                Status::Fails,
+                Subject::Run(id),
+                "HS 4, tabla 4.4",
+                "Tubería del retorno de ACS".into(),
+                format!("Ø{:.0} mm", drawn.get(&id).copied().unwrap_or(0.0) * 1000.0),
+                format!("≥ Ø{:.0} mm ({})", r.pipe.1 * 1000.0, r.pipe.0),
+            ));
+        }
     }
 }
 

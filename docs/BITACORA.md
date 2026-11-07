@@ -6,6 +6,33 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-07 (125) · Retorno de ACS como red propia
+
+Rama `bloque/retorno-acs`, con pull request. **Formato versión 94** (las tuberías pueden ser del sistema `hot_return`). Sin cambios de IFC: el retorno sale como agua caliente sanitaria (`DOMESTICHOTWATER`). `docs/INSTALACIONES.md` §4 y §8.
+
+- **Sistema nuevo «Retorno de ACS»** en la herramienta Tubería (en morado). Se engancha al montante, al acumulador, a las válvulas y a las bombas, y sale con la plantilla Instalaciones · Fontanería.
+- **Comprobación (HS 4, 2.3 y tabla 4.4).**
+  - Cuando el retorno hace falta (15 m o más del acumulador al grifo más lejano):
+    - sin dibujar, sale como aviso, como antes;
+    - dibujado, cumple si llega al acumulador (a menos de 45 cm) y ninguna de sus tuberías es más fina que la de la tabla 4.4;
+    - las más finas salen una a una, con su tramo.
+  - «Poner los diámetros calculados» les da la de la tabla.
+  - Lo mismo en el informe de fontanería, en la memoria y en la nota del esquema FO-01.
+- **Pérdidas del HE 4.** La recirculación usa ahora la ida hasta el grifo más lejano más el retorno dibujado. Si el retorno no está dibujado, se supone igual de largo que la ida. La memoria dice cuál de los dos casos se ha usado.
+- **Florence Street.**
+  - Lleva el retorno dibujado: del final de cada distribuidor de las plantas 1 a 4 al montante, y en la planta baja del montante al acumulador.
+  - Son 57,7 m y cumplen.
+  - La recirculación pasa de 6.867 a 8.174 kWh, y el agua caliente sigue siendo renovable al 67 %.
+
+**Pendiente:** las instalaciones en sección y alzado (siguiente bloque) y el resto de la lista (fracción solar, puentes térmicos, ventilación de bajantes, trifásica y cortocircuito, RITE, muros de perfil complejo, IfcEarthworks, SketchUp).
+
+**Qué debe probar Antonio:**
+- Abre `out/florence/edificio.archisim`, ve a la planta 2 con la plantilla Instalaciones · Fontanería y mira el retorno morado junto al agua caliente.
+- En Colaboración → Cálculo de fontanería, el retorno debe salir dibujado, de 57,7 m, y cumplir.
+- Selecciona un tramo del retorno y ponle 16 mm: la comprobación debe decir que es más fino que la tabla. Después, «Poner los diámetros calculados» lo devuelve a 20 mm.
+
+---
+
 ## 2026-11-07 (124) · Energías renovables: agua caliente (HE 4) y fotovoltaica (HE 5)
 
 Rama `bloque/energia-renovable`, con pull request; lleva dentro las ramas de las entradas 122 y 123 (#176 y #177). **Formato versión 93** (`renewables` en el proyecto). Sin cambios de IFC. `docs/INSTALACIONES.md` §8, `docs/CTE.md`.

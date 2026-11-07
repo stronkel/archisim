@@ -400,7 +400,8 @@ pub fn water(model: &Model, w: &Water) -> Vec<Block> {
     }
     if let Some(r) = &w.hot_return {
         out.push(Block::Para(format!(
-            "Red de retorno de ACS: {} m de tubería al grifo más lejano; {} l/h por {} columna{}, tubería {} aislada (HS 4, 2.3 y tabla 4.4).",
+            "Red de retorno de ACS, {}: {} m de tubería al grifo más lejano; {} l/h por {} columna{}, tubería {} aislada (HS 4, 2.3 y tabla 4.4).",
+            r.drawn_text(),
             dec(r.length, 1),
             dec(r.flow, 0),
             r.columns,
@@ -1030,9 +1031,15 @@ pub fn renewables(r: &Renewables) -> Vec<Block> {
                 "Pérdidas de recirculación".into(),
                 if h.losses.looped > 0.0 {
                     format!(
-                        "{} kWh (anillo de {} m, ida y vuelta)",
+                        "{} kWh (ida {} m, retorno {} m{})",
                         dec(h.losses.recirculation, 0),
-                        dec(h.losses.looped, 0)
+                        dec(h.losses.looped, 0),
+                        dec(h.losses.back, 0),
+                        if h.losses.return_drawn {
+                            ", dibujado"
+                        } else {
+                            ", supuesto"
+                        }
                     )
                 } else {
                     "sin retorno".into()
