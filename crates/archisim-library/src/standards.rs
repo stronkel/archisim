@@ -250,6 +250,8 @@ impl Standard {
                 id: ViewTemplateId(0),
                 name: name.into(),
                 style,
+                scale: None,
+                cut_plane: None,
             };
             if m.add_view_template(t).is_ok() {
                 added += 1;
@@ -339,6 +341,8 @@ pub fn add_schemes(m: &mut Model) -> (usize, usize) {
             id: ViewTemplateId(0),
             name: name.into(),
             style,
+            scale: None,
+            cut_plane: None,
         };
         if m.add_view_template(t).is_ok() {
             templates += 1;

@@ -67,10 +67,18 @@ pub fn new_project(name: impl Into<String>) -> Model {
 /// (the rooms with their floors and areas, in the black and white look).
 pub fn view_templates() -> Vec<archisim_core::ViewTemplate> {
     use archisim_core::{Category as C, ViewStyle, ViewTemplate, ViewTemplateId};
+    // «Albañilería» is drawn at 1:50 and «Superficies» at 1:100; «Blanco
+    // y negro» is a look for any scale, so it sets none.
     let template = |name: &str, style: ViewStyle| ViewTemplate {
         id: ViewTemplateId(0),
         name: name.into(),
         style,
+        scale: match name {
+            "Albañilería" => Some(50.0),
+            "Superficies" => Some(100.0),
+            _ => None,
+        },
+        cut_plane: None,
     };
     let hide = |mut s: ViewStyle, cs: &[C]| {
         s.hidden.extend(cs.iter().copied());

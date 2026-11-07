@@ -88,6 +88,12 @@ pub(crate) struct ViewTemplateOf {
     pub name: String,
     #[serde(default, skip_serializing_if = "Style::is_default")]
     pub style: Style,
+    /// The scale it sets for the views that follow it (version 91).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scale: Option<f64>,
+    /// The cut plane it sets for the plans that follow it (version 91).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cut_plane: Option<f64>,
 }
 
 impl ViewTemplateOf {
@@ -96,6 +102,8 @@ impl ViewTemplateOf {
             id: t.id.0,
             name: t.name.clone(),
             style: Style::out(&t.style),
+            scale: t.scale,
+            cut_plane: t.cut_plane,
         }
     }
 
@@ -105,6 +113,8 @@ impl ViewTemplateOf {
             id: core::ViewTemplateId(self.id),
             style: self.style.into_core(&element)?,
             name: self.name,
+            scale: self.scale,
+            cut_plane: self.cut_plane,
         })
     }
 }

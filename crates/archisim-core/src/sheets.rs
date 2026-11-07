@@ -147,6 +147,17 @@ pub struct Viewport {
     pub opening_type: Option<crate::ids::OpeningTypeId>,
 }
 
+impl Viewport {
+    /// Whether it shows a level cut in plan (so a cut plane counts), not
+    /// a section, an axonometry, a drafting view or a type's card.
+    pub fn is_plan(&self) -> bool {
+        self.section.is_none()
+            && self.axo.is_none()
+            && self.drafting.is_none()
+            && self.opening_type.is_none()
+    }
+}
+
 /// Where an axonometric view looks from: the direction the eye stands in,
 /// around the vertical from +X (east) counter-clockwise, and its height
 /// over the horizontal; radians. Parallel projection, so it has a scale.
@@ -357,6 +368,9 @@ impl Model {
             (None, Some(s)) => self.section(s).map(|s| s.style.clone()).unwrap_or_default(),
             (None, None) => self.level_style(spec.level),
         };
+        // And at its template's scale and cut plane, where it sets them.
+        let plan = spec.axo.is_none() && spec.section.is_none();
+        let (scale, cut_plane) = self.framed_by_template(&style, spec.scale, spec.cut_plane, plan);
         self.viewports.insert(
             id,
             Viewport {
@@ -365,8 +379,8 @@ impl Model {
                 level: spec.level,
                 section: spec.section,
                 axo: spec.axo,
-                scale: spec.scale,
-                cut_plane: spec.cut_plane,
+                scale,
+                cut_plane,
                 crop: spec.crop,
                 centre: spec.centre,
                 style,
@@ -467,6 +481,11 @@ impl Model {
         if let Some(d) = v.drafting.filter(|d| self.draft_view(*d).is_none()) {
             return Err(ModelError::UnknownDraftView(d));
         }
+        // One that follows a template has its scale and cut plane where the
+        // template sets them.
+        let mut v = v;
+        let plan = v.is_plan();
+        (v.scale, v.cut_plane) = self.framed_by_template(&v.style, v.scale, v.cut_plane, plan);
         self.viewports.insert(v.id, v);
         Ok(())
     }
