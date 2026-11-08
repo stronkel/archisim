@@ -290,6 +290,7 @@ dependencies = [
  "archisim-struct",
  "archisim-team",
  "resvg",
+ "ureq",
 ]
 
 [[package]]

@@ -4,7 +4,7 @@
 //! archisim demo [carpeta]                    vivienda de prueba: .archisim, IFC y plantas
 //! archisim exportar <proyecto.archisim> [carpeta]   IFC y plantas de un proyecto
 //! archisim importar <fichero.ifc> [proyecto.archisim]   proyecto a partir de un IFC
-//! archisim cartografia <ficheros…> [--proyecto p.archisim] [--radio m] [--centrar] [--salida s.archisim]   entorno del Catastro, OSM y MDT
+//! archisim cartografia <ficheros…> [--proyecto p.archisim] [--radio m] [--centrar] [--salida s.archisim] [--lugar "dirección"] [--resultado n] [--en-el-origen] [--enlaces]   entorno del Catastro, OSM y MDT
 //! archisim medir [n] [carpeta]             rendimiento con n × n viviendas
 //! archisim png <dibujo.svg> [imagen.png] [ppp]   imagen de un SVG
 //! archisim comprobar-ids | comparar | interferencias | bcf   colaboración (fase 4, `colaboracion`)
@@ -71,12 +71,19 @@ Uso:
       carpeta.
 
   archisim cartografia <ficheros…> [--proyecto p.archisim] [--radio 150] [--centrar] [--salida s.archisim]
+  archisim cartografia --lugar «Calle Ancha 12, Punta Umbría» [--resultado 1] [--en-el-origen] [--enlaces] [ficheros…]
       Trae el entorno de ficheros de cartografía gratuita: edificios por
       plantas y parcelas del Catastro (GML INSPIRE), calles y árboles de
       OpenStreetMap (.osm) y el terreno del CNIG (MDT en .asc), dentro de
       un radio alrededor del origen del proyecto. Sin proyecto, empieza
       uno nuevo georreferenciado por los ficheros; con --centrar, el
       origen del proyecto se lleva al centro de lo que traen los ficheros.
+      Con --lugar se busca el sitio por su dirección, un municipio, una
+      referencia catastral o unas coordenadas (CartoCiudad, OpenStreetMap,
+      Catastro; hace falta red): el proyecto sin emplazamiento lo toma con
+      su origen ahí, y el que lo tiene trae alrededor del lugar (o de su
+      origen, con --en-el-origen). --resultado elige otro de los
+      encontrados; con --enlaces, las direcciones de la descarga.
 
   archisim calles [carpeta]
       Unas calles en una ladera que se encuentran de todas las maneras:
@@ -364,6 +371,7 @@ fn main() -> ExitCode {
             let mut files = Vec::new();
             let (mut project, mut radius, mut out, mut recentre) = (None, 150.0, None, false);
             let mut links = false;
+            let (mut lugar, mut pick, mut keep_origin) = (None, 1usize, false);
             let mut it = args[1..].iter();
             while let Some(a) = it.next() {
                 match a.as_str() {
@@ -377,8 +385,71 @@ fn main() -> ExitCode {
                     "--salida" => out = it.next().map(PathBuf::from),
                     "--centrar" => recentre = true,
                     "--enlaces" => links = true,
+                    "--lugar" => lugar = it.next().cloned(),
+                    "--resultado" => pick = it.next().and_then(|v| v.parse().ok()).unwrap_or(1),
+                    "--en-el-origen" => keep_origin = true,
                     _ => files.push(PathBuf::from(a)),
                 }
+            }
+            if let Some(text) = &lugar {
+                // The place by its address, cadastral reference or
+                // coordinates.
+                let mut m = match cartografia::open(project.as_deref()) {
+                    Ok(m) => m,
+                    Err(e) => {
+                        eprintln!("{e}");
+                        return ExitCode::FAILURE;
+                    }
+                };
+                let mut opts = archisim_library::carto::CartoOptions {
+                    radius,
+                    recentre,
+                    ..Default::default()
+                };
+                println!("Buscando «{text}»…");
+                if let Err(e) = cartografia::place(
+                    &mut m,
+                    text,
+                    pick,
+                    keep_origin,
+                    &mut opts,
+                    &mut cartografia::http_get,
+                ) {
+                    eprintln!("{e}");
+                    return ExitCode::FAILURE;
+                }
+                if links {
+                    match archisim_library::download::plan(&m, &opts) {
+                        Ok(rs) => {
+                            for r in rs {
+                                println!("{}\n  {}", r.source.name(), r.url);
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("{e}");
+                            return ExitCode::FAILURE;
+                        }
+                    }
+                }
+                if links && files.is_empty() && out.is_none() {
+                    return ExitCode::SUCCESS;
+                }
+                let out = out
+                    .or_else(|| project.clone())
+                    .unwrap_or_else(|| PathBuf::from("out/entorno.archisim"));
+                let refs: Vec<&Path> = files.iter().map(PathBuf::as_path).collect();
+                if refs.is_empty() {
+                    // Only placed: saved with its georeference.
+                    if let Some(dir) = out.parent().filter(|d| !d.as_os_str().is_empty()) {
+                        let _ = std::fs::create_dir_all(dir);
+                    }
+                    return report(
+                        archisim_file::save(&m, &out)
+                            .map(|_| println!("  Proyecto: {}", out.display()))
+                            .map_err(|e| e.into()),
+                    );
+                }
+                return report(cartografia::run_with(m, &refs, &opts, &out));
             }
             if links {
                 // The addresses «Descargar el entorno» asks, to try them in
@@ -414,7 +485,7 @@ fn main() -> ExitCode {
                 }
             }
             if files.is_empty() {
-                eprintln!("Uso: archisim cartografia <ficheros .gml .osm .asc…> [--proyecto p.archisim] [--radio 150] [--centrar] [--salida entorno.archisim]  (o --enlaces --proyecto p.archisim: las direcciones de «Descargar el entorno»)");
+                eprintln!("Uso: archisim cartografia <ficheros .gml .osm .asc…> [--proyecto p.archisim] [--radio 150] [--centrar] [--salida entorno.archisim]  (o --enlaces --proyecto p.archisim: las direcciones de «Descargar el entorno»; con --lugar \"Calle Ancha 12, Punta Umbría\", una referencia catastral o coordenadas, alrededor de ese sitio)");
                 return ExitCode::FAILURE;
             }
             let out = out

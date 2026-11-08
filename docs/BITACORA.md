@@ -6,6 +6,40 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-08 (128) · Traer el entorno por dirección
+
+Rama `bloque/entorno-direccion`, con pull request. Va sobre la de la entrada 127 (#181, encima de #180 y #179). Sin cambios de formato (sigue la versión 95) ni de IFC. `docs/ENTORNO.md`, «Buscar el lugar por su dirección».
+
+- **Qué hace.** En Archivo → Descargar el entorno hay un campo «Lugar». Ya no hace falta saber las coordenadas: se escribe el sitio y se pulsa Buscar.
+  - **Una dirección, un sitio o un municipio** («Calle Ancha 12, Punta Umbría»): se busca en CartoCiudad, el callejero del IGN. Si no encuentra nada, en OpenStreetMap.
+  - **Una referencia catastral** de parcela (14 caracteres) o de inmueble (20), con o sin espacios: se pregunta al Catastro.
+  - **Unas coordenadas pegadas** («37,18, -6,93» o con puntos) valen sin buscar.
+- **La lista.** Sale cada resultado con su dirección, su municipio, qué es (portal, calle, municipio, parcela…) y de dónde viene. Se elige con un clic.
+- **Al elegir:**
+  - Si el proyecto no tiene emplazamiento, se le pone con el origen en ese punto, en el huso UTM del sitio. Si se trae el terreno, el ±0,00 queda en la cota del terreno de ahí. Se deshace en un paso.
+  - Si ya lo tiene, se elige entre traerlo alrededor del lugar (el proyecto no se mueve y el entorno queda en su sitio; la ventana dice a qué distancia) o alrededor del origen. A más de 20 km avisa.
+  - Un mapa pequeño con la ortofoto del PNOA enseña el lugar, el origen del proyecto y el círculo del radio.
+  - Después sigue la descarga de siempre.
+- **Lo que falla se dice en una frase:** sin conexión, sin resultados, una referencia de 13 caracteres, una que el Catastro no conoce, o coordenadas UTM.
+- **Línea de órdenes:** `archisim cartografia --lugar "Calle Ancha 12, Punta Umbría"`. Escribe lo encontrado y usa el primero; `--resultado 2` elige otro y `--en-el-origen` trae alrededor del origen. Con `--enlaces` escribe las direcciones de la descarga; con ficheros, los trae; sin más, guarda el proyecto georreferenciado.
+
+**Pendiente.**
+- Desde aquí no hay red: la búsqueda se ha probado con respuestas de ejemplo inventadas con la forma de las de CartoCiudad, Nominatim y el Catastro. La primera prueba de verdad es la de Antonio.
+- Las letras de control de la referencia catastral no se comprueban: lo dice el Catastro al buscarla.
+
+**Qué debe probar Antonio:**
+1. Abre un proyecto **sin emplazamiento** (Archivo → Nuevo). En Archivo → Descargar el entorno, escribe «Calle Ancha 12, Punta Umbría» y pulsa Buscar. Debe salir la lista; elige la de Punta Umbría.
+   - Debe decir que el proyecto se georreferencia ahí (EPSG:25829).
+   - En el mapa pequeño, el punto rojo debe caer en la calle.
+   - Pulsa Descargar: el entorno debe llegar alrededor del origen, con el ±0,00 en el terreno.
+   - Deshacer dos veces: primero se quita el entorno y luego el emplazamiento.
+2. Repite con la referencia catastral de una parcela que conozcas, con y sin espacios. Prueba también una con un carácter de menos: debe decir que tiene 13.
+3. Con un proyecto **ya georreferenciado** (la demo, que está en Madrid), busca «Punta Umbría». Debe avisar de que está a unos 450 km y dejar elegir entre el lugar y el origen.
+4. Desconecta el wifi y busca: debe decir que no hay conexión, sin romper nada.
+5. En la línea de órdenes: `archisim cartografia --lugar "Calle Ancha 12, Punta Umbría" --enlaces --salida out/lugar.archisim`. Debe escribir lo encontrado y las direcciones de la descarga.
+
+---
+
 ## 2026-11-08 (127) · Fracción solar por f-Chart (HE 4)
 
 Rama `bloque/fraccion-solar`, con pull request. Va sobre las de las entradas 125 y 126 (#179 y #180). **Formato versión 95**: los datos de los captadores y el clima del lugar en `renewables`. Sin cambios de IFC. `docs/INSTALACIONES.md` §8.

@@ -51,6 +51,10 @@ pub struct CartoOptions {
     /// The place of the world for them (its number); none: where the
     /// project stands, by its georeference.
     pub place: Option<u8>,
+    /// Put the ±0,00 on the terrain at the centre even if the project is
+    /// georeferenced: its georeference has just been given by a search
+    /// ([`crate::geocode`]), with no height.
+    pub level_to_ground: bool,
 }
 
 /// The kind of place a building stands in, for its style.
@@ -333,6 +337,7 @@ impl Default for CartoOptions {
             street_life: true,
             world: true,
             place: None,
+            level_to_ground: false,
         }
     }
 }
@@ -424,7 +429,7 @@ impl Frame {
         ]
     }
 
-    fn to_plan(self, p: [f64; 2]) -> Point2 {
+    pub(crate) fn to_plan(self, p: [f64; 2]) -> Point2 {
         let (dx, dy) = (p[0] - self.e, p[1] - self.n);
         Point2::new(
             dx * self.cos + dy * self.sin,
@@ -618,7 +623,7 @@ pub fn import_carto(
             });
         }
     }
-    let had_height = m.georeference().is_some();
+    let had_height = m.georeference().is_some() && !opts.level_to_ground;
     if m.georeference().is_none() || opts.recentre {
         let Some(g) = guess_georeference(&read) else {
             return Err(ModelError::InvalidShape(
@@ -1065,27 +1070,34 @@ fn guess_georeference(read: &Read) -> Option<Georeference> {
         let Some([lat, lon]) = middle(&pts) else {
             continue;
         };
-        let zone = (((lon + 180.0) / 6.0).floor() as u32 + 1).clamp(1, 60);
-        let (e, n) = archisim_carto::lat_lon_to_utm(lat, lon, zone, lat >= 0.0);
-        let crs = if (28..=38).contains(&zone) && lat >= 0.0 {
-            format!("EPSG:{}", 25800 + zone)
-        } else if lat >= 0.0 {
-            format!("EPSG:{}", 32600 + zone)
-        } else {
-            format!("EPSG:{}", 32700 + zone)
-        };
-        return Some(Georeference {
-            crs,
-            eastings: e.round(),
-            northings: n.round(),
-            height: 0.0,
-        });
+        return Some(georeference_at(lat, lon));
     }
     None
 }
 
+/// A georeference with its origin at a latitude and longitude: the UTM
+/// zone of the place in ETRS89 (in Europe; WGS 84 elsewhere), rounded to
+/// the metre, height 0.
+pub fn georeference_at(lat: f64, lon: f64) -> Georeference {
+    let zone = (((lon + 180.0) / 6.0).floor() as u32 + 1).clamp(1, 60);
+    let (e, n) = archisim_carto::lat_lon_to_utm(lat, lon, zone, lat >= 0.0);
+    let crs = if (28..=38).contains(&zone) && lat >= 0.0 {
+        format!("EPSG:{}", 25800 + zone)
+    } else if lat >= 0.0 {
+        format!("EPSG:{}", 32600 + zone)
+    } else {
+        format!("EPSG:{}", 32700 + zone)
+    };
+    Georeference {
+        crs,
+        eastings: e.round(),
+        northings: n.round(),
+        height: 0.0,
+    }
+}
+
 /// UTM of a latitude and longitude in the georeference's zone.
-fn utm_of(g: &Georeference, lat: f64, lon: f64) -> [f64; 2] {
+pub(crate) fn utm_of(g: &Georeference, lat: f64, lon: f64) -> [f64; 2] {
     let (zone, north) = g.utm_zone().unwrap_or((30, true));
     let (e, n) = archisim_carto::lat_lon_to_utm(lat, lon, zone, north);
     [e, n]
@@ -1494,6 +1506,43 @@ fn dress_brought(
 
 #[cfg(test)]
 mod tests {
+
+    /// A project placed by a search (its georeference with no height)
+    /// takes the height of the terrain at its origin, as one placed by
+    /// the files; without `level_to_ground` it keeps its height.
+    #[test]
+    fn a_project_placed_by_a_search_sits_on_the_terrain() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../archisim-carto/tests/fixtures");
+        let read = |f: &str| std::fs::read_to_string(dir.join(f)).unwrap();
+        let (gml, mdt) = (read("pueblo-catastro.gml"), read("pueblo-mdt05.asc"));
+        // Where the sample is, by the files.
+        let mut placed = Model::new("T");
+        placed.add_level("Planta baja", 0.0);
+        let opts = CartoOptions {
+            styles: false,
+            ..CartoOptions::default()
+        };
+        let files = [("c.gml".into(), gml), ("mdt.asc".into(), mdt)];
+        import_carto(&mut placed, &files, &opts).unwrap();
+        let h = placed.georeference().unwrap().height;
+        assert!(h.abs() > 0.5, "the sample's ground is not at 0: {h}");
+        for (level, height) in [(true, h), (false, 0.0)] {
+            let mut m = Model::new("T");
+            m.add_level("Planta baja", 0.0);
+            m.set_georeference(Some(Georeference {
+                height: 0.0,
+                ..placed.georeference().cloned().unwrap()
+            }))
+            .unwrap();
+            let o = CartoOptions {
+                level_to_ground: level,
+                ..opts.clone()
+            };
+            import_carto(&mut m, &files, &o).unwrap();
+            assert_eq!(m.georeference().unwrap().height, height);
+        }
+    }
 
     /// The LiDAR (V3): a surface model 15,5 m over the terrain on one
     /// building's footprint gives it five floors of 3 m, brought with the
