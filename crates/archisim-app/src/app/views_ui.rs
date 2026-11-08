@@ -320,8 +320,12 @@ impl ArchiSimApp {
     /// and, on a click, every template to switch to — the disciplines
     /// first, then each kind of installation — and the one the levels'
     /// plans follow (`docs/INTERFAZ.md` §13.5).
-    pub(super) fn template_pill(&mut self, ctx: &egui::Context, rect: egui::Rect) {
-        let p = super::theme::Palette::current(ctx);
+    /// The pill of the plan's template, at the top left of the plan. It is
+    /// drawn in the plan's own layer, not as a floating area: dialogs and
+    /// windows go over it (its menu, a popup, still opens above all).
+    pub(super) fn template_pill(&mut self, ui: &mut egui::Ui, rect: egui::Rect) {
+        let ctx = ui.ctx().clone();
+        let p = super::theme::Palette::current(&ctx);
         let model = self.ed.model();
         let templates: Vec<(ViewTemplateId, String)> = model
             .view_templates()
@@ -347,10 +351,12 @@ impl ArchiSimApp {
         let mut pick: Option<Option<ViewTemplateId>> = None;
         let mut for_plans = false;
         let mut bring = false;
-        egui::Area::new(egui::Id::unique("template-pill"))
-            .order(egui::Order::Foreground)
-            .fixed_pos(rect.left_top() + egui::vec2(12.0, 12.0))
-            .show(ctx, |ui| {
+        let spot = egui::Rect::from_min_max(rect.left_top() + egui::vec2(12.0, 12.0), rect.max);
+        ui.scope_builder(
+            egui::UiBuilder::new()
+                .max_rect(spot)
+                .layout(egui::Layout::top_down(egui::Align::Min)),
+            |ui| {
                 egui::Frame::new()
                     .fill(p.panel)
                     .stroke(egui::Stroke::new(1.0, p.line))

@@ -115,7 +115,7 @@ impl ArchiSimApp {
         }
 
         self.draw_overlays(&ctx, &painter, rect);
-        self.template_pill(&ctx, rect);
+        self.template_pill(ui, rect);
         self.temp_edit_ui(&ctx);
         self.terrain_z_editor(&ctx, rect);
 
