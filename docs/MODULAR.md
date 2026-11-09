@@ -70,6 +70,34 @@
 - Pasos por los montantes.
 - Fichero para la perfiladora, cuando se sepa cuál es.
 
+**M7 · Techos.** El falso techo como elemento, que hoy no existe (solo las vistas de techo).
+- Tiene su contorno, su altura, sus capas y sus registros. Se dibuja por contorno o dentro de un local.
+- Sale en la planta de techos, en las secciones y en 3D, y se mide.
+- En el IFC es un `IfcCovering` de techo, a la ida y a la vuelta.
+- Al importar entran los techos de otros programas (los del L-160 se quedaban fuera).
+
+**M8 · Catálogo del sistema.** Las cajas tipo como ficheros cerrados, con versión.
+- Cada una lleva lo que se puede elegir (acabados, carpinterías, distribución dentro de unas reglas) y lo que no se toca.
+- Una caja aprobada se congela con su número de revisión.
+- La primera caja tipo sale del L-160.
+
+**M9 · Taller.**
+- Planos y despiece de cada caja: paneles en alzado, chasis, lista de corte y lista de materiales, por caja.
+- Estado de cada caja: diseñada, aprobada, en fábrica (en qué puesto), en camión, montada.
+- Orden de montaje en obra y plan de grúa.
+
+**M10 · Obra previa desde las cajas.** Los apoyos se colocan solos en las esquinas y en los medios de cada caja, y salen la losa, los pilares y los pernos con sus cotas.
+
+## 3 bis. Cómo se organiza: componentes, cajas tipo y vivienda (9/11/2026)
+
+Decidido con Antonio. **No se separa la estructura en un modelo vinculado** (como se pensó en Revit). La unidad que se fabrica, se transporta y se monta es la caja, y lleva todo junto: chasis, muros, suelo, techo, cubierta, instalaciones y acabados. Las disciplinas se separan con el filtro de disciplina, no en ficheros distintos. Hay tres niveles:
+
+1. **Componentes del sistema**, en la biblioteca del estudio y no en cada proyecto: tipos de muro, suelo, techo y cubierta con su entramado y los perfiles del catálogo, el chasis, las uniones, las carpinterías y los acabados.
+2. **Cajas tipo**: un fichero cerrado y con versión por caja («Caja 6,20 · dormitorio doble», «Caja 6,20 · baño + cocina», «Caja 6,20 · estar con lados abiertos»). Se diseñan y se comprueban una vez. Son los módulos de proyecto de ArchiSim (`model/modules`): un fichero colocado varias veces, girado o en simetría, que avisa cuando cambia.
+3. **La vivienda**: la disposición de las cajas sobre la parcela, más lo propio del sitio (cimentación, acometidas, porche, terreno). El L-160 son 8 cajas y el porche.
+
+Mejorar una caja tipo mejora todas las viviendas que la usan.
+
 ## 4. Buenas prácticas que el programa debe ayudar a seguir
 
 - **La retícula de cajas manda.** Muros de carga y esquinas alineados en vertical; nada que apoye a media luz de una caja.
@@ -171,6 +199,7 @@ Un **módulo ligero** de estructura de acero, no forjados de hormigón. Los dos 
 
 ## 6. Pendiente de Antonio
 
-- Orden aprobado: M4 → M1 → M2 → M5 → M3 → M6. M4 hecho.
+- Orden aprobado (9/11/2026): M4 (hecho) → M7 techos → M1 caja → M8 catálogo con la primera caja tipo → M2 juntas y M3 chasis → M9 taller. M5, M6 y M10 cuando toquen.
+- Exportar desde Revit el modelo de estructura vinculado como IFC aparte, para partir de él en el chasis de la caja tipo.
 - Catálogo de perfiles del fabricante como fichero (`.csv`, §3 ter de ENTRAMADOS).
 - Propuesta de §5 aprobada (9/11/2026).
