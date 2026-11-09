@@ -792,9 +792,16 @@ pub fn ventilation(model: &Model, v: &Ventilation) -> Vec<Block> {
 // ---------------------------------------------------------------------
 
 pub fn thermal(model: &Model, t: &Thermal) -> Vec<Block> {
+    let zone = t.site.winter.index();
+    // Sections numbered in order (the ground's only when there is one).
+    let mut n = 0;
+    let mut heading = |text: &str| {
+        n += 1;
+        Block::Heading(2, format!("{n} {text}"))
+    };
     let mut out = vec![
         Block::Para(
-            "Transmitancias U = 1/(Rsi + Σ e/λ + Rse) con las capas de cada tipo; límites de la tabla 3.1.1.a-HE1 por la zona de invierno y coeficiente global K de los locales calefactados contra la tabla 3.1.1.b-HE1 por la compacidad. Cargas de calefacción por transmisión y ventilación; de refrigeración, con el sol por los vidrios, las personas, la luz y los aparatos.".into(),
+            "Transmitancias U = 1/(Rsi + Σ e/λ + Rse) con las capas de cada tipo; los suelos y muros contra el terreno con la U equivalente de la UNE-EN ISO 13370 (dimensión característica B' = A/(0,5·P), espesor equivalente y aislamiento perimetral). Puentes térmicos lineales medidos en el dibujo (frentes de forjado, pilares en fachada, contorno de huecos, esquinas y encuentros con la cubierta y la solera), con un ψ por clase de encuentro según dónde está el aislamiento del muro. Límites de la tabla 3.1.1.a-HE1 por la zona de invierno y coeficiente global K = (Σ U·A + Σ ψ·L) / Σ A de los locales calefactados contra la tabla 3.1.1.b-HE1 por la compacidad. Control solar de julio (3.1.2), permeabilidad al aire de los huecos y n50 por el anejo H (3.1.3) y condensaciones superficiales (fRsi). Cargas de calefacción por transmisión, puentes térmicos y ventilación; de refrigeración, con el sol por los vidrios, las personas, la luz y los aparatos.".into(),
         ),
         Block::Table {
             columns: vec![col("Dato", 2.0), col("Valor", 3.0)],
@@ -819,10 +826,26 @@ pub fn thermal(model: &Model, t: &Thermal) -> Vec<Block> {
                 vec![
                     "Huecos".into(),
                     format!(
-                        "U ventanas {} W/m²K, puertas {} W/m²K, factor solar {}",
+                        "U ventanas {} W/m²K, puertas {} W/m²K, factor solar {} ({} con la protección móvil), marco {} %, clase de permeabilidad {}",
                         dec(t.site.window_u, 2),
                         dec(t.site.door_u, 2),
-                        dec(t.site.glass_g, 2)
+                        dec(t.site.glass_g, 2),
+                        dec(t.site.shaded_g, 2),
+                        dec(t.site.frame_fraction * 100.0, 0),
+                        t.site.air_class
+                    ),
+                ],
+                vec![
+                    "Terreno".into(),
+                    format!(
+                        "λ = {} W/mK{}",
+                        dec(t.site.ground_conductivity, 1),
+                        t.site.edge.map_or(String::new(), |e| format!(
+                            "; aislamiento perimetral {} de {} m, R = {} m²K/W",
+                            if e.vertical { "vertical" } else { "horizontal" },
+                            dec(e.size, 2),
+                            dec(e.resistance, 2)
+                        ))
                     ),
                 ],
                 vec![
@@ -836,7 +859,7 @@ pub fn thermal(model: &Model, t: &Thermal) -> Vec<Block> {
                 ],
             ],
         },
-        Block::Heading(2, "1 Elementos de la envolvente".into()),
+        heading("Elementos de la envolvente"),
         Block::Table {
             columns: vec![
                 col("Elemento", 1.2),
@@ -872,22 +895,242 @@ pub fn thermal(model: &Model, t: &Thermal) -> Vec<Block> {
             ),
         ));
     }
+    if !t.ground.is_empty() {
+        out.push(heading("Suelos sobre el terreno (UNE-EN ISO 13370)"));
+        out.push(Block::Table {
+            columns: vec![
+                col("Planta", 1.6),
+                col("A (m²)", 0.8),
+                col("P (m)", 0.8),
+                col("B' (m)", 0.8),
+                col("dt (m)", 0.8),
+                col("z (m)", 0.7),
+                col("U capas", 0.8),
+                col("U equivalente", 1.0),
+            ],
+            rows: t
+                .ground
+                .iter()
+                .map(|(l, g)| {
+                    vec![
+                        level_name(model, *l),
+                        dec(g.area, 1),
+                        dec(g.perimeter, 1),
+                        dec(g.b, 2),
+                        dec(g.dt, 2),
+                        dec(g.depth, 2),
+                        dec(g.u_layers, 2),
+                        dec(g.u, 2),
+                    ]
+                })
+                .collect(),
+        });
+    }
+    out.push(heading("Puentes térmicos"));
+    if t.bridges.is_empty() {
+        out.push(Block::Para(
+            "No hay encuentros de fachada en la envolvente.".into(),
+        ));
+    } else {
+        out.push(Block::Table {
+            columns: vec![
+                col("Encuentro", 1.8),
+                col("Aislamiento", 1.5),
+                col("Longitud (m)", 0.9),
+                col("ψ (W/mK)", 0.8),
+                col("ψ·L (W/K)", 0.8),
+                col("fRsi", 0.6),
+            ],
+            rows: t
+                .bridges
+                .iter()
+                .map(|b| {
+                    vec![
+                        b.junction.name().to_string(),
+                        b.insulation.name().to_string(),
+                        dec(b.length, 1),
+                        dec(b.psi, 2),
+                        dec(b.h, 1),
+                        dec(b.f_rsi, 2),
+                    ]
+                })
+                .collect(),
+        });
+    }
     out.push(check(
-        t.k > t.k_limit + 1e-9,
+        t.k_fails(),
         format!(
-            "Coeficiente global K = {} W/m²K (≤ {}, tabla 3.1.1.b-HE1)",
+            "Coeficiente global K = ({} + {}) / {} = {} W/m²K (≤ {}, tabla 3.1.1.b-HE1)",
+            dec(t.ua, 1),
+            dec(t.psi_l, 1),
+            dec(t.envelope, 0),
             dec(t.k, 2),
             dec(t.k_limit, 2)
         ),
     ));
-    out.push(Block::Heading(2, "2 Cargas térmicas".into()));
+    out.push(heading("Control solar (3.1.2)"));
+    let sol = &t.solar;
+    if !sol.by_facing.is_empty() {
+        out.push(Block::Table {
+            columns: vec![
+                col("Orientación", 1.0),
+                col("Vidrio (m²)", 1.0),
+                col("H julio (kWh/m²)", 1.2),
+                col("Sombra media", 1.0),
+                col("Ganancia (kWh)", 1.0),
+            ],
+            rows: sol
+                .by_facing
+                .iter()
+                .map(|(f, a, sh, g)| {
+                    vec![
+                        f.name().to_string(),
+                        dec(*a, 1),
+                        dec(archisim_mep::envelope::july_radiation(t.site.summer, *f), 0),
+                        dec(*sh, 2),
+                        dec(*g, 0),
+                    ]
+                })
+                .collect(),
+        });
+    }
+    out.push(check(
+        sol.fails(),
+        format!(
+            "q sol;jul = {} kWh/m²·mes sobre {} m² útiles (≤ {}, {})",
+            dec(sol.q, 2),
+            dec(sol.useful, 1),
+            dec(sol.limit, 2),
+            if sol.residential {
+                "residencial privado"
+            } else {
+                "otros usos"
+            }
+        ),
+    ));
+    out.push(heading("Permeabilidad al aire (3.1.3)"));
+    if !t.air.windows.is_empty() {
+        out.push(Block::Table {
+            columns: vec![
+                col("Ventana", 2.6),
+                col("m²", 0.6),
+                col("Clase", 0.6),
+                col("Q100 (m³/h·m²)", 1.1),
+                col("Límite", 0.7),
+            ],
+            rows: t
+                .air
+                .windows
+                .iter()
+                .map(|w| {
+                    vec![
+                        w.type_name.clone(),
+                        dec(w.area, 1),
+                        w.class.to_string(),
+                        dec(w.q100, 0),
+                        dec(w.limit, 0),
+                    ]
+                })
+                .collect(),
+        });
+        for w in t.air.windows.iter().filter(|w| w.fails()) {
+            out.push(check(
+                true,
+                format!(
+                    "«{}»: clase {} ({} m³/h·m²), límite {} en la zona {}",
+                    w.type_name,
+                    w.class,
+                    dec(w.q100, 0),
+                    dec(w.limit, 0),
+                    t.site.winter.letter()
+                ),
+            ));
+        }
+    }
+    let n50_text = format!(
+        "n50 = {} h⁻¹ ({})",
+        dec(t.air.n50, 2),
+        if t.air.measured {
+            "medida".to_string()
+        } else {
+            format!(
+                "anejo H: 0,629·({} m³/h·m² × {} m² opacos + huecos por su clase) / {} m³",
+                dec(t.air.opaque_air, 0),
+                dec(t.air.opaque_area, 0),
+                dec(t.volume, 0)
+            )
+        }
+    );
+    if t.air.applies {
+        out.push(check(
+            t.air.n50_fails(),
+            format!("{n50_text}; límite {} (tabla 3.1.3.b)", dec(t.air.limit, 2)),
+        ));
+    } else {
+        out.push(Block::Check {
+            status: Status::Info,
+            text: format!(
+                "{n50_text}. La tabla 3.1.3.b se aplica a las viviendas de más de 120 m² útiles."
+            ),
+        });
+    }
+    out.push(heading("Condensaciones superficiales"));
+    out.push(Block::Para(format!(
+        "fRsi = 1 − 0,25·U de cada tipo opaco y el de cada clase de puente térmico, contra fRsi,min = {} (higrometría {}, zona {}).",
+        dec(archisim_mep::envelope::f_rsi_min(zone, t.site.hygrometry), 2),
+        t.site.hygrometry,
+        t.site.winter.letter()
+    )));
+    out.push(Block::Table {
+        columns: vec![col("Elemento", 1.4), col("Tipo", 2.8), col("fRsi", 0.7)],
+        rows: t
+            .condensation
+            .iter()
+            .map(|c| {
+                vec![
+                    c.kind.name().to_string(),
+                    c.type_name.clone(),
+                    dec(c.f_rsi, 2),
+                ]
+            })
+            .collect(),
+    });
+    for c in t.condensation.iter().filter(|c| c.fails()) {
+        out.push(check(
+            true,
+            format!(
+                "{} «{}»: fRsi {} < {}",
+                c.kind.name(),
+                c.type_name,
+                dec(c.f_rsi, 2),
+                dec(c.f_min, 2)
+            ),
+        ));
+    }
+    for b in t.bridges.iter().filter(|b| b.condenses()) {
+        out.push(check(
+            true,
+            format!(
+                "{} ({}): fRsi {} < {}",
+                b.junction.name(),
+                b.insulation.name(),
+                dec(b.f_rsi, 2),
+                dec(b.f_min, 2)
+            ),
+        ));
+    }
+    if !t.condensation.iter().any(|c| c.fails()) && !t.bridges.iter().any(|b| b.condenses()) {
+        out.push(check(false, "Sin condensaciones superficiales".into()));
+    }
+    out.push(heading("Cargas térmicas"));
     out.push(Block::Table {
         columns: vec![
-            col("Local", 2.2),
-            col("Planta", 1.4),
-            col("m²", 0.7),
-            col("Calefacción (W)", 1.1),
-            col("Refrigeración (W)", 1.1),
+            col("Local", 1.8),
+            col("Planta", 1.1),
+            col("m²", 0.6),
+            col("Calefacción (W)", 1.0),
+            col("de puentes (W)", 0.9),
+            col("Refrigeración (W)", 1.0),
             col("Unidad", 0.8),
         ],
         rows: t
@@ -899,13 +1142,14 @@ pub fn thermal(model: &Model, t: &Thermal) -> Vec<Block> {
                     level_name(model, r.level),
                     dec(r.area, 1),
                     dec(r.heating, 0),
+                    dec(r.heat_bridges, 0),
                     dec(r.cooling, 0),
                     r.unit.map_or("—".into(), |u| format!("{} kW", dec(u, 1))),
                 ]
             })
             .collect(),
     });
-    out.push(Block::Heading(2, "3 Equipos".into()));
+    out.push(heading("Equipos"));
     out.push(Block::Table {
         columns: vec![
             col("Grupo", 2.4),

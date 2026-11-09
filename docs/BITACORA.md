@@ -6,6 +6,73 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-08 (129) · Envolvente, segunda vuelta: puentes térmicos, terreno, control solar, permeabilidad y condensaciones (DB-HE 1)
+
+Rama `bloque/he1-puentes`, con pull request. Va sobre la de la entrada 128 (#182, encima de #181, #180 y #179). **Formato versión 96**: los datos nuevos de la envolvente en `thermal`. Sin cambios de IFC. `docs/INSTALACIONES.md` §7.
+
+- **Puentes térmicos lineales.** Se miden en el dibujo, local a local:
+  - frente de forjado a lo largo de cada fachada, en el suelo de cada planta sobre otra;
+  - pilares dentro de un muro de fachada (cada uno una vez, con la altura del local);
+  - contorno de cada ventana y puerta exterior: jambas, dintel y alféizar;
+  - esquinas salientes y entrantes de la fachada;
+  - encuentro de la fachada con la cubierta y con la solera.
+  
+  Cada clase lleva un ψ según dónde está el aislamiento del muro, que se saca de sus capas: por fuera, por dentro, en cámara o sin aislar. Los ψ habituales están en una tabla al principio de `crates/archisim-mep/src/envelope.rs`. En la ventana, el grupo «Puentes térmicos» enseña cada clase que hay en el dibujo con su longitud, y su ψ se cambia por el del detalle del proyecto. Entran en K = (Σ U·A + Σ ψ·L) / Σ A y en la calefacción (y en la refrigeración, salvo el de la solera).
+- **Terreno por la UNE-EN ISO 13370.**
+  - La solera ya no se calcula solo con sus capas: lleva la U equivalente por B' = A/(0,5·P) de su planta. El perímetro P cuenta la fachada y los lados a locales sin acondicionar (portal, garaje); las medianeras no.
+  - Se tienen en cuenta el espesor equivalente, la conductividad del terreno (2,0 W/mK por defecto) y, si se da, el aislamiento perimetral vertical u horizontal.
+  - En las plantas por debajo del ±0,00, el suelo va con su profundidad y los muros enterrados son «muro contra el terreno» con su U.
+- **Control solar, q sol;jul (3.1.2).**
+  - Se usa la radiación de julio por orientación y zona de verano, el factor solar con la protección móvil echada (0,15 por defecto) y la fracción de marco (25 %).
+  - La sombra de lo que vuela sobre cada ventana sale del dibujo: forjado o balcón de la planta de encima, o alero. Se busca hasta 3 m y se suma el retranqueo del marco.
+  - El límite es 2,00 kWh/m²·mes en residencial privado y 4,00 en los demás usos.
+- **Permeabilidad (3.1.3).**
+  - Cada tipo de ventana va con su clase (la general o la suya), contra la tabla 3.1.3.a por zona de invierno.
+  - La n50 sale por el anejo H (0,629·(Co·Ao + Σ Ch·Ah)/V) o se escribe la medida. Se compara con la tabla 3.1.3.b en viviendas de más de 120 m² útiles.
+- **Condensaciones superficiales.** El fRsi = 1 − 0,25·U de cada tipo opaco y el fRsi de cada clase de puente se comparan con el fRsi,min por higrometría y zona.
+- **Dónde sale:** la ventana, la Comprobación CTE, `archisim climatizacion` y la memoria de instalaciones (secciones nuevas: suelos sobre el terreno, puentes térmicos, control solar, permeabilidad y condensaciones).
+- **La ventana** lleva los datos en una parte con barra de desplazamiento, para que el resultado siga a la vista.
+- **Interfaz (commit aparte).** El selector de plantilla que flota sobre la planta («Arquitectura», «Estructura»…) ya no tapa los diálogos: ahora va en la capa de la planta. Los diálogos y ventanas, como Archivo → Descargar el entorno, pasan por encima. Su menú se sigue abriendo encima de todo.
+- **Pruebas.**
+  - Una caja hecha a mano de 10 × 6 m con una ventana al sur bajo un balcón de 1 m y un pilar en la fachada. Se comprueban las longitudes de cada puente (4 esquinas × 2,70; el contorno de la ventana; el pilar; cubierta y solera a lo largo de todo el perímetro), ΣψL, K, B' y la U de la solera, la sombra de la ventana, q sol;jul, la n50 y el fRsi.
+  - La UNE-EN ISO 13370 contra números hechos a mano: 10 × 10 m sin aislar da U = 0,762; con R = 2, 0,287. También el muro de sótano, la sombra y el anejo H.
+  - Un sótano, el ψ propio de una clase y la ventana de la aplicación.
+- **Florence Street (A4).**
+  - La solera pasa de 2,87 a 0,58 W/m²K (B' = 6,3 m).
+  - Puentes térmicos: 90 W/K, sobre todo los frentes de forjado de los muros sin aislar.
+  - K = 1,97 (antes 2,27).
+  - q sol;jul = 1,88, cumple por poco: lo marca el muro cortina, al que no se calcula sombra.
+  - n50 = 1,29: cumple.
+  - Condensan el hormigón visto, los tabiques de los patios y la losa vista, que tampoco cumplen la U.
+  - 34 kW de calefacción y 101 de refrigeración.
+
+**Pendiente.**
+- Las condensaciones intersticiales (Glaser con enero): harían falta los factores de resistencia al vapor de cada material. Quedan en «Lo que no hace».
+- Los puentes de los muros cortina y las esquinas entre muro y muro cortina; el ψ que depende a la vez del muro y de la cubierta o la solera (se toma el del muro); las aletas laterales y las sombras del entorno; las orientaciones intermedias.
+
+**Escrito de memoria (que lo compruebe Antonio).** Todas las tablas nuevas están juntas al principio de `crates/archisim-mep/src/envelope.rs`:
+- los ψ y fRsi por defecto de los puentes;
+- la radiación de julio por zona;
+- los límites de q sol;jul (2,00 y 4,00);
+- las permeabilidades por clase (50, 27, 9 y 3) y los límites de la tabla 3.1.3.a (27 hasta la zona B y 9 desde la C);
+- el anejo H (0,629; Co 16 y 29) y la tabla 3.1.3.b (6 y 3 h⁻¹ entre V/A 2 y 4, más de 120 m²);
+- los fRsi,min (0,50 a 0,64; 0,85 y 0,90).
+
+**Qué debe probar Antonio:**
+1. Abre un proyecto suyo con fachadas, forjados y cubierta, y entra en Colaboración → Envolvente y cargas térmicas.
+   - En «Puentes térmicos» deben salir las clases con su longitud. Mira si las longitudes cuadran con el dibujo: frentes de forjado igual al perímetro de fachada por planta, esquinas igual a su número por la altura libre.
+   - Cambia el ψ de una clase por el de un detalle suyo: K debe subir o bajar. «Habitual» lo devuelve.
+   - Comprueba que el aislamiento del muro sale donde está: por fuera en un SATE, en cámara en una doble hoja.
+2. En el mismo proyecto, en la tabla de elementos, el suelo sobre el terreno debe llevar la U equivalente (más baja que la de sus capas). Activa el aislamiento perimetral y mira cómo baja.
+3. Dibuja un balcón (un forjado de la planta de encima que vuele sobre una ventana al sur): en el informe, esa ventana debe salir con sombra y bajar q sol;jul.
+4. Pon una ventana de clase 1 en zona C: debe salir «no cumple» en la Comprobación CTE (tabla 3.1.3.a).
+5. En la línea de órdenes: `archisim climatizacion out/florence/edificio.archisim` (tras `archisim edificio out/florence`). Revisa las secciones nuevas.
+6. Archivo → Exportar → Memoria de instalaciones: el capítulo de la envolvente debe traer las tablas de puentes, terreno, control solar, permeabilidad y condensaciones.
+7. Abre Archivo → Descargar el entorno con una planta abierta: el selector «Arquitectura» debe quedar debajo del diálogo, y seguir funcionando al cerrarlo.
+8. Revisa los valores de memoria de la lista de arriba contra el DB-HE y sus documentos de apoyo.
+
+---
+
 ## 2026-11-08 (128) · Traer el entorno por dirección
 
 Rama `bloque/entorno-direccion`, con pull request. Va sobre la de la entrada 127 (#181, encima de #180 y #179). Sin cambios de formato (sigue la versión 95) ni de IFC. `docs/ENTORNO.md`, «Buscar el lugar por su dirección».

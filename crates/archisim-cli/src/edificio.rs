@@ -3333,5 +3333,16 @@ mod tests {
             .elements
             .iter()
             .any(|e| e.kind == archisim_mep::thermal::Kind::Curtain));
+        // The bridges, the ground slab by UNE-EN ISO 13370 and the solar
+        // control of the curtain walls.
+        assert!(t.psi_l > 0.0);
+        assert!(t
+            .bridges
+            .iter()
+            .any(|b| b.junction == archisim_core::Junction::SlabFront));
+        assert_eq!(t.ground.len(), 1);
+        assert!(t.ground[0].1.u < t.ground[0].1.u_layers);
+        assert!(t.solar.q > 0.0 && t.solar.useful > 0.0);
+        assert!(t.air.applies);
     }
 }

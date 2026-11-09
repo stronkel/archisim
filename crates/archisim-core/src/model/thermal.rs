@@ -4,7 +4,9 @@
 //! the transmittance of the windows and doors.
 //!
 //! The envelope itself (walls, roofs, floors and openings, and which of
-//! their faces are outside) comes from the drawing.
+//! their faces are outside) comes from the drawing; so do the lengths of
+//! its thermal bridges ([`Junction`]), whose ψ by the place of the
+//! insulation ([`Insulation`]) may be set here class by class.
 
 use super::*;
 
@@ -86,6 +88,126 @@ pub fn usual_summer_air(summer: u8) -> f64 {
     }
 }
 
+/// A class of linear thermal bridge (DB-HE, documento de apoyo 3).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Junction {
+    /// The edge of a floor slab that reaches a façade.
+    SlabFront,
+    /// A column inside a façade.
+    Pillar,
+    /// Jambs, head and sill of a window or an outside door.
+    OpeningPerimeter,
+    /// An outward corner of the façade.
+    OuterCorner,
+    /// An inward corner of the façade.
+    InnerCorner,
+    /// The façade against the roof.
+    Roof,
+    /// The façade against the ground floor.
+    Ground,
+}
+
+impl Junction {
+    pub const ALL: [Junction; 7] = [
+        Junction::SlabFront,
+        Junction::Pillar,
+        Junction::OpeningPerimeter,
+        Junction::OuterCorner,
+        Junction::InnerCorner,
+        Junction::Roof,
+        Junction::Ground,
+    ];
+
+    pub fn code(self) -> &'static str {
+        match self {
+            Junction::SlabFront => "slab_front",
+            Junction::Pillar => "pillar",
+            Junction::OpeningPerimeter => "opening",
+            Junction::OuterCorner => "outer_corner",
+            Junction::InnerCorner => "inner_corner",
+            Junction::Roof => "roof",
+            Junction::Ground => "ground",
+        }
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Junction::SlabFront => "Frente de forjado",
+            Junction::Pillar => "Pilar en fachada",
+            Junction::OpeningPerimeter => "Contorno de huecos",
+            Junction::OuterCorner => "Esquina saliente",
+            Junction::InnerCorner => "Esquina entrante",
+            Junction::Roof => "Encuentro con la cubierta",
+            Junction::Ground => "Encuentro con la solera",
+        }
+    }
+
+    pub fn index(self) -> usize {
+        self as usize
+    }
+}
+
+/// Where the insulation of a façade is, which sets the ψ of its bridges.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Insulation {
+    /// Outside the structural leaf (ETICS, ventilated façade).
+    Outside,
+    /// Inside it (lining on the room side).
+    Inside,
+    /// Between two leaves (in the cavity).
+    Middle,
+    /// No insulating layer.
+    None,
+}
+
+impl Insulation {
+    pub const ALL: [Insulation; 4] = [
+        Insulation::Outside,
+        Insulation::Inside,
+        Insulation::Middle,
+        Insulation::None,
+    ];
+
+    pub fn code(self) -> &'static str {
+        match self {
+            Insulation::Outside => "outside",
+            Insulation::Inside => "inside",
+            Insulation::Middle => "middle",
+            Insulation::None => "none",
+        }
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Insulation::Outside => "aislada por fuera",
+            Insulation::Inside => "aislada por dentro",
+            Insulation::Middle => "aislamiento en cámara",
+            Insulation::None => "sin aislar",
+        }
+    }
+
+    pub fn index(self) -> usize {
+        self as usize
+    }
+}
+
+/// The key of a class of thermal bridge in [`ThermalSite::psi`].
+pub fn psi_key(j: Junction, i: Insulation) -> String {
+    format!("{}/{}", j.code(), i.code())
+}
+
+/// Insulation along the edge of a slab on the ground (UNE-EN ISO 13370).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct EdgeInsulation {
+    /// Down the foundation (true) or flat under the slab's edge.
+    pub vertical: bool,
+    /// Its depth or width, m.
+    pub size: f64,
+    /// Its thermal resistance, m²K/W, and its thickness, m.
+    pub resistance: f64,
+    pub thickness: f64,
+}
+
 /// What the thermal calculations need besides the drawing.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ThermalSite {
@@ -107,6 +229,30 @@ pub struct ThermalSite {
     /// Thermal conductivity of a material, W/mK, where the usual one of
     /// its name or kind is not right.
     pub conductivity: BTreeMap<MaterialId, f64>,
+    /// ψ of a class of thermal bridge, W/mK, where the usual one is not
+    /// right (by [`psi_key`]).
+    pub psi: BTreeMap<String, f64>,
+    /// Conductivity of the ground, W/mK (UNE-EN ISO 13370: 1,5 clay, 2,0
+    /// sand, 3,5 rock).
+    pub ground_conductivity: f64,
+    /// Insulation along the edge of the ground slab, if any.
+    pub edge: Option<EdgeInsulation>,
+    /// Solar factor of the glass with its movable shading drawn (blinds,
+    /// shutters), for the solar control of July; and the part of a window
+    /// that is frame.
+    pub shaded_g: f64,
+    pub frame_fraction: f64,
+    /// Air permeability class of the windows (UNE-EN 12207, 1 to 4), and
+    /// of some window types.
+    pub air_class: u8,
+    pub air_classes: BTreeMap<OpeningTypeId, u8>,
+    /// n50 measured (a blower-door test), h⁻¹; otherwise it is worked out.
+    pub n50: Option<f64>,
+    /// Air flow through the opaque envelope at 100 Pa, m³/h·m² (anejo H:
+    /// 16 new, 29 existing).
+    pub opaque_air: f64,
+    /// Hygrometry class of the rooms (1 to 5; 3 or less for dwellings).
+    pub hygrometry: u8,
 }
 
 impl Default for ThermalSite {
@@ -123,6 +269,16 @@ impl Default for ThermalSite {
             door_u: 2.2,
             glass_g: 0.6,
             conductivity: BTreeMap::new(),
+            psi: BTreeMap::new(),
+            ground_conductivity: 2.0,
+            edge: None,
+            shaded_g: 0.15,
+            frame_fraction: 0.25,
+            air_class: 3,
+            air_classes: BTreeMap::new(),
+            n50: None,
+            opaque_air: 16.0,
+            hygrometry: 3,
         }
     }
 }
@@ -131,6 +287,16 @@ impl ThermalSite {
     /// «A4».
     pub fn zone(&self) -> String {
         format!("{}{}", self.winter.letter(), self.summer)
+    }
+
+    /// The ψ set for a class of thermal bridge, if any.
+    pub fn psi_set(&self, j: Junction, i: Insulation) -> Option<f64> {
+        self.psi.get(&psi_key(j, i)).copied()
+    }
+
+    /// The air permeability class of a window type.
+    pub fn air_class_of(&self, t: OpeningTypeId) -> u8 {
+        self.air_classes.get(&t).copied().unwrap_or(self.air_class)
     }
 
     pub fn is_valid(&self) -> bool {
@@ -142,10 +308,32 @@ impl ThermalSite {
             self.window_u,
             self.door_u,
             self.glass_g,
+            self.ground_conductivity,
+            self.shaded_g,
+            self.frame_fraction,
+            self.opaque_air,
         ]
         .iter()
         .all(|v| v.is_finite());
-        fin && (1..=4).contains(&self.summer)
+        let edge_ok = self.edge.is_none_or(|e| {
+            e.size.is_finite()
+                && e.size > 0.0
+                && e.resistance.is_finite()
+                && e.resistance >= 0.0
+                && e.thickness.is_finite()
+                && e.thickness >= 0.0
+        });
+        fin && edge_ok
+            && (1..=4).contains(&self.summer)
+            && self.ground_conductivity > 0.0
+            && (0.0..=1.0).contains(&self.shaded_g)
+            && (0.0..1.0).contains(&self.frame_fraction)
+            && self.opaque_air >= 0.0
+            && (1..=4).contains(&self.air_class)
+            && self.air_classes.values().all(|c| (1..=4).contains(c))
+            && self.n50.is_none_or(|v| v.is_finite() && v > 0.0)
+            && (1..=5).contains(&self.hygrometry)
+            && self.psi.values().all(|v| v.is_finite())
             && self.window_u > 0.0
             && self.door_u > 0.0
             && (0.0..=1.0).contains(&self.glass_g)

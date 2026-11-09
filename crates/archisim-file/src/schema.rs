@@ -6182,6 +6182,56 @@ pub struct ThermalOf {
     /// `[material id, W/mK]`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub conductivity: Vec<(u64, f64)>,
+    /// `[«junction/insulation», W/mK]` (version 96).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub psi: Vec<(String, f64)>,
+    #[serde(default = "default_ground_conductivity")]
+    pub ground_conductivity: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub edge: Option<EdgeInsulationOf>,
+    #[serde(default = "default_shaded_g")]
+    pub shaded_g: f64,
+    #[serde(default = "default_frame_fraction")]
+    pub frame_fraction: f64,
+    #[serde(default = "default_air_class")]
+    pub air_class: u8,
+    /// `[window type id, class]`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub air_classes: Vec<(u64, u8)>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub n50: Option<f64>,
+    #[serde(default = "default_opaque_air")]
+    pub opaque_air: f64,
+    #[serde(default = "default_hygrometry")]
+    pub hygrometry: u8,
+}
+
+fn default_ground_conductivity() -> f64 {
+    core::ThermalSite::default().ground_conductivity
+}
+fn default_shaded_g() -> f64 {
+    core::ThermalSite::default().shaded_g
+}
+fn default_frame_fraction() -> f64 {
+    core::ThermalSite::default().frame_fraction
+}
+fn default_air_class() -> u8 {
+    core::ThermalSite::default().air_class
+}
+fn default_opaque_air() -> f64 {
+    core::ThermalSite::default().opaque_air
+}
+fn default_hygrometry() -> u8 {
+    core::ThermalSite::default().hygrometry
+}
+
+/// Insulation along the edge of the ground slab (version 96).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EdgeInsulationOf {
+    pub vertical: bool,
+    pub size: f64,
+    pub resistance: f64,
+    pub thickness: f64,
 }
 
 impl ThermalOf {
@@ -6200,6 +6250,21 @@ impl ThermalOf {
             door_u: site.door_u,
             glass_g: site.glass_g,
             conductivity: site.conductivity.iter().map(|(m, v)| (m.0, *v)).collect(),
+            psi: site.psi.iter().map(|(k, v)| (k.clone(), *v)).collect(),
+            ground_conductivity: site.ground_conductivity,
+            edge: site.edge.map(|e| EdgeInsulationOf {
+                vertical: e.vertical,
+                size: e.size,
+                resistance: e.resistance,
+                thickness: e.thickness,
+            }),
+            shaded_g: site.shaded_g,
+            frame_fraction: site.frame_fraction,
+            air_class: site.air_class,
+            air_classes: site.air_classes.iter().map(|(t, c)| (t.0, *c)).collect(),
+            n50: site.n50,
+            opaque_air: site.opaque_air,
+            hygrometry: site.hygrometry,
         })
     }
 
@@ -6222,6 +6287,25 @@ impl ThermalOf {
                 .iter()
                 .map(|(m, v)| (core::MaterialId(*m), *v))
                 .collect(),
+            psi: self.psi.iter().cloned().collect(),
+            ground_conductivity: self.ground_conductivity,
+            edge: self.edge.as_ref().map(|e| core::EdgeInsulation {
+                vertical: e.vertical,
+                size: e.size,
+                resistance: e.resistance,
+                thickness: e.thickness,
+            }),
+            shaded_g: self.shaded_g,
+            frame_fraction: self.frame_fraction,
+            air_class: self.air_class,
+            air_classes: self
+                .air_classes
+                .iter()
+                .map(|(t, c)| (core::OpeningTypeId(*t), *c))
+                .collect(),
+            n50: self.n50,
+            opaque_air: self.opaque_air,
+            hygrometry: self.hygrometry,
         })
     }
 }

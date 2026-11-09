@@ -23,6 +23,7 @@
 
 pub mod drain;
 pub mod electrical;
+pub mod envelope;
 pub mod renewables;
 pub mod solar;
 pub mod thermal;

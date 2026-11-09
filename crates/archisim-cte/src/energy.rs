@@ -1,7 +1,10 @@
 //! DB-HE 1, the envelope, from the calculation of
 //! `archisim_mep::thermal`: the transmittance of every type of the
-//! envelope against its limit, the global coefficient K, and the loads
-//! and equipment as figures (the radiators drawn, against their room);
+//! envelope against its limit, the global coefficient K with the thermal
+//! bridges, the solar control of July, the air permeability of the
+//! windows and n50, the surface condensation of the opaque types and the
+//! bridges, and the loads and equipment as figures (the radiators drawn,
+//! against their room);
 //! and DB-HE 4 and HE 5, the renewables, from `archisim_mep::renewables`.
 
 use archisim_core::Model;
@@ -60,6 +63,28 @@ pub fn check(model: &Model, report: &mut Report) {
             format!("≤ {}", w(e.limit)),
         );
     }
+    for (_, g) in &t.ground {
+        push(
+            Status::Info,
+            Subject::Building,
+            None,
+            "HE 1, UNE-EN ISO 13370",
+            format!(
+                "Suelo sobre el terreno, U equivalente: B' = {} m (A {} m², P {} m){}; con sus capas solas, {}",
+                dec(g.b, 2),
+                dec(g.area, 1),
+                dec(g.perimeter, 1),
+                if g.depth > 0.0 {
+                    format!(", a {} m bajo el terreno", dec(g.depth, 2))
+                } else {
+                    String::new()
+                },
+                w(g.u_layers)
+            ),
+            w(g.u),
+            String::new(),
+        );
+    }
     push(
         if t.k_fails() {
             Status::Fails
@@ -70,12 +95,122 @@ pub fn check(model: &Model, report: &mut Report) {
         None,
         "HE 1, tabla 3.1.1.b",
         format!(
-            "Coeficiente global K de la envolvente (V/A = {} m)",
+            "Coeficiente global K de la envolvente, con {} W/K de puentes térmicos (V/A = {} m)",
+            dec(t.psi_l, 1),
             dec(t.compactness, 2)
         ),
         w(t.k),
         format!("≤ {}", w(t.k_limit)),
     );
+    let sol = &t.solar;
+    if sol.useful > 0.0 && sol.windows + sol.by_facing.len() > 0 {
+        push(
+            if sol.fails() {
+                Status::Fails
+            } else {
+                Status::Passes
+            },
+            Subject::Building,
+            None,
+            "HE 1, 3.1.2",
+            format!(
+                "Control solar de julio q sol;jul ({} m² útiles; {} de {} ventanas con un forjado, balcón o alero encima)",
+                dec(sol.useful, 0),
+                sol.overhung,
+                sol.windows
+            ),
+            format!("{} kWh/m²·mes", dec(sol.q, 2)),
+            format!("≤ {} kWh/m²·mes", dec(sol.limit, 2)),
+        );
+    }
+    for a in &t.air.windows {
+        push(
+            if a.fails() {
+                Status::Fails
+            } else {
+                Status::Passes
+            },
+            Subject::Building,
+            None,
+            "HE 1, tabla 3.1.3.a",
+            format!(
+                "Permeabilidad de «{}» (clase {}, zona {})",
+                a.type_name,
+                a.class,
+                t.site.winter.letter()
+            ),
+            format!("{} m³/h·m²", dec(a.q100, 0)),
+            format!("≤ {} m³/h·m²", dec(a.limit, 0)),
+        );
+    }
+    if t.air.applies {
+        push(
+            if t.air.n50_fails() {
+                Status::Fails
+            } else {
+                Status::Passes
+            },
+            Subject::Building,
+            None,
+            "HE 1, tabla 3.1.3.b",
+            format!(
+                "Relación de cambio de aire a 50 Pa ({})",
+                if t.air.measured {
+                    "medida"
+                } else {
+                    "anejo H, método simplificado"
+                }
+            ),
+            format!("{} h⁻¹", dec(t.air.n50, 2)),
+            format!("≤ {} h⁻¹", dec(t.air.limit, 2)),
+        );
+    }
+    for c in &t.condensation {
+        push(
+            if c.fails() {
+                Status::Fails
+            } else {
+                Status::Passes
+            },
+            Subject::Building,
+            None,
+            "HE 1, condensaciones superficiales",
+            format!(
+                "{} «{}» (higrometría {})",
+                c.kind.name(),
+                c.type_name,
+                t.site.hygrometry
+            ),
+            format!("fRsi {}", dec(c.f_rsi, 2)),
+            format!("≥ {}", dec(c.f_min, 2)),
+        );
+    }
+    for b in &t.bridges {
+        push(
+            if b.condenses() {
+                Status::Fails
+            } else {
+                Status::Info
+            },
+            Subject::Building,
+            None,
+            "HE 1, puentes térmicos",
+            format!(
+                "{} ({}): {} m × ψ {} W/mK; fRsi {}",
+                b.junction.name(),
+                b.insulation.name(),
+                dec(b.length, 1),
+                dec(b.psi, 2),
+                dec(b.f_rsi, 2)
+            ),
+            format!("{} W/K", dec(b.h, 1)),
+            if b.condenses() {
+                format!("fRsi ≥ {}", dec(b.f_min, 2))
+            } else {
+                String::new()
+            },
+        );
+    }
     for r in &t.rooms {
         if r.radiators_short() {
             push(

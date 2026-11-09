@@ -306,24 +306,75 @@ Colaboración → **Envolvente y cargas térmicas…**. En la ventana se escribe
 
 **Transmitancias.** U = 1/(Rsi + Σ e/λ + Rse) con las capas del tipo:
 - resistencias superficiales de 0,13 y 0,04 en muros, 0,10 hacia arriba en cubiertas y 0,17 hacia abajo en suelos;
-- una cámara de aire cuenta 0,17 m²K/W;
-- el suelo sobre el terreno, solo con sus capas, sin el efecto del terreno (queda del lado de la seguridad).
+- una cámara de aire cuenta 0,17 m²K/W.
+
+**Contra el terreno (UNE-EN ISO 13370).**
+- **Solera.** La U no es la de sus capas solas: es la U equivalente de la norma, planta por planta.
+  - A es la superficie de los locales acondicionados sobre el terreno.
+  - P es su perímetro expuesto: los lados a la fachada y los lados a locales sin acondicionar de la misma planta (portal, garaje). Las medianeras no cuentan.
+  - B' = A / (0,5·P); el espesor equivalente dt = w + λ·(Rsi + Rf + Rse), con w el grueso medio de la fachada (un muro cortina cuenta 15 cm) y λ la conductividad del terreno (2,0 W/mK por defecto, arena o grava; 1,5 arcilla, 3,5 roca).
+  - U = 2λ/(πB' + dt)·ln(πB'/dt + 1) si dt < B'; si no, λ/(0,457·B' + dt).
+  - **Aislamiento perimetral**, si lo hay (en la ventana: vertical u horizontal, profundidad o ancho, resistencia y espesor): ψ = −λ/π·[ln(D/dt + 1) − ln(D/(dt + d') + 1)], con 2D si es vertical, y U' = U + 2ψ/B'.
+- **Sótanos.** Una planta por debajo del ±0,00 está a esa profundidad z bajo el terreno:
+  - su suelo, con dt + 0,5·z;
+  - sus muros de fachada, hasta la altura enterrada, son «muro contra el terreno»: U = 2λ/(πz)·(1 + 0,5·dt/(dt + z))·ln(z/dw + 1). Lo que asoma por encima es muro de fachada.
+
+**Puentes térmicos lineales.** Las longitudes se miden en el dibujo, local a local:
+- **frente de forjado**: a lo largo de cada fachada, en el suelo de cada planta que no es la del terreno;
+- **pilar en fachada**: cada pilar dentro de la banda de un muro de fachada, una vez, con la altura del local;
+- **contorno de huecos**: jambas, dintel y alféizar (o umbral) de cada ventana y puerta exterior, 2·(ancho + alto);
+- **esquinas salientes y entrantes**: donde se encuentran dos lados de fachada del local, con su altura;
+- **encuentro con la cubierta** a lo largo de la fachada si el local tiene cubierta encima, y **con la solera** si está sobre el terreno.
+
+Cada clase lleva un ψ según dónde esté el aislamiento del muro, que se deduce de sus capas: una hoja (4 cm o más de algo que no aísla) a los dos lados del aislante es aislamiento **en cámara**; solo hacia dentro, aislamiento **por fuera**; solo hacia fuera, **por dentro**; sin capa aislante, **sin aislar**. Valores por defecto (W/mK, con las medidas interiores de los locales):
+
+| Encuentro | Por fuera | Por dentro | En cámara | Sin aislar |
+|---|---|---|---|---|
+| Frente de forjado | 0,10 | 0,85 | 0,80 | 0,90 |
+| Pilar en fachada | 0,05 | 0,90 | 0,80 | 0,90 |
+| Contorno de huecos | 0,25 | 0,15 | 0,20 | 0,30 |
+| Esquina saliente | 0,10 | 0,05 | 0,08 | 0,15 |
+| Esquina entrante | −0,05 | −0,05 | −0,05 | −0,10 |
+| Encuentro con la cubierta | 0,40 | 0,60 | 0,55 | 0,70 |
+| Encuentro con la solera | 0,15 | 0,55 | 0,50 | 0,70 |
+
+En la ventana, el grupo «Puentes térmicos» enseña las clases que hay en el dibujo con su longitud. El ψ de cada una se cambia por el del detalle del proyecto, y «Habitual» lo devuelve.
 
 **DB-HE 1.**
 - Cada tipo de la envolvente contra su límite de la tabla 3.1.1.a-HE1, por la letra de invierno:
   - muros y suelos al exterior: 0,80 · 0,70 · 0,56 · 0,49 · 0,41 · 0,37;
   - cubiertas: 0,55 · 0,50 · 0,44 · 0,40 · 0,35 · 0,33;
-  - contra el terreno: 0,90 · 0,80 · 0,75 · 0,70 · 0,65 · 0,59;
+  - contra el terreno (suelos y muros, con su U equivalente): 0,90 · 0,80 · 0,75 · 0,70 · 0,65 · 0,59;
   - huecos: 3,2 · 2,7 · 2,3 · 2,1 · 1,8 · 1,8;
   - puertas: 5,7.
-- El **coeficiente global K** = Σ U·A / Σ A de los locales calefactados, contra la tabla 3.1.1.b-HE1 de vivienda nueva según la compacidad V/A (entre V/A = 1 y 4 en línea recta).
+- El **coeficiente global K** = (Σ U·A + Σ ψ·L) / Σ A de los locales calefactados, contra la tabla 3.1.1.b-HE1 de vivienda nueva según la compacidad V/A (entre V/A = 1 y 4 en línea recta).
+- **Control solar (3.1.2).** q sol;jul = Σ F sh,obst · g gl;sh;wi · (1 − F F) · A · H sol;jul / A útil:
+  - H sol;jul, la radiación de julio por orientación y por la cifra de verano de la zona (en la zona 4: N 58, E y O 145, S 95, cenital 245 kWh/m²·mes);
+  - g gl;sh;wi, el factor solar del vidrio con la protección móvil echada (0,15 por defecto, persiana exterior), y F F la fracción de marco (25 %);
+  - F sh,obst, la sombra de lo que vuela sobre cada ventana: se busca hacia fuera de la fachada, cada 10 cm hasta 3 m, un forjado o balcón de la planta de encima o el alero de una cubierta, y se suma el retranqueo del marco. Con el ángulo del sol de julio en esa fachada (al sur, la altura a mediodía por la latitud; al este y oeste, 50°; al norte, 72°) sale la parte del vidrio en sombra, y deja fuera la parte directa de la radiación (S 60 %, E y O 70 %, N 30 %);
+  - límite: 2,00 kWh/m²·mes en residencial privado y 4,00 en los demás usos.
+- **Permeabilidad al aire (3.1.3).**
+  - Cada tipo de ventana con su clase (UNE-EN 12207; la general del proyecto o la de cada tipo): a 100 Pa, clase 1 50, clase 2 27, clase 3 9, clase 4 3 m³/h·m². Límite de la tabla 3.1.3.a: 27 en las zonas α, A y B, y 9 en C, D y E.
+  - **n50** por el método simplificado del anejo H: n50 = 0,629·(Co·Ao + Σ Ch·Ah) / V, con Co = 16 m³/h·m² (edificio nuevo; 29 existente) sobre la parte opaca al aire (muros, cubiertas y suelos al exterior; no lo que toca el terreno) y Ch la de la clase de cada hueco. Si se ha medido con un ensayo, se escribe en la ventana. Límite de la tabla 3.1.3.b para viviendas de más de 120 m² útiles: 6 h⁻¹ con V/A ≤ 2 y 3 con V/A ≥ 4, en línea recta entre medias.
+- **Condensaciones superficiales.** fRsi = 1 − 0,25·U de cada tipo opaco (con la U de sus capas) y el fRsi de cada clase de puente térmico, contra fRsi,min por la clase de higrometría y la zona: 0,50 · 0,50 · 0,52 · 0,56 · 0,61 · 0,64 con higrometría 3 o menos (viviendas), 0,85 con 4 y 0,90 con 5. Los fRsi de los puentes por defecto:
+
+| Encuentro | Por fuera | Por dentro | En cámara | Sin aislar |
+|---|---|---|---|---|
+| Frente de forjado | 0,90 | 0,65 | 0,70 | 0,60 |
+| Pilar en fachada | 0,90 | 0,60 | 0,65 | 0,55 |
+| Contorno de huecos | 0,75 | 0,75 | 0,75 | 0,65 |
+| Esquina saliente | 0,85 | 0,80 | 0,80 | 0,70 |
+| Esquina entrante | 0,95 | 0,95 | 0,95 | 0,90 |
+| Encuentro con la cubierta | 0,80 | 0,70 | 0,70 | 0,60 |
+| Encuentro con la solera | 0,85 | 0,70 | 0,70 | 0,65 |
 
 **Cargas de cada local**
 - **Calefacción:**
   - transmisión U·A·ΔT, con la mitad de la diferencia contra el terreno;
+  - los puentes térmicos, ψ·L·ΔT;
   - ventilación 1,2·q·ΔT, con el caudal de admisión del DB-HS 3, o media renovación a la hora si el local no es de una vivienda.
 - **Refrigeración:**
-  - la misma transmisión con la diferencia de verano;
+  - la misma transmisión con la diferencia de verano, con los puentes salvo el de la solera;
   - el sol por los vidrios: 100 W/m² al norte, 450 al este, 350 al sur, 500 al oeste y 750 en lucernarios, por el factor solar;
   - las personas: una por cada 10 m² en los locales vivideros, con 75 W sensibles y 55 latentes;
   - luz y aparatos: 5 + 3 W/m², o 5 + 20 en las cocinas;
@@ -332,16 +383,23 @@ Colaboración → **Envolvente y cargas térmicas…**. En la ventana se escribe
   - una unidad interior en cada local vividero (de 2,0 a 7,1 kW) y una bomba de calor por vivienda (o por local, si no es de una vivienda), de 3,5 a 20 kW;
   - los radiadores dibujados se comparan con la carga de calefacción de su local, a 2000 W por m² de frente.
 
-Todo sale en la ventana, en la Comprobación CTE (sección «Ahorro de energía (DB-HE 1) y cargas térmicas») y en `archisim climatizacion <proyecto>`.
+En la ventana se escriben también: el factor solar con la protección móvil, la fracción de marco, la clase de permeabilidad de las ventanas (y la de cada tipo), la n50 medida si la hay, el caudal de la parte opaca, la clase de higrometría, la conductividad del terreno y el aislamiento perimetral de la solera.
 
-El edificio de Florence Street, en A4: el ladrillo de fachada, el muro cortina, las ventanas y la cubierta transitable cumplen. No cumplen:
-- el hormigón visto y los tabiques de los patios (U de 2,6 a 3,7);
-- la losa vista;
-- la solera sin aislar.
+Todo sale en la ventana, en la Comprobación CTE (sección «Ahorro de energía (DB-HE 1) y cargas térmicas»), en la memoria de instalaciones y en `archisim climatizacion <proyecto>`.
 
-Por eso K da 2,27 contra 0,80. Los tipos de ese edificio están hechos para dibujarlo, no para cumplir el HE. Para que cumpla hay que darles su aislamiento. En total salen 35 kW de calefacción y 100 kW de refrigeración, con una bomba de calor por vivienda y otra por cada local de la planta baja.
+El edificio de Florence Street, en A4:
+- **Cumplen** el ladrillo de fachada, el muro cortina, las ventanas y la cubierta transitable; también la solera, que con la UNE-EN ISO 13370 baja de 2,87 a 0,58 W/m²K (A = 142 m², P = 45 m con los lados al portal, B' = 6,3 m).
+- **No cumplen** el hormigón visto y los tabiques de los patios (U de 2,6 a 3,7) y la losa vista; además condensan en su cara interior (fRsi 0,07, 0,35 y 0,43, contra 0,50).
+- **Puentes térmicos:** 90 W/K, sobre todo los frentes de forjado de los muros sin aislar (53 m) y el contorno de los huecos (112 m).
+- **K** da 1,97 contra 0,80 (antes 2,27: la solera pesa menos y entran los puentes).
+- **Control solar:** q sol;jul = 1,88 kWh/m²·mes, justo por debajo de 2,00. Lo marca sobre todo el muro cortina (unos 290 m² de vidrio al norte y al sur), al que no se le calcula sombra; de las 22 ventanas, 20 tienen un forjado o un balcón encima.
+- **Permeabilidad:** todas las ventanas de clase 3 cumplen, y n50 sale 1,29 h⁻¹ (límite 3).
 
-**A comprobar por Antonio**: los límites de las tablas 3.1.1.a y 3.1.1.b del HE 1 (versión de 2019), las conductividades habituales, la radiación por orientación y las cargas interiores están escritos de memoria. Están juntos al principio de `crates/archisim-mep/src/thermal.rs` y `crates/archisim-core/src/model/thermal.rs`.
+Los tipos de ese edificio están hechos para dibujarlo, no para cumplir el HE: para que cumpla hay que darles su aislamiento. En total salen 34 kW de calefacción y 101 kW de refrigeración, con una bomba de calor por vivienda y otra por cada local de la planta baja.
+
+**A comprobar por Antonio**: están escritos de memoria y hay que contrastarlos con el CTE y sus documentos de apoyo:
+- los límites de las tablas 3.1.1.a y 3.1.1.b del HE 1 (versión de 2019), las conductividades habituales, la radiación por orientación y las cargas interiores (al principio de `crates/archisim-mep/src/thermal.rs` y `crates/archisim-core/src/model/thermal.rs`);
+- los ψ y fRsi por defecto de los puentes (DA DB-HE/3), la radiación de julio por zona (DA DB-HE/1), el límite de q sol;jul (2,00 en residencial privado, 4,00 en los demás), las permeabilidades de las clases y los límites de la tabla 3.1.3.a, el anejo H (0,629, Co 16 y 29) y la tabla 3.1.3.b (6 y 3 h⁻¹), y los fRsi,min (DA DB-HE/2). Están juntos al principio de `crates/archisim-mep/src/envelope.rs`.
 
 ## 8. Energías renovables (DB-HE 4 y HE 5)
 
@@ -436,7 +494,11 @@ Lo que no cumple sale marcado como en el anejo de cálculo de la estructura. La 
   - los obstáculos que no son muros (castilletes de cubierta hechos con otros elementos, cubiertas inclinadas cercanas);
   - los edificios que no son de viviendas (RITE).
 - Envolvente y cargas:
-  - los puentes térmicos (frentes de forjado, pilares, contorno de huecos) y el método del terreno de la norma UNE-EN ISO 13370;
-  - el control solar (q sol;jul), la permeabilidad de los huecos y las condensaciones;
+  - las condensaciones intersticiales (método de Glaser con enero): harían falta los factores de resistencia al vapor de cada material;
+  - los puentes térmicos de los muros cortina (montantes contra los forjados) y las esquinas entre un muro y un muro cortina;
+  - el ψ que depende a la vez del aislamiento del muro y del de la cubierta o la solera: se toma el del muro;
+  - las sombras de las aletas laterales, de los edificios vecinos y del entorno sobre las ventanas (solo lo que vuela encima y el retranqueo, y el retranqueo solo por arriba), y las de los muros cortina (sin sombra);
+  - las orientaciones intermedias (NE, SE…): cada ventana va a la más cercana de las cuatro;
+  - la permeabilidad de las puertas contra la tabla 3.1.3.a (cuentan en la n50);
   - el consumo de energía y las emisiones (HE 0);
   - los conductos y tuberías de la climatización, y las cargas hora a hora.

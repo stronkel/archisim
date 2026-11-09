@@ -126,8 +126,13 @@ Sección propia «Ventilación (DB-HS 3)», del cálculo de `docs/INSTALACIONES.
 ## Envolvente (HE 1) y cargas térmicas
 
 Sección «Ahorro de energía (DB-HE 1) y cargas térmicas», del cálculo de `docs/INSTALACIONES.md` §7:
-- cada tipo de la envolvente (muros de fachada, ventanas, puertas, muros cortina, cubiertas, suelos al exterior y contra el terreno) con su U contra el límite de la tabla 3.1.1.a-HE1 de la zona;
-- el coeficiente global K contra la tabla 3.1.1.b-HE1 según la compacidad;
+- cada tipo de la envolvente (muros de fachada, ventanas, puertas, muros cortina, cubiertas, suelos al exterior, y suelos y muros contra el terreno con la U equivalente de la UNE-EN ISO 13370) con su U contra el límite de la tabla 3.1.1.a-HE1 de la zona;
+- como dato, la solera por la UNE-EN ISO 13370 (B', A, P y la U de sus capas solas);
+- el coeficiente global K, con los puentes térmicos, contra la tabla 3.1.1.b-HE1 según la compacidad;
+- el control solar de julio q sol;jul contra el límite de 3.1.2 (2,00 en residencial privado, 4,00 en los demás);
+- la permeabilidad de cada tipo de ventana contra la tabla 3.1.3.a y, en viviendas de más de 120 m² útiles, la n50 contra la tabla 3.1.3.b;
+- las condensaciones superficiales de cada tipo opaco (fRsi contra fRsi,min);
+- cada clase de puente térmico como dato (longitud, ψ y ψ·L), o como fallo si su fRsi no llega;
 - los radiadores dibujados que no cubren la carga de su local;
 - como datos, la bomba de calor de cada vivienda con sus cargas.
 

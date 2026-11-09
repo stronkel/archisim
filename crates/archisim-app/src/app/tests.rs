@@ -10637,6 +10637,21 @@ fn the_climate_window_changes_the_zone() {
         .find(|e| e.kind == archisim_mep::thermal::Kind::Wall)
         .unwrap();
     assert!((wall.limit - 0.37).abs() < 1e-9);
+    // A ψ of the project for a class of bridge raises K, in one step.
+    let b = t.bridges[0].clone();
+    let mut site = h.app.ed.model().thermal_site().clone();
+    site.psi.insert(
+        archisim_core::psi_key(b.junction, b.insulation),
+        b.psi + 1.0,
+    );
+    h.app
+        .ed
+        .transact("ψ", |m| m.set_thermal_site(site))
+        .unwrap();
+    h.frame();
+    let t2 = archisim_mep::thermal::thermal(h.app.ed.model());
+    assert!((t2.psi_l - t.psi_l - b.length).abs() < 1e-6);
+    assert!(t2.k > t.k);
 }
 
 /// The renewables window: the flat of the ventilation example asks for
