@@ -103,6 +103,7 @@ impl ArchiSimApp {
             return;
         };
         let t = self.module_tool;
+        let p = self.module_spot(source, p);
         match self.ed.place_module(source, p, t.rotation, t.mirror) {
             Ok(id) => {
                 self.ed.selection = [Element::Module(id)].into_iter().collect();
@@ -113,6 +114,23 @@ impl ArchiSimApp {
             }
             Err(e) => self.complain(format!("No se puede colocar el módulo: {e}.")),
         }
+    }
+
+    /// Where a copy clicked at `p` goes: a box type stands against the box
+    /// beside it (M8).
+    fn module_spot(&self, source: ModuleSourceId, p: Point2) -> Point2 {
+        let t = self.module_tool;
+        self.ed
+            .model()
+            .module_box_snap(
+                source,
+                self.ed.level,
+                p,
+                t.rotation,
+                t.mirror,
+                super::box_ui::BOX_REACH,
+            )
+            .unwrap_or(p)
     }
 
     /// Space with the module tool: the next copy turns 90°.
@@ -136,7 +154,7 @@ impl ArchiSimApp {
             return;
         };
         let t = ModuleTransform {
-            position: c.point,
+            position: self.module_spot(source, c.point),
             rotation: self.module_tool.rotation,
             mirror: self.module_tool.mirror,
         };
@@ -261,6 +279,7 @@ impl ArchiSimApp {
             };
             text_row(ui, "Estado", "", status);
         });
+        self.module_box_type_group(ui, id);
         group(ui, "module-place", "Colocación", |ui| {
             self.level_row(
                 ui,

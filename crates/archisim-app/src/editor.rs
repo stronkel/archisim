@@ -537,7 +537,17 @@ impl Editor {
                     .collect();
                 // Decals go with the wall they are stuck on.
                 let decals = m.decal_anchors();
+                // An approved box type is frozen (M8): only a new revision
+                // opens it.
+                let frozen = m.catalogue().filter(|c| c.approved()).map(|c| c.label());
                 let r = edit(m)?;
+                if let Some(label) = frozen.filter(|_| m.is_frozen()) {
+                    let e = format!(
+                        "esta caja tipo está aprobada ({label}): abre una revisión nueva para cambiarla"
+                    );
+                    refused = Some(e.clone());
+                    return Err(ModelError::InUse(e));
+                }
                 // In a shared project, only what is reserved (what follows
                 // below goes with it: dimensions, rooms, tags).
                 if let Some(g) = guard.as_mut() {

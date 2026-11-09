@@ -188,6 +188,7 @@ impl ArchiSimApp {
             }
         });
         *self.box_settings() = s;
+        self.catalogue_group(ui);
     }
 
     pub(super) fn box_properties(&mut self, ui: &mut Ui, id: BoxId) {
@@ -297,6 +298,14 @@ impl ArchiSimApp {
                 props::note(ui, &format!("{mark} {}", i.text(self.ed.model())));
             }
         });
+        ui.add_space(4.0);
+        if ui
+            .button("Guardar como caja tipo…")
+            .on_hover_text("La caja y lo que lleva, como caja tipo del catálogo (en diseño), en la carpeta «Cajas tipo» de la biblioteca")
+            .clicked()
+        {
+            self.save_box_type(id);
+        }
         if let Some(fill) = fill_now {
             let res = self
                 .ed

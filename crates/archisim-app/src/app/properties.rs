@@ -905,6 +905,11 @@ impl ArchiSimApp {
     // ---- Nothing selected: the view and the project ---------------------------
 
     fn view_properties(&mut self, ui: &mut Ui) {
+        // A box type says what it is first (M8).
+        let box_type = self.ed.model().catalogue().is_some();
+        if box_type {
+            self.box_type_group(ui);
+        }
         match self.mode {
             ViewMode::Plan => self.plan_view_properties(ui),
             ViewMode::ThreeD => self.view_3d_properties(ui),
@@ -918,6 +923,9 @@ impl ArchiSimApp {
                 self.drafting_properties(ui, id);
                 return;
             }
+        }
+        if !box_type {
+            self.box_type_group(ui);
         }
         self.project_group(ui);
         ui.add_space(8.0);

@@ -173,6 +173,9 @@ pub(crate) struct ProjectFile {
     /// The limits the boxes keep (version 97); the defaults when missing.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub modular_site: Option<ModularSiteOf>,
+    /// What this project is in the system's catalogue (version 98).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub catalogue: Option<CatalogueOf>,
     /// Road markings (version 65).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub markings: Vec<MarkingOf>,
@@ -1225,6 +1228,37 @@ pub(crate) struct BoxOf {
     pub sides: [String; 4],
 }
 
+/// A box type of the catalogue (version 98).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct CatalogueOf {
+    pub code: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub name: String,
+    #[serde(default, skip_serializing_if = "is_zero_u32")]
+    pub revision: u32,
+    /// «draft» or «approved».
+    pub status: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub approved_on: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub notes: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub options: Vec<CatalogueOptionOf>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct CatalogueOptionOf {
+    pub name: String,
+    pub slot: String,
+    pub choices: Vec<String>,
+}
+
+fn is_zero_u32(v: &u32) -> bool {
+    *v == 0
+}
+
 /// The limits the modular boxes keep (version 97).
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -2102,6 +2136,9 @@ pub(crate) struct Module {
     pub rotation: f64,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub mirror: bool,
+    /// What the copy of a box type chose (version 98): option → type.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub choices: Vec<[String; 2]>,
 }
 
 /// A footing (version 16): `pad` at a point (under a column), `strip`
@@ -3967,6 +4004,23 @@ impl ProjectFile {
                     deck_height: m.deck_height,
                 }
             }),
+            catalogue: p.catalogue.as_ref().map(|c| CatalogueOf {
+                code: c.code.clone(),
+                name: c.name.clone(),
+                revision: c.revision,
+                status: c.status.code().to_string(),
+                approved_on: c.approved_on.clone(),
+                notes: c.notes.clone(),
+                options: c
+                    .options
+                    .iter()
+                    .map(|o| CatalogueOptionOf {
+                        name: o.name.clone(),
+                        slot: o.slot.clone(),
+                        choices: o.choices.clone(),
+                    })
+                    .collect(),
+            }),
             roundabouts: p
                 .roundabouts
                 .iter()
@@ -4104,6 +4158,11 @@ impl ProjectFile {
                     position: xy(m.position),
                     rotation: m.rotation,
                     mirror: m.mirror,
+                    choices: m
+                        .choices
+                        .iter()
+                        .map(|(a, b)| [a.clone(), b.clone()])
+                        .collect(),
                 })
                 .collect(),
             objects: p
@@ -4699,6 +4758,7 @@ impl ProjectFile {
             ceilings: Vec::new(),
             boxes: Vec::new(),
             modular_site: core::ModularSite::default(),
+            catalogue: None,
             markings: Vec::new(),
             decals: Vec::new(),
             plantings: Vec::new(),
@@ -5588,6 +5648,30 @@ impl ProjectFile {
                 sides,
             });
         }
+        if let Some(c) = self.catalogue {
+            parts.catalogue = Some(core::CatalogueEntry {
+                status: core::CatalogueStatus::from_code(&c.status).ok_or_else(|| {
+                    FileError::Value {
+                        element: "catalogue".into(),
+                        message: format!("unknown status «{}»", c.status),
+                    }
+                })?,
+                code: c.code,
+                name: c.name,
+                revision: c.revision,
+                approved_on: c.approved_on,
+                notes: c.notes,
+                options: c
+                    .options
+                    .into_iter()
+                    .map(|o| core::CatalogueOption {
+                        name: o.name,
+                        slot: o.slot,
+                        choices: o.choices,
+                    })
+                    .collect(),
+            });
+        }
         if let Some(m) = self.modular_site {
             parts.modular_site = core::ModularSite {
                 max_length: m.max_length,
@@ -5647,6 +5731,7 @@ impl ProjectFile {
                 position: pt(m.position),
                 rotation: m.rotation,
                 mirror: m.mirror,
+                choices: m.choices.into_iter().map(|[a, b]| (a, b)).collect(),
             });
         }
         for o in self.objects {

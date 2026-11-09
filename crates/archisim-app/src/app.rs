@@ -381,6 +381,8 @@ pub struct ArchiSimApp {
     pub roundabout_settings: roundabout_ui::RoundaboutSettings,
     /// The box tool's settings, made from the project the first time.
     pub box_settings: Option<box_ui::BoxSettings>,
+    /// The box types of the library folder, read when first shown.
+    pub box_catalogue: Option<Vec<catalogue_ui::CatalogueRow>>,
     pub world_settings: world_ui::WorldSettings,
     pub decal_settings: decal_ui::DecalSettings,
     pub marking_settings: marking_ui::MarkingSettings,
@@ -832,6 +834,7 @@ impl ArchiSimApp {
             road_settings,
             roundabout_settings: Default::default(),
             box_settings: None,
+            box_catalogue: None,
             world_settings: Default::default(),
             decal_settings: Default::default(),
             marking_settings: Default::default(),
@@ -2784,6 +2787,7 @@ mod camera_ui;
 mod cards;
 mod carto_download_ui;
 mod carto_ui;
+mod catalogue_ui;
 mod chrome;
 mod climate_ui;
 mod collection_ui;

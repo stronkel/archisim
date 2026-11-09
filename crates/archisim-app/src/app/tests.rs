@@ -10996,3 +10996,54 @@ fn modular_boxes_are_placed_against_each_other_and_moved_whole() {
         .box_issues(b.id)
         .contains(&archisim_core::BoxIssue::JoinedAlone { side: 0 }));
 }
+
+/// The catalogue (M8): a box saved as a box type, approved (and then
+/// frozen), and placed twice in another project, the second copy against
+/// the first.
+#[test]
+fn box_types_are_saved_frozen_and_placed_side_by_side() {
+    let dir = std::env::temp_dir().join(format!("archisim-catalogo-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("CB-PRUEBA.archisim");
+    // A box with its envelope, saved as a box type.
+    let mut h = Harness::new(Editor::new_project());
+    h.app.pick(super::toolbox::Pick::Tool(Tool::ModularBox));
+    h.click_at(p(4.0, 3.0));
+    let b = h.model().boxes().next().unwrap().id;
+    h.app.write_box_type(b, &path);
+    let t = archisim_file::open(&path).unwrap();
+    assert_eq!(t.catalogue().unwrap().code, "CB-PRUEBA");
+    assert!(!t.is_frozen());
+    assert_eq!(t.boxes().count(), 1);
+    assert_eq!(t.walls().count(), 4);
+    // Opened, approved: nothing else can change until a new revision.
+    let mut ed = Editor::with_model(t, None);
+    ed.transact("Aprobar", |m| m.approve_catalogue("09/11/2026").map(drop))
+        .unwrap();
+    let wall = ed.model().walls().next().unwrap().id;
+    let err = ed
+        .transact("Borrar", |m| m.remove_wall(wall).map(drop))
+        .unwrap_err();
+    assert!(err.contains("aprobada"), "{err}");
+    ed.transact("Revisión", |m| m.new_catalogue_revision())
+        .unwrap();
+    ed.transact("Borrar", |m| m.remove_wall(wall).map(drop))
+        .unwrap();
+    ed.undo();
+    ed.transact("Aprobar", |m| m.approve_catalogue("10/11/2026").map(drop))
+        .unwrap();
+    archisim_file::save(ed.model(), &path).unwrap();
+    // Placed twice in a house: the second against the first.
+    let mut h = Harness::new(Editor::new_project());
+    h.app.load_module_from(&path);
+    assert_eq!(h.app.tool, Tool::Module);
+    h.click_at(p(1.0, 1.0));
+    h.click_at(p(1.3, 1.0 + 3.6 + 0.3));
+    let flat = h.model().flattened().unwrap();
+    assert_eq!(flat.boxes().count(), 2, "{:?}", h.app.message);
+    let boxes: Vec<_> = flat.boxes().cloned().collect();
+    assert!((boxes[1].origin.y - boxes[0].origin.y - (3.6 + 0.02)).abs() < 1e-6);
+    assert!((boxes[1].origin.x - boxes[0].origin.x).abs() < 1e-6);
+    assert!(boxes.iter().all(|b| b.kind.starts_with("CB-PRUEBA rev. 2")));
+    let _ = std::fs::remove_dir_all(&dir);
+}

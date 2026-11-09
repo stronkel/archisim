@@ -6,6 +6,58 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-09 (133) · M8: el catálogo del sistema
+
+Rama `bloque/catalogo`, con pull request, sobre la de la entrada 132 (`bloque/caja`, #191). **Formato versión 98**: lo que dice de sí misma una caja tipo, y lo que elige cada copia. `docs/MODULAR.md` (M8).
+
+**Qué hace.**
+- **La caja tipo.** Es un proyecto de ArchiSim con una caja y lo que lleva. Tiene:
+  - código («CB-620-DD») y nombre;
+  - estado: en diseño o aprobada;
+  - revisión, fecha de aprobación y notas;
+  - lo que puede elegir cada vivienda.
+- **Hacer una caja tipo.**
+  - Selecciona una caja (con sus muros, suelo, techo, huecos y muebles) y pulsa «Guardar como caja tipo…».
+  - Se guarda en la carpeta «Cajas tipo» de la biblioteca, con el código que le des al fichero.
+  - La caja queda en el origen, a lo largo de x y en una planta a ±0,00, aunque en el proyecto estuviera girada o en otra cota.
+  - Lleva también los locales que tengan su rótulo dentro.
+  - Si un proyecto tiene una sola caja, también puedes convertirlo en caja tipo desde Propiedades (sin nada seleccionado).
+- **Aprobarla.**
+  - Al abrir una caja tipo, Propiedades (sin nada seleccionado) enseña su página, con «Aprobar la revisión N».
+  - Una vez aprobada, el programa no deja cambiar nada: avisa de que está aprobada.
+  - Para mejorarla, «Abrir la revisión N+1», se cambia y se vuelve a aprobar.
+- **Lo que elige cada vivienda.**
+  - En la caja tipo se marca una puerta o ventana y las que la pueden sustituir. Por ejemplo, «Ventana del dormitorio»: la de dos hojas, o la de persiana o la de una hoja.
+  - En la vivienda, cada copia elige en Propiedades.
+- **Colocarlas en una vivienda.**
+  - La herramienta Caja enseña las cajas tipo de la biblioteca con su código, revisión y si están aprobadas (✓). «Colocar» las trae.
+  - Cada copia se pega a la caja de al lado con su junta, también girada.
+  - Cada copia toma la marca siguiente (MOD-01, MOD-02…). Su tipo dice código y revisión («CB-620-DD rev. 1 · Caja 6,20 · dormitorio doble»), en planta y en el IFC.
+  - Si la caja tipo cambia, la vivienda avisa y se actualiza como cualquier módulo.
+  - Si se coloca una caja tipo sin aprobar, la copia lo avisa.
+- **Arreglos de paso.** Las copias de los módulos ya llevan sus falsos techos (antes se quedaban fuera).
+- **Ejemplo:** `archisim catalogo out/` hace tres cajas tipo aprobadas en `out/Cajas tipo/` y una vivienda con cuatro copias pegadas. Las cajas tipo son dormitorio doble con ventana a elegir, baño + cocina y estar abierta; en la vivienda, la última copia va girada y con la otra ventana.
+
+**Pendiente.**
+- **La primera caja tipo real del L-160:** la tienes que hacer tú con tu fichero. No subo tu IFC al repositorio.
+- **Más opciones:** acabados (material de fachada, suelo) y distribución dentro de reglas.
+- **Lista de lo que cambia** al actualizar una vivienda a una revisión nueva.
+- **Obra previa:** el programa aún no sabe qué viviendas tienen ya cajas en fábrica.
+
+**Qué debe probar Antonio.**
+1. Ejecuta `cargo run -p archisim-cli -- catalogo out/catalogo` y abre `out/catalogo/catalogo-planta.svg`. Deben verse cuatro cajas MOD-01 a MOD-04 con su tipo y revisión, y en la de arriba la otra ventana.
+2. En la aplicación, abre `out/catalogo/Cajas tipo/CB-620-DD.archisim`. Sin nada seleccionado, Propiedades debe enseñar «Caja tipo del catálogo · Aprobada · rev. 1». Intenta mover un muro: debe negarse. Pulsa «Abrir la revisión 2», mueve el muro y aprueba.
+3. Con tu L-160 importado:
+   - Dibuja una caja encima de un dormitorio, con «Ponerle la envolvente» desactivado para que coja los muros que ya hay.
+   - Selecciónala y usa «Guardar como caja tipo…».
+   - Ábrela: debe estar en el origen con sus muros, techo y huecos.
+4. En un proyecto nuevo, herramienta Caja:
+   - Copia la carpeta `out/catalogo/Cajas tipo` a tu biblioteca y pulsa «Volver a leer la carpeta».
+   - «Colocar» una caja tipo y haz dos clics juntos: la segunda debe pegarse a la primera.
+   - Selecciona la copia del dormitorio y cambia «Ventana del dormitorio».
+
+---
+
 ## 2026-11-09 (132) · M1: la caja modular como elemento
 
 Rama `bloque/caja`, con pull request, sobre la de la entrada 131 (`bloque/techos`, #188). **Formato versión 97**: las cajas. El IFC lleva cada caja como `IfcElementAssembly` montada en fábrica con sus piezas. `docs/MODULAR.md` (M1).

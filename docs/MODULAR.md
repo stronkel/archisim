@@ -79,10 +79,13 @@
 - En el IFC es un `IfcCovering` de techo, a la ida y a la vuelta.
 - Al importar entran los techos de otros programas (los del L-160 se quedaban fuera).
 
-**M8 · Catálogo del sistema.** Las cajas tipo como ficheros cerrados, con versión.
-- Cada una lleva lo que se puede elegir (acabados, carpinterías, distribución dentro de unas reglas) y lo que no se toca.
-- Una caja aprobada se congela con su número de revisión.
-- La primera caja tipo sale del L-160.
+**M8 · Catálogo del sistema.** ✅ Hecho el 9/11/2026, rama `bloque/catalogo`.
+- **Qué es una caja tipo.** Un fichero de ArchiSim con una caja y lo que lleva. Tiene código («CB-620-DD»), nombre, estado (en diseño o aprobada), revisión, fecha y notas.
+- **Cómo se hace.** Se selecciona una caja de cualquier proyecto (por ejemplo, el L-160 importado con sus cajas dibujadas encima) y se usa «Guardar como caja tipo…». Sale en el origen, a ±0,00, en la carpeta «Cajas tipo» de la biblioteca.
+- **Aprobarla la cierra** en su revisión: el programa no deja cambiar nada. Para mejorarla se abre la revisión siguiente, se cambia y se aprueba.
+- **Lo que elige cada vivienda.** Por ahora, puertas y ventanas: una de la caja tipo que se puede cambiar por otras del mismo fichero. Los acabados y la distribución quedan para más adelante.
+- **En la vivienda.** Las cajas tipo se colocan desde la herramienta Caja. Cada copia se pega a la caja de al lado, toma la marca siguiente (MOD-nn) y lleva en su tipo el código y la revisión. Cuando una caja tipo cambia, las viviendas la actualizan como cualquier módulo.
+- **La primera caja tipo, del L-160:** la hace Antonio con su fichero (no se sube al repositorio). El ejemplo `archisim catalogo` trae tres inventadas con las medidas y la fachada del L-160.
 
 **M9 · Taller.**
 - Planos y despiece de cada caja: paneles en alzado, chasis, lista de corte y lista de materiales, por caja.
@@ -235,7 +238,7 @@ Lo que cambia respecto a §5:
 
 ## 6. Pendiente de Antonio
 
-- Orden aprobado (9/11/2026): M4 (hecho) → M7 techos (hecho) → M1 caja (hecha) → M8 catálogo con la primera caja tipo → M2 juntas y M3 chasis → M9 taller. M5, M6 y M10 cuando toquen.
+- Orden aprobado (9/11/2026): M4 (hecho) → M7 techos (hecho) → M1 caja (hecha) → M8 catálogo (hecho; falta la primera caja tipo real del L-160) → M2 juntas y M3 chasis → M9 taller. M5, M6 y M10 cuando toquen.
 - Exportar desde Revit el modelo de estructura vinculado como IFC aparte, para partir de él en el chasis de la caja tipo.
 - Catálogo de perfiles del fabricante como fichero (`.csv`, §3 ter de ENTRAMADOS).
 - Propuesta de §5 aprobada (9/11/2026).

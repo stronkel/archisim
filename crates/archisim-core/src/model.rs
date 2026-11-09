@@ -17,6 +17,7 @@ use crate::math::{is_simple_polygon, signed_area, Arc, Point2, Vec2, EPSILON, MI
 mod appearance;
 mod boxes;
 mod built_in;
+mod catalogue;
 mod ceilings;
 mod concept;
 mod curtain;
@@ -77,6 +78,7 @@ mod water;
 mod worktops;
 pub use appearance::*;
 pub use boxes::*;
+pub use catalogue::*;
 pub use ceilings::*;
 pub use concept::*;
 pub use curtain::*;
@@ -1531,6 +1533,9 @@ pub struct ModelParts {
     /// Modular boxes and the limits they keep (M1, version 97).
     pub boxes: Vec<ModularBox>,
     pub modular_site: ModularSite,
+    /// What this project is in the system's catalogue, if it is a box
+    /// type (M8, version 98).
+    pub catalogue: Option<CatalogueEntry>,
     /// Road markings at will (U4).
     pub markings: Vec<Marking>,
     /// Pictures stuck on faces (U8).
@@ -1695,6 +1700,7 @@ pub struct Model {
     ceilings: BTreeMap<CeilingId, Ceiling>,
     boxes: BTreeMap<BoxId, ModularBox>,
     modular_site: ModularSite,
+    catalogue: Option<CatalogueEntry>,
     markings: BTreeMap<MarkingId, Marking>,
     decals: BTreeMap<DecalId, Decal>,
     plantings: BTreeMap<PlantingId, Planting>,
@@ -1814,6 +1820,7 @@ impl Model {
             ceilings: BTreeMap::new(),
             boxes: BTreeMap::new(),
             modular_site: ModularSite::default(),
+            catalogue: None,
             markings: BTreeMap::new(),
             decals: BTreeMap::new(),
             plantings: BTreeMap::new(),
@@ -4540,6 +4547,7 @@ impl Model {
             ceilings: self.ceilings.values().cloned().collect(),
             boxes: self.boxes.values().cloned().collect(),
             modular_site: self.modular_site,
+            catalogue: self.catalogue.clone(),
             markings: self.markings.values().cloned().collect(),
             decals: self.decals.values().cloned().collect(),
             plantings: self.plantings.values().cloned().collect(),
@@ -4975,6 +4983,12 @@ impl Model {
         model.restore_roundabouts(parts.roundabouts, &mut claim)?;
         model.restore_ceilings(parts.ceilings, &mut claim)?;
         model.restore_boxes(parts.boxes, &mut claim)?;
+        model
+            .set_catalogue(parts.catalogue)
+            .map_err(|error| RestoreError {
+                element: "catalogue".into(),
+                error,
+            })?;
         model
             .set_modular_site(parts.modular_site)
             .map_err(|error| RestoreError {

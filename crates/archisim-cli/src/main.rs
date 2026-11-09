@@ -15,6 +15,7 @@ mod armado;
 mod cajas;
 mod calles;
 mod cartografia;
+mod catalogo;
 mod cocina;
 mod colaboracion;
 mod cubiertas;
@@ -173,6 +174,12 @@ Uso:
       con su envolvente): cajas.archisim, cajas.ifc (cada caja, un
       IfcElementAssembly con sus piezas), cajas-planta.svg y cajas.txt
       (lo que lleva cada caja y sus avisos). Por defecto: ./out
+  archisim catalogo [carpeta]
+      El catálogo del sistema: tres cajas tipo aprobadas en «Cajas tipo/»
+      (dormitorio doble con ventana a elegir, baño + cocina, estar
+      abierta) y una vivienda con cuatro copias pegadas una a otra:
+      catalogo.archisim, catalogo.ifc, catalogo-planta.svg y
+      catalogo.txt. Por defecto: ./out
   archisim entramado [carpeta]
       Entramados ligeros: dos casas, una de steel frame y otra de madera,
       con muros, forjado y cubierta de entramado: entramado.archisim,
@@ -581,6 +588,10 @@ fn main() -> ExitCode {
         Some("cocina") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
             report(cocina::write(&dir))
+        }
+        Some("catalogo") => {
+            let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
+            report(catalogo::write(&dir))
         }
         Some("cajas") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));

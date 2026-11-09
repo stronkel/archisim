@@ -25,24 +25,20 @@ fn material(m: &mut Model, name: &str, class: &str, rgb: [u8; 3]) -> archisim_co
     found.unwrap_or_else(|| m.add_material(name, class, rgb, CutPattern::Solid))
 }
 
-pub fn build() -> Res<Model> {
-    let mut m = Model::new("Vivienda de cajas");
-    let pb = m.add_level("Planta baja", 0.0);
-    let lib = archisim_library::add_library(&mut m)?;
-    archisim_library::frame_material(&mut m, FrameMaterial::Steel);
-    let ceramic = material(&mut m, "Placa cerámica", "ceramic", [196, 120, 92]);
-    let membrane = material(&mut m, "Membrana transpirable", "membrane", [90, 110, 140]);
-    let board = material(
-        &mut m,
-        "Placa con aislamiento",
-        "insulation",
-        [230, 220, 170],
-    );
-    let wool = material(&mut m, "Lana mineral", "insulation", [235, 225, 150]);
-    let plaster = material(&mut m, "Placa de yeso laminado", "plaster", [240, 240, 236]);
-    let wood = material(&mut m, "Tarima de madera", "wood", [190, 150, 105]);
-    let deck = material(&mut m, "Chapa colaborante", "steel", [150, 155, 160]);
-    let sheet = material(&mut m, "Lámina impermeable", "membrane", [60, 60, 60]);
+/// The system's envelope types (steel frame façade of 197 mm, floor on
+/// its chassis, roof) added to `m`, and the fill of a box with them and
+/// the template's false ceiling.
+pub fn system_fill(m: &mut Model, lib: &archisim_library::Library) -> Res<BoxFill> {
+    archisim_library::frame_material(m, FrameMaterial::Steel);
+    let m = &mut *m;
+    let ceramic = material(m, "Placa cerámica", "ceramic", [196, 120, 92]);
+    let membrane = material(m, "Membrana transpirable", "membrane", [90, 110, 140]);
+    let board = material(m, "Placa con aislamiento", "insulation", [230, 220, 170]);
+    let wool = material(m, "Lana mineral", "insulation", [235, 225, 150]);
+    let plaster = material(m, "Placa de yeso laminado", "plaster", [240, 240, 236]);
+    let wood = material(m, "Tarima de madera", "wood", [190, 150, 105]);
+    let deck = material(m, "Chapa colaborante", "steel", [150, 155, 160]);
+    let sheet = material(m, "Lámina impermeable", "membrane", [60, 60, 60]);
     let layer = |material, thickness, function| Layer {
         material,
         thickness,
@@ -90,6 +86,14 @@ pub fn build() -> Res<Model> {
         ceiling_type: Some(lib.ceiling),
         ceiling_height: 2.93,
     };
+    Ok(fill)
+}
+
+pub fn build() -> Res<Model> {
+    let mut m = Model::new("Vivienda de cajas");
+    let pb = m.add_level("Planta baja", 0.0);
+    let lib = archisim_library::add_library(&mut m)?;
+    let fill = system_fill(&mut m, &lib)?;
     let kinds = [
         "Caja 6,20 · dormitorio doble",
         "Caja 6,20 · baño + cocina",

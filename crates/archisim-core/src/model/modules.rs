@@ -17,7 +17,7 @@
 //! every export. Views, schedules and exports draw that model. A copy is
 //! changed only as a whole: to have something different, another module.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use super::*;
@@ -67,6 +67,9 @@ pub struct ModulePlacement {
     pub rotation: f64,
     /// Mirrored about the module's own `y` axis (before turning).
     pub mirror: bool,
+    /// What this copy chose in a box type of the catalogue (M8): option
+    /// name → the door or window type (by name) it takes.
+    pub choices: Vec<(String, String)>,
 }
 
 /// Data needed to place a copy of a module.
@@ -312,6 +315,7 @@ impl Model {
                 position: spec.position,
                 rotation: spec.rotation,
                 mirror: spec.mirror,
+                choices: Vec::new(),
             },
         );
         Ok(id)
@@ -666,6 +670,21 @@ impl Model {
             *n += 1;
             self.instantiate(&mut parts, src, maps, p, base, *n);
         }
+        // The boxes of the copies take the next free marks, in the order
+        // the copies were placed.
+        let own: BTreeSet<BoxId> = self.boxes.keys().copied().collect();
+        let mut used: BTreeSet<String> = self.boxes.values().map(|b| b.mark.clone()).collect();
+        let mut n = 0;
+        for b in parts.boxes.iter_mut().filter(|b| !own.contains(&b.id)) {
+            loop {
+                n += 1;
+                let mark = format!("MOD-{n:02}");
+                if used.insert(mark.clone()) {
+                    b.mark = mark;
+                    break;
+                }
+            }
+        }
         Model::from_parts(parts)
     }
 
@@ -733,7 +752,24 @@ impl Model {
         let maps = &maps;
         let wall_type = |id: WallTypeId| maps.walls.get(&id).copied();
         let slab_type = |id: SlabTypeId| maps.slabs.get(&id).copied();
-        let opening_type = |id: OpeningTypeId| maps.openings.get(&id).copied();
+        // A door or window type swapped by the copy's choice (M8).
+        let chosen = |id: OpeningTypeId| -> OpeningTypeId {
+            let Some(c) = src.catalogue() else {
+                return id;
+            };
+            let Some(name) = src.opening_type(id).map(|t| t.name.clone()) else {
+                return id;
+            };
+            let Some(option) = c.option_for(&name) else {
+                return id;
+            };
+            p.choices
+                .iter()
+                .find(|(o, v)| *o == option.name && option.choices.contains(v))
+                .and_then(|(_, v)| src.opening_types().find(|t| t.name == *v))
+                .map_or(id, |t| t.id)
+        };
+        let opening_type = |id: OpeningTypeId| maps.openings.get(&chosen(id)).copied();
         let member_type = |id: MemberTypeId| maps.members.get(&id).copied();
         let curtain_type = |id: CurtainTypeId| maps.curtains.get(&id).copied();
         let object_type = |id: ObjectTypeId| maps.objects.get(&id).copied();
@@ -1093,6 +1129,43 @@ impl Model {
                     format!("{copy}-{}", r.number)
                 },
                 ..r.clone()
+            });
+        }
+        for c in src.ceilings() {
+            let (Some(level), Some(ceiling_type)) = (level(c.level), slab_type(c.ceiling_type))
+            else {
+                continue;
+            };
+            placed.push(c.id.0);
+            parts.ceilings.push(Ceiling {
+                id: CeilingId(c.id.0 + base),
+                guid: guid(&c.guid),
+                ceiling_type,
+                level,
+                outline: pts(&c.outline),
+                holes: c.holes.iter().map(|h| pts(h)).collect(),
+                ..c.clone()
+            });
+        }
+        // Boxes (M1): placed as the copy places them; a box type's say
+        // what they are and at what revision.
+        for b in src.boxes() {
+            let Some(level) = level(b.level) else {
+                continue;
+            };
+            let (origin, angle, sides) = crate::model::placed_box(b, &t);
+            placed.push(b.id.0);
+            parts.boxes.push(ModularBox {
+                id: BoxId(b.id.0 + base),
+                guid: guid(&b.guid),
+                level,
+                origin,
+                angle,
+                sides,
+                kind: src
+                    .catalogue()
+                    .map_or_else(|| b.kind.clone(), |c| c.box_kind()),
+                ..b.clone()
             });
         }
         // Phases and disciplines given by hand go with their elements.

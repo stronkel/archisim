@@ -764,48 +764,7 @@ impl Model {
     /// away, flush with one of its ends. The nearest place within `reach`
     /// of where it was, if any.
     pub fn box_snap(&self, spec: &NewBox, reach: f64) -> Option<Point2> {
-        let probe = ModularBox {
-            id: BoxId(0),
-            guid: GlobalId::new(),
-            mark: String::new(),
-            kind: String::new(),
-            level: spec.level,
-            origin: Point2::new(0.0, 0.0),
-            angle: spec.angle,
-            length: spec.length,
-            width: spec.width,
-            bottom: spec.bottom,
-            height: spec.height,
-            sides: spec.sides,
-        };
-        // Its corners from its origin.
-        let rel = probe.corners();
-        let mut best: Option<(f64, Point2)> = None;
-        for o in self.boxes_on_level(spec.level) {
-            for j in 0..4 {
-                let (b0, b1) = o.side(j);
-                let Some(odir) = (b1 - b0).normalized() else {
-                    continue;
-                };
-                let out = -odir.perp_left();
-                for i in 0..4 {
-                    let (s0, s1) = (rel[i], rel[(i + 1) % 4]);
-                    let Some(dir) = (s1 - s0).normalized() else {
-                        continue;
-                    };
-                    if dir.dot(odir) > -0.999 {
-                        continue;
-                    }
-                    for origin in [b1 + out * BOX_JOINT - s0, b0 + out * BOX_JOINT - s1] {
-                        let d = origin.distance(spec.origin);
-                        if d <= reach && best.is_none_or(|(bd, _)| d < bd) {
-                            best = Some((d, origin));
-                        }
-                    }
-                }
-            }
-        }
-        best.map(|(_, p)| p)
+        snap_against(spec, reach, self.boxes_on_level(spec.level))
     }
 
     /// Fills a box with its envelope: a wall on each free side and on each
@@ -885,6 +844,57 @@ impl Model {
         }
         Ok(())
     }
+}
+
+/// Where a box near `spec.origin` goes to stand against one of `boxes`
+/// (see [`Model::box_snap`]).
+pub fn snap_against<'a>(
+    spec: &NewBox,
+    reach: f64,
+    boxes: impl Iterator<Item = &'a ModularBox>,
+) -> Option<Point2> {
+    let probe = ModularBox {
+        id: BoxId(0),
+        guid: GlobalId::new(),
+        mark: String::new(),
+        kind: String::new(),
+        level: spec.level,
+        origin: Point2::new(0.0, 0.0),
+        angle: spec.angle,
+        length: spec.length,
+        width: spec.width,
+        bottom: spec.bottom,
+        height: spec.height,
+        sides: spec.sides,
+    };
+    // Its corners from its origin.
+    let rel = probe.corners();
+    let mut best: Option<(f64, Point2)> = None;
+    for o in boxes {
+        for j in 0..4 {
+            let (b0, b1) = o.side(j);
+            let Some(odir) = (b1 - b0).normalized() else {
+                continue;
+            };
+            let out = -odir.perp_left();
+            for i in 0..4 {
+                let (s0, s1) = (rel[i], rel[(i + 1) % 4]);
+                let Some(dir) = (s1 - s0).normalized() else {
+                    continue;
+                };
+                if dir.dot(odir) > -0.999 {
+                    continue;
+                }
+                for origin in [b1 + out * BOX_JOINT - s0, b0 + out * BOX_JOINT - s1] {
+                    let d = origin.distance(spec.origin);
+                    if d <= reach && best.is_none_or(|(bd, _)| d < bd) {
+                        best = Some((d, origin));
+                    }
+                }
+            }
+        }
+    }
+    best.map(|(_, p)| p)
 }
 
 fn rooms_centroid(poly: &[Point2]) -> Point2 {
