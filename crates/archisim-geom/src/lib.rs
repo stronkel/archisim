@@ -25,6 +25,7 @@
 //! wall (or one of its layers) into the solid pieces between openings.
 
 pub mod anchors;
+pub mod boxes;
 pub mod ceilings;
 pub mod cover;
 pub mod crossroads;
@@ -680,6 +681,10 @@ fn end_cut(idx: &WallIndex, wall: &Wall, end: End) -> EndCut {
     if near.iter().any(|o| o.id != wall.id && !o.joins_at(p)) {
         return EndCut::Square;
     }
+    // Walls of two modular boxes meet at a joint: they only touch (M2).
+    if near.iter().any(|o| idx.apart(o.id, wall.id)) {
+        return EndCut::Square;
+    }
     let mut others = near.into_iter().filter_map(|o| {
         if o.id == wall.id {
             None
@@ -717,6 +722,7 @@ fn face_stop(idx: &WallIndex, wall: &Wall, end: End) -> Option<Curve> {
     idx.near(wall.level, p, 0.0)
         .into_iter()
         .filter(|h| h.id != wall.id && (h.is_curved() || wall.is_curved()))
+        .filter(|h| !idx.apart(h.id, wall.id))
         .find_map(|h| {
             let th = model.wall_type(h.wall_type)?.thickness();
             let (ext, int) = h.face_offsets(th);

@@ -254,6 +254,23 @@ def main(path: str) -> int:
         for p in parts:
             if p.ContainedInStructure != ():
                 errors.append(f"caja {name}: part {p.Name} also in a storey")
+        # Its chassis (M3): tubes with their role and a body whose volume
+        # is the tube's section times its length.
+        tubes = [p for p in parts if "ArchiSim_BoxPart" in eu.get_psets(p)]
+        if not tubes:
+            errors.append(f"caja {name}: no chassis")
+        if not any(p.is_a("IfcMember") and p.PredefinedType == "POST" for p in tubes):
+            errors.append(f"caja {name}: a chassis without posts")
+        if geom_ok:
+            for p in tubes[:6]:
+                try:
+                    shp = geom.create_shape(settings, p)
+                    vol = shape.get_volume(shp.geometry)
+                    kg = eu.get_psets(p)["ArchiSim_BoxPart"]["Weight"]
+                    if abs(vol * 7850.0 - kg) > max(0.5, 0.02 * kg):
+                        errors.append(f"caja {name}: {p.Name} weighs {kg:.1f} kg, its body {vol * 7850.0:.1f}")
+                except Exception as exc:
+                    errors.append(f"caja {name}: {p.Name} geometry failed: {exc}")
 
     # 14. Pools built in the ground (ArchiSim_Pool on an IfcElementAssembly):
     # contained in a storey, made of their floor, walls, lining and coping,

@@ -210,6 +210,7 @@ impl Model {
             bottom: b.bottom,
             height: b.height,
             sides,
+            chassis: b.chassis,
         };
         // Against this project's boxes and those of the copies already
         // placed.
@@ -457,6 +458,7 @@ mod tests {
             roof_type: None,
             ceiling_type: None,
             ceiling_height: 2.5,
+            parapet: BOX_PARAPET,
         };
         m.fill_box(b, fill).unwrap();
         let mut entry = CatalogueEntry::new("CB-620", "Caja 6,20");

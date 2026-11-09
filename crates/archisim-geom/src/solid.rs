@@ -67,6 +67,8 @@ pub enum SolidOwner {
     Orthophoto,
     /// A false ceiling (M7).
     Ceiling(archisim_core::CeilingId),
+    /// The chassis of a modular box (M3).
+    Box(archisim_core::BoxId),
 }
 
 impl SolidOwner {
@@ -97,6 +99,7 @@ impl SolidOwner {
             SolidOwner::Device(x) => x.0,
             SolidOwner::Orthophoto => 0,
             SolidOwner::Ceiling(x) => x.0,
+            SolidOwner::Box(x) => x.0,
         }
     }
 }
@@ -3932,6 +3935,10 @@ pub fn model_solids_except_detailed(
     for c in model.ceilings() {
         out.extend(crate::ceilings::ceiling_solids(model, c.id));
     }
+    // The chassis of the modular boxes (M3).
+    for b in model.boxes() {
+        out.extend(crate::boxes::box_solids(model, b.id));
+    }
     // The accessories of their types: skirtings, bands, cornices, copings
     // and slab edges (bloque 5).
     for w in model.walls() {
@@ -5610,6 +5617,7 @@ pub fn level_solids(model: &Model, level: LevelId) -> Vec<Solid> {
         SolidOwner::Run(r) => model.run(r).is_some_and(|r| r.level == level),
         SolidOwner::Device(d) => model.device(d).is_some_and(|d| d.level == level),
         SolidOwner::Ceiling(c) => model.ceiling(c).is_some_and(|c| c.level == level),
+        SolidOwner::Box(b) => model.modular_box(b).is_some_and(|b| b.level == level),
         SolidOwner::Orthophoto => {
             model
                 .terrains()

@@ -1952,6 +1952,7 @@ fn modular_boxes_round_trip() {
         roof_type: None,
         ceiling_type: ceiling,
         ceiling_height: 2.6,
+        parapet: archisim_core::BOX_PARAPET,
     };
     // Two boxes side by side, away from the model's house.
     let a = m
@@ -1964,6 +1965,10 @@ fn modular_boxes_round_trip() {
     m.edit_box(b, |x| {
         x.sides[0] = SideState::Open;
         x.kind = "Caja 6,20 · estar".into();
+        x.chassis.edge = archisim_core::BoxTube::mm(150.0, 100.0, 5.0);
+        x.chassis.lift = archisim_core::LiftPoints::Six;
+        x.chassis.middle_beam = false;
+        x.chassis.spacing = 0.40;
     })
     .unwrap();
     m.fill_box(a, fill).unwrap();
@@ -1973,6 +1978,9 @@ fn modular_boxes_round_trip() {
     let ifc = export(&m);
     assert_eq!(ifc.matches("'Caja modular'").count(), 2);
     assert!(ifc.contains(".FACTORY."), "assembled in the factory");
+    // Their chassis, tube by tube, part of each box.
+    assert!(ifc.contains("IFCRECTANGLEHOLLOWPROFILEDEF(.AREA.,"));
+    assert!(ifc.contains("'ArchiSim_BoxPart'"));
     let Imported { model, report } = import_ifc(&ifc).unwrap();
     assert_eq!(report.boxes, 2, "{report}");
     let diffs = differences(&m, &model);

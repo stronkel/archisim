@@ -1,18 +1,21 @@
 //! `archisim cajas`: a house of modular boxes in L, as the system's
 //! (`docs/MODULAR.md`): six boxes of 6,20 × 3,60 m side by side and two
-//! more on the ends of the last two, 2 cm apart. Each box is filled with
+//! more on the ends of the last two, 2 cm apart, and two on a first floor
+//! over the first two (lifted from six points). Each box is filled with
 //! its envelope (steel frame façade, floor on its chassis, roof and false
 //! ceiling); the joints carry one wall, except the one of the living room,
 //! open on both sides. Writes the project, its IFC (each box an
-//! `IfcElementAssembly` with its parts), the plan and a list of the boxes
-//! with what they hold and their notes.
+//! `IfcElementAssembly` with its parts and its chassis), the plans and a
+//! list of the boxes with what they hold, their notes, their weight and
+//! lifting, the order they are craned in and their cut lists.
 
 use std::fmt::Write as _;
 use std::path::Path;
 
 use archisim_core::{
     BoxFill, CutPattern, FrameMaterial, Framing, Hand, Layer, LayerFunction, Model, NewBox,
-    NewOpening, Point2, SideState, SlabFunction, WallFunction, WallSide, BOX_WIDTH, SIDE_NAMES,
+    NewOpening, Point2, SideState, SlabFunction, WallFunction, WallSide, BOX_BOTTOM, BOX_HEIGHT,
+    BOX_WIDTH, SIDE_NAMES,
 };
 
 type Res<T = ()> = Result<T, Box<dyn std::error::Error>>;
@@ -37,7 +40,8 @@ pub fn system_fill(m: &mut Model, lib: &archisim_library::Library) -> Res<BoxFil
     let wool = material(m, "Lana mineral", "insulation", [235, 225, 150]);
     let plaster = material(m, "Placa de yeso laminado", "plaster", [240, 240, 236]);
     let wood = material(m, "Tarima de madera", "wood", [190, 150, 105]);
-    let deck = material(m, "Chapa colaborante", "steel", [150, 155, 160]);
+    let deck = material(m, "Forjado colaborante H90+30", "concrete", [150, 155, 160]);
+    let decking = material(m, "Tablero de cubierta", "wood", [200, 170, 120]);
     let sheet = material(m, "Lámina impermeable", "membrane", [60, 60, 60]);
     let layer = |material, thickness, function| Layer {
         material,
@@ -75,8 +79,9 @@ pub fn system_fill(m: &mut Model, lib: &archisim_library::Library) -> Res<BoxFil
         vec![
             layer(sheet, 0.005, LayerFunction::Membrane),
             layer(board, 0.075, LayerFunction::Insulation),
-            layer(deck, 0.120, LayerFunction::Structure),
-            layer(wool, 0.180, LayerFunction::Insulation),
+            layer(decking, 0.022, LayerFunction::Substrate),
+            // The roof frame and its joists, with wool between them.
+            layer(wool, 0.278, LayerFunction::Structure),
         ],
     )?;
     let fill = BoxFill {
@@ -85,6 +90,7 @@ pub fn system_fill(m: &mut Model, lib: &archisim_library::Library) -> Res<BoxFil
         roof_type: Some(roof),
         ceiling_type: Some(lib.ceiling),
         ceiling_height: 2.93,
+        parapet: archisim_core::BOX_PARAPET,
     };
     Ok(fill)
 }
@@ -120,6 +126,29 @@ pub fn build() -> Res<Model> {
     for (id, kind) in ids.iter().zip(kinds) {
         m.edit_box(*id, |b| b.kind = kind.into())?;
     }
+    // A first floor over the first two: their floors on those roofs, a
+    // joint (2 cm) between the two chassis.
+    let roof_top = BOX_BOTTOM + BOX_HEIGHT;
+    let p1 = m.add_level("Planta primera", roof_top + JOINT - BOX_BOTTOM);
+    let upper = [
+        m.add_box(NewBox::usual(p1, Point2::new(BOX_WIDTH, 0.0), quarter))?,
+        m.add_box(NewBox::usual(
+            p1,
+            Point2::new(step + BOX_WIDTH, 0.0),
+            quarter,
+        ))?,
+    ];
+    for (id, kind) in upper
+        .iter()
+        .zip(["Caja 6,20 · dormitorio", "Caja 6,20 · estudio"])
+    {
+        m.edit_box(*id, |b| {
+            b.kind = kind.into();
+            // Hung from six points: it is lifted higher, on a longer reach.
+            b.chassis.lift = archisim_core::LiftPoints::Six;
+        })?;
+    }
+    ids.extend(upper);
     for id in &ids {
         m.set_box_sides_from_neighbours(*id)?;
     }
@@ -214,7 +243,13 @@ pub fn write(dir: &Path) -> Res {
         dir.join("cajas-planta.svg"),
         archisim_plan::render_plan(&m, level, &options),
     )?;
-    let text = list(&m);
+    for (n, l) in m.levels().iter().enumerate().skip(1) {
+        std::fs::write(
+            dir.join(format!("cajas-planta-{}.svg", n + 1)),
+            archisim_plan::render_plan(&m, l.id, &options),
+        )?;
+    }
+    let text = format!("{}\n{}", list(&m), archisim_struct::boxes::boxes_report(&m));
     std::fs::write(dir.join("cajas.txt"), &text)?;
     print!("{text}");
     println!("  {}", dir.join("cajas.ifc").display());
@@ -228,7 +263,11 @@ mod tests {
     #[test]
     fn the_house_of_boxes() {
         let m = build().unwrap();
-        assert_eq!(m.boxes().count(), 8);
+        assert_eq!(m.boxes().count(), 10);
+        // The upper ones over the first two, on their grid; the lower ones
+        // under them without a parapet.
+        let first = m.boxes().next().unwrap().id;
+        assert_eq!(m.boxes_above(first).len(), 1);
         let walls: usize = m.boxes().map(|b| m.box_members(b.id).walls.len()).sum();
         // Every wall belongs to one box.
         assert_eq!(walls, m.walls().count());

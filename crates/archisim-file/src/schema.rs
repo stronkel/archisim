@@ -1226,6 +1226,25 @@ pub(crate) struct BoxOf {
     pub height: f64,
     /// A, B, C and D: «free», «wall» or «open».
     pub sides: [String; 4],
+    /// Its chassis (version 99); the usual one when missing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chassis: Option<ChassisOf>,
+}
+
+/// The steel chassis of a box (version 99): tubes as «120×100×4» in
+/// millimetres.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ChassisOf {
+    pub edge: String,
+    pub post: String,
+    pub joist: String,
+    pub roof_joist: String,
+    pub spacing: f64,
+    pub middle_beam: bool,
+    pub roof_at: f64,
+    /// «four» or «six».
+    pub lift: String,
 }
 
 /// A box type of the catalogue (version 98).
@@ -3992,6 +4011,16 @@ impl ProjectFile {
                     bottom: b.bottom,
                     height: b.height,
                     sides: b.sides.map(|x| x.code().to_string()),
+                    chassis: (b.chassis != core::Chassis::default()).then(|| ChassisOf {
+                        edge: b.chassis.edge.label(),
+                        post: b.chassis.post.label(),
+                        joist: b.chassis.joist.label(),
+                        roof_joist: b.chassis.roof_joist.label(),
+                        spacing: b.chassis.spacing,
+                        middle_beam: b.chassis.middle_beam,
+                        roof_at: b.chassis.roof_at,
+                        lift: b.chassis.lift.code().to_string(),
+                    }),
                 })
                 .collect(),
             modular_site: (p.modular_site != core::ModularSite::default()).then(|| {
@@ -5646,6 +5675,32 @@ impl ProjectFile {
                 bottom: b.bottom,
                 height: b.height,
                 sides,
+                chassis: match b.chassis {
+                    None => core::Chassis::default(),
+                    Some(c) => {
+                        let tube = |t: &str| {
+                            core::BoxTube::parse(t).ok_or_else(|| FileError::Value {
+                                element: element.clone(),
+                                message: format!("tube «{t}»"),
+                            })
+                        };
+                        core::Chassis {
+                            edge: tube(&c.edge)?,
+                            post: tube(&c.post)?,
+                            joist: tube(&c.joist)?,
+                            roof_joist: tube(&c.roof_joist)?,
+                            spacing: c.spacing,
+                            middle_beam: c.middle_beam,
+                            roof_at: c.roof_at,
+                            lift: core::LiftPoints::from_code(&c.lift).ok_or_else(|| {
+                                FileError::Value {
+                                    element: element.clone(),
+                                    message: format!("lifting «{}»", c.lift),
+                                }
+                            })?,
+                        }
+                    }
+                },
             });
         }
         if let Some(c) = self.catalogue {

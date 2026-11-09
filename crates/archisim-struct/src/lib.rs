@@ -34,6 +34,7 @@
 pub mod actions;
 pub mod analysis;
 pub mod analytical;
+pub mod boxes;
 pub mod cases;
 pub mod cold;
 pub mod concrete;

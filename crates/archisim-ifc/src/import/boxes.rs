@@ -56,6 +56,7 @@ impl<'a> Importer<'a> {
             bottom: length(self, "Bottom")?,
             height: length(self, "Height")?,
             sides,
+            chassis: self.chassis_of(id),
         };
         let bid = self.model.add_box(spec).map_err(|e| explain(&e))?;
         if let Some(g) = guid {
@@ -63,5 +64,53 @@ impl<'a> Importer<'a> {
         }
         self.report.boxes += 1;
         Ok(())
+    }
+
+    /// The chassis kept in `ArchiSim_Box`; the usual one for what is
+    /// missing (a box written before M3).
+    fn chassis_of(&self, id: u64) -> archisim_core::Chassis {
+        let mut c = archisim_core::Chassis::default();
+        let text = |name: &str| {
+            self.property_own(id, "ArchiSim_Box", name)
+                .and_then(|v| v.as_str())
+                .map(String::from)
+        };
+        let number = |name: &str| {
+            self.property_own(id, "ArchiSim_Box", name)
+                .and_then(|v| v.as_f64())
+                .map(|v| snap(v * self.geo.length))
+        };
+        let tube = |name: &str| text(name).and_then(|t| archisim_core::BoxTube::parse(&t));
+        if let Some(t) = tube("EdgeTube") {
+            c.edge = t;
+        }
+        if let Some(t) = tube("PostTube") {
+            c.post = t;
+        }
+        if let Some(t) = tube("JoistTube") {
+            c.joist = t;
+        }
+        if let Some(t) = tube("RoofJoistTube") {
+            c.roof_joist = t;
+        }
+        if let Some(v) = number("JoistSpacing") {
+            c.spacing = v;
+        }
+        if let Some(v) = number("RoofFrameAt") {
+            c.roof_at = v;
+        }
+        if let Some(l) = text("LiftPoints").and_then(|t| archisim_core::LiftPoints::from_code(&t)) {
+            c.lift = l;
+        }
+        if let Some(v) = self.property_own(id, "ArchiSim_Box", "MiddleBeam") {
+            if let Some(b) = v.as_bool() {
+                c.middle_beam = b;
+            }
+        }
+        if c.is_valid() {
+            c
+        } else {
+            archisim_core::Chassis::default()
+        }
     }
 }

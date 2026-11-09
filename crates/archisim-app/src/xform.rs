@@ -807,6 +807,7 @@ pub fn box_spec(
         bottom: b.bottom,
         height: b.height,
         sides,
+        chassis: b.chassis,
     }
 }
 

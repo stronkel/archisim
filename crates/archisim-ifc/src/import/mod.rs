@@ -119,7 +119,8 @@ pub fn import_ifc(text: &str) -> Result<Imported, ImportError> {
 /// worktop of a run of kitchen modules (`ArchiSim_Worktop`) with its
 /// modules, and a window's grille and shutters (`ArchiSim_OpeningPart`)
 /// with its type, and the members of a light frame (`ArchiSim_FramePart`)
-/// with their element's type, not as elements of their own: they leave the file
+/// with their element's type, and the tubes of a modular box's chassis
+/// (`ArchiSim_BoxPart`) with the box, not as elements of their own: they leave the file
 /// before it is read.
 fn drop_roof_parts(file: &mut step_read::StepFile) {
     let sets: std::collections::HashSet<u64> = file
@@ -135,6 +136,7 @@ fn drop_roof_parts(file: &mut step_read::StepFile) {
                         | Some("ArchiSim_WallProfilePart")
                         | Some("ArchiSim_FramePart")
                         | Some("ArchiSim_PilePart")
+                        | Some("ArchiSim_BoxPart")
                 )
         })
         .map(|(id, _)| *id)

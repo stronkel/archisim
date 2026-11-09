@@ -183,6 +183,14 @@ pub fn differences(a: &Model, b: &Model) -> Vec<String> {
             && close(s.width, t.width)
             && close(s.bottom, t.bottom)
             && close(s.height, t.height)
+            && s.chassis.edge.label() == t.chassis.edge.label()
+            && s.chassis.post.label() == t.chassis.post.label()
+            && s.chassis.joist.label() == t.chassis.joist.label()
+            && s.chassis.roof_joist.label() == t.chassis.roof_joist.label()
+            && close(s.chassis.spacing, t.chassis.spacing)
+            && close(s.chassis.roof_at, t.chassis.roof_at)
+            && s.chassis.middle_beam == t.chassis.middle_beam
+            && s.chassis.lift == t.chassis.lift
             && level_guid(a, s.level) == level_guid(b, t.level);
         if !same {
             diff(format!("caja {}: {:?} / {:?}", s.guid, s, t));

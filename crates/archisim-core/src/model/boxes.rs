@@ -107,6 +107,8 @@ pub struct ModularBox {
     pub height: f64,
     /// A, B, C and D.
     pub sides: [SideState; 4],
+    /// Its steel chassis (M3): tubes, joists and how it is lifted.
+    pub chassis: Chassis,
 }
 
 /// Data needed to make a box.
@@ -122,6 +124,7 @@ pub struct NewBox {
     pub bottom: f64,
     pub height: f64,
     pub sides: [SideState; 4],
+    pub chassis: Chassis,
 }
 
 impl NewBox {
@@ -138,7 +141,208 @@ impl NewBox {
             bottom: BOX_BOTTOM,
             height: BOX_HEIGHT,
             sides: [SideState::Free; 4],
+            chassis: Chassis::default(),
         }
+    }
+}
+
+/// Density of the chassis' steel, kg/m³.
+pub const STEEL_DENSITY: f64 = 7850.0;
+
+/// A rectangular hollow section of the chassis (§5 bis), in metres: its
+/// depth (upright as laid in a frame, or along the box in a post), its
+/// width and its wall.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BoxTube {
+    pub depth: f64,
+    pub width: f64,
+    pub wall: f64,
+}
+
+impl BoxTube {
+    /// From millimetres.
+    pub fn mm(depth: f64, width: f64, wall: f64) -> Self {
+        BoxTube {
+            depth: depth / 1000.0,
+            width: width / 1000.0,
+            wall: wall / 1000.0,
+        }
+    }
+
+    /// «120×100×4», in millimetres.
+    pub fn label(&self) -> String {
+        let n = |v: f64| {
+            let mm = v * 1000.0;
+            if (mm - mm.round()).abs() < 0.05 {
+                format!("{}", mm.round() as i64)
+            } else {
+                format!("{mm:.1}").replace('.', ",")
+            }
+        };
+        format!("{}×{}×{}", n(self.depth), n(self.width), n(self.wall))
+    }
+
+    /// Reads «120×100×4» (also with «x»).
+    pub fn parse(text: &str) -> Option<Self> {
+        let v: Vec<f64> = text
+            .split(['×', 'x', 'X', '*'])
+            .map(|p| p.trim().replace(',', ".").parse::<f64>())
+            .collect::<Result<_, _>>()
+            .ok()?;
+        let t = match v.as_slice() {
+            [d, w, t] => BoxTube::mm(*d, *w, *t),
+            _ => return None,
+        };
+        t.is_valid().then_some(t)
+    }
+
+    pub fn is_valid(&self) -> bool {
+        self.depth.is_finite()
+            && self.width.is_finite()
+            && self.wall.is_finite()
+            && self.depth > 0.01
+            && self.width > 0.01
+            && self.wall > 0.0005
+            && 2.0 * self.wall < self.depth.min(self.width)
+    }
+
+    /// Area of steel, m².
+    pub fn area(&self) -> f64 {
+        let (d, w, t) = (self.depth, self.width, self.wall);
+        d * w - (d - 2.0 * t) * (w - 2.0 * t)
+    }
+
+    /// Weight, kg/m.
+    pub fn kg_per_m(&self) -> f64 {
+        self.area() * STEEL_DENSITY
+    }
+
+    /// Plastic modulus about its strong axis (bending in its depth), m³.
+    pub fn plastic_modulus(&self) -> f64 {
+        let (d, w, t) = (self.depth, self.width, self.wall);
+        (w * d * d - (w - 2.0 * t) * (d - 2.0 * t).powi(2)) / 4.0
+    }
+
+    /// Second moment about its strong axis, m⁴.
+    pub fn inertia(&self) -> f64 {
+        let (d, w, t) = (self.depth, self.width, self.wall);
+        (w * d.powi(3) - (w - 2.0 * t) * (d - 2.0 * t).powi(3)) / 12.0
+    }
+}
+
+/// The tubes offered for the chassis, smallest first.
+pub fn box_tubes() -> Vec<BoxTube> {
+    [
+        (40.0, 40.0, 3.0),
+        (60.0, 40.0, 3.0),
+        (60.0, 60.0, 3.0),
+        (80.0, 40.0, 3.0),
+        (80.0, 80.0, 4.0),
+        (100.0, 50.0, 4.0),
+        (100.0, 100.0, 4.0),
+        (120.0, 80.0, 4.0),
+        (120.0, 100.0, 4.0),
+        (120.0, 120.0, 5.0),
+        (150.0, 100.0, 5.0),
+        (160.0, 80.0, 5.0),
+        (180.0, 100.0, 5.0),
+        (200.0, 100.0, 6.0),
+        (200.0, 120.0, 6.0),
+        (250.0, 150.0, 6.0),
+    ]
+    .into_iter()
+    .map(|(d, w, t)| BoxTube::mm(d, w, t))
+    .collect()
+}
+
+/// Where a box hangs from when it is craned.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LiftPoints {
+    /// The four corners of the floor chassis.
+    Four,
+    /// The corners and the middle of the long sides.
+    Six,
+}
+
+impl LiftPoints {
+    pub const ALL: [LiftPoints; 2] = [LiftPoints::Four, LiftPoints::Six];
+
+    pub fn count(self) -> usize {
+        match self {
+            LiftPoints::Four => 4,
+            LiftPoints::Six => 6,
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            LiftPoints::Four => "Cuatro esquinas",
+            LiftPoints::Six => "Esquinas y medio",
+        }
+    }
+
+    pub fn code(self) -> &'static str {
+        match self {
+            LiftPoints::Four => "four",
+            LiftPoints::Six => "six",
+        }
+    }
+
+    pub fn from_code(code: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|l| l.code() == code)
+    }
+}
+
+/// The steel chassis of a box (M3, `docs/MODULAR.md` §5 bis): welded
+/// tubes. A floor frame round the box at its underside with its joists
+/// across (in two spans with a middle beam along it), a roof frame of the
+/// same tube with its joists, its underside at the false ceiling's plane,
+/// and posts at the corners from the underside to the top (and in the
+/// middle of the long sides that are open or where it is lifted from).
+/// The pieces are not kept: `archisim_geom::boxes` lays them out.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Chassis {
+    /// The tube of the floor and roof frames.
+    pub edge: BoxTube,
+    /// The tube of the posts.
+    pub post: BoxTube,
+    /// The floor's joists.
+    pub joist: BoxTube,
+    /// The roof's joists.
+    pub roof_joist: BoxTube,
+    /// Between joists, centre to centre.
+    pub spacing: f64,
+    /// A beam along the middle of the floor, halving the joists' span.
+    pub middle_beam: bool,
+    /// Underside of the roof frame over the level (the ceiling's plane).
+    pub roof_at: f64,
+    pub lift: LiftPoints,
+}
+
+impl Default for Chassis {
+    fn default() -> Self {
+        Chassis {
+            edge: BoxTube::mm(120.0, 100.0, 4.0),
+            post: BoxTube::mm(120.0, 100.0, 4.0),
+            joist: BoxTube::mm(60.0, 40.0, 3.0),
+            roof_joist: BoxTube::mm(60.0, 40.0, 3.0),
+            spacing: 0.60,
+            middle_beam: true,
+            roof_at: 2.93,
+            lift: LiftPoints::Four,
+        }
+    }
+}
+
+impl Chassis {
+    pub fn is_valid(&self) -> bool {
+        self.edge.is_valid()
+            && self.post.is_valid()
+            && self.joist.is_valid()
+            && self.roof_joist.is_valid()
+            && self.spacing.is_finite()
+            && self.spacing >= 0.2
+            && self.roof_at.is_finite()
     }
 }
 
@@ -313,6 +517,50 @@ pub enum BoxIssue {
     /// Neither box puts a wall in the joint and it is not meant to be open
     /// on both: it is, so it is only noted.
     OpenBothSides { side: usize, other: BoxId },
+    /// A joined side with part of it on the outside (`exposed` metres): a
+    /// hole in the façade if it is open; façade in the joint's wall if not.
+    PartlyExposed {
+        side: usize,
+        exposed: f64,
+        open: bool,
+    },
+    /// On an upper floor, over no box of the floor below.
+    NotOverBox,
+    /// Over a box of the floor below but off its grid: its corners `by`
+    /// metres from that box's.
+    OffGrid { under: BoxId, by: f64 },
+}
+
+/// Where a side of a box touches another box (see [`Model::box_contacts`]):
+/// from `from` to `to` along the side, the other's side, and the gap
+/// between the two chassis.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BoxContact {
+    pub side: usize,
+    pub other: BoxId,
+    pub other_side: usize,
+    pub from: f64,
+    pub to: f64,
+    pub gap: f64,
+}
+
+/// A joint between two boxes (M2): along the middle of the gap between
+/// their chassis.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BoxJoint {
+    pub a: BoxId,
+    pub side_a: usize,
+    pub b: BoxId,
+    pub side_b: usize,
+    pub start: Point2,
+    pub end: Point2,
+    pub gap: f64,
+    /// The box that carries its wall.
+    pub owner: Option<BoxId>,
+}
+
+fn n_is_none(n: &[Option<(BoxId, usize)>; 4], side: usize) -> bool {
+    n[side].is_none()
 }
 
 impl BoxIssue {
@@ -320,7 +568,11 @@ impl BoxIssue {
     pub fn is_error(&self) -> bool {
         !matches!(
             self,
-            BoxIssue::WideLoad { .. } | BoxIssue::OpenBothSides { .. }
+            BoxIssue::WideLoad { .. }
+                | BoxIssue::TooTall { .. }
+                | BoxIssue::OpenBothSides { .. }
+                | BoxIssue::PartlyExposed { open: false, .. }
+                | BoxIssue::OffGrid { .. }
         )
     }
 
@@ -348,7 +600,7 @@ impl BoxIssue {
                 m(*max)
             ),
             BoxIssue::TooTall { height, max } => format!(
-                "Sobre el camión llega a {} m de alto, y la carretera admite {} m.",
+                "Sobre el camión llega a {} m de alto, y la carretera admite {} m: transporte especial (o el peto montado en obra).",
                 m(*height),
                 m(*max)
             ),
@@ -371,6 +623,28 @@ impl BoxIssue {
                 SIDE_NAMES[*side],
                 mark(other)
             ),
+            BoxIssue::PartlyExposed {
+                side,
+                exposed,
+                open: true,
+            } => format!(
+                "El lado {} está abierto, pero {} m dan al exterior: quedaría un hueco en la fachada.",
+                SIDE_NAMES[*side],
+                m(*exposed)
+            ),
+            BoxIssue::PartlyExposed { side, exposed, .. } => format!(
+                "{} m del muro de la junta del lado {} dan al exterior: esa parte es fachada.",
+                m(*exposed),
+                SIDE_NAMES[*side]
+            ),
+            BoxIssue::NotOverBox => {
+                "No apoya sobre ninguna caja de la planta de abajo.".to_string()
+            }
+            BoxIssue::OffGrid { under, by } => format!(
+                "Está desplazada {} m respecto a {}, que tiene debajo: las esquinas deben caer una sobre otra.",
+                m(*by),
+                mark(under)
+            ),
         }
     }
 }
@@ -386,7 +660,14 @@ pub struct BoxFill {
     pub ceiling_type: Option<SlabTypeId>,
     /// Height of the false ceiling's face over the level.
     pub ceiling_height: f64,
+    /// How far the walls of the free sides rise over the roof (the
+    /// parapet, §5 bis); the joint's walls stop at the roof, which goes on
+    /// over the joint.
+    pub parapet: f64,
 }
+
+/// Height of the parapet over the roof on a free side.
+pub const BOX_PARAPET: f64 = 0.20;
 
 /// What [`Model::fill_box`] made.
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -417,6 +698,14 @@ impl Model {
         }
         if b.mark.trim().is_empty() {
             return Err(ModelError::InvalidShape("a box needs a mark"));
+        }
+        if !b.chassis.is_valid() {
+            return Err(ModelError::InvalidShape("a box's chassis needs real tubes"));
+        }
+        if b.chassis.roof_at <= b.bottom || b.chassis.roof_at >= b.bottom + b.height {
+            return Err(ModelError::InvalidShape(
+                "a box's roof frame must be inside its height",
+            ));
         }
         Ok(())
     }
@@ -451,6 +740,7 @@ impl Model {
             bottom: spec.bottom,
             height: spec.height,
             sides: spec.sides,
+            chassis: spec.chassis,
         };
         self.check_box(&b)?;
         let id = BoxId(self.take_id());
@@ -669,6 +959,154 @@ impl Model {
         out
     }
 
+    /// Every stretch where a side of a box touches another box: a side
+    /// can touch two (a long side against two ends), and part of it can
+    /// stay outside. Same rules as [`Model::box_neighbours`], without the
+    /// least overlap; by side, then along it.
+    pub fn box_contacts(&self, id: BoxId) -> Vec<BoxContact> {
+        let mut out = Vec::new();
+        let Some(b) = self.boxes.get(&id) else {
+            return out;
+        };
+        for i in 0..4 {
+            let (a0, a1) = b.side(i);
+            let Some(dir) = (a1 - a0).normalized() else {
+                continue;
+            };
+            let outward = -dir.perp_left();
+            for o in self.boxes_on_level(b.level).filter(|o| o.id != id) {
+                for j in 0..4 {
+                    let (b0, b1) = o.side(j);
+                    let Some(odir) = (b1 - b0).normalized() else {
+                        continue;
+                    };
+                    if dir.dot(odir) > -0.999 {
+                        continue;
+                    }
+                    let gap = (b0 - a0).dot(outward);
+                    if !(-TOUCH_GAP..=TOUCH_GAP).contains(&gap) {
+                        continue;
+                    }
+                    let (s0, s1) = ((b0 - a0).dot(dir), (b1 - a0).dot(dir));
+                    let (from, to) = (s0.min(s1).max(0.0), s0.max(s1).min(b.side_length(i)));
+                    if to - from < 0.05 {
+                        continue;
+                    }
+                    out.push(BoxContact {
+                        side: i,
+                        other: o.id,
+                        other_side: j,
+                        from,
+                        to,
+                        gap,
+                    });
+                }
+            }
+        }
+        out.sort_by(|a, b| a.side.cmp(&b.side).then(a.from.total_cmp(&b.from)));
+        out
+    }
+
+    /// How much of a side of a box touches no other box, in metres.
+    pub fn box_side_exposed(&self, id: BoxId, side: usize) -> f64 {
+        let Some(b) = self.boxes.get(&id) else {
+            return 0.0;
+        };
+        let mut spans: Vec<(f64, f64)> = self
+            .box_contacts(id)
+            .into_iter()
+            .filter(|c| c.side == side)
+            .map(|c| (c.from, c.to))
+            .collect();
+        spans.sort_by(|a, b| a.0.total_cmp(&b.0));
+        let mut covered = 0.0;
+        let mut reach = 0.0f64;
+        for (a, z) in spans {
+            let a = a.max(reach);
+            if z > a {
+                covered += z - a;
+                reach = z;
+            }
+        }
+        (b.side_length(side) - covered).max(0.0)
+    }
+
+    /// The joints between the boxes of a level (M2): one per pair of sides
+    /// that touch, with its two ends on the line between the two chassis
+    /// and the box that carries its wall (the one whose side is «wall»;
+    /// none when neither or both do).
+    pub fn box_joints_on(&self, level: LevelId) -> Vec<BoxJoint> {
+        let mut out = Vec::new();
+        for b in self.boxes_on_level(level) {
+            for c in self.box_contacts(b.id) {
+                // Each joint once, from the box with the lower id.
+                if c.other < b.id {
+                    continue;
+                }
+                let (a0, a1) = b.side(c.side);
+                let Some(dir) = (a1 - a0).normalized() else {
+                    continue;
+                };
+                let outward = -dir.perp_left();
+                let mid = outward * (c.gap / 2.0);
+                let theirs = self.boxes[&c.other].sides[c.other_side];
+                let mine = b.sides[c.side];
+                let owner = match (mine, theirs) {
+                    (SideState::Wall, SideState::Wall) => None,
+                    (SideState::Wall, _) => Some(b.id),
+                    (_, SideState::Wall) => Some(c.other),
+                    _ => None,
+                };
+                out.push(BoxJoint {
+                    a: b.id,
+                    side_a: c.side,
+                    b: c.other,
+                    side_b: c.other_side,
+                    start: a0 + dir * c.from + mid,
+                    end: a0 + dir * c.to + mid,
+                    gap: c.gap,
+                    owner,
+                });
+            }
+        }
+        out
+    }
+
+    /// The boxes standing on a box (the inverse of [`Model::box_below`]).
+    pub fn boxes_above(&self, id: BoxId) -> Vec<BoxId> {
+        self.boxes
+            .keys()
+            .copied()
+            .filter(|o| *o != id && self.box_below(*o) == Some(id))
+            .collect()
+    }
+
+    /// The box under a box, on the nearest lower level that has boxes:
+    /// the one its centre is over.
+    pub fn box_below(&self, id: BoxId) -> Option<BoxId> {
+        let b = self.boxes.get(&id)?;
+        let z = self.level(b.level)?.elevation;
+        let below = self
+            .boxes
+            .values()
+            .filter_map(|o| Some((self.level(o.level)?.elevation, o)))
+            .filter(|(e, _)| *e < z - 1e-6)
+            .map(|(e, _)| e)
+            .fold(f64::NEG_INFINITY, f64::max);
+        if !below.is_finite() {
+            return None;
+        }
+        let c = b.centre();
+        self.boxes
+            .values()
+            .filter(|o| {
+                self.level(o.level)
+                    .is_some_and(|l| (l.elevation - below).abs() < 1e-6)
+            })
+            .find(|o| o.contains(c, 0.0))
+            .map(|o| o.id)
+    }
+
     /// What is wrong with a box, or worth knowing.
     pub fn box_issues(&self, id: BoxId) -> Vec<BoxIssue> {
         let Some(b) = self.boxes.get(&id) else {
@@ -695,7 +1133,24 @@ impl Model {
                 max: site.road_width,
             });
         }
-        let on_road = b.height + site.deck_height;
+        // The box and what rises over it (its parapets).
+        let lv = self.level(b.level).map_or(0.0, |l| l.elevation);
+        let tallest = self
+            .box_members(id)
+            .walls
+            .iter()
+            .filter_map(|w| self.wall(*w))
+            .map(|w| w.base_offset + w.height - b.bottom)
+            .chain(
+                self.box_members(id)
+                    .slabs
+                    .iter()
+                    .filter_map(|s| self.slab(*s))
+                    .map(|s| s.top_offset - b.bottom),
+            )
+            .fold(b.height, f64::max);
+        let _ = lv;
+        let on_road = tallest + site.deck_height;
         if on_road > site.road_height + 1e-6 {
             issues.push(BoxIssue::TooTall {
                 height: on_road,
@@ -716,6 +1171,48 @@ impl Model {
                         issues.push(BoxIssue::DoubleWall { side, other });
                     } else if state == SideState::Open && theirs == SideState::Open {
                         issues.push(BoxIssue::OpenBothSides { side, other });
+                    }
+                }
+            }
+        }
+        // A joined side that is partly on the outside: open, a hole in the
+        // façade; with the wall, part of it is façade.
+        for side in 0..4 {
+            if !b.sides[side].joined() || n_is_none(&self.box_neighbours(id), side) {
+                continue;
+            }
+            let exposed = self.box_side_exposed(id, side);
+            if exposed > 0.05 {
+                issues.push(BoxIssue::PartlyExposed {
+                    side,
+                    exposed,
+                    open: b.sides[side] == SideState::Open,
+                });
+            }
+        }
+        // Over the boxes of the floor below, on their grid (§4).
+        let lower = self
+            .boxes
+            .values()
+            .filter_map(|o| self.level(o.level).map(|l| l.elevation))
+            .any(|e| self.level(b.level).is_some_and(|l| e < l.elevation - 1e-6));
+        if lower {
+            match self.box_below(id) {
+                None => issues.push(BoxIssue::NotOverBox),
+                Some(under) => {
+                    let u = &self.boxes[&under];
+                    let off = b
+                        .corners()
+                        .iter()
+                        .map(|p| {
+                            u.corners()
+                                .iter()
+                                .map(|q| (*p - *q).length())
+                                .fold(f64::INFINITY, f64::min)
+                        })
+                        .fold(0.0, f64::max);
+                    if off > 0.05 {
+                        issues.push(BoxIssue::OffGrid { under, by: off });
                     }
                 }
             }
@@ -752,6 +1249,16 @@ impl Model {
                 },
             };
         }
+        // A side against two boxes: when it is open, each of them carries
+        // its stretch of the joint.
+        for c in self.box_contacts(id) {
+            if sides[c.side] == SideState::Open
+                && self.boxes[&c.other].sides[c.other_side] == SideState::Free
+                && !theirs.contains(&(c.other, c.other_side))
+            {
+                theirs.push((c.other, c.other_side));
+            }
+        }
         self.edit_box(id, |b| b.sides = sides)?;
         for (other, j) in theirs {
             self.edit_box(other, |b| b.sides[j] = SideState::Wall)?;
@@ -780,6 +1287,10 @@ impl Model {
             .ok_or(ModelError::UnknownElement(id.0))?;
         let mut made = BoxFilled::default();
         let outline = b.outline();
+        let covered = self
+            .boxes
+            .keys()
+            .any(|o| *o != id && self.box_below(*o) == Some(id));
         if let Some(t) = fill.floor_type {
             made.floor = Some(self.add_slab(NewSlab {
                 slab_type: t,
@@ -811,6 +1322,12 @@ impl Model {
                 }
                 // Clockwise round the box, so the exterior is on the left.
                 let (s, e) = b.side(i);
+                // No parapet under another box: its floor sits on this roof.
+                let parapet = if b.sides[i] == SideState::Free && !covered {
+                    fill.parapet.max(0.0)
+                } else {
+                    0.0
+                };
                 made.walls.push(self.add_wall(NewWall {
                     wall_type: t,
                     level: b.level,
@@ -818,7 +1335,7 @@ impl Model {
                     end: s,
                     bulge: 0.0,
                     reference: ReferenceLine::ExteriorFace,
-                    height: b.height,
+                    height: b.height + parapet,
                     base_offset: b.bottom,
                     top: WallTop::Unconnected,
                 })?);
@@ -866,6 +1383,7 @@ pub fn snap_against<'a>(
         bottom: spec.bottom,
         height: spec.height,
         sides: spec.sides,
+        chassis: spec.chassis,
     };
     // Its corners from its origin.
     let rel = probe.corners();
@@ -977,6 +1495,7 @@ mod tests {
             roof_type: Some(rt),
             ceiling_type: Some(ct),
             ceiling_height: 2.93,
+            parapet: BOX_PARAPET,
         };
         let a = m
             .add_box(NewBox::usual(lv, Point2::new(0.0, 0.0), 0.0))
@@ -999,9 +1518,18 @@ mod tests {
         assert_eq!(ma.ceilings.len(), 1);
         assert_eq!(m.box_of(fa.walls[2].0), Some(a));
         // The walls go from the chassis to the top of the roof.
+        // and those of the free sides rise as a parapet over it.
         let w = m.wall(fa.walls[0]).unwrap();
         assert!((w.base_offset - BOX_BOTTOM).abs() < 1e-9);
-        assert!((w.height - BOX_HEIGHT).abs() < 1e-9);
+        assert!((w.height - BOX_HEIGHT - BOX_PARAPET).abs() < 1e-9);
+        assert!((m.wall(fa.walls[2]).unwrap().height - BOX_HEIGHT).abs() < 1e-9);
+        // The parapet makes it taller on the lorry: special transport.
+        let tall = m
+            .box_issues(a)
+            .into_iter()
+            .find(|i| matches!(i, BoxIssue::TooTall { .. }))
+            .unwrap();
+        assert!(!tall.is_error());
         // An open side keeps its wall out even if it is the other box's.
         let shared = m.wall(fa.walls[2]).unwrap();
         let mid = (shared.start + shared.end) * 0.5;
@@ -1031,6 +1559,72 @@ mod tests {
         // Too far: nothing.
         let far = NewBox::usual(lv, Point2::new(20.0, 20.0), 0.0);
         assert!(m.box_snap(&far, 1.0).is_none());
+    }
+
+    #[test]
+    fn a_long_side_against_two_boxes_and_one_over_them() {
+        let (mut m, lv) = model();
+        // A long box across the ends of two short ones.
+        let mut long = NewBox::usual(lv, Point2::new(0.0, 0.0), 0.0);
+        long.length = 7.24;
+        let a = m.add_box(long).unwrap();
+        let mut short = NewBox::usual(lv, Point2::new(0.0, BOX_WIDTH + 0.02), 0.0);
+        short.length = 3.60;
+        let b = m.add_box(short.clone()).unwrap();
+        short.origin = Point2::new(3.62, BOX_WIDTH + 0.02);
+        let c = m.add_box(short).unwrap();
+        let contacts = m.box_contacts(a);
+        assert_eq!(contacts.len(), 2, "{contacts:?}");
+        assert!(contacts.iter().all(|k| k.side == 2));
+        assert!(m.box_side_exposed(a, 2) < 0.05);
+        // Open on that side: both short ones carry their stretch.
+        m.edit_box(a, |x| x.sides[2] = SideState::Open).unwrap();
+        m.set_box_sides_from_neighbours(b).unwrap();
+        m.set_box_sides_from_neighbours(c).unwrap();
+        m.set_box_sides_from_neighbours(a).unwrap();
+        assert_eq!(m.modular_box(a).unwrap().sides[2], SideState::Open);
+        assert_eq!(m.modular_box(b).unwrap().sides[0], SideState::Wall);
+        assert_eq!(m.modular_box(c).unwrap().sides[0], SideState::Wall);
+        // Two along A, and the one between the short ones.
+        let joints = m.box_joints_on(lv);
+        assert_eq!(joints.len(), 3);
+        assert!(joints.iter().all(|j| (j.gap - 0.02).abs() < 1e-9));
+        assert!(joints.iter().any(|j| j.owner == Some(b)));
+        // Take one away: part of the open side looks out.
+        m.remove_box(c).unwrap();
+        let issues = m.box_issues(a);
+        assert!(
+            issues
+                .iter()
+                .any(|i| matches!(i, BoxIssue::PartlyExposed { open: true, .. }) && i.is_error()),
+            "{issues:?}"
+        );
+        // A box upstairs: over A, but 30 cm off.
+        let up = m.add_level("P1", 3.6);
+        let d = m
+            .add_box(NewBox::usual(up, Point2::new(0.3, 0.0), 0.0))
+            .unwrap();
+        assert_eq!(m.box_below(d), Some(a));
+        assert!(m
+            .box_issues(d)
+            .iter()
+            .any(|i| matches!(i, BoxIssue::OffGrid { under, .. } if *under == a)));
+        let e = m
+            .add_box(NewBox::usual(up, Point2::new(30.0, 0.0), 0.0))
+            .unwrap();
+        assert!(m.box_issues(e).contains(&BoxIssue::NotOverBox));
+    }
+
+    #[test]
+    fn tubes_read_and_weigh() {
+        let t = BoxTube::parse("120x100x4").unwrap();
+        assert_eq!(t.label(), "120×100×4");
+        // 1 696 mm² of steel: 13,3 kg/m.
+        assert!((t.area() * 1e6 - 1696.0).abs() < 1.0, "{}", t.area());
+        assert!((t.kg_per_m() - 13.31).abs() < 0.05);
+        assert!(BoxTube::parse("120×100").is_none());
+        assert!(BoxTube::parse("40×40×25").is_none());
+        assert!(Chassis::default().is_valid());
     }
 
     #[test]

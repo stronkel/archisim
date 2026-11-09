@@ -95,6 +95,15 @@ Si cambias la exportación IFC, la validación con IfcOpenShell debe pasar sin e
   - **IFC.** `archisim-ifc::boxes` (`IfcElementAssembly` `.FACTORY.` «Caja modular» con `ArchiSim_Box`; sus piezas salen de la planta y se agregan a ella). Importación en `import/boxes`; `scripts/validate_ifc.py` lo comprueba.
   - **App.** `Tool::ModularBox` y `app/box_ui` (`BoxSettings`, `box_at`, Espacio gira). `Element::Box` se elige por su marca o sus lados. `xform::with_box_members` hace que mover, copiar, girar y reflejar la caja lleve lo que tiene.
   - **Ejemplo.** `archisim cajas out/`.
+- Juntas y chasis de las cajas (M2, M3, `docs/MODULAR.md`, formato versión 99):
+  - **Chasis.** `ModularBox::chassis` (`Chassis` con `BoxTube` —«120×100×4», `box_tubes`, `STEEL_DENSITY`— y `LiftPoints`), en `archisim-core::model::boxes`. Las piezas no se guardan: `archisim_geom::boxes` (`chassis_members` → `ChassisMember` con `ChassisRole`, `lift_points`, `chassis_weight`, `box_solids` con dueño `SolidOwner::Box`, en `model_solids`).
+  - **Planta:** pilares cortados y puntos de izado en `archisim-plan::boxes`.
+  - **IFC:** un `IfcMember` por tubo con `IfcRectangleHollowProfileDef` en `archisim-ifc::boxes::write_chassis` (`ArchiSim_BoxPart`, que el importador quita; el chasis vuelve de `ArchiSim_Box`).
+  - **Peso, izado y montaje:** `archisim_struct::boxes` (`box_weight`, `lift_check`, `assembly_order`, `chassis_cut_list`, `boxes_report`).
+  - **Juntas:** `Model::box_contacts` (un lado contra dos cajas), `box_side_exposed`, `box_joints_on`, `box_below`/`boxes_above` y los avisos `PartlyExposed`, `NotOverBox`, `OffGrid`. Los muros de dos cajas no se unen: `WallIndex::apart`.
+  - **Petos:** `BoxFill::parapet` (`BOX_PARAPET`; sin peto bajo otra caja).
+  - **Despiece por caja:** `archisim_geom::framing::members_by_box`.
+  - **App:** grupos «Chasis» y «Peso e izado» en `app/box_ui`.
 - Catálogo del sistema (M8, `docs/MODULAR.md`, formato versión 98): `archisim-core::model::catalogue`.
   - **La caja tipo.** Un proyecto con una caja y lo que lleva, con `Model::catalogue` (`CatalogueEntry`: código, nombre, revisión, `CatalogueStatus` en diseño o aprobada, fecha, notas y `CatalogueOption`, una puerta o ventana que cada vivienda puede cambiar). `approve_catalogue` sube la revisión y la cierra; `new_catalogue_revision` la abre; `is_frozen`. `Model::box_type_model` hace la caja tipo de una caja: la recorta y la lleva al origen colocándola como módulo en un proyecto vacío y aplanándolo.
   - **Las viviendas.** Se colocan como módulos. `ModulePlacement::choices` (opción → tipo) se aplica al aplanar (`instantiate`, que ahora copia también techos y cajas). Las cajas de las copias toman `MOD-nn` libres y su tipo de `CatalogueEntry::box_kind`. `module_box_snap` (con `placed_box` y `snap_against`) pega la copia a la caja de al lado.

@@ -6,6 +6,80 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-09 (134) · M2 juntas y M3 chasis, peso e izado
+
+Rama `bloque/juntas`, con pull request, sobre la de la entrada 133 (`bloque/catalogo`, #193). **Formato versión 99**: el chasis de cada caja. `docs/MODULAR.md` (M2, M3).
+
+**Qué hace.**
+- **El chasis de la caja (M3).** Cada caja lleva su chasis de tubo soldado, como el módulo B de Revit (§5 bis):
+  - marco de suelo y de techo de 120 × 100 × 4;
+  - pilares de esquina de toda la altura, y uno intermedio en el medio de cada lado largo abierto;
+  - viguetas de 60 × 40 × 3 cada 60 cm, en dos vanos sobre una viga central en el suelo;
+  - el marco de techo con su cara de abajo en el plano del techo (2,93).
+  - Los tubos, la separación, la viga central, la cota del marco de techo y el izado se cambian en Propiedades de la caja, grupo «Chasis».
+  - No se dibujan a mano: salen de la caja y la siguen al moverla, girarla o cambiar su tamaño.
+- **Dónde se ve el chasis.**
+  - **3D:** se ve, se selecciona y forma parte de la caja.
+  - **Planta:** los pilares van cortados y los puntos de izado con un círculo con cruz.
+  - **IFC:** un `IfcMember` por tubo, con su perfil hueco, dentro del ensamblaje de la caja, y su peso. Vuelve igual al importarlo.
+- **Peso y centro de gravedad.** Propiedades de la caja, grupo «Peso e izado», con el peso desglosado. Cuenta:
+  - el chasis;
+  - los muros, con su entramado, menos los huecos;
+  - las carpinterías;
+  - los forjados y los techos.
+- **Izado.** Con balancín, de cuatro esquinas o de esquinas y medio:
+  - lo que tira cada eslinga;
+  - la flexión y la flecha del borde largo del chasis, con el peso mayorado por 1,35 y por 1,20 de dinámico.
+  - Es del lado de la seguridad: el muro de encima no se cuenta como viga.
+- **Orden de montaje.** Por plantas desde abajo. Empieza por una esquina y sigue por la caja que toca a más cajas ya puestas.
+- **Despiece por caja.** Para cada caja, la lista de corte del chasis (pieza, tubo, cantidad, largo y kilos) y el resumen del entramado de sus muros, suelos y cubiertas.
+- **Juntas (M2).**
+  - **Muros de cajas distintas:** no se unen nunca; en las esquinas solo se tocan.
+  - **Lado contra dos cajas:** un lado puede tocar dos cajas. Si está abierto, cada una de las otras lleva su tramo de muro.
+  - **Avisos nuevos:**
+    - lado abierto con parte al exterior (es un error: quedaría un hueco en la fachada);
+    - muro de junta con parte al exterior;
+    - caja de una planta alta que no apoya sobre ninguna de abajo;
+    - caja desplazada de la retícula de la de abajo.
+  - **Petos.** «Ponerle la envolvente» levanta 20 cm de peto en los lados libres. En los lados de junta, el muro acaba en la cubierta para que siga por encima de la junta. Bajo otra caja no hay peto.
+  - **Altura en camión.** Con el peto, la caja pasa de 4 m sobre el camión. Ahora es un aviso de transporte especial, no un error.
+- **Pesos de capa:** una capa cuyo material se llame «colaborante» pesa como forjado colaborante (unos 1,9 kN/m² en 12 cm), no como acero macizo.
+
+**Lo que salen las cajas del ejemplo, y por qué.**
+- **Peso: entre 9 y 12 t por caja**, más de las 5 a 8 t que estimamos.
+  - **Suelo y cubierta (unas 6 t):** casi todo es el forjado colaborante H90 + 30.
+  - **Muros (unas 4 t):** placa cerámica y dos placas de yeso.
+  - **Chasis (1 t).**
+- **Izado de cuatro esquinas:** el borde de 120 × 100 × 4 no llega, porque pide unas cuatro veces lo que da.
+- **Izado de seis puntos** (esquinas y medio): llega justo, al 99 %.
+- Es lo que ya apuntaba la §5 bis, ahora con números de cada caja.
+
+**Pendiente.**
+- **Contar el muro de fachada como viga** en el izado (necesita su cálculo).
+- **Orejetas y uniones atornilladas** entre cajas.
+- **Banda de lana de la junta y banda de impermeabilización** de la cubierta en 3D.
+- **El taller (M9):** planos de cada caja y estados de fabricación.
+- **Tu catálogo de perfiles**, para que los tubos salgan de tu lista.
+
+**Qué debe probar Antonio.**
+1. Ejecuta `cargo run -p archisim-cli -- cajas out/cajas` y abre `out/cajas/cajas.txt`. Tiene que haber 10 cajas, 2 de ellas en planta primera.
+   - Al final verás, para cada caja, su peso y centro de gravedad, lo que tira cada punto, la comprobación del borde y la lista de corte del chasis.
+   - Las dos de arriba se cuelgan de seis puntos.
+   - **Mira si los pesos te cuadran** con lo que esperáis en fábrica. Si no, dime qué capa pesa de más.
+2. Abre `out/cajas/cajas-planta.svg` y `cajas-planta-2.svg`. Deben verse:
+   - los pilares en azul en las esquinas y en el medio de los lados abiertos;
+   - los círculos de izado.
+3. Abre `out/cajas/cajas.archisim` en la aplicación.
+   - En 3D, con la caja de sección, mira el chasis: marcos, pilares y viguetas.
+   - Selecciona una caja. En Propiedades:
+     - grupo «Chasis»: cambia el izado a «Esquinas y medio» o el marco a 150 × 100 × 5;
+     - grupo «Peso e izado»: mira cómo cambia la comprobación.
+     - Debajo verás su orden de montaje.
+4. **Juntas:** borra una de las cajas de una fila. En Comprobación, la de al lado debe avisar de que su lado abierto queda en parte al exterior.
+5. **IFC:** valídalo con `python3 scripts/validate_ifc.py out/cajas/cajas.ifc`. Ábrelo en tu visor: cada caja es un ensamblaje con sus muros, forjados y los tubos del chasis.
+
+---
+
 ## 2026-11-09 (133) · M8: el catálogo del sistema
 
 Rama `bloque/catalogo`, con pull request, sobre la de la entrada 132 (`bloque/caja`, #191). **Formato versión 98**: lo que dice de sí misma una caja tipo, y lo que elige cada copia. `docs/MODULAR.md` (M8).

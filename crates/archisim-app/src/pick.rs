@@ -822,6 +822,7 @@ pub fn of_solid(owner: archisim_geom::solid::SolidOwner) -> Element {
         SolidOwner::Run(id) => Element::Run(id),
         SolidOwner::Device(id) => Element::Device(id),
         SolidOwner::Ceiling(id) => Element::Ceiling(id),
+        SolidOwner::Box(id) => Element::Box(id),
         // The picture on the ground has no element of its own: it goes
         // with the terrain (the 3D view gives it the real one).
         SolidOwner::Orthophoto => Element::Terrain(archisim_core::TerrainId(0)),
@@ -855,6 +856,7 @@ pub fn solid_of(e: Element) -> Option<archisim_geom::solid::SolidOwner> {
         Element::Run(id) => SolidOwner::Run(id),
         Element::Device(id) => SolidOwner::Device(id),
         Element::Ceiling(id) => SolidOwner::Ceiling(id),
+        Element::Box(id) => SolidOwner::Box(id),
         _ => return None,
     })
 }

@@ -2,7 +2,8 @@
 //! of their own colour over the walls, its mark in a tag at its middle
 //! («MOD-03», and under it what box of the system it is) and, inside each
 //! side, its letter and what it is when it is joined to another box («C ·
-//! muro», «A · abierto»).
+//! muro», «A · abierto»); the posts of its chassis, cut, and a ring with a
+//! cross at each point it is lifted from (M3).
 
 use std::fmt::Write as _;
 
@@ -95,6 +96,52 @@ fn draw_box(s: &mut String, b: &ModularBox, k: f64) {
             r#"<path d="{}" {}/>"#,
             text_path(&text, at, dir, h, Align::Centre),
             crate::lettering::paint(h, BOX_INK)
+        );
+    }
+    // The chassis' posts, cut (M3), and where it is lifted from.
+    for m in archisim_geom::boxes::chassis_members(b)
+        .iter()
+        .filter(|m| m.role.is_post())
+    {
+        let corners: Vec<Point2> = [
+            [m.lo[0], m.lo[1]],
+            [m.hi[0], m.lo[1]],
+            [m.hi[0], m.hi[1]],
+            [m.lo[0], m.hi[1]],
+        ]
+        .iter()
+        .map(|p| archisim_geom::boxes::box_point(b, [p[0], p[1], 0.0]))
+        .collect();
+        let _ = writeln!(
+            s,
+            r#"<path class="box-post" d="{}" fill="{BOX_INK}" stroke="none"/>"#,
+            path(&corners)
+        );
+    }
+    for p in archisim_geom::boxes::lift_points(b) {
+        // A small ring with a cross, inside the corner.
+        let c = archisim_geom::boxes::box_point(b, p);
+        let r = 1.2 * k;
+        let inward = (b.centre() - c)
+            .normalized()
+            .unwrap_or(Point2::new(0.0, 1.0));
+        let c = c + inward * (r * 2.5);
+        let _ = writeln!(
+            s,
+            r#"<circle class="box-lift" cx="{}" cy="{}" r="{}" fill="none" stroke="{BOX_INK}" stroke-width="{}"/>"#,
+            num(c.x),
+            num(-c.y),
+            num(r),
+            num(pens().view * k)
+        );
+        let _ = writeln!(
+            s,
+            r#"<path d="M{} L{} M{} L{}" stroke="{BOX_INK}" stroke-width="{}"/>"#,
+            pt(c - Point2::new(r, 0.0)),
+            pt(c + Point2::new(r, 0.0)),
+            pt(c - Point2::new(0.0, r)),
+            pt(c + Point2::new(0.0, r)),
+            num(pens().view * k)
         );
     }
     // The tag.

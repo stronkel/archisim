@@ -10953,6 +10953,9 @@ fn modular_boxes_are_placed_against_each_other_and_moved_whole() {
     assert_eq!(held.walls.len(), 4, "{held:?}");
     assert_eq!(held.slabs.len(), 2);
     assert_eq!(held.ceilings.len(), 1);
+    // Its chassis is in the 3D (M3), with the steel the tool added.
+    assert!(!archisim_geom::boxes::box_solids(m, a.id).is_empty());
+    assert!(archisim_struct::boxes::lift_check(m, a.id).is_some());
     // The second one, clicked a little off the place beside side C.
     h.click_at(p(4.3, 3.0 + 3.6 + 0.3));
     let m = h.model();
@@ -10995,6 +10998,12 @@ fn modular_boxes_are_placed_against_each_other_and_moved_whole() {
     assert!(m
         .box_issues(b.id)
         .contains(&archisim_core::BoxIssue::JoinedAlone { side: 0 }));
+    // Its properties: the chassis and how it is lifted.
+    let ctx = egui::Context::default();
+    let mut o = ctx.run_ui(egui::RawInput::default(), |ui| {
+        h.app.box_properties(ui, a.id)
+    });
+    o.textures_delta.clear();
 }
 
 /// The catalogue (M8): a box saved as a box type, approved (and then
