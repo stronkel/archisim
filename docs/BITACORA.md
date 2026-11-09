@@ -6,6 +6,53 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-09 (133) · Muros de sección variable: talud y zarpa
+
+Rama `bloque/muros-talud`, con pull request. Va sobre la de la entrada 132 (#187, todavía sin unir). **Formato versión 100**: los tipos de muro y los muros llevan su sección (`section`). Documento nuevo `docs/MUROS.md`; `docs/ESTRUCTURA.md` §6 y §8.
+
+- **Qué es.** Muros de contención y de mampostería con las caras en talud y la zarpa como parte del muro. Las capas del tipo dan el espesor en **coronación**; bajando, cada cara en talud sale lo que diga su talud y la capa que crece (la estructural, o la que se elija) se lleva la diferencia; las demás capas siguen su cara con su espesor. La **zarpa** va en la base, dentro de la altura del muro: su canto, y su vuelo por fuera y por dentro desde el pie de cada cara.
+- **Del tipo o del muro.** En Tipos y materiales → el tipo de muro → «Sección variable: talud y zarpa» (con su sección dibujada para un muro de 3 m), o en Propiedades del muro → «Sección variable», que manda sobre la del tipo («Como el tipo» la quita). Forma: Constante, Talud, Zarpa, Talud y zarpa. El talud se escribe «1:10», «10 %» o «5,7°», o se da el **espesor en la base** y se calcula el talud. Solo muros rectos.
+- **3D**: cada capa es un sólido de caras planas desde el pie de las caras hasta la coronación, y la zarpa un prisma. En las esquinas, cada vértice se desliza por la línea del encuentro: **dos muros en talud en L se encuentran a cualquier altura**, y sus zarpas también, a inglete. Con un muro normal en L o en T, el muro en talud se mete en él (se solapan, sin huecos). El perfil en alzado lo recorta; puertas y ventanas atraviesan el espesor que haya a su altura, y la zarpa si llegan a ella.
+- **Planta**: el corte con el espesor a la altura del plano de corte, y en discontinua el pie de las caras en talud y el contorno de la zarpa.
+- **Secciones y alzados**: la sección trapecial con su trama y la zarpa debajo (salen solas de los sólidos).
+- **IFC**: `IfcWall` con un `IfcFacetedBrep` por capa y otro para la zarpa (exactos), el conjunto de capas del tipo y el pset `ArchiSim_WallSection` (taludes, capa, vuelos, canto y los espesores en coronación y en la base), que ArchiSim vuelve a leer; los huecos atraviesan también el talud y la zarpa; `Qto_WallBaseQuantities` con el volumen real. Valida con IfcOpenShell (volúmenes comparados).
+- **Mediciones**: partida propia «<tipo> de sección variable» en **m³**, con el volumen real menos huecos.
+- **Cálculo** (muro de contención en ménsula): con la zarpa del muro, vuelco, deslizamiento y presión en el borde con su peso real y su centro de gravedad, la zarpa descentrada (puntera dentro, talón del lado de las tierras), las tierras sobre el talón y sobre la cara en talud y la sobrecarga; las tierras desde lo alto de la zarpa; flexión y cortante con el espesor al pie del alzado.
+- **Ejemplo**: `archisim muros-talud <carpeta>`: en el sótano un muro de contención HA de 30 cm en coronación, 3,50 m, talud 1:10 por las tierras, zarpa de 50 cm (talón 80, puntera 50), en L con otro igual y un muro de ladrillo en T sobre su zarpa; en planta baja un muro de mampostería de 45 cm entre enfoscados, en talud 1:20 por las dos caras, con puerta y ventana, en L con uno de ladrillo. Plantas y secciones a 1:50 en SVG, IFC y la comprobación.
+- **Pruebas**: el modelo (tipo y muro, valores no válidos), el fichero, la geometría a cada altura, la zarpa y las líneas ocultas, el volumen del sólido igual a sección × longitud, dos muros en talud que se encuentran en la esquina a cualquier altura, el IFC de ida y vuelta, el cálculo (igual que la fórmula de siempre con caras a plomo, y más estable con talud), el ejemplo (puerta que atraviesa, comprobación con su zarpa, planta con lo oculto) y la lectura de los taludes en la app. Se abrió la aplicación con Xvfb: grupo del muro y del tipo, cambio de talud (la planta y el 3D lo siguen).
+
+**Ejemplo (`muros-talud`).**
+
+| Muro | Coronación | Base del alzado | Volumen |
+|---|---|---|---|
+| Contención, 10 m | 0,30 m | 0,60 m | 23,40 m³ |
+| Contención (vuelta), 6 m | 0,30 m | 0,60 m | 14,20 m³ |
+| Mampostería, 8 m (con puerta y ventana) | 0,49 m | 0,77 m | 11,85 m³ |
+
+Contención: zarpa de 1,90 m, 57,5 kN/m; con 2,50 m de tierras sobre la zarpa, vuelco 2,89 (cumple), **deslizamiento 1,08 (no cumple 1,5: pide más talón o un tacón)**, presión en el borde 99 kN/m² de 250.
+
+**Valores por defecto** (al elegir Talud o Zarpa): talud exterior 1:10; zarpa de 50 cm de canto, 60 cm de vuelo exterior y 40 cm de vuelo interior.
+
+**Pendiente.**
+- Muros curvos en talud; contrafuertes y tacón; zarpas escalonadas.
+- Restar de los muros en talud los forjados, cubiertas y muros que acometen (hoy se solapan).
+- Colocar y dibujar puertas y ventanas con el espesor de su altura (hoy, el de coronación).
+- Las caras entre capas en los cortes del 3D; la fachada pieza a pieza y el entramado sobre caras en talud.
+- Guardar la sección en la biblioteca de tipos (`.astipos`) y en el `IfcWallType`; el descenso de cargas con el peso real.
+
+**Qué debe probar Antonio.**
+1. `cargo run --release -p archisim-cli -- muros-talud out/` y abrir `out/muros-talud.archisim` (`cargo run --release -p archisim-app -- out/muros-talud.archisim`).
+2. En la planta Sótano: el muro de contención cortado más grueso que en coronación, y en discontinua el pie del talud y la zarpa, con la esquina a inglete. En la Vista 3D (F3): el talud, la zarpa y la esquina.
+3. Abrir las secciones «Contención» y «Mampostería» del navegador: el trapecio con su trama y la zarpa.
+4. Seleccionar el muro de mampostería → Propiedades → «Sección variable»: cambiar el talud exterior a «1:10», el espesor en la base, o la forma a «Talud y zarpa»; ver cómo cambian la planta y el 3D. «Como el tipo» lo devuelve.
+5. Tipos y materiales → «Muro de contención HA 30» → «Sección variable: talud y zarpa»: cambiar los vuelos de la zarpa y ver que los dos muros del tipo cambian.
+6. Colaboración → Cálculo de la estructura: el vuelco, el deslizamiento y la presión del muro de contención con su zarpa.
+7. Abrir `out/muros-talud.ifc` en otro programa (BIMvision, Revit, ArchiCAD) y ver los sólidos en talud y los huecos de la puerta y la ventana.
+
+**Escrito de memoria (que lo compruebe Antonio).** Los valores por defecto (1:10; zarpa 50 × 60 / 40 cm); que la zarpa sea del material de la capa que crece; el peso del muro desde el peso por m² del tipo entre su espesor; que en el cálculo las tierras vayan contra la cara exterior y la puntera sea la interior.
+
+---
+
 ## 2026-11-09 (132) · Ventilación, tercera vuelta: locales que no son viviendas (RITE) y garajes con ventilación natural
 
 Rama `bloque/rite-garajes`, con pull request. Va sobre la de la entrada 131 (#186, todavía sin unir). **Formato versión 99**: cuatro datos nuevos en `ventilation` (cómo se ventilan los garajes, la calidad del aire exterior ODA, la velocidad de los conductos y la IDA puesta a mano en algunos locales). `docs/INSTALACIONES.md` §6 («Garajes con ventilación natural») y §6 bis.

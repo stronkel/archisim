@@ -2832,6 +2832,7 @@ mod view_cube;
 mod views_ui;
 mod vivero_ui;
 mod wall_profile_ui;
+mod wall_section_ui;
 mod wall_tools_ui;
 mod water_ui;
 mod widgets;

@@ -1466,6 +1466,7 @@ impl ArchiSimApp {
         });
         self.wall_tools_group(ui, id, &w);
         self.wall_profile_group(ui, id, &w);
+        self.wall_section_group(ui, id, &w);
         self.layers_group(ui, w.wall_type);
         self.phase_group(ui, "wall-phase", &[Element::Wall(id)]);
         group(ui, "wall-identity", "Datos de identidad", |ui| {

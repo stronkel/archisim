@@ -173,6 +173,7 @@ DB-SE-F 5.2. La carga del metro más cargado en la base se compara con Φ·t·fd
 - Si un forjado apoya arriba, el muro está apeado ahí; si no, trabaja en ménsula.
 - Flexión en la base y en el vano, armadura de cada cara y cortante sin cercos. Si el muro no es de hormigón, aviso.
 - **Muros de contención exentos** (sin forjado arriba): empuje activo Ka = (1 − sen φ)/(1 + sen φ) sobre las tierras y la zapata. Con la zapata corrida dibujada bajo el muro (centrada), se comprueban el **vuelco** sobre la punta (≥ 1,8), el **deslizamiento** con rozamiento tg(⅔φ) (≥ 1,5) y la **presión en el borde** (≤ 1,25 de la admisible). Sin zapata dibujada, se propone el ancho que pide.
+- **Muros de contención de sección variable** (`docs/MUROS.md`): si el muro lleva su zarpa (talud y zarpa, como propiedad del muro o de su tipo), el vuelco, el deslizamiento y la presión se comprueban con su sección real: el peso del alzado en talud y de la zarpa con su centro de gravedad, la zarpa descentrada (puntera del lado interior, talón del lado de las tierras, el exterior), las tierras sobre el talón y sobre la cara en talud, y la sobrecarga encima. Las tierras cuentan desde lo alto de la zarpa. La flexión y el cortante, con el espesor al pie del alzado.
 
 ### Reglas de construcción sísmicas (NCSE-02, capítulo 4)
 
@@ -254,7 +255,7 @@ El cálculo es el de la estructura tal como queda: lo que se derriba (fase «Dem
 
 - **Plasticidad**: el cálculo es elástico, a propósito (es lo prudente para un programa de ayuda al proyecto).
 - **Segundo orden**: se amplifica por 1/(1 − θ), no con un análisis no lineal; con θ > 0,30 se pide más rigidez.
-- Muros de contención con la zapata descentrada (más punta o más talón), con tacón o con contrafuertes.
+- Muros de contención con tacón o con contrafuertes; la zapata descentrada solo como zarpa del propio muro (sección variable), no con una zapata corrida dibujada aparte.
 - Uniones de acero soldadas, con cartela calculada o atornilladas de más de dos filas; uniones de madera de clavija en la madera sin chapa, de tirafondos o de herrajes de catálogo.
 - Secciones de hormigón en L o huecas (la T solo como ala de las vigas bajo forjado).
 - Ménsulas cortas.

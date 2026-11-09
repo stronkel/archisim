@@ -213,6 +213,8 @@ pub(super) enum Action {
     FloorSystem(SlabTypeId, Option<archisim_core::FloorSystem>),
     /// The façade of a wall type (E9).
     WallFacade(WallTypeId, Option<archisim_core::Facade>),
+    /// The type's section across: batters and footing.
+    WallSection(WallTypeId, Option<archisim_core::WallSection>),
     /// The edge of a slab type.
     SlabEdge(SlabTypeId, Option<archisim_core::SlabEdge>),
     DuplicateOpening(OpeningTypeId),
@@ -1544,6 +1546,43 @@ impl ArchiSimApp {
         if t.function == WallFunction::Exterior || t.facade.is_some() {
             self.facade_group(ui, &t, actions);
         }
+        {
+            let m = self.ed.model();
+            let names: Vec<String> = t
+                .layers
+                .iter()
+                .map(|l| {
+                    m.material(l.material)
+                        .map_or(String::new(), |x| x.name.clone())
+                })
+                .collect();
+            props::group(
+                ui,
+                "types-wall-section",
+                "Sección variable: talud y zarpa",
+                |ui| {
+                    props::note(
+                        ui,
+                        "Para muros de contención y de mampostería: el espesor de las capas es el de coronación; las caras en talud salen hacia abajo y la zarpa va en la base, dentro de la altura del muro. Cada muro puede tener la suya.",
+                    );
+                    let now = t.section.unwrap_or_default();
+                    if let Some(s) = super::wall_section_ui::section_rows(
+                        ui,
+                        "types-wall-section",
+                        &now,
+                        &t.layers,
+                        &names,
+                        None,
+                    ) {
+                        actions.push(Action::WallSection(id, Some(s)));
+                    }
+                    if !now.is_plain() {
+                        props::note(ui, "Así queda en un muro de 3,00 m:");
+                        super::wall_section_ui::section_picture(ui, &now, t.thickness(), 3.0);
+                    }
+                },
+            );
+        }
         props::group(
             ui,
             "types-wall-sweeps",
@@ -2068,6 +2107,15 @@ impl ArchiSimApp {
                     .ed
                     .transact("Envolver", |m| m.set_wall_type_wrap(id, ends, inserts));
                 self.report(r, "Envolver cambiado: lo siguen todos los muros del tipo.");
+            }
+            Action::WallSection(id, sec) => {
+                let r = self
+                    .ed
+                    .transact("Sección del tipo", |m| m.set_wall_type_section(id, sec));
+                self.report(
+                    r,
+                    "Sección cambiada: la siguen los muros del tipo sin sección propia.",
+                );
             }
             Action::WallFacade(id, f) => {
                 let r = self.ed.transact("Fachada del tipo", |m| {
