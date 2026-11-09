@@ -442,7 +442,7 @@ fn quote(s: &str) -> String {
 }
 
 /// A name not yet taken by a family (or a material) of the project.
-fn free_name(taken: impl Fn(&str) -> bool, base: &str) -> String {
+pub(crate) fn free_name(taken: impl Fn(&str) -> bool, base: &str) -> String {
     if !taken(base) {
         return base.to_string();
     }

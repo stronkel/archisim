@@ -23,6 +23,7 @@ mod gltf;
 mod obj;
 mod outline;
 mod simplify;
+mod solids;
 mod stl;
 mod tds;
 mod texture;
@@ -35,6 +36,9 @@ mod tests;
 pub use decimate::decimate;
 pub use outline::outline;
 pub use simplify::{levels_of_detail, simplify};
+pub use solids::{
+    extrusion, flat_face, is_plain_material, solids, volume, Extrusion, Solid, Solids,
+};
 pub use write::write_glb;
 pub use zip::{InZip, Zip};
 
@@ -220,6 +224,19 @@ pub fn plausible_unit(size: [f32; 3]) -> f64 {
     }
 }
 
+/// Metres per unit of a model of buildings of `size` (in the file's
+/// units) that does not say its units: metres up to 2 000 (2 km),
+/// millimetres beyond. Architects draw in metres or in millimetres; a
+/// model in centimetres is chosen by hand.
+pub fn plausible_site_unit(size: [f32; 3]) -> f64 {
+    let d = size.iter().fold(0.0f32, |a, b| a.max(*b)) as f64;
+    if d <= 2000.0 {
+        1.0
+    } else {
+        0.001
+    }
+}
+
 /// A model as read from a file, with what was decided reading it.
 #[derive(Debug, Clone)]
 pub struct Loaded {
@@ -233,6 +250,23 @@ pub struct Loaded {
     pub models: Vec<String>,
     /// Other formats of models the archive brings that are not read.
     pub others: Vec<&'static str>,
+}
+
+impl Loaded {
+    /// Its units guessed again as a model of buildings
+    /// ([`plausible_site_unit`]) rather than of a piece of furniture.
+    pub fn guess_for_site(&mut self) {
+        let Some(k) = self.guessed_unit else {
+            return;
+        };
+        let (lo, hi) = self.mesh.bounds();
+        let raw = [0, 1, 2].map(|i| (hi[i] - lo[i]) / k as f32);
+        let k2 = plausible_site_unit(raw);
+        if (k2 - k).abs() > 1e-12 {
+            self.mesh.scale((k2 / k) as f32);
+            self.guessed_unit = Some(k2);
+        }
+    }
 }
 
 /// Reads the model at `path`, with the files it refers to from its

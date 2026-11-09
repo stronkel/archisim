@@ -441,6 +441,35 @@ impl Editor {
         })
     }
 
+    /// A model of volumes (SketchUp's) brought in as volumes of the
+    /// concept phase on the current level, in one step, and selected.
+    pub fn import_concept(
+        &mut self,
+        mesh: &archisim_mesh::Mesh,
+        options: &archisim_library::concept_mesh::ConceptOptions,
+    ) -> EditResult<archisim_library::concept_mesh::ConceptImport> {
+        let r = self.transact("Traer volúmenes", |m| {
+            archisim_library::concept_mesh::import_concept(m, mesh, options)
+                .map_err(archisim_core::ModelError::InvalidMesh)
+        })?;
+        self.selection = r
+            .pieces
+            .iter()
+            .map(|p| crate::editor::Element::Mass(p.mass))
+            .collect();
+        Ok(r)
+    }
+
+    /// Masses moved in plan by `d` (one step).
+    pub fn move_masses(&mut self, ids: &[MassId], d: archisim_core::Vec2) -> EditResult {
+        self.transact("Colocar volúmenes", |m| {
+            for id in ids {
+                m.edit_mass(*id, |x| x.map_points(|p| p + d))?;
+            }
+            Ok(())
+        })
+    }
+
     /// Turns the masses into buildings with the default types (and the
     /// ones made before, again). Returns how many elements they made.
     pub fn masses_to_buildings(&mut self, ids: &[MassId]) -> EditResult<usize> {

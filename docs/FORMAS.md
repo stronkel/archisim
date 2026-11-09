@@ -88,7 +88,32 @@ Al dividir o empujar una cara que no es de un contorno, el volumen pasa a ser un
 
 Para el programador: `archisim_geom::sculpt` (`split`, `divide_face`, `push_face`, `deform`, `sweep`, `move_edge`, `preset_profile`; en el modelo, `divide_mass_face`, `push_mass_face`, `mass_to_mesh`); `Mass::deform` (`Deform`) y `MassShape::Sweep::profile`; formato versión 28; en la app, `app/sculpt_ui` y las herramientas `Tool::DivideFace` y `Tool::Deform`.
 
-## 6. Pendiente
+## 6. Volúmenes de SketchUp (bloque «Concepto», entrada 135 de la bitácora)
+
+Los volúmenes que el estudio recibe hechos en SketchUp (exportados como DAE de COLLADA, OBJ o STL, también dentro de un `.zip`) entran como **volúmenes de Concepto editables**, no como muebles.
+
+- **Cómo se trae**: Archivo → **Traer volúmenes (SketchUp, OBJ, STL)…**, o soltar el fichero en la ventana (o Archivo → Importar modelo 3D) y elegir arriba **Traer como: Volumen de Concepto**. El diálogo dice las medidas, enseña la planta y el alzado, y pide el nombre, **Colocar** («En sus coordenadas»: el origen del modelo en el del proyecto; «Donde haga clic»: el centro de su base donde se haga clic en la planta, con su contorno siguiendo al ratón; Esc los deja donde vinieron), las unidades, el eje vertical y **Reconocer los prismas**.
+- **Cada pieza cerrada es un volumen**, en la planta activa, a su altura (la cota 0 del modelo en el suelo de la planta). Se juntan los puntos que coinciden a menos de 1 mm, se quitan las caras que SketchUp exporta por las dos caras, se giran todas hacia fuera y se cierran los agujeros planos (la base que suele faltar).
+- **Prismas**: la pieza que es un contorno extruido (caras de los lados verticales, arriba y abajo horizontales, un solo contorno sin patios) pasa a ser un volumen normal con su contorno y su altura: se empuja, se edita su contorno, se hace masa por plantas y se pasa a edificio.
+- **Mallas**: las demás (cubiertas a dos aguas, formas curvas) son sólidos en los que cada cara plana de un material es una cara de Concepto: se pintan y se empujan una a una.
+- **Abiertas**: una pieza que no cierra (le falta más de una cara, o su borde no es plano) se trae igual, como superficie, y lo dice el aviso; su volumen no cuenta. Una sola cara horizontal se trae como cara de Concepto (altura 0), para empujarla.
+- **Materiales**: cada material del modelo pasa a ser un material del proyecto con su color (si ya hay uno con ese nombre, se usa ese; los «_» se cambian por espacios; la textura la da su nombre, como en los muebles). El volumen toma el material que más superficie cubre y las demás caras van pintadas con el suyo. Las caras sin material (el blanco por defecto de SketchUp) toman el material «Volumen de concepto».
+- **Unidades**: el DAE de SketchUp dice las suyas (pulgadas, metros…) y su eje vertical (`Z_UP`). OBJ y STL no las dicen: se suponen **metros si el modelo mide hasta 2 000 unidades y milímetros si mide más** (en centímetros, elegirlo a mano en el diálogo).
+- **IFC**: como todos los volúmenes de Concepto, no se exportan (son una ayuda de proyecto); lo que se exporta es el edificio que se hace con ellos.
+
+`archisim concepto-malla <fichero> [carpeta] [--edificios] [--unidades m|cm|mm|in]` hace lo mismo sin la aplicación: escribe `concepto-malla.archisim`, `concepto-malla.ifc`, la planta en SVG y `concepto-malla-informe.txt` (cada pieza: prisma o malla, cerrada o abierta, agujeros cerrados, caras, triángulos, superficie en planta, altura y volumen). Con `--edificios` pasa los prismas a edificio con plantas de 3 m.
+
+Lo que no hace:
+- Patios: un prisma con un patio queda como malla (los volúmenes por contorno no tienen huecos).
+- Dos grupos de SketchUp que comparten una cara entera pueden quedar como uno solo o abiertos.
+- Las superficies curvas suaves de SketchUp son muchas caras planas (una por triángulo), no una sola cara curva.
+- Las texturas de las imágenes del modelo: se queda su color medio.
+- Los componentes repetidos no se reconocen como tales: cada copia es un volumen.
+- Leer el `.skp` directamente (hay que exportar desde SketchUp).
+
+Para el programador: `archisim_mesh::solids` (`solids` → `Solids` con `Solid`: soldar, quitar las dobles, piezas por aristas, orientar, `fill_flat` con `ear_clip`, caras coplanarias por material; `extrusion` → `Extrusion`, `flat_face`, `volume`, `is_plain_material`), `plausible_site_unit` y `Loaded::guess_for_site`; `archisim_library::concept_mesh` (`import_concept` con `ConceptOptions` → `ConceptImport` con `ConceptPiece` y `PieceKind`, `summary`, `report`); en la app `Editor::import_concept`/`move_masses`, `MeshImport::as_volume`/`at_click`/`prisms`/`volumes`, `pick_concept_mesh`, `import_concept_now`, `ConceptDrop` (`concept_drop_click`, `draw_concept_drop`); ficheros de prueba de `scripts/make_concept_fixtures.py`. Sin cambios de formato.
+
+## 7. Pendiente
 
 - Las texturas en las axonometrías de los planos y en los PDF (hoy, el color liso del material) y en el IFC.
 - Editar un sólido después de la operación (hoy se deshace y se repite).

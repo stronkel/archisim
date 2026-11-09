@@ -6,6 +6,47 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-09 (135) · Concepto: volúmenes de SketchUp como volúmenes editables
+
+Rama `bloque/concepto-mallas`, con pull request. Va sobre la de la entrada 134 (#190, todavía sin unir). **Sin cambios de formato** (sigue la versión 101). Documento: `docs/FORMAS.md` §6.
+
+- **Traer volúmenes**: Archivo → «Traer volúmenes (SketchUp, OBJ, STL)…», o soltar el fichero (DAE, OBJ, STL, glTF, FBX, 3DS, también dentro de un `.zip`) y elegir arriba del diálogo **Traer como: Volumen de Concepto** (junto a «Objeto», que sigue como antes). El diálogo pide nombre, **Colocar** («En sus coordenadas» o «Donde haga clic»: el contorno sigue al ratón y el clic pone el centro de su base; Esc los deja donde vinieron), unidades, eje vertical y «Reconocer los prismas». Todo en un paso de Deshacer (y el clic, otro).
+- **Cada pieza cerrada, un volumen** en la planta activa: se juntan los puntos a menos de 1 mm, se quitan las caras exportadas por las dos caras (la opción de SketchUp), se orientan hacia fuera, se cierran los agujeros planos (la base que suele faltar) y los triángulos de una misma cara plana y un mismo material son una cara de Concepto (se pinta y se empuja entera).
+- **Prismas reconocidos**: la pieza que es un contorno extruido (lados verticales, arriba y abajo horizontales, un contorno sin patios) es un volumen normal: Empujar, Editar contorno, masa por plantas y **Convertir** a edificio. Las demás (cubiertas a dos aguas, curvas) son mallas con sus caras.
+- **Abiertas**: se traen igual, como superficie, y el aviso y el informe lo dicen. Una sola cara horizontal llega como cara de Concepto para empujarla.
+- **Materiales**: cada material del modelo es un material del proyecto con su color (o el que ya se llama igual); el volumen toma el que más superficie cubre y las demás caras van pintadas. Las caras sin material, «Volumen de concepto».
+- **Unidades**: las del DAE (SketchUp escribe pulgadas y `Z_UP`); OBJ y STL, metros hasta 2 000 unidades y milímetros por encima.
+- **Orden** `archisim concepto-malla <fichero> [carpeta] [--edificios] [--unidades m|cm|mm|in]`: proyecto, IFC, planta en SVG e informe pieza a pieza.
+- **Pruebas**: las piezas, las caras dobles, los agujeros, la orientación, el reconocimiento de prismas y el volumen exacto de la casa en L con los ficheros inventados de `scripts/make_concept_fixtures.py` (`volumenes.dae`: dos bloques —uno exportado a dos caras, otro sin base— y una casa en L con dos alas a dos aguas, en pulgadas; `volumenes.obj`: una cápsula curva y una caja abierta); la conversión con materiales y colocación; y la app con clics simulados (soltar el DAE, traer como volumen, colocar con un clic, empujar el prisma de 9 a 12 m, empujar un lado, pasarlo a edificio, IFC con muros, y deshacer todo). Se abrió la aplicación con Xvfb: el diálogo con «Traer como», los volúmenes en planta y en 3D (grava arriba del bloque, teja en la casa), Empujar un prisma reconocido y Convertir.
+
+**Ejemplo (`concepto-malla … volumenes.dae --edificios`)**:
+
+| Volumen | Es | Cerrado | Caras | Planta m² | Alto m | m³ |
+|---|---|---|---|---|---|---|
+| volumenes 1 (bloque, a dos caras) | prisma | sí | 6 | 120,00 | 9,00 | 1 080,00 |
+| volumenes 2 (torre sin base) | prisma | sí (1 agujero cerrado) | 6 | 64,00 | 15,00 | 960,00 |
+| volumenes 3 (casa en L a dos aguas) | malla | sí | 15 | 176,00 | 9,00 | 1 352,00 |
+
+Los dos prismas pasan a edificio (3 y 5 plantas de 3 m) y el IFC valida con IfcOpenShell.
+
+**Valores por defecto**: tolerancia de soldadura 1 mm; caras coplanarias a menos de 0,5°; agujero «plano» si sus puntos están a menos de 1 cm de su plano; colocar en sus coordenadas; reconocer prismas activado; masas sin altura de planta (con `--edificios`, 3 m); unidades de OBJ/STL por tamaño (m hasta 2 000, si no mm).
+
+**Pendiente.**
+- Prismas con patio (hoy, malla); dos grupos que comparten una cara entera; superficies curvas suaves como una sola cara; componentes repetidos como tales; leer el `.skp` directamente.
+- La selección de una malla en planta se marca con su envolvente convexa (como las mallas de antes), no con su contorno exacto.
+- Los volúmenes de Concepto siguen sin ir al IFC.
+
+**Qué debe probar Antonio.**
+1. `cargo run --release -p archisim-cli -- concepto-malla crates/archisim-mesh/tests/fixtures/volumenes.dae out/ --edificios` y mirar `out/concepto-malla-informe.txt` y `out/concepto-malla-planta.svg`; abrir `out/concepto-malla.ifc` en su visor.
+2. Con un modelo suyo de SketchUp: exportar como DAE (Archivo → Exportar → Modelo 3D → COLLADA) y `cargo run --release -p archisim-cli -- concepto-malla su-modelo.dae out/suyo`; el informe dice qué piezas son prismas, cuáles malla y cuáles abiertas.
+3. En la aplicación (`cargo run --release -p archisim-app`): Archivo → «Traer volúmenes (SketchUp, OBJ, STL)…», su DAE; probar «Donde haga clic». En 3D (F3): Concepto → Empujar sobre un prisma (arriba y un lado), Pintar una cara de la malla, Convertir un prisma a edificio; Propiedades → masa por plantas.
+4. Soltar `crates/archisim-mesh/tests/fixtures/volumenes.obj` en la ventana y elegir «Volumen de Concepto»: la cúpula llega como malla y la caja abierta como superficie (lo dice el aviso).
+5. Comprobar con un modelo real si las unidades supuestas de OBJ/STL (m hasta 2 000, si no mm) le sirven.
+
+**Escrito de memoria (que lo compruebe Antonio).** Los nombres que SketchUp da a las caras sin material («FrontColor», «BackColor», «Material») que se toman por «sin material»; que SketchUp exporte por defecto en pulgadas y con `Z_UP` en el DAE; la regla de unidades de OBJ/STL.
+
+---
+
 ## 2026-11-09 (134) · Terreno: movimiento de tierras en IFC 4.3 y explanaciones dibujadas a mano
 
 Rama `bloque/tierras-ifc`, con pull request. Va sobre la de la entrada 133 (#189, todavía sin unir). **Formato versión 101**: las plataformas del terreno llevan nombre, clase y, las rampas, su inclinación; el terreno, si colorea el desmonte y el terraplén en planta. Documento nuevo `docs/TERRENO.md`.

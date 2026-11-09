@@ -583,6 +583,9 @@ pub struct ArchiSimApp {
     profile_edit: Option<wall_profile_ui::ProfileEdit>,
     /// A 3D model being brought in (its dialog): `mesh_ui`.
     pub mesh_import: Option<mesh_ui::MeshImport>,
+    /// Volumes brought in waiting for the click that places them (the
+    /// middle of their base): `mesh_ui`.
+    pub concept_drop: Option<mesh_ui::ConceptDrop>,
     /// Moving, copying or stretching the selection with the mouse.
     pub drag: Option<DragState>,
     /// What the drag would give at the last cursor position: the outlines
@@ -938,6 +941,7 @@ impl ArchiSimApp {
             wall_band: Default::default(),
             profile_edit: None,
             mesh_import: None,
+            concept_drop: None,
             drag: None,
             drag_preview: None,
             wand_preview: None,

@@ -262,20 +262,23 @@ pub fn read(bytes: &[u8], files: &dyn Resources, options: Options) -> Result<Mes
         .or_else(|| child(root, "library_visual_scenes").and_then(|l| child(l, "visual_scene")))
         .ok_or_else(|| Error::Invalid("sin escena".into()))?;
     let mut b = Builder::default();
+    // In the order of the file (the last pushed is read first).
     let mut stack: Vec<(Node, Mat4, usize)> =
         children(scene, "node").map(|n| (n, IDENTITY, 0)).collect();
+    stack.reverse();
     let mut effects: HashMap<String, (usize, Option<String>, Rgb)> = HashMap::new();
     while let Some((node, parent, depth)) = stack.pop() {
         if depth > 64 {
             continue;
         }
         let m = mul(&parent, &local(node));
+        let mut below = Vec::new();
         for c in node.children() {
             match c.tag_name().name() {
-                "node" => stack.push((c, m, depth + 1)),
+                "node" => below.push((c, m, depth + 1)),
                 "instance_node" => {
                     if let Some(n) = c.attribute("url").and_then(|u| dae.get(u)) {
-                        stack.push((n, m, depth + 1));
+                        below.push((n, m, depth + 1));
                     }
                 }
                 "instance_geometry" => {
@@ -298,6 +301,7 @@ pub fn read(bytes: &[u8], files: &dyn Resources, options: Options) -> Result<Mes
                 _ => {}
             }
         }
+        stack.extend(below.into_iter().rev());
     }
     Ok(b.mesh)
 }

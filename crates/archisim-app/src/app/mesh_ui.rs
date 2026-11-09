@@ -9,6 +9,12 @@
 //! <Fabricante>/», never inside ArchiSim). A heavy model is lightened
 //! aside, without stopping the window; the object tool then takes the new
 //! type.
+//!
+//! A model of volumes (SketchUp's) can be brought instead as volumes of
+//! the concept phase («Traer como: Volumen de Concepto»): each closed
+//! piece a volume, the contours pushed up as ordinary volumes, on the
+//! current level, at the model's own coordinates or where the next click
+//! puts the middle of its base ([`ConceptDrop`]).
 
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::Receiver;
@@ -70,6 +76,24 @@ pub struct MeshImport {
     pictures: Option<(u8, Pictures)>,
     /// Being lightened aside: the result comes here.
     pub preparing: Option<Receiver<Mesh>>,
+    /// Brought as volumes of the concept phase, not as an object type.
+    pub as_volume: bool,
+    /// The volumes placed with a click (otherwise at the model's own
+    /// coordinates).
+    pub at_click: bool,
+    /// Contours pushed up become ordinary volumes.
+    pub prisms: bool,
+}
+
+/// Volumes just brought in, waiting for the click that places the middle
+/// of their base.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ConceptDrop {
+    pub masses: Vec<archisim_core::MassId>,
+    /// The middle of their base now.
+    pub from: archisim_core::Point2,
+    /// Their outlines, to show them under the cursor.
+    pub outlines: Vec<Vec<archisim_core::Point2>>,
 }
 
 /// Silhouettes of `mesh` turned `turns` quarters: from above (front at
@@ -207,6 +231,9 @@ impl MeshImport {
             read: Err(String::new()),
             pictures: None,
             preparing: None,
+            as_volume: false,
+            at_click: false,
+            prisms: true,
         };
         m.reread();
         if let Ok(l) = &m.read {
@@ -230,9 +257,23 @@ impl MeshImport {
         }
     }
 
+    /// The dialog for bringing a model as volumes of the concept phase.
+    pub fn volumes(path: &Path) -> Self {
+        let mut m = Self::new(path);
+        m.as_volume = true;
+        m.reread();
+        m
+    }
+
     pub fn reread(&mut self) {
         self.read = archisim_mesh::load(&self.path, self.entry.as_deref(), self.options())
             .map_err(|e| e.to_string());
+        // Volumes are buildings: their units guessed as such.
+        if self.as_volume {
+            if let Ok(l) = &mut self.read {
+                l.guess_for_site();
+            }
+        }
         if let Ok(l) = &self.read {
             self.entry = l.entry.clone();
         }
@@ -294,9 +335,123 @@ impl ArchiSimApp {
         }
     }
 
+    /// File → Traer volúmenes de SketchUp: chooses the file.
+    pub(super) fn pick_concept_mesh(&mut self) {
+        let mut exts: Vec<&str> = archisim_mesh::EXTENSIONS.to_vec();
+        exts.push("zip");
+        let mut d = rfd::FileDialog::new()
+            .set_title("Traer volúmenes de Concepto")
+            .add_filter(
+                "Modelos de volúmenes (DAE de SketchUp, OBJ, STL, glTF, FBX, 3DS o un .zip)",
+                &exts,
+            );
+        if let Some(dir) = self.start_dir() {
+            d = d.set_directory(dir);
+        }
+        if let Some(path) = d.pick_file() {
+            self.mesh_import = Some(MeshImport::volumes(&path));
+        }
+    }
+
+    /// The model as volumes of the concept phase on the current level.
+    pub(super) fn import_concept_now(&mut self) {
+        let Some(imp) = self.mesh_import.take() else {
+            return;
+        };
+        let loaded = match imp.read {
+            Ok(l) => l,
+            Err(e) => {
+                self.complain(format!("No se puede traer: {e}."));
+                return;
+            }
+        };
+        let mut options =
+            archisim_library::concept_mesh::ConceptOptions::new(self.ed.level, &imp.name);
+        options.prisms = imp.prisms;
+        match self.ed.import_concept(&loaded.mesh, &options) {
+            Ok(r) => {
+                let mut text = format!("Traídos {}.", r.summary());
+                if r.doubled > 0 {
+                    text.push_str(&format!(
+                        " {} caras venían a dos caras: se queda una.",
+                        r.doubled
+                    ));
+                }
+                let closed: usize = r.pieces.iter().map(|p| p.holes_closed).sum();
+                if closed > 0 {
+                    text.push_str(&format!(" {closed} agujeros planos cerrados."));
+                }
+                if r.open() > 0 {
+                    text.push_str(
+                        " Las piezas abiertas no son sólidos: se ven, pero su volumen no cuenta.",
+                    );
+                }
+                if imp.at_click {
+                    let model = self.ed.model();
+                    let outlines: Vec<Vec<archisim_core::Point2>> = r
+                        .pieces
+                        .iter()
+                        .filter_map(|p| model.mass(p.mass))
+                        .map(|m| m.outline())
+                        .collect();
+                    let (mut lo, mut hi) = (
+                        archisim_core::Point2::new(f64::INFINITY, f64::INFINITY),
+                        archisim_core::Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY),
+                    );
+                    for p in outlines.iter().flatten() {
+                        lo = archisim_core::Point2::new(lo.x.min(p.x), lo.y.min(p.y));
+                        hi = archisim_core::Point2::new(hi.x.max(p.x), hi.y.max(p.y));
+                    }
+                    self.concept_drop = Some(ConceptDrop {
+                        masses: r.pieces.iter().map(|p| p.mass).collect(),
+                        from: archisim_core::Point2::new((lo.x + hi.x) / 2.0, (lo.y + hi.y) / 2.0),
+                        outlines,
+                    });
+                    self.set_tool(Tool::Arrow);
+                    text.push_str(
+                        " Haga clic donde vaya el centro de su base (Esc: dejarlos donde están).",
+                    );
+                }
+                self.say(text);
+            }
+            Err(e) => self.complain(format!("No se puede traer: {e}.")),
+        }
+    }
+
+    /// The click that places the volumes just brought in.
+    pub(super) fn concept_drop_click(&mut self, p: archisim_core::Point2) {
+        let Some(drop) = self.concept_drop.take() else {
+            return;
+        };
+        match self.ed.move_masses(&drop.masses, p - drop.from) {
+            Ok(()) => self.say("Volúmenes colocados."),
+            Err(e) => self.complain(format!("No se pueden colocar: {e}.")),
+        }
+    }
+
+    /// Their outlines under the cursor, while they wait for the click.
+    pub(super) fn draw_concept_drop(&self, painter: &egui::Painter, rect: egui::Rect) {
+        let (Some(drop), Some(c)) = (&self.concept_drop, self.cursor) else {
+            return;
+        };
+        let d = c.point - drop.from;
+        let stroke = egui::Stroke::new(1.5, super::theme::ACCENT);
+        for o in &drop.outlines {
+            let pts: Vec<egui::Pos2> = o
+                .iter()
+                .map(|p| self.view.to_screen(rect, *p + d))
+                .collect();
+            painter.add(egui::Shape::closed_line(pts, stroke));
+        }
+    }
+
     /// Brings the model in as it is set in the dialog; the object tool
     /// takes its type. A heavy model is lightened aside first.
     pub(super) fn import_mesh_now(&mut self) {
+        if self.mesh_import.as_ref().is_some_and(|i| i.as_volume) {
+            self.import_concept_now();
+            return;
+        }
         let Some(imp) = self.mesh_import.as_mut() else {
             return;
         };
@@ -455,6 +610,28 @@ impl ArchiSimApp {
                         )
                         .strong(),
                     );
+                    ui.horizontal(|ui| {
+                        ui.label("Traer como");
+                        if ui
+                            .selectable_label(!imp.as_volume, "Objeto")
+                            .on_hover_text("Un tipo de objeto (mueble, sanitario, árbol…) que se coloca con clics")
+                            .clicked()
+                            && imp.as_volume
+                        {
+                            imp.as_volume = false;
+                            reread = true;
+                        }
+                        if ui
+                            .selectable_label(imp.as_volume, "Volumen de Concepto")
+                            .on_hover_text("Cada pieza cerrada, un volumen editable de Concepto: los que son un contorno extruido se empujan, se hacen masas por plantas y se pasan a edificio")
+                            .clicked()
+                            && !imp.as_volume
+                        {
+                            imp.as_volume = true;
+                            reread = true;
+                        }
+                    });
+                    let volume = imp.as_volume;
                     let (models, others, entry) = match &imp.read {
                         Ok(l) => (l.models.clone(), l.others.clone(), l.entry.clone()),
                         Err(_) => (Vec::new(), Vec::new(), None),
@@ -526,7 +703,12 @@ impl ArchiSimApp {
                                     .color(pal.faint),
                                 );
                             }
-                            if s.iter().any(|v| *v > 100.0) || s[2] < 0.05 {
+                            let odd = if volume {
+                                s.iter().any(|v| *v > 3000.0) || s.iter().all(|v| *v < 2.0)
+                            } else {
+                                s.iter().any(|v| *v > 100.0) || s[2] < 0.05
+                            };
+                            if odd {
                                 ui.colored_label(
                                     egui::Color32::from_rgb(200, 90, 40),
                                     "¿Son esas las medidas? Si no, cambie las unidades o el eje vertical.",
@@ -570,7 +752,7 @@ impl ArchiSimApp {
                                         ),
                                         egui::Color32::WHITE,
                                     );
-                                    if label == "Planta" {
+                                    if label == "Planta" && !volume {
                                         // Its front: the bottom side.
                                         let y = img.bottom() + 3.0;
                                         let c = img.center().x;
@@ -590,7 +772,7 @@ impl ArchiSimApp {
                                 });
                             }
                         });
-                        ui.horizontal(|ui| {
+                        if !volume { ui.horizontal(|ui| {
                             if ui
                                 .button("⟲ Girar")
                                 .on_hover_text("Gira el modelo un cuarto de vuelta hasta que su frente quede abajo en la planta")
@@ -601,16 +783,32 @@ impl ArchiSimApp {
                             if ui.button("⟳").on_hover_text("Gira al otro lado").clicked() {
                                 imp.turns = (turns + 3) % 4;
                             }
-                        });
+                        }); }
                     }
                     ui.add_space(6.0);
                     egui::Grid::new("mesh-import")
                         .num_columns(2)
                         .spacing([10.0, 6.0])
                         .show(ui, |ui| {
-                            ui.label("Nombre del tipo");
+                            ui.label(if volume { "Nombre de los volúmenes" } else { "Nombre del tipo" });
                             ui.text_edit_singleline(&mut imp.name);
                             ui.end_row();
+                            if volume {
+                                ui.label("Colocar");
+                                egui::ComboBox::from_id_salt("mesh-place")
+                                    .selected_text(if imp.at_click {
+                                        "Donde haga clic"
+                                    } else {
+                                        "En sus coordenadas"
+                                    })
+                                    .show_ui(ui, |ui| {
+                                        ui.selectable_value(&mut imp.at_click, false, "En sus coordenadas")
+                                            .on_hover_text("El origen del modelo en el del proyecto, sobre la planta activa");
+                                        ui.selectable_value(&mut imp.at_click, true, "Donde haga clic")
+                                            .on_hover_text("El centro de su base donde haga clic en la planta");
+                                    });
+                                ui.end_row();
+                            } else {
                             ui.label("Es");
                             egui::ComboBox::from_id_salt("mesh-kind")
                                 .selected_text(imp.kind.label())
@@ -620,6 +818,7 @@ impl ArchiSimApp {
                                     }
                                 });
                             ui.end_row();
+                            }
                             ui.label("Unidades");
                             egui::ComboBox::from_id_salt("mesh-unit")
                                 .selected_text(UNITS[imp.unit].0)
@@ -646,6 +845,7 @@ impl ArchiSimApp {
                                     }
                                 });
                             ui.end_row();
+                            if !volume {
                             ui.label("Detalle");
                             egui::ComboBox::from_id_salt("mesh-detail")
                                 .selected_text(DETAILS[imp.detail].0)
@@ -657,8 +857,19 @@ impl ArchiSimApp {
                                 .response
                                 .on_hover_text("Los modelos de los fabricantes suelen tener cientos de miles de caras. Se aligeran sin perder su forma; de lejos se ven versiones aún más ligeras.");
                             ui.end_row();
+                            }
                         });
                     ui.add_space(4.0);
+                    if volume {
+                        ui.switch(&mut imp.prisms, "Reconocer los prismas (contorno extruido)");
+                        ui.label(
+                            egui::RichText::new(
+                                "Cada pieza cerrada es un volumen en la planta activa. Las que son un contorno extruido quedan como volúmenes normales (empujar, editar contorno, masas por plantas, pasar a edificio); las demás, como sólidos con sus caras planas, que se pintan y se empujan. Los materiales del modelo pasan a las caras.",
+                            )
+                            .small()
+                            .color(pal.faint),
+                        );
+                    } else {
                     ui.switch(&mut imp.design, "Pieza de diseño de un fabricante");
                     if imp.design {
                         egui::Grid::new("mesh-maker")
@@ -696,6 +907,7 @@ impl ArchiSimApp {
                         .small()
                         .color(pal.faint),
                     );
+                    }
                 });
                 });
                 ui.add_space(6.0);
@@ -704,7 +916,10 @@ impl ArchiSimApp {
                         ui.spinner();
                         ui.label("Aligerando el modelo sin perder su forma…");
                     } else if ui
-                        .add_enabled(imp.read.is_ok(), egui::Button::new("Importar"))
+                        .add_enabled(
+                            imp.read.is_ok(),
+                            egui::Button::new(if imp.as_volume { "Traer volúmenes" } else { "Importar" }),
+                        )
                         .clicked()
                     {
                         go = true;

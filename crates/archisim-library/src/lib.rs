@@ -831,6 +831,7 @@ use StudioValue::{B, C, N, T};
 pub mod building_workshop;
 pub mod carto;
 pub mod collections;
+pub mod concept_mesh;
 pub mod download;
 pub mod extended;
 pub mod facades;

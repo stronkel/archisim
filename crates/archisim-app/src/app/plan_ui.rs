@@ -73,6 +73,7 @@ impl ArchiSimApp {
         self.draw_flip_controls(&painter, rect);
         self.draw_hotspots(&painter, rect);
         self.draw_wall_preview(&painter, rect);
+        self.draw_concept_drop(&painter, rect);
         self.draw_slab_preview(&painter, rect);
         self.draw_opening_preview(&painter, rect);
         self.draw_member_preview(&painter, rect);
@@ -852,7 +853,10 @@ impl ArchiSimApp {
                 _ => {}
             }
         }
-        if escape && self.tool != Tool::Cad && self.method_escape() {
+        if escape && self.concept_drop.is_some() {
+            // The volumes stay where they came.
+            self.concept_drop = None;
+        } else if escape && self.tool != Tool::Cad && self.method_escape() {
             // The spline or the line picking took it.
         } else if escape {
             match self.tool {
@@ -1060,6 +1064,15 @@ impl ArchiSimApp {
                 if let Some(pos) = response.interact_pointer_pos() {
                     let p = self.view.to_model(rect, pos);
                     self.sketch_pick_at(p);
+                }
+            }
+            return;
+        }
+        // Volumes just brought in, waiting to be placed.
+        if self.concept_drop.is_some() {
+            if response.clicked_by(PointerButton::Primary) {
+                if let Some(c) = self.cursor {
+                    self.concept_drop_click(c.point);
                 }
             }
             return;

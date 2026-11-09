@@ -3537,6 +3537,75 @@ fn imported_models_are_placed_and_drawn() {
     );
 }
 
+/// A model of volumes from SketchUp dropped on the window and brought as
+/// volumes of the concept phase: the two blocks are ordinary volumes (one
+/// placed with a click, pushed up with Empujar and turned into a
+/// building), the L-shaped house with its gabled roofs a solid whose
+/// roofs keep their tile.
+#[test]
+fn sketchup_volumes_become_concept_volumes() {
+    let mut h = Harness::new(Editor::new_project());
+    let dae = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../archisim-mesh/tests/fixtures/volumenes.dae");
+    h.app.open_files(vec![dae]);
+    let imp = h.app.mesh_import.as_mut().expect("the dialog");
+    assert!(!imp.as_volume);
+    imp.as_volume = true;
+    imp.at_click = true;
+    imp.name = "Bloques".into();
+    imp.reread();
+    h.frame();
+    h.app.import_mesh_now();
+    assert!(h.app.mesh_import.is_none());
+    let drop = h.app.concept_drop.clone().expect("waiting for the click");
+    assert_eq!(drop.masses.len(), 3);
+    assert_eq!(h.app.ed.selection.len(), 3);
+    // Its middle: the model is 28 × 34 m from (0, 0).
+    assert!(drop.from.distance(p(14.0, 17.0)) < 1e-3, "{:?}", drop.from);
+    let canvas = h.app.canvas;
+    h.app.view.fit(canvas, p(-10.0, -10.0), p(90.0, 90.0), 20.0);
+    h.frame();
+    h.click_at(p(64.0, 67.0));
+    assert!(h.app.concept_drop.is_none());
+    let m = h.model();
+    let a = m.mass(drop.masses[0]).unwrap();
+    let archisim_core::MassShape::Prism(outline) = &a.shape else {
+        panic!("a prism");
+    };
+    let min_x = outline.iter().map(|q| q.x).fold(f64::INFINITY, f64::min);
+    assert!((min_x - 50.0).abs() < 1e-3, "{min_x}");
+    let house = m.mass(drop.masses[2]).unwrap();
+    assert!(matches!(house.shape, archisim_core::MassShape::Mesh(_)));
+    assert!(m.face_paints().any(|(e, _, _)| e == house.id.0));
+    // Empujar: the first block from 9 to 12 m, clicking on it and 3 m up.
+    let id = a.id;
+    h.app.set_tool(Tool::PushPull);
+    h.click_at(p(56.0, 55.0));
+    h.click_at(p(56.0, 58.0));
+    assert!((h.model().mass(id).unwrap().height - 12.0).abs() < 0.05);
+    // A side face pushed out 2 m: the contour grows.
+    let before = archisim_core::signed_area(&h.model().mass(id).unwrap().outline());
+    h.app.ed.push_mass_face(id, 2, 2.0).unwrap();
+    let after = archisim_core::signed_area(&h.model().mass(id).unwrap().outline());
+    assert!(after > before + 15.0, "{before} → {after}");
+    assert!(matches!(
+        h.model().mass(id).unwrap().shape,
+        archisim_core::MassShape::Prism(_)
+    ));
+    // And a building: walls, slabs and roof.
+    let n = h.app.ed.masses_to_buildings(&[id]).unwrap();
+    assert!(n >= 6, "{n}");
+    assert!(h.model().walls().count() >= 4);
+    let ifc = archisim_ifc::export_ifc(h.model(), &Default::default());
+    assert!(ifc.contains("IFCWALL"));
+    // Undone: the building, the push, the side, the push, the place, the
+    // volumes.
+    for _ in 0..6 {
+        h.app.ed.undo();
+    }
+    assert_eq!(h.model().masses().count(), 0);
+}
+
 /// A design piece as its manufacturer hands it out: the download's .zip
 /// dropped on the window. The dialog takes the FBX inside (with its
 /// texture next to it in the zip), says what else it brings, turns it

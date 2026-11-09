@@ -16,6 +16,7 @@ mod calles;
 mod cartografia;
 mod cocina;
 mod colaboracion;
+mod concepto_malla;
 mod cubiertas;
 mod demo;
 mod diseno;
@@ -121,6 +122,14 @@ Uso:
       Todos los muebles, sanitarios, cocina, personas y coches de la
       biblioteca con su 3D hecho por ArchiSim, en filas: modelos.archisim,
       modelos.ifc, axonometría y planta en SVG. Por defecto: ./out
+  archisim concepto-malla <fichero> [carpeta] [--edificios] [--unidades m|cm|mm|in]
+      Trae un modelo de volúmenes (DAE de SketchUp, OBJ, STL…, también
+      dentro de un .zip) como volúmenes de Concepto, como la aplicación:
+      cada pieza cerrada es un volumen; las que son un contorno extruido,
+      prismas normales; las demás, mallas con sus caras planas. Escribe
+      concepto-malla.archisim, .ifc, la planta en SVG y el informe (qué
+      es cada pieza, si está cerrada, sus caras). Con --edificios pasa los
+      prismas a edificio con plantas de 3 m. Por defecto: ./out
   archisim diseno <modelo> [carpeta] [Fabricante]
       Importa el modelo 3D de un fabricante (FBX, OBJ, glTF, COLLADA, 3DS,
       STL o el .zip tal como se descarga) como pieza de diseño, igual que
@@ -547,6 +556,46 @@ fn main() -> ExitCode {
         Some("modelos") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
             report(modelos::write(&dir))
+        }
+        Some("concepto-malla") => {
+            let flags: Vec<&str> = args.iter().skip(1).map(String::as_str).collect();
+            let unit = flags
+                .iter()
+                .position(|a| *a == "--unidades")
+                .and_then(|i| flags.get(i + 1))
+                .and_then(|u| match *u {
+                    "m" => Some(1.0),
+                    "cm" => Some(0.01),
+                    "mm" => Some(0.001),
+                    "in" | "pulgadas" => Some(0.0254),
+                    _ => None,
+                });
+            let mut plain: Vec<&str> = Vec::new();
+            let mut skip = false;
+            for a in &flags {
+                if skip {
+                    skip = false;
+                } else if *a == "--unidades" {
+                    skip = true;
+                } else if !a.starts_with("--") {
+                    plain.push(a);
+                }
+            }
+            match plain.first() {
+                Some(model) => {
+                    let dir = PathBuf::from(plain.get(1).copied().unwrap_or("out"));
+                    report(concepto_malla::write(
+                        Path::new(model),
+                        &dir,
+                        flags.contains(&"--edificios"),
+                        unit,
+                    ))
+                }
+                None => {
+                    eprintln!("Uso: archisim concepto-malla <fichero> [carpeta] [--edificios] [--unidades m|cm|mm|in]");
+                    ExitCode::FAILURE
+                }
+            }
         }
         Some("diseno") | Some("diseño") => {
             match args.get(1) {

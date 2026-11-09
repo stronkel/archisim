@@ -364,6 +364,13 @@ impl ArchiSimApp {
                 self.pick_mesh();
             }
             if ui
+                .button("Traer volúmenes (SketchUp, OBJ, STL)…")
+                .on_hover_text("Un modelo de volúmenes como volúmenes de Concepto editables: los prismas se empujan y se pasan a edificio")
+                .clicked()
+            {
+                self.pick_concept_mesh();
+            }
+            if ui
                 .button("Importar topografía (DXF, CSV)…")
                 .on_hover_text("Puntos con cota y curvas de nivel de un levantamiento, en el terreno de la planta")
                 .clicked()
