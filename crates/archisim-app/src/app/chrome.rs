@@ -379,7 +379,7 @@ impl ArchiSimApp {
             }
             if ui
                 .button("Descargar el entorno (Catastro, OpenStreetMap, IGN)…")
-                .on_hover_text("Lo mismo, pedido directamente a sus servicios gratuitos para el emplazamiento del proyecto y un radio")
+                .on_hover_text("Lo mismo, pedido directamente a sus servicios gratuitos alrededor de un lugar: una dirección, un municipio, una referencia catastral o el emplazamiento del proyecto")
                 .clicked()
             {
                 self.open_carto_download();

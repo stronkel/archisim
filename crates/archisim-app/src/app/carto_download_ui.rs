@@ -3,6 +3,13 @@
 //! georeference and a radius (`archisim_library::download` gives the
 //! addresses). It runs on a thread; when it ends, «Traer el entorno»
 //! opens with what arrived, and says what did not.
+//!
+//! The place is looked up by an address, a site, a municipality, a
+//! cadastral reference or coordinates (`archisim_library::geocode`, on
+//! another thread): the project without a georeference takes one with its
+//! origin there; the one that has it brings the surroundings round the
+//! place, or round its origin. A little orthophoto shows where and how
+//! far.
 
 use std::io::Read as _;
 use std::sync::{Arc, Mutex};
@@ -10,6 +17,7 @@ use std::time::Duration;
 
 use archisim_library::carto::CartoOptions;
 use archisim_library::download::{self, Request};
+use archisim_library::geocode::{self, Place};
 
 use super::carto_ui::CartoImport;
 use super::length_field;
@@ -39,12 +47,46 @@ pub struct Progress {
     pub stop: bool,
 }
 
+/// An answer that a thread is waiting for: none until it arrives.
+pub type Pending<T> = Arc<Mutex<Option<Result<T, String>>>>;
+
+/// How an address is asked: a GET, or a POST of a form.
+pub type Fetch = fn(&str, Option<&str>) -> Result<Vec<u8>, String>;
+
+/// The little map of the window: the orthophoto round a point.
+pub struct Preview {
+    /// Its centre, latitude and longitude.
+    pub centre: (f64, f64),
+    /// Half its side, metres.
+    pub half: f64,
+    pub bbox: download::Bbox,
+    pub job: Pending<Vec<u8>>,
+    pub texture: Option<egui::TextureHandle>,
+    /// Why there is no picture.
+    pub failed: Option<String>,
+}
+
 /// The window: what to bring, and the download while it runs.
 pub struct CartoDownload {
     pub options: CartoOptions,
     pub job: Option<Arc<Mutex<Progress>>>,
     /// Why the last download brought nothing: what, why and its address.
     pub failures: Vec<(String, String, String)>,
+    /// What is written in the field of the place.
+    pub query: String,
+    /// The search while it runs.
+    pub search: Option<Pending<Vec<Place>>>,
+    /// What it found, and why it found nothing.
+    pub results: Vec<Place>,
+    pub search_error: Option<String>,
+    /// The place chosen.
+    pub chosen: Option<Place>,
+    /// With a georeferenced project: bring round the chosen place (true)
+    /// or round the project's origin.
+    pub around_place: bool,
+    pub preview: Option<Preview>,
+    /// How addresses are asked (the tests give their own).
+    pub fetch: Fetch,
 }
 
 impl Default for CartoDownload {
@@ -56,7 +98,166 @@ impl Default for CartoDownload {
             },
             job: None,
             failures: Vec::new(),
+            query: String::new(),
+            search: None,
+            results: Vec::new(),
+            search_error: None,
+            chosen: None,
+            around_place: true,
+            preview: None,
+            fetch: default_fetch(),
         }
+    }
+}
+
+/// The application's fetch: by HTTP; in a debug build with
+/// `ARCHISIM_BUSQUEDA_EJEMPLO=carpeta`, answers read from that folder
+/// (`candidatos.json`, `find.json`, `nominatim.json`, `catastro.xml`,
+/// `pnoa.png`), to see the window without network.
+fn default_fetch() -> Fetch {
+    #[cfg(debug_assertions)]
+    if std::env::var_os("ARCHISIM_BUSQUEDA_EJEMPLO").is_some() {
+        return sample_fetch;
+    }
+    if cfg!(test) {
+        return |_, _| Err("sin red en las pruebas".into());
+    }
+    http_get
+}
+
+#[cfg(debug_assertions)]
+fn sample_fetch(url: &str, _form: Option<&str>) -> Result<Vec<u8>, String> {
+    let dir =
+        std::path::PathBuf::from(std::env::var_os("ARCHISIM_BUSQUEDA_EJEMPLO").unwrap_or_default());
+    let file = if url.contains("/candidates") {
+        "candidatos.json"
+    } else if url.contains("/find") {
+        "find.json"
+    } else if url.contains("nominatim") {
+        "nominatim.json"
+    } else if url.contains("catastro") {
+        "catastro.xml"
+    } else if url.contains("pnoa") {
+        "pnoa.png"
+    } else {
+        return Err("no se llega al servicio (ejemplo sin red)".into());
+    };
+    std::fs::read(dir.join(file)).map_err(|_| "no se llega al servicio (ejemplo sin red)".into())
+}
+
+/// When Nominatim was last asked: its policy is one request a second.
+static NOMINATIM_LAST: Mutex<Option<std::time::Instant>> = Mutex::new(None);
+
+/// `fetch` for the search: a GET, waiting so that Nominatim is asked no
+/// more than once a second.
+fn paced(fetch: Fetch, url: &str) -> Result<Vec<u8>, String> {
+    if url.starts_with(geocode::NOMINATIM) {
+        if let Ok(mut last) = NOMINATIM_LAST.lock() {
+            if let Some(t) = *last {
+                let gap = Duration::from_millis(1100);
+                if t.elapsed() < gap {
+                    std::thread::sleep(gap - t.elapsed());
+                }
+            }
+            *last = Some(std::time::Instant::now());
+        }
+    }
+    fetch(url, None)
+}
+
+/// Runs `job` on a thread, its answer into a [`Pending`].
+fn spawn<T: Send + 'static>(
+    job: impl FnOnce() -> Result<T, String> + Send + 'static,
+) -> Pending<T> {
+    let pending: Pending<T> = Arc::new(Mutex::new(None));
+    let out = pending.clone();
+    std::thread::spawn(move || {
+        let r = job();
+        if let Ok(mut p) = out.lock() {
+            *p = Some(r);
+        }
+    });
+    pending
+}
+
+/// Takes the answer of a [`Pending`] if it has arrived.
+fn take<T>(p: &Pending<T>) -> Option<Result<T, String>> {
+    p.lock().ok()?.take()
+}
+
+impl CartoDownload {
+    /// Starts looking up what is written.
+    pub fn start_search(&mut self) {
+        // What can be said at once is said at once.
+        if let Err(e) = geocode::read_query(&self.query) {
+            self.search_error = Some(e);
+            self.results.clear();
+            return;
+        }
+        let (q, fetch) = (self.query.clone(), self.fetch);
+        self.search_error = None;
+        self.results.clear();
+        self.search = Some(spawn(move || {
+            geocode::search(&q, &mut |url| paced(fetch, url))
+        }));
+    }
+
+    /// When the search has ended, its places (the only one, chosen).
+    pub fn finish_search(&mut self) {
+        let Some(job) = &self.search else { return };
+        let Some(r) = take(job) else { return };
+        self.search = None;
+        match r {
+            Ok(places) => {
+                self.results = places;
+                if self.results.len() == 1 {
+                    self.choose(0);
+                }
+            }
+            Err(e) => self.search_error = Some(e),
+        }
+    }
+
+    /// Chooses one of the places found.
+    pub fn choose(&mut self, i: usize) {
+        if let Some(p) = self.results.get(i) {
+            self.chosen = Some(p.clone());
+            self.around_place = true;
+        }
+    }
+
+    /// Latitude and longitude of the centre of what is brought, if known.
+    pub fn centre_lat_lon(&self, m: &archisim_core::Model) -> Option<(f64, f64)> {
+        match (&self.chosen, m.georeference().is_some()) {
+            (Some(p), false) => p.lat_lon,
+            (Some(p), true) if self.around_place => p.lat_lon,
+            _ => geocode::lat_lon_of(m, archisim_core::Point2::new(0.0, 0.0)),
+        }
+    }
+
+    /// Asks the little map again if its centre or the radius changed.
+    fn refresh_preview(&mut self, centre: Option<(f64, f64)>) {
+        let Some(c) = centre else {
+            self.preview = None;
+            return;
+        };
+        let half = ((self.options.radius * 1.3).max(100.0) / 50.0).ceil() * 50.0;
+        if let Some(p) = &self.preview {
+            let moved = (p.centre.0 - c.0).abs() > 1e-6 || (p.centre.1 - c.1).abs() > 1e-6;
+            if !moved && half <= p.half && half * 2.0 > p.half {
+                return;
+            }
+        }
+        let (url, bbox) = geocode::preview(c.0, c.1, half);
+        let fetch = self.fetch;
+        self.preview = Some(Preview {
+            centre: c,
+            half,
+            bbox,
+            job: spawn(move || fetch(&url, None)),
+            texture: None,
+            failed: None,
+        });
     }
 }
 
@@ -213,8 +414,49 @@ impl ArchiSimApp {
         }
     }
 
+    /// Puts the chosen place in the project and the options: the project
+    /// without a georeference takes one with its origin there (one step
+    /// of Deshacer), its ±0,00 to go on the terrain; the one that has it
+    /// brings round the place (it does not move) or round its origin.
+    pub fn apply_chosen_place(&mut self) -> Result<(), String> {
+        let Some(d) = &self.carto_download else {
+            return Err("no hay nada que descargar".into());
+        };
+        let chosen = d.chosen.clone();
+        let around_place = d.around_place;
+        let mut centre = archisim_core::Point2::new(0.0, 0.0);
+        let mut level_to_ground = false;
+        match chosen {
+            Some(place) if self.ed.model().georeference().is_none() => {
+                let g = geocode::georeference_at(&place)
+                    .ok_or("el lugar elegido no tiene coordenadas")?;
+                self.ed
+                    .transact("Emplazamiento desde la búsqueda", |m| {
+                        m.set_georeference(Some(g))
+                    })
+                    .map_err(|e| e.to_string())?;
+                level_to_ground = true;
+            }
+            Some(place) if around_place => {
+                let (lat, lon) = place
+                    .lat_lon
+                    .ok_or("el lugar elegido no tiene coordenadas")?;
+                centre = geocode::plan_point(self.ed.model(), lat, lon).ok_or(
+                    "el emplazamiento del proyecto no está en UTM: no se sabe dónde cae el lugar",
+                )?;
+            }
+            _ => {}
+        }
+        if let Some(d) = &mut self.carto_download {
+            d.options.centre = centre;
+            d.options.level_to_ground = level_to_ground;
+        }
+        Ok(())
+    }
+
     /// Starts the download of what the window asks.
     pub fn start_carto_download(&mut self) -> Result<(), String> {
+        self.apply_chosen_place()?;
         let Some(d) = &mut self.carto_download else {
             return Err("no hay nada que descargar".into());
         };
@@ -222,7 +464,8 @@ impl ArchiSimApp {
         d.failures.clear();
         let job = Arc::new(Mutex::new(Progress::default()));
         d.job = Some(job.clone());
-        std::thread::spawn(move || run(&requests, &job, http_get));
+        let fetch = d.fetch;
+        std::thread::spawn(move || run(&requests, &job, fetch));
         Ok(())
     }
 
@@ -271,10 +514,31 @@ impl ArchiSimApp {
         let mut open = true;
         let mut start = false;
         let georef = self.ed.model().georeference().cloned();
+        d.finish_search();
+        let centre = d.centre_lat_lon(self.ed.model());
+        d.refresh_preview(centre);
+        // Where the chosen place falls in the plan, and the origin.
+        let model_origin = Origins {
+            chosen_in_plan: d
+                .chosen
+                .as_ref()
+                .and_then(|c| c.lat_lon)
+                .and_then(|(lat, lon)| geocode::plan_point(self.ed.model(), lat, lon)),
+            origin: geocode::lat_lon_of(self.ed.model(), archisim_core::Point2::new(0.0, 0.0)),
+            centre,
+        };
+        if d.search.is_some()
+            || d.preview
+                .as_ref()
+                .is_some_and(|p| p.texture.is_none() && p.failed.is_none())
+        {
+            ctx.request_repaint_after(Duration::from_millis(200));
+        }
+        let can_start = georef.is_some() || d.chosen.as_ref().is_some_and(|c| c.lat_lon.is_some());
         let running = d.job.clone();
         super::widgets::dialog("Descargar el entorno")
             .open(&mut open)
-            .default_width(520.0)
+            .default_width(560.0)
             .show(ctx, |ui| {
                 let p = Palette::current(ui.ctx());
                 if let Some(job) = &running {
@@ -299,19 +563,7 @@ impl ArchiSimApp {
                     ctx.request_repaint_after(Duration::from_millis(200));
                     return;
                 }
-                match &georef {
-                    Some(g) => ui.label(
-                        egui::RichText::new(format!(
-                            "Alrededor del origen del proyecto ({}, X {:.0} · Y {:.0}).",
-                            g.crs, g.eastings, g.northings
-                        ))
-                        .color(p.muted),
-                    ),
-                    None => ui.label(
-                        egui::RichText::new("El proyecto no está georreferenciado: pon antes su emplazamiento en las propiedades del proyecto («Emplazamiento (georreferencia)», sin nada seleccionado).")
-                            .color(p.bad),
-                    ),
-                };
+                place_section(ui, &mut d, georef.as_ref(), &model_origin, &p);
                 ui.add_space(4.0);
                 let o = &mut d.options;
                 ui.horizontal_wrapped(|ui| {
@@ -324,7 +576,7 @@ impl ArchiSimApp {
                     ui.switch(&mut o.street_life, "Vida en la calle");
                 });
                 ui.horizontal(|ui| {
-                    ui.label("Radio alrededor del origen");
+                    ui.label("Radio");
                     if let Some(v) =
                         length_field(ui, egui::Id::unique("carto-download-radius"), o.radius, 90.0)
                     {
@@ -356,7 +608,7 @@ impl ArchiSimApp {
                 }
                 ui.add_space(6.0);
                 if ui
-                    .add_enabled(georef.is_some(), egui::Button::new("Descargar"))
+                    .add_enabled(can_start, egui::Button::new("Descargar"))
                     .clicked()
                 {
                     start = true;
@@ -377,4 +629,312 @@ impl ArchiSimApp {
             }
         }
     }
+}
+
+/// Where things are, for the place's part of the window.
+struct Origins {
+    /// The chosen place in the project's plan (with a georeference).
+    chosen_in_plan: Option<archisim_core::Point2>,
+    /// The project's origin, latitude and longitude.
+    origin: Option<(f64, f64)>,
+    /// The centre of what is brought, latitude and longitude.
+    centre: Option<(f64, f64)>,
+}
+
+/// The place: the field to look it up, what was found, the one chosen,
+/// round what it is brought and the little map.
+fn place_section(
+    ui: &mut egui::Ui,
+    d: &mut CartoDownload,
+    georef: Option<&archisim_core::Georeference>,
+    at: &Origins,
+    p: &Palette,
+) {
+    ui.label(egui::RichText::new("Lugar").strong());
+    let mut search = false;
+    ui.horizontal(|ui| {
+        let r = ui.add(
+            egui::TextEdit::singleline(&mut d.query)
+                .id(egui::Id::unique("carto-place-query"))
+                .hint_text("Calle Ancha 12, Punta Umbría")
+                .desired_width(ui.available_width() - 80.0),
+        );
+        if r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+            search = true;
+        }
+        if ui
+            .add_enabled(d.search.is_none(), egui::Button::new("Buscar"))
+            .clicked()
+        {
+            search = true;
+        }
+    });
+    ui.label(
+        egui::RichText::new("Una dirección, un sitio o un municipio; una referencia catastral (14 caracteres, o 20 de un inmueble); o unas coordenadas como las copia un mapa web («37,18, -6,93»).")
+            .small()
+            .color(p.muted),
+    );
+    if search && d.search.is_none() {
+        d.start_search();
+    }
+    if d.search.is_some() {
+        ui.horizontal(|ui| {
+            ui.spinner();
+            ui.label(format!("Buscando «{}»…", d.query.trim()));
+        });
+    }
+    if let Some(e) = &d.search_error {
+        ui.label(egui::RichText::new(e).color(p.bad));
+    }
+    // What was found.
+    if d.results.len() > 1 || (d.results.len() == 1 && d.chosen.as_ref() != d.results.first()) {
+        let mut picked = None;
+        egui::ScrollArea::vertical()
+            .id_salt("carto-place-results")
+            .max_height(170.0)
+            .show(ui, |ui| {
+                for (i, r) in d.results.iter().enumerate() {
+                    let on = d.chosen.as_ref() == Some(r);
+                    let resp = ui
+                        .horizontal(|ui| {
+                            let s = ui.selectable_label(on, egui::RichText::new(&r.name).strong());
+                            ui.label(&r.municipality);
+                            ui.label(
+                                egui::RichText::new(format!("{} · {}", r.kind, r.origin.name()))
+                                    .small()
+                                    .color(p.muted),
+                            );
+                            s
+                        })
+                        .inner;
+                    if resp.clicked() {
+                        picked = Some(i);
+                    }
+                }
+            });
+        if let Some(i) = picked {
+            d.choose(i);
+        }
+    }
+    ui.add_space(4.0);
+    // Round what it is brought.
+    let radius = d.options.radius;
+    match (&d.chosen, georef) {
+        (Some(c), None) => {
+            chosen_line(ui, c, p);
+            let g = geocode::georeference_at(c);
+            ui.label(
+                egui::RichText::new(format!(
+                    "El proyecto no tiene emplazamiento: se le pone con su origen en este punto ({}), y su ±0,00 en el terreno de ahí si se trae el terreno. Se deshace en un paso.",
+                    g.map_or_else(String::new, |g| g.crs)
+                ))
+                .color(p.muted),
+            );
+        }
+        (Some(c), Some(g)) => {
+            chosen_line(ui, c, p);
+            let far = at
+                .chosen_in_plan
+                .map(|q| q.distance(archisim_core::Point2::new(0.0, 0.0)));
+            ui.radio_value(
+                &mut d.around_place,
+                true,
+                match far {
+                    Some(f) => format!(
+                        "Alrededor del lugar elegido, a {} del origen del proyecto (el proyecto no se mueve: el entorno queda donde le toca)",
+                        distance_text(f)
+                    ),
+                    None => "Alrededor del lugar elegido (el proyecto no se mueve)".into(),
+                },
+            );
+            ui.radio_value(
+                &mut d.around_place,
+                false,
+                format!(
+                    "Alrededor del origen del proyecto ({}, X {:.0} · Y {:.0})",
+                    g.crs, g.eastings, g.northings
+                ),
+            );
+            if far.is_some_and(|f| f > 20_000.0) && d.around_place {
+                ui.label(
+                    egui::RichText::new("El lugar está muy lejos del proyecto: ¿es el sitio que buscas? Si el emplazamiento del proyecto está mal, cámbialo en sus propiedades.")
+                        .color(p.bad),
+                );
+            }
+        }
+        (None, Some(g)) => {
+            ui.label(
+                egui::RichText::new(format!(
+                    "Alrededor del origen del proyecto ({}, X {:.0} · Y {:.0}). Busca un lugar para traerlo alrededor de otro sitio.",
+                    g.crs, g.eastings, g.northings
+                ))
+                .color(p.muted),
+            );
+        }
+        (None, None) => {
+            ui.label(
+                egui::RichText::new("El proyecto no tiene emplazamiento: busca el lugar arriba, o ponlo en las propiedades del proyecto («Emplazamiento (georreferencia)», sin nada seleccionado).")
+                    .color(p.bad),
+            );
+        }
+    }
+    if let Some(pv) = &mut d.preview {
+        little_map(ui, pv, d.chosen.as_ref(), at, radius, p);
+    }
+}
+
+/// «Calle Ancha, 12 · Punta Umbría (Huelva)», its coordinates and who
+/// found it.
+fn chosen_line(ui: &mut egui::Ui, c: &Place, p: &Palette) {
+    ui.horizontal_wrapped(|ui| {
+        ui.label("Lugar elegido:");
+        ui.label(egui::RichText::new(c.line()).strong().color(p.accent));
+    });
+    ui.label(
+        egui::RichText::new(format!(
+            "{} · {} · {}",
+            c.kind,
+            c.coordinates_text(),
+            c.origin.name()
+        ))
+        .small()
+        .color(p.muted),
+    );
+}
+
+/// «850 m», «12,3 km».
+fn distance_text(d: f64) -> String {
+    if d < 1000.0 {
+        format!("{:.0} m", d)
+    } else {
+        format!("{:.1} km", d / 1000.0).replace('.', ",")
+    }
+}
+
+/// The orthophoto round the centre, with the circle of what is brought,
+/// the chosen place and the project's origin.
+fn little_map(
+    ui: &mut egui::Ui,
+    pv: &mut Preview,
+    chosen: Option<&Place>,
+    at: &Origins,
+    radius: f64,
+    p: &Palette,
+) {
+    if pv.texture.is_none() && pv.failed.is_none() {
+        if let Some(r) = take(&pv.job) {
+            match r.and_then(|b| {
+                archisim_geom::decals::decode_png(&b)
+                    .ok_or_else(|| "no ha llegado una imagen".to_string())
+            }) {
+                Ok(px) => {
+                    let img =
+                        egui::ColorImage::from_rgba_unmultiplied([px.width, px.height], &px.rgba);
+                    pv.texture = Some(ui.ctx().load_texture(
+                        "carto-preview",
+                        img,
+                        egui::TextureOptions::LINEAR,
+                    ));
+                }
+                Err(e) => pv.failed = Some(e),
+            }
+        }
+    }
+    let side = 230.0;
+    ui.horizontal(|ui| {
+        let (rect, _) = ui.allocate_exact_size(egui::vec2(side, side), egui::Sense::hover());
+        let painter = ui.painter_at(rect);
+        painter.rect_filled(rect, 4.0, p.ground);
+        match (&pv.texture, &pv.failed) {
+            (Some(t), _) => {
+                painter.image(
+                    t.id(),
+                    rect,
+                    egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
+                    egui::Color32::WHITE,
+                );
+            }
+            (None, Some(_)) => {
+                painter.text(
+                    rect.center() + egui::vec2(0.0, -side * 0.3),
+                    egui::Align2::CENTER_CENTER,
+                    "Sin ortofoto",
+                    egui::FontId::proportional(12.0),
+                    p.muted,
+                );
+            }
+            (None, None) => {
+                painter.text(
+                    rect.center() + egui::vec2(0.0, -side * 0.3),
+                    egui::Align2::CENTER_CENTER,
+                    "Cargando la ortofoto…",
+                    egui::FontId::proportional(12.0),
+                    p.muted,
+                );
+            }
+        }
+        let spot = |lat: f64, lon: f64| {
+            let (u, v) = geocode::preview_spot(pv.centre.0, pv.centre.1, pv.bbox, lat, lon);
+            rect.min + egui::vec2(u as f32 * side, v as f32 * side)
+        };
+        let k = side / (pv.bbox[2] - pv.bbox[0]) as f32;
+        let ink = egui::Color32::from_rgb(230, 60, 40);
+        if let Some((lat, lon)) = at.centre {
+            let c = spot(lat, lon);
+            painter.circle_stroke(
+                c,
+                radius as f32 * k,
+                egui::Stroke::new(2.5, egui::Color32::WHITE),
+            );
+            painter.circle_stroke(c, radius as f32 * k, egui::Stroke::new(1.5, ink));
+        }
+        if let Some((lat, lon)) = chosen.and_then(|c| c.lat_lon) {
+            let c = spot(lat, lon);
+            painter.circle_filled(c, 5.0, egui::Color32::WHITE);
+            painter.circle_filled(c, 3.5, ink);
+        }
+        if let (Some((lat, lon)), true) = (at.origin, chosen.is_some() || at.centre.is_some()) {
+            // The project's origin: a cross.
+            let c = spot(lat, lon);
+            for (a, b) in [
+                (egui::vec2(-6.0, 0.0), egui::vec2(6.0, 0.0)),
+                (egui::vec2(0.0, -6.0), egui::vec2(0.0, 6.0)),
+            ] {
+                painter.line_segment([c + a, c + b], egui::Stroke::new(3.0, egui::Color32::WHITE));
+                painter.line_segment([c + a, c + b], egui::Stroke::new(1.5, egui::Color32::BLACK));
+            }
+        }
+        painter.text(
+            rect.right_bottom() + egui::vec2(-4.0, -3.0),
+            egui::Align2::RIGHT_BOTTOM,
+            "PNOA © IGN",
+            egui::FontId::proportional(10.0),
+            egui::Color32::WHITE,
+        );
+        ui.vertical(|ui| {
+            ui.label(egui::RichText::new(format!("Radio: {}", distance_text(radius))).strong());
+            ui.label(
+                egui::RichText::new(format!("Lado del mapa: {}", distance_text(pv.half * 2.0)))
+                    .small()
+                    .color(p.muted),
+            );
+            if chosen.is_some() {
+                ui.label(egui::RichText::new("● lugar elegido").small().color(ink));
+            }
+            if at.origin.is_some() {
+                ui.label(
+                    egui::RichText::new("+ origen del proyecto")
+                        .small()
+                        .color(p.muted),
+                );
+            }
+            if let Some(e) = &pv.failed {
+                ui.label(
+                    egui::RichText::new(format!("Sin ortofoto: {e}"))
+                        .small()
+                        .color(p.muted),
+                );
+            }
+        });
+    });
 }

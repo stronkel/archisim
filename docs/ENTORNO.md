@@ -15,6 +15,26 @@ Todo es gratuito y de uso libre: el Catastro con su licencia de reutilización, 
 - En la aplicación: **Archivo → Traer el entorno (Catastro, OpenStreetMap, MDT)…**, se eligen uno o varios ficheros (o se sueltan en la ventana). La ventana dice qué es cada uno y deja elegir qué traer (edificios, parcelas, calles, árboles, terreno), el radio alrededor del origen y la altura de planta. Se deshace en un paso.
 - En la línea de órdenes: `archisim cartografia <ficheros…> [--proyecto p.archisim] [--radio 150] [--centrar] [--salida s.archisim]`.
 
+## Buscar el lugar por su dirección
+
+En **Archivo → Descargar el entorno (Catastro, OpenStreetMap, IGN)…** no hace falta saber las coordenadas. En el campo «Lugar» se escribe cualquiera de estas cosas y se pulsa **Buscar** (o Intro):
+
+| Qué se escribe | Ejemplo | Dónde se busca |
+|---|---|---|
+| Una dirección, un sitio o un municipio | «Calle Ancha 12, Punta Umbría», «Ayuntamiento de Cartaya», «Aljaraque» | **CartoCiudad** (IGN), el callejero oficial de España; si no encuentra nada, **OpenStreetMap** (Nominatim) |
+| Una referencia catastral | «1234567AB1234C» (parcela, 14 caracteres) o la de 20 de un inmueble; con o sin espacios | **Catastro** (servicio de coordenadas de la Sede Electrónica) |
+| Unas coordenadas | «37,18, -6,93», «37.18, -6.93», «37,18 -6,93», «37.18° N 6.93° W» | No se busca: se toman tal cual (latitud y longitud, como las copia un mapa web) |
+
+- Sale una **lista** con la dirección, el municipio, qué es (portal, calle, municipio, parcela…) y de dónde viene. Se elige uno con un clic; si solo hay uno, queda elegido.
+- **Proyecto sin emplazamiento:** se le pone uno con su **origen en el lugar elegido** (ETRS89 en el huso UTM del sitio: 29 en Huelva, 30 en Madrid…) y, si se trae el terreno, el ±0,00 en la cota del terreno de ese punto. Se deshace en un paso.
+- **Proyecto con emplazamiento:** se elige entre traer el entorno **alrededor del lugar elegido** (el proyecto no se mueve; el entorno queda en su sitio, a la distancia que diga la ventana) o **alrededor del origen del proyecto**. Si el lugar está a más de 20 km, la ventana avisa.
+- Un **mapa pequeño** con la ortofoto del PNOA muestra el lugar (punto rojo), el origen del proyecto (cruz) y el círculo del radio.
+- Después sigue la descarga de siempre, con su radio y lo que se quiere traer.
+- Si algo falla se dice en una frase y no se rompe nada: sin conexión, sin resultados, una referencia catastral con un número de caracteres que no es 14 ni 20, una que el Catastro no conoce, o unas coordenadas UTM (que se escriben en el emplazamiento del proyecto, no aquí).
+- OpenStreetMap pide no hacerle más de una pregunta por segundo: ArchiSim espera lo que haga falta.
+
+En la línea de órdenes: `archisim cartografia --lugar "Calle Ancha 12, Punta Umbría" [--resultado 2] [--en-el-origen] [--proyecto p.archisim] [--radio 150] [--enlaces] [ficheros…]` escribe lo encontrado, toma el primero (o el de `--resultado`) y lo aplica igual que la ventana: con `--enlaces` escribe las direcciones de la descarga alrededor de ese lugar; con ficheros, los trae; sin nada más, guarda el proyecto georreferenciado (`--salida`).
+
 ## Dónde se coloca
 
 - Si el proyecto está georreferenciado (propiedades del proyecto, sin nada seleccionado: «Emplazamiento (georreferencia)»), cada cosa va a su sitio con esa georreferencia y el norte del proyecto, igual que en el IFC.
@@ -36,5 +56,8 @@ Todo es gratuito y de uso libre: el Catastro con su licencia de reutilización, 
 Si la calle no cabe entre las parcelas (o los edificios) de los dos lados, se estrecha: primero a una calle de doble sentido con aparcamiento, luego de un sentido, luego sin aparcamiento y, si aún no cabe, todas sus franjas en proporción. Después se edita como cualquier vial (H6).
 
 ## Lo que queda pendiente
+
+- La búsqueda por dirección necesita conexión; fuera de España solo encuentra OpenStreetMap, y el Catastro y el IGN no tienen datos allí.
+- Las referencias catastrales se reconocen por su forma (14 o 20 letras y cifras); no se comprueban sus dos letras de control, eso lo dice el Catastro al buscarla.
 
 - Las alturas de los edificios son por número de plantas, no por la altura real (el Catastro no la da; el LiDAR del PNOA sí, en una vuelta futura).

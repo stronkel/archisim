@@ -4780,6 +4780,106 @@ fn surroundings_downloaded() {
 }
 
 /// A tile of heights of the IGN all at `h` metres.
+/// Made-up answers of the geocoders, in their shape.
+fn sample_geocoder(url: &str, _form: Option<&str>) -> Result<Vec<u8>, String> {
+    if url.contains("/candidates?") {
+        Ok(br#"[{"id":"1","province":"HUELVA","muni":"PUNTA UMBR\u00cdA","type":"portal","address":"ANCHA","tip_via":"CALLE","lat":37.1801,"lng":-6.9662,"portalNumber":12},
+                {"id":"2","province":"HUELVA","muni":"HUELVA","type":"portal","address":"ANCHA","tip_via":"CALLE","lat":37.2610,"lng":-6.9480,"portalNumber":12}]"#
+            .to_vec())
+    } else if url.contains("pnoa") {
+        Ok(green_png())
+    } else {
+        Err("no se llega al servicio".into())
+    }
+}
+
+fn wait_for_search(h: &mut Harness) {
+    for _ in 0..200 {
+        h.frame();
+        if h.app.carto_download.as_ref().unwrap().search.is_none() {
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    panic!("the search did not end");
+}
+
+#[test]
+fn surroundings_found_by_address() {
+    let mut h = Harness::new(Editor::new_project());
+    assert!(h.model().georeference().is_none());
+    h.app.open_carto_download();
+    {
+        let d = h.app.carto_download.as_mut().unwrap();
+        d.fetch = sample_geocoder;
+        // A cadastral reference one character short is said at once.
+        d.query = "1234567AB1234".into();
+        d.start_search();
+        assert!(d.search.is_none());
+        assert!(d.search_error.as_deref().unwrap().contains("14"));
+        d.query = "Calle Ancha 12".into();
+        d.start_search();
+    }
+    wait_for_search(&mut h);
+    let d = h.app.carto_download.as_mut().unwrap();
+    assert!(d.search_error.is_none(), "{:?}", d.search_error);
+    assert_eq!(d.results.len(), 2);
+    assert_eq!(d.results[0].municipality, "Punta Umbría (Huelva)");
+    // Two places: nothing chosen until one is.
+    assert!(d.chosen.is_none());
+    d.choose(0);
+    h.frame();
+    // The project takes a georeference with its origin at the place.
+    h.app.apply_chosen_place().unwrap();
+    let g = h.model().georeference().cloned().unwrap();
+    assert_eq!(g.crs, "EPSG:25829");
+    let at = archisim_library::geocode::plan_point(h.model(), 37.1801, -6.9662).unwrap();
+    assert!(at.x.abs() < 1.0 && at.y.abs() < 1.0, "{at:?}");
+    let opts = h.app.carto_download.as_ref().unwrap().options.clone();
+    assert!(opts.level_to_ground);
+    assert!(archisim_library::download::plan(h.model(), &opts).is_ok());
+    // One step of Deshacer.
+    h.app.ed.undo();
+    assert!(h.model().georeference().is_none());
+
+    // A georeferenced project: round the place (it does not move) or
+    // round its origin.
+    h.app.ed.redo();
+    let d = h.app.carto_download.as_mut().unwrap();
+    d.choose(1);
+    assert!(d.around_place);
+    h.frame();
+    h.app.apply_chosen_place().unwrap();
+    assert_eq!(h.model().georeference(), Some(&g));
+    let opts = h.app.carto_download.as_ref().unwrap().options.clone();
+    assert!(!opts.level_to_ground);
+    // Huelva is some 9 km north of Punta Umbría.
+    assert!(
+        (opts.centre.y - 9_000.0).abs() < 300.0 && opts.centre.x.abs() < 2_000.0,
+        "{:?}",
+        opts.centre
+    );
+    h.app.carto_download.as_mut().unwrap().around_place = false;
+    h.frame();
+    h.app.apply_chosen_place().unwrap();
+    let opts = h.app.carto_download.as_ref().unwrap().options.clone();
+    assert_eq!(opts.centre, archisim_core::Point2::new(0.0, 0.0));
+
+    // No network: said, nothing broken.
+    let d = h.app.carto_download.as_mut().unwrap();
+    d.fetch = |_, _| Err("no se llega al servicio (Dns Failed)".into());
+    d.query = "Plaza Mayor, Ningunsitio".into();
+    d.start_search();
+    wait_for_search(&mut h);
+    let d = h.app.carto_download.as_ref().unwrap();
+    assert!(d
+        .search_error
+        .as_deref()
+        .unwrap()
+        .contains("Comprueba la conexión"));
+    assert!(d.results.is_empty());
+}
+
 fn height_png(h: f64) -> Vec<u8> {
     let v = ((h + 10_000.0) / 0.1).round() as u32;
     let px = [(v >> 16) as u8, (v >> 8) as u8, v as u8];

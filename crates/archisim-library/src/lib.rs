@@ -835,6 +835,7 @@ pub mod download;
 pub mod extended;
 pub mod facades;
 pub mod flora;
+pub mod geocode;
 pub mod ground;
 pub mod imported;
 pub mod railings;
