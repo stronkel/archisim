@@ -1616,3 +1616,275 @@ fn elevators_round_trip() {
     assert!((a.shaft_w - b.shaft_w).abs() < 1e-6 && (a.pit - b.pit).abs() < 1e-6);
     assert_eq!(model.level(b.car_at.unwrap()).unwrap().name, "P2");
 }
+
+/// A file whose façade is drawn layer by layer, each layer a wall (as
+/// some Revit models do): a 10 mm cladding in two pieces, 100 mm of
+/// insulation and a 25 mm lining, pressed face to face along x from 0 to
+/// 4 m; a window in the insulation and the voids each layer has for it.
+/// Apart, two 200 mm walls face to face, which are walls, not layers.
+fn layers_as_walls() -> String {
+    let mut d = Data { lines: Vec::new() };
+    let o3 = d.add("IFCCARTESIANPOINT((0.,0.,0.))");
+    let z = d.add("IFCDIRECTION((0.,0.,1.))");
+    let wcs = d.add(format!("IFCAXIS2PLACEMENT3D({o3},$,$)"));
+    let ctx = d.add(format!(
+        "IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,{wcs},$)"
+    ));
+    let m = d.add("IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.)");
+    let units = d.add(format!("IFCUNITASSIGNMENT(({m}))"));
+    let project = d.add(format!(
+        "IFCPROJECT('{}',$,'Capas',$,$,$,$,({ctx}),{units})",
+        G[0]
+    ));
+    let site_pl = d.add(format!("IFCLOCALPLACEMENT($,{wcs})"));
+    let site = d.add(format!(
+        "IFCSITE('{}',$,'Sitio',$,$,{site_pl},$,$,.ELEMENT.,$,$,$,$,$)",
+        G[1]
+    ));
+    let bldg = d.add(format!(
+        "IFCBUILDING('{}',$,'Edificio',$,$,{site_pl},$,$,.ELEMENT.,$,$,$)",
+        G[2]
+    ));
+    let storey_pl = d.add(format!("IFCLOCALPLACEMENT({site_pl},{wcs})"));
+    let storey = d.add(format!(
+        "IFCBUILDINGSTOREY('{}',$,'Planta baja',$,$,{storey_pl},$,$,.ELEMENT.,0.)",
+        G[3]
+    ));
+    d.add(format!(
+        "IFCRELAGGREGATES('1aaaaaaaaaaaaaaaaaaaa0',$,$,$,{project},({site}))"
+    ));
+    d.add(format!(
+        "IFCRELAGGREGATES('1aaaaaaaaaaaaaaaaaaaa1',$,$,$,{site},({bldg}))"
+    ));
+    d.add(format!(
+        "IFCRELAGGREGATES('1aaaaaaaaaaaaaaaaaaaa2',$,$,$,{bldg},({storey}))"
+    ));
+    let is_ext = d.add("IFCPROPERTYSINGLEVALUE('IsExternal',$,IFCBOOLEAN(.T.),$)");
+    let pset = d.add(format!(
+        "IFCPROPERTYSET('2aaaaaaaaaaaaaaaaaaaa0',$,'Pset_WallCommon',$,({is_ext}))"
+    ));
+    // (x0, x1, y0, y1, material, type name)
+    let walls_spec = [
+        (
+            0.0,
+            2.0,
+            -0.010,
+            0.0,
+            "Placa cerámica",
+            "Muro básico:EXT-PLACA",
+        ),
+        (
+            2.0,
+            4.0,
+            -0.010,
+            0.0,
+            "Placa cerámica",
+            "Muro básico:EXT-PLACA",
+        ),
+        (0.0, 4.0, 0.0, 0.100, "Lana mineral", "Muro básico:AIS-LANA"),
+        (
+            0.0,
+            4.0,
+            0.100,
+            0.125,
+            "Yeso laminado",
+            "Muro básico:INT-PLACA",
+        ),
+        (0.0, 4.0, 5.0, 5.2, "Ladrillo", "Muro básico:Fábrica 200"),
+        (0.0, 4.0, 5.2, 5.4, "Ladrillo", "Muro básico:Fábrica 200"),
+    ];
+    let mut walls = Vec::new();
+    let mut materials: Vec<(String, String)> = Vec::new();
+    for (i, (x0, x1, y0, y1, mat, name)) in walls_spec.iter().enumerate() {
+        let p = d.add(format!("IFCCARTESIANPOINT(({x0:.3},0.,0.))"));
+        let a = d.add(format!("IFCAXIS2PLACEMENT3D({p},$,$)"));
+        let pl = d.add(format!("IFCLOCALPLACEMENT({storey_pl},{a})"));
+        let len = x1 - x0;
+        let q0 = d.add("IFCCARTESIANPOINT((0.,0.))");
+        let q1 = d.add(format!("IFCCARTESIANPOINT(({len:.3},0.))"));
+        let axis = d.add(format!("IFCPOLYLINE(({q0},{q1}))"));
+        let axis_rep = d.add(format!(
+            "IFCSHAPEREPRESENTATION({ctx},'Axis','Curve2D',({axis}))"
+        ));
+        let c2 = d.add(format!(
+            "IFCCARTESIANPOINT(({:.4},{:.4}))",
+            len / 2.0,
+            (y0 + y1) / 2.0
+        ));
+        let a2 = d.add(format!("IFCAXIS2PLACEMENT2D({c2},$)"));
+        let prof = d.add(format!(
+            "IFCRECTANGLEPROFILEDEF(.AREA.,$,{a2},{len:.3},{:.4})",
+            y1 - y0
+        ));
+        let solid = d.add(format!("IFCEXTRUDEDAREASOLID({prof},{wcs},{z},2.7)"));
+        let body = d.add(format!(
+            "IFCSHAPEREPRESENTATION({ctx},'Body','SweptSolid',({solid}))"
+        ));
+        let shape = d.add(format!(
+            "IFCPRODUCTDEFINITIONSHAPE($,$,({axis_rep},{body}))"
+        ));
+        let w = d.add(format!(
+            "IFCWALLSTANDARDCASE('3aaaaaaaaaaaaaaaaaaa{i:02}',$,'{name}:{i}',$,'{name}',{pl},{shape},'{i}')"
+        ));
+        let material = match materials.iter().find(|(n, _)| n == mat) {
+            Some((_, id)) => id.clone(),
+            None => {
+                let id = d.add(format!("IFCMATERIAL('{mat}')"));
+                materials.push((mat.to_string(), id.clone()));
+                id
+            }
+        };
+        d.add(format!(
+            "IFCRELASSOCIATESMATERIAL('2bbbbbbbbbbbbbbbbbbb{i:02}',$,$,$,({w}),{material})"
+        ));
+        walls.push((w, pl));
+    }
+    let layered: Vec<&String> = walls[..4].iter().map(|w| &w.0).collect();
+    d.add(format!(
+        "IFCRELDEFINESBYPROPERTIES('2aaaaaaaaaaaaaaaaaaaa3',$,$,$,({}),{pset})",
+        layered
+            .iter()
+            .map(|s| s.as_str())
+            .collect::<Vec<_>>()
+            .join(",")
+    ));
+    // The window's hole, x 1.0–2.0, z 0.9–2.1, in each layer that has it
+    // there (the first cladding piece, the insulation, the lining); the
+    // window fills the one in the insulation.
+    let mut window = String::new();
+    for (k, &w) in [0usize, 2, 3].iter().enumerate() {
+        let (wall, wall_pl) = &walls[w];
+        let p = d.add("IFCCARTESIANPOINT((1.,0.,0.9))");
+        let a = d.add(format!("IFCAXIS2PLACEMENT3D({p},$,$)"));
+        let void_pl = d.add(format!("IFCLOCALPLACEMENT({wall_pl},{a})"));
+        let c2 = d.add("IFCCARTESIANPOINT((0.5,0.05))");
+        let a2 = d.add(format!("IFCAXIS2PLACEMENT2D({c2},$)"));
+        let prof = d.add(format!("IFCRECTANGLEPROFILEDEF(.AREA.,$,{a2},1.,0.4)"));
+        let solid = d.add(format!("IFCEXTRUDEDAREASOLID({prof},{wcs},{z},1.2)"));
+        let body = d.add(format!(
+            "IFCSHAPEREPRESENTATION({ctx},'Body','SweptSolid',({solid}))"
+        ));
+        let shape = d.add(format!("IFCPRODUCTDEFINITIONSHAPE($,$,({body}))"));
+        let void = d.add(format!(
+            "IFCOPENINGELEMENT('4aaaaaaaaaaaaaaaaaaaa{k}',$,'Hueco',$,'Opening',{void_pl},{shape},$)"
+        ));
+        d.add(format!(
+            "IFCRELVOIDSELEMENT('4bbbbbbbbbbbbbbbbbbbb{k}',$,$,$,{wall},{void})"
+        ));
+        if w == 2 {
+            let p = d.add("IFCCARTESIANPOINT((0.,0.05,0.))");
+            let a = d.add(format!("IFCAXIS2PLACEMENT3D({p},$,$)"));
+            let win_pl = d.add(format!("IFCLOCALPLACEMENT({void_pl},{a})"));
+            let c2 = d.add("IFCCARTESIANPOINT((0.5,0.))");
+            let a2 = d.add(format!("IFCAXIS2PLACEMENT2D({c2},$)"));
+            let prof = d.add(format!("IFCRECTANGLEPROFILEDEF(.AREA.,$,{a2},1.,0.07)"));
+            let solid = d.add(format!("IFCEXTRUDEDAREASOLID({prof},{wcs},{z},1.2)"));
+            let body = d.add(format!(
+                "IFCSHAPEREPRESENTATION({ctx},'Body','SweptSolid',({solid}))"
+            ));
+            let shape = d.add(format!("IFCPRODUCTDEFINITIONSHAPE($,$,({body}))"));
+            window = d.add(format!(
+                "IFCWINDOW('{}',$,'Ventana 100x120',$,$,{win_pl},{shape},$,1.2,1.)",
+                G[6]
+            ));
+            d.add(format!(
+                "IFCRELFILLSELEMENT('4cccccccccccccccccccc0',$,$,$,{void},{window})"
+            ));
+        }
+    }
+    let mut contained: Vec<String> = walls.iter().map(|w| w.0.clone()).collect();
+    contained.push(window);
+    d.add(format!(
+        "IFCRELCONTAINEDINSPATIALSTRUCTURE('5aaaaaaaaaaaaaaaaaaaa1',$,$,$,({}),{storey})",
+        contained.join(",")
+    ));
+    d.text("IFC2X3")
+}
+
+#[test]
+fn layers_drawn_as_walls_become_one_layered_wall() {
+    let Imported { model, report } = import_ifc(&layers_as_walls()).unwrap();
+    let text = report.to_string();
+    // Four walls of the file (two pieces of cladding, insulation, lining)
+    // make one wall; the two brick walls stay two.
+    assert_eq!(
+        (report.joined_layers, report.joined_walls),
+        (4, 1),
+        "{text}"
+    );
+    assert_eq!(report.walls, 3, "{text}");
+    assert!(text.contains("juntados en 1 muros"), "{text}");
+    let joined = model
+        .walls()
+        .find(|w| model.wall_type(w.wall_type).unwrap().layers.len() == 3)
+        .expect("a layered wall");
+    assert!((joined.start.distance(joined.end) - 4.0).abs() < 1e-6);
+    assert!((joined.height - 2.7).abs() < 1e-9);
+    let wt = model.wall_type(joined.wall_type).unwrap();
+    assert!((wt.thickness() - 0.135).abs() < 1e-9);
+    let names: Vec<_> = wt
+        .layers
+        .iter()
+        .map(|l| model.material(l.material).unwrap().name.as_str())
+        .collect();
+    // Outside in or inside out, the insulation in the middle.
+    assert_eq!(names[1], "Lana mineral", "{names:?}");
+    assert!(wt.name.starts_with("135 mm · "), "{}", wt.name);
+    assert!(wt.name.contains("AIS-LANA"), "{}", wt.name);
+    assert_eq!(wt.function, WallFunction::Exterior);
+    // One window and no void: the layers' holes repeat the window.
+    assert_eq!((report.windows, report.voids), (1, 0), "{text}");
+    assert_eq!(report.joined_voids, 2, "{text}");
+    let window = model.openings().next().unwrap();
+    assert_eq!(window.wall, joined.id);
+    assert_eq!(window.guid.as_str(), G[6]);
+    // The brick walls, each 200 mm with its own type.
+    let bricks: Vec<_> = model
+        .walls()
+        .filter(|w| w.id != joined.id)
+        .map(|w| model.wall_type(w.wall_type).unwrap().thickness())
+        .collect();
+    assert_eq!(bricks.len(), 2);
+    assert!(bricks.iter().all(|t| (t - 0.2).abs() < 1e-9));
+    // It comes back the same from ArchiSim's own file.
+    let again = export(&model);
+    let back = import_ifc(&again).unwrap();
+    assert!(differences(&model, &back.model).is_empty());
+    assert_eq!(back.report.joined_layers, 0);
+}
+
+#[test]
+fn repeated_grids_come_in_once() {
+    let mut d = Data { lines: Vec::new() };
+    let o3 = d.add("IFCCARTESIANPOINT((0.,0.,0.))");
+    let wcs = d.add(format!("IFCAXIS2PLACEMENT3D({o3},$,$)"));
+    let ctx = d.add(format!(
+        "IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,{wcs},$)"
+    ));
+    let m = d.add("IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.)");
+    let units = d.add(format!("IFCUNITASSIGNMENT(({m}))"));
+    d.add(format!(
+        "IFCPROJECT('{}',$,'Ejes',$,$,$,$,({ctx}),{units})",
+        G[0]
+    ));
+    let pl = d.add(format!("IFCLOCALPLACEMENT($,{wcs})"));
+    for k in 0..3 {
+        let mut axes = Vec::new();
+        for (tag, (p, q)) in [
+            ("A", ((0.0, -1.0), (0.0, 9.0))),
+            ("1", ((-1.0, 0.0), (9.0, 0.0))),
+        ] {
+            let a = d.add(format!("IFCCARTESIANPOINT(({:.1},{:.1}))", p.0, p.1));
+            let b = d.add(format!("IFCCARTESIANPOINT(({:.1},{:.1}))", q.0, q.1));
+            let line = d.add(format!("IFCPOLYLINE(({a},{b}))"));
+            axes.push(d.add(format!("IFCGRIDAXIS('{tag}',{line},.T.)")));
+        }
+        d.add(format!(
+            "IFCGRID('6aaaaaaaaaaaaaaaaaaaa{k}',$,'Rejilla',$,$,{pl},$,({}),({}),$)",
+            axes[0], axes[1]
+        ));
+    }
+    let Imported { model, report } = import_ifc(&d.text("IFC4")).unwrap();
+    assert_eq!(report.grids, 2, "{report}");
+    assert_eq!(model.grids().count(), 2);
+}

@@ -158,6 +158,9 @@ impl<'a> Importer<'a> {
     pub(super) fn import_grids(&mut self) {
         let mut ids = self.file.of_kind("IFCGRID");
         ids.sort_unstable();
+        // Some programs write the same grid once per storey: each axis is
+        // brought once (same name, same ends either way round, to the mm).
+        let mut seen = std::collections::HashSet::new();
         for id in ids {
             let Some(e) = self.ent(id) else { continue };
             let xf = self.geo.placement(e.arg(5));
@@ -179,6 +182,14 @@ impl<'a> Importer<'a> {
                         continue;
                     };
                     let (p, q) = (xf.apply(p), xf.apply(q));
+                    let mm = |v: f64| (v * 1000.0).round() as i64;
+                    let (a, b) = ((mm(p[0]), mm(p[1])), (mm(q[0]), mm(q[1])));
+                    if !seen.insert((name.clone(), a.min(b), a.max(b))) {
+                        self.report.warn(
+                            "Ejes repetidos en el fichero (uno por planta): se importan una vez.",
+                        );
+                        continue;
+                    }
                     let r = self.model.add_grid(NewGrid {
                         name,
                         start: Point2::new(snap(p[0]), snap(p[1])),

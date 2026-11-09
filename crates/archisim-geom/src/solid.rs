@@ -3283,19 +3283,27 @@ fn layered_regions(
         found.into_iter().map(|(_, c)| c).collect()
     };
     // A plan triangle split at the corners on its edges (fans from the
-    // opposite corner).
+    // opposite corner). The new edges of a fan can pass through further
+    // corners (many lie in line in a drawn building), so the pieces of one
+    // triangle are capped: past the cap the triangle is left whole, which
+    // can leave a hairline crack but never runs out of memory.
+    const MAX_PIECES: usize = 4096;
     fn split(
         tri: [Point2; 3],
         on: &dyn Fn(Point2, Point2) -> Vec<Point2>,
         out: &mut Vec<[Point2; 3]>,
         depth: usize,
+        budget: &mut usize,
     ) {
-        for e in 0..3 {
-            let (a, b, c) = (tri[e], tri[(e + 1) % 3], tri[(e + 2) % 3]);
-            if let Some(m) = on(a, b).first().copied().filter(|_| depth < 64) {
-                split([a, m, c], on, out, depth + 1);
-                split([m, b, c], on, out, depth + 1);
-                return;
+        if depth < 64 && *budget > 0 {
+            for e in 0..3 {
+                let (a, b, c) = (tri[e], tri[(e + 1) % 3], tri[(e + 2) % 3]);
+                if let Some(m) = on(a, b).first().copied() {
+                    *budget -= 1;
+                    split([a, m, c], on, out, depth + 1, budget);
+                    split([m, b, c], on, out, depth + 1, budget);
+                    return;
+                }
             }
         }
         out.push(tri);
@@ -3305,7 +3313,14 @@ fn layered_regions(
             let poly = with_holes(outer, holes);
             for [x, y, z] in triangulate(&poly) {
                 let mut pieces = Vec::new();
-                split([poly[x], poly[y], poly[z]], &on, &mut pieces, 0);
+                let mut budget = MAX_PIECES;
+                split(
+                    [poly[x], poly[y], poly[z]],
+                    &on,
+                    &mut pieces,
+                    0,
+                    &mut budget,
+                );
                 for [a, b, c] in pieces {
                     let (a, b, c) = (at(a, depth), at(b, depth), at(c, depth));
                     tris.push(if up { [a, b, c] } else { [a, c, b] });

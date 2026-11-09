@@ -56,7 +56,12 @@
 - Puntos de izado y caso de carga del izado.
 - Orden de montaje.
 
-**M4 · Del IFC por capas a muros con tipo.** Al importar, «Juntar capas apiladas en un muro»: los muros finos paralelos y pegados se convierten en un muro con su tipo multicapa, y el entramado sale solo en su capa de estructura. Sirve para traer los modelos que ya están en Revit.
+**M4 · Del IFC por capas a muros con tipo.** ✅ Hecho el 9/11/2026, rama `bloque/m4-capas` (`docs/FUNDACIONAL.md`, «Importación IFC»).
+- Al importar, los muros finos paralelos y pegados se convierten en un muro con su tipo multicapa.
+- Con el modelo de ejemplo: 411 muros del fichero pasan a 92 muros con tipo. Quedan sueltos solo los revestimientos que no tienen nada detrás, como los frentes del porche.
+- La fachada principal queda en un solo tipo: «197 mm · EXT-PLACA_CERÁMICA + AIS-Tabihaus + AIS-MEMBRANA + EXT_MADERA + AIS-LANA + INT-PLACA».
+- El entramado se activa en ese tipo (capa de lana de 100 mm). Es lo que hace que la comprobación lo calcule como steel frame y no como fábrica.
+- Mientras se probaba salió un fallo del 3D de los forjados (una división de triángulos sin límite que se quedaba sin memoria al exportar). Queda acotado.
 
 **M5 · Envolvente con los montantes.** HE 1 debe contar el puente térmico de los montantes de acero en la U del muro, del suelo y del techo (hoy cuenta las capas como continuas).
 
@@ -166,10 +171,6 @@ Un **módulo ligero** de estructura de acero, no forjados de hormigón. Los dos 
 
 ## 6. Pendiente de Antonio
 
-- ¿El orden M4 → M1 → M2 → M5 → M3 → M6 le vale? M4 primero, para trabajar ya con los modelos que tiene.
+- Orden aprobado: M4 → M1 → M2 → M5 → M3 → M6. M4 hecho.
 - Catálogo de perfiles del fabricante como fichero (`.csv`, §3 ter de ENTRAMADOS).
-- Revisar la propuesta de §5:
-  - lados abiertos con dueño de la junta;
-  - holgura de 20 mm;
-  - apoyos más anchos;
-  - porche en dos piezas colgadas del chasis.
+- Propuesta de §5 aprobada (9/11/2026).

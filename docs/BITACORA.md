@@ -6,6 +6,48 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-09 (130) · M4: capas dibujadas como muros, juntadas al importar
+
+Rama `bloque/m4-capas`, con pull request. Sin cambios de formato (sigue la versión 95). El IFC exportado solo cambia en un caso raro de las mediciones de muros (ver «Arreglos»). `docs/MODULAR.md` §3 (M4) y `docs/FUNDACIONAL.md`, «Importación IFC».
+
+**Qué hace.** Al importar un IFC que no es de ArchiSim, los muros que son capas de un cerramiento dibujadas una a una (placa, membrana, aislamiento, trasdosado) se convierten en muros con su tipo multicapa:
+- **Qué se junta:** muros paralelos, pegados cara con cara (3 mm de margen), que coinciden a lo largo y en altura, si al menos uno tiene 30 mm o menos. Dos muros de verdad pegados no se tocan.
+- **A lo largo:** el muro se parte donde cambia la composición; por ejemplo, donde el revestimiento pasa de placa cerámica a lamas o donde el trasdosado se para.
+- **En altura:** cada trozo va de la base más baja a la coronación más alta de sus capas.
+- **Juntas entre capas:** las rendijas y solapes de un par de milímetros se cierran.
+- **El tipo:** se llama por su espesor y por los tipos de sus capas de fuera adentro («197 mm · EXT-PLACA_CERÁMICA + AIS-Tabihaus + …»), y es de fachada.
+- **El lado exterior:** se busca por la envolvente de cada planta (qué lado queda dentro del edificio), así que vale en plantas en L.
+- **Puertas y ventanas:** se colocan antes que los huecos. Los huecos que cada capa tenía para la misma puerta o ventana no se duplican.
+- **El informe** dice cuántos muros se han juntado en cuántos.
+
+**Arreglos de paso.**
+- **Ejes:** los repetidos en el fichero (Revit escribe la rejilla una vez por planta) entran una vez.
+- **3D de los forjados:** el reparto de triángulos donde se encuentran capas distintas podía crecer sin límite y dejar sin memoria la exportación del glTF. Ahora tiene un tope.
+- **Mediciones de muros en el IFC:** cuando una puerta o ventana entra en lo que quita un forjado (un muro que atraviesa el solado), ese trozo se descontaba dos veces del volumen neto. Ahora una.
+
+**Con el L-160.**
+- 411 muros del fichero pasan a 92 con tipo; el proyecto queda en 189 muros, frente a los 508 de antes.
+- Un solo hueco sin carpintería, frente a 98.
+- La fachada principal es un tipo: 22 muros de «197 mm · …» y 5 con lamas.
+- Quedan sueltos los revestimientos sin nada detrás (frentes del porche y del acceso).
+- El IFC reexportado valida; el único error es el de un solado del fichero original.
+
+**Pendiente.**
+- La comprobación de estructura sigue tomando los muros por fábrica hasta que se active el entramado en su tipo.
+- Hay trozos cortos (5–30 cm) en las esquinas, donde las capas de dos fachadas se solapan en el modelo de Revit.
+- Siete trozos de remate (tipos «72 mm · 00_EXT_MADERA + …» y «61 mm · BIOk-AIS-Tabihaus + …») salen todavía con el exterior hacia dentro: no tienen una envolvente clara a un lado. Se giran a mano con el giro del muro.
+
+**Qué debe probar Antonio.**
+1. Abre ArchiSim y en Archivo → Importar IFC elige `BIOKUBIK_VIVIENDA_L_160.ifc`.
+   - El informe debe decir: «Capas dibujadas como muros sueltos: 411 muros del fichero juntados en 92 muros…».
+2. Selecciona un muro de la fachada sur. En Propiedades, su tipo debe ser «197 mm · BIOk-EXT-PLACA_CERÁMICA + …».
+   - La placa cerámica debe quedar fuera y la placa interior dentro.
+   - Mira también la fachada del ala del L que da al porche: ahí el centro de la planta queda fuera del edificio, y aun así el exterior debe salir bien.
+3. En Tipos y materiales, en ese tipo, activa «Entramado ligero» (steel frame, montante de 100, separación 600) y mira el 3D con «Entramado a la vista».
+4. Las ventanas deben estar cada una en su sitio, una sola vez, sin huecos sueltos encima.
+
+---
+
 ## 2026-11-09 (129) · Vivienda modular por cajas: propuesta
 
 Sin código. Antonio preguntó qué le falta a ArchiSim para proyectar las viviendas modulares de steel frame de un fabricante con el que trabaja (cajas completas de hasta 9 × 3,60 m, habitualmente 6,20 × 3,60 m) y mandó el IFC de Revit de uno de los modelos (no se sube).

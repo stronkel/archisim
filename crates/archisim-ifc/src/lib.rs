@@ -1963,6 +1963,33 @@ impl<'a> Exporter<'a> {
                 // (An arch or an oculus takes its own shape, not its box.)
                 let fill = og.face_area() / (og.width() * og.height()).max(1e-12);
                 cut_volume += removed_area(&geo, &og) * og.height() * fill;
+                // What a slab already took inside the opening (a wall through
+                // a floor build-up, as walls joined from layers are) is not
+                // taken out twice.
+                let (lo, hi) = (level_z + og.sill, level_z + og.head);
+                let far = 10.0 + geo.exterior_offset.abs() + geo.interior_offset.abs();
+                let at = |t: f64, s: f64| {
+                    Point2::new(
+                        og.origin.x + og.u.x * t + og.n.x * s,
+                        og.origin.y + og.u.y * t + og.n.y * s,
+                    )
+                };
+                let span: Vec<archisim_geom::junctions::Shape> = vec![(
+                    archisim_geom::ensure_ccw(vec![
+                        at(og.t0, -far),
+                        at(og.t1, -far),
+                        at(og.t1, far),
+                        at(og.t0, far),
+                    ]),
+                    Vec::new(),
+                )];
+                for (shapes, z0, z1) in &voids {
+                    let dz = hi.min(*z1) - lo.max(*z0);
+                    if dz > EPSILON {
+                        let both = archisim_geom::junctions::intersection(shapes, &span);
+                        cut_volume -= archisim_geom::junctions::area(&both) * dz * fill;
+                    }
+                }
                 let filling = self.opening(
                     w,
                     pl,
