@@ -6,6 +6,35 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-09 (129) · Vivienda modular por cajas: propuesta
+
+Sin código. Antonio preguntó qué le falta a ArchiSim para proyectar las viviendas modulares de steel frame de un fabricante con el que trabaja (cajas completas de hasta 9 × 3,60 m, habitualmente 6,20 × 3,60 m) y mandó el IFC de Revit de uno de los modelos (no se sube).
+
+- Importado con `archisim importar`: entra entero en menos de un segundo, pero cada capa del cerramiento es un muro, y la comprobación CTE las toma por fábrica que carga (204 «no cumple»). No hay locales ni agrupación por cajas. Los ejes llegan repetidos una vez por planta.
+- Propuesta en `docs/MODULAR.md`:
+  - M1 caja como elemento;
+  - M2 juntas;
+  - M3 chasis, peso e izado;
+  - M4 juntar capas apiladas al importar;
+  - M5 U con montantes de acero;
+  - M6 instalaciones en juntas y perfiladora.
+
+**Pendiente.**
+- Que Antonio confirme el orden y mande el catálogo de perfiles, el chasis y la junta entre cajas (§5 de `docs/MODULAR.md`).
+- Arreglo pequeño del importador: no repetir los ejes por planta.
+
+**Qué debe probar Antonio:** nada que probar; leer `docs/MODULAR.md` y decidir.
+
+**Después, el mismo día:** Antonio no tiene aún el chasis ni la junta desarrollados y pidió una propuesta. Está en `docs/MODULAR.md` §5:
+- chasis soldado y galvanizado, dimensionado para el izado;
+- cada junta con un dueño (muro en una caja, lado abierto en la otra);
+- holgura de 20 mm rellena;
+- apoyos compartidos más anchos;
+- cierres en obra;
+- el porche como módulo ligero en dos piezas de 7,20 m, colgado del chasis de cubierta y de los pilares, no de los montantes.
+
+---
+
 ## 2026-11-08 (129) · Envolvente, segunda vuelta: puentes térmicos, terreno, control solar, permeabilidad y condensaciones (DB-HE 1)
 
 Rama `bloque/he1-puentes`, con pull request. Va sobre la de la entrada 128 (#182, encima de #181, #180 y #179). **Formato versión 96**: los datos nuevos de la envolvente en `thermal`. Sin cambios de IFC. `docs/INSTALACIONES.md` §7.
