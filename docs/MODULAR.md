@@ -46,7 +46,7 @@
 - colocado con forzado a la retícula de cajas, y copiable.
 
 **M2 · Juntas entre cajas.** Donde se tocan dos cajas:
-- muro doble y forjado doble (suelo de una, techo de la de abajo) con la holgura del tipo;
+- holgura entre chasis y cada junta con su dueño: muro en una caja y lado abierto en la otra (§5.2); en dos plantas, forjado doble (suelo de una, techo de la de abajo);
 - los muros de cajas distintas no se unen;
 - el despiece del entramado sale por caja.
 
@@ -105,7 +105,7 @@ Caja de **3,58 m de alto**: 27 cm de suelo, 2,93 m libres y 38 cm de cubierta.
 - Pendiente con aislamiento en cuña o rastreles.
 - Peto en la coronación.
 
-**Muros**: steel frame del catálogo del fabricante (montantes de 100 a 600 mm) atornillado a los chasis. Composición de fuera a dentro:
+**Muros**: steel frame del catálogo del fabricante (montantes de 100 mm cada 600 mm) atornillado a los chasis. Composición de fuera a dentro:
 1. placa cerámica de 10 mm;
 2. membrana;
 3. placa con aislamiento de 51 mm (aislamiento continuo por fuera de los montantes, que corta el puente térmico);
