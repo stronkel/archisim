@@ -19,6 +19,21 @@ pub struct TerrainSettings {
     /// A click on a line of a DXF drawn in the plan makes it a contour line
     /// (E5), at the height of the nearest text that is a number.
     pub wand: bool,
+    /// Clicks draw a platform in the level's terrain (bloque Terreno).
+    pub pad: bool,
+    /// Clicks draw a ramp: its axis from one end to the other.
+    pub ramp: bool,
+    /// A platform drawn as a rectangle from two corners (else a polygon).
+    pub pad_rect: bool,
+    /// Height of the platform, or of the ramp's start; `None`: the
+    /// ground's where it is first clicked.
+    pub pad_z: Option<f64>,
+    /// Height of the ramp's end; `None`: the ground's where it ends.
+    pub ramp_end: Option<f64>,
+    /// Width of a ramp.
+    pub ramp_width: f64,
+    /// The banks, horizontal by vertical (1: 45°).
+    pub pad_run: f64,
 }
 
 impl Default for TerrainSettings {
@@ -30,6 +45,13 @@ impl Default for TerrainSettings {
             line: false,
             outline: false,
             wand: false,
+            pad: false,
+            ramp: false,
+            pad_rect: true,
+            pad_z: None,
+            ramp_end: None,
+            ramp_width: 3.0,
+            pad_run: 1.0,
         }
     }
 }
@@ -115,6 +137,30 @@ impl Editor {
         edit: impl FnOnce(&mut Terrain),
     ) -> EditResult {
         self.transact(label, |m| m.edit_terrain(id, edit))
+    }
+
+    /// Adds a platform (or a ramp) to a terrain and grades its ground
+    /// again; returns its index.
+    pub fn add_terrain_pad(
+        &mut self,
+        id: TerrainId,
+        pad: archisim_core::TerrainPad,
+    ) -> EditResult<usize> {
+        let label = if pad.tilt.is_some() {
+            "Rampa"
+        } else {
+            "Plataforma"
+        };
+        self.transact(label, |m| {
+            let mut index = 0;
+            m.edit_terrain(id, |t| {
+                let mut pads = t.pads.clone();
+                pads.push(pad);
+                index = pads.len() - 1;
+                t.set_pads(pads);
+            })?;
+            Ok(index)
+        })
     }
 
     /// Sets (or clears) where the project is on the map.

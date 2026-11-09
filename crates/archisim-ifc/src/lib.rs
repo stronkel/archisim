@@ -45,6 +45,7 @@
 mod accessories;
 mod curtain;
 mod decals;
+mod earthworks;
 mod elevators;
 mod facades;
 mod foundations;
@@ -2289,7 +2290,8 @@ impl<'a> Exporter<'a> {
         self.write_pools(&materials, &storeys, &mut contained);
         self.write_elevators(&storeys, &mut contained);
         self.write_grids(&storeys, &mut contained);
-        self.write_urban(&materials, site, site_pl);
+        let earthworks = self.write_earthworks(&materials, site_pl);
+        self.write_urban(&materials, site, site_pl, earthworks);
         self.write_services(&storeys, &mut contained, building);
         self.write_spaces(&storeys);
 

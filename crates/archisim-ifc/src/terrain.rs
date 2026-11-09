@@ -120,6 +120,7 @@ impl Exporter<'_> {
             }
             for (key, on) in [
                 ("ShowHeights", t.show_heights),
+                ("ShowEarthworks", t.show_earthworks),
                 ("SlopeArrows", t.slope_arrows),
             ] {
                 if on {
@@ -141,7 +142,22 @@ impl Exporter<'_> {
                             .map(|q| format!("{} {}", real(q.x), real(q.y)))
                             .collect::<Vec<_>>()
                             .join(",");
-                        format!("{} {}:{o}", real(p.z), real(p.slope))
+                        // Its kind, and a ramp's «x y direction grade».
+                        let tilt = p.tilt.map_or(String::new(), |t| {
+                            format!(
+                                " {} {} {} {}",
+                                real(t.from.x),
+                                real(t.from.y),
+                                t.dir,
+                                t.grade
+                            )
+                        });
+                        format!(
+                            "{} {} {}{tilt}:{o}",
+                            real(p.z),
+                            real(p.slope),
+                            p.kind.code()
+                        )
                     })
                     .collect::<Vec<_>>()
                     .join("|");
@@ -149,6 +165,18 @@ impl Exporter<'_> {
                     "IFCPROPERTYSINGLEVALUE('Pads',$,IFCTEXT({}),$)",
                     string(&text)
                 )));
+                if t.pads.iter().any(|p| !p.name.is_empty()) {
+                    let names = t
+                        .pads
+                        .iter()
+                        .map(|p| p.name.replace('|', "/"))
+                        .collect::<Vec<_>>()
+                        .join("|");
+                    props.push(self.w.add(format!(
+                        "IFCPROPERTYSINGLEVALUE('PadNames',$,IFCTEXT({}),$)",
+                        string(&names)
+                    )));
+                }
                 if let Some(g) = &t.ground {
                     let text = g
                         .iter()

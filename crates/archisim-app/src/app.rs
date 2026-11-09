@@ -444,8 +444,14 @@ pub struct ArchiSimApp {
     /// A survey point's height being typed where it is written (E5):
     /// the terrain, the point and the text.
     terrain_z_edit: Option<(archisim_core::TerrainId, usize, String)>,
-    /// Cut and fill of a terrain's platforms, by model revision (E8).
-    earthworks_cache: Option<(u64, archisim_core::TerrainId, (f64, f64))>,
+    /// The platform of the selected terrain picked in plan (bloque
+    /// Terreno): its corners have grips, Supr takes it away.
+    pub terrain_pad_pick: Option<usize>,
+    /// Cut and fill of a terrain's platforms, all and each, by model
+    /// revision (E8).
+    earthworks_cache: Option<(u64, archisim_core::TerrainId, terrain_ui::Earth)>,
+    /// The earthworks report being shown.
+    pub earthworks_report: Option<String>,
     /// The outline of a room drawn by hand.
     pub zone_tool: SlabTool,
     /// The «Maqueta» environment is on (`docs/MAQUETA.md`).
@@ -860,7 +866,9 @@ impl ArchiSimApp {
             terrain_line: Vec::new(),
             terrain_pick: Vec::new(),
             terrain_z_edit: None,
+            terrain_pad_pick: None,
             earthworks_cache: None,
+            earthworks_report: None,
             roof_tool: SlabTool::default(),
             zone_tool: SlabTool::default(),
             maquette: false,
@@ -1643,7 +1651,7 @@ impl ArchiSimApp {
     }
 
     fn delete(&mut self) {
-        if self.delete_terrain_points() || self.delete_vertex() {
+        if self.delete_terrain_pad() || self.delete_terrain_points() || self.delete_vertex() {
             return;
         }
         match self.ed.delete_selection() {
@@ -2470,6 +2478,7 @@ impl ArchiSimApp {
         self.params_dialog(ctx);
         self.cte_dialog(ctx);
         self.calc_dialog(ctx);
+        self.earthworks_report_dialog(ctx);
         self.electrical_dialog(ctx);
         self.water_dialog(ctx);
         self.drain_dialog(ctx);

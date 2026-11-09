@@ -41,6 +41,10 @@ Checks:
      with a type) is contained in a storey, has its type and 3D geometry.
  11. Every loose railing (IfcRailing not part of a stair) is contained in
      a storey, has its material, Pset_RailingCommon and 3D geometry.
+ 15. Every earthwork (ArchiSim_Earthworks: IfcEarthworksCut or
+     IfcEarthworksFill in IFC 4.3, a proxy in IFC4) has its base
+     quantities and a closed body of that volume; a cut voids its terrain
+     (an IfcGeographicElement), the others are contained in the site.
 
 Usage:  python3 scripts/validate_ifc.py out/demo.ifc
 Needs:  pip install ifcopenshell
@@ -264,6 +268,50 @@ def main(path: str) -> int:
         part = eu.get_psets(sp).get("ArchiSim_PoolPart")
         if part is not None and part.get("Pool") not in pool_guids:
             errors.append(f"{sp.Name}: the water of a pool not in the file")
+
+    # 15. Earthworks (ArchiSim_Earthworks): what the platforms dig and fill
+    # and what the pools dig, IfcEarthworksCut / IfcEarthworksFill in IFC
+    # 4.3 (proxies in IFC4); a cut voids its terrain, the rest are
+    # contained in the site; with their base quantities and a closed body
+    # whose volume matches them.
+    for e in list(f.by_type("IfcProduct")):
+        info = eu.get_psets(e).get("ArchiSim_Earthworks")
+        if info is None:
+            continue
+        name = e.Name
+        cut = info.get("Kind") == "Cut"
+        if f.schema.startswith("IFC4X3"):
+            want = "IfcEarthworksCut" if cut else "IfcEarthworksFill"
+            if not e.is_a(want):
+                errors.append(f"{name}: an earthwork as {e.is_a()}, not {want}")
+            qto = "Qto_EarthworksCutBaseQuantities" if cut else "Qto_EarthworksFillBaseQuantities"
+        else:
+            if not e.is_a("IfcBuildingElementProxy"):
+                errors.append(f"{name}: an IFC4 earthwork as {e.is_a()}")
+            qto = "ArchiSim_EarthworksQuantities"
+        if e.is_a("IfcEarthworksCut"):
+            voided = [r.RelatingBuildingElement for r in e.VoidsElements]
+            if len(voided) != 1 or not voided[0].is_a("IfcGeographicElement"):
+                errors.append(f"{name}: a cut that does not void its terrain")
+        else:
+            container = eu.get_container(e)
+            if container is None or not container.is_a("IfcSite"):
+                errors.append(f"{name}: not contained in the site")
+        q = eu.get_psets(e).get(qto)
+        vkey = "UndisturbedVolume" if cut else "CompactedVolume"
+        if q is None or vkey not in q:
+            errors.append(f"{name}: missing {qto}.{vkey}")
+            continue
+        if abs(q[vkey] - info.get("Volume", -1)) > 1e-3:
+            errors.append(f"{name}: {vkey} {q[vkey]} != ArchiSim_Earthworks.Volume")
+        if geom_ok:
+            try:
+                shp = geom.create_shape(settings, e)
+                vol = shape.get_volume(shp.geometry)
+                if abs(vol - q[vkey]) > 1e-3 * max(1.0, q[vkey]):
+                    errors.append(f"{name}: volume {vol:.4f} != {q[vkey]:.4f}")
+            except Exception as exc:
+                errors.append(f"{name}: geometry failed: {exc}")
 
     members = f.by_type("IfcColumn") + f.by_type("IfcBeam")
     for el in members:

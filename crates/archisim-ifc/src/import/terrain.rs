@@ -150,6 +150,7 @@ impl<'a> Importer<'a> {
                 .unwrap_or(false)
         };
         let (show_heights, slope_arrows) = (flag("ShowHeights"), flag("SlopeArrows"));
+        let show_earthworks = flag("ShowEarthworks");
         // Its platforms and the ground as surveyed (E8): the points read
         // are the ground already graded.
         let text = |name: &str| {
@@ -162,10 +163,21 @@ impl<'a> Importer<'a> {
                 s.split('|')
                     .filter_map(|p| {
                         let (head, o) = p.split_once(':')?;
-                        let mut h = head
-                            .split_whitespace()
-                            .filter_map(|n| n.parse::<f64>().ok());
+                        let words: Vec<&str> = head.split_whitespace().collect();
+                        let mut h = words.iter().filter_map(|n| n.parse::<f64>().ok());
                         let (z, slope) = (h.next()?, h.next()?);
+                        // Its kind (a word) and a ramp's tilt (four numbers).
+                        let kind = words
+                            .iter()
+                            .find(|w| w.parse::<f64>().is_err())
+                            .map(|w| archisim_core::PadKind::from_code(w))
+                            .unwrap_or_default();
+                        let rest: Vec<f64> = h.collect();
+                        let tilt = (rest.len() == 4).then(|| archisim_core::PadTilt {
+                            from: Point2::new(snap(rest[0] * len), snap(rest[1] * len)),
+                            dir: rest[2],
+                            grade: rest[3],
+                        });
                         let outline: Vec<Point2> = o
                             .split(',')
                             .filter_map(|q| {
@@ -178,11 +190,20 @@ impl<'a> Importer<'a> {
                             outline,
                             z: snap(z * len),
                             slope,
+                            name: String::new(),
+                            kind,
+                            tilt,
                         })
                     })
                     .collect()
             })
             .unwrap_or_default();
+        let mut pads = pads;
+        if let Some(names) = text("PadNames") {
+            for (p, n) in pads.iter_mut().zip(names.split('|')) {
+                p.name = n.to_string();
+            }
+        }
         let ground: Option<Vec<SurveyPoint>> = text("Ground").and_then(|s| {
             s.split(';')
                 .map(|p| {
@@ -203,6 +224,7 @@ impl<'a> Importer<'a> {
             t.ground = ground;
             t.outline = outline;
             t.show_heights = show_heights;
+            t.show_earthworks = show_earthworks;
             t.slope_arrows = slope_arrows;
         });
         self.terrain_ids.insert(id);

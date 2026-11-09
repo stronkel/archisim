@@ -49,6 +49,8 @@ pub struct Terrain {
     pub show_heights: bool,
     /// Slope arrows in plan, downhill, with their gradient (E5).
     pub slope_arrows: bool,
+    /// Cut and fill coloured in plan, with their volumes by platform.
+    pub show_earthworks: bool,
     /// Platforms dug or filled into it (E8: "explanaciones"), under the
     /// building or by hand. `points` is the ground already graded.
     pub pads: Vec<TerrainPad>,
@@ -64,9 +66,184 @@ pub struct Terrain {
 pub struct TerrainPad {
     /// Counter-clockwise, without repeating the first point.
     pub outline: Vec<Point2>,
+    /// Its height; for a ramp, at `tilt.from`.
     pub z: f64,
     /// Rise over run of the bank (1 = 1:1, 45°; 0.5 = 1:2).
     pub slope: f64,
+    /// Its name («Plataforma de la vivienda»); empty: numbered by kind.
+    pub name: String,
+    /// What it is for: it says how its cut and fill are written to IFC.
+    pub kind: PadKind,
+    /// A ramp: the platform tilted (none: flat).
+    pub tilt: Option<PadTilt>,
+}
+
+/// What a platform is for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PadKind {
+    /// Drawn by hand: a flat platform (a terrace, a yard, a car park).
+    #[default]
+    Platform,
+    /// Under the building, at the level of the terrain.
+    Building,
+    /// Under a basement: the dig of the basement ("vaciado").
+    Basement,
+    /// A ramp (tilted).
+    Ramp,
+}
+
+impl PadKind {
+    pub const ALL: [PadKind; 4] = [
+        PadKind::Platform,
+        PadKind::Building,
+        PadKind::Basement,
+        PadKind::Ramp,
+    ];
+
+    /// Its name, in Spanish.
+    pub fn name(self) -> &'static str {
+        match self {
+            PadKind::Platform => "Plataforma",
+            PadKind::Building => "Plataforma del edificio",
+            PadKind::Basement => "Vaciado de sótano",
+            PadKind::Ramp => "Rampa",
+        }
+    }
+
+    /// Its code in files («platform», «building», «basement», «ramp»).
+    pub fn code(self) -> &'static str {
+        match self {
+            PadKind::Platform => "platform",
+            PadKind::Building => "building",
+            PadKind::Basement => "basement",
+            PadKind::Ramp => "ramp",
+        }
+    }
+
+    pub fn from_code(code: &str) -> PadKind {
+        Self::ALL
+            .into_iter()
+            .find(|k| k.code() == code)
+            .unwrap_or_default()
+    }
+
+    /// Made from the building (and made again with it).
+    pub fn from_building(self) -> bool {
+        matches!(self, PadKind::Building | PadKind::Basement)
+    }
+}
+
+/// How a ramp is tilted: it rises `grade` metres per metre in the
+/// direction `dir` (radians, from +X), its height `z` at `from`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PadTilt {
+    pub from: Point2,
+    pub dir: f64,
+    pub grade: f64,
+}
+
+impl TerrainPad {
+    /// A flat platform drawn by hand.
+    pub fn flat(outline: Vec<Point2>, z: f64, slope: f64) -> TerrainPad {
+        TerrainPad {
+            outline,
+            z,
+            slope,
+            name: String::new(),
+            kind: PadKind::Platform,
+            tilt: None,
+        }
+    }
+
+    /// A ramp along its axis `start → end`, `width` wide, from height
+    /// `z_start` to `z_end`, with banks of `slope`.
+    pub fn ramp(
+        start: Point2,
+        end: Point2,
+        width: f64,
+        z_start: f64,
+        z_end: f64,
+        slope: f64,
+    ) -> Option<TerrainPad> {
+        let d = end - start;
+        let len = (d.x * d.x + d.y * d.y).sqrt();
+        if len < 1e-6 || width <= 1e-6 {
+            return None;
+        }
+        let u = Vec2::new(d.x / len, d.y / len);
+        let n = Vec2::new(-u.y, u.x) * (width / 2.0);
+        Some(TerrainPad {
+            outline: vec![start - n, end - n, end + n, start + n],
+            z: z_start,
+            slope,
+            name: String::new(),
+            kind: PadKind::Ramp,
+            tilt: Some(PadTilt {
+                from: start,
+                dir: u.y.atan2(u.x),
+                grade: (z_end - z_start) / len,
+            }),
+        })
+    }
+
+    /// Its height at `p` (anywhere: a ramp's plane goes on beyond it).
+    pub fn z_at(&self, p: Point2) -> f64 {
+        match self.tilt {
+            None => self.z,
+            Some(t) => {
+                let (s, c) = t.dir.sin_cos();
+                self.z + t.grade * ((p.x - t.from.x) * c + (p.y - t.from.y) * s)
+            }
+        }
+    }
+
+    /// Lowest and highest heights of its outline.
+    pub fn heights(&self) -> (f64, f64) {
+        self.outline
+            .iter()
+            .map(|p| self.z_at(*p))
+            .fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), z| {
+                (a.min(z), b.max(z))
+            })
+    }
+
+    /// Height at the middle of its outline (to order platforms).
+    pub fn mean_z(&self) -> f64 {
+        let n = self.outline.len().max(1) as f64;
+        let c = self.outline.iter().fold(Point2::new(0.0, 0.0), |a, p| {
+            Point2::new(a.x + p.x / n, a.y + p.y / n)
+        });
+        self.z_at(c)
+    }
+
+    /// For a ramp, its ends along its direction: the heights where it
+    /// starts and ends, and its length. None if flat.
+    pub fn ramp_ends(&self) -> Option<(f64, f64, f64)> {
+        let t = self.tilt?;
+        let (s, c) = t.dir.sin_cos();
+        let along = |p: &Point2| (p.x - t.from.x) * c + (p.y - t.from.y) * s;
+        let lo = self.outline.iter().map(along).fold(f64::INFINITY, f64::min);
+        let hi = self
+            .outline
+            .iter()
+            .map(along)
+            .fold(f64::NEG_INFINITY, f64::max);
+        Some((self.z + t.grade * lo, self.z + t.grade * hi, hi - lo))
+    }
+
+    /// Its name, or one by its kind and its place in the list.
+    pub fn label(&self, index: usize) -> String {
+        if !self.name.trim().is_empty() {
+            return self.name.trim().to_string();
+        }
+        let base = match self.kind {
+            PadKind::Platform => "Plataforma",
+            PadKind::Building => "Plataforma del edificio",
+            PadKind::Basement => "Vaciado",
+            PadKind::Ramp => "Rampa",
+        };
+        format!("{base} {}", index + 1)
+    }
 }
 
 /// Bank slope proposed for new platforms (1:1).
@@ -364,7 +541,7 @@ impl Terrain {
             return;
         }
         let mut order: Vec<&TerrainPad> = pads.iter().collect();
-        order.sort_by(|a, b| b.z.total_cmp(&a.z));
+        order.sort_by(|a, b| b.mean_z().total_cmp(&a.mean_z()));
         let mut points = ground.clone();
         for pad in order {
             points = grade(&points, pad, self.outline.as_deref());
@@ -393,61 +570,18 @@ impl Terrain {
 
     /// Earthworks for its platforms: the volume dug ("desmonte") and the
     /// volume filled ("terraplén"), in cubic metres, between the ground
-    /// as surveyed and as graded.
+    /// as surveyed and as graded: the sums of `pad_earthworks` (less than
+    /// `MIN_EARTH_VOLUME` is none).
     pub fn earthworks(&self) -> (f64, f64) {
-        let Some(ground) = &self.ground else {
-            return (0.0, 0.0);
-        };
-        if self.pads.is_empty() {
-            return (0.0, 0.0);
-        }
-        let surveyed = Terrain {
-            points: ground.clone(),
-            pads: Vec::new(),
-            ground: None,
-            ..self.clone()
-        };
-        // Only near the platforms does the ground change.
-        let (mut lo, mut hi) = (
-            Point2::new(f64::MAX, f64::MAX),
-            Point2::new(f64::MIN, f64::MIN),
-        );
-        for p in self.points.iter().skip(ground.len()) {
-            lo = Point2::new(lo.x.min(p.at.x), lo.y.min(p.at.y));
-            hi = Point2::new(hi.x.max(p.at.x), hi.y.max(p.at.y));
-        }
-        for pad in &self.pads {
-            for p in &pad.outline {
-                lo = Point2::new(lo.x.min(p.x), lo.y.min(p.y));
-                hi = Point2::new(hi.x.max(p.x), hi.y.max(p.y));
-            }
-        }
-        if lo.x > hi.x {
-            return (0.0, 0.0);
-        }
-        let area = (hi.x - lo.x) * (hi.y - lo.y);
-        let step = (area / 250_000.0).sqrt().max(EARTHWORKS_STEP);
-        let nx = ((hi.x - lo.x) / step).ceil().max(1.0) as usize;
-        let ny = ((hi.y - lo.y) / step).ceil().max(1.0) as usize;
-        let before = surveyed.sample(lo, step, nx, ny);
-        let after = self.sample(lo, step, nx, ny);
-        let (mut cut, mut fill) = (0.0, 0.0);
-        for (b, a) in before.iter().zip(&after) {
-            if let (Some(b), Some(a)) = (b, a) {
-                let d = a - b;
-                if d < 0.0 {
-                    cut -= d * step * step;
-                } else {
-                    fill += d * step * step;
-                }
-            }
-        }
-        (cut, fill)
+        let v = |m: &EarthMesh| if m.is_empty() { 0.0 } else { m.volume };
+        self.pad_earthworks()
+            .iter()
+            .fold((0.0, 0.0), |(c, f), e| (c + v(&e.cut), f + v(&e.fill)))
     }
 
     /// Heights of the surface at the middle of each cell of a grid from
     /// `lo`, `step` wide, `nx` by `ny` (by rows), where it lies over it.
-    fn sample(&self, lo: Point2, step: f64, nx: usize, ny: usize) -> Vec<Option<f64>> {
+    pub(super) fn sample(&self, lo: Point2, step: f64, nx: usize, ny: usize) -> Vec<Option<f64>> {
         let mut out = vec![None; nx * ny];
         for [a, b, c] in self.triangles() {
             let (pa, pb, pc) = (self.points[a], self.points[b], self.points[c]);
@@ -709,6 +843,32 @@ fn distance_out(p: Point2, poly: &[Point2]) -> f64 {
         .fold(f64::MAX, f64::min)
 }
 
+/// Distance from `p` to the edge of `poly` (zero inside it) and the
+/// nearest point of the edge.
+pub(crate) fn nearest_out(p: Point2, poly: &[Point2]) -> (f64, Point2) {
+    let n = poly.len();
+    let mut best = (f64::MAX, p);
+    for i in 0..n {
+        let (a, b) = (poly[i], poly[(i + 1) % n]);
+        let ab = b - a;
+        let len2 = ab.x * ab.x + ab.y * ab.y;
+        let t = if len2 < 1e-18 {
+            0.0
+        } else {
+            (((p - a).x * ab.x + (p - a).y * ab.y) / len2).clamp(0.0, 1.0)
+        };
+        let q = a + ab * t;
+        let d = p.distance(q);
+        if d < best.0 {
+            best = (d, q);
+        }
+    }
+    if super::roofs::point_in_polygon(p, poly) {
+        best.0 = 0.0;
+    }
+    best
+}
+
 fn segment_distance(p: Point2, a: Point2, b: Point2) -> f64 {
     let ab = b - a;
     let len2 = ab.x * ab.x + ab.y * ab.y;
@@ -738,12 +898,16 @@ fn grade(points: &[SurveyPoint], pad: &TerrainPad, outline: Option<&[Point2]>) -
         outline: outline.map(|o| o.to_vec()),
         show_heights: false,
         slope_arrows: false,
+        show_earthworks: false,
         pads: Vec::new(),
         ground: None,
     };
+    // Held by the bank from the nearest point of its edge (a ramp's
+    // height changes along it).
     let held = |q: Point2, z: f64| {
-        let d = distance_out(q, &pad.outline);
-        z.clamp(pad.z - d * pad.slope, pad.z + d * pad.slope)
+        let (d, near) = nearest_out(q, &pad.outline);
+        let zr = pad.z_at(if d > 0.0 { near } else { q });
+        z.clamp(zr - d * pad.slope, zr + d * pad.slope)
     };
     let mut out: Vec<SurveyPoint> = points
         .iter()
@@ -795,7 +959,10 @@ fn grade(points: &[SurveyPoint], pad: &TerrainPad, outline: Option<&[Point2]>) -
     };
     for (q, _) in &samples {
         if before.height_at(*q).is_some() && !near(&out, &added, *q, 0.05) {
-            added.push(SurveyPoint { at: *q, z: pad.z });
+            added.push(SurveyPoint {
+                at: *q,
+                z: pad.z_at(*q),
+            });
         }
     }
     // Points well inside go (the platform is flat); those near its edge
@@ -1320,6 +1487,7 @@ impl Model {
                 outline: None,
                 show_heights: false,
                 slope_arrows: false,
+                show_earthworks: false,
                 pads: Vec::new(),
                 ground: None,
             },
@@ -1387,10 +1555,18 @@ impl Model {
             if signed_area(&outline) < 0.0 {
                 outline.reverse();
             }
+            let kind = if level.elevation < top - 0.05 {
+                PadKind::Basement
+            } else {
+                PadKind::Building
+            };
             pads.push(TerrainPad {
                 outline: grow_polygon(&outline, margin),
                 z,
                 slope,
+                name: String::new(),
+                kind,
+                tilt: None,
             });
         }
         pads
@@ -1445,6 +1621,11 @@ fn check_pads(t: &Terrain) -> Result<(), ModelError> {
         }
         finite(pad.z, "terrain platform height")?;
         finite(pad.slope, "terrain platform bank")?;
+        if let Some(t) = pad.tilt {
+            finite_point(t.from, "ramp")?;
+            finite(t.dir, "ramp direction")?;
+            finite(t.grade, "ramp grade")?;
+        }
         if pad.outline.len() < 3 || pad.slope <= 0.0 {
             return Err(ModelError::InvalidTerrain);
         }
@@ -1725,6 +1906,7 @@ mod tests {
             outline: square(15.0, 15.0, 10.0),
             z: 1.0,
             slope: 1.0,
+            ..TerrainPad::flat(Vec::new(), 0.0, 1.0)
         };
         m.edit_terrain(id, |t| t.set_pads(vec![dig.clone()]))
             .unwrap();
@@ -1754,6 +1936,7 @@ mod tests {
             outline: square(5.0, 5.0, 5.0),
             z: 1.5,
             slope: 0.5,
+            ..TerrainPad::flat(Vec::new(), 0.0, 1.0)
         };
         m.edit_terrain(id, |t| t.set_pads(vec![raise])).unwrap();
         let (cut, fill) = m.terrain(id).unwrap().earthworks();

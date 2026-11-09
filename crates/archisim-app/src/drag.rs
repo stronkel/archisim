@@ -68,6 +68,12 @@ pub enum Grip {
         road: archisim_core::RoadId,
         index: usize,
     },
+    /// A corner of a platform of a terrain (bloque Terreno).
+    PadCorner {
+        terrain: archisim_core::TerrainId,
+        pad: usize,
+        index: usize,
+    },
     /// A corner of a pool's outline (the edge of its water).
     PoolCorner {
         pool: archisim_core::PoolId,
@@ -377,6 +383,19 @@ pub fn hotspots(model: &Model, selection: &BTreeSet<Element>) -> Vec<Hotspot> {
             }
             Element::Terrain(id) => {
                 if let Some(t) = model.terrain(*id) {
+                    // The corners of its platforms.
+                    for (pad, p) in t.pads.iter().enumerate() {
+                        for (index, point) in p.outline.iter().enumerate() {
+                            v.push(Hotspot {
+                                grip: Grip::PadCorner {
+                                    terrain: *id,
+                                    pad,
+                                    index,
+                                },
+                                point: *point,
+                            });
+                        }
+                    }
                     // The surveyed points (not those of its platforms).
                     for (index, p) in t.points.iter().take(t.survey().len()).enumerate() {
                         v.push(Hotspot {
@@ -545,7 +564,9 @@ pub fn moving(model: &Model, selection: &BTreeSet<Element>, grip: Grip) -> BTree
             [Element::Object(object)].into_iter().collect()
         }
         Grip::OpeningJamb { opening, .. } => [Element::Opening(opening)].into_iter().collect(),
-        Grip::TerrainPoint { terrain, .. } => [Element::Terrain(terrain)].into_iter().collect(),
+        Grip::TerrainPoint { terrain, .. } | Grip::PadCorner { terrain, .. } => {
+            [Element::Terrain(terrain)].into_iter().collect()
+        }
         Grip::DraftPoint { draft, .. } => [Element::Draft(draft)].into_iter().collect(),
     }
 }
@@ -941,6 +962,7 @@ pub fn label(model: &Model, drag: &Drag) -> &'static str {
         Grip::ObjectTurn { .. } => "Girar objeto",
         Grip::OpeningJamb { .. } => "Estirar hueco",
         Grip::TerrainPoint { .. } => "Mover punto del terreno",
+        Grip::PadCorner { .. } => "Mover esquina de explanación",
         Grip::DraftPoint { .. } => "Estirar",
     }
 }
@@ -1077,6 +1099,33 @@ pub fn apply(
                 }
             })
             .map(|_| None),
+        Grip::PadCorner {
+            terrain,
+            pad,
+            index,
+        } => {
+            // A crossing outline is refused; the ground is graded again.
+            let Some(t) = model.terrain(terrain) else {
+                return Err(ModelError::UnknownTerrain(terrain));
+            };
+            let mut pads = t.pads.clone();
+            let Some(p) = pads.get_mut(pad) else {
+                return Ok(None);
+            };
+            if let Some(q) = p.outline.get_mut(index) {
+                *q = drag.to;
+            }
+            if !archisim_core::is_simple_polygon(&p.outline)
+                || archisim_core::signed_area(&p.outline).abs() < 1e-6
+            {
+                return Err(ModelError::InvalidShape(
+                    "the outline of a platform crosses itself",
+                ));
+            }
+            model
+                .edit_terrain(terrain, |t| t.set_pads(pads))
+                .map(|_| None)
+        }
         Grip::PoolCorner { pool, index } => model
             .edit_pool(pool, |x| {
                 if let Some(p) = x.outline.get_mut(index) {
@@ -2285,7 +2334,9 @@ fn level_of(
             model.roof(roof).map(|r| r.level)
         }
         Grip::StairPoint { stair, .. } => model.stair(stair).map(|s| s.level),
-        Grip::TerrainPoint { terrain, .. } => model.terrain(terrain).map(|t| t.level),
+        Grip::TerrainPoint { terrain, .. } | Grip::PadCorner { terrain, .. } => {
+            model.terrain(terrain).map(|t| t.level)
+        }
         Grip::CurtainEnd { curtain, .. } => model.curtain_wall(curtain).map(|c| c.level),
         Grip::RailingPoint { railing, .. } => model.railing(railing).map(|r| r.level),
         Grip::RoadPoint { road, .. } => model.road(road).map(|r| r.level),

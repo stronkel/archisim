@@ -38,7 +38,273 @@ fn height(z: f64) -> String {
     }
 }
 
+/// Cut and fill of a terrain's platforms: in all, and each one's (cut,
+/// fill, and their areas in plan).
+#[derive(Debug, Clone, Default)]
+pub(crate) struct Earth {
+    pub total: (f64, f64),
+    pub pads: Vec<(f64, f64, f64, f64)>,
+}
+
+/// The platforms with ramp `i` going from height `a` to `b` along its
+/// direction (`len` long), its start kept.
+fn with_ramp(
+    pads: &[archisim_core::TerrainPad],
+    i: usize,
+    a: f64,
+    b: f64,
+    len: f64,
+) -> Vec<archisim_core::TerrainPad> {
+    let mut pads = pads.to_vec();
+    let p = &mut pads[i];
+    if let Some(mut t) = p.tilt {
+        let (s, c) = t.dir.sin_cos();
+        let lo = p
+            .outline
+            .iter()
+            .map(|q| (q.x - t.from.x) * c + (q.y - t.from.y) * s)
+            .fold(f64::INFINITY, f64::min);
+        t.grade = (b - a) / len.max(1e-9);
+        p.z = a - t.grade * lo;
+        p.tilt = Some(t);
+    }
+    pads
+}
+
+/// The rectangle of a ramp along its axis, `width` wide.
+fn ramp_outline(a: Point2, b: Point2, width: f64) -> Option<Vec<Point2>> {
+    archisim_core::TerrainPad::ramp(a, b, width, 0.0, 0.0, 1.0).map(|p| p.outline)
+}
+
+/// A rectangle from two opposite corners, counter-clockwise.
+fn rect_from(a: Point2, b: Point2) -> Vec<Point2> {
+    let (x0, x1) = (a.x.min(b.x), a.x.max(b.x));
+    let (y0, y1) = (a.y.min(b.y), a.y.max(b.y));
+    vec![
+        Point2::new(x0, y0),
+        Point2::new(x1, y0),
+        Point2::new(x1, y1),
+        Point2::new(x0, y1),
+    ]
+}
+
 impl ArchiSimApp {
+    /// A click with the terrain tool in the modes Plataforma and Rampa:
+    /// the corners of a platform (two for a rectangle, or a polygon closed
+    /// on its first corner) or the two ends of a ramp's axis.
+    fn pad_click(&mut self, p: Point2) {
+        if self.level_terrain().is_none() {
+            self.complain("Dibuja antes el terreno de esta planta: las plataformas se excavan o rellenan en él.");
+            return;
+        }
+        if self.terrain_line.last().is_some_and(|q| q.approx_eq(p)) {
+            return;
+        }
+        let s = self.terrain_settings;
+        if s.ramp {
+            if self.terrain_line.is_empty() {
+                self.terrain_line.push(p);
+                self.say("Rampa: haz clic donde acaba su eje.");
+                return;
+            }
+            let start = self.terrain_line[0];
+            self.terrain_line.clear();
+            let Some(id) = self.level_terrain() else {
+                return;
+            };
+            let t = self.ed.model().terrain(id);
+            let ground = |q: Point2| t.and_then(|t| t.height_at(q));
+            let z0 = s.pad_z.or_else(|| ground(start)).unwrap_or(0.0);
+            let z1 = s.ramp_end.or_else(|| ground(p)).unwrap_or(z0);
+            let Some(pad) = archisim_core::TerrainPad::ramp(
+                start,
+                p,
+                s.ramp_width,
+                z0,
+                z1,
+                1.0 / s.pad_run.max(0.1),
+            ) else {
+                self.complain("La rampa necesita dos extremos distintos y un ancho.");
+                return;
+            };
+            self.add_pad(id, pad);
+            return;
+        }
+        if s.pad_rect {
+            if self.terrain_line.is_empty() {
+                self.terrain_line.push(p);
+                self.say("Plataforma: haz clic en la esquina opuesta.");
+                return;
+            }
+            let a = self.terrain_line[0];
+            self.terrain_line.clear();
+            if (a.x - p.x).abs() < 0.05 || (a.y - p.y).abs() < 0.05 {
+                self.complain("La plataforma necesita dos esquinas opuestas.");
+                return;
+            }
+            self.finish_pad_outline(rect_from(a, p), a);
+            return;
+        }
+        // A polygon, closed by clicking on its first corner.
+        let reach = self.view.to_metres(REACH);
+        if self.terrain_line.len() >= 3 && self.terrain_line[0].distance(p) <= reach {
+            self.finish_pad();
+            return;
+        }
+        self.terrain_line.push(p);
+        self.say(format!(
+            "Plataforma: {} vértices · clic en el primero, Intro o doble clic: cerrarla.",
+            self.terrain_line.len()
+        ));
+    }
+
+    /// Closes the platform being drawn as a polygon.
+    fn finish_pad(&mut self) {
+        let path = std::mem::take(&mut self.terrain_line);
+        if path.len() < 3 {
+            self.complain("La plataforma necesita al menos tres vértices.");
+            self.terrain_line = path;
+            return;
+        }
+        if !archisim_core::is_simple_polygon(&path) {
+            self.complain("El contorno de la plataforma se cruza consigo mismo.");
+            return;
+        }
+        let first = path[0];
+        self.finish_pad_outline(path, first);
+    }
+
+    /// A flat platform on `outline`: at the height written, or at the
+    /// ground's at `first` (the first corner clicked).
+    fn finish_pad_outline(&mut self, outline: Vec<Point2>, first: Point2) {
+        let Some(id) = self.level_terrain() else {
+            return;
+        };
+        let s = &self.terrain_settings;
+        let z = s
+            .pad_z
+            .or_else(|| self.ed.model().terrain(id).and_then(|t| t.height_at(first)))
+            .unwrap_or(0.0);
+        let pad = archisim_core::TerrainPad::flat(outline, z, 1.0 / s.pad_run.max(0.1));
+        self.add_pad(id, pad);
+    }
+
+    fn add_pad(&mut self, id: TerrainId, pad: archisim_core::TerrainPad) {
+        let what = match pad.ramp_ends() {
+            Some((a, b, _)) => format!("Rampa de {} a {}", height(a), height(b)),
+            None => format!("Plataforma a {}", height(pad.z)),
+        };
+        match self.ed.add_terrain_pad(id, pad) {
+            Ok(i) => {
+                self.ed.selection = [Element::Terrain(id)].into_iter().collect();
+                self.terrain_pad_pick = Some(i);
+                let e = self.terrain_earth(id);
+                let (c, f) = e.pads.get(i).map_or((0.0, 0.0), |v| (v.0, v.1));
+                self.say(format!(
+                    "{what}: desmonte {} m³, terraplén {} m³. Sus esquinas se mueven con los pinzamientos.",
+                    volume(c),
+                    volume(f)
+                ));
+            }
+            Err(e) => self.complain(format!("No se puede explanar: {e}.")),
+        }
+    }
+
+    /// A click inside a platform of the selected terrain picks it.
+    fn pick_terrain_pad(&mut self, id: TerrainId, p: Point2) -> bool {
+        let Some(t) = self.ed.model().terrain(id) else {
+            return false;
+        };
+        // The smallest one there (one inside another is reached).
+        let hit = t
+            .pads
+            .iter()
+            .enumerate()
+            .filter(|(_, pad)| archisim_core::point_in_polygon(p, &pad.outline))
+            .min_by(|a, b| {
+                archisim_core::signed_area(&a.1.outline)
+                    .abs()
+                    .total_cmp(&archisim_core::signed_area(&b.1.outline).abs())
+            })
+            .map(|(i, pad)| (i, pad.label(i)));
+        match hit {
+            Some((i, name)) => {
+                self.terrain_pad_pick = Some(i);
+                self.say(format!(
+                    "{name}: sus datos en Propiedades · arrastra sus esquinas · Supr: quitarla."
+                ));
+                true
+            }
+            None => {
+                self.terrain_pad_pick = None;
+                false
+            }
+        }
+    }
+
+    /// Supr with a platform picked: that platform goes.
+    pub(super) fn delete_terrain_pad(&mut self) -> bool {
+        let Some(id) = self.selected_terrain() else {
+            return false;
+        };
+        let Some(i) = self.terrain_pad_pick else {
+            return false;
+        };
+        let Some(name) = self
+            .ed
+            .model()
+            .terrain(id)
+            .and_then(|t| t.pads.get(i))
+            .map(|p| p.label(i))
+        else {
+            self.terrain_pad_pick = None;
+            return false;
+        };
+        let r = self.ed.edit_terrain("Quitar explanación", id, |t| {
+            let mut pads = t.pads.clone();
+            pads.remove(i);
+            t.set_pads(pads);
+        });
+        self.terrain_pad_pick = None;
+        self.report(
+            r,
+            &format!("{name} quitada: el terreno vuelve a su sitio allí."),
+        );
+        true
+    }
+
+    /// The earthworks report, as text that can be copied.
+    pub(super) fn earthworks_report_dialog(&mut self, ctx: &egui::Context) {
+        let Some(text) = self.earthworks_report.clone() else {
+            return;
+        };
+        let mut open = true;
+        super::widgets::dialog("Informe de tierras")
+            .open(&mut open)
+            .default_width(720.0)
+            .default_height(420.0)
+            .show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    if ui.button("Copiar").clicked() {
+                        ui.ctx().copy_text(text.clone());
+                    }
+                    if ui.button("Actualizar").clicked() {
+                        self.earthworks_report =
+                            Some(archisim_plan::terrain::earthworks_report(self.ed.model()));
+                    }
+                });
+                egui::ScrollArea::both().show(ui, |ui| {
+                    ui.add(
+                        egui::Label::new(egui::RichText::new(&text).monospace())
+                            .wrap_mode(egui::TextWrapMode::Extend),
+                    );
+                });
+            });
+        if !open {
+            self.earthworks_report = None;
+        }
+    }
+
     /// The terrain the terrain tool adds to: the selected one on this
     /// level, or the first one there.
     pub(super) fn level_terrain(&self) -> Option<TerrainId> {
@@ -93,6 +359,10 @@ impl ArchiSimApp {
     }
 
     pub(super) fn terrain_click(&mut self, p: Point2) {
+        if self.terrain_settings.pad || self.terrain_settings.ramp {
+            self.pad_click(p);
+            return;
+        }
         if self.terrain_settings.wand {
             self.terrain_wand(p);
             return;
@@ -242,6 +512,13 @@ impl ArchiSimApp {
     }
 
     pub(super) fn finish_terrain(&mut self) {
+        if self.terrain_settings.pad && !self.terrain_settings.pad_rect {
+            self.finish_pad();
+            return;
+        }
+        if self.terrain_settings.pad || self.terrain_settings.ramp {
+            return;
+        }
         if self.terrain_settings.outline && !self.terrain_line.is_empty() {
             self.finish_terrain_outline();
             return;
@@ -329,10 +606,12 @@ impl ArchiSimApp {
                 Some(l) => self.ed.model().terrain(id).unwrap().lines[l].clone(),
                 None => {
                     self.terrain_pick.clear();
-                    return false;
+                    // Inside one of its platforms: that platform.
+                    return self.pick_terrain_pad(id, p);
                 }
             },
         };
+        self.terrain_pad_pick = None;
         if shift {
             for i in hit {
                 if let Some(k) = self.terrain_pick.iter().position(|&j| j == i) {
@@ -505,7 +784,25 @@ impl ArchiSimApp {
                 }
             }
         }
+        // The platform picked.
+        if let (Tool::Arrow, Some(i), Some(t)) = (
+            self.tool,
+            self.terrain_pad_pick,
+            self.selected_terrain()
+                .and_then(|id| self.ed.model().terrain(id)),
+        ) {
+            if let Some(pad) = t.pads.get(i) {
+                painter.add(Shape::closed_line(
+                    self.polygon(rect, &pad.outline),
+                    Stroke::new(2.5, ACCENT),
+                ));
+            }
+        }
         if self.tool != Tool::Terrain {
+            return;
+        }
+        if self.terrain_settings.pad || self.terrain_settings.ramp {
+            self.draw_pad_preview(painter, rect);
             return;
         }
         let ink = Stroke::new(1.0, ACCENT);
@@ -557,6 +854,159 @@ impl ArchiSimApp {
         }
     }
 
+    /// The tool's data for a platform or a ramp.
+    fn pad_tool_rows(&mut self, ui: &mut Ui) {
+        let ramp = self.terrain_settings.ramp;
+        if !ramp {
+            let mut rect = self.terrain_settings.pad_rect;
+            row(
+                ui,
+                "Rectángulo",
+                "Dos esquinas opuestas; si no, un polígono",
+                |ui, _| {
+                    ui.switch(&mut rect, "");
+                },
+            );
+            if rect != self.terrain_settings.pad_rect {
+                self.terrain_settings.pad_rect = rect;
+                self.terrain_line.clear();
+            }
+        }
+        // Heights: from the ground where clicked, or written.
+        let heights: &[(&str, &str, bool)] = if ramp {
+            &[
+                (
+                    "Cota de arranque",
+                    "Respecto al ±0,00; si no, la del terreno en el primer clic",
+                    true,
+                ),
+                (
+                    "Cota de llegada",
+                    "Respecto al ±0,00; si no, la del terreno en el segundo clic",
+                    false,
+                ),
+            ]
+        } else {
+            &[(
+                "Cota",
+                "Respecto al ±0,00; si no, la del terreno en la primera esquina",
+                true,
+            )]
+        };
+        for &(label, hint, start) in heights {
+            let value = if start {
+                self.terrain_settings.pad_z
+            } else {
+                self.terrain_settings.ramp_end
+            };
+            let mut written = value.is_some();
+            row(ui, &format!("{label} escrita"), hint, |ui, _| {
+                ui.switch(&mut written, "");
+            });
+            let mut v = value;
+            if written {
+                let now = value.unwrap_or(0.0);
+                row(ui, &format!("{label} (mm)"), hint, |ui, w| {
+                    if let Some(z) =
+                        length_field(ui, Id::unique(("tool-pad-z", start)), now, w - 8.0)
+                    {
+                        v = Some(z);
+                    }
+                });
+                v = Some(v.unwrap_or(now));
+            } else {
+                v = None;
+            }
+            if start {
+                self.terrain_settings.pad_z = v;
+            } else {
+                self.terrain_settings.ramp_end = v;
+            }
+        }
+        if ramp {
+            row(
+                ui,
+                "Ancho (mm)",
+                "De la rampa, centrada en su eje",
+                |ui, w| {
+                    if let Some(v) = length_field(
+                        ui,
+                        Id::unique("tool-ramp-width"),
+                        self.terrain_settings.ramp_width,
+                        w - 8.0,
+                    ) {
+                        self.terrain_settings.ramp_width = v.max(0.5);
+                    }
+                },
+            );
+        }
+        row(
+            ui,
+            "Talud (H:V)",
+            "Metros en horizontal por cada metro de altura (1 = 45°)",
+            |ui, w| {
+                ui.add_sized(
+                    [w - 8.0, 20.0],
+                    egui::DragValue::new(&mut self.terrain_settings.pad_run)
+                        .range(0.25..=10.0)
+                        .speed(0.05)
+                        .custom_formatter(|v, _| format!("{v:.2}").replace('.', ","))
+                        .custom_parser(|t| t.trim().replace(',', ".").parse().ok()),
+                );
+            },
+        );
+        props::note(
+            ui,
+            if ramp {
+                "Haz clic en la arrancada y en la llegada de su eje. Después, en Propiedades del terreno, se cambian sus cotas, su pendiente y su dirección, y con los pinzamientos sus esquinas."
+            } else {
+                "Rectángulo: dos clics en esquinas opuestas. Polígono: un clic por vértice; se cierra con un clic en el primero, Intro o doble clic. Esc quita el último vértice. Después, en Propiedades del terreno: su cota, talud y nombre, «Editar contorno» y los pinzamientos de sus esquinas."
+            },
+        );
+    }
+
+    /// The platform or ramp being drawn, as it would be.
+    fn draw_pad_preview(&self, painter: &egui::Painter, rect: Rect) {
+        let s = &self.terrain_settings;
+        let ink = Stroke::new(2.0, ACCENT);
+        let cursor = self.cursor.map(|c| c.point);
+        let shape: Option<Vec<Point2>> = match (self.terrain_line.first(), cursor) {
+            (Some(&a), Some(c)) if s.ramp => {
+                painter.add(Shape::line(
+                    self.polygon(rect, &[a, c]),
+                    Stroke::new(1.0, ACCENT),
+                ));
+                ramp_outline(a, c, s.ramp_width)
+            }
+            (Some(&a), Some(c)) if s.pad_rect => Some(rect_from(a, c)),
+            _ => None,
+        };
+        if let Some(o) = shape {
+            painter.add(Shape::closed_line(self.polygon(rect, &o), ink));
+        } else if !s.ramp && !s.pad_rect {
+            let mut line = self.terrain_line.clone();
+            if let (false, Some(c)) = (line.is_empty(), cursor) {
+                line.push(c);
+            }
+            if line.len() >= 2 {
+                painter.add(Shape::line(self.polygon(rect, &line), ink));
+            }
+        }
+        if let Some(c) = cursor {
+            let z = |v: Option<f64>| v.map_or("la cota del terreno".to_string(), height);
+            let text = if s.ramp {
+                if self.terrain_line.is_empty() {
+                    format!("Arranque de la rampa a {}", z(s.pad_z))
+                } else {
+                    format!("Llegada de la rampa a {}", z(s.ramp_end))
+                }
+            } else {
+                format!("Plataforma a {}", z(s.pad_z))
+            };
+            self.draw_label(painter, rect, c, text);
+        }
+    }
+
     pub(super) fn terrain_tool_properties(&mut self, ui: &mut Ui) {
         props::title(ui, "Herramienta Terreno · lo que vas a crear");
         group(ui, "tool-terrain", "Terreno", |ui| {
@@ -565,11 +1015,15 @@ impl ArchiSimApp {
                 self.terrain_settings.line,
                 self.terrain_settings.outline,
                 self.terrain_settings.wand,
+                self.terrain_settings.pad,
+                self.terrain_settings.ramp,
             );
             let mut mode = match before {
-                (_, _, true) => 3u8,
-                (_, true, _) => 2,
-                (true, _, _) => 1,
+                (_, _, _, _, true) => 5u8,
+                (_, _, _, true, _) => 4,
+                (_, _, true, _, _) => 3,
+                (_, true, _, _, _) => 2,
+                (true, _, _, _, _) => 1,
                 _ => 0,
             };
             segmented(
@@ -595,19 +1049,45 @@ impl ArchiSimApp {
                     ),
                 ],
             );
+            ui.add_space(2.0);
+            segmented(
+                ui,
+                "terrain-mode-pads",
+                &mut mode,
+                &[
+                    (
+                        4,
+                        "Plataforma",
+                        "Una explanación horizontal: rectángulo o polígono, a la cota escrita o a la del terreno en su primera esquina",
+                    ),
+                    (
+                        5,
+                        "Rampa",
+                        "Una plataforma inclinada: su eje con dos clics, de la arrancada a la llegada",
+                    ),
+                ],
+            );
             self.terrain_settings.line = mode == 1;
             self.terrain_settings.outline = mode == 2;
             self.terrain_settings.wand = mode == 3;
+            self.terrain_settings.pad = mode == 4;
+            self.terrain_settings.ramp = mode == 5;
             if before
                 != (
                     self.terrain_settings.line,
                     self.terrain_settings.outline,
                     self.terrain_settings.wand,
+                    self.terrain_settings.pad,
+                    self.terrain_settings.ramp,
                 )
             {
                 self.terrain_line.clear();
             }
             ui.add_space(4.0);
+            if mode >= 4 {
+                self.pad_tool_rows(ui);
+                return;
+            }
             row(
                 ui,
                 if self.terrain_settings.line {
@@ -675,6 +1155,9 @@ impl ArchiSimApp {
                 ),
             }
         });
+        if self.terrain_settings.pad || self.terrain_settings.ramp {
+            return;
+        }
         ui.add_space(6.0);
         props::note(
             ui,
@@ -698,7 +1181,8 @@ impl ArchiSimApp {
         );
         let (lo, hi) = t.range();
         // What the plan shows of it (E5).
-        let (mut heights, mut arrows) = (t.show_heights, t.slope_arrows);
+        let (mut heights, mut arrows, mut works) =
+            (t.show_heights, t.slope_arrows, t.show_earthworks);
         group(ui, "terrain-show", "En planta", |ui| {
             row(
                 ui,
@@ -716,11 +1200,22 @@ impl ArchiSimApp {
                     ui.switch(&mut arrows, "");
                 },
             );
+            if !t.pads.is_empty() {
+                row(
+                    ui,
+                    "Desmonte y terraplén",
+                    "Coloreados (rojo: se excava; verde: se rellena), con sus volúmenes",
+                    |ui, _| {
+                        ui.switch(&mut works, "");
+                    },
+                );
+            }
         });
-        if (heights, arrows) != (t.show_heights, t.slope_arrows) {
+        if (heights, arrows, works) != (t.show_heights, t.slope_arrows, t.show_earthworks) {
             let r = self.ed.edit_terrain("Terreno en planta", id, |t| {
                 t.show_heights = heights;
                 t.slope_arrows = arrows;
+                t.show_earthworks = works;
             });
             self.report(r, "Terreno en planta cambiado.");
         }
@@ -787,49 +1282,210 @@ impl ArchiSimApp {
 
     /// Cut and fill of a terrain's platforms, kept while the model does
     /// not change.
+    #[cfg(test)]
     pub(super) fn terrain_earthworks(&mut self, id: TerrainId) -> (f64, f64) {
+        self.terrain_earth(id).total
+    }
+
+    /// Cut and fill of a terrain's platforms, all and each one's, kept
+    /// while the model does not change.
+    pub(super) fn terrain_earth(&mut self, id: TerrainId) -> Earth {
         let rev = self.ed.revision();
-        if let Some((r, t, v)) = self.earthworks_cache {
-            if r == rev && t == id {
-                return v;
+        if let Some((r, t, v)) = &self.earthworks_cache {
+            if *r == rev && *t == id {
+                return v.clone();
             }
         }
         let v = self
             .ed
             .model()
             .terrain(id)
-            .map_or((0.0, 0.0), |t| t.earthworks());
-        self.earthworks_cache = Some((rev, id, v));
+            .map_or_else(Earth::default, |t| {
+                let each: Vec<(f64, f64, f64, f64)> = t
+                    .pad_earthworks()
+                    .iter()
+                    .map(|e| {
+                        let v = |m: &archisim_core::EarthMesh| {
+                            if m.is_empty() {
+                                0.0
+                            } else {
+                                m.volume
+                            }
+                        };
+                        (v(&e.cut), v(&e.fill), e.cut.area, e.fill.area)
+                    })
+                    .collect();
+                Earth {
+                    total: each.iter().fold((0.0, 0.0), |(c, f), e| (c + e.0, f + e.1)),
+                    pads: each,
+                }
+            });
+        self.earthworks_cache = Some((rev, id, v.clone()));
         v
     }
 
-    /// Platforms dug or filled into the ground (E8): one click for the
-    /// building's, their heights and banks, and the earthworks.
+    /// Platforms dug or filled into the ground (E8, bloque Terreno): one
+    /// click for the building's; each one with its name, its height (a
+    /// ramp's at both ends, or its grade and direction), its banks and its
+    /// cut and fill; the earthworks and their report.
     fn terrain_pads_group(&mut self, ui: &mut Ui, id: TerrainId, t: &archisim_core::Terrain) {
-        let (cut, fill) = self.terrain_earthworks(id);
+        let earth = self.terrain_earth(id);
+        let (cut, fill) = earth.total;
         let mut change: Option<Vec<archisim_core::TerrainPad>> = None;
+        let mut sketch: Option<usize> = None;
+        let picked = self.terrain_pad_pick.filter(|i| *i < t.pads.len());
         group(ui, "terrain-pads", "Explanaciones", |ui| {
             if t.pads.is_empty() {
                 props::note(
                     ui,
-                    "Plataformas excavadas o rellenas bajo el edificio, con su talud hasta el terreno. «Explanar bajo el edificio» hace una por cada forjado de esta planta y de los sótanos, a su cara inferior, con 50 cm de margen y talud 1:1.",
+                    "Plataformas excavadas o rellenas, con su talud hasta el terreno. «Explanar bajo el edificio» hace una por cada forjado de esta planta y de los sótanos, a su cara inferior, con 50 cm de margen y talud 1:1. Con la herramienta Terreno, modos Plataforma y Rampa, se dibujan a mano.",
                 );
             }
             for (i, pad) in t.pads.iter().enumerate() {
+                let open = picked == Some(i);
+                let title = format!("{}{}", if open { "▾ " } else { "▸ " }, pad.label(i));
+                ui.horizontal(|ui| {
+                    ui.add_space(4.0);
+                    if ui
+                        .selectable_label(open, title)
+                        .on_hover_text(pad.kind.name())
+                        .clicked()
+                    {
+                        self.terrain_pad_pick = if open { None } else { Some(i) };
+                    }
+                    if let Some(&(c, f, _, _)) = earth.pads.get(i) {
+                        ui.weak(format!("D {} · T {} m³", volume(c), volume(f)));
+                    }
+                });
+                if !open {
+                    continue;
+                }
+                text_row(
+                    ui,
+                    "Clase",
+                    "Para qué es; dice su clase en IFC",
+                    pad.kind.name(),
+                );
                 row(
                     ui,
-                    &format!("Plataforma {} (mm)", i + 1),
-                    "Cota de la plataforma, respecto al ±0,00",
+                    "Nombre",
+                    "En las mediciones, el informe y el IFC",
                     |ui, w| {
-                        if let Some(v) =
-                            length_field(ui, Id::unique(("terrain-pad-z", id.0, i)), pad.z, w - 8.0)
-                        {
+                        if let Some(v) = text_edit_committed(
+                            ui,
+                            Id::unique(("terrain-pad-name", id.0, i)),
+                            &pad.label(i),
+                            w - 8.0,
+                        ) {
                             let mut pads = t.pads.clone();
-                            pads[i].z = v;
+                            pads[i].name = v.trim().to_string();
                             change = Some(pads);
                         }
                     },
                 );
+                match pad.ramp_ends() {
+                    None => row(
+                        ui,
+                        "Cota (mm)",
+                        "De la plataforma, respecto al ±0,00",
+                        |ui, w| {
+                            if let Some(v) = length_field(
+                                ui,
+                                Id::unique(("terrain-pad-z", id.0, i)),
+                                pad.z,
+                                w - 8.0,
+                            ) {
+                                let mut pads = t.pads.clone();
+                                pads[i].z = v;
+                                change = Some(pads);
+                            }
+                        },
+                    ),
+                    Some((z0, z1, len)) => {
+                        let tilt = pad.tilt.unwrap_or(archisim_core::PadTilt {
+                            from: pad.outline[0],
+                            dir: 0.0,
+                            grade: 0.0,
+                        });
+                        for (label, hint, z, start) in [
+                            ("Cota de arranque (mm)", "Donde empieza la rampa", z0, true),
+                            ("Cota de llegada (mm)", "Donde acaba la rampa", z1, false),
+                        ] {
+                            row(ui, label, hint, |ui, w| {
+                                if let Some(v) = length_field(
+                                    ui,
+                                    Id::unique(("terrain-ramp-z", id.0, i, start)),
+                                    z,
+                                    w - 8.0,
+                                ) {
+                                    let (a, b) = if start { (v, z1) } else { (z0, v) };
+                                    change = Some(with_ramp(&t.pads, i, a, b, len));
+                                }
+                            });
+                        }
+                        row(
+                            ui,
+                            "Pendiente (%)",
+                            "Positiva: sube de la arrancada a la llegada",
+                            |ui, w| {
+                                let shown = format!("{:.2}", (z1 - z0) / len.max(1e-9) * 100.0)
+                                    .replace('.', ",");
+                                if let Some(v) = text_edit_committed(
+                                    ui,
+                                    Id::unique(("terrain-ramp-grade", id.0, i)),
+                                    &shown,
+                                    w - 8.0,
+                                ) {
+                                    match parse_number(v.trim().trim_end_matches('%')) {
+                                        Some(g) => {
+                                            let b = z0 + g / 100.0 * len;
+                                            change = Some(with_ramp(&t.pads, i, z0, b, len));
+                                        }
+                                        None => {
+                                            self.complain("Escribe la pendiente en %, p. ej. 8.")
+                                        }
+                                    }
+                                }
+                            },
+                        );
+                        row(
+                            ui,
+                            "Dirección (°)",
+                            "Hacia donde va la rampa, desde el eje X en sentido antihorario",
+                            |ui, w| {
+                                let shown =
+                                    format!("{:.1}", tilt.dir.to_degrees()).replace('.', ",");
+                                if let Some(v) = text_edit_committed(
+                                    ui,
+                                    Id::unique(("terrain-ramp-dir", id.0, i)),
+                                    &shown,
+                                    w - 8.0,
+                                ) {
+                                    if let Some(d) = parse_number(v.trim().trim_end_matches('°')) {
+                                        let mut pads = t.pads.clone();
+                                        let p = &mut pads[i];
+                                        // The start keeps its height.
+                                        let from = p.tilt.map_or(p.outline[0], |t| t.from);
+                                        let z_from = p.z_at(from);
+                                        p.tilt = Some(archisim_core::PadTilt {
+                                            from,
+                                            dir: d.to_radians(),
+                                            grade: tilt.grade,
+                                        });
+                                        p.z = z_from;
+                                        change = Some(pads);
+                                    }
+                                }
+                            },
+                        );
+                        text_row(
+                            ui,
+                            "Longitud",
+                            "En la dirección de la rampa",
+                            &format!("{} m", volume(len)),
+                        );
+                    }
+                }
                 row(
                     ui,
                     "Talud (H:V)",
@@ -851,39 +1507,100 @@ impl ArchiSimApp {
                         }
                     },
                 );
+                if let Some(&(c, f, ca, fa)) = earth.pads.get(i) {
+                    text_row(
+                        ui,
+                        "Desmonte",
+                        "Excavado por esta plataforma y su talud",
+                        &format!("{} m³ · {} m²", volume(c), volume(ca)),
+                    );
+                    text_row(
+                        ui,
+                        "Terraplén",
+                        "Rellenado por esta plataforma y su talud",
+                        &format!("{} m³ · {} m²", volume(f), volume(fa)),
+                    );
+                }
+                ui.horizontal_wrapped(|ui| {
+                    ui.add_space(4.0);
+                    if ui
+                        .button("Editar contorno")
+                        .on_hover_text("En modo boceto, como el de los forjados")
+                        .clicked()
+                    {
+                        sketch = Some(i);
+                    }
+                    if ui.button("Quitar").clicked() {
+                        let mut pads = t.pads.clone();
+                        pads.remove(i);
+                        self.terrain_pad_pick = None;
+                        change = Some(pads);
+                    }
+                });
             }
             if !t.pads.is_empty() {
                 text_row(
                     ui,
                     "Desmonte",
-                    "Tierra que se excava",
+                    "Tierra que se excava (todas)",
                     &format!("{} m³", volume(cut)),
                 );
                 text_row(
                     ui,
                     "Terraplén",
-                    "Tierra que se rellena",
+                    "Tierra que se rellena (todas)",
                     &format!("{} m³", volume(fill)),
+                );
+                let balance = cut - fill;
+                text_row(
+                    ui,
+                    "Compensación",
+                    "Desmonte menos terraplén, sin esponjamiento",
+                    &if balance >= 0.0 {
+                        format!("sobran {} m³", volume(balance))
+                    } else {
+                        format!("faltan {} m³", volume(-balance))
+                    },
                 );
             }
             ui.horizontal_wrapped(|ui| {
                 ui.add_space(4.0);
                 if ui
                     .button("Explanar bajo el edificio")
-                    .on_hover_text("Plataformas bajo los forjados de esta planta y de los sótanos")
+                    .on_hover_text("Plataformas bajo los forjados de esta planta y de los sótanos (las dibujadas a mano se quedan)")
                     .clicked()
                 {
-                    change = Some(self.ed.model().building_pads(
+                    let mut pads: Vec<archisim_core::TerrainPad> = t
+                        .pads
+                        .iter()
+                        .filter(|p| !p.kind.from_building())
+                        .cloned()
+                        .collect();
+                    let mut building = self.ed.model().building_pads(
                         id,
                         archisim_core::PAD_MARGIN,
                         archisim_core::PAD_SLOPE,
-                    ));
+                    );
+                    building.append(&mut pads);
+                    change = Some(building);
                 }
                 if !t.pads.is_empty() && ui.button("Quitar explanaciones").clicked() {
+                    self.terrain_pad_pick = None;
                     change = Some(Vec::new());
+                }
+                if ui
+                    .button("Informe de tierras")
+                    .on_hover_text("Volúmenes por plataforma y piscina, superficies y compensación")
+                    .clicked()
+                {
+                    self.earthworks_report =
+                        Some(archisim_plan::terrain::earthworks_report(self.ed.model()));
                 }
             });
         });
+        if let Some(i) = sketch {
+            self.start_sketch(crate::sketch::SketchTarget::TerrainPad(id, i));
+        }
         if let Some(pads) = change {
             let none = pads.is_empty();
             let n = pads.len();

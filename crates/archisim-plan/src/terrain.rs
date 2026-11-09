@@ -108,44 +108,8 @@ pub fn draw_terrain(s: &mut String, model: &Model, t: &Terrain, k: f64) {
             num(1.5 * k)
         );
     }
-    // Platforms (E8): their edge, and their height inside.
-    for pad in &t.pads {
-        let pts: Vec<String> = pad.outline.iter().map(|q| pt(*q)).collect();
-        let _ = writeln!(
-            s,
-            r#"<path class="terrain-pad" d="M{} Z" fill="none" stroke="{INK}" stroke-width="{}" stroke-dasharray="{} {} {} {}"/>"#,
-            pts.join(" L"),
-            num(pens().view * k),
-            num(6.0 * k),
-            num(1.2 * k),
-            num(1.2 * k),
-            num(1.2 * k),
-        );
-        // The height outside its longest side, along it (inside, the
-        // building covers it).
-        let n = pad.outline.len();
-        let (a, b) = (0..n)
-            .map(|i| (pad.outline[i], pad.outline[(i + 1) % n]))
-            .max_by(|x, y| x.0.distance(x.1).total_cmp(&y.0.distance(y.1)))
-            .unwrap_or((pad.outline[0], pad.outline[0]));
-        let along = (b - a).normalized().unwrap_or(Point2::new(1.0, 0.0));
-        // Counter-clockwise: outside is to the right.
-        let out = along.perp_left() * -1.0;
-        let dir = if along.x < 0.0 { along * -1.0 } else { along };
-        let mid = (a + b) * 0.5 + out * (th * 1.4);
-        let _ = writeln!(
-            s,
-            r#"<path class="terrain-pad-height" d="{}" {}/>"#,
-            text_path(
-                &format!("Explanación {}", height(pad.z)),
-                mid,
-                dir,
-                th,
-                Align::Centre
-            ),
-            crate::lettering::paint(th, INK)
-        );
-    }
+    // Platforms (E8): their edge, their banks and their height.
+    draw_pads(s, t, k, th);
     // Slope arrows, downhill, with their gradient (E5).
     if t.slope_arrows {
         let step = slope_step(t);
@@ -397,6 +361,332 @@ fn draw_growth(s: &mut String, model: &Model, patch: &archisim_core::TerrainPatc
     }
 }
 
+/// Colour of the ground dug, and of the ground filled, when the plan shows
+/// them.
+const CUT_TINT: &str = "#d9735f";
+const FILL_TINT: &str = "#5f9f6a";
+
+/// Volumes as written beside a platform: "23,4".
+fn m3(v: f64) -> String {
+    format!("{v:.1}").replace('.', ",")
+}
+
+/// The platforms of a terrain (E8 and bloque Terreno): with the
+/// earthworks shown, the ground dug and filled coloured; each one's edge
+/// (dash-dot), its banks (the line where they meet the ground and the
+/// bank ticks, long and short, from the top of the bank towards its
+/// foot), its name and height (a ramp's, from one end to the other with
+/// an arrow uphill and its grade) and, with the earthworks shown, its cut
+/// and fill.
+fn draw_pads(s: &mut String, t: &Terrain, k: f64, th: f64) {
+    if t.pads.is_empty() {
+        return;
+    }
+    let plan = t.earth_plan(t.show_earthworks);
+    if t.show_earthworks {
+        if let Some(map) = &plan.map {
+            for (sign, tint, class) in [
+                (-1.0, CUT_TINT, "terrain-cut"),
+                (1.0, FILL_TINT, "terrain-fill"),
+            ] {
+                let mut d = String::new();
+                for j in 0..map.ny.saturating_sub(1) {
+                    let y0 = map.lo.y + j as f64 * map.step;
+                    let mut run: Option<usize> = None;
+                    for i in 0..map.nx {
+                        let on = i + 1 < map.nx && map.cell(i, j).is_some_and(|c| c * sign > 0.02);
+                        match (on, run) {
+                            (true, None) => run = Some(i),
+                            (false, Some(i0)) => {
+                                let x0 = map.lo.x + i0 as f64 * map.step;
+                                let x1 = map.lo.x + i as f64 * map.step;
+                                let _ = write!(
+                                    d,
+                                    "M{} L{} L{} L{} Z ",
+                                    pt(Point2::new(x0, y0)),
+                                    pt(Point2::new(x1, y0)),
+                                    pt(Point2::new(x1, y0 + map.step)),
+                                    pt(Point2::new(x0, y0 + map.step))
+                                );
+                                run = None;
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                if !d.is_empty() {
+                    let _ = writeln!(
+                        s,
+                        r#"<path class="{class}" d="{}" fill="{tint}" fill-opacity="0.35" stroke="none"/>"#,
+                        d.trim_end()
+                    );
+                }
+            }
+        }
+    }
+    let (banks, volumes) = (&plan.banks, &plan.volumes);
+    for (i, pad) in t.pads.iter().enumerate() {
+        let pts: Vec<String> = pad.outline.iter().map(|q| pt(*q)).collect();
+        let _ = writeln!(
+            s,
+            r#"<path class="terrain-pad" d="M{} Z" fill="none" stroke="{INK}" stroke-width="{}" stroke-dasharray="{} {} {} {}"/>"#,
+            pts.join(" L"),
+            num(pens().view * k),
+            num(6.0 * k),
+            num(1.2 * k),
+            num(1.2 * k),
+            num(1.2 * k),
+        );
+        // Its banks: where they meet the ground, and the ticks.
+        let marks = banks.get(i).map(Vec::as_slice).unwrap_or(&[]);
+        let mut edge_line = String::new();
+        let mut ticks = String::new();
+        for (n, m) in marks.iter().enumerate() {
+            if m.edge.distance(m.ground) < 0.05 {
+                continue;
+            }
+            if let Some(next) = marks
+                .get(n + 1)
+                .or(marks.first())
+                .filter(|_| marks.len() > 2)
+            {
+                if next.edge.distance(next.ground) >= 0.05
+                    && next.ground.distance(m.ground) < 3.0
+                    && next.cut == m.cut
+                {
+                    let _ = write!(edge_line, "M{} L{} ", pt(m.ground), pt(next.ground));
+                }
+            }
+            let (top, foot) = m.top_foot();
+            let end = if n % 2 == 0 {
+                foot
+            } else {
+                top + (foot - top) * 0.5
+            };
+            let _ = write!(ticks, "M{} L{} ", pt(top), pt(end));
+        }
+        if !edge_line.is_empty() {
+            let _ = writeln!(
+                s,
+                r#"<path class="terrain-bank-edge" d="{}" fill="none" stroke="{INK}" stroke-width="{}"/>"#,
+                edge_line.trim_end(),
+                num(pens().hatch * k)
+            );
+        }
+        if !ticks.is_empty() {
+            let _ = writeln!(
+                s,
+                r#"<path class="terrain-bank" d="{}" fill="none" stroke="{CONTOUR}" stroke-width="{}"/>"#,
+                ticks.trim_end(),
+                num(pens().hatch * k)
+            );
+        }
+        // Its name and height outside its longest side, along it (inside,
+        // the building covers it).
+        let n = pad.outline.len();
+        let (a, b) = (0..n)
+            .map(|i| (pad.outline[i], pad.outline[(i + 1) % n]))
+            .max_by(|x, y| x.0.distance(x.1).total_cmp(&y.0.distance(y.1)))
+            .unwrap_or((pad.outline[0], pad.outline[0]));
+        let along = (b - a).normalized().unwrap_or(Point2::new(1.0, 0.0));
+        // Counter-clockwise: outside is to the right.
+        let out = along.perp_left() * -1.0;
+        let dir = if along.x < 0.0 { along * -1.0 } else { along };
+        let label = match pad.ramp_ends() {
+            Some((z0, z1, len)) => format!(
+                "{} {} a {} · {} %",
+                pad.label(i),
+                height(z0),
+                height(z1),
+                format!("{:.1}", ((z1 - z0) / len.max(1e-9)).abs() * 100.0).replace('.', ",")
+            ),
+            None => format!("{} {}", pad.label(i), height(pad.z)),
+        };
+        // Beyond the banks, if they run along that side.
+        let reach = marks
+            .iter()
+            .filter(|m| {
+                let ab = b - a;
+                let t = ((m.edge - a).dot(ab) / ab.dot(ab).max(1e-12)).clamp(0.0, 1.0);
+                m.edge.distance(a + ab * t) < 0.05
+            })
+            .map(|m| m.edge.distance(m.ground))
+            .fold(0.0, f64::max);
+        let mid = (a + b) * 0.5 + out * (reach + th * 1.4);
+        let _ = writeln!(
+            s,
+            r#"<path class="terrain-pad-height" d="{}" {}/>"#,
+            text_path(&label, mid, dir, th, Align::Centre),
+            crate::lettering::paint(th, INK)
+        );
+        if let Some(v) = volumes.get(i) {
+            let text = format!(
+                "Desmonte {} m³ · Terraplén {} m³",
+                m3(v.cut.volume),
+                m3(v.fill.volume)
+            );
+            let below = mid + out * (th * 1.6);
+            let _ = writeln!(
+                s,
+                r#"<path class="terrain-pad-volumes" d="{}" {}/>"#,
+                text_path(&text, below, dir, th * 0.85, Align::Centre),
+                crate::lettering::paint(th * 0.85, INK)
+            );
+        }
+        // A ramp: an arrow uphill along its middle.
+        if let Some(tilt) = pad.tilt.filter(|t| t.grade.abs() > 1e-6) {
+            let mut up = Point2::new(tilt.dir.cos(), tilt.dir.sin());
+            if tilt.grade < 0.0 {
+                up = up * -1.0;
+            }
+            let c = pad
+                .outline
+                .iter()
+                .fold(Point2::new(0.0, 0.0), |acc, p| acc + *p * (1.0 / n as f64));
+            let span = pad
+                .outline
+                .iter()
+                .map(|p| (*p - c).dot(up).abs())
+                .fold(0.0, f64::max);
+            let (p0, p1) = (c - up * (span * 0.6), c + up * (span * 0.6));
+            let nrm = up.perp_left();
+            let head = 2.5 * k;
+            let _ = writeln!(
+                s,
+                r#"<path class="terrain-ramp" d="M{} L{} M{} L{} L{}" fill="none" stroke="{INK}" stroke-width="{}"/>"#,
+                pt(p0),
+                pt(p1),
+                pt(p1 - up * head + nrm * (head * 0.5)),
+                pt(p1),
+                pt(p1 - up * head - nrm * (head * 0.5)),
+                num(pens().view * k)
+            );
+        }
+    }
+}
+
+/// A number with a decimal comma.
+fn dec(v: f64, places: usize) -> String {
+    format!("{v:.places$}").replace('.', ",")
+}
+
+/// What each earthwork is, as the report and the IFC say it.
+pub fn earthwork_kind(e: &archisim_core::Earthwork) -> &'static str {
+    use archisim_core::{EarthSide, EarthUse, PadKind};
+    match (e.side, e.what) {
+        (EarthSide::Fill, _) => "Terraplén",
+        (_, EarthUse::Pool) => "Vaciado de piscina",
+        (_, EarthUse::Pad(PadKind::Basement)) => "Vaciado de sótano",
+        (_, EarthUse::Pad(PadKind::Ramp)) => "Desmonte de rampa",
+        _ => "Desmonte",
+    }
+}
+
+/// The earthworks report: every platform with its height and banks, then
+/// each earthwork with its area in plan, its greatest depth and its
+/// volume, and the totals with the balance between cut and fill (no
+/// swelling of the soil: volumes as dug and as placed).
+pub fn earthworks_report(model: &Model) -> String {
+    let mut s = String::new();
+    let _ = writeln!(s, "Movimiento de tierras · {}", model.project_name);
+    for t in model.terrains().filter(|t| !t.pads.is_empty()) {
+        let level = model
+            .level(t.level)
+            .map_or(String::new(), |l| l.name.clone());
+        let _ = writeln!(s, "\nTerreno de {level}: {} explanaciones", t.pads.len());
+        for (i, p) in t.pads.iter().enumerate() {
+            let bank = format!("talud {}:1", dec(1.0 / p.slope, 2));
+            let at = match p.ramp_ends() {
+                Some((a, b, len)) => format!(
+                    "de {} a {} en {} m ({} %)",
+                    height(a),
+                    height(b),
+                    dec(len, 2),
+                    dec(((b - a) / len.max(1e-9)).abs() * 100.0, 1)
+                ),
+                None => format!("a {}", height(p.z)),
+            };
+            let area = archisim_core::signed_area(&p.outline).abs();
+            let _ = writeln!(
+                s,
+                "  {} ({}): {at}, {} m², {bank}",
+                p.label(i),
+                p.kind.name(),
+                dec(area, 1)
+            );
+        }
+    }
+    let works = model.earthworks();
+    if works.is_empty() {
+        let _ = writeln!(s, "\nSin movimiento de tierras.");
+        return s;
+    }
+    let _ = writeln!(
+        s,
+        "\n  {:<44} {:<20} {:>10} {:>9} {:>10}",
+        "Elemento", "Clase", "Planta m²", "Prof. m", "Volumen m³"
+    );
+    let (mut cut, mut fill, mut dig) = (0.0, 0.0, 0.0);
+    let (mut cut_area, mut fill_area) = (0.0, 0.0);
+    for e in &works {
+        let kind = earthwork_kind(e);
+        let _ = writeln!(
+            s,
+            "  {:<44} {:<20} {:>10} {:>9} {:>10}",
+            e.name,
+            kind,
+            dec(e.mesh.area, 1),
+            dec(e.mesh.depth, 2),
+            dec(e.mesh.volume, 2)
+        );
+        match (e.side, kind.starts_with("Vaciado")) {
+            (archisim_core::EarthSide::Fill, _) => {
+                fill += e.mesh.volume;
+                fill_area += e.mesh.area;
+            }
+            (_, true) => dig += e.mesh.volume,
+            _ => {
+                cut += e.mesh.volume;
+                cut_area += e.mesh.area;
+            }
+        }
+    }
+    let out = cut + dig;
+    let _ = writeln!(s);
+    let _ = writeln!(
+        s,
+        "  Desmonte: {} m³ en {} m²",
+        dec(cut, 2),
+        dec(cut_area, 1)
+    );
+    if dig > 0.0 {
+        let _ = writeln!(s, "  Vaciados (sótanos y piscinas): {} m³", dec(dig, 2));
+    }
+    let _ = writeln!(
+        s,
+        "  Terraplén: {} m³ en {} m²",
+        dec(fill, 2),
+        dec(fill_area, 1)
+    );
+    let balance = out - fill;
+    let _ = writeln!(
+        s,
+        "  Compensación: se excavan {} m³ y se rellenan {} m³: {}",
+        dec(out, 2),
+        dec(fill, 2),
+        if balance >= 0.0 {
+            format!("sobran {} m³ (a vertedero o a otro uso)", dec(balance, 2))
+        } else {
+            format!("faltan {} m³ (de préstamo)", dec(-balance, 2))
+        }
+    );
+    let _ = writeln!(
+        s,
+        "  (Volúmenes en perfil, sin esponjamiento ni compactación.)"
+    );
+    s
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -528,6 +818,7 @@ mod tests {
                 ],
                 z: 0.5,
                 slope: 1.0,
+                ..archisim_core::TerrainPad::flat(Vec::new(), 0.0, 1.0)
             }])
         })
         .unwrap();
@@ -541,5 +832,12 @@ mod tests {
         assert_eq!(*title, "Movimiento de tierras");
         assert_eq!(items[0].key, "tierras:desmonte");
         assert!(items[0].total() > 49.0 * 0.35, "{}", items[0].total());
+        // Its banks, and with the earthworks shown, the ground coloured
+        // and its volumes.
+        assert!(graded.contains("terrain-bank"));
+        assert!(!graded.contains("terrain-cut"));
+        m.edit_terrain(id, |t| t.show_earthworks = true).unwrap();
+        let shown = draw(&m);
+        assert!(shown.contains("terrain-cut") && shown.contains("terrain-pad-volumes"));
     }
 }

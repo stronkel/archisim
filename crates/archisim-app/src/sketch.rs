@@ -18,6 +18,8 @@ pub enum SketchTarget {
     Slab(SlabId),
     Roof(RoofId),
     Terrain(TerrainId),
+    /// A platform (or a ramp) of a terrain, by its index (bloque Terreno).
+    TerrainPad(TerrainId, usize),
     /// The zones a face looking up or down is divided in (G3: «Dividir
     /// cara»): the element and its face.
     Zones(crate::pick::Element, archisim_core::FaceRef),
@@ -105,6 +107,10 @@ impl Sketch {
             SketchTarget::Roof(id) => {
                 let r = model.roof(id)?;
                 (vec![r.outline.clone()], r.slopes.clone(), Vec::new())
+            }
+            SketchTarget::TerrainPad(id, i) => {
+                let pad = model.terrain(id)?.pads.get(i)?;
+                (vec![pad.outline.clone()], Vec::new(), Vec::new())
             }
             SketchTarget::Terrain(id) => {
                 let t = model.terrain(id)?;
@@ -336,6 +342,17 @@ impl Sketch {
             | SketchTarget::WallProfile(_)
             | SketchTarget::Road(_)
             | SketchTarget::RoadEdges(_) => {}
+            SketchTarget::TerrainPad(id, i) => {
+                // Graded again for its new outline.
+                m.edit_terrain(id, |t| {
+                    let mut pads = t.pads.clone();
+                    if let Some(p) = pads.get_mut(i) {
+                        p.outline = outline;
+                    }
+                    t.set_pads(pads);
+                })
+                .map_err(SketchError::Model)?;
+            }
             SketchTarget::Terrain(id) if self.terrain.is_empty() => {
                 // An edge drawn by hand (E5): the terrain takes the new one.
                 m.edit_terrain(id, |t| t.set_outline(outline))
@@ -609,7 +626,9 @@ impl Sketch {
         match self.target {
             SketchTarget::Slab(id) => crate::pick::Element::Slab(id),
             SketchTarget::Roof(id) => crate::pick::Element::Roof(id),
-            SketchTarget::Terrain(id) => crate::pick::Element::Terrain(id),
+            SketchTarget::Terrain(id) | SketchTarget::TerrainPad(id, _) => {
+                crate::pick::Element::Terrain(id)
+            }
             SketchTarget::Zones(e, _) => e,
             SketchTarget::WallFace(w, _) | SketchTarget::WallProfile(w) => {
                 crate::pick::Element::Wall(w)

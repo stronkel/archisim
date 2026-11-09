@@ -393,24 +393,31 @@ fn facade_pieces(model: &Model) -> Vec<Item> {
     items.into_values().collect()
 }
 
-/// Cut and fill of the terrains' platforms (E8), m³.
+/// Cut and fill of the terrains' platforms (E8), one line per platform,
+/// and the dig of basements and pools ("vaciado"), m³.
 fn earthworks(model: &Model) -> Vec<Item> {
     let mut cut = Vec::new();
     let mut fill = Vec::new();
-    for t in model.terrains().filter(|t| !t.pads.is_empty()) {
-        let (c, f) = t.earthworks();
-        for (v, list) in [(c, &mut cut), (f, &mut fill)] {
-            if v > 0.0005 {
-                list.push(Measured {
-                    comment: format!("Terreno {} · {} explanaciones", t.id.0, t.pads.len()),
-                    units: 1.0,
-                    length: 0.0,
-                    width: 0.0,
-                    height: 0.0,
-                    quantity: (v * 1000.0).round() / 1000.0,
-                });
-            }
-        }
+    let mut dig = Vec::new();
+    for e in model.earthworks() {
+        let list = match (e.side, e.what) {
+            (archisim_core::EarthSide::Fill, _) => &mut fill,
+            (_, archisim_core::EarthUse::Pool)
+            | (_, archisim_core::EarthUse::Pad(archisim_core::PadKind::Basement)) => &mut dig,
+            _ => &mut cut,
+        };
+        list.push(Measured {
+            comment: format!(
+                "{} · {} m² en planta",
+                e.name,
+                format!("{:.1}", e.mesh.area).replace('.', ",")
+            ),
+            units: 1.0,
+            length: 0.0,
+            width: 0.0,
+            height: 0.0,
+            quantity: (e.mesh.volume * 1000.0).round() / 1000.0,
+        });
     }
     let mut items = Vec::new();
     for (lines, code, key, summary) in [
@@ -425,6 +432,12 @@ fn earthworks(model: &Model) -> Vec<Item> {
             "T02",
             "tierras:terraplen",
             "Terraplén (relleno compactado)",
+        ),
+        (
+            dig,
+            "T03",
+            "tierras:vaciado",
+            "Excavación en vaciado (sótanos y piscinas)",
         ),
     ] {
         if !lines.is_empty() {

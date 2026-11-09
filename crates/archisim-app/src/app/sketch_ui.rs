@@ -488,6 +488,7 @@ impl ArchiSimApp {
             SketchTarget::Slab(_) => "contorno del forjado",
             SketchTarget::Roof(_) => "contorno de la cubierta",
             SketchTarget::Terrain(_) => "contorno del terreno",
+            SketchTarget::TerrainPad(..) => "contorno de la plataforma",
             SketchTarget::Zones(_, archisim_core::FaceRef::Top) => "dividir la cara de arriba",
             SketchTarget::Zones(_, archisim_core::FaceRef::Bottom) => "dividir la cara de abajo",
             SketchTarget::Zones(..) if st.elevation.is_some() => {

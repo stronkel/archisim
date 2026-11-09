@@ -1060,6 +1060,10 @@ impl ArchiSimApp {
             Tool::Roof if self.roof_wand() => "Clic dentro del edificio: cubierta por las caras exteriores de sus muros · Esc: flecha",
             Tool::Roof if !self.roof_tool.is_drawing() => "Clic: primera esquina de la cubierta · Esc: flecha",
             Tool::Roof => "Clic: siguiente esquina · Clic en la primera o Intro: cerrar · Esc: quitar la última",
+            Tool::Terrain if self.terrain_settings.ramp && self.terrain_line.is_empty() => "Clic: arranque del eje de la rampa · Esc: flecha",
+            Tool::Terrain if self.terrain_settings.ramp => "Clic: llegada del eje de la rampa · Esc: volver a empezar",
+            Tool::Terrain if self.terrain_settings.pad && self.terrain_settings.pad_rect => "Clic: una esquina de la plataforma y luego la opuesta · Esc: quitar la primera",
+            Tool::Terrain if self.terrain_settings.pad => "Clic: vértices de la plataforma · Clic en el primero, Intro o doble clic: cerrarla · Esc: quitar el último",
             Tool::Terrain if self.terrain_settings.line => "Escribe la cota en Propiedades y clic: vértices de la línea de nivel · Intro o doble clic: terminarla · Esc: quitar el último",
             Tool::Terrain => "Escribe la cota en Propiedades y clic: punto del terreno (sobre uno que ya existe: le pone la cota) · Intro o doble clic: crear · Esc: quitar el último",
             Tool::Stair if self.stair_tool.points.is_empty() => match self.stair_settings.preset {

@@ -2849,6 +2849,103 @@ fn terrain_platforms_under_the_house() {
     assert_eq!(back.points.len(), t.points.len());
 }
 
+/// Platforms and ramps drawn by hand (bloque Terreno): with the terrain
+/// tool, a rectangle at the ground's height where it starts and a ramp
+/// between two written heights; their cut and fill at once; with the
+/// arrow, a click inside picks the platform, its corner is dragged by its
+/// grip (the ground graded again) and Delete takes it away.
+#[test]
+fn platforms_and_ramps_drawn_by_hand() {
+    let mut h = Harness::new(Editor::new_project());
+    let level = h.app.ed.level;
+    let earth = h.model().materials().next().unwrap().id;
+    let sp = |x: f64, y: f64| archisim_core::SurveyPoint {
+        at: p(x, y),
+        z: y / 10.0,
+    };
+    let mut points = Vec::new();
+    for i in 0..=4 {
+        for j in 0..=3 {
+            points.push(sp(i as f64 * 10.0, j as f64 * 10.0));
+        }
+    }
+    let r = h.app.ed.transact("Terreno", |m| {
+        m.add_terrain(archisim_core::NewTerrain {
+            level,
+            points,
+            material: earth,
+            depth: 2.0,
+            contour: 0.5,
+            lines: Vec::new(),
+        })
+        .map(|_| ())
+    });
+    assert!(r.is_ok(), "{r:?}");
+    let tid = h.model().terrains().next().unwrap().id;
+    h.type_text("r");
+    assert_eq!(h.app.tool, Tool::Terrain);
+    // A platform: two corners; its height the ground's at the first (+0,10).
+    h.app.terrain_settings.pad = true;
+    h.app.terrain_settings.pad_rect = true;
+    h.click_at(p(1.0, 1.0));
+    assert_eq!(h.app.terrain_line.len(), 1, "{:?}", h.app.message);
+    h.click_at(p(5.0, 6.0));
+    let t = h.model().terrain(tid).unwrap().clone();
+    assert_eq!(t.pads.len(), 1, "{:?}", h.app.message);
+    assert!((t.pads[0].z - 0.1).abs() < 1e-6, "{}", t.pads[0].z);
+    assert_eq!(t.pads[0].kind, archisim_core::PadKind::Platform);
+    let (cut, fill) = h.app.terrain_earthworks(tid);
+    assert!(cut > 1.0 && fill < 0.1, "{cut} {fill}");
+    assert_eq!(h.app.terrain_pad_pick, Some(0));
+    // A ramp from +0,20 to +0,90 along its axis, 2 m wide.
+    h.app.terrain_settings.pad = false;
+    h.app.terrain_settings.ramp = true;
+    h.app.terrain_settings.ramp_width = 2.0;
+    h.app.terrain_settings.pad_z = Some(0.2);
+    h.app.terrain_settings.ramp_end = Some(0.9);
+    h.click_at(p(8.5, 0.5));
+    h.click_at(p(8.5, 7.5));
+    let t = h.model().terrain(tid).unwrap().clone();
+    assert_eq!(t.pads.len(), 2);
+    let ramp = &t.pads[1];
+    assert_eq!(ramp.kind, archisim_core::PadKind::Ramp);
+    let (a, b, len) = ramp.ramp_ends().unwrap();
+    assert!((a - 0.2).abs() < 1e-9 && (b - 0.9).abs() < 1e-9 && (len - 7.0).abs() < 1e-9);
+    let z = t.height_at(p(8.5, 4.0)).unwrap();
+    assert!((z - 0.55).abs() < 0.02, "{z}");
+    h.frame();
+    // With the arrow: inside the platform picks it.
+    h.key(Key::Escape);
+    h.key(Key::Escape);
+    assert_eq!(h.app.tool, Tool::Arrow);
+    h.app.ed.selection = [Element::Terrain(tid)].into_iter().collect();
+    h.click_at(p(2.5, 3.0));
+    assert_eq!(h.app.terrain_pad_pick, Some(0), "{:?}", h.app.message);
+    h.frame();
+    // Its corner dragged: bigger, the ground graded again.
+    h.drag(p(5.0, 6.0), p(6.0, 6.0));
+    let t = h.model().terrain(tid).unwrap().clone();
+    assert!(
+        t.pads[0].outline.iter().any(|q| q.approx_eq(p(6.0, 6.0))),
+        "{:?} {:?}",
+        t.pads[0].outline,
+        h.app.message
+    );
+    let z = t.height_at(p(5.2, 4.0)).unwrap();
+    assert!((z - 0.1).abs() < 1e-6, "{z}");
+    // Supr takes it away, and only it.
+    h.app.ed.selection = [Element::Terrain(tid)].into_iter().collect();
+    h.click_at(p(2.5, 3.0));
+    h.key(Key::Delete);
+    let t = h.model().terrain(tid).unwrap();
+    assert_eq!(t.pads.len(), 1);
+    assert_eq!(t.pads[0].kind, archisim_core::PadKind::Ramp);
+    // The contour of the ramp in sketch mode.
+    let sk = crate::sketch::Sketch::of(h.model(), crate::sketch::SketchTarget::TerrainPad(tid, 0))
+        .unwrap();
+    assert_eq!(sk.loops[0].len(), 4);
+}
+
 /// The terrain in plan (R4): contour lines drawn at a height make the
 /// terrain; clicks on its points give them the height written; with the
 /// arrow, a point or a whole line is picked and given a height at once,

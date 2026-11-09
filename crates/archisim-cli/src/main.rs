@@ -35,6 +35,7 @@ mod muestrario;
 mod muros_talud;
 mod ortofoto;
 mod taller;
+mod tierras;
 mod tramas;
 mod trazado;
 mod vivero;
@@ -204,6 +205,14 @@ Uso:
       con una puerta y una ventana, en L con uno de ladrillo:
       muros-talud.archisim, muros-talud.ifc, las plantas y dos secciones a
       1:50 en SVG y la comprobación del muro de contención. Por defecto: ./out
+  archisim tierras [carpeta]
+      Movimiento de tierras en una ladera al 12 %: la plataforma de una
+      vivienda y el vaciado de su garaje (desde sus forjados), una terraza
+      dibujada a mano, la rampa de acceso al garaje, la plataforma de la
+      piscina y la piscina: tierras.archisim, tierras.ifc (IFC 4.3, con
+      IfcEarthworksCut e IfcEarthworksFill), tierras-ifc4.ifc, la planta a
+      1:200 con el desmonte y el terraplén coloreados y el informe de
+      tierras. Por defecto: ./out
   archisim gama [carpeta]
       La gama estilizada de materiales: un muestrario con cada uno (fachadas,
       cubiertas, suelos, pavimentos y pinturas) y una calle con acantilado,
@@ -644,6 +653,10 @@ fn main() -> ExitCode {
         Some("instalaciones") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
             report(instalaciones::write(&dir))
+        }
+        Some("tierras") => {
+            let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
+            report(tierras::write(&dir))
         }
         Some("muros-talud") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));

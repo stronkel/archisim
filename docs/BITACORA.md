@@ -6,6 +6,54 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-09 (134) · Terreno: movimiento de tierras en IFC 4.3 y explanaciones dibujadas a mano
+
+Rama `bloque/tierras-ifc`, con pull request. Va sobre la de la entrada 133 (#189, todavía sin unir). **Formato versión 101**: las plataformas del terreno llevan nombre, clase y, las rampas, su inclinación; el terreno, si colorea el desmonte y el terraplén en planta. Documento nuevo `docs/TERRENO.md`.
+
+- **Desmonte y terraplén como sólidos.** Cada plataforma tiene su desmonte y su terraplén: el terreno entre el levantamiento y el explanado, como un sólido cerrado de triángulos (rejilla de 50 cm), dado a la plataforma que lo ha hecho así. Las piscinas (construidas y de la biblioteca) se vacían desde el terreno explanado hasta el fondo de su vaso.
+- **IFC 4.3**: `IfcEarthworksCut` (`CUT` en plataformas y rampas; `EXCAVATION` en vaciados de sótano y piscinas) e `IfcEarthworksFill` (`EMBANKMENT`), con su cuerpo, `Qto_EarthworksCutBaseQuantities` / `Qto_EarthworksFillBaseQuantities` (largo, ancho, profundidad, `UndisturbedVolume` / `CompactedVolume`) y el pset `ArchiSim_Earthworks`, que ArchiSim quita al importar. El terraplén está en el `IfcSite`; el desmonte **vacía el terreno** (`IfcRelVoidsElement`): en IFC 4.3 una sustracción no puede estar en el emplazamiento (lo prohíbe la norma, y la validación lo comprobó). **IFC4**: `IfcBuildingElementProxy` en el `IfcSite`. Valida con IfcOpenShell en los dos, con el volumen del sólido igual a sus cantidades (punto 15 nuevo de `scripts/validate_ifc.py`).
+- **Plataformas y rampas a mano** (herramienta Terreno, modos **Plataforma** y **Rampa**): rectángulo o polígono; rampa por su eje y su ancho; cota escrita o la del terreno donde se hace clic; talud H:V. Con el terreno seleccionado: clic dentro elige la plataforma (Supr la quita), **pinzamientos** en sus esquinas, y en Propiedades → Explanaciones cada una con nombre, cota (en las rampas, arranque, llegada, pendiente y dirección), talud, desmonte, terraplén, «Editar contorno» (modo boceto) y Quitar; el total, la compensación y el **Informe de tierras**. «Explanar bajo el edificio» rehace solo las del edificio.
+- **Planta**: la línea donde el talud encuentra el terreno y las rayas de talud (largas y cortas, de la cabeza al pie); nombre y cota fuera del lado más largo; en las rampas «de +a a +b · p %» y flecha hacia donde sube; con «Desmonte y terraplén» (Propiedades → En planta) las zonas coloreadas (rojo excava, verde rellena) y los volúmenes.
+- **Mediciones** (capítulo 12): una línea por plataforma y piscina con su superficie; T01 desmonte, T02 terraplén, **T03 excavación en vaciado** (sótanos y piscinas, nueva).
+- **Ejemplo**: `archisim tierras <carpeta>`.
+- **Pruebas**: el sólido cerrado y su volumen (plataforma en ladera, rampa, dos plataformas, piscina), el fichero, el IFC de ida y vuelta en 4.3 y en IFC4 (las entidades no vuelven como objetos), la planta, el ejemplo, y la herramienta con clics simulados (rectángulo a la cota del terreno, rampa entre dos cotas escritas, elegir, arrastrar una esquina, Supr, boceto). Se abrió la aplicación con Xvfb: modos Plataforma y Rampa con su vista previa, la plataforma elegida con sus pinzamientos, las propiedades de la rampa y el informe.
+
+**Ejemplo (`tierras`)**: ladera al 12 % hacia el norte.
+
+| Elemento | Clase IFC | Planta m² | Prof. m | m³ |
+|---|---|---|---|---|
+| Plataforma de la vivienda (−0,35) | `IfcEarthworksCut` CUT | 75,9 | 2,47 | 77,25 |
+| Garaje (−3,35) | `IfcEarthworksCut` EXCAVATION | 301,7 | 5,33 | 962,59 |
+| Terraza (+0,60, talud 3:2), desmonte | `IfcEarthworksCut` CUT | 140,5 | 1,17 | 71,05 |
+| Terraza, terraplén | `IfcEarthworksFill` EMBANKMENT | 68,9 | 0,62 | 19,11 |
+| Rampa de acceso al garaje (−1,36 a −3,30, 11,8 %) | `IfcEarthworksCut` CUT | 121,2 | 3,98 | 182,51 |
+| Plataforma de la piscina (+0,15) | `IfcEarthworksCut` CUT | 233,7 | 1,84 | 215,52 |
+| Piscina 8 × 4 m | `IfcEarthworksCut` EXCAVATION | 38,2 | 2,37 | 90,65 |
+
+Se excavan 1 600 m³ y se rellenan 19 m³: sobran 1 580 m³.
+
+**Valores por defecto**: talud 1:1; rampa de 3,00 m de ancho; cota de la plataforma, la del terreno en la primera esquina (de la rampa, la del terreno en cada extremo); rectángulo.
+
+**Pendiente.**
+- Zanjas de instalaciones como `IfcEarthworksCut` `TRENCH` (siguen midiéndose sin sólido).
+- Esponjamiento y compactación; capas del terreno (tierra vegetal, roca).
+- Muros de contención en lugar del talud; taludes distintos por lado, bermas; plataformas con pendiente en dos direcciones.
+- El vaciado del sótano no se recorta por los muros ni por las zapatas.
+- Con muchos puntos de levantamiento, explanar al arrastrar una esquina es lento en la versión de depuración.
+
+**Qué debe probar Antonio.**
+1. `cargo run --release -p archisim-cli -- tierras out/` y mirar `out/tierras-planta.svg` y `out/tierras-informe.txt`.
+2. Abrir `out/tierras.archisim` (`cargo run --release -p archisim-app -- out/tierras.archisim`): en la planta, los taludes, las zonas coloreadas, la rampa con su flecha.
+3. Seleccionar el terreno, hacer clic dentro de la terraza: Propiedades → Explanaciones → «Terraza»; cambiar su cota a +0,30 y el talud a 2,00 y ver cómo cambian el desmonte, el terraplén y la planta. Arrastrar una esquina. Pulsar «Informe de tierras».
+4. En la rampa: cambiar la pendiente a 10 % o la cota de llegada; «Editar contorno» para ensancharla en modo boceto.
+5. Urbanismo → Terreno → modo **Plataforma**: dibujar un rectángulo en una zona libre (con «Cota escrita» apagado toma la del terreno) y otro como polígono; modo **Rampa**: dos clics. Supr con una plataforma elegida.
+6. Abrir `out/tierras.ifc` en BIMvision o Revit: los desmontes y el terraplén como elementos de movimiento de tierras con su volumen; `out/tierras-ifc4.ifc` en un programa que no lea IFC 4.3.
+7. Mediciones: capítulo 12 con T01, T02 y T03, una línea por plataforma.
+
+**Escrito de memoria (que lo compruebe Antonio).** Los tipos predefinidos elegidos (CUT para plataformas y rampas, EXCAVATION para vaciados de sótano y piscina, EMBANKMENT para todos los terraplenes; la lista de IFC 4.3 no tiene «PIT»); que el desmonte vacíe el terreno en lugar de estar en el emplazamiento; la partida T03 aparte para los vaciados; los colores de la planta (rojo desmonte, verde terraplén); que las rayas de talud vayan de la cabeza al pie, alternas largas y cortas.
+
+---
+
 ## 2026-11-09 (133) · Muros de sección variable: talud y zarpa
 
 Rama `bloque/muros-talud`, con pull request. Va sobre la de la entrada 132 (#187, todavía sin unir). **Formato versión 100**: los tipos de muro y los muros llevan su sección (`section`). Documento nuevo `docs/MUROS.md`; `docs/ESTRUCTURA.md` §6 y §8.

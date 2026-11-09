@@ -1116,7 +1116,11 @@ impl ArchiSimApp {
                 }
             }
             Tool::Terrain => {
-                if response.double_clicked_by(PointerButton::Primary) {
+                // A rectangle and a ramp take two clicks: a quick second
+                // one is a click, not the end.
+                let two_clicks = self.terrain_settings.ramp
+                    || (self.terrain_settings.pad && self.terrain_settings.pad_rect);
+                if response.double_clicked_by(PointerButton::Primary) && !two_clicks {
                     self.finish_terrain();
                 } else if response.clicked_by(PointerButton::Primary) {
                     if let Some(c) = self.cursor {
@@ -1845,6 +1849,7 @@ impl ArchiSimApp {
             (Grip::ObjectTurn { .. }, _) => "Girar",
             (Grip::OpeningJamb { .. }, _) => "Ancho del hueco",
             (Grip::TerrainPoint { .. }, _) => "Punto",
+            (Grip::PadCorner { .. }, _) => "Esquina de la explanación",
             (Grip::DraftPoint { .. }, _) => "Estirar",
         };
         let delta = to - d.from;

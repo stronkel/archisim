@@ -753,6 +753,9 @@ pub(crate) struct Terrain {
     /// Slope arrows in plan (version 45).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub slope_arrows: bool,
+    /// Cut and fill coloured in plan (version 101).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub show_earthworks: bool,
     /// Platforms (version 46, optional): `points` is the ground graded.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub pads: Vec<TerrainPad>,
@@ -769,6 +772,26 @@ pub(crate) struct TerrainPad {
     pub outline: Vec<[f64; 2]>,
     pub z: f64,
     pub slope: f64,
+    /// Its name (version 101, optional).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub name: String,
+    /// «platform», «building», «basement» or «ramp» (version 101; without
+    /// it, «platform»).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
+    /// A ramp (version 101): `[x, y]` where it is at `z`, its direction
+    /// (degrees from +X) and its grade (m/m).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tilt: Option<PadTilt>,
+}
+
+/// How a ramp is tilted (version 101).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct PadTilt {
+    pub from: [f64; 2],
+    pub dir: f64,
+    pub grade: f64,
 }
 
 /// An area of a terrain painted with another material (version 37): its
@@ -3604,6 +3627,7 @@ impl ProjectFile {
                         .map(|o| o.iter().map(|q| [q.x, q.y]).collect()),
                     show_heights: t.show_heights,
                     slope_arrows: t.slope_arrows,
+                    show_earthworks: t.show_earthworks,
                     pads: t
                         .pads
                         .iter()
@@ -3611,6 +3635,14 @@ impl ProjectFile {
                             outline: p.outline.iter().map(|q| [q.x, q.y]).collect(),
                             z: p.z,
                             slope: p.slope,
+                            name: p.name.clone(),
+                            kind: (p.kind != core::PadKind::Platform)
+                                .then(|| p.kind.code().to_string()),
+                            tilt: p.tilt.map(|t| PadTilt {
+                                from: [t.from.x, t.from.y],
+                                dir: t.dir.to_degrees(),
+                                grade: t.grade,
+                            }),
                         })
                         .collect(),
                     ground: t
@@ -4526,6 +4558,7 @@ impl ProjectFile {
                             .map(|o| o.iter().map(|q| core::Point2::new(q[0], q[1])).collect()),
                         show_heights: t.show_heights,
                         slope_arrows: t.slope_arrows,
+                        show_earthworks: t.show_earthworks,
                         pads: t
                             .pads
                             .iter()
@@ -4537,6 +4570,17 @@ impl ProjectFile {
                                     .collect(),
                                 z: p.z,
                                 slope: p.slope,
+                                name: p.name.clone(),
+                                kind: p
+                                    .kind
+                                    .as_deref()
+                                    .map(core::PadKind::from_code)
+                                    .unwrap_or_default(),
+                                tilt: p.tilt.as_ref().map(|t| core::PadTilt {
+                                    from: core::Point2::new(t.from[0], t.from[1]),
+                                    dir: t.dir.to_radians(),
+                                    grade: t.grade,
+                                }),
                             })
                             .collect(),
                         ground: t.ground.as_ref().map(|g| {

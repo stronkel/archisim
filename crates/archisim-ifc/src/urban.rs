@@ -42,6 +42,7 @@ impl Exporter<'_> {
         materials: &BTreeMap<MaterialId, Ref>,
         site: Ref,
         site_pl: Ref,
+        earthworks: Vec<Ref>,
     ) {
         let model = self.model;
         let elevation = |l| model.level(l).map_or(0.0, |l| l.elevation);
@@ -104,7 +105,8 @@ impl Exporter<'_> {
 
         // Roads.
         let mut roads = Vec::new();
-        let mut on_site = Vec::new();
+        // The earthworks are in the site too.
+        let mut on_site = earthworks;
         let mut alignments = Vec::new();
         let junctions: Vec<archisim_geom::crossroads::Junction> = model
             .levels()

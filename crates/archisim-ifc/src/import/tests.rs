@@ -1539,22 +1539,67 @@ fn terrain_platforms_round_trip() {
         .unwrap();
     m.edit_terrain(t, |t| {
         t.show_heights = true;
-        t.set_pads(vec![TerrainPad {
-            outline: vec![
-                Point2::new(-0.5, -0.5),
-                Point2::new(10.5, -0.5),
-                Point2::new(10.5, 8.5),
-                Point2::new(-0.5, 8.5),
-            ],
-            z: -0.4,
-            slope: 1.0,
-        }]);
+        t.show_earthworks = true;
+        t.set_pads(vec![
+            TerrainPad {
+                outline: vec![
+                    Point2::new(-0.5, -0.5),
+                    Point2::new(10.5, -0.5),
+                    Point2::new(10.5, 8.5),
+                    Point2::new(-0.5, 8.5),
+                ],
+                z: -0.4,
+                slope: 1.0,
+                ..TerrainPad::flat(Vec::new(), 0.0, 1.0)
+            },
+            // A ramp with its name, filled downhill.
+            TerrainPad {
+                name: "Rampa de acceso".into(),
+                ..TerrainPad::ramp(
+                    Point2::new(-8.0, 4.0),
+                    Point2::new(-8.0, -8.0),
+                    3.0,
+                    -0.4,
+                    -0.1,
+                    0.5,
+                )
+                .unwrap()
+            },
+        ]);
     })
     .unwrap();
     let before = m.terrain(t).unwrap().clone();
     let ifc = export(&m);
     assert!(ifc.contains("'CutVolume',$,IFCVOLUMEMEASURE("));
+    // The earthworks as elements of their own, in the site.
+    assert!(ifc.contains("IFCEARTHWORKSCUT("), "no cut");
+    assert!(ifc.contains("IFCEARTHWORKSFILL("), "no fill");
+    assert!(ifc.contains(",.CUT.)") && ifc.contains(",.EMBANKMENT.)"));
+    assert!(ifc.contains("'Qto_EarthworksCutBaseQuantities'"));
+    assert!(ifc.contains("'Qto_EarthworksFillBaseQuantities'"));
+    assert!(ifc.contains("'UndisturbedVolume'") && ifc.contains("'CompactedVolume'"));
+    assert!(ifc.contains("'ArchiSim_Earthworks'"));
+    // Their volumes add up to the terrain's.
+    let total: f64 = m.earthworks().iter().map(|e| e.mesh.volume).sum();
+    let (c, f) = before.earthworks();
+    assert!((total - c - f).abs() < 1e-6, "{total} {c} {f}");
     let Imported { model, .. } = import_ifc(&ifc).unwrap();
+    // Nothing else comes back from them.
+    assert_eq!(model.objects().count(), m.objects().count());
+    // IFC4: proxies, read back the same.
+    let ifc4 = export_ifc(
+        &m,
+        &ExportOptions {
+            timestamp: Some("2026-10-17T12:00:00".into()),
+            schema: crate::Schema::Ifc4,
+            ..Default::default()
+        },
+    );
+    assert!(!ifc4.contains("IFCEARTHWORKS"));
+    assert!(ifc4.contains("'ArchiSim_EarthworksQuantities'"));
+    let Imported { model: m4, .. } = import_ifc(&ifc4).unwrap();
+    assert_eq!(m4.objects().count(), m.objects().count());
+    assert_eq!(m4.terrains().next().unwrap().pads, before.pads);
     let back = model.terrains().find(|x| x.guid == before.guid).unwrap();
     assert_eq!(back.pads, before.pads);
     assert_eq!(back.points.len(), before.points.len());
@@ -1562,7 +1607,7 @@ fn terrain_platforms_round_trip() {
         back.ground.as_ref().map(Vec::len),
         before.ground.as_ref().map(Vec::len)
     );
-    assert!(back.show_heights);
+    assert!(back.show_heights && back.show_earthworks);
     let (a, b) = (before.earthworks(), back.earthworks());
     assert!(
         (a.0 - b.0).abs() < 1e-3 && (a.1 - b.1).abs() < 1e-3,

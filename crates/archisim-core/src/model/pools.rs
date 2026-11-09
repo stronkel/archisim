@@ -316,16 +316,27 @@ impl Model {
     /// What every pool takes out of the ground: the pools built here and
     /// the pools that are objects of the library (`props:fine_pool`).
     pub fn excavations(&self) -> Vec<Excavation> {
-        let mut out: Vec<Excavation> = self
+        self.excavations_of().into_iter().map(|e| e.3).collect()
+    }
+
+    /// The same as `excavations`, each with where it comes from, the
+    /// identifier and the name of its pool.
+    pub fn excavations_of(&self) -> Vec<(EarthSource, GlobalId, String, Excavation)> {
+        let mut out: Vec<(EarthSource, GlobalId, String, Excavation)> = self
             .pools
             .values()
             .map(|p| {
                 let z0 = self.level(p.level).map_or(0.0, |l| l.elevation);
                 let deepest = p.deep.max(p.shallow);
-                Excavation {
-                    outline: p.outer(),
-                    bottom: z0 + p.water_level() - deepest - p.wall,
-                }
+                (
+                    EarthSource::Pool(p.id),
+                    p.guid.clone(),
+                    p.name.clone(),
+                    Excavation {
+                        outline: p.outer(),
+                        bottom: z0 + p.water_level() - deepest - p.wall,
+                    },
+                )
             })
             .collect();
         for o in self.objects.values() {
@@ -347,10 +358,18 @@ impl Model {
                 })
                 .collect();
             let z0 = self.level(o.level).map_or(0.0, |l| l.elevation) + o.base_offset;
-            out.push(Excavation {
-                outline,
-                bottom: z0 + bottom,
-            });
+            let name = self
+                .object_type(o.object_type)
+                .map_or_else(|| "Piscina".to_string(), |t| t.name.clone());
+            out.push((
+                EarthSource::Object(o.id),
+                o.guid.clone(),
+                name,
+                Excavation {
+                    outline,
+                    bottom: z0 + bottom,
+                },
+            ));
         }
         out
     }
