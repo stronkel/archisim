@@ -2344,6 +2344,28 @@ fn water_network(m: &mut Model, lv: &[LevelId], riser: archisim_core::DeviceId) 
             }
         }
     }
+    // The return of the hot water (HS 4, 2.3: 41,8 m to the farthest
+    // tap): from the end of each landing's main back to the riser, down it
+    // and to the tank; 250 l/h for its one column, a 3/4" pipe.
+    let back = ServiceSystem::HotReturn;
+    for k in 1..=4 {
+        run(
+            m,
+            lv[k],
+            back,
+            vec![p(25.6, 3.62), p(16.7, 3.62), p(16.7, 1.62)],
+            0.02,
+            2.5,
+        )?;
+    }
+    run(
+        m,
+        pb,
+        back,
+        vec![p(16.7, 1.62), p(17.4, 1.62), p(17.4, 1.2)],
+        0.02,
+        2.5,
+    )?;
     // Every appliance to the nearest pipe of each system.
     for l in lv {
         for system in [cold, hot] {

@@ -16,6 +16,9 @@ use super::*;
 pub enum ServiceSystem {
     ColdWater,
     HotWater,
+    /// The return of the hot water to its heater (HS 4, 2.3): the loop
+    /// that keeps it hot near the taps.
+    HotReturn,
     /// The building's waste water (aguas residuales).
     Drainage,
     /// The building's rain water (aguas pluviales): roofs, terraces and
@@ -41,9 +44,10 @@ pub enum ServiceSystem {
 }
 
 impl ServiceSystem {
-    pub const PIPES: [ServiceSystem; 6] = [
+    pub const PIPES: [ServiceSystem; 7] = [
         ServiceSystem::ColdWater,
         ServiceSystem::HotWater,
+        ServiceSystem::HotReturn,
         ServiceSystem::Drainage,
         ServiceSystem::Rainwater,
         ServiceSystem::Heating,
@@ -130,6 +134,7 @@ impl ServiceSystem {
         match self {
             ServiceSystem::ColdWater => "cold_water",
             ServiceSystem::HotWater => "hot_water",
+            ServiceSystem::HotReturn => "hot_return",
             ServiceSystem::Drainage => "drainage",
             ServiceSystem::Rainwater => "rainwater",
             ServiceSystem::Heating => "heating",
@@ -160,6 +165,7 @@ impl ServiceSystem {
         match self {
             ServiceSystem::ColdWater => "Agua fría",
             ServiceSystem::HotWater => "Agua caliente",
+            ServiceSystem::HotReturn => "Retorno de ACS",
             ServiceSystem::Drainage => "Saneamiento",
             ServiceSystem::Rainwater => "Pluviales",
             ServiceSystem::Heating => "Calefacción",
@@ -183,6 +189,7 @@ impl ServiceSystem {
         match self {
             ServiceSystem::ColdWater => [30, 110, 220],
             ServiceSystem::HotWater => [215, 45, 45],
+            ServiceSystem::HotReturn => [200, 60, 150],
             ServiceSystem::Drainage => [125, 85, 50],
             ServiceSystem::Rainwater => [40, 140, 175],
             ServiceSystem::Heating => [235, 130, 20],
@@ -205,7 +212,7 @@ impl ServiceSystem {
     pub fn ifc_system(self) -> &'static str {
         match self {
             ServiceSystem::ColdWater => "DOMESTICCOLDWATER",
-            ServiceSystem::HotWater => "DOMESTICHOTWATER",
+            ServiceSystem::HotWater | ServiceSystem::HotReturn => "DOMESTICHOTWATER",
             ServiceSystem::Drainage => "DRAINAGE",
             ServiceSystem::Rainwater => "RAINWATER",
             ServiceSystem::Heating => "HEATING",
@@ -898,7 +905,7 @@ impl ServiceGroup {
     pub fn of_system(s: ServiceSystem) -> ServiceGroup {
         use ServiceSystem as S;
         match s {
-            S::ColdWater | S::HotWater => ServiceGroup::Water,
+            S::ColdWater | S::HotWater | S::HotReturn => ServiceGroup::Water,
             S::Drainage | S::Rainwater => ServiceGroup::Drainage,
             S::Heating | S::SupplyAir | S::ReturnAir => ServiceGroup::Climate,
             S::ExhaustAir => ServiceGroup::Ventilation,

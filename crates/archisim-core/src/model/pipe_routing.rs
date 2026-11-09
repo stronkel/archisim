@@ -172,12 +172,13 @@ impl DeviceKind {
             D::Equipment => !system.is_urban(),
             D::Riser => matches!(
                 system,
-                S::ColdWater | S::HotWater | S::Heating | S::FireProtection
+                S::ColdWater | S::HotWater | S::HotReturn | S::Heating | S::FireProtection
             ),
             D::Downpipe => matches!(system, S::Drainage | S::Rainwater),
-            D::WaterHeater | D::Valve | D::WaterMeter | D::Tank | D::Pump => {
-                matches!(system, S::ColdWater | S::HotWater)
+            D::WaterHeater | D::Valve | D::Pump => {
+                matches!(system, S::ColdWater | S::HotWater | S::HotReturn)
             }
+            D::WaterMeter | D::Tank => matches!(system, S::ColdWater | S::HotWater),
             D::Radiator => system == S::Heating,
             D::Grille | D::Diffuser => system.is_duct(),
             D::ExhaustVent | D::AirShaft | D::Fan => system == S::ExhaustAir,

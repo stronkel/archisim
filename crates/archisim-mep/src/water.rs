@@ -256,6 +256,78 @@ pub struct HotReturn {
     /// Its pipe by tabla 4.4: the inch size and the usual multilayer
     /// outside diameter, metres.
     pub pipe: (&'static str, f64),
+    /// The return drawn (pipes of the system «Retorno de ACS»), if any.
+    pub drawn: Option<DrawnReturn>,
+}
+
+impl HotReturn {
+    /// The drawn runs narrower than the table's pipe.
+    pub fn narrow(&self) -> Vec<RunId> {
+        self.drawn.as_ref().map_or(Vec::new(), |d| {
+            d.runs
+                .iter()
+                .filter(|(_, w)| *w + 1e-6 < self.pipe.1)
+                .map(|(r, _)| *r)
+                .collect()
+        })
+    }
+
+    /// What is drawn of it, in words.
+    pub fn drawn_text(&self) -> String {
+        match &self.drawn {
+            None => "sin dibujar".into(),
+            Some(d) => format!(
+                "dibujada, {} m{}",
+                format!("{:.1}", d.length).replace('.', ","),
+                if d.reaches_heater {
+                    ", vuelve al acumulador"
+                } else {
+                    ", sin llegar al acumulador"
+                }
+            ),
+        }
+    }
+
+    /// Drawn, reaching the heater and wide enough.
+    pub fn passes(&self) -> bool {
+        self.drawn
+            .as_ref()
+            .is_some_and(|d| d.reaches_heater && self.narrow().is_empty())
+    }
+}
+
+/// The return as drawn.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DrawnReturn {
+    /// Its pipes, metres, through the risers too.
+    pub length: f64,
+    /// Each run with its diameter.
+    pub runs: Vec<(RunId, f64)>,
+    /// One of its ends is at a heater (within 45 cm).
+    pub reaches_heater: bool,
+}
+
+/// The return pipes drawn, as one network.
+pub fn drawn_return(model: &Model) -> Option<DrawnReturn> {
+    let runs: Vec<(RunId, f64)> = model
+        .runs()
+        .filter(|r| r.system == ServiceSystem::HotReturn)
+        .map(|r| (r.id, r.width))
+        .collect();
+    if runs.is_empty() {
+        return None;
+    }
+    let g = graph(model, ServiceSystem::HotReturn);
+    let length = g.edges.iter().map(|e| e.length).sum();
+    let reaches_heater = model
+        .devices()
+        .filter(|d| d.kind == DeviceKind::WaterHeater)
+        .any(|d| g.nearest(d.level, d.position, APPLIANCE_REACH).is_some());
+    Some(DrawnReturn {
+        length,
+        runs,
+        reaches_heater,
+    })
 }
 
 /// The pressure a pressure group adds over its least one, kPa.
@@ -306,6 +378,12 @@ impl Water {
         let mut out = BTreeMap::new();
         for n in &self.networks {
             out.extend(n.sized_runs());
+        }
+        // The return drawn, at the table's pipe.
+        if let Some(r) = &self.hot_return {
+            for (id, _) in r.drawn.iter().flat_map(|d| &d.runs) {
+                out.insert(*id, r.pipe.1);
+            }
         }
         out
     }
@@ -942,6 +1020,7 @@ pub fn water(model: &Model) -> Water {
             columns,
             flow,
             pipe: return_pipe(flow),
+            drawn: drawn_return(model),
         })
     });
     networks.extend(cold);
@@ -1141,6 +1220,26 @@ pub fn report(model: &Model, w: &Water) -> String {
             r.pipe.0,
             r.pipe.1 * 1000.0
         );
+        let narrow = r.narrow();
+        let _ = writeln!(
+            s,
+            "  Red de retorno {} — {}",
+            r.drawn_text(),
+            if r.passes() {
+                "CUMPLE".to_string()
+            } else if r.drawn.is_none() {
+                "falta dibujarlo".to_string()
+            } else if narrow.is_empty() {
+                "NO CUMPLE: no llega al acumulador".to_string()
+            } else {
+                format!(
+                    "NO CUMPLE: {} tubería{} más fina{} que la de la tabla",
+                    narrow.len(),
+                    if narrow.len() == 1 { "" } else { "s" },
+                    if narrow.len() == 1 { "" } else { "s" }
+                )
+            }
+        );
     }
     s
 }
@@ -1171,6 +1270,75 @@ mod tests {
         assert_eq!(return_pipe(250.0).0, "3/4\"");
         assert_eq!(return_pipe(500.0).0, "1\"");
         assert_eq!(return_pipe(5000.0).0, "2\" o más");
+    }
+
+    /// A basin 20 m from the heater asks for a return; drawn too narrow it
+    /// fails, at 3/4" it passes, and the sizes widen it.
+    #[test]
+    fn a_drawn_return() {
+        let mut m = archisim_library::new_project("Casa");
+        let l0 = m.levels()[0].id;
+        let basin = archisim_library::add_object_entry(&mut m, "Lavabo 60").unwrap();
+        m.add_object(NewObject {
+            level: l0,
+            object_type: basin,
+            position: Point2::new(20.0, 0.5),
+            rotation: 0.0,
+            base_offset: 0.0,
+        })
+        .unwrap();
+        let tap = m.appliances_on(l0)[0].point;
+        m.add_device(NewDevice {
+            level: l0,
+            kind: DeviceKind::WaterHeater,
+            name: "Termo".into(),
+            position: Point2::new(0.0, 0.0),
+            rotation: 0.0,
+            elevation: 0.3,
+            width: 0.45,
+            depth: 0.45,
+            height: 0.9,
+        })
+        .unwrap();
+        let run = |m: &mut Model, system, path: Vec<Point2>, w: f64| {
+            m.add_run(NewRun {
+                level: l0,
+                system,
+                path,
+                elevation: 0.3,
+                width: w,
+                height: w,
+                slope: 0.0,
+            })
+            .unwrap()
+        };
+        run(
+            &mut m,
+            ServiceSystem::HotWater,
+            vec![Point2::new(0.0, 0.0), Point2::new(tap.x, 0.0), tap],
+            0.016,
+        );
+        let r = water(&m).hot_return.expect("needed");
+        assert!(r.drawn.is_none() && !r.passes());
+        let back = run(
+            &mut m,
+            ServiceSystem::HotReturn,
+            vec![Point2::new(tap.x, 0.2), Point2::new(0.1, 0.2)],
+            0.016,
+        );
+        let w = water(&m);
+        let r = w.hot_return.clone().unwrap();
+        let d = r.drawn.clone().unwrap();
+        assert!(d.reaches_heater && (d.length - (tap.x - 0.1)).abs() < 1e-6);
+        assert_eq!(r.narrow(), vec![back]);
+        assert!(!r.passes());
+        assert_eq!(w.sized_runs().get(&back), Some(&0.020));
+        m.edit_run(back, |x| {
+            x.width = 0.02;
+            x.height = 0.02;
+        })
+        .unwrap();
+        assert!(water(&m).hot_return.unwrap().passes());
     }
 
     #[test]
