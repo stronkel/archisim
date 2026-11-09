@@ -55,6 +55,8 @@ pub enum Change {
     },
     /// A drain's slope.
     RunSlope { run: RunId, slope: f64 },
+    /// The breaking capacity of the electrical breakers, kA (ITC-BT-22).
+    BreakingCapacity { ka: f64 },
     /// A door of a type of its family this wide (the opening, in metres).
     DoorWidth { opening: OpeningId, width: f64 },
     /// A door opening to the other side of its wall.
@@ -121,6 +123,11 @@ pub fn apply(model: &mut Model, change: &Change) -> Result<(), ModelError> {
             model.edit_device(*device, |d| d.height = *height)
         }
         Change::RunSlope { run, slope } => model.edit_run(*run, |r| r.slope = *slope),
+        Change::BreakingCapacity { ka } => {
+            let mut site = *model.electrical_site();
+            site.breaking_capacity = *ka;
+            model.set_electrical_site(site)
+        }
         Change::DoorWidth { opening, width } => {
             let o = model
                 .opening(*opening)
@@ -432,6 +439,22 @@ pub fn fix(model: &Model) -> Fix {
     for (run, width) in widths {
         push(&mut m, Change::RunWidth { run, width }, &mut changes);
     }
+    // The breakers that do not break the short circuit at their board:
+    // the least breaking capacity made that does, for all.
+    if report
+        .items
+        .iter()
+        .any(|i| i.status == Status::Fails && i.rule == "ITC-BT-22, poder de corte")
+    {
+        let need = archisim_mep::electrical::installations(&m)
+            .iter()
+            .filter(|i| !i.breaks())
+            .filter_map(|i| i.breaking_needed())
+            .fold(0.0, f64::max);
+        if need > m.electrical_site().breaking_capacity {
+            push(&mut m, Change::BreakingCapacity { ka: need }, &mut changes);
+        }
+    }
     // Doors: the widest clear width each one is asked for, round by round
     // (a door wide enough for its leaf may then be short once the leaf's
     // thickness is taken off).
@@ -617,6 +640,20 @@ fn lines(before: &Model, after: &Model, changes: &[Change]) -> Vec<Line> {
                     subject: Subject::Device(*device),
                     name: crate::subject_name(before, Subject::Device(*device)),
                     what: "Tamaño",
+                    before: v(before),
+                    after: v(after),
+                });
+            }
+            Change::BreakingCapacity { .. } => {
+                if !seen.insert((0, 7)) {
+                    continue;
+                }
+                let v =
+                    |m: &Model| archisim_mep::electrical::ka(m.electrical_site().breaking_capacity);
+                out.push(Line {
+                    subject: Subject::Building,
+                    name: "Magnetotérmicos de los cuadros".into(),
+                    what: "Poder de corte",
                     before: v(before),
                     after: v(after),
                 });

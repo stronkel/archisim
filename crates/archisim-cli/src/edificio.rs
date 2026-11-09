@@ -1886,6 +1886,12 @@ fn services(m: &mut Model, lv: &[LevelId]) -> R {
         p(16.6, 2.0),
         0.0,
     )?;
+    // A building with its meters centralised by the general board: a
+    // general feeder from the main fuse box at the façade.
+    let mut site = *m.electrical_site();
+    site.single_user = false;
+    site.general_length = 12.0;
+    m.set_electrical_site(site)?;
     // Water to the toilets and to the café's kitchen; on the roof, to the
     // laundry.
     for (system, d, width) in [

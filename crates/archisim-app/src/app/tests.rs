@@ -10143,6 +10143,23 @@ fn electrical_window_works_out_the_board() {
     assert_eq!(archisim_plan::single_line::pages(&model).len(), 1);
     let cte = archisim_cte::check(&model);
     assert!(cte.items.iter().any(|i| i.rule == "ITC-BT-15"));
+    assert!(cte
+        .items
+        .iter()
+        .any(|i| i.rule == "ITC-BT-22, poder de corte"));
+    // Three phase, chosen in the window.
+    site.supply = archisim_core::Supply::Three;
+    site.supply_fault = 15.0;
+    h.app
+        .ed
+        .transact("Datos de la instalación eléctrica", |m| {
+            m.set_electrical_site(site)
+        })
+        .unwrap();
+    h.frame();
+    let text = archisim_mep::electrical::report(&h.app.ed.shown());
+    assert!(text.contains("trifásica 3×400/230 V"), "{text}");
+    assert!(text.contains("4P"), "{text}");
 }
 
 /// A dialog stays where it opened: clicking inside it, on the other half

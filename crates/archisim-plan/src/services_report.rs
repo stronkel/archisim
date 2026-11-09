@@ -9,7 +9,7 @@
 
 use archisim_core::{Electrification, LevelId, Model, ServiceSystem};
 use archisim_mep::drain::{self as dr, Drainage};
-use archisim_mep::electrical::{self as el, Installation};
+use archisim_mep::electrical::{self as el, Electrical};
 use archisim_mep::renewables::{self as rn, Renewables};
 use archisim_mep::thermal::{self as th, Thermal};
 use archisim_mep::ventilation::{self as vt, Ventilation};
@@ -42,7 +42,7 @@ fn check(fails: bool, text: String) -> Block {
 
 /// What the report carries: the calculations, once.
 struct All {
-    electrical: Vec<Installation>,
+    electrical: Electrical,
     water: Water,
     drainage: Drainage,
     ventilation: Ventilation,
@@ -53,7 +53,7 @@ struct All {
 /// The report's blocks.
 pub fn report(model: &Model) -> Vec<Block> {
     let all = All {
-        electrical: el::installations(model),
+        electrical: el::analysis(model),
         water: wa::water(model),
         drainage: dr::drainage(model),
         ventilation: vt::ventilation(model),
@@ -69,7 +69,7 @@ pub fn report(model: &Model) -> Vec<Block> {
     let has_ventilation = all.ventilation.applies && !all.ventilation.dwellings.is_empty();
     let has_thermal = !all.thermal.rooms.is_empty();
     let mut chapters: Vec<(&str, Vec<Block>)> = Vec::new();
-    if !all.electrical.is_empty() {
+    if !all.electrical.installations.is_empty() {
         chapters.push((
             "Instalación eléctrica (REBT)",
             electricity(model, &all.electrical),
@@ -139,11 +139,111 @@ pub fn report(model: &Model) -> Vec<Block> {
 // Electricity
 // ---------------------------------------------------------------------
 
-pub fn electricity(model: &Model, all: &[Installation]) -> Vec<Block> {
+pub fn electricity(model: &Model, e: &Electrical) -> Vec<Block> {
+    let site = *model.electrical_site();
+    let pct = |v: f64| format!("{} %", dec(v * 100.0, 2));
     let mut out = vec![Block::Para(
-        "Instalación interior de baja tensión, monofásica a 230 V, según el Reglamento Electrotécnico para Baja Tensión: grado de electrificación (ITC-BT-10), circuitos (ITC-BT-25, tabla 1), intensidades admisibles de la UNE-HD 60364-5-52 (método B1, tubo empotrado, PVC, dos conductores cargados), caída de tensión con cobre a 70 °C contra el 3 % (ITC-BT-19) y derivación individual (ITC-BT-15).".into(),
+        "Instalación interior de baja tensión según el Reglamento Electrotécnico para Baja Tensión: previsión de cargas y grado de electrificación (ITC-BT-10), suministro monofásico a 230 V o trifásico a 3×400/230 V por encima de 14 490 W, línea general de alimentación (ITC-BT-14), derivaciones individuales (ITC-BT-15), circuitos (ITC-BT-25, tabla 1), intensidades admisibles de la UNE-HD 60364-5-52 (método B1, tubo empotrado, PVC), caída de tensión con cobre a 70 °C sumada tramo a tramo por el recorrido de los cables (ITC-BT-19) y cortocircuito por el método simplificado de la guía técnica, Icc = 0,8·U/R, con la resistencia de los conductores a 20 °C (ITC-BT-22).".into(),
     )];
-    for (k, inst) in all.iter().enumerate() {
+    if let Some(b) = e
+        .building
+        .as_ref()
+        .filter(|b| b.general.is_some() || e.installations.len() > 1)
+    {
+        out.push(Block::Heading(2, "Previsión de cargas del edificio".into()));
+        let mut rows = Vec::new();
+        if b.dwellings > 0 {
+            rows.push(vec![
+                format!("{} viviendas", b.dwellings),
+                format!(
+                    "{} W de media × {} = {} W",
+                    dec(b.dwelling_mean, 0),
+                    dec(b.coefficient, 1),
+                    dec(b.dwellings_power, 0)
+                ),
+            ]);
+        }
+        for (name, v) in [
+            ("Servicios generales", b.services),
+            ("Locales y oficinas", b.locals),
+            ("Garaje", b.garage),
+        ] {
+            if v > 0.0 {
+                rows.push(vec![name.into(), format!("{} W", dec(v, 0))]);
+            }
+        }
+        rows.push(vec![
+            "Total".into(),
+            format!(
+                "{} W, {}",
+                dec(b.total, 0),
+                if b.three_phase {
+                    "trifásico 3×400/230 V"
+                } else {
+                    "monofásico 230 V"
+                }
+            ),
+        ]);
+        if b.three_phase {
+            rows.push(vec![
+                "Reparto por fases".into(),
+                format!(
+                    "L1 {} W · L2 {} W · L3 {} W (desequilibrio {} %)",
+                    dec(b.phase_loads[0], 0),
+                    dec(b.phase_loads[1], 0),
+                    dec(b.phase_loads[2], 0),
+                    dec(b.unbalance * 100.0, 0)
+                ),
+            ]);
+        }
+        rows.push(vec![
+            "Cortocircuito en la CGP".into(),
+            if site.supply_fault > 0.0 {
+                format!("{} (dado por la compañía)", el::ka(b.fault_supply))
+            } else {
+                format!(
+                    "{} (desde el transformador, {} m de línea)",
+                    el::ka(b.fault_supply),
+                    dec(site.network_length, 0)
+                )
+            },
+        ]);
+        if let Some(g) = &b.general {
+            rows.push(vec![
+                "Línea general de alimentación".into(),
+                format!(
+                    "{} m, {} mm² Cu, tubo Ø{} mm, {} A, ΔU {} (≤ {})",
+                    dec(g.length, 1),
+                    g.wires(),
+                    g.tube,
+                    dec(g.current, 1),
+                    pct(g.drop),
+                    pct(g.limit)
+                ),
+            ]);
+            rows.push(vec![
+                "Cortocircuito en los contadores".into(),
+                el::ka(b.fault_meters),
+            ]);
+        }
+        out.push(Block::Table {
+            columns: vec![col("Dato", 2.0), col("Valor", 3.0)],
+            rows,
+        });
+        if let Some(g) = &b.general {
+            out.push(check(
+                !g.passes(),
+                format!(
+                    "Línea general de alimentación: ΔU {} ≤ {}, {} A ≤ Iz {} A",
+                    pct(g.drop),
+                    pct(g.limit),
+                    dec(g.current, 1),
+                    dec(g.ampacity, 0)
+                ),
+            ));
+        }
+    }
+    for (k, inst) in e.installations.iter().enumerate() {
         let board = inst
             .board
             .and_then(|b| model.device(b))
@@ -152,73 +252,135 @@ pub fn electricity(model: &Model, all: &[Installation]) -> Vec<Block> {
             2,
             format!("{} {board} · {}", k + 1, level_name(model, inst.level)),
         ));
+        let mut rows = vec![
+            vec![
+                "Uso".into(),
+                match inst.use_ {
+                    el::BoardUse::Dwelling => format!(
+                        "Vivienda, electrificación {}",
+                        match inst.grade {
+                            Electrification::High => "elevada",
+                            _ => "básica",
+                        }
+                    ),
+                    u => {
+                        let n = u.name();
+                        let mut c = n.chars();
+                        c.next().map_or(String::new(), |f| {
+                            f.to_uppercase().collect::<String>() + c.as_str()
+                        })
+                    }
+                },
+            ],
+            vec![
+                "Superficie servida".into(),
+                format!("{} m²", dec(inst.area, 1)),
+            ],
+            vec![
+                "Potencia prevista".into(),
+                format!(
+                    "{} W, {}",
+                    dec(inst.power, 0),
+                    if inst.three_phase {
+                        "trifásica 3×400/230 V"
+                    } else {
+                        "monofásica 230 V"
+                    }
+                ),
+            ],
+        ];
+        if inst.three_phase {
+            rows.push(vec![
+                "Fases".into(),
+                format!(
+                    "L1 {} W · L2 {} W · L3 {} W (desequilibrio {} %)",
+                    dec(inst.phase_loads[0], 0),
+                    dec(inst.phase_loads[1], 0),
+                    dec(inst.phase_loads[2], 0),
+                    dec(inst.unbalance * 100.0, 0)
+                ),
+            ]);
+        }
+        rows.push(vec![
+            "Interruptor general (IGA)".into(),
+            format!(
+                "{} A {} · {}",
+                inst.main_switch,
+                inst.poles(),
+                el::ka(inst.breaking_capacity)
+            ),
+        ]);
+        rows.push(vec![
+            "Derivación individual".into(),
+            format!(
+                "{} m{}, {} mm² Cu, tubo Ø{} mm, {} A, ΔU {} (≤ {})",
+                dec(inst.feeder.length, 1),
+                if inst.feeder.measured {
+                    " desde los contadores"
+                } else {
+                    ""
+                },
+                inst.feeder.wires(),
+                inst.feeder.tube,
+                dec(inst.feeder.current, 1),
+                pct(inst.feeder.drop),
+                pct(inst.feeder.limit)
+            ),
+        ]);
+        rows.push(vec![
+            "Cortocircuito en el cuadro".into(),
+            format!(
+                "{} (poder de corte {})",
+                el::ka(inst.fault),
+                el::ka(inst.breaking_capacity)
+            ),
+        ]);
+        rows.push(vec![
+            "Diferenciales".into(),
+            inst.differentials
+                .iter()
+                .map(|d| {
+                    format!(
+                        "{} A/{} mA {}P (C{})",
+                        d.rating,
+                        d.sensitivity,
+                        d.poles,
+                        d.circuits
+                            .iter()
+                            .map(|c| c.to_string())
+                            .collect::<Vec<_>>()
+                            .join(", C")
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(" · "),
+        ]);
+        rows.push(vec![
+            "Caída de tensión total".into(),
+            format!(
+                "{} desde la CGP hasta el punto más lejano",
+                pct(inst.total_drop())
+            ),
+        ]);
         out.push(Block::Table {
             columns: vec![col("Dato", 2.0), col("Valor", 3.0)],
-            rows: vec![
-                vec![
-                    "Grado de electrificación".into(),
-                    match inst.grade {
-                        Electrification::High => "Elevada".into(),
-                        _ => "Básica".into(),
-                    },
-                ],
-                vec![
-                    "Superficie servida".into(),
-                    format!("{} m²", dec(inst.area, 1)),
-                ],
-                vec![
-                    "Potencia prevista".into(),
-                    format!("{} W", dec(inst.power, 0)),
-                ],
-                vec![
-                    "Interruptor general (IGA)".into(),
-                    format!("{} A", inst.main_switch),
-                ],
-                vec![
-                    "Derivación individual".into(),
-                    format!(
-                        "{} m, 2 × {} + T mm² Cu, tubo Ø{} mm, ΔU {} % (≤ {} %)",
-                        dec(inst.feeder.length, 1),
-                        dec(inst.feeder.section, 0),
-                        inst.feeder.tube,
-                        dec(inst.feeder.drop, 2),
-                        dec(inst.feeder.limit, 1)
-                    ),
-                ],
-                vec![
-                    "Diferenciales".into(),
-                    inst.differentials
-                        .iter()
-                        .map(|d| {
-                            format!(
-                                "{} A/{} mA (C{})",
-                                d.rating,
-                                d.sensitivity,
-                                d.circuits
-                                    .iter()
-                                    .map(|c| c.to_string())
-                                    .collect::<Vec<_>>()
-                                    .join(", C")
-                            )
-                        })
-                        .collect::<Vec<_>>()
-                        .join(" · "),
-                ],
-            ],
+            rows,
         });
         for r in &inst.reasons {
             out.push(Block::Para(r.clone()));
         }
         out.push(Block::Table {
             columns: vec![
-                col("Circuito", 2.6),
-                col("Puntos", 0.9),
-                col("P (W)", 1.0),
-                col("I (A)", 0.9),
-                col("PIA", 0.8),
-                col("Sección", 1.0),
-                col("L (m)", 0.9),
-                col("ΔU", 0.9),
+                col("Circuito", 2.4),
+                col("Fase", 0.6),
+                col("Puntos", 0.8),
+                col("P (W)", 0.9),
+                col("I (A)", 0.8),
+                col("PIA", 0.9),
+                col("Sección", 0.9),
+                col("L (m)", 0.8),
+                col("ΔU", 0.8),
+                col("Icc final", 1.0),
             ],
             rows: inst
                 .circuits
@@ -226,31 +388,59 @@ pub fn electricity(model: &Model, all: &[Installation]) -> Vec<Block> {
                 .map(|c| {
                     vec![
                         format!("C{} {}", c.spec.number, c.spec.name),
+                        if c.phase.is_some() {
+                            c.phase_text()
+                        } else {
+                            "L".into()
+                        },
                         c.count.to_string(),
                         dec(c.power, 0),
                         dec(c.current, 1),
-                        format!("{} A", c.breaker),
+                        format!("{} A {}", c.breaker, site.curve.name()),
                         format!("{} mm²", dec(c.chosen, 1)),
                         dec(c.length, 1),
-                        format!("{} %", dec(c.drop, 2)),
+                        pct(c.drop),
+                        el::ka(c.fault_end),
                     ]
                 })
                 .collect(),
         });
+        if !inst.feeder.passes() {
+            out.push(check(
+                true,
+                format!(
+                    "Derivación individual: ΔU {} (≤ {}), {} A (Iz {} A)",
+                    pct(inst.feeder.drop),
+                    pct(inst.feeder.limit),
+                    dec(inst.feeder.current, 1),
+                    dec(inst.feeder.ampacity, 0)
+                ),
+            ));
+        }
+        if !inst.breaks() {
+            out.push(check(
+                true,
+                format!(
+                    "Poder de corte: {} en el cuadro con magnetotérmicos de {}",
+                    el::ka(inst.fault),
+                    el::ka(inst.breaking_capacity)
+                ),
+            ));
+        }
         for c in &inst.circuits {
-            let fails = c.current > f64::from(c.breaker) + 1e-9
-                || f64::from(c.breaker) > c.ampacity + 1e-9
-                || c.drop > 3.0 + 1e-9;
+            let fails = !c.protected() || c.drop > el::CIRCUIT_DROP + 1e-9 || !c.trips();
             if fails {
                 out.push(check(
                     true,
                     format!(
-                        "C{}: Ib {} A, In {} A, Iz {} A, ΔU {} %",
+                        "C{}: Ib {} A, In {} A, Iz {} A, ΔU {}, Icc final {} (dispara con {})",
                         c.spec.number,
                         dec(c.current, 1),
                         c.breaker,
                         dec(c.ampacity, 0),
-                        dec(c.drop, 2)
+                        pct(c.drop),
+                        el::ka(c.fault_end),
+                        el::ka(c.trip / 1000.0)
                     ),
                 ));
             }

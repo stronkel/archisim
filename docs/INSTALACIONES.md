@@ -39,29 +39,76 @@ Código: `archisim-core::model::pipe_routing` (uniones, cambio de planta y traza
 
 ## 2. Cálculo eléctrico (REBT)
 
-Colaboración → **Cálculo eléctrico…**. Sale del cuadro (aparato «Cuadro»), de los mecanismos con su circuito (Propiedades → Circuito, de C1 a C10) y de las lavadoras y lavavajillas dibujados. Con varios cuadros, cada mecanismo va al más cercano.
+Colaboración → **Cálculo eléctrico…**. Sale de los cuadros (aparato «Cuadro»), de los mecanismos con su circuito (Propiedades → Circuito, de C1 a C10) y de las lavadoras y lavavajillas dibujados. Con varios cuadros, cada mecanismo va al más cercano.
 
-- **Grado de electrificación** (ITC-BT-10): el elegido, o uno calculado.
+### Qué sirve cada cuadro
+
+Por su nombre o, si no lo dice, por los locales que tiene alrededor:
+- **vivienda** («Cuadro de vivienda»…);
+- **servicios generales** («general», «servicios», «comunes», «escalera»);
+- **local** u oficina («local», «comercial», «oficina», «tienda»; o la mayoría de sus locales se llaman así, o café, bar, restaurante);
+- **garaje** («garaje», «aparcamiento»).
+
+Un cuadro que se llama «Contadores» o «Centralización» no es un cuadro: marca dónde están los contadores.
+
+### Potencia y suministro
+
+- **Grado de electrificación** de cada vivienda (ITC-BT-10): el elegido, o uno calculado.
   - Es elevada con más de 160 m² de locales, con más puntos de los que admiten C1, C2 o C5, o con mecanismos en C6 a C10.
   - La básica da 5 750 W e IGA de 25 A; la elevada, 9 200 W e IGA de 40 A.
-- **Circuitos** (ITC-BT-25, tabla 1):
-  - C1 a C5 están siempre; los de la elevada (C6 iluminación, C7 tomas, C8 calefacción, C9 aire acondicionado, C10 secadora), si tienen puntos.
-  - Potencia P = n·Pa·Fs·Fu con la potencia por punto y los factores de la tabla; un circuito de un solo punto toma su potencia con el factor de utilización.
-  - Intensidad I = P/230.
-  - Comprobación Ib ≤ In ≤ Iz, con Iz de la norma UNE-HD 60364-5-52, tabla B.52.2, método B1: tubo empotrado, PVC, dos conductores cargados.
-  - Longitud hasta el punto más lejano, como van los cables: en planta en dos direcciones, subiendo del cuadro al techo (2,5 m) y bajando al punto, y entre plantas.
-  - Caída de tensión ΔU = 2·L·P/(γ·S·U²), con cobre a 70 °C (γ = 48), contra el 3 % (ITC-BT-19). Si la sección de la tabla no basta, se da la que basta y su tubo.
-- **Derivación individual** (ITC-BT-15): la sección, de 6 mm² en adelante, que lleva la intensidad y cae como mucho un 1,5 % (un solo usuario) o un 1 % (contadores centralizados). Se dan la longitud (dato de la ventana) y el tubo.
-- **Protecciones**: el IGA, un diferencial de 40 A y 30 mA por cada cinco circuitos (ITC-BT-25) y el protector de sobretensiones (ITC-BT-23).
+- **Potencia de los demás cuadros** (ITC-BT-10):
+  - servicios generales, la suma de sus circuitos;
+  - locales y oficinas, 100 W/m² y 3 450 W como mínimo;
+  - garaje, 20 W/m² (ventilación forzada) y 3 450 W como mínimo.
+  - En estos cuadros solo salen los circuitos que tienen puntos (C1 a C5 «siempre» es solo de las viviendas).
+- **Suministro.** En la ventana: «Según la potencia» (por defecto), «Monofásico 230 V» o «Trifásico 3×400/230 V».
+  - Según la potencia: trifásico cuando pasa de 14 490 W.
+  - En trifásico, los circuitos se reparten por fases: el de más potencia primero, en la fase que va menos cargada. Sale la carga de cada fase y el desequilibrio, (la más cargada − la media) / la media; por encima del 20 % sale un aviso.
+  - La intensidad es P/(√3·400·cos φ), con cos φ = 0,9; la caída de tensión, ΔU = L·P/(γ·S·400²).
+  - El IGA y los diferenciales pasan a tetrapolares (4P) y la derivación individual lleva cuatro conductores y la protección (4×S+TT×S).
+  - El IGA es el menor que lleva la intensidad, y nunca menos de 25 A (40 A en una vivienda elevada monofásica).
 
-Todo sale en la ventana, en la Comprobación CTE (sección eléctrica, con el cuadro seleccionable) y en `archisim electricidad <proyecto> [carpeta]`.
+### Previsión de cargas del edificio y línea general
+
+Cuando los contadores no son de un solo usuario (en la ventana, se quita «un solo usuario»):
+- **Previsión de cargas** (ITC-BT-10): la potencia media de las viviendas por el coeficiente de simultaneidad de su número (tabla 1: 1, 2, 3, 3,8… 15,3 con 21 viviendas y 0,5 más por cada una), más los servicios generales, los locales y el garaje.
+- **Línea general de alimentación** (ITC-BT-14), de la caja general de protección a los contadores: su longitud se escribe en la ventana (10 m por defecto). Trifásica si la previsión pasa de 14 490 W; 10 mm² como mínimo; ΔU ≤ 0,5 % con los contadores en un solo lugar, ≤ 1 % si están repartidos («contadores en más de un lugar»).
+- **Reparto por fases** del edificio: cada vivienda monofásica entera en una fase (la más cargada primero en la más ligera) y las trifásicas un tercio en cada una.
+- **Derivaciones individuales medidas en el dibujo**: desde el cuadro «Contadores» si está dibujado o, si no, desde el de servicios generales, en dos direcciones y subiendo de planta a planta. Con un solo usuario se usa la longitud de la ventana.
+- **Límite de la derivación individual** (ITC-BT-15): 1,5 % con un solo usuario (sin línea general), 1 % con los contadores en un solo lugar y 0,5 % si están repartidos.
+
+### Circuitos (ITC-BT-25, tabla 1)
+
+- C1 a C5 están siempre en las viviendas; los de la elevada (C6 iluminación, C7 tomas, C8 calefacción, C9 aire acondicionado, C10 secadora), si tienen puntos.
+- Potencia P = n·Pa·Fs·Fu con la potencia por punto y los factores de la tabla; un circuito de un solo punto toma su potencia con el factor de utilización.
+- Intensidad I = P/230 (los circuitos son monofásicos también en trifásico: cada uno en su fase).
+- Comprobación Ib ≤ In ≤ Iz, con Iz de la norma UNE-HD 60364-5-52, tabla B.52.2, método B1: tubo empotrado, PVC, dos conductores cargados (tres en las líneas trifásicas).
+- **Recorrido de los cables.** Del cuadro al punto más cercano y de punto en punto (el árbol más corto que los une a todos), cada tramo en dos direcciones por el techo (2,5 m) y bajando a cada caja; entre plantas, lo que suben.
+- **Caída de tensión por tramos.** Cada tramo lleva la potencia de los puntos que hay después de él (cada punto, la parte que le toca de la del circuito): ΔU = 2·L·P/(γ·S·U²) con cobre a 70 °C (γ = 48). Se suma de tramo en tramo hasta cada punto, y vale la del que más cae, contra el 3 % (ITC-BT-19). Sale el recorrido hasta ese punto, tramo a tramo. Si la sección de la tabla no basta, se da la que basta y su tubo.
+- **Caída total**: la de la línea general, la de la derivación y la del peor circuito, sumadas, desde la caja general de protección hasta el punto más lejano.
+
+### Cortocircuito (ITC-BT-22)
+
+Método simplificado de la guía técnica: **Icc = 0,8·U/R**, con U = 230 V y R la resistencia de los conductores de fase a 20 °C (γ = 56 para el cobre) desde el origen.
+- **El origen**: la intensidad de cortocircuito en la acometida que da la compañía (en la ventana, en kA) o, si no se da (0), la línea de la compañía desde el transformador (su longitud en la ventana, 100 m por defecto, de 150 mm² de aluminio).
+- Se calcula en la caja general de protección, en los contadores, en cada cuadro (al principio de sus circuitos) y al final de cada circuito (su punto más lejano por los cables).
+- **Poder de corte.** El cortocircuito en el cuadro debe ser como mucho el poder de corte de su IGA y sus PIA (en la ventana: 4,5, 6, 10, 15 o 25 kA; 6 por defecto).
+- **Disparo.** El cortocircuito al final de cada circuito debe hacer saltar el magnético de su PIA: con la curva B, 5·In; con la C (por defecto), 10·In; con la D, 20·In. Si no salta, el circuito toma la sección que lo hace saltar (sale con ↑ y el aviso).
+
+### Dónde sale
+
+En la ventana (en tarjetas o como texto), en la Comprobación CTE (sección eléctrica, con el cuadro seleccionable, y el edificio), en la memoria de instalaciones y en `archisim electricidad <proyecto> [carpeta]`.
+
+**«Arreglar lo que no cumple»** (Comprobación CTE): si el cortocircuito de algún cuadro pasa del poder de corte, lo sube al menor que lo corta en todos (4,5 → 6 → 10 → 15 → 25 kA). Las secciones por caída de tensión y por disparo las da ya el cálculo.
 
 ## 3. Esquema unifilar
 
-Una hoja A3 por cuadro: red, CGP, contador, derivación individual con sus conductores, IGA, protector de sobretensiones, diferenciales y, debajo de cada uno, sus circuitos con el PIA y la sección. Debajo, el cuadro de circuitos: uso, puntos, potencia, intensidad, PIA, conductores, tubo, longitud y caída de tensión. En rojo lo que no cumple; con ↑ la sección que sube por la caída de tensión.
+Con los contadores centralizados, una primera hoja A3 con la caja general de protección, la línea general de alimentación, la centralización de contadores y la tabla de las derivaciones individuales (cuadro, uso, potencia, suministro, longitud, conductores, tubo, caída de tensión y cortocircuito en el cuadro).
+
+Después, una hoja A3 por cuadro: red, CGP, contador, derivación individual con sus conductores, IGA (2P o 4P, con su poder de corte), protector de sobretensiones, diferenciales y, debajo de cada uno, sus circuitos con el PIA, su curva, su fase (en trifásica) y la sección. Arriba, el uso, la potencia, el suministro, el cortocircuito en el cuadro y, en trifásica, la carga de cada fase. Debajo, el cuadro de circuitos: uso, fase, puntos, potencia, intensidad, PIA, conductores, tubo, longitud, caída de tensión y cortocircuito al final. En rojo lo que no cumple; con ↑ la sección que sube por la caída de tensión o por el disparo.
 
 - PDF: Archivo → Exportar → Esquema unifilar, o desde la ventana del cálculo.
-- DXF: desde la ventana (un archivo por cuadro).
+- DXF: desde la ventana (un archivo por hoja).
 - `archisim electricidad <proyecto> <carpeta>` deja `<proyecto>-unifilar.pdf` y un DXF por hoja.
 
 ## 4. Fontanería (DB-HS 4)
@@ -500,7 +547,7 @@ Las tablas están al principio de `crates/archisim-core/src/model/renewables.rs`
 ## 9. Memoria de instalaciones
 
 Archivo → Exportar → **Memoria de instalaciones** (o `archisim memoria-instalaciones <proyecto> [carpeta]`, que deja el PDF y el mismo texto en `.txt`). Hojas A4, con portada y un capítulo por cada instalación dibujada:
-1. **Instalación eléctrica (REBT)**: por cada cuadro, el grado de electrificación, la potencia, el IGA, la derivación individual y los diferenciales, y el cuadro de circuitos (puntos, potencia, intensidad, PIA, sección, longitud y caída de tensión).
+1. **Instalación eléctrica (REBT)**: la previsión de cargas del edificio con la línea general y el reparto por fases; por cada cuadro, su uso, la potencia y el suministro, las fases, el IGA, la derivación individual, el cortocircuito, los diferenciales y la caída de tensión total, y el cuadro de circuitos (fase, puntos, potencia, intensidad, PIA y curva, sección, longitud, caída de tensión y cortocircuito al final).
 2. **Suministro de agua (DB-HS 4)**: los datos de partida, la tabla de tramos de agua fría y caliente (caudal, diámetro dibujado y calculado, velocidad y pérdida), el grifo más desfavorable, el grupo de presión, el aljibe y el retorno.
 3. **Evacuación de aguas (DB-HS 5)**: los tramos de cada red con sus UD o su superficie, la pendiente y el diámetro dibujado y exigido, los sumideros y los canalones.
 4. **Calidad del aire interior (DB-HS 3)**: los caudales de cada vivienda, las aberturas de cada local, los pasos de las puertas, los conductos y las campanas.
@@ -511,9 +558,13 @@ Lo que no cumple sale marcado como en el anejo de cálculo de la estructura. La 
 
 ## 10. Lo que no hace (todavía)
 
-- Trifásica, viviendas con más de 14 490 W, locales y oficinas (ITC-BT-28 en adelante).
-- Caída de tensión por tramos con la carga repartida: se pone toda la carga en el punto más lejano, lo que queda del lado de la seguridad.
-- Cortocircuito y poder de corte (se pone 6 kA).
+- Electricidad:
+  - los circuitos trifásicos (motores, ascensores): todos los circuitos son monofásicos, repartidos por fases;
+  - los cables dibujados: el recorrido es el árbol más corto entre los puntos, no el que se dibuje;
+  - el cortocircuito por el método de las impedancias (con el transformador y la reactancia de los cables): se usa el simplificado de la guía, con la misma resistencia a 20 °C al principio y al final;
+  - la selectividad entre protecciones, los fusibles de la CGP y de la centralización, y la protección de la derivación individual;
+  - los locales de pública concurrencia y las instalaciones de las ITC-BT-28 en adelante (alumbrado de emergencia, piscinas, garajes con riesgo de incendio);
+  - las secciones del neutro reducidas en las líneas grandes (se pone igual que la fase).
 - Fontanería:
   - el volumen del depósito de presión del grupo;
   - los fluxores.

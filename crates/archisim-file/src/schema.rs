@@ -6508,6 +6508,39 @@ pub struct ElectricalOf {
     pub grade: String,
     pub feeder_length: f64,
     pub single_user: bool,
+    /// «auto», «single» or «three» (version 98).
+    #[serde(default = "auto_text")]
+    pub supply: String,
+    #[serde(default)]
+    pub partly_centralised: bool,
+    #[serde(default = "default_general_length")]
+    pub general_length: f64,
+    /// kA; 0: from the line to the transformer.
+    #[serde(default)]
+    pub supply_fault: f64,
+    #[serde(default = "default_network_length")]
+    pub network_length: f64,
+    #[serde(default = "default_breaking_capacity")]
+    pub breaking_capacity: f64,
+    /// «B», «C» or «D».
+    #[serde(default = "default_curve")]
+    pub curve: String,
+}
+
+fn default_general_length() -> f64 {
+    core::ElectricalSite::default().general_length
+}
+
+fn default_network_length() -> f64 {
+    core::ElectricalSite::default().network_length
+}
+
+fn default_breaking_capacity() -> f64 {
+    core::ElectricalSite::default().breaking_capacity
+}
+
+fn default_curve() -> String {
+    "C".into()
 }
 
 impl ElectricalOf {
@@ -6519,6 +6552,13 @@ impl ElectricalOf {
             grade: site.grade.code().into(),
             feeder_length: site.feeder_length,
             single_user: site.single_user,
+            supply: site.supply.code().into(),
+            partly_centralised: site.partly_centralised,
+            general_length: site.general_length,
+            supply_fault: site.supply_fault,
+            network_length: site.network_length,
+            breaking_capacity: site.breaking_capacity,
+            curve: site.curve.name().into(),
         })
     }
 
@@ -6527,6 +6567,13 @@ impl ElectricalOf {
             grade: core::Electrification::from_code(&self.grade).unwrap_or_default(),
             feeder_length: self.feeder_length,
             single_user: self.single_user,
+            supply: core::Supply::from_code(&self.supply).unwrap_or_default(),
+            partly_centralised: self.partly_centralised,
+            general_length: self.general_length,
+            supply_fault: self.supply_fault,
+            network_length: self.network_length,
+            breaking_capacity: self.breaking_capacity,
+            curve: core::TripCurve::from_code(&self.curve).unwrap_or_default(),
         })
     }
 }

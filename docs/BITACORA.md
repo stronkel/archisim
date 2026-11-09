@@ -6,6 +6,66 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-09 (131) · Electricidad, segunda vuelta: trifásica, previsión del edificio, cortocircuito y caída de tensión por tramos (REBT)
+
+Rama `bloque/rebt-trifasica`, con pull request. Va sobre la de la entrada 130 (#184, todavía sin unir). **Formato versión 98**: siete datos nuevos de la instalación eléctrica en `electrical` (suministro, contadores repartidos, longitud de la línea general, cortocircuito en la acometida, longitud de la línea desde el transformador, poder de corte y curva). `docs/INSTALACIONES.md` §2 y §3.
+
+- **Qué sirve cada cuadro.** Por su nombre («vivienda», «general»/«servicios», «local»/«oficina», «garaje») o por los locales que tiene alrededor. Uno que se llama «Contadores» marca la centralización.
+  - Locales y oficinas: 100 W/m², 3 450 W como mínimo; garaje: 20 W/m², 3 450 W como mínimo; servicios generales: la suma de sus circuitos. Fuera de las viviendas solo salen los circuitos con puntos.
+- **Suministro trifásico** (ITC-BT-10). En la ventana, «Según la potencia» (trifásico por encima de 14 490 W), monofásico o trifásico.
+  - Los circuitos se reparten por fases (el más cargado primero en la fase más ligera); sale la carga de cada fase y el desequilibrio, con aviso por encima del 20 %.
+  - I = P/(√3·400·cos φ) con cos φ = 0,9; ΔU = L·P/(γ·S·400²); IGA y diferenciales de 4 polos; derivación de 4×S+TT×S.
+- **Previsión de cargas del edificio y línea general** (ITC-BT-10 y 14), cuando no es un solo usuario: media de las viviendas por el coeficiente de simultaneidad de su número, más servicios generales, locales y garaje. La línea general (su longitud en la ventana), trifásica por encima de 14 490 W, 10 mm² como mínimo, ΔU ≤ 0,5 % (≤ 1 % con los contadores repartidos). Las viviendas se reparten por las fases del edificio.
+  - Las derivaciones individuales se miden ahora en el dibujo desde los contadores (el cuadro «Contadores» o, si no está, el de servicios generales). Su límite: 1,5 % un solo usuario, 1 % contadores en un lugar, 0,5 % repartidos.
+- **Caída de tensión por tramos.** Los cables van del cuadro al punto más cercano y de punto en punto (el árbol más corto). Cada tramo lleva la potencia de los puntos que hay detrás; la caída se suma tramo a tramo hasta el punto que más cae, contra el 3 %. El informe enseña ese recorrido («3,9 m 225 W 0,05 % → 2,9 m 150 W 0,07 % → …»). Sale también la caída total desde la CGP (línea general + derivación + circuito).
+- **Cortocircuito** (ITC-BT-22, método simplificado de la guía: Icc = 0,8·U/R, conductores de fase a 20 °C). El origen es la Icc que da la compañía en la acometida o, si no se da, 100 m (en la ventana) de línea de 150 mm² de aluminio desde el transformador.
+  - En el cuadro, contra el poder de corte (4,5 / 6 / 10 / 15 / 25 kA en la ventana; 6 por defecto).
+  - Al final de cada circuito, contra el disparo de la curva (B 5·In, C 10·In, D 20·In; C por defecto). Si no dispara, el circuito toma la sección que lo hace disparar (↑ con aviso).
+- **Dónde sale**: el informe de la ventana y de `archisim electricidad`, la memoria de instalaciones (previsión, línea general, fases, Icc, caída total, y la fase y la Icc final de cada circuito; además se corrige que las caídas salían como fracción y no en %), el esquema unifilar (hoja nueva IE-01 de la línea general con la tabla de las derivaciones cuando hay contadores centralizados; en cada cuadro, la fase sobre cada PIA, la curva, 2P/4P, el poder de corte, la Icc en el cuadro y al final de cada circuito) y la Comprobación CTE (previsión, línea general, fases, poder de corte y disparo).
+- **«Arreglar lo que no cumple»** sube el poder de corte al menor que corta el cortocircuito de todos los cuadros. Las secciones por caída de tensión y por disparo ya las da el cálculo.
+- **Pruebas**: el recorrido de tres luces en fila (tramo a tramo), un piso en trifásica (fases, 4P, intensidad) y un local de 200 m² que pasa solo a trifásica, un edificio de tres viviendas con su cuadro general (previsión, línea general, derivaciones medidas, fases, Icc bajando de la CGP al cuadro), el poder de corte y el disparo con curva D, el arreglo del poder de corte en la Comprobación CTE, el fichero que guarda los datos nuevos, el esquema unifilar en trifásica y con la hoja de la línea general, y la ventana de la app.
+
+**Florence Street.** El edificio lleva ahora sus contadores centralizados junto al cuadro general (en `archisim edificio`), con 12 m de línea general.
+
+| Comprobación | Resultado |
+|---|---|
+| Previsión de cargas | 23 viviendas básicas y 1 elevada: 5 894 W de media × 16,8 = 99 015 W; servicios generales 3 866 W; total 102 880 W, trifásico |
+| Línea general (12 m) | Cumple: 4×70+TT×70 mm², 165 A, ΔU 0,23 % ≤ 0,5 % |
+| Reparto por fases | L1 49 450 W, L2 49 866 W, L3 46 000 W: desequilibrio 3 % |
+| Cortocircuito | 9,66 kA en la CGP (100 m desde el transformador), 8,32 kA en los contadores, de 3,0 a 5,0 kA en los cuadros de las viviendas |
+| Derivaciones individuales (de 1 a 25 m, medidas) | Cumplen las 25 con ΔU ≤ 1 %: 9 de 6 mm², 14 de 10, una de 16 y la elevada de 25 |
+| Poder de corte (6 kA) | Cumplen las viviendas. **No cumple** el cuadro general, junto a los contadores: 7,34 kA. El arreglo lo sube a 10 kA |
+| Disparo (curva C) | Cumplen todos los circuitos (Icc final de 0,7 a 2,6 kA) |
+| Caída de tensión de los circuitos | Cumplen todos (la mayor, 1,92 %); el C4 de la vivienda de la planta 4 que recoge las 7 lavadoras de la cubierta sube a 16 mm² |
+| Caída total desde la CGP | De 1,2 % a 3,0 % |
+| Ib ≤ In (ya fallaba antes) | **No cumple** el C4 de 4 viviendas: 3 puntos dan 22,3 A con su PIA de 20 A, y el de la planta 4 con 7 puntos da 52 A |
+
+**Pendiente.**
+- Los circuitos trifásicos (ascensores, motores) y la protección de la derivación individual; la selectividad.
+- El método de las impedancias completo (con la reactancia y el transformador); se usa el simplificado con la misma resistencia al principio y al final.
+- Los cables dibujados: el recorrido es el árbol más corto, no el que se dibuje.
+- En Florence Street, dar su propio cuadro a la lavandería de la cubierta (hoy sus lavadoras van al cuadro de vivienda más cercano) y repartir el C4 de 3 puntos en dos circuitos.
+
+**Escrito de memoria (que lo compruebe Antonio).** Todo junto al principio de `crates/archisim-mep/src/electrical.rs`:
+- 14 490 W para pasar a trifásico y cos φ = 0,9 en las líneas trifásicas (1 en las monofásicas);
+- la tabla 1 de la ITC-BT-10 (1, 2, 3, 3,8, 4,6, 5,4, 6,2, 7, 7,8, 8,5, 9,2, 9,9, 10,6, 11,3, 11,9, 12,5, 13,1, 13,7, 14,3, 14,8, 15,3 y 0,5 más por vivienda por encima de 21);
+- 100 W/m² y 3 450 W para locales y oficinas; 20 W/m² y 3 450 W para garajes (ventilación forzada; 10 W/m² con natural no se distingue);
+- límites de caída: línea general 0,5 % / 1 %, derivación 1,5 % / 1 % / 0,5 %; secciones mínimas 10 mm² y 6 mm²;
+- intensidades admisibles B1 con tres conductores cargados y de 70 a 120 mm² con dos;
+- Icc = 0,8·U/R con U = 230 V y la resistencia de las fases a 20 °C (γ = 56; 35 en aluminio); 150 mm² de aluminio para la línea de la compañía;
+- poderes de corte 4,5 / 6 / 10 / 15 / 25 kA; curvas B 5·In, C 10·In, D 20·In (el disparo magnético seguro suele ser el límite alto de cada curva, que es lo que se ha puesto);
+- aviso por encima del 20 % de desequilibrio (este es mío).
+
+**Qué debe probar Antonio:**
+1. En la línea de órdenes, `archisim edificio out/florence` y luego `archisim electricidad out/florence/edificio.archisim out/florence/electricidad`. Arriba sale la previsión de cargas y la línea general; en cada cuadro, la derivación medida desde los contadores, el cortocircuito y, en los circuitos con varios puntos, «por tramos». Abre `out/florence/electricidad/edificio-unifilar.pdf`: la hoja IE-01 es la línea general con la tabla de las 25 derivaciones; el cuadro general (IE-26) sale en rojo por el poder de corte.
+2. Abre `out/florence/edificio.archisim` y entra en Colaboración → Cálculo eléctrico.
+   - Cambia «Suministro» a «Trifásico»: cada cuadro pasa a 4P y sus circuitos salen con L1, L2 o L3.
+   - Escribe 15 kA en «Cortocircuito» (dato de la compañía): suben las Icc de los cuadros.
+   - Cambia la curva a D: mira si algún circuito largo sube de sección («para que dispare»).
+3. En Colaboración → Comprobación CTE, filtra por Electricidad y pulsa «Arreglar lo que no cumple…»: debe salir «Poder de corte 6,00 kA → 10,00 kA». Acéptalo y vuelve a comprobar: el cuadro general debe cumplir.
+
+---
+
 ## 2026-11-09 (130) · Saneamiento, tercera vuelta: ventilación de las bajantes, sifones y derivaciones (DB-HS 5)
 
 Rama `bloque/hs5-ventilacion`, con pull request. Va sobre la de la entrada 129 (#183, todavía sin unir). **Formato versión 97**: dos aparatos nuevos (válvula de aireación y bote sifónico) y dos datos del saneamiento en `water` (altura del cierre hidráulico y si las cubiertas son transitables). En el IFC, los aparatos nuevos salen como `IfcValve` (ANTIVACUUM) e `IfcWasteTerminal` (WASTETRAP). `docs/INSTALACIONES.md` §5, «Ventilación de la red, sifones y derivaciones».

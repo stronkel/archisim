@@ -1,9 +1,11 @@
 //! The electrical calculation window (Colaboración → Cálculo eléctrico):
 //! what the drawing does not give (the degree of electrification, the
-//! feeder's length, a single user or centralised meters), the calculation
+//! feeder's length, a single user or centralised meters, the supply, the
+//! general feeder, the short circuit at the supply and the breakers'
+//! breaking capacity and curve), the calculation
 //! of each board as text, and the single-line diagram in PDF or DXF.
 
-use archisim_core::Electrification;
+use archisim_core::{Electrification, Supply, TripCurve};
 use eframe::egui::{self, Ui};
 
 use super::*;
@@ -68,6 +70,89 @@ impl ArchiSimApp {
                     );
                 });
                 ui.end_row();
+                ui.label("Suministro");
+                egui::ComboBox::from_id_salt("el-supply")
+                    .selected_text(new.supply.name())
+                    .width(220.0)
+                    .show_ui(ui, |ui| {
+                        for g in Supply::ALL {
+                            ui.selectable_value(&mut new.supply, g, g.name());
+                        }
+                    })
+                    .response
+                    .on_hover_text("Según la potencia: trifásico por encima de 14 490 W (ITC-BT-10); los circuitos se reparten por fases");
+                ui.end_row();
+                if !new.single_user {
+                    ui.label("Línea general");
+                    ui.horizontal(|ui| {
+                        ui.add(
+                            egui::DragValue::new(&mut new.general_length)
+                                .range(0.0..=300.0)
+                                .speed(0.5)
+                                .suffix(" m"),
+                        )
+                        .on_hover_text("De la caja general de protección a la centralización de contadores (ITC-BT-14). Las derivaciones se miden en el dibujo desde un cuadro llamado «Contadores» o, si no lo hay, desde el de servicios generales");
+                        super::widgets::switch(
+                            ui,
+                            &mut new.partly_centralised,
+                            "contadores en más de un lugar: línea general ≤ 1 % y derivaciones ≤ 0,5 %",
+                        );
+                    });
+                    ui.end_row();
+                }
+                ui.label("Cortocircuito");
+                ui.horizontal(|ui| {
+                    ui.add(
+                        egui::DragValue::new(&mut new.supply_fault)
+                            .range(0.0..=50.0)
+                            .speed(0.1)
+                            .max_decimals(1)
+                            .suffix(" kA"),
+                    )
+                    .on_hover_text("La intensidad de cortocircuito en la acometida que da la compañía; 0: se calcula desde el transformador");
+                    if new.supply_fault <= 0.0 {
+                        ui.label("desde el transformador, a");
+                        ui.add(
+                            egui::DragValue::new(&mut new.network_length)
+                                .range(0.0..=2000.0)
+                                .speed(1.0)
+                                .suffix(" m"),
+                        )
+                        .on_hover_text("Longitud de la línea de la compañía (150 mm² de aluminio) del transformador a la acometida");
+                    } else {
+                        ui.label("en la acometida (dato de la compañía)");
+                    }
+                });
+                ui.end_row();
+                ui.label("Magnetotérmicos");
+                ui.horizontal(|ui| {
+                    egui::ComboBox::from_id_salt("el-breaking")
+                        .selected_text(format!(
+                            "poder de corte {}",
+                            archisim_mep::electrical::ka(new.breaking_capacity)
+                        ))
+                        .width(170.0)
+                        .show_ui(ui, |ui| {
+                            for b in archisim_mep::electrical::BREAKING_CAPACITIES {
+                                ui.selectable_value(
+                                    &mut new.breaking_capacity,
+                                    b,
+                                    archisim_mep::electrical::ka(b),
+                                );
+                            }
+                        });
+                    egui::ComboBox::from_id_salt("el-curve")
+                        .selected_text(format!("curva {}", new.curve.name()))
+                        .width(90.0)
+                        .show_ui(ui, |ui| {
+                            for c in TripCurve::ALL {
+                                ui.selectable_value(&mut new.curve, c, format!("curva {}", c.name()));
+                            }
+                        })
+                        .response
+                        .on_hover_text("Disparo magnético: B a 5·In, C a 10·In, D a 20·In; se comprueba con el cortocircuito al final de cada circuito");
+                });
+                ui.end_row();
             });
         if new != site {
             let r = self.ed.transact("Datos de la instalación eléctrica", |m| {
@@ -88,9 +173,9 @@ impl ArchiSimApp {
         if self.electrical.results.as_ref().is_none_or(|r| r.0 != rev) {
             let model = self.ed.shown();
             let text = archisim_mep::electrical::report(&model);
-            let all = archisim_mep::electrical::installations(&model);
+            let all = archisim_mep::electrical::analysis(&model);
             let blocks = archisim_plan::services_report::electricity(&model, &all);
-            self.electrical.results = Some((rev, text, all.len(), blocks));
+            self.electrical.results = Some((rev, text, all.installations.len(), blocks));
         }
         let (_, text, boards, blocks) = self.electrical.results.clone().expect("just made");
         let (mut pdf, mut dxf) = (false, false);
