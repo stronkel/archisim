@@ -50,6 +50,7 @@ pub mod slice;
 pub mod solid;
 pub mod stairs;
 pub mod sweeps;
+pub mod wall_section;
 
 use archisim_core::{
     Arc, Hand, LayerFunction, LevelId, MaterialId, Model, OpeningId, OpeningKind, Point2, Vec2,
@@ -440,10 +441,26 @@ pub fn wall_geometry(model: &Model, id: WallId) -> Option<WallGeometry> {
 /// [`wall_geometry`] with the walls around found through an index (build
 /// one for many walls).
 pub fn wall_geometry_in(idx: &WallIndex, id: WallId) -> Option<WallGeometry> {
+    wall_geometry_with(idx, id, None)
+}
+
+/// [`wall_geometry_in`] with each layer boundary (from the exterior face
+/// to the interior one) moved across by `shifts` (left positive): the
+/// wall at a height where its battered faces lean out
+/// ([`wall_section`]). The corners stay on the lines their ends are cut
+/// along, so mitres still meet.
+pub fn wall_geometry_with(
+    idx: &WallIndex,
+    id: WallId,
+    shifts: Option<&[f64]>,
+) -> Option<WallGeometry> {
     let model = idx.model;
     let wall = model.wall(id)?;
     let wtype = model.wall_type(wall.wall_type)?;
     let (ext, int) = wall.face_offsets(wtype.thickness());
+    let shift = |i: usize| shifts.and_then(|s| s.get(i)).copied().unwrap_or(0.0);
+    let n_layers = wtype.layers.len();
+    let (ext, int) = (ext + shift(0), int + shift(n_layers));
 
     let start_cut = end_cut(idx, wall, End::Start);
     let end_cut_ = end_cut(idx, wall, End::End);
@@ -464,9 +481,10 @@ pub fn wall_geometry_in(idx: &WallIndex, id: WallId) -> Option<WallGeometry> {
     let nseg = arc.map_or(0, |a| arc_segments(&a, ext, int));
 
     let mut tops = vec![ext];
-    for layer in &wtype.layers {
-        let last = *tops.last()?;
-        tops.push(last - layer.thickness);
+    let mut nominal = ext - shift(0);
+    for (li, layer) in wtype.layers.iter().enumerate() {
+        nominal -= layer.thickness;
+        tops.push(nominal + shift(li + 1));
     }
     let layers: Vec<LayerBand> = wtype
         .layers

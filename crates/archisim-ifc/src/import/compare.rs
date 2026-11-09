@@ -97,6 +97,28 @@ pub fn differences(a: &Model, b: &Model) -> Vec<String> {
         {
             diff(format!("muro {}: {:?} / {:?}", w.guid, w, v));
         }
+        // The section it is built with (its own or its type's).
+        let (sa, sb) = (a.wall_section(w.id), b.wall_section(v.id));
+        let same_section = match (sa, sb) {
+            (None, None) => true,
+            (Some(x), Some(y)) => {
+                close(x.batter_ext, y.batter_ext)
+                    && close(x.batter_int, y.batter_int)
+                    && match (x.footing, y.footing) {
+                        (None, None) => true,
+                        (Some(f), Some(g)) => {
+                            close(f.toe_ext, g.toe_ext)
+                                && close(f.toe_int, g.toe_int)
+                                && close(f.depth, g.depth)
+                        }
+                        _ => false,
+                    }
+            }
+            _ => false,
+        };
+        if !same_section {
+            diff(format!("sección del muro {}: {:?} / {:?}", w.guid, sa, sb));
+        }
         match (ta, tb) {
             (Some(ta), Some(tb)) => {
                 if ta.guid != tb.guid

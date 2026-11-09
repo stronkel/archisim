@@ -32,6 +32,7 @@ mod grande;
 mod instalaciones;
 mod modelos;
 mod muestrario;
+mod muros_talud;
 mod ortofoto;
 mod taller;
 mod tramas;
@@ -196,6 +197,13 @@ Uso:
       rombos, bloque, paneles, ventilada y aplacado), con dinteles a
       sardinel, esquinas trabadas y frentes de forjado: fachadas.archisim y
       fachadas.ifc, y cuántas piezas lleva. Por defecto: ./out
+  archisim muros-talud [carpeta]
+      Muros de sección variable: un muro de contención de hormigón en talud
+      1:10 con su zarpa (talón y puntera), en L con otro igual y con un muro
+      de ladrillo en T, y un muro de mampostería en talud por las dos caras
+      con una puerta y una ventana, en L con uno de ladrillo:
+      muros-talud.archisim, muros-talud.ifc, las plantas y dos secciones a
+      1:50 en SVG y la comprobación del muro de contención. Por defecto: ./out
   archisim gama [carpeta]
       La gama estilizada de materiales: un muestrario con cada uno (fachadas,
       cubiertas, suelos, pavimentos y pinturas) y una calle con acantilado,
@@ -636,6 +644,10 @@ fn main() -> ExitCode {
         Some("instalaciones") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
             report(instalaciones::write(&dir))
+        }
+        Some("muros-talud") => {
+            let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
+            report(muros_talud::write(&dir))
         }
         Some("fachadas") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));

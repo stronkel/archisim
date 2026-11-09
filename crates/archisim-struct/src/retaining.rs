@@ -77,6 +77,19 @@ pub fn check(model: &Model) -> Vec<Check> {
             .filter(|l| Kind::of(model.material(l.material)) == Kind::Concrete)
             .map(|l| l.thickness)
             .sum();
+        // A wall of variable section: thicker at the foot of its faces,
+        // where it bends most; the earth from the top of its footing.
+        let section = model.wall_section(w.id);
+        let (concrete, earth) = match &section {
+            Some(s) if concrete >= 0.1 => {
+                let (e, i) = s.leans_at(w.height, 0.0);
+                (concrete + e + i, earth - s.footing_depth())
+            }
+            _ => (concrete, earth),
+        };
+        if earth < 0.5 {
+            continue;
+        }
         if concrete < 0.1 {
             out.push(Check {
                 subject: Subject::Wall(w.id),
@@ -101,7 +114,12 @@ pub fn check(model: &Model) -> Vec<Check> {
             (z - top).abs() < 0.5 && crate::geo::near_polygon(mid, &s.outline, 0.5)
         });
         if !propped {
-            retaining_checks(model, w, &t.name, earth, concrete, &mut out);
+            match &section {
+                Some(sec) if sec.footing.is_some() => {
+                    section_checks(model, w, &t.name, earth, sec, &mut out)
+                }
+                _ => retaining_checks(model, w, &t.name, earth, concrete, &mut out),
+            }
         }
         let p = k0 * site.soil_weight * earth;
         let q = k0 * SURCHARGE;
@@ -227,6 +245,186 @@ pub fn retaining(
         f64::INFINITY
     };
     (overturn, slide, edge, e)
+}
+
+/// A retaining wall per metre as it is built (a wall of variable section
+/// with its own footing), measured across from the toe (the edge of the
+/// footing away from the earth) towards the earth.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RetainingSection {
+    /// Width and depth of the footing.
+    pub b: f64,
+    pub hf: f64,
+    /// Weight of the wall and its footing, kN/m, and where it acts.
+    pub weight: f64,
+    pub x_weight: f64,
+    /// The earth's face of the wall at the top of the footing, from the
+    /// toe, and how far it leans back towards the toe per metre up.
+    pub face: f64,
+    pub lean: f64,
+}
+
+impl RetainingSection {
+    /// The section of a wall `crown` thick and `height` high whose earth is
+    /// on its exterior face, its materials `density` kN/m³.
+    pub fn of(s: &archisim_core::WallSection, crown: f64, height: f64, density: f64) -> Self {
+        let f = s.footing.unwrap_or(archisim_core::WallFooting {
+            toe_ext: 0.0,
+            toe_int: 0.0,
+            depth: 0.0,
+        });
+        let d = f.depth;
+        let (e, i) = s.leans_at(height, 0.0);
+        let base = crown + e + i;
+        let b = base + f.toe_ext + f.toe_int;
+        let stem = (height - d).max(0.0);
+        // From the toe: the interior face's foot at toe_int, its top at
+        // toe_int + i; the exterior face's foot at toe_int + base.
+        let (x0, x1) = (f.toe_int, f.toe_int + base);
+        let (t0, t1) = (f.toe_int + i, f.toe_int + i + crown);
+        let stem_area = stem * (base + crown) / 2.0;
+        // The trapezoid's centroid: its two triangles and its rectangle.
+        let stem_x = if stem_area > 1e-12 {
+            let rect = (t0, t1, crown * stem);
+            let left = ((x0 + 2.0 * t0) / 3.0, 0.5 * (t0 - x0) * stem);
+            let right = ((x1 + 2.0 * t1) / 3.0, 0.5 * (x1 - t1) * stem);
+            ((rect.0 + rect.1) / 2.0 * rect.2 + left.0 * left.1 + right.0 * right.1) / stem_area
+        } else {
+            0.0
+        };
+        let foot_area = b * d;
+        let area = stem_area + foot_area;
+        RetainingSection {
+            b,
+            hf: d,
+            weight: density * area,
+            x_weight: if area > 1e-12 {
+                (stem_x * stem_area + b / 2.0 * foot_area) / area
+            } else {
+                b / 2.0
+            },
+            face: x1,
+            lean: s.batter_ext,
+        }
+    }
+}
+
+/// [`retaining`] for a wall as built: `h` of earth above its footing.
+/// The earth over the heel takes in the wedge over a battered face.
+/// Returns (overturning safety, sliding safety, edge pressure kN/m²,
+/// eccentricity m).
+pub fn retaining_section(
+    h: f64,
+    s: &RetainingSection,
+    phi: f64,
+    gamma: f64,
+    q: f64,
+) -> (f64, f64, f64, f64) {
+    let sn = phi.to_radians().sin();
+    let ka = (1.0 - sn) / (1.0 + sn);
+    let ht = h + s.hf;
+    let e_tri = 0.5 * ka * gamma * ht * ht;
+    let e_q = ka * q * ht;
+    let m_over = e_tri * ht / 3.0 + e_q * ht / 2.0;
+    let b = s.b;
+    let heel = (b - s.face).max(0.0);
+    // Earth over the heel and over the leaning face (its wedge).
+    let wedge = 0.5 * s.lean * h * h;
+    let w_heel = gamma * h * heel;
+    let w_wedge = gamma * wedge;
+    let w_q = q * (heel + s.lean * h);
+    let x_heel = b - heel / 2.0;
+    let x_wedge = s.face - s.lean * h / 3.0;
+    let x_q = b - (heel + s.lean * h) / 2.0;
+    let m_stab = s.weight * s.x_weight + w_heel * x_heel + w_wedge * x_wedge + w_q * x_q;
+    let v = s.weight + w_heel + w_wedge + w_q;
+    let overturn = m_stab / m_over.max(1e-9);
+    let slide = v * (2.0 / 3.0 * phi.to_radians()).tan() / (e_tri + e_q).max(1e-9);
+    let x = (m_stab - m_over) / v.max(1e-9);
+    let e = b / 2.0 - x;
+    let edge = if e.abs() <= b / 6.0 {
+        v / b * (1.0 + 6.0 * e.abs() / b)
+    } else if x > 0.0 {
+        2.0 * v / (3.0 * x)
+    } else {
+        f64::INFINITY
+    };
+    (overturn, slide, edge, e)
+}
+
+/// The checks of a retaining wall of variable section on its own footing:
+/// its real weight and base.
+fn section_checks(
+    model: &Model,
+    w: &archisim_core::Wall,
+    name: &str,
+    earth: f64,
+    sec: &archisim_core::WallSection,
+    out: &mut Vec<Check>,
+) {
+    let site = model.structural_site();
+    let Some(t) = model.wall_type(w.wall_type) else {
+        return;
+    };
+    let crown = t.thickness();
+    let density = crate::weights::wall_type_weight(model, w.wall_type) / crown.max(1e-9);
+    let rs = RetainingSection::of(sec, crown, w.height, density);
+    let (o, sl, edge, e) =
+        retaining_section(earth, &rs, site.soil_friction, site.soil_weight, SURCHARGE);
+    let f = sec.footing.unwrap_or(archisim_core::USUAL_FOOTING);
+    let foot = format!(
+        "zarpa de {} m (puntera {}, talón {}) y {} de canto, {} m en la base del alzado, {} kN/m",
+        dec(rs.b, 2),
+        dec(f.toe_int, 2),
+        dec(f.toe_ext, 2),
+        dec(rs.hf, 2),
+        dec(sec.base_thickness(crown, w.height), 2),
+        dec(rs.weight, 1)
+    );
+    let mut push = |rule: &'static str, what: String, ratio: f64| {
+        out.push(Check {
+            subject: Subject::Wall(w.id),
+            what,
+            rule,
+            ratio,
+            status: if ratio <= 1.0 {
+                Status::Pass
+            } else {
+                Status::Fail
+            },
+            advice: (ratio > 1.0).then(|| {
+                "una zarpa más ancha (sobre todo el talón, del lado de las tierras), más talud o un tacón"
+                    .into()
+            }),
+        });
+    };
+    push(
+        "Vuelco del muro de contención (DB-SE-C, 6.3; γ 1,8)",
+        format!(
+            "{name} con {foot}: {} m de tierras, seguridad al vuelco {}",
+            dec(earth, 2),
+            dec(o, 2)
+        ),
+        1.8 / o.max(1e-9),
+    );
+    push(
+        "Deslizamiento del muro de contención (DB-SE-C, 6.3; γ 1,5)",
+        format!(
+            "{name}: seguridad al deslizamiento {} (rozamiento tan ⅔φ)",
+            dec(sl, 2)
+        ),
+        1.5 / sl.max(1e-9),
+    );
+    push(
+        "Presión bajo la zapata del muro (DB-SE-C, 4.3; borde ≤ 1,25·σadm)",
+        format!(
+            "{name}: presión en el borde {} kN/m² (excentricidad {} m) sobre {} admisibles",
+            dec(edge, 0),
+            dec(e, 2),
+            dec(1.25 * site.bearing, 0)
+        ),
+        edge / (1.25 * site.bearing),
+    );
 }
 
 /// The checks of a retaining wall.
@@ -377,5 +575,40 @@ mod tests {
         assert!(wide.0 > 1.8, "{wide:?}");
         // A narrow one tips over.
         assert!(narrow.0 < 1.8, "{narrow:?}");
+    }
+
+    #[test]
+    fn the_section_as_built_matches_the_plain_wall() {
+        // An upright 25 cm wall on a centred 2 m footing, 0,40 deep, as a
+        // section: the same as the plain formula (12,5 kN/m of wall over
+        // 2,4 m of height is 20,8 kN/m³ × 0,25 × 2,4; footing at 25).
+        let s = archisim_core::WallSection {
+            footing: Some(archisim_core::WallFooting {
+                toe_ext: 0.875,
+                toe_int: 0.875,
+                depth: 0.4,
+            }),
+            ..Default::default()
+        };
+        let rs = RetainingSection::of(&s, 0.25, 2.4, 25.0);
+        assert!((rs.b - 2.0).abs() < 1e-12 && (rs.x_weight - 1.0).abs() < 1e-12);
+        let a = retaining_section(2.0, &rs, 30.0, 18.0, 10.0);
+        let w_wall = 25.0 * 0.25 * 2.0;
+        let b = retaining(2.0, 2.0, 0.4, 0.25, w_wall, 30.0, 18.0, 10.0);
+        assert!(
+            (a.0 - b.0).abs() < 1e-9 && (a.1 - b.1).abs() < 1e-9,
+            "{a:?} {b:?}"
+        );
+        // A batter on the earth side adds weight and the earth over it.
+        let battered = archisim_core::WallSection {
+            batter_ext: 0.1,
+            ..s
+        };
+        let rb = RetainingSection::of(&battered, 0.25, 2.4, 25.0);
+        let c = retaining_section(2.0, &rb, 30.0, 18.0, 10.0);
+        assert!(
+            rb.weight > rs.weight && c.0 > a.0 && c.1 > a.1,
+            "{a:?} {c:?}"
+        );
     }
 }

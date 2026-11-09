@@ -201,6 +201,9 @@ struct Exporter<'a> {
     /// The classification systems written (GuBIMClass, Uniclass…), by
     /// name, each once.
     classifications: BTreeMap<String, Ref>,
+    /// How much further the next opening's void goes past the faces (the
+    /// foot of a battered wall and its footing).
+    void_reach: f64,
 }
 
 impl<'a> Exporter<'a> {
@@ -219,7 +222,89 @@ impl<'a> Exporter<'a> {
             schema: Schema::default(),
             hosts: BTreeMap::new(),
             classifications: BTreeMap::new(),
+            void_reach: 0.0,
         }
+    }
+
+    /// A closed body of triangles (in the current placement) as an
+    /// `IfcFacetedBrep`, styled with `material`.
+    fn faceted_brep(&mut self, tris: &[[[f64; 3]; 3]], material: MaterialId) -> Ref {
+        let mut points: BTreeMap<[i64; 3], Ref> = BTreeMap::new();
+        let mut faces = Vec::new();
+        for t in tris {
+            let ids: Vec<Ref> = t
+                .iter()
+                .map(|p| {
+                    let key = p.map(|c| (c * 1e7).round() as i64);
+                    *points.entry(key).or_insert_with(|| {
+                        self.w.add(format!(
+                            "IFCCARTESIANPOINT(({},{},{}))",
+                            real(p[0]),
+                            real(p[1]),
+                            real(p[2])
+                        ))
+                    })
+                })
+                .collect();
+            if ids[0] == ids[1] || ids[1] == ids[2] || ids[0] == ids[2] {
+                continue;
+            }
+            let lp = self
+                .w
+                .add(format!("IFCPOLYLOOP(({},{},{}))", ids[0], ids[1], ids[2]));
+            let bound = self.w.add(format!("IFCFACEOUTERBOUND({lp},.T.)"));
+            faces.push(self.w.add(format!("IFCFACE(({bound}))")));
+        }
+        let shell = self.w.add(format!("IFCCLOSEDSHELL({})", list(&faces)));
+        let brep = self.w.add(format!("IFCFACETEDBREP({shell})"));
+        if let Some(&style) = self.styles.get(&material) {
+            self.w.add(format!("IFCSTYLEDITEM({brep},({style}),$)"));
+        }
+        brep
+    }
+
+    /// `ArchiSim_WallSection` on a wall of variable section: what ArchiSim
+    /// reads back (its own section, over its type's), and the thickness at
+    /// the crown and at the foot of its faces.
+    fn wall_section_pset(
+        &mut self,
+        el: Ref,
+        wall: &archisim_core::Wall,
+        f: &archisim_geom::wall_section::SectionFrame,
+    ) {
+        let s = &f.section;
+        let mut values = vec![
+            ("BatterExterior", s.batter_ext),
+            ("BatterInterior", s.batter_int),
+            ("CrownThickness", f.crown),
+            ("BaseThickness", f.base_thickness()),
+        ];
+        if let Some(t) = s.footing {
+            values.extend([
+                ("FootingToeExterior", t.toe_ext),
+                ("FootingToeInterior", t.toe_int),
+                ("FootingDepth", t.depth),
+            ]);
+        }
+        let mut props: Vec<Ref> = values
+            .into_iter()
+            .map(|(k, v)| {
+                let kind = if k.starts_with("Batter") {
+                    "IFCRATIOMEASURE"
+                } else {
+                    "IFCLENGTHMEASURE"
+                };
+                self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('{k}',$,{kind}({}),$)",
+                    real(v)
+                ))
+            })
+            .collect();
+        props.push(self.w.add(format!(
+            "IFCPROPERTYSINGLEVALUE('Layer',$,IFCINTEGER({}),$)",
+            f.layer
+        )));
+        self.pset(el, &wall.guid, "ArchiSim_WallSection", &props);
     }
 
     /// The classification of a type from its family's `classification`
@@ -1148,7 +1233,7 @@ impl<'a> Exporter<'a> {
         // The void: the rough opening through the whole wall thickness. It
         // overshoots the faces, and the base or top when it reaches them, so
         // the boolean cut is clean.
-        let mut m = 0.05;
+        let mut m = 0.05 + std::mem::take(&mut self.void_reach);
         // In a curved wall the void is square to the wall at its centre:
         // placed on the tangent there, and deeper by how far the faces
         // curve away at its sides.
@@ -1780,8 +1865,14 @@ impl<'a> Exporter<'a> {
             // Walls butting into this one take part of its layers over
             // their own height only: one extrusion per height band.
             let base = wall.base_offset;
+            // A wall of variable section (batters, footing): its layers
+            // as plane-faced solids, built whole (the slabs and roofs it
+            // meets are left aside).
+            let section = archisim_geom::wall_section::SectionFrame::of(model, wall.id);
             // Under a roof: built up to its ridge, then clipped.
-            let trims = if wall.arc().is_none() {
+            let trims = if section.is_some() {
+                Vec::new()
+            } else if wall.arc().is_none() {
                 model.wall_trim_planes(wall.id)
             } else {
                 Vec::new()
@@ -1802,7 +1893,29 @@ impl<'a> Exporter<'a> {
             let mut solids = Vec::new();
             let mut volume = 0.0;
             let path = geo.outline_path();
-            for band in zs.windows(2) {
+            let mut kind = "SweptSolid";
+            if section.is_some() {
+                zs = vec![base, top];
+                kind = "Brep";
+                let to_wall = |p: [f64; 3]| -> [f64; 3] {
+                    let q = to_local(Point2::new(p[0], p[1]));
+                    [q.x, q.y, p[2] - level_z - base]
+                };
+                for (material, tris) in archisim_geom::solid::section_wall_bodies(&idx, wall.id) {
+                    volume += tris
+                        .iter()
+                        .map(|[a, b, c]| {
+                            (a[0] * (b[1] * c[2] - b[2] * c[1])
+                                - a[1] * (b[0] * c[2] - b[2] * c[0])
+                                + a[2] * (b[0] * c[1] - b[1] * c[0]))
+                                / 6.0
+                        })
+                        .sum::<f64>();
+                    let local: Vec<[[f64; 3]; 3]> = tris.iter().map(|t| t.map(to_wall)).collect();
+                    solids.push(self.faceted_brep(&local, material));
+                }
+            }
+            for band in zs.windows(2).filter(|_| section.is_none()) {
                 let (z0, z1) = (band[0], band[1]);
                 let outline = match &path {
                     Some(path) => {
@@ -1835,7 +1948,6 @@ impl<'a> Exporter<'a> {
             // Each roof plane clips what is above its underside: a half
             // space in the wall's axes (x along it, y to its left, z up
             // from its base), its material above the plane.
-            let mut kind = "SweptSolid";
             if !trims.is_empty() {
                 kind = "Clipping";
                 for plane in &trims {
@@ -1872,7 +1984,11 @@ impl<'a> Exporter<'a> {
                 }
             }
             // What the slabs it meets take (see `archisim_geom::junctions`).
-            let voids = archisim_geom::junctions::wall_slab_voids(&idx, &geo);
+            let voids = if section.is_some() {
+                Vec::new()
+            } else {
+                archisim_geom::junctions::wall_slab_voids(&idx, &geo)
+            };
             geometries.insert(wall.id, geo.clone());
             let slab_lost: f64 = voids
                 .iter()
@@ -1963,6 +2079,12 @@ impl<'a> Exporter<'a> {
                 // (An arch or an oculus takes its own shape, not its box.)
                 let fill = og.face_area() / (og.width() * og.height()).max(1e-12);
                 cut_volume += removed_area(&geo, &og) * og.height() * fill;
+                // Through the foot of battered faces and the footing too.
+                self.void_reach = section.as_ref().map_or(0.0, |f| {
+                    let (e, i) = f.section.leans_at(f.height, 0.0);
+                    let toes = f.section.footing.map_or(0.0, |t| t.toe_ext.max(t.toe_int));
+                    e.max(i) + toes
+                });
                 let filling = self.opening(
                     w,
                     pl,
@@ -1991,6 +2113,9 @@ impl<'a> Exporter<'a> {
                     geo.exterior_offset,
                     geo.interior_offset,
                 );
+            }
+            if let Some(f) = &section {
+                self.wall_section_pset(w, wall, f);
             }
             if let Some(roof) = model.wall_roof(wall.id).and_then(|r| model.roof(r)) {
                 // What ArchiSim needs to read the trim back: the roof and
@@ -2026,6 +2151,14 @@ impl<'a> Exporter<'a> {
             // An elevation profile (E3) takes its cuts out: the volume of
             // what is left, as in 3D.
             let (cut_side, cut_volume, volume) = match wall.profile.as_ref() {
+                // Variable section: the volume of what is built.
+                _ if section.is_some() => {
+                    let net: f64 = archisim_geom::solid::wall_solids_in(&idx, wall.id)
+                        .iter()
+                        .map(|s| s.volume())
+                        .sum();
+                    (cut_side, volume - net, volume)
+                }
                 Some(p) if !wall.is_curved() => {
                     let net: f64 = archisim_geom::solid::wall_solids(model, wall.id)
                         .iter()

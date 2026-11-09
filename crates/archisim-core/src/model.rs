@@ -71,6 +71,7 @@ mod urban;
 mod ventilation_site;
 mod views;
 mod wall_profile;
+mod wall_section;
 mod water;
 mod worktops;
 pub use appearance::*;
@@ -127,6 +128,7 @@ pub use urban::*;
 pub use ventilation_site::*;
 pub use views::*;
 pub use wall_profile::*;
+pub use wall_section::*;
 pub use water::*;
 pub use worktops::*;
 
@@ -251,6 +253,8 @@ pub struct WallType {
     /// The bond of its exterior finish and the piece over the slab edges
     /// (E9): `None`, a plain finish.
     pub facade: Option<Facade>,
+    /// Its batters and footing (`docs/MUROS.md`): `None`, upright faces.
+    pub section: Option<WallSection>,
 }
 
 /// Which finish of a wall type wraps (Revit's «Envolver»): the exterior
@@ -362,6 +366,9 @@ pub struct Wall {
     /// Its outline in elevation, with holes (E3: «Editar perfil»); `None`:
     /// its rectangle. Straight walls only.
     pub profile: Option<WallProfile>,
+    /// Its own section across (batters, footing), over its type's;
+    /// `None`: its type's.
+    pub section: Option<WallSection>,
 }
 
 /// The top constraint of a wall (Revit's "Restricción superior",
@@ -2239,6 +2246,7 @@ impl Model {
                 layers,
                 sweeps: Vec::new(),
                 facade: None,
+                section: None,
             },
         );
         Ok(id)
@@ -2308,6 +2316,7 @@ impl Model {
             top: spec.top,
             allow_join: [true, true],
             profile: None,
+            section: None,
         };
         self.walls.insert(id, wall);
         self.stamp_phase(id.0);
@@ -2367,6 +2376,7 @@ impl Model {
                 top: spec.top,
                 allow_join: [true, true],
                 profile: None,
+                section: None,
             };
             let (ext, int) = probe.face_offsets(t);
             let tight = arc.radius_at(ext).min(arc.radius_at(int)) < MIN_INNER_RADIUS;

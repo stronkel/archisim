@@ -1640,6 +1640,10 @@ impl<'a> Importer<'a> {
                     if let Some(profile) = self.wall_profile_of(c.ifc) {
                         let _ = self.model.set_wall_profile(wid, Some(profile));
                     }
+                    // Its section across (batters, footing), ArchiSim's own.
+                    if let Some(section) = self.wall_section_of(c.ifc) {
+                        let _ = self.model.set_wall_section(wid, Some(section));
+                    }
                     self.guids.walls.push((wid, c.guid));
                     self.sources.push((wid.0, c.ifc));
                     let length = a.distance(b);
@@ -1687,6 +1691,29 @@ impl<'a> Importer<'a> {
             .map(|t| t.split('|').map(ring).filter(|h| h.len() >= 3).collect())
             .unwrap_or_default();
         (outline.len() >= 3).then_some(archisim_core::WallProfile { outline, holes })
+    }
+
+    /// A wall's section across written by ArchiSim (`ArchiSim_WallSection`).
+    fn wall_section_of(&self, ifc: u64) -> Option<archisim_core::WallSection> {
+        if !self.own_file {
+            return None;
+        }
+        let num = |name: &str| {
+            self.property_own(ifc, "ArchiSim_WallSection", name)
+                .and_then(|v| v.as_f64())
+        };
+        let batter_ext = num("BatterExterior")?;
+        let footing = num("FootingDepth").map(|depth| archisim_core::WallFooting {
+            toe_ext: snap(num("FootingToeExterior").unwrap_or(0.0)),
+            toe_int: snap(num("FootingToeInterior").unwrap_or(0.0)),
+            depth: snap(depth),
+        });
+        Some(archisim_core::WallSection {
+            batter_ext,
+            batter_int: num("BatterInterior").unwrap_or(0.0),
+            layer: num("Layer").map(|l| l.max(0.0) as usize),
+            footing,
+        })
     }
 
     /// A unique type name: `name`, or `name (2)`, `name (3)`…

@@ -211,6 +211,49 @@ fn round_trip_keeps_the_model() {
 }
 
 #[test]
+fn walls_of_variable_section_come_back() {
+    let mut original = model();
+    let walls: Vec<_> = original
+        .walls()
+        .filter(|w| !w.is_curved())
+        .map(|w| w.id)
+        .take(2)
+        .collect();
+    original
+        .set_wall_section(
+            walls[0],
+            Some(archisim_core::WallSection {
+                batter_ext: 0.1,
+                batter_int: 0.0,
+                layer: None,
+                footing: Some(archisim_core::WallFooting {
+                    toe_ext: 0.5,
+                    toe_int: 0.3,
+                    depth: 0.4,
+                }),
+            }),
+        )
+        .unwrap();
+    original
+        .set_wall_section(
+            walls[1],
+            Some(archisim_core::WallSection {
+                batter_ext: 0.05,
+                batter_int: 0.05,
+                ..Default::default()
+            }),
+        )
+        .unwrap();
+    let ifc = export(&original);
+    assert!(ifc.contains("ArchiSim_WallSection"));
+    assert!(ifc.contains("IFCFACETEDBREP"));
+    let Imported { model, report } = import_ifc(&ifc).unwrap();
+    let diffs = differences(&original, &model);
+    assert!(diffs.is_empty(), "{}", diffs.join("\n"));
+    assert!(report.skipped.is_empty(), "{report}");
+}
+
+#[test]
 fn rejects_what_is_not_ifc() {
     assert!(matches!(import_ifc("hola"), Err(ImportError::Parse(_))));
     let step = "ISO-10303-21;HEADER;FILE_SCHEMA(('AP214'));ENDSEC;DATA;ENDSEC;END-ISO-10303-21;";

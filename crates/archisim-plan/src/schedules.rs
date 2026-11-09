@@ -448,9 +448,32 @@ pub fn measurements(model: &Model) -> Vec<(&'static str, &'static str, Vec<Item>
     let new = |id: u64| model.phase(id) == Phase::New;
     // Walls by type, m² of one face less the openings.
     let mut walls: BTreeMap<String, Item> = BTreeMap::new();
+    let idx = archisim_geom::WallIndex::new(model);
     for (i, t) in model.wall_types().enumerate() {
         let mut lines: Vec<Measured> = Vec::new();
+        // Walls of variable section (batters, footing): by their volume,
+        // as built (less their doors and windows), in their own item.
+        let mut solid: Vec<Measured> = Vec::new();
         for w in model.walls().filter(|w| w.wall_type == t.id && new(w.id.0)) {
+            if model.wall_section(w.id).is_some() {
+                let v: f64 = archisim_geom::solid::wall_solids_in(&idx, w.id)
+                    .iter()
+                    .map(|s| s.volume())
+                    .sum();
+                solid.push(Measured {
+                    comment: format!(
+                        "Muro {} · {} (sección variable)",
+                        w.id.0,
+                        level_name(w.level)
+                    ),
+                    units: 1.0,
+                    length: w.length(),
+                    width: 0.0,
+                    height: w.height,
+                    quantity: (v * 1000.0).round() / 1000.0,
+                });
+                continue;
+            }
             lines.push(Measured {
                 comment: format!("Muro {} · {}", w.id.0, level_name(w.level)),
                 units: 1.0,
@@ -492,6 +515,22 @@ pub fn measurements(model: &Model) -> Vec<(&'static str, &'static str, Vec<Item>
                     unit: "m2",
                     summary: format!("{} ({} cm)", t.name, dec(t.thickness() * 100.0, 1)),
                     lines,
+                },
+            );
+        }
+        if !solid.is_empty() {
+            walls.insert(
+                format!("{:03}v", i),
+                Item {
+                    code: format!("M{:02}V", i + 1),
+                    key: format!("muro-seccion:{}", t.id.0),
+                    unit: "m3",
+                    summary: format!(
+                        "{} de sección variable ({} cm en coronación)",
+                        t.name,
+                        dec(t.thickness() * 100.0, 1)
+                    ),
+                    lines: solid,
                 },
             );
         }

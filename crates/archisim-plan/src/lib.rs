@@ -451,6 +451,12 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
             cuts.push(*z);
         }
     }
+    // Walls of variable section, cut where the plan cuts them.
+    let geos: Vec<WallGeometry> = geos
+        .into_iter()
+        .zip(&cuts)
+        .map(|(g, z)| archisim_geom::wall_section::cut_geometry(&idx, g, *z))
+        .collect();
     let reference: Vec<WallGeometry> = others
         .reference
         .iter()
@@ -955,6 +961,40 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
         dim::element(&mut s, g.wall.0, |s| draw_cut_lines(s, g, p, *cut, k));
     }
     s.push_str("</g>\n");
+    // Below the cut, walls of variable section show the foot of their
+    // battered faces and their footing, dashed.
+    let hidden: Vec<(WallId, Vec<Vec<Point2>>)> = geos
+        .iter()
+        .map(|g| {
+            (
+                g.wall,
+                archisim_geom::wall_section::hidden_lines(&idx, g.wall),
+            )
+        })
+        .filter(|(_, l)| !l.is_empty())
+        .collect();
+    if !hidden.is_empty() && !ceiling {
+        s.push_str("<g id=\"wall-section-below\" class=\"wall-section\" fill=\"none\">\n");
+        for (id, lines) in &hidden {
+            dim::element(&mut s, id.0, |s| {
+                for l in lines {
+                    let d: String = l
+                        .iter()
+                        .enumerate()
+                        .map(|(i, p)| format!("{}{}", if i == 0 { "M" } else { " L" }, pt(*p)))
+                        .collect();
+                    let _ = writeln!(
+                        s,
+                        r#"<path d="{d}" stroke="{INK}" stroke-width="{}" stroke-dasharray="{} {}"/>"#,
+                        num(pens().view * k),
+                        num(2.0 * k),
+                        num(1.0 * k)
+                    );
+                }
+            });
+        }
+        s.push_str("</g>\n");
+    }
     overrides::close(&mut s);
     // The accessories of wall and slab types (bloque 5): skirtings and
     // the like seen from above, dashed when over the cut plane.

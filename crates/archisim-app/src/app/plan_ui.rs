@@ -1945,6 +1945,7 @@ impl ArchiSimApp {
                 top: archisim_core::WallTop::Unconnected,
                 allow_join: [true, true],
                 profile: None,
+                section: None,
             };
             let (ext, int) = probe.face_offsets(wtype.thickness());
             // The curve (or line) of the wall cut into short straight

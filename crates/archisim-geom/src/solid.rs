@@ -554,6 +554,14 @@ pub fn wall_inner_faces(idx: &WallIndex, id: WallId) -> Vec<Solid> {
 use archisim_core::MassMesh;
 
 fn wall_parts_in(idx: &WallIndex, id: WallId, between: bool) -> Vec<Solid> {
+    // A wall of variable section (batters, footing): lofts of its layers.
+    if let Some(f) = crate::wall_section::SectionFrame::of(idx.model, id) {
+        return if between {
+            Vec::new()
+        } else {
+            section_wall_parts(idx, id, &f)
+        };
+    }
     let parts = wall_parts_plain(idx, id, between);
     let model = idx.model;
     let Some(wall) = model.wall(id) else {
@@ -611,26 +619,7 @@ fn wall_parts_in(idx: &WallIndex, id: WallId, between: bool) -> Vec<Solid> {
         .iter()
         .map(|h| frame.prism(h, reach))
         .collect();
-    for o in idx.openings_in_wall(id) {
-        let (t0, t1) = o.cut_span();
-        let (w, h) = (t1 - t0, o.head - o.sill);
-        let sill = o.sill - wall.base_offset;
-        let poly: Vec<Point2> = if o.shape.is_rect() {
-            vec![
-                Point2::new(t0, sill),
-                Point2::new(t1, sill),
-                Point2::new(t1, sill + h),
-                Point2::new(t0, sill + h),
-            ]
-        } else {
-            o.shape
-                .polygon(w, h)
-                .into_iter()
-                .map(|q| Point2::new(t0 + w / 2.0 + q[0], sill + q[1]))
-                .collect()
-        };
-        cutters.push(frame.prism(&poly, reach));
-    }
+    cutters.extend(opening_cutters(idx, wall, &frame, reach));
     let n = frame.u.perp_left();
     let mut out = Vec::new();
     let mut at = g.exterior_offset;
@@ -668,6 +657,197 @@ fn wall_parts_in(idx: &WallIndex, id: WallId, between: bool) -> Vec<Solid> {
             out.push(Solid {
                 owner,
                 material: l.material,
+                triangles,
+            });
+        }
+    }
+    out
+}
+
+/// The rough openings of a wall's doors and windows, as solids through
+/// it, `reach` to each side of its line.
+fn opening_cutters(
+    idx: &WallIndex,
+    wall: &archisim_core::Wall,
+    frame: &ProfileFrame,
+    reach: f64,
+) -> Vec<MassMesh> {
+    idx.openings_in_wall(wall.id)
+        .into_iter()
+        .map(|o| {
+            let (t0, t1) = o.cut_span();
+            let (w, h) = (t1 - t0, o.head - o.sill);
+            let sill = o.sill - wall.base_offset;
+            let poly: Vec<Point2> = if o.shape.is_rect() {
+                vec![
+                    Point2::new(t0, sill),
+                    Point2::new(t1, sill),
+                    Point2::new(t1, sill + h),
+                    Point2::new(t0, sill + h),
+                ]
+            } else {
+                o.shape
+                    .polygon(w, h)
+                    .into_iter()
+                    .map(|q| Point2::new(t0 + w / 2.0 + q[0], sill + q[1]))
+                    .collect()
+            };
+            frame.prism(&poly, reach)
+        })
+        .collect()
+}
+
+/// A solid between two plan polygons with their points in the same order,
+/// `bottom` at `z0` and `top` at `z1`: each side a plane when its two
+/// points move alike (as the corners of a battered wall do).
+pub fn loft(bottom: &[Point2], z0: f64, top: &[Point2], z1: f64) -> Vec<[P3; 3]> {
+    let n = bottom.len();
+    if n < 3 || top.len() != n || z1 - z0 <= EPSILON {
+        return Vec::new();
+    }
+    let (sb, st) = (
+        archisim_core::signed_area(bottom),
+        archisim_core::signed_area(top),
+    );
+    if sb * st <= 0.0 {
+        return Vec::new();
+    }
+    let (bottom, top): (Vec<Point2>, Vec<Point2>) = if sb < 0.0 {
+        (
+            bottom.iter().rev().copied().collect(),
+            top.iter().rev().copied().collect(),
+        )
+    } else {
+        (bottom.to_vec(), top.to_vec())
+    };
+    let at = |p: Point2, z: f64| [p.x, p.y, z];
+    let mut tris = Vec::new();
+    for [a, b, c] in triangulate(&top) {
+        tris.push([at(top[a], z1), at(top[b], z1), at(top[c], z1)]);
+    }
+    for [a, b, c] in triangulate(&bottom) {
+        tris.push([at(bottom[a], z0), at(bottom[c], z0), at(bottom[b], z0)]);
+    }
+    for i in 0..n {
+        let j = (i + 1) % n;
+        let (p0, q0, p1, q1) = (bottom[i], bottom[j], top[i], top[j]);
+        tris.push([at(p0, z0), at(q0, z0), at(q1, z1)]);
+        tris.push([at(p0, z0), at(q1, z1), at(p1, z1)]);
+    }
+    tris
+}
+
+/// The bodies of a wall of variable section before its profile, doors
+/// and windows cut it: each layer a loft from the foot of its faces to its
+/// top (up to its profile's top), and its footing, with their materials.
+pub fn section_wall_bodies(idx: &WallIndex, id: WallId) -> Vec<(MaterialId, Vec<[P3; 3]>)> {
+    let model = idx.model;
+    let Some(f) = crate::wall_section::SectionFrame::of(model, id) else {
+        return Vec::new();
+    };
+    let (Some(wall), Some(wtype)) = (
+        model.wall(id),
+        model.wall(id).and_then(|w| model.wall_type(w.wall_type)),
+    ) else {
+        return Vec::new();
+    };
+    let top = wall
+        .height
+        .max(wall.profile.as_ref().map_or(0.0, |p| p.top()));
+    let foot = f.foot();
+    let (Some(lo), Some(hi)) = (
+        crate::wall_geometry_with(idx, id, Some(&f.shifts_at(foot))),
+        crate::wall_geometry_with(idx, id, Some(&f.shifts_at(top))),
+    ) else {
+        return Vec::new();
+    };
+    let mut pieces: Vec<(MaterialId, Vec<[P3; 3]>)> = wtype
+        .layers
+        .iter()
+        .enumerate()
+        .filter_map(|(li, l)| {
+            let (b, t) = (lo.layers.get(li)?, hi.layers.get(li)?);
+            Some((
+                l.material,
+                loft(&b.polygon, f.z0 + foot, &t.polygon, f.z0 + top),
+            ))
+        })
+        .filter(|(_, t)| !t.is_empty())
+        .collect();
+    if let Some(q) = crate::wall_section::footing_outline(idx, id) {
+        let m = wtype.layers[f.layer.min(wtype.layers.len() - 1)].material;
+        pieces.push((m, prism(&q, f.z0, f.z0 + foot)));
+    }
+    pieces
+}
+
+/// The layers of a wall of variable section, each a loft from the foot of
+/// its faces to its top, and its footing; cut by its elevation profile and
+/// its doors and windows. (The joins with slabs and roofs, and the walls
+/// butting into it, are left aside: they overlap it.)
+fn section_wall_parts(
+    idx: &WallIndex,
+    id: WallId,
+    f: &crate::wall_section::SectionFrame,
+) -> Vec<Solid> {
+    let model = idx.model;
+    let Some(wall) = model.wall(id) else {
+        return Vec::new();
+    };
+    let profile = wall.profile.as_ref();
+    let frame = ProfileFrame {
+        origin: wall.start,
+        u: (wall.end - wall.start)
+            .normalized()
+            .unwrap_or(Point2::new(1.0, 0.0)),
+        z0: f.z0,
+    };
+    let toes = f.section.footing.map_or(0.0, |t| t.toe_ext + t.toe_int);
+    let reach = f.base_thickness() + toes + 2.0;
+    let mut cutters: Vec<MassMesh> = Vec::new();
+    let keep = profile.map(|p| {
+        cutters.extend(p.holes.iter().map(|h| frame.prism(h, reach)));
+        frame.prism(
+            &crate::junctions::profile_with_ends(p, wall.length(), reach),
+            reach,
+        )
+    });
+    cutters.extend(opening_cutters(idx, wall, &frame, reach));
+    let pieces = section_wall_bodies(idx, id);
+    let mut out = Vec::new();
+    for (material, tris) in pieces {
+        if tris.is_empty() {
+            continue;
+        }
+        let mut piece = mass_mesh_of(&tris);
+        if let Some(keep) = &keep {
+            match crate::csg::combine(&piece, keep, 0.0, 1, crate::csg::Op::Intersect) {
+                Some(p) => piece = p,
+                None => continue,
+            }
+        }
+        let mut gone = false;
+        for c in &cutters {
+            match crate::csg::combine(&piece, c, 0.0, 1, crate::csg::Op::Subtract) {
+                Some(p) => piece = p,
+                None => {
+                    gone = true;
+                    break;
+                }
+            }
+        }
+        if gone {
+            continue;
+        }
+        let triangles: Vec<[P3; 3]> = piece
+            .triangles
+            .iter()
+            .map(|t| t.map(|i| piece.positions[i as usize]))
+            .collect();
+        if !triangles.is_empty() {
+            out.push(Solid {
+                owner: SolidOwner::Wall(id),
+                material,
                 triangles,
             });
         }

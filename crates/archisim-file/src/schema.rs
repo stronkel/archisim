@@ -2723,6 +2723,51 @@ pub(crate) struct WallType {
     /// The bond of its exterior finish and its slab fronts (version 49).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub facade: Option<FacadeOf>,
+    /// Its batters and footing (version 100). Absent: upright faces.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub section: Option<WallSectionOf>,
+}
+
+/// A wall's section across (version 100): batters of the exterior and
+/// interior faces, the layer that grows and the footing.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct WallSectionOf {
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub batter_ext: f64,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub batter_int: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub layer: Option<usize>,
+    /// `[toe exterior, toe interior, depth]`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub footing: Option<[f64; 3]>,
+}
+
+impl WallSectionOf {
+    pub fn out(s: &core::WallSection) -> Self {
+        WallSectionOf {
+            batter_ext: s.batter_ext,
+            batter_int: s.batter_int,
+            layer: s.layer,
+            footing: s.footing.map(|f| [f.toe_ext, f.toe_int, f.depth]),
+        }
+    }
+
+    pub fn into_core(self) -> core::WallSection {
+        core::WallSection {
+            batter_ext: self.batter_ext,
+            batter_int: self.batter_int,
+            layer: self.layer,
+            footing: self
+                .footing
+                .map(|[toe_ext, toe_int, depth]| core::WallFooting {
+                    toe_ext,
+                    toe_int,
+                    depth,
+                }),
+        }
+    }
 }
 
 /// The bond of a façade (version 49).
@@ -2963,6 +3008,9 @@ pub(crate) struct Wall {
     /// Its outline in elevation and holes, `[along, up]` (version 47).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub profile: Option<WallProfile>,
+    /// Its own section across (version 100). Absent: its type's.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub section: Option<WallSectionOf>,
 }
 
 /// A wall's elevation profile (version 47): outline and holes as
@@ -3207,6 +3255,7 @@ impl ProjectFile {
                         != core::Wrap::inserts_by_default(t.function, &t.layers))
                     .then(|| WrapOf::out(t.wrap_inserts)),
                     facade: t.facade.as_ref().map(FacadeOf::out),
+                    section: t.section.as_ref().map(WallSectionOf::out),
                     name: t.name,
                     function: match t.function {
                         core::WallFunction::Exterior => WallFunction::Exterior,
@@ -3233,6 +3282,7 @@ impl ProjectFile {
                     height: w.height,
                     base_offset: w.base_offset,
                     allow_join: w.allow_join,
+                    section: w.section.as_ref().map(WallSectionOf::out),
                     profile: w.profile.as_ref().map(|p| WallProfile {
                         outline: p.outline.iter().map(|q| [q.x, q.y]).collect(),
                         holes: p
@@ -4847,6 +4897,7 @@ impl ProjectFile {
                     WrapOf::into_core,
                 ),
                 facade: t.facade.map(FacadeOf::into_core),
+                section: t.section.map(WallSectionOf::into_core),
                 layers,
             });
         }
@@ -4867,6 +4918,7 @@ impl ProjectFile {
                 height: w.height,
                 base_offset: w.base_offset,
                 allow_join: w.allow_join,
+                section: w.section.map(WallSectionOf::into_core),
                 profile: w.profile.as_ref().map(|p| core::WallProfile {
                     outline: p
                         .outline
