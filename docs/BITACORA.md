@@ -6,6 +6,56 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-09 (132) · M1: la caja modular como elemento
+
+Rama `bloque/caja`, con pull request, sobre la de la entrada 131 (`bloque/techos`, #188). **Formato versión 97**: las cajas. El IFC lleva cada caja como `IfcElementAssembly` montada en fábrica con sus piezas. `docs/MODULAR.md` (M1).
+
+**Qué hace.**
+- **La caja.** Un rectángulo en planta (6,20 × 3,60 m por defecto), con su alto (3,58), la base del chasis bajo el suelo terminado (−0,27), su marca («MOD-01», «MOD-02»…) y qué caja del sistema es (texto libre hasta el catálogo, M8).
+- **Sus cuatro lados.** A y C son los largos (A sale del origen) y B y D, los testeros. Cada uno puede estar:
+  - **libre:** fachada y pretil;
+  - **unido, con el muro de la junta:** esta caja es la dueña de la junta;
+  - **unido, abierto:** el muro lo lleva la otra caja, o no hay muro.
+- **Lo que lleva.** Muros, puertas y ventanas, forjados, techos, pilares, vigas y muebles que están dentro de ella, o en un lado suyo que no está abierto. No es una lista que haya que mantener: si mueves un tabique de una caja a otra, pasa a la otra.
+- **La herramienta Caja** (Estructura, la última ficha; teclas CM).
+  - Un clic pone la caja con su centro en el cursor y Espacio la gira.
+  - Cerca de otra caja se pega a ella, a 2 cm de junta y enrasada con uno de sus extremos. La que ya estaba lleva el muro de la junta y la nueva queda abierta por ese lado.
+  - Puede ponerle al colocarla los muros (en los lados libres y en los que llevan la junta), el suelo, la cubierta y el falso techo, con los tipos que elijas en Propiedades.
+- **Seleccionarla:** por su marca, en el centro, o por sus lados. En Propiedades salen marca, tipo, medidas, giro, el estado de cada lado (con «Ajustar a las cajas de al lado»), lo que lleva, «Ponerle la envolvente» si está vacía y la comprobación.
+- **Moverla, copiarla, girarla o reflejarla** lleva todo lo que tiene. Las cajas de al lado no se tocan. Borrarla quita solo la caja: lo que llevaba se queda.
+- **Comprobación.**
+  - Si es más larga o ancha que lo que fabrica el sistema (9 × 3,60 m).
+  - Si pasa de 2,55 m de ancho: aviso de transporte especial con autorización.
+  - Si sobre el camión (plataforma de 40 cm) pasa de 4 m de alto.
+  - Si una junta no tiene dueño, lleva dos muros o un lado unido no toca nada.
+  - Los límites se guardan con el proyecto.
+- **En planta:** el contorno en azul, de trazo y punto en los lados libres y discontinuo fino en los unidos; la marca y el tipo en una etiqueta en el centro, y la letra de cada lado con «muro» o «abierto». Categoría «Cajas modulares» en Representación.
+- **IFC:** `IfcElementAssembly` «Caja modular», montada en fábrica (`.FACTORY.`), con su caja envolvente y `ArchiSim_Box`. Sus piezas salen de la planta y quedan dentro de la caja, como pide IFC. Al importar vuelve igual y con lo mismo dentro.
+- **Ejemplo:** `archisim cajas out/` hace una vivienda en L de ocho cajas como la L-160, con su envolvente de steel frame (fachada de 197 mm), suelo sobre chasis, cubierta y techo, y la sala abierta entre MOD-03 y MOD-04. Escribe el proyecto, el IFC, la planta y `cajas.txt` con lo que lleva cada caja y sus avisos.
+
+**Arreglo de paso.** Arrastrar un falso techo con el ratón no lo movía (sí con Mover y las órdenes); ahora sí.
+
+**Pendiente.**
+- **Pretiles** en los lados libres y **cubierta continua** en los unidos: el estado del lado ya está, falta que la cubierta lo dibuje (con M3, el chasis).
+- **Juntas (M2):** los muros de cajas distintas aún se unen en las esquinas.
+- **Lado que toca dos cajas:** cuenta solo con la que más comparte.
+- **En 3D** la caja no se ve ni se elige (se ven sus muros y forjados).
+
+**Qué debe probar Antonio.**
+1. Ejecuta `cargo run -p archisim-cli -- cajas out/cajas` y abre `out/cajas/cajas-planta.svg`. Deben verse las ocho cajas con su marca, sus lados («A · muro», «C · abierto»…) y la sala abierta entre MOD-03 y MOD-04. Lee `out/cajas/cajas.txt`: cada caja con sus muros, forjados y techo, y el aviso de transporte especial.
+2. Abre `out/cajas/cajas.ifc` en tu visor. Cada caja debe ser un conjunto «Caja modular» que agrupa sus muros, suelo, cubierta, techo y huecos, y no deben salir sueltos en la planta.
+3. En la aplicación, proyecto nuevo, herramienta **Caja**:
+   - Coloca una caja.
+   - Coloca otra al lado: debe pegarse con su junta y la primera debe pasar a «muro» en ese lado.
+   - Pulsa Espacio antes de colocar la tercera: debe girar.
+4. Selecciona una caja por su marca:
+   - Muévela: deben ir con ella sus muros, suelo, cubierta y techo, y la de al lado quedarse como estaba.
+   - Mira el aviso en «Comprobación».
+   - Cambia el largo a 9,50 m: debe avisar de que el sistema llega a 9 m.
+5. Abre `out/cajas/cajas.archisim`, exporta el IFC e impórtalo: el informe debe decir «8 cajas modulares».
+
+---
+
 ## 2026-11-09 (131) · M7: falsos techos
 
 Rama `bloque/techos`, con pull request, sobre la de la entrada 130 (`bloque/m4-capas`, #185). **Formato versión 96**: los falsos techos. El IFC lleva `IfcCovering` de techo. `docs/MODULAR.md` (M7 y §5 bis) y `docs/FUNDACIONAL.md`, «Importación IFC».

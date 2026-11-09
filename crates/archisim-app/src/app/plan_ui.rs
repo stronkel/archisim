@@ -150,6 +150,7 @@ impl ArchiSimApp {
             | Tool::Brush
             | Tool::Road
             | Tool::Roundabout
+            | Tool::ModularBox
             | Tool::World
             | Tool::Decal
             | Tool::Marking
@@ -480,6 +481,7 @@ impl ArchiSimApp {
             | Tool::Pool
             | Tool::Road
             | Tool::Roundabout
+            | Tool::ModularBox
             | Tool::World
             | Tool::Decal
             | Tool::Marking
@@ -495,7 +497,11 @@ impl ArchiSimApp {
                     Tool::Road => self.road_points.clone(),
                     Tool::Planting => self.planting_points.clone(),
                     Tool::Pipe | Tool::Duct => self.run_points.clone(),
-                    Tool::Device | Tool::Elevator | Tool::Roundabout | Tool::Decal => Vec::new(),
+                    Tool::Device
+                    | Tool::Elevator
+                    | Tool::Roundabout
+                    | Tool::ModularBox
+                    | Tool::Decal => Vec::new(),
                     Tool::World => self.world_settings.first.into_iter().collect(),
                     Tool::Marking => self.marking_points.clone(),
                     Tool::TeamZone => self.team_ui.zone_start.into_iter().collect(),
@@ -514,6 +520,7 @@ impl ArchiSimApp {
                     | Tool::Elevator
                     | Tool::TeamZone
                     | Tool::Roundabout
+                    | Tool::ModularBox
                     | Tool::Decal => None,
                     Tool::World => self.world_settings.first,
                     Tool::Marking => self.marking_points.last().copied(),
@@ -655,6 +662,10 @@ impl ArchiSimApp {
         }
         if space && self.tool == Tool::World {
             self.world_turn();
+            return;
+        }
+        if space && self.tool == Tool::ModularBox {
+            self.box_turn();
             return;
         }
         if self.command_keys(&events, enter, escape, backspace, space) {
@@ -898,7 +909,7 @@ impl ArchiSimApp {
                         self.set_tool(Tool::Arrow);
                     }
                 }
-                Tool::Roundabout | Tool::Decal => self.set_tool(Tool::Arrow),
+                Tool::Roundabout | Tool::ModularBox | Tool::Decal => self.set_tool(Tool::Arrow),
                 Tool::World => self.world_escape(),
                 Tool::Marking => {
                     if self.marking_points.pop().is_none() {
@@ -1285,6 +1296,13 @@ impl ArchiSimApp {
                 if response.clicked_by(PointerButton::Primary) {
                     if let Some(c) = self.cursor {
                         self.roundabout_click(c.point);
+                    }
+                }
+            }
+            Tool::ModularBox => {
+                if response.clicked_by(PointerButton::Primary) {
+                    if let Some(c) = self.cursor {
+                        self.box_click(c.point);
                     }
                 }
             }

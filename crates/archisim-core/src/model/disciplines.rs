@@ -163,6 +163,7 @@ impl Model {
         if self.pools.contains_key(&PoolId(id))
             || self.elevators.contains_key(&ElevatorId(id))
             || self.ceilings.contains_key(&CeilingId(id))
+            || self.boxes.contains_key(&BoxId(id))
         {
             return Some(Architecture);
         }

@@ -250,10 +250,12 @@ pub enum Category {
     RefPlanes,
     /// False ceilings (M7): in ceiling plans, sections and 3D.
     Ceilings,
+    /// Modular boxes (M1): their outline, mark and sides.
+    Boxes,
 }
 
 impl Category {
-    pub const ALL: [Category; 26] = [
+    pub const ALL: [Category; 27] = [
         Category::Walls,
         Category::Slabs,
         Category::Ceilings,
@@ -280,6 +282,7 @@ impl Category {
         Category::Drafting,
         Category::Rooms,
         Category::Tags,
+        Category::Boxes,
     ];
 
     pub fn code(self) -> &'static str {
@@ -310,6 +313,7 @@ impl Category {
             Category::Vegetation => "vegetation",
             Category::RefPlanes => "reference_planes",
             Category::Ceilings => "ceilings",
+            Category::Boxes => "boxes",
         }
     }
 
@@ -345,6 +349,7 @@ impl Category {
             Category::Vegetation => "Vegetación",
             Category::RefPlanes => "Planos de referencia",
             Category::Ceilings => "Techos",
+            Category::Boxes => "Cajas modulares",
         }
     }
 }

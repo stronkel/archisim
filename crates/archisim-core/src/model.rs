@@ -15,6 +15,7 @@ use crate::ids::*;
 use crate::math::{is_simple_polygon, signed_area, Arc, Point2, Vec2, EPSILON, MIN_BULGE};
 
 mod appearance;
+mod boxes;
 mod built_in;
 mod ceilings;
 mod concept;
@@ -75,6 +76,7 @@ mod wall_profile;
 mod water;
 mod worktops;
 pub use appearance::*;
+pub use boxes::*;
 pub use ceilings::*;
 pub use concept::*;
 pub use curtain::*;
@@ -1526,6 +1528,9 @@ pub struct ModelParts {
     pub roundabouts: Vec<Roundabout>,
     /// False ceilings (M7, version 96).
     pub ceilings: Vec<Ceiling>,
+    /// Modular boxes and the limits they keep (M1, version 97).
+    pub boxes: Vec<ModularBox>,
+    pub modular_site: ModularSite,
     /// Road markings at will (U4).
     pub markings: Vec<Marking>,
     /// Pictures stuck on faces (U8).
@@ -1688,6 +1693,8 @@ pub struct Model {
     roads: BTreeMap<RoadId, Road>,
     roundabouts: BTreeMap<RoundaboutId, Roundabout>,
     ceilings: BTreeMap<CeilingId, Ceiling>,
+    boxes: BTreeMap<BoxId, ModularBox>,
+    modular_site: ModularSite,
     markings: BTreeMap<MarkingId, Marking>,
     decals: BTreeMap<DecalId, Decal>,
     plantings: BTreeMap<PlantingId, Planting>,
@@ -1805,6 +1812,8 @@ impl Model {
             roads: BTreeMap::new(),
             roundabouts: BTreeMap::new(),
             ceilings: BTreeMap::new(),
+            boxes: BTreeMap::new(),
+            modular_site: ModularSite::default(),
             markings: BTreeMap::new(),
             decals: BTreeMap::new(),
             plantings: BTreeMap::new(),
@@ -1970,6 +1979,7 @@ impl Model {
         self.roads.retain(|_, r| r.level != id);
         self.roundabouts.retain(|_, r| r.level != id);
         self.ceilings.retain(|_, c| c.level != id);
+        self.boxes.retain(|_, b| b.level != id);
         self.markings.retain(|_, r| r.level != id);
         self.decals.retain(|_, r| r.level != id);
         self.plantings.retain(|_, p| p.level != id);
@@ -4528,6 +4538,8 @@ impl Model {
             roads: self.roads.values().cloned().collect(),
             roundabouts: self.roundabouts.values().cloned().collect(),
             ceilings: self.ceilings.values().cloned().collect(),
+            boxes: self.boxes.values().cloned().collect(),
+            modular_site: self.modular_site,
             markings: self.markings.values().cloned().collect(),
             decals: self.decals.values().cloned().collect(),
             plantings: self.plantings.values().cloned().collect(),
@@ -4962,6 +4974,13 @@ impl Model {
         model.restore_urban(parts.plots, parts.roads, &mut claim)?;
         model.restore_roundabouts(parts.roundabouts, &mut claim)?;
         model.restore_ceilings(parts.ceilings, &mut claim)?;
+        model.restore_boxes(parts.boxes, &mut claim)?;
+        model
+            .set_modular_site(parts.modular_site)
+            .map_err(|error| RestoreError {
+                element: "transport limits".into(),
+                error,
+            })?;
         model.restore_markings(parts.markings, &mut claim)?;
         model.restore_decals(parts.decals, &mut claim)?;
         model.restore_plantings(parts.plantings, &mut claim)?;

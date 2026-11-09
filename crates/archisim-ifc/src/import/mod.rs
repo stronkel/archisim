@@ -29,6 +29,7 @@
 //! or other curves, closed circular walls, sloped slabs, holes in slabs, empty openings, and every other
 //! class (columns, beams, stairs, roofs that are not slabs…).
 
+mod boxes;
 mod ceilings;
 mod compare;
 mod curtain;
@@ -346,6 +347,7 @@ struct GuidPlan {
     roads: Vec<(archisim_core::RoadId, String)>,
     roundabouts: Vec<(archisim_core::RoundaboutId, String)>,
     ceilings: Vec<(archisim_core::CeilingId, String)>,
+    boxes: Vec<(archisim_core::BoxId, String)>,
     markings: Vec<(archisim_core::MarkingId, String)>,
     masses: Vec<(archisim_core::MassId, String)>,
     decals: Vec<(archisim_core::DecalId, String)>,
@@ -3160,6 +3162,7 @@ impl<'a> Importer<'a> {
         self.import_walls();
         self.import_slabs();
         self.import_ceilings();
+        self.import_boxes();
         self.restore_type_accessories();
         self.import_members();
         self.import_openings();
@@ -3237,6 +3240,7 @@ impl<'a> Importer<'a> {
         restore!(roads, roads);
         restore!(roundabouts, roundabouts);
         restore!(ceilings, ceilings);
+        restore!(boxes, boxes);
         restore!(markings, markings);
         restore!(masses, masses);
         restore!(decals, decals);

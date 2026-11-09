@@ -79,6 +79,10 @@ typed_id!(
     CeilingId
 );
 typed_id!(
+    /// Identifies a [`crate::ModularBox`] (a modular box, M1).
+    BoxId
+);
+typed_id!(
     /// Identifies a [`crate::Marking`] (a road marking).
     MarkingId
 );

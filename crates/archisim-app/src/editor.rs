@@ -498,6 +498,7 @@ impl Editor {
             Element::Edge(id) => model.edge(*id).is_some(),
             Element::Device(id) => model.device(*id).is_some(),
             Element::Ceiling(id) => model.ceiling(*id).is_some(),
+            Element::Box(id) => model.modular_box(*id).is_some(),
         });
         if model.level(self.level).is_none() {
             if let Some(l) = model.levels().first() {
@@ -819,7 +820,8 @@ impl Editor {
                         | Element::Run(_)
                         | Element::Edge(_)
                         | Element::Device(_)
-                        | Element::Ceiling(_)) => remove_element(m, e)?,
+                        | Element::Ceiling(_)
+                        | Element::Box(_)) => remove_element(m, e)?,
                     },
                     Change::WallEnds(id, a, b) => {
                         m.stretch_wall(id, a, b)?;
@@ -1612,6 +1614,7 @@ fn remove_element(m: &mut Model, e: Element) -> Result<(), archisim_core::ModelE
         Element::Edge(id) => m.remove_edge(id).map(drop),
         Element::Device(id) => m.remove_device(id).map(drop),
         Element::Ceiling(id) => m.remove_ceiling(id).map(drop),
+        Element::Box(id) => m.remove_box(id).map(drop),
         _ => Ok(()),
     }
 }
@@ -1727,7 +1730,8 @@ pub(crate) fn remove_items(m: &mut Model, items: &[Element]) -> Result<(), Model
             | Element::Run(_)
             | Element::Edge(_)
             | Element::Device(_)
-            | Element::Ceiling(_)) => remove_element(m, *e)?,
+            | Element::Ceiling(_)
+            | Element::Box(_)) => remove_element(m, *e)?,
             Element::Draft(id) => {
                 m.remove_draft(*id)?;
             }

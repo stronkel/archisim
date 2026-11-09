@@ -414,6 +414,8 @@ impl Model {
             .or_else(|| g(self.railing(RailingId(id)).map(|x| &x.guid)))
             .or_else(|| g(self.object(ObjectId(id)).map(|x| &x.guid)))
             .or_else(|| g(self.room(RoomId(id)).map(|x| &x.guid)))
+            .or_else(|| g(self.ceilings.get(&CeilingId(id)).map(|x| &x.guid)))
+            .or_else(|| g(self.boxes.get(&BoxId(id)).map(|x| &x.guid)))
     }
 
     /// The type of an element, by their ids, if it has one.

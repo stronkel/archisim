@@ -113,6 +113,8 @@ pub enum Tool {
     Road,
     /// Roundabouts and squares, by their centre (U3).
     Roundabout,
+    /// A modular box (M1).
+    ModularBox,
     /// Buildings of the world put by hand, as in CityRT (tanda 16).
     World,
     /// Road markings (U4).
@@ -171,6 +173,7 @@ impl Tool {
                 | Tool::Pool
                 | Tool::Road
                 | Tool::Roundabout
+                | Tool::ModularBox
                 | Tool::World
                 | Tool::Decal
                 | Tool::Marking
@@ -219,6 +222,7 @@ impl Tool {
             "ps" => Some(Tool::Pool),
             "as" => Some(Tool::Elevator),
             "gl" => Some(Tool::Roundabout),
+            "cm" => Some(Tool::ModularBox),
             "em" => Some(Tool::World),
             "pe" => Some(Tool::Decal),
             "mv" => Some(Tool::Marking),
@@ -375,6 +379,8 @@ pub struct ArchiSimApp {
     pub road_start_join: Option<Point2>,
     pub road_settings: urban_ui::RoadSettings,
     pub roundabout_settings: roundabout_ui::RoundaboutSettings,
+    /// The box tool's settings, made from the project the first time.
+    pub box_settings: Option<box_ui::BoxSettings>,
     pub world_settings: world_ui::WorldSettings,
     pub decal_settings: decal_ui::DecalSettings,
     pub marking_settings: marking_ui::MarkingSettings,
@@ -825,6 +831,7 @@ impl ArchiSimApp {
             road_start_join: None,
             road_settings,
             roundabout_settings: Default::default(),
+            box_settings: None,
             world_settings: Default::default(),
             decal_settings: Default::default(),
             marking_settings: Default::default(),
@@ -2768,6 +2775,7 @@ pub(super) fn text_edit_committed(ui: &mut Ui, id: Id, shown: &str, width: f32) 
 mod annotation_ui;
 mod background;
 mod bottom_segments;
+mod box_ui;
 mod brush_ui;
 mod budget_ui;
 mod cad_ui;

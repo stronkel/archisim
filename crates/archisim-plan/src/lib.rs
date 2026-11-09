@@ -25,6 +25,7 @@
 
 pub mod annotate;
 pub mod axo;
+pub mod boxes;
 pub mod calc_report;
 pub mod carpentry;
 pub mod ceilings;
@@ -1050,6 +1051,12 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
     if show(archisim_core::Category::Tags) {
         overrides::group(&mut s, archisim_core::Category::Tags, |s| {
             rooms::draw_tags(s, model, level, k)
+        });
+    }
+    // Modular boxes (M1): how the building is split, over everything.
+    if show(archisim_core::Category::Boxes) {
+        overrides::group(&mut s, archisim_core::Category::Boxes, |s| {
+            boxes::draw_boxes(s, model, level, k)
         });
     }
     if show(archisim_core::Category::RefPlanes) {

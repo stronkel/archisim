@@ -187,7 +187,10 @@ def main(path: str) -> int:
                 errors.append(f"{name}: missing {required}")
         if not el.OverallWidth or not el.OverallHeight:
             errors.append(f"{name}: missing overall size")
-        if el.ContainedInStructure == () and not in_curtain:
+        # A door or window of a modular box (M1) is part of the box, in the
+        # storey through it.
+        in_box = any(r.RelatingObject.is_a("IfcElementAssembly") for r in el.Decomposes)
+        if el.ContainedInStructure == () and not in_curtain and not in_box:
             errors.append(f"{name}: not contained in a storey")
         if geom_ok:
             try:
@@ -233,6 +236,24 @@ def main(path: str) -> int:
                     errors.append(f"{name}: empty geometry")
             except Exception as exc:
                 errors.append(f"{name}: geometry failed: {exc}")
+
+    # 13 bis. Modular boxes (ArchiSim_Box on an IfcElementAssembly, M1):
+    # in a storey, assembled in the factory, with parts that are not in the
+    # storey themselves (an element is contained or a part, not both).
+    for a in f.by_type("IfcElementAssembly"):
+        if "ArchiSim_Box" not in eu.get_psets(a):
+            continue
+        name = a.Name
+        if a.ContainedInStructure == ():
+            errors.append(f"caja {name}: not contained in a storey")
+        if a.AssemblyPlace != "FACTORY":
+            errors.append(f"caja {name}: not assembled in the factory")
+        parts = [p for r in a.IsDecomposedBy for p in r.RelatedObjects]
+        if not parts:
+            errors.append(f"caja {name}: no parts")
+        for p in parts:
+            if p.ContainedInStructure != ():
+                errors.append(f"caja {name}: part {p.Name} also in a storey")
 
     # 14. Pools built in the ground (ArchiSim_Pool on an IfcElementAssembly):
     # contained in a storey, made of their floor, walls, lining and coping,

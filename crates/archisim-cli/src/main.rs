@@ -12,6 +12,7 @@
 //! ```
 
 mod armado;
+mod cajas;
 mod calles;
 mod cartografia;
 mod cocina;
@@ -167,6 +168,11 @@ Uso:
       planas, ventanas de cubierta, tejas de cada clase, caballetes,
       canalones y bajantes: cubiertas.archisim, cubiertas.ifc, planta de
       cubiertas y axonometría en SVG. Por defecto: ./out
+  archisim cajas [carpeta]
+      Una vivienda de cajas modulares en L (ocho cajas de 6,20 × 3,60 m
+      con su envolvente): cajas.archisim, cajas.ifc (cada caja, un
+      IfcElementAssembly con sus piezas), cajas-planta.svg y cajas.txt
+      (lo que lleva cada caja y sus avisos). Por defecto: ./out
   archisim entramado [carpeta]
       Entramados ligeros: dos casas, una de steel frame y otra de madera,
       con muros, forjado y cubierta de entramado: entramado.archisim,
@@ -575,6 +581,10 @@ fn main() -> ExitCode {
         Some("cocina") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
             report(cocina::write(&dir))
+        }
+        Some("cajas") => {
+            let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
+            report(cajas::write(&dir))
         }
         Some("entramado") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));

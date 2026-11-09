@@ -167,6 +167,12 @@ pub(crate) struct ProjectFile {
     /// False ceilings (version 96).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub ceilings: Vec<CeilingOf>,
+    /// Modular boxes (version 97).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub boxes: Vec<BoxOf>,
+    /// The limits the boxes keep (version 97); the defaults when missing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub modular_site: Option<ModularSiteOf>,
     /// Road markings (version 65).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub markings: Vec<MarkingOf>,
@@ -1196,6 +1202,38 @@ pub(crate) struct CeilingOf {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub holes: Vec<Vec<Xy>>,
     pub height: f64,
+}
+
+/// A modular box (version 97).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct BoxOf {
+    pub id: u64,
+    pub guid: String,
+    pub mark: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub kind: String,
+    pub level: u64,
+    pub origin: Xy,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub angle: f64,
+    pub length: f64,
+    pub width: f64,
+    pub bottom: f64,
+    pub height: f64,
+    /// A, B, C and D: «free», «wall» or «open».
+    pub sides: [String; 4],
+}
+
+/// The limits the modular boxes keep (version 97).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ModularSiteOf {
+    pub max_length: f64,
+    pub max_width: f64,
+    pub road_width: f64,
+    pub road_height: f64,
+    pub deck_height: f64,
 }
 
 /// A roundabout or a square where streets meet (version 64).
@@ -3901,6 +3939,34 @@ impl ProjectFile {
                     height: c.height,
                 })
                 .collect(),
+            boxes: p
+                .boxes
+                .iter()
+                .map(|b| BoxOf {
+                    id: b.id.0,
+                    guid: b.guid.to_string(),
+                    mark: b.mark.clone(),
+                    kind: b.kind.clone(),
+                    level: b.level.0,
+                    origin: xy(b.origin),
+                    angle: b.angle,
+                    length: b.length,
+                    width: b.width,
+                    bottom: b.bottom,
+                    height: b.height,
+                    sides: b.sides.map(|x| x.code().to_string()),
+                })
+                .collect(),
+            modular_site: (p.modular_site != core::ModularSite::default()).then(|| {
+                let m = p.modular_site;
+                ModularSiteOf {
+                    max_length: m.max_length,
+                    max_width: m.max_width,
+                    road_width: m.road_width,
+                    road_height: m.road_height,
+                    deck_height: m.deck_height,
+                }
+            }),
             roundabouts: p
                 .roundabouts
                 .iter()
@@ -4631,6 +4697,8 @@ impl ProjectFile {
             roads: Vec::new(),
             roundabouts: Vec::new(),
             ceilings: Vec::new(),
+            boxes: Vec::new(),
+            modular_site: core::ModularSite::default(),
             markings: Vec::new(),
             decals: Vec::new(),
             plantings: Vec::new(),
@@ -5495,6 +5563,39 @@ impl ProjectFile {
                     .collect(),
                 height: c.height,
             });
+        }
+        for b in self.boxes {
+            let element = format!("box {} «{}»", b.id, b.mark);
+            let mut sides = [core::SideState::Free; 4];
+            for (i, code) in b.sides.iter().enumerate() {
+                sides[i] = core::SideState::from_code(code).ok_or_else(|| FileError::Value {
+                    element: element.clone(),
+                    message: format!("unknown side «{code}»"),
+                })?;
+            }
+            parts.boxes.push(core::ModularBox {
+                id: core::BoxId(b.id),
+                guid: guid(&element, &b.guid)?,
+                mark: b.mark,
+                kind: b.kind,
+                level: core::LevelId(b.level),
+                origin: pt(b.origin),
+                angle: b.angle,
+                length: b.length,
+                width: b.width,
+                bottom: b.bottom,
+                height: b.height,
+                sides,
+            });
+        }
+        if let Some(m) = self.modular_site {
+            parts.modular_site = core::ModularSite {
+                max_length: m.max_length,
+                max_width: m.max_width,
+                road_width: m.road_width,
+                road_height: m.road_height,
+                deck_height: m.deck_height,
+            };
         }
         for c in self.roundabouts {
             let element = format!("roundabout {} «{}»", c.id, c.name);

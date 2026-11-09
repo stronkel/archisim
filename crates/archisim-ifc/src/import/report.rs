@@ -16,6 +16,8 @@ pub struct ImportReport {
     pub slabs: usize,
     /// False ceilings (`IfcCovering` CEILING, M7).
     pub ceilings: usize,
+    /// Modular boxes (`IfcElementAssembly` «Caja modular», M1).
+    pub boxes: usize,
     pub doors: usize,
     pub windows: usize,
     /// Rooms (IfcSpace).
@@ -199,6 +201,9 @@ impl ImportReport {
         }
         if self.ceilings > 0 {
             members.push_str(&format!(", {} techos", self.ceilings));
+        }
+        if self.boxes > 0 {
+            members.push_str(&format!(", {} cajas modulares", self.boxes));
         }
         if self.roofs > 0 {
             members.push_str(&format!(", {} cubiertas", self.roofs));

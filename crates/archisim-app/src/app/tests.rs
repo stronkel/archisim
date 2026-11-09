@@ -10933,3 +10933,66 @@ fn false_ceilings_with_the_wand_and_by_corners() {
     assert_ne!(found, Some(crate::pick::Element::Ceiling(c)));
     assert!(crate::pick::in_view(crate::pick::Element::Ceiling(c), true));
 }
+
+/// The Caja tool (M1): a box with its envelope, a second one that goes
+/// against it with its joint, picked by its mark and moved with what it
+/// holds.
+#[test]
+fn modular_boxes_are_placed_against_each_other_and_moved_whole() {
+    use archisim_core::SideState;
+    let mut h = Harness::new(Editor::new_project());
+    h.app.pick(super::toolbox::Pick::Tool(Tool::ModularBox));
+    assert_eq!(h.app.tool, Tool::ModularBox);
+    h.click_at(p(4.0, 3.0));
+    let m = h.model();
+    assert_eq!(m.boxes().count(), 1, "{:?}", h.app.message);
+    let a = m.boxes().next().unwrap().clone();
+    assert_eq!(a.mark, "MOD-01");
+    assert!(a.centre().approx_eq(p(4.0, 3.0)));
+    let held = m.box_members(a.id);
+    assert_eq!(held.walls.len(), 4, "{held:?}");
+    assert_eq!(held.slabs.len(), 2);
+    assert_eq!(held.ceilings.len(), 1);
+    // The second one, clicked a little off the place beside side C.
+    h.click_at(p(4.3, 3.0 + 3.6 + 0.3));
+    let m = h.model();
+    assert_eq!(m.boxes().count(), 2, "{:?} {:?}", h.app.message, h.app.tool);
+    let b = m.boxes().find(|x| x.mark == "MOD-02").unwrap().clone();
+    assert!((b.origin.y - (a.origin.y + a.width + archisim_core::BOX_JOINT)).abs() < 1e-9);
+    assert!((b.origin.x - a.origin.x).abs() < 1e-9);
+    assert_eq!(m.modular_box(a.id).unwrap().sides[2], SideState::Wall);
+    assert_eq!(b.sides[0], SideState::Open);
+    assert_eq!(m.box_members(b.id).walls.len(), 3);
+    let walls = m.walls().count();
+    assert_eq!(walls, 7);
+    // Picked by its mark, and moved 3 m south with all it holds.
+    h.key(Key::Escape);
+    h.click_at(p(4.0, 3.0));
+    assert_eq!(
+        h.app.ed.selection.iter().copied().collect::<Vec<_>>(),
+        vec![crate::pick::Element::Box(a.id)]
+    );
+    let before: Vec<_> = h.model().box_members(b.id).walls;
+    let b_walls: Vec<_> = before
+        .iter()
+        .map(|w| h.model().wall(*w).unwrap().clone())
+        .collect();
+    h.drag(p(4.0, 3.0), p(4.0, 0.0));
+    let m = h.model();
+    let moved = m.modular_box(a.id).unwrap();
+    assert!(
+        (moved.origin.y - (a.origin.y - 3.0)).abs() < 1e-6,
+        "{moved:?}"
+    );
+    assert_eq!(m.box_members(a.id).walls.len(), 4);
+    assert_eq!(m.box_members(a.id).slabs.len(), 2);
+    // The other box and its walls stayed where they were.
+    for w in &b_walls {
+        let now = m.wall(w.id).unwrap();
+        assert!(now.start.approx_eq(w.start) && now.end.approx_eq(w.end));
+    }
+    // Now nothing touches its side A.
+    assert!(m
+        .box_issues(b.id)
+        .contains(&archisim_core::BoxIssue::JoinedAlone { side: 0 }));
+}

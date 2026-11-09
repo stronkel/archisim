@@ -584,6 +584,13 @@ const STRUCTURE: &[Tile] = &[
         "X",
         "Ejes de replanteo con su numeración",
     ),
+    tile(
+        Pick::Tool(Tool::ModularBox),
+        Glyph::ModularBox,
+        "Caja",
+        "CM",
+        "Cajas modulares de fábrica: un clic la pone (junto a otra se pega con su junta); con su envolvente, sus lados libres o unidos y su marca",
+    ),
 ];
 
 const SERVICES: &[Tile] = &[

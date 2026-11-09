@@ -1042,6 +1042,7 @@ impl ArchiSimApp {
             Tool::Mass | Tool::PushPull | Tool::DivideFace | Tool::Deform | Tool::MassOffset | Tool::Tape | Tool::Paint => self.concept_hint(),
             Tool::Plot | Tool::Road => self.urban_hint(),
             Tool::Roundabout => "Clic: centro de la glorieta (en un cruce, se centra en él) · Esc: flecha",
+            Tool::ModularBox => "Clic: centro de la caja (junto a otra, se pega a ella con su junta) · Espacio: girar · Esc: flecha",
             Tool::World => "Clic: el centro de la fachada (junto a una calle, en su borde) · Espacio: girar · Esc: flecha",
             Tool::Marking => self.marking_hint(),
             Tool::Decal => self.decal_hint(),

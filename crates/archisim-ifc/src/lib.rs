@@ -43,6 +43,7 @@
 //! model twice gives the same file apart from the header timestamp.
 
 mod accessories;
+mod boxes;
 mod ceilings;
 mod curtain;
 mod decals;
@@ -2197,6 +2198,8 @@ impl<'a> Exporter<'a> {
         self.write_urban(&materials, site, site_pl);
         self.write_services(&storeys, &mut contained, building);
         self.write_spaces(&storeys);
+        // Last: the boxes take their parts out of the storeys.
+        self.write_boxes(&storeys, &mut contained);
 
         self.write_user_parameters(project);
 

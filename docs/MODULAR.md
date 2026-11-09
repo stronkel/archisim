@@ -39,11 +39,14 @@
 
 ## 3. Lo que hay que añadir
 
-**M1 · La caja como elemento.** «Módulo»:
-- un rectángulo (o contorno) en planta con su altura, sus muros, su suelo y su techo;
-- su marca («MOD-03»), su contorno de transporte y aviso si se pasa de lo que admite el camión;
-- en el IFC, un `IfcElementAssembly` con sus piezas;
-- colocado con forzado a la retícula de cajas, y copiable.
+**M1 · La caja como elemento.** ✅ Hecho el 9/11/2026, rama `bloque/caja`.
+- **La caja.** Un rectángulo en planta con su largo, ancho y alto, la base del chasis bajo el suelo, su marca («MOD-03») y su tipo (texto hasta M8).
+- **Sus lados.** A y C son los largos; B y D, los testeros. Cada lado está libre (fachada y pretil), unido con el muro de la junta, o unido y abierto.
+- **Lo que lleva.** Lo que está dentro, o en un lado que no está abierto. No se guarda en una lista: se deduce de dónde está, así que mover un muro dentro o fuera no pide nada más.
+- **Avisos.** Si se pasa de lo que fabrica el sistema (9 × 3,60 m), si pide transporte especial (más de 2,55 m de ancho) o si sobre el camión pasa de 4 m. También si una junta no tiene dueño o lleva dos muros.
+- **Colocarla.** Un clic pone una caja; cerca de otra se pega a ella con 2 cm de junta, y la que ya estaba lleva el muro. Espacio la gira. Puede ponerle muros, suelo, cubierta y techo al colocarla.
+- **Con lo que lleva.** Se mueve, se copia, se gira y se refleja con todo.
+- **En el IFC.** Un `IfcElementAssembly` montado en fábrica con sus piezas. Vuelve igual al importarlo.
 
 **M2 · Juntas entre cajas.** Donde se tocan dos cajas:
 - holgura entre chasis y cada junta con su dueño: muro en una caja y lado abierto en la otra (§5.2); en dos plantas, forjado doble (suelo de una, techo de la de abajo);
@@ -232,7 +235,7 @@ Lo que cambia respecto a §5:
 
 ## 6. Pendiente de Antonio
 
-- Orden aprobado (9/11/2026): M4 (hecho) → M7 techos (hecho) → M1 caja → M8 catálogo con la primera caja tipo → M2 juntas y M3 chasis → M9 taller. M5, M6 y M10 cuando toquen.
+- Orden aprobado (9/11/2026): M4 (hecho) → M7 techos (hecho) → M1 caja (hecha) → M8 catálogo con la primera caja tipo → M2 juntas y M3 chasis → M9 taller. M5, M6 y M10 cuando toquen.
 - Exportar desde Revit el modelo de estructura vinculado como IFC aparte, para partir de él en el chasis de la caja tipo.
 - Catálogo de perfiles del fabricante como fichero (`.csv`, §3 ter de ENTRAMADOS).
 - Propuesta de §5 aprobada (9/11/2026).

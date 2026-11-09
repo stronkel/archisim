@@ -1933,3 +1933,50 @@ fn false_ceilings_round_trip() {
         archisim_core::SlabFunction::Ceiling
     );
 }
+
+#[test]
+fn modular_boxes_round_trip() {
+    use archisim_core::{BoxFill, NewBox, SideState};
+    let mut m = model();
+    let pb = m.levels()[0].id;
+    let wall_type = m.wall_types().next().unwrap().id;
+    let floor = m
+        .slab_types()
+        .find(|t| t.function == archisim_core::SlabFunction::Floor)
+        .unwrap()
+        .id;
+    let ceiling = m.ceiling_types().next().map(|t| t.id);
+    let fill = BoxFill {
+        wall_type: Some(wall_type),
+        floor_type: Some(floor),
+        roof_type: None,
+        ceiling_type: ceiling,
+        ceiling_height: 2.6,
+    };
+    // Two boxes side by side, away from the model's house.
+    let a = m
+        .add_box(NewBox::usual(pb, Point2::new(30.0, 0.0), 0.0))
+        .unwrap();
+    let b = m
+        .add_box(NewBox::usual(pb, Point2::new(30.0, 3.62), 0.0))
+        .unwrap();
+    m.edit_box(a, |x| x.sides[2] = SideState::Wall).unwrap();
+    m.edit_box(b, |x| {
+        x.sides[0] = SideState::Open;
+        x.kind = "Caja 6,20 · estar".into();
+    })
+    .unwrap();
+    m.fill_box(a, fill).unwrap();
+    m.fill_box(b, fill).unwrap();
+    let held = m.box_members(a).count();
+    assert!(held >= 6, "{:?}", m.box_members(a));
+    let ifc = export(&m);
+    assert_eq!(ifc.matches("'Caja modular'").count(), 2);
+    assert!(ifc.contains(".FACTORY."), "assembled in the factory");
+    let Imported { model, report } = import_ifc(&ifc).unwrap();
+    assert_eq!(report.boxes, 2, "{report}");
+    let diffs = differences(&m, &model);
+    assert!(diffs.is_empty(), "{}", diffs.join("\n"));
+    let back = model.boxes().find(|x| x.mark == "MOD-01").unwrap();
+    assert_eq!(model.box_members(back.id).count(), held);
+}

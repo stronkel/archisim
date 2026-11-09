@@ -162,6 +162,41 @@ pub fn differences(a: &Model, b: &Model) -> Vec<String> {
         }
     }
 
+    if a.boxes().count() != b.boxes().count() {
+        diff(format!(
+            "número de cajas: {} / {}",
+            a.boxes().count(),
+            b.boxes().count()
+        ));
+    }
+    for s in a.boxes() {
+        let Some(t) = b.boxes().find(|t| t.guid == s.guid) else {
+            diff(format!("caja {} falta", s.guid));
+            continue;
+        };
+        let same = s.mark == t.mark
+            && s.kind == t.kind
+            && s.sides == t.sides
+            && s.origin.distance(t.origin) <= TOL
+            && close(s.angle, t.angle)
+            && close(s.length, t.length)
+            && close(s.width, t.width)
+            && close(s.bottom, t.bottom)
+            && close(s.height, t.height)
+            && level_guid(a, s.level) == level_guid(b, t.level);
+        if !same {
+            diff(format!("caja {}: {:?} / {:?}", s.guid, s, t));
+        }
+        if a.box_members(s.id).count() != b.box_members(t.id).count() {
+            diff(format!(
+                "caja {}: {} / {} elementos dentro",
+                s.mark,
+                a.box_members(s.id).count(),
+                b.box_members(t.id).count()
+            ));
+        }
+    }
+
     if a.ceilings().count() != b.ceilings().count() {
         diff(format!(
             "número de techos: {} / {}",

@@ -44,6 +44,8 @@ pub enum Glyph {
     Raft,
     /// A false ceiling: a board hung under a slab.
     Ceiling,
+    /// A modular box: a box in perspective with its joint.
+    ModularBox,
     Pipe,
     Duct,
     Fixture,
@@ -271,6 +273,9 @@ impl Glyph {
             }
             Glyph::Ceiling => {
                 r##"<path d="M2 4h16"/><path d="M5 4v5M10 4v5M15 4v5" stroke-width="0.8"/><path d="M3 10h14v2H3z"/>"##
+            }
+            Glyph::ModularBox => {
+                r##"<path d="M2 8l5-3h11l-5 3z"/><path d="M2 8h11v8H2z"/><path d="M13 8l5-3v8l-5 3"/><path d="M7.5 8v8" stroke-width="0.8" stroke-dasharray="1.5 1"/>"##
             }
             Glyph::Raft => {
                 r##"<rect x="2" y="9" width="16" height="6"/><path d="M5 9v6M9 9v6M13 9v6" stroke-width="0.8" stroke-dasharray="1.5 1.5"/>"##
@@ -585,6 +590,7 @@ impl Glyph {
         Glyph::BearingWall,
         Glyph::Footing,
         Glyph::Raft,
+        Glyph::ModularBox,
         Glyph::Pipe,
         Glyph::Duct,
         Glyph::Fixture,
