@@ -159,6 +159,41 @@ Colaboración → **Cálculo de saneamiento…**. Se dibujan dos sistemas de tub
 
 Cada tramo («S1», «S2»… en residuales; «P1»… en pluviales) se calcula con su diámetro dibujado y el exigido, en PVC (diámetro exterior = nominal de las tablas). **«Poner los diámetros calculados»** agranda las tuberías y bajantes que se quedan cortas, en un paso de Deshacer; las que están de más se quedan como están. En la **Comprobación CTE** salen todos los tramos, los sumideros y los canalones, y «Arreglar lo que no cumple» agranda lo corto.
 
+### Ventilación de la red, sifones y derivaciones (HS 5, 3.3.1 y 3.3.3)
+
+Todo sale del dibujo. Las bajantes que están una encima de otra en el mismo sitio son una **columna**; su cabeza es la parte de arriba de la más alta (su altura, `height`).
+
+- **Ventilación primaria** (3.3.3.1). La columna debe salir por la cubierta que tiene encima:
+  - 1,30 m sobre una cubierta no transitable y 2,00 m sobre una transitable. «Según el dibujo», es transitable un forjado de cubierta con locales o barandillas en su planta; las cubiertas inclinadas, no. En la ventana de saneamiento se puede decir «Transitables» o «No transitables» para todas;
+  - si hay un aireador a menos de 6 m, más alta que él; si hay una ventana a menos de 6 m, 50 cm por encima de su dintel;
+  - una **válvula de aireación** en su cabeza (el aparato nuevo «Válvula de aireación», a menos de 30 cm y a la altura de la cabeza) la sustituye (3.3.3.4).
+  - La bajante que va por un patinillo (un hueco de los forjados) sale igual por la cubierta: se mira la cubierta de encima aunque el punto esté en el hueco.
+- **Ventilación secundaria** (3.3.3.2): cuando a la columna desaguan 7 plantas o más (11 si está dibujada un diámetro por encima del exigido, «sobredimensionada»). Hace falta una **columna de ventilación** junto a ella: otra bajante dibujada a menos de 1 m, sin aparatos, que cubra todas las plantas que sirve, de al menos la mitad de su diámetro. También vale una válvula de aireación en el ramal de cada planta.
+- **Ventilación terciaria** (3.3.3.3): en el ramal de una planta de más de 5 m (del aparato más lejano a la bajante) o en todos si la columna sirve a más de 14 plantas. Vale una válvula de aireación sobre el ramal o una columna de ventilación junto a su final, de al menos la mitad de su diámetro.
+- **Cierres hidráulicos** (3.3.1.1). Cada aparato lleva su sifón, salvo los que desaguan por un **bote sifónico** (el aparato nuevo «Bote sifónico», dibujado sobre la tubería). La altura del cierre se escribe en la ventana (por defecto 50 mm) y debe estar entre 50 y 100 mm. Cada bote sifónico:
+  - solo con aparatos de su mismo local y sin inodoros;
+  - las derivaciones hasta él, de 2,50 m como mucho y entre el 2 y el 4 %;
+  - a 2,00 m como mucho de la bajante.
+- **Cada aparato con sifón propio, hasta la bajante** (3.3.1.4), por las tuberías dibujadas:
+  - lavabos, bidés, fregaderos, lavavajillas y lavadoras: 4 m como mucho, su derivación entre el 2,5 y el 5 %;
+  - bañeras y duchas: 4 m, su derivación hasta el 10 %;
+  - inodoros: 1 m como mucho (desagüe directo o manguetón).
+  - Si no hay bajante en su camino (la planta baja), hasta el primer colector.
+  - La pendiente es la de su derivación propia; la del ramal que comparte con otros va por la tabla 4.3.
+
+Sale en el informe de la ventana (al final), en la memoria de instalaciones («Ventilación y pequeña evacuación») y en la Comprobación CTE. **«Arreglar lo que no cumple»** prolonga cada bajante que no llega hasta la altura de su ventilación primaria, de 5 en 5 cm.
+
+Los aparatos nuevos están en la ficha «Montante» de Instalaciones, en su «Tipo».
+
+**Florence Street.** Con lo dibujado:
+- Primaria: no llega ninguna. Las bajantes acaban 1 m sobre la terraza de cubierta, que es transitable (exige 2,00 m: faltan 1,00 m en 4 bajantes), y las 5 que están bajo el pabellón acaban dentro de él (faltan 3,50 m para salir 1,30 m sobre su forjado). Tres bajantes (1, 7 y 10) quedan dibujadas 39 cm por detrás de la fachada trasera, fuera de cualquier forjado: no se comprueban. «Arreglar lo que no cumple» prolonga las nueve.
+- Secundaria: no hace falta (4 o 5 plantas por bajante).
+- Terciaria: dos ramales largos sin ventilar, el de la planta baja de la bajante 7 (7,40 m) y el de la lavadora de la cubierta en la bajante 11 (5,25 m).
+- Sifones: todos individuales, 50 mm: cumple.
+- Derivaciones: 111 de 130 aparatos cumplen. No cumplen 17 inodoros, a entre 1,10 y 1,89 m de la bajante en las plantas tipo (4,10 m en la baja), y dos lavadoras de la cubierta, a 4,55 y 5,25 m.
+
+**A comprobar por Antonio**: todos los valores de esta parte están escritos de memoria del texto del HS 5 y juntos al principio de `crates/archisim-mep/src/drain_vent.rs`. En particular, las 11 plantas con la bajante sobredimensionada (el encargo decía 14; recuerdo 11), los 4 m de las bañeras y duchas (el texto que recuerdo solo da su pendiente), el 2 % mínimo que les pongo, la mitad del diámetro para las columnas de ventilación y la válvula en cada ramal como sustituta de la secundaria.
+
 ### Esquemas de saneamiento
 
 Igual que los de fontanería:
@@ -483,9 +518,10 @@ Lo que no cumple sale marcado como en el anejo de cálculo de la estructura. La 
   - el volumen del depósito de presión del grupo;
   - los fluxores.
 - Saneamiento:
-  - la ventilación de las bajantes (primaria, secundaria y terciaria, HS 5 3.3.3);
-  - los sifones y botes sifónicos;
-  - la longitud de las derivaciones y la distancia a la bajante (4.1.1);
+  - los diámetros de las columnas de ventilación por su longitud (tablas 4.10 y 4.11): se pide la mitad del diámetro de la bajante o del ramal;
+  - que la columna de ventilación esté unida a la bajante en cada planta (se mira solo que esté junto a ella y cubra sus plantas), y los obstáculos de la cubierta que no son tomas de aire ni ventanas;
+  - los rebosaderos, los desagües enfrentados y el ángulo de las uniones a la bajante (3.3.1.4);
+  - los aparatos de uso discontinuo, que piden 70 mm de cierre (se pone un solo valor para todos);
   - las bombas de elevación;
   - los canalones de sección cuadrada (se toman como semicirculares).
 - Ventilación:

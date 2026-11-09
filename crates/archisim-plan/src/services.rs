@@ -644,6 +644,66 @@ fn draw_device(s: &mut String, d: &archisim_core::ServiceDevice, k: f64) {
         | DeviceKind::StreetLight) => {
             urban_symbol(s, d, kind, r, ink, k);
         }
+        DeviceKind::AirValve | DeviceKind::TrapBox => {
+            // In the colour of the drainage: a trap box is a square with
+            // its grating, an air valve a circle with its cap; both with
+            // their initials.
+            let colour = hex(ServiceSystem::Drainage.color());
+            let rr = (d.width / 2.0).max(1.2 * k);
+            if d.kind == DeviceKind::TrapBox {
+                let q: Vec<Point2> = [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)]
+                    .into_iter()
+                    .map(|(x, y)| rot(x * rr, y * rr))
+                    .collect();
+                let _ = writeln!(
+                    s,
+                    r#"<path d="{}" fill="white" stroke="{colour}" stroke-width="{}"/>"#,
+                    path(&q),
+                    num(pens().cut * k)
+                );
+                let _ = writeln!(
+                    s,
+                    r#"<circle cx="{}" cy="{}" r="{}" fill="none" stroke="{colour}" stroke-width="{w}"/>"#,
+                    num(c.x),
+                    num(-c.y),
+                    num(rr * 0.7)
+                );
+            } else {
+                let _ = writeln!(
+                    s,
+                    r#"<circle cx="{}" cy="{}" r="{}" fill="white" stroke="{colour}" stroke-width="{}"/>"#,
+                    num(c.x),
+                    num(-c.y),
+                    num(rr),
+                    num(pens().cut * k)
+                );
+                let _ = writeln!(
+                    s,
+                    r#"<circle cx="{}" cy="{}" r="{}" fill="{colour}" stroke="none"/>"#,
+                    num(c.x),
+                    num(-c.y),
+                    num(rr * 0.4)
+                );
+            }
+            let h = 1.8 * k;
+            let text = if d.kind == DeviceKind::TrapBox {
+                "BS"
+            } else {
+                "VA"
+            };
+            let _ = writeln!(
+                s,
+                r#"<path d="{}" {}/>"#,
+                text_path(
+                    text,
+                    c + Point2::new(rr + 0.8 * k, -rr - h),
+                    Point2::new(1.0, 0.0),
+                    h,
+                    Align::Left
+                ),
+                crate::lettering::paint(h, &colour)
+            );
+        }
         DeviceKind::Equipment => {
             let o = d.outline();
             let _ = writeln!(

@@ -14,7 +14,9 @@
 //! - `drain`: the drainage by DB-HS 5: waste water by units of discharge
 //!   (branches, downpipes and collectors), rain water by the roof each
 //!   inlet takes, mixed collectors, the outlets of every roof and its
-//!   gutters.
+//!   gutters; `drain_vent`, its ventilation (primary, secondary and
+//!   tertiary), the traps and trap boxes, and each appliance's way to its
+//!   downpipe.
 //!
 //! It works on the board («cuadro»), the mechanisms and the appliances
 //! drawn; it adds no elements. It is a design aid: the installer's
@@ -22,6 +24,7 @@
 //! authors.
 
 pub mod drain;
+pub mod drain_vent;
 pub mod electrical;
 pub mod envelope;
 pub mod renewables;

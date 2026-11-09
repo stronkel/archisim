@@ -175,6 +175,7 @@ impl DeviceKind {
                 S::ColdWater | S::HotWater | S::HotReturn | S::Heating | S::FireProtection
             ),
             D::Downpipe => matches!(system, S::Drainage | S::Rainwater),
+            D::AirValve | D::TrapBox => system == S::Drainage,
             D::WaterHeater | D::Valve | D::Pump => {
                 matches!(system, S::ColdWater | S::HotWater | S::HotReturn)
             }

@@ -606,5 +606,263 @@ pub fn drain_calculation(model: &Model, report: &mut Report) {
             format!("≥ {}", mm(g.downpipe_sized)),
         );
     }
+    // The ventilation of the waste network and its small evacuation.
+    let v = archisim_mep::drain_vent::venting(model, &d);
+    venting_items(model, &d, &v, first_level, &mut push);
     let _ = first_level;
+}
+
+/// The ventilation (3.3.3), the traps (3.3.1.1) and each appliance's way
+/// to its downpipe (3.3.1.4).
+fn venting_items(
+    model: &Model,
+    d: &archisim_mep::drain::Drainage,
+    v: &archisim_mep::drain_vent::Venting,
+    first_level: Option<archisim_core::LevelId>,
+    push: &mut impl FnMut(
+        Status,
+        Subject,
+        Option<archisim_core::LevelId>,
+        &'static str,
+        String,
+        String,
+        String,
+    ),
+) {
+    use archisim_mep::drain_vent as dv;
+    let dec = |v: f64, n: usize| format!("{v:.n$}").replace('.', ",");
+    let device_level =
+        |id: archisim_core::DeviceId| model.devices().find(|x| x.id == id).map(|x| x.level);
+    for c in &v.columns {
+        let name = dv::column_name(model, c);
+        let level = device_level(c.head);
+        match (c.valve, &c.cover, c.required_top()) {
+            (Some(_), _, _) => push(
+                Status::Passes,
+                Subject::Device(c.head),
+                level,
+                "HS 5, 3.3.3.4",
+                "Ventilación primaria con válvula de aireación en su cabeza".to_string(),
+                "válvula".into(),
+                String::new(),
+            ),
+            (None, Some(cv), Some(req)) => push(
+                if c.primary_fails() {
+                    Status::Fails
+                } else {
+                    Status::Passes
+                },
+                Subject::Device(c.head),
+                level,
+                "HS 5, 3.3.3.1",
+                format!(
+                    "Ventilación primaria sobre {} ({}){}",
+                    cv.name,
+                    if cv.walked {
+                        "transitable"
+                    } else {
+                        "no transitable"
+                    },
+                    match &c.near {
+                        Some((what, z)) if *z > cv.z + c.above_required() => {
+                            format!("; más alta que la {what}, a menos de {} m", dec(dv::INTAKE_GAP, 0))
+                        }
+                        _ => String::new(),
+                    }
+                ),
+                format!("{} m", dec(c.top - cv.z, 2)),
+                format!("≥ {} m", dec(req - cv.z, 2)),
+            ),
+            _ => push(
+                Status::Warning,
+                Subject::Device(c.head),
+                level,
+                "HS 5, 3.3.3.1",
+                "No está bajo ninguna cubierta ni forjado del dibujo: no se comprueba su ventilación primaria".to_string(),
+                String::new(),
+                String::new(),
+            ),
+        }
+        if c.secondary_needed() {
+            let by = if c.valves_on_branches() {
+                "válvulas en los ramales".to_string()
+            } else {
+                c.vent.map_or("sin columna".into(), |(_, w)| mm(w))
+            };
+            push(
+                if c.secondary_fails() {
+                    Status::Fails
+                } else {
+                    Status::Passes
+                },
+                Subject::Device(c.head),
+                level,
+                "HS 5, 3.3.3.2",
+                format!(
+                    "Ventilación secundaria ({} plantas{})",
+                    c.floors,
+                    if c.oversized {
+                        ", sobredimensionada"
+                    } else {
+                        ""
+                    }
+                ),
+                by,
+                format!("columna ≥ {}", mm(c.vent_sized)),
+            );
+        }
+        for b in c.branches.iter().filter(|b| b.needed) {
+            let st = &d.networks[c.network].stretches[b.stretch];
+            push(
+                if b.fails() {
+                    Status::Fails
+                } else {
+                    Status::Passes
+                },
+                st.run.map_or(Subject::Level(b.level), Subject::Run),
+                Some(b.level),
+                "HS 5, 3.3.3.3",
+                format!(
+                    "Ventilación terciaria del ramal {} ({} m) de {name}",
+                    st.name,
+                    dec(b.length, 2)
+                ),
+                if b.valve.is_some() {
+                    "válvula".into()
+                } else {
+                    b.vent.map_or("sin ventilar".into(), |(_, w)| mm(w))
+                },
+                format!("válvula o ventilación ≥ {}", mm(b.vent_sized)),
+            );
+        }
+    }
+    if !v.ways.is_empty() {
+        push(
+            if v.seal_fails() {
+                Status::Fails
+            } else {
+                Status::Passes
+            },
+            Subject::Building,
+            first_level,
+            "HS 5, 3.3.1.1",
+            "Altura del cierre hidráulico de los sifones y botes sifónicos".into(),
+            format!("{} mm", dec(v.seal * 1000.0, 0)),
+            format!(
+                "{} a {} mm",
+                dec(dv::SEAL_MIN * 1000.0, 0),
+                dec(dv::SEAL_MAX * 1000.0, 0)
+            ),
+        );
+    }
+    for b in &v.trap_boxes {
+        let subject = Subject::Device(b.device);
+        let fail = |bad: bool| if bad { Status::Fails } else { Status::Passes };
+        push(
+            fail(b.has_wc() || b.other_rooms > 0),
+            subject,
+            Some(b.level),
+            "HS 5, 3.3.1.1",
+            "Bote sifónico: solo aparatos de su local y ningún inodoro".into(),
+            format!(
+                "{} aparatos{}{}",
+                b.appliances.len(),
+                if b.has_wc() { ", un inodoro" } else { "" },
+                if b.other_rooms > 0 {
+                    format!(", {} de otro local", b.other_rooms)
+                } else {
+                    String::new()
+                }
+            ),
+            "de su local, sin inodoro".into(),
+        );
+        let longest = b.appliances.iter().map(|a| a.2).fold(0.0, f64::max);
+        push(
+            fail(b.long_branches() > 0 || b.bad_slopes() > 0),
+            subject,
+            Some(b.level),
+            "HS 5, 3.3.1.4",
+            "Derivaciones al bote sifónico".into(),
+            format!("hasta {} m", dec(longest, 2)),
+            format!(
+                "≤ {} m, del {} al {} %",
+                dec(dv::BOX_BRANCH, 2),
+                dec(dv::BOX_SLOPE.0 * 100.0, 0),
+                dec(dv::BOX_SLOPE.1 * 100.0, 0)
+            ),
+        );
+        if let Some(x) = b.to_downpipe {
+            push(
+                fail(b.too_far()),
+                subject,
+                Some(b.level),
+                "HS 5, 3.3.1.4",
+                "Bote sifónico a la bajante".into(),
+                format!("{} m", dec(x, 2)),
+                format!("≤ {} m", dec(dv::BOX_TO_DOWNPIPE, 2)),
+            );
+        }
+    }
+    for w in &v.ways {
+        if w.trap_box.is_some() {
+            continue;
+        }
+        let (reach, lo, hi) = w.limits();
+        if let Some(l) = w.length {
+            push(
+                if w.too_far() {
+                    Status::Fails
+                } else {
+                    Status::Passes
+                },
+                Subject::Object(w.object),
+                Some(w.level),
+                "HS 5, 3.3.1.4",
+                format!(
+                    "{}: distancia a la {}{}",
+                    w.kind.name(),
+                    if w.to_downpipe { "bajante" } else { "red" },
+                    if w.kind == archisim_core::Appliance::Wc {
+                        " (desagüe directo o manguetón)"
+                    } else {
+                        ""
+                    }
+                ),
+                format!("{} m", dec(l, 2)),
+                format!("≤ {} m", dec(reach, 2)),
+            );
+        }
+        if let Some((a, b)) = w.slopes {
+            if w.kind != archisim_core::Appliance::Wc {
+                push(
+                    if w.bad_slope() {
+                        Status::Fails
+                    } else {
+                        Status::Passes
+                    },
+                    Subject::Object(w.object),
+                    Some(w.level),
+                    "HS 5, 3.3.1.4",
+                    format!("{}: pendiente de su derivación", w.kind.name()),
+                    if (a - b).abs() < 1e-6 {
+                        crate::pct(a)
+                    } else {
+                        format!("{} a {}", crate::pct(a), crate::pct(b))
+                    },
+                    format!("{} a {}", crate::pct(lo), crate::pct(hi)),
+                );
+            }
+        }
+    }
+    for b in &v.loose_boxes {
+        push(
+            Status::Warning,
+            Subject::Device(*b),
+            device_level(*b),
+            "HS 5, 3.3.1.1",
+            "Bote sifónico sin ningún aparato que desagüe por él".into(),
+            String::new(),
+            String::new(),
+        );
+    }
 }

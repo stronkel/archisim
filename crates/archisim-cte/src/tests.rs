@@ -745,6 +745,109 @@ fn drainage_by_hs5_and_its_fix() {
 }
 
 #[test]
+fn downpipes_vented_over_the_roof_and_their_fix() {
+    use archisim_core::{DeviceKind, NewDevice, NewObject, NewRun, ServiceSystem};
+    let mut m = archisim_library::new_project("Casa");
+    let l0 = m.levels()[0].id;
+    let l1 = m.add_level("Planta 1", 3.0);
+    let roof = m.add_level("Cubierta", 6.0);
+    let wc = archisim_library::add_object_entry(&mut m, "Inodoro").unwrap();
+    m.add_object(NewObject {
+        level: l1,
+        object_type: wc,
+        position: Point2::new(1.6, 0.6),
+        rotation: 0.0,
+        base_offset: 0.0,
+    })
+    .unwrap();
+    // A downpipe up to the roof's slab, and no further.
+    let pipe = m
+        .add_device(NewDevice {
+            level: l0,
+            kind: DeviceKind::Downpipe,
+            name: "Bajante".into(),
+            position: Point2::new(1.0, 0.0),
+            rotation: 0.0,
+            elevation: -0.5,
+            width: 0.11,
+            depth: 0.11,
+            height: 6.5,
+        })
+        .unwrap();
+    let st = m.slab_types().next().unwrap().id;
+    m.add_slab(archisim_core::NewSlab {
+        slab_type: st,
+        level: roof,
+        outline: vec![
+            Point2::new(-1.0, -1.0),
+            Point2::new(4.0, -1.0),
+            Point2::new(4.0, 3.0),
+            Point2::new(-1.0, 3.0),
+        ],
+        top_offset: 0.0,
+    })
+    .unwrap();
+    let p = m.appliances_on(l1)[0].point;
+    for (level, path, z) in [
+        (l1, vec![p, Point2::new(1.0, 0.0)], 0.3),
+        (
+            l0,
+            vec![Point2::new(1.0, 0.0), Point2::new(1.0, -3.0)],
+            -0.6,
+        ),
+    ] {
+        let w = 0.11;
+        m.add_run(NewRun {
+            level,
+            system: ServiceSystem::Drainage,
+            path,
+            elevation: z,
+            width: w,
+            height: w,
+            slope: 0.02,
+        })
+        .unwrap();
+    }
+    let primary = |m: &Model| {
+        check(m)
+            .items
+            .into_iter()
+            .filter(|i| i.rule == "HS 5, 3.3.3.1")
+            .collect::<Vec<Item>>()
+    };
+    let before = primary(&m);
+    assert!(
+        before
+            .iter()
+            .any(|i| i.status == Status::Fails && i.subject == Subject::Device(pipe)),
+        "{before:#?}"
+    );
+    let f = crate::fix::fix(&m);
+    assert!(
+        f.changes.iter().any(
+            |c| matches!(c, crate::fix::Change::DeviceHeight { device, .. } if *device == pipe)
+        ),
+        "{:#?}",
+        f.changes
+    );
+    let mut done = m.clone();
+    crate::fix::apply_all(&mut done, &f).unwrap();
+    let after = primary(&done);
+    assert!(
+        after.iter().all(|i| i.status == Status::Passes),
+        "{after:#?}"
+    );
+    // Its head 1,30 m over the roof at 6 m, to the next 5 cm.
+    let d = done.devices().find(|d| d.id == pipe).unwrap();
+    assert!((d.elevation + d.height - 7.3).abs() < 0.051, "{d:?}");
+    // The WC is 0,8 m from it: within the metre of 3.3.1.4.
+    assert!(check(&done)
+        .items
+        .iter()
+        .any(|i| i.rule == "HS 5, 3.3.1.4" && i.status == Status::Passes));
+}
+
+#[test]
 fn ventilation_by_hs3_and_its_fix() {
     use archisim_core::DeviceKind;
     let mut m = Model::new("Piso");

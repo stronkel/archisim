@@ -6,6 +6,65 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-09 (130) · Saneamiento, tercera vuelta: ventilación de las bajantes, sifones y derivaciones (DB-HS 5)
+
+Rama `bloque/hs5-ventilacion`, con pull request. Va sobre la de la entrada 129 (#183, todavía sin unir). **Formato versión 97**: dos aparatos nuevos (válvula de aireación y bote sifónico) y dos datos del saneamiento en `water` (altura del cierre hidráulico y si las cubiertas son transitables). En el IFC, los aparatos nuevos salen como `IfcValve` (ANTIVACUUM) e `IfcWasteTerminal` (WASTETRAP). `docs/INSTALACIONES.md` §5, «Ventilación de la red, sifones y derivaciones».
+
+- **Ventilación primaria** (3.3.3.1). Las bajantes que están una encima de otra en el mismo sitio forman una columna. Su cabeza debe salir por la cubierta que tiene encima: 1,30 m si no es transitable y 2,00 m si lo es. Con un aireador a menos de 6 m, más alta que él; con una ventana a menos de 6 m, 50 cm sobre su dintel. Una válvula de aireación en la cabeza la sustituye.
+  - «Transitable», según el dibujo: un forjado de cubierta con locales o barandillas en su planta. En la ventana se puede fijar para todas.
+  - Una bajante en un patinillo (un hueco de los forjados) se mide contra la cubierta igual.
+- **Ventilación secundaria** (3.3.3.2): desde 7 plantas que desaguan en la columna, u 11 si está sobredimensionada. Pide una columna de ventilación junto a ella (otra bajante sin aparatos a menos de 1 m, que cubra sus plantas, de la mitad de su diámetro al menos) o una válvula en el ramal de cada planta.
+- **Ventilación terciaria** (3.3.3.3): en los ramales de más de 5 m, o en todos por encima de 14 plantas. Vale una válvula sobre el ramal o una columna de ventilación junto a su final.
+- **Cierres hidráulicos y botes sifónicos** (3.3.1.1). La altura del cierre se escribe en la ventana (50 mm por defecto) y se comprueba entre 50 y 100 mm. Cada bote sifónico dibujado sobre la tubería recoge los aparatos cuyo desagüe pasa por él. Se comprueba que no lleve inodoros ni aparatos de otro local, que sus derivaciones no pasen de 2,50 m y vayan al 2–4 %, y que esté a 2,00 m como mucho de la bajante.
+- **Cada aparato hasta su bajante** (3.3.1.4), por las tuberías dibujadas: lavabos, bidés, fregaderos, lavavajillas y lavadoras a 4 m con su derivación al 2,5–5 %; bañeras y duchas a 4 m y hasta el 10 %; inodoros a 1 m. En la planta baja, hasta el primer colector.
+- **Dónde sale**: al final del informe de la ventana de saneamiento y de `archisim saneamiento`, en la memoria de instalaciones («Ventilación y pequeña evacuación», con la tabla de las bajantes) y en la Comprobación CTE. **«Arreglar lo que no cumple»** prolonga cada bajante corta hasta la altura de su ventilación primaria, de 5 en 5 cm.
+- **Aparatos nuevos**: «Válvula de aireación» y «Bote sifónico», en la ficha Montante de Instalaciones (en su «Tipo»), con su símbolo en planta (VA y BS, en el color del saneamiento) y su modelo 3D.
+- **Pruebas.**
+  - La casa de dos plantas de las pruebas del saneamiento: su bajante acaba en la planta 1, bajo la cubierta a 6 m. Se comprueba que pide 7,30 m de cabeza; con 7,40 m cumple; con la cubierta transitable pide 8,00 m; con una válvula en su cabeza cumple.
+  - En la misma casa, las distancias de cada aparato a la bajante por las tuberías (inodoro 1,8 m, lavabo 3,3 m, ducha 4,8 m) y la pendiente del lavabo.
+  - Un bote sifónico entre la ducha y el lavabo (recoge la ducha, a 3,25 m de la bajante), otro junto al inodoro (no vale) y uno suelto.
+  - La columna de ventilación junto a una bajante alta.
+  - En la Comprobación CTE, el arreglo que prolonga una bajante hasta 1,30 m sobre la cubierta.
+
+**Florence Street.** Con lo dibujado (30 «no cumple» nuevos en la Comprobación CTE):
+
+| Comprobación | Resultado |
+|---|---|
+| Primaria, bajantes bajo la terraza (2, 3, 8 y 9) | No cumple: acaban a 1,00 m y la terraza es transitable (2,00 m) |
+| Primaria, bajantes bajo el pabellón (4, 5, 6, 11 y 12) | No cumple: acaban dentro del pabellón, 2,20 m por debajo de su forjado (faltan 3,50 m) |
+| Primaria, bajantes 1, 7 y 10 | Aviso: están dibujadas 39 cm por detrás de la fachada trasera, fuera de los forjados |
+| Secundaria | No hace falta: 4 o 5 plantas por bajante |
+| Terciaria | No cumple en 2 ramales: el de la planta baja de la bajante 7 (7,40 m) y el de la lavadora de la cubierta en la 11 (5,25 m) |
+| Cierres hidráulicos | Cumple: sifones individuales de 50 mm |
+| Derivaciones de los aparatos | 111 de 130 cumplen. No cumplen 17 inodoros (1,10 a 1,89 m en las plantas tipo y 4,10 m en la baja) y 2 lavadoras de la cubierta (4,55 y 5,25 m) |
+
+**Pendiente.**
+- Las tablas 4.10 y 4.11 (diámetro de las columnas de ventilación por su longitud): se pide la mitad del diámetro de la bajante o del ramal.
+- Que la columna de ventilación esté unida a la bajante en cada planta (se mira que esté junto a ella), los rebosaderos, los desagües enfrentados y el ángulo de las uniones.
+- En Florence Street, llevar las bajantes 1, 7 y 10 dentro del edificio y acercar los inodoros a sus bajantes; no lo he cambiado para no mover los resultados de los bloques anteriores.
+
+**Escrito de memoria (que lo compruebe Antonio).** Todo junto al principio de `crates/archisim-mep/src/drain_vent.rs`:
+- 1,30 y 2,00 m sobre la cubierta, 6 m a tomas y ventanas y 0,50 m sobre las ventanas;
+- 7 plantas, u 11 con la bajante sobredimensionada (el encargo decía 14; el texto que recuerdo dice 11);
+- más de 5 m o más de 14 plantas para la terciaria;
+- la mitad del diámetro para las columnas de ventilación (mínimo Ø32) y la válvula en cada ramal como sustituta de la secundaria;
+- 50 a 100 mm de cierre (70 en uso discontinuo, que no se distingue);
+- bote sifónico a 2,00 m de la bajante, derivaciones de 2,50 m al 2–4 %;
+- 4 m al 2,5–5 % para lavabos, bidés, fregaderos, lavavajillas y lavadoras; 4 m y 10 % para bañeras y duchas (los 4 m son del encargo y el 2 % mínimo es mío); 1 m para el inodoro.
+
+**Qué debe probar Antonio:**
+1. En la línea de órdenes, `archisim edificio out/florence` y luego `archisim saneamiento out/florence/edificio.archisim`. Al final salen «Ventilación de la red», «Cierres hidráulicos» y «Derivaciones de los aparatos»: mira si lo que se pide a cada bajante cuadra con lo que harías tú en la terraza y en el pabellón.
+2. Abre `out/florence/edificio.archisim` y entra en Colaboración → Comprobación CTE.
+   - Filtra por «Agua y saneamiento»: deben salir las bajantes que no llegan (HS 5, 3.3.3.1).
+   - Pulsa «Arreglar lo que no cumple…»: las nueve bajantes deben salir con su altura nueva («cabeza a … m»). Acéptalo y vuelve a comprobar: la ventilación primaria debe cumplir en todas (salvo el aviso de las tres de detrás).
+3. En Colaboración → Cálculo de saneamiento, cambia «Cubiertas» a «No transitables»: las bajantes de la terraza deben pedir 1,30 m en lugar de 2,00 m (siguen sin cumplir por 30 cm). Cambia también «Cierre hidráulico» a 40 mm: debe salir «no cumple».
+4. En un proyecto tuyo con un baño, pon un bote sifónico (Instalaciones → Montante; en Propiedades, Tipo «Bote sifónico») sobre la tubería entre la ducha y el lavabo. En el cálculo debe salir con sus aparatos y su distancia a la bajante. Muévelo junto al inodoro: debe salir «no cumple».
+5. Pon una válvula de aireación (el mismo camino, Tipo «Válvula de aireación») en la cabeza de una bajante que no sale por la cubierta: la ventilación primaria debe pasar a «válvula».
+6. Exporta el IFC y mira en otro visor que la válvula y el bote salen como válvula y como terminal de desagüe.
+7. Revisa los valores de memoria de la lista de arriba contra el DB-HS 5.
+
+---
+
 ## 2026-11-08 (129) · Envolvente, segunda vuelta: puentes térmicos, terreno, control solar, permeabilidad y condensaciones (DB-HE 1)
 
 Rama `bloque/he1-puentes`, con pull request. Va sobre la de la entrada 128 (#182, encima de #181, #180 y #179). **Formato versión 96**: los datos nuevos de la envolvente en `thermal`. Sin cambios de IFC. `docs/INSTALACIONES.md` §7.

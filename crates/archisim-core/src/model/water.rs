@@ -120,6 +120,43 @@ impl PipeMaterial {
     }
 }
 
+/// Whether the roofs the downpipes go through are walked on (DB-HS 5
+/// 3.3.3.1: the primary ventilation 2,00 m over a walked roof, 1,30 m over
+/// one that is not).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum RoofAccess {
+    /// By the drawing: a flat roof with rooms or a railing on its level is
+    /// walked on; a pitched one is not.
+    #[default]
+    Auto,
+    Walked,
+    NotWalked,
+}
+
+impl RoofAccess {
+    pub const ALL: [RoofAccess; 3] = [RoofAccess::Auto, RoofAccess::Walked, RoofAccess::NotWalked];
+
+    pub fn code(self) -> &'static str {
+        match self {
+            RoofAccess::Auto => "auto",
+            RoofAccess::Walked => "walked",
+            RoofAccess::NotWalked => "not_walked",
+        }
+    }
+
+    pub fn from_code(c: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|k| k.code() == c)
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            RoofAccess::Auto => "Según el dibujo",
+            RoofAccess::Walked => "Transitables",
+            RoofAccess::NotWalked => "No transitables",
+        }
+    }
+}
+
 /// What the water calculations (supply and drainage) need besides the
 /// drawing.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -137,6 +174,11 @@ pub struct WaterSite {
     pub meter_loss: f64,
     /// What the heater takes from the pressure of the hot water, kPa.
     pub heater_loss: f64,
+    /// The water seal of the appliances' traps and trap boxes, metres
+    /// (DB-HS 5 3.3.1.1: 50 to 100 mm).
+    pub trap_seal: f64,
+    /// Whether the roofs over the downpipes are walked on.
+    pub roof_access: RoofAccess,
 }
 
 impl Default for WaterSite {
@@ -147,6 +189,8 @@ impl Default for WaterSite {
             rain_intensity: 100.0,
             meter_loss: 0.0,
             heater_loss: 0.0,
+            trap_seal: 0.05,
+            roof_access: RoofAccess::Auto,
         }
     }
 }
@@ -159,6 +203,8 @@ impl WaterSite {
             && self.rain_intensity > 0.0
             && (0.0..self.pressure).contains(&self.meter_loss)
             && (0.0..1000.0).contains(&self.heater_loss)
+            && self.trap_seal.is_finite()
+            && (0.0..0.5).contains(&self.trap_seal)
     }
 }
 

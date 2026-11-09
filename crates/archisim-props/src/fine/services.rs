@@ -37,7 +37,7 @@ pub const ROLES: [&str; 11] = [
 ];
 
 /// The kinds that have a model: the codes of the devices' kinds.
-pub const KINDS: [&str; 40] = [
+pub const KINDS: [&str; 42] = [
     "equipment",
     "light",
     "socket",
@@ -78,6 +78,8 @@ pub const KINDS: [&str; 40] = [
     "exhaust_vent",
     "air_shaft",
     "fan",
+    "air_valve",
+    "trap_box",
 ];
 
 /// How far a key or a shutter is tilted, radians.
@@ -151,6 +153,8 @@ fn make(kind: &str, w: f64, d: f64, h: f64) -> Option<PropMesh> {
         "exhaust_vent" => exhaust_vent(&mut b, w, h),
         "air_shaft" => air_shaft(&mut b, w, d, h),
         "fan" => roof_fan(&mut b, w, d, h),
+        "air_valve" => air_valve(&mut b, w, h),
+        "trap_box" => trap_box(&mut b, w, d, h),
         _ => return None,
     }
     Some(PropMesh {
@@ -842,6 +846,75 @@ fn roof_fan(b: &mut Builder, w: f64, d: f64, h: f64) {
         r * 0.3,
         ROUND * 2,
     );
+}
+
+/// An air admittance valve: the socket on the pipe, the body and its cap
+/// with the slots that let the air in.
+fn air_valve(b: &mut Builder, w: f64, h: f64) {
+    let r = w / 2.0;
+    let socket = h * 0.35;
+    b.cone(
+        "pipe",
+        [0.0, 0.0, 0.0],
+        [0.0, 0.0, socket],
+        r * 0.75,
+        r * 0.75,
+        ROUND * 2,
+    );
+    b.cone(
+        "body",
+        [0.0, 0.0, socket],
+        [0.0, 0.0, h * 0.8],
+        r * 0.85,
+        r,
+        ROUND * 2,
+    );
+    b.cone(
+        "dark",
+        [0.0, 0.0, h * 0.8],
+        [0.0, 0.0, h * 0.86],
+        r * 0.95,
+        r * 0.95,
+        ROUND * 2,
+    );
+    b.cone(
+        "body",
+        [0.0, 0.0, h * 0.86],
+        [0.0, 0.0, h],
+        r,
+        r * 0.55,
+        ROUND * 2,
+    );
+}
+
+/// A trap box under the floor: its body, the ring of its lid at the top
+/// and the grating.
+fn trap_box(b: &mut Builder, w: f64, d: f64, h: f64) {
+    let r = w.min(d) / 2.0;
+    b.cone(
+        "pipe",
+        [0.0, 0.0, 0.0],
+        [0.0, 0.0, h * 0.85],
+        r * 0.9,
+        r * 0.9,
+        ROUND * 2,
+    );
+    b.cone(
+        "metal",
+        [0.0, 0.0, h * 0.85],
+        [0.0, 0.0, h],
+        r,
+        r,
+        ROUND * 2,
+    );
+    for k in [-0.5, 0.0, 0.5] {
+        b.rbox(
+            "dark",
+            [-r * 0.7, k * r - 0.003, h - 0.002],
+            [r * 0.7, k * r + 0.003, h],
+            0.0,
+        );
+    }
 }
 
 fn riser(b: &mut Builder, w: f64, h: f64, downpipe: bool) {
@@ -1839,6 +1912,8 @@ mod tests {
                 "exhaust_vent" => (0.15, 0.15, 0.05),
                 "air_shaft" => (0.2, 0.2, 3.0),
                 "fan" => (0.6, 0.6, 0.55),
+                "air_valve" => (0.11, 0.11, 0.18),
+                "trap_box" => (0.11, 0.11, 0.12),
                 _ => (0.08, 0.04, 0.08),
             };
             let m = device_model(kind, w, d, h).expect(kind);

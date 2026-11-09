@@ -181,7 +181,7 @@ pub fn equivalent_area(units: u32) -> f64 {
 }
 
 /// The smallest PVC size of at least `mm`.
-fn pvc_at_least(m: f64) -> f64 {
+pub(crate) fn pvc_at_least(m: f64) -> f64 {
     PVC.iter()
         .copied()
         .find(|d| *d + 1e-6 >= m)
@@ -265,6 +265,25 @@ pub struct Drain {
     pub units: u32,
     /// Its way to the outlet, first stretch first (the outlet's end).
     pub path: Vec<usize>,
+    /// Where it joins the network (the end of a drain nearest it).
+    pub point: Point2,
+    /// The points of its way, from where it joins down to the outlet.
+    pub route: Vec<RoutePoint>,
+}
+
+/// A point on an appliance's way to the outlet.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RoutePoint {
+    pub level: LevelId,
+    pub p: Point2,
+    /// Absolute height, metres.
+    pub z: f64,
+    /// How far along the pipes from the appliance's end, metres.
+    pub along: f64,
+    /// A downpipe starts or passes here.
+    pub downpipe: bool,
+    /// The stretch it goes on by towards the outlet (none at the outlet).
+    pub stretch: Option<usize>,
 }
 
 /// A rain inlet: where a roof's water enters the network.
@@ -381,7 +400,7 @@ impl Drainage {
     }
 }
 
-fn inside(p: Point2, poly: &[Point2]) -> bool {
+pub(crate) fn inside(p: Point2, poly: &[Point2]) -> bool {
     let mut c = false;
     let n = poly.len();
     for i in 0..n {
@@ -1001,6 +1020,30 @@ fn build(
         v.reverse();
         v
     };
+    let route_of = |mut n: usize| {
+        let mut v = Vec::new();
+        let mut along = 0.0;
+        loop {
+            let node = g.nodes[n];
+            let step = parent[n];
+            v.push(RoutePoint {
+                level: node.level,
+                p: node.p,
+                z: node.z,
+                along,
+                downpipe: g.adj[n].iter().any(|e| g.edges[*e].riser.is_some()),
+                stretch: step.and_then(|(_, e)| stretch_of_edge.get(&e).copied()),
+            });
+            match step {
+                Some((p, e)) => {
+                    along += g.edges[e].length;
+                    n = p;
+                }
+                None => break,
+            }
+        }
+        v
+    };
     let mut drains = Vec::new();
     for (n, list) in drains_at {
         if !seen[*n] {
@@ -1013,6 +1056,8 @@ fn build(
                 level: *level,
                 units: units(*kind, public).0,
                 path: path_of(*n),
+                point: g.nodes[*n].p,
+                route: route_of(*n),
             });
         }
     }
@@ -1196,6 +1241,11 @@ pub fn report(model: &Model, d: &Drainage) -> String {
             ));
         }
     }
+    s.push_str(&crate::drain_vent::report(
+        model,
+        d,
+        &crate::drain_vent::venting(model, d),
+    ));
     if !d.loose.is_empty() {
         s.push_str(&format!(
             "\n{} aparato{} sin desagüe a menos de {} cm.\n",
@@ -1208,7 +1258,7 @@ pub fn report(model: &Model, d: &Drainage) -> String {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use archisim_core::{DeviceKind, NewDevice, NewObject, NewRun};
 
@@ -1229,7 +1279,7 @@ mod tests {
 
     /// Two bathrooms one over another on a downpipe, a buried collector to
     /// the outlet, and a flat roof with two outlets on a rain downpipe.
-    fn house() -> Model {
+    pub(crate) fn house() -> Model {
         let mut m = archisim_library::new_project("Casa");
         let l0 = m.levels()[0].id;
         let l1 = m.add_level("Planta 1", 3.0);

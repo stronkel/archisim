@@ -92,18 +92,44 @@ impl ArchiSimApp {
                 )
                 .on_hover_text("La del lugar: DB-HS 5, anejo B, tabla B.1, por su zona (A o B, figura B.1) y su isoyeta. Las tablas de pluviales son para 100 mm/h");
                 ui.end_row();
+                ui.label("Cierre hidráulico");
+                let mut seal = new.trap_seal * 1000.0;
+                if ui
+                    .add(
+                        egui::DragValue::new(&mut seal)
+                            .range(20.0..=150.0)
+                            .speed(1.0)
+                            .suffix(" mm"),
+                    )
+                    .on_hover_text("La altura del cierre de los sifones y botes sifónicos (HS 5, 3.3.1.1: de 50 a 100 mm; 70 en usos discontinuos)")
+                    .changed()
+                {
+                    new.trap_seal = seal / 1000.0;
+                }
+                ui.end_row();
+                ui.label("Cubiertas");
+                egui::ComboBox::from_id_salt("drain-roof-access")
+                    .selected_text(new.roof_access.name())
+                    .show_ui(ui, |ui| {
+                        for a in archisim_core::RoofAccess::ALL {
+                            ui.selectable_value(&mut new.roof_access, a, a.name());
+                        }
+                    })
+                    .response
+                    .on_hover_text("Para la ventilación primaria (HS 5, 3.3.3.1): la bajante sale 2,00 m sobre una cubierta transitable y 1,30 m sobre una que no lo es. «Según el dibujo»: transitable si en su planta hay locales o barandillas");
+                ui.end_row();
             });
         if new != site {
             let r = self
                 .ed
-                .transact("Intensidad de lluvia", |m| m.set_water_site(new));
+                .transact("Datos del saneamiento", |m| m.set_water_site(new));
             if let Err(e) = r {
                 self.complain(format!("No se puede cambiar: {e}."));
             }
         }
         ui.label(
             egui::RichText::new(
-                "Residuales: de cada aparato sanitario por sus desagües y bajantes hasta el punto más bajo de la red (la acometida), por unidades de desagüe. Pluviales: las cubiertas y terrazas al aire reparten su lluvia entre los sumideros (extremos altos de las tuberías de pluviales) a su altura.",
+                "Residuales: de cada aparato sanitario por sus desagües y bajantes hasta el punto más bajo de la red (la acometida), por unidades de desagüe. Pluviales: las cubiertas y terrazas al aire reparten su lluvia entre los sumideros (extremos altos de las tuberías de pluviales) a su altura. Ventilación: cada bajante hasta su cabeza sobre la cubierta, o con una válvula de aireación; la columna de ventilación secundaria es una bajante sin aparatos junto a ella.",
             )
             .small(),
         );

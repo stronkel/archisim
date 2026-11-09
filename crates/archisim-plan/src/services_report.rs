@@ -517,6 +517,167 @@ pub fn drainage(model: &Model, d: &Drainage) -> Vec<Block> {
             format!("{} aparatos sin desagüe a menos de 45 cm", d.loose.len()),
         ));
     }
+    out.extend(drain_venting(model, d));
+    out
+}
+
+/// The ventilation of the waste network and its small evacuation (HS 5
+/// 3.3.1 and 3.3.3).
+fn drain_venting(model: &Model, d: &Drainage) -> Vec<Block> {
+    use archisim_mep::drain_vent as dv;
+    let v = dv::venting(model, d);
+    let mut out = Vec::new();
+    if v.columns.is_empty() && v.ways.is_empty() {
+        return out;
+    }
+    out.push(Block::Heading(2, "Ventilación y pequeña evacuación".into()));
+    out.push(Block::Para(format!(
+        "Ventilación primaria por la prolongación de cada bajante sobre la cubierta ({} m si no es transitable, {} m si lo es), a más de {} m de las tomas de aire o por encima de ellas y {} m sobre las ventanas cercanas, o con una válvula de aireación en su cabeza. Secundaria desde {} plantas ({} con la bajante sobredimensionada) y terciaria en los ramales de más de {} m o por encima de {} plantas (3.3.3). Cierres hidráulicos de {} a {} mm; botes sifónicos solo con aparatos de su local y sin inodoros, a {} m como mucho de la bajante y con derivaciones de hasta {} m (3.3.1).",
+        dec(dv::ABOVE_ROOF, 2),
+        dec(dv::ABOVE_WALKED_ROOF, 2),
+        dec(dv::INTAKE_GAP, 0),
+        dec(dv::OVER_WINDOWS, 2),
+        dv::PRIMARY_FLOORS,
+        dv::PRIMARY_FLOORS_OVERSIZED,
+        dec(dv::LONG_BRANCH, 0),
+        dv::TERTIARY_FLOORS,
+        dec(dv::SEAL_MIN * 1000.0, 0),
+        dec(dv::SEAL_MAX * 1000.0, 0),
+        dec(dv::BOX_TO_DOWNPIPE, 2),
+        dec(dv::BOX_BRANCH, 2),
+    )));
+    if !v.columns.is_empty() {
+        out.push(Block::Table {
+            columns: vec![
+                col("Bajante", 2.0),
+                col("Plantas", 0.7),
+                col("Sobre cubierta", 1.0),
+                col("Exigido", 0.8),
+                col("Secundaria", 1.4),
+                col("Terciaria", 1.2),
+            ],
+            rows: v
+                .columns
+                .iter()
+                .map(|c| {
+                    let tertiary = c.branches.iter().filter(|b| b.needed).count();
+                    vec![
+                        dv::column_name(model, c),
+                        c.floors.to_string(),
+                        if c.valve.is_some() {
+                            "válvula".into()
+                        } else {
+                            c.above().map_or("—".into(), |a| format!("{} m", dec(a, 2)))
+                        },
+                        if c.valve.is_some() {
+                            "—".into()
+                        } else {
+                            match (c.required_top(), &c.cover) {
+                                (Some(z), Some(cv)) => format!("{} m", dec(z - cv.z, 2)),
+                                _ => "—".into(),
+                            }
+                        },
+                        if !c.secondary_needed() {
+                            "no hace falta".into()
+                        } else if c.valves_on_branches() {
+                            "válvulas".into()
+                        } else {
+                            match c.vent {
+                                Some((_, w)) => format!("{} (≥ {})", mm(w), mm(c.vent_sized)),
+                                None => "falta".into(),
+                            }
+                        },
+                        if tertiary == 0 {
+                            "no hace falta".into()
+                        } else {
+                            format!(
+                                "{} de {} ramales",
+                                tertiary - c.branches.iter().filter(|b| b.fails()).count(),
+                                tertiary
+                            )
+                        },
+                    ]
+                })
+                .collect(),
+        });
+        for c in &v.columns {
+            out.push(check(
+                c.primary_fails(),
+                format!(
+                    "{}: ventilación primaria, {}",
+                    dv::column_name(model, c),
+                    dv::primary_text(c)
+                ),
+            ));
+            if c.secondary_needed() {
+                out.push(check(
+                    c.secondary_fails(),
+                    format!(
+                        "{}: ventilación secundaria para {} plantas",
+                        dv::column_name(model, c),
+                        c.floors
+                    ),
+                ));
+            }
+            let bad = c.branches.iter().filter(|b| b.fails()).count();
+            if c.branches.iter().any(|b| b.needed) {
+                out.push(check(
+                    bad > 0,
+                    format!(
+                        "{}: ventilación terciaria de los ramales largos{}",
+                        dv::column_name(model, c),
+                        if bad > 0 {
+                            format!(" ({bad} sin ventilar)")
+                        } else {
+                            String::new()
+                        }
+                    ),
+                ));
+            }
+        }
+    }
+    out.push(check(
+        v.seal_fails(),
+        format!(
+            "Altura del cierre hidráulico: {} mm (de {} a {})",
+            dec(v.seal * 1000.0, 0),
+            dec(dv::SEAL_MIN * 1000.0, 0),
+            dec(dv::SEAL_MAX * 1000.0, 0)
+        ),
+    ));
+    for b in &v.trap_boxes {
+        out.push(check(
+            b.fails(),
+            format!(
+                "Bote sifónico de {}: {} aparatos{}{}",
+                level_name(model, b.level),
+                b.appliances.len(),
+                b.to_downpipe.map_or(String::new(), |x| format!(
+                    ", a {} m de la bajante",
+                    dec(x, 2)
+                )),
+                if b.has_wc() { ", con un inodoro" } else { "" }
+            ),
+        ));
+    }
+    let far = v.ways.iter().filter(|w| w.too_far()).count();
+    let slope = v.ways.iter().filter(|w| w.bad_slope()).count();
+    out.push(check(
+        far > 0,
+        format!(
+            "Distancia de los aparatos a la bajante (3.3.1.4): {} de {} dentro del límite",
+            v.ways.len() - far,
+            v.ways.len()
+        ),
+    ));
+    out.push(check(
+        slope > 0,
+        format!(
+            "Pendiente de las derivaciones de los aparatos (3.3.1.4): {} de {} dentro del límite",
+            v.ways.len() - slope,
+            v.ways.len()
+        ),
+    ));
     out
 }
 

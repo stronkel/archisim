@@ -9,7 +9,9 @@
 //!   HS 4 or HS 5 asks for (the largest of the appliances it serves), each
 //!   stretch of the water supply the one its flow asks for, and
 //!   a drain with too little or too much slope takes the nearest allowed
-//!   (2 % for a branch, 1 % for a hung collector, 2 % for a buried one);
+//!   (2 % for a branch, 1 % for a hung collector, 2 % for a buried one),
+//!   and a downpipe too low over its roof goes up to its primary
+//!   ventilation's height (HS 5 3.3.3.1);
 //! - doors: the door takes a type of its family wide enough for the clear
 //!   width asked (an existing one, or a copy of its own a few centimetres
 //!   wider), and a door that must open towards the way out is turned
@@ -44,6 +46,12 @@ pub enum Change {
         device: archisim_core::DeviceId,
         width: f64,
         depth: f64,
+    },
+    /// A downpipe taken higher, to its primary ventilation over the roof
+    /// (HS 5 3.3.3.1): its new height, metres.
+    DeviceHeight {
+        device: archisim_core::DeviceId,
+        height: f64,
     },
     /// A drain's slope.
     RunSlope { run: RunId, slope: f64 },
@@ -109,6 +117,9 @@ pub fn apply(model: &mut Model, change: &Change) -> Result<(), ModelError> {
             d.width = *width;
             d.depth = *depth;
         }),
+        Change::DeviceHeight { device, height } => {
+            model.edit_device(*device, |d| d.height = *height)
+        }
         Change::RunSlope { run, slope } => model.edit_run(*run, |r| r.slope = *slope),
         Change::DoorWidth { opening, width } => {
             let o = model
@@ -366,6 +377,33 @@ pub fn fix(model: &Model) -> Fix {
             }
         }
     }
+    // The downpipes too low over the roof: up to their primary
+    // ventilation's height (HS 5, 3.3.3.1), to the next 5 cm.
+    if report
+        .items
+        .iter()
+        .any(|i| i.status == Status::Fails && i.rule == "HS 5, 3.3.3.1")
+    {
+        let d = archisim_mep::drain::drainage(&m);
+        let v = archisim_mep::drain_vent::venting(&m, &d);
+        for c in v.columns.iter().filter(|c| c.primary_fails()) {
+            let (Some(want), Some(head)) = (c.required_top(), m.device(c.head)) else {
+                continue;
+            };
+            let base = m.level(head.level).map_or(0.0, |l| l.elevation) + head.elevation;
+            let height = ((want - base) / 0.05 - 1e-6).ceil() * 0.05;
+            if height > head.height + 1e-6 {
+                push(
+                    &mut m,
+                    Change::DeviceHeight {
+                        device: c.head,
+                        height,
+                    },
+                    &mut changes,
+                );
+            }
+        }
+    }
     // The inlets, valves, ducts and shafts of the ventilation (HS 3).
     if report.items.iter().any(|i| {
         i.status == Status::Fails
@@ -529,6 +567,28 @@ fn lines(before: &Model, after: &Model, changes: &[Change]) -> Vec<Line> {
                     subject: Subject::Device(*device),
                     name: crate::subject_name(before, Subject::Device(*device)),
                     what: "Diámetro",
+                    before: v(before),
+                    after: v(after),
+                });
+            }
+            Change::DeviceHeight { device, .. } => {
+                if !seen.insert((device.0, 6)) {
+                    continue;
+                }
+                let v = |m: &Model| {
+                    m.devices()
+                        .find(|d| d.id == *device)
+                        .map_or(String::new(), |d| {
+                            let top = m.level(d.level).map_or(0.0, |l| l.elevation)
+                                + d.elevation
+                                + d.height;
+                            format!("cabeza a {}", crate::m(top))
+                        })
+                };
+                out.push(Line {
+                    subject: Subject::Device(*device),
+                    name: crate::subject_name(before, Subject::Device(*device)),
+                    what: "Altura",
                     before: v(before),
                     after: v(after),
                 });

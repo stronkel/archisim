@@ -100,9 +100,11 @@ Con desagües o pluviales dibujados, la comprobación añade el cálculo de las 
   - colectores mixtos, 4.3 y tabla 4.9;
 - un aviso si un tramo lleva más de lo que da su tabla;
 - los sumideros de cada cubierta o terraza de 25 m² o más (tabla 4.6), y la superficie que no tiene sumidero a su altura;
-- los canalones de las cubiertas que los llevan (tabla 4.7, al 1 %) y sus bajantes (tabla 4.8).
+- los canalones de las cubiertas que los llevan (tabla 4.7, al 1 %) y sus bajantes (tabla 4.8);
+- la ventilación de cada bajante (3.3.3): la primaria, por su altura sobre la cubierta que atraviesa (1,30 m o 2,00 m si es transitable, y por encima de las tomas de aire y ventanas a menos de 6 m) o con una válvula de aireación en su cabeza; la secundaria, si sirve a 7 plantas o más (11 si está sobredimensionada); y la terciaria de los ramales de más de 5 m;
+- la altura del cierre hidráulico (3.3.1.1), cada bote sifónico (sin inodoro, solo aparatos de su local, derivaciones de hasta 2,50 m al 2–4 %, a 2,00 m de la bajante) y, cada aparato con sifón propio, su distancia a la bajante y la pendiente de su derivación (3.3.1.4).
 
-«Arreglar lo que no cumple» agranda las tuberías y bajantes cortas al diámetro calculado.
+«Arreglar lo que no cumple» agranda las tuberías y bajantes cortas al diámetro calculado y prolonga las bajantes que no llegan a la altura de su ventilación primaria.
 
 ## Ventilación de las viviendas (HS 3)
 
@@ -167,7 +169,7 @@ Superficie útil de cada local, por uso y por planta; superficie construida de c
 El botón «Arreglar lo que no cumple…» de la ventana arregla solo lo que tiene una respuesta clara y mínima, sobre una copia del modelo, y enseña antes lo que cambia (elemento, qué, antes → después):
 
 - **Estructura y entramados**: lo mismo que en la ventana del cálculo (armado, y si no basta la sección o el tamaño siguiente; `docs/ESTRUCTURA.md`), y el armado que propone el cálculo para lo que tiene un armado dibujado que no cumple una regla de construcción.
-- **Agua y saneamiento**: la tubería más cercana al aparato toma el diámetro de HS 4 tabla 4.2 o HS 5 tabla 4.1 (el mayor de los aparatos a los que sirve); cada tramo de la red de agua, el que pide su caudal en el cálculo de HS 4; cada tubería y bajante de saneamiento o pluviales corta, el diámetro del cálculo de HS 5; una pendiente fuera de lo permitido pasa a la más cercana que vale (derivación entre 2 % y 5 %, colector colgado 1 %, enterrado 2 %).
+- **Agua y saneamiento**: la tubería más cercana al aparato toma el diámetro de HS 4 tabla 4.2 o HS 5 tabla 4.1 (el mayor de los aparatos a los que sirve); cada tramo de la red de agua, el que pide su caudal en el cálculo de HS 4; cada tubería y bajante de saneamiento o pluviales corta, el diámetro del cálculo de HS 5; una pendiente fuera de lo permitido pasa a la más cercana que vale (derivación entre 2 % y 5 %, colector colgado 1 %, enterrado 2 %); la bajante que se queda corta sobre la cubierta se prolonga hasta la altura de su ventilación primaria (de 5 en 5 cm).
 - **Ventilación**: los aireadores cortos se alargan (con su misma rendija); las bocas, los conductos verticales y los conductos de extracción cortos pasan al tamaño calculado.
 - **Puertas**: la que no tiene el paso libre que pide la evacuación (A ≥ P/200 ≥ 0,80 m) o la accesibilidad (0,80 m de hoja, 0,78 m con la hoja abierta) pasa a un tipo de su misma familia lo bastante ancho, de 5 en 5 cm: uno del proyecto si ya lo hay o una copia del suyo con el ancho en el nombre. La que debe abrir en el sentido de la evacuación se gira con las bisagras en la misma jamba.
 
@@ -181,7 +183,7 @@ Lo demás se queda en la lista «Lo que tienes que decidir tú»: un pasillo est
 - Barandillas: altura según la diferencia de cota (0,90 / 1,10 m).
 - Superficies mínimas de las normas de habitabilidad de cada comunidad o del planeamiento: no son del CTE.
 - Ascensores accesibles, plazas de aparcamiento accesibles y la reserva de plazas.
-- La distancia de los aparatos a la bajante y la longitud de las derivaciones (HS 5, 4.1.1), la ventilación de las bajantes (HS 5, 3.3.3) y los sifones y botes sifónicos.
+- Saneamiento: los diámetros de las columnas de ventilación por su longitud (tablas 4.10 y 4.11 del HS 5; se pide la mitad del diámetro de la bajante o del ramal), los rebosaderos, los desagües enfrentados y el ángulo de las uniones a la bajante (3.3.1.4).
 
 ## Fuentes
 

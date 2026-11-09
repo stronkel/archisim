@@ -484,10 +484,17 @@ pub enum DeviceKind {
     AirShaft,
     /// An extract fan («extractor»), on the roof at the head of a shaft.
     Fan,
+    /// An air admittance valve of the drainage («válvula de aireación»),
+    /// at the head of a downpipe (instead of taking it above the roof) or
+    /// on a branch (its tertiary ventilation), DB-HS 5 3.3.3.4.
+    AirValve,
+    /// A floor trap box of a bathroom («bote sifónico»): the appliances of
+    /// its room drain through it to the downpipe, DB-HS 5 3.3.1.1.
+    TrapBox,
 }
 
 impl DeviceKind {
-    pub const ALL: [DeviceKind; 40] = [
+    pub const ALL: [DeviceKind; 42] = [
         DeviceKind::Equipment,
         DeviceKind::Light,
         DeviceKind::Socket,
@@ -528,6 +535,8 @@ impl DeviceKind {
         DeviceKind::ExhaustVent,
         DeviceKind::AirShaft,
         DeviceKind::Fan,
+        DeviceKind::AirValve,
+        DeviceKind::TrapBox,
     ];
 
     /// The mechanisms of the electricity and telecommunications.
@@ -604,6 +613,8 @@ impl DeviceKind {
             DeviceKind::ExhaustVent => "exhaust_vent",
             DeviceKind::AirShaft => "air_shaft",
             DeviceKind::Fan => "fan",
+            DeviceKind::AirValve => "air_valve",
+            DeviceKind::TrapBox => "trap_box",
         }
     }
 
@@ -653,6 +664,8 @@ impl DeviceKind {
             DeviceKind::ExhaustVent => "Boca de extracción",
             DeviceKind::AirShaft => "Conducto de extracción",
             DeviceKind::Fan => "Extractor",
+            DeviceKind::AirValve => "Válvula de aireación",
+            DeviceKind::TrapBox => "Bote sifónico",
         }
     }
 
@@ -703,6 +716,11 @@ impl DeviceKind {
             DeviceKind::ExhaustVent => (0.15, 0.15, 0.05, 2.45),
             DeviceKind::AirShaft => (0.2, 0.2, 3.0, 0.0),
             DeviceKind::Fan => (0.6, 0.6, 0.55, 0.0),
+            // On a branch, under the basin; at a downpipe's head it is
+            // set at the top of the downpipe.
+            DeviceKind::AirValve => (0.11, 0.11, 0.18, 0.4),
+            // Under the floor finish.
+            DeviceKind::TrapBox => (0.11, 0.11, 0.12, -0.15),
         }
     }
 
@@ -748,6 +766,8 @@ impl DeviceKind {
             DeviceKind::ExhaustVent => ("IFCAIRTERMINAL", "REGISTER"),
             DeviceKind::AirShaft => ("IFCDUCTSEGMENT", "RIGIDSEGMENT"),
             DeviceKind::Fan => ("IFCFAN", "CENTRIFUGALRADIAL"),
+            DeviceKind::AirValve => ("IFCVALVE", "ANTIVACUUM"),
+            DeviceKind::TrapBox => ("IFCWASTETERMINAL", "WASTETRAP"),
         }
     }
 
@@ -822,6 +842,7 @@ impl DeviceKind {
             DeviceKind::ExhaustVent | DeviceKind::AirShaft | DeviceKind::Fan => {
                 Some(ServiceSystem::ExhaustAir)
             }
+            DeviceKind::AirValve | DeviceKind::TrapBox => Some(ServiceSystem::Drainage),
             _ => None,
         }
     }
@@ -923,7 +944,7 @@ impl ServiceGroup {
             k if k.is_urban() => ServiceGroup::Urban,
             k if k.is_electric() => ServiceGroup::Electricity,
             D::SolarPanel => ServiceGroup::Electricity,
-            D::Downpipe => ServiceGroup::Drainage,
+            D::Downpipe | D::AirValve | D::TrapBox => ServiceGroup::Drainage,
             D::Riser
             | D::Valve
             | D::WaterMeter

@@ -653,7 +653,7 @@ const SERVICES: &[Tile] = &[
         Glyph::Pipe,
         "Montante",
         "",
-        "Tubería vertical entre plantas; en su tipo, bajantes de saneamiento o pluviales",
+        "Tubería vertical entre plantas; en su tipo, bajantes de saneamiento o pluviales, válvulas de aireación y botes sifónicos",
     ),
     tile(
         Pick::Device(archisim_core::DeviceKind::Radiator),

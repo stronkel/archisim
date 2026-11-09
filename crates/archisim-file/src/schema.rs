@@ -6451,10 +6451,24 @@ pub struct WaterOf {
     pub meter_loss: f64,
     #[serde(default)]
     pub heater_loss: f64,
+    /// The traps' water seal, metres (version 97; 0,05 before).
+    #[serde(default = "trap_seal")]
+    pub trap_seal: f64,
+    /// «auto», «walked» or «not_walked» (version 97).
+    #[serde(default = "auto_text")]
+    pub roof_access: String,
 }
 
 fn hundred() -> f64 {
     100.0
+}
+
+fn trap_seal() -> f64 {
+    0.05
+}
+
+fn auto_text() -> String {
+    "auto".into()
 }
 
 impl WaterOf {
@@ -6468,6 +6482,8 @@ impl WaterOf {
             rain_intensity: site.rain_intensity,
             meter_loss: site.meter_loss,
             heater_loss: site.heater_loss,
+            trap_seal: site.trap_seal,
+            roof_access: site.roof_access.code().into(),
         })
     }
 
@@ -6478,6 +6494,8 @@ impl WaterOf {
             rain_intensity: self.rain_intensity,
             meter_loss: self.meter_loss,
             heater_loss: self.heater_loss,
+            trap_seal: self.trap_seal,
+            roof_access: core::RoofAccess::from_code(&self.roof_access).unwrap_or_default(),
         }
     }
 }
