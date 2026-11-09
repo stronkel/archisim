@@ -6,6 +6,33 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-07 (126) · Instalaciones en sección y alzado
+
+Rama `bloque/instalaciones-seccion`, con pull request. Va sobre la de la entrada 125 (#179). Sin cambios de formato ni de IFC. `docs/INSTALACIONES.md` §1.
+
+- **Tuberías y conductos vistos.** Se dibujan en sección y alzado por su eje, en el color de su sistema, como en planta.
+  - Los gruesos y los conductos van como banda, con el color aclarado dentro.
+  - Los montantes, bajantes y conductos verticales van como bandas de planta a planta.
+  - Lo que hay delante los tapa.
+- **Tuberías y conductos cortados.**
+  - Una tubería, un círculo relleno de su color.
+  - Un conducto, un rectángulo con sus diagonales.
+  - A 1:50 o más, con su rótulo («Agua fría Ø 20 mm») sobre blanco, donde no pisa otra tubería ni otro rótulo.
+- Antes se cortaban en negro como un sólido cualquiera, y las cotas de altura libre se paraban en la primera tubería (2,50 en los baños de Florence). Ahora llegan al techo.
+- **Alzados:** no sale lo enterrado, lo que va por debajo de la planta más baja.
+- **Orden nueva** `archisim secciones <proyecto> [carpeta]`: todas las secciones y alzados a 1:100 y a 1:50. `archisim exportar` saca también las de 1:50.
+
+**Pendiente.**
+- En la axonometría siguen como sólidos.
+- Las tuberías vistas no llevan rótulo; solo las cortadas.
+
+**Qué debe probar Antonio:**
+1. Ejecuta `archisim secciones out/florence/edificio.archisim out/secciones`.
+2. Abre `edificio-seccion-a-1a50.svg`. En los baños y cocinas deben verse el agua fría (azul) y la caliente (roja) bajo el techo, y los conductos de extracción cortados con su cruz y su rótulo.
+3. Mira `edificio-alzado-sur.svg`: ya no deben salir los colectores enterrados bajo el terreno.
+
+---
+
 ## 2026-11-07 (125) · Retorno de ACS como red propia
 
 Rama `bloque/retorno-acs`, con pull request. **Formato versión 94** (las tuberías pueden ser del sistema `hot_return`). Sin cambios de IFC: el retorno sale como agua caliente sanitaria (`DOMESTICHOTWATER`). `docs/INSTALACIONES.md` §4 y §8.

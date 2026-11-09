@@ -22,7 +22,7 @@ fn percent(slope: f64) -> String {
     }
 }
 
-fn hex(c: [u8; 3]) -> String {
+pub(crate) fn hex(c: [u8; 3]) -> String {
     format!("#{:02x}{:02x}{:02x}", c[0], c[1], c[2])
 }
 

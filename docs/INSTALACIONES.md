@@ -21,6 +21,22 @@ Código: `archisim-core::model::pipe_routing` (uniones, cambio de planta y traza
   - El agua caliente solo va a los aparatos que la llevan.
   - Quedan seleccionadas para retocarlas.
 
+### En secciones y alzados
+
+- **Tuberías y conductos vistos.** Se dibujan por su eje, en el color de su sistema, como en planta.
+  - Si su grueso en el papel es mayor que una plumilla, se dibujan como banda: su contorno en el color del sistema y el relleno en ese color aclarado.
+  - Los conductos van siempre como banda: con su alto cuando van tumbados y con su ancho cuando suben.
+  - Los montantes, bajantes y conductos verticales van como bandas de planta a planta.
+  - Lo que está delante los tapa: un muro, un forjado o un mueble.
+- **Tuberías y conductos cortados.**
+  - Una tubería, como un círculo relleno del color de su sistema.
+  - Un conducto, como un rectángulo con sus diagonales.
+  - A 1:50 o más, con su sistema y su medida («Agua fría Ø 20 mm»), sobre blanco, donde no pisa otra tubería ni otro rótulo.
+- Antes se cortaban como un sólido cualquiera, en negro. Por eso las cotas de altura libre de las secciones se paraban en la primera tubería; ahora llegan al techo.
+- En los **alzados** no sale lo enterrado: lo que va por debajo de la planta más baja.
+- Si la vista de la sección esconde un grupo de instalaciones (agua, saneamiento, ventilación…), ese grupo no sale, igual que en planta.
+- `archisim secciones <proyecto> [carpeta]` dibuja todas las secciones y alzados de un proyecto a 1:100 y a 1:50. `archisim exportar` también saca ahora las de 1:50.
+
 ## 2. Cálculo eléctrico (REBT)
 
 Colaboración → **Cálculo eléctrico…**. Sale del cuadro (aparato «Cuadro»), de los mecanismos con su circuito (Propiedades → Circuito, de C1 a C10) y de las lavadoras y lavavajillas dibujados. Con varios cuadros, cada mecanismo va al más cercano.

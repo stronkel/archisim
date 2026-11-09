@@ -52,6 +52,8 @@ pub struct SectionDrawing {
     /// The members of the light frames cut, at a fine scale: the element
     /// and the outline of each plate.
     frames: Vec<(SolidOwner, Vec<Vec<Point2>>)>,
+    /// The pipes and ducts the section cuts.
+    services: Vec<ServiceCut>,
     pub lo: Point2,
     pub hi: Point2,
     pub title: String,
@@ -88,6 +90,10 @@ struct Face {
     /// A detail drawn only at a fine scale (the joints of a façade's
     /// pieces, E17).
     fine: bool,
+    /// A pipe or duct seen beyond, drawn in the colour of its system:
+    /// its band (`poly`, tinted) or its axis (`edges`) when it is thinner
+    /// than a pen on paper; and whether it is a duct.
+    service: Option<([u8; 3], bool)>,
 }
 
 /// A plant, a person or a car seen from the side in a section or
@@ -544,6 +550,11 @@ pub fn section_drawing(model: &Model, sec: &SectionLine) -> SectionDrawing {
         {
             continue;
         }
+        // Pipes, ducts, risers and downpipes: drawn by their axis in the
+        // colour of their system (below), not by their mesh.
+        if drawn_as_line(model, solid.owner) {
+            continue;
+        }
         if let SolidOwner::Object(o) = solid.owner {
             if bodies.contains(&o) {
                 let entry = body_faces.entry(o).or_default();
@@ -694,6 +705,7 @@ pub fn section_drawing(model: &Model, sec: &SectionLine) -> SectionDrawing {
                         far: if glass { f64::NAN } else { span.1 },
                         hidden: false,
                         fine: false,
+                        service: None,
                     },
                 ));
                 // Each edge is painted on its own, a little ahead of where
@@ -714,6 +726,7 @@ pub fn section_drawing(model: &Model, sec: &SectionLine) -> SectionDrawing {
                             far: f64::NAN,
                             hidden: false,
                             fine: false,
+                            service: None,
                         },
                     ));
                 }
@@ -780,6 +793,7 @@ pub fn section_drawing(model: &Model, sec: &SectionLine) -> SectionDrawing {
                 far: f64::NAN,
                 hidden: false,
                 fine: false,
+                service: None,
             },
         ));
     }
@@ -826,6 +840,7 @@ pub fn section_drawing(model: &Model, sec: &SectionLine) -> SectionDrawing {
                 far: f64::NAN,
                 hidden: false,
                 fine: false,
+                service: None,
             },
         ));
     }
@@ -872,6 +887,7 @@ pub fn section_drawing(model: &Model, sec: &SectionLine) -> SectionDrawing {
                 far: f64::NAN,
                 hidden: false,
                 fine: false,
+                service: None,
             },
         ));
     }
@@ -900,10 +916,13 @@ pub fn section_drawing(model: &Model, sec: &SectionLine) -> SectionDrawing {
                     far: f64::NAN,
                     hidden: false,
                     fine: false,
+                    service: None,
                 },
             ));
         }
     }
+    // The pipes and ducts, in the colour of their system.
+    d.services = service_lines(model, sec, &mut faces);
     // The joints of the façades seen beyond the cut and the bed joints of
     // the brick cut (E17).
     facade_detail(model, sec, &mut faces, &mut d.fine_lines, &d.cuts);
@@ -952,6 +971,288 @@ pub fn section_drawing(model: &Model, sec: &SectionLine) -> SectionDrawing {
         .filter(|(x, _)| *x >= d.lo.x - 1e-6 && *x <= d.hi.x + 1e-6)
         .collect();
     d
+}
+
+/// A pipe or duct cut by a section: drawn as a disc (a box, a duct) in
+/// the colour of its system, with its name and size at a fine scale.
+#[derive(Debug, Clone)]
+struct ServiceCut {
+    owner: SolidOwner,
+    at: Point2,
+    /// Half its size across the drawing and up.
+    half: Point2,
+    colour: [u8; 3],
+    duct: bool,
+    label: String,
+}
+
+/// The pipes and ducts cut: a disc in the colour of the system (a box
+/// with its diagonals, a duct), and at a fine scale its name and size
+/// where it falls clear of the others'.
+fn draw_service_cuts(
+    s: &mut String,
+    d: &SectionDrawing,
+    fine: bool,
+    k: f64,
+    visible: &dyn Fn(&[Point2]) -> bool,
+) {
+    // Where a label must not go: the pipes seen and the discs of those cut.
+    let mut placed: Vec<(Point2, Point2)> = d
+        .faces
+        .iter()
+        .filter(|f| f.service.is_some() && f.poly.len() == 4)
+        .map(|f| {
+            let (mut a, mut b) = (f.poly[0], f.poly[0]);
+            for p in &f.poly {
+                a = Point2::new(a.x.min(p.x), a.y.min(p.y));
+                b = Point2::new(b.x.max(p.x), b.y.max(p.y));
+            }
+            let m = Point2::new(0.4 * k, 0.4 * k);
+            (a - m, b + m)
+        })
+        .chain(d.services.iter().map(|c| {
+            let r = Point2::new(c.half.x.max(0.6 * k), c.half.y.max(0.6 * k));
+            (c.at - r, c.at + r)
+        }))
+        .collect();
+    for c in &d.services {
+        if !visible(&[c.at]) {
+            continue;
+        }
+        let ink = crate::services::hex(c.colour);
+        crate::dim::element(s, c.owner.id(), |s| {
+            let min = 0.6 * k;
+            let (hx, hy) = (c.half.x.max(min), c.half.y.max(min));
+            if c.duct {
+                let o = [
+                    c.at + Point2::new(-hx, -hy),
+                    c.at + Point2::new(hx, -hy),
+                    c.at + Point2::new(hx, hy),
+                    c.at + Point2::new(-hx, hy),
+                ];
+                let _ = writeln!(
+                    s,
+                    r#"<path d="{} M{} L{} M{} L{}" fill="white" stroke="{ink}" stroke-width="{}"/>"#,
+                    path(&o),
+                    pt(o[0]),
+                    pt(o[2]),
+                    pt(o[1]),
+                    pt(o[3]),
+                    num(pens().cut * k)
+                );
+            } else {
+                let _ = writeln!(
+                    s,
+                    r#"<circle cx="{}" cy="{}" r="{}" fill="{ink}" stroke="{INK}" stroke-width="{}"/>"#,
+                    num(c.at.x),
+                    num(-c.at.y),
+                    num(hx),
+                    num(pens().thin * k)
+                );
+            }
+            if !fine {
+                return;
+            }
+            let h = 1.8 * k;
+            let w = archisim_draft::font::text_width(&c.label, h);
+            let gap = 0.8 * k;
+            // Right, above, left, below, then farther out.
+            // Above, below, right, left, then farther up and down.
+            let mut spots = vec![
+                (Point2::new(-w / 2.0, hy + gap), Align::Left),
+                (Point2::new(-w / 2.0, -hy - gap - h), Align::Left),
+                (Point2::new(hx + gap, -h / 2.0), Align::Left),
+                (Point2::new(-hx - gap - w, -h / 2.0), Align::Left),
+            ];
+            for i in 1..4 {
+                let up = f64::from(i) * (h + gap);
+                spots.push((Point2::new(-w / 2.0, hy + gap + up), Align::Left));
+                spots.push((Point2::new(-w / 2.0, -hy - gap - h - up), Align::Left));
+            }
+            let free = |lo: Point2, hi: Point2| {
+                !placed
+                    .iter()
+                    .any(|(a, b)| lo.x < b.x && hi.x > a.x && lo.y < b.y && hi.y > a.y)
+            };
+            let Some((at, align)) = spots
+                .iter()
+                .map(|(off, a)| (c.at + *off, *a))
+                .find(|(at, _)| free(*at, *at + Point2::new(w, h)))
+            else {
+                return;
+            };
+            placed.push((at, at + Point2::new(w, h)));
+            // On white, over what is seen behind.
+            let pad = 0.3 * k;
+            let _ = writeln!(
+                s,
+                r#"<rect x="{}" y="{}" width="{}" height="{}" fill="white" fill-opacity="0.85"/>"#,
+                num(at.x - pad),
+                num(-(at.y + h + pad)),
+                num(w + 2.0 * pad),
+                num(h + 2.0 * pad)
+            );
+            let _ = writeln!(
+                s,
+                r#"<path d="{}" {}/>"#,
+                text_path(&c.label, at, Point2::new(1.0, 0.0), h, align),
+                crate::lettering::paint(h, &ink)
+            );
+        });
+    }
+}
+
+/// Whether a solid is of a pipe, a duct (with its fittings) or a riser,
+/// downpipe or extract shaft: what sections draw by its axis.
+fn drawn_as_line(model: &Model, owner: SolidOwner) -> bool {
+    match owner {
+        SolidOwner::Run(_) => true,
+        SolidOwner::Device(id) => model.devices().any(|d| d.id == id && d.kind.is_vertical()),
+        _ => false,
+    }
+}
+
+/// The pipes, ducts, risers and downpipes of a section: what it sees of
+/// them beyond the cut, as faces in `faces` (their band, or their axis),
+/// and where it cuts them.
+fn service_lines(
+    model: &Model,
+    sec: &SectionLine,
+    faces: &mut Vec<(f64, Face)>,
+) -> Vec<ServiceCut> {
+    let (Some(u), Some(look)) = (sec.along(), sec.looks()) else {
+        return Vec::new();
+    };
+    let o = sec.start;
+    let plane = 1e-5;
+    let depth_of = |p: P3| Point2::new(p[0] - o.x, p[1] - o.y).dot(look);
+    let to2 = |p: P3| Point2::new(Point2::new(p[0] - o.x, p[1] - o.y).dot(u), p[2]);
+    let mut cuts = Vec::new();
+    // An elevation does not see what is buried: below the lowest level.
+    let ground = if sec.kind == SectionKind::Elevation {
+        model
+            .levels()
+            .iter()
+            .map(|l| l.elevation)
+            .fold(f64::INFINITY, f64::min)
+            - 0.05
+    } else {
+        f64::NEG_INFINITY
+    };
+    // A stretch seen, from `a` to `b`, `thick` across.
+    let mut seen = |owner: SolidOwner, a: P3, b: P3, thick: f64, colour: [u8; 3], duct: bool| {
+        if a[2].max(b[2]) < ground {
+            return;
+        }
+        let (da, db) = (depth_of(a), depth_of(b));
+        // Clipped to what the section sees.
+        let (mut t0, mut t1) = (0.0_f64, 1.0_f64);
+        for (lim, keep_above) in [(plane, true), (sec.depth, false)] {
+            let (fa, fb) = (da - lim, db - lim);
+            let (fa, fb) = if keep_above { (fa, fb) } else { (-fa, -fb) };
+            if fa < 0.0 && fb < 0.0 {
+                return;
+            }
+            if fa < 0.0 {
+                t0 = t0.max(fa / (fa - fb));
+            } else if fb < 0.0 {
+                t1 = t1.min(fa / (fa - fb));
+            }
+        }
+        if t1 - t0 < 1e-9 {
+            return;
+        }
+        let (p, q) = (lerp(a, b, t0), lerp(a, b, t1));
+        let (p2, q2) = (to2(p), to2(q));
+        let Some(dir) = (q2 - p2).normalized() else {
+            return;
+        };
+        if p2.distance(q2) < 1e-3 {
+            return;
+        }
+        let n = dir.perp_left() * (thick / 2.0);
+        let (dp, dq) = (depth_of(p), depth_of(q));
+        let centre = (dp + dq) / 2.0;
+        faces.push((
+            centre,
+            Face {
+                owner,
+                poly: vec![p2 - n, q2 - n, q2 + n, p2 + n],
+                fill: colour,
+                edges: vec![(p2, q2)],
+                opening_line: None,
+                figure: None,
+                near: dp.min(dq),
+                far: f64::NAN,
+                hidden: false,
+                fine: false,
+                service: Some((colour, duct)),
+            },
+        ));
+    };
+    for r in model.runs() {
+        let base = model.level(r.level).map_or(0.0, |l| l.elevation);
+        let zs = r.point_elevations();
+        let pts: Vec<P3> = r
+            .path
+            .iter()
+            .zip(&zs)
+            .map(|(p, z)| [p.x, p.y, base + z])
+            .collect();
+        let colour = r.system.color();
+        let duct = r.is_duct();
+        let owner = SolidOwner::Run(r.id);
+        for w in pts.windows(2) {
+            let (a, b) = (w[0], w[1]);
+            let flat = (a[2] - b[2]).abs() < 0.5 * Point2::new(a[0] - b[0], a[1] - b[1]).length();
+            // Seen from the side, a duct shows its height when it lies
+            // and its width when it rises.
+            let thick = if duct && flat { r.height } else { r.width };
+            seen(owner, a, b, thick, colour, duct);
+            let (sa, sb) = (depth_of(a) - plane, depth_of(b) - plane);
+            if (sa < 0.0) != (sb < 0.0) {
+                let at = lerp(a, b, sa / (sa - sb));
+                let half = if duct {
+                    Point2::new(r.width / 2.0, r.height / 2.0)
+                } else {
+                    Point2::new(r.width / 2.0, r.width / 2.0)
+                };
+                cuts.push(ServiceCut {
+                    owner,
+                    at: to2(at),
+                    half,
+                    colour,
+                    duct,
+                    label: format!("{} {}", r.system.name(), r.size_text()),
+                });
+            }
+        }
+    }
+    for d in model.devices().filter(|d| d.kind.is_vertical()) {
+        let base = model.level(d.level).map_or(0.0, |l| l.elevation) + d.elevation;
+        let a = [d.position.x, d.position.y, base];
+        let b = [d.position.x, d.position.y, base + d.height];
+        let colour = d.kind.system().map_or([90, 90, 90], |s| s.color());
+        // A riser cut along its length is seen whole: it is drawn as seen
+        // from where the section cuts it.
+        let at = depth_of(a);
+        let shift = if at < plane && at > -d.width.max(d.depth) / 2.0 {
+            let k = plane + 1e-6 - at;
+            [look.x * k, look.y * k, 0.0]
+        } else {
+            [0.0; 3]
+        };
+        let moved = |p: P3| [p[0] + shift[0], p[1] + shift[1], p[2]];
+        seen(
+            SolidOwner::Device(d.id),
+            moved(a),
+            moved(b),
+            d.width,
+            colour,
+            d.kind == archisim_core::DeviceKind::AirShaft,
+        );
+    }
+    cuts
 }
 
 /// The finest scale (denominator) at which a section draws the joints of
@@ -1032,6 +1333,7 @@ fn facade_detail(
                         far: f64::NAN,
                         hidden: false,
                         fine: true,
+                        service: None,
                     },
                 ));
             }
@@ -1953,6 +2255,35 @@ fn render_section_inner(model: &Model, d: &SectionDrawing, options: &PlanOptions
             }
             return;
         }
+        if let Some((colour, duct)) = f.service {
+            if !visible(&f.poly) {
+                return;
+            }
+            flush(out, edges);
+            let ink = crate::services::hex(colour);
+            let thick = f.poly[0].distance(f.poly[3]);
+            if duct || thick > 1.2 * k {
+                // Its band, tinted, with its two sides.
+                let tint = colour.map(|c| (255.0 - (255.0 - f64::from(c)) * 0.25) as u8);
+                let _ = writeln!(
+                    out,
+                    r#"<path d="{}" fill="{}" stroke="{ink}" stroke-width="{}"/>"#,
+                    path(&f.poly),
+                    crate::services::hex(tint),
+                    num(pens().view * k)
+                );
+            } else {
+                let (a, b) = f.edges[0];
+                let _ = writeln!(
+                    out,
+                    r#"<path d="M{} L{}" fill="none" stroke="{ink}" stroke-width="{}" stroke-linecap="round"/>"#,
+                    pt(a),
+                    pt(b),
+                    num(pens().cut * k)
+                );
+            }
+            return;
+        }
         if let Some(dashed) = f.opening_line {
             flush(out, edges);
             let mut dashes = String::new();
@@ -2058,6 +2389,7 @@ fn render_section_inner(model: &Model, d: &SectionDrawing, options: &PlanOptions
             s.push_str(&crate::dim::grey(&t));
         }
     }
+    draw_service_cuts(&mut s, d, fine, k, &visible);
     // The bed joints of the brick cut and the bars, at a fine scale (E17).
     if fine {
         let mut joints = String::new();
@@ -2418,5 +2750,77 @@ mod tests {
             Point2::new(1.0, 0.0),
             Point2::new(2.0, 1e-7)
         ]));
+    }
+
+    /// Pipes are drawn by their axis in the colour of their system: the
+    /// one the section cuts as a disc with its name and size at 1:50, the
+    /// one it sees as a line; nothing of the mesh is cut.
+    #[test]
+    fn draws_the_pipes_in_their_colour() {
+        use archisim_core::{NewRun, ServiceSystem};
+        let mut m = Model::new("t");
+        let l = m.add_level("PB", 0.0);
+        let run = |m: &mut Model, sys, a: Point2, b: Point2| {
+            m.add_run(NewRun {
+                level: l,
+                system: sys,
+                path: vec![a, b],
+                elevation: 2.5,
+                width: 0.02,
+                height: 0.02,
+                slope: 0.0,
+            })
+            .unwrap()
+        };
+        // Across the section line, and along it, 2 m behind.
+        let cut = run(
+            &mut m,
+            ServiceSystem::ColdWater,
+            Point2::new(2.0, -1.0),
+            Point2::new(2.0, 5.0),
+        );
+        let seen = run(
+            &mut m,
+            ServiceSystem::HotWater,
+            Point2::new(0.0, 4.0),
+            Point2::new(5.0, 4.0),
+        );
+        let sec = m
+            .add_section(NewSection {
+                name: "A".into(),
+                kind: SectionKind::Section,
+                start: Point2::new(-1.0, 2.0),
+                end: Point2::new(6.0, 2.0),
+                depth: 10.0,
+            })
+            .unwrap();
+        let d = section_drawing(&m, m.section(sec).unwrap());
+        assert!(d.cuts.is_empty(), "the pipes are not cut as solids");
+        assert_eq!(d.services.len(), 1);
+        assert_eq!(d.services[0].owner, SolidOwner::Run(cut));
+        assert!((d.services[0].at.y - 2.5).abs() < 1e-9);
+        assert!(d
+            .faces
+            .iter()
+            .any(|f| f.owner == SolidOwner::Run(seen) && f.service.is_some()));
+        let cold = crate::services::hex(ServiceSystem::ColdWater.color());
+        let hot = crate::services::hex(ServiceSystem::HotWater.color());
+        let at = |scale: f64| {
+            render_section(
+                &m,
+                &d,
+                &PlanOptions {
+                    scale,
+                    ..PlanOptions::default()
+                },
+            )
+        };
+        let (fifty, hundred) = (at(50.0), at(100.0));
+        assert!(fifty.contains(&format!(r#"fill="{cold}""#)), "the disc");
+        assert!(fifty.contains(&format!(r#"stroke="{hot}""#)), "the line");
+        // Its label is a path painted in its colour, only at 1:50.
+        let labels = |svg: &str| svg.matches(r#"fill-opacity="0.85""#).count();
+        assert_eq!(labels(&fifty), 1);
+        assert_eq!(labels(&hundred), 0);
     }
 }
