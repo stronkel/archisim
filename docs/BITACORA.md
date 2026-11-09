@@ -6,6 +6,27 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-09 (129) · Vivienda modular por cajas: propuesta
+
+Sin código. Antonio preguntó qué le falta a ArchiSim para proyectar las viviendas modulares de steel frame de un fabricante con el que trabaja (cajas completas de hasta 9 × 3,60 m, habitualmente 6,20 × 3,60 m) y mandó el IFC de Revit de uno de los modelos (no se sube).
+
+- Importado con `archisim importar`: entra entero en menos de un segundo, pero cada capa del cerramiento es un muro, y la comprobación CTE las toma por fábrica que carga (204 «no cumple»). No hay locales ni agrupación por cajas. Los ejes llegan repetidos una vez por planta.
+- Propuesta en `docs/MODULAR.md`:
+  - M1 caja como elemento;
+  - M2 juntas;
+  - M3 chasis, peso e izado;
+  - M4 juntar capas apiladas al importar;
+  - M5 U con montantes de acero;
+  - M6 instalaciones en juntas y perfiladora.
+
+**Pendiente.**
+- Que Antonio confirme el orden y mande el catálogo de perfiles, el chasis y la junta entre cajas (§5 de `docs/MODULAR.md`).
+- Arreglo pequeño del importador: no repetir los ejes por planta.
+
+**Qué debe probar Antonio:** nada que probar; leer `docs/MODULAR.md` y decidir.
+
+---
+
 ## 2026-11-08 (128) · Traer el entorno por dirección
 
 Rama `bloque/entorno-direccion`, con pull request. Va sobre la de la entrada 127 (#181, encima de #180 y #179). Sin cambios de formato (sigue la versión 95) ni de IFC. `docs/ENTORNO.md`, «Buscar el lugar por su dirección».
