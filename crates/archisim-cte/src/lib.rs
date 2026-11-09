@@ -24,7 +24,7 @@ pub mod evacuation;
 pub mod fire;
 pub mod fix;
 pub mod framing;
-pub mod occupancy;
+pub use archisim_core::occupancy;
 pub mod region;
 pub mod services;
 pub mod structure;
@@ -98,7 +98,7 @@ impl Section {
             Section::Accessibility => "Accesibilidad (DB-SUA 9)",
             Section::StairsAndRamps => "Escaleras y rampas (DB-SUA 1)",
             Section::Services => "Agua y saneamiento (DB-HS 4 y HS 5)",
-            Section::Ventilation => "Ventilación (DB-HS 3)",
+            Section::Ventilation => "Ventilación (DB-HS 3 y RITE)",
             Section::Energy => "Ahorro de energía (DB-HE 1) y cargas térmicas",
             Section::Structure => "Estructura (Código Estructural, DB-SE-F, DB-SE-C)",
             Section::Electrical => "Electricidad (REBT, ITC-BT-25)",

@@ -1,9 +1,15 @@
 //! The data of the ventilation calculation besides the drawing (DB-HS 3,
 //! format version 91): whether the dwellings are ventilated by mechanical
 //! extraction or by hybrid ventilation, and the thermal zone of the
-//! table 4.4, which gives the draught of the hybrid ducts.
+//! table 4.4, which gives the draught of the hybrid ducts. Format version
+//! 99 adds how the garages are ventilated (natural or mechanical, HS 3
+//! 3.1.4), and, for the rooms that are not of dwellings (RITE IT 1.1.4.2),
+//! the outdoor air's class (ODA), the air speed of the ducts and the indoor
+//! air class (IDA) set by hand on a room.
 
-use super::{Model, ModelError};
+use std::collections::BTreeMap;
+
+use super::{Model, ModelError, RoomId};
 
 /// How the dwellings are ventilated (HS 3, 3.1.1: hybrid or mechanical).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -135,11 +141,84 @@ pub fn draft_zone_of(province: &str, above_800: bool) -> Option<DraftZone> {
         .and_then(|(_, low, high)| if above_800 { *high } else { Some(*low) })
 }
 
-/// The ventilation's data.
+/// How the garages are ventilated (HS 3, 3.1.4).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum GarageVent {
+    /// By the drawing: mechanical if extract valves are drawn in it,
+    /// natural if only openings to the outside.
+    #[default]
+    Auto,
+    /// Mixed openings on the façades (3.1.4.1).
+    Natural,
+    /// Extraction by fans, 120 l/s a space (3.1.4.2).
+    Mechanical,
+}
+
+impl GarageVent {
+    pub const ALL: [GarageVent; 3] = [
+        GarageVent::Auto,
+        GarageVent::Natural,
+        GarageVent::Mechanical,
+    ];
+
+    pub fn code(self) -> &'static str {
+        match self {
+            GarageVent::Auto => "auto",
+            GarageVent::Natural => "natural",
+            GarageVent::Mechanical => "mechanical",
+        }
+    }
+
+    pub fn from_code(s: &str) -> Option<GarageVent> {
+        GarageVent::ALL.into_iter().find(|v| v.code() == s)
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            GarageVent::Auto => "Según el dibujo",
+            GarageVent::Natural => "Natural",
+            GarageVent::Mechanical => "Mecánica",
+        }
+    }
+}
+
+/// The outdoor air's class of the RITE (IT 1.1.4.2.4) taken when none is
+/// given: ODA 2, a town.
+pub const DEFAULT_ODA: u8 = 2;
+/// The air speed of the main ducts of the RITE, m/s, taken when none is
+/// given.
+pub const DEFAULT_DUCT_SPEED: f64 = 5.0;
+
+/// The ventilation's data.
+#[derive(Debug, Clone, PartialEq)]
 pub struct VentilationSite {
     pub system: VentSystem,
     pub zone: DraftZone,
+    /// The garages (version 99).
+    pub garage: GarageVent,
+    /// The outdoor air's class, 1 to 3 (RITE IT 1.1.4.2.4, for the
+    /// filters; version 99).
+    pub oda: u8,
+    /// The air speed of the main ducts of the rooms ventilated by the
+    /// RITE, m/s (the branches to a single terminal take 60 % of it;
+    /// version 99).
+    pub duct_speed: f64,
+    /// The indoor air class (IDA 1 to 4) set by hand on a room; the others
+    /// take the one of their use (RITE IT 1.1.4.2.1; version 99).
+    pub ida: BTreeMap<RoomId, u8>,
+}
+
+impl Default for VentilationSite {
+    fn default() -> Self {
+        VentilationSite {
+            system: VentSystem::default(),
+            zone: DraftZone::default(),
+            garage: GarageVent::default(),
+            oda: DEFAULT_ODA,
+            duct_speed: DEFAULT_DUCT_SPEED,
+            ida: BTreeMap::new(),
+        }
+    }
 }
 
 impl Model {
@@ -148,8 +227,47 @@ impl Model {
     }
 
     pub fn set_ventilation_site(&mut self, site: VentilationSite) -> Result<(), ModelError> {
+        if !(1..=3).contains(&site.oda) {
+            return Err(ModelError::InvalidParameter(
+                "la calidad del aire exterior va de ODA 1 a ODA 3".into(),
+            ));
+        }
+        if !(site.duct_speed > 0.5 && site.duct_speed <= 20.0) {
+            return Err(ModelError::InvalidParameter(
+                "la velocidad de los conductos va de 0,5 a 20 m/s".into(),
+            ));
+        }
+        if site.ida.values().any(|c| !(1..=4).contains(c)) {
+            return Err(ModelError::InvalidParameter(
+                "la calidad del aire interior va de IDA 1 a IDA 4".into(),
+            ));
+        }
         self.ventilation_site = site;
         Ok(())
+    }
+
+    /// Sets (or, with `None`, takes away) the indoor air class of a room.
+    pub fn set_room_ida(&mut self, room: RoomId, ida: Option<u8>) -> Result<(), ModelError> {
+        let mut site = self.ventilation_site.clone();
+        match ida {
+            Some(c) => {
+                site.ida.insert(room, c);
+            }
+            None => {
+                site.ida.remove(&room);
+            }
+        }
+        self.set_ventilation_site(site)
+    }
+
+    /// The indoor air class set by hand on a room, if any (and the room is
+    /// still there).
+    pub fn room_ida(&self, room: RoomId) -> Option<u8> {
+        self.ventilation_site
+            .ida
+            .get(&room)
+            .copied()
+            .filter(|_| self.room(room).is_some())
     }
 }
 
@@ -164,5 +282,8 @@ mod tests {
         assert_eq!(draft_zone_of("Ceuta", true), None);
         assert_eq!(draft_zone_of("Huelva", false), Some(DraftZone::default()));
         assert_eq!(VentSystem::from_code("hybrid"), Some(VentSystem::Hybrid));
+        assert_eq!(GarageVent::from_code("natural"), Some(GarageVent::Natural));
+        let s = VentilationSite::default();
+        assert_eq!((s.oda, s.duct_speed), (DEFAULT_ODA, DEFAULT_DUCT_SPEED));
     }
 }

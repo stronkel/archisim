@@ -222,9 +222,10 @@ Uso:
   archisim fontaneria <proyecto.archisim> [--diametros salida.archisim] [--esquemas carpeta]   cálculo del suministro de agua (DB-HS 4); con --diametros, guarda el proyecto con los diámetros calculados; con --esquemas, el esquema vertical y la distribución por planta en PDF y DXF
   archisim climatizacion <proyecto.archisim>   envolvente por el DB-HE 1 (transmitancias, terreno por la UNE-EN ISO 13370, puentes térmicos, K, control solar, permeabilidad, n50 y condensaciones) y cargas de calefacción y refrigeración de cada local, con sus equipos
   archisim renovables <proyecto.archisim>     energías renovables: agua caliente por el DB-HE 4 (demanda, agua fría de la provincia y parte renovable) y fotovoltaica mínima por el HE 5
-  archisim ventilacion <proyecto.archisim> [--tamanos salida.archisim] [--esquemas carpeta]   ventilación de las viviendas (DB-HS 3): caudales, aireadores, bocas, pasos, conductos y campanas; con --tamanos, agranda lo que se queda corto; con --esquemas, el esquema vertical y la red de cada planta en PDF y DXF
+  archisim ventilacion <proyecto.archisim> [--tamanos salida.archisim] [--esquemas carpeta]   ventilación de las viviendas (DB-HS 3), de los garajes y de los locales del RITE: caudales, aireadores, bocas, pasos, conductos y campanas; con --tamanos, agranda lo que se queda corto; con --esquemas, el esquema vertical y la red de cada planta en PDF y DXF
   archisim memoria-instalaciones <proyecto.archisim> [carpeta]   la memoria de instalaciones (REBT, DB-HS 4, DB-HS 5, DB-HS 3 y DB-HE 1) con las tablas del cálculo, en PDF A4 y en texto
   archisim ventilacion --ejemplo <carpeta>   un piso de ejemplo con su ventilación y la campana con su conducto (ventilacion-ejemplo.archisim)
+  archisim ventilacion --ejemplo-terciario <carpeta>   una oficina (RITE: IDA, aire exterior, conductos por velocidad) sobre un garaje de diez plazas con ventilación natural (ventilacion-oficina.archisim)
   archisim saneamiento <proyecto.archisim> [--diametros salida.archisim] [--esquemas carpeta]   evacuación de aguas (DB-HS 5): residuales por unidades de desagüe y pluviales por cubierta; con --diametros, agranda lo que se queda corto; con --esquemas, el esquema vertical y la red de cada planta en PDF y DXF
   archisim electricidad <proyecto.archisim> [carpeta]   cálculo de la instalación eléctrica (REBT); con carpeta, el esquema unifilar en PDF y DXF
   archisim estructura <proyecto.archisim> [carpeta]   acciones, descenso de cargas y cálculo de la estructura; con carpeta, el anejo de cálculo y los planos de estructura en PDF
@@ -731,6 +732,9 @@ fn main() -> ExitCode {
             Some("--ejemplo") => report(ventilation_example(Path::new(
                 args.get(2).map_or("out", String::as_str),
             ))),
+            Some("--ejemplo-terciario") => report(office_example(Path::new(
+                args.get(2).map_or("out", String::as_str),
+            ))),
             Some(project) => {
                 let after = |flag: &str| {
                     args.iter()
@@ -1198,6 +1202,32 @@ fn ventilation_example(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let hood = archisim_library::add_object_entry(&mut m, "Campana decorativa 60")?;
     archisim_mep::ventilation::example_hood(&mut m, l0, l1, hood);
     let path = dir.join("ventilacion-ejemplo.archisim");
+    archisim_file::save(&m, &path)?;
+    let v = archisim_mep::ventilation::ventilation(&m);
+    print!("{}", archisim_mep::ventilation::report(&m, &v));
+    println!("\n{}", path.display());
+    Ok(())
+}
+
+/// `archisim ventilacion --ejemplo-terciario`: an office over a garage
+/// (RITE and the garage's natural ventilation).
+fn office_example(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    std::fs::create_dir_all(dir)?;
+    let mut m = archisim_core::Model::new("Oficina con garaje");
+    let s = m.add_level("Sótano", -3.0);
+    let l0 = m.add_level("Planta baja", 0.0);
+    m.add_level("Cubierta", 3.0);
+    let lib = archisim_library::add_library(&mut m)?;
+    archisim_mep::rite::example_office_garage(
+        &mut m,
+        s,
+        l0,
+        lib.partition,
+        lib.facade,
+        lib.interior_door,
+        lib.void,
+    );
+    let path = dir.join("ventilacion-oficina.archisim");
     archisim_file::save(&m, &path)?;
     let v = archisim_mep::ventilation::ventilation(&m);
     print!("{}", archisim_mep::ventilation::report(&m, &v));

@@ -2,7 +2,9 @@
 //! system (mechanical or hybrid) and the zone of table 4.4, the
 //! dwellings' ventilation by the DB-HS 3 as text, and «Poner los tamaños
 //! calculados», which takes every inlet, extract valve, duct and shaft
-//! drawn smaller up to what it needs, in one undoable step.
+//! drawn smaller up to what it needs, in one undoable step. Also the
+//! garages' system (natural or mechanical) and, for the rooms of the RITE,
+//! the outdoor air's class, the ducts' speed and each room's IDA.
 
 use eframe::egui::{self, Ui};
 
@@ -19,6 +21,9 @@ pub struct VentilationWindow {
     /// text.
     blocks: Vec<archisim_struct::report::Block>,
     as_text: bool,
+    /// The rooms of the RITE of the last calculation: room, name, IDA and
+    /// whether set by hand.
+    rite: Vec<(archisim_core::RoomId, String, u8, bool)>,
 }
 
 /// What grows: ducts (their width) and devices (width and depth).
@@ -51,7 +56,7 @@ impl ArchiSimApp {
             return;
         }
         let mut open = true;
-        super::widgets::dialog("Cálculo de ventilación (DB-HS 3)")
+        super::widgets::dialog("Cálculo de ventilación (DB-HS 3 y RITE)")
             .open(&mut open)
             .default_width(860.0)
             .default_height(560.0)
@@ -67,6 +72,7 @@ impl ArchiSimApp {
             .small(),
         );
         self.ventilation_site_row(ui);
+        self.rite_rows(ui);
         ui.separator();
         let rev = self.ed.revision();
         if self.ventilation.results.as_ref().is_none_or(|r| r.0 != rev) {
@@ -74,7 +80,21 @@ impl ArchiSimApp {
             let v = archisim_mep::ventilation::ventilation(model);
             let text = archisim_mep::ventilation::report(model, &v);
             let fails = v.fails();
-            self.ventilation.blocks = archisim_plan::services_report::ventilation(model, &v);
+            let mut blocks = archisim_plan::services_report::ventilation(model, &v);
+            if v.rite.applies() {
+                blocks.push(archisim_struct::report::Block::Heading(
+                    1,
+                    "Locales del RITE (IT 1.1.4.2)".into(),
+                ));
+                blocks.extend(archisim_plan::services_report::rite(model, &v));
+            }
+            self.ventilation.blocks = blocks;
+            self.ventilation.rite = v
+                .rite
+                .rooms
+                .iter()
+                .map(|r| (r.room, r.name.clone(), r.ida, r.by_hand))
+                .collect();
             self.ventilation.results = Some((rev, text, Grow::of(model, &v), fails));
         }
         let (_, text, grow, fails) = self.ventilation.results.clone().expect("just made");
@@ -132,9 +152,10 @@ impl ArchiSimApp {
     /// The system (mechanical or hybrid) and the zone of table 4.4, set
     /// by hand or from the province.
     fn ventilation_site_row(&mut self, ui: &mut Ui) {
+        use archisim_core::GarageVent;
         use archisim_core::{DraftZone, VentSystem, DRAFT_ZONES};
-        let site = *self.ed.model().ventilation_site();
-        let mut new = site;
+        let site = self.ed.model().ventilation_site().clone();
+        let mut new = site.clone();
         ui.horizontal(|ui| {
             ui.label("Sistema");
             egui::ComboBox::from_id_salt("vent-system")
@@ -182,10 +203,103 @@ impl ArchiSimApp {
                     });
             });
         });
+        ui.horizontal(|ui| {
+            ui.label("Garajes");
+            egui::ComboBox::from_id_salt("vent-garage")
+                .selected_text(new.garage.name())
+                .show_ui(ui, |ui| {
+                    for g in GarageVent::ALL {
+                        ui.selectable_value(&mut new.garage, g, g.name());
+                    }
+                })
+                .response
+                .on_hover_text("HS 3, 3.1.4: natural, por aberturas mixtas en dos zonas opuestas de la fachada (se leen las ventanas, huecos y rejillas de sus muros), o mecánica, 120 l/s por plaza con bocas de extracción. «Según el dibujo»: mecánica si tiene bocas dibujadas");
+            ui.add_space(12.0);
+            ui.label("Aire exterior (RITE)");
+            egui::ComboBox::from_id_salt("vent-oda")
+                .selected_text(format!("ODA {}", new.oda))
+                .width(60.0)
+                .show_ui(ui, |ui| {
+                    for (k, what) in [
+                        (1u8, "ODA 1: aire puro, se ensucia solo de vez en cuando (polen)"),
+                        (2, "ODA 2: muchas partículas o gases (ciudad)"),
+                        (3, "ODA 3: muchísimos gases o partículas"),
+                    ] {
+                        ui.selectable_value(&mut new.oda, k, what);
+                    }
+                })
+                .response
+                .on_hover_text("RITE IT 1.1.4.2.4: con la IDA de cada local da los filtros (tabla 1.4.2.5)");
+            ui.add_space(12.0);
+            ui.label("Velocidad en conductos");
+            ui.add(
+                egui::DragValue::new(&mut new.duct_speed)
+                    .range(1.0..=12.0)
+                    .speed(0.1)
+                    .suffix(" m/s"),
+            )
+            .on_hover_text("Los conductos de los locales del RITE se dimensionan por la velocidad del aire: esta en los principales y el 60 % en los ramales a un solo terminal");
+        });
         if new != site {
             let r = self
                 .ed
                 .transact("Sistema de ventilación", |m| m.set_ventilation_site(new));
+            if let Err(e) = r {
+                self.complain(format!("No se puede cambiar: {e}."));
+            }
+        }
+    }
+
+    /// The rooms of the RITE with their indoor air class, which can be set
+    /// by hand.
+    fn rite_rows(&mut self, ui: &mut Ui) {
+        let rooms = self.ventilation.rite.clone();
+        if rooms.is_empty() {
+            return;
+        }
+        let mut change: Option<(archisim_core::RoomId, Option<u8>)> = None;
+        egui::CollapsingHeader::new(format!(
+            "Calidad del aire interior de los locales del RITE ({})",
+            rooms.len()
+        ))
+        .id_salt("rite-ida")
+        .show(ui, |ui| {
+            egui::Grid::new("rite-ida-grid")
+                .striped(true)
+                .show(ui, |ui| {
+                    for (id, name, ida, by_hand) in &rooms {
+                        ui.label(name);
+                        let shown = if *by_hand {
+                            format!("IDA {ida} (a mano)")
+                        } else {
+                            format!("IDA {ida} (por su uso)")
+                        };
+                        egui::ComboBox::from_id_salt(("rite-ida", id.0))
+                            .selected_text(shown)
+                            .show_ui(ui, |ui| {
+                                if ui.selectable_label(!by_hand, "Por su uso").clicked() {
+                                    change = Some((*id, None));
+                                }
+                                for k in 1..=4u8 {
+                                    let what = match k {
+                                        1 => "IDA 1: óptima (hospitales, guarderías)",
+                                        2 => "IDA 2: buena (oficinas, aulas)",
+                                        3 => "IDA 3: media (comercios, bares)",
+                                        _ => "IDA 4: baja",
+                                    };
+                                    if ui.selectable_label(*by_hand && *ida == k, what).clicked() {
+                                        change = Some((*id, Some(k)));
+                                    }
+                                }
+                            });
+                        ui.end_row();
+                    }
+                });
+        });
+        if let Some((room, ida)) = change {
+            let r = self
+                .ed
+                .transact("Calidad del aire interior", |m| m.set_room_ida(room, ida));
             if let Err(e) = r {
                 self.complain(format!("No se puede cambiar: {e}."));
             }

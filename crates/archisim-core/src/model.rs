@@ -4507,7 +4507,7 @@ impl Model {
             electrical_site: self.electrical_site,
             water_site: self.water_site,
             thermal_site: self.thermal_site.clone(),
-            ventilation_site: self.ventilation_site,
+            ventilation_site: self.ventilation_site.clone(),
             renewables_site: self.renewables_site.clone(),
             plan_template: self.plan_template,
             level_underlays: self

@@ -6,6 +6,74 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-09 (132) · Ventilación, tercera vuelta: locales que no son viviendas (RITE) y garajes con ventilación natural
+
+Rama `bloque/rite-garajes`, con pull request. Va sobre la de la entrada 131 (#186, todavía sin unir). **Formato versión 99**: cuatro datos nuevos en `ventilation` (cómo se ventilan los garajes, la calidad del aire exterior ODA, la velocidad de los conductos y la IDA puesta a mano en algunos locales). `docs/INSTALACIONES.md` §6 («Garajes con ventilación natural») y §6 bis.
+
+- **Locales del RITE (IT 1.1.4.2).** En un edificio que no es de viviendas, todos sus locales; en uno de viviendas, los comercios, oficinas, bares, aulas, consultas… y los aseos que no son de ninguna vivienda. Antes, un edificio que no era de viviendas no se calculaba.
+  - **IDA** por el uso o el nombre del local (IDA 1 hospitales y guarderías, IDA 2 oficinas y aulas, IDA 3 comercios y bares), y en la ventana se puede cambiar local a local.
+  - **Aire exterior** por persona (20 / 12,5 / 8 / 5 l/s), con la misma ocupación del DB-SI 3 que la Comprobación CTE (la ocupación pasa al núcleo para que la use el cálculo); por superficie en almacenes, archivos y trastiendas (0,83 / 0,55 / 0,28 l/s·m²); 2,5 l/s·m² en piscinas.
+  - **Aseos, vestuarios y cuartos de limpieza**: extracción de 2 l/s·m².
+  - **Filtros** de la tabla 1.4.2.5 con la ODA del proyecto (ODA 2 por defecto), como dato.
+  - **Recuperación de calor** obligatoria si los ventiladores echan fuera más de 0,28 m³/s; cumple si hay dibujado un equipo que se llama «recuperador» (eficiencia ≥ 73 %, como dato).
+  - **Conductos por velocidad**: las redes de impulsión (difusores y rejillas del sistema Impulsión hasta su equipo; tramos «I1», «I2»…) y las de extracción de estos locales se dimensionan a 5 m/s en los principales y 3 m/s en los ramales a un solo terminal (la velocidad, en la ventana). Se da la velocidad de lo dibujado y la sección que basta.
+- **Garajes con ventilación natural (HS 3, 3.1.4.1).** En la ventana, «Garajes»: según el dibujo (por defecto), natural o mecánica. Se leen las ventanas, huecos sin carpintería, puertas de tipo «rejilla» o «celosía», y las rejillas y aireadores del borde del garaje que dan fuera; se agrupan por fachada y se comprueba:
+  - dos zonas opuestas, cada una con 8·qv cm² (con 10 plazas, 9 600 cm² en cada fachada);
+  - ningún punto a más de 25 m de una abertura (en línea recta, por una rejilla de puntos cada 50 cm);
+  - otra abertura a media distancia si las opuestas están a más de 30 m;
+  - en los garajes de 5 plazas y 100 m² como mucho, admisión abajo y extracción arriba en un muro, a 1,5 m.
+  Si no cumple: «con ventilación natural no cumple: necesita ventilación mecánica». Los garajes, trasteros y basuras se calculan ahora en cualquier edificio, no solo en los de viviendas.
+- **Dónde sale**: el informe de la ventana y de `archisim ventilacion`, la memoria de instalaciones (capítulo nuevo «Calidad del aire interior (RITE IT 1.1.4.2)» y, en el del HS 3, la columna «Ventilación» de los garajes), la Comprobación CTE (sección «Ventilación (DB-HS 3 y RITE)», reglas «RITE IT 1.1.4.2.3», «…4.2.4», «…4.2.5», «RITE IT 1.2.4.5.2», «HS 3, 3.1.4.1») y las cargas térmicas (el aire exterior de los locales del RITE entra en su carga de ventilación).
+- **Ejemplo nuevo**: `archisim ventilacion --ejemplo-terciario <carpeta>` hace una oficina de 12 × 8 m (oficina, sala de reuniones y aseo) con recuperador, tres difusores y dos bocas, sobre un garaje de 10 plazas con dos huecos.
+- **Pruebas**: la oficina (IDA, personas, caudales, red de impulsión y de extracción por velocidad, garaje que cumple), la IDA a mano y la recuperación al llenar la oficina, el garaje abierto por un solo lado (pide mecánica) y mecánico sin bocas, un local comercial bajo un piso, el fichero que guarda los datos nuevos.
+
+**Ejemplo (`--ejemplo-terciario`).**
+
+| Comprobación | Resultado |
+|---|---|
+| Oficina, 64 m² | IDA 2, 7 personas × 12,5 = 87,5 l/s; dos difusores de 43,8 l/s |
+| Sala de reuniones, 16 m² | IDA 2, 2 personas, 25 l/s |
+| Aseo, 15,2 m² | 30,4 l/s de extracción |
+| Conductos | Cumplen los 5 tramos (de 1,0 a 2,9 m/s; el ramal de retorno de la oficina, 292 de 300 cm² a 3 m/s) |
+| Filtros (ODA 2) | IDA 2: F6 + F8 |
+| Recuperación | 0,118 m³/s ≤ 0,28: no obligatoria |
+| Garaje, 246,5 m², 10 plazas | Cumple natural: sur y norte 18 900 cm² cada una (≥ 9 600), punto más alejado a 13,2 m |
+
+**Florence Street** (`archisim edificio`; edificio de viviendas). Las viviendas, garajes y campanas salen igual que antes (siguen sin cumplir solo los 12 pasos de puerta). Nuevos, en la planta baja:
+
+| Local | Resultado |
+|---|---|
+| Café | IDA 3, 39 personas × 8 = 312 l/s; **sin impulsión dibujada** (aviso) |
+| Café: trastienda | IDA 3, por superficie 18,9 m² × 0,55 = 10,4 l/s (antes salía como trastero del HS 3); sin impulsión (aviso) |
+| Oficina de la cooperativa | IDA 2, 5 personas × 12,5 = 62,5 l/s; sin impulsión (aviso) |
+| Aseo y aseo accesible | 10,4 y 11,6 l/s de extracción; sin boca (aviso) |
+| Recuperación de calor | 0,385 m³/s > 0,28: **obligatoria**, a prever (no hay recuperador dibujado) |
+| Garajes | No tiene (el de bicicletas no cuenta) |
+
+**Pendiente.**
+- Dibujar en Florence Street la impulsión y la extracción del café y la oficina, con su recuperador.
+- Los métodos B, C y E del RITE, las categorías del aire de extracción (AE) y la recirculación, la pérdida de carga y la presión de los ventiladores, los difusores por su alcance.
+- En los garajes naturales, la distancia por el recorrido libre (hoy en línea recta) y los trasteros y basuras con ventilación natural.
+
+**Escrito de memoria (que lo compruebe Antonio).** Todo junto al principio de `crates/archisim-mep/src/rite.rs` y `crates/archisim-mep/src/garage.rs`, marcado «para revisar»:
+- tabla 1.4.2.1 (20 / 12,5 / 8 / 5 l/s por persona) y tabla 1.4.2.4 (— / 0,83 / 0,55 / 0,28 l/s·m²) y qué usos van a cada IDA;
+- 2 l/s·m² de extracción en los locales de servicio y 2,5 l/s·m² en las piscinas;
+- el umbral de la recuperación: **0,28 m³/s** (el texto vigente tras la modificación de 2021; el encargo decía 0,5, que era el de antes) y la eficiencia del 73 % (68 % con batería de doble circuito) del reglamento de diseño ecológico; la tabla 2.4.5.1 por horas de funcionamiento queda hoy solo para las piscinas y no se aplica;
+- los filtros de la tabla 1.4.2.5 en clases EN 779 (F5…F9; puede que el texto de 2021 los dé por ISO 16890);
+- las aberturas mixtas de 8·qv en cada zona opuesta (nota de la tabla 4.1), 25 m, 30 m con el 5 %, el garaje pequeño de 5 plazas, 100 m² y 1,5 m, y 4·qv para la admisión y la extracción por separado;
+- míos, no de la norma: 5 m/s y 3 m/s en los conductos, ODA 2 por defecto y las palabras que reconocen cada uso.
+
+**Qué debe probar Antonio:**
+1. `archisim ventilacion --ejemplo-terciario out/terciario`. Al final salen los tres locales del RITE con su IDA y su caudal, la red de impulsión I1–I3 y la de extracción con su velocidad, y el garaje con sus dos fachadas.
+2. Abre `out/terciario/ventilacion-oficina.archisim` y entra en Colaboración → Cálculo de ventilación.
+   - Despliega «Calidad del aire interior de los locales del RITE» y pon la Oficina en IDA 1: su aire sube a 140 l/s y salen cortos el ramal de retorno (V2) y el de los dos difusores (I3); «Poner los tamaños calculados (2)» los agranda.
+   - Cambia «Velocidad en conductos» a 3 m/s: los tramos piden más sección.
+   - Borra uno de los dos huecos del garaje (planta Sótano): sale «con ventilación natural no cumple: necesita ventilación mecánica». Cambia «Garajes» a «Mecánica»: no cumple por no tener bocas.
+3. `archisim edificio out/florence` y `archisim ventilacion out/florence/edificio.archisim`: al final, el café, la trastienda, la oficina y los aseos de la planta baja, y el aviso de la recuperación de calor.
+4. En Colaboración → Comprobación CTE, filtra por «Ventilación (DB-HS 3 y RITE)» y mira las reglas «RITE IT 1.1.4.2…».
+
+---
+
 ## 2026-11-09 (131) · Electricidad, segunda vuelta: trifásica, previsión del edificio, cortocircuito y caída de tensión por tramos (REBT)
 
 Rama `bloque/rebt-trifasica`, con pull request. Va sobre la de la entrada 130 (#184, todavía sin unir). **Formato versión 98**: siete datos nuevos de la instalación eléctrica en `electrical` (suministro, contadores repartidos, longitud de la línea general, cortocircuito en la acometida, longitud de la línea desde el transformador, poder de corte y curva). `docs/INSTALACIONES.md` §2 y §3.

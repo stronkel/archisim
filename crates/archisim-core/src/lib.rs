@@ -16,6 +16,7 @@ pub mod graphics;
 pub mod ids;
 pub mod math;
 pub mod model;
+pub mod occupancy;
 pub mod rooms;
 pub mod sheets;
 pub mod skeleton;

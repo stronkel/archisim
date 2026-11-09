@@ -651,6 +651,10 @@ pub fn thermal(model: &Model) -> Thermal {
             dwelling_of.insert(r.room, i);
         }
     }
+    // The outdoor air of the rooms of the RITE.
+    for r in &vent.rite.rooms {
+        inflow.entry(r.room).or_insert(r.outdoor);
+    }
     let levels = model.levels();
     let first = levels.first().map(|l| l.id);
     let mut rooms: Vec<RoomLoad> = Vec::new();

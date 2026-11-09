@@ -2,9 +2,13 @@
 //! `archisim_mep::ventilation`: the flow of every dwelling, the inlets
 //! and valves of every room, the passages of the doors, the extract ducts
 //! (mechanical or hybrid), where each comes out, the fan, and the
-//! garages, storerooms and refuse rooms.
+//! garages (mechanical or natural, 3.1.4), storerooms and refuse rooms;
+//! and the rooms that are not of dwellings by the RITE (IT 1.1.4.2): their
+//! indoor air class, outdoor air, filters, heat recovery and the ducts
+//! sized by the air's speed.
 
 use archisim_core::Model;
+use archisim_mep::garage as vt_garage;
 use archisim_mep::ventilation as vt;
 
 use crate::{Item, Report, Section, Status, Subject};
@@ -15,7 +19,7 @@ fn dec(v: f64, n: usize) -> String {
 
 pub fn check(model: &Model, report: &mut Report) {
     let v = vt::ventilation(model);
-    if !v.applies {
+    if !v.anything() {
         return;
     }
     let mut push = |status: Status,
@@ -136,6 +140,34 @@ pub fn check(model: &Model, report: &mut Report) {
                 (None, Some(dv)) => Subject::Device(dv),
                 _ => Subject::Level(s.level),
             };
+            if let Some(sp) = s.speed {
+                push(
+                    pass(s.short()),
+                    subject,
+                    Some(s.level),
+                    "RITE IT 1.1.4.2, conductos por velocidad",
+                    format!(
+                        "Tramo {} de {}: {} l/s{}",
+                        s.name,
+                        if n.supply {
+                            "impulsión"
+                        } else {
+                            "extracción"
+                        },
+                        dec(s.flow, 1),
+                        s.drawn_speed()
+                            .map_or(String::new(), |x| format!(", {} m/s", dec(x, 1)))
+                    ),
+                    format!("{} ({})", s.size, cm2(s.area)),
+                    format!(
+                        "≥ {} a {} m/s ({})",
+                        cm2(s.needed),
+                        dec(sp, 1),
+                        s.sized_text
+                    ),
+                );
+                continue;
+            }
             push(
                 pass(s.short()),
                 subject,
@@ -222,7 +254,9 @@ pub fn check(model: &Model, report: &mut Report) {
         if n.is_hood_duct() {
             continue;
         }
-        let head = if n.hybrid.is_some() {
+        let head = if n.supply {
+            "Unidad de impulsión"
+        } else if n.hybrid.is_some() {
             "Aspirador híbrido"
         } else {
             "Extractor"
@@ -232,7 +266,11 @@ pub fn check(model: &Model, report: &mut Report) {
                 Status::Info,
                 Subject::Device(f),
                 model.device(f).map(|d| d.level),
-                "HS 3, 3.2",
+                if n.rite {
+                    "RITE IT 1.1.4.2"
+                } else {
+                    "HS 3, 3.2"
+                },
                 format!("{head}: caudal de su red"),
                 format!("{} m³/h", dec(n.flow * 3.6, 0)),
                 String::new(),
@@ -241,12 +279,23 @@ pub fn check(model: &Model, report: &mut Report) {
                 Status::Fails,
                 Subject::Building,
                 None,
-                "HS 3, 3.2",
-                format!(
-                    "Red de extracción de {} bocas sin {} dibujado",
-                    n.vents.len(),
-                    head.to_lowercase()
-                ),
+                if n.rite {
+                    "RITE IT 1.1.4.2"
+                } else {
+                    "HS 3, 3.2"
+                },
+                if n.supply {
+                    format!(
+                        "Red de impulsión de {} terminales sin unidad de impulsión dibujada (un equipo junto a su conducto)",
+                        n.vents.len()
+                    )
+                } else {
+                    format!(
+                        "Red de extracción de {} bocas sin {} dibujado",
+                        n.vents.len(),
+                        head.to_lowercase()
+                    )
+                },
                 "—".into(),
                 format!("{} m³/h", dec(n.flow * 3.6, 0)),
             ),
@@ -259,6 +308,17 @@ pub fn check(model: &Model, report: &mut Report) {
             model.device(*id).map(|d| d.level),
             "HS 3, 3.2",
             "Boca de extracción sin conducto de extracción a menos de 45 cm".into(),
+            String::new(),
+            String::new(),
+        );
+    }
+    for id in &v.loose_supply {
+        push(
+            Status::Warning,
+            Subject::Device(*id),
+            model.device(*id).map(|d| d.level),
+            "RITE IT 1.1.4.2",
+            "Terminal de impulsión sin conducto de impulsión a menos de 45 cm".into(),
             String::new(),
             String::new(),
         );
@@ -300,6 +360,108 @@ pub fn check(model: &Model, report: &mut Report) {
             format!("{} l/s", dec(o.flow, 1)),
             String::new(),
         );
+        if let Some(nat) = &o.natural {
+            let no = |b: bool| if b { Status::Passes } else { Status::Fails };
+            if nat.openings.is_empty() {
+                push(
+                    Status::Fails,
+                    subject,
+                    level,
+                    "HS 3, 3.1.4.1",
+                    format!(
+                        "{}: ventilación natural sin aberturas al exterior dibujadas (necesita mecánica, 3.1.4.2)",
+                        o.name
+                    ),
+                    String::new(),
+                    String::new(),
+                );
+            } else {
+                let zones = match nat.opposite {
+                    Some((a, b)) => format!(
+                        "{} {} y {} {}",
+                        nat.zones[a].name,
+                        cm2(nat.zones[a].area),
+                        nat.zones[b].name,
+                        cm2(nat.zones[b].area)
+                    ),
+                    None => "sin zonas opuestas".into(),
+                };
+                push(
+                    no(nat.zones_pass() || nat.one_wall),
+                    subject,
+                    level,
+                    "HS 3, 3.1.4.1 y tabla 4.1",
+                    format!(
+                        "{}: aberturas mixtas en dos zonas opuestas de la fachada{}",
+                        o.name,
+                        if nat.one_wall {
+                            " (garaje pequeño: admisión abajo y extracción arriba en un muro)"
+                        } else {
+                            ""
+                        }
+                    ),
+                    zones,
+                    format!("≥ {} en cada una (8·qv)", cm2(nat.needed)),
+                );
+                push(
+                    no(nat.reach_passes()),
+                    subject,
+                    level,
+                    "HS 3, 3.1.4.1",
+                    format!(
+                        "{}: distancia del punto más alejado a la abertura más cercana",
+                        o.name
+                    ),
+                    format!("{} m", dec(nat.farthest, 1)),
+                    format!("≤ {} m", dec(vt_garage::REACH, 0)),
+                );
+                if nat.opposite.is_some() && nat.opposite_gap > vt_garage::OPPOSITE_GAP {
+                    push(
+                        no(nat.halfway),
+                        subject,
+                        level,
+                        "HS 3, 3.1.4.1",
+                        format!(
+                            "{}: aberturas opuestas a más de {} m, otra equidistante",
+                            o.name,
+                            dec(vt_garage::OPPOSITE_GAP, 0)
+                        ),
+                        format!("{} m", dec(nat.opposite_gap, 1)),
+                        "una abertura a media distancia (± 5 %)".into(),
+                    );
+                }
+                if !nat.passes() {
+                    push(
+                        Status::Fails,
+                        subject,
+                        level,
+                        "HS 3, 3.1.4.2",
+                        format!(
+                            "{}: con ventilación natural no cumple; necesita ventilación mecánica",
+                            o.name
+                        ),
+                        String::new(),
+                        format!("{} l/s, una boca cada 100 m²", dec(o.flow, 0)),
+                    );
+                }
+            }
+            continue;
+        }
+        if o.garage && o.mechanical && o.vents.is_empty() {
+            push(
+                Status::Fails,
+                subject,
+                level,
+                "HS 3, 3.1.4.2",
+                format!(
+                    "{}: ventilación mecánica sin bocas de extracción dibujadas",
+                    o.name
+                ),
+                String::new(),
+                format!("{} l/s, una boca cada 100 m²", dec(o.flow, 0)),
+            );
+            continue;
+        }
         if !o.drawn() {
             push(
                 if o.garage {
@@ -394,4 +556,118 @@ pub fn check(model: &Model, report: &mut Report) {
             );
         }
     }
+    rite_items(model, &v.rite, report);
+}
+
+/// The rooms of the RITE (IT 1.1.4.2).
+fn rite_items(model: &Model, rite: &archisim_mep::rite::Rite, report: &mut Report) {
+    use archisim_mep::rite as rt;
+    if !rite.applies() {
+        return;
+    }
+    let mut push = |status: Status,
+                    subject: Subject,
+                    level,
+                    rule: &'static str,
+                    text: String,
+                    value: String,
+                    required: String| {
+        report.items.push(Item {
+            section: Section::Ventilation,
+            status,
+            subject,
+            level,
+            rule,
+            text,
+            value,
+            required,
+            route: Vec::new(),
+        });
+    };
+    for r in &rite.rooms {
+        let (rule, value, required) = match r.method {
+            rt::Method::Service => (
+                "RITE IT 1.1.4.2.5",
+                format!("{} l/s de extracción", dec(r.extraction, 1)),
+                format!("{} l/s·m²", dec(rt::SERVICE_PER_M2, 0)),
+            ),
+            rt::Method::Person => (
+                "RITE IT 1.1.4.2.3, tabla 1.4.2.1",
+                format!("{} l/s de aire exterior", dec(r.outdoor, 1)),
+                format!(
+                    "{} personas × {} l/s",
+                    r.people,
+                    dec(rt::PER_PERSON[usize::from(r.ida) - 1], 1)
+                ),
+            ),
+            rt::Method::Area => (
+                "RITE IT 1.1.4.2.3, tabla 1.4.2.4",
+                format!("{} l/s de aire exterior", dec(r.outdoor, 1)),
+                format!("{} m²", dec(r.area, 1)),
+            ),
+            rt::Method::Pool => (
+                "RITE IT 1.1.4.2.3",
+                format!("{} l/s de aire exterior", dec(r.outdoor, 1)),
+                format!("{} l/s·m²", dec(rt::POOL_PER_M2, 1)),
+            ),
+        };
+        push(
+            if r.no_supply() || r.no_vent() {
+                Status::Warning
+            } else {
+                Status::Info
+            },
+            Subject::Room(r.room),
+            Some(r.level),
+            rule,
+            format!(
+                "{}: IDA {} ({}){}",
+                r.name,
+                r.ida,
+                r.why,
+                if r.no_supply() {
+                    "; sin impulsión dibujada"
+                } else if r.no_vent() {
+                    "; sin boca de extracción dibujada"
+                } else {
+                    ""
+                }
+            ),
+            value,
+            required,
+        );
+    }
+    let filters: Vec<String> = rite
+        .filters()
+        .into_iter()
+        .map(|(i, f)| format!("IDA {i}: {f}"))
+        .collect();
+    if !filters.is_empty() {
+        push(
+            Status::Info,
+            Subject::Building,
+            None,
+            "RITE IT 1.1.4.2.4, tabla 1.4.2.5",
+            format!("Filtros del aire exterior con ODA {}", rite.oda),
+            filters.join("; "),
+            String::new(),
+        );
+    }
+    let _ = model;
+    push(
+        match (rite.recovery_needed, rite.recovery) {
+            (false, _) => Status::Info,
+            (true, Some(_)) => Status::Passes,
+            (true, None) => Status::Warning,
+        },
+        rite.recovery.map_or(Subject::Building, Subject::Device),
+        None,
+        "RITE IT 1.2.4.5.2",
+        rt::recovery_text(rite),
+        format!("{} m³/s", dec(rite.expelled / 1000.0, 3)),
+        format!(
+            "recuperación por encima de {} m³/s",
+            dec(rt::RECOVERY_ABOVE, 2)
+        ),
+    );
 }

@@ -66,7 +66,9 @@ pub fn report(model: &Model) -> Vec<Block> {
         .networks
         .iter()
         .any(|n| !n.stretches.is_empty());
-    let has_ventilation = all.ventilation.applies && !all.ventilation.dwellings.is_empty();
+    let has_ventilation =
+        !all.ventilation.dwellings.is_empty() || !all.ventilation.others.is_empty();
+    let has_rite = all.ventilation.rite.applies();
     let has_thermal = !all.thermal.rooms.is_empty();
     let mut chapters: Vec<(&str, Vec<Block>)> = Vec::new();
     if !all.electrical.installations.is_empty() {
@@ -88,6 +90,12 @@ pub fn report(model: &Model) -> Vec<Block> {
         chapters.push((
             "Calidad del aire interior (DB-HS 3)",
             ventilation(model, &all.ventilation),
+        ));
+    }
+    if has_rite {
+        chapters.push((
+            "Calidad del aire interior (RITE IT 1.1.4.2)",
+            rite(model, &all.ventilation),
         ));
     }
     if has_thermal {
@@ -888,7 +896,10 @@ pub fn ventilation(model: &Model, v: &Ventilation) -> Vec<Block> {
             site.zone.code()
         ),
     };
-    let mut out = vec![Block::Para(format!(
+    let dwellings = !v.dwellings.is_empty();
+    let mut out = Vec::new();
+    if dwellings {
+        out.push(Block::Para(format!(
         "Ventilación {}: el aire entra por los aireadores de los locales secos, pasa bajo las puertas y sale por las bocas de extracción de los húmedos, por los conductos hasta {}. Caudales de la tabla 2.1, aberturas de la tabla 4.1 ({} cm² por l/s) y {}. Cada cocina lleva además la extracción de su campana, {} l/s por un conducto propio (3.1.1). Cada conducto sale a {} m al menos de las ventanas, puertas exteriores, aireadores y terrazas (3.2.1).",
         site.system.name().to_lowercase(),
         if site.system == archisim_core::VentSystem::Hybrid {
@@ -900,164 +911,165 @@ pub fn ventilation(model: &Model, v: &Ventilation) -> Vec<Block> {
         ducts,
         dec(vt::HOOD_FLOW, 0),
         dec(vt::OUTLET_GAP, 0)
-    ))];
-    out.push(Block::Heading(2, "1 Caudales de las viviendas".into()));
-    out.push(Block::Table {
-        columns: vec![
-            col("Vivienda", 2.6),
-            col("Dormitorios", 1.0),
-            col("Secos (l/s)", 1.0),
-            col("Húmedos (l/s)", 1.0),
-            col("Caudal (l/s)", 1.0),
-            col("No cumple", 0.9),
-        ],
-        rows: v
+    )));
+        out.push(Block::Heading(2, "1 Caudales de las viviendas".into()));
+        out.push(Block::Table {
+            columns: vec![
+                col("Vivienda", 2.6),
+                col("Dormitorios", 1.0),
+                col("Secos (l/s)", 1.0),
+                col("Húmedos (l/s)", 1.0),
+                col("Caudal (l/s)", 1.0),
+                col("No cumple", 0.9),
+            ],
+            rows: v
+                .dwellings
+                .iter()
+                .map(|d| {
+                    vec![
+                        d.name.clone(),
+                        d.bedrooms.to_string(),
+                        dec(d.dry_flow, 1),
+                        dec(d.wet_flow, 1),
+                        dec(d.flow, 1),
+                        d.fails().to_string(),
+                    ]
+                })
+                .collect(),
+        });
+        out.push(Block::Heading(2, "2 Aberturas de los locales".into()));
+        let mut rows = Vec::new();
+        for d in &v.dwellings {
+            for r in &d.rooms {
+                if let Some(dry) = r.dry {
+                    rows.push(vec![
+                        d.name.clone(),
+                        r.name.clone(),
+                        dry.name().to_string(),
+                        format!("{} entra", dec(r.admission, 1)),
+                        format!("{} cm²", dec(r.inlet_area, 0)),
+                        format!("{} cm²", dec(r.inlet_needed(), 0)),
+                    ]);
+                }
+                if r.wet {
+                    rows.push(vec![
+                        d.name.clone(),
+                        r.name.clone(),
+                        "húmedo".into(),
+                        format!("{} sale", dec(r.extraction, 1)),
+                        format!("{} cm²", dec(r.vent_area, 0)),
+                        format!("{} cm²", dec(r.vent_needed(), 0)),
+                    ]);
+                }
+            }
+        }
+        out.push(Block::Table {
+            columns: vec![
+                col("Vivienda", 2.0),
+                col("Local", 1.6),
+                col("Clase", 1.4),
+                col("l/s", 0.9),
+                col("Abertura", 0.9),
+                col("Exigida", 0.9),
+            ],
+            rows,
+        });
+        let passages: Vec<String> = v
             .dwellings
             .iter()
-            .map(|d| {
-                vec![
-                    d.name.clone(),
-                    d.bedrooms.to_string(),
-                    dec(d.dry_flow, 1),
-                    dec(d.wet_flow, 1),
-                    dec(d.flow, 1),
-                    d.fails().to_string(),
-                ]
+            .flat_map(|d| d.passages.iter().map(move |p| (d, p)))
+            .filter(|(_, p)| p.short())
+            .map(|(d, p)| {
+                let name = |r| model.room(r).map_or("—".to_string(), |x| x.name.clone());
+                format!(
+                    "{}: paso de {} a {}, {} l/s{}",
+                    d.name,
+                    name(p.from),
+                    name(p.to),
+                    dec(p.flow, 1),
+                    p.gap_needed()
+                        .map_or(String::new(), |g| format!(" — holgura de {g} mm o rejilla"))
+                )
             })
-            .collect(),
-    });
-    out.push(Block::Heading(2, "2 Aberturas de los locales".into()));
-    let mut rows = Vec::new();
-    for d in &v.dwellings {
-        for r in &d.rooms {
-            if let Some(dry) = r.dry {
-                rows.push(vec![
-                    d.name.clone(),
-                    r.name.clone(),
-                    dry.name().to_string(),
-                    format!("{} entra", dec(r.admission, 1)),
-                    format!("{} cm²", dec(r.inlet_area, 0)),
-                    format!("{} cm²", dec(r.inlet_needed(), 0)),
-                ]);
+            .collect();
+        out.push(check(
+            !passages.is_empty(),
+            if passages.is_empty() {
+                "Pasos de aire bajo las puertas suficientes (tabla 4.1)".into()
+            } else {
+                format!(
+                    "{} pasos de puerta cortos (tabla 4.1): {}",
+                    passages.len(),
+                    passages.join("; ")
+                )
+            },
+        ));
+        out.push(Block::Heading(2, "3 Conductos de extracción".into()));
+        out.push(Block::Table {
+            columns: vec![
+                col("Tramo", 0.8),
+                col("Planta", 1.5),
+                col("l/s", 0.8),
+                col("Dibujado", 1.2),
+                col("cm²", 0.8),
+                col("Exigido", 0.8),
+                col("Basta", 1.2),
+            ],
+            rows: v
+                .networks
+                .iter()
+                .filter(|n| !n.rite && !n.supply)
+                .flat_map(|n| &n.stretches)
+                .map(|s| {
+                    vec![
+                        s.name.clone(),
+                        level_name(model, s.level),
+                        dec(s.flow, 1),
+                        s.size.clone(),
+                        dec(s.area, 0),
+                        dec(s.needed, 0),
+                        s.sized_text.clone(),
+                    ]
+                })
+                .collect(),
+        });
+        for (i, n) in v.networks.iter().enumerate() {
+            if n.is_hood_duct() || n.rite || n.supply {
+                continue;
             }
-            if r.wet {
-                rows.push(vec![
-                    d.name.clone(),
-                    r.name.clone(),
-                    "húmedo".into(),
-                    format!("{} sale", dec(r.extraction, 1)),
-                    format!("{} cm²", dec(r.vent_area, 0)),
-                    format!("{} cm²", dec(r.vent_needed(), 0)),
-                ]);
-            }
+            out.push(check(
+                n.fan.is_none() || n.shared(),
+                format!(
+                    "Red {}: {} bocas, {} m³/h; extractor {}{}",
+                    i + 1,
+                    n.vents.len(),
+                    dec(n.flow * 3.6, 0),
+                    if n.fan.is_some() {
+                        "dibujado"
+                    } else {
+                        "sin dibujar"
+                    },
+                    if n.shared() {
+                        "; lleva campanas, que van por conducto propio"
+                    } else {
+                        ""
+                    }
+                ),
+            ));
         }
-    }
-    out.push(Block::Table {
-        columns: vec![
-            col("Vivienda", 2.0),
-            col("Local", 1.6),
-            col("Clase", 1.4),
-            col("l/s", 0.9),
-            col("Abertura", 0.9),
-            col("Exigida", 0.9),
-        ],
-        rows,
-    });
-    let passages: Vec<String> = v
-        .dwellings
-        .iter()
-        .flat_map(|d| d.passages.iter().map(move |p| (d, p)))
-        .filter(|(_, p)| p.short())
-        .map(|(d, p)| {
-            let name = |r| model.room(r).map_or("—".to_string(), |x| x.name.clone());
-            format!(
-                "{}: paso de {} a {}, {} l/s{}",
-                d.name,
-                name(p.from),
-                name(p.to),
-                dec(p.flow, 1),
-                p.gap_needed()
-                    .map_or(String::new(), |g| format!(" — holgura de {g} mm o rejilla"))
-            )
-        })
-        .collect();
-    out.push(check(
-        !passages.is_empty(),
-        if passages.is_empty() {
-            "Pasos de aire bajo las puertas suficientes (tabla 4.1)".into()
-        } else {
-            format!(
-                "{} pasos de puerta cortos (tabla 4.1): {}",
-                passages.len(),
-                passages.join("; ")
-            )
-        },
-    ));
-    out.push(Block::Heading(2, "3 Conductos de extracción".into()));
-    out.push(Block::Table {
-        columns: vec![
-            col("Tramo", 0.8),
-            col("Planta", 1.5),
-            col("l/s", 0.8),
-            col("Dibujado", 1.2),
-            col("cm²", 0.8),
-            col("Exigido", 0.8),
-            col("Basta", 1.2),
-        ],
-        rows: v
+        let outlets: Vec<(usize, &vt::Outlet)> = v
             .networks
             .iter()
-            .flat_map(|n| &n.stretches)
-            .map(|s| {
-                vec![
-                    s.name.clone(),
-                    level_name(model, s.level),
-                    dec(s.flow, 1),
-                    s.size.clone(),
-                    dec(s.area, 0),
-                    dec(s.needed, 0),
-                    s.sized_text.clone(),
-                ]
-            })
-            .collect(),
-    });
-    for (i, n) in v.networks.iter().enumerate() {
-        if n.is_hood_duct() {
-            continue;
-        }
-        out.push(check(
-            n.fan.is_none() || n.shared(),
-            format!(
-                "Red {}: {} bocas, {} m³/h; extractor {}{}",
-                i + 1,
-                n.vents.len(),
-                dec(n.flow * 3.6, 0),
-                if n.fan.is_some() {
-                    "dibujado"
-                } else {
-                    "sin dibujar"
-                },
-                if n.shared() {
-                    "; lleva campanas, que van por conducto propio"
-                } else {
-                    ""
-                }
-            ),
-        ));
-    }
-    let outlets: Vec<(usize, &vt::Outlet)> = v
-        .networks
-        .iter()
-        .enumerate()
-        .filter_map(|(i, n)| n.outlet.as_ref().map(|o| (i, o)))
-        .collect();
-    let bad: Vec<String> = outlets
-        .iter()
-        .filter(|(_, o)| o.fails())
-        .map(|(i, o)| format!("red {}: {}", i + 1, vt::outlet_text(o)))
-        .collect();
-    if !outlets.is_empty() {
-        out.push(check(
+            .enumerate()
+            .filter_map(|(i, n)| n.outlet.as_ref().map(|o| (i, o)))
+            .collect();
+        let bad: Vec<String> = outlets
+            .iter()
+            .filter(|(_, o)| o.fails())
+            .map(|(i, o)| format!("red {}: {}", i + 1, vt::outlet_text(o)))
+            .collect();
+        if !outlets.is_empty() {
+            out.push(check(
             !bad.is_empty(),
             if bad.is_empty() {
                 format!(
@@ -1069,27 +1081,38 @@ pub fn ventilation(model: &Model, v: &Ventilation) -> Vec<Block> {
                 format!("Salidas de los conductos (3.2.1): {}", bad.join("; "))
             },
         ));
+        }
+        let hoods_ok = v.hoods.iter().filter(|h| !v.hood_fails(h)).count();
+        let bad: Vec<String> = v
+            .hoods
+            .iter()
+            .filter(|h| v.hood_fails(h))
+            .map(|h| format!("{}: {}", h.dwelling, vt::hood_text(v, h)))
+            .collect();
+        out.push(check(
+            !bad.is_empty(),
+            if bad.is_empty() {
+                format!("Campanas de cocina: {hoods_ok} con conducto propio (3.1.1)")
+            } else {
+                bad.join("; ")
+            },
+        ));
     }
-    let hoods_ok = v.hoods.iter().filter(|h| !v.hood_fails(h)).count();
-    let bad: Vec<String> = v
-        .hoods
-        .iter()
-        .filter(|h| v.hood_fails(h))
-        .map(|h| format!("{}: {}", h.dwelling, vt::hood_text(v, h)))
-        .collect();
-    out.push(check(
-        !bad.is_empty(),
-        if bad.is_empty() {
-            format!("Campanas de cocina: {hoods_ok} con conducto propio (3.1.1)")
-        } else {
-            bad.join("; ")
-        },
-    ));
     if !v.others.is_empty() {
         out.push(Block::Heading(
             2,
-            "4 Aparcamientos, trasteros y almacenes de residuos".into(),
+            format!(
+                "{} Aparcamientos, trasteros y almacenes de residuos",
+                if dwellings { 4 } else { 1 }
+            ),
         ));
+        out.push(Block::Para(format!(
+            "Caudales de la tabla 2.2 (aparcamientos {} l/s por plaza). Con ventilación natural (3.1.4.1), aberturas mixtas en dos zonas opuestas de la fachada de {} cm² por l/s cada una, ningún punto a más de {} m de una abertura y otra a media distancia si las opuestas están a más de {} m; con mecánica (3.1.4.2), una boca de extracción cada 100 m², a menos de 10 m unas de otras.",
+            dec(vt::GARAGE_PER_SPACE, 0),
+            dec(archisim_mep::garage::MIXED_PER_LS, 0),
+            dec(archisim_mep::garage::REACH, 0),
+            dec(archisim_mep::garage::OPPOSITE_GAP, 0)
+        )));
         out.push(Block::Table {
             columns: vec![
                 col("Local", 2.2),
@@ -1097,6 +1120,7 @@ pub fn ventilation(model: &Model, v: &Ventilation) -> Vec<Block> {
                 col("m²", 0.8),
                 col("Plazas", 0.8),
                 col("l/s", 0.8),
+                col("Ventilación", 1.0),
             ],
             rows: v
                 .others
@@ -1112,6 +1136,15 @@ pub fn ventilation(model: &Model, v: &Ventilation) -> Vec<Block> {
                             "—".into()
                         },
                         dec(o.flow, 1),
+                        if !o.garage {
+                            "—".into()
+                        } else if o.natural.is_some() {
+                            "natural".into()
+                        } else if o.mechanical {
+                            "mecánica".into()
+                        } else {
+                            "sin dibujar".into()
+                        },
                     ]
                 })
                 .collect(),
@@ -1120,6 +1153,8 @@ pub fn ventilation(model: &Model, v: &Ventilation) -> Vec<Block> {
             let lines = vt::other_lines(o);
             let status = if o.vent_short() || o.garage_fails() > 0 {
                 Status::Fail
+            } else if o.natural.is_some() {
+                Status::Pass
             } else if !o.drawn() {
                 if o.garage {
                     Status::Warn
@@ -1135,6 +1170,149 @@ pub fn ventilation(model: &Model, v: &Ventilation) -> Vec<Block> {
             });
         }
     }
+    out
+}
+
+/// The rooms ventilated by the RITE (IT 1.1.4.2).
+pub fn rite(model: &Model, v: &Ventilation) -> Vec<Block> {
+    use archisim_mep::rite as rt;
+    let r = &v.rite;
+    let mut out = vec![Block::Para(format!(
+        "Los locales que no son de vivienda se ventilan por el RITE (IT 1.1.4.2). Cada uno tiene su categoría de calidad del aire interior (IDA) por su uso. El aire exterior se da por persona (tabla 1.4.2.1: {} l/s en IDA 1 a 4), con la ocupación del DB-SI 3, o por superficie en los locales sin ocupación permanente (tabla 1.4.2.4); los locales de servicio, aseos y vestuarios, extraen {} l/s por m² (IT 1.1.4.2.5). Los conductos se dimensionan por la velocidad del aire: {} m/s en los principales y {} m/s en los ramales a un solo terminal.",
+        rt::PER_PERSON.iter().map(|x| dec(*x, 1)).collect::<Vec<_>>().join(" / "),
+        dec(rt::SERVICE_PER_M2, 0),
+        dec(model.ventilation_site().duct_speed, 1),
+        dec(model.ventilation_site().duct_speed * rt::BRANCH_SPEED, 1),
+    ))];
+    out.push(Block::Heading(
+        2,
+        "1 Aire exterior y extracción de los locales".into(),
+    ));
+    out.push(Block::Table {
+        columns: vec![
+            col("Local", 2.0),
+            col("Planta", 1.2),
+            col("IDA", 0.5),
+            col("Método", 1.6),
+            col("Personas", 0.8),
+            col("m²", 0.7),
+            col("Exterior (l/s)", 0.9),
+            col("Extracción (l/s)", 0.9),
+        ],
+        rows: r
+            .rooms
+            .iter()
+            .map(|x| {
+                vec![
+                    x.name.clone(),
+                    level_name(model, x.level),
+                    format!("{}{}", x.ida, if x.by_hand { " (a mano)" } else { "" }),
+                    match x.method {
+                        rt::Method::Person => "por persona",
+                        rt::Method::Area => "por superficie",
+                        rt::Method::Service => "local de servicio",
+                        rt::Method::Pool => "piscina",
+                    }
+                    .into(),
+                    if x.people > 0 {
+                        x.people.to_string()
+                    } else {
+                        "—".into()
+                    },
+                    dec(x.area, 1),
+                    dec(x.outdoor, 1),
+                    dec(x.extraction, 1),
+                ]
+            })
+            .collect(),
+    });
+    for x in r.rooms.iter().filter(|x| x.no_supply() || x.no_vent()) {
+        out.push(Block::Check {
+            status: Status::Warn,
+            text: rt::room_text(x),
+        });
+    }
+    let stretches: Vec<(&vt::Network, &vt::Stretch)> = v
+        .networks
+        .iter()
+        .filter(|n| n.rite || n.supply)
+        .flat_map(|n| n.stretches.iter().map(move |s| (n, s)))
+        .collect();
+    if !stretches.is_empty() {
+        out.push(Block::Heading(
+            2,
+            "2 Conductos de impulsión y extracción".into(),
+        ));
+        out.push(Block::Table {
+            columns: vec![
+                col("Tramo", 0.7),
+                col("Red", 1.0),
+                col("l/s", 0.8),
+                col("Dibujado", 1.1),
+                col("m/s", 0.7),
+                col("Exigido (cm²)", 1.0),
+                col("Basta", 1.1),
+            ],
+            rows: stretches
+                .iter()
+                .map(|(n, s)| {
+                    vec![
+                        s.name.clone(),
+                        if n.supply {
+                            "impulsión"
+                        } else {
+                            "extracción"
+                        }
+                        .into(),
+                        dec(s.flow, 1),
+                        s.size.clone(),
+                        s.drawn_speed().map_or("—".into(), |x| dec(x, 1)),
+                        dec(s.needed, 0),
+                        s.sized_text.clone(),
+                    ]
+                })
+                .collect(),
+        });
+        let short: Vec<String> = stretches
+            .iter()
+            .filter(|(_, s)| s.short())
+            .map(|(_, s)| format!("{} ({} → {})", s.name, s.size, s.sized_text))
+            .collect();
+        out.push(check(
+            !short.is_empty(),
+            if short.is_empty() {
+                "Conductos suficientes para la velocidad de proyecto".into()
+            } else {
+                format!("Conductos cortos: {}", short.join("; "))
+            },
+        ));
+    }
+    out.push(Block::Heading(
+        2,
+        "3 Filtros y recuperación de calor".into(),
+    ));
+    let f: Vec<String> = r
+        .filters()
+        .into_iter()
+        .map(|(i, f)| format!("IDA {i}: {f}"))
+        .collect();
+    out.push(Block::Para(format!(
+        "Aire exterior ODA {}; filtros mínimos de la tabla 1.4.2.5: {}.",
+        r.oda,
+        if f.is_empty() {
+            "—".into()
+        } else {
+            f.join("; ")
+        }
+    )));
+    out.push(Block::Check {
+        status: match (r.recovery_needed, r.recovery) {
+            (false, _) => Status::Info,
+            (true, Some(_)) => Status::Pass,
+            (true, None) => Status::Warn,
+        },
+        text: rt::recovery_text(r),
+    });
     out
 }
 

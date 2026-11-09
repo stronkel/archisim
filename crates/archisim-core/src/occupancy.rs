@@ -1,8 +1,11 @@
 //! Occupancy of each room (CTE DB-SI 3, 2.1): its floor area divided by
 //! the area per person of its use, as table 2.1 gives it for the building's
 //! use, unless the room says otherwise.
+//!
+//! (In the core, re-exported by `archisim-cte`, so that the ventilation of
+//! `archisim-mep` can count the people of a room.)
 
-use archisim_core::{BuildingUse, Model, Room};
+use crate::{BuildingUse, Model, Room};
 
 /// Area per person of a room and where it comes from.
 #[derive(Debug, Clone, PartialEq)]

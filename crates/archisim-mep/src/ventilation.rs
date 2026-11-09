@@ -37,9 +37,13 @@
 //!
 //! Storerooms and refuse rooms of the building (table 2.2) are given
 //! their flow by their area, and garages 120 l/s a parking space (the cars
-//! drawn in them, or one every 25 m²), with the openings of 3.1.4.
-//! Buildings that are not dwellings are ventilated by the RITE
-//! (IT 1.1.4.2): not worked out here.
+//! drawn in them, or one every 25 m²), with the openings of 3.1.4 when
+//! mechanical, or the openings to the outside of [`crate::garage`] when
+//! natural; in every building, of dwellings or not.
+//! The rooms that are not of dwellings (all of a building of another use;
+//! the shops and offices of a building of dwellings, and the toilets beside
+//! them) are ventilated by the RITE (IT 1.1.4.2, [`crate::rite`]); their
+//! ducts, supply («Impulsión») and extract, are sized by the air's speed.
 //!
 //! The figures of tables 2.1, 2.2, 4.1, 4.2, 4.3 and 4.4 and of 3.1.4,
 //! 3.2.1 and 4.2.2 were checked against the text of the code (2022
@@ -48,10 +52,10 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use archisim_core::{
-    BuildingUse, DeviceId, DeviceKind, DraftZone, Hand, LevelId, Model, NewDevice, NewObject,
-    NewOpening, NewRoom, NewRun, NewWall, ObjectId, ObjectTypeId, OpeningId, OpeningKind,
-    OpeningTypeId, Point2, ReferenceLine, RoomId, RunId, ServiceSystem, VentSystem, WallSide,
-    WallTop, WallTypeId,
+    BuildingUse, DeviceId, DeviceKind, DraftZone, GarageVent, Hand, LevelId, Model, NewDevice,
+    NewObject, NewOpening, NewRoom, NewRun, NewWall, ObjectId, ObjectTypeId, OpeningId,
+    OpeningKind, OpeningTypeId, Point2, ReferenceLine, RoomId, RunId, ServiceSystem, VentSystem,
+    WallSide, WallTop, WallTypeId,
 };
 
 use crate::water::graph;
@@ -447,6 +451,15 @@ pub struct Stretch {
     pub ducts: Vec<f64>,
     /// On the roof (mechanical: 1,5·q, formula 4.2).
     pub on_roof: bool,
+    /// The RITE: the air speed it is sized for, m/s.
+    pub speed: Option<f64>,
+}
+
+impl Stretch {
+    /// The air's speed in it as drawn, m/s.
+    pub fn drawn_speed(&self) -> Option<f64> {
+        (self.area > 0.0).then(|| self.flow / 1000.0 / (self.area / 1e4))
+    }
 }
 
 impl Stretch {
@@ -513,6 +526,10 @@ pub struct Network {
     /// Garage valves on it, and whether it serves anything else.
     pub garage_vents: usize,
     pub outlet: Option<Outlet>,
+    /// A supply network («Impulsión», RITE), and one whose terminals are
+    /// all of rooms of the RITE: sized by the air's speed.
+    pub supply: bool,
+    pub rite: bool,
 }
 
 impl Network {
@@ -572,6 +589,10 @@ pub struct Other {
     /// valve is from the next one, metres.
     pub networks: usize,
     pub vent_gap: f64,
+    /// A garage: ventilated mechanically (by the site's choice, or its
+    /// valves drawn), and its natural ventilation when it is natural.
+    pub mechanical: bool,
+    pub natural: Option<crate::garage::Natural>,
 }
 
 impl Other {
@@ -604,10 +625,15 @@ impl Other {
     /// A garage that fails 3.1.4: too few extraction openings, too far
     /// apart, or one network where two are needed.
     pub fn garage_fails(&self) -> usize {
-        // Without valves drawn it may be ventilated naturally, by mixed
-        // openings on two opposite façades: not checked.
-        if !self.garage || self.vents.is_empty() {
+        if !self.garage {
             return 0;
+        }
+        if let Some(n) = &self.natural {
+            return (!n.passes()) as usize;
+        }
+        if self.vents.is_empty() {
+            // Mechanical by choice, without valves.
+            return self.mechanical as usize;
         }
         (self.vents.len() < self.openings_needed()) as usize
             + (self.vent_gap > GARAGE_VENT_SPACING + 1e-6) as usize
@@ -634,6 +660,10 @@ pub struct Ventilation {
     pub lone_wet: Vec<RoomId>,
     /// Every kitchen of a dwelling and its hood.
     pub hoods: Vec<Hood>,
+    /// The rooms ventilated by the RITE.
+    pub rite: crate::rite::Rite,
+    /// Supply terminals far from every supply duct.
+    pub loose_supply: Vec<DeviceId>,
 }
 
 impl Ventilation {
@@ -721,6 +751,12 @@ impl Ventilation {
                 .iter()
                 .map(|o| o.vent_short() as usize + o.garage_fails())
                 .sum::<usize>()
+    }
+
+    /// The building has something to ventilate (dwellings, garages,
+    /// storerooms or rooms of the RITE).
+    pub fn anything(&self) -> bool {
+        !self.dwellings.is_empty() || !self.others.is_empty() || self.rite.applies()
     }
 
     /// A hood drawn without its duct, or on a duct with valves.
@@ -832,7 +868,12 @@ fn doors(model: &Model) -> Vec<(LevelId, Door)> {
 
 /// The room of a level a device is in, or the nearest within reach (an
 /// inlet in its wall).
-fn room_of(model: &Model, level: LevelId, p: Point2, rooms: &BTreeSet<RoomId>) -> Option<RoomId> {
+pub(crate) fn room_of(
+    model: &Model,
+    level: LevelId,
+    p: Point2,
+    rooms: &BTreeSet<RoomId>,
+) -> Option<RoomId> {
     let mut best: Option<(RoomId, f64)> = None;
     for r in model
         .rooms_on_level(level)
@@ -876,23 +917,25 @@ fn dwelling_name(names: &[&str], i: usize, level: &str) -> String {
 
 /// Works out the ventilation of the dwellings.
 pub fn ventilation(model: &Model) -> Ventilation {
+    let building = model.code_settings().building_use;
     let mut v = Ventilation {
-        applies: model.code_settings().building_use == BuildingUse::Dwelling,
+        applies: building == BuildingUse::Dwelling,
         ..Default::default()
     };
-    if !v.applies {
-        return v;
-    }
+    let site = model.ventilation_site();
     let all_doors = doors(model);
     let devices: Vec<_> = model.devices().collect();
+    let mut rite_rooms: Vec<crate::rite::RiteRoom> = Vec::new();
     for level in model.levels() {
-        // Dwelling rooms and the others.
+        // Dwelling rooms, the others of table 2.2 and those of the RITE.
         let mut ours: BTreeMap<RoomId, Class> = BTreeMap::new();
         for r in model.rooms_on_level(level.id) {
             let c = Class::of(&r.usage, &r.name);
-            if c.of_dwelling() {
+            let words = archisim_core::occupancy::plain(&format!("{} {}", r.usage, r.name));
+            let non_residential = crate::rite::is_non_residential(&words);
+            if v.applies && c.of_dwelling() {
                 ours.insert(r.id, c);
-            } else if c.store || c.refuse || c.garage {
+            } else if c.garage || c.refuse || (c.store && !non_residential) {
                 let area = r.area();
                 let cars = model
                     .objects()
@@ -948,6 +991,14 @@ pub fn ventilation(model: &Model) -> Ventilation {
                         })
                         .fold(0.0, f64::max)
                 };
+                let mechanical = match site.garage {
+                    GarageVent::Mechanical => true,
+                    GarageVent::Natural => false,
+                    GarageVent::Auto => !vents.is_empty(),
+                };
+                let natural = (c.garage && !mechanical)
+                    .then(|| crate::garage::natural(model, r, spaces, flow))
+                    .filter(|n| site.garage == GarageVent::Natural || !n.openings.is_empty());
                 v.others.push(Other {
                     room: r.id,
                     name: r.name.clone(),
@@ -964,7 +1015,14 @@ pub fn ventilation(model: &Model) -> Ventilation {
                     vent_area,
                     networks: 0,
                     vent_gap,
+                    mechanical: c.garage && mechanical,
+                    natural,
                 });
+            } else if !v.applies || non_residential {
+                match crate::rite::rite_room(model, building, r) {
+                    Ok(x) => rite_rooms.push(x),
+                    Err(why) => v.rite.left.push((r.id, why)),
+                }
             }
         }
         // Joined by doors.
@@ -1135,6 +1193,48 @@ pub fn ventilation(model: &Model) -> Ventilation {
             });
         }
     }
+    // The toilets beside the shops and offices of a building of dwellings
+    // are service rooms of the RITE.
+    if !rite_rooms.is_empty() {
+        let mut keep = Vec::new();
+        for id in std::mem::take(&mut v.lone_wet) {
+            let Some(r) = model.room(id) else {
+                continue;
+            };
+            let words = archisim_core::occupancy::plain(&format!("{} {}", r.usage, r.name));
+            match crate::rite::is_service(&words)
+                .then(|| crate::rite::rite_room(model, building, r).ok())
+                .flatten()
+            {
+                Some(x) => rite_rooms.push(x),
+                None => keep.push(id),
+            }
+        }
+        v.lone_wet = keep;
+    }
+    // Their supply terminals and valves.
+    let rite_ids: BTreeSet<RoomId> = rite_rooms.iter().map(|r| r.room).collect();
+    for d in &devices {
+        let supply = matches!(
+            d.kind,
+            DeviceKind::Diffuser | DeviceKind::Grille | DeviceKind::AirInlet
+        );
+        if !supply && d.kind != DeviceKind::ExhaustVent {
+            continue;
+        }
+        let Some(r) = room_of(model, d.level, d.position, &rite_ids) else {
+            continue;
+        };
+        if let Some(x) = rite_rooms.iter_mut().find(|x| x.room == r) {
+            if supply {
+                x.supply.push(d.id);
+            } else {
+                x.vents.push(d.id);
+            }
+        }
+    }
+    v.rite.rooms = rite_rooms;
+    crate::rite::finish(model, &mut v.rite);
     // The extract ducts, with the flow of each valve.
     let mut vent_flow: BTreeMap<DeviceId, f64> = BTreeMap::new();
     for r in v.dwellings.iter().flat_map(|d| &d.rooms) {
@@ -1199,6 +1299,18 @@ pub fn ventilation(model: &Model) -> Ventilation {
             });
         }
     }
+    let mut rite_vents: BTreeSet<DeviceId> = BTreeSet::new();
+    let mut supply_flow: BTreeMap<DeviceId, f64> = BTreeMap::new();
+    for r in &v.rite.rooms {
+        for id in &r.vents {
+            vent_flow.insert(*id, r.vent_flow());
+            rite_vents.insert(*id);
+        }
+        for id in &r.supply {
+            supply_flow.insert(*id, r.supply_flow());
+        }
+    }
+    let supply_terminals: BTreeSet<DeviceId> = supply_flow.keys().copied().collect();
     let (mut networks, loose) = extract_networks(
         model,
         &Sources {
@@ -1207,8 +1319,33 @@ pub fn ventilation(model: &Model) -> Ventilation {
             dwelling_vents: &dwelling_vents,
             garage_vents: &garage_vents,
             top_dwelling,
+            system: ServiceSystem::ExhaustAir,
+            terminals: &[DeviceKind::ExhaustVent],
+            rite_vents: &rite_vents,
+            speed: site.duct_speed,
         },
     );
+    let empty = BTreeSet::new();
+    let (supply_networks, loose_supply) = extract_networks(
+        model,
+        &Sources {
+            vent_flow: &supply_flow,
+            hoods: &[],
+            dwelling_vents: &empty,
+            garage_vents: &empty,
+            top_dwelling,
+            system: ServiceSystem::SupplyAir,
+            terminals: &[DeviceKind::Diffuser, DeviceKind::Grille],
+            rite_vents: &supply_terminals,
+            speed: site.duct_speed,
+        },
+    );
+    // Only the grilles of the RITE's rooms are supply terminals: the
+    // others (a garage's openings) are not lost.
+    v.loose_supply = loose_supply
+        .into_iter()
+        .filter(|d| supply_terminals.contains(d))
+        .collect();
     for o in v.others.iter_mut().filter(|o| o.garage) {
         o.networks = networks
             .iter()
@@ -1230,11 +1367,26 @@ pub fn ventilation(model: &Model) -> Ventilation {
             };
         }
     }
+    let mut supply = 0;
+    for n in supply_networks.into_iter().filter(|n| !n.vents.is_empty()) {
+        let mut n = n;
+        for st in &mut n.stretches {
+            supply += 1;
+            st.name = format!("I{supply}");
+        }
+        networks.push(n);
+    }
     for h in &mut v.hoods {
         h.network = h
             .object
             .and_then(|o| networks.iter().position(|n| n.hoods.contains(&o)));
     }
+    let drawn: f64 = networks
+        .iter()
+        .filter(|n| n.rite && !n.supply)
+        .map(|n| n.flow)
+        .sum();
+    crate::rite::set_expelled(&mut v.rite, drawn);
     v.networks = networks;
     v.loose = loose;
     v
@@ -1355,20 +1507,24 @@ struct Sources<'a> {
     garage_vents: &'a BTreeSet<DeviceId>,
     /// The highest floor with dwellings (above it, the roof).
     top_dwelling: f64,
+    /// The ducts' system and the devices that are its terminals.
+    system: ServiceSystem,
+    terminals: &'a [DeviceKind],
+    /// The terminals of the rooms of the RITE, and the main ducts' speed.
+    rite_vents: &'a BTreeSet<DeviceId>,
+    speed: f64,
 }
 
 /// The extract networks: each part of the ducts with valves, from them
 /// to its fan.
 fn extract_networks(model: &Model, src: &Sources) -> (Vec<Network>, Vec<DeviceId>) {
     let (vent_flow, hoods) = (src.vent_flow, src.hoods);
-    let site = *model.ventilation_site();
-    let g = graph(model, ServiceSystem::ExhaustAir);
+    let site = model.ventilation_site();
+    let g = graph(model, src.system);
+    let supply = src.system == ServiceSystem::SupplyAir;
     let mut at_node: BTreeMap<usize, Vec<DeviceId>> = BTreeMap::new();
     let mut loose = Vec::new();
-    for d in model
-        .devices()
-        .filter(|d| d.kind == DeviceKind::ExhaustVent)
-    {
+    for d in model.devices().filter(|d| src.terminals.contains(&d.kind)) {
         match g.nearest(d.level, d.position, JOIN_REACH) {
             Some(n) => at_node.entry(n).or_default().push(d.id),
             None => loose.push(d.id),
@@ -1383,7 +1539,7 @@ fn extract_networks(model: &Model, src: &Sources) -> (Vec<Network>, Vec<DeviceId
     let starts: BTreeSet<usize> = at_node.keys().chain(at_hood.keys()).copied().collect();
     let fans: Vec<_> = model
         .devices()
-        .filter(|d| d.kind == DeviceKind::Fan)
+        .filter(|d| matches!(d.kind, DeviceKind::Fan | DeviceKind::Equipment))
         .filter_map(|d| g.nearest(d.level, d.position, 1.0).map(|n| (n, d.id)))
         .collect();
     let mut done = vec![false; g.nodes.len()];
@@ -1447,6 +1603,10 @@ fn extract_networks(model: &Model, src: &Sources) -> (Vec<Network>, Vec<DeviceId
             let floors = venting_floors(model, &part_vents);
             (floors, draft_class(floors, site.zone))
         });
+        // The RITE: sized by the air's speed.
+        let rite = !part_vents.is_empty()
+            && part_vents.iter().all(|d| src.rite_vents.contains(d))
+            && !part.iter().any(|n| at_hood.contains_key(n));
         // A tree from the fan.
         let mut up: BTreeMap<usize, usize> = BTreeMap::new(); // node → edge to its parent
         let mut order = vec![root];
@@ -1540,7 +1700,15 @@ fn extract_networks(model: &Model, src: &Sources) -> (Vec<Network>, Vec<DeviceId
                 Some((_, class)) => hybrid_ducts(fl, class).map_or_else(Vec::new, |d| d.to_vec()),
                 None => Vec::new(),
             };
+            let speed = rite.then_some({
+                if nv > 1 {
+                    src.speed
+                } else {
+                    src.speed * crate::rite::BRANCH_SPEED
+                }
+            });
             let needed = match hybrid {
+                _ if speed.is_some() => fl / 1000.0 / speed.unwrap_or(5.0) * 1e4,
                 Some(_) if !ducts.is_empty() => ducts.iter().sum(),
                 // Above the table: as many 900 cm² ducts as 1 000 l/s.
                 Some(_) => 900.0 * (fl / 1000.0).ceil(),
@@ -1604,6 +1772,7 @@ fn extract_networks(model: &Model, src: &Sources) -> (Vec<Network>, Vec<DeviceId
                 sized,
                 ducts,
                 on_roof,
+                speed,
             });
             of_edge.insert(e, stretches.len() - 1);
         }
@@ -1645,6 +1814,7 @@ fn extract_networks(model: &Model, src: &Sources) -> (Vec<Network>, Vec<DeviceId
                 Some((n.level, n.p, n.z, None))
             }
         }
+        .filter(|_| !supply && !rite)
         .map(|(level, at, z, fan)| outlet(model, level, at, z, fan, hybrid.is_some()));
         out.push(Network {
             stretches,
@@ -1657,6 +1827,8 @@ fn extract_networks(model: &Model, src: &Sources) -> (Vec<Network>, Vec<DeviceId
             hybrid,
             garage_vents,
             outlet,
+            supply,
+            rite,
         });
     }
     (out, loose)
@@ -1910,9 +2082,25 @@ pub fn hood_text(v: &Ventilation, h: &Hood) -> String {
 /// What a garage, a storeroom or a refuse room has, line by line.
 pub fn other_lines(o: &Other) -> Vec<String> {
     let mut out = Vec::new();
+    if let Some(n) = &o.natural {
+        out.extend(crate::garage::lines(n));
+        if o.needs_co() && !n.passes() {
+            out.push(
+                "detección de monóxido de carbono, con la ventilación mecánica (3.1.4.2)".into(),
+            );
+        }
+        return out;
+    }
+    if o.garage && o.mechanical && o.vents.is_empty() {
+        out.push(format!(
+            "ventilación mecánica sin bocas de extracción dibujadas — NO CUMPLE: {} l/s, una boca cada 100 m² (3.1.4.2)",
+            dec(o.flow, 0)
+        ));
+        return out;
+    }
     if !o.drawn() {
         out.push(if o.garage {
-            "sin aireadores ni bocas de extracción dibujados: ventilación natural por aberturas mixtas en dos fachadas opuestas, a comprobar (3.1.4), o mecánica".into()
+            "sin aberturas al exterior ni bocas de extracción dibujadas: ventilación natural por aberturas mixtas en dos fachadas opuestas (3.1.4.1) o mecánica (3.1.4.2)".into()
         } else {
             "sin aireadores ni bocas de extracción dibujados".into()
         });
@@ -1980,13 +2168,12 @@ pub fn other_lines(o: &Other) -> Vec<String> {
 pub fn report(model: &Model, v: &Ventilation) -> String {
     use std::fmt::Write as _;
     let mut s = String::new();
-    let _ = writeln!(s, "VENTILACIÓN DE LAS VIVIENDAS (DB-HS 3)");
+    let _ = writeln!(s, "VENTILACIÓN (DB-HS 3 Y RITE IT 1.1.4.2)");
     if !v.applies {
         let _ = writeln!(
             s,
-            "\nEl edificio no es de viviendas: su ventilación es la del RITE (IT 1.1.4.2), que no se calcula aquí."
+            "\nEl edificio no es de viviendas: sus locales se ventilan por el RITE (IT 1.1.4.2); los aparcamientos, trasteros y almacenes de residuos, por el HS 3."
         );
-        return s;
     }
     let level_name = |l: LevelId| model.level(l).map_or("—".to_string(), |l| l.name.clone());
     for d in &v.dwellings {
@@ -2061,7 +2248,20 @@ pub fn report(model: &Model, v: &Ventilation) -> String {
         }
     }
     for (i, n) in v.networks.iter().enumerate() {
-        if n.is_hood_duct() {
+        if n.supply {
+            let _ = writeln!(
+                s,
+                "\nRed de impulsión {} (RITE): {} terminales, {} l/s ({} m³/h). Unidad de impulsión: {}",
+                i + 1,
+                n.vents.len(),
+                dec(n.flow, 1),
+                dec(n.flow * 3.6, 0),
+                match n.fan.and_then(|f| model.device(f)) {
+                    Some(f) => format!("«{}»", f.name),
+                    None => "no está dibujada".into(),
+                }
+            );
+        } else if n.is_hood_duct() {
             let _ = writeln!(
                 s,
                 "\nRed de extracción {} (campanas): {} campana{}, {} l/s ({} m³/h), salida por su extremo más alto",
@@ -2074,8 +2274,9 @@ pub fn report(model: &Model, v: &Ventilation) -> String {
         } else {
             let _ = writeln!(
                 s,
-                "\nRed de extracción {}: {} bocas{}, {} l/s ({} m³/h). Extractor: {}",
+                "\nRed de extracción {}{}: {} bocas{}, {} l/s ({} m³/h). Extractor: {}",
                 i + 1,
+                if n.rite { " (RITE)" } else { "" },
                 n.vents.len(),
                 if n.shared() {
                     format!(
@@ -2120,6 +2321,25 @@ pub fn report(model: &Model, v: &Ventilation) -> String {
             );
         }
         for st in &n.stretches {
+            if let Some(sp) = st.speed {
+                let _ = writeln!(
+                    s,
+                    "  {} ({}): {} m, {} l/s, {} = {} cm²{} (≥ {} cm² a {} m/s, {}){}",
+                    st.name,
+                    level_name(st.level),
+                    dec(st.length, 1),
+                    dec(st.flow, 1),
+                    st.size,
+                    dec(st.area, 0),
+                    st.drawn_speed()
+                        .map_or(String::new(), |x| format!(", {} m/s", dec(x, 1))),
+                    dec(st.needed, 0),
+                    dec(sp, 1),
+                    st.sized_text,
+                    if st.short() { " — NO CUMPLE" } else { "" }
+                );
+                continue;
+            }
             let _ = writeln!(
                 s,
                 "  {} ({}, {}): {} m, {} l/s, {} = {} cm² (≥ {}, {}){}",
@@ -2167,8 +2387,47 @@ pub fn report(model: &Model, v: &Ventilation) -> String {
             let _ = writeln!(s, "  {t}");
         }
     }
+    if v.rite.applies() {
+        let _ = writeln!(s, "\nLOCALES QUE SE VENTILAN POR EL RITE (IT 1.1.4.2)");
+        for r in &v.rite.rooms {
+            let _ = writeln!(s, "  {}", crate::rite::room_text(r));
+        }
+        for (id, why) in &v.rite.left {
+            if let Some(r) = model.room(*id) {
+                let _ = writeln!(s, "  {}: no se ventila por el RITE ({})", r.name, why);
+            }
+        }
+        let _ = writeln!(
+            s,
+            "  Aire exterior {} l/s, extracción de los locales de servicio {} l/s",
+            dec(v.rite.outdoor, 1),
+            dec(v.rite.extraction, 1)
+        );
+        let f: Vec<String> = v
+            .rite
+            .filters()
+            .into_iter()
+            .map(|(i, f)| format!("IDA {i}: {f}"))
+            .collect();
+        if !f.is_empty() {
+            let _ = writeln!(
+                s,
+                "  Filtros con ODA {} (tabla 1.4.2.5): {}",
+                v.rite.oda,
+                f.join("; ")
+            );
+        }
+        let _ = writeln!(s, "  {}", crate::rite::recovery_text(&v.rite));
+    }
     if !v.loose.is_empty() {
         let _ = writeln!(s, "\n{} bocas de extracción sin conducto.", v.loose.len());
+    }
+    if !v.loose_supply.is_empty() {
+        let _ = writeln!(
+            s,
+            "\n{} terminales de impulsión sin conducto de impulsión.",
+            v.loose_supply.len()
+        );
     }
     if !v.lone_wet.is_empty() {
         let names: Vec<String> = v
@@ -2559,6 +2818,7 @@ mod tests {
         m.set_ventilation_site(archisim_core::VentilationSite {
             system: VentSystem::Hybrid,
             zone: DraftZone::X,
+            ..Default::default()
         })
         .unwrap();
         let v = ventilation(&m);

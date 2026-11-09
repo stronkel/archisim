@@ -259,11 +259,13 @@ Con lo dibujado se quedan cortos 28 tramos, casi todos ramales de las cocinas (f
 
 ## 6. Ventilación de las viviendas (DB-HS 3)
 
-Colaboración → **Cálculo de ventilación…**. Casi todo sale del dibujo. Arriba de la ventana se eligen dos datos (se guardan en el proyecto):
+Colaboración → **Cálculo de ventilación…**. Casi todo sale del dibujo. Arriba de la ventana se eligen estos datos (se guardan en el proyecto):
 - el **sistema**: mecánica (por defecto) o híbrida (3.1.1: las viviendas llevan una de las dos);
-- en híbrida, la **zona térmica** de la tabla 4.4 (W, X, Y o Z). Se puede elegir directamente o «Por provincia…», hasta 800 m o por encima. Por defecto es Z, la de Huelva.
+- en híbrida, la **zona térmica** de la tabla 4.4 (W, X, Y o Z). Se puede elegir directamente o «Por provincia…», hasta 800 m o por encima. Por defecto es Z, la de Huelva;
+- los **garajes**: según el dibujo (por defecto), natural o mecánica (ver «Garajes con ventilación natural»);
+- para los locales del RITE, la **calidad del aire exterior** (ODA 1, 2 o 3; ODA 2 por defecto) y la **velocidad en los conductos** (5 m/s por defecto). Ver la sección 6 bis.
 
-Solo se calcula en edificios de viviendas (uso del edificio en los datos del CTE); los demás usos se ventilan por el RITE (IT 1.1.4.2), que no se calcula todavía.
+Las viviendas se calculan por el HS 3 en los edificios de viviendas (uso del edificio en los datos del CTE). Los aparcamientos, trasteros y almacenes de residuos, por el HS 3 en cualquier edificio. Los demás locales (todos los de un edificio de otro uso, y los locales comerciales, oficinas y bares de un edificio de viviendas, con sus aseos) se ventilan por el RITE: sección 6 bis.
 
 **Qué se dibuja.** Cuatro aparatos nuevos, en el «Tipo» del aparato de la ficha Instalaciones:
 - **Aireador**: en el muro o sobre la ventana de cada local seco. Su abertura libre es ancho × alto: el de serie, 400 × 20 mm, da 80 cm².
@@ -337,7 +339,21 @@ Los conductos de cada planta, del sistema **Extracción**, van de cada boca al c
 
   Se avisa:
   - de la detección de monóxido de carbono a partir de 5 plazas o 100 m² (que arranque los extractores a 50 ppm, o a 100 ppm sin personal);
-  - si no tiene nada dibujado: puede ir con ventilación natural, por aberturas mixtas en dos fachadas opuestas, que no se comprueba todavía.
+  - si no tiene nada dibujado (ni bocas ni aberturas al exterior): puede ir con ventilación natural o mecánica.
+
+### Garajes con ventilación natural (3.1.4.1)
+
+Con «Garajes: Natural», o «Según el dibujo» cuando el garaje no tiene bocas de extracción pero sí aberturas al exterior, se lee lo que hay en sus muros:
+- las **aberturas**: ventanas (su luz, sin el marco), huecos sin carpintería (todo el hueco) y las puertas cuyo tipo se llama «rejilla», «celosía» o «ventilación»; además, las rejillas y aireadores dibujados como aparato en el borde del garaje (ancho × alto). Solo cuentan las que dan fuera (al otro lado no hay ningún local);
+- las **zonas de fachada**: las aberturas que miran hacia el mismo lado (norte, sureste…; con los ejes de la planta, +Y al norte) forman una zona.
+
+Se comprueba:
+- **aberturas mixtas en dos zonas opuestas**, y cada una de las dos con toda el área de la tabla 4.1, 8·qv cm² (qv: 120 l/s por plaza; con 10 plazas, 9 600 cm² en cada zona). Esto lo dice la nota de la tabla: el área de cada zona opuesta es como mínimo el área total exigida;
+- **ningún punto a más de 25 m** de la abertura más cercana: se mide en línea recta desde una rejilla de puntos cada 50 cm dentro del garaje (no ve los obstáculos ni los pilares);
+- si las aberturas opuestas más cercanas están a **más de 30 m**, otra abertura a media distancia de las dos (con un 5 % de margen);
+- en los **garajes pequeños** (5 plazas y 100 m² como mucho) vale también una admisión abajo y una extracción arriba en el mismo muro, separadas 1,5 m en altura (del borde de arriba de la baja al de abajo de la alta), de 4·qv cm² cada una.
+
+Si no cumple, se dice: **«con ventilación natural no cumple: necesita ventilación mecánica»**, que es la de antes (120 l/s por plaza, bocas cada 100 m²…). Con «Garajes: Mecánica» y sin bocas dibujadas, no cumple.
 
 Todo sale en la ventana, en la Comprobación CTE (sección «Ventilación (DB-HS 3)») y en `archisim ventilacion <proyecto>`. **«Poner los tamaños calculados»** alarga los aireadores cortos (con su misma rendija) y agranda las bocas, conductos y conductos verticales cortos, en un paso de Deshacer. Lo mismo hace «Arreglar lo que no cumple» y `archisim ventilacion <proyecto> --tamanos salida.archisim`. Los pasos de las puertas no se tocan: holgura o rejilla, a decidir.
 
@@ -366,6 +382,35 @@ Las tablas 2.1, 2.2, 4.1, 4.2, 4.3 y 4.4 y los apartados 3.1.4, 3.2.1 y 4.2.2 es
 - las plantas de la tabla 4.3: se cuentan hasta la última planta que vierte al conducto, no hasta la última del edificio; así sale más sección;
 - la plaza de 25 m² cuando no hay coches dibujados;
 - que una cubierta es transitable si hay en ella algún local o una barandilla.
+
+## 6 bis. Locales que no son viviendas (RITE, IT 1.1.4.2)
+
+En la misma ventana de ventilación (y en `archisim ventilacion`, la memoria de instalaciones y la Comprobación CTE). Son locales del RITE:
+- en un edificio que no es de viviendas, todos, salvo los aparcamientos, trasteros y almacenes de residuos (HS 3);
+- en un edificio de viviendas, los que por su uso o su nombre son comercio, oficina, bar, restaurante, aula, consulta, gimnasio, sala de reuniones o recepción, y los aseos que no son de ninguna vivienda cuando hay alguno de esos locales.
+
+Por cada local:
+- **Calidad del aire interior** (IT 1.1.4.2.2), por su uso o su nombre: IDA 1 hospitales, clínicas, laboratorios y guarderías; IDA 2 oficinas, residencias, salas de lectura, museos, aulas y piscinas; IDA 3 comercios, cines, teatros, restaurantes, bares, gimnasios y habitaciones de hotel. Si no se reconoce, la del uso del edificio. En la ventana, «Calidad del aire interior de los locales del RITE» enseña la de cada local y deja ponerla a mano (vuelve a la suya con «Por su uso»).
+- **Aire exterior** (IT 1.1.4.2.3):
+  - por persona (método A, tabla 1.4.2.1): 20 / 12,5 / 8 / 5 l/s por persona en IDA 1 a 4. Las personas son las de la ocupación del DB-SI 3, la misma de la Comprobación CTE (o la del local, si se ha escrito). En un edificio de viviendas, un local comercial cuenta como comercial, una oficina como administrativo y un bar como pública concurrencia;
+  - por superficie (método D, tabla 1.4.2.4) en almacenes, archivos y trastiendas: 0,83 / 0,55 / 0,28 l/s·m² en IDA 2 a 4 (en IDA 1 no se admite; se toma el de IDA 2);
+  - piscinas cubiertas: 2,5 l/s por m² (se toma todo el local, no solo la lámina y la playa).
+
+  Los pasillos, escaleras y cuartos de instalaciones (ocupación nula o alternativa) no llevan aire exterior propio: se dicen y no se calculan.
+- **Locales de servicio** (IT 1.1.4.2.5): aseos, vestuarios, cuartos de limpieza y cocinas, extracción de 2 l/s por m².
+- **Lo dibujado**: los difusores y rejillas del sistema Impulsión y los aireadores que dan aire al local; las bocas de extracción que lo sacan. Se avisa del local que necesita aire y no tiene nada que lo meta, y del local de servicio sin boca.
+
+**Conductos.** Las redes de impulsión (sistema Impulsión, de los difusores y rejillas hasta su equipo) y las de extracción de estos locales se dimensionan por la **velocidad del aire**: 5 m/s en los tramos principales y el 60 % (3 m/s) en los ramales que llevan a un solo terminal. Se da la velocidad que sale con lo dibujado y la sección que basta. La unidad de cada red es un extractor o un equipo (un recuperador, una climatizadora) a menos de 1 m de su conducto. Los tramos de impulsión se llaman «I1», «I2»…
+
+**Filtros** (IT 1.1.4.2.4, tabla 1.4.2.5): con la ODA del proyecto y la IDA de cada local; se dan, no se comprueban.
+
+**Recuperación de calor** (IT 1.2.4.5.2): obligatoria si el aire que los ventiladores echan fuera pasa de 0,28 m³/s (el mayor del aire exterior, la extracción de los locales de servicio y lo que llevan las redes de extracción dibujadas). Su eficiencia mínima es la del diseño ecológico de las unidades de ventilación no residenciales: 73 % (68 % con batería de doble circuito). Cumple si hay un equipo dibujado cuyo nombre lleva «recuperador»; si no, se avisa «a prever».
+
+`archisim ventilacion --ejemplo-terciario <carpeta>` hace una oficina de 12 × 8 m (oficina diáfana, sala de reuniones y aseo) con su recuperador, tres difusores y dos bocas, sobre un garaje de diez plazas con dos huecos en sus muros largos.
+
+En Florence Street salen como locales del RITE el café, su trastienda, la oficina de la cooperativa y sus dos aseos de la planta baja (ver la bitácora, entrada 132).
+
+**Escrito de memoria (para revisar).** Todo junto al principio de `crates/archisim-mep/src/rite.rs` y de `crates/archisim-mep/src/garage.rs`: las tablas 1.4.2.1 y 1.4.2.4, los 2 l/s·m² de los locales de servicio, los 2,5 l/s·m² de las piscinas, el umbral de 0,28 m³/s (era 0,5 antes de la modificación de 2021) y el 73 / 68 % de eficiencia, los filtros de la tabla 1.4.2.5 en clases de la EN 779 (el texto de 2021 puede darlos por la ISO 16890), los 8·qv de las aberturas mixtas, los 25 m, los 30 m con su 5 %, y el garaje pequeño de 5 plazas, 100 m² y 1,5 m. Las palabras que reconocen cada IDA y la velocidad de 5 y 3 m/s son mías (práctica habitual, no norma).
 
 ## 7. Envolvente (DB-HE 1) y cargas térmicas
 
@@ -576,10 +621,11 @@ Lo que no cumple sale marcado como en el anejo de cálculo de la estructura. La 
   - las bombas de elevación;
   - los canalones de sección cuadrada (se toman como semicirculares).
 - Ventilación:
-  - la ventilación natural de garajes, trasteros y cuartos de basuras (aberturas mixtas en fachadas opuestas, a 25 m de cualquier punto);
-  - en los garajes, los dos tercios de bocas a menos de 0,5 m del techo y los garajes pequeños con aberturas en un mismo muro;
+  - la ventilación natural de trasteros y cuartos de basuras (aberturas mixtas a 15 m de cualquier punto);
+  - en los garajes con ventilación natural, los obstáculos del recorrido (la distancia de 25 m es en línea recta) y si la abertura da a un patio o a la calle;
+  - en los garajes con ventilación mecánica, los dos tercios de bocas a menos de 0,5 m del techo;
   - los obstáculos que no son muros (castilletes de cubierta hechos con otros elementos, cubiertas inclinadas cercanas);
-  - los edificios que no son de viviendas (RITE).
+  - en el RITE: los métodos B, C y E (calidad percibida, CO₂ y dilución), los locales de fumadores, las categorías del aire de extracción (AE 1 a 4) y si se puede recircular, el tamaño de los difusores y su alcance, la pérdida de carga y la presión de los ventiladores, la eficiencia del recuperador dibujado (basta con que esté) y la tabla de las piscinas por horas de funcionamiento.
 - Envolvente y cargas:
   - las condensaciones intersticiales (método de Glaser con enero): harían falta los factores de resistencia al vapor de cada material;
   - los puentes térmicos de los muros cortina (montantes contra los forjados) y las esquinas entre un muro y un muro cortina;

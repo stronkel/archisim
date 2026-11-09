@@ -6410,6 +6410,18 @@ pub struct VentilationOf {
     pub system: String,
     /// «W», «X», «Y» or «Z» (HS 3, table 4.4).
     pub zone: String,
+    /// The garages: «auto», «natural» or «mechanical» (version 99).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub garage: Option<String>,
+    /// The outdoor air's class, 1 to 3 (RITE; version 99).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub oda: Option<u8>,
+    /// The RITE's main ducts' air speed, m/s (version 99).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub duct_speed: Option<f64>,
+    /// The indoor air class set by hand: [room, class] (version 99).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub ida: Vec<[u64; 2]>,
 }
 
 impl VentilationOf {
@@ -6420,6 +6432,10 @@ impl VentilationOf {
         Some(VentilationOf {
             system: site.system.code().into(),
             zone: site.zone.code().into(),
+            garage: (site.garage != core::GarageVent::default()).then(|| site.garage.code().into()),
+            oda: (site.oda != core::DEFAULT_ODA).then_some(site.oda),
+            duct_speed: (site.duct_speed != core::DEFAULT_DUCT_SPEED).then_some(site.duct_speed),
+            ida: site.ida.iter().map(|(r, c)| [r.0, u64::from(*c)]).collect(),
         })
     }
 
@@ -6432,6 +6448,20 @@ impl VentilationOf {
             system: core::VentSystem::from_code(&self.system)
                 .ok_or_else(|| bad("system", &self.system))?,
             zone: core::DraftZone::from_code(&self.zone).ok_or_else(|| bad("zone", &self.zone))?,
+            garage: match &self.garage {
+                Some(g) => core::GarageVent::from_code(g).ok_or_else(|| bad("garage", g))?,
+                None => core::GarageVent::default(),
+            },
+            oda: self.oda.unwrap_or(core::DEFAULT_ODA).clamp(1, 3),
+            duct_speed: self
+                .duct_speed
+                .filter(|v| v.is_finite() && *v > 0.5)
+                .unwrap_or(core::DEFAULT_DUCT_SPEED),
+            ida: self
+                .ida
+                .iter()
+                .map(|[r, c]| (core::RoomId(*r), (*c).clamp(1, 4) as u8))
+                .collect(),
         })
     }
 }
