@@ -139,14 +139,40 @@ fn renewables(model: &Model, report: &mut Report) {
                 dec(h.annual, 0),
                 h.source.name().to_lowercase(),
                 if h.weak_pump {
-                    " (su SCOP no llega a 2,5: no cuenta)"
+                    " (su SCOP no llega a 2,5: no cuenta)".to_string()
+                } else if let Some(f) = &h.solar {
+                    format!(" (f-Chart, {} m² de captadores dibujados)", dec(f.area, 1))
+                } else if h.source == archisim_core::AcsSource::Solar {
+                    " (fracción dada: no hay captadores dibujados)".to_string()
                 } else {
-                    ""
+                    String::new()
                 }
             ),
             pct(h.provided),
             format!("≥ {}", pct(h.required)),
         ));
+        if let Some(f) = h
+            .solar
+            .as_ref()
+            .filter(|f| f.estimated_sun || f.estimated_air)
+        {
+            report.items.push(item(
+                Status::Warning,
+                "HE 4, 3.1",
+                "Fracción solar con el clima estimado por la latitud: dar el del lugar (PVGIS, AEMET) en Energías renovables".into(),
+                format!("{} %", dec(f.annual * 100.0, 1)),
+                String::new(),
+            ));
+        }
+        if let Some(f) = h.solar.as_ref().filter(|f| !f.over.is_empty()) {
+            report.items.push(item(
+                Status::Warning,
+                "HE 4",
+                "Los captadores darían más de lo que se gasta algún mes: prever la protección contra sobrecalentamientos".into(),
+                format!("{} meses", f.over.len()),
+                String::new(),
+            ));
+        }
     }
     let e = &r.electricity;
     if e.applies {

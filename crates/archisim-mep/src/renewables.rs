@@ -201,6 +201,9 @@ pub struct HotWater {
     pub source: AcsSource,
     /// A heat pump too poor to count.
     pub weak_pump: bool,
+    /// The f-Chart of the collectors drawn, when the hot water is solar
+    /// and there are some: its annual fraction is the one provided.
+    pub solar: Option<crate::solar::SolarFraction>,
 }
 
 impl HotWater {
@@ -306,9 +309,20 @@ fn hot_water(model: &Model, site: &RenewablesSite) -> HotWater {
     }
     let annual: f64 = monthly.iter().sum();
     let weak_pump = site.acs_source == AcsSource::HeatPump && site.scop <= MIN_SCOP;
+    let solar = if site.acs_source == AcsSource::Solar && annual > 0.0 {
+        let volume = if losses.tank > 0.0 {
+            losses.tank
+        } else {
+            daily_stored
+        };
+        crate::solar::f_chart(model, site, monthly, volume, cold)
+    } else {
+        None
+    };
     let provided = match site.acs_source {
         AcsSource::HeatPump if !weak_pump => 1.0 - 1.0 / site.scop,
-        AcsSource::Solar | AcsSource::Other => site.fraction,
+        AcsSource::Solar => solar.as_ref().map_or(site.fraction, |f| f.annual),
+        AcsSource::Other => site.fraction,
         _ => 0.0,
     };
     HotWater {
@@ -329,6 +343,7 @@ fn hot_water(model: &Model, site: &RenewablesSite) -> HotWater {
         provided,
         source: site.acs_source,
         weak_pump,
+        solar,
     }
 }
 
@@ -509,6 +524,9 @@ pub fn report(r: &Renewables) -> String {
             " — NO CUMPLE"
         }
     ));
+    if h.source == AcsSource::Solar {
+        s.push_str(&solar_text(h.solar.as_ref()));
+    }
     s.push_str(&format!(
         "\nHE 5 — Electricidad\n  S = {} m², Sc = {} m², Soc = {} m²\n  P1 = {} kWp, P2 = {} kWp, mínima {} kWp; dibujada {} kWp ({} m² de placas){}\n",
         dec(e.built, 0),
@@ -531,6 +549,85 @@ pub fn report(r: &Renewables) -> String {
         "\nHE 0 (consumo de energía primaria) no se calcula aquí: se justifica con la herramienta oficial.\n",
     );
     s
+}
+
+/// The f-Chart of the collectors, in text: what it was done with and its
+/// months; or, without collectors drawn, that the fraction is the one
+/// given.
+pub fn solar_text(f: Option<&crate::solar::SolarFraction>) -> String {
+    let Some(f) = f else {
+        return "  Fracción solar dada (no hay captadores dibujados para calcularla por f-Chart)\n"
+            .into();
+    };
+    let mut s = format!(
+        "  f-Chart: {} m² de captadores a {}°, orientados {}; η0 = {}, a1 = {} W/m²K; acumulación {} l ({} l/m²); latitud {}°\n",
+        dec(f.area, 1),
+        dec(f.tilt_deg, 0),
+        orientation(f.azimuth_deg),
+        dec(f.eta0, 2),
+        dec(f.k1, 2),
+        dec(f.volume, 0),
+        dec(f.litres_m2, 0),
+        dec(f.latitude, 2)
+    );
+    if f.estimated_sun || f.estimated_air {
+        s.push_str(&format!(
+            "  Clima estimado ({}): conviene dar los datos del lugar (PVGIS, AEMET)\n",
+            match (f.estimated_sun, f.estimated_air) {
+                (true, true) => "radiación por la latitud y aire por el agua fría",
+                (true, false) => "radiación por la latitud",
+                _ => "aire por el agua fría",
+            }
+        ));
+    }
+    s.push_str("  Mes   H horiz.  H capt.  T aire   Carga kWh   D1     D2     f      Solar kWh\n");
+    const NAMES: [&str; 12] = [
+        "ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic",
+    ];
+    for (i, m) in f.months.iter().enumerate() {
+        s.push_str(&format!(
+            "  {}   {:>7}  {:>7}  {:>6}  {:>10}  {:>5}  {:>5}  {:>5}  {:>10}\n",
+            NAMES[i],
+            dec(m.horizontal, 2),
+            dec(m.on_collectors, 2),
+            dec(m.ambient, 1),
+            dec(m.load, 0),
+            dec(m.d1, 2),
+            dec(m.d2, 2),
+            dec(m.f.clamp(0.0, 1.0), 2),
+            dec(m.solar, 0)
+        ));
+    }
+    s.push_str(&format!(
+        "  Fracción solar anual {} %\n",
+        dec(f.annual * 100.0, 1)
+    ));
+    if !f.over.is_empty() {
+        s.push_str(&format!(
+            "  Aviso: en {} los captadores darían más de lo que se gasta; protegerlos del sobrecalentamiento\n",
+            f.over
+                .iter()
+                .map(|&i| NAMES[i])
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+    }
+    s
+}
+
+/// «sur», «sureste 30°»…: which way a collector faces, from its azimuth
+/// from the south (positive to the west).
+pub fn orientation(azimuth_deg: f64) -> String {
+    let a = azimuth_deg;
+    if a.abs() < 2.5 {
+        "al sur".into()
+    } else if a.abs() > 177.5 {
+        "al norte".into()
+    } else if a < 0.0 {
+        format!("al sur {}° al este", dec(-a, 0))
+    } else {
+        format!("al sur {}° al oeste", dec(a, 0))
+    }
 }
 
 #[cfg(test)]
@@ -577,5 +674,77 @@ mod tests {
         assert!(h.weak_pump && !h.passes());
         // An empty project: nothing to build, HE 5 does not apply.
         assert!(!renewables(&m).electricity.applies);
+    }
+
+    /// 1.000 l a day in Huelva with 20 m² of collectors facing south at
+    /// 35°: the f-Chart gives a solar fraction of the order of the usual
+    /// (65 to 92 %), more than the same facing east, much more than facing
+    /// north; and the climate is said to be estimated.
+    #[test]
+    fn the_solar_fraction_of_the_collectors_drawn() {
+        let mut m = archisim_library::new_project("Prueba");
+        m.set_renewables_site(RenewablesSite {
+            acs_demand: Some(1000.0),
+            acs_source: AcsSource::Solar,
+            fraction: 0.1,
+            ..Default::default()
+        })
+        .unwrap();
+        // Without collectors, the fraction given.
+        assert!((renewables(&m).hot_water.provided - 0.1).abs() < 1e-9);
+        let level = m.levels()[0].id;
+        // Four boxes of 2,5 × 2 m, rising 1,4 m: 35° and 2,44 m along the
+        // slope.
+        let depth = 2.0;
+        let height = 1.4 + 0.08;
+        let add = |m: &mut archisim_core::Model, rotation: f64| {
+            for i in 0..4 {
+                m.add_device(archisim_core::NewDevice {
+                    level,
+                    kind: archisim_core::DeviceKind::SolarCollector,
+                    name: "Captadores".into(),
+                    position: archisim_core::Point2::new(3.0 * i as f64, 0.0),
+                    rotation,
+                    elevation: 0.0,
+                    width: 2.5,
+                    depth,
+                    height,
+                })
+                .unwrap();
+            }
+        };
+        // Facing the plan's −y, which is south with north up.
+        let pi = std::f64::consts::PI;
+        let mut south = m.clone();
+        add(&mut south, pi);
+        let h = renewables(&south).hot_water;
+        let f = h.solar.as_ref().unwrap();
+        assert!((f.tilt_deg - 35.0).abs() < 0.1, "{}", f.tilt_deg);
+        assert!(f.azimuth_deg.abs() < 0.1, "{}", f.azimuth_deg);
+        assert!((f.area - 4.0 * 2.5 * (2.0f64.powi(2) + 1.4f64.powi(2)).sqrt()).abs() < 1e-6);
+        assert!(f.estimated_sun && f.estimated_air);
+        assert!((0.65..0.92).contains(&f.annual), "{}", f.annual);
+        assert!((h.provided - f.annual).abs() < 1e-12);
+        // Summer gives more than winter.
+        assert!(f.months[6].f > f.months[0].f);
+        let text = report(&renewables(&south));
+        assert!(text.contains("f-Chart") && text.contains("Clima estimado"));
+        let mut east = m.clone();
+        add(&mut east, -pi / 2.0);
+        let fe = renewables(&east).hot_water.solar.unwrap();
+        assert!((fe.azimuth_deg + 90.0).abs() < 0.1, "{}", fe.azimuth_deg);
+        assert!(fe.annual < f.annual - 0.03, "{} {}", fe.annual, f.annual);
+        let mut north = m.clone();
+        add(&mut north, 0.0);
+        let fnorth = renewables(&north).hot_water.solar.unwrap();
+        assert!(fnorth.annual < 0.75 * f.annual, "{}", fnorth.annual);
+        // The site's own climate replaces the estimate.
+        let mut site = south.renewables_site().clone();
+        site.irradiation = Some([2.0; 12]);
+        site.ambient = Some([15.0; 12]);
+        south.set_renewables_site(site).unwrap();
+        let low = renewables(&south).hot_water.solar.unwrap();
+        assert!(!low.estimated_sun && !low.estimated_air);
+        assert!(low.annual < f.annual);
     }
 }

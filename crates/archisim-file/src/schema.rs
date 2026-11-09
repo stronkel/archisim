@@ -6248,6 +6248,25 @@ pub struct RenewablesOf {
     /// The store's litres, given.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tank_volume: Option<f64>,
+    /// The collectors' η0 and a1 (W/m²K), for the f-Chart (version 95).
+    #[serde(default = "default_eta0")]
+    pub collector_eta0: f64,
+    #[serde(default = "default_k1")]
+    pub collector_k1: f64,
+    /// The site's mean daily horizontal irradiation of each month, kWh/m²,
+    /// and its air temperature by day, °C (version 95).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub irradiation: Option<[f64; 12]>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ambient: Option<[f64; 12]>,
+}
+
+fn default_eta0() -> f64 {
+    core::RenewablesSite::default().collector_eta0
+}
+
+fn default_k1() -> f64 {
+    core::RenewablesSite::default().collector_k1
 }
 
 impl RenewablesOf {
@@ -6267,6 +6286,10 @@ impl RenewablesOf {
             built_area: site.built_area,
             acs_demand: site.acs_demand,
             tank_volume: site.tank_volume,
+            collector_eta0: site.collector_eta0,
+            collector_k1: site.collector_k1,
+            irradiation: site.irradiation,
+            ambient: site.ambient,
         })
     }
 
@@ -6288,6 +6311,10 @@ impl RenewablesOf {
             built_area: self.built_area,
             acs_demand: self.acs_demand,
             tank_volume: self.tank_volume,
+            collector_eta0: self.collector_eta0,
+            collector_k1: self.collector_k1,
+            irradiation: self.irradiation,
+            ambient: self.ambient,
         })
     }
 }

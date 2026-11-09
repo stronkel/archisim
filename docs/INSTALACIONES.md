@@ -358,6 +358,26 @@ Colaboración → **Energías renovables…** (o `archisim renovables <proyecto>
 - Energía de cada mes con el agua fría de la capital de la provincia (Anejo G), bajada 0,0066 °C por metro de octubre a marzo y 0,0033 de abril a septiembre.
 - Se aplica con más de 100 l/día. Se exige el 60 % renovable por debajo de 5.000 l/día y el 70 % por encima.
 - La bomba de calor cuenta 1 − 1/SCOP de lo que calienta, y nada si su SCOP es de 2,5 o menos.
+- **Solar térmica: fracción por f-Chart.** Con captadores solares dibujados (aparato «Captadores solares»), la fracción solar se calcula mes a mes por el método f-Chart. Sin captadores dibujados vale la que se da.
+  - **Los captadores.**
+    - Su área es la de los captadores a lo largo de su pendiente.
+    - Su inclinación sale de su caja: lo que suben sobre su fondo.
+    - Su orientación es hacia donde mira su frente bajo, con el norte del proyecto.
+    - De la ficha del captador se dan η0 (rendimiento óptico; 0,75 por defecto) y a1 (pérdidas; 3,5 W/m²K).
+  - **El sol sobre ellos.** Se parte de la radiación media diaria sobre el horizontal de cada mes.
+    - Se pasa al plano de los captadores con el cielo isótropo de Liu y Jordan, con la parte difusa de Erbs. La radiación directa se calcula hora a hora, así que vale cualquier inclinación y orientación.
+    - La latitud es la de la georreferencia o, si no hay, la de la capital de la provincia.
+  - **El clima** se puede dar de tres maneras en la ventana:
+    - leído de un fichero mensual de PVGIS (herramienta «Monthly radiation», con la temperatura);
+    - escrito a mano mes a mes;
+    - estimado: la radiación por la latitud con una claridad media de la península, y el aire por el agua fría del Anejo G más 2 a 6 °C. Si se usa la estimación, la comprobación avisa y la memoria lo dice.
+  - **El método**, cada mes:
+    - D1 = A·F'R(τα)·H·N/Q y D2 = A·F'R·UL·(100 − Ta)·Δt·K1·K2/Q;
+    - con (τα)/(τα)n = 0,96, F'R/FR = 0,95, K1 por los litros de acumulación por m² (frente a 75) y K2 con el agua de uso a 45 °C y la fría del mes;
+    - f = 1,029·D1 − 0,065·D2 − 0,245·D1² + 0,0018·D2² + 0,0215·D1³, entre 0 y 1.
+  - La carga de cada mes es el agua más las pérdidas. La fracción anual es la energía solar entre la carga del año.
+  - Los meses en que los captadores darían más de lo que se gasta salen como aviso de sobrecalentamiento.
+  - En la línea de órdenes, `archisim renovables <proyecto> --pvgis fichero.csv` usa el clima de ese fichero sin cambiar el proyecto.
 - **Pérdidas** (HE 4, 4.1: la demanda «incrementada» con ellas), sacadas de la red de agua caliente dibujada. La parte renovable se pide sobre el agua más las pérdidas:
   - **Recirculación.** Si la red necesita retorno (15 m o más del acumulador al grifo más lejano), pierden calor todo el año la ida hasta el grifo más lejano y el retorno dibujado. Si el retorno no está dibujado, se toma tan largo como la ida. La pérdida es de 0,25 W/mK (tubería aislada según el RITE), a la temperatura de acumulación menos 2,5 °C, en un local a 20 °C.
   - **Distribución.** En el resto de la tubería caliente, la que no tiene retorno, el agua que queda dentro se enfría hasta 20 °C tres veces al día.
@@ -376,7 +396,7 @@ El consumo de energía primaria (**HE 0**) no se calcula: se justifica con la he
 
 Antonio dio por buenos, el 7/11/2026, la parte renovable de la bomba de calor, la cubierta no transitable y los 0,2 kWp/m².
 
-**A comprobar por Antonio:** las cifras de las pérdidas.
+**A comprobar por Antonio:** la estimación del clima (claridad media de la península y aire sobre el agua fría), que solo debe servir mientras no se dé el del lugar; y las cifras de las pérdidas.
 - 0,25 W/mK de la tubería aislada.
 - Tres enfriamientos al día del agua sin retorno.
 - Acumulador de clase C.
@@ -419,5 +439,4 @@ Lo que no cumple sale marcado como en el anejo de cálculo de la estructura. La 
   - los puentes térmicos (frentes de forjado, pilares, contorno de huecos) y el método del terreno de la norma UNE-EN ISO 13370;
   - el control solar (q sol;jul), la permeabilidad de los huecos y las condensaciones;
   - el consumo de energía y las emisiones (HE 0);
-  - en el HE 4, el cálculo de la fracción solar (f-Chart): se da;
   - los conductos y tuberías de la climatización, y las cargas hora a hora.

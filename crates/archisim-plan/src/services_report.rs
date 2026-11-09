@@ -1056,8 +1056,13 @@ pub fn renewables(r: &Renewables) -> Vec<Block> {
                         format!("{}, SCOP {}", h.source.name(), dec(r.site.scop, 1))
                     }
                     archisim_core::AcsSource::None => h.source.name().into(),
+                    archisim_core::AcsSource::Solar if h.solar.is_some() => format!(
+                        "{}, fracción {} % por f-Chart (abajo)",
+                        h.source.name(),
+                        dec(h.provided * 100.0, 1)
+                    ),
                     _ => format!(
-                        "{}, fracción {} %",
+                        "{}, fracción {} % (dada)",
                         h.source.name(),
                         dec(r.site.fraction * 100.0, 0)
                     ),
@@ -1084,6 +1089,58 @@ pub fn renewables(r: &Renewables) -> Vec<Block> {
                 .collect(),
         ],
     });
+    if let Some(f) = &h.solar {
+        out.push(Block::Heading(3, "Fracción solar (f-Chart)".into()));
+        out.push(Block::Para(format!(
+            "{} m² de captadores (área a lo largo de su pendiente) a {}°, orientados {}, con η0 = {} y a1 = {} W/m²K; acumulación de {} l ({} l/m²); latitud {}°. Radiación sobre los captadores por el cielo isótropo de Liu y Jordan con la parte difusa de Erbs; D1 = A·F'R(τα)·H·N/Q y D2 = A·F'R·UL·(100 − Ta)·Δt·K1·K2/Q, con (τα)/(τα)n = 0,96, F'R/FR = 0,95 y agua de uso a {} °C; f = 1,029·D1 − 0,065·D2 − 0,245·D1² + 0,0018·D2² + 0,0215·D1³.{}",
+            dec(f.area, 1),
+            dec(f.tilt_deg, 0),
+            rn::orientation(f.azimuth_deg),
+            dec(f.eta0, 2),
+            dec(f.k1, 2),
+            dec(f.volume, 0),
+            dec(f.litres_m2, 0),
+            dec(f.latitude, 2),
+            dec(archisim_mep::solar::TAC, 0),
+            if f.estimated_sun || f.estimated_air {
+                " El clima está estimado (radiación por la latitud, aire por el agua fría): el técnico debe sustituirlo por los datos del lugar."
+            } else {
+                " Clima del lugar, dado."
+            }
+        )));
+        let row = |name: &str, v: &dyn Fn(&archisim_mep::solar::Month) -> String| {
+            std::iter::once(name.to_string())
+                .chain(f.months.iter().map(v))
+                .collect::<Vec<_>>()
+        };
+        out.push(Block::Table {
+            columns: std::iter::once(col("Mes", 1.2))
+                .chain(MONTHS.iter().map(|m| col(m, 0.7)))
+                .collect(),
+            rows: vec![
+                row("H horiz., kWh/m²", &|m| dec(m.horizontal, 2)),
+                row("H captad., kWh/m²", &|m| dec(m.on_collectors, 2)),
+                row("T aire, °C", &|m| dec(m.ambient, 1)),
+                row("D1", &|m| dec(m.d1, 2)),
+                row("D2", &|m| dec(m.d2, 2)),
+                row("f", &|m| dec(m.f.clamp(0.0, 1.0), 2)),
+                row("Solar, kWh", &|m| dec(m.solar, 0)),
+            ],
+        });
+        if !f.over.is_empty() {
+            out.push(check(
+                true,
+                format!(
+                    "En {} los captadores darían más de lo que se gasta: prever la protección contra sobrecalentamientos",
+                    f.over
+                        .iter()
+                        .map(|&i| MONTHS[i])
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
+            ));
+        }
+    }
     if h.weak_pump {
         out.push(check(
             true,

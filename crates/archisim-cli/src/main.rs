@@ -637,7 +637,13 @@ fn main() -> ExitCode {
             }
         },
         Some("renovables") => match args.get(1) {
-            Some(project) => report(run_renewables(Path::new(project))),
+            Some(project) => report(run_renewables(
+                Path::new(project),
+                args.iter()
+                    .position(|a| a == "--pvgis")
+                    .and_then(|i| args.get(i + 1))
+                    .map(Path::new),
+            )),
             None => {
                 eprintln!("Falta el proyecto: archisim renovables <proyecto.archisim>");
                 ExitCode::FAILURE
@@ -948,9 +954,30 @@ fn run_thermal(project: &Path) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn run_renewables(project: &Path) -> Result<(), Box<dyn std::error::Error>> {
-    let model = archisim_file::open(project)
+/// The renewables of a project; with `--pvgis fichero`, with the climate
+/// of a monthly file of PVGIS (only for this report: the project is not
+/// changed).
+fn run_renewables(project: &Path, pvgis: Option<&Path>) -> Result<(), Box<dyn std::error::Error>> {
+    let mut model = archisim_file::open(project)
         .map_err(|e| format!("no se puede abrir {}: {e}", project.display()))?;
+    if let Some(file) = pvgis {
+        let text = std::fs::read_to_string(file)
+            .map_err(|e| format!("no se puede leer {}: {e}", file.display()))?;
+        let (sun, air) = archisim_mep::solar::read_pvgis(&text).ok_or_else(|| {
+            format!(
+                "{}: no lleva la radiación mensual de PVGIS (columnas «month» y «H(h)_m»)",
+                file.display()
+            )
+        })?;
+        let mut site = model.renewables_site().clone();
+        site.irradiation = Some(sun);
+        if air.is_some() {
+            site.ambient = air;
+        }
+        model
+            .set_renewables_site(site)
+            .map_err(|e| format!("{e}"))?;
+    }
     let r = archisim_mep::renewables::renewables(&model);
     print!("{}", archisim_mep::renewables::report(&r));
     Ok(())
