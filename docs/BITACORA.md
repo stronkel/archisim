@@ -25,6 +25,14 @@ Sin código. Antonio preguntó qué le falta a ArchiSim para proyectar las vivie
 
 **Qué debe probar Antonio:** nada que probar; leer `docs/MODULAR.md` y decidir.
 
+**Después, el mismo día:** Antonio no tiene aún el chasis ni la junta desarrollados y pidió una propuesta. Está en `docs/MODULAR.md` §5:
+- chasis soldado y galvanizado, dimensionado para el izado;
+- cada junta con un dueño (muro en una caja, lado abierto en la otra);
+- holgura de 20 mm rellena;
+- apoyos compartidos más anchos;
+- cierres en obra;
+- el porche como módulo ligero en dos piezas de 7,20 m, colgado del chasis de cubierta y de los pilares, no de los montantes.
+
 ---
 
 ## 2026-11-08 (128) · Traer el entorno por dirección

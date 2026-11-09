@@ -75,10 +75,101 @@
 - **Aislamiento continuo por fuera de los montantes.**
 - **Un solo modelo** del que salen los planos, el despiece y la máquina, con el diseño congelado antes de fábrica.
 
-## 5. Pendiente de Antonio
+## 5. Propuesta de chasis, junta y porche (9/11/2026)
+
+Antonio no tiene aún el chasis ni la junta desarrollados y pide una propuesta. Es un **punto de partida para predimensionar**, no un cálculo. Los perfiles salen del cálculo, que ArchiSim hará cuando exista M3. Parte de lo que fija el modelo L-160:
+- caja de 3,60 × 6,20 m;
+- apoyo inferior a −0,27;
+- suelo terminado a ±0,00, falso techo a 2,93 y coronación a 3,31;
+- apoyos en las cuatro esquinas y a media longitud.
+
+### 5.1 La caja
+
+Caja de **3,58 m de alto**: 27 cm de suelo, 2,93 m libres y 38 cm de cubierta.
+
+**Chasis de suelo**, soldado en taller y galvanizado en caliente después de soldar (ambiente marino):
+- **Vigas de borde**: dos largas de 6,20 m y dos testeras de 3,60 m, de perfil laminado en U o tubo rectangular de unos 200 mm de canto.
+  - Se dimensionan para el **izado**: la caja colgada de sus cuatro esquinas es el caso que manda, no el apoyo en obra.
+  - En obra apoyan a 3,05 m (esquinas y medio).
+- **Viguetas de suelo**: perfil conformado de unos 150–200 mm a 400–600 mm, de borde a borde (3,60 m de luz), con tablero de 18–22 mm encima.
+- **Bajo las viguetas**: aislamiento entre ellas y una placa de cierre por debajo, resistente a la humedad y a los roedores, porque la cámara del forjado sanitario es ventilada.
+- **Comprobación de cantos**: 200 de chasis + 22 de tablero + 10 de mortero + 20 de madera ≈ 252 mm, dentro de los 270 del modelo.
+
+**Pilares de esquina**: tubo cuadrado de unos 100–120 mm soldado al chasis de suelo y al de cubierta.
+- Con un **pilar intermedio** a media longitud en los lados que van abiertos (ver 5.2), sobre el apoyo de medio.
+- En una planta no cargan mucho: dan rigidez para el transporte y el izado y recogen la cubierta donde no hay muro.
+
+**Chasis de cubierta**: igual que el de suelo, pero más ligero.
+- Vigas de borde de unos 150–200 mm.
+- Viguetas de 3,60 m de luz.
+- Pendiente con aislamiento en cuña o rastreles.
+- Peto en la coronación.
+
+**Muros**: steel frame del catálogo del fabricante (montantes de 100 a 600 mm) atornillado a los chasis. Composición de fuera a dentro:
+1. placa cerámica de 10 mm;
+2. membrana;
+3. placa con aislamiento de 51 mm (aislamiento continuo por fuera de los montantes, que corta el puente térmico);
+4. lana de 100 mm entre montantes;
+5. placa de 2 × 12,5 mm.
+
+**Izado**: cuatro orejetas o cantoneras en las esquinas del chasis de suelo, con balancín de grúa para que las eslingas vayan verticales y no aprieten los muros.
+
+**Peso orientativo**: entre 5 y 8 t por caja terminada. ArchiSim lo calculará con su centro de gravedad (M3).
+
+**Transporte**:
+- **Altura**: 3,58 m de caja más la plataforma rebajada se queda en el entorno de los 4 m, que es el límite general de altura. Hay que confirmarlo con el transportista.
+- **Ancho**: los 3,60 m superan los 2,55 m generales, así que es transporte especial con su autorización.
+
+### 5.2 Lados abiertos y junta entre cajas
+
+**Cada junta tiene dueño.** Donde dos cajas se tocan:
+- si hay muro, lo lleva **una sola** de las dos;
+- la otra deja el lado **abierto**, con su viga de borde y el pilar intermedio.
+
+No hay muros dobles: la sala del L-160, que cruza varias cajas, sale de lados abiertos. Dentro de una vivienda no hace falta el aislamiento acústico entre cajas que pediría una medianera.
+
+**Holgura de 20 mm** entre chasis, la tolerancia de fabricación y montaje, rellena con banda de lana mineral comprimida. Así no queda una cámara hueca que haga de conducto oculto para el fuego ni para el aire.
+
+**Unión entre cajas**: placas atornilladas entre los chasis de suelo y de cubierta en cada esquina y en el medio. Atornilladas para poder desmontar; la soldadura queda en el taller.
+
+**Apoyo**: el apoyo compartido por dos esquinas (que es la mayoría en el L-160) no cabe en 25 × 25.
+- Propuesta: pilar de **40 × 40** o una **placa de acero** de 400 × 250 encima.
+- Sobre ella, calzos de nivelación y banda elastomérica.
+- Pernos de anclaje que resistan también el levantamiento por viento.
+
+**Cierres en obra**, lo único que se hace en la parcela:
+- **Cubierta**: banda de impermeabilización de unos 30 cm sobre la junta, soldada a la de las dos cajas, que llegan con ese borde sin terminar.
+- **Fachada**: la junta de la placa cerámica coincide con la de las cajas. Detrás va una banda de membrana solapada y una cinta de estanqueidad al aire (la ventilación con recuperación de calor necesita una envolvente estanca).
+- **Suelo y techo interiores**: tapajuntas o la última tabla del suelo y una banda de placa del techo puestas en obra.
+- **Instalaciones**: conexiones en un registro junto a la junta.
+
+### 5.3 El porche
+
+Un **módulo ligero** de estructura de acero, no forjados de hormigón. Los dos de 30 cm del modelo pesan unos 7,5 kN/m² cada uno, demasiado para colgarlos de una fachada de steel frame.
+
+**Partido en dos piezas de 7,20 m**, dos pasos de caja, en lugar de una de 14,40:
+- caben mejor en el camión;
+- la junta cae sobre la pata de x = −7,06, que ya está en el eje de una caja.
+
+**Apoyos**:
+- **Pieza 1**: sus dos patas (x = −14,21 y −7,06) por delante, y por detrás la fachada sur de la fila de cajas.
+- **Pieza 2**: la pata compartida, la fachada de detrás y, en su extremo, la fachada del ala.
+
+**Unión a la fachada**: se cuelga de las **vigas de borde del chasis de cubierta y de los pilares** de las cajas, nunca de los montantes.
+- Lo hace con un durmiente atornillado en los puntos de los pilares (esquinas y medio).
+- Entre medias, una pieza de **rotura de puente térmico**.
+- El viento levanta un porche: las patas van ancladas a la losa con pernos que trabajen a tracción, y la unión a la fachada también.
+
+**Agua**: pendiente hacia fuera de la fachada, con su canalón. La junta con la fachada va con un vierteaguas que permita el movimiento entre las dos piezas.
+
+**La piscina y la terraza** son de presentación y no forman parte de la vivienda.
+
+## 6. Pendiente de Antonio
 
 - ¿El orden M4 → M1 → M2 → M5 → M3 → M6 le vale? M4 primero, para trabajar ya con los modelos que tiene.
 - Catálogo de perfiles del fabricante como fichero (`.csv`, §3 ter de ENTRAMADOS).
-- Sección del chasis y de los pilares de esquina, y cómo se unen las cajas entre sí.
-- Holgura entre cajas y si los muros de junta son dobles completos o uno de ellos sin placa.
-- Qué es el forjado de hormigón de 30 cm del porche.
+- Revisar la propuesta de §5:
+  - lados abiertos con dueño de la junta;
+  - holgura de 20 mm;
+  - apoyos más anchos;
+  - porche en dos piezas colgadas del chasis.
