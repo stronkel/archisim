@@ -381,6 +381,34 @@ pub fn transform(
                     out.insert(*e);
                 }
             }
+            Element::Ceiling(id) => {
+                let c = model
+                    .ceiling(id)
+                    .ok_or(ModelError::UnknownElement(id.0))?
+                    .clone();
+                let outline: Vec<_> = c.outline.iter().map(|p| t.apply(*p)).collect();
+                let holes: Vec<Vec<_>> = c
+                    .holes
+                    .iter()
+                    .map(|h| h.iter().map(|p| t.apply(*p)).collect())
+                    .collect();
+                if copy {
+                    let new = model.add_ceiling(archisim_core::NewCeiling {
+                        ceiling_type: c.ceiling_type,
+                        level: c.level,
+                        outline,
+                        height: c.height,
+                    })?;
+                    model.edit_ceiling(new, |n| n.holes = holes)?;
+                    out.insert(Element::Ceiling(new));
+                } else {
+                    model.edit_ceiling(id, |n| {
+                        n.outline = outline;
+                        n.holes = holes;
+                    })?;
+                    out.insert(*e);
+                }
+            }
             Element::Device(id) => {
                 let x = model
                     .device(id)

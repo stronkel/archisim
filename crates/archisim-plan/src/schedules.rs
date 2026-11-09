@@ -523,6 +523,31 @@ pub fn measurements(model: &Model) -> Vec<(&'static str, &'static str, Vec<Item>
             );
         }
     }
+    // False ceilings (M7) by type, m² seen from the room.
+    let mut ceilings: Vec<Item> = Vec::new();
+    for (i, t) in model.ceiling_types().enumerate() {
+        let lines: Vec<Measured> = model
+            .ceilings()
+            .filter(|c| c.ceiling_type == t.id && new(c.id.0))
+            .map(|c| Measured {
+                comment: format!("Techo {} · {}", c.id.0, level_name(c.level)),
+                units: 1.0,
+                length: 0.0,
+                width: 0.0,
+                height: 0.0,
+                quantity: c.area(),
+            })
+            .collect();
+        if !lines.is_empty() {
+            ceilings.push(Item {
+                code: format!("T{:02}", i + 1),
+                key: format!("techo:{}", t.id.0),
+                unit: "m2",
+                summary: format!("{} ({} cm)", t.name, dec(t.thickness() * 100.0, 1)),
+                lines,
+            });
+        }
+    }
     let mut joinery: BTreeMap<String, Item> = BTreeMap::new();
     for (i, t) in model.opening_types().enumerate() {
         if t.kind == OpeningKind::Void {
@@ -617,6 +642,7 @@ pub fn measurements(model: &Model) -> Vec<(&'static str, &'static str, Vec<Item>
         ("13", "Fachadas: piezas", facade_pieces(model)),
         ("14", "Acero en barras", rebar(model)),
         ("15", "Entramados ligeros", framing(model)),
+        ("16", "Falsos techos", ceilings),
     ];
     chapters.retain(|(_, _, items)| !items.is_empty());
     chapters

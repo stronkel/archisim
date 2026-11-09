@@ -6,6 +6,45 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-09 (131) · M7: falsos techos
+
+Rama `bloque/techos`, con pull request, sobre la de la entrada 130 (`bloque/m4-capas`, #185). **Formato versión 96**: los falsos techos. El IFC lleva `IfcCovering` de techo. `docs/MODULAR.md` (M7 y §5 bis) y `docs/FUNDACIONAL.md`, «Importación IFC».
+
+**Qué hace.**
+- **El elemento.** El falso techo existe como elemento: un contorno con sus huecos (registros, luminarias), su altura (la cara vista sobre la planta) y su tipo.
+  - El tipo es un tipo de forjado con la función «Falso techo», con sus capas de arriba abajo: la placa, la última.
+  - Se edita en Tipos y materiales → Forjados → «Falsos techos». La plantilla trae dos: «Falso techo continuo de placa 15 con lana» y «Falso techo registrable 60×60».
+  - No es un forjado: no carga, no lo atraviesan los muros y no es el suelo de nada. Los forjados no aceptan sus tipos.
+- **La herramienta Techo** (Arquitectura, junto a Abertura). Se dibuja por esquinas o con la varita dentro de un local, con la altura en Propiedades (2,50 por defecto). Si se dibuja en una planta normal, avisa de que se ve en la planta de techos.
+- **Dónde se ve.**
+  - **Planta de techos:** el techo con un tono claro, la retícula de 60 × 60 si es registrable, los huecos con su cruz y «FT +2,60». En la planta normal no sale, porque está por encima del corte.
+  - **En 3D y en las secciones:** con sus capas.
+  - **Al seleccionar:** solo en la planta de techos (o en 3D). En Propiedades salen el tipo, el espesor, la altura (editable) y la superficie.
+  - **Al exportar:** `archisim exportar` escribe la planta de techos de cada planta que los tiene.
+- **Mediciones:** capítulo 16 «Falsos techos», en m² por tipo.
+- **IFC:** `IfcCovering .CEILING.` con su `IfcCoveringType`, sus capas, `Pset_CoveringCommon` y sus cantidades. Al importar entran los de cualquier programa.
+  - Los del L-160 (7) entran ahora, en la planta P. Suelo, a 2,70.
+  - Revit los cuelga de P. Techo con −0,23; ArchiSim los pone en la planta del local.
+- **La demo** lleva un techo en cada local, a 2,60.
+
+**También en esta entrada.**
+- El plan acordado (componentes → cajas tipo → vivienda; techos, catálogo, taller y obra previa) en `docs/MODULAR.md`.
+- El análisis del módulo B de estructura que mandó Antonio (§5 bis): chasis de tubo soldado, pretiles según el lado y el izado a comprobar.
+
+**Pendiente.**
+- **Cálculo de la estructura:** el peso de los techos aún no se suma al forjado del que cuelgan.
+- **Altura libre:** los locales no toman todavía su altura del techo.
+- **Perfilería:** el techo no la dibuja (maestras y montantes); puede ir como entramado de su tipo más adelante.
+
+**Qué debe probar Antonio.**
+1. Abre la demo (`archisim demo out/` y luego `out/demo.archisim`) y, en el Navegador, la vista «Planta baja — techos» (en otro proyecto: clic derecho en la planta → «Planta de techos»). Deben salir los cuatro techos con «FT +2,60».
+2. Elige la herramienta **Techo** (Arquitectura), activa la varita y haz clic dentro de un local. Debe crearse el techo y avisar de que se ve en la planta de techos. Míralo en 3D y en una sección.
+3. En la planta de techos, selecciona un techo y cambia su altura a 2,40 en Propiedades. Cambia su tipo a «registrable 60×60» y comprueba la retícula.
+4. Importa `BIOKUBIK_VIVIENDA_L_160.ifc`. El informe debe decir «7 techos» y no «revestimientos» sin importar. Su planta de techos de P. Suelo debe enseñar los 7 a +2,70.
+5. Exporta el IFC y ábrelo en otro visor: los techos deben ser `IfcCovering` de techo.
+
+---
+
 ## 2026-11-09 (130) · M4: capas dibujadas como muros, juntadas al importar
 
 Rama `bloque/m4-capas`, con pull request. Sin cambios de formato (sigue la versión 95). El IFC exportado solo cambia en un caso raro de las mediciones de muros (ver «Arreglos»). `docs/MODULAR.md` §3 (M4) y `docs/FUNDACIONAL.md`, «Importación IFC».

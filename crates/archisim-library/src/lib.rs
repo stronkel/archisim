@@ -27,6 +27,8 @@ pub struct Library {
     pub flat_roof: SlabTypeId,
     /// Tiled pitched roof on an inclined concrete slab.
     pub pitched_roof: SlabTypeId,
+    /// False ceiling (M7): a plasterboard with mineral wool over it.
+    pub ceiling: SlabTypeId,
     pub entrance_door: OpeningTypeId,
     pub interior_door: OpeningTypeId,
     pub double_door: OpeningTypeId,
@@ -214,6 +216,12 @@ pub fn add_library(m: &mut Model) -> Result<Library, ModelError> {
         [245, 245, 245],
         CutPattern::Solid,
     );
+    let placa = mat(
+        "Placa de yeso laminado",
+        "plaster",
+        [242, 242, 240],
+        CutPattern::Solid,
+    );
     let baldosa = mat(
         "Baldosa cerámica",
         "ceramic",
@@ -396,6 +404,22 @@ pub fn add_library(m: &mut Model) -> Result<Library, ModelError> {
             layer(hormigon, 0.180, LayerFunction::Structure),
             layer(yeso, 0.015, LayerFunction::Finish),
         ],
+    )?;
+
+    // False ceilings (M7): types of their own, layers top down, the board
+    // seen from the room last.
+    let ceiling = m.add_slab_type(
+        "Falso techo continuo de placa 15 con lana",
+        SlabFunction::Ceiling,
+        vec![
+            layer(lana, 0.040, LayerFunction::Insulation),
+            layer(placa, 0.015, LayerFunction::Finish),
+        ],
+    )?;
+    m.add_slab_type(
+        "Falso techo registrable 60×60",
+        SlabFunction::Ceiling,
+        vec![layer(placa, 0.015, LayerFunction::Finish)],
     )?;
 
     // The materials the system families ask for by name that the
@@ -639,6 +663,7 @@ pub fn add_library(m: &mut Model) -> Result<Library, ModelError> {
         floor_slab,
         flat_roof,
         pitched_roof,
+        ceiling,
         entrance_door,
         interior_door,
         double_door,
@@ -2936,8 +2961,9 @@ mod tests {
         assert_eq!(m.levels()[0].elevation, 0.0);
         // The three of always and the eight façades laid piece by piece (E9).
         assert_eq!(m.wall_types().count(), 3 + facades::FACADE_TYPES.len());
-        // Five, and the one-way and waffle floors.
-        assert_eq!(m.slab_types().count(), 7);
+        // Five, the one-way and waffle floors and the two false ceilings.
+        assert_eq!(m.slab_types().count(), 9);
+        assert_eq!(m.ceiling_types().count(), 2);
         // With the studio's: 8 doors and 8 windows more.
         assert_eq!(m.opening_types().filter(|t| t.is_door()).count(), 14);
         assert_eq!(m.opening_types().filter(|t| t.is_window()).count(), 13);

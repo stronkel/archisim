@@ -70,7 +70,7 @@
 - Pasos por los montantes.
 - Fichero para la perfiladora, cuando se sepa cuál es.
 
-**M7 · Techos.** El falso techo como elemento, que hoy no existe (solo las vistas de techo).
+**M7 · Techos.** ✅ Hecho el 9/11/2026, rama `bloque/techos`. El falso techo como elemento, que antes no existía (solo las vistas de techo).
 - Tiene su contorno, su altura, sus capas y sus registros. Se dibuja por contorno o dentro de un local.
 - Sale en la planta de techos, en las secciones y en 3D, y se mide.
 - En el IFC es un `IfcCovering` de techo, a la ida y a la vuelta.
@@ -197,9 +197,42 @@ Un **módulo ligero** de estructura de acero, no forjados de hormigón. Los dos 
 
 **La piscina y la terraza** son de presentación y no forman parte de la vivienda.
 
+## 5 bis. El módulo base de estructura (9/11/2026)
+
+Antonio exportó de Revit el módulo B de 6,10 × 3,60 m con su estructura, como caja suelta (sin uniones con otras). Lo que lleva:
+
+**Pilares y marcos.**
+- Pilares de esquina de tubo 120 × 100 × 4 de toda la altura, de −0,27 a 3,31 (3,58 m).
+- Marcos perimetrales de suelo y de techo del mismo tubo.
+
+**Suelo, de abajo arriba.**
+- Viguetas de tubo 60 × 40 × 3 cada 60 cm, en dos vanos de 1,62 m, con una viga central de 60 × 40.
+- Bordes de 60 × 60.
+- Forjado colaborante de chapa H90 + 30.
+- Tabihaus 8 + 43 + 8.
+- En total, los 27 cm del suelo.
+
+**Techo y cubierta.**
+- Viguetas de 60 × 40 a 2,93 (el plano del techo).
+- Tabihaus a 2,99 y recrecido de pendiente.
+- Pretil de 20 cm sobre montantitos de 40 × 60 en los cuatro lados, con lana y membrana.
+
+Lo que cambia respecto a §5:
+- **El chasis es de tubo soldado**, no de perfiles de chapa. El de §5.1 queda sustituido por este.
+- **Pretil según el lado.** En otras variantes, la coronación cambia según el lado que se une a otra caja, para hacer una cubierta plana continua. En la caja tipo (M1, M8), cada lado tendrá un estado:
+  - **libre**: con pretil y fachada;
+  - **unido**: sin pretil, cubierta continua, lado abierto o con muro según el dueño de la junta.
+- **Izado, a comprobar.** Colgada solo de las cuatro esquinas, el tubo de borde de 120 × 100 × 4 en 6,10 m va justo o no llega (unos 18 kNm frente a unos 15 kNm resistentes, cálculo rápido). Opciones:
+  - seis puntos de izado;
+  - contar con el muro de fachada como viga;
+  - más canto en el borde.
+- **Al importarlo en ArchiSim.**
+  - Los tubos entran como piezas macizas con la forma de su caja, y las dos riostras (`IfcMember`) se quedan fuera.
+  - Hacen falta perfiles tubulares y riostras de verdad (M1, M3).
+
 ## 6. Pendiente de Antonio
 
-- Orden aprobado (9/11/2026): M4 (hecho) → M7 techos → M1 caja → M8 catálogo con la primera caja tipo → M2 juntas y M3 chasis → M9 taller. M5, M6 y M10 cuando toquen.
+- Orden aprobado (9/11/2026): M4 (hecho) → M7 techos (hecho) → M1 caja → M8 catálogo con la primera caja tipo → M2 juntas y M3 chasis → M9 taller. M5, M6 y M10 cuando toquen.
 - Exportar desde Revit el modelo de estructura vinculado como IFC aparte, para partir de él en el chasis de la caja tipo.
 - Catálogo de perfiles del fabricante como fichero (`.csv`, §3 ter de ENTRAMADOS).
 - Propuesta de §5 aprobada (9/11/2026).

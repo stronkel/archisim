@@ -1888,3 +1888,48 @@ fn repeated_grids_come_in_once() {
     assert_eq!(report.grids, 2, "{report}");
     assert_eq!(model.grids().count(), 2);
 }
+
+#[test]
+fn false_ceilings_round_trip() {
+    use archisim_core::NewCeiling;
+    let mut m = model();
+    let pb = m.levels()[0].id;
+    let t = m.ceiling_types().next().expect("a ceiling type").id;
+    let id = m
+        .add_ceiling(NewCeiling {
+            ceiling_type: t,
+            level: pb,
+            outline: vec![
+                Point2::new(0.3, 0.3),
+                Point2::new(9.7, 0.3),
+                Point2::new(9.7, 7.7),
+                Point2::new(0.3, 7.7),
+            ],
+            height: 2.6,
+        })
+        .unwrap();
+    m.edit_ceiling(id, |c| {
+        c.holes = vec![vec![
+            Point2::new(2.0, 2.0),
+            Point2::new(2.6, 2.0),
+            Point2::new(2.6, 2.6),
+            Point2::new(2.0, 2.6),
+        ]]
+    })
+    .unwrap();
+    let ifc = export(&m);
+    assert!(ifc.contains("IFCCOVERING("), "an IfcCovering");
+    assert!(ifc.contains("IFCCOVERINGTYPE("), "its type");
+    let Imported { model, report } = import_ifc(&ifc).unwrap();
+    assert_eq!(report.ceilings, 1, "{report}");
+    let diffs = differences(&m, &model);
+    assert!(diffs.is_empty(), "{}", diffs.join("\n"));
+    assert!(report.skipped.is_empty(), "{report}");
+    let c = model.ceilings().next().unwrap();
+    assert!((c.height - 2.6).abs() < 1e-9);
+    assert_eq!(c.holes.len(), 1);
+    assert_eq!(
+        model.slab_type(c.ceiling_type).unwrap().function,
+        archisim_core::SlabFunction::Ceiling
+    );
+}

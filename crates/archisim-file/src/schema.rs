@@ -164,6 +164,9 @@ pub(crate) struct ProjectFile {
     /// Roundabouts and squares (version 64).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub roundabouts: Vec<RoundaboutOf>,
+    /// False ceilings (version 96).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub ceilings: Vec<CeilingOf>,
     /// Road markings (version 65).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub markings: Vec<MarkingOf>,
@@ -1178,6 +1181,21 @@ pub(crate) struct MarkingOf {
     #[serde(default, skip_serializing_if = "is_zero")]
     pub depth: f64,
     pub material: u64,
+}
+
+/// A false ceiling (version 96).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct CeilingOf {
+    pub id: u64,
+    pub guid: String,
+    #[serde(rename = "type")]
+    pub ceiling_type: u64,
+    pub level: u64,
+    pub outline: Vec<Xy>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub holes: Vec<Vec<Xy>>,
+    pub height: f64,
 }
 
 /// A roundabout or a square where streets meet (version 64).
@@ -2997,6 +3015,8 @@ pub(crate) enum SlabFunction {
     Floor,
     BaseSlab,
     Roof,
+    /// A false ceiling's type (version 96).
+    Ceiling,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -3266,6 +3286,7 @@ impl ProjectFile {
                         core::SlabFunction::Floor => SlabFunction::Floor,
                         core::SlabFunction::BaseSlab => SlabFunction::BaseSlab,
                         core::SlabFunction::Roof => SlabFunction::Roof,
+                        core::SlabFunction::Ceiling => SlabFunction::Ceiling,
                     },
                 })
                 .collect(),
@@ -3861,6 +3882,23 @@ impl ProjectFile {
                     gap: m.gap,
                     depth: m.depth,
                     material: m.material.0,
+                })
+                .collect(),
+            ceilings: p
+                .ceilings
+                .iter()
+                .map(|c| CeilingOf {
+                    id: c.id.0,
+                    guid: c.guid.to_string(),
+                    ceiling_type: c.ceiling_type.0,
+                    level: c.level.0,
+                    outline: c.outline.iter().map(|p| xy(*p)).collect(),
+                    holes: c
+                        .holes
+                        .iter()
+                        .map(|h| h.iter().map(|p| xy(*p)).collect())
+                        .collect(),
+                    height: c.height,
                 })
                 .collect(),
             roundabouts: p
@@ -4592,6 +4630,7 @@ impl ProjectFile {
             plots: Vec::new(),
             roads: Vec::new(),
             roundabouts: Vec::new(),
+            ceilings: Vec::new(),
             markings: Vec::new(),
             decals: Vec::new(),
             plantings: Vec::new(),
@@ -4897,6 +4936,7 @@ impl ProjectFile {
                     SlabFunction::Floor => core::SlabFunction::Floor,
                     SlabFunction::BaseSlab => core::SlabFunction::BaseSlab,
                     SlabFunction::Roof => core::SlabFunction::Roof,
+                    SlabFunction::Ceiling => core::SlabFunction::Ceiling,
                 },
                 layers: layers_in(t.layers),
                 edge: t.edge.map(|e| core::SlabEdge {
@@ -5438,6 +5478,22 @@ impl ProjectFile {
                 gap: x.gap,
                 depth: x.depth,
                 material: core::MaterialId(x.material),
+            });
+        }
+        for c in self.ceilings {
+            let element = format!("false ceiling {}", c.id);
+            parts.ceilings.push(core::Ceiling {
+                id: core::CeilingId(c.id),
+                guid: guid(&element, &c.guid)?,
+                ceiling_type: core::SlabTypeId(c.ceiling_type),
+                level: core::LevelId(c.level),
+                outline: c.outline.into_iter().map(pt).collect(),
+                holes: c
+                    .holes
+                    .into_iter()
+                    .map(|h| h.into_iter().map(pt).collect())
+                    .collect(),
+                height: c.height,
             });
         }
         for c in self.roundabouts {

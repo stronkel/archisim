@@ -191,6 +191,8 @@ pub enum Pick {
     SlabHole,
     /// The slab tool with the raft foundation type.
     Raft,
+    /// The slab tool drawing false ceilings (M7).
+    Ceiling,
     /// Clicks that arm columns, beams, footings and slabs.
     Rebar,
     /// An action, not a tool: it opens or makes something.
@@ -451,6 +453,13 @@ const ARCHITECTURE: &[Tile] = &[
         "Abertura",
         "",
         "Huecos en forjados: patinillos, escaleras, lucernarios (en muros, la familia Hueco de Puerta)",
+    ),
+    tile(
+        Pick::Ceiling,
+        Glyph::Ceiling,
+        "Techo",
+        "",
+        "Falsos techos por contorno o dentro de un local (varita); se ven en la planta de techos",
     ),
     tile(
         Pick::Tool(Tool::Roof),
@@ -1481,11 +1490,13 @@ impl ArchiSimApp {
     fn picked(&self, pick: Pick) -> Option<bool> {
         let level_marks = self.dim_settings.mode == DimMode::LevelMark;
         let holes = self.slab_settings.hole;
+        let ceiling = self.slab_settings.ceiling;
         let raft = raft_type(self.ed.model()) == Some(self.slab_settings.slab_type);
         match pick {
             Pick::Tool(Tool::Dimension) => Some(self.tool == Tool::Dimension && !level_marks),
-            Pick::Tool(Tool::Slab) => Some(self.tool == Tool::Slab && !holes && !raft),
-            Pick::Raft => Some(self.tool == Tool::Slab && !holes && raft),
+            Pick::Tool(Tool::Slab) => Some(self.tool == Tool::Slab && !holes && !raft && !ceiling),
+            Pick::Raft => Some(self.tool == Tool::Slab && !holes && raft && !ceiling),
+            Pick::Ceiling => Some(self.tool == Tool::Slab && ceiling),
             Pick::Rebar => Some(self.tool == Tool::Arrow && self.rebar_pick),
             Pick::Concept(c) => Some(self.concept_picked(c)),
             Pick::Device(k) => Some(self.tool == Tool::Device && self.service_settings.device == k),
@@ -1499,7 +1510,7 @@ impl ArchiSimApp {
             }
             Pick::Tool(t) => Some(self.tool == t),
             Pick::LevelMark => Some(self.tool == Tool::Dimension && level_marks),
-            Pick::SlabHole => Some(self.tool == Tool::Slab && holes),
+            Pick::SlabHole => Some(self.tool == Tool::Slab && holes && !ceiling),
             Pick::Action(a) => Some(match a {
                 Action::Cte => self.cte.open,
                 Action::Vivero => self.vivero.open,
@@ -1569,7 +1580,32 @@ impl ArchiSimApp {
             }
             Pick::Tool(Tool::Slab) => {
                 self.slab_settings.hole = false;
+                self.slab_settings.ceiling = false;
                 self.set_tool(Tool::Slab);
+            }
+            Pick::Ceiling => {
+                let m = self.ed.model();
+                let wrong = m
+                    .slab_type(self.slab_settings.ceiling_type)
+                    .is_none_or(|t| t.function != archisim_core::SlabFunction::Ceiling);
+                let first = m.ceiling_types().next().map(|t| t.id);
+                if wrong {
+                    match first {
+                        Some(t) => self.slab_settings.ceiling_type = t,
+                        None => {
+                            self.complain(
+                                "El proyecto no tiene tipos de falso techo: crea uno en Tipos y materiales (Forjados → Falso techo).",
+                            );
+                            return;
+                        }
+                    }
+                }
+                self.slab_settings.hole = false;
+                self.slab_settings.ceiling = true;
+                self.set_tool(Tool::Slab);
+                if !self.active_ceiling() {
+                    self.say("Techo: dibuja su contorno o haz clic dentro de un local con la varita. Se ve en la planta de techos.");
+                }
             }
             Pick::Tool(Tool::Object) => {
                 self.object_scope = None;
@@ -1584,12 +1620,14 @@ impl ArchiSimApp {
                 self.set_tool(Tool::Dimension);
             }
             Pick::SlabHole => {
+                self.slab_settings.ceiling = false;
                 self.slab_settings.hole = true;
                 self.set_tool(Tool::Slab);
             }
             Pick::Raft => match raft_type(self.ed.model()) {
                 Some(t) => {
                     self.slab_settings.hole = false;
+                    self.slab_settings.ceiling = false;
                     self.slab_settings.slab_type = t;
                     self.set_tool(Tool::Slab);
                     self.say("Losa de cimentación: dibuja su contorno (o varita dentro de los muros).");

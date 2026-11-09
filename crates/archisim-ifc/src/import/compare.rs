@@ -162,6 +162,55 @@ pub fn differences(a: &Model, b: &Model) -> Vec<String> {
         }
     }
 
+    if a.ceilings().count() != b.ceilings().count() {
+        diff(format!(
+            "número de techos: {} / {}",
+            a.ceilings().count(),
+            b.ceilings().count()
+        ));
+    }
+    for s in a.ceilings() {
+        let Some(t) = b.ceilings().find(|t| t.guid == s.guid) else {
+            diff(format!("techo {} falta", s.guid));
+            continue;
+        };
+        let n = s.outline.len();
+        let shift = t
+            .outline
+            .iter()
+            .position(|q| s.outline.first().is_some_and(|p| p.distance(*q) <= TOL));
+        let same_outline = n == t.outline.len()
+            && shift.is_some_and(|k| {
+                (0..n).all(|i| s.outline[i].distance(t.outline[(i + k) % n]) <= TOL)
+            });
+        if !same_outline
+            || s.holes.len() != t.holes.len()
+            || !close(s.height, t.height)
+            || level_guid(a, s.level) != level_guid(b, t.level)
+        {
+            diff(format!("techo {}: {:?} / {:?}", s.guid, s, t));
+        }
+        match (a.slab_type(s.ceiling_type), b.slab_type(t.ceiling_type)) {
+            (Some(ta), Some(tb)) => {
+                if ta.guid != tb.guid
+                    || ta.name != tb.name
+                    || ta.function != tb.function
+                    || layers_text(a, &ta.layers) != layers_text(b, &tb.layers)
+                {
+                    diff(format!(
+                        "tipo del techo {}: «{}» [{}] / «{}» [{}]",
+                        s.guid,
+                        ta.name,
+                        layers_text(a, &ta.layers),
+                        tb.name,
+                        layers_text(b, &tb.layers)
+                    ));
+                }
+            }
+            _ => diff(format!("tipo del techo {} falta", s.guid)),
+        }
+    }
+
     for o in a.openings() {
         let Some(p) = b.openings().find(|p| p.guid == o.guid) else {
             diff(format!("puerta o ventana {} falta", o.guid));

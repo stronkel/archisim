@@ -259,6 +259,11 @@ Como ArchiCAD en la disposición, con las propiedades como Revit (v0.16):
   - **Huecos.** Los que cada capa tenía para la misma puerta o ventana se quedan en uno.
   - **No se aplica** a los ficheros de ArchiSim.
 - Los ejes repetidos en el fichero (Revit escribe la rejilla una vez por planta) se importan una vez.
+- **Falsos techos** (M7): los `IfcCovering` de techo (`.CEILING.` en el elemento o en su tipo) entran como techos de ArchiSim.
+  - Su contorno y sus huecos salen del sólido.
+  - Su cara vista es la parte de abajo del sólido.
+  - Sus capas salen del juego de capas.
+  - Van en la planta más alta que queda por debajo de su cara (Revit los cuelga de la planta de arriba con desfase negativo).
 - Lo que no se importa (pilares, vigas, escaleras, cubiertas inclinadas, forjados inclinados, locales…) se cuenta en un **informe**; lo que se importa con aproximaciones (capas sin espesor, marcos sin medidas, huecos en forjados), también.
 - Lo que exporta ArchiSim se importa idéntico (ida y vuelta comprobada en pruebas): para ello el IFC lleva, además, el cerco de puertas y ventanas (`IfcDoorLiningProperties`, `IfcWindowLiningProperties`), el funcionamiento de cada hoja de ventana (`IfcWindowPanelProperties`), la mano de cada hueco (`ArchiSim_Opening`) y la trama de corte de cada material (`ArchiSim_Material`).
 

@@ -1645,10 +1645,11 @@ fn properties_palette_shows_every_state() {
             .map(|t| format!("{:?}", t.layers))
             .collect();
         // Slab types too: a one-way floor draws as the solid one of its
-        // layers.
+        // layers. (Those of false ceilings are listed by the Techo tool.)
         let slabs: std::collections::HashSet<String> = h
             .model()
             .slab_types()
+            .filter(|t| t.function != SlabFunction::Ceiling)
             .map(|t| format!("{:?}", t.layers))
             .collect();
         let types = walls.len() + slabs.len() + h.model().opening_types().count();
@@ -10881,4 +10882,54 @@ fn installations_are_picked_only_in_their_template() {
     h.move_to(p(5.0, 2.0));
     h.frame();
     assert!(!h.app.under_cursor.contains(&Element::Run(run)));
+}
+
+/// The Techo tool (M7): a false ceiling with the magic wand inside a room,
+/// another by its corners; neither picked from the floor plan.
+#[test]
+fn false_ceilings_with_the_wand_and_by_corners() {
+    let mut h = Harness::new(Editor::new_project());
+    draw_outline(&mut h);
+    h.key(Key::Escape);
+    h.app.pick(super::toolbox::Pick::Ceiling);
+    assert_eq!(h.app.tool, Tool::Slab);
+    assert!(h.app.slab_settings.ceiling);
+    h.app.slab_settings.wand = true;
+    h.app.slab_settings.contour = Contour::InteriorFace;
+    h.click_at(p(6.0, 4.5));
+    let m = h.model();
+    assert_eq!(m.ceilings().count(), 1, "{:?}", h.app.message);
+    assert_eq!(m.slabs().count(), 0);
+    let c = m.ceilings().next().unwrap();
+    let inner = (12.0 - 0.53) * (9.0 - 0.53);
+    assert!((c.area() - inner).abs() < 1e-6);
+    assert!((c.height - archisim_core::CEILING_HEIGHT).abs() < 1e-9);
+    assert_eq!(
+        m.slab_type(c.ceiling_type).unwrap().function,
+        SlabFunction::Ceiling
+    );
+    let msg = h.app.message.as_ref().unwrap().text.clone();
+    assert!(msg.contains("planta de techos"), "{msg}");
+    // By its corners, lower.
+    h.app.slab_settings.wand = false;
+    h.app.slab_settings.ceiling_height = 2.4;
+    for c in [p(1.0, 1.0), p(1.0, 3.0), p(4.0, 3.0), p(4.0, 1.0)] {
+        h.click_at(c);
+    }
+    h.click_at(p(1.0, 1.0));
+    let m = h.model();
+    assert_eq!(m.ceilings().count(), 2, "{:?}", h.app.message);
+    assert!(m
+        .ceilings()
+        .any(|c| (c.height - 2.4).abs() < 1e-9 && (c.area() - 6.0).abs() < 1e-9));
+    // The slab tool again makes slabs.
+    h.key(Key::Escape);
+    h.type_text("f");
+    assert!(!h.app.slab_settings.ceiling);
+    // In a floor plan a click inside the room does not pick a ceiling.
+    h.key(Key::Escape);
+    let c = h.model().ceilings().next().unwrap().id;
+    let found = crate::pick::pick(h.model(), h.app.ed.level, p(6.0, 4.5), 0.05);
+    assert_ne!(found, Some(crate::pick::Element::Ceiling(c)));
+    assert!(crate::pick::in_view(crate::pick::Element::Ceiling(c), true));
 }

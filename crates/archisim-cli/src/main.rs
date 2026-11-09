@@ -1603,6 +1603,19 @@ fn export_all(model: &Model, dir: &Path, stem: &str) -> Result<(), Box<dyn std::
             "  Planta «{name}» en DXF (mm, 1:50): {}",
             dxf_path.display()
         );
+        // Its reflected ceiling plan, if it has false ceilings (M7).
+        if model.ceilings_on_level(level).next().is_some() {
+            let file_ceiling = format!("{}-techos.svg", file.trim_end_matches(".svg"));
+            let options = PlanOptions {
+                ceiling: true,
+                ..PlanOptions::default()
+            };
+            std::fs::write(dir.join(&file_ceiling), render_plan(model, level, &options))?;
+            println!(
+                "  Planta de techos «{name}»: {}",
+                dir.join(&file_ceiling).display()
+            );
+        }
     }
     // Saved plans, each with its own scale, cut plane and look.
     for v in model.plan_views() {

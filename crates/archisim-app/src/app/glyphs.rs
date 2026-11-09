@@ -42,6 +42,8 @@ pub enum Glyph {
     BearingWall,
     Footing,
     Raft,
+    /// A false ceiling: a board hung under a slab.
+    Ceiling,
     Pipe,
     Duct,
     Fixture,
@@ -266,6 +268,9 @@ impl Glyph {
             }
             Glyph::Footing => {
                 r##"<rect x="3" y="11" width="14" height="5"/><rect x="8" y="3" width="4" height="8"/>"##
+            }
+            Glyph::Ceiling => {
+                r##"<path d="M2 4h16"/><path d="M5 4v5M10 4v5M15 4v5" stroke-width="0.8"/><path d="M3 10h14v2H3z"/>"##
             }
             Glyph::Raft => {
                 r##"<rect x="2" y="9" width="16" height="6"/><path d="M5 9v6M9 9v6M13 9v6" stroke-width="0.8" stroke-dasharray="1.5 1.5"/>"##

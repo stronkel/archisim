@@ -478,6 +478,7 @@ pub fn hotspots(model: &Model, selection: &BTreeSet<Element>) -> Vec<Hotspot> {
             | Element::Run(_)
             | Element::Edge(_)
             | Element::Device(_)
+            | Element::Ceiling(_)
             | Element::Elevator(_) => {}
         }
     }
@@ -1988,6 +1989,25 @@ pub(crate) fn copy(
                 let new = model.add_device(crate::xform::device_spec(&x, |p| p + d, 0.0))?;
                 copies.insert(Element::Device(new));
             }
+            Element::Ceiling(id) => {
+                let c = model
+                    .ceiling(*id)
+                    .ok_or(ModelError::UnknownElement(id.0))?
+                    .clone();
+                let new = model.add_ceiling(archisim_core::NewCeiling {
+                    ceiling_type: c.ceiling_type,
+                    level: c.level,
+                    outline: c.outline.iter().map(|p| *p + d).collect(),
+                    height: c.height,
+                })?;
+                let holes: Vec<Vec<_>> = c
+                    .holes
+                    .iter()
+                    .map(|h| h.iter().map(|p| *p + d).collect())
+                    .collect();
+                model.edit_ceiling(new, |n| n.holes = holes)?;
+                copies.insert(Element::Ceiling(new));
+            }
             Element::Section(id) => {
                 let s = model
                     .section(*id)
@@ -2250,6 +2270,7 @@ pub(crate) fn exists(model: &Model, e: Element) -> bool {
         Element::Run(id) => model.run(id).is_some(),
         Element::Edge(id) => model.edge(id).is_some(),
         Element::Device(id) => model.device(id).is_some(),
+        Element::Ceiling(id) => model.ceiling(id).is_some(),
         Element::Dormer(r, i) => model
             .roof(r)
             .is_some_and(|x| usize::from(i) < x.dormers.len()),
@@ -2332,6 +2353,7 @@ fn level_of(
             Element::Run(id) => model.run(*id).map(|r| r.level),
             Element::Edge(id) => model.edge(*id).map(|e| e.level),
             Element::Device(id) => model.device(*id).map(|d| d.level),
+            Element::Ceiling(id) => model.ceiling(*id).map(|c| c.level),
         }),
     }
 }

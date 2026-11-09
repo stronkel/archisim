@@ -1093,6 +1093,13 @@ pub fn build() -> Result<Document, ModelError> {
         ] {
             let outline = room_outline(m, pb, at, Contour::InteriorFace)
                 .map_err(|_| ModelError::InvalidOutline)?;
+            // Its false ceiling (M7), at 2,60.
+            m.add_ceiling(archisim_core::NewCeiling {
+                ceiling_type: lib.ceiling,
+                level: pb,
+                outline: outline.clone(),
+                height: 2.6,
+            })?;
             let id = m.add_room(NewRoom {
                 level: pb,
                 number: number.into(),
@@ -1624,7 +1631,8 @@ mod tests {
         assert_eq!(m.openings().count(), 10);
         assert_eq!(m.opening_types().count(), 28);
         assert_eq!(doc.undo_label(), Some("Precios del presupuesto"));
-        assert_eq!(m.prices().count(), 29);
+        // The false ceilings (M7) have theirs too.
+        assert_eq!(m.prices().count(), 30);
         assert_eq!(m.user_parameters().count(), 2);
         assert_eq!(m.sections().count(), 6);
         // A-01 to A-03 and the two carpentry sheets.
@@ -1633,6 +1641,8 @@ mod tests {
         assert!(m.viewports().any(|v| v.style.presentation.is_some()));
         assert_eq!(m.viewports().filter(|v| v.section.is_some()).count(), 3);
         assert_eq!(m.rooms().count(), 4);
+        // A false ceiling in each room (M7).
+        assert_eq!(m.ceilings().count(), 4);
         assert_eq!(m.tags().count(), 9);
         let total: f64 = m.rooms().map(|r| r.area()).sum();
         assert!(total > 90.0 && total < 108.0, "{total}");

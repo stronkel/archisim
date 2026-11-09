@@ -14,6 +14,8 @@ pub struct ImportReport {
     pub levels: usize,
     pub walls: usize,
     pub slabs: usize,
+    /// False ceilings (`IfcCovering` CEILING, M7).
+    pub ceilings: usize,
     pub doors: usize,
     pub windows: usize,
     /// Rooms (IfcSpace).
@@ -194,6 +196,9 @@ impl ImportReport {
         };
         if self.rooms > 0 {
             members.push_str(&format!(", {} locales", self.rooms));
+        }
+        if self.ceilings > 0 {
+            members.push_str(&format!(", {} techos", self.ceilings));
         }
         if self.roofs > 0 {
             members.push_str(&format!(", {} cubiertas", self.roofs));

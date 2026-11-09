@@ -65,6 +65,8 @@ pub enum SolidOwner {
     Facade(WallId),
     /// The aerial picture on the ground (V2).
     Orthophoto,
+    /// A false ceiling (M7).
+    Ceiling(archisim_core::CeilingId),
 }
 
 impl SolidOwner {
@@ -94,6 +96,7 @@ impl SolidOwner {
             SolidOwner::Run(x) => x.0,
             SolidOwner::Device(x) => x.0,
             SolidOwner::Orthophoto => 0,
+            SolidOwner::Ceiling(x) => x.0,
         }
     }
 }
@@ -3925,6 +3928,10 @@ pub fn model_solids_except_detailed(
     for s in model.slabs() {
         out.extend(slab_solids_in(&idx, s.id));
     }
+    // False ceilings (M7).
+    for c in model.ceilings() {
+        out.extend(crate::ceilings::ceiling_solids(model, c.id));
+    }
     // The accessories of their types: skirtings, bands, cornices, copings
     // and slab edges (bloque 5).
     for w in model.walls() {
@@ -5602,6 +5609,7 @@ pub fn level_solids(model: &Model, level: LevelId) -> Vec<Solid> {
         SolidOwner::Decal(d) => model.decal(d).is_some_and(|d| d.level == level),
         SolidOwner::Run(r) => model.run(r).is_some_and(|r| r.level == level),
         SolidOwner::Device(d) => model.device(d).is_some_and(|d| d.level == level),
+        SolidOwner::Ceiling(c) => model.ceiling(c).is_some_and(|c| c.level == level),
         SolidOwner::Orthophoto => {
             model
                 .terrains()

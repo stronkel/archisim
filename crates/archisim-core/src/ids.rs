@@ -75,6 +75,10 @@ typed_id!(
     RoundaboutId
 );
 typed_id!(
+    /// Identifies a [`crate::Ceiling`] (a false ceiling).
+    CeilingId
+);
+typed_id!(
     /// Identifies a [`crate::Marking`] (a road marking).
     MarkingId
 );

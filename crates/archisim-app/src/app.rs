@@ -241,6 +241,11 @@ pub struct SlabSettings {
     /// The outline drawn is a hole through the slab it is drawn on, not a
     /// new slab.
     pub hole: bool,
+    /// The outline drawn is a false ceiling (M7), not a slab: of
+    /// `ceiling_type`, its face `ceiling_height` over the level.
+    pub ceiling: bool,
+    pub ceiling_type: SlabTypeId,
+    pub ceiling_height: f64,
 }
 
 /// Outlines a drag would give, or why it cannot be done.
@@ -1741,6 +1746,19 @@ impl ArchiSimApp {
     /// Builds the slab closed by the slab tool.
     fn build_slab(&mut self, outline: Vec<Point2>) {
         let s = self.slab_settings;
+        if s.ceiling {
+            match self
+                .ed
+                .add_ceiling(s.ceiling_type, outline, s.ceiling_height)
+            {
+                Ok(id) => {
+                    self.slab_tool.accept();
+                    self.ceiling_made(id, false);
+                }
+                Err(e) => self.complain(format!("No se puede crear el techo: {e}.")),
+            }
+            return;
+        }
         if s.hole {
             let area = archisim_core::signed_area(&outline).abs();
             match self.ed.add_slab_hole(outline) {
@@ -1762,9 +1780,33 @@ impl ArchiSimApp {
         }
     }
 
+    /// Says what false ceiling was made, and where it is seen.
+    fn ceiling_made(&mut self, id: archisim_core::CeilingId, wand: bool) {
+        let area = self.ed.model().ceiling(id).map_or(0.0, |c| c.area());
+        let how = if wand { " con la varita mágica" } else { "" };
+        if self.active_ceiling() {
+            self.say(format!("Techo de {} creado{how}.", fmt_area(area)));
+        } else {
+            self.say(format!(
+                "Techo de {} creado{how}. Se ve en la planta de techos, en las secciones y en 3D.",
+                fmt_area(area)
+            ));
+        }
+    }
+
     /// Builds the slab of the room around `p` (magic wand).
     fn build_slab_in_room(&mut self, p: Point2) {
         let s = self.slab_settings;
+        if s.ceiling {
+            match self
+                .ed
+                .add_ceiling_in_room(s.ceiling_type, p, s.contour, s.ceiling_height)
+            {
+                Ok(id) => self.ceiling_made(id, true),
+                Err(e) => self.complain(format!("No se puede crear el techo: {e}.")),
+            }
+            return;
+        }
         match self
             .ed
             .add_slab_in_room(s.slab_type, p, s.contour, s.top_offset)
@@ -2631,6 +2673,9 @@ pub fn default_slab_settings(model: &Model) -> SlabSettings {
         wand: false,
         contour: Contour::InteriorFace,
         hole: false,
+        ceiling: false,
+        ceiling_type: model.ceiling_types().next().map_or(SlabTypeId(0), |t| t.id),
+        ceiling_height: archisim_core::CEILING_HEIGHT,
     }
 }
 

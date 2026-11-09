@@ -248,12 +248,15 @@ pub enum Category {
     Vegetation,
     /// Reference planes: lines to draw against.
     RefPlanes,
+    /// False ceilings (M7): in ceiling plans, sections and 3D.
+    Ceilings,
 }
 
 impl Category {
-    pub const ALL: [Category; 25] = [
+    pub const ALL: [Category; 26] = [
         Category::Walls,
         Category::Slabs,
+        Category::Ceilings,
         Category::Openings,
         Category::Structure,
         Category::Foundations,
@@ -306,6 +309,7 @@ impl Category {
             Category::Services => "services",
             Category::Vegetation => "vegetation",
             Category::RefPlanes => "reference_planes",
+            Category::Ceilings => "ceilings",
         }
     }
 
@@ -340,6 +344,7 @@ impl Category {
             Category::Services => "Instalaciones",
             Category::Vegetation => "Vegetación",
             Category::RefPlanes => "Planos de referencia",
+            Category::Ceilings => "Techos",
         }
     }
 }

@@ -594,8 +594,10 @@ impl ArchiSimApp {
                     {
                         let style = self.view_style.effective();
                         let model = self.ed.model();
+                        let ceiling_plan = self.active_ceiling();
                         crate::pick::pick_all(&self.ed, self.ed.level, raw, reach)
                             .into_iter()
+                            .filter(|e| crate::pick::in_view(*e, ceiling_plan))
                             .filter(|e| !self.ed.hidden().contains(e))
                             .filter(|e| crate::pick::pickable(model, &style, *e))
                             .collect()
@@ -1488,6 +1490,8 @@ impl ArchiSimApp {
                     if let (Some(a), Some(c)) = (self.window_start.take(), self.cursor) {
                         let mut found = in_window(&self.ed, self.ed.level, a, c.point);
                         found.retain(|e| !self.ed.hidden().contains(e));
+                        let ceiling_plan = self.active_ceiling();
+                        found.retain(|e| crate::pick::in_view(*e, ceiling_plan));
                         let style = self.view_style.effective();
                         found.retain(|e| crate::pick::pickable(self.ed.model(), &style, *e));
                         if !shift {

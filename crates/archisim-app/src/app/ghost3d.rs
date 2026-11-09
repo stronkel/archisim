@@ -103,7 +103,7 @@ impl ArchiSimApp {
                     top_offset: s.top_offset,
                 })
             }
-            Tool::Slab if !self.slab_settings.hole => {
+            Tool::Slab if !self.slab_settings.hole && !self.slab_settings.ceiling => {
                 let outline = if self.slab_tool.mode == crate::slab_tool::SlabMode::Rectangle {
                     self.slab_tool.rectangle_to(c.point)?
                 } else {

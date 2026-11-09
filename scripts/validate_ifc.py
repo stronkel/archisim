@@ -220,7 +220,9 @@ def main(path: str) -> int:
             errors.append(f"{name}: no material")
         if el.is_a("IfcWindow") and (not el.OverallWidth or not el.OverallHeight):
             errors.append(f"{name}: missing overall size")
-        if el.is_a("IfcCovering") and not any(
+        # A false ceiling (M7) hangs in its storey; other coverings
+        # (tiles, gutters) cover their roof.
+        if el.is_a("IfcCovering") and el.PredefinedType != "CEILING" and not any(
             r.RelatingBuildingElement.is_a("IfcRoof") for r in el.CoversElements
         ):
             errors.append(f"{name}: covers no roof")

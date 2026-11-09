@@ -43,6 +43,7 @@
 //! model twice gives the same file apart from the header timestamp.
 
 mod accessories;
+mod ceilings;
 mod curtain;
 mod decals;
 mod elevators;
@@ -1705,12 +1706,21 @@ impl<'a> Exporter<'a> {
         let mut slab_type_refs: BTreeMap<SlabTypeId, Ref> = BTreeMap::new();
         for t in model.slab_types() {
             let set = self.layer_set(&materials, t.layers.iter().rev(), &t.name);
-            let ty = self.w.add(format!(
-                "IFCSLABTYPE({},$,{},$,$,$,$,$,$,.{}.)",
-                string(t.guid.as_str()),
-                string(&t.name),
-                t.function.ifc_predefined_type()
-            ));
+            // A false ceiling's type is a covering's (M7).
+            let ty = if t.function == archisim_core::SlabFunction::Ceiling {
+                self.w.add(format!(
+                    "IFCCOVERINGTYPE({},$,{},$,$,$,$,$,$,.CEILING.)",
+                    string(t.guid.as_str()),
+                    string(&t.name),
+                ))
+            } else {
+                self.w.add(format!(
+                    "IFCSLABTYPE({},$,{},$,$,$,$,$,$,.{}.)",
+                    string(t.guid.as_str()),
+                    string(&t.name),
+                    t.function.ifc_predefined_type()
+                ))
+            };
             self.w.add(format!(
                 "IFCRELASSOCIATESMATERIAL({},$,$,$,({ty}),{set})",
                 string(derived_guid(&t.guid, "material").as_str())
@@ -2167,6 +2177,7 @@ impl<'a> Exporter<'a> {
 
         self.write_members(&materials, &storeys, &mut contained);
         self.write_roofs(&storeys, &slab_sets, &mut contained, &mut slabs_by_type);
+        self.write_ceilings(&storeys, &slab_sets, &mut contained, &mut slabs_by_type);
         self.write_stairs(&materials, &storeys, &mut contained);
         self.write_terrains(&materials, &storeys, &mut contained);
         self.write_curtain_walls(&materials, &storeys, &mut contained, &mut openings_by_type);
