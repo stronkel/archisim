@@ -149,6 +149,102 @@ pub fn read_module(text: &str) -> Result<(String, String, Model), FileError> {
     Ok((pretty(&value), archisim_core::text_stamp(text), model))
 }
 
+/// What a project template keeps out: everything drawn (elements,
+/// annotations, the site's streets and terrain, the boxes) and what hangs
+/// on it. It keeps the levels, materials, types and families, the graphic
+/// standards, view templates, title blocks, sheets, tables, parameters,
+/// prices and the calculation data (sites of the structure and the
+/// installations).
+const TEMPLATE_DROPS: &[&str] = &[
+    "walls",
+    "slabs",
+    "openings",
+    "dimensions",
+    "elevation_marks",
+    "columns",
+    "beams",
+    "sections",
+    "grids",
+    "footings",
+    "roofs",
+    "wall_roofs",
+    "stairs",
+    "terrains",
+    "curtain_walls",
+    "railings",
+    "objects",
+    "modules",
+    "module_sources",
+    "masses",
+    "edges",
+    "face_paints",
+    "paint_zones",
+    "face_zones",
+    "cameras",
+    "plots",
+    "roads",
+    "roundabouts",
+    "ceilings",
+    "boxes",
+    "markings",
+    "decals",
+    "plantings",
+    "pools",
+    "elevators",
+    "runs",
+    "devices",
+    "drafts",
+    "draft_views",
+    "level_underlays",
+    "viewports",
+    "reinforcements",
+    "footing_offsets",
+    "footing_piles",
+    "device_circuits",
+    "rooms",
+    "tags",
+    "orthophoto",
+];
+
+/// The project as a template for new ones (Revit's «Guardar como
+/// plantilla»): the same file without anything drawn in it, so a new
+/// project starts with its levels, types, materials, view templates,
+/// title blocks, sheets, tables and calculation data. A box type's
+/// catalogue data goes too: a template is not a box type.
+pub fn template_of(model: &Model) -> Result<Model, FileError> {
+    let text = to_string(model);
+    let mut value: Value = serde_json::from_str(&text).map_err(FileError::Json)?;
+    if let Value::Object(map) = &mut value {
+        for key in TEMPLATE_DROPS {
+            if let Some(v) = map.get_mut(*key) {
+                *v = match v {
+                    Value::Array(_) => Value::Array(Vec::new()),
+                    _ => Value::Null,
+                };
+            }
+        }
+        map.remove("catalogue");
+        // Values of parameters kept only for what is still there (types).
+        let kept: std::collections::BTreeSet<u64> = model
+            .wall_types()
+            .map(|t| t.id.0)
+            .chain(model.slab_types().map(|t| t.id.0))
+            .chain(model.opening_types().map(|t| t.id.0))
+            .chain(model.member_types().map(|t| t.id.0))
+            .chain(model.object_types().map(|t| t.id.0))
+            .chain(model.curtain_types().map(|t| t.id.0))
+            .collect();
+        if let Some(Value::Array(values)) = map.get_mut("parameter_values") {
+            values.retain(|v| {
+                v.get("element")
+                    .and_then(Value::as_u64)
+                    .is_some_and(|id| kept.contains(&id))
+            });
+        }
+    }
+    from_str(&pretty(&value))
+}
+
 /// Reads a project from `.archisim` text.
 pub fn from_str(text: &str) -> Result<Model, FileError> {
     // Editors on Windows may add a byte order mark.
@@ -3511,5 +3607,22 @@ mod tests {
         }
         let own: &Values = &back.object(p.members[0]).unwrap().values;
         assert!(matches!(own.get("plant_seed"), Some(Value::Number(_))));
+    }
+
+    #[test]
+    fn a_template_keeps_types_and_levels_and_drops_what_is_drawn() {
+        let m = sample();
+        assert!(m.walls().count() > 0);
+        let t = template_of(&m).unwrap();
+        assert_eq!(t.walls().count(), 0);
+        assert_eq!(t.slabs().count(), 0);
+        assert_eq!(t.openings().count(), 0);
+        assert_eq!(t.levels().len(), m.levels().len());
+        assert_eq!(t.wall_types().count(), m.wall_types().count());
+        assert_eq!(t.slab_types().count(), m.slab_types().count());
+        assert_eq!(t.materials().count(), m.materials().count());
+        assert_eq!(t.view_templates().count(), m.view_templates().count());
+        // And it saves and opens as any project.
+        assert_eq!(from_str(&to_string(&t)).unwrap(), t);
     }
 }

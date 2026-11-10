@@ -194,6 +194,7 @@ fn civil(days: i64) -> (i64, u32, u32) {
 /// What the start screen asked for.
 enum Choice {
     New,
+    FromTemplate,
     Open,
     Import,
     Team,
@@ -321,6 +322,10 @@ impl ArchiSimApp {
                 self.start.open = false;
                 self.guarded(Pending::New);
             }
+            Some(Choice::FromTemplate) => {
+                self.start.open = false;
+                self.guarded(Pending::FromTemplate(None));
+            }
             Some(Choice::Open) => self.guarded(Pending::Open(None)),
             Some(Choice::Import) => self.guarded(Pending::Import(None)),
             Some(Choice::Team) => self.pick_team_folder(),
@@ -392,6 +397,10 @@ impl ArchiSimApp {
         };
         if big(ui, "Proyecto nuevo", true) {
             *choice = Some(Choice::New);
+        }
+        ui.add_space(4.0);
+        if big(ui, "Nuevo desde plantilla…", false) {
+            *choice = Some(Choice::FromTemplate);
         }
         ui.add_space(4.0);
         if big(ui, "Abrir…", false) {

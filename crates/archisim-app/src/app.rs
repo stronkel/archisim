@@ -284,6 +284,8 @@ impl DragState {
 #[derive(Debug, Clone, PartialEq)]
 enum Pending {
     New,
+    /// A new project from a template (or from a project, as its template).
+    FromTemplate(Option<PathBuf>),
     Open(Option<PathBuf>),
     Import(Option<PathBuf>),
     Quit,
@@ -1241,6 +1243,20 @@ impl ArchiSimApp {
                 self.replace_editor(Editor::new_project());
                 self.say("Proyecto nuevo con la plantilla de ArchiSim.");
             }
+            Pending::FromTemplate(path) => {
+                let path = path.or_else(|| {
+                    let mut d = rfd::FileDialog::new()
+                        .set_title("Nuevo desde plantilla")
+                        .add_filter("Plantilla o proyecto ArchiSim", &[archisim_file::EXTENSION]);
+                    if let Some(dir) = self.start_dir() {
+                        d = d.set_directory(dir);
+                    }
+                    d.pick_file()
+                });
+                if let Some(path) = path {
+                    self.new_from_template(&path);
+                }
+            }
             Pending::Open(path) => {
                 let path = path.or_else(|| {
                     let mut d = rfd::FileDialog::new()
@@ -1394,6 +1410,52 @@ impl ArchiSimApp {
                 self.say(format!("Importado {name}: {}.", report.summary()));
             }
             Err(e) => self.complain(format!("No se puede importar {}: {e}.", path.display())),
+        }
+    }
+
+    /// A new, unsaved project with what `path` keeps (its levels, types,
+    /// materials, view templates, sheets…) and nothing drawn: a template,
+    /// or any project taken as one.
+    pub fn new_from_template(&mut self, path: &Path) {
+        let made = archisim_file::open(path).and_then(|m| archisim_file::template_of(&m));
+        match made {
+            Ok(model) => {
+                self.replace_editor(Editor::with_model(model, None));
+                self.say(format!(
+                    "Proyecto nuevo con la plantilla {}.",
+                    path.file_name()
+                        .map(|n| n.to_string_lossy())
+                        .unwrap_or_default()
+                ));
+            }
+            Err(e) => self.complain(format!(
+                "No se puede usar {} como plantilla: {e}.",
+                path.display()
+            )),
+        }
+    }
+
+    /// Saves the project as a template: the same file with nothing drawn.
+    fn save_as_template(&mut self) {
+        let mut d = rfd::FileDialog::new()
+            .set_title("Guardar como plantilla")
+            .add_filter("Plantilla ArchiSim", &[archisim_file::EXTENSION])
+            .set_file_name(format!(
+                "{} (plantilla).{}",
+                self.file_name_stem(),
+                archisim_file::EXTENSION
+            ));
+        if let Some(dir) = self.start_dir() {
+            d = d.set_directory(dir);
+        }
+        let Some(path) = d.save_file() else {
+            return;
+        };
+        let res = archisim_file::template_of(self.ed.model())
+            .and_then(|t| archisim_file::save(&t, &path));
+        match res {
+            Ok(()) => self.say(format!("Plantilla guardada en {}.", path.display())),
+            Err(e) => self.complain(format!("No se pudo guardar la plantilla: {e}.")),
         }
     }
 
