@@ -11211,6 +11211,20 @@ fn modular_boxes_are_placed_against_each_other_and_moved_whole() {
         h.app.box_properties(ui, a.id)
     });
     o.textures_delta.clear();
+    // The work on site under it (M10), in one step that undoes.
+    let levels = h.model().levels().len();
+    let made = h
+        .app
+        .ed
+        .transact("Obra previa", |m| {
+            m.build_box_base(&archisim_core::BaseOptions::default())
+        })
+        .unwrap();
+    assert_eq!(made.piers.len(), h.model().box_supports().len());
+    assert_eq!(h.model().levels().len(), levels + 1);
+    h.app.ed.undo();
+    assert_eq!(h.model().levels().len(), levels);
+    assert_eq!(h.model().columns().count(), 0);
 }
 
 /// The catalogue (M8): a box saved as a box type, approved (and then

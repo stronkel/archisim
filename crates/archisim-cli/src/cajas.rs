@@ -7,7 +7,8 @@
 //! open on both sides. Writes the project, its IFC (each box an
 //! `IfcElementAssembly` with its parts and its chassis), the plans and a
 //! list of the boxes with what they hold, their notes, their weight and
-//! lifting, the order they are craned in and their cut lists.
+//! lifting, the order they are craned in and their cut lists; and the
+//! work on site under them (M10): slab, supports and block plinth.
 
 use std::fmt::Write as _;
 use std::path::Path;
@@ -225,6 +226,9 @@ pub fn build() -> Res<Model> {
     let mut site = m.modular_site();
     site.crane = Some(Point2::new((min_x + max_x) / 2.0, min_y - 6.0));
     m.set_modular_site(site)?;
+    // The work on site before the boxes come (M10): slab, supports and
+    // plinth, on their level under the boxes.
+    m.build_box_base(&archisim_core::BaseOptions::default())?;
     Ok(m)
 }
 
@@ -294,14 +298,30 @@ pub fn write(dir: &Path) -> Res {
         scale: 100.0,
         ..Default::default()
     };
-    let level = m.levels()[0].id;
-    std::fs::write(
-        dir.join("cajas-planta.svg"),
-        archisim_plan::render_plan(&m, level, &options),
-    )?;
-    for (n, l) in m.levels().iter().enumerate().skip(1) {
+    // The boxes' levels, and the base's under them.
+    let mut n = 0;
+    for l in m.levels() {
+        let name = if l.name == archisim_core::BASE_LEVEL {
+            "cajas-cimentacion.svg".to_string()
+        } else {
+            n += 1;
+            if n == 1 {
+                "cajas-planta.svg".to_string()
+            } else {
+                format!("cajas-planta-{n}.svg")
+            }
+        };
+        // The base's plan, cut through its piers.
+        let options = archisim_plan::PlanOptions {
+            cut_plane: if l.name == archisim_core::BASE_LEVEL {
+                archisim_core::BASE_CUT
+            } else {
+                options.cut_plane
+            },
+            ..options.clone()
+        };
         std::fs::write(
-            dir.join(format!("cajas-planta-{}.svg", n + 1)),
+            dir.join(name),
             archisim_plan::render_plan(&m, l.id, &options),
         )?;
     }
@@ -331,8 +351,24 @@ mod tests {
         let first = m.boxes().next().unwrap().id;
         assert_eq!(m.boxes_above(first).len(), 1);
         let walls: usize = m.boxes().map(|b| m.box_members(b.id).walls.len()).sum();
-        // Every wall belongs to one box.
-        assert_eq!(walls, m.walls().count());
+        // Every wall belongs to one box, but the plinth's, on the base's
+        // level.
+        let base = m
+            .levels()
+            .into_iter()
+            .find(|l| l.name == archisim_core::BASE_LEVEL)
+            .unwrap()
+            .id;
+        let plinth = m.walls().filter(|w| w.level == base).count();
+        assert_eq!(plinth, 6, "an L of six sides");
+        assert_eq!(walls + plinth, m.walls().count());
+        // Under the eight boxes on the ground, their supports.
+        let check = archisim_struct::boxes::base_check(&m).unwrap();
+        assert_eq!(
+            m.columns().filter(|c| c.level == base).count(),
+            check.supports.len()
+        );
+        assert!(check.ground_passes(), "{}", check.pressure);
         // Notes only: wide load, and the living room open on both sides.
         for b in m.boxes() {
             for i in m.box_issues(b.id) {

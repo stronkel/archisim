@@ -416,6 +416,185 @@ pub fn crane_plan(model: &Model) -> Option<CranePlan> {
     })
 }
 
+/// Use load on each box's floor (housing, DB-SE-AE category A), kN/m².
+pub const BOX_USE_LOAD: f64 = 2.0;
+/// Partial factors of the supports' check.
+pub const GAMMA_G: f64 = 1.35;
+pub const GAMMA_Q: f64 = 1.50;
+/// Concrete's unit weight, kN/m³.
+const CONCRETE: f64 = 25.0;
+
+/// What a support carries and whether its pier and its plate are enough
+/// (M10). The boxes stacked on a box on the ground come down through it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SupportLoad {
+    pub mark: String,
+    pub at: Point2,
+    /// Top of the plate over project zero.
+    pub z: f64,
+    /// Permanent and use loads, kN, without factors.
+    pub g: f64,
+    pub q: f64,
+    /// Pier side, m (the one built, or the usual one).
+    pub pier: f64,
+    /// The steel plate on it, «250×250×15», and its bolts.
+    pub plate: String,
+    pub bolts: String,
+    /// Design load, kN, and the pier's stress and limit, MPa.
+    pub design: f64,
+    pub stress: f64,
+    pub limit: f64,
+    /// The boxes it carries.
+    pub boxes: Vec<BoxId>,
+}
+
+impl SupportLoad {
+    pub fn passes(&self) -> bool {
+        self.stress <= self.limit + 1e-9
+    }
+}
+
+/// The base's check: each support and the ground under the slab.
+#[derive(Debug, Clone, PartialEq)]
+pub struct BaseCheck {
+    pub supports: Vec<SupportLoad>,
+    /// Slab area, m², and the pressure on the ground and what it admits,
+    /// kN/m² (service loads and the slab and plinth's own weight).
+    pub area: f64,
+    pub pressure: f64,
+    pub bearing: f64,
+}
+
+impl BaseCheck {
+    pub fn ground_passes(&self) -> bool {
+        self.pressure <= self.bearing + 1e-9
+    }
+}
+
+/// The weight of a box with every box stacked on it, kN, and the floor
+/// area under use, m².
+fn stack(model: &Model, id: BoxId, seen: &mut Vec<BoxId>) -> (f64, f64) {
+    if seen.contains(&id) {
+        return (0.0, 0.0);
+    }
+    seen.push(id);
+    let Some(b) = model.modular_box(id) else {
+        return (0.0, 0.0);
+    };
+    let own = box_weight(model, id).map_or(0.0, |w| w.kg) / KG_PER_KN;
+    let (mut g, mut area) = (own, b.length * b.width);
+    for up in model.boxes_above(id) {
+        let (ug, ua) = stack(model, up, seen);
+        g += ug;
+        area += ua;
+    }
+    (g, area)
+}
+
+/// What each support of the boxes on the ground carries (M10).
+pub fn base_check(model: &Model) -> Option<BaseCheck> {
+    let supports = model.box_supports();
+    if supports.is_empty() {
+        return None;
+    }
+    let site = model.structural_site();
+    let fck = site.materials.concrete_fck;
+    let limit = 0.85 * fck / 1.5;
+    let base = model
+        .levels()
+        .into_iter()
+        .find(|l| l.name == archisim_core::BASE_LEVEL)
+        .map(|l| l.id);
+    let defaults = archisim_core::BaseOptions::default();
+    let mut stacks: std::collections::BTreeMap<BoxId, (f64, f64)> = Default::default();
+    let mut out = Vec::new();
+    let (mut total_g, mut total_q) = (0.0, 0.0);
+    for s in &supports {
+        let (mut g, mut q) = (0.0, 0.0);
+        for (id, share) in &s.boxes {
+            let (sg, sa) = *stacks
+                .entry(*id)
+                .or_insert_with(|| stack(model, *id, &mut Vec::new()));
+            g += sg * share;
+            q += BOX_USE_LOAD * sa * share;
+        }
+        total_g += g;
+        total_q += q;
+        // The pier built there, if there is one.
+        let built = base.and_then(|lv| {
+            model
+                .columns()
+                .filter(|c| c.level == lv && c.position.distance(s.at) < 0.05)
+                .find_map(|c| match model.member_type(c.member_type)?.profile {
+                    archisim_core::Profile::Rectangle { width, depth } => Some(width.min(depth)),
+                    _ => None,
+                })
+        });
+        let pier = built.unwrap_or(if s.shared() {
+            defaults.shared_pier
+        } else {
+            defaults.pier
+        });
+        let design = GAMMA_G * g + GAMMA_Q * q;
+        let stress = design / (pier * pier) / 1000.0;
+        // Two bolts per box it carries, on a plate that takes them.
+        let plate = match s.boxes.len() {
+            1 => "250×250×15",
+            2 => "400×250×15",
+            _ => "400×400×15",
+        };
+        let bolts = format!("{} pernos M16", 2 * s.boxes.len());
+        out.push(SupportLoad {
+            mark: s.mark.clone(),
+            at: s.at,
+            z: s.z,
+            g,
+            q,
+            pier,
+            plate: plate.into(),
+            bolts,
+            design,
+            stress,
+            limit,
+            boxes: s.boxes.iter().map(|(id, _)| *id).collect(),
+        });
+    }
+    // The slab (the one built, or the outline it would have).
+    let (mut area, mut own) = (0.0, 0.0);
+    let built: Vec<_> = base
+        .map(|lv| model.slabs().filter(|sl| sl.level == lv).collect())
+        .unwrap_or_default();
+    if built.is_empty() {
+        for o in model.ground_box_outlines(defaults.margin) {
+            let a = signed_area(&o).abs();
+            area += a;
+            own += a * defaults.slab * CONCRETE;
+        }
+    } else {
+        for sl in built {
+            let a = signed_area(&sl.outline).abs();
+            area += a;
+            own += a * slab_type_weight(model, sl.slab_type);
+        }
+    }
+    if let Some(lv) = base {
+        for w in model.walls().filter(|w| w.level == lv) {
+            own += wall_type_weight(model, w.wall_type) * w.start.distance(w.end) * w.height;
+        }
+    }
+    let pressure = if area > 0.0 {
+        (total_g + total_q + own) / area
+    } else {
+        0.0
+    };
+    Some(BaseCheck {
+        supports: out,
+        area,
+        pressure,
+        bearing: site.bearing,
+    })
+}
+
 fn num(v: f64, d: usize) -> String {
     format!("{v:.d$}").replace('.', ",")
 }
@@ -522,6 +701,48 @@ pub fn boxes_report(model: &Model) -> String {
                 if l.passes() { "cumple" } else { "NO CUMPLE" }
             ));
         }
+    }
+    if let Some(base) = base_check(model) {
+        t.push_str(&format!(
+            "\nAPOYOS (OBRA PREVIA)\nPeso de las cajas con las que tienen encima; uso {} kN/m²; {} G + {} Q. \
+             Pilar de hormigón de fck {} MPa: hasta 0,85 fck / 1,5.\n",
+            num(BOX_USE_LOAD, 1),
+            num(GAMMA_G, 2),
+            num(GAMMA_Q, 2),
+            num(model.structural_site().materials.concrete_fck, 0)
+        ));
+        for s in &base.supports {
+            let marks: Vec<&str> = s
+                .boxes
+                .iter()
+                .filter_map(|b| model.modular_box(*b).map(|b| b.mark.as_str()))
+                .collect();
+            t.push_str(&format!(
+                "{} ({}): G {} kN · Q {} kN · pilar {}×{} · {} MPa de {} · placa {}, {} → {}\n",
+                s.mark,
+                marks.join(", "),
+                num(s.g, 1),
+                num(s.q, 1),
+                (s.pier * 100.0).round(),
+                (s.pier * 100.0).round(),
+                num(s.stress, 2),
+                num(s.limit, 2),
+                s.plate,
+                s.bolts,
+                if s.passes() { "cumple" } else { "NO CUMPLE" }
+            ));
+        }
+        t.push_str(&format!(
+            "Terreno: {} kN/m² en {} m² de losa, admite {} → {}\n",
+            num(base.pressure, 1),
+            num(base.area, 1),
+            num(base.bearing, 0),
+            if base.ground_passes() {
+                "cumple"
+            } else {
+                "NO CUMPLE"
+            }
+        ));
     }
     t.push_str("\nDESPIECE POR CAJA\n");
     let frames = archisim_geom::framing::members_by_box(model);
@@ -696,5 +917,58 @@ mod tests {
         );
         let _ = SideState::Free;
         let _ = b;
+    }
+
+    #[test]
+    fn the_supports_carry_the_boxes_and_what_is_on_them() {
+        let (mut m, a, _) = houses();
+        let up = m.add_level("P1", 3.6);
+        m.add_box(NewBox::usual(up, Point2::new(0.0, 0.0), 0.0))
+            .unwrap();
+        let before = base_check(&m).unwrap();
+        // Two boxes side by side: nine supports, three shared.
+        assert_eq!(before.supports.len(), 9);
+        assert_eq!(
+            before
+                .supports
+                .iter()
+                .filter(|s| s.boxes.len() == 2)
+                .count(),
+            3
+        );
+        // All the weight comes down: the boxes' and the one on top.
+        let g: f64 = before.supports.iter().map(|s| s.g).sum();
+        let weight: f64 = m
+            .boxes()
+            .filter_map(|b| box_weight(&m, b.id))
+            .map(|w| w.kg / KG_PER_KN)
+            .sum();
+        assert!((g - weight).abs() < 1e-6 * weight, "{g} {weight}");
+        // Under box A, which has a box on it, more than under the other.
+        let under = |id: BoxId| -> f64 {
+            before
+                .supports
+                .iter()
+                .filter(|s| s.boxes == vec![id])
+                .map(|s| s.g)
+                .sum()
+        };
+        let other = m
+            .boxes()
+            .find(|b| b.id != a && b.level == m.modular_box(a).unwrap().level)
+            .unwrap()
+            .id;
+        assert!(under(a) > under(other));
+        // Built: its piers are the ones checked, and the slab weighs.
+        m.build_box_base(&archisim_core::BaseOptions::default())
+            .unwrap();
+        let after = base_check(&m).unwrap();
+        assert!(after.supports.iter().all(|s| s.passes()));
+        assert!(
+            after.pressure > 0.0 && after.ground_passes(),
+            "{}",
+            after.pressure
+        );
+        assert!(boxes_report(&m).contains("APOYOS (OBRA PREVIA)"));
     }
 }
