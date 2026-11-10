@@ -456,7 +456,7 @@ Hoy hay cuatro sitios que se pisan: Visibilidad y gráficos (por vista), plantil
 | Nivel | Qué decide | Dónde |
 |---|---|---|
 | **Proyecto** · Normas gráficas | Grosores por escala, tipografía, color y trama de corte de cada material | Gestionar → Normas gráficas |
-| **Plantilla de vista** | Todo el aspecto con nombre: escala, nivel de detalle, qué categorías se ven y cómo (VG), estilo de presentación, atenuación, fase | Un solo diálogo «Representación» con pestañas: Categorías · Capas 2D · Presentación · Fases |
+| **Plantilla de vista** | Todo el aspecto con nombre: escala (si manda en ella), plano de corte (si manda en él), nivel de detalle, qué categorías se ven y cómo (VG), estilo de presentación, atenuación, fase | Un solo diálogo «Representación» con pestañas: Categorías · Capas 2D · Presentación · Fases |
 | **Vista** | Qué plantilla usa y, si hace falta, algún retoque suyo | Propiedades: Plantilla ▾ · Editar… · Escala |
 
 El estilo de presentación dejaría de ser una cosa aparte: sería una pestaña de la plantilla. Un plano de albañilería, uno de superficies o uno de presentación para el cliente serían tres plantillas.
@@ -471,5 +471,7 @@ El estilo de presentación dejaría de ser una cosa aparte: sería una pestaña 
 
 **Tercera vuelta** (7/11/2026, rama `bloque/vistas-limpias`, `docs/GRAFICOS.md`): una plantilla por cada instalación; las plantas siguen por defecto Arquitectura (sin instalaciones); una pastilla arriba a la izquierda de la planta cambia de plantilla con un clic; solo se selecciona lo que la vista enseña sin gris; la trama de los pavimentos, solo en presentación.
 
-**Pendiente**: llevar las plantillas a la biblioteca entre proyectos; la misma pastilla en secciones, alzados y la vista 3D.
+**Pendiente**: la misma pastilla en secciones, alzados y la vista 3D.
+
+**Cuarta vuelta** (rama `bloque/plantillas-biblioteca`, formato versión 107): la plantilla **manda en** la escala (encendido por defecto) y en el plano de corte (apagado por defecto), con un interruptor cada uno en la ventana Representación; lo que fija sale en gris en Propiedades. Las plantillas se guardan en la biblioteca («Plantillas de vista.asplantillas») y se cargan en otros proyectos, con sus capas por nombre y su estilo de presentación.
 

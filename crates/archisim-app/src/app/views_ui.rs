@@ -14,11 +14,11 @@
 use super::widgets::SwitchExt as _;
 use archisim_core::{
     Category, GraphicOverride, LayerLines, LevelId, Model, ModelError, PlanKind, PlanView,
-    PlanViewId, Rgb, ViewStyle, ViewTemplate, ViewTemplateId, ViewportId,
+    PlanViewId, Rgb, SavedTemplate, ViewStyle, ViewTemplate, ViewTemplateId, ViewportId,
 };
 use eframe::egui::{self, Ui};
 
-use super::tabs::{TabKind, ViewTab};
+use super::tabs::{TabKind, ViewTab, SCALES};
 use super::theme::Palette;
 use super::ArchiSimApp;
 
@@ -150,6 +150,43 @@ fn look_tab(
 
 /// A style without what belongs to the session, not to the view: the
 /// discipline greyed and the disciplines hidden from the navigator.
+/// The library file of the view templates.
+pub const TEMPLATE_FILE: &str = "Plantillas de vista.asplantillas";
+
+fn template_file() -> std::path::PathBuf {
+    crate::editor::library::library_dir().join(TEMPLATE_FILE)
+}
+
+/// The view templates of the library folder (none if it has no file, or
+/// one this program cannot read).
+pub fn library_templates() -> Vec<SavedTemplate> {
+    std::fs::read_to_string(template_file())
+        .ok()
+        .and_then(|t| archisim_file::templates_from_str(&t).ok())
+        .unwrap_or_default()
+}
+
+/// The library's templates with `t` in (replacing the one of its name).
+pub fn with_template(mut all: Vec<SavedTemplate>, t: SavedTemplate) -> Vec<SavedTemplate> {
+    match all.iter_mut().find(|o| o.template.name == t.template.name) {
+        Some(o) => *o = t,
+        None => all.push(t),
+    }
+    all.sort_by(|a, b| a.template.name.cmp(&b.template.name));
+    all
+}
+
+/// Keeps a template in the library folder.
+fn save_template(t: SavedTemplate) -> Result<std::path::PathBuf, String> {
+    let path = template_file();
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    }
+    let all = with_template(library_templates(), t);
+    std::fs::write(&path, archisim_file::templates_to_string(&all)).map_err(|e| e.to_string())?;
+    Ok(path)
+}
+
 /// What a view that follows a template changes in its look goes to the
 /// template, and so to every view that follows it (Revit's view
 /// templates). Nothing happens for a view with a look of its own.
@@ -472,6 +509,20 @@ impl ArchiSimApp {
     }
 
     /// The template the active view follows, if any.
+    /// The scale and cut plane of the view the window Representación
+    /// edits, and whether a cut plane counts in it (a plan, not a
+    /// section or an axonometry on a sheet).
+    fn view_frame(&self) -> (f64, f64, bool) {
+        match self
+            .views
+            .vg_viewport
+            .and_then(|id| self.ed.model().viewport(id))
+        {
+            Some(v) => (v.scale, v.cut_plane, v.is_plan()),
+            None => (self.plan_scale, self.cut_plane, true),
+        }
+    }
+
     pub(super) fn followed_template(&self) -> Option<ViewTemplate> {
         self.view_style
             .template
@@ -494,6 +545,12 @@ impl ArchiSimApp {
             }
         }
         let key = (level, saved);
+        // A view that follows a template that sets its scale or cut plane
+        // has them (the model keeps them for the saved ones; a level's own
+        // plan keeps them in the tab).
+        if let Some(t) = self.followed_template() {
+            (self.plan_scale, self.cut_plane) = t.frame(self.plan_scale, self.cut_plane);
+        }
         let now = ViewState {
             scale: self.plan_scale,
             cut: self.cut_plane,
@@ -639,6 +696,12 @@ impl ArchiSimApp {
         let mut delete_template = None;
         let mut open_graphics = false;
         let mut open_styles = false;
+        // What the template sets of the view's scale and cut plane, and
+        // the library (a file of the library folder).
+        let mut new_frame: Option<(Option<f64>, Option<f64>)> = None;
+        let mut save_to_library = false;
+        let mut load_from_library: Option<SavedTemplate> = None;
+        let (view_scale, view_cut, cut_counts) = self.view_frame();
         let layers = self.layer_options();
         let following = self.followed_template();
         let followers = following
@@ -693,6 +756,40 @@ impl ArchiSimApp {
                                 }
                             }
                         });
+                    // The library: the studio's templates, for every project.
+                    egui::ComboBox::from_id_salt("vg-template-library")
+                        .selected_text("De la biblioteca…")
+                        .show_ui(ui, |ui| {
+                            let saved = library_templates();
+                            if saved.is_empty() {
+                                ui.label(
+                                    egui::RichText::new(
+                                        "Aún no hay plantillas en la biblioteca",
+                                    )
+                                    .color(p.muted),
+                                );
+                            }
+                            for t in saved {
+                                let name = t.template.name.clone();
+                                if ui
+                                    .selectable_label(false, &name)
+                                    .on_hover_text("Cargarla en este proyecto (si ya tiene una con su nombre, la sustituye) y que esta vista la siga")
+                                    .clicked()
+                                {
+                                    load_from_library = Some(t);
+                                }
+                            }
+                        });
+                    if following.is_some()
+                        && ui
+                            .button("Guardar en la biblioteca")
+                            .on_hover_text(format!(
+                                "Guarda la plantilla en la carpeta de la biblioteca («{TEMPLATE_FILE}») para usarla en otros proyectos"
+                            ))
+                            .clicked()
+                    {
+                        save_to_library = true;
+                    }
                 });
                 match &following {
                     Some(t) => {
@@ -709,6 +806,61 @@ impl ArchiSimApp {
                             ))
                             .color(p.accent),
                         );
+                        // What the template sets besides the look: the
+                        // scale on by default, the cut plane off (a
+                        // basement or a mezzanine may need its own).
+                        ui.horizontal(|ui| {
+                            ui.label("La plantilla manda en:");
+                            let mut on = t.scale.is_some();
+                            let mut scale = t.scale.unwrap_or(view_scale);
+                            let mut changed = ui
+                                .switch(&mut on, "Escala")
+                                .on_hover_text("Las vistas que la siguen se dibujan a esta escala")
+                                .changed();
+                            ui.add_enabled_ui(on, |ui| {
+                                egui::ComboBox::from_id_salt("vg-template-scale")
+                                    .selected_text(format!("1:{scale}"))
+                                    .width(80.0)
+                                    .show_ui(ui, |ui| {
+                                        for k in SCALES {
+                                            if ui
+                                                .selectable_label(scale == k, format!("1:{k}"))
+                                                .clicked()
+                                            {
+                                                scale = k;
+                                                changed = true;
+                                            }
+                                        }
+                                    });
+                            });
+                            ui.add_space(12.0);
+                            let mut cut_on = t.cut_plane.is_some();
+                            let mut cut = t.cut_plane.unwrap_or(view_cut);
+                            changed |= ui
+                                .switch(&mut cut_on, "Plano de corte")
+                                .on_hover_text("Las plantas que la siguen cortan a esta altura sobre su planta; apagado, cada una conserva la suya")
+                                .changed();
+                            ui.add_enabled_ui(cut_on, |ui| {
+                                changed |= ui
+                                    .add(
+                                        egui::DragValue::new(&mut cut)
+                                            .range(0.1..=10.0)
+                                            .speed(0.05)
+                                            .max_decimals(2)
+                                            .suffix(" m"),
+                                    )
+                                    .changed();
+                            });
+                            if changed {
+                                new_frame = Some((on.then_some(scale), cut_on.then_some(cut)));
+                            }
+                            if !cut_counts {
+                                ui.label(
+                                    egui::RichText::new("(el corte no cuenta en esta vista)")
+                                        .color(p.muted),
+                                );
+                            }
+                        });
                     }
                     None => {
                         ui.horizontal(|ui| {
@@ -835,6 +987,43 @@ impl ArchiSimApp {
         if let Some(id) = apply {
             self.apply_template(id);
         }
+        if let (Some((scale, cut)), Some(t)) = (new_frame, following.clone()) {
+            let r = self.ed.transact("Escala y corte de la plantilla", |m| {
+                m.set_view_template(ViewTemplate {
+                    scale,
+                    cut_plane: cut,
+                    ..t
+                })
+            });
+            self.report(r, "");
+        }
+        if save_to_library {
+            let saved = following
+                .as_ref()
+                .and_then(|t| self.ed.model().saved_template(t.id));
+            if let Some(t) = saved {
+                let name = t.template.name.clone();
+                match save_template(t) {
+                    Ok(path) => self.say(format!(
+                        "Plantilla «{name}» guardada en la biblioteca ({}).",
+                        path.display()
+                    )),
+                    Err(e) => self.complain(format!("No se puede guardar en la biblioteca: {e}.")),
+                }
+            }
+        }
+        if let Some(t) = load_from_library {
+            let name = t.template.name.clone();
+            match self.ed.transact("Cargar plantilla de la biblioteca", |m| {
+                m.load_saved_template(&t)
+            }) {
+                Ok(id) => {
+                    self.apply_template(Some(id));
+                    self.say(format!("Plantilla «{name}» cargada de la biblioteca."));
+                }
+                Err(e) => self.complain(format!("No se puede cargar la plantilla: {e}.")),
+            }
+        }
         if let Some(name) = save_as {
             if name.is_empty() {
                 self.complain("Escribe el nombre de la plantilla.");
@@ -843,6 +1032,10 @@ impl ArchiSimApp {
                     id: ViewTemplateId(0),
                     name: name.clone(),
                     style: kept(&self.view_style),
+                    // The scale on, as Revit's: a look is made for a
+                    // scale. The cut plane off.
+                    scale: Some(view_scale),
+                    cut_plane: None,
                 };
                 let r = self.ed.transact("Guardar plantilla de vista", |m| {
                     let existing = m.view_templates().find(|t| t.name == name).map(|t| t.id);

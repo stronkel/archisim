@@ -1014,7 +1014,25 @@ impl ArchiSimApp {
                     });
                 }
             }
+            // What its template sets is shown greyed.
+            let framing = v
+                .style
+                .template
+                .and_then(|id| self.ed.model().view_template(id).cloned());
+            let fixed_scale = framing
+                .as_ref()
+                .filter(|t| t.scale.is_some())
+                .map(|t| t.name.clone());
+            let fixed_cut = framing
+                .as_ref()
+                .filter(|t| t.cut_plane.is_some())
+                .map(|t| t.name.clone());
             row(ui, "Escala", "", |ui, w| {
+                if let Some(n) = &fixed_scale {
+                    ui.add_enabled(false, egui::Label::new(format!("1:{}", v.scale)))
+                        .on_disabled_hover_text(format!("La fija la plantilla «{n}»"));
+                    return;
+                }
                 let mut opts: Vec<(u32, String)> = [20.0, 50.0, 100.0, 200.0, 500.0]
                     .iter()
                     .chain(SCALES.iter())
@@ -1027,6 +1045,14 @@ impl ArchiSimApp {
             });
             if section_title.is_none() && !axo {
                 row(ui, "Plano de corte (mm)", "", |ui, w| {
+                    if let Some(n) = &fixed_cut {
+                        ui.add_enabled(
+                            false,
+                            egui::Label::new(format!("{:.0}", v.cut_plane * 1000.0)),
+                        )
+                        .on_disabled_hover_text(format!("Lo fija la plantilla «{n}»"));
+                        return;
+                    }
                     if let Some(c) =
                         length_field(ui, Id::unique(("vp-cut", v.id)), v.cut_plane, w - 8.0)
                     {

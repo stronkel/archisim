@@ -754,6 +754,15 @@ impl ArchiSimApp {
     }
 
     pub(super) fn set_scale(&mut self, scale: f64) {
+        if (scale - self.plan_scale).abs() > 1e-9 && self.mode == ViewMode::Plan {
+            if let Some(t) = self.followed_template().filter(|t| t.scale.is_some()) {
+                self.say(format!(
+                    "La escala la fija la plantilla «{}»: cámbiala en Representación… (VG) o deja de seguirla.",
+                    t.name
+                ));
+                return;
+            }
+        }
         if (scale - self.plan_scale).abs() > 1e-9 {
             // The model stays the same size on the screen; lines, texts
             // and symbols change (and the zoom, measured on the paper).

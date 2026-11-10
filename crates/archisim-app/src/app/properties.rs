@@ -980,12 +980,27 @@ impl ArchiSimApp {
             .and_then(|id| self.ed.model().plan_view(id).cloned());
         // No card of the view: the title and the level say it.
         self.view_actions_group(ui, saved.as_ref());
+        // What the view's template sets is shown greyed, as in Revit.
+        let framing = self.followed_template();
+        let fixed_scale = framing
+            .as_ref()
+            .filter(|t| t.scale.is_some())
+            .map(|t| t.name.clone());
+        let fixed_cut = framing
+            .as_ref()
+            .filter(|t| t.cut_plane.is_some())
+            .map(|t| t.name.clone());
         group(ui, "view-graphics", "Gráficos", |ui| {
             row(
                 ui,
                 "Escala",
                 "Grosores de línea, tramas, textos y símbolos de puertas y ventanas",
                 |ui, w| {
+                    if let Some(n) = &fixed_scale {
+                        ui.add_enabled(false, egui::Label::new(format!("1:{}", self.plan_scale)))
+                            .on_disabled_hover_text(format!("La fija la plantilla «{n}»"));
+                        return;
+                    }
                     let options: Vec<(u32, String)> = SCALES
                         .iter()
                         .map(|s| (*s as u32, format!("1:{s}")))
@@ -1001,6 +1016,14 @@ impl ArchiSimApp {
                 "Plano de corte (mm)",
                 "Altura sobre la planta a la que se corta: lo de debajo se ve, lo de encima va discontinuo",
                 |ui, w| {
+                    if let Some(n) = &fixed_cut {
+                        ui.add_enabled(
+                            false,
+                            egui::Label::new(format!("{:.0}", self.cut_plane * 1000.0)),
+                        )
+                        .on_disabled_hover_text(format!("Lo fija la plantilla «{n}»"));
+                        return;
+                    }
                     if let Some(v) =
                         length_field(ui, Id::unique("view-cut"), self.cut_plane, w - 8.0)
                     {

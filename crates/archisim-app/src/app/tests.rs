@@ -11263,3 +11263,102 @@ fn box_types_are_saved_frozen_and_placed_side_by_side() {
     assert!(boxes.iter().all(|b| b.kind.starts_with("CB-PRUEBA rev. 2")));
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn a_template_sets_the_scale() {
+    let mut h = Harness::new(Editor::new_project());
+    h.frame();
+    let level = h.app.ed.level;
+    // «Albañilería» of the starter project is drawn at 1:50.
+    let t = h
+        .model()
+        .view_templates()
+        .find(|t| t.name == "Albañilería")
+        .map(|t| t.id)
+        .expect("a template in the starter project");
+    assert_eq!(h.model().view_template(t).unwrap().scale, Some(50.0));
+    h.app.set_scale(100.0);
+    h.frame();
+    assert_eq!(h.app.plan_scale, 100.0);
+    h.app.apply_template(Some(t));
+    h.frame();
+    h.frame();
+    assert_eq!(h.model().level_style(level).template, Some(t));
+    assert_eq!(
+        h.app.plan_scale, 50.0,
+        "the plan takes the template's scale"
+    );
+    // The tab cannot change it while the template sets it.
+    h.app.set_scale(200.0);
+    h.frame();
+    assert_eq!(h.app.plan_scale, 50.0);
+    // The template's scale changed: the plan follows it.
+    let mut tt = h.model().view_template(t).unwrap().clone();
+    tt.scale = Some(100.0);
+    h.app
+        .ed
+        .transact("Escala", |m| m.set_view_template(tt))
+        .unwrap();
+    h.frame();
+    h.frame();
+    assert_eq!(h.app.plan_scale, 100.0);
+    // Off: the view's scale is its own again.
+    let mut tt = h.model().view_template(t).unwrap().clone();
+    tt.scale = None;
+    h.app
+        .ed
+        .transact("Escala", |m| m.set_view_template(tt))
+        .unwrap();
+    h.frame();
+    h.app.set_scale(200.0);
+    h.frame();
+    h.frame();
+    assert_eq!(h.app.plan_scale, 200.0);
+    // The cut plane, likewise, when the template sets it.
+    let mut tt = h.model().view_template(t).unwrap().clone();
+    tt.cut_plane = Some(1.3);
+    h.app
+        .ed
+        .transact("Corte", |m| m.set_view_template(tt))
+        .unwrap();
+    h.frame();
+    h.frame();
+    assert!((h.app.cut_plane - 1.3).abs() < 1e-9);
+}
+
+#[test]
+fn templates_go_to_the_library() {
+    use super::views_ui::with_template;
+    let mut h = Harness::new(Editor::new_project());
+    h.frame();
+    let t = h
+        .model()
+        .view_templates()
+        .find(|t| t.name == "Albañilería")
+        .map(|t| t.id)
+        .unwrap();
+    let saved = h.model().saved_template(t).unwrap();
+    // The library keeps one per name, the newest.
+    let mut newer = saved.clone();
+    newer.template.scale = Some(20.0);
+    let all = with_template(with_template(Vec::new(), saved), newer);
+    assert_eq!(all.len(), 1);
+    assert_eq!(all[0].template.scale, Some(20.0));
+    // Through its file and into another project.
+    let text = archisim_file::templates_to_string(&all);
+    let back = archisim_file::templates_from_str(&text).unwrap();
+    let mut other = Harness::new(Editor::new_project());
+    other.frame();
+    let before = other.model().view_templates().count();
+    let id = other
+        .app
+        .ed
+        .transact("Cargar", |m| m.load_saved_template(&back[0]))
+        .unwrap();
+    assert_eq!(
+        other.model().view_templates().count(),
+        before,
+        "replaces the one of its name"
+    );
+    assert_eq!(other.model().view_template(id).unwrap().scale, Some(20.0));
+}

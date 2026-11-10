@@ -65,6 +65,14 @@ pub struct ViewTemplate {
     pub id: ViewTemplateId,
     pub name: String,
     pub style: ViewStyle,
+    /// The scale denominator it sets for the views that follow it, if it
+    /// sets one (version 92, Revit's «Escala» in the template; on by
+    /// default: a template's look is made for a scale).
+    pub scale: Option<f64>,
+    /// The cut plane it sets for the plans that follow it, metres above
+    /// their level, if it sets one (version 92; off by default: a basement
+    /// or a mezzanine may need its own).
+    pub cut_plane: Option<f64>,
 }
 
 impl ViewTemplate {
@@ -78,6 +86,30 @@ impl ViewTemplate {
         s.hidden_disciplines = old.hidden_disciplines.clone();
         s
     }
+
+    /// The scale and cut plane of a view that follows it: its own where
+    /// the template sets none.
+    pub fn frame(&self, scale: f64, cut_plane: f64) -> (f64, f64) {
+        (
+            self.scale.unwrap_or(scale),
+            self.cut_plane.unwrap_or(cut_plane),
+        )
+    }
+}
+
+/// A view template as kept in the library between projects (the file
+/// «Plantillas de vista.asplantillas»): what refers to the project goes
+/// by name, so it can be loaded in another one.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SavedTemplate {
+    /// The template, without its hidden 2D layers and its presentation
+    /// style, which go by name below.
+    pub template: ViewTemplate,
+    /// The 2D layers it hides, by name.
+    pub hidden_layers: Vec<String>,
+    /// Its presentation style, whole: added to the project if it has none
+    /// of that name.
+    pub presentation: Option<crate::PresentationStyle>,
 }
 
 /// A saved point of view of the 3D view (the Cámara tile of
@@ -163,6 +195,7 @@ impl Model {
     /// Saves a plan view (its id is given here).
     pub fn add_plan_view(&mut self, mut v: PlanView) -> Result<PlanViewId, ModelError> {
         self.check_plan_view(&v, None)?;
+        (v.scale, v.cut_plane) = self.framed_by_template(&v.style, v.scale, v.cut_plane, true);
         v.id = PlanViewId(self.take_id());
         let id = v.id;
         self.plan_views.insert(id, v);
@@ -175,6 +208,10 @@ impl Model {
             return Err(ModelError::UnknownPlanView(v.id));
         }
         self.check_plan_view(&v, Some(v.id))?;
+        // A plan that follows a template has its scale and cut plane where
+        // the template sets them.
+        let mut v = v;
+        (v.scale, v.cut_plane) = self.framed_by_template(&v.style, v.scale, v.cut_plane, true);
         self.plan_views.insert(v.id, v);
         Ok(())
     }
@@ -267,6 +304,12 @@ impl Model {
         if t.name.trim().is_empty() {
             return Err(ModelError::EmptyName);
         }
+        if t.scale.is_some_and(|k| !(k.is_finite() && k > 0.0)) {
+            return Err(ModelError::NonPositive("template scale"));
+        }
+        if t.cut_plane.is_some_and(|c| !c.is_finite()) {
+            return Err(ModelError::NonPositive("template cut plane"));
+        }
         if self
             .view_templates
             .values()
@@ -293,8 +336,116 @@ impl Model {
         let mut t = t;
         t.style.template = None;
         self.restyle_followers(t.id, |old| t.applied(old));
+        self.reframe_followers(&t);
         self.view_templates.insert(t.id, t);
         Ok(())
+    }
+
+    /// The scale and cut plane of the saved plans and the views on sheets
+    /// that follow `t`, where `t` sets them (the levels' own plans take
+    /// theirs in the tab, which asks `view_template`).
+    fn reframe_followers(&mut self, t: &ViewTemplate) {
+        let follows = |s: &ViewStyle| s.template == Some(t.id);
+        for v in self.plan_views.values_mut().filter(|v| follows(&v.style)) {
+            (v.scale, v.cut_plane) = t.frame(v.scale, v.cut_plane);
+        }
+        for v in self.viewports.values_mut().filter(|v| follows(&v.style)) {
+            let plan = v.is_plan();
+            let (scale, cut) = t.frame(v.scale, v.cut_plane);
+            v.scale = scale;
+            if plan {
+                v.cut_plane = cut;
+            }
+        }
+    }
+
+    /// The scale and cut plane a view with `style` must have: what its
+    /// template sets, or its own (`plan`: it is cut, so a template's cut
+    /// plane counts).
+    pub fn framed_by_template(
+        &self,
+        style: &ViewStyle,
+        scale: f64,
+        cut_plane: f64,
+        plan: bool,
+    ) -> (f64, f64) {
+        match style.template.and_then(|id| self.view_templates.get(&id)) {
+            Some(t) => {
+                let (k, c) = t.frame(scale, cut_plane);
+                (k, if plan { c } else { cut_plane })
+            }
+            None => (scale, cut_plane),
+        }
+    }
+
+    /// A template as the library keeps it: its hidden layers by name and
+    /// its presentation style whole.
+    pub fn saved_template(&self, id: ViewTemplateId) -> Option<SavedTemplate> {
+        let t = self.view_templates.get(&id)?;
+        let mut template = t.clone();
+        let hidden_layers = t
+            .style
+            .hidden_layers
+            .iter()
+            .filter_map(|l| self.draw_layer(*l).map(|l| l.name.clone()))
+            .collect();
+        template.style.hidden_layers.clear();
+        let presentation = t
+            .style
+            .presentation
+            .and_then(|p| self.presentation_style(p).cloned());
+        template.style.presentation = None;
+        Some(SavedTemplate {
+            template,
+            hidden_layers,
+            presentation,
+        })
+    }
+
+    /// Loads a template from the library: it replaces the project's of the
+    /// same name (and so changes the views that follow it) or is added. Its
+    /// layers are matched by name (those the project lacks are left out)
+    /// and its presentation style too, added if the project has none of
+    /// that name.
+    pub fn load_saved_template(&mut self, t: &SavedTemplate) -> Result<ViewTemplateId, ModelError> {
+        let mut template = t.template.clone();
+        template.style.template = None;
+        template.style.hidden_layers = t
+            .hidden_layers
+            .iter()
+            .filter_map(|n| {
+                self.draw_layers()
+                    .into_iter()
+                    .find(|l| &l.name == n)
+                    .map(|l| l.id)
+            })
+            .collect();
+        template.style.presentation = match &t.presentation {
+            None => None,
+            Some(p) => {
+                let found = self
+                    .presentation_styles()
+                    .find(|s| s.name == p.name)
+                    .map(|s| s.id);
+                Some(match found {
+                    Some(id) => id,
+                    None => self.add_presentation_style(p.clone())?,
+                })
+            }
+        };
+        match self
+            .view_templates
+            .values()
+            .find(|o| o.name == template.name)
+        {
+            Some(o) => {
+                template.id = o.id;
+                let id = template.id;
+                self.set_view_template(template)?;
+                Ok(id)
+            }
+            None => self.add_view_template(template),
+        }
     }
 
     /// Every view that follows template `id`: its look as `f` makes it.
@@ -595,6 +746,84 @@ mod tests {
     /// changes; removing it leaves them their look as their own; the file
     /// keeps who follows what.
     #[test]
+    fn templates_set_scale_and_cut_plane() {
+        let mut m = Model::new("Plantillas");
+        let level = m.add_level("Planta baja", 0.0);
+        let t = m
+            .add_view_template(ViewTemplate {
+                id: ViewTemplateId(0),
+                name: "Albañilería 1:50".into(),
+                style: ViewStyle::default(),
+                scale: Some(50.0),
+                cut_plane: None,
+            })
+            .unwrap();
+        let follows = ViewStyle {
+            template: Some(t),
+            ..Default::default()
+        };
+        // A saved plan that follows it takes its scale, and keeps its own
+        // cut plane (the template sets none).
+        let v = m
+            .add_plan_view(PlanView {
+                id: PlanViewId(0),
+                name: "Planta baja — obra".into(),
+                level,
+                kind: PlanKind::Floor,
+                scale: 100.0,
+                cut_plane: 1.4,
+                style: follows.clone(),
+            })
+            .unwrap();
+        assert_eq!(m.plan_view(v).unwrap().scale, 50.0);
+        assert_eq!(m.plan_view(v).unwrap().cut_plane, 1.4);
+        // Edited to another scale, it keeps the template's.
+        let mut edited = m.plan_view(v).unwrap().clone();
+        edited.scale = 20.0;
+        m.set_plan_view(edited).unwrap();
+        assert_eq!(m.plan_view(v).unwrap().scale, 50.0);
+        // The template sets the cut plane and changes scale: the plan
+        // follows; one with a look of its own does not.
+        let own = m
+            .add_plan_view(PlanView {
+                id: PlanViewId(0),
+                name: "Planta baja — propia".into(),
+                level,
+                kind: PlanKind::Floor,
+                scale: 100.0,
+                cut_plane: 1.0,
+                style: ViewStyle::default(),
+            })
+            .unwrap();
+        let mut tt = m.view_template(t).unwrap().clone();
+        tt.scale = Some(20.0);
+        tt.cut_plane = Some(1.1);
+        m.set_view_template(tt).unwrap();
+        let v = m.plan_view(v).unwrap();
+        assert_eq!((v.scale, v.cut_plane), (20.0, 1.1));
+        let own = m.plan_view(own).unwrap();
+        assert_eq!((own.scale, own.cut_plane), (100.0, 1.0));
+        // Neither set: each view keeps its own.
+        let mut tt = m.view_template(t).unwrap().clone();
+        tt.scale = None;
+        tt.cut_plane = None;
+        m.set_view_template(tt).unwrap();
+        let mut free = m
+            .plan_views()
+            .find(|p| p.name == "Planta baja — obra")
+            .unwrap()
+            .clone();
+        free.scale = 200.0;
+        let id = free.id;
+        m.set_plan_view(free).unwrap();
+        assert_eq!(m.plan_view(id).unwrap().scale, 200.0);
+        // A wrong scale is refused.
+        let mut bad = m.view_template(t).unwrap().clone();
+        bad.scale = Some(0.0);
+        assert!(m.set_view_template(bad).is_err());
+    }
+
+    #[test]
     fn views_follow_their_template() {
         let mut m = Model::new("T");
         let ground = m.add_level("Planta baja", 0.0);
@@ -606,6 +835,8 @@ mod tests {
                 id: ViewTemplateId(0),
                 name: "Albañilería".into(),
                 style: look.clone(),
+                scale: None,
+                cut_plane: None,
             })
             .unwrap();
         let template = m.view_template(t).unwrap().clone();
@@ -712,6 +943,8 @@ mod tests {
                 id: ViewTemplateId(0),
                 name: "Blanco y negro".into(),
                 style: ViewStyle::ad5(),
+                scale: None,
+                cut_plane: None,
             })
             .unwrap();
         assert!(m.view_template(t).is_some());
@@ -754,6 +987,8 @@ mod plan_template_tests {
                     discipline: Some(crate::ElementDiscipline::Architecture),
                     ..Default::default()
                 },
+                scale: None,
+                cut_plane: None,
             })
             .unwrap();
         assert_eq!(m.level_style(a).template, None);

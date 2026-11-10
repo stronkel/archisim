@@ -6,6 +6,29 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-07 (143) · Plantillas de vista: escala, plano de corte y biblioteca
+
+Rama `bloque/plantillas-biblioteca`, con pull request. **Formato `.archisim` versión 107** (la plantilla guarda su escala y su plano de corte; se hizo como la 92 y pasó a la 107 al unirla a `main` el 10/11/2026). Sin cambios de IFC. Antonio aprobó la propuesta: la plantilla manda en la escala (encendido por defecto) y en el plano de corte (apagado por defecto), cada uno con su interruptor.
+
+**Hecho**
+- **La plantilla manda en**: en la ventana Representación, bajo la plantilla, dos interruptores: **Escala** (con su escala) y **Plano de corte** (con su altura). Encendidos, las vistas que siguen la plantilla —plantas, vistas guardadas y vistas de los planos— toman su escala y su corte; apagados, cada vista conserva los suyos.
+- Mientras la plantilla fija la escala o el corte, en Propiedades (de la planta y de la vista del plano) salen en gris con la nota «La fija la plantilla…», y la escala de la barra inferior no cambia (avisa).
+- Una plantilla nueva creada desde una vista nace con la escala de esa vista encendida y el corte apagado. En la plantilla de inicio, «Albañilería» va a 1:50 y «Superficies» a 1:100; «Blanco y negro» no fija escala.
+- **Biblioteca**: «Guardar en la biblioteca» guarda la plantilla que sigue la vista en la carpeta de la biblioteca («Plantillas de vista.asplantillas»), con su escala, su corte, las capas de dibujo que oculta (por su nombre) y su estilo de presentación entero. «De la biblioteca…» la carga en otro proyecto (si ya tiene una con su nombre, la sustituye y cambian las vistas que la siguen) y la vista pasa a seguirla.
+- Pruebas: núcleo (las vistas toman la escala y el corte de su plantilla, editadas los conservan, apagado vuelven a ser suyos), fichero (de ida y vuelta por la biblioteca a otro proyecto) y aplicación (la planta a la escala de la plantilla, la barra no la cambia, el corte, la biblioteca).
+
+**Pendiente**
+- Nada de esta parte. Si algún día hace falta, una plantilla de sección o alzado con su propia escala.
+
+**Qué debe probar Antonio**
+1. `cargo run --release -p archisim-app -- out/demo.archisim` (con la demo hecha de nuevo: `cargo run -p archisim-cli -- demo out/`).
+2. En la Planta baja, Propiedades → **Representación… (VG)** → Plantilla «Superficies»: la pestaña pasa a 1:100. Debajo, «La plantilla manda en: Escala ☑ 1:100 · Plano de corte ☐».
+3. Cambia la escala de la barra inferior: no cambia y avisa. En Propiedades, la escala sale en gris.
+4. Enciende **Plano de corte** y ponlo a 1,50: la planta corta más alto.
+5. **Guardar en la biblioteca**, abre otro proyecto (o uno nuevo) y en **De la biblioteca…** elige «Superficies»: llega con su escala y su aspecto.
+
+---
+
 ## 2026-11-10 (142) · M9 taller de las cajas: estado, plan de grúa y planos de taller
 
 Rama `bloque/taller-cajas`, con pull request sobre `bloque/juntas` (#194). **Formato versión 106.** `docs/MODULAR.md` (M9).
