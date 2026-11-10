@@ -99,6 +99,9 @@ pub fn system_fill(m: &mut Model, lib: &archisim_library::Library) -> Res<BoxFil
         ceiling_height: 2.93,
         parapet: archisim_core::BOX_PARAPET,
     };
+    // How the boards are laid (M18): the insulating boards in a zipper,
+    // the ceramic cladding by joint lines with wood round the windows.
+    archisim_library::modular_board_layouts(m);
     Ok(fill)
 }
 

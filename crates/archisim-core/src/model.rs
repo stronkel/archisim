@@ -15,6 +15,7 @@ use crate::ids::*;
 use crate::math::{is_simple_polygon, signed_area, Arc, Point2, Vec2, EPSILON, MIN_BULGE};
 
 mod appearance;
+mod board_layouts;
 mod box_base;
 mod box_import;
 mod box_porch;
@@ -82,6 +83,7 @@ mod wall_section;
 mod water;
 mod worktops;
 pub use appearance::*;
+pub use board_layouts::*;
 pub use box_base::*;
 pub use box_import::*;
 pub use box_porch::*;
@@ -1551,6 +1553,8 @@ pub struct ModelParts {
     /// What this project is in the system's catalogue, if it is a box
     /// type (M8, version 98).
     pub catalogue: Option<CatalogueEntry>,
+    /// How the studio lays each material in boards (M18, version 108).
+    pub board_layouts: Vec<(MaterialId, BoardLayout)>,
     /// Road markings at will (U4).
     pub markings: Vec<Marking>,
     /// Pictures stuck on faces (U8).
@@ -1716,6 +1720,7 @@ pub struct Model {
     boxes: BTreeMap<BoxId, ModularBox>,
     modular_site: ModularSite,
     catalogue: Option<CatalogueEntry>,
+    board_layouts: BTreeMap<MaterialId, BoardLayout>,
     markings: BTreeMap<MarkingId, Marking>,
     decals: BTreeMap<DecalId, Decal>,
     plantings: BTreeMap<PlantingId, Planting>,
@@ -1836,6 +1841,7 @@ impl Model {
             boxes: BTreeMap::new(),
             modular_site: ModularSite::default(),
             catalogue: None,
+            board_layouts: BTreeMap::new(),
             markings: BTreeMap::new(),
             decals: BTreeMap::new(),
             plantings: BTreeMap::new(),
@@ -4566,6 +4572,11 @@ impl Model {
             boxes: self.boxes.values().cloned().collect(),
             modular_site: self.modular_site.clone(),
             catalogue: self.catalogue.clone(),
+            board_layouts: self
+                .board_layouts
+                .iter()
+                .map(|(m, l)| (*m, l.clone()))
+                .collect(),
             markings: self.markings.values().cloned().collect(),
             decals: self.decals.values().cloned().collect(),
             plantings: self.plantings.values().cloned().collect(),
@@ -5007,6 +5018,14 @@ impl Model {
                 element: "catalogue".into(),
                 error,
             })?;
+        for (material, layout) in parts.board_layouts {
+            model
+                .set_board_layout(material, Some(layout))
+                .map_err(|error| RestoreError {
+                    element: "board layout".into(),
+                    error,
+                })?;
+        }
         model
             .set_modular_site(parts.modular_site)
             .map_err(|error| RestoreError {

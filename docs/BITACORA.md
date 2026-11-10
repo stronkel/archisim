@@ -6,6 +6,14 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-10 (152) · M18: el despiece del estudio (cremallera, líneas de junta y acentos)
+
+Rama `bloque/despiece-placas` (sobre la del porche), con pull request. Formato versión 108 (`board_layouts`; los ficheros anteriores se abren sin despiece propio).
+
+- **Qué se hizo.** Antonio preguntó si se tenía en cuenta su despiece de Revit. Leído su IFC del L-160: Tabihaus 1,20 × 3,00 en vertical en cremallera (cortada de 0,58 arriba y abajo por columnas), placa cerámica en columnas de 1,20 con juntas a ±0,00 y 2,50 y lamas de madera en las columnas de los huecos. Ahora cada material puede tener su despiece (formato, vertical, juntas a media placa, en cremallera o por líneas, y acento alrededor de huecos), que siguen las placas pieza a pieza, la compra, los pedidos y, en fachada, el 3D y los alzados con sus juntas. `archisim despiece` pone el habitual; `archisim cajas` ya lo trae.
+- **Pendiente.** Piezas de esquina y remate de otro formato; la banda superior en otro formato; confirmar 2,50 frente a los 2,70 que comentó Antonio.
+- **Qué debe probar Antonio.** `archisim despiece <su L-160 con cajas>.archisim out/l160-despiece.archisim` y `archisim compra out/l160-despiece.archisim out/l160`: en `tableros.csv`, el Tabihaus en 1200×3000 y 1200×580 alternos y la cerámica en 1200×2500 y 1200×810 con las lamas junto a los huecos. Abrir `out/l160-despiece.archisim` en la app y mirar la fachada en 3D. En Tipos y materiales, elegir la placa cerámica → «Despiece en placas», cambiar las líneas (por ejemplo «0; 2,70») y ver cómo cambia la fachada.
+
 ## 2026-11-10 (151) · M17: el porche como módulo ligero de acero
 
 Rama `bloque/porche` (sobre la de M6, M15 y M16), con pull request. Sin cambios de formato.

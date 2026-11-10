@@ -201,6 +201,11 @@ Uso:
       Los locales de un proyecto desde una lista (nombre; uso; x; y, en
       metros): cada uno se cierra con los muros alrededor de su punto,
       como la herramienta Local. Para una vivienda importada sin locales.
+  archisim despiece <proyecto> <salida.archisim>
+      Pone en los materiales el despiece habitual del sistema modular: los
+      paneles aislantes de 1200 × 3000 en vertical y en cremallera, y la
+      placa cerámica de fachada en columnas de 1,20 con juntas a ±0,00 y
+      2,50, con madera alrededor de puertas y ventanas.
   archisim compra <proyecto> [carpeta]
       Las placas y tableros pieza a pieza (tableros.csv: marca, caja,
       material, formato y corte) y la lista de compra por caja y total
@@ -780,6 +785,26 @@ fn main() -> ExitCode {
                 }
             }
         }
+        Some("despiece") => match (args.get(1), args.get(2)) {
+            (Some(project), Some(out)) => report((|| {
+                let mut m = archisim_file::open(PathBuf::from(project))?;
+                let done = archisim_library::modular_board_layouts(&mut m);
+                if done.is_empty() {
+                    println!("Ningún material del proyecto se reconoce como panel aislante o placa cerámica de fachada.");
+                } else {
+                    for n in &done {
+                        println!("  {n}");
+                    }
+                }
+                archisim_file::save(&m, PathBuf::from(out))?;
+                println!("Despiece puesto en {} materiales: {out}", done.len());
+                Ok(())
+            })()),
+            _ => {
+                eprintln!("Uso: archisim despiece <proyecto> <salida.archisim>");
+                std::process::exit(2);
+            }
+        },
         Some("compra") => match args.get(1) {
             Some(project) => {
                 let path = PathBuf::from(project);

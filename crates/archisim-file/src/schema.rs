@@ -176,6 +176,9 @@ pub(crate) struct ProjectFile {
     /// What this project is in the system's catalogue (version 104).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub catalogue: Option<CatalogueOf>,
+    /// How the studio lays each material in boards (version 108).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub board_layouts: Vec<BoardLayoutOf>,
     /// Road markings (version 65).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub markings: Vec<MarkingOf>,
@@ -1288,6 +1291,25 @@ pub(crate) struct ChassisOf {
     pub roof_at: f64,
     /// «four» or «six».
     pub lift: String,
+}
+
+/// How a material is laid in boards (version 108).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct BoardLayoutOf {
+    pub material: u64,
+    pub width: f64,
+    pub length: f64,
+    pub upright: bool,
+    /// «half», «zipper» or «lines».
+    pub joints: String,
+    /// The joint lines over the level, for «lines».
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub lines: Vec<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub accent_material: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub accent_up_to: Option<f64>,
 }
 
 /// A box type of the catalogue (version 104).
@@ -4171,6 +4193,23 @@ impl ProjectFile {
                     rigging: (m.rigging != usual.rigging).then_some(m.rigging),
                 }
             }),
+            board_layouts: p
+                .board_layouts
+                .iter()
+                .map(|(m, l)| BoardLayoutOf {
+                    material: m.0,
+                    width: l.width,
+                    length: l.length,
+                    upright: l.upright,
+                    joints: l.joints.code().to_string(),
+                    lines: match &l.joints {
+                        core::BoardJoints::Lines(v) => v.clone(),
+                        _ => Vec::new(),
+                    },
+                    accent_material: l.accent.as_ref().map(|a| a.material.0),
+                    accent_up_to: l.accent.as_ref().map(|a| a.up_to),
+                })
+                .collect(),
             catalogue: p.catalogue.as_ref().map(|c| CatalogueOf {
                 code: c.code.clone(),
                 name: c.name.clone(),
@@ -4938,6 +4977,7 @@ impl ProjectFile {
             boxes: Vec::new(),
             modular_site: core::ModularSite::default(),
             catalogue: None,
+            board_layouts: Vec::new(),
             markings: Vec::new(),
             decals: Vec::new(),
             plantings: Vec::new(),
@@ -5875,6 +5915,32 @@ impl ProjectFile {
                     date: b.stage_date,
                 },
             });
+        }
+        for l in self.board_layouts {
+            let joints = match l.joints.as_str() {
+                "half" => core::BoardJoints::HalfBond,
+                "zipper" => core::BoardJoints::Zipper,
+                "lines" => core::BoardJoints::Lines(l.lines),
+                other => {
+                    return Err(FileError::Value {
+                        element: "board layout".into(),
+                        message: format!("unknown joints «{other}»"),
+                    })
+                }
+            };
+            parts.board_layouts.push((
+                core::MaterialId(l.material),
+                core::BoardLayout {
+                    width: l.width,
+                    length: l.length,
+                    upright: l.upright,
+                    joints,
+                    accent: l.accent_material.map(|m| core::BoardAccent {
+                        material: core::MaterialId(m),
+                        up_to: l.accent_up_to.unwrap_or(2.5),
+                    }),
+                },
+            ));
         }
         if let Some(c) = self.catalogue {
             parts.catalogue = Some(core::CatalogueEntry {

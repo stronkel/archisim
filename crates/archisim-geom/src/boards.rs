@@ -9,7 +9,7 @@
 //! and, with the frames, joints and fixings, the shopping list of a box.
 //! Nothing is kept: all is worked out from the model.
 
-use archisim_core::{BoxId, LayerFunction, MaterialId, Model, Point2, SlabFunction};
+use archisim_core::{BoardJoints, BoxId, LayerFunction, MaterialId, Model, Point2, SlabFunction};
 
 /// A commercial board: what it is and its size (width × length), m.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -94,8 +94,48 @@ pub const BOARD_MAX: f64 = 0.08;
 /// Saw cut, m.
 pub const KERF: f64 = 0.003;
 
+/// How a layer's material is laid: its format, upright or not, its joints
+/// and its accent; the studio's layout (M18) or the usual one.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Laying {
+    pub format: BoardFormat,
+    pub upright: bool,
+    pub joints: BoardJoints,
+    pub accent: Option<archisim_core::BoardAccent>,
+}
+
+/// How a layer is laid in boards, if it is: the studio's layout for its
+/// material, or the usual format by its name, upright at half a board.
+pub fn laying(model: &Model, material: MaterialId, thickness: f64) -> Option<Laying> {
+    if let Some(l) = model.board_layout(material) {
+        return Some(Laying {
+            format: BoardFormat {
+                kind: "Placa (despiece del estudio)",
+                width: l.width,
+                length: l.length,
+            },
+            upright: l.upright,
+            joints: l.joints.clone(),
+            accent: l.accent.clone(),
+        });
+    }
+    board_format(model, material, thickness).map(|format| Laying {
+        format,
+        upright: true,
+        joints: BoardJoints::HalfBond,
+        accent: None,
+    })
+}
+
 /// The board format of a layer's material, if it is laid in boards.
 pub fn board_format(model: &Model, material: MaterialId, thickness: f64) -> Option<BoardFormat> {
+    if let Some(l) = model.board_layout(material) {
+        return Some(BoardFormat {
+            kind: "Placa (despiece del estudio)",
+            width: l.width,
+            length: l.length,
+        });
+    }
     if !(0.004..=BOARD_MAX).contains(&thickness) {
         return None;
     }
@@ -176,6 +216,33 @@ fn overlap(a: Rect, b: Rect) -> Option<Rect> {
     (r[2] - r[0] > 1e-6 && r[3] - r[1] > 1e-6).then_some(r)
 }
 
+/// A rectangle less some others, as rectangles.
+fn subtract(r: Rect, holes: &[Rect]) -> Vec<Rect> {
+    let mut parts = vec![r];
+    for h in holes {
+        let mut next = Vec::new();
+        for p in parts {
+            let Some(o) = overlap(p, *h) else {
+                next.push(p);
+                continue;
+            };
+            // Left and right full height, then below and above the hole.
+            for q in [
+                [p[0], p[1], o[0], p[3]],
+                [o[2], p[1], p[2], p[3]],
+                [o[0], p[1], o[2], o[1]],
+                [o[0], o[3], o[2], p[3]],
+            ] {
+                if q[2] - q[0] > 1e-4 && q[3] - q[1] > 1e-4 {
+                    next.push(q);
+                }
+            }
+        }
+        parts = next;
+    }
+    parts
+}
+
 fn area(r: Rect) -> f64 {
     (r[2] - r[0]) * (r[3] - r[1])
 }
@@ -219,6 +286,114 @@ fn lay(
     out
 }
 
+/// A piece laid by [`lay_with`]: its rectangle, area left, whether it is
+/// cut round a hole, and whether it takes the accent.
+struct Laid {
+    rect: Rect,
+    area: f64,
+    notched: bool,
+    accent: bool,
+}
+
+/// Boards over the rectangle `face` as `laying` says, `shift` a part of a
+/// board (the layer's offset), less the `holes`.
+fn lay_with(face: Rect, laying: &Laying, shift: f64, holes: &[Rect]) -> Vec<Laid> {
+    let f = laying.format;
+    let columns_of = |bw: f64, bl: f64, zipper: bool, lines: Option<&[f64]>| {
+        let mut out: Vec<Laid> = Vec::new();
+        let off = (shift % 1.0) * bw;
+        let mut u = face[0] - off;
+        let mut c = 0usize;
+        let height = face[3] - face[1];
+        while u < face[2] - 1e-6 {
+            // The joints of this column, bottom to top.
+            let mut cuts: Vec<f64> = vec![face[1]];
+            match lines {
+                Some(lines) => {
+                    let mut l: Vec<f64> = lines
+                        .iter()
+                        .copied()
+                        .filter(|h| *h > face[1] + 0.01 && *h < face[3] - 0.01)
+                        .collect();
+                    l.sort_by(|a, b| a.total_cmp(b));
+                    l.push(face[3]);
+                    for top in l {
+                        // A band taller than a board: whole boards up.
+                        let mut v = *cuts.last().unwrap();
+                        while top - v > bl + 1e-6 {
+                            v += bl;
+                            cuts.push(v);
+                        }
+                        cuts.push(top);
+                    }
+                }
+                None => {
+                    let rest = height % bl;
+                    let mut v = face[1];
+                    if zipper && c % 2 == 1 && rest > 0.01 && height > bl {
+                        // The cut piece at the bottom.
+                        v += rest;
+                        cuts.push(v);
+                    }
+                    while face[3] - v > 1e-6 {
+                        v = (v + bl).min(face[3]);
+                        cuts.push(v);
+                    }
+                }
+            }
+            for k in 0..cuts.len().saturating_sub(1) {
+                let sheet = [u, cuts[k], u + bw, cuts[k + 1]];
+                let Some(r) = overlap(sheet, face) else {
+                    continue;
+                };
+                let cut: f64 = holes.iter().filter_map(|h| overlap(*h, r)).map(area).sum();
+                let left = area(r) - cut;
+                // The accent: in the band of the doors' heads, in a column
+                // a door or window crosses.
+                let accent = laying.accent.as_ref().is_some_and(|a| {
+                    let low = lines
+                        .and_then(|l| l.iter().copied().reduce(f64::min))
+                        .unwrap_or(face[1]);
+                    r[1] >= low - 1e-6
+                        && r[3] <= a.up_to + 1e-6
+                        && holes
+                            .iter()
+                            .any(|h| h[0] < r[2] - 1e-6 && h[2] > r[0] + 1e-6)
+                });
+                if left > 0.005 {
+                    out.push(Laid {
+                        rect: r,
+                        area: left,
+                        notched: cut > 1e-6,
+                        accent,
+                    });
+                }
+            }
+            u += bw;
+            c += 1;
+        }
+        out
+    };
+    let (bw, bl) = if laying.upright {
+        (f.width, f.length)
+    } else {
+        (f.length, f.width)
+    };
+    match &laying.joints {
+        BoardJoints::HalfBond => lay(face, f, laying.upright, shift, holes)
+            .into_iter()
+            .map(|(rect, area, notched)| Laid {
+                rect,
+                area,
+                notched,
+                accent: false,
+            })
+            .collect(),
+        BoardJoints::Zipper => columns_of(bw, bl, true, None),
+        BoardJoints::Lines(lines) => columns_of(bw, bl, false, Some(lines)),
+    }
+}
+
 /// The boards of a wall, layer by layer (from the outside in).
 pub fn wall_boards(model: &Model, wall: archisim_core::WallId) -> Vec<BoardPiece> {
     let Some(w) = model.wall(wall) else {
@@ -227,34 +402,131 @@ pub fn wall_boards(model: &Model, wall: archisim_core::WallId) -> Vec<BoardPiece
     let Some(t) = model.wall_type(w.wall_type) else {
         return Vec::new();
     };
+    // On the face, along the wall from its start and up from the level.
     let holes: Vec<Rect> = crate::openings_in_wall(model, wall)
         .iter()
         .map(|o| [o.t0, o.sill, o.t1, o.head])
         .collect();
-    let face = [0.0, 0.0, w.length(), w.height];
+    let face = [0.0, w.base_offset, w.length(), w.base_offset + w.height];
     let mark = format!("M{}", wall.0);
     let mut out = Vec::new();
     let mut nth = 0usize;
     for (i, l) in t.layers.iter().enumerate() {
-        let Some(f) = board_format(model, l.material, l.thickness) else {
+        let Some(laying) = laying(model, l.material, l.thickness) else {
             continue;
         };
-        // Joints half a board off the layer before.
-        let shift = 0.5 * (nth % 2) as f64;
+        // Joints half a board off the layer before (not where the studio
+        // fixed the joints).
+        let shift = if matches!(laying.joints, BoardJoints::HalfBond) {
+            0.5 * (nth % 2) as f64
+        } else {
+            0.0
+        };
         nth += 1;
-        for (k, (r, a, notched)) in lay(face, f, true, shift, &holes).into_iter().enumerate() {
+        for (k, p) in lay_with(face, &laying, shift, &holes)
+            .into_iter()
+            .enumerate()
+        {
+            let (material, format) = match (&laying.accent, p.accent) {
+                (Some(a), true) => (
+                    a.material,
+                    BoardFormat {
+                        kind: "Acento",
+                        ..laying.format
+                    },
+                ),
+                _ => (l.material, laying.format),
+            };
             out.push(BoardPiece {
                 mark: format!("{mark}·{}·{:02}", i + 1, k + 1),
                 host: Host::Wall(wall.0),
                 layer: i,
-                material: l.material,
+                material,
                 thickness: l.thickness,
-                format: f,
-                at: (r[0], r[1]),
-                size: (r[2] - r[0], r[3] - r[1]),
-                area: a,
-                notched,
+                format,
+                at: (p.rect[0], p.rect[1]),
+                size: (p.rect[2] - p.rect[0], p.rect[3] - p.rect[1]),
+                area: p.area,
+                notched: p.notched,
             });
+        }
+    }
+    out
+}
+
+/// How far the accent pieces stand out of the wall's exterior face, m:
+/// enough to read in 3D and in the elevations.
+pub const ACCENT_PROUD: f64 = 0.012;
+/// How far the cladding's own pieces stand out, m.
+pub const CLADDING_PROUD: f64 = 0.004;
+/// The open joint between cladding pieces, m.
+pub const CLADDING_JOINT: f64 = 0.006;
+
+/// The pieces of the walls' outer cladding laid by joint lines (M18) as
+/// thin plates on their exterior face with their open joints, the accent
+/// ones in the accent's material and further out: the façade's drawing in
+/// 3D and in the elevations. Straight walls only.
+pub fn cladding_solids(model: &Model) -> Vec<crate::solid::Solid> {
+    let mut out = Vec::new();
+    for w in model.walls() {
+        if w.bulge.abs() > 1e-9 {
+            continue;
+        }
+        let Some(t) = model.wall_type(w.wall_type) else {
+            continue;
+        };
+        let by_lines = t
+            .layers
+            .first()
+            .and_then(|l| model.board_layout(l.material))
+            .is_some_and(|l| matches!(l.joints, BoardJoints::Lines(_)));
+        if !by_lines {
+            continue;
+        }
+        let Some(u) = (w.end - w.start).normalized() else {
+            continue;
+        };
+        let n = u.perp_left();
+        let ext = w.face_offsets(t.thickness()).0;
+        let lv = model.level(w.level).map_or(0.0, |l| l.elevation);
+        let holes: Vec<Rect> = crate::openings_in_wall(model, w.id)
+            .iter()
+            .map(|o| [o.t0, o.sill, o.t1, o.head])
+            .collect();
+        for p in wall_boards(model, w.id)
+            .into_iter()
+            .filter(|p| p.layer == 0)
+        {
+            let proud = if p.format.kind == "Acento" {
+                ACCENT_PROUD
+            } else {
+                CLADDING_PROUD
+            };
+            let j = CLADDING_JOINT / 2.0;
+            let r = [
+                p.at.0 + j,
+                p.at.1 + j,
+                p.at.0 + p.size.0 - j,
+                p.at.1 + p.size.1 - j,
+            ];
+            let mut triangles = Vec::new();
+            for q in subtract(r, &holes) {
+                let o = w.start + u * q[0] + n * ext;
+                crate::framing::cuboid(
+                    &mut triangles,
+                    [o.x, o.y, lv + q[1]],
+                    [u.x * (q[2] - q[0]), u.y * (q[2] - q[0]), 0.0],
+                    [n.x * proud, n.y * proud, 0.0],
+                    [0.0, 0.0, q[3] - q[1]],
+                );
+            }
+            if !triangles.is_empty() {
+                out.push(crate::solid::Solid {
+                    owner: crate::solid::SolidOwner::Wall(w.id),
+                    material: p.material,
+                    triangles,
+                });
+            }
         }
     }
     out
@@ -361,12 +633,26 @@ fn plan_boards(
     let mut out = Vec::new();
     let mut nth = 0usize;
     for (i, l) in layers.iter().enumerate() {
-        let Some(f) = board_format(model, l.material, l.thickness) else {
+        let Some(mut laying) = laying(model, l.material, l.thickness) else {
             continue;
         };
-        let shift = 0.5 * (nth % 2) as f64;
+        let f = laying.format;
+        // In plan, «upright» lays the boards' length along the slab's
+        // short side; the usual format lies along its long side.
+        if model.board_layout(l.material).is_none() {
+            laying.upright = false;
+        }
+        let shift = if matches!(laying.joints, BoardJoints::HalfBond) {
+            0.5 * (nth % 2) as f64
+        } else {
+            0.0
+        };
         nth += 1;
-        for (k, (r, _, _)) in lay(face, f, false, shift, &[]).into_iter().enumerate() {
+        let laid: Vec<Rect> = lay_with(face, &laying, shift, &[])
+            .into_iter()
+            .map(|p| p.rect)
+            .collect();
+        for (k, r) in laid.into_iter().enumerate() {
             let inside = clip(&poly, r);
             let mut a = poly_area(&inside);
             for h in &holes {
@@ -921,6 +1207,10 @@ mod tests {
     };
 
     fn plaster_wall(length: f64) -> (Model, archisim_core::WallId) {
+        plaster_wall_of(length, 2.60)
+    }
+
+    fn plaster_wall_of(length: f64, height: f64) -> (Model, archisim_core::WallId) {
         let mut m = Model::new("T");
         let level = m.add_level("PB", 0.0);
         let gyp = m.add_material(
@@ -959,7 +1249,7 @@ mod tests {
                 end: Point2::new(length, 0.0),
                 bulge: 0.0,
                 reference: ReferenceLine::Center,
-                height: 2.60,
+                height,
                 base_offset: 0.0,
                 top: WallTop::Unconnected,
             })
@@ -1041,5 +1331,89 @@ mod tests {
         ];
         let refs: Vec<&BoardPiece> = v.iter().collect();
         assert_eq!(boards_needed(&refs), 2);
+    }
+
+    #[test]
+    fn a_zipper_puts_the_cut_piece_up_and_down_by_turns() {
+        let (mut m, w) = plaster_wall_of(3.6, 3.58);
+        let gyp = m.materials().find(|x| x.name.contains("yeso")).unwrap().id;
+        m.set_board_layout(
+            gyp,
+            Some(archisim_core::BoardLayout {
+                width: 1.2,
+                length: 3.0,
+                upright: true,
+                joints: BoardJoints::Zipper,
+                accent: None,
+            }),
+        )
+        .unwrap();
+        let p: Vec<_> = wall_boards(&m, w)
+            .into_iter()
+            .filter(|x| x.layer == 0)
+            .collect();
+        // Three columns, two pieces each: 3,00 + 0,58 and 0,58 + 3,00.
+        assert_eq!(p.len(), 6);
+        let first: Vec<_> = p.iter().filter(|x| x.at.0.abs() < 1e-9).collect();
+        let second: Vec<_> = p.iter().filter(|x| (x.at.0 - 1.2).abs() < 1e-9).collect();
+        assert!((first[0].size.1 - 3.0).abs() < 1e-9, "{first:?}");
+        assert!((second[0].size.1 - 0.58).abs() < 1e-9, "{second:?}");
+    }
+
+    #[test]
+    fn a_cladding_by_lines_frames_the_window_in_wood() {
+        let (mut m, w) = plaster_wall(3.6);
+        let gyp = m.materials().find(|x| x.name.contains("yeso")).unwrap().id;
+        let wood = m.add_material("Madera", "wood", [160, 110, 70], CutPattern::Solid);
+        m.set_board_layout(
+            gyp,
+            Some(archisim_core::BoardLayout {
+                width: 1.2,
+                length: 2.5,
+                upright: true,
+                joints: BoardJoints::Lines(vec![0.0, 2.0]),
+                accent: Some(archisim_core::BoardAccent {
+                    material: wood,
+                    up_to: 2.0,
+                }),
+            }),
+        )
+        .unwrap();
+        let board = m.add_material("Marco", "wood", [190, 150, 105], CutPattern::Solid);
+        let ot = m
+            .add_opening_type(NewOpeningType {
+                name: "Ventana".into(),
+                kind: OpeningKind::Door(DoorOperation::SingleSwing),
+                width: 0.8,
+                height: 1.0,
+                frame_width: 0.05,
+                frame_depth: 0.07,
+                frame_material: board,
+                panel_material: board,
+            })
+            .unwrap();
+        // In the middle column.
+        m.add_opening(NewOpening {
+            opening_type: ot,
+            wall: w,
+            along: 1.8,
+            sill: 0.9,
+            opens_to: WallSide::Interior,
+            hand: Hand::Left,
+            setback: None,
+        })
+        .unwrap();
+        let p: Vec<_> = wall_boards(&m, w)
+            .into_iter()
+            .filter(|x| x.layer == 0)
+            .collect();
+        // Bands 0–2,0 and 2,0–2,6; the middle column's lower piece is wood.
+        let wood_pieces: Vec<_> = p.iter().filter(|x| x.material == wood).collect();
+        assert_eq!(wood_pieces.len(), 1, "{p:?}");
+        assert!((wood_pieces[0].at.0 - 1.2).abs() < 1e-9);
+        assert!((wood_pieces[0].size.1 - 2.0).abs() < 1e-9);
+        assert!(p
+            .iter()
+            .any(|x| (x.at.1 - 2.0).abs() < 1e-9 && (x.size.1 - 0.6).abs() < 1e-9));
     }
 }
