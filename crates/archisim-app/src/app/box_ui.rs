@@ -952,4 +952,41 @@ impl ArchiSimApp {
             Err(e) => self.complain(format!("No se pudo exportar: {e}.")),
         }
     }
+
+    /// The shopping list of the boxes (M14), and their boards piece by
+    /// piece beside it, as CSV.
+    pub(super) fn export_shopping_list(&mut self) {
+        let model = self.ed.shown();
+        if model.boxes().next().is_none() {
+            self.complain("El proyecto no tiene cajas modulares.".to_string());
+            return;
+        }
+        let mut d = rfd::FileDialog::new()
+            .set_title("Lista de compra de las cajas (CSV)")
+            .add_filter("CSV", &["csv"])
+            .set_file_name(format!("{}-compra.csv", self.file_name_stem()));
+        if let Some(dir) = self.start_dir() {
+            d = d.set_directory(dir);
+        }
+        let Some(path) = d.save_file() else {
+            return;
+        };
+        let boards = path.with_file_name(format!(
+            "{}-tableros.csv",
+            path.file_stem().map_or("cajas".into(), |s| s
+                .to_string_lossy()
+                .trim_end_matches("-compra")
+                .to_string())
+        ));
+        let r = std::fs::write(&path, archisim_geom::boards::shopping_csv(&model))
+            .and_then(|_| std::fs::write(&boards, archisim_geom::boards::boards_csv(&model)));
+        match r {
+            Ok(()) => self.say(format!(
+                "Lista de compra en {} y placas pieza a pieza en {}.",
+                path.display(),
+                boards.display()
+            )),
+            Err(e) => self.complain(format!("No se pudo exportar: {e}.")),
+        }
+    }
 }

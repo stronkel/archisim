@@ -200,6 +200,11 @@ Uso:
       Los locales de un proyecto desde una lista (nombre; uso; x; y, en
       metros): cada uno se cierra con los muros alrededor de su punto,
       como la herramienta Local. Para una vivienda importada sin locales.
+  archisim compra <proyecto> [carpeta]
+      Las placas y tableros pieza a pieza (tableros.csv: marca, caja,
+      material, formato y corte) y la lista de compra por caja y total
+      (compra.csv): tableros en su formato comercial, perfiles en barras,
+      aislamiento, láminas, junta, uniones, chasis y tornillería.
   archisim taller-cajas <proyecto> [carpeta]
       Los planos de taller de las cajas modulares de un proyecto, A3:
       montaje y plan de grúa (M-00) y una hoja por caja con su chasis en
@@ -769,6 +774,37 @@ fn main() -> ExitCode {
                 }
             }
         }
+        Some("compra") => match args.get(1) {
+            Some(project) => {
+                let path = PathBuf::from(project);
+                let dir = PathBuf::from(args.get(2).map(String::as_str).unwrap_or("out"));
+                report((|| {
+                    let m = archisim_file::open(&path)?;
+                    std::fs::create_dir_all(&dir)?;
+                    let boards = archisim_geom::boards::all_boards(&m);
+                    std::fs::write(
+                        dir.join("tableros.csv"),
+                        archisim_geom::boards::boards_csv(&m),
+                    )?;
+                    std::fs::write(
+                        dir.join("compra.csv"),
+                        archisim_geom::boards::shopping_csv(&m),
+                    )?;
+                    let whole = boards.iter().filter(|b| b.whole()).count();
+                    println!(
+                        "{} piezas de placa y tablero ({whole} enteras) en {}",
+                        boards.len(),
+                        dir.join("tableros.csv").display()
+                    );
+                    println!("Lista de compra en {}", dir.join("compra.csv").display());
+                    Ok(())
+                })())
+            }
+            None => {
+                eprintln!("Uso: archisim compra <proyecto> [carpeta]");
+                std::process::exit(2);
+            }
+        },
         Some("taller-cajas") => match args.get(1) {
             Some(project) => {
                 let path = PathBuf::from(project);

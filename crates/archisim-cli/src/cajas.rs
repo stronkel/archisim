@@ -340,6 +340,16 @@ pub fn write(dir: &Path) -> Res {
         sheets,
         dir.join("cajas-taller.pdf").display()
     );
+    // The boards piece by piece and the shopping list (M14).
+    std::fs::write(
+        dir.join("cajas-tableros.csv"),
+        archisim_geom::boards::boards_csv(&m),
+    )?;
+    std::fs::write(
+        dir.join("cajas-compra.csv"),
+        archisim_geom::boards::shopping_csv(&m),
+    )?;
+    println!("  {}", dir.join("cajas-compra.csv").display());
     println!("  {}", dir.join("cajas.ifc").display());
     Ok(())
 }

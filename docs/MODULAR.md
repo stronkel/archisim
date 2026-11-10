@@ -146,9 +146,14 @@ Lo que falta para montar una vivienda con detalle de fabricación y trabajar có
 - **Cuentas**: cuatro tornillos autotaladrantes por montante del entramado; soldadura en todo el contorno de los dos extremos de cada tubo del chasis.
 - **Dónde sale**: en 3D, en el IFC (`IfcCovering` de aislamiento, membrana o moldura, `IfcPlate`, `IfcDiscreteAccessory` y `IfcMechanicalFastener` .ANCHORBOLT., con `ArchiSim_BoxPart`, agregados a la caja), en las mediciones (capítulo 17, «Cajas modulares: chasis, juntas y uniones», una línea por caja) y en la tabla de materiales de la hoja de taller de cada caja. Los materiales («Lana mineral de junta», «Banda impermeable de junta», «Membrana de junta», «Tapajuntas de aluminio») los añade la biblioteca al poner cajas (`archisim_library::joint_materials`).
 
-**M14 · Tableros y placas por piezas**: cada placa y tablero en su formato comercial con sus cortes, la junta de fachada sobre la de las cajas, y la lista de compra por caja.
+**M14 · Tableros y placas por piezas.** Hecho (10/11/2026; sin cambios de formato). `archisim_geom::boards`: cada capa de placa o tablero de un muro, suelo, cubierta o falso techo se coloca en su formato comercial desde el inicio del muro (o la esquina del forjado), con las juntas de una capa a media placa de las de la siguiente y de una fila a la siguiente, y cada placa recortada alrededor de puertas y ventanas. Como cada muro y forjado de una caja acaba en la caja, las juntas de la fachada caen sobre la de las cajas. Formatos estándar por el nombre del material, a confirmar con el proveedor: placa de yeso 1200 × 2600, OSB y tablero 1250 × 2500, placa de cemento 1200 × 2500, placa de revestimiento 1200 × 2400, panel aislante 600 × 1200; la lana, las láminas, los morteros y las tarimas no son placas. Las placas a comprar son las enteras más los recortes empaquetados en placas (cortes de guillotina, girando la pieza si cabe mejor).
 
-**M5 · Montantes en el HE 1** y **M6 · instalaciones en steel frame** (pasos en los montantes, conexiones en la junta, registros, patinillo).
+- **Lista de compra por caja** (`shopping_list`): placas por formato, perfiles en barras de 6 m, lana en paquetes de 7,2 m², láminas en rollos de 1,5 × 50 m con un 10 % de solape, junta y uniones (M13), chasis en kg y metros de soldadura, y tornillería.
+- **Dónde sale**: `archisim compra <proyecto> [carpeta]` (`tableros.csv`, pieza a pieza con su marca «M12·1·03» —muro, capa, pieza—, y `compra.csv`, por caja y total); `archisim cajas` escribe `cajas-tableros.csv` y `cajas-compra.csv`; en la app, Archivo → Exportar → «Lista de compra de las cajas (CSV)».
+
+**M5 · Montantes en el HE 1.** Hecho (10/11/2026; sin cambios de formato). La U de un muro, suelo o cubierta con entramado ligero cuenta los montantes: la capa que llena el entramado son dos caminos, la lana entre montantes y los montantes, y la resistencia es la media de los límites superior e inferior de la UNE-EN ISO 6946 (`archisim_mep::thermal::framed_u_value`). El montante de acero es su alma (su espesor, λ 50 W/m·K) a lo ancho de su ala; el de madera, todo su ancho (λ 0,13). Con todo el aislamiento entre montantes de acero cada 600 mm, la U casi se duplica (queda trabajando la mitad de la lana, como dicen las tablas de ASHRAE para el acero); con un aislamiento continuo por fuera, como el panel de 51 mm de la fachada de las cajas, sube mucho menos. Es un método simplificado: para el proyecto de ejecución conviene el valor de un cálculo por elementos finitos o del fabricante.
+
+**M6 · instalaciones en steel frame** (pasos en los montantes, conexiones en la junta, registros, patinillo).
 
 **M15 · Reglas del sistema como avisos y más elecciones por cliente** (acabados, distribución, equipamiento).
 
@@ -300,7 +305,7 @@ Lo que cambia respecto a §5:
 
 ## 6. Pendiente de Antonio
 
-- Orden aprobado (9/11/2026): M4 (hecho) → M7 techos (hecho) → M1 caja (hecha) → M8 catálogo (hecho; falta la primera caja tipo real del L-160) → M2 juntas y M3 chasis (hechos) → M9 taller (hecho) → M10 obra previa (hecha, 10/11/2026) → M11 plantilla y perfiles (hecha) → M12 cajas de una vivienda importada (hecha) → M13 juntas y uniones (hecha). Lo siguiente, en §3 ter: M14 a M17, M5 y M6.
+- Orden aprobado (9/11/2026): M4 (hecho) → M7 techos (hecho) → M1 caja (hecha) → M8 catálogo (hecho; falta la primera caja tipo real del L-160) → M2 juntas y M3 chasis (hechos) → M9 taller (hecho) → M10 obra previa (hecha, 10/11/2026) → M11 plantilla y perfiles (hecha) → M12 cajas de una vivienda importada (hecha) → M13 juntas y uniones (hecha) → M14 tableros por piezas y lista de compra (hecha) → M5 montantes en el HE 1 (hecho). Lo siguiente, en §3 ter: M6, M15, M16 y M17.
 - Exportar desde Revit el modelo de estructura vinculado como IFC aparte, para partir de él en el chasis de la caja tipo.
 - Catálogo de perfiles del fabricante como fichero (`.csv`, §3 ter de ENTRAMADOS).
 - Propuesta de §5 aprobada (9/11/2026).

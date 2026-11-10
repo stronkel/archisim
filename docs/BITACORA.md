@@ -6,6 +6,14 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-10 (149) · M14 y M5: placas por piezas, lista de compra y montantes en el HE 1
+
+Rama `bloque/tableros` (sobre la de M13), con pull request. Sin cambios de formato.
+
+- **Qué se hizo.** Cada capa de placa o tablero de muros, suelos, cubiertas y falsos techos se coloca pieza a pieza en su formato comercial (juntas a media placa entre capas y filas, recortes alrededor de puertas y ventanas; las juntas de fachada caen sobre las de las cajas porque cada muro acaba en su caja). De ahí, las placas que hay que comprar (las enteras más los recortes empaquetados) y la lista de compra por caja y total: placas, perfiles en barras de 6 m, lana en paquetes, láminas en rollos, junta y uniones de M13, chasis en kg, soldadura y tornillería. `archisim compra` y Archivo → Exportar → «Lista de compra de las cajas (CSV)». En el HE 1, la U de los muros, suelos y cubiertas con entramado ligero cuenta los montantes (UNE-EN ISO 6946, media de los dos límites). Formatos y cuentas estándar en `docs/MODULAR.md`, a confirmar.
+- **Pendiente.** Confirmar formatos de placa con el proveedor; con todo el aislamiento entre montantes de acero la U casi se duplica, así que conviene mirar en la Envolvente si la fachada cumple; el valor del fabricante o un cálculo por elementos finitos sustituirá al método simplificado.
+- **Qué debe probar Antonio.** `archisim cajas out/` y abrir `out/cajas-compra.csv` en Excel (separador «;»): una tabla por caja y al final las líneas TOTAL. `out/cajas-tableros.csv` trae cada placa con su marca (muro·capa·pieza), su corte y si va entera, cortada o recortada. Con su L-160: `archisim compra <l160 con cajas>.archisim out/l160`. En la app, Colaboración → Envolvente y cargas térmicas sobre `out/cajas.archisim`: la U de la fachada de las cajas es ahora mayor que antes.
+
 ## 2026-11-10 (148) · M13: la junta completa y las uniones de las cajas
 
 Rama `bloque/juntas-uniones` (sobre la de M12), con pull request. Sin cambios de formato.
