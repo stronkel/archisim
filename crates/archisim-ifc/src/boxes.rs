@@ -172,6 +172,7 @@ impl Exporter<'_> {
                     list_of.retain(|r| !parts.contains(r));
                 }
                 parts.extend(self.write_chassis(b, pl));
+                parts.extend(self.write_joint_pieces(b, pl));
                 if !parts.is_empty() {
                     self.w.add(format!(
                         "IFCRELAGGREGATES({},$,$,$,{el},{})",
@@ -288,6 +289,100 @@ impl Exporter<'_> {
                     real(m.weight())
                 )),
             ];
+            self.pset(el, &guid, "ArchiSim_BoxPart", &props);
+            out.push(el);
+        }
+        out
+    }
+    /// What closes and holds a box's joints (M13): the wool, bands and
+    /// strips as `IfcCovering`, the plates as `IfcPlate`, the lugs as
+    /// `IfcDiscreteAccessory` and the anchor bolts as
+    /// `IfcMechanicalFastener`, each a block extruded upwards in the box's
+    /// placement, with `ArchiSim_BoxPart` (which the importer leaves out:
+    /// they are worked out again from the boxes).
+    fn write_joint_pieces(&mut self, b: &archisim_core::ModularBox, box_pl: Ref) -> Vec<Ref> {
+        use archisim_geom::box_joints::{box_pieces, PieceKind};
+        let steel = self
+            .model
+            .frame_member_material(archisim_core::FrameMaterial::Steel);
+        let mut out = Vec::new();
+        for (n, p) in box_pieces(self.model, b.id).iter().enumerate() {
+            let size = p.size();
+            if size.iter().any(|v| *v < 1e-4) {
+                continue;
+            }
+            let material = match p.kind.material_name() {
+                Some(name) => self
+                    .model
+                    .materials()
+                    .find(|m| m.name == name)
+                    .map(|m| m.id),
+                None => steel,
+            };
+            let profile = self.w.add(format!(
+                "IFCRECTANGLEPROFILEDEF(.AREA.,$,$,{},{})",
+                real(size[0]),
+                real(size[1])
+            ));
+            let loc = self.point3(
+                (p.lo[0] + p.hi[0]) / 2.0,
+                (p.lo[1] + p.hi[1]) / 2.0,
+                p.lo[2] - b.bottom,
+            );
+            let axes = self.w.add(format!("IFCAXIS2PLACEMENT3D({loc},$,$)"));
+            let solid = self.w.add(format!(
+                "IFCEXTRUDEDAREASOLID({profile},{axes},{},{})",
+                self.z,
+                real(size[2])
+            ));
+            if let Some(style) = material.and_then(|mt| self.styles.get(&mt)).copied() {
+                self.w.add(format!("IFCSTYLEDITEM({solid},({style}),$)"));
+            }
+            let rep = self.w.add(format!(
+                "IFCSHAPEREPRESENTATION({},'Body','SweptSolid',({solid}))",
+                self.body_ctx
+            ));
+            let shape = self
+                .w
+                .add(format!("IFCPRODUCTDEFINITIONSHAPE($,$,({rep}))"));
+            let origin = self.point3(0.0, 0.0, 0.0);
+            let pl = self.placement(Some(box_pl), origin, None);
+            let guid = derived_guid(&b.guid, &format!("joint {n}"));
+            let name = string(&format!("{} {}", b.mark, p.kind.label()));
+            let kind = string(p.kind.label());
+            let g = string(guid.as_str());
+            let el = match p.kind {
+                PieceKind::JointWool => self.w.add(format!(
+                    "IFCCOVERING({g},$,{name},$,{kind},{pl},{shape},$,.INSULATION.)"
+                )),
+                PieceKind::RoofBand | PieceKind::FacadeBand => self.w.add(format!(
+                    "IFCCOVERING({g},$,{name},$,{kind},{pl},{shape},$,.MEMBRANE.)"
+                )),
+                PieceKind::FloorStrip | PieceKind::CeilingStrip => self.w.add(format!(
+                    "IFCCOVERING({g},$,{name},$,{kind},{pl},{shape},$,.MOLDING.)"
+                )),
+                PieceKind::JointPlate | PieceKind::BasePlate => self.w.add(format!(
+                    "IFCPLATE({g},$,{name},$,{kind},{pl},{shape},$,.USERDEFINED.)"
+                )),
+                PieceKind::LiftLug => self.w.add(format!(
+                    "IFCDISCRETEACCESSORY({g},$,{name},$,{kind},{pl},{shape},$,.BRACKET.)"
+                )),
+                PieceKind::AnchorBolt => self.w.add(format!(
+                    "IFCMECHANICALFASTENER({g},$,{name},$,{kind},{pl},{shape},$,{},{},.ANCHORBOLT.)",
+                    real(0.016),
+                    real(size[2])
+                )),
+            };
+            let mut props = vec![self.w.add(format!(
+                "IFCPROPERTYSINGLEVALUE('Role',$,IFCLABEL({}),$)",
+                string(p.kind.code())
+            ))];
+            if p.kind.is_steel() {
+                props.push(self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('Weight',$,IFCMASSMEASURE({}),$)",
+                    real(p.weight())
+                )));
+            }
             self.pset(el, &guid, "ArchiSim_BoxPart", &props);
             out.push(el);
         }

@@ -2458,6 +2458,22 @@ pub fn frame_material(m: &mut Model, kind: archisim_core::FrameMaterial) -> Mate
     material_named(m, name, cat, colour, CutPattern::Solid)
 }
 
+/// The materials of the boxes' joints (M13), added to the project if it
+/// has none of their names.
+pub fn joint_materials(m: &mut Model) {
+    use archisim_core::{COVER_STRIP, FACADE_BAND, JOINT_WOOL, ROOF_BAND};
+    for (name, cat, colour) in [
+        (JOINT_WOOL, "insulation", [214, 196, 120]),
+        (ROOF_BAND, "other", [58, 60, 64]),
+        (FACADE_BAND, "other", [222, 226, 232]),
+        (COVER_STRIP, "metal", [196, 198, 200]),
+    ] {
+        if !m.materials().any(|x| x.name == name) {
+            material_named(m, name, cat, colour, CutPattern::Solid);
+        }
+    }
+}
+
 /// A material of the cosy palette, added to the project if it has none of
 /// that name.
 pub fn palette_material(m: &mut Model, name: &str) -> Option<MaterialId> {

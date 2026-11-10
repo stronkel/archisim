@@ -139,7 +139,12 @@ Lo que falta para montar una vivienda con detalle de fabricación y trabajar có
 - **Locales con lo que dibujan otros programas**: los pilares cierran locales (como en Revit) y los huecos de hasta 15 cm entre muros se puentean al buscar el local.
 - **Con el L-160**: 8 cajas de 6,10 × 3,60, con el salón, el comedor y la cocina abiertos entre cajas. 10 locales, con 160,26 m² útiles: los del nombre del modelo. Avisos que salen del modelo de Revit: en cuatro juntas hay tabique en las dos cajas (dos placas de pladur una junto a otra); debe llevarlo solo una.
 
-**M13 · La junta completa y las uniones**: banda de lana, banda de impermeabilización, membrana y cinta en fachada, tapajuntas; placas de unión entre cajas, orejetas, pernos, tornillos por montante y soldaduras, en 3D, IFC y mediciones.
+**M13 · La junta completa y las uniones.** Hecho (10/11/2026; sin cambios de formato). Las piezas no se guardan: salen de las cajas (`archisim_geom::box_joints`), como el chasis. Valores estándar, a confirmar con el fabricante y el instalador:
+
+- **Junta** (cada junta la lleva la primera caja de la pareja): lana mineral en el hueco entre chasis, de la base a la cubierta; banda impermeable de 30 cm sobre la junta en cubierta (no si hay otra caja encima); membrana transpirable con cinta de 20 cm en los extremos de la junta que dan a fachada; tapajuntas de aluminio de 8 cm en suelo y techo cuando los dos lados están abiertos.
+- **Uniones**: placas de acero 200 × 100 × 10 mm atornilladas a los dos chasis (cuatro tornillos M16 8.8), en los extremos de la junta a 15 cm y en el centro si pasa de 4 m, en el marco del suelo y en el del techo; orejetas de izado en los puntos de izado; placas de apoyo sobre los pilares de la obra previa (250 × 250 mm con una caja, 400 × 250 con dos, 400 × 400 con más; 15 mm) con dos pernos M16 por caja, de 30 cm, con resina.
+- **Cuentas**: cuatro tornillos autotaladrantes por montante del entramado; soldadura en todo el contorno de los dos extremos de cada tubo del chasis.
+- **Dónde sale**: en 3D, en el IFC (`IfcCovering` de aislamiento, membrana o moldura, `IfcPlate`, `IfcDiscreteAccessory` y `IfcMechanicalFastener` .ANCHORBOLT., con `ArchiSim_BoxPart`, agregados a la caja), en las mediciones (capítulo 17, «Cajas modulares: chasis, juntas y uniones», una línea por caja) y en la tabla de materiales de la hoja de taller de cada caja. Los materiales («Lana mineral de junta», «Banda impermeable de junta», «Membrana de junta», «Tapajuntas de aluminio») los añade la biblioteca al poner cajas (`archisim_library::joint_materials`).
 
 **M14 · Tableros y placas por piezas**: cada placa y tablero en su formato comercial con sus cortes, la junta de fachada sobre la de las cajas, y la lista de compra por caja.
 
@@ -295,7 +300,7 @@ Lo que cambia respecto a §5:
 
 ## 6. Pendiente de Antonio
 
-- Orden aprobado (9/11/2026): M4 (hecho) → M7 techos (hecho) → M1 caja (hecha) → M8 catálogo (hecho; falta la primera caja tipo real del L-160) → M2 juntas y M3 chasis (hechos) → M9 taller (hecho) → M10 obra previa (hecha, 10/11/2026) → M11 plantilla y perfiles (hecha) → M12 cajas de una vivienda importada (hecha). Lo siguiente, en §3 ter: M13 a M17, M5 y M6.
+- Orden aprobado (9/11/2026): M4 (hecho) → M7 techos (hecho) → M1 caja (hecha) → M8 catálogo (hecho; falta la primera caja tipo real del L-160) → M2 juntas y M3 chasis (hechos) → M9 taller (hecho) → M10 obra previa (hecha, 10/11/2026) → M11 plantilla y perfiles (hecha) → M12 cajas de una vivienda importada (hecha) → M13 juntas y uniones (hecha). Lo siguiente, en §3 ter: M14 a M17, M5 y M6.
 - Exportar desde Revit el modelo de estructura vinculado como IFC aparte, para partir de él en el chasis de la caja tipo.
 - Catálogo de perfiles del fabricante como fichero (`.csv`, §3 ter de ENTRAMADOS).
 - Propuesta de §5 aprobada (9/11/2026).

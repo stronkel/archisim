@@ -4118,6 +4118,8 @@ pub fn model_solids_except_detailed(
     // The chassis of the modular boxes (M3).
     for b in model.boxes() {
         out.extend(crate::boxes::box_solids(model, b.id));
+        // Its joints and connections (M13).
+        out.extend(crate::box_joints::piece_solids(model, b.id));
     }
     // The accessories of their types: skirtings, bands, cornices, copings
     // and slab edges (bloque 5).

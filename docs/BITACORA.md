@@ -6,6 +6,14 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-10 (148) · M13: la junta completa y las uniones de las cajas
+
+Rama `bloque/juntas-uniones` (sobre la de M12), con pull request. Sin cambios de formato.
+
+- **Qué se hizo.** Lo que cierra y une las juntas entre cajas, calculado desde las cajas (no se guarda): lana mineral en el hueco, banda impermeable en cubierta, membrana en los extremos de fachada, tapajuntas en suelo y techo si la junta es abierta; placas de unión atornilladas en el marco de suelo y de techo, orejetas de izado, placas de apoyo con pernos sobre los pilares de la obra previa; y las cuentas de tornillos de montante y metros de soldadura. Sale en 3D, en el IFC (4.3 e IFC4, valida con IfcOpenShell), en las mediciones (capítulo 17, una línea por caja) y en la hoja de taller de cada caja. `archisim cajas` escribe también `cajas-ifc4.ifc`. Valores estándar descritos en `docs/MODULAR.md` (M13), a confirmar.
+- **Pendiente.** Elegir con el fabricante las medidas reales de placas, tornillería y bandas; dibujar las placas en planta de cimentación.
+- **Qué debe probar Antonio.** `archisim cajas out/` y abrir `out/cajas.ifc` en su visor: dentro de cada caja (Caja modular) aparecen, además de los tubos, la lana, bandas, placas, orejetas y pernos. Abrir `out/cajas.archisim` en la app, mirar en 3D una junta de cerca y, en Mediciones, el capítulo 17. En `out/cajas-taller.pdf`, la tabla «Materiales» de cada caja trae las filas «Junta» y «Unión».
+
 ## 2026-11-10 (147) · M12: las cajas de una vivienda importada (el L-160)
 
 Rama `bloque/cajas-importadas`, con pull request. Sin cambios de formato ni de IFC. Antes se unieron #196 (obra previa) y #197 (plantilla) a `main`, como pidió Antonio.

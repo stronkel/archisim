@@ -25,6 +25,7 @@
 //! wall (or one of its layers) into the solid pieces between openings.
 
 pub mod anchors;
+pub mod box_joints;
 pub mod boxes;
 pub mod ceilings;
 pub mod cover;

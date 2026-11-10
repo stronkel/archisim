@@ -17,6 +17,8 @@ pub fn place(m: &mut Model, module: (f64, f64)) -> Res<(Vec<archisim_core::BoxId
     if floors.is_empty() {
         return Err("no hay suelos del tamaño de una caja (de 4 a 9,5 m por 2,4 a 3,8 m)".into());
     }
+    archisim_library::frame_material(m, archisim_core::FrameMaterial::Steel);
+    archisim_library::joint_materials(m);
     let boxes = m.boxes_on_floors(&floors, Some(module))?;
     m.box_sides_from_walls(&boxes)?;
     let mut t = String::new();

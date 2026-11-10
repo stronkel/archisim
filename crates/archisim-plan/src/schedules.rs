@@ -695,9 +695,160 @@ pub fn measurements(model: &Model) -> Vec<(&'static str, &'static str, Vec<Item>
         ("14", "Acero en barras", rebar(model)),
         ("15", "Entramados ligeros", framing(model)),
         ("16", "Falsos techos", ceilings),
+        (
+            "17",
+            "Cajas modulares: chasis, juntas y uniones",
+            boxes(model),
+        ),
     ];
     chapters.retain(|(_, _, items)| !items.is_empty());
     chapters
+}
+
+/// The modular boxes (M3, M13): the chassis' steel (kg), the wool of the
+/// joints (m²), the bands and strips over them (m), the plates, lugs and
+/// anchor bolts (ud), the bolts of the plates, the screws of the walls'
+/// studs and the chassis' welds, each with a line per box.
+fn boxes(model: &Model) -> Vec<Item> {
+    use archisim_geom::box_joints::{box_pieces, joint_tally, PieceKind, PLATE_BOLTS};
+    use archisim_geom::framing::{members_by_box, Role};
+    let new = |id: u64| model.phase(id) == Phase::New;
+    let framed = members_by_box(model);
+    let mut items: BTreeMap<usize, Item> = BTreeMap::new();
+    let mut push =
+        |order: usize, key: &str, unit: &'static str, summary: &str, comment: &str, q: f64| {
+            if q <= 0.0 {
+                return;
+            }
+            let item = items.entry(order).or_insert_with(|| Item {
+                code: format!("K{:02}", order + 1),
+                key: format!("caja:{key}"),
+                unit,
+                summary: summary.to_string(),
+                lines: Vec::new(),
+            });
+            item.lines.push(Measured {
+                comment: comment.to_string(),
+                units: 1.0,
+                length: 0.0,
+                width: 0.0,
+                height: 0.0,
+                quantity: q,
+            });
+        };
+    for b in model.boxes().filter(|b| new(b.id.0)) {
+        let studs = framed.get(&b.id).map_or(0, |v| {
+            v.iter()
+                .filter(|m| {
+                    matches!(
+                        m.role,
+                        Role::Stud | Role::KingStud | Role::JackStud | Role::Cripple
+                    )
+                })
+                .count()
+        });
+        let t = joint_tally(model, b.id, studs);
+        let pieces = box_pieces(model, b.id);
+        let count = |k: PieceKind| pieces.iter().filter(|p| p.kind == k).count() as f64;
+        let mark = format!("Caja {}", b.mark);
+        push(
+            0,
+            "chasis",
+            "kg",
+            "Chasis de tubo de acero S275 soldado",
+            &mark,
+            archisim_geom::boxes::chassis_weight(b),
+        );
+        push(
+            1,
+            "soldadura",
+            "m",
+            "Soldadura en ángulo de los tubos del chasis",
+            &mark,
+            t.welds,
+        );
+        push(
+            2,
+            "lana",
+            "m2",
+            "Lana mineral en la junta entre cajas",
+            &mark,
+            t.wool,
+        );
+        push(
+            3,
+            "banda-cubierta",
+            "m",
+            "Banda impermeable sobre la junta en cubierta (30 cm)",
+            &mark,
+            t.roof_band,
+        );
+        push(
+            4,
+            "membrana",
+            "m",
+            "Membrana y cinta sobre la junta en fachada (20 cm)",
+            &mark,
+            t.facade_band,
+        );
+        push(
+            5,
+            "tapajuntas",
+            "m",
+            "Tapajuntas de aluminio en suelo y techo",
+            &mark,
+            t.strips,
+        );
+        push(
+            6,
+            "placa-union",
+            "ud",
+            "Placa de unión entre cajas 200×100×10 mm",
+            &mark,
+            count(PieceKind::JointPlate),
+        );
+        push(
+            7,
+            "tornillo-placa",
+            "ud",
+            "Tornillo M16 8.8 con tuerca y arandela",
+            &mark,
+            count(PieceKind::JointPlate) * PLATE_BOLTS as f64,
+        );
+        push(
+            8,
+            "orejeta",
+            "ud",
+            "Orejeta de izado soldada",
+            &mark,
+            count(PieceKind::LiftLug),
+        );
+        push(
+            9,
+            "placa-apoyo",
+            "ud",
+            "Placa de apoyo de acero sobre pilar",
+            &mark,
+            count(PieceKind::BasePlate),
+        );
+        push(
+            10,
+            "perno",
+            "ud",
+            "Perno de anclaje M16 con resina",
+            &mark,
+            count(PieceKind::AnchorBolt),
+        );
+        push(
+            11,
+            "tornillos",
+            "ud",
+            "Tornillo autotaladrante del entramado",
+            &mark,
+            t.screws as f64,
+        );
+    }
+    items.into_values().collect()
 }
 
 /// What a refurbishment demolishes: walls (m² of one face), slabs (m²),

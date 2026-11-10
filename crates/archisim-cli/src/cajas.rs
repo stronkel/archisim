@@ -34,6 +34,7 @@ fn material(m: &mut Model, name: &str, class: &str, rgb: [u8; 3]) -> archisim_co
 /// the template's false ceiling.
 pub fn system_fill(m: &mut Model, lib: &archisim_library::Library) -> Res<BoxFill> {
     archisim_library::frame_material(m, FrameMaterial::Steel);
+    archisim_library::joint_materials(m);
     let m = &mut *m;
     let ceramic = material(m, "Placa cerámica", "ceramic", [196, 120, 92]);
     let membrane = material(m, "Membrana transpirable", "membrane", [90, 110, 140]);
@@ -294,6 +295,11 @@ pub fn write(dir: &Path) -> Res {
     std::fs::create_dir_all(dir)?;
     archisim_file::save(&m, dir.join(format!("cajas.{}", archisim_file::EXTENSION)))?;
     std::fs::write(dir.join("cajas.ifc"), crate::ifc_text(&m, "cajas", None))?;
+    // The same in IFC4, for the programs that do not read 4.3.
+    std::fs::write(
+        dir.join("cajas-ifc4.ifc"),
+        crate::ifc_text_in(&m, "cajas-ifc4", None, archisim_ifc::Schema::Ifc4),
+    )?;
     let options = archisim_plan::PlanOptions {
         scale: 100.0,
         ..Default::default()

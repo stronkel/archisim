@@ -127,6 +127,7 @@ impl ArchiSimApp {
         let res = self.ed.transact("Caja modular", |m| {
             // The steel its chassis is drawn with.
             archisim_library::frame_material(m, archisim_core::FrameMaterial::Steel);
+            archisim_library::joint_materials(m);
             let b = m.add_box(spec)?;
             m.set_box_sides_from_neighbours(b)?;
             if s.fill {
@@ -222,6 +223,8 @@ impl ArchiSimApp {
         if go {
             let module = (self.box_settings().length, self.box_settings().width);
             let res = self.ed.transact("Cajas sobre los suelos", move |m| {
+                archisim_library::frame_material(m, archisim_core::FrameMaterial::Steel);
+                archisim_library::joint_materials(m);
                 let ids = m.boxes_on_floors(&floors, Some(module))?;
                 m.box_sides_from_walls(&ids)?;
                 Ok(ids)
