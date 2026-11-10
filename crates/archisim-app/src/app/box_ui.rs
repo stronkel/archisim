@@ -989,4 +989,71 @@ impl ArchiSimApp {
             Err(e) => self.complain(format!("No se pudo exportar: {e}.")),
         }
     }
+
+    /// What the factory needs (M16), to a folder: the panels dimensioned
+    /// and the labels as PDF, an order per box and the roll former's file.
+    pub(super) fn export_factory(&mut self) {
+        let model = self.ed.shown();
+        if model.boxes().next().is_none() {
+            self.complain("El proyecto no tiene cajas modulares.".to_string());
+            return;
+        }
+        let mut d = rfd::FileDialog::new().set_title("Carpeta para la fábrica de las cajas");
+        if let Some(dir) = self.start_dir() {
+            d = d.set_directory(dir);
+        }
+        let Some(dir) = d.pick_folder() else {
+            return;
+        };
+        let stem = self.file_name_stem();
+        let r = (|| -> Result<usize, String> {
+            let panels = archisim_plan::factory::panel_pages(&model);
+            if !panels.is_empty() {
+                let sheets: Vec<(String, String)> =
+                    panels.into_iter().map(|(code, svg)| (svg, code)).collect();
+                let bytes = crate::documents::pdf_of(&sheets, "Paneles de las cajas")?;
+                std::fs::write(dir.join(format!("{stem}-paneles.pdf")), bytes)
+                    .map_err(|e| e.to_string())?;
+            }
+            let labels = archisim_plan::factory::label_pages(&model);
+            if !labels.is_empty() {
+                let sheets: Vec<(String, String)> = labels
+                    .into_iter()
+                    .enumerate()
+                    .map(|(i, svg)| (svg, format!("Etiquetas {}", i + 1)))
+                    .collect();
+                let bytes = crate::documents::pdf_of(&sheets, "Etiquetas de las piezas")?;
+                std::fs::write(dir.join(format!("{stem}-etiquetas.pdf")), bytes)
+                    .map_err(|e| e.to_string())?;
+            }
+            std::fs::write(
+                dir.join(format!("{stem}-perfiladora.csv")),
+                archisim_geom::factory::machine_csv(&model),
+            )
+            .map_err(|e| e.to_string())?;
+            let mut n = 0;
+            for b in model.boxes() {
+                let mut s = String::from("Grupo;Concepto;Unidad;Cantidad\n");
+                for p in archisim_geom::boards::shopping_list(&model, b.id) {
+                    let amount = if p.unit == "ud" {
+                        format!("{:.0}", p.amount)
+                    } else {
+                        format!("{:.2}", p.amount).replace('.', ",")
+                    };
+                    s.push_str(&format!("{};{};{};{}\n", p.group, p.what, p.unit, amount));
+                }
+                std::fs::write(dir.join(format!("{stem}-pedido-{}.csv", b.mark)), s)
+                    .map_err(|e| e.to_string())?;
+                n += 1;
+            }
+            Ok(n)
+        })();
+        match r {
+            Ok(n) => self.say(format!(
+                "Fábrica: paneles, etiquetas, perfiladora y {n} pedidos en {}.",
+                dir.display()
+            )),
+            Err(e) => self.complain(format!("No se pudo exportar: {e}.")),
+        }
+    }
 }

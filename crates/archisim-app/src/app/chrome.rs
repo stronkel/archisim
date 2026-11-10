@@ -294,6 +294,12 @@ impl ArchiSimApp {
                     self.export_shopping_list();
                 }
                 if ui
+                    .add(shortcut_button("Fábrica de las cajas…", "PDF, CSV"))
+                    .clicked()
+                {
+                    self.export_factory();
+                }
+                if ui
                     .add(shortcut_button("Esquema unifilar…", "PDF"))
                     .clicked()
                 {
@@ -546,6 +552,13 @@ impl ArchiSimApp {
                 .clicked()
             {
                 self.export_shopping_list();
+            }
+            if ui
+                .button("Fábrica de las cajas (PDF y CSV)…")
+                .on_hover_text("En una carpeta: los paneles de cada caja acotados, las etiquetas de todas las piezas con su código QR, un pedido por caja y el fichero de la perfiladora")
+                .clicked()
+            {
+                self.export_factory();
             }
             if ui
                 .button("Ejes del entramado (DXF 3D)…")

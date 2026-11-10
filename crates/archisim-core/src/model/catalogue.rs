@@ -45,14 +45,16 @@ impl CatalogueStatus {
     }
 }
 
-/// Something each house may choose in a box type: a door or window type
-/// (`slot`, by name) that may be swapped for any of `choices` (names of
-/// other types of the same file).
+/// Something each house may choose in a box type: a type (`slot`, by name)
+/// that may be swapped for any of `choices` (names of other types of the
+/// same file and of the same kind, [`SlotKind`]): a door or window, a wall
+/// or floor type (the finishes), a false ceiling or an object type (the
+/// equipment).
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct CatalogueOption {
     /// What it is called where it is chosen («Ventana del dormitorio»).
     pub name: String,
-    /// The door or window type of the file that may be swapped.
+    /// The type of the file that may be swapped.
     pub slot: String,
     /// What it may be swapped for.
     pub choices: Vec<String>,
@@ -112,13 +114,76 @@ impl CatalogueEntry {
         }
     }
 
-    /// The option a door or window type (by name) belongs to.
+    /// The option a type (by name) belongs to.
     pub fn option_for(&self, type_name: &str) -> Option<&CatalogueOption> {
         self.options.iter().find(|o| o.slot == type_name)
     }
 }
 
+/// What kind of type an option swaps (M15): only for one of its kind.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum SlotKind {
+    Door,
+    Window,
+    Wall,
+    Floor,
+    Ceiling,
+    Object,
+}
+
+impl SlotKind {
+    pub fn label(self) -> &'static str {
+        match self {
+            SlotKind::Door => "Puerta",
+            SlotKind::Window => "Ventana",
+            SlotKind::Wall => "Muro (acabado)",
+            SlotKind::Floor => "Suelo o cubierta (acabado)",
+            SlotKind::Ceiling => "Techo",
+            SlotKind::Object => "Equipamiento",
+        }
+    }
+}
+
 impl Model {
+    /// The types an option of a box type may swap, by kind and name (the
+    /// object types of the railings left out).
+    pub fn slot_types(&self) -> Vec<(SlotKind, String)> {
+        let mut out: Vec<(SlotKind, String)> = Vec::new();
+        for t in self.opening_types() {
+            let k = if t.is_door() {
+                SlotKind::Door
+            } else {
+                SlotKind::Window
+            };
+            out.push((k, t.name.clone()));
+        }
+        for t in self.wall_types() {
+            out.push((SlotKind::Wall, t.name.clone()));
+        }
+        for t in self.slab_types() {
+            let k = if t.function == crate::SlabFunction::Ceiling {
+                SlotKind::Ceiling
+            } else {
+                SlotKind::Floor
+            };
+            out.push((k, t.name.clone()));
+        }
+        for t in self.object_types() {
+            if !self.is_railing_type(t.id) {
+                out.push((SlotKind::Object, t.name.clone()));
+            }
+        }
+        out
+    }
+
+    /// The kind of the type of this name, if it may be an option's.
+    pub fn slot_kind(&self, name: &str) -> Option<SlotKind> {
+        self.slot_types()
+            .into_iter()
+            .find(|(_, n)| n == name)
+            .map(|(k, _)| k)
+    }
+
     pub fn catalogue(&self) -> Option<&CatalogueEntry> {
         self.catalogue.as_ref()
     }
@@ -136,7 +201,7 @@ impl Model {
             for o in &e.options {
                 if o.name.trim().is_empty() || o.slot.trim().is_empty() {
                     return Err(ModelError::InvalidShape(
-                        "an option of a box type needs a name and a door or window type",
+                        "an option of a box type needs a name and a type",
                     ));
                 }
             }
@@ -516,5 +581,75 @@ mod tests {
         // Their sides touch.
         let first = flat.boxes().next().unwrap().id;
         assert!(flat.box_neighbours(first)[2].is_some());
+    }
+
+    #[test]
+    fn a_house_chooses_the_finish_of_the_box_walls() {
+        let mut m = Model::new("Casa");
+        let lv = m.add_level("PB", 0.0);
+        let mat = m.add_material("Placa", "board", [200, 200, 200], CutPattern::Solid);
+        let layer = |t| Layer {
+            material: mat,
+            thickness: t,
+            function: LayerFunction::Structure,
+        };
+        let wt = m
+            .add_wall_type("Fachada cerámica", WallFunction::Exterior, vec![layer(0.2)])
+            .unwrap();
+        m.add_wall_type(
+            "Fachada de madera",
+            WallFunction::Exterior,
+            vec![layer(0.21)],
+        )
+        .unwrap();
+        let b = m
+            .add_box(NewBox::usual(lv, Point2::new(0.0, 0.0), 0.0))
+            .unwrap();
+        let fill = BoxFill {
+            wall_type: Some(wt),
+            floor_type: None,
+            roof_type: None,
+            ceiling_type: None,
+            ceiling_height: 2.5,
+            parapet: BOX_PARAPET,
+        };
+        m.fill_box(b, fill).unwrap();
+        assert_eq!(m.slot_kind("Fachada cerámica"), Some(SlotKind::Wall));
+        let mut entry = CatalogueEntry::new("CB-620", "Caja");
+        entry.options.push(CatalogueOption {
+            name: "Acabado de fachada".into(),
+            slot: "Fachada cerámica".into(),
+            choices: vec!["Fachada de madera".into()],
+        });
+        let t = m.box_type_model(b, entry).unwrap();
+        let mut h = Model::new("Vivienda");
+        let pb = h.add_level("PB", 0.0);
+        let text: std::sync::Arc<str> = "x".into();
+        let src = h.add_module_source("CB-620", "", text, "s", t).unwrap();
+        let p = h
+            .add_module(NewModulePlacement {
+                source: src,
+                level: pb,
+                position: Point2::new(0.0, 0.0),
+                rotation: 0.0,
+                mirror: false,
+            })
+            .unwrap();
+        let name_of = |flat: &Model| -> Vec<String> {
+            flat.walls()
+                .filter_map(|w| flat.wall_type(w.wall_type).map(|t| t.name.clone()))
+                .collect()
+        };
+        assert!(name_of(&h.flattened().unwrap())
+            .iter()
+            .all(|n| n == "Fachada cerámica"));
+        h.edit_module(p, |x| {
+            x.choices = vec![("Acabado de fachada".into(), "Fachada de madera".into())]
+        })
+        .unwrap();
+        let flat = h.flattened().unwrap();
+        let names = name_of(&flat);
+        assert_eq!(names.len(), 4);
+        assert!(names.iter().all(|n| n == "Fachada de madera"), "{names:?}");
     }
 }

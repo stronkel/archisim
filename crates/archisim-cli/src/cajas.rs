@@ -350,6 +350,8 @@ pub fn write(dir: &Path) -> Res {
         archisim_geom::boards::shopping_csv(&m),
     )?;
     println!("  {}", dir.join("cajas-compra.csv").display());
+    // The factory (M16).
+    print!("{}", crate::fabrica::write(&m, dir, "cajas")?);
     println!("  {}", dir.join("cajas.ifc").display());
     Ok(())
 }

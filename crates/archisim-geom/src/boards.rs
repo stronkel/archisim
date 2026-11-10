@@ -795,6 +795,39 @@ pub fn shopping_list(model: &Model, id: BoxId) -> Vec<Purchase> {
             t.welds,
         );
     }
+    // The services: their joints at the box's joints and the grommets of
+    // the holes in its studs (M6).
+    for c in crate::box_services::joint_crossings(model)
+        .into_iter()
+        .filter(|c| c.a == id)
+    {
+        push(
+            &mut out,
+            "Instalaciones",
+            format!("{} ({})", c.kind.label(), c.size),
+            "ud",
+            1.0,
+        );
+        push(
+            &mut out,
+            "Instalaciones",
+            "Registro de la unión en la junta".into(),
+            "ud",
+            1.0,
+        );
+    }
+    let walls = &model.box_members(id).walls;
+    let grommets = crate::box_services::stud_holes(model)
+        .iter()
+        .filter(|h| walls.contains(&h.wall))
+        .count();
+    push(
+        &mut out,
+        "Instalaciones",
+        "Pasamuros de goma para los pasos por montantes".into(),
+        "ud",
+        grommets as f64,
+    );
     // Whole units, rounded up.
     for p in &mut out {
         if p.unit == "ud" {

@@ -37,6 +37,7 @@ pub(crate) mod dim;
 pub mod drafting;
 pub mod drafting_views;
 pub mod elevators;
+pub mod factory;
 pub mod framing;
 pub mod grids;
 pub mod layout;

@@ -28,6 +28,7 @@ mod entorno;
 mod entramado;
 mod equipo;
 mod escaleras;
+mod fabrica;
 mod fachadas;
 mod figuras;
 mod formas;
@@ -205,6 +206,11 @@ Uso:
       material, formato y corte) y la lista de compra por caja y total
       (compra.csv): tableros en su formato comercial, perfiles en barras,
       aislamiento, láminas, junta, uniones, chasis y tornillería.
+  archisim fabrica <proyecto> [carpeta]
+      Lo que necesita la fábrica: los paneles de cada caja acotados (A3),
+      las etiquetas de todas las piezas con su código QR (A4), un pedido
+      por caja y el fichero de la perfiladora (CSV abierto: pieza, perfil,
+      largo y operaciones en mm).
   archisim taller-cajas <proyecto> [carpeta]
       Los planos de taller de las cajas modulares de un proyecto, A3:
       montaje y plan de grúa (M-00) y una hoja por caja con su chasis en
@@ -802,6 +808,29 @@ fn main() -> ExitCode {
             }
             None => {
                 eprintln!("Uso: archisim compra <proyecto> [carpeta]");
+                std::process::exit(2);
+            }
+        },
+        Some("fabrica") => match args.get(1) {
+            Some(project) => {
+                let path = PathBuf::from(project);
+                let dir = PathBuf::from(args.get(2).map(String::as_str).unwrap_or("out"));
+                report((|| {
+                    let m = archisim_file::open(&path)?;
+                    if m.boxes().next().is_none() {
+                        println!("El proyecto no tiene cajas modulares.");
+                        return Ok(());
+                    }
+                    let stem = path
+                        .file_stem()
+                        .map(|s| s.to_string_lossy().to_string())
+                        .unwrap_or_else(|| "proyecto".into());
+                    print!("{}", fabrica::write(&m, &dir, &stem)?);
+                    Ok(())
+                })())
+            }
+            None => {
+                eprintln!("Uso: archisim fabrica <proyecto> [carpeta]");
                 std::process::exit(2);
             }
         },

@@ -153,11 +153,21 @@ Lo que falta para montar una vivienda con detalle de fabricación y trabajar có
 
 **M5 · Montantes en el HE 1.** Hecho (10/11/2026; sin cambios de formato). La U de un muro, suelo o cubierta con entramado ligero cuenta los montantes: la capa que llena el entramado son dos caminos, la lana entre montantes y los montantes, y la resistencia es la media de los límites superior e inferior de la UNE-EN ISO 6946 (`archisim_mep::thermal::framed_u_value`). El montante de acero es su alma (su espesor, λ 50 W/m·K) a lo ancho de su ala; el de madera, todo su ancho (λ 0,13). Con todo el aislamiento entre montantes de acero cada 600 mm, la U casi se duplica (queda trabajando la mitad de la lana, como dicen las tablas de ASHRAE para el acero); con un aislamiento continuo por fuera, como el panel de 51 mm de la fachada de las cajas, sube mucho menos. Es un método simplificado: para el proyecto de ejecución conviene el valor de un cálculo por elementos finitos o del fabricante.
 
-**M6 · instalaciones en steel frame** (pasos en los montantes, conexiones en la junta, registros, patinillo).
+**M6 · Instalaciones en steel frame.** Hecho (10/11/2026; sin cambios de formato). `archisim_geom::box_services`:
+- **En la junta**: cada tubería, conducto o canalización que cruza una junta entre cajas, y cada montante, bajante o patinillo que pasa de una caja a la de encima, se corta en fábrica y se une en obra: manguito (tuberías), brida (conductos) o caja de conexión (cables), con un registro para llegar a ella. Salen como avisos informativos en la comprobación y en el pedido de la caja.
+- **Pasos por los montantes**: donde una tubería corre dentro de un muro con entramado y atraviesa el alma de un montante, el paso (con su pasamuros de goma, +10 mm) no puede pasar del 40 % del canto del montante ni estar a menos de 25 cm del canal. Valores habituales, a confirmar con el fabricante del perfil.
+- **Pendiente**: el patinillo como elemento propio (hoy son los montantes y bajantes de siempre).
 
-**M15 · Reglas del sistema como avisos y más elecciones por cliente** (acabados, distribución, equipamiento).
+**M15 · Reglas del sistema como avisos y más elecciones por cliente.** Hecho (10/11/2026; sin cambios de formato).
+- **Reglas** (Comprobación CTE → «Sistema modular (reglas del sistema)», `archisim_cte::modular`): los avisos de cada caja (medidas, transporte, juntas); puertas y ventanas con la jamba a menos de 30 cm de un pilar de esquina del chasis; huecos de más de 2,40 m sin viga; ninguna ventana en un lado que da a otra caja; locales húmedos que pasan por una junta; y las instalaciones de M6. Valores en la cabecera del módulo, a acordar con el fabricante.
+- **Elecciones por cliente**: una opción de una caja tipo ya no es solo una puerta o ventana: puede ser un tipo de muro o de suelo (los acabados), un techo o un tipo de objeto (el equipamiento), y se cambia solo por otro de su clase (`SlotKind`). Cada vivienda elige en las propiedades de su copia, como antes.
+- **Pendiente**: la distribución como elección (hoy se hace con cajas tipo distintas).
 
-**M16 · Fábrica**: paneles acotados en la hoja de cada caja, etiquetas con código y QR, pedido por caja y el fichero de la perfiladora.
+**M16 · Fábrica.** Hecho (10/11/2026; sin cambios de formato). `archisim fabrica <proyecto> [carpeta]` (también dentro de `archisim cajas`) y Archivo → Exportar → «Fábrica de las cajas»:
+- **Paneles acotados**: una hoja A3 por caja (o más) con los paneles de sus muros en alzado desde fuera a 1:25, su largo y alto y la cadena de cotas de los montantes.
+- **Etiquetas**: hojas A4 de 3 × 8 (70 × 37 mm), una por pieza, con su marca (caja·panel·pieza), caja, panel, elemento, perfil, largo y un código QR que lleva todo eso.
+- **Pedido por caja**: un CSV por caja con su lista de compra (M14), más las uniones de instalaciones y los pasamuros de M6.
+- **Perfiladora**: un CSV abierto, una línea por pieza: marca, caja, panel, elemento, perfil, largo en mm y operaciones en mm desde el inicio (tornillos donde se cruzan montante y canal, cortes de labio en los extremos de los canales, agujeros de instalaciones). El programa de la máquina que se compre lo traducirá a su formato; cuando se sepa cuál, se escribe directamente.
 
 **M17 · El porche** como módulo ligero de acero.
 
@@ -305,7 +315,7 @@ Lo que cambia respecto a §5:
 
 ## 6. Pendiente de Antonio
 
-- Orden aprobado (9/11/2026): M4 (hecho) → M7 techos (hecho) → M1 caja (hecha) → M8 catálogo (hecho; falta la primera caja tipo real del L-160) → M2 juntas y M3 chasis (hechos) → M9 taller (hecho) → M10 obra previa (hecha, 10/11/2026) → M11 plantilla y perfiles (hecha) → M12 cajas de una vivienda importada (hecha) → M13 juntas y uniones (hecha) → M14 tableros por piezas y lista de compra (hecha) → M5 montantes en el HE 1 (hecho). Lo siguiente, en §3 ter: M6, M15, M16 y M17.
+- Orden aprobado (9/11/2026): M4 (hecho) → M7 techos (hecho) → M1 caja (hecha) → M8 catálogo (hecho; falta la primera caja tipo real del L-160) → M2 juntas y M3 chasis (hechos) → M9 taller (hecho) → M10 obra previa (hecha, 10/11/2026) → M11 plantilla y perfiles (hecha) → M12 cajas de una vivienda importada (hecha) → M13 juntas y uniones (hecha) → M14 tableros por piezas y lista de compra (hecha) → M5 montantes en el HE 1 (hecho). → M6 instalaciones, M15 reglas y elecciones, M16 fábrica (hechos). Lo siguiente, en §3 ter: M17.
 - Exportar desde Revit el modelo de estructura vinculado como IFC aparte, para partir de él en el chasis de la caja tipo.
 - Catálogo de perfiles del fabricante como fichero (`.csv`, §3 ter de ENTRAMADOS).
 - Propuesta de §5 aprobada (9/11/2026).

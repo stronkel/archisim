@@ -25,6 +25,7 @@ pub mod fire;
 pub mod fix;
 pub mod framing;
 pub use archisim_core::occupancy;
+pub mod modular;
 pub mod region;
 pub mod services;
 pub mod structure;
@@ -72,12 +73,14 @@ pub enum Section {
     Electrical,
     /// The light frames, predimensioned.
     Framing,
+    /// The rules of the modular system (M15).
+    Modular,
     /// Floor areas.
     Areas,
 }
 
 impl Section {
-    pub const ALL: [Section; 11] = [
+    pub const ALL: [Section; 12] = [
         Section::Evacuation,
         Section::Fire,
         Section::Accessibility,
@@ -88,6 +91,7 @@ impl Section {
         Section::Electrical,
         Section::Structure,
         Section::Framing,
+        Section::Modular,
         Section::Areas,
     ];
 
@@ -103,6 +107,7 @@ impl Section {
             Section::Structure => "Estructura (Código Estructural, DB-SE-F, DB-SE-C)",
             Section::Electrical => "Electricidad (REBT, ITC-BT-25)",
             Section::Framing => "Entramado ligero (EN 1993-1-3, EN 1995-1-1, DB-SE-M)",
+            Section::Modular => "Sistema modular (reglas del sistema)",
             Section::Areas => "Superficies",
         }
     }
@@ -347,6 +352,7 @@ pub fn check(model: &Model) -> Report {
     structure::check(model, &mut report);
     electrical::check(model, &mut report);
     framing::check(model, &mut report);
+    modular::check(model, &mut report);
     report
 }
 

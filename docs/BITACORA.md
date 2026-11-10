@@ -6,6 +6,14 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-10 (150) · M6, M15 y M16: instalaciones en el entramado, reglas del sistema, elecciones por cliente y fábrica
+
+Rama `bloque/reglas-fabrica` (sobre la de M14), con pull request. Sin cambios de formato.
+
+- **Qué se hizo.** Instalaciones: uniones en obra donde una tubería, conducto o cable cruza una junta entre cajas (o un montante pasa a la caja de encima), con su registro, y comprobación de los pasos por el alma de los montantes (40 % del canto, 25 cm del canal). Reglas del sistema como un apartado nuevo de la Comprobación CTE: avisos de cada caja, huecos junto a los pilares de esquina, huecos de más de 2,40 m, ventanas en lados que dan a otra caja, locales húmedos sobre una junta e instalaciones. Elecciones por cliente: las opciones de una caja tipo pueden ser acabados de muro y suelo, techos y equipamiento, además de puertas y ventanas. Fábrica: paneles acotados por caja (A3, 1:25), etiquetas con QR de cada pieza (A4), un pedido por caja y el fichero de la perfiladora (CSV abierto con operaciones en mm). Valores estándar en `docs/MODULAR.md`.
+- **Pendiente.** El formato real de la perfiladora cuando se elija la máquina; la distribución como elección; el patinillo como elemento.
+- **Qué debe probar Antonio.** `archisim cajas out/`: mira `out/cajas-paneles.pdf` (paneles de cada caja con sus cotas), `out/cajas-etiquetas.pdf` (lee un QR con el móvil: sale la pieza), `out/cajas-perfiladora.csv` y `out/cajas-pedido-MOD-01.csv`. En la app, abre `out/cajas.archisim`, Colaboración → Comprobación CTE, apartado «Sistema modular». Pon una ventana en el lado de una caja que da a otra y vuelve a comprobar: sale en rojo. Dibuja una tubería dentro de un muro de fachada de una caja y comprueba los pasos por montantes. En una caja tipo, añade una opción con un tipo de muro y elige otro en la copia de la vivienda.
+
 ## 2026-11-10 (149) · M14 y M5: placas por piezas, lista de compra y montantes en el HE 1
 
 Rama `bloque/tableros` (sobre la de M13), con pull request. Sin cambios de formato.

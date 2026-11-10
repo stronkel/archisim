@@ -14,6 +14,8 @@ archisim-geom.workspace = true
 archisim-draft.workspace = true
 archisim-struct.workspace = true
 archisim-mep.workspace = true
+# The QR codes of the factory labels (M16).
+qrcodegen = "1.8"
 
 [dev-dependencies]
 # Rasterises plans in tests to compare drawings pixel by pixel.
