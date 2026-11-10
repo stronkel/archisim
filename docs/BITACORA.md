@@ -6,6 +6,19 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-10 (144) · v0.80: todo lo pendiente unido a `main` (formato 107)
+
+Unidos a `main` los catorce pull requests que quedaban abiertos:
+- **Instalaciones y terreno** (#183, #184, #186, #187, #189, #190, #192): puentes térmicos (HE 1), ventilación de las bajantes (HS 5), REBT trifásica, RITE y garajes, muros con talud y zarpa, movimiento de tierras en IFC 4.3 y volúmenes de SketchUp. Formatos 96 a 101, sin cambios.
+- **Las cajas modulares** (#185, #188, #191, #193, #194, #195): M4, M7, M1, M8, M2, M3 y M9. Se hicieron como los formatos 96 a 100 en paralelo a los anteriores y aquí pasan a ser **102 a 106**. Los ficheros guardados desde la rama de las cajas se siguen abriendo: ningún paso entre esas versiones cambia lo que ya estaba escrito, solo añade campos.
+- **Plantillas de vista con escala, corte y biblioteca** (#175): era la versión 92 y pasa a ser la **107**.
+
+Las tres partes se tocaban en el fichero (`archisim-file`), el IFC (lo que el importador quita: el movimiento de tierras y los tubos del chasis), los muros con talud con los forjados que atraviesan (los dos recortes juntos en el IFC) y la documentación. Pasan fmt, clippy, todas las pruebas y la validación IFC.
+
+**Qué debe probar Antonio**: abrir un proyecto suyo guardado antes (se abre igual) y `cargo run -p archisim-cli -- cajas out/cajas`.
+
+---
+
 ## 2026-11-07 (143) · Plantillas de vista: escala, plano de corte y biblioteca
 
 Rama `bloque/plantillas-biblioteca`, con pull request. **Formato `.archisim` versión 107** (la plantilla guarda su escala y su plano de corte; se hizo como la 92 y pasó a la 107 al unirla a `main` el 10/11/2026). Sin cambios de IFC. Antonio aprobó la propuesta: la plantilla manda en la escala (encendido por defecto) y en el plano de corte (apagado por defecto), cada uno con su interruptor.
