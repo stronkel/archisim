@@ -60,6 +60,10 @@ pub enum Element {
     /// A road marking, picked on its paint or along its path.
     Marking(archisim_core::MarkingId),
     Decal(archisim_core::DecalId),
+    /// A false ceiling (M7), picked inside its outline in a ceiling plan.
+    Ceiling(archisim_core::CeilingId),
+    /// A modular box (M1), picked by its mark or along its sides.
+    Box(archisim_core::BoxId),
     /// A pool built in the ground, picked inside its coping.
     Pool(archisim_core::PoolId),
     /// A lift, picked inside its shaft on any level it crosses.
@@ -174,6 +178,8 @@ pub fn outline<G: Geo + ?Sized>(geo: &G, element: Element) -> Option<Vec<Point2>
             .edge(id)
             .map(|e| archisim_core::strip(&e.points, -0.005, 0.005)),
         Element::Device(id) => model.device(id).map(|d| d.outline()),
+        Element::Ceiling(id) => model.ceiling(id).map(|c| c.outline.clone()),
+        Element::Box(id) => model.modular_box(id).map(|b| b.outline()),
     }
 }
 
@@ -480,11 +486,19 @@ pub fn elements_on_level(model: &Model, level: LevelId) -> Vec<Element> {
     v.extend(model.devices_on_level(level).map(|d| Element::Device(d.id)));
     v.extend(model.plots_on_level(level).map(|p| Element::Plot(p.id)));
     v.extend(model.pools_on_level(level).map(|p| Element::Pool(p.id)));
+    // False ceilings: only a ceiling plan lets them be picked (see
+    // `in_view`).
+    v.extend(
+        model
+            .ceilings_on_level(level)
+            .map(|c| Element::Ceiling(c.id)),
+    );
     v.extend(
         model
             .elevators_on_level(level)
             .map(|e| Element::Elevator(e.id)),
     );
+    v.extend(model.boxes_on_level(level).map(|b| Element::Box(b.id)));
     v
 }
 
@@ -534,7 +548,9 @@ pub fn type_of(model: &Model, e: Element) -> Option<TypeOf> {
         | Element::Planting(_)
         | Element::Run(_)
         | Element::Edge(_)
-        | Element::Device(_) => None,
+        | Element::Device(_)
+        | Element::Ceiling(_)
+        | Element::Box(_) => None,
     }
 }
 
@@ -582,6 +598,8 @@ pub fn category(model: &archisim_core::Model, e: Element) -> Option<archisim_cor
         Element::Plot(_) => C::Plots,
         Element::Road(_) | Element::Roundabout(_) | Element::Marking(_) => C::Roads,
         Element::Pool(_) => C::Pools,
+        Element::Ceiling(_) => C::Ceilings,
+        Element::Box(_) => C::Boxes,
         Element::Run(_) | Element::Device(_) => C::Services,
         Element::Planting(_) => C::Vegetation,
         _ => return None,
@@ -607,13 +625,24 @@ pub fn pickable(
         && !model.hidden_by_group(&style.systems, id)
 }
 
+/// Whether an element can be picked in a plan: false ceilings only in a
+/// ceiling plan (in a floor plan they are above the cut and not drawn), and
+/// in a ceiling plan only them and what is drawn with them.
+pub fn in_view(e: Element, ceiling_plan: bool) -> bool {
+    !matches!(e, Element::Ceiling(_)) || ceiling_plan
+}
+
 pub fn pick<G: Geo + ?Sized>(
     geo: &G,
     level: LevelId,
     p: Point2,
     tolerance: f64,
 ) -> Option<Element> {
-    pick_all(geo, level, p, tolerance).into_iter().next()
+    // Out of a ceiling plan (only the plan view lets false ceilings be
+    // picked, through `pick_all` and `in_view`).
+    pick_all(geo, level, p, tolerance)
+        .into_iter()
+        .find(|e| in_view(*e, false))
 }
 
 /// Every element under a point, the one [`pick`] takes first: what Tab
@@ -669,6 +698,11 @@ pub fn pick_all<G: Geo + ?Sized>(
         // Lines in front of the faces they may close.
         Element::Edge(_) => 1,
         Element::Device(_) => 1,
+        // Under the room seen from below, as a slab.
+        Element::Ceiling(_) => 4,
+        // Along its sides, after the walls and slabs on them (its mark is
+        // picked first, below).
+        Element::Box(_) => 5,
         // The ground everything stands on: last.
         Element::Plot(_) => 7,
         Element::Terrain(_) => 6,
@@ -704,6 +738,16 @@ pub fn pick_all<G: Geo + ?Sized>(
                     return Some((0, 0.0, e));
                 }
                 return r.contains(p).then_some((3, 0.0, e));
+            }
+            if let Element::Box(id) = e {
+                // By its mark first; then along its sides, not from
+                // inside (it holds what is inside).
+                let b = model.modular_box(id)?;
+                if contains(&archisim_plan::boxes::box_tag(b, k), p) {
+                    return Some((0, 0.0, e));
+                }
+                let d = distance_to_outline(&b.outline(), p);
+                return (d <= tolerance).then_some((rank(&e), d, e));
             }
             let poly = outline(geo, e)?;
             // A hole of a slab is not the slab.
@@ -777,6 +821,8 @@ pub fn of_solid(owner: archisim_geom::solid::SolidOwner) -> Element {
         SolidOwner::Elevator(id) => Element::Elevator(id),
         SolidOwner::Run(id) => Element::Run(id),
         SolidOwner::Device(id) => Element::Device(id),
+        SolidOwner::Ceiling(id) => Element::Ceiling(id),
+        SolidOwner::Box(id) => Element::Box(id),
         // The picture on the ground has no element of its own: it goes
         // with the terrain (the 3D view gives it the real one).
         SolidOwner::Orthophoto => Element::Terrain(archisim_core::TerrainId(0)),
@@ -809,6 +855,8 @@ pub fn solid_of(e: Element) -> Option<archisim_geom::solid::SolidOwner> {
         Element::Elevator(id) => SolidOwner::Elevator(id),
         Element::Run(id) => SolidOwner::Run(id),
         Element::Device(id) => SolidOwner::Device(id),
+        Element::Ceiling(id) => SolidOwner::Ceiling(id),
+        Element::Box(id) => SolidOwner::Box(id),
         _ => return None,
     })
 }

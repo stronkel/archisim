@@ -15,7 +15,10 @@ use crate::ids::*;
 use crate::math::{is_simple_polygon, signed_area, Arc, Point2, Vec2, EPSILON, MIN_BULGE};
 
 mod appearance;
+mod boxes;
 mod built_in;
+mod catalogue;
+mod ceilings;
 mod concept;
 mod curtain;
 mod decals;
@@ -76,6 +79,9 @@ mod wall_section;
 mod water;
 mod worktops;
 pub use appearance::*;
+pub use boxes::*;
+pub use catalogue::*;
+pub use ceilings::*;
 pub use concept::*;
 pub use curtain::*;
 pub use decals::*;
@@ -481,6 +487,9 @@ pub enum SlabFunction {
     BaseSlab,
     /// Flat roof ("cubierta plana"). IFC `ROOF`.
     Roof,
+    /// A false ceiling's type ("falso techo", M7): not for slabs but for
+    /// [`Ceiling`]s. IFC `IfcCoveringType` `.CEILING.`.
+    Ceiling,
 }
 
 impl SlabFunction {
@@ -490,13 +499,14 @@ impl SlabFunction {
             SlabFunction::Floor => "FLOOR",
             SlabFunction::BaseSlab => "BASESLAB",
             SlabFunction::Roof => "ROOF",
+            SlabFunction::Ceiling => "NOTDEFINED",
         }
     }
 
     /// Whether the slab separates inside from outside (or ground), which
     /// is what `Pset_SlabCommon.IsExternal` means.
     pub fn is_external(self) -> bool {
-        !matches!(self, SlabFunction::Floor)
+        !matches!(self, SlabFunction::Floor | SlabFunction::Ceiling)
     }
 }
 
@@ -1527,6 +1537,14 @@ pub struct ModelParts {
     pub roads: Vec<Road>,
     /// Roundabouts and squares where streets meet (U3).
     pub roundabouts: Vec<Roundabout>,
+    /// False ceilings (M7, version 96).
+    pub ceilings: Vec<Ceiling>,
+    /// Modular boxes and the limits they keep (M1, version 97).
+    pub boxes: Vec<ModularBox>,
+    pub modular_site: ModularSite,
+    /// What this project is in the system's catalogue, if it is a box
+    /// type (M8, version 98).
+    pub catalogue: Option<CatalogueEntry>,
     /// Road markings at will (U4).
     pub markings: Vec<Marking>,
     /// Pictures stuck on faces (U8).
@@ -1688,6 +1706,10 @@ pub struct Model {
     plots: BTreeMap<PlotId, Plot>,
     roads: BTreeMap<RoadId, Road>,
     roundabouts: BTreeMap<RoundaboutId, Roundabout>,
+    ceilings: BTreeMap<CeilingId, Ceiling>,
+    boxes: BTreeMap<BoxId, ModularBox>,
+    modular_site: ModularSite,
+    catalogue: Option<CatalogueEntry>,
     markings: BTreeMap<MarkingId, Marking>,
     decals: BTreeMap<DecalId, Decal>,
     plantings: BTreeMap<PlantingId, Planting>,
@@ -1804,6 +1826,10 @@ impl Model {
             plots: BTreeMap::new(),
             roads: BTreeMap::new(),
             roundabouts: BTreeMap::new(),
+            ceilings: BTreeMap::new(),
+            boxes: BTreeMap::new(),
+            modular_site: ModularSite::default(),
+            catalogue: None,
             markings: BTreeMap::new(),
             decals: BTreeMap::new(),
             plantings: BTreeMap::new(),
@@ -1968,6 +1994,8 @@ impl Model {
         self.plots.retain(|_, p| p.level != id);
         self.roads.retain(|_, r| r.level != id);
         self.roundabouts.retain(|_, r| r.level != id);
+        self.ceilings.retain(|_, c| c.level != id);
+        self.boxes.retain(|_, b| b.level != id);
         self.markings.retain(|_, r| r.level != id);
         self.decals.retain(|_, r| r.level != id);
         self.plantings.retain(|_, p| p.level != id);
@@ -2892,6 +2920,28 @@ impl Model {
         layers: Vec<Layer>,
     ) -> Result<(), ModelError> {
         self.validate_layers(&layers)?;
+        // A false ceiling's type stays one while false ceilings use it, and
+        // a slab's while slabs or roofs do.
+        let was = self
+            .slab_types
+            .get(&id)
+            .ok_or(ModelError::UnknownSlabType(id))?
+            .function;
+        if (was == SlabFunction::Ceiling) != (function == SlabFunction::Ceiling) {
+            let ceilings = self.ceilings.values().any(|c| c.ceiling_type == id);
+            let others = self.slabs.values().any(|s| s.slab_type == id)
+                || self.roofs.values().any(|r| r.roof_type == id);
+            if ceilings || others {
+                return Err(ModelError::InUse(
+                    "the type is in use: a false ceiling's type and a slab's cannot swap".into(),
+                ));
+            }
+        }
+        if function == SlabFunction::Ceiling && layers.is_empty() {
+            return Err(ModelError::InvalidShape(
+                "a false ceiling needs a type with layers",
+            ));
+        }
         let t = self
             .slab_types
             .get_mut(&id)
@@ -2906,6 +2956,11 @@ impl Model {
     pub fn slab_type_users(&self, id: SlabTypeId) -> usize {
         self.slabs.values().filter(|s| s.slab_type == id).count()
             + self.roofs.values().filter(|r| r.roof_type == id).count()
+            + self
+                .ceilings
+                .values()
+                .filter(|c| c.ceiling_type == id)
+                .count()
     }
 
     // ---- Slabs --------------------------------------------------------
@@ -2929,8 +2984,14 @@ impl Model {
         if !self.levels.contains_key(&spec.level) {
             return Err(ModelError::UnknownLevel(spec.level));
         }
-        if !self.slab_types.contains_key(&spec.slab_type) {
-            return Err(ModelError::UnknownSlabType(spec.slab_type));
+        match self.slab_types.get(&spec.slab_type) {
+            None => return Err(ModelError::UnknownSlabType(spec.slab_type)),
+            Some(t) if t.function == SlabFunction::Ceiling => {
+                return Err(ModelError::InvalidShape(
+                    "a false ceiling's type is not for slabs",
+                ))
+            }
+            Some(_) => {}
         }
         finite(spec.top_offset, "slab top offset")?;
         let outline = Self::normalized_outline(spec.outline)?;
@@ -3065,8 +3126,14 @@ impl Model {
 
     /// Changes a slab's type; the top face stays where it is.
     pub fn set_slab_type(&mut self, id: SlabId, slab_type: SlabTypeId) -> Result<(), ModelError> {
-        if !self.slab_types.contains_key(&slab_type) {
-            return Err(ModelError::UnknownSlabType(slab_type));
+        match self.slab_types.get(&slab_type) {
+            None => return Err(ModelError::UnknownSlabType(slab_type)),
+            Some(t) if t.function == SlabFunction::Ceiling => {
+                return Err(ModelError::InvalidShape(
+                    "a false ceiling's type is not for slabs",
+                ))
+            }
+            Some(_) => {}
         }
         let slab = self.slabs.get_mut(&id).ok_or(ModelError::UnknownSlab(id))?;
         slab.slab_type = slab_type;
@@ -4489,6 +4556,10 @@ impl Model {
             plots: self.plots.values().cloned().collect(),
             roads: self.roads.values().cloned().collect(),
             roundabouts: self.roundabouts.values().cloned().collect(),
+            ceilings: self.ceilings.values().cloned().collect(),
+            boxes: self.boxes.values().cloned().collect(),
+            modular_site: self.modular_site.clone(),
+            catalogue: self.catalogue.clone(),
             markings: self.markings.values().cloned().collect(),
             decals: self.decals.values().cloned().collect(),
             plantings: self.plantings.values().cloned().collect(),
@@ -4922,6 +4993,20 @@ impl Model {
             })?;
         model.restore_urban(parts.plots, parts.roads, &mut claim)?;
         model.restore_roundabouts(parts.roundabouts, &mut claim)?;
+        model.restore_ceilings(parts.ceilings, &mut claim)?;
+        model.restore_boxes(parts.boxes, &mut claim)?;
+        model
+            .set_catalogue(parts.catalogue)
+            .map_err(|error| RestoreError {
+                element: "catalogue".into(),
+                error,
+            })?;
+        model
+            .set_modular_site(parts.modular_site)
+            .map_err(|error| RestoreError {
+                element: "transport limits".into(),
+                error,
+            })?;
         model.restore_markings(parts.markings, &mut claim)?;
         model.restore_decals(parts.decals, &mut claim)?;
         model.restore_plantings(parts.plantings, &mut claim)?;

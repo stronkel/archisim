@@ -36,6 +36,7 @@ pub fn transform(
 ) -> Result<BTreeSet<Element>, ModelError> {
     let mirror = t.is_mirror();
     let f = t.factor();
+    let selection = &with_box_members(model, selection);
     let mut out = transform_phase_2(model, selection, t, copy)?;
     let mut copied: Vec<(archisim_core::DraftId, archisim_core::DraftId)> = Vec::new();
     for e in selection {
@@ -381,6 +382,69 @@ pub fn transform(
                     out.insert(*e);
                 }
             }
+            Element::Ceiling(id) => {
+                let c = model
+                    .ceiling(id)
+                    .ok_or(ModelError::UnknownElement(id.0))?
+                    .clone();
+                let outline: Vec<_> = c.outline.iter().map(|p| t.apply(*p)).collect();
+                let holes: Vec<Vec<_>> = c
+                    .holes
+                    .iter()
+                    .map(|h| h.iter().map(|p| t.apply(*p)).collect())
+                    .collect();
+                if copy {
+                    let new = model.add_ceiling(archisim_core::NewCeiling {
+                        ceiling_type: c.ceiling_type,
+                        level: c.level,
+                        outline,
+                        height: c.height,
+                    })?;
+                    model.edit_ceiling(new, |n| n.holes = holes)?;
+                    out.insert(Element::Ceiling(new));
+                } else {
+                    model.edit_ceiling(id, |n| {
+                        n.outline = outline;
+                        n.holes = holes;
+                    })?;
+                    out.insert(*e);
+                }
+            }
+            Element::Box(id) => {
+                if (f - 1.0).abs() > 1e-9 {
+                    return Err(ModelError::InvalidShape(
+                        "a modular box is moved, turned or mirrored, not scaled",
+                    ));
+                }
+                let b = model
+                    .modular_box(id)
+                    .ok_or(ModelError::UnknownElement(id.0))?
+                    .clone();
+                let c = b.corners().map(|p| t.apply(p));
+                // Mirrored, the corners go round the other way: the box
+                // starts at its second one, and B and D change places.
+                let (origin, along, sides) = if mirror {
+                    (
+                        c[1],
+                        c[0] - c[1],
+                        [b.sides[0], b.sides[3], b.sides[2], b.sides[1]],
+                    )
+                } else {
+                    (c[0], c[1] - c[0], b.sides)
+                };
+                let angle = along.y.atan2(along.x);
+                if copy {
+                    let new = model.add_box(box_spec(&b, origin, angle, sides))?;
+                    out.insert(Element::Box(new));
+                } else {
+                    model.edit_box(id, |x| {
+                        x.origin = origin;
+                        x.angle = angle;
+                        x.sides = sides;
+                    })?;
+                    out.insert(*e);
+                }
+            }
             Element::Device(id) => {
                 let x = model
                     .device(id)
@@ -613,6 +677,7 @@ pub fn scales(e: &Element) -> bool {
             | Element::Grid(_)
             | Element::RefPlane(_)
             | Element::Module(_)
+            | Element::Box(_)
     )
 }
 
@@ -698,6 +763,55 @@ fn mirror_one(model: &mut Model, e: Element, t: &Transform) -> Result<(), ModelE
 }
 
 /// A room or a tag moved, turned or copied (`walls_too`: with walls).
+/// The selection with what its boxes hold (their doors and windows go
+/// with their walls): a box is moved, copied, turned and mirrored whole.
+pub fn with_box_members(model: &Model, selection: &BTreeSet<Element>) -> BTreeSet<Element> {
+    let boxes: Vec<archisim_core::BoxId> = selection
+        .iter()
+        .filter_map(|e| match e {
+            Element::Box(id) => Some(*id),
+            _ => None,
+        })
+        .collect();
+    if boxes.is_empty() {
+        return selection.clone();
+    }
+    let mut out = selection.clone();
+    for id in boxes {
+        let m = model.box_members(id);
+        out.extend(m.walls.into_iter().map(Element::Wall));
+        out.extend(m.slabs.into_iter().map(Element::Slab));
+        out.extend(m.ceilings.into_iter().map(Element::Ceiling));
+        out.extend(m.columns.into_iter().map(Element::Column));
+        out.extend(m.beams.into_iter().map(Element::Beam));
+        out.extend(m.objects.into_iter().map(Element::Object));
+    }
+    out
+}
+
+/// A copy of a box at `origin` turned to `angle`, with the next mark.
+pub fn box_spec(
+    b: &archisim_core::ModularBox,
+    origin: archisim_core::Point2,
+    angle: f64,
+    sides: [archisim_core::SideState; 4],
+) -> archisim_core::NewBox {
+    archisim_core::NewBox {
+        mark: None,
+        kind: b.kind.clone(),
+        level: b.level,
+        origin,
+        angle,
+        length: b.length,
+        width: b.width,
+        bottom: b.bottom,
+        height: b.height,
+        sides,
+        chassis: b.chassis,
+        progress: b.progress.clone(),
+    }
+}
+
 pub fn transform_one(
     model: &mut Model,
     e: Element,

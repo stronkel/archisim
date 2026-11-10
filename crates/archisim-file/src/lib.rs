@@ -48,7 +48,7 @@ use serde_json::Value;
 /// Value of the `format` field.
 pub const FORMAT: &str = "ArchiSim";
 /// File layout written by this version of ArchiSim.
-pub const CURRENT_VERSION: u32 = 101;
+pub const CURRENT_VERSION: u32 = 106;
 /// File name extension, without the dot.
 pub const EXTENSION: &str = "archisim";
 /// Length unit of every number in the file.
@@ -422,7 +422,15 @@ pub fn migrate(value: Value, from: u64) -> Result<Value, FileError> {
             // footing); older walls have upright faces. 100 → 101: the
             // terrains' platforms with a name, a kind and a tilt (ramps);
             // older platforms are flat platforms with no name.
-            9..=100 => {
+            // 101 → 102: the false ceilings (`ceilings`); older files have none. 102 → 103:
+            // the modular boxes (`boxes`, `modular_site`); older files have
+            // none. 103 → 104: a box type's place in the catalogue
+            // (`catalogue`) and the choices of module copies; older files
+            // have neither. 104 → 105: the chassis of the boxes (`chassis`);
+            // older boxes take the usual one. 105 → 106: where each box is
+            // (`stage`, `station`, `stage_date`) and the crane of the site;
+            // older boxes are in design, with no crane.
+            9..=105 => {
                 let mut v = if version == 32 {
                     legacy_dormers(value)
                 } else {
@@ -1929,7 +1937,7 @@ mod tests {
         let back = from_str(&text).unwrap();
         assert_eq!(back, m);
         // A version 6 file has none of them and still opens.
-        let v6 = to_string(&sample()).replacen("\"version\": 101", "\"version\": 6", 1);
+        let v6 = to_string(&sample()).replacen("\"version\": 106", "\"version\": 6", 1);
         assert_eq!(from_str(&v6).unwrap().columns().count(), 0);
     }
 
@@ -1956,7 +1964,7 @@ mod tests {
         let opened = from_str(&old).unwrap();
         assert_same_project(&opened, &m);
         // Saved again, it is a version 5 file.
-        assert!(to_string(&opened).contains("\"version\": 101"));
+        assert!(to_string(&opened).contains("\"version\": 106"));
     }
 
     /// The project as ArchiSim 0.10–0.13 wrote it (file version 2): door and
@@ -2141,7 +2149,7 @@ mod tests {
         assert_eq!(back, m);
         let plain = to_string(&sample());
         assert!(!plain.contains("wrap_"));
-        let old = from_str(&plain.replacen("\"version\": 101", "\"version\": 40", 1)).unwrap();
+        let old = from_str(&plain.replacen("\"version\": 106", "\"version\": 40", 1)).unwrap();
         for t in old.wall_types() {
             assert_eq!(t.wrap_ends, Wrap::None);
             assert_eq!(
@@ -2177,7 +2185,7 @@ mod tests {
             FacadeSystem::Brick
         );
         let plain = to_string(&sample());
-        let old = from_str(&plain.replacen("\"version\": 101", "\"version\": 48", 1)).unwrap();
+        let old = from_str(&plain.replacen("\"version\": 106", "\"version\": 48", 1)).unwrap();
         assert!(old.wall_types().all(|t| t.facade.is_none()));
     }
 
@@ -2354,7 +2362,7 @@ mod tests {
         assert_eq!(back, m);
         let plain = to_string(&sample());
         assert!(!plain.contains("allow_join"));
-        let old = plain.replacen("\"version\": 101", "\"version\": 39", 1);
+        let old = plain.replacen("\"version\": 106", "\"version\": 39", 1);
         assert!(from_str(&old)
             .unwrap()
             .walls()
@@ -2380,7 +2388,7 @@ mod tests {
         let start = text.find("      \"top\": {").unwrap();
         let end = start + text[start..].find("}\n").unwrap() + 2;
         let old = format!("{}{}", &text[..start], &text[end..])
-            .replacen("\"version\": 101", "\"version\": 3", 1)
+            .replacen("\"version\": 106", "\"version\": 3", 1)
             .replace("\"base_offset\": -0.1,\n", "\"base_offset\": -0.1\n");
         let opened = from_str(&old).unwrap();
         let w = opened.wall(tied.id).unwrap();
@@ -2442,7 +2450,7 @@ mod tests {
         assert!(back.opening_type(void).unwrap().is_void());
         assert_eq!(back.opening_type(void).unwrap().mark, "H-01");
         // Version 5 (ArchiSim 0.19): no holes, no voids.
-        let v5 = to_string(&sample()).replacen("\"version\": 101", "\"version\": 5", 1);
+        let v5 = to_string(&sample()).replacen("\"version\": 106", "\"version\": 5", 1);
         assert!(from_str(&v5).unwrap().slabs().all(|s| s.holes.is_empty()));
     }
 
@@ -2765,6 +2773,75 @@ mod tests {
         assert_same_project(&back, &m);
     }
 
+    /// A box type's place in the catalogue (version 98).
+    #[test]
+    fn catalogue_round_trip() {
+        let mut m = sample();
+        let mut e = archisim_core::CatalogueEntry::new("CB-620-DD", "Caja 6,20 · dormitorio doble");
+        e.notes = "Ventana mayor".into();
+        e.options.push(archisim_core::CatalogueOption {
+            name: "Ventana".into(),
+            slot: "V1".into(),
+            choices: vec!["V2".into(), "V3".into()],
+        });
+        m.set_catalogue(Some(e)).unwrap();
+        m.approve_catalogue("09/11/2026").unwrap();
+        let text = to_string(&m);
+        let back = from_str(&text).unwrap();
+        assert_eq!(back.catalogue(), m.catalogue());
+        assert!(back.is_frozen());
+        assert_same_project(&back, &m);
+    }
+
+    /// Modular boxes and their limits (version 97).
+    #[test]
+    fn boxes_round_trip() {
+        let mut m = sample();
+        let level = m.levels()[0].id;
+        let b = m
+            .add_box(archisim_core::NewBox::usual(
+                level,
+                Point2::new(20.0, 1.0),
+                0.5,
+            ))
+            .unwrap();
+        m.edit_box(b, |x| {
+            x.sides[1] = archisim_core::SideState::Open;
+            x.sides[3] = archisim_core::SideState::Wall;
+            x.kind = "Caja 6,20 · baño".into();
+        })
+        .unwrap();
+        let mut site = m.modular_site();
+        site.deck_height = 0.3;
+        m.set_modular_site(site).unwrap();
+        m.edit_box(b, |x| {
+            x.chassis.edge = archisim_core::BoxTube::mm(150.0, 100.0, 5.0);
+            x.chassis.lift = archisim_core::LiftPoints::Six;
+            x.chassis.middle_beam = false;
+            x.progress = archisim_core::BoxProgress {
+                stage: archisim_core::BoxStage::Factory,
+                station: "Puesto 3".into(),
+                date: "2026-11-10".into(),
+            };
+        })
+        .unwrap();
+        let mut site = m.modular_site();
+        site.crane = Some(archisim_core::Point2::new(-6.0, 2.0));
+        site.rigging = 0.8;
+        site.crane_chart.rows.truncate(5);
+        m.set_modular_site(site.clone()).unwrap();
+        let text = to_string(&m);
+        assert!(text.contains("\"stage\": \"factory\""));
+        assert!(text.contains("\"edge\": \"150×100×5\""));
+        assert!(text.contains("\"mark\": \"MOD-01\""));
+        let back = from_str(&text).unwrap();
+        assert_eq!(back.modular_box(b), m.modular_box(b));
+        assert_eq!(back.modular_site(), site);
+        assert_same_project(&back, &m);
+        let err = from_str(&text.replacen("\"open\"", "\"half\"", 1)).unwrap_err();
+        assert!(err.to_string().contains("half"), "{err}");
+    }
+
     /// The code settings and a room's area per occupant (version 12).
     #[test]
     fn code_settings_round_trip() {
@@ -2903,7 +2980,7 @@ mod tests {
         assert_same_project(&back, &m);
         assert_eq!(back.wall(curved).unwrap().bulge, -0.4);
         // Version 4 (ArchiSim 0.17–0.18): no bulge anywhere.
-        let v4 = to_string(&sample()).replacen("\"version\": 101", "\"version\": 4", 1);
+        let v4 = to_string(&sample()).replacen("\"version\": 106", "\"version\": 4", 1);
         let opened = from_str(&v4).unwrap();
         assert!(opened.walls().all(|w| w.bulge == 0.0));
         // A bend tighter than the wall is thick is refused on opening.
@@ -2935,7 +3012,7 @@ mod tests {
             })
             .unwrap();
         let wall = m.materials().next().unwrap().id;
-        let text = to_string(&m).replacen("\"version\": 101", "\"version\": 32", 1);
+        let text = to_string(&m).replacen("\"version\": 106", "\"version\": 32", 1);
         let mut v: Value = serde_json::from_str(&text).unwrap();
         let roofs = v["roofs"].as_array_mut().unwrap();
         let at = roofs.iter().position(|r| r["id"] == roof.0).unwrap();
@@ -2968,7 +3045,7 @@ mod tests {
     #[test]
     fn layout_is_readable() {
         let text = to_string(&sample());
-        assert!(text.starts_with("{\n  \"format\": \"ArchiSim\",\n  \"version\": 101,\n"));
+        assert!(text.starts_with("{\n  \"format\": \"ArchiSim\",\n  \"version\": 106,\n"));
         // A wall tied to a level says which, and how far from it; a free
         // wall has no `top`.
         assert!(text.contains("\"top\": {\n        \"level\": "));
@@ -3014,11 +3091,11 @@ mod tests {
             Err(FileError::NotAProject)
         ));
         assert!(matches!(
-            edited("\"version\": 101", "\"version\": 102"),
-            Err(FileError::TooNew { version: 102 })
+            edited("\"version\": 106", "\"version\": 107"),
+            Err(FileError::TooNew { version: 107 })
         ));
         assert!(matches!(
-            edited("\"version\": 101", "\"version\": 0"),
+            edited("\"version\": 106", "\"version\": 0"),
             Err(FileError::UnknownVersion(0))
         ));
         assert!(matches!(

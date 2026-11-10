@@ -43,6 +43,8 @@
 //! model twice gives the same file apart from the header timestamp.
 
 mod accessories;
+mod boxes;
+mod ceilings;
 mod curtain;
 mod decals;
 mod earthworks;
@@ -1791,12 +1793,21 @@ impl<'a> Exporter<'a> {
         let mut slab_type_refs: BTreeMap<SlabTypeId, Ref> = BTreeMap::new();
         for t in model.slab_types() {
             let set = self.layer_set(&materials, t.layers.iter().rev(), &t.name);
-            let ty = self.w.add(format!(
-                "IFCSLABTYPE({},$,{},$,$,$,$,$,$,.{}.)",
-                string(t.guid.as_str()),
-                string(&t.name),
-                t.function.ifc_predefined_type()
-            ));
+            // A false ceiling's type is a covering's (M7).
+            let ty = if t.function == archisim_core::SlabFunction::Ceiling {
+                self.w.add(format!(
+                    "IFCCOVERINGTYPE({},$,{},$,$,$,$,$,$,.CEILING.)",
+                    string(t.guid.as_str()),
+                    string(&t.name),
+                ))
+            } else {
+                self.w.add(format!(
+                    "IFCSLABTYPE({},$,{},$,$,$,$,$,$,.{}.)",
+                    string(t.guid.as_str()),
+                    string(&t.name),
+                    t.function.ifc_predefined_type()
+                ))
+            };
             self.w.add(format!(
                 "IFCRELASSOCIATESMATERIAL({},$,$,$,({ty}),{set})",
                 string(derived_guid(&t.guid, "material").as_str())
@@ -2086,6 +2097,33 @@ impl<'a> Exporter<'a> {
                     let toes = f.section.footing.map_or(0.0, |t| t.toe_ext.max(t.toe_int));
                     e.max(i) + toes
                 });
+                // What a slab already took inside the opening (a wall through
+                // a floor build-up, as walls joined from layers are) is not
+                // taken out twice.
+                let (lo, hi) = (level_z + og.sill, level_z + og.head);
+                let far = 10.0 + geo.exterior_offset.abs() + geo.interior_offset.abs();
+                let at = |t: f64, s: f64| {
+                    Point2::new(
+                        og.origin.x + og.u.x * t + og.n.x * s,
+                        og.origin.y + og.u.y * t + og.n.y * s,
+                    )
+                };
+                let span: Vec<archisim_geom::junctions::Shape> = vec![(
+                    archisim_geom::ensure_ccw(vec![
+                        at(og.t0, -far),
+                        at(og.t1, -far),
+                        at(og.t1, far),
+                        at(og.t0, far),
+                    ]),
+                    Vec::new(),
+                )];
+                for (shapes, z0, z1) in &voids {
+                    let dz = hi.min(*z1) - lo.max(*z0);
+                    if dz > EPSILON {
+                        let both = archisim_geom::junctions::intersection(shapes, &span);
+                        cut_volume -= archisim_geom::junctions::area(&both) * dz * fill;
+                    }
+                }
                 let filling = self.opening(
                     w,
                     pl,
@@ -2274,6 +2312,7 @@ impl<'a> Exporter<'a> {
 
         self.write_members(&materials, &storeys, &mut contained);
         self.write_roofs(&storeys, &slab_sets, &mut contained, &mut slabs_by_type);
+        self.write_ceilings(&storeys, &slab_sets, &mut contained, &mut slabs_by_type);
         self.write_stairs(&materials, &storeys, &mut contained);
         self.write_terrains(&materials, &storeys, &mut contained);
         self.write_curtain_walls(&materials, &storeys, &mut contained, &mut openings_by_type);
@@ -2294,6 +2333,8 @@ impl<'a> Exporter<'a> {
         self.write_urban(&materials, site, site_pl, earthworks);
         self.write_services(&storeys, &mut contained, building);
         self.write_spaces(&storeys);
+        // Last: the boxes take their parts out of the storeys.
+        self.write_boxes(&storeys, &mut contained);
 
         self.write_user_parameters(project);
 

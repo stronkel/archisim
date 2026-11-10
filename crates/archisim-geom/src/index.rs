@@ -42,6 +42,9 @@ pub struct WallIndex<'a> {
     openings: HashMap<WallId, Vec<OpeningId>>,
     /// The slabs whose outline may reach each cell (any level).
     slab_cells: HashMap<Key, Vec<SlabId>>,
+    /// The modular box each wall belongs to, if any (M2): walls of two
+    /// different boxes do not join.
+    wall_box: HashMap<WallId, archisim_core::BoxId>,
 }
 
 impl<'a> WallIndex<'a> {
@@ -74,8 +77,18 @@ impl<'a> WallIndex<'a> {
                 }
             }
         }
+        let mut wall_box = HashMap::new();
+        let levels: std::collections::BTreeSet<LevelId> = model.boxes().map(|b| b.level).collect();
+        for level in levels {
+            for (b, members) in model.box_members_on(level) {
+                for w in members.walls {
+                    wall_box.insert(w, b);
+                }
+            }
+        }
         Self {
             model,
+            wall_box,
             slab_cells,
             cells,
             ends,
@@ -95,6 +108,15 @@ impl<'a> WallIndex<'a> {
             .collect();
         v.sort_by(|a, b| a.t0.total_cmp(&b.t0));
         v
+    }
+
+    /// Whether two walls are in two different modular boxes: they meet at
+    /// a joint, built apart in the factory, and do not join.
+    pub fn apart(&self, a: WallId, b: WallId) -> bool {
+        match (self.wall_box.get(&a), self.wall_box.get(&b)) {
+            (Some(x), Some(y)) => x != y,
+            _ => false,
+        }
     }
 
     /// Walls of `level` whose outline may come within `r` of `p`.

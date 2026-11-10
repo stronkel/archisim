@@ -25,8 +25,11 @@
 
 pub mod annotate;
 pub mod axo;
+pub mod box_sheets;
+pub mod boxes;
 pub mod calc_report;
 pub mod carpentry;
+pub mod ceilings;
 pub mod concept;
 pub mod curtain;
 pub mod decals;
@@ -723,6 +726,13 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
         }
     }
     overrides::close(&mut s);
+    // False ceilings (M7): in the ceiling plan of their level only (in a
+    // floor plan they are above the cut).
+    if ceiling && show(archisim_core::Category::Ceilings) {
+        overrides::group(&mut s, archisim_core::Category::Ceilings, |s| {
+            ceilings::draw_ceilings(s, model, level, k)
+        });
+    }
     // The rooms' floor patterns only in views with a presentation style:
     // the working plans stay clear (and easy to pick in).
     if show(archisim_core::Category::Rooms)
@@ -1082,6 +1092,12 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
     if show(archisim_core::Category::Tags) {
         overrides::group(&mut s, archisim_core::Category::Tags, |s| {
             rooms::draw_tags(s, model, level, k)
+        });
+    }
+    // Modular boxes (M1): how the building is split, over everything.
+    if show(archisim_core::Category::Boxes) {
+        overrides::group(&mut s, archisim_core::Category::Boxes, |s| {
+            boxes::draw_boxes(s, model, level, k)
         });
     }
     if show(archisim_core::Category::RefPlanes) {
@@ -1933,7 +1949,7 @@ fn fmt_percent(v: f64) -> String {
 }
 
 /// Lowest and highest corner of the box around some points.
-fn bounds(pts: &[Point2]) -> (Point2, Point2) {
+pub(crate) fn bounds(pts: &[Point2]) -> (Point2, Point2) {
     let mut lo = Point2::new(f64::INFINITY, f64::INFINITY);
     let mut hi = Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY);
     for p in pts {
@@ -2020,7 +2036,7 @@ fn hatch_dots(poly: &[Point2], spacing: f64, radius: f64) -> String {
 }
 
 /// The parts of segment `p`–`q` inside a simple polygon (any shape).
-fn clip_segment(p: Point2, q: Point2, poly: &[Point2]) -> Vec<(Point2, Point2)> {
+pub(crate) fn clip_segment(p: Point2, q: Point2, poly: &[Point2]) -> Vec<(Point2, Point2)> {
     let d = q - p;
     let n = poly.len();
     let mut ts = vec![0.0, 1.0];

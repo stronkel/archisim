@@ -1645,10 +1645,11 @@ fn properties_palette_shows_every_state() {
             .map(|t| format!("{:?}", t.layers))
             .collect();
         // Slab types too: a one-way floor draws as the solid one of its
-        // layers.
+        // layers. (Those of false ceilings are listed by the Techo tool.)
         let slabs: std::collections::HashSet<String> = h
             .model()
             .slab_types()
+            .filter(|t| t.function != SlabFunction::Ceiling)
             .map(|t| format!("{:?}", t.layers))
             .collect();
         let types = walls.len() + slabs.len() + h.model().opening_types().count();
@@ -11079,4 +11080,186 @@ fn installations_are_picked_only_in_their_template() {
     h.move_to(p(5.0, 2.0));
     h.frame();
     assert!(!h.app.under_cursor.contains(&Element::Run(run)));
+}
+
+/// The Techo tool (M7): a false ceiling with the magic wand inside a room,
+/// another by its corners; neither picked from the floor plan.
+#[test]
+fn false_ceilings_with_the_wand_and_by_corners() {
+    let mut h = Harness::new(Editor::new_project());
+    draw_outline(&mut h);
+    h.key(Key::Escape);
+    h.app.pick(super::toolbox::Pick::Ceiling);
+    assert_eq!(h.app.tool, Tool::Slab);
+    assert!(h.app.slab_settings.ceiling);
+    h.app.slab_settings.wand = true;
+    h.app.slab_settings.contour = Contour::InteriorFace;
+    h.click_at(p(6.0, 4.5));
+    let m = h.model();
+    assert_eq!(m.ceilings().count(), 1, "{:?}", h.app.message);
+    assert_eq!(m.slabs().count(), 0);
+    let c = m.ceilings().next().unwrap();
+    let inner = (12.0 - 0.53) * (9.0 - 0.53);
+    assert!((c.area() - inner).abs() < 1e-6);
+    assert!((c.height - archisim_core::CEILING_HEIGHT).abs() < 1e-9);
+    assert_eq!(
+        m.slab_type(c.ceiling_type).unwrap().function,
+        SlabFunction::Ceiling
+    );
+    let msg = h.app.message.as_ref().unwrap().text.clone();
+    assert!(msg.contains("planta de techos"), "{msg}");
+    // By its corners, lower.
+    h.app.slab_settings.wand = false;
+    h.app.slab_settings.ceiling_height = 2.4;
+    for c in [p(1.0, 1.0), p(1.0, 3.0), p(4.0, 3.0), p(4.0, 1.0)] {
+        h.click_at(c);
+    }
+    h.click_at(p(1.0, 1.0));
+    let m = h.model();
+    assert_eq!(m.ceilings().count(), 2, "{:?}", h.app.message);
+    assert!(m
+        .ceilings()
+        .any(|c| (c.height - 2.4).abs() < 1e-9 && (c.area() - 6.0).abs() < 1e-9));
+    // The slab tool again makes slabs.
+    h.key(Key::Escape);
+    h.type_text("f");
+    assert!(!h.app.slab_settings.ceiling);
+    // In a floor plan a click inside the room does not pick a ceiling.
+    h.key(Key::Escape);
+    let c = h.model().ceilings().next().unwrap().id;
+    let found = crate::pick::pick(h.model(), h.app.ed.level, p(6.0, 4.5), 0.05);
+    assert_ne!(found, Some(crate::pick::Element::Ceiling(c)));
+    assert!(crate::pick::in_view(crate::pick::Element::Ceiling(c), true));
+}
+
+/// The Caja tool (M1): a box with its envelope, a second one that goes
+/// against it with its joint, picked by its mark and moved with what it
+/// holds.
+#[test]
+fn modular_boxes_are_placed_against_each_other_and_moved_whole() {
+    use archisim_core::SideState;
+    let mut h = Harness::new(Editor::new_project());
+    h.app.pick(super::toolbox::Pick::Tool(Tool::ModularBox));
+    assert_eq!(h.app.tool, Tool::ModularBox);
+    h.click_at(p(4.0, 3.0));
+    let m = h.model();
+    assert_eq!(m.boxes().count(), 1, "{:?}", h.app.message);
+    let a = m.boxes().next().unwrap().clone();
+    assert_eq!(a.mark, "MOD-01");
+    assert!(a.centre().approx_eq(p(4.0, 3.0)));
+    let held = m.box_members(a.id);
+    assert_eq!(held.walls.len(), 4, "{held:?}");
+    assert_eq!(held.slabs.len(), 2);
+    assert_eq!(held.ceilings.len(), 1);
+    // Its chassis is in the 3D (M3), with the steel the tool added.
+    assert!(!archisim_geom::boxes::box_solids(m, a.id).is_empty());
+    assert!(archisim_struct::boxes::lift_check(m, a.id).is_some());
+    // The second one, clicked a little off the place beside side C.
+    h.click_at(p(4.3, 3.0 + 3.6 + 0.3));
+    let m = h.model();
+    assert_eq!(m.boxes().count(), 2, "{:?} {:?}", h.app.message, h.app.tool);
+    let b = m.boxes().find(|x| x.mark == "MOD-02").unwrap().clone();
+    assert!((b.origin.y - (a.origin.y + a.width + archisim_core::BOX_JOINT)).abs() < 1e-9);
+    assert!((b.origin.x - a.origin.x).abs() < 1e-9);
+    assert_eq!(m.modular_box(a.id).unwrap().sides[2], SideState::Wall);
+    assert_eq!(b.sides[0], SideState::Open);
+    assert_eq!(m.box_members(b.id).walls.len(), 3);
+    let walls = m.walls().count();
+    assert_eq!(walls, 7);
+    // Picked by its mark, and moved 3 m south with all it holds.
+    h.key(Key::Escape);
+    h.click_at(p(4.0, 3.0));
+    assert_eq!(
+        h.app.ed.selection.iter().copied().collect::<Vec<_>>(),
+        vec![crate::pick::Element::Box(a.id)]
+    );
+    let before: Vec<_> = h.model().box_members(b.id).walls;
+    let b_walls: Vec<_> = before
+        .iter()
+        .map(|w| h.model().wall(*w).unwrap().clone())
+        .collect();
+    h.drag(p(4.0, 3.0), p(4.0, 0.0));
+    let m = h.model();
+    let moved = m.modular_box(a.id).unwrap();
+    assert!(
+        (moved.origin.y - (a.origin.y - 3.0)).abs() < 1e-6,
+        "{moved:?}"
+    );
+    assert_eq!(m.box_members(a.id).walls.len(), 4);
+    assert_eq!(m.box_members(a.id).slabs.len(), 2);
+    // The other box and its walls stayed where they were.
+    for w in &b_walls {
+        let now = m.wall(w.id).unwrap();
+        assert!(now.start.approx_eq(w.start) && now.end.approx_eq(w.end));
+    }
+    // Now nothing touches its side A.
+    assert!(m
+        .box_issues(b.id)
+        .contains(&archisim_core::BoxIssue::JoinedAlone { side: 0 }));
+    // Where it is: at the factory's station 2.
+    let res = h.app.ed.transact("Estado", |m| {
+        m.edit_box(a.id, |x| {
+            x.progress.stage = archisim_core::BoxStage::Factory;
+            x.progress.station = "Puesto 2".into();
+        })
+    });
+    assert!(res.is_ok());
+    assert!(!archisim_plan::box_sheets::pages(h.app.ed.model()).is_empty());
+    // Its properties: the chassis and how it is lifted.
+    let ctx = egui::Context::default();
+    let mut o = ctx.run_ui(egui::RawInput::default(), |ui| {
+        h.app.box_properties(ui, a.id)
+    });
+    o.textures_delta.clear();
+}
+
+/// The catalogue (M8): a box saved as a box type, approved (and then
+/// frozen), and placed twice in another project, the second copy against
+/// the first.
+#[test]
+fn box_types_are_saved_frozen_and_placed_side_by_side() {
+    let dir = std::env::temp_dir().join(format!("archisim-catalogo-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("CB-PRUEBA.archisim");
+    // A box with its envelope, saved as a box type.
+    let mut h = Harness::new(Editor::new_project());
+    h.app.pick(super::toolbox::Pick::Tool(Tool::ModularBox));
+    h.click_at(p(4.0, 3.0));
+    let b = h.model().boxes().next().unwrap().id;
+    h.app.write_box_type(b, &path);
+    let t = archisim_file::open(&path).unwrap();
+    assert_eq!(t.catalogue().unwrap().code, "CB-PRUEBA");
+    assert!(!t.is_frozen());
+    assert_eq!(t.boxes().count(), 1);
+    assert_eq!(t.walls().count(), 4);
+    // Opened, approved: nothing else can change until a new revision.
+    let mut ed = Editor::with_model(t, None);
+    ed.transact("Aprobar", |m| m.approve_catalogue("09/11/2026").map(drop))
+        .unwrap();
+    let wall = ed.model().walls().next().unwrap().id;
+    let err = ed
+        .transact("Borrar", |m| m.remove_wall(wall).map(drop))
+        .unwrap_err();
+    assert!(err.contains("aprobada"), "{err}");
+    ed.transact("Revisión", |m| m.new_catalogue_revision())
+        .unwrap();
+    ed.transact("Borrar", |m| m.remove_wall(wall).map(drop))
+        .unwrap();
+    ed.undo();
+    ed.transact("Aprobar", |m| m.approve_catalogue("10/11/2026").map(drop))
+        .unwrap();
+    archisim_file::save(ed.model(), &path).unwrap();
+    // Placed twice in a house: the second against the first.
+    let mut h = Harness::new(Editor::new_project());
+    h.app.load_module_from(&path);
+    assert_eq!(h.app.tool, Tool::Module);
+    h.click_at(p(1.0, 1.0));
+    h.click_at(p(1.3, 1.0 + 3.6 + 0.3));
+    let flat = h.model().flattened().unwrap();
+    assert_eq!(flat.boxes().count(), 2, "{:?}", h.app.message);
+    let boxes: Vec<_> = flat.boxes().cloned().collect();
+    assert!((boxes[1].origin.y - boxes[0].origin.y - (3.6 + 0.02)).abs() < 1e-6);
+    assert!((boxes[1].origin.x - boxes[0].origin.x).abs() < 1e-6);
+    assert!(boxes.iter().all(|b| b.kind.starts_with("CB-PRUEBA rev. 2")));
+    let _ = std::fs::remove_dir_all(&dir);
 }

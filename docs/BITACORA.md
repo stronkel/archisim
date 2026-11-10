@@ -6,6 +6,338 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-10 (142) · M9 taller de las cajas: estado, plan de grúa y planos de taller
+
+Rama `bloque/taller-cajas`, con pull request sobre `bloque/juntas` (#194). **Formato versión 106.** `docs/MODULAR.md` (M9).
+
+**Qué hace.**
+- **Estado de fabricación de cada caja.** En Propiedades de la caja, grupo «Fabricación»:
+  - estado: en diseño, aprobada, en fábrica (con el puesto), en camión, montada;
+  - fecha, con el botón «Hoy».
+  - En planta, el estado sale bajo la marca de la caja, en su color. Va también en el IFC y vuelve al importarlo.
+- **Plan de grúa.** En Propiedades de la caja, grupo «Plan de grúa»:
+  - dónde está la grúa: si no se coloca, se calcula con ella en el centro de las cajas, y «Colocarla ahí» la fija;
+  - el peso del aparejo (balancín, eslingas y grilletes; 0,5 t por defecto);
+  - para esa caja, la carga con el aparejo, el radio y qué parte usa de lo que admite la grúa a ese radio, con aviso si no la levanta.
+  - La tabla de cargas es **orientativa** (grúa móvil de 50 t). Hay que poner la de la grúa que se contrate.
+  - En el informe de las cajas (`cajas.txt`), todas las cajas en orden de montaje.
+- **Planos de taller**, A3 en PDF, desde Archivo → Exportar → «Planos de taller de las cajas» o `archisim taller-cajas`:
+  - **M-00, montaje:**
+    - la planta con las cajas coloreadas por su estado y numeradas en el orden de montaje (las de la planta de arriba, a trazos);
+    - la grúa con los círculos de su tabla;
+    - la tabla de izados con la peor.
+  - **M-01 en adelante, una hoja por caja** en el orden de montaje:
+    - chasis de suelo y de techo con peto en planta, con los puntos de izado;
+    - los cuatro alzados del chasis a 1:60;
+    - despiece: lista de corte del chasis y totales del entramado;
+    - materiales: m² de muros, suelos, cubierta y techos, y carpinterías;
+    - peso, centro de gravedad e izado.
+
+**En el ejemplo** (`archisim cajas`, la grúa a 6 m de la fachada sur):
+- las cajas pesan entre 10 y 13 t;
+- MOD-07 y MOD-08, las del fondo, quedan a 16,5 y 18,1 m y la grúa de la tabla no las levanta. Es lo esperado: hay que acercar la grúa o elegir una mayor.
+
+**Pendiente.**
+- Los paneles de entramado en alzado dentro de la hoja de cada caja. Están en el despiece de entramados de siempre.
+- Los tubos de 60 × 60 de borde del suelo (¿dónde van?).
+
+**Qué debe probar Antonio.**
+1. Ejecuta `cargo run -p archisim-cli -- cajas out/cajas`.
+2. Abre `out/cajas/cajas-taller.pdf`:
+   - en M-00, mira la planta de montaje y la tabla de la grúa;
+   - en cada hoja M-nn, el chasis, los alzados y las listas.
+3. Abre `out/cajas/cajas.archisim` y selecciona una caja:
+   - en «Fabricación», cámbiale el estado: la planta lo dice bajo la marca;
+   - en «Plan de grúa», mueve la grúa (X, Y) y mira cómo cambia lo que usa.
+4. Con tu propio proyecto: `cargo run -p archisim-cli -- taller-cajas <proyecto>.archisim <carpeta>`.
+
+---
+
+## 2026-11-10 (141) · El peto de las cajas como en el módulo B
+
+Rama `bloque/juntas` (#194), sin cambio de versión del formato (la 99 todavía no está en `main`). Pedido de Antonio al ver el chasis: en su modelo el peto lleva una coronación arriba.
+
+**Qué cambia**, comparado con el IFC del módulo B de 6,10 × 3,60 que mandó Antonio:
+- **Peto en los lados libres.**
+  - Montantes de 60 × 40 desde el marco de techo (2,99) hasta debajo de la coronación (3,19), a no más de 1,20 m.
+  - Coronación de 120 × 100 arriba (3,19 a 3,31), entre los pilares de esquina.
+- **Lados de junta.** No llevan peto: la cubierta sigue por encima de la junta. El pilar de esquina entre dos lados de junta acaba en el marco de techo.
+- **Marco de techo de 60 × 40** en el plano del techo (2,93), con sus viguetas y su viga central, en dos vanos como en el suelo. Antes era de 120 × 100.
+- **Viguetas del suelo** apoyadas abajo, enrasadas con la cara inferior del marco, como en el modelo.
+- **La envolvente («Ponerle la envolvente»).**
+  - Pone la cubierta 20 cm por debajo de la coronación.
+  - Los muros de los lados libres llegan arriba, al peto.
+  - Los de la junta acaban en la cubierta.
+  - La caja vuelve a medir 3,58 m y, con el camión, se queda en 3,98 m: dentro de los 4 m, sin aviso de transporte especial por altura.
+- **Propiedades de la caja, grupo «Chasis».** Ahora también se cambian el marco de techo, la coronación, los montantes del peto y su separación.
+- **Planta.** Los montantes del peto salen como pilares cortados.
+- **IFC.** Cada tubo, con su papel («Coronación del peto», «Montante del peto», «Viga central de techo»).
+
+**Lo que no está.** Los tubos de 60 × 60 de borde del suelo del modelo de Revit (no está claro dónde van; dímelo y los añado).
+
+**Qué debe probar Antonio.**
+1. Ejecuta `cargo run -p archisim-cli -- cajas out/cajas`.
+2. Abre `out/cajas/cajas.archisim` y mira en 3D una caja de la fila:
+   - en los lados libres, montantes sobre el marco de techo y la coronación arriba;
+   - en los de junta, nada por encima del marco de techo.
+3. En `out/cajas/cajas.txt`, la lista de corte de cada caja debe incluir la coronación y los montantes.
+
+---
+
+## 2026-11-09 (140) · M2 juntas y M3 chasis, peso e izado
+
+Rama `bloque/juntas`, con pull request, sobre la de la entrada 139 (`bloque/catalogo`, #193). **Formato versión 105**: el chasis de cada caja. `docs/MODULAR.md` (M2, M3).
+
+**Qué hace.**
+- **El chasis de la caja (M3).** Cada caja lleva su chasis de tubo soldado, como el módulo B de Revit (§5 bis):
+  - marco de suelo y de techo de 120 × 100 × 4;
+  - pilares de esquina de toda la altura, y uno intermedio en el medio de cada lado largo abierto;
+  - viguetas de 60 × 40 × 3 cada 60 cm, en dos vanos sobre una viga central en el suelo;
+  - el marco de techo con su cara de abajo en el plano del techo (2,93).
+  - Los tubos, la separación, la viga central, la cota del marco de techo y el izado se cambian en Propiedades de la caja, grupo «Chasis».
+  - No se dibujan a mano: salen de la caja y la siguen al moverla, girarla o cambiar su tamaño.
+- **Dónde se ve el chasis.**
+  - **3D:** se ve, se selecciona y forma parte de la caja.
+  - **Planta:** los pilares van cortados y los puntos de izado con un círculo con cruz.
+  - **IFC:** un `IfcMember` por tubo, con su perfil hueco, dentro del ensamblaje de la caja, y su peso. Vuelve igual al importarlo.
+- **Peso y centro de gravedad.** Propiedades de la caja, grupo «Peso e izado», con el peso desglosado. Cuenta:
+  - el chasis;
+  - los muros, con su entramado, menos los huecos;
+  - las carpinterías;
+  - los forjados y los techos.
+- **Izado.** Con balancín, de cuatro esquinas o de esquinas y medio:
+  - lo que tira cada eslinga;
+  - la flexión y la flecha del borde largo del chasis, con el peso mayorado por 1,35 y por 1,20 de dinámico.
+  - Es del lado de la seguridad: el muro de encima no se cuenta como viga.
+- **Orden de montaje.** Por plantas desde abajo. Empieza por una esquina y sigue por la caja que toca a más cajas ya puestas.
+- **Despiece por caja.** Para cada caja, la lista de corte del chasis (pieza, tubo, cantidad, largo y kilos) y el resumen del entramado de sus muros, suelos y cubiertas.
+- **Juntas (M2).**
+  - **Muros de cajas distintas:** no se unen nunca; en las esquinas solo se tocan.
+  - **Lado contra dos cajas:** un lado puede tocar dos cajas. Si está abierto, cada una de las otras lleva su tramo de muro.
+  - **Avisos nuevos:**
+    - lado abierto con parte al exterior (es un error: quedaría un hueco en la fachada);
+    - muro de junta con parte al exterior;
+    - caja de una planta alta que no apoya sobre ninguna de abajo;
+    - caja desplazada de la retícula de la de abajo.
+  - **Petos.** «Ponerle la envolvente» levanta 20 cm de peto en los lados libres. En los lados de junta, el muro acaba en la cubierta para que siga por encima de la junta. Bajo otra caja no hay peto.
+  - **Altura en camión.** Con el peto, la caja pasa de 4 m sobre el camión. Ahora es un aviso de transporte especial, no un error.
+- **Pesos de capa:** una capa cuyo material se llame «colaborante» pesa como forjado colaborante (unos 1,9 kN/m² en 12 cm), no como acero macizo.
+
+**Lo que salen las cajas del ejemplo, y por qué.**
+- **Peso: entre 9 y 12 t por caja** (entre 10 y 12,5 t con el peto de la entrada 141), más de las 5 a 8 t que estimamos.
+  - **Suelo y cubierta (unas 6 t):** casi todo es el forjado colaborante H90 + 30.
+  - **Muros (unas 4 t):** placa cerámica y dos placas de yeso.
+  - **Chasis (1 t).**
+- **Izado de cuatro esquinas:** el borde de 120 × 100 × 4 no llega, porque pide unas cuatro veces lo que da.
+- **Izado de seis puntos** (esquinas y medio): llega justo, al 99 %.
+- Es lo que ya apuntaba la §5 bis, ahora con números de cada caja.
+
+**Pendiente.**
+- **Contar el muro de fachada como viga** en el izado (necesita su cálculo).
+- **Orejetas y uniones atornilladas** entre cajas.
+- **Banda de lana de la junta y banda de impermeabilización** de la cubierta en 3D.
+- **El taller (M9):** planos de cada caja y estados de fabricación.
+- **Tu catálogo de perfiles**, para que los tubos salgan de tu lista.
+
+**Qué debe probar Antonio.**
+1. Ejecuta `cargo run -p archisim-cli -- cajas out/cajas` y abre `out/cajas/cajas.txt`. Tiene que haber 10 cajas, 2 de ellas en planta primera.
+   - Al final verás, para cada caja, su peso y centro de gravedad, lo que tira cada punto, la comprobación del borde y la lista de corte del chasis.
+   - Las dos de arriba se cuelgan de seis puntos.
+   - **Mira si los pesos te cuadran** con lo que esperáis en fábrica. Si no, dime qué capa pesa de más.
+2. Abre `out/cajas/cajas-planta.svg` y `cajas-planta-2.svg`. Deben verse:
+   - los pilares en azul en las esquinas y en el medio de los lados abiertos;
+   - los círculos de izado.
+3. Abre `out/cajas/cajas.archisim` en la aplicación.
+   - En 3D, con la caja de sección, mira el chasis: marcos, pilares y viguetas.
+   - Selecciona una caja. En Propiedades:
+     - grupo «Chasis»: cambia el izado a «Esquinas y medio» o el marco a 150 × 100 × 5;
+     - grupo «Peso e izado»: mira cómo cambia la comprobación.
+     - Debajo verás su orden de montaje.
+4. **Juntas:** borra una de las cajas de una fila. En Comprobación, la de al lado debe avisar de que su lado abierto queda en parte al exterior.
+5. **IFC:** valídalo con `python3 scripts/validate_ifc.py out/cajas/cajas.ifc`. Ábrelo en tu visor: cada caja es un ensamblaje con sus muros, forjados y los tubos del chasis.
+
+---
+
+## 2026-11-09 (139) · M8: el catálogo del sistema
+
+Rama `bloque/catalogo`, con pull request, sobre la de la entrada 138 (`bloque/caja`, #191). **Formato versión 104**: lo que dice de sí misma una caja tipo, y lo que elige cada copia. `docs/MODULAR.md` (M8).
+
+**Qué hace.**
+- **La caja tipo.** Es un proyecto de ArchiSim con una caja y lo que lleva. Tiene:
+  - código («CB-620-DD») y nombre;
+  - estado: en diseño o aprobada;
+  - revisión, fecha de aprobación y notas;
+  - lo que puede elegir cada vivienda.
+- **Hacer una caja tipo.**
+  - Selecciona una caja (con sus muros, suelo, techo, huecos y muebles) y pulsa «Guardar como caja tipo…».
+  - Se guarda en la carpeta «Cajas tipo» de la biblioteca, con el código que le des al fichero.
+  - La caja queda en el origen, a lo largo de x y en una planta a ±0,00, aunque en el proyecto estuviera girada o en otra cota.
+  - Lleva también los locales que tengan su rótulo dentro.
+  - Si un proyecto tiene una sola caja, también puedes convertirlo en caja tipo desde Propiedades (sin nada seleccionado).
+- **Aprobarla.**
+  - Al abrir una caja tipo, Propiedades (sin nada seleccionado) enseña su página, con «Aprobar la revisión N».
+  - Una vez aprobada, el programa no deja cambiar nada: avisa de que está aprobada.
+  - Para mejorarla, «Abrir la revisión N+1», se cambia y se vuelve a aprobar.
+- **Lo que elige cada vivienda.**
+  - En la caja tipo se marca una puerta o ventana y las que la pueden sustituir. Por ejemplo, «Ventana del dormitorio»: la de dos hojas, o la de persiana o la de una hoja.
+  - En la vivienda, cada copia elige en Propiedades.
+- **Colocarlas en una vivienda.**
+  - La herramienta Caja enseña las cajas tipo de la biblioteca con su código, revisión y si están aprobadas (✓). «Colocar» las trae.
+  - Cada copia se pega a la caja de al lado con su junta, también girada.
+  - Cada copia toma la marca siguiente (MOD-01, MOD-02…). Su tipo dice código y revisión («CB-620-DD rev. 1 · Caja 6,20 · dormitorio doble»), en planta y en el IFC.
+  - Si la caja tipo cambia, la vivienda avisa y se actualiza como cualquier módulo.
+  - Si se coloca una caja tipo sin aprobar, la copia lo avisa.
+- **Arreglos de paso.** Las copias de los módulos ya llevan sus falsos techos (antes se quedaban fuera).
+- **Ejemplo:** `archisim catalogo out/` hace tres cajas tipo aprobadas en `out/Cajas tipo/` y una vivienda con cuatro copias pegadas. Las cajas tipo son dormitorio doble con ventana a elegir, baño + cocina y estar abierta; en la vivienda, la última copia va girada y con la otra ventana.
+
+**Pendiente.**
+- **La primera caja tipo real del L-160:** la tienes que hacer tú con tu fichero. No subo tu IFC al repositorio.
+- **Más opciones:** acabados (material de fachada, suelo) y distribución dentro de reglas.
+- **Lista de lo que cambia** al actualizar una vivienda a una revisión nueva.
+- **Obra previa:** el programa aún no sabe qué viviendas tienen ya cajas en fábrica.
+
+**Qué debe probar Antonio.**
+1. Ejecuta `cargo run -p archisim-cli -- catalogo out/catalogo` y abre `out/catalogo/catalogo-planta.svg`. Deben verse cuatro cajas MOD-01 a MOD-04 con su tipo y revisión, y en la de arriba la otra ventana.
+2. En la aplicación, abre `out/catalogo/Cajas tipo/CB-620-DD.archisim`. Sin nada seleccionado, Propiedades debe enseñar «Caja tipo del catálogo · Aprobada · rev. 1». Intenta mover un muro: debe negarse. Pulsa «Abrir la revisión 2», mueve el muro y aprueba.
+3. Con tu L-160 importado:
+   - Dibuja una caja encima de un dormitorio, con «Ponerle la envolvente» desactivado para que coja los muros que ya hay.
+   - Selecciónala y usa «Guardar como caja tipo…».
+   - Ábrela: debe estar en el origen con sus muros, techo y huecos.
+4. En un proyecto nuevo, herramienta Caja:
+   - Copia la carpeta `out/catalogo/Cajas tipo` a tu biblioteca y pulsa «Volver a leer la carpeta».
+   - «Colocar» una caja tipo y haz dos clics juntos: la segunda debe pegarse a la primera.
+   - Selecciona la copia del dormitorio y cambia «Ventana del dormitorio».
+
+---
+
+## 2026-11-09 (138) · M1: la caja modular como elemento
+
+Rama `bloque/caja`, con pull request, sobre la de la entrada 137 (`bloque/techos`, #188). **Formato versión 103**: las cajas. El IFC lleva cada caja como `IfcElementAssembly` montada en fábrica con sus piezas. `docs/MODULAR.md` (M1).
+
+**Qué hace.**
+- **La caja.** Un rectángulo en planta (6,20 × 3,60 m por defecto), con su alto (3,58), la base del chasis bajo el suelo terminado (−0,27), su marca («MOD-01», «MOD-02»…) y qué caja del sistema es (texto libre hasta el catálogo, M8).
+- **Sus cuatro lados.** A y C son los largos (A sale del origen) y B y D, los testeros. Cada uno puede estar:
+  - **libre:** fachada y pretil;
+  - **unido, con el muro de la junta:** esta caja es la dueña de la junta;
+  - **unido, abierto:** el muro lo lleva la otra caja, o no hay muro.
+- **Lo que lleva.** Muros, puertas y ventanas, forjados, techos, pilares, vigas y muebles que están dentro de ella, o en un lado suyo que no está abierto. No es una lista que haya que mantener: si mueves un tabique de una caja a otra, pasa a la otra.
+- **La herramienta Caja** (Estructura, la última ficha; teclas CM).
+  - Un clic pone la caja con su centro en el cursor y Espacio la gira.
+  - Cerca de otra caja se pega a ella, a 2 cm de junta y enrasada con uno de sus extremos. La que ya estaba lleva el muro de la junta y la nueva queda abierta por ese lado.
+  - Puede ponerle al colocarla los muros (en los lados libres y en los que llevan la junta), el suelo, la cubierta y el falso techo, con los tipos que elijas en Propiedades.
+- **Seleccionarla:** por su marca, en el centro, o por sus lados. En Propiedades salen marca, tipo, medidas, giro, el estado de cada lado (con «Ajustar a las cajas de al lado»), lo que lleva, «Ponerle la envolvente» si está vacía y la comprobación.
+- **Moverla, copiarla, girarla o reflejarla** lleva todo lo que tiene. Las cajas de al lado no se tocan. Borrarla quita solo la caja: lo que llevaba se queda.
+- **Comprobación.**
+  - Si es más larga o ancha que lo que fabrica el sistema (9 × 3,60 m).
+  - Si pasa de 2,55 m de ancho: aviso de transporte especial con autorización.
+  - Si sobre el camión (plataforma de 40 cm) pasa de 4 m de alto.
+  - Si una junta no tiene dueño, lleva dos muros o un lado unido no toca nada.
+  - Los límites se guardan con el proyecto.
+- **En planta:** el contorno en azul, de trazo y punto en los lados libres y discontinuo fino en los unidos; la marca y el tipo en una etiqueta en el centro, y la letra de cada lado con «muro» o «abierto». Categoría «Cajas modulares» en Representación.
+- **IFC:** `IfcElementAssembly` «Caja modular», montada en fábrica (`.FACTORY.`), con su caja envolvente y `ArchiSim_Box`. Sus piezas salen de la planta y quedan dentro de la caja, como pide IFC. Al importar vuelve igual y con lo mismo dentro.
+- **Ejemplo:** `archisim cajas out/` hace una vivienda en L de ocho cajas como la L-160, con su envolvente de steel frame (fachada de 197 mm), suelo sobre chasis, cubierta y techo, y la sala abierta entre MOD-03 y MOD-04. Escribe el proyecto, el IFC, la planta y `cajas.txt` con lo que lleva cada caja y sus avisos.
+
+**Arreglo de paso.** Arrastrar un falso techo con el ratón no lo movía (sí con Mover y las órdenes); ahora sí.
+
+**Pendiente.**
+- **Pretiles** en los lados libres y **cubierta continua** en los unidos: el estado del lado ya está, falta que la cubierta lo dibuje (con M3, el chasis).
+- **Juntas (M2):** los muros de cajas distintas aún se unen en las esquinas.
+- **Lado que toca dos cajas:** cuenta solo con la que más comparte.
+- **En 3D** la caja no se ve ni se elige (se ven sus muros y forjados).
+
+**Qué debe probar Antonio.**
+1. Ejecuta `cargo run -p archisim-cli -- cajas out/cajas` y abre `out/cajas/cajas-planta.svg`. Deben verse las ocho cajas con su marca, sus lados («A · muro», «C · abierto»…) y la sala abierta entre MOD-03 y MOD-04. Lee `out/cajas/cajas.txt`: cada caja con sus muros, forjados y techo, y el aviso de transporte especial.
+2. Abre `out/cajas/cajas.ifc` en tu visor. Cada caja debe ser un conjunto «Caja modular» que agrupa sus muros, suelo, cubierta, techo y huecos, y no deben salir sueltos en la planta.
+3. En la aplicación, proyecto nuevo, herramienta **Caja**:
+   - Coloca una caja.
+   - Coloca otra al lado: debe pegarse con su junta y la primera debe pasar a «muro» en ese lado.
+   - Pulsa Espacio antes de colocar la tercera: debe girar.
+4. Selecciona una caja por su marca:
+   - Muévela: deben ir con ella sus muros, suelo, cubierta y techo, y la de al lado quedarse como estaba.
+   - Mira el aviso en «Comprobación».
+   - Cambia el largo a 9,50 m: debe avisar de que el sistema llega a 9 m.
+5. Abre `out/cajas/cajas.archisim`, exporta el IFC e impórtalo: el informe debe decir «8 cajas modulares».
+
+---
+
+## 2026-11-09 (137) · M7: falsos techos
+
+Rama `bloque/techos`, con pull request, sobre la de la entrada 136 (`bloque/m4-capas`, #185). **Formato versión 102**: los falsos techos. El IFC lleva `IfcCovering` de techo. `docs/MODULAR.md` (M7 y §5 bis) y `docs/FUNDACIONAL.md`, «Importación IFC».
+
+**Qué hace.**
+- **El elemento.** El falso techo existe como elemento: un contorno con sus huecos (registros, luminarias), su altura (la cara vista sobre la planta) y su tipo.
+  - El tipo es un tipo de forjado con la función «Falso techo», con sus capas de arriba abajo: la placa, la última.
+  - Se edita en Tipos y materiales → Forjados → «Falsos techos». La plantilla trae dos: «Falso techo continuo de placa 15 con lana» y «Falso techo registrable 60×60».
+  - No es un forjado: no carga, no lo atraviesan los muros y no es el suelo de nada. Los forjados no aceptan sus tipos.
+- **La herramienta Techo** (Arquitectura, junto a Abertura). Se dibuja por esquinas o con la varita dentro de un local, con la altura en Propiedades (2,50 por defecto). Si se dibuja en una planta normal, avisa de que se ve en la planta de techos.
+- **Dónde se ve.**
+  - **Planta de techos:** el techo con un tono claro, la retícula de 60 × 60 si es registrable, los huecos con su cruz y «FT +2,60». En la planta normal no sale, porque está por encima del corte.
+  - **En 3D y en las secciones:** con sus capas.
+  - **Al seleccionar:** solo en la planta de techos (o en 3D). En Propiedades salen el tipo, el espesor, la altura (editable) y la superficie.
+  - **Al exportar:** `archisim exportar` escribe la planta de techos de cada planta que los tiene.
+- **Mediciones:** capítulo 16 «Falsos techos», en m² por tipo.
+- **IFC:** `IfcCovering .CEILING.` con su `IfcCoveringType`, sus capas, `Pset_CoveringCommon` y sus cantidades. Al importar entran los de cualquier programa.
+  - Los del L-160 (7) entran ahora, en la planta P. Suelo, a 2,70.
+  - Revit los cuelga de P. Techo con −0,23; ArchiSim los pone en la planta del local.
+- **La demo** lleva un techo en cada local, a 2,60.
+
+**También en esta entrada.**
+- El plan acordado (componentes → cajas tipo → vivienda; techos, catálogo, taller y obra previa) en `docs/MODULAR.md`.
+- El análisis del módulo B de estructura que mandó Antonio (§5 bis): chasis de tubo soldado, pretiles según el lado y el izado a comprobar.
+
+**Pendiente.**
+- **Cálculo de la estructura:** el peso de los techos aún no se suma al forjado del que cuelgan.
+- **Altura libre:** los locales no toman todavía su altura del techo.
+- **Perfilería:** el techo no la dibuja (maestras y montantes); puede ir como entramado de su tipo más adelante.
+
+**Qué debe probar Antonio.**
+1. Abre la demo (`archisim demo out/` y luego `out/demo.archisim`) y, en el Navegador, la vista «Planta baja — techos» (en otro proyecto: clic derecho en la planta → «Planta de techos»). Deben salir los cuatro techos con «FT +2,60».
+2. Elige la herramienta **Techo** (Arquitectura), activa la varita y haz clic dentro de un local. Debe crearse el techo y avisar de que se ve en la planta de techos. Míralo en 3D y en una sección.
+3. En la planta de techos, selecciona un techo y cambia su altura a 2,40 en Propiedades. Cambia su tipo a «registrable 60×60» y comprueba la retícula.
+4. Importa `BIOKUBIK_VIVIENDA_L_160.ifc`. El informe debe decir «7 techos» y no «revestimientos» sin importar. Su planta de techos de P. Suelo debe enseñar los 7 a +2,70.
+5. Exporta el IFC y ábrelo en otro visor: los techos deben ser `IfcCovering` de techo.
+
+---
+
+## 2026-11-09 (136) · M4: capas dibujadas como muros, juntadas al importar
+
+Rama `bloque/m4-capas`, con pull request. Sin cambios de formato (sigue la versión 95). El IFC exportado solo cambia en un caso raro de las mediciones de muros (ver «Arreglos»). `docs/MODULAR.md` §3 (M4) y `docs/FUNDACIONAL.md`, «Importación IFC».
+
+**Qué hace.** Al importar un IFC que no es de ArchiSim, los muros que son capas de un cerramiento dibujadas una a una (placa, membrana, aislamiento, trasdosado) se convierten en muros con su tipo multicapa:
+- **Qué se junta:** muros paralelos, pegados cara con cara (3 mm de margen), que coinciden a lo largo y en altura, si al menos uno tiene 30 mm o menos. Dos muros de verdad pegados no se tocan.
+- **A lo largo:** el muro se parte donde cambia la composición; por ejemplo, donde el revestimiento pasa de placa cerámica a lamas o donde el trasdosado se para.
+- **En altura:** cada trozo va de la base más baja a la coronación más alta de sus capas.
+- **Juntas entre capas:** las rendijas y solapes de un par de milímetros se cierran.
+- **El tipo:** se llama por su espesor y por los tipos de sus capas de fuera adentro («197 mm · EXT-PLACA_CERÁMICA + AIS-Tabihaus + …»), y es de fachada.
+- **El lado exterior:** se busca por la envolvente de cada planta (qué lado queda dentro del edificio), así que vale en plantas en L.
+- **Puertas y ventanas:** se colocan antes que los huecos. Los huecos que cada capa tenía para la misma puerta o ventana no se duplican.
+- **El informe** dice cuántos muros se han juntado en cuántos.
+
+**Arreglos de paso.**
+- **Ejes:** los repetidos en el fichero (Revit escribe la rejilla una vez por planta) entran una vez.
+- **3D de los forjados:** el reparto de triángulos donde se encuentran capas distintas podía crecer sin límite y dejar sin memoria la exportación del glTF. Ahora tiene un tope.
+- **Mediciones de muros en el IFC:** cuando una puerta o ventana entra en lo que quita un forjado (un muro que atraviesa el solado), ese trozo se descontaba dos veces del volumen neto. Ahora una.
+
+**Con el L-160.**
+- 411 muros del fichero pasan a 92 con tipo; el proyecto queda en 189 muros, frente a los 508 de antes.
+- Un solo hueco sin carpintería, frente a 98.
+- La fachada principal es un tipo: 22 muros de «197 mm · …» y 5 con lamas.
+- Quedan sueltos los revestimientos sin nada detrás (frentes del porche y del acceso).
+- El IFC reexportado valida; el único error es el de un solado del fichero original.
+
+**Pendiente.**
+- La comprobación de estructura sigue tomando los muros por fábrica hasta que se active el entramado en su tipo.
+- Hay trozos cortos (5–30 cm) en las esquinas, donde las capas de dos fachadas se solapan en el modelo de Revit.
+- Siete trozos de remate (tipos «72 mm · 00_EXT_MADERA + …» y «61 mm · BIOk-AIS-Tabihaus + …») salen todavía con el exterior hacia dentro: no tienen una envolvente clara a un lado. Se giran a mano con el giro del muro.
+
+**Qué debe probar Antonio.**
+1. Abre ArchiSim y en Archivo → Importar IFC elige `BIOKUBIK_VIVIENDA_L_160.ifc`.
+   - El informe debe decir: «Capas dibujadas como muros sueltos: 411 muros del fichero juntados en 92 muros…».
+2. Selecciona un muro de la fachada sur. En Propiedades, su tipo debe ser «197 mm · BIOk-EXT-PLACA_CERÁMICA + …».
+   - La placa cerámica debe quedar fuera y la placa interior dentro.
+   - Mira también la fachada del ala del L que da al porche: ahí el centro de la planta queda fuera del edificio, y aun así el exterior debe salir bien.
+3. En Tipos y materiales, en ese tipo, activa «Entramado ligero» (steel frame, montante de 100, separación 600) y mira el 3D con «Entramado a la vista».
+4. Las ventanas deben estar cada una en su sitio, una sola vez, sin huecos sueltos encima.
 ## 2026-11-09 (135) · Concepto: volúmenes de SketchUp como volúmenes editables
 
 Rama `bloque/concepto-mallas`, con pull request. Va sobre la de la entrada 134 (#190, todavía sin unir). **Sin cambios de formato** (sigue la versión 101). Documento: `docs/FORMAS.md` §6.

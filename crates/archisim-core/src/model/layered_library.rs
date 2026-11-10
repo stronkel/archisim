@@ -130,6 +130,7 @@ fn kind_code(k: LayeredKind) -> (&'static str, &'static str) {
         LayeredKind::Slab(SlabFunction::Floor) => ("slab_type", "floor"),
         LayeredKind::Slab(SlabFunction::BaseSlab) => ("slab_type", "baseslab"),
         LayeredKind::Slab(SlabFunction::Roof) => ("slab_type", "roof"),
+        LayeredKind::Slab(SlabFunction::Ceiling) => ("slab_type", "ceiling"),
     }
 }
 
@@ -250,6 +251,7 @@ pub fn parse_layered_catalog(text: &str) -> Result<LayeredCatalog, String> {
                     ("wall_type", _) => LayeredKind::Wall(WallFunction::Exterior),
                     ("slab_type", "baseslab") => LayeredKind::Slab(SlabFunction::BaseSlab),
                     ("slab_type", "roof") => LayeredKind::Slab(SlabFunction::Roof),
+                    ("slab_type", "ceiling") => LayeredKind::Slab(SlabFunction::Ceiling),
                     _ => LayeredKind::Slab(SlabFunction::Floor),
                 };
                 if cat.types.iter().any(|t| t.name == *name) {

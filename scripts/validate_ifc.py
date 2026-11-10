@@ -191,7 +191,10 @@ def main(path: str) -> int:
                 errors.append(f"{name}: missing {required}")
         if not el.OverallWidth or not el.OverallHeight:
             errors.append(f"{name}: missing overall size")
-        if el.ContainedInStructure == () and not in_curtain:
+        # A door or window of a modular box (M1) is part of the box, in the
+        # storey through it.
+        in_box = any(r.RelatingObject.is_a("IfcElementAssembly") for r in el.Decomposes)
+        if el.ContainedInStructure == () and not in_curtain and not in_box:
             errors.append(f"{name}: not contained in a storey")
         if geom_ok:
             try:
@@ -224,7 +227,9 @@ def main(path: str) -> int:
             errors.append(f"{name}: no material")
         if el.is_a("IfcWindow") and (not el.OverallWidth or not el.OverallHeight):
             errors.append(f"{name}: missing overall size")
-        if el.is_a("IfcCovering") and not any(
+        # A false ceiling (M7) hangs in its storey; other coverings
+        # (tiles, gutters) cover their roof.
+        if el.is_a("IfcCovering") and el.PredefinedType != "CEILING" and not any(
             r.RelatingBuildingElement.is_a("IfcRoof") for r in el.CoversElements
         ):
             errors.append(f"{name}: covers no roof")
@@ -235,6 +240,41 @@ def main(path: str) -> int:
                     errors.append(f"{name}: empty geometry")
             except Exception as exc:
                 errors.append(f"{name}: geometry failed: {exc}")
+
+    # 13 bis. Modular boxes (ArchiSim_Box on an IfcElementAssembly, M1):
+    # in a storey, assembled in the factory, with parts that are not in the
+    # storey themselves (an element is contained or a part, not both).
+    for a in f.by_type("IfcElementAssembly"):
+        if "ArchiSim_Box" not in eu.get_psets(a):
+            continue
+        name = a.Name
+        if a.ContainedInStructure == ():
+            errors.append(f"caja {name}: not contained in a storey")
+        if a.AssemblyPlace != "FACTORY":
+            errors.append(f"caja {name}: not assembled in the factory")
+        parts = [p for r in a.IsDecomposedBy for p in r.RelatedObjects]
+        if not parts:
+            errors.append(f"caja {name}: no parts")
+        for p in parts:
+            if p.ContainedInStructure != ():
+                errors.append(f"caja {name}: part {p.Name} also in a storey")
+        # Its chassis (M3): tubes with their role and a body whose volume
+        # is the tube's section times its length.
+        tubes = [p for p in parts if "ArchiSim_BoxPart" in eu.get_psets(p)]
+        if not tubes:
+            errors.append(f"caja {name}: no chassis")
+        if not any(p.is_a("IfcMember") and p.PredefinedType == "POST" for p in tubes):
+            errors.append(f"caja {name}: a chassis without posts")
+        if geom_ok:
+            for p in tubes[:6]:
+                try:
+                    shp = geom.create_shape(settings, p)
+                    vol = shape.get_volume(shp.geometry)
+                    kg = eu.get_psets(p)["ArchiSim_BoxPart"]["Weight"]
+                    if abs(vol * 7850.0 - kg) > max(0.5, 0.02 * kg):
+                        errors.append(f"caja {name}: {p.Name} weighs {kg:.1f} kg, its body {vol * 7850.0:.1f}")
+                except Exception as exc:
+                    errors.append(f"caja {name}: {p.Name} geometry failed: {exc}")
 
     # 14. Pools built in the ground (ArchiSim_Pool on an IfcElementAssembly):
     # contained in a storey, made of their floor, walls, lining and coping,

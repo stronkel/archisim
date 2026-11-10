@@ -341,6 +341,8 @@ pub(super) fn element_name(e: &Element) -> &'static str {
         Element::Mass(_) => "Volumen",
         Element::Plot(_) => "Parcela",
         Element::Pool(_) => "Piscina",
+        Element::Ceiling(_) => "Falso techo",
+        Element::Box(_) => "Caja modular",
         Element::Elevator(_) => "Ascensor",
         Element::Road(_) => "Vial",
         Element::Roundabout(_) => "Glorieta",
@@ -418,6 +420,12 @@ impl ArchiSimApp {
         };
         let (name, current, wand_name, wand_hint): (&str, Option<Outline>, &str, &str) =
             match self.tool {
+                Tool::Slab if self.slab_settings.ceiling => (
+                    "Techo",
+                    Some(outline(self.slab_settings.wand, self.slab_tool.mode)),
+                    "Varita",
+                    "Varita mágica: clic dentro de un local para su falso techo",
+                ),
                 Tool::Slab if self.slab_settings.hole => (
                     "Abertura",
                     Some(outline(false, self.slab_tool.mode)),
@@ -486,6 +494,7 @@ impl ArchiSimApp {
                 ),
                 Tool::Road => ("Vial", None, "Varita", ""),
                 Tool::Roundabout => ("Glorieta", None, "Varita", ""),
+                Tool::ModularBox => ("Caja modular", None, "", ""),
                 Tool::World => ("Edificio del mundo", None, "", ""),
                 Tool::Decal => ("Pegatina", None, "Varita", ""),
                 Tool::Marking => ("Marca vial", None, "Varita", ""),

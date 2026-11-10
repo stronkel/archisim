@@ -160,7 +160,11 @@ impl Model {
         {
             return Some(Structure);
         }
-        if self.pools.contains_key(&PoolId(id)) || self.elevators.contains_key(&ElevatorId(id)) {
+        if self.pools.contains_key(&PoolId(id))
+            || self.elevators.contains_key(&ElevatorId(id))
+            || self.ceilings.contains_key(&CeilingId(id))
+            || self.boxes.contains_key(&BoxId(id))
+        {
             return Some(Architecture);
         }
         if self.runs.contains_key(&RunId(id)) || self.devices.contains_key(&DeviceId(id)) {

@@ -164,6 +164,18 @@ pub(crate) struct ProjectFile {
     /// Roundabouts and squares (version 64).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub roundabouts: Vec<RoundaboutOf>,
+    /// False ceilings (version 102).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub ceilings: Vec<CeilingOf>,
+    /// Modular boxes (version 103).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub boxes: Vec<BoxOf>,
+    /// The limits the boxes keep (version 103); the defaults when missing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub modular_site: Option<ModularSiteOf>,
+    /// What this project is in the system's catalogue (version 104).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub catalogue: Option<CatalogueOf>,
     /// Road markings (version 65).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub markings: Vec<MarkingOf>,
@@ -1203,6 +1215,141 @@ pub(crate) struct MarkingOf {
     pub material: u64,
 }
 
+/// A false ceiling (version 102).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct CeilingOf {
+    pub id: u64,
+    pub guid: String,
+    #[serde(rename = "type")]
+    pub ceiling_type: u64,
+    pub level: u64,
+    pub outline: Vec<Xy>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub holes: Vec<Vec<Xy>>,
+    pub height: f64,
+}
+
+/// A modular box (version 103).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct BoxOf {
+    pub id: u64,
+    pub guid: String,
+    pub mark: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub kind: String,
+    pub level: u64,
+    pub origin: Xy,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub angle: f64,
+    pub length: f64,
+    pub width: f64,
+    pub bottom: f64,
+    pub height: f64,
+    /// A, B, C and D: «free», «wall» or «open».
+    pub sides: [String; 4],
+    /// Its chassis (version 105); the usual one when missing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chassis: Option<ChassisOf>,
+    /// Where it is (version 106): «design», «approved», «factory»,
+    /// «transport» or «placed»; «design» when missing.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub stage: String,
+    /// The factory's station it is at.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub station: String,
+    /// When it got to its stage, as written.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub stage_date: String,
+}
+
+/// The steel chassis of a box (version 105): tubes as «120×100×4» in
+/// millimetres.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ChassisOf {
+    pub edge: String,
+    pub post: String,
+    pub joist: String,
+    /// The ceiling frame, the crown and the parapet's posts; the usual
+    /// ones when missing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub roof_edge: Option<String>,
+    pub roof_joist: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub crown: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parapet_post: Option<String>,
+    pub spacing: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parapet_spacing: Option<f64>,
+    pub middle_beam: bool,
+    pub roof_at: f64,
+    /// «four» or «six».
+    pub lift: String,
+}
+
+/// A box type of the catalogue (version 104).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct CatalogueOf {
+    pub code: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub name: String,
+    #[serde(default, skip_serializing_if = "is_zero_u32")]
+    pub revision: u32,
+    /// «draft» or «approved».
+    pub status: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub approved_on: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub notes: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub options: Vec<CatalogueOptionOf>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct CatalogueOptionOf {
+    pub name: String,
+    pub slot: String,
+    pub choices: Vec<String>,
+}
+
+fn is_zero_u32(v: &u32) -> bool {
+    *v == 0
+}
+
+/// The limits the modular boxes keep (version 103).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ModularSiteOf {
+    pub max_length: f64,
+    pub max_width: f64,
+    pub road_width: f64,
+    pub road_height: f64,
+    pub deck_height: f64,
+    /// The crane's place (version 106).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub crane: Option<Xy>,
+    /// Its chart: its name and [radius, tonnes] rows; the usual one when
+    /// missing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub crane_chart: Option<CraneChartOf>,
+    /// Tonnes of rigging on the hook; 0,5 when missing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rigging: Option<f64>,
+}
+
+/// A crane's chart (version 106).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct CraneChartOf {
+    pub name: String,
+    pub rows: Vec<[f64; 2]>,
+}
+
 /// A roundabout or a square where streets meet (version 64).
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -2069,6 +2216,9 @@ pub(crate) struct Module {
     pub rotation: f64,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub mirror: bool,
+    /// What the copy of a box type chose (version 104): option → type.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub choices: Vec<[String; 2]>,
 }
 
 /// A footing (version 16): `pad` at a point (under a column), `strip`
@@ -3068,6 +3218,8 @@ pub(crate) enum SlabFunction {
     Floor,
     BaseSlab,
     Roof,
+    /// A false ceiling's type (version 102).
+    Ceiling,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -3339,6 +3491,7 @@ impl ProjectFile {
                         core::SlabFunction::Floor => SlabFunction::Floor,
                         core::SlabFunction::BaseSlab => SlabFunction::BaseSlab,
                         core::SlabFunction::Roof => SlabFunction::Roof,
+                        core::SlabFunction::Ceiling => SlabFunction::Ceiling,
                     },
                 })
                 .collect(),
@@ -3945,6 +4098,96 @@ impl ProjectFile {
                     material: m.material.0,
                 })
                 .collect(),
+            ceilings: p
+                .ceilings
+                .iter()
+                .map(|c| CeilingOf {
+                    id: c.id.0,
+                    guid: c.guid.to_string(),
+                    ceiling_type: c.ceiling_type.0,
+                    level: c.level.0,
+                    outline: c.outline.iter().map(|p| xy(*p)).collect(),
+                    holes: c
+                        .holes
+                        .iter()
+                        .map(|h| h.iter().map(|p| xy(*p)).collect())
+                        .collect(),
+                    height: c.height,
+                })
+                .collect(),
+            boxes: p
+                .boxes
+                .iter()
+                .map(|b| BoxOf {
+                    id: b.id.0,
+                    guid: b.guid.to_string(),
+                    mark: b.mark.clone(),
+                    kind: b.kind.clone(),
+                    level: b.level.0,
+                    origin: xy(b.origin),
+                    angle: b.angle,
+                    length: b.length,
+                    width: b.width,
+                    bottom: b.bottom,
+                    height: b.height,
+                    sides: b.sides.map(|x| x.code().to_string()),
+                    chassis: (b.chassis != core::Chassis::default()).then(|| ChassisOf {
+                        edge: b.chassis.edge.label(),
+                        post: b.chassis.post.label(),
+                        joist: b.chassis.joist.label(),
+                        roof_edge: Some(b.chassis.roof_edge.label()),
+                        roof_joist: b.chassis.roof_joist.label(),
+                        crown: Some(b.chassis.crown.label()),
+                        parapet_post: Some(b.chassis.parapet_post.label()),
+                        spacing: b.chassis.spacing,
+                        parapet_spacing: Some(b.chassis.parapet_spacing),
+                        middle_beam: b.chassis.middle_beam,
+                        roof_at: b.chassis.roof_at,
+                        lift: b.chassis.lift.code().to_string(),
+                    }),
+                    stage: if b.progress.stage == core::BoxStage::Design {
+                        String::new()
+                    } else {
+                        b.progress.stage.code().to_string()
+                    },
+                    station: b.progress.station.clone(),
+                    stage_date: b.progress.date.clone(),
+                })
+                .collect(),
+            modular_site: (p.modular_site != core::ModularSite::default()).then(|| {
+                let m = &p.modular_site;
+                let usual = core::ModularSite::default();
+                ModularSiteOf {
+                    max_length: m.max_length,
+                    max_width: m.max_width,
+                    road_width: m.road_width,
+                    road_height: m.road_height,
+                    deck_height: m.deck_height,
+                    crane: m.crane.map(xy),
+                    crane_chart: (m.crane_chart != usual.crane_chart).then(|| CraneChartOf {
+                        name: m.crane_chart.name.clone(),
+                        rows: m.crane_chart.rows.iter().map(|(r, c)| [*r, *c]).collect(),
+                    }),
+                    rigging: (m.rigging != usual.rigging).then_some(m.rigging),
+                }
+            }),
+            catalogue: p.catalogue.as_ref().map(|c| CatalogueOf {
+                code: c.code.clone(),
+                name: c.name.clone(),
+                revision: c.revision,
+                status: c.status.code().to_string(),
+                approved_on: c.approved_on.clone(),
+                notes: c.notes.clone(),
+                options: c
+                    .options
+                    .iter()
+                    .map(|o| CatalogueOptionOf {
+                        name: o.name.clone(),
+                        slot: o.slot.clone(),
+                        choices: o.choices.clone(),
+                    })
+                    .collect(),
+            }),
             roundabouts: p
                 .roundabouts
                 .iter()
@@ -4082,6 +4325,11 @@ impl ProjectFile {
                     position: xy(m.position),
                     rotation: m.rotation,
                     mirror: m.mirror,
+                    choices: m
+                        .choices
+                        .iter()
+                        .map(|(a, b)| [a.clone(), b.clone()])
+                        .collect(),
                 })
                 .collect(),
             objects: p
@@ -4686,6 +4934,10 @@ impl ProjectFile {
             plots: Vec::new(),
             roads: Vec::new(),
             roundabouts: Vec::new(),
+            ceilings: Vec::new(),
+            boxes: Vec::new(),
+            modular_site: core::ModularSite::default(),
+            catalogue: None,
             markings: Vec::new(),
             decals: Vec::new(),
             plantings: Vec::new(),
@@ -4993,6 +5245,7 @@ impl ProjectFile {
                     SlabFunction::Floor => core::SlabFunction::Floor,
                     SlabFunction::BaseSlab => core::SlabFunction::BaseSlab,
                     SlabFunction::Roof => core::SlabFunction::Roof,
+                    SlabFunction::Ceiling => core::SlabFunction::Ceiling,
                 },
                 layers: layers_in(t.layers),
                 edge: t.edge.map(|e| core::SlabEdge {
@@ -5536,6 +5789,135 @@ impl ProjectFile {
                 material: core::MaterialId(x.material),
             });
         }
+        for c in self.ceilings {
+            let element = format!("false ceiling {}", c.id);
+            parts.ceilings.push(core::Ceiling {
+                id: core::CeilingId(c.id),
+                guid: guid(&element, &c.guid)?,
+                ceiling_type: core::SlabTypeId(c.ceiling_type),
+                level: core::LevelId(c.level),
+                outline: c.outline.into_iter().map(pt).collect(),
+                holes: c
+                    .holes
+                    .into_iter()
+                    .map(|h| h.into_iter().map(pt).collect())
+                    .collect(),
+                height: c.height,
+            });
+        }
+        for b in self.boxes {
+            let element = format!("box {} «{}»", b.id, b.mark);
+            let mut sides = [core::SideState::Free; 4];
+            for (i, code) in b.sides.iter().enumerate() {
+                sides[i] = core::SideState::from_code(code).ok_or_else(|| FileError::Value {
+                    element: element.clone(),
+                    message: format!("unknown side «{code}»"),
+                })?;
+            }
+            parts.boxes.push(core::ModularBox {
+                id: core::BoxId(b.id),
+                guid: guid(&element, &b.guid)?,
+                mark: b.mark,
+                kind: b.kind,
+                level: core::LevelId(b.level),
+                origin: pt(b.origin),
+                angle: b.angle,
+                length: b.length,
+                width: b.width,
+                bottom: b.bottom,
+                height: b.height,
+                sides,
+                chassis: match b.chassis {
+                    None => core::Chassis::default(),
+                    Some(c) => {
+                        let tube = |t: &str| {
+                            core::BoxTube::parse(t).ok_or_else(|| FileError::Value {
+                                element: element.clone(),
+                                message: format!("tube «{t}»"),
+                            })
+                        };
+                        let usual = core::Chassis::default();
+                        let maybe = |t: &Option<String>, or: core::BoxTube| match t {
+                            Some(t) => tube(t),
+                            None => Ok(or),
+                        };
+                        core::Chassis {
+                            edge: tube(&c.edge)?,
+                            post: tube(&c.post)?,
+                            joist: tube(&c.joist)?,
+                            roof_edge: maybe(&c.roof_edge, usual.roof_edge)?,
+                            roof_joist: tube(&c.roof_joist)?,
+                            crown: maybe(&c.crown, usual.crown)?,
+                            parapet_post: maybe(&c.parapet_post, usual.parapet_post)?,
+                            spacing: c.spacing,
+                            parapet_spacing: c.parapet_spacing.unwrap_or(usual.parapet_spacing),
+                            middle_beam: c.middle_beam,
+                            roof_at: c.roof_at,
+                            lift: core::LiftPoints::from_code(&c.lift).ok_or_else(|| {
+                                FileError::Value {
+                                    element: element.clone(),
+                                    message: format!("lifting «{}»", c.lift),
+                                }
+                            })?,
+                        }
+                    }
+                },
+                progress: core::BoxProgress {
+                    stage: if b.stage.is_empty() {
+                        core::BoxStage::Design
+                    } else {
+                        core::BoxStage::from_code(&b.stage).ok_or_else(|| FileError::Value {
+                            element: element.clone(),
+                            message: format!("unknown stage «{}»", b.stage),
+                        })?
+                    },
+                    station: b.station,
+                    date: b.stage_date,
+                },
+            });
+        }
+        if let Some(c) = self.catalogue {
+            parts.catalogue = Some(core::CatalogueEntry {
+                status: core::CatalogueStatus::from_code(&c.status).ok_or_else(|| {
+                    FileError::Value {
+                        element: "catalogue".into(),
+                        message: format!("unknown status «{}»", c.status),
+                    }
+                })?,
+                code: c.code,
+                name: c.name,
+                revision: c.revision,
+                approved_on: c.approved_on,
+                notes: c.notes,
+                options: c
+                    .options
+                    .into_iter()
+                    .map(|o| core::CatalogueOption {
+                        name: o.name,
+                        slot: o.slot,
+                        choices: o.choices,
+                    })
+                    .collect(),
+            });
+        }
+        if let Some(m) = self.modular_site {
+            let usual = core::ModularSite::default();
+            parts.modular_site = core::ModularSite {
+                max_length: m.max_length,
+                max_width: m.max_width,
+                road_width: m.road_width,
+                road_height: m.road_height,
+                deck_height: m.deck_height,
+                crane: m.crane.map(pt),
+                crane_chart: m
+                    .crane_chart
+                    .map_or(usual.crane_chart, |c| core::CraneChart {
+                        name: c.name,
+                        rows: c.rows.iter().map(|r| (r[0], r[1])).collect(),
+                    }),
+                rigging: m.rigging.unwrap_or(usual.rigging),
+            };
+        }
         for c in self.roundabouts {
             let element = format!("roundabout {} «{}»", c.id, c.name);
             parts.roundabouts.push(core::Roundabout {
@@ -5586,6 +5968,7 @@ impl ProjectFile {
                 position: pt(m.position),
                 rotation: m.rotation,
                 mirror: m.mirror,
+                choices: m.choices.into_iter().map(|[a, b]| (a, b)).collect(),
             });
         }
         for o in self.objects {

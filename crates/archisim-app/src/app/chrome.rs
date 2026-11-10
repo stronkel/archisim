@@ -282,6 +282,12 @@ impl ArchiSimApp {
                     self.export_structure_drawings();
                 }
                 if ui
+                    .add(shortcut_button("Planos de taller de las cajas…", "PDF"))
+                    .clicked()
+                {
+                    self.export_box_drawings();
+                }
+                if ui
                     .add(shortcut_button("Esquema unifilar…", "PDF"))
                     .clicked()
                 {
@@ -506,6 +512,13 @@ impl ArchiSimApp {
                 .clicked()
             {
                 self.export_structure_drawings();
+            }
+            if ui
+                .button("Planos de taller de las cajas (PDF)…")
+                .on_hover_text("Montaje y plan de grúa, y una hoja A3 por caja modular con su chasis en planta y alzados, despiece, materiales, peso e izado")
+                .clicked()
+            {
+                self.export_box_drawings();
             }
             if ui
                 .button("Ejes del entramado (DXF 3D)…")
@@ -1049,6 +1062,7 @@ impl ArchiSimApp {
             Tool::Mass | Tool::PushPull | Tool::DivideFace | Tool::Deform | Tool::MassOffset | Tool::Tape | Tool::Paint => self.concept_hint(),
             Tool::Plot | Tool::Road => self.urban_hint(),
             Tool::Roundabout => "Clic: centro de la glorieta (en un cruce, se centra en él) · Esc: flecha",
+            Tool::ModularBox => "Clic: centro de la caja (junto a otra, se pega a ella con su junta) · Espacio: girar · Esc: flecha",
             Tool::World => "Clic: el centro de la fachada (junto a una calle, en su borde) · Espacio: girar · Esc: flecha",
             Tool::Marking => self.marking_hint(),
             Tool::Decal => self.decal_hint(),

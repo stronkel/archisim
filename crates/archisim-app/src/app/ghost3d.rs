@@ -36,6 +36,8 @@ enum Would {
     Object(NewObject),
     World(archisim_core::NewWorldBuilding),
     Road(archisim_core::RoadStretch),
+    /// A modular box (M1): its outline and mark in plan, nothing in 3D.
+    Box(archisim_core::NewBox),
 }
 
 impl ArchiSimApp {
@@ -103,7 +105,7 @@ impl ArchiSimApp {
                     top_offset: s.top_offset,
                 })
             }
-            Tool::Slab if !self.slab_settings.hole => {
+            Tool::Slab if !self.slab_settings.hole && !self.slab_settings.ceiling => {
                 let outline = if self.slab_tool.mode == crate::slab_tool::SlabMode::Rectangle {
                     self.slab_tool.rectangle_to(c.point)?
                 } else {
@@ -132,6 +134,12 @@ impl ArchiSimApp {
                 })
             }
             Tool::World => Would::World(self.world_would(c.point)?),
+            Tool::ModularBox => Would::Box(super::box_ui::box_at(
+                model,
+                level,
+                self.box_settings.as_ref()?,
+                c.point,
+            )),
             Tool::Road if self.road_settings.draw.by_stretches() => {
                 if self.road_settings.draw == super::urban_ui::RoadDraw::Curve
                     && self.road_points.len() < 2
@@ -280,6 +288,7 @@ fn build_ghost(model: &Model, would: Would) -> Option<Vec<Solid>> {
             m.set_mass_dress(id, None).ok()?;
             solid::mass_solids(&m, id)
         }
+        Would::Box(_) => Vec::new(),
         Would::Road(spec) => {
             let id = m.add_road_stretch(spec).ok()?;
             solid::road_solids(&m, id)
@@ -456,6 +465,7 @@ fn build_plan_ghost(model: &Model, would: Would) -> Option<(Model, Vec<Element>)
         Would::Object(spec) => vec![Element::Object(m.add_object(spec).ok()?)],
         Would::World(spec) => vec![Element::Mass(m.add_world_building(spec).ok()?)],
         Would::Road(spec) => vec![Element::Road(m.add_road_stretch(spec).ok()?)],
+        Would::Box(spec) => vec![Element::Box(m.add_box(spec).ok()?)],
     };
     Some((m, made))
 }

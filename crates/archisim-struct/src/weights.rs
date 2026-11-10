@@ -47,6 +47,11 @@ pub fn specific_weight(m: &Material) -> f64 {
     if has(&["mármol", "marmol", "caliza"]) {
         return 27.0;
     }
+    // A composite slab (steel deck and concrete) drawn as one layer: its
+    // weight spread over its depth (H90 + 30 in 120 mm, some 1,9 kN/m²).
+    if has(&["colaborante"]) {
+        return 16.0;
+    }
     if has(&["acero"]) {
         return 78.5;
     }

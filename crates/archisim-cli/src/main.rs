@@ -12,8 +12,10 @@
 //! ```
 
 mod armado;
+mod cajas;
 mod calles;
 mod cartografia;
+mod catalogo;
 mod cocina;
 mod colaboracion;
 mod concepto_malla;
@@ -178,6 +180,24 @@ Uso:
       planas, ventanas de cubierta, tejas de cada clase, caballetes,
       canalones y bajantes: cubiertas.archisim, cubiertas.ifc, planta de
       cubiertas y axonometría en SVG. Por defecto: ./out
+  archisim cajas [carpeta]
+      Una vivienda de cajas modulares en L (ocho cajas de 6,20 × 3,60 m
+      con su envolvente): cajas.archisim, cajas.ifc (cada caja, un
+      IfcElementAssembly con sus piezas), cajas-planta.svg y cajas.txt
+      (lo que lleva cada caja y sus avisos, su peso e izado, el plan de
+      grúa y el despiece) y los planos de taller (cajas-taller.pdf).
+      Por defecto: ./out
+  archisim taller-cajas <proyecto> [carpeta]
+      Los planos de taller de las cajas modulares de un proyecto, A3:
+      montaje y plan de grúa (M-00) y una hoja por caja con su chasis en
+      planta y alzados, despiece, materiales, peso e izado
+      (<proyecto>-taller.pdf y una SVG por hoja). Por defecto: ./out
+  archisim catalogo [carpeta]
+      El catálogo del sistema: tres cajas tipo aprobadas en «Cajas tipo/»
+      (dormitorio doble con ventana a elegir, baño + cocina, estar
+      abierta) y una vivienda con cuatro copias pegadas una a otra:
+      catalogo.archisim, catalogo.ifc, catalogo-planta.svg y
+      catalogo.txt. Por defecto: ./out
   archisim entramado [carpeta]
       Entramados ligeros: dos casas, una de steel frame y otra de madera,
       con muros, forjado y cubierta de entramado: entramado.archisim,
@@ -643,6 +663,43 @@ fn main() -> ExitCode {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
             report(cocina::write(&dir))
         }
+        Some("catalogo") => {
+            let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
+            report(catalogo::write(&dir))
+        }
+        Some("cajas") => {
+            let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
+            report(cajas::write(&dir))
+        }
+        Some("taller-cajas") => match args.get(1) {
+            Some(project) => {
+                let path = PathBuf::from(project);
+                let dir = PathBuf::from(args.get(2).map(String::as_str).unwrap_or("out"));
+                report((|| {
+                    let m = archisim_file::open(&path)?;
+                    std::fs::create_dir_all(&dir)?;
+                    let stem = path
+                        .file_stem()
+                        .map(|s| s.to_string_lossy().to_string())
+                        .unwrap_or_else(|| "proyecto".into());
+                    print!("{}", archisim_struct::boxes::boxes_report(&m));
+                    let n = cajas::workshop(&m, &dir, &stem)?;
+                    if n == 0 {
+                        println!("El proyecto no tiene cajas modulares.");
+                    } else {
+                        println!(
+                            "Planos de taller: {n} hojas A3 en {}",
+                            dir.join(format!("{stem}-taller.pdf")).display()
+                        );
+                    }
+                    Ok(())
+                })())
+            }
+            None => {
+                eprintln!("Uso: archisim taller-cajas <proyecto> [carpeta]");
+                std::process::exit(2);
+            }
+        },
         Some("entramado") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
             report(entramado::write(&dir))
@@ -1707,6 +1764,19 @@ fn export_all(model: &Model, dir: &Path, stem: &str) -> Result<(), Box<dyn std::
             "  Planta «{name}» en DXF (mm, 1:50): {}",
             dxf_path.display()
         );
+        // Its reflected ceiling plan, if it has false ceilings (M7).
+        if model.ceilings_on_level(level).next().is_some() {
+            let file_ceiling = format!("{}-techos.svg", file.trim_end_matches(".svg"));
+            let options = PlanOptions {
+                ceiling: true,
+                ..PlanOptions::default()
+            };
+            std::fs::write(dir.join(&file_ceiling), render_plan(model, level, &options))?;
+            println!(
+                "  Planta de techos «{name}»: {}",
+                dir.join(&file_ceiling).display()
+            );
+        }
     }
     // Saved plans, each with its own scale, cut plane and look.
     for v in model.plan_views() {

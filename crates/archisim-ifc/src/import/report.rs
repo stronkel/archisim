@@ -14,6 +14,10 @@ pub struct ImportReport {
     pub levels: usize,
     pub walls: usize,
     pub slabs: usize,
+    /// False ceilings (`IfcCovering` CEILING, M7).
+    pub ceilings: usize,
+    /// Modular boxes (`IfcElementAssembly` «Caja modular», M1).
+    pub boxes: usize,
     pub doors: usize,
     pub windows: usize,
     /// Rooms (IfcSpace).
@@ -51,6 +55,13 @@ pub struct ImportReport {
     pub railings: usize,
     /// Furniture and sanitary ware written by ArchiSim.
     pub objects: usize,
+    /// Walls of the file that were layers of a build-up drawn one by one
+    /// (M4), and the layered walls they became.
+    pub joined_layers: usize,
+    pub joined_walls: usize,
+    /// Voids of those layers that repeated a door, a window or another
+    /// void of the joined wall.
+    pub joined_voids: usize,
     pub wall_types: usize,
     pub slab_types: usize,
     pub opening_types: usize,
@@ -137,6 +148,19 @@ impl fmt::Display for ImportReport {
             },
             self.materials
         )?;
+        if self.joined_layers > 0 {
+            writeln!(
+                f,
+                "Capas dibujadas como muros sueltos: {} muros del fichero juntados en {} muros con su tipo multicapa{}.",
+                self.joined_layers,
+                self.joined_walls,
+                if self.joined_voids > 0 {
+                    format!(" ({} huecos de las capas repetían una puerta, ventana o hueco y no se duplican)", self.joined_voids)
+                } else {
+                    String::new()
+                }
+            )?;
+        }
         if self.parameters > 0 {
             writeln!(
                 f,
@@ -174,6 +198,12 @@ impl ImportReport {
         };
         if self.rooms > 0 {
             members.push_str(&format!(", {} locales", self.rooms));
+        }
+        if self.ceilings > 0 {
+            members.push_str(&format!(", {} techos", self.ceilings));
+        }
+        if self.boxes > 0 {
+            members.push_str(&format!(", {} cajas modulares", self.boxes));
         }
         if self.roofs > 0 {
             members.push_str(&format!(", {} cubiertas", self.roofs));

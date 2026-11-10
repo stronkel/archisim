@@ -1179,7 +1179,7 @@ pub fn member_triangles(m: &Member) -> Vec<[P3; 3]> {
 }
 
 /// The twelve triangles of the box `o + a·ex + b·ey + c·ez`, facing out.
-fn cuboid(out: &mut Vec<[P3; 3]>, o: P3, ex: P3, ey: P3, ez: P3) {
+pub(crate) fn cuboid(out: &mut Vec<[P3; 3]>, o: P3, ex: P3, ey: P3, ez: P3) {
     let (ex, ey) = if dot(cross(ex, ey), ez) < 0.0 {
         (ey, ex)
     } else {
@@ -1305,6 +1305,32 @@ pub struct CutList {
     pub nails: usize,
     /// Hold-downs and anchors of the walls to what carries them.
     pub anchors: usize,
+}
+
+/// The members of the light frame of each modular box (M2): those of the
+/// walls, floors and roofs it holds, for a cut list per box.
+pub fn members_by_box(
+    model: &Model,
+) -> std::collections::BTreeMap<archisim_core::BoxId, Vec<Member>> {
+    let mut owner_box: std::collections::HashMap<u64, archisim_core::BoxId> = Default::default();
+    let levels: std::collections::BTreeSet<_> = model.boxes().map(|b| b.level).collect();
+    for level in levels {
+        for (b, m) in model.box_members_on(level) {
+            for id in m.ids() {
+                owner_box.insert(id, b);
+            }
+        }
+    }
+    let mut out: std::collections::BTreeMap<archisim_core::BoxId, Vec<Member>> = Default::default();
+    if owner_box.is_empty() {
+        return out;
+    }
+    for m in all_members(model) {
+        if let Some(b) = owner_box.get(&m.owner.id()) {
+            out.entry(*b).or_default().push(m);
+        }
+    }
+    out
 }
 
 /// The cut list of `members`, with the boards of the framed elements.

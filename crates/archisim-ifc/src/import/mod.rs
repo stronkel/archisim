@@ -29,6 +29,8 @@
 //! or other curves, closed circular walls, sloped slabs, holes in slabs, empty openings, and every other
 //! class (columns, beams, stairs, roofs that are not slabs…).
 
+mod boxes;
+mod ceilings;
 mod compare;
 mod curtain;
 mod elevators;
@@ -42,6 +44,7 @@ pub mod report;
 mod roofs;
 mod services;
 mod spaces;
+mod stacked;
 mod stairs;
 mod terrain;
 mod urban;
@@ -116,8 +119,9 @@ pub fn import_ifc(text: &str) -> Result<Imported, ImportError> {
 /// worktop of a run of kitchen modules (`ArchiSim_Worktop`) with its
 /// modules, and a window's grille and shutters (`ArchiSim_OpeningPart`)
 /// with its type, and the members of a light frame (`ArchiSim_FramePart`)
-/// with their element's type, and the earthworks (`ArchiSim_Earthworks`, made
-/// again from the terrain and the pools), not as elements of their own: they leave the file
+/// with their element's type, the earthworks (`ArchiSim_Earthworks`, made
+/// again from the terrain and the pools) and the tubes of a modular box's
+/// chassis (`ArchiSim_BoxPart`, made again from the box), not as elements of their own: they leave the file
 /// before it is read.
 fn drop_roof_parts(file: &mut step_read::StepFile) {
     let sets: std::collections::HashSet<u64> = file
@@ -134,6 +138,7 @@ fn drop_roof_parts(file: &mut step_read::StepFile) {
                         | Some("ArchiSim_FramePart")
                         | Some("ArchiSim_PilePart")
                         | Some("ArchiSim_Earthworks")
+                        | Some("ArchiSim_BoxPart")
                 )
         })
         .map(|(id, _)| *id)
@@ -205,6 +210,8 @@ struct Index {
 /// A wall read from the file, before it is added to the model.
 struct WallCandidate {
     ifc: u64,
+    /// Other IFC walls joined into this one (layers drawn as walls, M4).
+    also: Vec<u64>,
     guid: String,
     a: Point2,
     b: Point2,
@@ -219,9 +226,13 @@ struct WallCandidate {
     external: bool,
     type_key_name: String,
     ifc_type: Option<u64>,
+    /// For a wall joined from layers (M4): the wall type each layer came
+    /// from, in the order of `layers`, to name its type outside in.
+    layer_names: Vec<String>,
 }
 
 /// An imported wall, as needed to place its doors and windows.
+#[derive(Clone)]
 struct WallFrame {
     id: WallId,
     level_elevation: f64,
@@ -234,6 +245,9 @@ struct WallFrame {
     exterior: f64,
     thickness: f64,
     curved: bool,
+    /// Made of several IFC walls (M4): their voids repeat its doors and
+    /// windows, one per layer.
+    joined: bool,
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -303,6 +317,8 @@ struct Importer<'a> {
     road_ids: HashSet<u64>,
     /// The stretches of pipes and ducts and the devices read back.
     service_ids: HashSet<u64>,
+    /// The `IfcCovering`s read (or tried) as false ceilings.
+    ceiling_ids: HashSet<u64>,
     /// The parts of the pools read back, and the GlobalIds of their water.
     pool_parts: HashSet<u64>,
     pool_waters: HashSet<String>,
@@ -334,6 +350,8 @@ struct GuidPlan {
     plots: Vec<(archisim_core::PlotId, String)>,
     roads: Vec<(archisim_core::RoadId, String)>,
     roundabouts: Vec<(archisim_core::RoundaboutId, String)>,
+    ceilings: Vec<(archisim_core::CeilingId, String)>,
+    boxes: Vec<(archisim_core::BoxId, String)>,
     markings: Vec<(archisim_core::MarkingId, String)>,
     masses: Vec<(archisim_core::MassId, String)>,
     decals: Vec<(archisim_core::DecalId, String)>,
@@ -551,6 +569,7 @@ impl<'a> Importer<'a> {
             used_type_guids: HashSet::new(),
             type_names: HashSet::new(),
             guids: GuidPlan::default(),
+            ceiling_ids: HashSet::new(),
             walls: HashMap::new(),
             member_types: HashMap::new(),
             sources: Vec::new(),
@@ -1533,6 +1552,7 @@ impl<'a> Importer<'a> {
         };
         Ok(WallCandidate {
             ifc: id,
+            also: Vec::new(),
             guid,
             a,
             b,
@@ -1544,6 +1564,7 @@ impl<'a> Importer<'a> {
             external: self.is_external(id, "Pset_WallCommon").unwrap_or(false),
             type_key_name: type_name,
             ifc_type,
+            layer_names: Vec::new(),
         })
     }
 
@@ -1558,6 +1579,15 @@ impl<'a> Importer<'a> {
             }
         }
         candidates.sort_by_key(|c| c.ifc);
+        // Layers drawn as walls of their own become one layered wall.
+        if !self.own_file {
+            let (joined, done) = stacked::join_stacks(candidates);
+            candidates = joined;
+            if done.layers > 0 {
+                self.report.joined_layers = done.layers;
+                self.report.joined_walls = done.walls;
+            }
+        }
 
         // Middle of each level's walls, weighted by length: the inside.
         let mut middle: BTreeMap<LevelId, (Point2, f64)> = BTreeMap::new();
@@ -1570,11 +1600,62 @@ impl<'a> Importer<'a> {
             m.1 += len;
         }
 
+        // The envelope of each level for walls joined from layers (M4): the
+        // joined walls and those marked external. A point is inside the
+        // building if a ray from it crosses the envelope an odd number of
+        // times; this places the outside of a joined wall even in an L,
+        // where the middle of the walls can fall outside.
+        let mut envelope: BTreeMap<LevelId, Vec<(Point2, Point2)>> = BTreeMap::new();
+        for c in &candidates {
+            if (c.external || !c.layer_names.is_empty()) && c.bulge == 0.0 {
+                envelope.entry(c.level).or_default().push((c.a, c.b));
+            }
+        }
+        let inside = |level: LevelId, p: Point2| -> bool {
+            let mut odd = false;
+            for &(a, b) in envelope.get(&level).map(Vec::as_slice).unwrap_or(&[]) {
+                if (a.y > p.y) != (b.y > p.y) {
+                    let x = a.x + (p.y - a.y) / (b.y - a.y) * (b.x - a.x);
+                    if x > p.x {
+                        odd = !odd;
+                    }
+                }
+            }
+            odd
+        };
+
         for mut c in candidates {
             let u = (c.b - c.a).normalized().unwrap_or(Point2::new(1.0, 0.0));
             let mut n = u.perp_left();
+            let mut settled = false;
+            if !c.layer_names.is_empty() && c.bulge == 0.0 {
+                let lo = c.layers.iter().map(|l| l.0).fold(f64::INFINITY, f64::min);
+                let hi = c
+                    .layers
+                    .iter()
+                    .map(|l| l.1)
+                    .fold(f64::NEG_INFINITY, f64::max);
+                // A little off each face, off the middle of the wall (and a
+                // hair along it, clear of the joints of the envelope).
+                let mid = (c.a + c.b) * 0.5 + u * 1e-4;
+                let left = inside(c.level, mid + n * (hi + 0.3));
+                let right = inside(c.level, mid + n * (lo - 0.3));
+                if left != right {
+                    settled = true;
+                    c.external = true;
+                    if left {
+                        std::mem::swap(&mut c.a, &mut c.b);
+                        n = -n;
+                        for l in &mut c.layers {
+                            let (lo, hi) = (l.0, l.1);
+                            l.0 = -hi;
+                            l.1 = -lo;
+                        }
+                    }
+                }
+            }
             // Sides: the exterior is on the left of the line (+n).
-            if c.external && !self.own_file {
+            if c.external && !self.own_file && !settled {
                 if let Some(&(sum, total)) = middle.get(&c.level) {
                     let centre = sum * (1.0 / total.max(1e-9));
                     let mid = (c.a + c.b) * 0.5;
@@ -1589,6 +1670,16 @@ impl<'a> Importer<'a> {
                         }
                     }
                 }
+            }
+            if c.layer_names.len() == c.layers.len() && !c.layer_names.is_empty() {
+                // Joined from layers: sort the names with them and name the
+                // type outside in.
+                let mut both: Vec<_> = c.layers.drain(..).zip(c.layer_names.drain(..)).collect();
+                both.sort_by(|x, y| y.0 .1.total_cmp(&x.0 .1));
+                let names: Vec<String> = both.iter().map(|b| b.1.clone()).collect();
+                c.layers = both.into_iter().map(|b| b.0).collect();
+                let total: f64 = c.layers.iter().map(|l| l.2.thickness).sum();
+                c.type_key_name = stacked::joined_name(total, &names);
             }
             c.layers.sort_by(|x, y| y.1.total_cmp(&x.1));
             let exterior = c.layers.first().map_or(0.0, |l| l.1);
@@ -1649,7 +1740,7 @@ impl<'a> Importer<'a> {
                     self.guids.walls.push((wid, c.guid));
                     self.sources.push((wid.0, c.ifc));
                     let length = a.distance(b);
-                    self.walls.entry(c.ifc).or_default().push(WallFrame {
+                    let frame = WallFrame {
                         id: wid,
                         level_elevation: elevation,
                         origin: a,
@@ -1661,7 +1752,12 @@ impl<'a> Importer<'a> {
                         exterior: exterior_face,
                         thickness,
                         curved: c.bulge != 0.0,
-                    });
+                        joined: !c.also.is_empty(),
+                    };
+                    for &other in &c.also {
+                        self.walls.entry(other).or_default().push(frame.clone());
+                    }
+                    self.walls.entry(c.ifc).or_default().push(frame);
                 }
                 Err(e) => self.report.skip("muros", explain(&e)),
             }
@@ -2178,14 +2274,14 @@ impl<'a> Importer<'a> {
         let mut walls: Vec<u64> = self.walls.keys().copied().collect();
         walls.sort_unstable();
         let mut placed: HashSet<u64> = HashSet::new();
-        for wall in walls {
+        // Doors and windows first, then voids: in a wall joined from layers
+        // (M4) each layer has its own void where the window is.
+        let mut empty: Vec<(u64, u64)> = Vec::new();
+        for &wall in &walls {
             let voids = self.ix.voids.get(&wall).cloned().unwrap_or_default();
             for void in voids {
                 let Some(&filling) = self.ix.fills.get(&void) else {
-                    // An opening with nothing in it: a void ("hueco").
-                    if let Err(why) = self.import_void(wall, void) {
-                        self.report.skip("huecos", why);
-                    }
+                    empty.push((wall, void));
                     continue;
                 };
                 placed.insert(filling);
@@ -2195,6 +2291,19 @@ impl<'a> Importer<'a> {
                 if let Err(why) = self.import_opening(wall, void, filling) {
                     self.report.skip(what, why);
                 }
+            }
+        }
+        // An opening with nothing in it: a void ("hueco").
+        let overlap = explain(&ModelError::OverlappingOpenings);
+        for (wall, void) in empty {
+            let joined = self
+                .walls
+                .get(&wall)
+                .is_some_and(|f| f.iter().any(|f| f.joined));
+            match self.import_void(wall, void) {
+                Ok(()) => {}
+                Err(why) if joined && why == overlap => self.report.joined_voids += 1,
+                Err(why) => self.report.skip("huecos", why),
             }
         }
         // Doors and windows not in an imported wall.
@@ -3018,6 +3127,7 @@ impl<'a> Importer<'a> {
                         && !self.road_ids.contains(id)
                         && !self.service_ids.contains(id)
                         && !self.pool_parts.contains(id)
+                        && !self.ceiling_ids.contains(id)
                         && !self
                             .ix
                             .parent
@@ -3082,6 +3192,8 @@ impl<'a> Importer<'a> {
         self.import_elevators();
         self.import_walls();
         self.import_slabs();
+        self.import_ceilings();
+        self.import_boxes();
         self.restore_type_accessories();
         self.import_members();
         self.import_openings();
@@ -3158,6 +3270,8 @@ impl<'a> Importer<'a> {
         restore!(plots, plots);
         restore!(roads, roads);
         restore!(roundabouts, roundabouts);
+        restore!(ceilings, ceilings);
+        restore!(boxes, boxes);
         restore!(markings, markings);
         restore!(masses, masses);
         restore!(decals, decals);

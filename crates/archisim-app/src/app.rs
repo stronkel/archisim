@@ -113,6 +113,8 @@ pub enum Tool {
     Road,
     /// Roundabouts and squares, by their centre (U3).
     Roundabout,
+    /// A modular box (M1).
+    ModularBox,
     /// Buildings of the world put by hand, as in CityRT (tanda 16).
     World,
     /// Road markings (U4).
@@ -171,6 +173,7 @@ impl Tool {
                 | Tool::Pool
                 | Tool::Road
                 | Tool::Roundabout
+                | Tool::ModularBox
                 | Tool::World
                 | Tool::Decal
                 | Tool::Marking
@@ -219,6 +222,7 @@ impl Tool {
             "ps" => Some(Tool::Pool),
             "as" => Some(Tool::Elevator),
             "gl" => Some(Tool::Roundabout),
+            "cm" => Some(Tool::ModularBox),
             "em" => Some(Tool::World),
             "pe" => Some(Tool::Decal),
             "mv" => Some(Tool::Marking),
@@ -241,6 +245,11 @@ pub struct SlabSettings {
     /// The outline drawn is a hole through the slab it is drawn on, not a
     /// new slab.
     pub hole: bool,
+    /// The outline drawn is a false ceiling (M7), not a slab: of
+    /// `ceiling_type`, its face `ceiling_height` over the level.
+    pub ceiling: bool,
+    pub ceiling_type: SlabTypeId,
+    pub ceiling_height: f64,
 }
 
 /// Outlines a drag would give, or why it cannot be done.
@@ -370,6 +379,10 @@ pub struct ArchiSimApp {
     pub road_start_join: Option<Point2>,
     pub road_settings: urban_ui::RoadSettings,
     pub roundabout_settings: roundabout_ui::RoundaboutSettings,
+    /// The box tool's settings, made from the project the first time.
+    pub box_settings: Option<box_ui::BoxSettings>,
+    /// The box types of the library folder, read when first shown.
+    pub box_catalogue: Option<Vec<catalogue_ui::CatalogueRow>>,
     pub world_settings: world_ui::WorldSettings,
     pub decal_settings: decal_ui::DecalSettings,
     pub marking_settings: marking_ui::MarkingSettings,
@@ -829,6 +842,8 @@ impl ArchiSimApp {
             road_start_join: None,
             road_settings,
             roundabout_settings: Default::default(),
+            box_settings: None,
+            box_catalogue: None,
             world_settings: Default::default(),
             decal_settings: Default::default(),
             marking_settings: Default::default(),
@@ -1753,6 +1768,19 @@ impl ArchiSimApp {
     /// Builds the slab closed by the slab tool.
     fn build_slab(&mut self, outline: Vec<Point2>) {
         let s = self.slab_settings;
+        if s.ceiling {
+            match self
+                .ed
+                .add_ceiling(s.ceiling_type, outline, s.ceiling_height)
+            {
+                Ok(id) => {
+                    self.slab_tool.accept();
+                    self.ceiling_made(id, false);
+                }
+                Err(e) => self.complain(format!("No se puede crear el techo: {e}.")),
+            }
+            return;
+        }
         if s.hole {
             let area = archisim_core::signed_area(&outline).abs();
             match self.ed.add_slab_hole(outline) {
@@ -1774,9 +1802,33 @@ impl ArchiSimApp {
         }
     }
 
+    /// Says what false ceiling was made, and where it is seen.
+    fn ceiling_made(&mut self, id: archisim_core::CeilingId, wand: bool) {
+        let area = self.ed.model().ceiling(id).map_or(0.0, |c| c.area());
+        let how = if wand { " con la varita mágica" } else { "" };
+        if self.active_ceiling() {
+            self.say(format!("Techo de {} creado{how}.", fmt_area(area)));
+        } else {
+            self.say(format!(
+                "Techo de {} creado{how}. Se ve en la planta de techos, en las secciones y en 3D.",
+                fmt_area(area)
+            ));
+        }
+    }
+
     /// Builds the slab of the room around `p` (magic wand).
     fn build_slab_in_room(&mut self, p: Point2) {
         let s = self.slab_settings;
+        if s.ceiling {
+            match self
+                .ed
+                .add_ceiling_in_room(s.ceiling_type, p, s.contour, s.ceiling_height)
+            {
+                Ok(id) => self.ceiling_made(id, true),
+                Err(e) => self.complain(format!("No se puede crear el techo: {e}.")),
+            }
+            return;
+        }
         match self
             .ed
             .add_slab_in_room(s.slab_type, p, s.contour, s.top_offset)
@@ -2644,6 +2696,9 @@ pub fn default_slab_settings(model: &Model) -> SlabSettings {
         wand: false,
         contour: Contour::InteriorFace,
         hole: false,
+        ceiling: false,
+        ceiling_type: model.ceiling_types().next().map_or(SlabTypeId(0), |t| t.id),
+        ceiling_height: archisim_core::CEILING_HEIGHT,
     }
 }
 
@@ -2736,6 +2791,7 @@ pub(super) fn text_edit_committed(ui: &mut Ui, id: Id, shown: &str, width: f32) 
 mod annotation_ui;
 mod background;
 mod bottom_segments;
+mod box_ui;
 mod brush_ui;
 mod budget_ui;
 mod cad_ui;
@@ -2744,6 +2800,7 @@ mod camera_ui;
 mod cards;
 mod carto_download_ui;
 mod carto_ui;
+mod catalogue_ui;
 mod chrome;
 mod climate_ui;
 mod collection_ui;

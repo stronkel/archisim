@@ -75,6 +75,8 @@ impl ArchiSimApp {
             [Element::Wall(id)] => self.wall_properties(ui, *id),
             [Element::Opening(id)] => self.opening_properties(ui, *id),
             [Element::Slab(id)] => self.slab_properties(ui, *id),
+            [Element::Ceiling(id)] => self.ceiling_properties(ui, *id),
+            [Element::Box(id)] => self.box_properties(ui, *id),
             [Element::Dimension(id)] => self.dimension_properties(ui, *id),
             [Element::Mark(id)] => self.mark_properties(ui, *id),
             [Element::Column(id)] => self.column_properties(ui, *id),
@@ -190,15 +192,25 @@ impl ArchiSimApp {
             .collect()
     }
 
-    fn slab_type_items(&mut self, ctx: &egui::Context) -> Vec<TypeItem<SlabTypeId>> {
+    /// The slab types to choose from: those of slabs, or (`ceilings`)
+    /// those of false ceilings.
+    fn slab_type_items(
+        &mut self,
+        ctx: &egui::Context,
+        ceilings: bool,
+    ) -> Vec<TypeItem<SlabTypeId>> {
         let sig = self.picture_signature(false);
         let model = self.ed.model();
         let thumbs = &mut self.thumbs;
-        let mut list: Vec<_> = model.slab_types().collect();
+        let mut list: Vec<_> = model
+            .slab_types()
+            .filter(|t| (t.function == SlabFunction::Ceiling) == ceilings)
+            .collect();
         list.sort_by_key(|t| match t.function {
             SlabFunction::Floor => 0,
             SlabFunction::BaseSlab => 1,
             SlabFunction::Roof => 2,
+            SlabFunction::Ceiling => 3,
         });
         list.into_iter()
             .map(|t| {
@@ -206,6 +218,7 @@ impl ArchiSimApp {
                     SlabFunction::Floor => "forjado de planta",
                     SlabFunction::BaseSlab => "solera",
                     SlabFunction::Roof => "cubierta",
+                    SlabFunction::Ceiling => "falso techo",
                 };
                 // The layers as a band, the top face up (as in the types
                 // dialog).
@@ -358,6 +371,7 @@ impl ArchiSimApp {
             Tool::Pool => self.pool_tool_properties(ui),
             Tool::Road => self.road_tool_properties(ui),
             Tool::Roundabout => self.roundabout_tool_properties(ui),
+            Tool::ModularBox => self.box_tool_properties(ui),
             Tool::World => self.world_tool_properties(ui),
             Tool::Decal => self.decal_tool_properties(ui),
             Tool::Marking => self.marking_tool_properties(ui),
@@ -526,8 +540,11 @@ impl ArchiSimApp {
     }
 
     fn slab_tool_properties(&mut self, ui: &mut Ui) {
+        if self.slab_settings.ceiling {
+            return self.ceiling_tool_properties(ui);
+        }
         props::title(ui, "Herramienta Forjado · lo que vas a dibujar");
-        let items = self.slab_type_items(ui.ctx());
+        let items = self.slab_type_items(ui.ctx(), false);
         let mut chosen = None;
         let card = type_card(
             ui,
@@ -592,6 +609,139 @@ impl ArchiSimApp {
                         self.slab_settings.top_offset = v;
                     }
                 },
+            );
+        });
+    }
+
+    /// The Techo tool (the slab tool drawing false ceilings, M7).
+    fn ceiling_tool_properties(&mut self, ui: &mut Ui) {
+        props::title(ui, "Herramienta Techo · lo que vas a dibujar");
+        let items = self.slab_type_items(ui.ctx(), true);
+        let mut chosen = None;
+        let card = type_card(
+            ui,
+            "tool-ceiling",
+            Icon::Slab,
+            "Falso techo",
+            "IfcCovering",
+            Some(self.slab_settings.ceiling_type),
+            &items,
+            &mut chosen,
+            None,
+        );
+        if let Some(t) = chosen {
+            self.slab_settings.ceiling_type = t;
+        }
+        if card.edit {
+            self.edit_type(TypesTab::Slabs, self.slab_settings.ceiling_type.0);
+        }
+        group(ui, "tool-ceiling-method", "Contorno", |ui| {
+            row(
+                ui,
+                "Contorno",
+                "Hasta dónde llega el techo de la varita mágica",
+                |ui, w| {
+                    self.slab_settings.contour = choice(
+                        ui,
+                        "tool-ceiling-contour",
+                        w,
+                        self.slab_settings.contour,
+                        &[
+                            (Contour::InteriorFace, "Cara interior"),
+                            (Contour::WallAxis, "Eje de muros"),
+                            (Contour::ExteriorFace, "Cara exterior"),
+                        ],
+                    );
+                },
+            );
+        });
+        group(ui, "tool-ceiling-constraints", "Restricciones", |ui| {
+            row(
+                ui,
+                "Altura (mm)",
+                "Altura de la cara vista del techo sobre la planta",
+                |ui, w| {
+                    if let Some(v) = length_field(
+                        ui,
+                        Id::unique("tool-ceiling-height"),
+                        self.slab_settings.ceiling_height,
+                        w - 8.0,
+                    ) {
+                        self.slab_settings.ceiling_height = v;
+                    }
+                },
+            );
+        });
+    }
+
+    /// A false ceiling selected (M7).
+    fn ceiling_properties(&mut self, ui: &mut Ui, id: archisim_core::CeilingId) {
+        let model = self.ed.model();
+        let Some(c) = model.ceiling(id).cloned() else {
+            return;
+        };
+        let thickness = model
+            .slab_type(c.ceiling_type)
+            .map_or(0.0, |t| t.thickness());
+        props::title(ui, "Falso techo · 1 seleccionado");
+        let items = self.slab_type_items(ui.ctx(), true);
+        let mut chosen = None;
+        let card = type_card(
+            ui,
+            "ceiling",
+            Icon::Slab,
+            "Falso techo",
+            "IfcCovering",
+            Some(c.ceiling_type),
+            &items,
+            &mut chosen,
+            None,
+        );
+        if let Some(t) = chosen {
+            let r = self
+                .ed
+                .edit_ceiling(id, "Cambiar tipo de techo", move |c| c.ceiling_type = t);
+            self.report(r, "Tipo de techo cambiado.");
+        }
+        if card.edit {
+            self.edit_type(TypesTab::Slabs, c.ceiling_type.0);
+        }
+        if let Some((_, v)) = props::measure_tiles(
+            ui,
+            ("ceiling", id),
+            &[
+                props::Measure {
+                    label: "Espesor",
+                    hint: "Del tipo",
+                    value: thickness,
+                    editable: false,
+                },
+                props::Measure {
+                    label: "Altura",
+                    hint: "De la cara vista sobre la planta",
+                    value: c.height,
+                    editable: true,
+                },
+            ],
+        ) {
+            let r = self
+                .ed
+                .edit_ceiling(id, "Cambiar altura del techo", move |c| c.height = v);
+            self.report(r, "Altura del techo cambiada.");
+        }
+        group(ui, "ceiling-dimensions", "Dimensiones", |ui| {
+            text_row(
+                ui,
+                "Superficie",
+                "Descontados los huecos",
+                &fmt_area(c.area()),
+            );
+            text_row(ui, "Vértices", "", &c.outline.len().to_string());
+            text_row(
+                ui,
+                "Huecos",
+                "Registros, luminarias",
+                &c.holes.len().to_string(),
             );
         });
     }
@@ -755,6 +905,11 @@ impl ArchiSimApp {
     // ---- Nothing selected: the view and the project ---------------------------
 
     fn view_properties(&mut self, ui: &mut Ui) {
+        // A box type says what it is first (M8).
+        let box_type = self.ed.model().catalogue().is_some();
+        if box_type {
+            self.box_type_group(ui);
+        }
         match self.mode {
             ViewMode::Plan => self.plan_view_properties(ui),
             ViewMode::ThreeD => self.view_3d_properties(ui),
@@ -768,6 +923,9 @@ impl ArchiSimApp {
                 self.drafting_properties(ui, id);
                 return;
             }
+        }
+        if !box_type {
+            self.box_type_group(ui);
         }
         self.project_group(ui);
         ui.add_space(8.0);
@@ -1775,7 +1933,7 @@ impl ArchiSimApp {
         if super::sketch_ui::edit_contour_button(ui) {
             self.start_sketch(crate::sketch::SketchTarget::Slab(id));
         }
-        let items = self.slab_type_items(ui.ctx());
+        let items = self.slab_type_items(ui.ctx(), false);
         let mut chosen = None;
         let card = type_card(
             ui,

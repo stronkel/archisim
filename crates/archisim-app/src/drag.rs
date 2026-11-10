@@ -497,6 +497,8 @@ pub fn hotspots(model: &Model, selection: &BTreeSet<Element>) -> Vec<Hotspot> {
             | Element::Run(_)
             | Element::Edge(_)
             | Element::Device(_)
+            | Element::Ceiling(_)
+            | Element::Box(_)
             | Element::Elevator(_) => {}
         }
     }
@@ -538,7 +540,7 @@ pub fn grip_at<G: Geo + ?Sized>(
 /// them (a point does not snap to itself).
 pub fn moving(model: &Model, selection: &BTreeSet<Element>, grip: Grip) -> BTreeSet<Element> {
     match grip {
-        Grip::Body => selection.clone(),
+        Grip::Body => crate::xform::with_box_members(model, selection),
         Grip::WallEnd { wall, start } => joined_at(model, wall, start)
             .into_iter()
             .map(|(w, _)| Element::Wall(w))
@@ -987,8 +989,11 @@ pub fn apply(
 ) -> Result<Option<BTreeSet<Element>>, ModelError> {
     let d = drag.to - drag.from;
     match drag.grip {
-        Grip::Body if drag.variant => copy(model, selection, d).map(Some),
-        Grip::Body => move_selection(model, selection, d).map(|_| None),
+        Grip::Body if drag.variant => {
+            copy(model, &crate::xform::with_box_members(model, selection), d).map(Some)
+        }
+        Grip::Body => move_selection(model, &crate::xform::with_box_members(model, selection), d)
+            .map(|_| None),
         Grip::WallEnd { wall, start } => {
             let ends = if drag.variant {
                 vec![(wall, start)]
@@ -1232,7 +1237,13 @@ pub(crate) fn move_selection(
             _ => None,
         })
         .collect();
-    let followers = followers(model, &walls, d);
+    // A box goes with what it holds; the boxes beside it stay as they
+    // are (their walls do not follow).
+    let followers = if selection.iter().any(|e| matches!(e, Element::Box(_))) {
+        Vec::new()
+    } else {
+        followers(model, &walls, d)
+    };
     for id in &walls {
         let w = model.wall(*id).ok_or(ModelError::UnknownWall(*id))?;
         let (s, e) = (w.start + d, w.end + d);
@@ -1399,6 +1410,17 @@ pub(crate) fn move_selection(
             }
             Element::Device(id) => {
                 model.edit_device(*id, |x| x.position = x.position + d)?;
+            }
+            Element::Ceiling(id) => {
+                model.edit_ceiling(*id, |c| {
+                    c.outline.iter_mut().for_each(|p| *p = *p + d);
+                    c.holes
+                        .iter_mut()
+                        .for_each(|h| h.iter_mut().for_each(|p| *p = *p + d));
+                })?;
+            }
+            Element::Box(id) => {
+                model.edit_box(*id, |b| b.origin = b.origin + d)?;
             }
             Element::Room(_) | Element::Tag(_) => {
                 // Moved with walls, a room goes whole.
@@ -2037,6 +2059,34 @@ pub(crate) fn copy(
                 let new = model.add_device(crate::xform::device_spec(&x, |p| p + d, 0.0))?;
                 copies.insert(Element::Device(new));
             }
+            Element::Ceiling(id) => {
+                let c = model
+                    .ceiling(*id)
+                    .ok_or(ModelError::UnknownElement(id.0))?
+                    .clone();
+                let new = model.add_ceiling(archisim_core::NewCeiling {
+                    ceiling_type: c.ceiling_type,
+                    level: c.level,
+                    outline: c.outline.iter().map(|p| *p + d).collect(),
+                    height: c.height,
+                })?;
+                let holes: Vec<Vec<_>> = c
+                    .holes
+                    .iter()
+                    .map(|h| h.iter().map(|p| *p + d).collect())
+                    .collect();
+                model.edit_ceiling(new, |n| n.holes = holes)?;
+                copies.insert(Element::Ceiling(new));
+            }
+            Element::Box(id) => {
+                let b = model
+                    .modular_box(*id)
+                    .ok_or(ModelError::UnknownElement(id.0))?
+                    .clone();
+                let new =
+                    model.add_box(crate::xform::box_spec(&b, b.origin + d, b.angle, b.sides))?;
+                copies.insert(Element::Box(new));
+            }
             Element::Section(id) => {
                 let s = model
                     .section(*id)
@@ -2299,6 +2349,8 @@ pub(crate) fn exists(model: &Model, e: Element) -> bool {
         Element::Run(id) => model.run(id).is_some(),
         Element::Edge(id) => model.edge(id).is_some(),
         Element::Device(id) => model.device(id).is_some(),
+        Element::Ceiling(id) => model.ceiling(id).is_some(),
+        Element::Box(id) => model.modular_box(id).is_some(),
         Element::Dormer(r, i) => model
             .roof(r)
             .is_some_and(|x| usize::from(i) < x.dormers.len()),
@@ -2383,6 +2435,8 @@ fn level_of(
             Element::Run(id) => model.run(*id).map(|r| r.level),
             Element::Edge(id) => model.edge(*id).map(|e| e.level),
             Element::Device(id) => model.device(*id).map(|d| d.level),
+            Element::Ceiling(id) => model.ceiling(*id).map(|c| c.level),
+            Element::Box(id) => model.modular_box(*id).map(|b| b.level),
         }),
     }
 }

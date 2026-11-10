@@ -497,6 +497,8 @@ impl Editor {
             Element::Run(id) => model.run(*id).is_some(),
             Element::Edge(id) => model.edge(*id).is_some(),
             Element::Device(id) => model.device(*id).is_some(),
+            Element::Ceiling(id) => model.ceiling(*id).is_some(),
+            Element::Box(id) => model.modular_box(*id).is_some(),
         });
         if model.level(self.level).is_none() {
             if let Some(l) = model.levels().first() {
@@ -535,7 +537,17 @@ impl Editor {
                     .collect();
                 // Decals go with the wall they are stuck on.
                 let decals = m.decal_anchors();
+                // An approved box type is frozen (M8): only a new revision
+                // opens it.
+                let frozen = m.catalogue().filter(|c| c.approved()).map(|c| c.label());
                 let r = edit(m)?;
+                if let Some(label) = frozen.filter(|_| m.is_frozen()) {
+                    let e = format!(
+                        "esta caja tipo está aprobada ({label}): abre una revisión nueva para cambiarla"
+                    );
+                    refused = Some(e.clone());
+                    return Err(ModelError::InUse(e));
+                }
                 // In a shared project, only what is reserved (what follows
                 // below goes with it: dimensions, rooms, tags).
                 if let Some(g) = guard.as_mut() {
@@ -817,7 +829,9 @@ impl Editor {
                         | Element::Planting(_)
                         | Element::Run(_)
                         | Element::Edge(_)
-                        | Element::Device(_)) => remove_element(m, e)?,
+                        | Element::Device(_)
+                        | Element::Ceiling(_)
+                        | Element::Box(_)) => remove_element(m, e)?,
                     },
                     Change::WallEnds(id, a, b) => {
                         m.stretch_wall(id, a, b)?;
@@ -1381,6 +1395,47 @@ impl Editor {
         self.add_slab(slab_type, outline, top_offset)
     }
 
+    /// Makes a false ceiling (M7) on the active level.
+    pub fn add_ceiling(
+        &mut self,
+        ceiling_type: SlabTypeId,
+        outline: Vec<Point2>,
+        height: f64,
+    ) -> EditResult<archisim_core::CeilingId> {
+        let level = self.level;
+        self.transact("Crear techo", |m| {
+            m.add_ceiling(archisim_core::NewCeiling {
+                ceiling_type,
+                level,
+                outline,
+                height,
+            })
+        })
+    }
+
+    /// Changes a false ceiling (type, height, outline, holes).
+    pub fn edit_ceiling(
+        &mut self,
+        id: archisim_core::CeilingId,
+        what: &str,
+        edit: impl FnOnce(&mut archisim_core::Ceiling),
+    ) -> EditResult {
+        self.transact(what, |m| m.edit_ceiling(id, edit))
+    }
+
+    /// A false ceiling over the room around `p` (magic wand).
+    pub fn add_ceiling_in_room(
+        &mut self,
+        ceiling_type: SlabTypeId,
+        p: Point2,
+        contour: archisim_geom::Contour,
+        height: f64,
+    ) -> EditResult<archisim_core::CeilingId> {
+        let outline = archisim_geom::room_outline(self.model(), self.level, p, contour)
+            .map_err(|e| crate::units::explain_room(&e))?;
+        self.add_ceiling(ceiling_type, outline, height)
+    }
+
     /// Draws a dimension on the active level.
     pub fn add_dimension(&mut self, mut spec: NewDimension) -> EditResult<DimensionId> {
         spec.level = self.level;
@@ -1568,6 +1623,8 @@ fn remove_element(m: &mut Model, e: Element) -> Result<(), archisim_core::ModelE
         Element::Run(id) => m.remove_run(id).map(drop),
         Element::Edge(id) => m.remove_edge(id).map(drop),
         Element::Device(id) => m.remove_device(id).map(drop),
+        Element::Ceiling(id) => m.remove_ceiling(id).map(drop),
+        Element::Box(id) => m.remove_box(id).map(drop),
         _ => Ok(()),
     }
 }
@@ -1682,7 +1739,9 @@ pub(crate) fn remove_items(m: &mut Model, items: &[Element]) -> Result<(), Model
             | Element::Planting(_)
             | Element::Run(_)
             | Element::Edge(_)
-            | Element::Device(_)) => remove_element(m, *e)?,
+            | Element::Device(_)
+            | Element::Ceiling(_)
+            | Element::Box(_)) => remove_element(m, *e)?,
             Element::Draft(id) => {
                 m.remove_draft(*id)?;
             }

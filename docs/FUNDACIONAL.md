@@ -251,6 +251,20 @@ Como ArchiCAD en la disposición, con las propiedades como Revit (v0.16):
 - Muros curvos de un solo arco (v0.19), con sus capas medidas en radial; muros de varios tramos (eje en polilínea o curva compuesta de rectas y arcos) como un muro por tramo, unidos (el primero conserva el `GlobalId`, los demás reciben uno derivado, igual en cada importación), y muros circulares cerrados como dos medias circunferencias (v0.20).
 - Forjados con huecos: los del perfil y los `IfcOpeningElement` que los vacían (así exportan Revit y ArchiCAD escaleras y patinillos), por su contorno en planta (v0.20).
 - Huecos de muro sin puerta ni ventana, como huecos de la familia Hueco de su tamaño (v0.20).
+- **Capas dibujadas como muros sueltos** (M4, `docs/MODULAR.md`). Algunos modelos de Revit dibujan cada capa de un cerramiento como un muro aparte: placa, membrana, aislamiento, trasdosado.
+  - **Qué se junta.** Muros paralelos, pegados cara con cara, que coinciden a lo largo y en altura, si al menos uno tiene 30 mm o menos.
+  - **El resultado.** Un muro con su tipo multicapa, nombrado por su espesor y los tipos de sus capas de fuera adentro («197 mm · EXT-PLACA + AIS-LANA + …»).
+  - **A lo largo.** Se parte donde cambia la composición (un trasdosado que se para, un revestimiento distinto). Cada trozo va de la base más baja a la coronación más alta de sus capas.
+  - **El lado exterior** se busca por la envolvente de la planta (a qué lado queda el interior del edificio), así que vale también en plantas en L.
+  - **Huecos.** Los que cada capa tenía para la misma puerta o ventana se quedan en uno.
+  - **No se aplica** a los ficheros de ArchiSim.
+- Los ejes repetidos en el fichero (Revit escribe la rejilla una vez por planta) se importan una vez.
+- **Falsos techos** (M7): los `IfcCovering` de techo (`.CEILING.` en el elemento o en su tipo) entran como techos de ArchiSim.
+  - Su contorno y sus huecos salen del sólido.
+  - Su cara vista es la parte de abajo del sólido.
+  - Sus capas salen del juego de capas.
+  - Van en la planta más alta que queda por debajo de su cara (Revit los cuelga de la planta de arriba con desfase negativo).
+- **Cajas modulares** (M1): las `IfcElementAssembly` «Caja modular» que escribe ArchiSim (montadas en fábrica, `.FACTORY.`, con `ArchiSim_Box`) vuelven como cajas; sus piezas (muros, huecos, forjados, techos, pilares, vigas y objetos, agregados a la caja y no a la planta) vuelven como los elementos que son. Los tubos de su chasis (M3, `IfcMember` con `ArchiSim_BoxPart`) no se importan como elementos: el chasis vuelve con la caja, desde `ArchiSim_Box`, igual que el estado de fabricación de la caja (M9).
 - Lo que no se importa (pilares, vigas, escaleras, cubiertas inclinadas, forjados inclinados, locales…) se cuenta en un **informe**; lo que se importa con aproximaciones (capas sin espesor, marcos sin medidas, huecos en forjados), también.
 - Lo que exporta ArchiSim se importa idéntico (ida y vuelta comprobada en pruebas): para ello el IFC lleva, además, el cerco de puertas y ventanas (`IfcDoorLiningProperties`, `IfcWindowLiningProperties`), el funcionamiento de cada hoja de ventana (`IfcWindowPanelProperties`), la mano de cada hueco (`ArchiSim_Opening`) y la trama de corte de cada material (`ArchiSim_Material`).
 

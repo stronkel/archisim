@@ -338,6 +338,7 @@ fn slab_function_name(f: SlabFunction) -> &'static str {
         SlabFunction::Floor => "Forjado de planta",
         SlabFunction::BaseSlab => "Solera",
         SlabFunction::Roof => "Cubierta plana",
+        SlabFunction::Ceiling => "Falso techo",
     }
 }
 
@@ -624,6 +625,7 @@ impl ArchiSimApp {
                     SlabFunction::Floor,
                     SlabFunction::BaseSlab,
                     SlabFunction::Roof,
+                    SlabFunction::Ceiling,
                 ] {
                     for t in m.slab_types().filter(|t| t.function == f) {
                         if !matches(&t.name, "") {
@@ -1623,6 +1625,7 @@ impl ArchiSimApp {
                             (SlabFunction::Floor, slab_function_name(SlabFunction::Floor)),
                             (SlabFunction::BaseSlab, slab_function_name(SlabFunction::BaseSlab)),
                             (SlabFunction::Roof, slab_function_name(SlabFunction::Roof)),
+                            (SlabFunction::Ceiling, slab_function_name(SlabFunction::Ceiling)),
                         ],
                     );
                     if f != t.function {
@@ -2505,6 +2508,7 @@ pub(super) fn slab_folder_name(f: SlabFunction) -> &'static str {
         SlabFunction::Floor => "Forjados de planta",
         SlabFunction::BaseSlab => "Soleras",
         SlabFunction::Roof => "Cubiertas planas",
+        SlabFunction::Ceiling => "Falsos techos",
     }
 }
 

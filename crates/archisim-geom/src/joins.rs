@@ -160,7 +160,7 @@ pub fn tee_end_in(idx: &WallIndex, wall: &Wall, at_start: bool) -> Option<TeeEnd
     }
     idx.near(wall.level, p, 0.0)
         .into_iter()
-        .filter(|h| h.id != wall.id && !h.is_curved())
+        .filter(|h| h.id != wall.id && !h.is_curved() && !idx.apart(h.id, wall.id))
         .find_map(|h| tee_with(idx, wall, at_start, h))
 }
 
@@ -259,7 +259,7 @@ fn corner_margin(idx: &WallIndex, w: &Wall) -> (f64, f64) {
     let at = |p: Point2| {
         idx.at_end(w.level, p)
             .into_iter()
-            .filter(|o| o.id != w.id)
+            .filter(|o| o.id != w.id && !idx.apart(o.id, w.id))
             .filter_map(|o| idx.model.wall_type(o.wall_type).map(|t| t.thickness()))
             .fold(0.0, f64::max)
             + EPSILON

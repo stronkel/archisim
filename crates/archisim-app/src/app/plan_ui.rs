@@ -151,6 +151,7 @@ impl ArchiSimApp {
             | Tool::Brush
             | Tool::Road
             | Tool::Roundabout
+            | Tool::ModularBox
             | Tool::World
             | Tool::Decal
             | Tool::Marking
@@ -481,6 +482,7 @@ impl ArchiSimApp {
             | Tool::Pool
             | Tool::Road
             | Tool::Roundabout
+            | Tool::ModularBox
             | Tool::World
             | Tool::Decal
             | Tool::Marking
@@ -496,7 +498,11 @@ impl ArchiSimApp {
                     Tool::Road => self.road_points.clone(),
                     Tool::Planting => self.planting_points.clone(),
                     Tool::Pipe | Tool::Duct => self.run_points.clone(),
-                    Tool::Device | Tool::Elevator | Tool::Roundabout | Tool::Decal => Vec::new(),
+                    Tool::Device
+                    | Tool::Elevator
+                    | Tool::Roundabout
+                    | Tool::ModularBox
+                    | Tool::Decal => Vec::new(),
                     Tool::World => self.world_settings.first.into_iter().collect(),
                     Tool::Marking => self.marking_points.clone(),
                     Tool::TeamZone => self.team_ui.zone_start.into_iter().collect(),
@@ -515,6 +521,7 @@ impl ArchiSimApp {
                     | Tool::Elevator
                     | Tool::TeamZone
                     | Tool::Roundabout
+                    | Tool::ModularBox
                     | Tool::Decal => None,
                     Tool::World => self.world_settings.first,
                     Tool::Marking => self.marking_points.last().copied(),
@@ -595,8 +602,10 @@ impl ArchiSimApp {
                     {
                         let style = self.view_style.effective();
                         let model = self.ed.model();
+                        let ceiling_plan = self.active_ceiling();
                         crate::pick::pick_all(&self.ed, self.ed.level, raw, reach)
                             .into_iter()
+                            .filter(|e| crate::pick::in_view(*e, ceiling_plan))
                             .filter(|e| !self.ed.hidden().contains(e))
                             .filter(|e| crate::pick::pickable(model, &style, *e))
                             .collect()
@@ -654,6 +663,10 @@ impl ArchiSimApp {
         }
         if space && self.tool == Tool::World {
             self.world_turn();
+            return;
+        }
+        if space && self.tool == Tool::ModularBox {
+            self.box_turn();
             return;
         }
         if self.command_keys(&events, enter, escape, backspace, space) {
@@ -900,7 +913,7 @@ impl ArchiSimApp {
                         self.set_tool(Tool::Arrow);
                     }
                 }
-                Tool::Roundabout | Tool::Decal => self.set_tool(Tool::Arrow),
+                Tool::Roundabout | Tool::ModularBox | Tool::Decal => self.set_tool(Tool::Arrow),
                 Tool::World => self.world_escape(),
                 Tool::Marking => {
                     if self.marking_points.pop().is_none() {
@@ -1303,6 +1316,13 @@ impl ArchiSimApp {
                     }
                 }
             }
+            Tool::ModularBox => {
+                if response.clicked_by(PointerButton::Primary) {
+                    if let Some(c) = self.cursor {
+                        self.box_click(c.point);
+                    }
+                }
+            }
             Tool::World => {
                 if response.clicked_by(PointerButton::Primary) {
                     if let Some(c) = self.cursor {
@@ -1505,6 +1525,8 @@ impl ArchiSimApp {
                     if let (Some(a), Some(c)) = (self.window_start.take(), self.cursor) {
                         let mut found = in_window(&self.ed, self.ed.level, a, c.point);
                         found.retain(|e| !self.ed.hidden().contains(e));
+                        let ceiling_plan = self.active_ceiling();
+                        found.retain(|e| crate::pick::in_view(*e, ceiling_plan));
                         let style = self.view_style.effective();
                         found.retain(|e| crate::pick::pickable(self.ed.model(), &style, *e));
                         if !shift {
