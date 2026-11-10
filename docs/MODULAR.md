@@ -55,19 +55,24 @@
   - lado abierto con parte al exterior (hueco en la fachada);
   - muro de junta con parte al exterior;
   - caja de planta alta que no apoya en ninguna de abajo, o desplazada de su retícula.
-- **Petos y cubierta continua.** La envolvente pone peto de 20 cm en los lados libres. En los lados de junta, el muro acaba en la cubierta, que sigue por encima. Bajo otra caja no hay peto: forjado doble, el suelo de una sobre el techo de la otra, con su junta de 2 cm.
+- **Petos y cubierta continua.** La envolvente pone la cubierta 20 cm por debajo de la coronación. Los muros de los lados libres suben hasta arriba, como peto; en los lados de junta, el muro acaba en la cubierta, que sigue por encima. Bajo otra caja no hay peto: forjado doble, el suelo de una sobre el techo de la otra, con su junta de 2 cm.
 - **Despiece por caja:** chasis y entramado de lo que lleva.
 - Queda la banda de lana de la junta y la de impermeabilización de la cubierta en 3D.
 
 **M3 · Chasis, peso e izado.** ✅ Hecho el 9/11/2026, rama `bloque/juntas`.
-- **El chasis** de §5 bis, guardado en la caja con sus medidas: marcos de suelo y de techo, pilares de esquina y pilares intermedios (en los lados largos abiertos, o donde se cuelga), viguetas de suelo en dos vanos sobre una viga central, y viguetas de techo.
+- **El chasis** de §5 bis, guardado en la caja con sus medidas, como el módulo B:
+  - marco de suelo de 120 × 100 con viguetas de 60 × 40 en dos vanos sobre una viga central, enrasadas abajo;
+  - marco de techo de 60 × 40 en el plano del techo, con sus viguetas y su viga central;
+  - pilares de esquina y pilares intermedios (en los lados largos abiertos, o donde se cuelga);
+  - en los lados libres, el peto: montantes de 60 × 40 sobre el marco de techo y la coronación de 120 × 100 arriba.
+  - En los lados de junta no hay peto, y el pilar entre dos de ellos acaba en el marco de techo.
   - Se ve en 3D y en planta (pilares cortados y puntos de izado).
   - En el IFC, un `IfcMember` por tubo con su perfil hueco, dentro del ensamblaje.
 - **Peso y centro de gravedad** de la caja terminada: chasis, muros con su entramado, carpinterías, forjados y techos.
 - **Izado** con balancín desde cuatro o seis puntos: lo que tira cada eslinga, y la flexión y la flecha del borde largo del chasis (peso × 1,35 × 1,20).
 - **Orden de montaje:** por plantas; de una esquina y siguiendo por las cajas que tocan a las ya puestas.
 - **Con las capas del ejemplo:**
-  - cada caja pesa entre 9 y 12 t (el suelo colaborante y la fachada son lo que más pesa);
+  - cada caja pesa entre 10 y 12,5 t (el suelo colaborante y la fachada son lo que más pesa);
   - colgada de cuatro esquinas, el borde de 120 × 100 × 4 no llega;
   - colgada de seis puntos, llega justo.
 - **Queda:**

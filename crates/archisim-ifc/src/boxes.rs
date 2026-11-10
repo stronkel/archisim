@@ -103,14 +103,21 @@ impl Exporter<'_> {
                     ("EdgeTube", c.edge),
                     ("PostTube", c.post),
                     ("JoistTube", c.joist),
+                    ("RoofEdgeTube", c.roof_edge),
                     ("RoofJoistTube", c.roof_joist),
+                    ("CrownTube", c.crown),
+                    ("ParapetPostTube", c.parapet_post),
                 ] {
                     props.push(self.w.add(format!(
                         "IFCPROPERTYSINGLEVALUE('{name}',$,IFCLABEL({}),$)",
                         string(&tube.label())
                     )));
                 }
-                for (name, v) in [("JoistSpacing", c.spacing), ("RoofFrameAt", c.roof_at)] {
+                for (name, v) in [
+                    ("JoistSpacing", c.spacing),
+                    ("ParapetSpacing", c.parapet_spacing),
+                    ("RoofFrameAt", c.roof_at),
+                ] {
                     props.push(self.w.add(format!(
                         "IFCPROPERTYSINGLEVALUE('{name}',$,IFCLENGTHMEASURE({}),$)",
                         real(v)

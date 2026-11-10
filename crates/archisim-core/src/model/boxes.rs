@@ -293,28 +293,42 @@ impl LiftPoints {
     }
 }
 
-/// The steel chassis of a box (M3, `docs/MODULAR.md` §5 bis): welded
-/// tubes. A floor frame round the box at its underside with its joists
-/// across (in two spans with a middle beam along it), a roof frame of the
-/// same tube with its joists, its underside at the false ceiling's plane,
-/// and posts at the corners from the underside to the top (and in the
-/// middle of the long sides that are open or where it is lifted from).
-/// The pieces are not kept: `archisim_geom::boxes` lays them out.
+/// The steel chassis of a box (M3, `docs/MODULAR.md` §5 bis), as the
+/// fabricator's model has it: welded tubes. A floor frame round the box at
+/// its underside, its joists across (in two spans over a middle beam along
+/// it) with their underside flush with the frame's; a ceiling frame of a
+/// lighter tube with its underside at the ceiling's plane and its joists;
+/// corner posts from the underside to the top (and in the middle of the
+/// long sides that are open or where it is lifted from); and, on each free
+/// side, the parapet: short posts standing on the ceiling frame under a
+/// crowning frame at the top. On a joined side there is no parapet (the
+/// roof goes on over the joint), and the posts between two joined sides
+/// stop at the ceiling frame. The pieces are not kept:
+/// `archisim_geom::boxes` lays them out.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Chassis {
-    /// The tube of the floor and roof frames.
+    /// The tube of the floor frame.
     pub edge: BoxTube,
     /// The tube of the posts.
     pub post: BoxTube,
-    /// The floor's joists.
+    /// The floor's joists and middle beam.
     pub joist: BoxTube,
-    /// The roof's joists.
+    /// The ceiling frame's tube.
+    pub roof_edge: BoxTube,
+    /// The ceiling's joists and middle beam.
     pub roof_joist: BoxTube,
+    /// The crowning frame at the top of the parapet.
+    pub crown: BoxTube,
+    /// The parapet's short posts (their depth along the side).
+    pub parapet_post: BoxTube,
     /// Between joists, centre to centre.
     pub spacing: f64,
-    /// A beam along the middle of the floor, halving the joists' span.
+    /// Between the parapet's posts, at most.
+    pub parapet_spacing: f64,
+    /// A beam along the middle of the floor and of the ceiling, halving
+    /// the joists' span.
     pub middle_beam: bool,
-    /// Underside of the roof frame over the level (the ceiling's plane).
+    /// Underside of the ceiling frame over the level (the ceiling's plane).
     pub roof_at: f64,
     pub lift: LiftPoints,
 }
@@ -325,8 +339,12 @@ impl Default for Chassis {
             edge: BoxTube::mm(120.0, 100.0, 4.0),
             post: BoxTube::mm(120.0, 100.0, 4.0),
             joist: BoxTube::mm(60.0, 40.0, 3.0),
+            roof_edge: BoxTube::mm(60.0, 40.0, 3.0),
             roof_joist: BoxTube::mm(60.0, 40.0, 3.0),
+            crown: BoxTube::mm(120.0, 100.0, 4.0),
+            parapet_post: BoxTube::mm(60.0, 40.0, 3.0),
             spacing: 0.60,
+            parapet_spacing: 1.20,
             middle_beam: true,
             roof_at: 2.93,
             lift: LiftPoints::Four,
@@ -336,12 +354,21 @@ impl Default for Chassis {
 
 impl Chassis {
     pub fn is_valid(&self) -> bool {
-        self.edge.is_valid()
-            && self.post.is_valid()
-            && self.joist.is_valid()
-            && self.roof_joist.is_valid()
+        [
+            self.edge,
+            self.post,
+            self.joist,
+            self.roof_edge,
+            self.roof_joist,
+            self.crown,
+            self.parapet_post,
+        ]
+        .iter()
+        .all(|t| t.is_valid())
             && self.spacing.is_finite()
             && self.spacing >= 0.2
+            && self.parapet_spacing.is_finite()
+            && self.parapet_spacing >= 0.2
             && self.roof_at.is_finite()
     }
 }
@@ -660,13 +687,15 @@ pub struct BoxFill {
     pub ceiling_type: Option<SlabTypeId>,
     /// Height of the false ceiling's face over the level.
     pub ceiling_height: f64,
-    /// How far the walls of the free sides rise over the roof (the
-    /// parapet, §5 bis); the joint's walls stop at the roof, which goes on
-    /// over the joint.
+    /// How far the top of the box (the crowning frame of the chassis) is
+    /// over the roof: the parapet of the free sides, whose walls reach the
+    /// top (§5 bis). The joint's walls stop at the roof, which goes on over
+    /// the joint; under another box there is no parapet.
     pub parapet: f64,
 }
 
-/// Height of the parapet over the roof on a free side.
+/// Height of the parapet over the roof (the posts of 40 × 60 under the
+/// crowning frame).
 pub const BOX_PARAPET: f64 = 0.20;
 
 /// What [`Model::fill_box`] made.
@@ -702,9 +731,12 @@ impl Model {
         if !b.chassis.is_valid() {
             return Err(ModelError::InvalidShape("a box's chassis needs real tubes"));
         }
-        if b.chassis.roof_at <= b.bottom || b.chassis.roof_at >= b.bottom + b.height {
+        let c = &b.chassis;
+        if c.roof_at <= b.bottom + c.edge.depth
+            || c.roof_at + c.roof_edge.depth >= b.bottom + b.height - c.crown.depth
+        {
             return Err(ModelError::InvalidShape(
-                "a box's roof frame must be inside its height",
+                "a box's ceiling frame must be between its floor frame and its crown",
             ));
         }
         Ok(())
@@ -1299,12 +1331,17 @@ impl Model {
                 top_offset: 0.0,
             })?);
         }
+        // The roof sits under the parapet (its top `parapet` under the top
+        // of the box, where the crowning frame is); under another box there
+        // is no parapet and it reaches the top.
+        let parapet = if covered { 0.0 } else { fill.parapet.max(0.0) };
+        let roof_top = b.bottom + b.height - parapet;
         if let Some(t) = fill.roof_type {
             made.roof = Some(self.add_slab(NewSlab {
                 slab_type: t,
                 level: b.level,
                 outline: outline.clone(),
-                top_offset: b.bottom + b.height,
+                top_offset: roof_top,
             })?);
         }
         if let Some(t) = fill.ceiling_type {
@@ -1322,11 +1359,12 @@ impl Model {
                 }
                 // Clockwise round the box, so the exterior is on the left.
                 let (s, e) = b.side(i);
-                // No parapet under another box: its floor sits on this roof.
-                let parapet = if b.sides[i] == SideState::Free && !covered {
-                    fill.parapet.max(0.0)
+                // A free side rises to the top as the parapet; the joint's
+                // wall stops at the roof, which goes on over the joint.
+                let height = if b.sides[i] == SideState::Free {
+                    b.height
                 } else {
-                    0.0
+                    roof_top - b.bottom
                 };
                 made.walls.push(self.add_wall(NewWall {
                     wall_type: t,
@@ -1335,7 +1373,7 @@ impl Model {
                     end: s,
                     bulge: 0.0,
                     reference: ReferenceLine::ExteriorFace,
-                    height: b.height + parapet,
+                    height,
                     base_offset: b.bottom,
                     top: WallTop::Unconnected,
                 })?);
@@ -1517,19 +1555,19 @@ mod tests {
         assert_eq!(ma.slabs.len(), 2);
         assert_eq!(ma.ceilings.len(), 1);
         assert_eq!(m.box_of(fa.walls[2].0), Some(a));
-        // The walls go from the chassis to the top of the roof.
-        // and those of the free sides rise as a parapet over it.
+        // The walls of the free sides go from the chassis to the top (the
+        // parapet), the joint's to the roof, 20 cm under it.
         let w = m.wall(fa.walls[0]).unwrap();
         assert!((w.base_offset - BOX_BOTTOM).abs() < 1e-9);
-        assert!((w.height - BOX_HEIGHT - BOX_PARAPET).abs() < 1e-9);
-        assert!((m.wall(fa.walls[2]).unwrap().height - BOX_HEIGHT).abs() < 1e-9);
-        // The parapet makes it taller on the lorry: special transport.
-        let tall = m
+        assert!((w.height - BOX_HEIGHT).abs() < 1e-9);
+        assert!((m.wall(fa.walls[2]).unwrap().height - BOX_HEIGHT + BOX_PARAPET).abs() < 1e-9);
+        let roof = m.slab(fa.roof.unwrap()).unwrap();
+        assert!((roof.top_offset - (BOX_BOTTOM + BOX_HEIGHT - BOX_PARAPET)).abs() < 1e-9);
+        // 3,58 m on a 40 cm deck: within the 4 m.
+        assert!(!m
             .box_issues(a)
-            .into_iter()
-            .find(|i| matches!(i, BoxIssue::TooTall { .. }))
-            .unwrap();
-        assert!(!tall.is_error());
+            .iter()
+            .any(|i| matches!(i, BoxIssue::TooTall { .. })));
         // An open side keeps its wall out even if it is the other box's.
         let shared = m.wall(fa.walls[2]).unwrap();
         let mid = (shared.start + shared.end) * 0.5;

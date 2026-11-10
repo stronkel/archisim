@@ -419,14 +419,25 @@ fn chassis_group(ui: &mut Ui, id: BoxId, c: &mut archisim_core::Chassis) {
     group(ui, "box-chassis", "Chasis", |ui| {
         props::note(
             ui,
-            "Tubo soldado: marco de suelo y de techo, pilares en las esquinas (y en el medio de los lados largos abiertos) y viguetas.",
+            "Tubo soldado: marco de suelo y de techo con sus viguetas, pilares en las esquinas (y en el medio de los lados largos abiertos) y, en los lados libres, el peto: montantes sobre el marco de techo y la coronación arriba.",
         );
         let tubes = archisim_core::box_tubes();
         for (name, hint, slot) in [
-            ("Marcos", "Bordes del suelo y del techo", &mut c.edge),
-            ("Pilares", "", &mut c.post),
+            ("Marco de suelo", "Bordes del suelo", &mut c.edge),
+            ("Pilares", "De esquina e intermedios", &mut c.post),
             ("Viguetas de suelo", "Y la viga central", &mut c.joist),
-            ("Viguetas de techo", "", &mut c.roof_joist),
+            ("Marco de techo", "En el plano del techo", &mut c.roof_edge),
+            ("Viguetas de techo", "Y la viga central", &mut c.roof_joist),
+            (
+                "Coronación",
+                "Arriba del peto, en los lados libres",
+                &mut c.crown,
+            ),
+            (
+                "Montantes del peto",
+                "Entre el marco de techo y la coronación",
+                &mut c.parapet_post,
+            ),
         ] {
             row(ui, name, hint, |ui, w| {
                 ComboBox::from_id_salt(("box-tube", id, name))
@@ -450,6 +461,21 @@ fn chassis_group(ui: &mut Ui, id: BoxId, c: &mut archisim_core::Chassis) {
         });
         row(
             ui,
+            "Montantes del peto (mm)",
+            "Separación máxima entre ellos",
+            |ui, w| {
+                if let Some(x) = length_field(
+                    ui,
+                    Id::unique(("box-parapet-spacing", id)),
+                    c.parapet_spacing,
+                    w - 8.0,
+                ) {
+                    c.parapet_spacing = x;
+                }
+            },
+        );
+        row(
+            ui,
             "Marco de techo (mm)",
             "Su cara de abajo sobre la planta: el plano del techo",
             |ui, w| {
@@ -462,7 +488,7 @@ fn chassis_group(ui: &mut Ui, id: BoxId, c: &mut archisim_core::Chassis) {
         );
         ui.switch(
             &mut c.middle_beam,
-            "Viga central en el suelo (dos vanos de viguetas)",
+            "Viga central en suelo y techo (dos vanos de viguetas)",
         );
         row(ui, "Izado", "De dónde se cuelga", |ui, w| {
             ComboBox::from_id_salt(("box-lift", id))

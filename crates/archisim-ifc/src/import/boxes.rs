@@ -93,6 +93,18 @@ impl<'a> Importer<'a> {
         if let Some(t) = tube("RoofJoistTube") {
             c.roof_joist = t;
         }
+        if let Some(t) = tube("RoofEdgeTube") {
+            c.roof_edge = t;
+        }
+        if let Some(t) = tube("CrownTube") {
+            c.crown = t;
+        }
+        if let Some(t) = tube("ParapetPostTube") {
+            c.parapet_post = t;
+        }
+        if let Some(v) = number("ParapetSpacing") {
+            c.parapet_spacing = v;
+        }
         if let Some(v) = number("JoistSpacing") {
             c.spacing = v;
         }

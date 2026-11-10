@@ -187,6 +187,10 @@ pub fn differences(a: &Model, b: &Model) -> Vec<String> {
             && s.chassis.post.label() == t.chassis.post.label()
             && s.chassis.joist.label() == t.chassis.joist.label()
             && s.chassis.roof_joist.label() == t.chassis.roof_joist.label()
+            && s.chassis.roof_edge.label() == t.chassis.roof_edge.label()
+            && s.chassis.crown.label() == t.chassis.crown.label()
+            && s.chassis.parapet_post.label() == t.chassis.parapet_post.label()
+            && close(s.chassis.parapet_spacing, t.chassis.parapet_spacing)
             && close(s.chassis.spacing, t.chassis.spacing)
             && close(s.chassis.roof_at, t.chassis.roof_at)
             && s.chassis.middle_beam == t.chassis.middle_beam

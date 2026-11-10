@@ -1239,8 +1239,18 @@ pub(crate) struct ChassisOf {
     pub edge: String,
     pub post: String,
     pub joist: String,
+    /// The ceiling frame, the crown and the parapet's posts; the usual
+    /// ones when missing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub roof_edge: Option<String>,
     pub roof_joist: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub crown: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parapet_post: Option<String>,
     pub spacing: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parapet_spacing: Option<f64>,
     pub middle_beam: bool,
     pub roof_at: f64,
     /// «four» or «six».
@@ -4015,8 +4025,12 @@ impl ProjectFile {
                         edge: b.chassis.edge.label(),
                         post: b.chassis.post.label(),
                         joist: b.chassis.joist.label(),
+                        roof_edge: Some(b.chassis.roof_edge.label()),
                         roof_joist: b.chassis.roof_joist.label(),
+                        crown: Some(b.chassis.crown.label()),
+                        parapet_post: Some(b.chassis.parapet_post.label()),
                         spacing: b.chassis.spacing,
+                        parapet_spacing: Some(b.chassis.parapet_spacing),
                         middle_beam: b.chassis.middle_beam,
                         roof_at: b.chassis.roof_at,
                         lift: b.chassis.lift.code().to_string(),
@@ -5684,12 +5698,21 @@ impl ProjectFile {
                                 message: format!("tube «{t}»"),
                             })
                         };
+                        let usual = core::Chassis::default();
+                        let maybe = |t: &Option<String>, or: core::BoxTube| match t {
+                            Some(t) => tube(t),
+                            None => Ok(or),
+                        };
                         core::Chassis {
                             edge: tube(&c.edge)?,
                             post: tube(&c.post)?,
                             joist: tube(&c.joist)?,
+                            roof_edge: maybe(&c.roof_edge, usual.roof_edge)?,
                             roof_joist: tube(&c.roof_joist)?,
+                            crown: maybe(&c.crown, usual.crown)?,
+                            parapet_post: maybe(&c.parapet_post, usual.parapet_post)?,
                             spacing: c.spacing,
+                            parapet_spacing: c.parapet_spacing.unwrap_or(usual.parapet_spacing),
                             middle_beam: c.middle_beam,
                             roof_at: c.roof_at,
                             lift: core::LiftPoints::from_code(&c.lift).ok_or_else(|| {

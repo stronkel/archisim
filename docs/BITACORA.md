@@ -6,6 +6,37 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-10 (135) · El peto de las cajas como en el módulo B
+
+Rama `bloque/juntas` (#194), sin cambio de versión del formato (la 99 todavía no está en `main`). Pedido de Antonio al ver el chasis: en su modelo el peto lleva una coronación arriba.
+
+**Qué cambia**, comparado con el IFC del módulo B de 6,10 × 3,60 que mandó Antonio:
+- **Peto en los lados libres.**
+  - Montantes de 60 × 40 desde el marco de techo (2,99) hasta debajo de la coronación (3,19), a no más de 1,20 m.
+  - Coronación de 120 × 100 arriba (3,19 a 3,31), entre los pilares de esquina.
+- **Lados de junta.** No llevan peto: la cubierta sigue por encima de la junta. El pilar de esquina entre dos lados de junta acaba en el marco de techo.
+- **Marco de techo de 60 × 40** en el plano del techo (2,93), con sus viguetas y su viga central, en dos vanos como en el suelo. Antes era de 120 × 100.
+- **Viguetas del suelo** apoyadas abajo, enrasadas con la cara inferior del marco, como en el modelo.
+- **La envolvente («Ponerle la envolvente»).**
+  - Pone la cubierta 20 cm por debajo de la coronación.
+  - Los muros de los lados libres llegan arriba, al peto.
+  - Los de la junta acaban en la cubierta.
+  - La caja vuelve a medir 3,58 m y, con el camión, se queda en 3,98 m: dentro de los 4 m, sin aviso de transporte especial por altura.
+- **Propiedades de la caja, grupo «Chasis».** Ahora también se cambian el marco de techo, la coronación, los montantes del peto y su separación.
+- **Planta.** Los montantes del peto salen como pilares cortados.
+- **IFC.** Cada tubo, con su papel («Coronación del peto», «Montante del peto», «Viga central de techo»).
+
+**Lo que no está.** Los tubos de 60 × 60 de borde del suelo del modelo de Revit (no está claro dónde van; dímelo y los añado).
+
+**Qué debe probar Antonio.**
+1. Ejecuta `cargo run -p archisim-cli -- cajas out/cajas`.
+2. Abre `out/cajas/cajas.archisim` y mira en 3D una caja de la fila:
+   - en los lados libres, montantes sobre el marco de techo y la coronación arriba;
+   - en los de junta, nada por encima del marco de techo.
+3. En `out/cajas/cajas.txt`, la lista de corte de cada caja debe incluir la coronación y los montantes.
+
+---
+
 ## 2026-11-09 (134) · M2 juntas y M3 chasis, peso e izado
 
 Rama `bloque/juntas`, con pull request, sobre la de la entrada 133 (`bloque/catalogo`, #193). **Formato versión 99**: el chasis de cada caja. `docs/MODULAR.md` (M2, M3).
@@ -46,7 +77,7 @@ Rama `bloque/juntas`, con pull request, sobre la de la entrada 133 (`bloque/cata
 - **Pesos de capa:** una capa cuyo material se llame «colaborante» pesa como forjado colaborante (unos 1,9 kN/m² en 12 cm), no como acero macizo.
 
 **Lo que salen las cajas del ejemplo, y por qué.**
-- **Peso: entre 9 y 12 t por caja**, más de las 5 a 8 t que estimamos.
+- **Peso: entre 9 y 12 t por caja** (entre 10 y 12,5 t con el peto de la entrada 135), más de las 5 a 8 t que estimamos.
   - **Suelo y cubierta (unas 6 t):** casi todo es el forjado colaborante H90 + 30.
   - **Muros (unas 4 t):** placa cerámica y dos placas de yeso.
   - **Chasis (1 t).**

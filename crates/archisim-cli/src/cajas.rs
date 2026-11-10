@@ -73,15 +73,20 @@ pub fn system_fill(m: &mut Model, lib: &archisim_library::Library) -> Res<BoxFil
             layer(wool, 0.071, LayerFunction::Insulation),
         ],
     )?;
+    // From the ceiling's plane (2,93) to 20 cm under the crown: the
+    // ceiling frame and its joists, the board with its insulation and the
+    // falls, under the parapet.
+    let falls = material(m, "Mortero de pendiente", "mortar", [205, 200, 190]);
     let roof = m.add_slab_type(
-        "Cubierta de caja 380",
+        "Cubierta de caja 180",
         SlabFunction::Roof,
         vec![
             layer(sheet, 0.005, LayerFunction::Membrane),
-            layer(board, 0.075, LayerFunction::Insulation),
-            layer(decking, 0.022, LayerFunction::Substrate),
-            // The roof frame and its joists, with wool between them.
-            layer(wool, 0.278, LayerFunction::Structure),
+            layer(falls, 0.030, LayerFunction::Substrate),
+            layer(board, 0.059, LayerFunction::Insulation),
+            layer(decking, 0.006, LayerFunction::Substrate),
+            // The ceiling frame and its joists.
+            layer(wool, 0.080, LayerFunction::Structure),
         ],
     )?;
     let fill = BoxFill {
