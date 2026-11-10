@@ -435,8 +435,9 @@ pub struct CatalogueFit {
 pub enum CatalogueScope {
     /// Only those that already have a frame: their sections change.
     Framed,
-    /// Those, and every wall type whose frame layer is insulation between
-    /// boards (the cavity of a steel frame wall).
+    /// Those, and every exterior wall type whose frame layer is
+    /// insulation between boards (the cavity of a steel frame façade; the
+    /// partitions inside are a drywall system of their own).
     Cavities,
 }
 
@@ -514,11 +515,12 @@ impl Model {
         let mut cavity_types: Vec<(WallTypeId, usize)> = Vec::new();
         for t in self.wall_types() {
             let framed = self.framings.contains_key(&t.id.0);
-            let cavity = if scope == CatalogueScope::Cavities {
-                self.cavity_layer(&t.layers)
-            } else {
-                None
-            };
+            let cavity =
+                if scope == CatalogueScope::Cavities && t.function == WallFunction::Exterior {
+                    self.cavity_layer(&t.layers)
+                } else {
+                    None
+                };
             let at = cavity.or_else(|| Model::frame_layer(&t.layers).filter(|_| framed));
             if let Some(i) = at {
                 if !framed {
@@ -686,8 +688,8 @@ mod tests {
             .unwrap();
         let thin = m
             .add_wall_type(
-                "Tabique",
-                WallFunction::Interior,
+                "Fachada fina",
+                WallFunction::Exterior,
                 vec![l(board, 0.0125), l(wool, 0.05), l(board, 0.0125)],
             )
             .unwrap();
@@ -699,6 +701,16 @@ mod tests {
             .is_empty());
         let fits = m.frame_types_from_catalogue(&cat, CatalogueScope::Cavities);
         assert_eq!(fits.len(), 2, "the block wall is not a cavity: {fits:?}");
+        // A partition inside is a drywall system of its own: not framed.
+        let inside = m
+            .add_wall_type(
+                "Tabique de placa",
+                WallFunction::Interior,
+                vec![l(board, 0.0125), l(wool, 0.1), l(board, 0.0125)],
+            )
+            .unwrap();
+        m.frame_types_from_catalogue(&cat, CatalogueScope::Cavities);
+        assert!(m.type_framing(inside.0).is_none());
         let f = m.type_framing(facade.0).unwrap();
         assert_eq!(f.stud.name, "SFC100 1,2", "the deepest C, thinnest gauge");
         // The cavity is now the wall's structure, where the frame goes.

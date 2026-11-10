@@ -6,6 +6,33 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-10 (147) · M12: las cajas de una vivienda importada (el L-160)
+
+Rama `bloque/cajas-importadas`, con pull request. Sin cambios de formato ni de IFC. Antes se unieron #196 (obra previa) y #197 (plantilla) a `main`, como pidió Antonio.
+
+**Qué hace.**
+- **Cajas sobre los suelos.** En las propiedades de la herramienta Caja hay un grupo nuevo, «Cajas sobre lo dibujado». También desde la línea de órdenes: `archisim cajas-sobre <proyecto> <salida> [--modulo 6.10x3.60] [--tipos carpeta --prefijo L160]`.
+  - Pone una caja sobre cada suelo del tamaño de una caja que esté cerrado por muros.
+  - La lleva al módulo si cabe sin pisar a la vecina.
+  - Lee sus lados de los muros de las juntas: con muro (si el muro está de su lado), abierto o libre.
+  - Con `--tipos`, guarda una caja tipo por caja, en diseño.
+- **Locales desde una lista** (`archisim locales <proyecto> <locales.csv> <salida>`, con nombre; uso; x; y). Cada local se cierra con los muros que hay alrededor de su punto. Si dos puntos caen en el mismo espacio, se avisa en vez de repetirlo.
+- **Locales de modelos de otros programas.** Los pilares cierran locales, como en Revit. Si no se cierra, se puentean los huecos de hasta 15 cm entre muros. Por eso el L-160 no cerraba: sus fachadas paran unos centímetros antes de cada junta.
+
+**Con el L-160** (su IFC y el plano 01, que no se suben):
+- **Cajas:** 8 de 6,10 × 3,60, en la misma disposición que el plano. Salón, comedor y cocina quedan con las juntas abiertas.
+- **Locales:** 10, con **160,26 m² útiles**. El salón-comedor-cocina con el pasillo es un solo espacio de 75,67 m², porque entre ellos solo hay huecos de paso. El dormitorio suite con su vestidor es otro.
+- **Avisos que vienen del modelo de Revit:** en cuatro juntas hay tabique de pladur en las dos cajas, uno al lado del otro. Debe llevarlo solo una.
+
+**Qué debe probar Antonio.**
+1. Importa tu IFC: `cargo run -p archisim-cli -- importar BIOKUBIK_VIVIENDA_L_160.ifc l160.archisim`.
+2. Pon las cajas: `cargo run -p archisim-cli -- cajas-sobre l160.archisim l160-cajas.archisim --tipos "Cajas tipo" --prefijo L160`. Mira el informe de cada caja y sus avisos.
+3. Pon los locales con el fichero `locales-L160.csv` que te paso: `cargo run -p archisim-cli -- locales l160-cajas.archisim locales-L160.csv l160-locales.archisim`.
+4. Comprueba el CTE: `cargo run -p archisim-cli -- cte l160-locales.archisim`. Ahora salen los 160 m² y la ocupación.
+5. En la aplicación, abre `l160.archisim`, elige la herramienta Caja y pulsa «Poner 8 cajas sobre los suelos».
+
+---
+
 ## 2026-11-10 (146) · M11: plantilla del sistema y perfiles del fabricante
 
 Rama `bloque/plantilla`, con pull request sobre #196. Sin cambios de formato ni de IFC. `docs/MODULAR.md` §3 ter, donde queda también el camino hasta el LOD 400 (M12 a M17).

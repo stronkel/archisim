@@ -98,8 +98,20 @@ pub fn room_outline(
         // building's outline is the walls'.
         if contour == Contour::InteriorFace {
             walls.extend(curtain_bounds(model, level, lo, hi));
+            walls.extend(column_bounds(model, level, lo, hi));
         }
-        let found = room_among(model, &walls, p, contour);
+        let mut found = room_among(model, &walls, p, contour);
+        // Walls drawn in another program may stop a few centimetres short
+        // of each other (at the joints of a house of boxes): try again
+        // with those gaps bridged.
+        if matches!(found, Err(RoomError::NotEnclosed)) {
+            let bridges = gap_bridges(&walls, GAP_BRIDGE);
+            if !bridges.is_empty() {
+                let mut more = walls.clone();
+                more.extend(bridges);
+                found = room_among(model, &more, p, contour);
+            }
+        }
         let well_inside = |poly: &[Point2]| {
             let m = 1.0;
             poly.iter()
@@ -118,6 +130,109 @@ pub fn room_outline(
 /// The ids curtain walls take among the walls that bound rooms: past every
 /// wall's (no wall has them).
 const CURTAIN_BOUND: u64 = 1 << 62;
+
+/// Gaps between walls up to this wide are closed when finding a room.
+pub const GAP_BRIDGE: f64 = 0.15;
+
+/// The ids the bridges over gaps take among the walls that bound rooms.
+const BRIDGE_BOUND: u64 = 1 << 60;
+
+/// Thin pieces that close the gaps, up to `gap` wide, between a corner of
+/// one wall's outline and another wall.
+fn gap_bridges(walls: &[(WallId, Vec<Point2>)], gap: f64) -> Vec<(WallId, Vec<Point2>)> {
+    let nearest = |poly: &[Point2], v: Point2| -> (f64, Point2) {
+        let n = poly.len();
+        let mut best = (f64::INFINITY, v);
+        for i in 0..n {
+            let (a, b) = (poly[i], poly[(i + 1) % n]);
+            let d = b - a;
+            let l2 = d.x * d.x + d.y * d.y;
+            let t = if l2 < 1e-12 {
+                0.0
+            } else {
+                (((v - a).x * d.x + (v - a).y * d.y) / l2).clamp(0.0, 1.0)
+            };
+            let q = a + d * t;
+            let dist = q.distance(v);
+            if dist < best.0 {
+                best = (dist, q);
+            }
+        }
+        best
+    };
+    let mut out = Vec::new();
+    let mut k = 0u64;
+    for (i, (_, a)) in walls.iter().enumerate() {
+        for v in a {
+            // A corner already touching or inside another wall closes nothing.
+            let touching = walls
+                .iter()
+                .enumerate()
+                .any(|(j, (_, b))| j != i && (contains(b, *v) || nearest(b, *v).0 < 1e-4));
+            if touching {
+                continue;
+            }
+            let found = walls
+                .iter()
+                .enumerate()
+                .filter(|(j, _)| *j != i)
+                .map(|(_, (_, b))| nearest(b, *v))
+                .filter(|(d, _)| *d <= gap)
+                .min_by(|x, y| x.0.total_cmp(&y.0));
+            if let Some((d, q)) = found {
+                let dir = (q - *v) * (1.0 / d);
+                let side = dir.perp_left() * 0.005;
+                // Into both walls a little, so they overlap.
+                let (s, e) = (*v - dir * 0.005, q + dir * 0.005);
+                out.push((
+                    WallId(BRIDGE_BOUND | k),
+                    vec![s - side, e - side, e + side, s + side],
+                ));
+                k += 1;
+            }
+        }
+    }
+    out
+}
+
+/// The ids columns take among the walls that bound rooms.
+const COLUMN_BOUND: u64 = 1 << 61;
+
+/// The outlines of the columns of a level within a box, as walls that
+/// bound rooms (Revit's columns are room bounding too): the posts at the
+/// joints of a house of boxes close its rooms.
+fn column_bounds(
+    model: &Model,
+    level: LevelId,
+    lo: Point2,
+    hi: Point2,
+) -> Vec<(WallId, Vec<Point2>)> {
+    model
+        .columns_on_level(level)
+        .filter(|c| {
+            c.position.x >= lo.x - 1.0
+                && c.position.x <= hi.x + 1.0
+                && c.position.y >= lo.y - 1.0
+                && c.position.y <= hi.y + 1.0
+        })
+        .filter_map(|c| {
+            let t = model.member_type(c.member_type)?;
+            let (cos, sin) = (c.rotation.cos(), c.rotation.sin());
+            let outline: Vec<Point2> = t
+                .profile
+                .outline(16)
+                .into_iter()
+                .map(|q| {
+                    Point2::new(
+                        c.position.x + q.x * cos - q.y * sin,
+                        c.position.y + q.x * sin + q.y * cos,
+                    )
+                })
+                .collect();
+            Some((WallId(COLUMN_BOUND | c.id.0), outline))
+        })
+        .collect()
+}
 
 /// The outlines of the curtain walls of a level within a box, as walls
 /// that bound rooms.
@@ -902,5 +1017,48 @@ mod tests {
         let room = room_outline(&m, lvl, Point2::new(8.0, 4.0), Contour::InteriorFace).unwrap();
         let xmax = room.iter().map(|p| p.x).fold(f64::MIN, f64::max);
         assert!((xmax - 11.65).abs() < 1e-6, "{room:?}");
+    }
+
+    #[test]
+    fn small_gaps_between_walls_and_columns_close_rooms() {
+        // A 6 × 4 m room of four separate walls, the north one stopping
+        // 10 cm short of the east one, as walls drawn in another program at
+        // the joint of two boxes.
+        let mut m = Model::new("Caja");
+        let lvl = m.add_level("PB", 0.0);
+        let mat = m.add_material("Placa", "plaster", [230; 3], CutPattern::Solid);
+        let wt = m
+            .add_wall_type(
+                "Muro",
+                WallFunction::Exterior,
+                vec![Layer {
+                    material: mat,
+                    thickness: 0.2,
+                    function: LayerFunction::Structure,
+                }],
+            )
+            .unwrap();
+        let mut wall = |a: Point2, b: Point2| {
+            m.add_wall(NewWall {
+                wall_type: wt,
+                level: lvl,
+                start: a,
+                end: b,
+                reference: ReferenceLine::Center,
+                height: 3.0,
+                base_offset: 0.0,
+                bulge: 0.0,
+                top: archisim_core::WallTop::Unconnected,
+            })
+            .unwrap();
+        };
+        let p = Point2::new;
+        wall(p(-0.1, 0.0), p(6.1, 0.0));
+        wall(p(6.0, 0.0), p(6.0, 4.1));
+        wall(p(5.8, 4.0), p(-0.1, 4.0));
+        wall(p(0.0, 4.0), p(0.0, 0.0));
+        let r = room_outline(&m, lvl, p(3.0, 2.0), Contour::InteriorFace).unwrap();
+        let area = crate::signed_area(&r).abs();
+        assert!((area - 5.8 * 3.8).abs() < 0.1, "{area}");
     }
 }

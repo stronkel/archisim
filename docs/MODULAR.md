@@ -132,7 +132,12 @@ Lo que falta para montar una vivienda con detalle de fabricación y trabajar có
 - **Con el L-160 y el catálogo SFsystem** (SFC/SFU): las fachadas de 197 mm y el tabique de 150 toman SFC100 1,2 y SFU100 1,2. Los tabiques de placa de 100 mm (lana de 50) no tienen perfil en ese catálogo: son de otro sistema (montantes de 48) y quedan sin entramado.
 - **Queda para Antonio**: la serie SFM del catálogo (no dice si es C o U y repite cantos), el perfil de los tabiques interiores y confirmar el espesor (1,2 o 1,5) que da el cálculo.
 
-**M12 · La caja tipo real del L-160**, sobre su IFC importado y la plantilla: las 8 cajas dibujadas, la primera aprobada en «Cajas tipo». Necesita el plano de usos de Antonio.
+**M12 · Las cajas de una vivienda importada.** Hecho (10/11/2026; sin cambios de formato).
+- **Cajas sobre los suelos**: en la herramienta Caja, «Poner N cajas sobre los suelos» (o `archisim cajas-sobre`). Una caja sobre cada suelo del tamaño de una caja (cerrado por muros: una terraza no), llevada al módulo de 6,10 × 3,60 si cabe sin pisar a la vecina. Sus lados se leen de los muros de las juntas: del muro (con el muro a su lado de la junta), abierto o libre.
+- **Cajas tipo** de cada caja con `--tipos <carpeta> --prefijo L160`, en diseño, para revisarlas y aprobarlas.
+- **Locales desde una lista** (`archisim locales`, nombre; uso; x; y): cada uno se cierra con los muros alrededor de su punto. Los puntos que caen en el mismo espacio (sin muros entre ellos) se dicen y no se repiten.
+- **Locales con lo que dibujan otros programas**: los pilares cierran locales (como en Revit) y los huecos de hasta 15 cm entre muros se puentean al buscar el local.
+- **Con el L-160**: 8 cajas de 6,10 × 3,60, con el salón, el comedor y la cocina abiertos entre cajas. 10 locales, con 160,26 m² útiles: los del nombre del modelo. Avisos que salen del modelo de Revit: en cuatro juntas hay tabique en las dos cajas (dos placas de pladur una junto a otra); debe llevarlo solo una.
 
 **M13 · La junta completa y las uniones**: banda de lana, banda de impermeabilización, membrana y cinta en fachada, tapajuntas; placas de unión entre cajas, orejetas, pernos, tornillos por montante y soldaduras, en 3D, IFC y mediciones.
 
@@ -290,7 +295,7 @@ Lo que cambia respecto a §5:
 
 ## 6. Pendiente de Antonio
 
-- Orden aprobado (9/11/2026): M4 (hecho) → M7 techos (hecho) → M1 caja (hecha) → M8 catálogo (hecho; falta la primera caja tipo real del L-160) → M2 juntas y M3 chasis (hechos) → M9 taller (hecho) → M10 obra previa (hecha, 10/11/2026) → M11 plantilla y perfiles (hecha). Lo siguiente, en §3 ter: M12 a M17, M5 y M6.
+- Orden aprobado (9/11/2026): M4 (hecho) → M7 techos (hecho) → M1 caja (hecha) → M8 catálogo (hecho; falta la primera caja tipo real del L-160) → M2 juntas y M3 chasis (hechos) → M9 taller (hecho) → M10 obra previa (hecha, 10/11/2026) → M11 plantilla y perfiles (hecha) → M12 cajas de una vivienda importada (hecha). Lo siguiente, en §3 ter: M13 a M17, M5 y M6.
 - Exportar desde Revit el modelo de estructura vinculado como IFC aparte, para partir de él en el chasis de la caja tipo.
 - Catálogo de perfiles del fabricante como fichero (`.csv`, §3 ter de ENTRAMADOS).
 - Propuesta de §5 aprobada (9/11/2026).

@@ -11399,3 +11399,82 @@ fn a_new_project_from_a_template() {
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// A house drawn without boxes: the box tool puts one over each floor of a
+/// box's size, in one step that undoes.
+#[test]
+fn boxes_over_the_floors_of_a_house_drawn_without_them() {
+    let mut m = archisim_core::Model::new("Importada");
+    let lv = m.add_level("PB", 0.0);
+    let mat = m.add_material("Madera", "wood", [180; 3], archisim_core::CutPattern::Solid);
+    let layer = |t| archisim_core::Layer {
+        material: mat,
+        thickness: t,
+        function: archisim_core::LayerFunction::Structure,
+    };
+    let st = m
+        .add_slab_type(
+            "Suelo",
+            archisim_core::SlabFunction::Floor,
+            vec![layer(0.02)],
+        )
+        .unwrap();
+    let wt = m
+        .add_wall_type(
+            "Fachada",
+            archisim_core::WallFunction::Exterior,
+            vec![layer(0.2)],
+        )
+        .unwrap();
+    let p = |x: f64, y: f64| archisim_core::Point2::new(x, y);
+    for i in 0..2 {
+        let x = i as f64 * 3.6;
+        m.add_slab(archisim_core::NewSlab {
+            slab_type: st,
+            level: lv,
+            outline: vec![p(x, 0.0), p(x + 3.6, 0.0), p(x + 3.6, 6.1), p(x, 6.1)],
+            top_offset: 0.0,
+        })
+        .unwrap();
+    }
+    for (a, b) in [
+        ((-0.1, -0.1), (7.3, -0.1)),
+        ((7.3, -0.1), (7.3, 6.2)),
+        ((7.3, 6.2), (-0.1, 6.2)),
+        ((-0.1, 6.2), (-0.1, -0.1)),
+    ] {
+        m.add_wall(archisim_core::NewWall {
+            wall_type: wt,
+            level: lv,
+            start: p(a.0, a.1),
+            end: p(b.0, b.1),
+            bulge: 0.0,
+            reference: archisim_core::ReferenceLine::Center,
+            height: 3.0,
+            base_offset: 0.0,
+            top: archisim_core::WallTop::Unconnected,
+        })
+        .unwrap();
+    }
+    let mut h = Harness::new(Editor::with_model(m, None));
+    assert_eq!(h.model().box_floor_slabs().len(), 2);
+    let ctx = egui::Context::default();
+    let mut o = ctx.run_ui(Default::default(), |ui| h.app.box_tool_properties(ui));
+    o.textures_delta.clear();
+    // What the button does.
+    let floors = h.model().box_floor_slabs();
+    h.app
+        .ed
+        .transact("Cajas sobre los suelos", |m| {
+            let ids = m.boxes_on_floors(&floors, Some((6.10, 3.60)))?;
+            m.box_sides_from_walls(&ids)
+        })
+        .unwrap();
+    assert_eq!(h.model().boxes().count(), 2);
+    assert!(
+        h.model().box_floor_slabs().is_empty(),
+        "no floor left without its box"
+    );
+    h.app.ed.undo();
+    assert_eq!(h.model().boxes().count(), 0);
+}

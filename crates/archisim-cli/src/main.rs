@@ -13,6 +13,7 @@
 
 mod armado;
 mod cajas;
+mod cajas_sobre;
 mod calles;
 mod cartografia;
 mod catalogo;
@@ -33,6 +34,7 @@ mod formas;
 mod gama;
 mod grande;
 mod instalaciones;
+mod locales;
 mod modelos;
 mod muestrario;
 mod muros_talud;
@@ -188,6 +190,16 @@ Uso:
       (lo que lleva cada caja y sus avisos, su peso e izado, el plan de
       grúa y el despiece) y los planos de taller (cajas-taller.pdf).
       Por defecto: ./out
+  archisim cajas-sobre <proyecto> <salida.archisim> [--modulo 6.10x3.60] [--tipos <carpeta> [--prefijo L160]]
+      Las cajas de una vivienda modular dibujada en otro programa e
+      importada: una caja sobre cada suelo del tamaño de una caja (llevado
+      al módulo si cabe), con sus lados leídos de los muros de las juntas
+      (del muro, abierto o libre). Con --tipos, una caja tipo por caja en
+      esa carpeta (<prefijo>-01, -02…), en diseño.
+  archisim locales <proyecto> <locales.csv> <salida.archisim>
+      Los locales de un proyecto desde una lista (nombre; uso; x; y, en
+      metros): cada uno se cierra con los muros alrededor de su punto,
+      como la herramienta Local. Para una vivienda importada sin locales.
   archisim taller-cajas <proyecto> [carpeta]
       Los planos de taller de las cajas modulares de un proyecto, A3:
       montaje y plan de grúa (M-00) y una hoja por caja con su chasis en
@@ -679,6 +691,57 @@ fn main() -> ExitCode {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
             report(cajas::write(&dir))
         }
+        Some("cajas-sobre") => {
+            let flag = |name: &str| {
+                args.iter()
+                    .position(|a| a == name)
+                    .and_then(|i| args.get(i + 1))
+            };
+            let module = flag("--modulo")
+                .and_then(|m| {
+                    let (a, b) = m
+                        .replace(',', ".")
+                        .split_once(['x', '×'])
+                        .map(|(a, b)| (a.to_string(), b.to_string()))?;
+                    Some((a.trim().parse().ok()?, b.trim().parse().ok()?))
+                })
+                .unwrap_or((6.10, 3.60));
+            let types = flag("--tipos").map(PathBuf::from);
+            let prefix = flag("--prefijo").cloned().unwrap_or_else(|| "CB".into());
+            match (args.get(1), args.get(2)) {
+                (Some(input), Some(output))
+                    if !input.starts_with("--") && !output.starts_with("--") =>
+                {
+                    report((|| {
+                        let text = cajas_sobre::run(
+                            Path::new(input),
+                            Path::new(output),
+                            module,
+                            types.as_deref().map(|d| (d, prefix.as_str())),
+                        )?;
+                        print!("{text}");
+                        Ok(())
+                    })())
+                }
+                _ => {
+                    eprintln!("Uso: archisim cajas-sobre <proyecto> <salida.archisim> [--modulo 6.10x3.60] [--tipos <carpeta> [--prefijo L160]]");
+                    ExitCode::FAILURE
+                }
+            }
+        }
+        Some("locales") => match (args.get(1), args.get(2), args.get(3)) {
+            (Some(p), Some(l), Some(o)) => report((|| {
+                print!(
+                    "{}",
+                    locales::run(Path::new(p), Path::new(l), Path::new(o))?
+                );
+                Ok(())
+            })()),
+            _ => {
+                eprintln!("Uso: archisim locales <proyecto> <locales.csv> <salida.archisim>");
+                ExitCode::FAILURE
+            }
+        },
         Some("plantilla") => {
             let flag = |name: &str| args.iter().position(|a| a == name);
             let catalogue = flag("--perfiles")

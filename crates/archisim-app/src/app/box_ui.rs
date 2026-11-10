@@ -196,7 +196,62 @@ impl ArchiSimApp {
             }
         });
         *self.box_settings() = s;
+        self.boxes_on_floors_group(ui);
         self.catalogue_group(ui);
+    }
+
+    /// A house drawn without boxes (imported from another program): one
+    /// box over each floor of a box's size, with its sides read from the
+    /// walls at the joints.
+    fn boxes_on_floors_group(&mut self, ui: &mut Ui) {
+        let floors = self.ed.model().box_floor_slabs();
+        let mut go = false;
+        group(ui, "tool-box-floors", "Cajas sobre lo dibujado", |ui| {
+            props::note(
+                ui,
+                "Para una vivienda importada (de Revit o ArchiCAD) sin cajas: una caja sobre cada suelo del tamaño de una caja, llevada al largo y ancho de arriba si cabe, con sus lados leídos de los muros de las juntas (del muro, abierto o libre).",
+            );
+            if floors.is_empty() {
+                props::note(ui, "No hay suelos del tamaño de una caja sin caja encima.");
+                return;
+            }
+            go = ui
+                .button(format!("Poner {} cajas sobre los suelos", floors.len()))
+                .clicked();
+        });
+        if go {
+            let module = (self.box_settings().length, self.box_settings().width);
+            let res = self.ed.transact("Cajas sobre los suelos", move |m| {
+                let ids = m.boxes_on_floors(&floors, Some(module))?;
+                m.box_sides_from_walls(&ids)?;
+                Ok(ids)
+            });
+            match res {
+                Ok(ids) => {
+                    let issues: usize = ids
+                        .iter()
+                        .map(|id| {
+                            self.ed
+                                .model()
+                                .box_issues(*id)
+                                .iter()
+                                .filter(|i| i.is_error())
+                                .count()
+                        })
+                        .sum();
+                    self.say(format!(
+                        "{} cajas puestas{}.",
+                        ids.len(),
+                        if issues == 0 {
+                            String::new()
+                        } else {
+                            format!(": {issues} avisos que mirar en sus propiedades")
+                        }
+                    ));
+                }
+                Err(e) => self.complain(format!("No se pueden poner las cajas: {e}.")),
+            }
+        }
     }
 
     pub(super) fn box_properties(&mut self, ui: &mut Ui, id: BoxId) {
