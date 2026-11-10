@@ -417,7 +417,7 @@ impl Model {
         // The slab, one per group of boxes.
         for outline in self.ground_box_outlines(options.margin) {
             made.slabs.push(self.add_slab(NewSlab {
-                slab_type: slab_type,
+                slab_type,
                 level,
                 outline,
                 top_offset: 0.0,
