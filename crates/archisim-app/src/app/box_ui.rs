@@ -36,6 +36,8 @@ pub struct BoxSettings {
     pub ceiling_height: f64,
     /// How the work on site under the boxes is made (M10).
     pub base: archisim_core::BaseOptions,
+    /// How a porch is made (M17).
+    pub porch: archisim_core::PorchOptions,
 }
 
 impl BoxSettings {
@@ -59,6 +61,7 @@ impl BoxSettings {
             ceiling_type: slab(SlabFunction::Ceiling),
             ceiling_height: 2.93,
             base: archisim_core::BaseOptions::default(),
+            porch: archisim_core::PorchOptions::default(),
         }
     }
 
@@ -326,6 +329,7 @@ impl ArchiSimApp {
         self.lift_group(ui, id);
         self.crane_group(ui, id);
         self.base_group(ui, id);
+        self.porch_group(ui, id);
         let model = self.ed.model();
         let held = model.box_members(id);
         group(ui, "box-held", "Lo que lleva", |ui| {
@@ -596,6 +600,70 @@ impl ArchiSimApp {
 
     /// The work on site under the boxes (M10): its sizes, and the button
     /// that makes (or makes again) the slab, the supports and the plinth.
+    /// The porch of a box as a light steel module (M17).
+    fn porch_group(&mut self, ui: &mut Ui, id: BoxId) {
+        let mut o = self.box_settings().porch.clone();
+        let mut build = false;
+        group(ui, "box-porch", "Porche", |ui| {
+            props::note(
+                ui,
+                "Un módulo ligero de acero en un lado de la caja: pilares de tubo, vigas alrededor y cubierta de chapa a la altura del techo de la caja.",
+            );
+            row(ui, "Lado", "", |ui, w| {
+                egui::ComboBox::from_id_salt(("box-porch-side", id))
+                    .width(w - 8.0)
+                    .selected_text(archisim_core::SIDE_NAMES[o.side.min(3)])
+                    .show_ui(ui, |ui| {
+                        for (i, n) in archisim_core::SIDE_NAMES.iter().enumerate() {
+                            ui.selectable_value(&mut o.side, i, *n);
+                        }
+                    });
+            });
+            row(ui, "Fondo (mm)", "Lo que sale de la caja", |ui, w| {
+                if let Some(x) =
+                    length_field(ui, Id::unique(("box-porch", "depth")), o.depth, w - 8.0)
+                {
+                    o.depth = x;
+                }
+            });
+            row(ui, "Pilar (mm)", "Tubo cuadrado", |ui, w| {
+                if let Some(x) =
+                    length_field(ui, Id::unique(("box-porch", "post")), o.post, w - 8.0)
+                {
+                    o.post = x;
+                }
+            });
+            row(ui, "Viga (mm)", "Canto del tubo", |ui, w| {
+                if let Some(x) =
+                    length_field(ui, Id::unique(("box-porch", "beam")), o.beam_depth, w - 8.0)
+                {
+                    o.beam_depth = x;
+                }
+            });
+            build = ui.button("Hacer el porche").clicked();
+        });
+        if o != self.box_settings().porch {
+            self.box_settings().porch = o.clone();
+        }
+        if build {
+            let res = self.ed.transact("Porche", move |m| m.build_porch(id, &o));
+            match res {
+                Ok(made) => self.say(format!(
+                    "Porche: {} pilares, {} vigas y cubierta; {:.0} kg de acero{}.",
+                    made.posts.len(),
+                    made.beams.len(),
+                    made.steel,
+                    if made.replaced > 0 {
+                        ", en lugar del anterior"
+                    } else {
+                        ""
+                    }
+                )),
+                Err(e) => self.complain(format!("No se pudo hacer el porche: {e}.")),
+            }
+        }
+    }
+
     fn base_group(&mut self, ui: &mut Ui, id: BoxId) {
         let model = self.ed.model();
         let supports = model.box_supports();

@@ -6,6 +6,14 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-10 (151) · M17: el porche como módulo ligero de acero
+
+Rama `bloque/porche` (sobre la de M6, M15 y M16), con pull request. Sin cambios de formato.
+
+- **Qué se hizo.** En las propiedades de una caja, «Porche»: elige el lado y el fondo y hace pilares de tubo, vigas alrededor (las vueltas atadas al marco de techo de la caja) y la cubierta de chapa a esa altura, con tipos propios, y dice el peso de acero del bastidor. Se puede rehacer en el mismo sitio. `archisim cajas` pone uno en el ejemplo.
+- **Pendiente.** Placas de anclaje y apoyos del porche en la obra previa; la barandilla o las lamas si las lleva.
+- **Qué debe probar Antonio.** `archisim cajas out/` y abre `out/cajas.archisim`: en 3D, el porche de 2,40 m en una caja de la planta baja. Selecciona otra caja, Propiedades → «Porche», elige el lado y el fondo y pulsa «Hacer el porche». Mira el `out/cajas.ifc` en su visor (pilares, vigas y la cubierta).
+
 ## 2026-11-10 (150) · M6, M15 y M16: instalaciones en el entramado, reglas del sistema, elecciones por cliente y fábrica
 
 Rama `bloque/reglas-fabrica` (sobre la de M14), con pull request. Sin cambios de formato.

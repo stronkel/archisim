@@ -230,6 +230,26 @@ pub fn build() -> Res<Model> {
     // The work on site before the boxes come (M10): slab, supports and
     // plinth, on their level under the boxes.
     m.build_box_base(&archisim_core::BaseOptions::default())?;
+    // A porch on the first free long side of a box on the ground (M17).
+    let spot = m.ground_boxes().into_iter().find_map(|b| {
+        [0usize, 2]
+            .into_iter()
+            .find(|s| {
+                b.sides[*s] == archisim_core::SideState::Free
+                    && m.box_contacts(b.id).iter().all(|k| k.side != *s)
+            })
+            .map(|s| (b.id, s))
+    });
+    if let Some((b, side)) = spot {
+        m.build_porch(
+            b,
+            &archisim_core::PorchOptions {
+                side,
+                depth: 2.4,
+                ..Default::default()
+            },
+        )?;
+    }
     Ok(m)
 }
 

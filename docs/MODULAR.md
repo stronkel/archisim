@@ -169,7 +169,7 @@ Lo que falta para montar una vivienda con detalle de fabricación y trabajar có
 - **Pedido por caja**: un CSV por caja con su lista de compra (M14), más las uniones de instalaciones y los pasamuros de M6.
 - **Perfiladora**: un CSV abierto, una línea por pieza: marca, caja, panel, elemento, perfil, largo en mm y operaciones en mm desde el inicio (tornillos donde se cruzan montante y canal, cortes de labio en los extremos de los canales, agujeros de instalaciones). El programa de la máquina que se compre lo traducirá a su formato; cuando se sepa cuál, se escribe directamente.
 
-**M17 · El porche** como módulo ligero de acero.
+**M17 · El porche como módulo ligero de acero.** Hecho (10/11/2026; sin cambios de formato). Propiedades de una caja → «Porche» (`Model::build_porch` con `PorchOptions`): en el lado elegido, pilares de tubo cuadrado 100 × 100 × 4 en las esquinas de fuera y cada 3,60 m como mucho, vigas de tubo 160 × 80 × 5 por el frente y las dos vueltas hasta el marco de techo de la caja, y cubierta de chapa de 50 mm a la altura de ese marco. Son pilares, vigas y una cubierta de tipos propios («Pilar de porche…», «Viga de porche…», «Cubierta de porche…»): salen en planta, 3D, IFC, mediciones y cálculo como los demás. Volver a hacerlo en el mismo sitio quita el anterior. Dice su peso de acero (se fabrica como un bastidor y se iza con la caja). `archisim cajas` pone uno de 2,40 m en el primer lado largo libre de una caja sobre el terreno. Pendiente: sus placas de anclaje y que la obra previa le ponga apoyos.
 
 ## 3 bis. Cómo se organiza: componentes, cajas tipo y vivienda (9/11/2026)
 
@@ -315,7 +315,7 @@ Lo que cambia respecto a §5:
 
 ## 6. Pendiente de Antonio
 
-- Orden aprobado (9/11/2026): M4 (hecho) → M7 techos (hecho) → M1 caja (hecha) → M8 catálogo (hecho; falta la primera caja tipo real del L-160) → M2 juntas y M3 chasis (hechos) → M9 taller (hecho) → M10 obra previa (hecha, 10/11/2026) → M11 plantilla y perfiles (hecha) → M12 cajas de una vivienda importada (hecha) → M13 juntas y uniones (hecha) → M14 tableros por piezas y lista de compra (hecha) → M5 montantes en el HE 1 (hecho). → M6 instalaciones, M15 reglas y elecciones, M16 fábrica (hechos). Lo siguiente, en §3 ter: M17.
+- Orden aprobado (9/11/2026): M4 (hecho) → M7 techos (hecho) → M1 caja (hecha) → M8 catálogo (hecho; falta la primera caja tipo real del L-160) → M2 juntas y M3 chasis (hechos) → M9 taller (hecho) → M10 obra previa (hecha, 10/11/2026) → M11 plantilla y perfiles (hecha) → M12 cajas de una vivienda importada (hecha) → M13 juntas y uniones (hecha) → M14 tableros por piezas y lista de compra (hecha) → M5 montantes en el HE 1 (hecho). → M6 instalaciones, M15 reglas y elecciones, M16 fábrica (hechos). → M17 porche (hecho). §3 ter completo; queda lo que diga Antonio al probarlo.
 - Exportar desde Revit el modelo de estructura vinculado como IFC aparte, para partir de él en el chasis de la caja tipo.
 - Catálogo de perfiles del fabricante como fichero (`.csv`, §3 ter de ENTRAMADOS).
 - Propuesta de §5 aprobada (9/11/2026).
