@@ -6,6 +6,33 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-10 (145) · M10: obra previa desde las cajas
+
+Rama `bloque/obra-previa`, con pull request. Sin cambios de formato ni de IFC (son losas, pilares y muros de siempre). `docs/MODULAR.md` (M10).
+
+**Qué hace.**
+- **Apoyos de las cajas**, calculados desde las cajas que están sobre el terreno:
+  - uno bajo cada esquina y otro en el medio de cada lado largo, en la línea de los pilares del chasis;
+  - los de cajas juntas son uno solo, de 40 × 40, con su placa para todas (400 × 250, o 400 × 400 si son tres o cuatro);
+  - numerados A1, A2… por filas.
+- **Qué carga cada uno**: el peso de la caja terminada y de las que tiene encima, más el uso. Se comprueba el pilar y la presión en el terreno (con la losa y el zócalo) contra la tensión admisible de los datos de Estructura. Sale en el informe de las cajas («APOYOS (OBRA PREVIA)»).
+- **Hacer la obra previa**: en Propiedades de cualquier caja, grupo «Obra previa», con sus medidas (alto de los apoyos 60 cm, pilar 25 o 40, losa de 45 cm con 30 cm de vuelo, zócalo de bloque de 20 cm), y el botón «Hacer la obra previa».
+  - Lo hace en una planta nueva bajo las cajas, «Cimentación de las cajas», cuya planta se corta a 30 cm (por una plantilla suya) para ver los pilares y el zócalo.
+  - La losa sigue el contorno de las cajas (en L en el ejemplo); el zócalo va a haces con las fachadas.
+  - Volver a hacerla quita la anterior. Es un paso de Deshacer.
+- **Replanteo**: última hoja de los planos de taller, con los apoyos en planta medidos desde la esquina de las cajas por sus ejes y la tabla de cada uno (X, Y, cota de la placa, pilar, placa, carga y cajas).
+
+**En el ejemplo** (`archisim cajas`): 27 apoyos para las 8 cajas del suelo, todos cumplen; el terreno, a unos 20 kN/m² de 200.
+
+**Pendiente.** Rejillas de ventilación en el zócalo, los pernos como piezas del IFC y el armado de la losa (se puede dibujar ya con Armado).
+
+**Qué debe probar Antonio.**
+1. `cargo run -p archisim-cli -- cajas out/cajas` y abre la última hoja de `out/cajas/cajas-taller.pdf` (M-11, replanteo) y `out/cajas/cajas-cimentacion.svg`.
+2. Abre `out/cajas/cajas.archisim`, selecciona una caja de la planta baja y en «Obra previa» cambia el alto de los apoyos o el canto de la losa y pulsa «Volver a hacer la obra previa»: mira la planta «Cimentación de las cajas» y el 3D.
+3. Con una vivienda tuya de cajas: el mismo botón, y Archivo → Exportar → Planos de taller de las cajas.
+
+---
+
 ## 2026-11-10 (144) · v0.80: todo lo pendiente unido a `main` (formato 107)
 
 Unidos a `main` los catorce pull requests que quedaban abiertos:

@@ -115,7 +115,12 @@
 - **Estado de cada caja**: en diseño, aprobada, en fábrica (con su puesto), en camión, montada, con la fecha. Sale en planta bajo la marca, con su color, y en el IFC (`ArchiSim_Box`: Stage, Station, StageDate).
 - **Plan de grúa**: dónde está la grúa (o se propone en el centro de las cajas), su tabla de cargas (por ahora una orientativa de grúa móvil de 50 t; hay que poner la de la grúa que se contrate) y el peso del aparejo. Para cada caja, el radio, la carga y si la grúa la levanta allí.
 
-**M10 · Obra previa desde las cajas.** Los apoyos se colocan solos en las esquinas y en los medios de cada caja, y salen la losa, los pilares y los pernos con sus cotas.
+**M10 · Obra previa desde las cajas.** Hecho (10/11/2026; sin cambios de formato). Desde las cajas que están sobre el terreno:
+- **Apoyos**: uno bajo cada esquina y otro en el medio de cada lado largo, en la línea de los pilares del chasis (medio tubo hacia dentro). Los de cajas juntas (a menos de 35 cm) son uno solo, más grande, con su placa para las dos, tres o cuatro cajas. Se numeran A1, A2… por filas.
+- **Qué carga cada apoyo**: el peso de la caja terminada y de las que tiene encima, más el uso (2 kN/m²); una esquina se lleva 3/32 y un medio 5/16 (cada lado largo, como viga continua de dos vanos). Se comprueba el pilar de hormigón y, con la losa y el zócalo, la presión en el terreno contra la tensión admisible de los datos de Estructura.
+- **Hacerla** (Propiedades de una caja → «Obra previa»): en una planta nueva bajo las cajas, «Cimentación de las cajas», con su cara superior en la base del chasis menos el alto de los apoyos (60 cm por defecto). Lleva la losa (45 cm, 30 cm de vuelo por fuera de las cajas, una por grupo de cajas que se tocan, con su contorno en L o como sea), un pilar por apoyo (25 × 25, o 40 × 40 si es de varias cajas) y el zócalo de bloque de 20 cm a haces con las fachadas. Volver a hacerla quita la anterior. Son losas, pilares y muros normales: salen en planta (cortada a 30 cm por su plantilla), en 3D, en el IFC, en las mediciones y en el cálculo.
+- **Replanteo**: la última hoja de los planos de taller, con los apoyos en planta medidos desde la esquina de las cajas por sus ejes, y su tabla (X, Y, cota de la placa, pilar, placa, pernos, carga mayorada y cajas).
+- **Queda**: las rejillas de ventilación del zócalo (el forjado sanitario es ventilado), los pernos como piezas del IFC y el armado de la losa (ya se puede dibujar y comprobar con Armado).
 
 ## 3 bis. Cómo se organiza: componentes, cajas tipo y vivienda (9/11/2026)
 
@@ -261,7 +266,7 @@ Lo que cambia respecto a §5:
 
 ## 6. Pendiente de Antonio
 
-- Orden aprobado (9/11/2026): M4 (hecho) → M7 techos (hecho) → M1 caja (hecha) → M8 catálogo (hecho; falta la primera caja tipo real del L-160) → M2 juntas y M3 chasis (hechos) → M9 taller (hecho). M5, M6 y M10 cuando toquen.
+- Orden aprobado (9/11/2026): M4 (hecho) → M7 techos (hecho) → M1 caja (hecha) → M8 catálogo (hecho; falta la primera caja tipo real del L-160) → M2 juntas y M3 chasis (hechos) → M9 taller (hecho) → M10 obra previa (hecha, 10/11/2026). Quedan M5 y M6.
 - Exportar desde Revit el modelo de estructura vinculado como IFC aparte, para partir de él en el chasis de la caja tipo.
 - Catálogo de perfiles del fabricante como fichero (`.csv`, §3 ter de ENTRAMADOS).
 - Propuesta de §5 aprobada (9/11/2026).

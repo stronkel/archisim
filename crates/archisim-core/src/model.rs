@@ -15,6 +15,7 @@ use crate::ids::*;
 use crate::math::{is_simple_polygon, signed_area, Arc, Point2, Vec2, EPSILON, MIN_BULGE};
 
 mod appearance;
+mod box_base;
 mod boxes;
 mod built_in;
 mod catalogue;
@@ -79,6 +80,7 @@ mod wall_section;
 mod water;
 mod worktops;
 pub use appearance::*;
+pub use box_base::*;
 pub use boxes::*;
 pub use catalogue::*;
 pub use ceilings::*;

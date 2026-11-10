@@ -34,6 +34,8 @@ pub struct BoxSettings {
     pub roof_type: Option<SlabTypeId>,
     pub ceiling_type: Option<SlabTypeId>,
     pub ceiling_height: f64,
+    /// How the work on site under the boxes is made (M10).
+    pub base: archisim_core::BaseOptions,
 }
 
 impl BoxSettings {
@@ -56,6 +58,7 @@ impl BoxSettings {
             roof_type: slab(SlabFunction::Roof),
             ceiling_type: slab(SlabFunction::Ceiling),
             ceiling_height: 2.93,
+            base: archisim_core::BaseOptions::default(),
         }
     }
 
@@ -264,6 +267,7 @@ impl ArchiSimApp {
         chassis_group(ui, id, &mut n.chassis);
         self.lift_group(ui, id);
         self.crane_group(ui, id);
+        self.base_group(ui, id);
         let model = self.ed.model();
         let held = model.box_members(id);
         group(ui, "box-held", "Lo que lleva", |ui| {
@@ -528,6 +532,141 @@ impl ArchiSimApp {
                 .transact("Plan de grúa", move |m| m.set_modular_site(site));
             if let Err(e) = res {
                 self.complain(format!("No se puede cambiar la grúa: {e}."));
+            }
+        }
+    }
+
+    /// The work on site under the boxes (M10): its sizes, and the button
+    /// that makes (or makes again) the slab, the supports and the plinth.
+    fn base_group(&mut self, ui: &mut Ui, id: BoxId) {
+        let model = self.ed.model();
+        let supports = model.box_supports();
+        let built = model
+            .levels()
+            .into_iter()
+            .find(|l| l.name == archisim_core::BASE_LEVEL)
+            .map(|l| l.id);
+        let check = archisim_struct::boxes::base_check(model);
+        let mine: Vec<String> = check
+            .as_ref()
+            .map(|c| {
+                c.supports
+                    .iter()
+                    .filter(|s| s.boxes.contains(&id))
+                    .map(|s| format!("{}{}", s.mark, if s.passes() { "" } else { " ✗" }))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let n = |v: f64, d: usize| format!("{v:.d$}").replace('.', ",");
+        let mut o = self.box_settings().base.clone();
+        let mut build = false;
+        group(ui, "box-base", "Obra previa", |ui| {
+            if supports.is_empty() {
+                props::note(ui, "Solo las cajas sobre el terreno llevan apoyos.");
+                return;
+            }
+            text_row(
+                ui,
+                "Apoyos",
+                "Bajo las esquinas y el medio de los lados largos; los de cajas juntas, uno",
+                &format!("{} en total", supports.len()),
+            );
+            if !mine.is_empty() {
+                text_row(ui, "Bajo esta", "Sus apoyos", &mine.join(", "));
+            }
+            if let Some(c) = &check {
+                text_row(
+                    ui,
+                    "Terreno",
+                    "Presión bajo la losa y lo que admite (Estructura → Datos del sitio)",
+                    &format!(
+                        "{} de {} kN/m²{}",
+                        n(c.pressure, 1),
+                        n(c.bearing, 0),
+                        if c.ground_passes() { "" } else { " ✗" }
+                    ),
+                );
+            }
+            let field = |ui: &mut Ui, key: &str, label: &str, hint: &str, v: &mut f64| {
+                row(ui, label, hint, |ui, w| {
+                    if let Some(x) = length_field(ui, Id::unique(("box-base", key)), *v, w - 8.0) {
+                        *v = x;
+                    }
+                });
+            };
+            field(
+                ui,
+                "pier-h",
+                "Alto de los apoyos (mm)",
+                "De la losa a la base del chasis",
+                &mut o.pier_height,
+            );
+            field(
+                ui,
+                "pier",
+                "Pilar (mm)",
+                "Lado del pilar bajo una caja",
+                &mut o.pier,
+            );
+            field(
+                ui,
+                "shared",
+                "Pilar compartido (mm)",
+                "Bajo dos cajas o más",
+                &mut o.shared_pier,
+            );
+            field(ui, "slab", "Canto de la losa (mm)", "", &mut o.slab);
+            field(
+                ui,
+                "margin",
+                "Vuelo de la losa (mm)",
+                "Lo que sale por fuera de las cajas",
+                &mut o.margin,
+            );
+            ui.switch(&mut o.plinth, "Zócalo de bloque");
+            if o.plinth {
+                field(
+                    ui,
+                    "plinth",
+                    "Zócalo (mm)",
+                    "Grueso, a haces con las cajas",
+                    &mut o.plinth_thickness,
+                );
+            }
+            props::note(
+                ui,
+                if built.is_some() {
+                    "Ya hecha en la planta «Cimentación de las cajas». Volver a hacerla quita la anterior."
+                } else {
+                    "Se hace en una planta nueva bajo las cajas, «Cimentación de las cajas»."
+                },
+            );
+            build = ui
+                .button(if built.is_some() {
+                    "Volver a hacer la obra previa"
+                } else {
+                    "Hacer la obra previa"
+                })
+                .clicked();
+        });
+        if o != self.box_settings().base {
+            self.box_settings().base = o.clone();
+        }
+        if build {
+            let res = self
+                .ed
+                .transact("Obra previa", move |m| m.build_box_base(&o));
+            match res {
+                Ok(made) => self.say(format!(
+                    "Obra previa: losa, {} apoyos{}.",
+                    made.piers.len(),
+                    if made.plinth.is_empty() {
+                        String::new()
+                    } else {
+                        format!(" y {} tramos de zócalo", made.plinth.len())
+                    }
+                )),
+                Err(e) => self.complain(format!("No se puede hacer la obra previa: {e}.")),
             }
         }
     }
