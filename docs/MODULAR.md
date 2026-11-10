@@ -108,10 +108,12 @@
 - **En la vivienda.** Las cajas tipo se colocan desde la herramienta Caja. Cada copia se pega a la caja de al lado, toma la marca siguiente (MOD-nn) y lleva en su tipo el código y la revisión. Cuando una caja tipo cambia, las viviendas la actualizan como cualquier módulo.
 - **La primera caja tipo, del L-160:** la hace Antonio con su fichero (no se sube al repositorio). El ejemplo `archisim catalogo` trae tres inventadas con las medidas y la fachada del L-160.
 
-**M9 · Taller.**
-- Planos y despiece de cada caja: paneles en alzado, chasis, lista de corte y lista de materiales, por caja.
-- Estado de cada caja: diseñada, aprobada, en fábrica (en qué puesto), en camión, montada.
-- Orden de montaje en obra y plan de grúa.
+**M9 · Taller.** Hecho (10/11/2026, formato versión 100), salvo los paneles de entramado en alzado dentro de la hoja de cada caja (están en el despiece de entramados de siempre).
+- **Planos de taller**, un juego A3 por proyecto (`archisim taller-cajas`, o Archivo → Exportar → Planos de taller de las cajas):
+  - M-00, montaje: la planta con las cajas coloreadas por su estado, el orden de montaje, la grúa con los círculos de su tabla y la tabla de izados (carga, radio, lo que admite, uso);
+  - M-01…, una hoja por caja en el orden de montaje: chasis de suelo y de techo con peto en planta, los cuatro alzados del chasis a 1:60, despiece (lista de corte del chasis y totales del entramado), materiales (m² de muros, suelos, cubierta y techos; carpinterías) y peso e izado.
+- **Estado de cada caja**: en diseño, aprobada, en fábrica (con su puesto), en camión, montada, con la fecha. Sale en planta bajo la marca, con su color, y en el IFC (`ArchiSim_Box`: Stage, Station, StageDate).
+- **Plan de grúa**: dónde está la grúa (o se propone en el centro de las cajas), su tabla de cargas (por ahora una orientativa de grúa móvil de 50 t; hay que poner la de la grúa que se contrate) y el peso del aparejo. Para cada caja, el radio, la carga y si la grúa la levanta allí.
 
 **M10 · Obra previa desde las cajas.** Los apoyos se colocan solos en las esquinas y en los medios de cada caja, y salen la losa, los pilares y los pernos con sus cotas.
 
@@ -259,7 +261,7 @@ Lo que cambia respecto a §5:
 
 ## 6. Pendiente de Antonio
 
-- Orden aprobado (9/11/2026): M4 (hecho) → M7 techos (hecho) → M1 caja (hecha) → M8 catálogo (hecho; falta la primera caja tipo real del L-160) → M2 juntas y M3 chasis (hechos) → M9 taller. M5, M6 y M10 cuando toquen.
+- Orden aprobado (9/11/2026): M4 (hecho) → M7 techos (hecho) → M1 caja (hecha) → M8 catálogo (hecho; falta la primera caja tipo real del L-160) → M2 juntas y M3 chasis (hechos) → M9 taller (hecho). M5, M6 y M10 cuando toquen.
 - Exportar desde Revit el modelo de estructura vinculado como IFC aparte, para partir de él en el chasis de la caja tipo.
 - Catálogo de perfiles del fabricante como fichero (`.csv`, §3 ter de ENTRAMADOS).
 - Propuesta de §5 aprobada (9/11/2026).

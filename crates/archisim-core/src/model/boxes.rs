@@ -109,6 +109,8 @@ pub struct ModularBox {
     pub sides: [SideState; 4],
     /// Its steel chassis (M3): tubes, joists and how it is lifted.
     pub chassis: Chassis,
+    /// Where it is between the drawing board and the site (M9).
+    pub progress: BoxProgress,
 }
 
 /// Data needed to make a box.
@@ -125,6 +127,7 @@ pub struct NewBox {
     pub height: f64,
     pub sides: [SideState; 4],
     pub chassis: Chassis,
+    pub progress: BoxProgress,
 }
 
 impl NewBox {
@@ -142,7 +145,169 @@ impl NewBox {
             height: BOX_HEIGHT,
             sides: [SideState::Free; 4],
             chassis: Chassis::default(),
+            progress: BoxProgress::default(),
         }
+    }
+}
+
+/// Where a box is on its way from the drawing board to the site (M9).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+pub enum BoxStage {
+    /// Being drawn.
+    #[default]
+    Design,
+    /// Approved for the factory.
+    Approved,
+    /// Being made, at a station of the factory.
+    Factory,
+    /// Finished, on its way.
+    Transport,
+    /// On its supports on site.
+    Placed,
+}
+
+impl BoxStage {
+    pub const ALL: [BoxStage; 5] = [
+        BoxStage::Design,
+        BoxStage::Approved,
+        BoxStage::Factory,
+        BoxStage::Transport,
+        BoxStage::Placed,
+    ];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            BoxStage::Design => "En diseño",
+            BoxStage::Approved => "Aprobada para fábrica",
+            BoxStage::Factory => "En fábrica",
+            BoxStage::Transport => "En camión",
+            BoxStage::Placed => "Montada",
+        }
+    }
+
+    /// Short, for the plan's tag.
+    pub fn short(self) -> &'static str {
+        match self {
+            BoxStage::Design => "diseño",
+            BoxStage::Approved => "aprobada",
+            BoxStage::Factory => "fábrica",
+            BoxStage::Transport => "camión",
+            BoxStage::Placed => "montada",
+        }
+    }
+
+    pub fn code(self) -> &'static str {
+        match self {
+            BoxStage::Design => "design",
+            BoxStage::Approved => "approved",
+            BoxStage::Factory => "factory",
+            BoxStage::Transport => "transport",
+            BoxStage::Placed => "placed",
+        }
+    }
+
+    pub fn from_code(code: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|s| s.code() == code)
+    }
+
+    /// Its colour on the drawings.
+    pub fn rgb(self) -> [u8; 3] {
+        match self {
+            BoxStage::Design => [110, 110, 110],
+            BoxStage::Approved => [30, 90, 190],
+            BoxStage::Factory => [200, 110, 20],
+            BoxStage::Transport => [130, 60, 170],
+            BoxStage::Placed => [40, 140, 70],
+        }
+    }
+}
+
+/// A box's stage, the station of the factory it is at (when it is being
+/// made) and the date it got there, as written («2026-11-10»).
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct BoxProgress {
+    pub stage: BoxStage,
+    pub station: String,
+    pub date: String,
+}
+
+impl BoxProgress {
+    /// «En fábrica · puesto 3 · 2026-11-10».
+    pub fn label(&self) -> String {
+        let mut t = self.stage.label().to_string();
+        if self.stage == BoxStage::Factory && !self.station.trim().is_empty() {
+            t.push_str(&format!(" · {}", self.station.trim()));
+        }
+        if !self.date.trim().is_empty() {
+            t.push_str(&format!(" · {}", self.date.trim()));
+        }
+        t
+    }
+}
+
+/// A crane's capacity by its reach: tonnes at each radius (metres from
+/// its centre), radii growing. Between two rows it is interpolated;
+/// beyond the last, nothing.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CraneChart {
+    pub name: String,
+    pub rows: Vec<(f64, f64)>,
+}
+
+impl CraneChart {
+    /// An indicative chart of a 50 t mobile crane, outriggers out: a
+    /// starting point for the one of the crane that is hired.
+    pub fn usual() -> Self {
+        CraneChart {
+            name: "Grúa móvil de 50 t (tabla orientativa)".into(),
+            rows: vec![
+                (3.0, 50.0),
+                (5.0, 36.0),
+                (8.0, 24.0),
+                (10.0, 19.0),
+                (12.0, 15.5),
+                (15.0, 11.5),
+                (18.0, 9.0),
+                (20.0, 7.8),
+                (24.0, 6.0),
+                (28.0, 4.6),
+                (32.0, 3.6),
+                (36.0, 2.8),
+                (40.0, 2.2),
+            ],
+        }
+    }
+
+    /// What it lifts at `radius`, tonnes.
+    pub fn capacity(&self, radius: f64) -> f64 {
+        let Some(first) = self.rows.first() else {
+            return 0.0;
+        };
+        if radius <= first.0 {
+            return first.1;
+        }
+        for w in self.rows.windows(2) {
+            let ((r0, c0), (r1, c1)) = (w[0], w[1]);
+            if radius <= r1 {
+                let k = (radius - r0) / (r1 - r0).max(1e-9);
+                return c0 + (c1 - c0) * k;
+            }
+        }
+        0.0
+    }
+
+    /// Its farthest reach.
+    pub fn reach(&self) -> f64 {
+        self.rows.last().map_or(0.0, |r| r.0)
+    }
+
+    pub fn is_valid(&self) -> bool {
+        !self.rows.is_empty()
+            && self
+                .rows
+                .iter()
+                .all(|(r, c)| r.is_finite() && c.is_finite() && *r > 0.0 && *c >= 0.0)
+            && self.rows.windows(2).all(|w| w[1].0 > w[0].0)
     }
 }
 
@@ -498,7 +663,7 @@ impl BoxMembers {
 
 /// The limits a box must keep: those of the system (the factory and its
 /// chassis) and those of the road.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ModularSite {
     /// Longest box the system makes (9 m).
     pub max_length: f64,
@@ -510,6 +675,14 @@ pub struct ModularSite {
     pub road_height: f64,
     /// Height of the lorry's deck the box stands on (a low loader).
     pub deck_height: f64,
+    /// Where the crane stands on site (its centre of rotation), when it has
+    /// been placed (M9).
+    pub crane: Option<Point2>,
+    /// What it lifts by its reach.
+    pub crane_chart: CraneChart,
+    /// What hangs from the hook with the box: spreader beam, slings,
+    /// shackles, tonnes.
+    pub rigging: f64,
 }
 
 impl Default for ModularSite {
@@ -520,6 +693,9 @@ impl Default for ModularSite {
             road_width: 2.55,
             road_height: 4.0,
             deck_height: 0.40,
+            crane: None,
+            crane_chart: CraneChart::usual(),
+            rigging: 0.5,
         }
     }
 }
@@ -773,6 +949,7 @@ impl Model {
             height: spec.height,
             sides: spec.sides,
             chassis: spec.chassis,
+            progress: spec.progress.clone(),
         };
         self.check_box(&b)?;
         let id = BoxId(self.take_id());
@@ -819,7 +996,7 @@ impl Model {
     }
 
     pub fn modular_site(&self) -> ModularSite {
-        self.modular_site
+        self.modular_site.clone()
     }
 
     pub fn set_modular_site(&mut self, site: ModularSite) -> Result<(), ModelError> {
@@ -829,12 +1006,24 @@ impl Model {
             site.road_width,
             site.road_height,
             site.deck_height,
+            site.rigging,
         ] {
             if !(v.is_finite() && v >= 0.0) {
                 return Err(ModelError::InvalidShape(
                     "transport limits must be positive",
                 ));
             }
+        }
+        if !site.crane_chart.is_valid() {
+            return Err(ModelError::InvalidShape(
+                "a crane chart needs radii growing and capacities",
+            ));
+        }
+        if site
+            .crane
+            .is_some_and(|p| !(p.x.is_finite() && p.y.is_finite()))
+        {
+            return Err(ModelError::InvalidShape("the crane needs a real place"));
         }
         self.modular_site = site;
         Ok(())
@@ -1144,7 +1333,7 @@ impl Model {
         let Some(b) = self.boxes.get(&id) else {
             return Vec::new();
         };
-        let site = self.modular_site;
+        let site = &self.modular_site;
         let mut issues = Vec::new();
         let long = b.length.max(b.width);
         let wide = b.length.min(b.width);
@@ -1422,6 +1611,7 @@ pub fn snap_against<'a>(
         height: spec.height,
         sides: spec.sides,
         chassis: spec.chassis,
+        progress: spec.progress.clone(),
     };
     // Its corners from its origin.
     let rel = probe.corners();

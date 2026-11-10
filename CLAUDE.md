@@ -104,6 +104,11 @@ Si cambias la exportación IFC, la validación con IfcOpenShell debe pasar sin e
   - **Petos:** `BoxFill::parapet` (`BOX_PARAPET`: la cubierta queda así bajo la coronación; muros libres hasta arriba, los de la junta hasta la cubierta; sin peto bajo otra caja).
   - **Despiece por caja:** `archisim_geom::framing::members_by_box`.
   - **App:** grupos «Chasis» y «Peso e izado» en `app/box_ui`.
+- Taller de las cajas (M9, `docs/MODULAR.md`, formato versión 100):
+  - **Estado.** `ModularBox::progress` (`BoxProgress` con `BoxStage` —diseño, aprobada, fábrica, camión, montada, `rgb`—, puesto y fecha); en planta `box-stage` bajo la marca; IFC en `ArchiSim_Box` (Stage, Station, StageDate).
+  - **Grúa.** `ModularSite::crane`, `crane_chart` (`CraneChart`, `usual`, `capacity`) y `rigging`; `ModularSite` ya no es `Copy`. El cálculo en `archisim_struct::boxes::crane_plan` (`CranePlan`, `CraneLift`, `suggested_crane`), en el informe de cajas.
+  - **Planos de taller.** `archisim-plan::box_sheets::pages` (M-00 montaje y grúa, una hoja por caja en el orden de montaje: chasis en planta y alzados a 1:60, despiece, materiales, peso e izado), sobre los ayudantes de `structure_sheets`; `archisim taller-cajas <proyecto> [carpeta]`, y `cajas::workshop` en `archisim cajas`.
+  - **App.** Grupos «Fabricación» y «Plan de grúa» en `app/box_ui`; `export_box_drawings` (Archivo → Exportar).
 - Catálogo del sistema (M8, `docs/MODULAR.md`, formato versión 98): `archisim-core::model::catalogue`.
   - **La caja tipo.** Un proyecto con una caja y lo que lleva, con `Model::catalogue` (`CatalogueEntry`: código, nombre, revisión, `CatalogueStatus` en diseño o aprobada, fecha, notas y `CatalogueOption`, una puerta o ventana que cada vivienda puede cambiar). `approve_catalogue` sube la revisión y la cierra; `new_catalogue_revision` la abre; `is_frozen`. `Model::box_type_model` hace la caja tipo de una caja: la recorta y la lleva al origen colocándola como módulo en un proyecto vacío y aplanándolo.
   - **Las viviendas.** Se colocan como módulos. `ModulePlacement::choices` (opción → tipo) se aplica al aplanar (`instantiate`, que ahora copia también techos y cajas). Las cajas de las copias toman `MOD-nn` libres y su tipo de `CatalogueEntry::box_kind`. `module_box_snap` (con `placed_box` y `snap_against`) pega la copia a la caja de al lado.

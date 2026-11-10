@@ -89,6 +89,7 @@ pub fn box_at(model: &Model, level: archisim_core::LevelId, s: &BoxSettings, p: 
         height: s.height,
         sides: [SideState::Free; 4],
         chassis: archisim_core::Chassis::default(),
+        progress: archisim_core::BoxProgress::default(),
     };
     if let Some(at) = model.box_snap(&spec, BOX_REACH) {
         spec.origin = at;
@@ -259,8 +260,10 @@ impl ArchiSimApp {
                 }
             }
         });
+        progress_group(ui, id, &mut n.progress);
         chassis_group(ui, id, &mut n.chassis);
         self.lift_group(ui, id);
+        self.crane_group(ui, id);
         let model = self.ed.model();
         let held = model.box_members(id);
         group(ui, "box-held", "Lo que lleva", |ui| {
@@ -388,9 +391,9 @@ impl ArchiSimApp {
             );
             text_row(
                 ui,
-                "Flecha (mm)",
+                "Flecha",
                 "Colgada, sin mayorar; límite luz / 250",
-                &format!("{} de {}", n(c.deflection, 1), n(c.deflection_limit, 1)),
+                &format!("{} de {} mm", n(c.deflection, 1), n(c.deflection_limit, 1)),
             );
             if c.passes() {
                 props::note(ui, "· El chasis aguanta el izado.");
@@ -410,6 +413,122 @@ impl ArchiSimApp {
                     order.len()
                 ),
             );
+        }
+    }
+}
+
+/// Where a box is between the drawing board and the site (M9).
+fn progress_group(ui: &mut Ui, id: BoxId, p: &mut archisim_core::BoxProgress) {
+    group(ui, "box-progress", "Fabricación", |ui| {
+        row(ui, "Estado", "Dónde está la caja", |ui, w| {
+            ComboBox::from_id_salt(("box-stage", id))
+                .width(w - 8.0)
+                .selected_text(p.stage.label())
+                .show_ui(ui, |ui| {
+                    for st in archisim_core::BoxStage::ALL {
+                        ui.selectable_value(&mut p.stage, st, st.label());
+                    }
+                });
+        });
+        if p.stage == archisim_core::BoxStage::Factory {
+            row(ui, "Puesto", "En qué puesto de la fábrica", |ui, w| {
+                ui.add(egui::TextEdit::singleline(&mut p.station).desired_width(w - 8.0));
+            });
+        }
+        row(ui, "Fecha", "Desde cuándo está así", |ui, w| {
+            ui.horizontal(|ui| {
+                ui.add(egui::TextEdit::singleline(&mut p.date).desired_width(w - 60.0));
+                if ui.button("Hoy").clicked() {
+                    p.date = super::catalogue_ui::today();
+                }
+            });
+        });
+    });
+}
+
+impl ArchiSimApp {
+    /// The crane of the site and this box's lift.
+    fn crane_group(&mut self, ui: &mut Ui, id: BoxId) {
+        let model = self.ed.model();
+        let mut site = model.modular_site();
+        let plan = archisim_struct::boxes::crane_plan(model);
+        let n = |v: f64, d: usize| format!("{v:.d$}").replace('.', ",");
+        let before = site.clone();
+        group(ui, "box-crane", "Plan de grúa", |ui| {
+            props::note(ui, &site.crane_chart.name);
+            if let Some(p) = &plan {
+                if let Some(l) = p.lifts.iter().find(|l| l.id == id) {
+                    text_row(
+                        ui,
+                        "Esta caja",
+                        "Carga con el aparejo, radio desde la grúa y qué parte de lo que admite allí usa",
+                        &format!(
+                            "{} t a {} m · {} %",
+                            n(l.load, 1),
+                            n(l.radius, 1),
+                            (l.usage() * 100.0).min(999.0).round()
+                        ),
+                    );
+                    if !l.passes() {
+                        props::note(
+                            ui,
+                            "✗ La grúa no la levanta a esa distancia: acércala o elige una grúa mayor.",
+                        );
+                    }
+                }
+            }
+            match site.crane {
+                Some(mut c) => {
+                    row(ui, "Grúa X (mm)", "Centro de giro", |ui, w| {
+                        if let Some(x) = length_field(ui, Id::unique(("crane-x", id)), c.x, w - 8.0)
+                        {
+                            c.x = x;
+                        }
+                    });
+                    row(ui, "Grúa Y (mm)", "", |ui, w| {
+                        if let Some(y) = length_field(ui, Id::unique(("crane-y", id)), c.y, w - 8.0)
+                        {
+                            c.y = y;
+                        }
+                    });
+                    site.crane = Some(c);
+                    if ui.button("Quitar la grúa").clicked() {
+                        site.crane = None;
+                    }
+                }
+                None => {
+                    props::note(
+                        ui,
+                        "Sin grúa colocada: se calcula con ella en el centro de las cajas.",
+                    );
+                    if ui.button("Colocarla ahí").clicked() {
+                        site.crane = plan.as_ref().map(|p| p.at);
+                    }
+                }
+            }
+            row(
+                ui,
+                "Aparejo (t)",
+                "Balancín, eslingas y grilletes",
+                |ui, _| {
+                    ui.add(
+                        egui::DragValue::new(&mut site.rigging)
+                            .range(0.0..=10.0)
+                            .speed(0.05)
+                            .max_decimals(2)
+                            .custom_formatter(|v, _| format!("{v:.2}").replace('.', ","))
+                            .custom_parser(|t| t.replace(',', ".").trim().parse().ok()),
+                    );
+                },
+            );
+        });
+        if site != before {
+            let res = self
+                .ed
+                .transact("Plan de grúa", move |m| m.set_modular_site(site));
+            if let Err(e) = res {
+                self.complain(format!("No se puede cambiar la grúa: {e}."));
+            }
         }
     }
 }
@@ -601,5 +720,39 @@ fn fill_rows(ui: &mut Ui, model: &Model, key: &str, s: &mut BoxSettings) {
                 s.ceiling_height = x;
             }
         });
+    }
+}
+
+impl ArchiSimApp {
+    /// The workshop drawings of the boxes (M9), A3, to a PDF.
+    pub(super) fn export_box_drawings(&mut self) {
+        let model = self.ed.shown();
+        let pages = archisim_plan::box_sheets::pages(&model);
+        if pages.is_empty() {
+            self.complain("El proyecto no tiene cajas modulares.".to_string());
+            return;
+        }
+        let mut d = rfd::FileDialog::new()
+            .set_title("Planos de taller de las cajas (PDF)")
+            .add_filter("PDF", &["pdf"])
+            .set_file_name(format!("{}-taller.pdf", self.file_name_stem()));
+        if let Some(dir) = self.start_dir() {
+            d = d.set_directory(dir);
+        }
+        let Some(path) = d.save_file() else {
+            return;
+        };
+        let codes = archisim_plan::box_sheets::codes(pages.len());
+        let sheets: Vec<(String, String)> = pages.into_iter().zip(codes).collect();
+        let r = crate::documents::pdf_of(&sheets, "Planos de taller de las cajas")
+            .and_then(|bytes| std::fs::write(&path, bytes).map_err(|e| e.to_string()));
+        match r {
+            Ok(()) => self.say(format!(
+                "Planos de taller: {} hojas A3 en {}.",
+                sheets.len(),
+                path.display()
+            )),
+            Err(e) => self.complain(format!("No se pudo exportar: {e}.")),
+        }
     }
 }

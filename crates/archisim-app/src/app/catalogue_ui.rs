@@ -57,7 +57,7 @@ pub fn read_catalogue(dir: &Path) -> Vec<CatalogueRow> {
 }
 
 /// Today as «09/11/2026».
-fn today() -> String {
+pub(super) fn today() -> String {
     let iso = archisim_ifc::utc_now();
     let (y, rest) = iso.split_at(4.min(iso.len()));
     let m = rest.get(1..3).unwrap_or("");

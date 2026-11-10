@@ -6,6 +6,53 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-10 (136) · M9 taller de las cajas: estado, plan de grúa y planos de taller
+
+Rama `bloque/taller-cajas`, con pull request sobre `bloque/juntas` (#194). **Formato versión 100.** `docs/MODULAR.md` (M9).
+
+**Qué hace.**
+- **Estado de fabricación de cada caja.** En Propiedades de la caja, grupo «Fabricación»:
+  - estado: en diseño, aprobada, en fábrica (con el puesto), en camión, montada;
+  - fecha, con el botón «Hoy».
+  - En planta, el estado sale bajo la marca de la caja, en su color. Va también en el IFC y vuelve al importarlo.
+- **Plan de grúa.** En Propiedades de la caja, grupo «Plan de grúa»:
+  - dónde está la grúa: si no se coloca, se calcula con ella en el centro de las cajas, y «Colocarla ahí» la fija;
+  - el peso del aparejo (balancín, eslingas y grilletes; 0,5 t por defecto);
+  - para esa caja, la carga con el aparejo, el radio y qué parte usa de lo que admite la grúa a ese radio, con aviso si no la levanta.
+  - La tabla de cargas es **orientativa** (grúa móvil de 50 t). Hay que poner la de la grúa que se contrate.
+  - En el informe de las cajas (`cajas.txt`), todas las cajas en orden de montaje.
+- **Planos de taller**, A3 en PDF, desde Archivo → Exportar → «Planos de taller de las cajas» o `archisim taller-cajas`:
+  - **M-00, montaje:**
+    - la planta con las cajas coloreadas por su estado y numeradas en el orden de montaje (las de la planta de arriba, a trazos);
+    - la grúa con los círculos de su tabla;
+    - la tabla de izados con la peor.
+  - **M-01 en adelante, una hoja por caja** en el orden de montaje:
+    - chasis de suelo y de techo con peto en planta, con los puntos de izado;
+    - los cuatro alzados del chasis a 1:60;
+    - despiece: lista de corte del chasis y totales del entramado;
+    - materiales: m² de muros, suelos, cubierta y techos, y carpinterías;
+    - peso, centro de gravedad e izado.
+
+**En el ejemplo** (`archisim cajas`, la grúa a 6 m de la fachada sur):
+- las cajas pesan entre 10 y 13 t;
+- MOD-07 y MOD-08, las del fondo, quedan a 16,5 y 18,1 m y la grúa de la tabla no las levanta. Es lo esperado: hay que acercar la grúa o elegir una mayor.
+
+**Pendiente.**
+- Los paneles de entramado en alzado dentro de la hoja de cada caja. Están en el despiece de entramados de siempre.
+- Los tubos de 60 × 60 de borde del suelo (¿dónde van?).
+
+**Qué debe probar Antonio.**
+1. Ejecuta `cargo run -p archisim-cli -- cajas out/cajas`.
+2. Abre `out/cajas/cajas-taller.pdf`:
+   - en M-00, mira la planta de montaje y la tabla de la grúa;
+   - en cada hoja M-nn, el chasis, los alzados y las listas.
+3. Abre `out/cajas/cajas.archisim` y selecciona una caja:
+   - en «Fabricación», cámbiale el estado: la planta lo dice bajo la marca;
+   - en «Plan de grúa», mueve la grúa (X, Y) y mira cómo cambia lo que usa.
+4. Con tu propio proyecto: `cargo run -p archisim-cli -- taller-cajas <proyecto>.archisim <carpeta>`.
+
+---
+
 ## 2026-11-10 (135) · El peto de las cajas como en el módulo B
 
 Rama `bloque/juntas` (#194), sin cambio de versión del formato (la 99 todavía no está en `main`). Pedido de Antonio al ver el chasis: en su modelo el peto lleva una coronación arriba.

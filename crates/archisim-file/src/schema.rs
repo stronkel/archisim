@@ -1229,6 +1229,16 @@ pub(crate) struct BoxOf {
     /// Its chassis (version 99); the usual one when missing.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub chassis: Option<ChassisOf>,
+    /// Where it is (version 100): «design», «approved», «factory»,
+    /// «transport» or «placed»; «design» when missing.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub stage: String,
+    /// The factory's station it is at.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub station: String,
+    /// When it got to its stage, as written.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub stage_date: String,
 }
 
 /// The steel chassis of a box (version 99): tubes as «120×100×4» in
@@ -1297,6 +1307,24 @@ pub(crate) struct ModularSiteOf {
     pub road_width: f64,
     pub road_height: f64,
     pub deck_height: f64,
+    /// The crane's place (version 100).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub crane: Option<Xy>,
+    /// Its chart: its name and [radius, tonnes] rows; the usual one when
+    /// missing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub crane_chart: Option<CraneChartOf>,
+    /// Tonnes of rigging on the hook; 0,5 when missing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rigging: Option<f64>,
+}
+
+/// A crane's chart (version 100).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct CraneChartOf {
+    pub name: String,
+    pub rows: Vec<[f64; 2]>,
 }
 
 /// A roundabout or a square where streets meet (version 64).
@@ -4035,16 +4063,30 @@ impl ProjectFile {
                         roof_at: b.chassis.roof_at,
                         lift: b.chassis.lift.code().to_string(),
                     }),
+                    stage: if b.progress.stage == core::BoxStage::Design {
+                        String::new()
+                    } else {
+                        b.progress.stage.code().to_string()
+                    },
+                    station: b.progress.station.clone(),
+                    stage_date: b.progress.date.clone(),
                 })
                 .collect(),
             modular_site: (p.modular_site != core::ModularSite::default()).then(|| {
-                let m = p.modular_site;
+                let m = &p.modular_site;
+                let usual = core::ModularSite::default();
                 ModularSiteOf {
                     max_length: m.max_length,
                     max_width: m.max_width,
                     road_width: m.road_width,
                     road_height: m.road_height,
                     deck_height: m.deck_height,
+                    crane: m.crane.map(xy),
+                    crane_chart: (m.crane_chart != usual.crane_chart).then(|| CraneChartOf {
+                        name: m.crane_chart.name.clone(),
+                        rows: m.crane_chart.rows.iter().map(|(r, c)| [*r, *c]).collect(),
+                    }),
+                    rigging: (m.rigging != usual.rigging).then_some(m.rigging),
                 }
             }),
             catalogue: p.catalogue.as_ref().map(|c| CatalogueOf {
@@ -5724,6 +5766,18 @@ impl ProjectFile {
                         }
                     }
                 },
+                progress: core::BoxProgress {
+                    stage: if b.stage.is_empty() {
+                        core::BoxStage::Design
+                    } else {
+                        core::BoxStage::from_code(&b.stage).ok_or_else(|| FileError::Value {
+                            element: element.clone(),
+                            message: format!("unknown stage «{}»", b.stage),
+                        })?
+                    },
+                    station: b.station,
+                    date: b.stage_date,
+                },
             });
         }
         if let Some(c) = self.catalogue {
@@ -5751,12 +5805,21 @@ impl ProjectFile {
             });
         }
         if let Some(m) = self.modular_site {
+            let usual = core::ModularSite::default();
             parts.modular_site = core::ModularSite {
                 max_length: m.max_length,
                 max_width: m.max_width,
                 road_width: m.road_width,
                 road_height: m.road_height,
                 deck_height: m.deck_height,
+                crane: m.crane.map(pt),
+                crane_chart: m
+                    .crane_chart
+                    .map_or(usual.crane_chart, |c| core::CraneChart {
+                        name: c.name,
+                        rows: c.rows.iter().map(|r| (r[0], r[1])).collect(),
+                    }),
+                rigging: m.rigging.unwrap_or(usual.rigging),
             };
         }
         for c in self.roundabouts {

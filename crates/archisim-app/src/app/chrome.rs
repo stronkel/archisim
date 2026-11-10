@@ -282,6 +282,12 @@ impl ArchiSimApp {
                     self.export_structure_drawings();
                 }
                 if ui
+                    .add(shortcut_button("Planos de taller de las cajas…", "PDF"))
+                    .clicked()
+                {
+                    self.export_box_drawings();
+                }
+                if ui
                     .add(shortcut_button("Esquema unifilar…", "PDF"))
                     .clicked()
                 {
@@ -499,6 +505,13 @@ impl ArchiSimApp {
                 .clicked()
             {
                 self.export_structure_drawings();
+            }
+            if ui
+                .button("Planos de taller de las cajas (PDF)…")
+                .on_hover_text("Montaje y plan de grúa, y una hoja A3 por caja modular con su chasis en planta y alzados, despiece, materiales, peso e izado")
+                .clicked()
+            {
+                self.export_box_drawings();
             }
             if ui
                 .button("Ejes del entramado (DXF 3D)…")

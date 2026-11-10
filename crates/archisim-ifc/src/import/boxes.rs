@@ -57,6 +57,7 @@ impl<'a> Importer<'a> {
             height: length(self, "Height")?,
             sides,
             chassis: self.chassis_of(id),
+            progress: self.progress_of(id),
         };
         let bid = self.model.add_box(spec).map_err(|e| explain(&e))?;
         if let Some(g) = guid {
@@ -123,6 +124,21 @@ impl<'a> Importer<'a> {
             c
         } else {
             archisim_core::Chassis::default()
+        }
+    }
+
+    /// Where the box is, from `ArchiSim_Box` (in design when missing).
+    fn progress_of(&self, id: u64) -> archisim_core::BoxProgress {
+        let text = |name: &str| {
+            self.property_own(id, "ArchiSim_Box", name)
+                .and_then(|v| v.as_str())
+                .map(String::from)
+                .unwrap_or_default()
+        };
+        archisim_core::BoxProgress {
+            stage: archisim_core::BoxStage::from_code(&text("Stage")).unwrap_or_default(),
+            station: text("Station"),
+            date: text("StageDate"),
         }
     }
 }

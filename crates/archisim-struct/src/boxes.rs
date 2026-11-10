@@ -305,6 +305,117 @@ pub fn assembly_order(model: &Model) -> Vec<BoxId> {
     out
 }
 
+/// A lift of the crane: a box, in its order, at its reach.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CraneLift {
+    pub id: BoxId,
+    /// 1 for the first box up.
+    pub order: usize,
+    /// Its centre of gravity, in plan.
+    pub at: Point2,
+    /// From the crane's centre, m.
+    pub radius: f64,
+    /// On the hook: the box and the rigging, t.
+    pub load: f64,
+    /// What the crane lifts at that reach, t.
+    pub capacity: f64,
+}
+
+impl CraneLift {
+    pub fn usage(&self) -> f64 {
+        if self.capacity <= 0.0 {
+            f64::INFINITY
+        } else {
+            self.load / self.capacity
+        }
+    }
+
+    pub fn passes(&self) -> bool {
+        self.usage() <= 1.0
+    }
+}
+
+/// The crane plan: where it stands (or where it would, if it has not been
+/// placed) and each box's lift in the assembly order.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CranePlan {
+    pub at: Point2,
+    /// It was not placed: this is the middle of the boxes.
+    pub suggested: bool,
+    pub chart: String,
+    pub lifts: Vec<CraneLift>,
+}
+
+impl CranePlan {
+    pub fn worst(&self) -> Option<&CraneLift> {
+        self.lifts
+            .iter()
+            .max_by(|a, b| a.usage().total_cmp(&b.usage()))
+    }
+}
+
+/// Where the crane would stand if it has not been placed: the middle of
+/// the boxes' centres of gravity (the smallest reach to all of them).
+pub fn suggested_crane(model: &Model) -> Option<Point2> {
+    let pts: Vec<Point2> = model
+        .boxes()
+        .filter_map(|b| box_weight(model, b.id).map(|w| centre_in_plan(b, &w)))
+        .collect();
+    if pts.is_empty() {
+        return None;
+    }
+    let (lo, hi) = pts.iter().fold(
+        (
+            Point2::new(f64::MAX, f64::MAX),
+            Point2::new(f64::MIN, f64::MIN),
+        ),
+        |(lo, hi), p| {
+            (
+                Point2::new(lo.x.min(p.x), lo.y.min(p.y)),
+                Point2::new(hi.x.max(p.x), hi.y.max(p.y)),
+            )
+        },
+    );
+    Some((lo + hi) * 0.5)
+}
+
+fn centre_in_plan(b: &ModularBox, w: &BoxWeight) -> Point2 {
+    b.origin + b.along() * w.centre[0] + b.across() * w.centre[1]
+}
+
+/// The crane plan of the project's boxes (none without boxes).
+pub fn crane_plan(model: &Model) -> Option<CranePlan> {
+    let site = model.modular_site();
+    let (at, suggested) = match site.crane {
+        Some(p) => (p, false),
+        None => (suggested_crane(model)?, true),
+    };
+    let lifts = assembly_order(model)
+        .into_iter()
+        .enumerate()
+        .filter_map(|(n, id)| {
+            let b = model.modular_box(id)?;
+            let w = box_weight(model, id)?;
+            let c = centre_in_plan(b, &w);
+            let radius = (c - at).length();
+            Some(CraneLift {
+                id,
+                order: n + 1,
+                at: c,
+                radius,
+                load: w.tonnes() + site.rigging,
+                capacity: site.crane_chart.capacity(radius),
+            })
+        })
+        .collect();
+    Some(CranePlan {
+        at,
+        suggested,
+        chart: site.crane_chart.name.clone(),
+        lifts,
+    })
+}
+
 fn num(v: f64, d: usize) -> String {
     format!("{v:.d$}").replace('.', ",")
 }
@@ -384,6 +495,33 @@ pub fn boxes_report(model: &Model) -> String {
             num(c.deflection_limit, 1),
             if c.passes() { "cumple" } else { "NO CUMPLE" }
         ));
+    }
+    if let Some(plan) = crane_plan(model) {
+        t.push_str(&format!(
+            "\nPLAN DE GRÚA\n{} en ({}, {}){}; con {} t de aparejo.\n",
+            plan.chart,
+            num(plan.at.x, 2),
+            num(plan.at.y, 2),
+            if plan.suggested {
+                " (propuesta: no se ha colocado; en el centro de las cajas)"
+            } else {
+                ""
+            },
+            num(model.modular_site().rigging, 2)
+        ));
+        for l in &plan.lifts {
+            let b = model.modular_box(l.id).expect("box");
+            t.push_str(&format!(
+                "{}º {}: radio {} m · carga {} t · admite {} t ({} %) → {}\n",
+                l.order,
+                b.mark,
+                num(l.radius, 1),
+                num(l.load, 2),
+                num(l.capacity, 2),
+                (l.usage() * 100.0).round(),
+                if l.passes() { "cumple" } else { "NO CUMPLE" }
+            ));
+        }
     }
     t.push_str("\nDESPIECE POR CAJA\n");
     let frames = archisim_geom::framing::members_by_box(model);
@@ -535,7 +673,21 @@ mod tests {
         assert!(six.usage() < four.usage());
         // The order: the first one, then the one against it.
         assert_eq!(assembly_order(&m), vec![a, b]);
+        // The crane: in the middle when it has not been placed; far away,
+        // too far.
+        let plan = crane_plan(&m).unwrap();
+        assert!(plan.suggested);
+        assert_eq!(plan.lifts.len(), 2);
+        assert!(plan.lifts.iter().all(|l| l.passes()), "{plan:?}");
+        let mut site = m.modular_site();
+        site.crane = Some(Point2::new(60.0, 0.0));
+        m.set_modular_site(site).unwrap();
+        let plan = crane_plan(&m).unwrap();
+        assert!(!plan.suggested);
+        assert!(plan.lifts.iter().all(|l| !l.passes() && l.radius > 50.0));
+        assert_eq!(plan.worst().unwrap().capacity, 0.0);
         let text = boxes_report(&m);
+        assert!(text.contains("PLAN DE GRÚA"), "{text}");
         assert!(text.contains("1º MOD-01"), "{text}");
         assert!(text.contains("2º MOD-02"));
         assert!(

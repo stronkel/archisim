@@ -195,6 +195,7 @@ pub fn differences(a: &Model, b: &Model) -> Vec<String> {
             && close(s.chassis.roof_at, t.chassis.roof_at)
             && s.chassis.middle_beam == t.chassis.middle_beam
             && s.chassis.lift == t.chassis.lift
+            && s.progress == t.progress
             && level_guid(a, s.level) == level_guid(b, t.level);
         if !same {
             diff(format!("caja {}: {:?} / {:?}", s.guid, s, t));

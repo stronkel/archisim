@@ -131,6 +131,19 @@ impl Exporter<'_> {
                     "IFCPROPERTYSINGLEVALUE('LiftPoints',$,IFCLABEL({}),$)",
                     string(c.lift.code())
                 )));
+                // Where it is (M9).
+                for (name, v) in [
+                    ("Stage", b.progress.stage.code()),
+                    ("Station", b.progress.station.as_str()),
+                    ("StageDate", b.progress.date.as_str()),
+                ] {
+                    if !v.is_empty() {
+                        props.push(self.w.add(format!(
+                            "IFCPROPERTYSINGLEVALUE('{name}',$,IFCLABEL({}),$)",
+                            string(v)
+                        )));
+                    }
+                }
                 props.push(self.w.add(format!(
                     "IFCPROPERTYSINGLEVALUE('ChassisWeight',$,IFCMASSMEASURE({}),$)",
                     real(archisim_geom::boxes::chassis_weight(b))

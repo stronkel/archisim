@@ -25,6 +25,7 @@
 
 pub mod annotate;
 pub mod axo;
+pub mod box_sheets;
 pub mod boxes;
 pub mod calc_report;
 pub mod carpentry;

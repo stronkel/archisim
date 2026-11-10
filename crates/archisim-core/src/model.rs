@@ -4546,7 +4546,7 @@ impl Model {
             roundabouts: self.roundabouts.values().cloned().collect(),
             ceilings: self.ceilings.values().cloned().collect(),
             boxes: self.boxes.values().cloned().collect(),
-            modular_site: self.modular_site,
+            modular_site: self.modular_site.clone(),
             catalogue: self.catalogue.clone(),
             markings: self.markings.values().cloned().collect(),
             decals: self.decals.values().cloned().collect(),

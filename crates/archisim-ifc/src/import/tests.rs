@@ -1969,6 +1969,11 @@ fn modular_boxes_round_trip() {
         x.chassis.lift = archisim_core::LiftPoints::Six;
         x.chassis.middle_beam = false;
         x.chassis.spacing = 0.40;
+        x.progress = archisim_core::BoxProgress {
+            stage: archisim_core::BoxStage::Transport,
+            station: String::new(),
+            date: "2026-11-12".into(),
+        };
     })
     .unwrap();
     m.fill_box(a, fill).unwrap();

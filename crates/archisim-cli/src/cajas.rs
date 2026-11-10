@@ -13,9 +13,9 @@ use std::fmt::Write as _;
 use std::path::Path;
 
 use archisim_core::{
-    BoxFill, CutPattern, FrameMaterial, Framing, Hand, Layer, LayerFunction, Model, NewBox,
-    NewOpening, Point2, SideState, SlabFunction, WallFunction, WallSide, BOX_BOTTOM, BOX_HEIGHT,
-    BOX_WIDTH, SIDE_NAMES,
+    BoxFill, BoxProgress, BoxStage, CutPattern, FrameMaterial, Framing, Hand, Layer, LayerFunction,
+    Model, NewBox, NewOpening, Point2, SideState, SlabFunction, WallFunction, WallSide, BOX_BOTTOM,
+    BOX_HEIGHT, BOX_WIDTH, SIDE_NAMES,
 };
 
 type Res<T = ()> = Result<T, Box<dyn std::error::Error>>;
@@ -197,7 +197,58 @@ pub fn build() -> Res<Model> {
             setback: None,
         })?;
     }
+    // Where they are (M9): the first two up already, the third on the
+    // lorry, the fourth at the factory's station 3, the fifth approved.
+    let order = archisim_struct::boxes::assembly_order(&m);
+    let stages = [
+        (BoxStage::Placed, ""),
+        (BoxStage::Placed, ""),
+        (BoxStage::Transport, ""),
+        (BoxStage::Factory, "Puesto 3"),
+        (BoxStage::Approved, ""),
+    ];
+    for (id, (stage, station)) in order.iter().zip(stages) {
+        m.edit_box(*id, |b| {
+            b.progress = BoxProgress {
+                stage,
+                station: station.into(),
+                date: "10/11/2026".into(),
+            }
+        })?;
+    }
+    // The crane, 6 m off the long side of the row.
+    let corners: Vec<Point2> = m.boxes().flat_map(|b| b.corners()).collect();
+    let (min_x, max_x) = corners
+        .iter()
+        .fold((f64::MAX, f64::MIN), |(a, z), p| (a.min(p.x), z.max(p.x)));
+    let min_y = corners.iter().map(|p| p.y).fold(f64::MAX, f64::min);
+    let mut site = m.modular_site();
+    site.crane = Some(Point2::new((min_x + max_x) / 2.0, min_y - 6.0));
+    m.set_modular_site(site)?;
     Ok(m)
+}
+
+/// The workshop drawings of a project's boxes (M9): `<stem>-taller.pdf`,
+/// A3, and each page as `<stem>-taller-M-nn.svg`. The number of pages.
+pub fn workshop(m: &Model, dir: &Path, stem: &str) -> Result<usize, Box<dyn std::error::Error>> {
+    let pages = archisim_plan::box_sheets::pages(m);
+    if pages.is_empty() {
+        return Ok(0);
+    }
+    let codes = archisim_plan::box_sheets::codes(pages.len());
+    for (svg, code) in pages.iter().zip(&codes) {
+        std::fs::write(dir.join(format!("{stem}-taller-{code}.svg")), svg)?;
+    }
+    let pdf_pages: Vec<archisim_export::pdf::Page> = pages
+        .iter()
+        .zip(&codes)
+        .map(|(svg, title)| archisim_export::pdf::Page { svg, title })
+        .collect();
+    std::fs::write(
+        dir.join(format!("{stem}-taller.pdf")),
+        archisim_export::pdf::pdf(&pdf_pages, "Planos de taller de las cajas")?,
+    )?;
+    Ok(pages.len())
 }
 
 /// The boxes, what each holds and their notes, as text.
@@ -256,7 +307,13 @@ pub fn write(dir: &Path) -> Res {
     }
     let text = format!("{}\n{}", list(&m), archisim_struct::boxes::boxes_report(&m));
     std::fs::write(dir.join("cajas.txt"), &text)?;
+    let sheets = workshop(&m, dir, "cajas")?;
     print!("{text}");
+    println!(
+        "  Planos de taller: {} hojas A3 en {}",
+        sheets,
+        dir.join("cajas-taller.pdf").display()
+    );
     println!("  {}", dir.join("cajas.ifc").display());
     Ok(())
 }

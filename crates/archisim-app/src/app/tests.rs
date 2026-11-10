@@ -10998,6 +10998,15 @@ fn modular_boxes_are_placed_against_each_other_and_moved_whole() {
     assert!(m
         .box_issues(b.id)
         .contains(&archisim_core::BoxIssue::JoinedAlone { side: 0 }));
+    // Where it is: at the factory's station 2.
+    let res = h.app.ed.transact("Estado", |m| {
+        m.edit_box(a.id, |x| {
+            x.progress.stage = archisim_core::BoxStage::Factory;
+            x.progress.station = "Puesto 2".into();
+        })
+    });
+    assert!(res.is_ok());
+    assert!(!archisim_plan::box_sheets::pages(h.app.ed.model()).is_empty());
     // Its properties: the chassis and how it is lifted.
     let ctx = egui::Context::default();
     let mut o = ctx.run_ui(egui::RawInput::default(), |ui| {

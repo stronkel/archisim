@@ -195,6 +195,29 @@ fn draw_box(s: &mut String, b: &ModularBox, k: f64) {
             crate::lettering::paint(small, BOX_INK)
         );
     }
+    // Where it is (M9), under the tag, in the stage's colour.
+    if b.progress.stage != archisim_core::BoxStage::Design {
+        let small = SMALL * k;
+        let low = tag.iter().map(|p| p.y).fold(f64::INFINITY, f64::min);
+        let mut t = b.progress.stage.short().to_string();
+        if b.progress.stage == archisim_core::BoxStage::Factory && !b.progress.station.is_empty() {
+            t.push_str(&format!(" · {}", b.progress.station));
+        }
+        let [r, g, bl] = b.progress.stage.rgb();
+        let colour = format!("#{r:02x}{g:02x}{bl:02x}");
+        let _ = writeln!(
+            s,
+            r#"<path class="box-stage" d="{}" {}/>"#,
+            text_path(
+                &t,
+                Point2::new(c.x, low - small * 1.4),
+                right,
+                small,
+                Align::Centre
+            ),
+            crate::lettering::paint(small, &colour)
+        );
+    }
 }
 
 #[cfg(test)]
@@ -223,5 +246,18 @@ mod tests {
             m.modular_box(a).unwrap().centre(),
             &tag
         ));
+        assert!(!s.contains("box-stage"));
+        m.edit_box(a, |b| {
+            b.progress.stage = archisim_core::BoxStage::Factory;
+            b.progress.station = "Puesto 2".into();
+        })
+        .unwrap();
+        let mut s = String::new();
+        draw_boxes(&mut s, &m, lv, 0.05);
+        assert!(s.contains("box-stage"));
+        // Its posts are drawn, cut (and the parapet's, but on C, the joint),
+        // and where it is lifted from.
+        assert_eq!(s.matches("box-post").count(), 4 + 8);
+        assert_eq!(s.matches("box-lift").count(), 4);
     }
 }

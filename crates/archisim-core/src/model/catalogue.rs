@@ -211,6 +211,7 @@ impl Model {
             height: b.height,
             sides,
             chassis: b.chassis,
+            progress: b.progress.clone(),
         };
         // Against this project's boxes and those of the copies already
         // placed.

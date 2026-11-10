@@ -173,7 +173,14 @@ Uso:
       Una vivienda de cajas modulares en L (ocho cajas de 6,20 × 3,60 m
       con su envolvente): cajas.archisim, cajas.ifc (cada caja, un
       IfcElementAssembly con sus piezas), cajas-planta.svg y cajas.txt
-      (lo que lleva cada caja y sus avisos). Por defecto: ./out
+      (lo que lleva cada caja y sus avisos, su peso e izado, el plan de
+      grúa y el despiece) y los planos de taller (cajas-taller.pdf).
+      Por defecto: ./out
+  archisim taller-cajas <proyecto> [carpeta]
+      Los planos de taller de las cajas modulares de un proyecto, A3:
+      montaje y plan de grúa (M-00) y una hoja por caja con su chasis en
+      planta y alzados, despiece, materiales, peso e izado
+      (<proyecto>-taller.pdf y una SVG por hoja). Por defecto: ./out
   archisim catalogo [carpeta]
       El catálogo del sistema: tres cajas tipo aprobadas en «Cajas tipo/»
       (dormitorio doble con ventana a elegir, baño + cocina, estar
@@ -597,6 +604,35 @@ fn main() -> ExitCode {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
             report(cajas::write(&dir))
         }
+        Some("taller-cajas") => match args.get(1) {
+            Some(project) => {
+                let path = PathBuf::from(project);
+                let dir = PathBuf::from(args.get(2).map(String::as_str).unwrap_or("out"));
+                report((|| {
+                    let m = archisim_file::open(&path)?;
+                    std::fs::create_dir_all(&dir)?;
+                    let stem = path
+                        .file_stem()
+                        .map(|s| s.to_string_lossy().to_string())
+                        .unwrap_or_else(|| "proyecto".into());
+                    print!("{}", archisim_struct::boxes::boxes_report(&m));
+                    let n = cajas::workshop(&m, &dir, &stem)?;
+                    if n == 0 {
+                        println!("El proyecto no tiene cajas modulares.");
+                    } else {
+                        println!(
+                            "Planos de taller: {n} hojas A3 en {}",
+                            dir.join(format!("{stem}-taller.pdf")).display()
+                        );
+                    }
+                    Ok(())
+                })())
+            }
+            None => {
+                eprintln!("Uso: archisim taller-cajas <proyecto> [carpeta]");
+                std::process::exit(2);
+            }
+        },
         Some("entramado") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
             report(entramado::write(&dir))

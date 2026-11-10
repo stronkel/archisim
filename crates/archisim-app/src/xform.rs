@@ -808,6 +808,7 @@ pub fn box_spec(
         height: b.height,
         sides,
         chassis: b.chassis,
+        progress: b.progress.clone(),
     }
 }
 
