@@ -11376,3 +11376,26 @@ fn templates_go_to_the_library() {
     );
     assert_eq!(other.model().view_template(id).unwrap().scale, Some(20.0));
 }
+
+/// Archivo → Nuevo desde plantilla: a project taken as a template gives a
+/// new, unsaved project with its types and none of its drawing.
+#[test]
+fn a_new_project_from_a_template() {
+    let mut h = Harness::new(Editor::new_project());
+    draw_outline(&mut h);
+    h.key(Key::Escape);
+    assert!(h.model().walls().count() > 0);
+    let dir = std::env::temp_dir().join(format!("archisim-desde-plantilla-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("casa.archisim");
+    archisim_file::save(h.model(), &path).unwrap();
+    let types = h.model().wall_types().count();
+    h.app.new_from_template(&path);
+    assert_eq!(h.model().walls().count(), 0);
+    assert_eq!(h.model().wall_types().count(), types);
+    assert!(
+        h.app.ed.path.is_none(),
+        "a new project, not the template's file"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}

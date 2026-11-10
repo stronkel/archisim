@@ -37,6 +37,7 @@ mod modelos;
 mod muestrario;
 mod muros_talud;
 mod ortofoto;
+mod plantilla;
 mod taller;
 mod tierras;
 mod tramas;
@@ -192,6 +193,13 @@ Uso:
       montaje y plan de grúa (M-00) y una hoja por caja con su chasis en
       planta y alzados, despiece, materiales, peso e izado
       (<proyecto>-taller.pdf y una SVG por hoja). Por defecto: ./out
+  archisim plantilla <proyecto> <plantilla.archisim> [--perfiles <catálogo.csv>] [--entramado]
+      La plantilla de un proyecto: sus plantas, materiales, tipos,
+      plantillas de vista, cajetines, planos, tablas y datos de cálculo,
+      sin nada dibujado. Con un catálogo de perfiles (nombre; material;
+      canto; ala; labio; espesor, en mm), los tipos con entramado toman
+      sus montantes y canales por el grueso de la capa que llenan; con
+      --entramado, también los muros con aislamiento entre placas.
   archisim catalogo [carpeta]
       El catálogo del sistema: tres cajas tipo aprobadas en «Cajas tipo/»
       (dormitorio doble con ventana a elegir, baño + cocina, estar
@@ -670,6 +678,33 @@ fn main() -> ExitCode {
         Some("cajas") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
             report(cajas::write(&dir))
+        }
+        Some("plantilla") => {
+            let flag = |name: &str| args.iter().position(|a| a == name);
+            let catalogue = flag("--perfiles")
+                .and_then(|i| args.get(i + 1))
+                .map(PathBuf::from);
+            let cavities = flag("--entramado").is_some();
+            match (args.get(1), args.get(2)) {
+                (Some(input), Some(output))
+                    if !input.starts_with("--") && !output.starts_with("--") =>
+                {
+                    report((|| {
+                        let text = plantilla::run(
+                            Path::new(input),
+                            Path::new(output),
+                            catalogue.as_deref(),
+                            cavities,
+                        )?;
+                        print!("{text}");
+                        Ok(())
+                    })())
+                }
+                _ => {
+                    eprintln!("Uso: archisim plantilla <proyecto> <plantilla.archisim> [--perfiles <catálogo.csv>] [--entramado]");
+                    ExitCode::FAILURE
+                }
+            }
         }
         Some("taller-cajas") => match args.get(1) {
             Some(project) => {

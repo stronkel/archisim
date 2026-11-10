@@ -122,6 +122,30 @@
 - **Replanteo**: la última hoja de los planos de taller, con los apoyos en planta medidos desde la esquina de las cajas por sus ejes, y su tabla (X, Y, cota de la placa, pilar, placa, pernos, carga mayorada y cajas).
 - **Queda**: las rejillas de ventilación del zócalo (el forjado sanitario es ventilado), los pernos como piezas del IFC y el armado de la losa (ya se puede dibujar y comprobar con Armado).
 
+## 3 ter. Hacia el LOD 400 (10/11/2026)
+
+Lo que falta para montar una vivienda con detalle de fabricación y trabajar cómodo, en el orden propuesto a Antonio:
+
+**M11 · Plantilla del sistema y perfiles del fabricante.** Hecho (10/11/2026; sin cambios de formato).
+- **Plantilla desde un proyecto** (Archivo → «Guardar como plantilla…», o `archisim plantilla`): el proyecto sin nada dibujado, con sus plantas, materiales, tipos, plantillas de vista, cajetines, planos, tablas y datos de cálculo. **«Nuevo desde plantilla…»** (Archivo y pantalla de inicio) empieza un proyecto con ella, o con cualquier proyecto tomado como plantilla.
+- **Perfiles del fabricante**: un catálogo como fichero de la biblioteca del estudio (carpeta «Perfiles de entramado»; nombre; material; canto; ala; labio; espesor, en mm). Al hacer la plantilla, los tipos con entramado toman sus montantes y canales por el grueso de la capa que llenan (el C más profundo que cabe, en su espesor más fino, y la U en la que entra), y con `--entramado` también los muros con aislamiento entre placas: esa capa pasa a ser la estructura del tipo.
+- **Con el L-160 y el catálogo SFsystem** (SFC/SFU): las fachadas de 197 mm y el tabique de 150 toman SFC100 1,2 y SFU100 1,2. Los tabiques de placa de 100 mm (lana de 50) no tienen perfil en ese catálogo: son de otro sistema (montantes de 48) y quedan sin entramado.
+- **Queda para Antonio**: la serie SFM del catálogo (no dice si es C o U y repite cantos), el perfil de los tabiques interiores y confirmar el espesor (1,2 o 1,5) que da el cálculo.
+
+**M12 · La caja tipo real del L-160**, sobre su IFC importado y la plantilla: las 8 cajas dibujadas, la primera aprobada en «Cajas tipo». Necesita el plano de usos de Antonio.
+
+**M13 · La junta completa y las uniones**: banda de lana, banda de impermeabilización, membrana y cinta en fachada, tapajuntas; placas de unión entre cajas, orejetas, pernos, tornillos por montante y soldaduras, en 3D, IFC y mediciones.
+
+**M14 · Tableros y placas por piezas**: cada placa y tablero en su formato comercial con sus cortes, la junta de fachada sobre la de las cajas, y la lista de compra por caja.
+
+**M5 · Montantes en el HE 1** y **M6 · instalaciones en steel frame** (pasos en los montantes, conexiones en la junta, registros, patinillo).
+
+**M15 · Reglas del sistema como avisos y más elecciones por cliente** (acabados, distribución, equipamiento).
+
+**M16 · Fábrica**: paneles acotados en la hoja de cada caja, etiquetas con código y QR, pedido por caja y el fichero de la perfiladora.
+
+**M17 · El porche** como módulo ligero de acero.
+
 ## 3 bis. Cómo se organiza: componentes, cajas tipo y vivienda (9/11/2026)
 
 Decidido con Antonio. **No se separa la estructura en un modelo vinculado** (como se pensó en Revit). La unidad que se fabrica, se transporta y se monta es la caja, y lleva todo junto: chasis, muros, suelo, techo, cubierta, instalaciones y acabados. Las disciplinas se separan con el filtro de disciplina, no en ficheros distintos. Hay tres niveles:
@@ -266,7 +290,7 @@ Lo que cambia respecto a §5:
 
 ## 6. Pendiente de Antonio
 
-- Orden aprobado (9/11/2026): M4 (hecho) → M7 techos (hecho) → M1 caja (hecha) → M8 catálogo (hecho; falta la primera caja tipo real del L-160) → M2 juntas y M3 chasis (hechos) → M9 taller (hecho) → M10 obra previa (hecha, 10/11/2026). Quedan M5 y M6.
+- Orden aprobado (9/11/2026): M4 (hecho) → M7 techos (hecho) → M1 caja (hecha) → M8 catálogo (hecho; falta la primera caja tipo real del L-160) → M2 juntas y M3 chasis (hechos) → M9 taller (hecho) → M10 obra previa (hecha, 10/11/2026) → M11 plantilla y perfiles (hecha). Lo siguiente, en §3 ter: M12 a M17, M5 y M6.
 - Exportar desde Revit el modelo de estructura vinculado como IFC aparte, para partir de él en el chasis de la caja tipo.
 - Catálogo de perfiles del fabricante como fichero (`.csv`, §3 ter de ENTRAMADOS).
 - Propuesta de §5 aprobada (9/11/2026).

@@ -6,6 +6,30 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-10 (146) · M11: plantilla del sistema y perfiles del fabricante
+
+Rama `bloque/plantilla`, con pull request sobre #196. Sin cambios de formato ni de IFC. `docs/MODULAR.md` §3 ter, donde queda también el camino hasta el LOD 400 (M12 a M17).
+
+**Qué hace.**
+- **Guardar como plantilla** (Archivo): el proyecto sin nada dibujado. Guarda las plantas, los materiales, los tipos, las plantillas de vista, los cajetines, los planos, las tablas y los datos de cálculo.
+- **Nuevo desde plantilla** (Archivo y pantalla de inicio): un proyecto nuevo, sin guardar, con lo que tiene la plantilla. Vale cualquier proyecto: se toma sin lo dibujado.
+- **Perfiles del fabricante**: el catálogo de SFsystem como fichero de la biblioteca del estudio (`Perfiles SFsystem.csv`, carpeta «Perfiles de entramado»; el programa no lleva marcas). Con `archisim plantilla … --perfiles <csv> --entramado`, cada tipo de muro con aislamiento entre placas toma el montante C más profundo que cabe en esa capa, en su espesor más fino, y la U en la que entra. Esa capa pasa a ser la estructura del tipo.
+
+**Con el L-160** (importado de su IFC, que no se sube):
+- las dos fachadas de 197 mm y el tabique de 150 toman **SFC100 de 1,2 mm con SFU100 de 1,2 mm**;
+- los tabiques de 100 mm (2 placas + 50 de lana + 2 placas) no tienen perfil en ese catálogo, que empieza en 90 mm. Son de tabiquería seca, con montantes de 48 de otro proveedor.
+
+**Dudas del catálogo** (en el fichero):
+- la serie SFM no dice si es C o U y repite cantos, así que no va;
+- en el SFC200 de 2,0 mm la web pone 150 de alma; se ha puesto 200.
+
+**Qué debe probar Antonio.**
+1. Copia `Perfiles SFsystem.csv` a la carpeta «Perfiles de entramado» de tu biblioteca.
+2. Importa tu IFC del L-160 con `cargo run -p archisim-cli -- importar BIOKUBIK_VIVIENDA_L_160.ifc l160.archisim` y haz la plantilla con `cargo run -p archisim-cli -- plantilla l160.archisim "Plantilla Biokubik.archisim" --perfiles "Perfiles SFsystem.csv" --entramado`. Mira qué perfil toma cada tipo.
+3. En la aplicación, Archivo → «Nuevo desde plantilla…» → `Plantilla Biokubik.archisim`. Dibuja un muro de fachada y mira el entramado a la vista en 3D.
+
+---
+
 ## 2026-11-10 (145) · M10: obra previa desde las cajas
 
 Rama `bloque/obra-previa`, con pull request. Sin cambios de formato ni de IFC (son losas, pilares y muros de siempre). `docs/MODULAR.md` (M10).

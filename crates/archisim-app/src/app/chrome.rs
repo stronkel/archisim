@@ -344,6 +344,13 @@ impl ArchiSimApp {
             if ui.add(shortcut_button("Nuevo", "Ctrl+N")).clicked() {
                 self.guarded(Pending::New);
             }
+            if ui
+                .button("Nuevo desde plantilla…")
+                .on_hover_text("Un proyecto nuevo con las plantas, tipos, materiales, plantillas de vista y planos de una plantilla, o de otro proyecto sin lo dibujado")
+                .clicked()
+            {
+                self.guarded(Pending::FromTemplate(None));
+            }
             if ui.add(shortcut_button("Abrir…", "Ctrl+O")).clicked() {
                 self.guarded(Pending::Open(None));
             }
@@ -357,6 +364,13 @@ impl ArchiSimApp {
                 .clicked()
             {
                 self.save(true);
+            }
+            if ui
+                .button("Guardar como plantilla…")
+                .on_hover_text("El proyecto sin nada dibujado: sus plantas, tipos, materiales, plantillas de vista, cajetines, planos y tablas, para empezar otros")
+                .clicked()
+            {
+                self.save_as_template();
             }
             ui.separator();
             if ui.button("Importar IFC…").clicked() {

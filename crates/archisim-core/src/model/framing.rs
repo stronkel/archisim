@@ -417,6 +417,195 @@ impl Model {
     }
 }
 
+/// What [`Model::frame_types_from_catalogue`] did with one type.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CatalogueFit {
+    /// The wall or slab type's id and name.
+    pub id: u64,
+    pub name: String,
+    /// The depth of the layer the frame fills, m.
+    pub depth: f64,
+    /// The studs and tracks it took, or `None` when the catalogue has none
+    /// that fits (the type keeps what it had).
+    pub framing: Option<(FrameSection, FrameSection)>,
+}
+
+/// Which types [`Model::frame_types_from_catalogue`] frames.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CatalogueScope {
+    /// Only those that already have a frame: their sections change.
+    Framed,
+    /// Those, and every wall type whose frame layer is insulation between
+    /// boards (the cavity of a steel frame wall).
+    Cavities,
+}
+
+impl Framing {
+    /// A steel frame of a catalogue's sections for a layer `depth` deep:
+    /// the deepest C that fits (6 mm of play), in its thinnest gauge, and
+    /// the narrowest U it fits in, of that gauge or the next one up.
+    /// `None` if the catalogue has no C that fits.
+    pub fn from_catalogue(catalogue: &[(FrameMaterial, FrameSection)], depth: f64) -> Option<Self> {
+        let steel: Vec<&FrameSection> = catalogue
+            .iter()
+            .filter(|(m, s)| *m == FrameMaterial::Steel && s.is_valid())
+            .map(|(_, s)| s)
+            .collect();
+        let deepest = steel
+            .iter()
+            .filter(|s| s.lip > 0.0 && s.depth <= depth + 0.006)
+            .map(|s| s.depth)
+            .fold(f64::NEG_INFINITY, f64::max);
+        if !deepest.is_finite() {
+            return None;
+        }
+        let stud = steel
+            .iter()
+            .filter(|s| s.lip > 0.0 && (s.depth - deepest).abs() < 1e-6)
+            .min_by(|a, b| a.thickness.total_cmp(&b.thickness))?;
+        let track = steel
+            .iter()
+            .filter(|s| {
+                s.lip == 0.0 && s.depth >= stud.depth - 1e-6 && s.thickness >= stud.thickness - 1e-6
+            })
+            .min_by(|a, b| {
+                a.depth
+                    .total_cmp(&b.depth)
+                    .then(a.thickness.total_cmp(&b.thickness))
+            })
+            .map(|s| (*s).clone())
+            .unwrap_or_else(|| FrameSection {
+                name: format!(
+                    "U {:.0} (sin perfil en el catálogo)",
+                    stud.depth * 1000.0 + 3.0
+                ),
+                ..FrameSection::steel(
+                    stud.depth * 1000.0 + 3.0,
+                    stud.width * 1000.0,
+                    0.0,
+                    stud.thickness * 1000.0,
+                )
+            });
+        Some(Framing {
+            material: FrameMaterial::Steel,
+            stud: (*stud).clone(),
+            track,
+            spacing: 0.6,
+            noggins: true,
+            // The boards are layers of the type already.
+            sheathing: None,
+        })
+    }
+}
+
+impl Model {
+    /// Gives the wall and slab types the studs and tracks of a supplier's
+    /// catalogue (a file of the studio's library, read with
+    /// [`parse_section_catalogue`]), by the depth of the layer their frame
+    /// fills. A type that is framed keeps its spacing, blocking and
+    /// boards. Returns what was done with each type it looked at.
+    pub fn frame_types_from_catalogue(
+        &mut self,
+        catalogue: &[(FrameMaterial, FrameSection)],
+        scope: CatalogueScope,
+    ) -> Vec<CatalogueFit> {
+        // Each type with the layer its frame fills.
+        let mut todo: Vec<(u64, String, Vec<Layer>, usize, bool)> = Vec::new();
+        let mut cavity_types: Vec<(WallTypeId, usize)> = Vec::new();
+        for t in self.wall_types() {
+            let framed = self.framings.contains_key(&t.id.0);
+            let cavity = if scope == CatalogueScope::Cavities {
+                self.cavity_layer(&t.layers)
+            } else {
+                None
+            };
+            let at = cavity.or_else(|| Model::frame_layer(&t.layers).filter(|_| framed));
+            if let Some(i) = at {
+                if !framed {
+                    cavity_types.push((t.id, i));
+                }
+                todo.push((t.id.0, t.name.clone(), t.layers.clone(), i, framed));
+            }
+        }
+        for t in self.slab_types() {
+            if self.framings.contains_key(&t.id.0) {
+                if let Some(i) = Model::frame_layer(&t.layers) {
+                    todo.push((t.id.0, t.name.clone(), t.layers.clone(), i, true));
+                }
+            }
+        }
+        let mut out = Vec::new();
+        for (id, name, layers, i, framed) in todo {
+            let depth = layers[i].thickness;
+            let fit = Framing::from_catalogue(catalogue, depth);
+            let framing = fit.map(|mut f| {
+                if framed {
+                    if let Some(old) = self.framings.get(&id) {
+                        f.spacing = old.spacing;
+                        f.noggins = old.noggins;
+                        f.sheathing = old.sheathing.clone();
+                    }
+                }
+                f
+            });
+            if let Some(f) = &framing {
+                self.framings.insert(id, f.clone());
+                // A cavity framed now: it is the wall's structure (where
+                // the frame goes), and what was marked so outside it (a
+                // cladding read from another program) is a finish.
+                if let Some((t, at)) = cavity_types.iter().find(|(t, _)| t.0 == id) {
+                    if let Some(wt) = self.wall_type(*t).cloned() {
+                        let layers: Vec<Layer> = wt
+                            .layers
+                            .iter()
+                            .enumerate()
+                            .map(|(k, l)| Layer {
+                                function: if k == *at {
+                                    LayerFunction::Structure
+                                } else if l.function == LayerFunction::Structure {
+                                    LayerFunction::Finish
+                                } else {
+                                    l.function
+                                },
+                                ..l.clone()
+                            })
+                            .collect();
+                        let _ = self.edit_wall_type(*t, wt.name.clone(), wt.function, layers);
+                    }
+                }
+            }
+            out.push(CatalogueFit {
+                id,
+                name,
+                depth,
+                framing: framing.map(|f| (f.stud, f.track)),
+            });
+        }
+        out
+    }
+
+    /// The layer a steel frame fills in a wall's layers: the thickest
+    /// insulation (or air) layer with something on each side of it.
+    fn cavity_layer(&self, layers: &[Layer]) -> Option<usize> {
+        let soft = |l: &Layer| {
+            matches!(
+                l.function,
+                LayerFunction::Insulation | LayerFunction::AirGap
+            ) || self.material(l.material).is_some_and(|m| {
+                let n = m.name.to_lowercase();
+                m.category == "insulation"
+                    || m.category == "air"
+                    || n.contains("lana")
+                    || n.contains("aislamiento")
+                    || n.contains("cámara")
+            })
+        };
+        (1..layers.len().saturating_sub(1))
+            .filter(|i| soft(&layers[*i]))
+            .max_by(|a, b| layers[*a].thickness.total_cmp(&layers[*b].thickness))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -468,5 +657,57 @@ mod tests {
         assert!(m.set_type_framing(wt.0, Some(bad)).is_err());
         m.set_type_framing(wt.0, None).unwrap();
         assert_eq!(m.framings().count(), 0);
+    }
+
+    #[test]
+    fn a_catalogue_frames_the_cavities() {
+        let text = "SFC090 1,2;acero;90;43;15;1,2\nSFC100 1,5;acero;100;43;15;1,5\nSFC100 1,2;acero;100;43;15;1,2\nSFU100 1,2;acero;103;43;0;1,2\nSFU090 1,2;acero;93;43;0;1,2\n";
+        let cat = parse_section_catalogue(text);
+        let mut m = Model::new("P");
+        let board = m.add_material("Placa de yeso", "plaster", [230; 3], CutPattern::Solid);
+        let wool = m.add_material(
+            "Lana mineral",
+            "insulation",
+            [250, 230, 150],
+            CutPattern::Insulation,
+        );
+        let block = m.add_material("Bloque", "concrete", [180; 3], CutPattern::Cross);
+        let l = |m, t| Layer {
+            material: m,
+            thickness: t,
+            function: LayerFunction::Finish,
+        };
+        let facade = m
+            .add_wall_type(
+                "Fachada",
+                WallFunction::Exterior,
+                vec![l(board, 0.0125), l(wool, 0.1), l(board, 0.0125)],
+            )
+            .unwrap();
+        let thin = m
+            .add_wall_type(
+                "Tabique",
+                WallFunction::Interior,
+                vec![l(board, 0.0125), l(wool, 0.05), l(board, 0.0125)],
+            )
+            .unwrap();
+        m.add_wall_type("Bloque", WallFunction::Exterior, vec![l(block, 0.25)])
+            .unwrap();
+        // Only what is framed: nothing yet.
+        assert!(m
+            .frame_types_from_catalogue(&cat, CatalogueScope::Framed)
+            .is_empty());
+        let fits = m.frame_types_from_catalogue(&cat, CatalogueScope::Cavities);
+        assert_eq!(fits.len(), 2, "the block wall is not a cavity: {fits:?}");
+        let f = m.type_framing(facade.0).unwrap();
+        assert_eq!(f.stud.name, "SFC100 1,2", "the deepest C, thinnest gauge");
+        // The cavity is now the wall's structure, where the frame goes.
+        let layers = &m.wall_type(facade).unwrap().layers;
+        assert_eq!(Model::frame_layer(layers), Some(1));
+        assert_eq!(f.track.name, "SFU100 1,2");
+        // 50 mm: no C of the catalogue fits; left as it was.
+        let t = fits.iter().find(|x| x.id == thin.0).unwrap();
+        assert!(t.framing.is_none());
+        assert!(m.type_framing(thin.0).is_none());
     }
 }
