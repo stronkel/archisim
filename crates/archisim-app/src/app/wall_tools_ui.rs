@@ -3,7 +3,7 @@
 //! a skirting, a dado, a stripe — without drawing in Concepto.
 
 use archisim_core::{FaceSide, MaterialId, Point2, Wall, WallId};
-use eframe::egui::{Id, Ui};
+use eframe::egui::{self, Id, Ui};
 
 use super::props::{choice, group, row};
 use super::*;
@@ -202,32 +202,36 @@ impl ArchiSimApp {
         group(ui, "wall-board-faces", "Despiece a mano", |ui| {
             for (i, name, by_hand) in &layers {
                 let state = match by_hand {
-                    Some((j, 0)) => format!("a mano, {j} juntas"),
-                    Some((j, s)) => format!("a mano, {j} juntas, {s} en obra"),
-                    None => "por la regla del material".to_string(),
+                    Some((j, 0)) => format!("A mano, {j} juntas"),
+                    Some((j, s)) => format!("A mano, {j} juntas, {s} en obra"),
+                    None => "Por la regla".to_string(),
                 };
                 row(ui, &format!("Capa {}", i + 1), name, |ui, _| {
-                    ui.label(state);
+                    ui.add(egui::Label::new(state).truncate())
+                        .on_hover_text(name.as_str());
                 });
                 row(ui, "", "", |ui, _| {
                     if ui
-                        .button("Dibujar el despiece…")
-                        .on_hover_text("En alzado, visto desde fuera: las juntas son líneas (empieza con las de la regla); luego marca piezas de acento o para colocar en obra")
+                        .button("Dibujar…")
+                        .on_hover_text("El despiece de esta capa en alzado, visto desde fuera: las juntas son líneas (empieza con las de la regla); luego marca piezas de acento o para colocar en obra")
                         .clicked()
                     {
                         draw = Some(*i);
                     }
-                    if by_hand.is_some()
-                        && ui
-                            .button("Volver a la regla")
+                });
+                if by_hand.is_some() {
+                    row(ui, "", "", |ui, _| {
+                        if ui
+                            .button("A la regla")
                             .on_hover_text(
                                 "Quita el despiece a mano de esta capa: vuelve el de su material",
                             )
                             .clicked()
-                    {
-                        back = Some(*i);
-                    }
-                });
+                        {
+                            back = Some(*i);
+                        }
+                    });
+                }
             }
         });
         if let Some(i) = draw {
