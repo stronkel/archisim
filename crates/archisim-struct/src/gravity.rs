@@ -257,6 +257,9 @@ pub struct Plate {
     /// foundation of what stands on it — named so, or with 30 cm or more
     /// of concrete.
     pub raft: bool,
+    /// Inside a modular box (its floor, roof or ceiling): its chassis
+    /// carries it (`crate::boxes::chassis_checks`), not a slab of its own.
+    pub boxed: bool,
 }
 
 /// Whether a slab type is a foundation slab (see `Plate::raft`).
@@ -347,6 +350,46 @@ fn level_z(model: &Model, l: LevelId) -> f64 {
     model.level(l).map_or(0.0, |l| l.elevation)
 }
 
+/// A floor outside the boxes with nothing under it, its underside less
+/// than 1 m over the lowest level (a terrace on the ground, brought from
+/// another program on the ground floor's level): it bears on the ground,
+/// as a ground slab.
+fn on_ground(model: &Model, s: &archisim_core::Slab, thickness: f64) -> bool {
+    let levels = model.levels();
+    let Some(lowest) = levels
+        .iter()
+        .min_by(|a, b| a.elevation.total_cmp(&b.elevation))
+    else {
+        return false;
+    };
+    if lowest.id == s.level || in_box(model, s.level, &s.outline) {
+        return false;
+    }
+    let under = level_z(model, s.level) + s.top_offset - thickness;
+    let z = level_z(model, s.level);
+    under <= lowest.elevation + 1.0
+        && !model.columns().any(|c| {
+            level_z(model, c.level) < z - 0.05
+                && archisim_core::point_in_polygon(c.position, &s.outline)
+        })
+        && !model.walls().any(|w| {
+            level_z(model, w.level) < z - 0.05
+                && archisim_core::point_in_polygon((w.start + w.end) * 0.5, &s.outline)
+        })
+}
+
+/// Whether an outline lies in a modular box on its level (its middle).
+pub fn in_box(model: &Model, level: LevelId, outline: &[Point2]) -> bool {
+    if outline.is_empty() {
+        return false;
+    }
+    let c =
+        outline.iter().fold(Point2::new(0.0, 0.0), |s, p| s + *p) * (1.0 / outline.len() as f64);
+    model
+        .boxes()
+        .any(|b| b.level == level && archisim_core::point_in_polygon(c, &b.outline()))
+}
+
 pub fn plates(model: &Model) -> Vec<Plate> {
     let mut out = Vec::new();
     for s in model.slabs() {
@@ -382,11 +425,12 @@ pub fn plates(model: &Model) -> Vec<Plate> {
                 * (1.0 + pitch.tan().powi(2)).sqrt(),
             pitch,
             roof: t.function == SlabFunction::Roof,
-            base: t.function == SlabFunction::BaseSlab,
+            base: t.function == SlabFunction::BaseSlab || on_ground(model, s, t.thickness()),
             raft: is_raft_type(model, t),
             walkable: name_l.contains("transitable") && !name_l.contains("no transitable"),
             span,
             tiles: false,
+            boxed: in_box(model, s.level, &s.outline),
         });
     }
     for r in model.roofs() {
@@ -421,6 +465,7 @@ pub fn plates(model: &Model) -> Vec<Plate> {
                 tiles: r.covering.tiles.is_some(),
                 base: false,
                 raft: false,
+                boxed: in_box(model, r.level, &plane.outline),
             });
         }
     }

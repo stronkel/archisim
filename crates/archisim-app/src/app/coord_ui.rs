@@ -134,6 +134,14 @@ impl ArchiSimApp {
             }
             ui.separator();
             if ui
+                .button("Equipar la vivienda…")
+                .on_hover_text("Las instalaciones de cada local por su uso, unidas y calculadas (electricidad, agua, saneamiento, pluviales y ventilación), y con cajas las reglas del sistema")
+                .clicked()
+            {
+                self.equip.open = true;
+                ui.close();
+            }
+            if ui
                 .button("Comprobación CTE…")
                 .on_hover_text("Evacuación, accesibilidad, escaleras y rampas y superficies según el Código Técnico")
                 .clicked()

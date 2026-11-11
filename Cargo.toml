@@ -22,6 +22,7 @@ members = [
     "crates/archisim-cte",
     "crates/archisim-struct",
     "crates/archisim-mep",
+    "crates/archisim-equip",
     "crates/archisim-team",
     "crates/archisim-cli",
     "crates/archisim-app",
@@ -56,6 +57,7 @@ archisim-ids = { path = "crates/archisim-ids" }
 archisim-bcf = { path = "crates/archisim-bcf" }
 archisim-coord = { path = "crates/archisim-coord" }
 archisim-cte = { path = "crates/archisim-cte" }
+archisim-equip = { path = "crates/archisim-equip" }
 archisim-struct = { path = "crates/archisim-struct" }
 archisim-mep = { path = "crates/archisim-mep" }
 archisim-team = { path = "crates/archisim-team" }

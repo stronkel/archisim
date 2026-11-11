@@ -226,6 +226,7 @@ dependencies = [
  "archisim-cte",
  "archisim-draft",
  "archisim-dxf",
+ "archisim-equip",
  "archisim-export",
  "archisim-family",
  "archisim-file",
@@ -277,6 +278,7 @@ dependencies = [
  "archisim-core",
  "archisim-cte",
  "archisim-draft",
+ "archisim-equip",
  "archisim-export",
  "archisim-file",
  "archisim-geom",
@@ -336,6 +338,17 @@ dependencies = [
 [[package]]
 name = "archisim-dxf"
 version = "0.80.0"
+
+[[package]]
+name = "archisim-equip"
+version = "0.80.0"
+dependencies = [
+ "archisim-core",
+ "archisim-geom",
+ "archisim-library",
+ "archisim-mep",
+ "archisim-struct",
+]
 
 [[package]]
 name = "archisim-export"

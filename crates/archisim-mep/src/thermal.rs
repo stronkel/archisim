@@ -600,6 +600,18 @@ fn window_shade(
                 }
             }
         }
+        // Any other slab over it, on whatever level (a porch's roof drawn
+        // on the box's level, M17).
+        for s in model.slabs() {
+            if above.is_some_and(|(up, _)| up == s.level) || !point_in_polygon(p, &s.outline) {
+                continue;
+            }
+            let t = model.slab_type(s.slab_type).map_or(0.3, |t| t.thickness());
+            let z = model.level(s.level).map_or(0.0, |l| l.elevation) + s.top_at(p) - t;
+            if z > top_z - 0.01 && z < top_z + 4.0 {
+                over = Some(over.map_or(z, |o: f64| o.min(z)));
+            }
+        }
         for r in model.roofs() {
             let z = model.level(r.level).map_or(0.0, |l| l.elevation) + r.base_offset;
             if z < top_z - 0.01 {
@@ -823,10 +835,21 @@ pub fn thermal(model: &Model) -> Thermal {
                         let t = model.wall_type(w.wall_type)?;
                         let (dist, _) = segment_distance(mid, w.start, w.end);
                         let along = (w.end - w.start).normalized()?;
-                        (dist <= t.thickness() + 0.35 && along.cross(d).abs() < 0.2)
+                        // Up the room's height (not a plinth under the
+                        // floor or a fascia over the ceiling).
+                        let spans = w.base_offset < 1.5 && w.base_offset + w.height > 1.0;
+                        (spans && dist <= t.thickness() + 0.35 && along.cross(d).abs() < 0.2)
                             .then_some((w, t, dist))
                     })
-                    .min_by(|x, y| x.2.total_cmp(&y.2));
+                    // A piece under 30 cm (the cladding's return at a corner
+                    // or over a joint between boxes) is not the room's
+                    // façade if a longer wall is there too.
+                    .min_by(|x, y| {
+                        let short = |w: &archisim_core::Wall| w.start.distance(w.end) < 0.30;
+                        (short(x.0), x.2)
+                            .partial_cmp(&(short(y.0), y.2))
+                            .unwrap_or(std::cmp::Ordering::Equal)
+                    });
                 let Some((wall, wtype, _)) = wall else {
                     continue;
                 };
@@ -945,9 +968,23 @@ pub fn thermal(model: &Model) -> Thermal {
                     ));
                 }
             }
-            // Above: a room over it is inside; otherwise the slab of the
-            // level above, or a roof.
-            if let Some((up, _)) = above {
+            // Above: a roof slab of its own level over it (a modular
+            // box's, M2); a room over it is inside; otherwise the slab of
+            // the level above, or a roof.
+            let own_roof = model
+                .slabs_on_level(level.id)
+                .filter(|s| s.top_at(p) > 2.0 && point_in_polygon(p, &s.outline))
+                .filter_map(|s| model.slab_type(s.slab_type))
+                .find(|t| t.function == archisim_core::SlabFunction::Roof);
+            if let Some(t) = own_roof {
+                pieces.push(Piece::plain(
+                    Kind::Roof,
+                    t.name.clone(),
+                    area,
+                    framed_u_value(model, t.id.0, &t.layers, RSI_UP, RSE),
+                    Facing::Up,
+                ));
+            } else if let Some((up, _)) = above {
                 let covered = model.rooms_on_level(up).any(|r| r.contains(p));
                 if !covered {
                     let slab = model
