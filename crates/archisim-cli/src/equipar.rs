@@ -637,7 +637,12 @@ fn crosses(a: Point2, b: Point2, c: Point2, d: Point2) -> bool {
 /// nearest to the tree first, joined to the nearest point of the tree by
 /// one or two straight stretches (the way that crosses fewer walls). Each
 /// path goes from its target to the tree (the first, to the root).
-fn tree(walls: &[(Point2, Point2)], root: Point2, targets: &[Point2]) -> Vec<Vec<Point2>> {
+fn tree(
+    walls: &[(Point2, Point2)],
+    inside: &[Vec<Point2>],
+    root: Point2,
+    targets: &[Point2],
+) -> Vec<Vec<Point2>> {
     let mut segs: Vec<(Point2, Point2)> = Vec::new();
     let mut out = Vec::new();
     let mut left: Vec<Point2> = targets.to_vec();
@@ -684,11 +689,42 @@ fn tree(walls: &[(Point2, Point2)], root: Point2, targets: &[Point2]) -> Vec<Vec
                 })
                 .sum()
         };
-        let options = [
+        // How much of a way runs outside the building (every 25 cm).
+        let outside = |path: &[Point2]| -> usize {
+            if inside.is_empty() {
+                return 0;
+            }
+            path.windows(2)
+                .map(|s| {
+                    let n = (s[0].distance(s[1]) / 0.25).ceil().max(1.0) as usize;
+                    (0..=n)
+                        .filter(|k| {
+                            let x = s[0] + (s[1] - s[0]) * (*k as f64 / n as f64);
+                            !inside.iter().any(|poly| point_in_polygon(x, poly))
+                        })
+                        .count()
+                })
+                .sum()
+        };
+        let mut options = vec![
             vec![p, Point2::new(q.x, p.y), q],
             vec![p, Point2::new(p.x, q.y), q],
         ];
-        let mut path = options.into_iter().min_by_key(|o| crossings(o)).unwrap();
+        // Round by the middle of a room or a box (an L-shaped house: not
+        // across its courtyard).
+        for poly in inside {
+            let c = archisim_core::rooms::centroid(poly);
+            options.push(vec![p, Point2::new(p.x, c.y), Point2::new(q.x, c.y), q]);
+            options.push(vec![p, Point2::new(c.x, p.y), Point2::new(c.x, q.y), q]);
+        }
+        let score = |o: &Vec<Point2>| {
+            let len: f64 = o.windows(2).map(|w| w[0].distance(w[1])).sum();
+            outside(o) as f64 * 100.0 + crossings(o) as f64 * 2.0 + len
+        };
+        let mut path = options
+            .into_iter()
+            .min_by(|a, b| score(a).total_cmp(&score(b)))
+            .unwrap();
         path.dedup_by(|a, b| a.distance(*b) < 0.02);
         for w in path.windows(2) {
             segs.push((w[0], w[1]));
@@ -696,6 +732,15 @@ fn tree(walls: &[(Point2, Point2)], root: Point2, targets: &[Point2]) -> Vec<Vec
         out.push(path);
     }
     out
+}
+
+/// Where the pipes may go on a level: its rooms and its boxes.
+fn indoors(m: &Model, level: LevelId) -> Vec<Vec<Point2>> {
+    m.rooms()
+        .filter(|r| r.level == level)
+        .map(|r| r.outline.clone())
+        .chain(m.boxes().filter(|b| b.level == level).map(|b| b.outline()))
+        .collect()
 }
 
 fn walls_on(m: &Model, level: LevelId) -> Vec<(Point2, Point2)> {
@@ -924,7 +969,7 @@ pub fn plumb(m: &mut Model, level: LevelId) -> Res<String> {
         targets.insert(0, h);
     }
     let mut runs = 0;
-    for path in tree(&walls, into, &targets) {
+    for path in tree(&walls, &indoors(m, level), into, &targets) {
         run(m, level, S::ColdWater, path, WATER_Z, 0.025, 0.0)?;
         runs += 1;
     }
@@ -941,7 +986,7 @@ pub fn plumb(m: &mut Model, level: LevelId) -> Res<String> {
     // Hot water: from the tank.
     if let Some(h) = heater_at {
         let hot = appliance_points(m, level, true);
-        for path in tree(&walls, h, &hot) {
+        for path in tree(&walls, &indoors(m, level), h, &hot) {
             run(m, level, S::HotWater, path, WATER_Z - 0.05, 0.02, 0.0)?;
             runs += 1;
         }
@@ -952,7 +997,7 @@ pub fn plumb(m: &mut Model, level: LevelId) -> Res<String> {
             .copied()
             .max_by(|a, b| a.distance(h).total_cmp(&b.distance(h)));
         if let Some(f) = far.filter(|f| (f.x - h.x).abs() + (f.y - h.y).abs() > 15.0) {
-            for path in tree(&walls, h, &[f]) {
+            for path in tree(&walls, &indoors(m, level), h, &[f]) {
                 let path: Vec<Point2> = path.iter().map(|p| *p + Point2::new(0.06, 0.06)).collect();
                 run(m, level, S::HotReturn, path, WATER_Z - 0.10, 0.02, 0.0)?;
             }
@@ -1009,7 +1054,7 @@ pub fn plumb(m: &mut Model, level: LevelId) -> Res<String> {
     // WC within 1 m of it, 3.3.1.4) or in the middle of its appliances.
     let feet: Vec<Point2> = drain_points(m, level);
     // Walls don't matter under the floor: the shortest way.
-    let paths = tree(&[], chamber, &feet);
+    let paths = tree(&[], &indoors(m, level), chamber, &feet);
     // Heights: along the tree from the chamber up.
     let mut known: Vec<(Point2, Point2, f64, f64)> = Vec::new(); // a, b, z at a, z at b
     let z_on = |known: &[(Point2, Point2, f64, f64)], p: Point2| -> f64 {
@@ -1141,6 +1186,23 @@ pub fn plumb(m: &mut Model, level: LevelId) -> Res<String> {
         let _ = writeln!(t, "  Aviso: el colector más alto empieza a {high:.2}, por encima de {DRAIN_TOP_Z:.2} (el chasis)");
     }
     Ok(t)
+}
+
+/// Height of a collector at a point on it (`known`: its stretches with the
+/// heights at both ends), or `exit` off it.
+fn z_along(known: &[(Point2, Point2, f64, f64)], p: Point2, exit: f64) -> f64 {
+    for (a, b, za, zb) in known {
+        let ab = *b - *a;
+        let l = ab.length();
+        if l < 1e-9 {
+            continue;
+        }
+        let s = (p - *a).dot(ab) / (l * l);
+        if (*a + ab * s.clamp(0.0, 1.0)).distance(p) < 0.03 {
+            return za + (zb - za) * s.clamp(0.0, 1.0);
+        }
+    }
+    exit
 }
 
 /// The lowest level (the crawl space, or the ground) and how far `level`
@@ -1705,15 +1767,36 @@ pub fn rain(m: &mut Model, level: LevelId) -> Res<String> {
                 edges.push((a, b, out));
             }
         }
-        let Some((a, b, out)) = edges
-            .into_iter()
-            .max_by(|x, y| x.0.distance(x.1).total_cmp(&y.0.distance(y.1)))
-        else {
+        // Not over a lower roof (a porch): the downpipe falls clear to
+        // the ground; then the longest.
+        let over_lower = |p: Point2| {
+            slabs.iter().any(|x| {
+                let top = abs_top(m, x, p);
+                top > z_level + 0.5 && top < o.top - 0.1 && point_in_polygon(p, &x.outline)
+            })
+        };
+        let Some((a, b, out)) = edges.into_iter().max_by(|x, y| {
+            let key = |e: &(Point2, Point2, Point2)| {
+                let clear = !over_lower((e.0 + e.1) * 0.5 + e.2 * 0.3);
+                (clear as u8 as f64) * 1000.0 + e.0.distance(e.1)
+            };
+            key(x).total_cmp(&key(y))
+        }) else {
             continue;
         };
         let ground = o.level == level && (o.top - z_level).abs() < 0.5;
+        let len = a.distance(b).max(1e-6);
         for j in 0..n_out {
-            let f = (j as f64 + 0.5) / n_out as f64;
+            // On a roof, by the corners (the downpipes in the joints
+            // between boxes); on the ground, spread along.
+            let f = if ground {
+                (j as f64 + 0.5) / n_out as f64
+            } else if n_out == 1 {
+                0.5f64.min(0.4 / len)
+            } else {
+                let lo = (0.4 / len).min(0.5);
+                lo + (1.0 - 2.0 * lo) * j as f64 / (n_out - 1) as f64
+            };
             let edge = a + (b - a) * f;
             let outlet = edge - out * 0.4;
             let top_rel = o.top - m.level(o.level).map_or(0.0, |l| l.elevation);
@@ -1755,40 +1838,43 @@ pub fn rain(m: &mut Model, level: LevelId) -> Res<String> {
         0.0,
         Some(-1.2),
     )?;
+    // The collector, laid out first; then deep enough for the farthest
+    // downpipe's foot to stay 50 cm under the ground with its 2 % (DB-HS
+    // 5, buried).
+    let slope = 0.02;
+    let paths = tree(&[], &[], chamber, &feet);
+    let heights = |exit: f64| -> Vec<(Point2, Point2, f64, f64)> {
+        let mut known: Vec<(Point2, Point2, f64, f64)> = Vec::new();
+        for path in &paths {
+            let end = *path.last().unwrap();
+            let len: f64 = path.windows(2).map(|w| w[0].distance(w[1])).sum();
+            let z0 = z_along(&known, end, exit) + slope * len;
+            let mut acc = 0.0;
+            for w in path.windows(2) {
+                let l = w[0].distance(w[1]);
+                known.push((w[0], w[1], z0 - slope * acc, z0 - slope * (acc + l)));
+                acc += l;
+            }
+        }
+        known
+    };
+    let rise = heights(0.0)
+        .iter()
+        .map(|k| k.2.max(k.3))
+        .fold(0.0, f64::max);
+    let exit = (-0.5 - rise).min(-0.9);
+    let known = heights(exit);
     m.edit_device(id, |d| {
         d.width = 0.6;
         d.depth = 0.6;
-        d.height = 0.9;
+        d.elevation = exit - 0.3;
+        d.height = -exit + 0.3;
     })?;
-    let exit = -0.9;
-    let slope = 0.02;
-    let mut known: Vec<(Point2, Point2, f64, f64)> = Vec::new();
-    let z_on = |known: &[(Point2, Point2, f64, f64)], p: Point2| -> f64 {
-        for (a, b, za, zb) in known {
-            let ab = *b - *a;
-            let l = ab.length();
-            if l < 1e-9 {
-                continue;
-            }
-            let s = (p - *a).dot(ab) / (l * l);
-            if (*a + ab * s.clamp(0.0, 1.0)).distance(p) < 0.03 {
-                return za + (zb - za) * s.clamp(0.0, 1.0);
-            }
-        }
-        exit
-    };
-    for path in tree(&[], chamber, &feet) {
-        let end = *path.last().unwrap();
-        let len: f64 = path.windows(2).map(|w| w[0].distance(w[1])).sum();
-        let z0 = z_on(&known, end) + slope * len;
-        let mut acc = 0.0;
-        for w in path.windows(2) {
-            let l = w[0].distance(w[1]);
-            known.push((w[0], w[1], z0 - slope * acc, z0 - slope * (acc + l)));
-            acc += l;
-        }
+    let z_on = |known: &[(Point2, Point2, f64, f64)], p: Point2| z_along(known, p, exit);
+    for path in &paths {
+        let start = z_on(&known, path[0]);
         let (base, dz) = under(m, level);
-        run(m, base, S::Rainwater, path, z0 + dz, 0.11, slope)?;
+        run(m, base, S::Rainwater, path.clone(), start + dz, 0.11, slope)?;
     }
     // The downpipes, from the collector up to their outlet.
     let mut pipes = 0;
@@ -1965,7 +2051,7 @@ pub fn ventilate(m: &mut Model, level: LevelId, roof: Option<LevelId>) -> Res<St
             d.depth = 0.16;
             d.height = roof_z + 0.3;
         })?;
-        for path in tree(&walls_on(m, level), shaft_at, &vents) {
+        for path in tree(&walls_on(m, level), &indoors(m, level), shaft_at, &vents) {
             run(m, level, S::ExhaustAir, path, DUCT_Z, 0.125, 0.0)?;
             ducts += 1;
         }
