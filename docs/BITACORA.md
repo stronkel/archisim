@@ -6,6 +6,14 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-11 (153) · M18 bis y M19: remates del despiece y `archisim equipar` (la L-160 a LOD 400)
+
+Rama `bloque/equipar` (sobre la del despiece), con pull request. Formato versión 108 (añade `accent_side` al despiece; sin migración).
+
+- **Qué se hizo.** Despiece: la madera en su formato (hasta 1,20 × 2,70); las columnas de 1,20 empiezan en cada jamba y en el marco de acento de 30 cm a cada lado de los huecos (ventanal de 3,00: 0,30 + 3 × 1,00 + 0,30; salida de 1,20: 0,30 + 1,20 + 0,30; baño de 0,60: una columna justa de 1,20); a las esquinas van las piezas pequeñas, nunca de menos de 30 cm. La banda alta (0,81) sale de cortar placas de 2,70 (tres por placa). `archisim equipar`: amuebla con una lista, aplica una colección y pone las instalaciones por el uso de cada local (REBT, HS 4, HS 5 con pluviales, HS 3), las une para que las calcule el programa y les pone los tamaños del cálculo; con las cajas, aplica las reglas del sistema a lo que viene de otro programa (entramado en la cámara de lana, suelos del sistema, un muro por junta, montantes dibujados como pilares fuera, capas al revés, clases de materiales), pone las cubiertas de las cajas, porches ligeros donde estaban los de hormigón y elige el espesor de los montantes por cálculo. Con todo ello se ha montado la L-160 a LOD 400 (no se sube: es un proyecto real).
+- **Pendiente.** El porche ligero: el cálculo general aún no sabe que sus vueltas se cuelgan del chasis y las da como voladizo; los suelos de caja aparecen en el cálculo como losas sobre los pilares de la obra previa (el chasis no entra todavía en el cálculo general); la puerta del aseo pide 11 mm de holgura; quedan cuatro trozos de fachada sueltos del IFC (0,2–3 m²); el control solar de julio no ve los porches como alero.
+- **Qué debe probar Antonio.** Abrir `L-160-LOD400.archisim` (se le envía) y mirar planta, 3D e instalaciones; `archisim cte L-160-LOD400.archisim`; los PDF de esquemas, memoria, unifilar, estructura, taller y fábrica que se le envían. En Tipos y materiales → placa cerámica → «Despiece en placas», el nuevo campo «Marco (m)».
+
 ## 2026-11-10 (152) · M18: el despiece del estudio (cremallera, líneas de junta y acentos)
 
 Rama `bloque/despiece-placas` (sobre la del porche), con pull request. Formato versión 108 (`board_layouts`; los ficheros anteriores se abren sin despiece propio).

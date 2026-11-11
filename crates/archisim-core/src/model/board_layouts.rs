@@ -48,6 +48,10 @@ pub struct BoardAccent {
     /// The pieces of the band from the lowest joint line up to this
     /// height over the level (m) whose column a door or window crosses.
     pub up_to: f64,
+    /// The width of the frame each side of a door or window (m): a column
+    /// of that width beside each jamb takes the accent too, so the opening
+    /// is framed. Zero: only the columns the opening crosses.
+    pub side: f64,
 }
 
 /// A board layout.
@@ -71,7 +75,10 @@ impl BoardLayout {
                 BoardJoints::Lines(v) => v.iter().all(|h| h.is_finite()),
                 _ => true,
             }
-            && self.accent.as_ref().is_none_or(|a| a.up_to.is_finite())
+            && self
+                .accent
+                .as_ref()
+                .is_none_or(|a| a.up_to.is_finite() && (0.0..=1.2).contains(&a.side))
     }
 }
 

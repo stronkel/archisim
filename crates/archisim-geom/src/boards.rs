@@ -297,15 +297,130 @@ struct Laid {
 
 /// Boards over the rectangle `face` as `laying` says, `shift` a part of a
 /// board (the layer's offset), less the `holes`.
+/// The narrowest piece a column of the studio's layout is left with at a
+/// corner or a jamb (m): a narrower remnant is shared with the board next
+/// to it, two equal pieces.
+pub const MIN_PIECE: f64 = 0.30;
+
+/// The columns of a studio layout across a face, as (from, to, frame):
+/// a joint at each jamb of a door or window (and at the frame beside it,
+/// `side`, which takes the accent), whole boards from the openings out to
+/// the corners with the smaller pieces at the corners, and the run over an
+/// opening or between two in equal pieces. No piece narrower than
+/// [`MIN_PIECE`] unless the gap itself is.
+pub fn layout_columns(face: Rect, bw: f64, holes: &[Rect], side: f64) -> Vec<(f64, f64, bool)> {
+    let (a, b) = (face[0], face[2]);
+    if b - a < 1e-6 || bw < 1e-6 {
+        return Vec::new();
+    }
+    // The fixed joints: the jambs (and the frames), inside the face.
+    let mut marks: Vec<f64> = vec![a, b];
+    let mut frames: Vec<(f64, f64)> = Vec::new();
+    let mut spans: Vec<(f64, f64)> = Vec::new();
+    for h in holes {
+        let (h0, h1) = (h[0].max(a), h[2].min(b));
+        if h1 - h0 < 0.01 {
+            continue;
+        }
+        spans.push((h0, h1));
+        marks.extend([h0, h1]);
+        if side > 0.01 {
+            let (f0, f1) = ((h0 - side).max(a), (h1 + side).min(b));
+            frames.push((f0, h0));
+            frames.push((h1, f1));
+            marks.extend([f0, f1]);
+        }
+    }
+    marks.sort_by(|x, y| x.total_cmp(y));
+    marks.dedup_by(|x, y| (*x - *y).abs() < 0.02);
+    if let Some(last) = marks.last_mut() {
+        *last = b;
+    }
+    let within = |u0: f64, u1: f64, r: &(f64, f64)| u0 >= r.0 - 0.02 && u1 <= r.1 + 0.02;
+    let mut out = Vec::new();
+    for w in marks.windows(2) {
+        let (u0, u1) = (w[0], w[1]);
+        let len = u1 - u0;
+        if len < 0.005 {
+            continue;
+        }
+        let frame =
+            frames.iter().any(|r| within(u0, u1, r)) && !spans.iter().any(|r| within(u0, u1, r));
+        let at_start = (u0 - a).abs() < 1e-6;
+        let at_end = (u1 - b).abs() < 1e-6;
+        let mut cuts: Vec<f64> = Vec::new();
+        if frame || len <= bw + 1e-6 {
+            cuts = vec![u0, u1];
+        } else if at_start != at_end {
+            // Out to a corner: whole boards from the opening, the remnant
+            // at the corner.
+            let n = (len / bw).floor() as usize;
+            let rest = len - n as f64 * bw;
+            let mut widths = vec![bw; n];
+            if rest > 0.005 {
+                if rest < MIN_PIECE && n > 0 {
+                    let shared = (bw + rest) / 2.0;
+                    widths.pop();
+                    widths.extend([shared, shared]);
+                } else {
+                    widths.push(rest);
+                }
+            }
+            if at_start {
+                widths.reverse();
+            }
+            cuts.push(u0);
+            for wd in widths {
+                let v = cuts.last().unwrap() + wd;
+                cuts.push(v);
+            }
+            *cuts.last_mut().unwrap() = u1;
+        } else if at_start && at_end {
+            // A face without openings: whole boards in the middle, the
+            // remnant shared by the two corners.
+            let n = (len / bw).floor() as usize;
+            let rest = len - n as f64 * bw;
+            let mut widths = vec![bw; n];
+            if rest > 0.005 {
+                let half = rest / 2.0;
+                if half < MIN_PIECE && n > 0 {
+                    let shared = (bw + rest) / 2.0;
+                    widths.pop();
+                    widths.insert(0, shared);
+                    widths.push(shared);
+                } else {
+                    widths.insert(0, half);
+                    widths.push(half);
+                }
+            }
+            cuts.push(u0);
+            for wd in widths {
+                let v = cuts.last().unwrap() + wd;
+                cuts.push(v);
+            }
+            *cuts.last_mut().unwrap() = u1;
+        } else {
+            // Over an opening or between two: equal pieces.
+            let n = (len / bw - 1e-6).ceil().max(1.0) as usize;
+            cuts = (0..=n).map(|k| u0 + len * k as f64 / n as f64).collect();
+        }
+        for c in cuts.windows(2) {
+            out.push((c[0], c[1], frame));
+        }
+    }
+    out
+}
+
 fn lay_with(face: Rect, laying: &Laying, shift: f64, holes: &[Rect]) -> Vec<Laid> {
     let f = laying.format;
+    let side = laying.accent.as_ref().map_or(0.0, |a| a.side);
     let columns_of = |bw: f64, bl: f64, zipper: bool, lines: Option<&[f64]>| {
         let mut out: Vec<Laid> = Vec::new();
-        let off = (shift % 1.0) * bw;
-        let mut u = face[0] - off;
-        let mut c = 0usize;
         let height = face[3] - face[1];
-        while u < face[2] - 1e-6 {
+        for (c, (u0, u1, frame)) in layout_columns(face, bw, holes, side)
+            .into_iter()
+            .enumerate()
+        {
             // The joints of this column, bottom to top.
             let mut cuts: Vec<f64> = vec![face[1]];
             match lines {
@@ -342,23 +457,21 @@ fn lay_with(face: Rect, laying: &Laying, shift: f64, holes: &[Rect]) -> Vec<Laid
                 }
             }
             for k in 0..cuts.len().saturating_sub(1) {
-                let sheet = [u, cuts[k], u + bw, cuts[k + 1]];
-                let Some(r) = overlap(sheet, face) else {
-                    continue;
-                };
+                let r = [u0, cuts[k], u1, cuts[k + 1]];
                 let cut: f64 = holes.iter().filter_map(|h| overlap(*h, r)).map(area).sum();
                 let left = area(r) - cut;
                 // The accent: in the band of the doors' heads, in a column
-                // a door or window crosses.
+                // a door or window crosses or in the frame beside one.
                 let accent = laying.accent.as_ref().is_some_and(|a| {
                     let low = lines
                         .and_then(|l| l.iter().copied().reduce(f64::min))
                         .unwrap_or(face[1]);
                     r[1] >= low - 1e-6
                         && r[3] <= a.up_to + 1e-6
-                        && holes
-                            .iter()
-                            .any(|h| h[0] < r[2] - 1e-6 && h[2] > r[0] + 1e-6)
+                        && (frame
+                            || holes
+                                .iter()
+                                .any(|h| h[0] < r[2] - 1e-6 && h[2] > r[0] + 1e-6))
                 });
                 if left > 0.005 {
                     out.push(Laid {
@@ -369,9 +482,8 @@ fn lay_with(face: Rect, laying: &Laying, shift: f64, holes: &[Rect]) -> Vec<Laid
                     });
                 }
             }
-            u += bw;
-            c += 1;
         }
+        let _ = shift;
         out
     };
     let (bw, bl) = if laying.upright {
@@ -428,13 +540,19 @@ pub fn wall_boards(model: &Model, wall: archisim_core::WallId) -> Vec<BoardPiece
             .enumerate()
         {
             let (material, format) = match (&laying.accent, p.accent) {
-                (Some(a), true) => (
-                    a.material,
-                    BoardFormat {
-                        kind: "Acento",
-                        ..laying.format
-                    },
-                ),
+                (Some(a), true) => {
+                    // Its own commercial size, if the accent material has
+                    // a layout.
+                    let own = model.board_layout(a.material);
+                    (
+                        a.material,
+                        BoardFormat {
+                            kind: "Acento",
+                            width: own.map_or(laying.format.width, |o| o.width),
+                            length: own.map_or(laying.format.length, |o| o.length),
+                        },
+                    )
+                }
                 _ => (l.material, laying.format),
             };
             out.push(BoardPiece {
@@ -1361,6 +1479,29 @@ mod tests {
     }
 
     #[test]
+    fn columns_frame_the_openings_and_leave_no_slivers() {
+        let widths = |c: &[(f64, f64, bool)]| -> Vec<f64> {
+            c.iter()
+                .map(|x| ((x.1 - x.0) * 100.0).round() / 100.0)
+                .collect()
+        };
+        // A blank face of 6,10: whole boards, the remnant at both corners.
+        let c = layout_columns([0.0, 0.0, 6.1, 3.0], 1.2, &[], 0.0);
+        assert_eq!(widths(&c), vec![0.65, 1.2, 1.2, 1.2, 1.2, 0.65]);
+        // 3,70: a 0,05 remnant is shared with the last board, not left.
+        let c = layout_columns([0.0, 0.0, 3.7, 3.0], 1.2, &[], 0.0);
+        assert!(widths(&c).iter().all(|w| *w >= MIN_PIECE), "{c:?}");
+        // A 3,00 window with a 0,30 frame each side, at 1,50–4,50 of 6,10.
+        let c = layout_columns([0.0, 0.0, 6.1, 3.0], 1.2, &[[1.5, 0.9, 4.5, 2.5]], 0.3);
+        assert_eq!(widths(&c), vec![1.2, 0.3, 1.0, 1.0, 1.0, 0.3, 0.65, 0.65]);
+        assert_eq!(c.iter().filter(|x| x.2).count(), 2);
+        // Joints at the jambs and the frames.
+        for x in [1.2, 1.5, 4.5, 4.8] {
+            assert!(c.iter().any(|k| (k.0 - x).abs() < 1e-9), "{x}");
+        }
+    }
+
+    #[test]
     fn a_cladding_by_lines_frames_the_window_in_wood() {
         let (mut m, w) = plaster_wall(3.6);
         let gyp = m.materials().find(|x| x.name.contains("yeso")).unwrap().id;
@@ -1375,6 +1516,7 @@ mod tests {
                 accent: Some(archisim_core::BoardAccent {
                     material: wood,
                     up_to: 2.0,
+                    side: 0.0,
                 }),
             }),
         )
@@ -1407,10 +1549,11 @@ mod tests {
             .into_iter()
             .filter(|x| x.layer == 0)
             .collect();
-        // Bands 0–2,0 and 2,0–2,6; the middle column's lower piece is wood.
+        // Bands 0–2,0 and 2,0–2,6; the column under the window (its joints
+        // at the jambs) is wood in the lower band.
         let wood_pieces: Vec<_> = p.iter().filter(|x| x.material == wood).collect();
         assert_eq!(wood_pieces.len(), 1, "{p:?}");
-        assert!((wood_pieces[0].at.0 - 1.2).abs() < 1e-9);
+        assert!((wood_pieces[0].at.0 - 1.4).abs() < 1e-9);
         assert!((wood_pieces[0].size.1 - 2.0).abs() < 1e-9);
         assert!(p
             .iter()

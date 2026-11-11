@@ -1025,6 +1025,7 @@ mod tests {
             accent: Some(archisim_core::BoardAccent {
                 material: b,
                 up_to: 2.5,
+                side: 0.3,
             }),
         };
         m.set_board_layout(a, Some(l.clone())).unwrap();
