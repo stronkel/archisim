@@ -166,3 +166,81 @@ impl ArchiSimApp {
         }
     }
 }
+
+impl ArchiSimApp {
+    /// The «Despiece a mano» group of a wall's properties (M20): each of
+    /// its layers of boards drawn by hand on the face, or by its
+    /// material's rule.
+    pub(super) fn board_face_group(&mut self, ui: &mut Ui, id: WallId, w: &Wall) {
+        let m = self.ed.model();
+        let Some(t) = m.wall_type(w.wall_type) else {
+            return;
+        };
+        // Each board layer: its index, name and, if drawn by hand, its
+        // joints and pieces on site.
+        type Row = (usize, String, Option<(usize, usize)>);
+        let layers: Vec<Row> = t
+            .layers
+            .iter()
+            .enumerate()
+            .filter(|(_, l)| archisim_geom::boards::laying(m, l.material, l.thickness).is_some())
+            .map(|(i, l)| {
+                let name = m
+                    .material(l.material)
+                    .map_or_else(|| format!("capa {}", i + 1), |x| x.name.clone());
+                let by_hand = m
+                    .board_face(id, i)
+                    .map(|f| (f.joints.len(), f.marks.iter().filter(|k| k.on_site).count()));
+                (i, name, by_hand)
+            })
+            .collect();
+        if layers.is_empty() {
+            return;
+        }
+        let mut draw: Option<usize> = None;
+        let mut back: Option<usize> = None;
+        group(ui, "wall-board-faces", "Despiece a mano", |ui| {
+            for (i, name, by_hand) in &layers {
+                let state = match by_hand {
+                    Some((j, 0)) => format!("a mano, {j} juntas"),
+                    Some((j, s)) => format!("a mano, {j} juntas, {s} en obra"),
+                    None => "por la regla del material".to_string(),
+                };
+                row(ui, &format!("Capa {}", i + 1), name, |ui, _| {
+                    ui.label(state);
+                });
+                row(ui, "", "", |ui, _| {
+                    if ui
+                        .button("Dibujar el despiece…")
+                        .on_hover_text("En alzado, visto desde fuera: las juntas son líneas (empieza con las de la regla); luego marca piezas de acento o para colocar en obra")
+                        .clicked()
+                    {
+                        draw = Some(*i);
+                    }
+                    if by_hand.is_some()
+                        && ui
+                            .button("Volver a la regla")
+                            .on_hover_text(
+                                "Quita el despiece a mano de esta capa: vuelve el de su material",
+                            )
+                            .clicked()
+                    {
+                        back = Some(*i);
+                    }
+                });
+            }
+        });
+        if let Some(i) = draw {
+            self.start_sketch(crate::sketch::SketchTarget::BoardFace(id, i));
+        }
+        if let Some(i) = back {
+            match self
+                .ed
+                .transact("Volver a la regla", |m| m.set_board_face(id, i, None))
+            {
+                Ok(()) => self.say("La capa vuelve al despiece de su material."),
+                Err(e) => self.complain(format!("No se puede: {e}.")),
+            }
+        }
+    }
+}

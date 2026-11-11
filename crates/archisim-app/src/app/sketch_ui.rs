@@ -51,6 +51,21 @@ pub(crate) struct SketchState {
     /// The exterior face is seen from outside: its start on the right
     /// (`x` drawn as the wall's length minus `x`).
     mirror: Option<f64>,
+    /// A face composed by hand: what a click on a piece does to it.
+    pub piece: Option<PieceMode>,
+    /// The material a click makes a piece of (the accent).
+    pub accent: Option<archisim_core::MaterialId>,
+}
+
+/// What a click on a piece does, in a face composed by hand (M20).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PieceMode {
+    /// Another material: the accent.
+    Accent,
+    /// Left out of the factory, fitted on site.
+    OnSite,
+    /// Back to the layer's material and the factory.
+    Plain,
 }
 
 /// How much of the rest of the drawing the sketch's veil hides (of 255).
@@ -71,7 +86,7 @@ fn mirrored(mirror: Option<f64>, p: Point2) -> Point2 {
 /// border and its doors and windows, in the sketch's coordinates.
 fn wall_references(m: &archisim_core::Model, target: SketchTarget) -> Vec<Vec<Point2>> {
     let (w, up) = match target {
-        SketchTarget::WallFace(w, _) => (w, 0.0),
+        SketchTarget::WallFace(w, _) | SketchTarget::BoardFace(w, _) => (w, 0.0),
         SketchTarget::WallProfile(w) => (w, 1.0),
         // A face standing up: its outline seen from outside.
         SketchTarget::Zones(e, face) => {
@@ -183,9 +198,8 @@ impl ArchiSimApp {
         }
         // The exterior side of a wall is seen from outside.
         let mirror = match sketch.target {
-            SketchTarget::WallFace(w, archisim_core::FaceSide::Exterior) => {
-                self.ed.model().wall(w).map(|w| w.length())
-            }
+            SketchTarget::WallFace(w, archisim_core::FaceSide::Exterior)
+            | SketchTarget::BoardFace(w, _) => self.ed.model().wall(w).map(|w| w.length()),
             _ => None,
         };
         let title = match sketch.target {
@@ -201,6 +215,12 @@ impl ArchiSimApp {
                 }
             ),
             SketchTarget::WallProfile(w) => format!("Boceto · perfil del muro {}", w.0),
+            SketchTarget::BoardFace(w, layer) => format!(
+                "Despiece · muro {} · capa {} · {}",
+                w.0,
+                layer + 1,
+                board_layer_name(self.ed.model(), w, layer)
+            ),
             SketchTarget::Zones(..) => "Boceto · cara".to_string(),
             _ => String::new(),
         };
@@ -284,6 +304,10 @@ impl ArchiSimApp {
             self.ed.hide([sketch.element()]);
         }
         self.ed.selection.clear();
+        let accent = match sketch.target {
+            SketchTarget::BoardFace(w, l) => usual_accent(self.ed.model(), w, l),
+            _ => None,
+        };
         let settings = self.cad_settings.clone();
         self.cad_settings.layer = layer;
         self.cad_settings.color = None;
@@ -303,6 +327,8 @@ impl ArchiSimApp {
             pick_at: None,
             elevation,
             mirror,
+            piece: None,
+            accent,
         });
     }
 
@@ -325,7 +351,19 @@ impl ArchiSimApp {
         let segs = self.sketch_segs(&st);
         let zones = st.sketch.is_zones();
         let mirror = st.mirror;
-        let loops = if matches!(st.sketch.target, SketchTarget::RoadEdges(_)) {
+        let loops = if st.sketch.is_joints() {
+            // Loose joint lines, each as drawn.
+            Ok(segs
+                .iter()
+                .map(|s| {
+                    let pts = match s {
+                        archisim_draft::Seg::Line { a, b } => vec![*a, *b],
+                        _ => s.tessellate(0.02),
+                    };
+                    pts.into_iter().map(|p| mirrored(mirror, p)).collect()
+                })
+                .collect())
+        } else if matches!(st.sketch.target, SketchTarget::RoadEdges(_)) {
             chains_from_segs(&segs)
         } else if st.sketch.is_open() {
             chain_from_segs(&segs).map(|c| vec![c])
@@ -371,6 +409,7 @@ impl ArchiSimApp {
                     SketchTarget::WallProfile(_) => "Editar perfil",
                     SketchTarget::Road(_) => "Editar el eje",
                     SketchTarget::RoadEdges(_) => "Editar bordillos y fachadas",
+                    SketchTarget::BoardFace(..) => "Despiece a mano",
                     _ if zones => "Dividir cara",
                     _ => "Editar contorno",
                 };
@@ -379,6 +418,7 @@ impl ArchiSimApp {
                     SketchTarget::WallProfile(_) => "Perfil del muro cambiado.",
                     SketchTarget::Road(_) => "Eje de la calle cambiado.",
                     SketchTarget::RoadEdges(_) => "Bordillos y fachadas cambiados: la calle cambia de sección donde los has movido.",
+                    SketchTarget::BoardFace(..) => "Despiece a mano guardado: placas, compra, fábrica y 3D lo siguen.",
                     _ if zones => "Cara dividida: pinta cada zona con Pintar.",
                     _ => "Contorno cambiado.",
                 };
@@ -444,6 +484,9 @@ impl ArchiSimApp {
             0.0,
             Color32::from_rgba_unmultiplied(255, 255, 255, SKETCH_VEIL),
         );
+        if st.sketch.is_joints() {
+            self.draw_live_pieces(st, painter, rect);
+        }
         let stroke = Stroke::new(2.2, SKETCH);
         for seg in self.sketch_segs(st) {
             let pts: Vec<egui::Pos2> = seg
@@ -502,8 +545,16 @@ impl ArchiSimApp {
             SketchTarget::WallProfile(_) => "perfil del muro en alzado",
             SketchTarget::Road(_) => "eje de la calle (una línea abierta)",
             SketchTarget::RoadEdges(_) => "bordillos y líneas de fachada de la calle",
+            SketchTarget::BoardFace(..) => "despiece a mano (vista desde fuera)",
         };
-        let note = if matches!(st.sketch.target, SketchTarget::RoadEdges(_)) {
+        let note = if st.sketch.is_joints() {
+            match st.piece {
+                Some(PieceMode::Accent) => "Clic en una pieza: pasa al material de acento (otra vez, vuelve al de la capa).",
+                Some(PieceMode::OnSite) => "Clic en una pieza: se coloca en obra, fuera de la fábrica (otra vez, vuelve a fábrica).",
+                Some(PieceMode::Plain) => "Clic en una pieza: vuelve al material de la capa y a fábrica.",
+                None => "Cada línea es una junta: corta las piezas que cruza de lado a lado (llévala hasta otra junta o el borde). Luego marca piezas de acento o en obra.",
+            }
+        } else if matches!(st.sketch.target, SketchTarget::RoadEdges(_)) {
             "Cuatro líneas abiertas, de un extremo de la calle al otro: bordillo y fachada de cada lado. Donde las muevas, la calle cambia de sección con su transición; la calzada se queda en su sitio."
         } else if matches!(st.sketch.target, SketchTarget::Road(_)) {
             "Una sola línea abierta, de un extremo de la calle al otro."
@@ -532,6 +583,7 @@ impl ArchiSimApp {
         if let Some(st) = self.sketch.as_mut() {
             st.open_ends.clear();
             st.pick = false;
+            st.piece = None;
         }
         self.start_command(cmd);
     }
@@ -545,4 +597,237 @@ pub(super) fn edit_contour_button(ui: &mut Ui) -> bool {
             "Modo boceto: el contorno en líneas sueltas para dibujar, recortar, alargar o borrar; Aceptar o Cancelar",
         )
         .clicked()
+}
+
+/// The name of a wall's layer: its material.
+pub(super) fn board_layer_name(
+    m: &archisim_core::Model,
+    w: archisim_core::WallId,
+    layer: usize,
+) -> String {
+    m.wall(w)
+        .and_then(|w| m.wall_type(w.wall_type))
+        .and_then(|t| t.layers.get(layer))
+        .and_then(|l| m.material(l.material))
+        .map_or_else(|| format!("capa {}", layer + 1), |x| x.name.clone())
+}
+
+/// The accent a face composed by hand starts with: its material's, or a
+/// wood one.
+fn usual_accent(
+    m: &archisim_core::Model,
+    w: archisim_core::WallId,
+    layer: usize,
+) -> Option<archisim_core::MaterialId> {
+    let mat = m
+        .wall(w)
+        .and_then(|w| m.wall_type(w.wall_type))
+        .and_then(|t| t.layers.get(layer))
+        .map(|l| l.material)?;
+    m.board_layout(mat)
+        .and_then(|l| l.accent.as_ref().map(|a| a.material))
+        .or_else(|| {
+            m.materials()
+                .find(|x| x.id != mat && x.name.to_lowercase().contains("madera"))
+                .map(|x| x.id)
+        })
+}
+
+impl ArchiSimApp {
+    /// The pieces of a face composed by hand as its lines cut it now, in
+    /// the face's own axes (not mirrored).
+    fn live_pieces(&self, st: &SketchState) -> Vec<Vec<(f64, f64)>> {
+        let SketchTarget::BoardFace(w, _) = st.sketch.target else {
+            return Vec::new();
+        };
+        let Some(wall) = self.ed.model().wall(w) else {
+            return Vec::new();
+        };
+        let face = [
+            0.0,
+            wall.base_offset,
+            wall.length(),
+            wall.base_offset + wall.height,
+        ];
+        let joints: Vec<(Point2, Point2)> = self
+            .sketch_segs(st)
+            .iter()
+            .flat_map(|s| {
+                let pts = match s {
+                    archisim_draft::Seg::Line { a, b } => vec![*a, *b],
+                    _ => s.tessellate(0.02),
+                };
+                let pts: Vec<Point2> = pts.into_iter().map(|p| mirrored(st.mirror, p)).collect();
+                pts.windows(2).map(|p| (p[0], p[1])).collect::<Vec<_>>()
+            })
+            .collect();
+        archisim_geom::boards::face_pieces(face, &joints)
+    }
+
+    /// What a click on a piece does now: on, off or another.
+    pub(super) fn set_piece_mode(&mut self, mode: PieceMode) {
+        self.end_command(true);
+        if let Some(st) = self.sketch.as_mut() {
+            st.pick = false;
+            st.piece = if st.piece == Some(mode) {
+                None
+            } else {
+                Some(mode)
+            };
+        }
+    }
+
+    /// Whether a click in the drawing marks a piece of a face composed by
+    /// hand.
+    pub(super) fn sketch_marking(&self) -> bool {
+        self.tool == Tool::Arrow && self.sketch.as_ref().is_some_and(|s| s.piece.is_some())
+    }
+
+    /// Marks the piece under a point (as drawn): an accent, on site, or
+    /// back to plain; a second click undoes it.
+    pub(super) fn sketch_mark_at(&mut self, p: Point2) {
+        let Some(st) = self.sketch.as_ref() else {
+            return;
+        };
+        let Some(mode) = st.piece else {
+            return;
+        };
+        let q = mirrored(st.mirror, p);
+        let pieces = self.live_pieces(st);
+        let Some(poly) = pieces
+            .into_iter()
+            .find(|poly| archisim_geom::boards::inside_convex(poly, (q.x, q.y)))
+        else {
+            return;
+        };
+        let accent = st.accent;
+        if mode == PieceMode::Accent && accent.is_none() {
+            self.complain("Elige primero el material de acento en la barra de opciones.");
+            return;
+        }
+        let n = poly.len() as f64;
+        let centre = Point2::new(
+            poly.iter().map(|v| v.0).sum::<f64>() / n,
+            poly.iter().map(|v| v.1).sum::<f64>() / n,
+        );
+        let Some(st) = self.sketch.as_mut() else {
+            return;
+        };
+        let marks = &mut st.sketch.marks;
+        let at = marks
+            .iter()
+            .position(|m| archisim_geom::boards::inside_convex(&poly, (m.at.x, m.at.y)));
+        let mut mark = match at {
+            Some(i) => marks.remove(i),
+            None => archisim_core::PieceMark {
+                at: centre,
+                material: None,
+                on_site: false,
+            },
+        };
+        mark.at = centre;
+        match mode {
+            PieceMode::Accent => {
+                mark.material = if mark.material.is_some() {
+                    None
+                } else {
+                    accent
+                };
+            }
+            PieceMode::OnSite => mark.on_site = !mark.on_site,
+            PieceMode::Plain => {
+                mark.material = None;
+                mark.on_site = false;
+            }
+        }
+        if mark.material.is_some() || mark.on_site {
+            marks.push(mark);
+        }
+    }
+
+    /// The pieces of a face composed by hand over its sketch: the accent
+    /// ones in wood, the ones on site in orange, and each one's size.
+    fn draw_live_pieces(&self, st: &SketchState, painter: &egui::Painter, rect: Rect) {
+        let m = self.ed.model();
+        for poly in self.live_pieces(st) {
+            let mark = st
+                .sketch
+                .marks
+                .iter()
+                .find(|k| archisim_geom::boards::inside_convex(&poly, (k.at.x, k.at.y)));
+            let pts: Vec<egui::Pos2> = poly
+                .iter()
+                .map(|v| {
+                    self.view
+                        .to_screen(rect, mirrored(st.mirror, Point2::new(v.0, v.1)))
+                })
+                .collect();
+            let fill = match mark {
+                Some(k) if k.on_site => Some(Color32::from_rgba_unmultiplied(235, 120, 30, 90)),
+                Some(k) if k.material.is_some() => {
+                    let c = k.material.map_or([160, 110, 70], |x| m.surface_color(x));
+                    Some(Color32::from_rgba_unmultiplied(c[0], c[1], c[2], 150))
+                }
+                _ => None,
+            };
+            if let Some(f) = fill {
+                painter.add(egui::Shape::convex_polygon(pts.clone(), f, Stroke::NONE));
+            }
+            let x0 = poly.iter().map(|v| v.0).fold(f64::INFINITY, f64::min);
+            let x1 = poly.iter().map(|v| v.0).fold(f64::NEG_INFINITY, f64::max);
+            let y0 = poly.iter().map(|v| v.1).fold(f64::INFINITY, f64::min);
+            let y1 = poly.iter().map(|v| v.1).fold(f64::NEG_INFINITY, f64::max);
+            let centre = egui::Pos2::new(
+                pts.iter().map(|p| p.x).sum::<f32>() / pts.len() as f32,
+                pts.iter().map(|p| p.y).sum::<f32>() / pts.len() as f32,
+            );
+            let wide = pts.iter().map(|p| p.x).fold(f32::NEG_INFINITY, f32::max)
+                - pts.iter().map(|p| p.x).fold(f32::INFINITY, f32::min);
+            if wide > 46.0 {
+                let mut text = format!("{:.0}×{:.0}", (x1 - x0) * 100.0, (y1 - y0) * 100.0);
+                if mark.is_some_and(|k| k.on_site) {
+                    text = format!("OBRA\n{text}");
+                }
+                painter.text(
+                    centre,
+                    egui::Align2::CENTER_CENTER,
+                    text,
+                    egui::FontId::proportional(11.0),
+                    Color32::from_gray(70),
+                );
+            }
+        }
+    }
+}
+
+impl ArchiSimApp {
+    /// The accent of a face composed by hand, in the options bar.
+    pub(super) fn accent_choice(&mut self, ui: &mut Ui) {
+        let Some(current) = self.sketch.as_ref().map(|s| s.accent) else {
+            return;
+        };
+        let m = self.ed.model();
+        let name = |id: Option<archisim_core::MaterialId>| {
+            id.and_then(|x| m.material(x))
+                .map_or("—".to_string(), |x| x.name.clone())
+        };
+        let mut list: Vec<(archisim_core::MaterialId, String)> =
+            m.materials().map(|x| (x.id, x.name.clone())).collect();
+        list.sort_by(|a, b| a.1.cmp(&b.1));
+        let mut chosen = current;
+        ui.label("Acento");
+        egui::ComboBox::from_id_salt("board-face-accent")
+            .selected_text(name(current))
+            .width(170.0)
+            .show_ui(ui, |ui| {
+                for (id, n) in &list {
+                    ui.selectable_value(&mut chosen, Some(*id), n);
+                }
+            });
+        if chosen != current {
+            if let Some(st) = self.sketch.as_mut() {
+                st.accent = chosen;
+            }
+        }
+    }
 }

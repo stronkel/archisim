@@ -164,6 +164,16 @@ impl ArchiSimApp {
             self.cad_clicks(ctx, response, rect);
             return;
         }
+        // A face composed by hand: a click marks a piece.
+        if self.sketch_marking() {
+            if response.clicked_by(PointerButton::Primary) {
+                if let Some(pos) = response.interact_pointer_pos() {
+                    let p = self.view.to_model(rect, pos);
+                    self.sketch_mark_at(p);
+                }
+            }
+            return;
+        }
         // «Elegir línea» of a sketch in elevation: the face's references.
         if self.sketch_picking() {
             if response.clicked_by(PointerButton::Primary) {

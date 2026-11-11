@@ -193,6 +193,11 @@ pub struct BoardPiece {
     /// Cut round a door or window (or the slab's outline), not only to
     /// length.
     pub notched: bool,
+    /// Its outline on the face when it is not its rectangle (a face
+    /// composed by hand, M20), in the same axes as `at`.
+    pub outline: Vec<(f64, f64)>,
+    /// Fitted on site once the boxes stand, not in the factory (M20).
+    pub on_site: bool,
 }
 
 impl BoardPiece {
@@ -506,6 +511,178 @@ fn lay_with(face: Rect, laying: &Laying, shift: f64, holes: &[Rect]) -> Vec<Laid
     }
 }
 
+/// How near a joint line must reach the edge of a piece to split it, m: a
+/// line drawn to another one is taken as reaching it.
+pub const JOINT_REACH: f64 = 0.02;
+
+/// A polygon on a face, in the face's axes.
+type FacePoly = Vec<(f64, f64)>;
+
+/// A convex polygon cut by a line (through `a`, along `d`) in two: the side
+/// on its left and the side on its right.
+fn split_convex(poly: &[(f64, f64)], a: (f64, f64), d: (f64, f64)) -> (FacePoly, FacePoly) {
+    let side = |p: (f64, f64)| d.0 * (p.1 - a.1) - d.1 * (p.0 - a.0);
+    let (mut left, mut right) = (Vec::new(), Vec::new());
+    let n = poly.len();
+    for i in 0..n {
+        let (p, q) = (poly[i], poly[(i + 1) % n]);
+        let (sp, sq) = (side(p), side(q));
+        if sp >= 0.0 {
+            left.push(p);
+        }
+        if sp <= 0.0 {
+            right.push(p);
+        }
+        if (sp > 0.0 && sq < 0.0) || (sp < 0.0 && sq > 0.0) {
+            let t = sp / (sp - sq);
+            let x = (p.0 + (q.0 - p.0) * t, p.1 + (q.1 - p.1) * t);
+            left.push(x);
+            right.push(x);
+        }
+    }
+    (left, right)
+}
+
+/// Where a line (through `a`, along the unit `d`) goes through a convex
+/// polygon: the distances along it, from `a`, it comes in and goes out.
+fn chord(poly: &[(f64, f64)], a: (f64, f64), d: (f64, f64)) -> Option<(f64, f64)> {
+    let side = |p: (f64, f64)| d.0 * (p.1 - a.1) - d.1 * (p.0 - a.0);
+    let along = |p: (f64, f64)| (p.0 - a.0) * d.0 + (p.1 - a.1) * d.1;
+    let mut ts: Vec<f64> = Vec::new();
+    let n = poly.len();
+    for i in 0..n {
+        let (p, q) = (poly[i], poly[(i + 1) % n]);
+        let (sp, sq) = (side(p), side(q));
+        if (sp > 1e-9 && sq < -1e-9) || (sp < -1e-9 && sq > 1e-9) {
+            let t = sp / (sp - sq);
+            ts.push(along((p.0 + (q.0 - p.0) * t, p.1 + (q.1 - p.1) * t)));
+        } else if sp.abs() <= 1e-9 {
+            ts.push(along(p));
+        }
+    }
+    let lo = ts.iter().copied().fold(f64::INFINITY, f64::min);
+    let hi = ts.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    (hi - lo > 0.01).then_some((lo, hi))
+}
+
+/// The pieces a face (a rectangle `[u0, v0, u1, v1]`) is cut in by joint
+/// lines drawn on it: each line splits the pieces it crosses from side to
+/// side (reaching their edges within [`JOINT_REACH`]); one that stops short
+/// of a piece's edge splits nothing there. Convex polygons, in the face's
+/// axes, from the bottom left.
+pub fn face_pieces(face: [f64; 4], joints: &[(Point2, Point2)]) -> Vec<Vec<(f64, f64)>> {
+    let mut pieces: Vec<Vec<(f64, f64)>> = vec![vec![
+        (face[0], face[1]),
+        (face[2], face[1]),
+        (face[2], face[3]),
+        (face[0], face[3]),
+    ]];
+    // Again and again: a line may only reach across once another has cut.
+    for _ in 0..8 {
+        let mut changed = false;
+        for (a, b) in joints {
+            let len = (*b - *a).length();
+            if len < 0.01 {
+                continue;
+            }
+            let d = ((b.x - a.x) / len, (b.y - a.y) / len);
+            let a = (a.x, a.y);
+            let mut next = Vec::with_capacity(pieces.len() + 1);
+            for p in pieces.drain(..) {
+                let cuts = chord(&p, a, d).is_some_and(|(lo, hi)| {
+                    lo >= -JOINT_REACH && hi <= len + JOINT_REACH && hi - lo > 0.01
+                });
+                if cuts {
+                    let (l, r) = split_convex(&p, a, d);
+                    if poly_area(&l) > 1e-4 && poly_area(&r) > 1e-4 {
+                        next.push(l);
+                        next.push(r);
+                        changed = true;
+                        continue;
+                    }
+                }
+                next.push(p);
+            }
+            pieces = next;
+        }
+        if !changed {
+            break;
+        }
+    }
+    let low = |p: &Vec<(f64, f64)>| {
+        let x = p.iter().map(|q| q.0).fold(f64::INFINITY, f64::min);
+        let y = p.iter().map(|q| q.1).fold(f64::INFINITY, f64::min);
+        (y, x)
+    };
+    pieces.sort_by(|a, b| {
+        let (ya, xa) = low(a);
+        let (yb, xb) = low(b);
+        xa.total_cmp(&xb).then(ya.total_cmp(&yb))
+    });
+    pieces
+}
+
+/// Whether a point is inside a convex polygon (either way round).
+pub fn inside_convex(poly: &[(f64, f64)], p: (f64, f64)) -> bool {
+    let n = poly.len();
+    let (mut pos, mut neg) = (false, false);
+    for i in 0..n {
+        let (a, b) = (poly[i], poly[(i + 1) % n]);
+        let c = (b.0 - a.0) * (p.1 - a.1) - (b.1 - a.1) * (p.0 - a.0);
+        if c > 1e-9 {
+            pos = true;
+        } else if c < -1e-9 {
+            neg = true;
+        }
+    }
+    n >= 3 && !(pos && neg)
+}
+
+/// A convex polygon drawn in by `d` on every side (half the open joint
+/// round a piece).
+pub fn inset_convex(poly: &[(f64, f64)], d: f64) -> Vec<(f64, f64)> {
+    let n = poly.len();
+    if n < 3 || d <= 0.0 {
+        return poly.to_vec();
+    }
+    let ccw = {
+        let a: f64 = (0..n)
+            .map(|i| poly[i].0 * poly[(i + 1) % n].1 - poly[(i + 1) % n].0 * poly[i].1)
+            .sum();
+        a > 0.0
+    };
+    // Each side moved in, as a point and a direction.
+    let lines: Vec<((f64, f64), (f64, f64))> = (0..n)
+        .filter_map(|i| {
+            let (a, b) = (poly[i], poly[(i + 1) % n]);
+            let l = ((b.0 - a.0).powi(2) + (b.1 - a.1).powi(2)).sqrt();
+            if l < 1e-9 {
+                return None;
+            }
+            let u = ((b.0 - a.0) / l, (b.1 - a.1) / l);
+            let inward = if ccw { (-u.1, u.0) } else { (u.1, -u.0) };
+            Some(((a.0 + inward.0 * d, a.1 + inward.1 * d), u))
+        })
+        .collect();
+    let m = lines.len();
+    let mut out = Vec::with_capacity(m);
+    for i in 0..m {
+        let (p, u) = lines[(i + m - 1) % m];
+        let (q, v) = lines[i];
+        let den = u.0 * v.1 - u.1 * v.0;
+        if den.abs() < 1e-12 {
+            out.push(q);
+            continue;
+        }
+        let t = ((q.0 - p.0) * v.1 - (q.1 - p.1) * v.0) / den;
+        out.push((p.0 + u.0 * t, p.1 + u.1 * t));
+    }
+    if poly_area(&out) < 1e-6 {
+        return Vec::new();
+    }
+    out
+}
+
 /// The boards of a wall, layer by layer (from the outside in).
 pub fn wall_boards(model: &Model, wall: archisim_core::WallId) -> Vec<BoardPiece> {
     let Some(w) = model.wall(wall) else {
@@ -527,6 +704,53 @@ pub fn wall_boards(model: &Model, wall: archisim_core::WallId) -> Vec<BoardPiece
         let Some(laying) = laying(model, l.material, l.thickness) else {
             continue;
         };
+        if let Some(by_hand) = model.board_face(wall, i) {
+            // Composed by hand: the pieces its lines cut the face in.
+            for (k, poly) in face_pieces(face, &by_hand.joints).into_iter().enumerate() {
+                let cut: f64 = holes.iter().map(|h| poly_area(&clip(&poly, *h))).sum();
+                let left = poly_area(&poly) - cut;
+                if left <= 0.005 {
+                    continue;
+                }
+                let mark_of = by_hand
+                    .marks
+                    .iter()
+                    .find(|m| inside_convex(&poly, (m.at.x, m.at.y)));
+                let material = mark_of.and_then(|m| m.material).unwrap_or(l.material);
+                let format = if material == l.material {
+                    laying.format
+                } else {
+                    let own = model.board_layout(material);
+                    BoardFormat {
+                        kind: "Acento",
+                        width: own.map_or(laying.format.width, |o| o.width),
+                        length: own.map_or(laying.format.length, |o| o.length),
+                    }
+                };
+                let x0 = poly.iter().map(|q| q.0).fold(f64::INFINITY, f64::min);
+                let x1 = poly.iter().map(|q| q.0).fold(f64::NEG_INFINITY, f64::max);
+                let y0 = poly.iter().map(|q| q.1).fold(f64::INFINITY, f64::min);
+                let y1 = poly.iter().map(|q| q.1).fold(f64::NEG_INFINITY, f64::max);
+                let (sw, sl) = (x1 - x0, y1 - y0);
+                let size = (sw, sl);
+                out.push(BoardPiece {
+                    mark: format!("{mark}·{}·{:02}", i + 1, k + 1),
+                    host: Host::Wall(wall.0),
+                    layer: i,
+                    material,
+                    thickness: l.thickness,
+                    format,
+                    at: (x0, y0),
+                    size,
+                    area: left,
+                    notched: cut > 1e-6 || (poly_area(&poly) - sw * sl).abs() > 1e-4,
+                    outline: poly,
+                    on_site: mark_of.is_some_and(|m| m.on_site),
+                });
+            }
+            nth += 1;
+            continue;
+        }
         // Joints half a board off the layer before (not where the studio
         // fixed the joints).
         let shift = if matches!(laying.joints, BoardJoints::HalfBond) {
@@ -566,8 +790,66 @@ pub fn wall_boards(model: &Model, wall: archisim_core::WallId) -> Vec<BoardPiece
                 size: (p.rect[2] - p.rect[0], p.rect[3] - p.rect[1]),
                 area: p.area,
                 notched: p.notched,
+                outline: Vec::new(),
+                on_site: false,
             });
         }
+    }
+    out
+}
+
+/// The joints of a wall's layer as its material's rule lays them, as lines
+/// on the face (along the wall and up from the level), the ones in line
+/// joined: where a face composed by hand starts from.
+pub fn rule_joints(
+    model: &Model,
+    wall: archisim_core::WallId,
+    layer: usize,
+) -> Vec<(Point2, Point2)> {
+    let Some(w) = model.wall(wall) else {
+        return Vec::new();
+    };
+    let face = [0.0, w.base_offset, w.length(), w.base_offset + w.height];
+    let mut m = model.clone();
+    let _ = m.set_board_face(wall, layer, None);
+    let mut level: Vec<(f64, f64, f64)> = Vec::new();
+    let mut upright: Vec<(f64, f64, f64)> = Vec::new();
+    let on_edge = |v: f64, a: f64, b: f64| (v - a).abs() < 1e-4 || (v - b).abs() < 1e-4;
+    for p in wall_boards(&m, wall)
+        .into_iter()
+        .filter(|p| p.layer == layer)
+    {
+        let (x0, y0) = p.at;
+        let (x1, y1) = (x0 + p.size.0, y0 + p.size.1);
+        for y in [y0, y1] {
+            if !on_edge(y, face[1], face[3]) {
+                level.push((y, x0, x1));
+            }
+        }
+        for x in [x0, x1] {
+            if !on_edge(x, face[0], face[2]) {
+                upright.push((x, y0, y1));
+            }
+        }
+    }
+    // Lines in line, touching or overlapping, become one.
+    let join = |mut v: Vec<(f64, f64, f64)>| {
+        v.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.total_cmp(&b.1)));
+        let mut out: Vec<(f64, f64, f64)> = Vec::new();
+        for s in v {
+            match out.last_mut() {
+                Some(l) if (l.0 - s.0).abs() < 1e-4 && s.1 <= l.2 + 1e-4 => l.2 = l.2.max(s.2),
+                _ => out.push(s),
+            }
+        }
+        out
+    };
+    let mut out = Vec::new();
+    for (y, a, b) in join(level) {
+        out.push((Point2::new(a, y), Point2::new(b, y)));
+    }
+    for (x, a, b) in join(upright) {
+        out.push((Point2::new(x, a), Point2::new(x, b)));
     }
     out
 }
@@ -593,14 +875,16 @@ pub fn cladding_solids(model: &Model) -> Vec<crate::solid::Solid> {
         let Some(t) = model.wall_type(w.wall_type) else {
             continue;
         };
-        let by_lines = t
+        let layout = t
             .layers
             .first()
-            .and_then(|l| model.board_layout(l.material))
-            .is_some_and(|l| matches!(l.joints, BoardJoints::Lines(_)));
-        if !by_lines {
+            .and_then(|l| model.board_layout(l.material));
+        let by_lines = layout.is_some_and(|l| matches!(l.joints, BoardJoints::Lines(_)));
+        let by_hand = model.board_face(w.id, 0).is_some();
+        if !by_lines && !by_hand {
             continue;
         }
+        let joint = layout.map_or(CLADDING_JOINT, |l| l.joint);
         let Some(u) = (w.end - w.start).normalized() else {
             continue;
         };
@@ -620,7 +904,52 @@ pub fn cladding_solids(model: &Model) -> Vec<crate::solid::Solid> {
             } else {
                 CLADDING_PROUD
             };
-            let j = CLADDING_JOINT / 2.0;
+            let j = joint / 2.0;
+            if !p.outline.is_empty() {
+                // A piece composed by hand: its outline drawn in by half
+                // the joint, less the doors and windows.
+                let poly = inset_convex(&p.outline, j);
+                if poly.len() < 3 {
+                    continue;
+                }
+                let pt = |q: (f64, f64)| Point2::new(q.0, q.1);
+                let shape = (poly.iter().map(|q| pt(*q)).collect::<Vec<_>>(), Vec::new());
+                let cutters: Vec<crate::junctions::Shape> = holes
+                    .iter()
+                    .map(|h| {
+                        (
+                            vec![
+                                Point2::new(h[0], h[1]),
+                                Point2::new(h[2], h[1]),
+                                Point2::new(h[2], h[3]),
+                                Point2::new(h[0], h[3]),
+                            ],
+                            Vec::new(),
+                        )
+                    })
+                    .collect();
+                let mut triangles = Vec::new();
+                for (outer, inner) in crate::junctions::difference(&[shape], &cutters) {
+                    let flat = crate::solid::with_holes(&outer, &inner);
+                    // Along the wall, up, and out of the face: turned over
+                    // so the faces look out.
+                    for [a, b, c] in crate::solid::prism(&flat, 0.0, proud) {
+                        let to = |q: [f64; 3]| {
+                            let o = w.start + u * q[0] + n * (ext + q[2]);
+                            [o.x, o.y, lv + q[1]]
+                        };
+                        triangles.push([to(a), to(c), to(b)]);
+                    }
+                }
+                if !triangles.is_empty() {
+                    out.push(crate::solid::Solid {
+                        owner: crate::solid::SolidOwner::Wall(w.id),
+                        material: p.material,
+                        triangles,
+                    });
+                }
+                continue;
+            }
             let r = [
                 p.at.0 + j,
                 p.at.1 + j,
@@ -793,6 +1122,8 @@ fn plan_boards(
                 size: (r[2] - r[0], r[3] - r[1]),
                 area: a,
                 notched,
+                outline: Vec::new(),
+                on_site: false,
             });
         }
     }
@@ -981,8 +1312,25 @@ fn push(
 /// joints and connections (M13), the chassis' steel and the fixings.
 pub fn shopping_list(model: &Model, id: BoxId) -> Vec<Purchase> {
     let mut out = Vec::new();
-    // Boards.
-    let boards = box_boards(model, id);
+    // Boards: those of the factory; the ones fitted on site (M20) apart,
+    // counted, to go with the box.
+    let (on_site, boards): (Vec<BoardPiece>, Vec<BoardPiece>) =
+        box_boards(model, id).into_iter().partition(|p| p.on_site);
+    for p in &on_site {
+        let name = model
+            .material(p.material)
+            .map_or(p.format.kind.to_string(), |m| m.name.clone());
+        push(
+            &mut out,
+            "En obra",
+            format!(
+                "{name} {} mm, piezas para colocar en obra",
+                (p.thickness * 1000.0).round()
+            ),
+            "ud",
+            1.0,
+        );
+    }
     let mut kinds: Vec<(MaterialId, String, f64)> = Vec::new();
     for p in &boards {
         let key = (p.material, p.format.kind.to_string(), p.thickness);
@@ -1284,7 +1632,8 @@ fn amount(p: &Purchase) -> String {
 /// The boards piece by piece, as CSV: mark, where, material, size as cut
 /// and whether it is whole.
 pub fn boards_csv(model: &Model) -> String {
-    let mut s = String::from("Marca;Caja;Material;Espesor mm;Formato mm;Corte mm;Área m²;Pieza\n");
+    let mut s =
+        String::from("Marca;Caja;Material;Espesor mm;Formato mm;Corte mm;Área m²;Pieza;Dónde\n");
     let mut owner: std::collections::HashMap<u64, String> = Default::default();
     for b in model.boxes() {
         for id in model.box_members(b.id).ids() {
@@ -1294,7 +1643,7 @@ pub fn boards_csv(model: &Model) -> String {
     for p in all_boards(model) {
         let mm = |v: f64| format!("{:.0}", v * 1000.0);
         s.push_str(&format!(
-            "{};{};{};{};{}×{};{}×{};{};{}\n",
+            "{};{};{};{};{}×{};{}×{};{};{};{}\n",
             p.mark,
             owner.get(&p.host.id()).cloned().unwrap_or_default(),
             model.material(p.material).map_or("", |m| m.name.as_str()),
@@ -1310,7 +1659,8 @@ pub fn boards_csv(model: &Model) -> String {
                 "recortada"
             } else {
                 "cortada"
-            }
+            },
+            if p.on_site { "en obra" } else { "fábrica" }
         ));
     }
     s
@@ -1326,6 +1676,97 @@ mod tests {
 
     fn plaster_wall(length: f64) -> (Model, archisim_core::WallId) {
         plaster_wall_of(length, 2.60)
+    }
+
+    #[test]
+    fn a_face_composed_by_hand_follows_its_lines() {
+        let (mut m, w) = plaster_wall_of(3.6, 2.7);
+        let wood = m.add_material("Lama de madera", "wood", [160, 110, 70], CutPattern::Solid);
+        let p = |x: f64, y: f64| Point2::new(x, y);
+        // Two upright joints, a level one only in the middle column (drawn
+        // to the uprights), and one that stops short: it splits nothing.
+        let face = archisim_core::BoardFace {
+            wall: w,
+            layer: 0,
+            joints: vec![
+                (p(1.2, 0.0), p(1.2, 2.7)),
+                (p(2.4, 0.0), p(2.4, 2.7)),
+                (p(1.2, 2.0), p(2.4, 2.0)),
+                (p(0.2, 1.0), p(0.8, 1.0)),
+            ],
+            marks: vec![
+                archisim_core::PieceMark {
+                    at: p(1.8, 2.3),
+                    material: Some(wood),
+                    on_site: false,
+                },
+                archisim_core::PieceMark {
+                    at: p(3.0, 1.0),
+                    material: None,
+                    on_site: true,
+                },
+            ],
+        };
+        m.set_board_face(w, 0, Some(face)).unwrap();
+        let pieces: Vec<_> = wall_boards(&m, w)
+            .into_iter()
+            .filter(|b| b.layer == 0)
+            .collect();
+        assert_eq!(pieces.len(), 4, "{pieces:?}");
+        let accent = pieces.iter().find(|b| b.material == wood).unwrap();
+        assert!((accent.size.0 - 1.2).abs() < 1e-6 && (accent.size.1 - 0.7).abs() < 1e-6);
+        assert_eq!(accent.format.kind, "Acento");
+        let site: Vec<_> = pieces.iter().filter(|b| b.on_site).collect();
+        assert_eq!(site.len(), 1);
+        assert!((site[0].at.0 - 2.4).abs() < 1e-6);
+        let total: f64 = pieces.iter().map(|b| b.area).sum();
+        assert!((total - 3.6 * 2.7).abs() < 1e-6);
+        // The other layers keep their rule.
+        assert!(wall_boards(&m, w)
+            .iter()
+            .any(|b| b.layer == 2 && b.outline.is_empty()));
+    }
+
+    #[test]
+    fn a_joint_drawn_short_of_an_edge_cuts_nothing() {
+        let face = [0.0, 0.0, 2.0, 2.0];
+        let p = |x: f64, y: f64| Point2::new(x, y);
+        assert_eq!(face_pieces(face, &[(p(0.5, 0.0), p(0.5, 1.5))]).len(), 1);
+        assert_eq!(face_pieces(face, &[(p(0.5, -0.01), p(0.5, 2.01))]).len(), 2);
+        // A slanted joint makes two triangles' worth of pieces.
+        let slant = face_pieces(face, &[(p(0.0, 0.0), p(2.0, 2.0))]);
+        assert_eq!(slant.len(), 2);
+        let inset = inset_convex(&slant[0], 0.003);
+        assert!(poly_area(&inset) < poly_area(&slant[0]));
+    }
+
+    #[test]
+    fn a_face_drawn_from_its_rule_has_the_rules_pieces() {
+        let (mut m, w) = plaster_wall_of(3.6, 2.7);
+        let before: Vec<_> = wall_boards(&m, w)
+            .into_iter()
+            .filter(|b| b.layer == 0)
+            .collect();
+        let joints = rule_joints(&m, w, 0);
+        assert!(!joints.is_empty());
+        m.set_board_face(
+            w,
+            0,
+            Some(archisim_core::BoardFace {
+                wall: w,
+                layer: 0,
+                joints,
+                marks: Vec::new(),
+            }),
+        )
+        .unwrap();
+        let after: Vec<_> = wall_boards(&m, w)
+            .into_iter()
+            .filter(|b| b.layer == 0)
+            .collect();
+        assert_eq!(before.len(), after.len());
+        let area = |v: &[BoardPiece]| v.iter().map(|b| b.area).sum::<f64>();
+        assert!((area(&before) - area(&after)).abs() < 1e-6);
     }
 
     fn plaster_wall_of(length: f64, height: f64) -> (Model, archisim_core::WallId) {
@@ -1440,6 +1881,8 @@ mod tests {
             size: (w, l),
             area: w * l,
             notched: false,
+            outline: Vec::new(),
+            on_site: false,
         };
         let v = [
             piece(0.6, 2.6),
@@ -1461,6 +1904,7 @@ mod tests {
                 width: 1.2,
                 length: 3.0,
                 upright: true,
+                joint: 0.0,
                 joints: BoardJoints::Zipper,
                 accent: None,
             }),
@@ -1512,6 +1956,7 @@ mod tests {
                 width: 1.2,
                 length: 2.5,
                 upright: true,
+                joint: 0.0,
                 joints: BoardJoints::Lines(vec![0.0, 2.0]),
                 accent: Some(archisim_core::BoardAccent {
                     material: wood,

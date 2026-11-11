@@ -62,6 +62,8 @@ pub struct BoardLayout {
     pub length: f64,
     /// Upright on walls (length up); across the slab's long side on floors.
     pub upright: bool,
+    /// The open joint left between pieces, m (0: butted).
+    pub joint: f64,
     pub joints: BoardJoints,
     pub accent: Option<BoardAccent>,
 }
@@ -71,6 +73,8 @@ impl BoardLayout {
         let ok = |v: f64| v.is_finite() && (0.05..=6.0).contains(&v);
         ok(self.width)
             && ok(self.length)
+            && self.joint.is_finite()
+            && (0.0..=0.05).contains(&self.joint)
             && match &self.joints {
                 BoardJoints::Lines(v) => v.iter().all(|h| h.is_finite()),
                 _ => true,
@@ -133,6 +137,7 @@ mod tests {
             width: 1.2,
             length: 3.0,
             upright: true,
+            joint: 0.0,
             joints: BoardJoints::Zipper,
             accent: None,
         };

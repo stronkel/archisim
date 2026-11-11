@@ -1207,6 +1207,7 @@ impl ArchiSimApp {
             width: 1.20,
             length: 2.50,
             upright: true,
+            joint: 0.0,
             joints: BoardJoints::HalfBond,
             accent: None,
         });
@@ -1245,6 +1246,23 @@ impl ArchiSimApp {
                 }
             });
             ui.switch(&mut l.upright, "En vertical");
+            props::row(
+                ui,
+                "Junta (mm)",
+                "Junta abierta entre piezas (0: a tope); la del despiece a mano y la del 3D",
+                |ui, w| {
+                    if let Some(v) = text_edit_committed(
+                        ui,
+                        Id::unique(("board-joint", id.0)),
+                        &format!("{:.0}", l.joint * 1000.0),
+                        w - 8.0,
+                    )
+                    .and_then(|t| t.trim().replace(',', ".").parse::<f64>().ok())
+                    {
+                        l.joint = (v / 1000.0).clamp(0.0, 0.05);
+                    }
+                },
+            );
             let mut kind = l.joints.code();
             props::row(ui, "Juntas", "", |ui, w| {
                 ComboBox::from_id_salt(("board-joints", id.0))

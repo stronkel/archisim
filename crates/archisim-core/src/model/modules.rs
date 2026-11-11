@@ -833,6 +833,37 @@ impl Model {
                 ..w.clone()
             });
         }
+        // Their layers composed by hand (M20), along the copy.
+        for f in src.board_faces() {
+            let Some(&(_, length)) = walls_in.iter().find(|(w, _)| *w == f.wall) else {
+                continue;
+            };
+            let along = |q: Point2| {
+                if mirror {
+                    Point2::new(length - q.x, q.y)
+                } else {
+                    q
+                }
+            };
+            parts.board_faces.push(BoardFace {
+                wall: WallId(f.wall.0 + base),
+                layer: f.layer,
+                joints: f
+                    .joints
+                    .iter()
+                    .map(|(a, b)| (along(*a), along(*b)))
+                    .collect(),
+                marks: f
+                    .marks
+                    .iter()
+                    .map(|k| PieceMark {
+                        at: along(k.at),
+                        material: k.material.and_then(mat),
+                        on_site: k.on_site,
+                    })
+                    .collect(),
+            });
+        }
         for o in src.openings() {
             let Some(&(_, length)) = walls_in.iter().find(|(w, _)| *w == o.wall) else {
                 continue;
