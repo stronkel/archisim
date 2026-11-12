@@ -1559,6 +1559,8 @@ pub struct ModelParts {
     pub board_layouts: Vec<(MaterialId, BoardLayout)>,
     /// Wall layers composed by hand (M20, version 109).
     pub board_faces: Vec<BoardFace>,
+    /// Slab and ceiling layers composed by hand in plan (version 111).
+    pub board_plans: Vec<BoardPlan>,
     /// Road markings at will (U4).
     pub markings: Vec<Marking>,
     /// Pictures stuck on faces (U8).
@@ -1726,6 +1728,7 @@ pub struct Model {
     catalogue: Option<CatalogueEntry>,
     board_layouts: BTreeMap<MaterialId, BoardLayout>,
     board_faces: Vec<BoardFace>,
+    board_plans: Vec<BoardPlan>,
     markings: BTreeMap<MarkingId, Marking>,
     decals: BTreeMap<DecalId, Decal>,
     plantings: BTreeMap<PlantingId, Planting>,
@@ -1848,6 +1851,7 @@ impl Model {
             catalogue: None,
             board_layouts: BTreeMap::new(),
             board_faces: Vec::new(),
+            board_plans: Vec::new(),
             markings: BTreeMap::new(),
             decals: BTreeMap::new(),
             plantings: BTreeMap::new(),
@@ -4584,6 +4588,7 @@ impl Model {
                 .map(|(m, l)| (*m, l.clone()))
                 .collect(),
             board_faces: self.board_faces().cloned().collect(),
+            board_plans: self.board_plans().cloned().collect(),
             markings: self.markings.values().cloned().collect(),
             decals: self.decals.values().cloned().collect(),
             plantings: self.plantings.values().cloned().collect(),
@@ -5038,6 +5043,14 @@ impl Model {
                 .set_board_face(f.wall, f.layer, Some(f.clone()))
                 .map_err(|error| RestoreError {
                     element: "composed face".into(),
+                    error,
+                })?;
+        }
+        for f in parts.board_plans {
+            model
+                .set_board_plan(f.host, f.layer, Some(f.clone()))
+                .map_err(|error| RestoreError {
+                    element: "composed layer in plan".into(),
                     error,
                 })?;
         }

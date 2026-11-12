@@ -2,7 +2,14 @@
 
 Lo que cambia en cada versión, en pocas líneas. ArchiSim enseña la parte de su versión antes de actualizarse (Ayuda → «Buscar actualizaciones…»), y la página de cada versión en GitHub la lleva también. El detalle, día a día, está en `BITACORA.md`.
 
-Cada versión empieza con una línea `## <versión>` (por ejemplo `## 0.81.0`): es la que busca la publicación.
+Cada versión empieza con una línea `## <versión>` (por ejemplo `## 0.82.0
+
+- **Despiece a mano, tercera vuelta.** Un despiece se copia a los muros iguales (también en simetría). Las piezas de las juntas entre cajas se marcan «en obra» de una vez. «Repartir» parte una pieza en tantas iguales como digas.
+- **Avisos del despiece.** Mientras dibujas, y en la Comprobación CTE: en rojo la pieza que no sale de una placa; en ámbar la de menos de 30 cm, la junta pegada a una jamba y la que cae sobre una junta de la capa de al lado.
+- **Planos de despiece.** Archivo → Exportar → «Despiece a mano de las fachadas…»: una hoja A3 por cara, vista desde fuera, con las marcas de las piezas, las juntas acotadas y la tabla de piezas para el taller y la obra.
+- **Forjados y falsos techos despiezados a mano**, en planta: las mismas líneas, pinturas y piezas en obra que en los muros. Lo siguen la compra y los pedidos.
+
+## 0.81.0`): es la que busca la publicación.
 
 ## 0.81.0
 

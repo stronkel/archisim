@@ -1021,6 +1021,38 @@ impl ArchiSimApp {
         }
     }
 
+    /// The drawings of the faces composed by hand (M20), as PDF.
+    pub(super) fn export_board_drawings(&mut self) {
+        let model = self.ed.shown();
+        let pages = archisim_plan::board_sheets::pages(&model);
+        if pages.is_empty() {
+            self.complain("No hay caras con despiece a mano.".to_string());
+            return;
+        }
+        let mut d = rfd::FileDialog::new()
+            .set_title("Despiece a mano de las fachadas (PDF)")
+            .add_filter("PDF", &["pdf"])
+            .set_file_name(format!("{}-despiece.pdf", self.file_name_stem()));
+        if let Some(dir) = self.start_dir() {
+            d = d.set_directory(dir);
+        }
+        let Some(path) = d.save_file() else {
+            return;
+        };
+        let codes = archisim_plan::board_sheets::codes(pages.len());
+        let sheets: Vec<(String, String)> = pages.into_iter().zip(codes).collect();
+        let r = crate::documents::pdf_of(&sheets, "Despiece a mano de las fachadas")
+            .and_then(|bytes| std::fs::write(&path, bytes).map_err(|e| e.to_string()));
+        match r {
+            Ok(()) => self.say(format!(
+                "Despiece a mano: {} hojas A3 en {}.",
+                sheets.len(),
+                path.display()
+            )),
+            Err(e) => self.complain(format!("No se pudo exportar: {e}.")),
+        }
+    }
+
     /// The shopping list of the boxes (M14), and their boards piece by
     /// piece beside it, as CSV.
     pub(super) fn export_shopping_list(&mut self) {

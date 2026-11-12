@@ -182,6 +182,9 @@ pub(crate) struct ProjectFile {
     /// Wall layers composed by hand (version 109).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub board_faces: Vec<BoardFaceOf>,
+    /// Slab and ceiling layers composed by hand in plan (version 111).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub board_plans: Vec<BoardPlanOf>,
     /// Road markings (version 65).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub markings: Vec<MarkingOf>,
@@ -1334,6 +1337,25 @@ pub(crate) struct BoardFaceOf {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub pieces: Vec<PieceMarkOf>,
     /// The open joint, m, if not its material's (version 110).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub joint: Option<f64>,
+}
+
+/// A slab's or a ceiling's layer composed by hand in plan (version 111):
+/// one of `slab` or `ceiling`.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct BoardPlanOf {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub slab: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ceiling: Option<u64>,
+    pub layer: usize,
+    /// Joint lines in plan, x and y.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub joints: Vec<[Xy; 2]>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pieces: Vec<PieceMarkOf>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub joint: Option<f64>,
 }
@@ -4268,6 +4290,32 @@ impl ProjectFile {
                     joint: f.joint,
                 })
                 .collect(),
+            board_plans: p
+                .board_plans
+                .iter()
+                .map(|f| BoardPlanOf {
+                    slab: match f.host {
+                        core::PlanHost::Slab(s) => Some(s.0),
+                        core::PlanHost::Ceiling(_) => None,
+                    },
+                    ceiling: match f.host {
+                        core::PlanHost::Ceiling(c) => Some(c.0),
+                        core::PlanHost::Slab(_) => None,
+                    },
+                    layer: f.layer,
+                    joints: f.joints.iter().map(|(a, b)| [xy(*a), xy(*b)]).collect(),
+                    pieces: f
+                        .marks
+                        .iter()
+                        .map(|m| PieceMarkOf {
+                            at: xy(m.at),
+                            material: m.material.map(|x| x.0),
+                            on_site: m.on_site,
+                        })
+                        .collect(),
+                    joint: f.joint,
+                })
+                .collect(),
             catalogue: p.catalogue.as_ref().map(|c| CatalogueOf {
                 code: c.code.clone(),
                 name: c.name.clone(),
@@ -5037,6 +5085,7 @@ impl ProjectFile {
             catalogue: None,
             board_layouts: Vec::new(),
             board_faces: Vec::new(),
+            board_plans: Vec::new(),
             markings: Vec::new(),
             decals: Vec::new(),
             plantings: Vec::new(),
@@ -6009,6 +6058,34 @@ impl ProjectFile {
             let p = |a: Xy| Point2::new(a[0], a[1]);
             parts.board_faces.push(core::BoardFace {
                 wall: core::WallId(f.wall),
+                layer: f.layer,
+                joints: f.joints.iter().map(|j| (p(j[0]), p(j[1]))).collect(),
+                marks: f
+                    .pieces
+                    .iter()
+                    .map(|m| core::PieceMark {
+                        at: p(m.at),
+                        material: m.material.map(core::MaterialId),
+                        on_site: m.on_site,
+                    })
+                    .collect(),
+                joint: f.joint,
+            });
+        }
+        for f in self.board_plans {
+            let p = |a: Xy| Point2::new(a[0], a[1]);
+            let host = match (f.slab, f.ceiling) {
+                (Some(s), None) => core::PlanHost::Slab(core::SlabId(s)),
+                (None, Some(c)) => core::PlanHost::Ceiling(core::CeilingId(c)),
+                _ => {
+                    return Err(FileError::Value {
+                        element: "composed layer in plan".into(),
+                        message: "it needs one slab or one ceiling".into(),
+                    })
+                }
+            };
+            parts.board_plans.push(core::BoardPlan {
+                host,
                 layer: f.layer,
                 joints: f.joints.iter().map(|j| (p(j[0]), p(j[1]))).collect(),
                 marks: f

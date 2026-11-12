@@ -265,6 +265,60 @@ pub fn check(model: &Model, report: &mut Report) {
             format!("≤ {:.0} mm", STUD_HOLE_SHARE * h.web * 1000.0),
         ));
     }
+    // The faces composed by hand: pieces that will not come out of a board
+    // or are too small, joints off a jamb or over another layer's.
+    for f in model.board_faces() {
+        let level = model.wall(f.wall).map(|w| w.level);
+        for w in archisim_geom::boards::face_warnings(model, f.wall, f.layer, &f.joints, &f.marks) {
+            use archisim_geom::boards::FaceWarningKind as K;
+            let status = match w.kind {
+                K::TooBig => Status::Fails,
+                _ => Status::Warning,
+            };
+            report.items.push(item(
+                Subject::Wall(f.wall),
+                status,
+                level,
+                "Sistema modular: despiece a mano",
+                format!("Muro {}, capa {}: {}.", f.wall.0, f.layer + 1, w.text),
+                String::new(),
+                String::new(),
+            ));
+        }
+    }
+    // And the slabs and ceilings composed by hand in plan.
+    for f in model.board_plans() {
+        let (subject, level, what) = match f.host {
+            archisim_core::PlanHost::Slab(id) => (
+                Some(Subject::Floor(id)),
+                model.slab(id).map(|s| s.level),
+                format!("Forjado {}", id.0),
+            ),
+            archisim_core::PlanHost::Ceiling(id) => (
+                None,
+                model.ceiling(id).map(|c| c.level),
+                format!("Falso techo {}", id.0),
+            ),
+        };
+        for w in archisim_geom::boards::plan_warnings(model, f.host, f.layer, &f.joints, &f.marks) {
+            use archisim_geom::boards::FaceWarningKind as K;
+            let status = match w.kind {
+                K::TooBig => Status::Fails,
+                _ => Status::Warning,
+            };
+            report.items.push(item(
+                subject
+                    .or(level.map(Subject::Level))
+                    .unwrap_or(Subject::Building),
+                status,
+                level,
+                "Sistema modular: despiece a mano",
+                format!("{what}, capa {}: {}.", f.layer + 1, w.text),
+                String::new(),
+                String::new(),
+            ));
+        }
+    }
 }
 
 #[cfg(test)]

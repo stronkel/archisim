@@ -361,7 +361,7 @@ impl ArchiSimApp {
     }
 
     /// Goes on to another level's plan in the same tab, keeping the view.
-    fn go_to_level_plan(&mut self, level: archisim_core::LevelId) {
+    pub(super) fn go_to_level_plan(&mut self, level: archisim_core::LevelId) {
         if let Some(t) = self.tabs.get_mut(self.active_tab) {
             if matches!(t.kind, super::tabs::TabKind::Plan(_)) {
                 t.kind = super::tabs::TabKind::Plan(level);

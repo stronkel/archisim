@@ -50,6 +50,8 @@ pub(super) enum Act {
     SketchPick,
     /// What a click on a piece of a face composed by hand does.
     SketchPiece(super::sketch_ui::PieceMode),
+    /// The pieces at the joints between boxes, on site.
+    SketchJointsOnSite,
     Pick(Pick),
     CreateSimilar,
 }
@@ -1451,7 +1453,17 @@ impl ArchiSimApp {
                             piece(Glyph::Paint, "Pintar", PieceMode::Paint, "Clic o arrastrar sobre las piezas: se pintan con el material de «Pintar con», en la barra de opciones; un clic en una ya pintada así la devuelve al de la capa"),
                             piece(Glyph::ModularBox, "En obra", PieceMode::OnSite, "Clic o arrastrar sobre las piezas: se dejan fuera de la fábrica y se colocan en obra con las cajas montadas (salen aparte en la compra y en los pedidos)"),
                             piece(Glyph::Convert, "Normal", PieceMode::Plain, "Clic o arrastrar sobre las piezas: vuelven al material de la capa y a fábrica"),
-                        ],
+                            piece(Glyph::DivideFace, "Repartir", PieceMode::Split, "Clic en una pieza: se reparte en piezas iguales (cuántas, y en columnas o filas, en la barra de opciones)"),
+                        ]
+                        .into_iter()
+                        .chain(
+                            matches!(st.sketch.target, crate::sketch::SketchTarget::BoardFace(..))
+                                .then(|| {
+                                    Item::new(Mark::Glyph(Glyph::ModularBox), "En obra en las juntas", Size::Small, Act::SketchJointsOnSite)
+                                        .hint("Marca para colocar en obra, de una vez, las piezas de los extremos del muro que dan a una junta entre cajas")
+                                }),
+                        )
+                        .collect(),
                     )
                     .contextual(),
                 );
@@ -1764,6 +1776,7 @@ impl ArchiSimApp {
             Act::SketchAccept => self.finish_sketch(),
             Act::SketchPick => self.toggle_sketch_pick(),
             Act::SketchPiece(mode) => self.set_piece_mode(mode),
+            Act::SketchJointsOnSite => self.joint_pieces_on_site(),
             Act::SketchCancel => self.cancel_sketch(),
             Act::Pick(p) => self.pick(p),
             Act::CreateSimilar => self.create_similar(),

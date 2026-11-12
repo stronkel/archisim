@@ -222,6 +222,11 @@ Uso:
       montaje y plan de grúa (M-00) y una hoja por caja con su chasis en
       planta y alzados, despiece, materiales, peso e izado
       (<proyecto>-taller.pdf y una SVG por hoja). Por defecto: ./out
+  archisim despiece-planos <proyecto> [carpeta]
+      Los planos del despiece a mano, A3: una hoja por cara compuesta a
+      mano, vista desde fuera, con cada pieza y su marca, las juntas
+      acotadas y la tabla de piezas (<proyecto>-despiece.pdf y una SVG
+      por hoja). Por defecto: ./out
   archisim plantilla <proyecto> <plantilla.archisim> [--perfiles <catálogo.csv>] [--entramado]
       La plantilla de un proyecto: sus plantas, materiales, tipos,
       plantillas de vista, cajetines, planos, tablas y datos de cálculo,
@@ -859,6 +864,34 @@ fn main() -> ExitCode {
             }
             None => {
                 eprintln!("Uso: archisim fabrica <proyecto> [carpeta]");
+                std::process::exit(2);
+            }
+        },
+        Some("despiece-planos") => match args.get(1) {
+            Some(project) => {
+                let path = PathBuf::from(project);
+                let dir = PathBuf::from(args.get(2).map(String::as_str).unwrap_or("out"));
+                report((|| {
+                    let m = archisim_file::open(&path)?;
+                    std::fs::create_dir_all(&dir)?;
+                    let stem = path
+                        .file_stem()
+                        .map(|s| s.to_string_lossy().to_string())
+                        .unwrap_or_else(|| "proyecto".into());
+                    let n = cajas::board_drawings(&m, &dir, &stem)?;
+                    if n == 0 {
+                        println!("El proyecto no tiene caras con despiece a mano.");
+                    } else {
+                        println!(
+                            "Despiece a mano: {n} hojas A3 en {}",
+                            dir.join(format!("{stem}-despiece.pdf")).display()
+                        );
+                    }
+                    Ok(())
+                })())
+            }
+            None => {
+                eprintln!("Uso: archisim despiece-planos <proyecto> [carpeta]");
                 std::process::exit(2);
             }
         },

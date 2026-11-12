@@ -11597,4 +11597,125 @@ fn a_face_is_composed_by_hand_in_elevation() {
         .collect();
     assert_eq!(pieces.iter().filter(|b| b.on_site).count(), 1);
     assert!(pieces.iter().all(|b| b.size.1 < 1.6), "cut at 1,00");
+    // A second wall like it takes the same face, and in symmetry the piece
+    // on site goes to the other end.
+    let w2 = h
+        .app
+        .ed
+        .transact("Otro muro", |m| {
+            let t = m.wall(w).unwrap().wall_type;
+            m.add_wall(archisim_core::NewWall {
+                wall_type: t,
+                level: m.wall(w).unwrap().level,
+                start: Point2::new(0.0, 3.0),
+                end: Point2::new(4.0, 3.0),
+                reference: archisim_core::ReferenceLine::Center,
+                height: 2.5,
+                base_offset: 0.0,
+                bulge: 0.0,
+                top: archisim_core::WallTop::Unconnected,
+            })
+        })
+        .unwrap();
+    assert_eq!(h.model().walls_like(w), vec![w2]);
+    h.app
+        .ed
+        .transact("Copiar", |m| m.copy_board_face(w, 0, &[w2], true))
+        .unwrap();
+    let g = h.model().board_face(w2, 0).unwrap();
+    assert!(g.marks.iter().any(|k| k.on_site && k.at.x > 2.7), "{g:?}");
+    // «Repartir»: a piece split in three columns is three pieces.
+    h.app
+        .start_sketch(crate::sketch::SketchTarget::BoardFace(w2, 0));
+    h.frame();
+    if let Some(st) = h.app.sketch.as_mut() {
+        st.split = (3, true);
+    }
+    h.app.set_piece_mode(super::sketch_ui::PieceMode::Split);
+    let before = archisim_geom::boards::wall_boards(h.model(), w2)
+        .iter()
+        .filter(|b| b.layer == 0)
+        .count();
+    h.app.sketch_mark_at(p(2.0, 2.0));
+    h.frame();
+    h.key(Key::Enter);
+    assert!(h.app.sketch.is_none());
+    let after = archisim_geom::boards::wall_boards(h.model(), w2)
+        .iter()
+        .filter(|b| b.layer == 0)
+        .count();
+    assert_eq!(after, before + 2, "{before} → {after}");
+}
+
+/// A slab's layer of boards composed by hand in plan: lines across it and
+/// a piece left for the site.
+#[test]
+fn a_slab_is_composed_by_hand_in_plan() {
+    let mut ed = Editor::new_project();
+    let level = ed.level;
+    let s = ed
+        .transact("Suelo", |m| {
+            let gyp = m.add_material(
+                "Placa de yeso laminado",
+                "plaster",
+                [240, 240, 236],
+                archisim_core::CutPattern::Solid,
+            );
+            let st = m.add_slab_type(
+                "Suelo de placas",
+                archisim_core::SlabFunction::Floor,
+                vec![archisim_core::Layer {
+                    material: gyp,
+                    thickness: 0.015,
+                    function: archisim_core::LayerFunction::Finish,
+                }],
+            )?;
+            m.add_slab(archisim_core::NewSlab {
+                slab_type: st,
+                level,
+                outline: vec![p(0.0, 0.0), p(3.6, 0.0), p(3.6, 2.4), p(0.0, 2.4)],
+                top_offset: 0.0,
+            })
+        })
+        .unwrap();
+    let mut h = Harness::new(ed);
+    h.frame();
+    let host = archisim_core::PlanHost::Slab(s);
+    h.app
+        .start_sketch(crate::sketch::SketchTarget::BoardPlan(host, 0));
+    h.frame();
+    assert!(h.app.sketch.is_some());
+    assert!(matches!(h.app.mode, ViewMode::Plan));
+    let layer = h.model().draw_layer_by_name("Boceto").unwrap().id;
+    let view = archisim_core::ViewRef::Level(level);
+    h.app
+        .ed
+        .transact("Juntas", |m| {
+            for x in [1.2, 2.4] {
+                m.add_draft(archisim_core::NewDraft::new(
+                    view,
+                    layer,
+                    archisim_core::Shape::Line {
+                        a: p(x, -0.2),
+                        b: p(x, 2.6),
+                    },
+                ))?;
+            }
+            Ok(())
+        })
+        .unwrap();
+    h.app.set_piece_mode(super::sketch_ui::PieceMode::OnSite);
+    h.app.sketch_mark_at(p(3.0, 1.0));
+    h.frame();
+    h.key(Key::Enter);
+    assert!(
+        h.app.sketch.is_none(),
+        "{:?}",
+        h.app.message.as_ref().map(|m| &m.text)
+    );
+    let f = h.model().board_plan(host, 0).unwrap();
+    assert_eq!(f.joints.len(), 2);
+    let pieces = archisim_geom::boards::slab_boards(h.model(), s);
+    assert_eq!(pieces.len(), 3, "{pieces:?}");
+    assert_eq!(pieces.iter().filter(|b| b.on_site).count(), 1);
 }

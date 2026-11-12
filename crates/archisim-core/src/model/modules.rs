@@ -1199,6 +1199,38 @@ impl Model {
                 ..c.clone()
             });
         }
+        // Their slab and ceiling layers composed by hand, in plan.
+        for f in src.board_plans() {
+            let host = match f.host {
+                PlanHost::Slab(id) => PlanHost::Slab(SlabId(id.0 + base)),
+                PlanHost::Ceiling(id) => PlanHost::Ceiling(CeilingId(id.0 + base)),
+            };
+            let id = match f.host {
+                PlanHost::Slab(id) => id.0,
+                PlanHost::Ceiling(id) => id.0,
+            };
+            if !placed.contains(&id) {
+                continue;
+            }
+            parts.board_plans.push(BoardPlan {
+                host,
+                layer: f.layer,
+                joints: f
+                    .joints
+                    .iter()
+                    .map(|(a, b)| (t.apply(*a), t.apply(*b)))
+                    .collect(),
+                marks: f
+                    .marks
+                    .iter()
+                    .map(|k| PieceMark {
+                        at: t.apply(k.at),
+                        ..k.clone()
+                    })
+                    .collect(),
+                joint: f.joint,
+            });
+        }
         // Boxes (M1): placed as the copy places them; a box type's say
         // what they are and at what revision.
         for b in src.boxes() {

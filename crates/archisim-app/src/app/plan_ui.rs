@@ -1071,6 +1071,24 @@ impl ArchiSimApp {
                 }
             }
         }
+        // A slab or a ceiling composed by hand in plan: a click (or a
+        // drag) marks pieces.
+        if self.sketch_marking() {
+            if let Some(pos) = response.interact_pointer_pos() {
+                let p = self.view.to_model(rect, pos);
+                if response.clicked_by(PointerButton::Primary) {
+                    self.sketch_mark_at(p);
+                } else if response.dragged_by(PointerButton::Primary) {
+                    self.sketch_mark(p, true);
+                }
+            }
+            if response.drag_stopped() {
+                if let Some(st) = self.sketch.as_mut() {
+                    st.stroke.clear();
+                }
+            }
+            return;
+        }
         // «Elegir línea» of a sketch.
         if self.sketch_picking() {
             if response.clicked_by(PointerButton::Primary) {

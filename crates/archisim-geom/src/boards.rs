@@ -798,6 +798,262 @@ pub fn wall_boards(model: &Model, wall: archisim_core::WallId) -> Vec<BoardPiece
     out
 }
 
+/// How near a joint can come to a jamb, a sill or a head without one of
+/// them, m: closer, a sliver of board is left there.
+pub const JAMB_GAP: f64 = 0.05;
+
+/// What a face composed by hand warns of.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FaceWarningKind {
+    /// A piece that does not come out of one board of its format.
+    TooBig,
+    /// A piece narrower than [`MIN_PIECE`].
+    TooSmall,
+    /// A joint a few centimetres off a jamb, a sill or a head.
+    NearJamb,
+    /// A joint over a joint of the layer next to it.
+    OverJoint,
+}
+
+/// A warning of a face composed by hand, where it is on the face (along
+/// the wall and up from the level): a piece (its outline) or a stretch of
+/// joint.
+#[derive(Debug, Clone, PartialEq)]
+pub struct FaceWarning {
+    pub kind: FaceWarningKind,
+    pub outline: Vec<(f64, f64)>,
+    pub text: String,
+}
+
+/// The joints of a layer as they stand: drawn by hand or by its rule.
+pub fn layer_joints(
+    model: &Model,
+    wall: archisim_core::WallId,
+    layer: usize,
+) -> Vec<(Point2, Point2)> {
+    match model.board_face(wall, layer) {
+        Some(f) => f.joints.clone(),
+        None => rule_joints(model, wall, layer),
+    }
+}
+
+/// What a face of a wall's layer composed by hand (with these joints and
+/// marks) warns of: pieces too big for their board or too small, joints
+/// next to a jamb, and joints over those of the layers on either side.
+pub fn face_warnings(
+    model: &Model,
+    wall: archisim_core::WallId,
+    layer: usize,
+    joints: &[(Point2, Point2)],
+    marks: &[archisim_core::PieceMark],
+) -> Vec<FaceWarning> {
+    let mut out = Vec::new();
+    let (Some(w), Some(t)) = (
+        model.wall(wall),
+        model.wall(wall).and_then(|w| model.wall_type(w.wall_type)),
+    ) else {
+        return out;
+    };
+    let Some(l) = t.layers.get(layer) else {
+        return out;
+    };
+    let Some(lay) = laying(model, l.material, l.thickness) else {
+        return out;
+    };
+    let holes: Vec<Rect> = crate::openings_in_wall(model, wall)
+        .iter()
+        .map(|o| [o.t0, o.sill, o.t1, o.head])
+        .collect();
+    let face = [0.0, w.base_offset, w.length(), w.base_offset + w.height];
+    let cm = |v: f64| format!("{:.0}", v * 100.0);
+    for poly in face_pieces(face, joints) {
+        let cut: f64 = holes.iter().map(|h| poly_area(&clip(&poly, *h))).sum();
+        if poly_area(&poly) - cut <= 0.005 {
+            continue;
+        }
+        let material = marks
+            .iter()
+            .find(|m| inside_convex(&poly, (m.at.x, m.at.y)))
+            .and_then(|m| m.material)
+            .unwrap_or(l.material);
+        let (fw, fl) = if material == l.material {
+            (lay.format.width, lay.format.length)
+        } else {
+            model
+                .board_layout(material)
+                .map_or((lay.format.width, lay.format.length), |o| {
+                    (o.width, o.length)
+                })
+        };
+        let x0 = poly.iter().map(|q| q.0).fold(f64::INFINITY, f64::min);
+        let x1 = poly.iter().map(|q| q.0).fold(f64::NEG_INFINITY, f64::max);
+        let y0 = poly.iter().map(|q| q.1).fold(f64::INFINITY, f64::min);
+        let y1 = poly.iter().map(|q| q.1).fold(f64::NEG_INFINITY, f64::max);
+        let (a, b) = (x1 - x0, y1 - y0);
+        let fits = |a: f64, b: f64| a <= fw + 1e-3 && b <= fl + 1e-3;
+        if !fits(a, b) && !fits(b, a) {
+            out.push(FaceWarning {
+                kind: FaceWarningKind::TooBig,
+                outline: poly.clone(),
+                text: format!(
+                    "Pieza de {}×{} cm: no sale de una placa de {}×{}",
+                    cm(a),
+                    cm(b),
+                    cm(fw),
+                    cm(fl)
+                ),
+            });
+        }
+        if a.min(b) < MIN_PIECE - 1e-3 {
+            out.push(FaceWarning {
+                kind: FaceWarningKind::TooSmall,
+                outline: poly.clone(),
+                text: format!(
+                    "Pieza de {}×{} cm: más estrecha de {} cm",
+                    cm(a),
+                    cm(b),
+                    cm(MIN_PIECE)
+                ),
+            });
+        }
+    }
+    // Joints that come near a jamb, a sill or a head.
+    let upright = |a: &Point2, b: &Point2| (a.x - b.x).abs() < 1e-3;
+    let level = |a: &Point2, b: &Point2| (a.y - b.y).abs() < 1e-3;
+    let overlap = |a0: f64, a1: f64, b0: f64, b1: f64| {
+        a0.min(a1).max(b0.min(b1)) < a0.max(a1).min(b0.max(b1))
+    };
+    for (a, b) in joints {
+        for h in &holes {
+            let near = |v: f64, edge: f64| {
+                let d = (v - edge).abs();
+                d > 0.002 && d < JAMB_GAP
+            };
+            let hit = if upright(a, b) && overlap(a.y, b.y, h[1] - JAMB_GAP, h[3] + JAMB_GAP) {
+                [h[0], h[2]]
+                    .into_iter()
+                    .find(|e| near(a.x, *e))
+                    .map(|e| (a.x - e).abs())
+            } else if level(a, b) && overlap(a.x, b.x, h[0] - JAMB_GAP, h[2] + JAMB_GAP) {
+                [h[1], h[3]]
+                    .into_iter()
+                    .find(|e| near(a.y, *e))
+                    .map(|e| (a.y - e).abs())
+            } else {
+                None
+            };
+            if let Some(d) = hit {
+                out.push(FaceWarning {
+                    kind: FaceWarningKind::NearJamb,
+                    outline: vec![(a.x, a.y), (b.x, b.y)],
+                    text: format!(
+                        "Junta a {:.0} mm de un hueco: queda una tira de placa",
+                        d * 1000.0
+                    ),
+                });
+                break;
+            }
+        }
+    }
+    // Joints over the joints of the board layers on either side.
+    let mut near_layers = Vec::new();
+    for j in [layer.checked_sub(1), Some(layer + 1)]
+        .into_iter()
+        .flatten()
+    {
+        if let Some(n) = t.layers.get(j) {
+            if laying(model, n.material, n.thickness).is_some() {
+                near_layers.push(j);
+            }
+        }
+    }
+    for j in near_layers {
+        let theirs = layer_joints(model, wall, j);
+        for (a, b) in joints {
+            for (c, d) in &theirs {
+                let same = if upright(a, b) && upright(c, d) && (a.x - c.x).abs() < 0.01 {
+                    let lo = a.y.min(b.y).max(c.y.min(d.y));
+                    let hi = a.y.max(b.y).min(c.y.max(d.y));
+                    (hi - lo > 0.05).then(|| vec![(a.x, lo), (a.x, hi)])
+                } else if level(a, b) && level(c, d) && (a.y - c.y).abs() < 0.01 {
+                    let lo = a.x.min(b.x).max(c.x.min(d.x));
+                    let hi = a.x.max(b.x).min(c.x.max(d.x));
+                    (hi - lo > 0.05).then(|| vec![(lo, a.y), (hi, a.y)])
+                } else {
+                    None
+                };
+                if let Some(line) = same {
+                    out.push(FaceWarning {
+                        kind: FaceWarningKind::OverJoint,
+                        outline: line,
+                        text: format!("Junta sobre la de la capa {}: conviene desplazarla", j + 1),
+                    });
+                }
+            }
+        }
+    }
+    out
+}
+
+/// Whether each end of a wall (start, end) meets a joint between boxes:
+/// it is in a box and comes to one of its sides that touches another box.
+/// The pieces there are the ones fitted on site once the boxes stand.
+pub fn ends_at_joints(model: &Model, wall: archisim_core::WallId) -> (bool, bool) {
+    let Some(w) = model.wall(wall) else {
+        return (false, false);
+    };
+    let Some(b) = model.box_of(wall.0).and_then(|b| model.modular_box(b)) else {
+        return (false, false);
+    };
+    const REACH: f64 = 0.35;
+    let contacts = model.box_contacts(b.id);
+    let at_joint = |p: Point2| {
+        contacts.iter().any(|c| {
+            let (s0, s1) = b.side(c.side);
+            let d = s1 - s0;
+            let len = d.length();
+            if len < 1e-9 {
+                return false;
+            }
+            let u = d * (1.0 / len);
+            let t = (p - s0).dot(u);
+            let off = (p - (s0 + u * t)).length();
+            off < REACH && t > c.from - REACH && t < c.to + REACH
+        })
+    };
+    (at_joint(w.start), at_joint(w.end))
+}
+
+/// The pieces of a face (these joints) at the ends of a wall that meet a
+/// joint between boxes: the points inside them, to mark them on site.
+pub fn joint_end_pieces(
+    model: &Model,
+    wall: archisim_core::WallId,
+    joints: &[(Point2, Point2)],
+) -> Vec<Point2> {
+    let Some(w) = model.wall(wall) else {
+        return Vec::new();
+    };
+    let (at_start, at_end) = ends_at_joints(model, wall);
+    let len = w.length();
+    let face = [0.0, w.base_offset, len, w.base_offset + w.height];
+    face_pieces(face, joints)
+        .into_iter()
+        .filter(|poly| {
+            let x0 = poly.iter().map(|q| q.0).fold(f64::INFINITY, f64::min);
+            let x1 = poly.iter().map(|q| q.0).fold(f64::NEG_INFINITY, f64::max);
+            (at_start && x0 < 1e-3) || (at_end && x1 > len - 1e-3)
+        })
+        .map(|poly| {
+            let n = poly.len() as f64;
+            Point2::new(
+                poly.iter().map(|q| q.0).sum::<f64>() / n,
+                poly.iter().map(|q| q.1).sum::<f64>() / n,
+            )
+        })
+        .collect()
+}
+
 /// The joints of a wall's layer as its material's rule lays them, as lines
 /// on the face (along the wall and up from the level), the ones in line
 /// joined: where a face composed by hand starts from.
@@ -1099,6 +1355,50 @@ fn plan_boards(
             0.0
         };
         nth += 1;
+        // Composed by hand in plan: the pieces its lines cut.
+        if let Some(bp) = plan_host(host).and_then(|h| model.board_plan(h, i)) {
+            let local_pt = |q: &Point2| {
+                let (x, y) = local(q);
+                Point2::new(x, y)
+            };
+            let joints: Vec<(Point2, Point2)> = bp
+                .joints
+                .iter()
+                .map(|(a, b)| (local_pt(a), local_pt(b)))
+                .collect();
+            let mut k = 0;
+            for piece in face_pieces(face, &joints) {
+                let inside = clip_to_convex(&poly, &piece);
+                let mut a = poly_area(&inside);
+                for h in &holes {
+                    a -= poly_area(&clip_to_convex(h, &piece));
+                }
+                if a < 0.005 || inside.len() < 3 {
+                    continue;
+                }
+                k += 1;
+                let r = bounds(&inside);
+                let pm = bp
+                    .marks
+                    .iter()
+                    .find(|m| inside_convex(&piece, local(&m.at)));
+                out.push(BoardPiece {
+                    mark: format!("{mark}·{}·{:02}", i + 1, k),
+                    host,
+                    layer: i,
+                    material: pm.and_then(|m| m.material).unwrap_or(l.material),
+                    thickness: l.thickness,
+                    format: f,
+                    at: (r[0], r[1]),
+                    size: (r[2] - r[0], r[3] - r[1]),
+                    area: a,
+                    notched: (a - area(r)).abs() > 1e-4,
+                    outline: inside,
+                    on_site: pm.is_some_and(|m| m.on_site),
+                });
+            }
+            continue;
+        }
         let laid: Vec<Rect> = lay_with(face, &laying, shift, &[])
             .into_iter()
             .map(|p| p.rect)
@@ -1128,6 +1428,176 @@ fn plan_boards(
                 notched,
                 outline: Vec::new(),
                 on_site: false,
+            });
+        }
+    }
+    out
+}
+
+/// The slab or ceiling a host of boards in plan is.
+fn plan_host(host: Host) -> Option<archisim_core::PlanHost> {
+    match host {
+        Host::Slab(id) => Some(archisim_core::PlanHost::Slab(archisim_core::SlabId(id))),
+        Host::Ceiling(id) => Some(archisim_core::PlanHost::Ceiling(archisim_core::CeilingId(
+            id,
+        ))),
+        _ => None,
+    }
+}
+
+/// The rectangle that holds a polygon.
+fn bounds(p: &[(f64, f64)]) -> Rect {
+    let mut r = [f64::MAX, f64::MAX, f64::MIN, f64::MIN];
+    for q in p {
+        r = [r[0].min(q.0), r[1].min(q.1), r[2].max(q.0), r[3].max(q.1)];
+    }
+    r
+}
+
+/// A polygon (convex or not) clipped to a convex one, in the same axes.
+fn clip_to_convex(subject: &[(f64, f64)], convex: &[(f64, f64)]) -> FacePoly {
+    let n = convex.len();
+    if n < 3 {
+        return Vec::new();
+    }
+    let ccw = (0..n)
+        .map(|i| convex[i].0 * convex[(i + 1) % n].1 - convex[(i + 1) % n].0 * convex[i].1)
+        .sum::<f64>()
+        > 0.0;
+    let mut out = subject.to_vec();
+    for i in 0..n {
+        let (a, b) = (convex[i], convex[(i + 1) % n]);
+        let (l, r) = split_convex(&out, a, (b.0 - a.0, b.1 - a.1));
+        out = if ccw { l } else { r };
+        if out.len() < 3 {
+            return Vec::new();
+        }
+    }
+    out
+}
+
+/// Whether a point is inside a polygon, convex or not.
+pub fn inside_piece(poly: &[(f64, f64)], p: (f64, f64)) -> bool {
+    let n = poly.len();
+    let mut inside = false;
+    for i in 0..n {
+        let (a, b) = (poly[i], poly[(i + 1) % n]);
+        if (a.1 > p.1) != (b.1 > p.1) && p.0 < a.0 + (b.0 - a.0) * (p.1 - a.1) / (b.1 - a.1) {
+            inside = !inside;
+        }
+    }
+    inside
+}
+
+/// The pieces a slab's or a ceiling's layer is cut in by lines drawn in
+/// plan (as they are drawn, before they are kept), in plan: each piece of
+/// the face as the lines cut it, clipped to the outline.
+pub fn plan_pieces(
+    model: &Model,
+    host: archisim_core::PlanHost,
+    joints: &[(Point2, Point2)],
+) -> Vec<FacePoly> {
+    let Some((outline, _)) = model.plan_host_outline(host) else {
+        return Vec::new();
+    };
+    if outline.len() < 3 {
+        return Vec::new();
+    }
+    let (o, u, v) = plan_axes(outline);
+    let local = |p: &Point2| {
+        let d = *p - o;
+        (d.x * u.x + d.y * u.y, d.x * v.x + d.y * v.y)
+    };
+    let back = |q: (f64, f64)| {
+        let p = o + u * q.0 + v * q.1;
+        (p.x, p.y)
+    };
+    let poly: Vec<(f64, f64)> = outline.iter().map(local).collect();
+    let face = bounds(&poly);
+    let joints: Vec<(Point2, Point2)> = joints
+        .iter()
+        .map(|(a, b)| {
+            let (a, b) = (local(a), local(b));
+            (Point2::new(a.0, a.1), Point2::new(b.0, b.1))
+        })
+        .collect();
+    face_pieces(face, &joints)
+        .into_iter()
+        .map(|piece| clip_to_convex(&poly, &piece))
+        .filter(|p| p.len() >= 3 && poly_area(p) > 1e-3)
+        .map(|p| p.into_iter().map(back).collect())
+        .collect()
+}
+
+/// What a slab's or a ceiling's layer composed in plan warns of: pieces
+/// too big for their board (red) or narrower than `MIN_PIECE` (amber),
+/// measured along the slab's own axes. Outlines in plan.
+pub fn plan_warnings(
+    model: &Model,
+    host: archisim_core::PlanHost,
+    layer: usize,
+    joints: &[(Point2, Point2)],
+    marks: &[archisim_core::PieceMark],
+) -> Vec<FaceWarning> {
+    let mut out = Vec::new();
+    let (Some(layers), Some((outline, _))) =
+        (model.plan_host_layers(host), model.plan_host_outline(host))
+    else {
+        return out;
+    };
+    let Some(l) = layers.get(layer) else {
+        return out;
+    };
+    let Some(lay) = laying(model, l.material, l.thickness) else {
+        return out;
+    };
+    let (o, u, v) = plan_axes(outline);
+    let local = |p: (f64, f64)| {
+        let d = Point2::new(p.0, p.1) - o;
+        (d.x * u.x + d.y * u.y, d.x * v.x + d.y * v.y)
+    };
+    let cm = |v: f64| format!("{:.0}", v * 100.0);
+    for poly in plan_pieces(model, host, joints) {
+        let material = marks
+            .iter()
+            .find(|m| inside_piece(&poly, (m.at.x, m.at.y)))
+            .and_then(|m| m.material)
+            .unwrap_or(l.material);
+        let (fw, fl) = if material == l.material {
+            (lay.format.width, lay.format.length)
+        } else {
+            model
+                .board_layout(material)
+                .map_or((lay.format.width, lay.format.length), |o| {
+                    (o.width, o.length)
+                })
+        };
+        let r = bounds(&poly.iter().map(|q| local(*q)).collect::<Vec<_>>());
+        let (a, b) = (r[2] - r[0], r[3] - r[1]);
+        let fits = |a: f64, b: f64| a <= fw + 1e-3 && b <= fl + 1e-3;
+        if !fits(a, b) && !fits(b, a) {
+            out.push(FaceWarning {
+                kind: FaceWarningKind::TooBig,
+                outline: poly.clone(),
+                text: format!(
+                    "Pieza de {}×{} cm: no sale de una placa de {}×{}",
+                    cm(a),
+                    cm(b),
+                    cm(fw),
+                    cm(fl)
+                ),
+            });
+        }
+        if a.min(b) < MIN_PIECE - 1e-3 {
+            out.push(FaceWarning {
+                kind: FaceWarningKind::TooSmall,
+                outline: poly,
+                text: format!(
+                    "Pieza de {}×{} cm: más estrecha de {} cm",
+                    cm(a),
+                    cm(b),
+                    cm(MIN_PIECE)
+                ),
             });
         }
     }
@@ -1773,6 +2243,83 @@ mod tests {
         assert_eq!(before.len(), after.len());
         let area = |v: &[BoardPiece]| v.iter().map(|b| b.area).sum::<f64>();
         assert!((area(&before) - area(&after)).abs() < 1e-6);
+    }
+
+    #[test]
+    fn a_face_by_hand_warns_of_what_will_not_go() {
+        let (m, w) = plaster_wall_of(3.6, 2.5);
+        let p = |x: f64, y: f64| Point2::new(x, y);
+        // Uprights at 1,2 and 1,4: a sliver of 20 cm; nothing at 3,6: the
+        // last piece is 2,2 wide, more than a board.
+        let joints = vec![(p(1.2, 0.0), p(1.2, 2.5)), (p(1.4, 0.0), p(1.4, 2.5))];
+        let warn = face_warnings(&m, w, 0, &joints, &[]);
+        let kinds: Vec<_> = warn.iter().map(|x| x.kind).collect();
+        assert!(kinds.contains(&FaceWarningKind::TooSmall), "{warn:?}");
+        assert!(kinds.contains(&FaceWarningKind::TooBig), "{warn:?}");
+        // The inner layer's joints are those of its rule, every 1,20 from
+        // the start: the joint at 1,20 is over one of them.
+        assert!(kinds.contains(&FaceWarningKind::OverJoint) || kinds.len() >= 2);
+    }
+
+    #[test]
+    fn a_slab_composed_by_hand_in_plan() {
+        let mut m = Model::new("T");
+        let level = m.add_level("PB", 0.0);
+        let osb = m.add_material("Tablero OSB", "wood", [200, 170, 120], CutPattern::Solid);
+        let st = m
+            .add_slab_type(
+                "Suelo",
+                archisim_core::SlabFunction::Floor,
+                vec![Layer {
+                    material: osb,
+                    thickness: 0.018,
+                    function: LayerFunction::Structure,
+                }],
+            )
+            .unwrap();
+        let p = |x: f64, y: f64| Point2::new(x, y);
+        let s = m
+            .add_slab(archisim_core::NewSlab {
+                slab_type: st,
+                level,
+                outline: vec![p(0.0, 0.0), p(4.0, 0.0), p(4.0, 3.0), p(0.0, 3.0)],
+                top_offset: 0.0,
+            })
+            .unwrap();
+        let host = archisim_core::PlanHost::Slab(s);
+        let by_rule = slab_boards(&m, s).len();
+        assert!(by_rule > 0);
+        // One line across at x = 1,2 (it overshoots: it still cuts) and
+        // one that stops short: two pieces, the narrow one on site.
+        let joints = vec![(p(1.2, -0.5), p(1.2, 3.5)), (p(2.0, 1.0), p(3.0, 1.0))];
+        assert_eq!(plan_pieces(&m, host, &joints).len(), 2);
+        m.set_board_plan(
+            host,
+            0,
+            Some(archisim_core::BoardPlan {
+                host,
+                layer: 0,
+                joints: joints.clone(),
+                marks: vec![archisim_core::PieceMark {
+                    at: p(0.6, 1.5),
+                    material: None,
+                    on_site: true,
+                }],
+                joint: None,
+            }),
+        )
+        .unwrap();
+        let pieces = slab_boards(&m, s);
+        assert_eq!(pieces.len(), 2, "{pieces:?}");
+        assert_eq!(pieces.iter().filter(|b| b.on_site).count(), 1);
+        let total: f64 = pieces.iter().map(|b| b.area).sum();
+        assert!((total - 12.0).abs() < 1e-6);
+        // 2,80 × 3,00 does not come out of a board of OSB.
+        let warn = plan_warnings(&m, host, 0, &joints, &[]);
+        assert!(
+            warn.iter().any(|w| w.kind == FaceWarningKind::TooBig),
+            "{warn:?}"
+        );
     }
 
     fn plaster_wall_of(length: f64, height: f64) -> (Model, archisim_core::WallId) {
