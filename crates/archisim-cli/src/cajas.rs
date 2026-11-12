@@ -34,6 +34,7 @@ fn material(m: &mut Model, name: &str, class: &str, rgb: [u8; 3]) -> archisim_co
 /// the template's false ceiling.
 pub fn system_fill(m: &mut Model, lib: &archisim_library::Library) -> Res<BoxFill> {
     archisim_library::frame_material(m, FrameMaterial::Steel);
+    archisim_library::joint_materials(m);
     let m = &mut *m;
     let ceramic = material(m, "Placa cerámica", "ceramic", [196, 120, 92]);
     let membrane = material(m, "Membrana transpirable", "membrane", [90, 110, 140]);
@@ -98,6 +99,9 @@ pub fn system_fill(m: &mut Model, lib: &archisim_library::Library) -> Res<BoxFil
         ceiling_height: 2.93,
         parapet: archisim_core::BOX_PARAPET,
     };
+    // How the boards are laid (M18): the insulating boards in a zipper,
+    // the ceramic cladding by joint lines with wood round the windows.
+    archisim_library::modular_board_layouts(m);
     Ok(fill)
 }
 
@@ -229,6 +233,26 @@ pub fn build() -> Res<Model> {
     // The work on site before the boxes come (M10): slab, supports and
     // plinth, on their level under the boxes.
     m.build_box_base(&archisim_core::BaseOptions::default())?;
+    // A porch on the first free long side of a box on the ground (M17).
+    let spot = m.ground_boxes().into_iter().find_map(|b| {
+        [0usize, 2]
+            .into_iter()
+            .find(|s| {
+                b.sides[*s] == archisim_core::SideState::Free
+                    && m.box_contacts(b.id).iter().all(|k| k.side != *s)
+            })
+            .map(|s| (b.id, s))
+    });
+    if let Some((b, side)) = spot {
+        m.build_porch(
+            b,
+            &archisim_core::PorchOptions {
+                side,
+                depth: 2.4,
+                ..Default::default()
+            },
+        )?;
+    }
     Ok(m)
 }
 
@@ -294,6 +318,11 @@ pub fn write(dir: &Path) -> Res {
     std::fs::create_dir_all(dir)?;
     archisim_file::save(&m, dir.join(format!("cajas.{}", archisim_file::EXTENSION)))?;
     std::fs::write(dir.join("cajas.ifc"), crate::ifc_text(&m, "cajas", None))?;
+    // The same in IFC4, for the programs that do not read 4.3.
+    std::fs::write(
+        dir.join("cajas-ifc4.ifc"),
+        crate::ifc_text_in(&m, "cajas-ifc4", None, archisim_ifc::Schema::Ifc4),
+    )?;
     let options = archisim_plan::PlanOptions {
         scale: 100.0,
         ..Default::default()
@@ -334,6 +363,18 @@ pub fn write(dir: &Path) -> Res {
         sheets,
         dir.join("cajas-taller.pdf").display()
     );
+    // The boards piece by piece and the shopping list (M14).
+    std::fs::write(
+        dir.join("cajas-tableros.csv"),
+        archisim_geom::boards::boards_csv(&m),
+    )?;
+    std::fs::write(
+        dir.join("cajas-compra.csv"),
+        archisim_geom::boards::shopping_csv(&m),
+    )?;
+    println!("  {}", dir.join("cajas-compra.csv").display());
+    // The factory (M16).
+    print!("{}", crate::fabrica::write(&m, dir, "cajas")?);
     println!("  {}", dir.join("cajas.ifc").display());
     Ok(())
 }

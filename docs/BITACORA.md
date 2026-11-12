@@ -6,6 +6,73 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-10 (152) · M18: el despiece del estudio (cremallera, líneas de junta y acentos)
+
+Rama `bloque/despiece-placas` (sobre la del porche), con pull request. Formato versión 108 (`board_layouts`; los ficheros anteriores se abren sin despiece propio).
+
+- **Qué se hizo.** Antonio preguntó si se tenía en cuenta su despiece de Revit. Leído su IFC del L-160: Tabihaus 1,20 × 3,00 en vertical en cremallera (cortada de 0,58 arriba y abajo por columnas), placa cerámica en columnas de 1,20 con juntas a ±0,00 y 2,50 y lamas de madera en las columnas de los huecos. Ahora cada material puede tener su despiece (formato, vertical, juntas a media placa, en cremallera o por líneas, y acento alrededor de huecos), que siguen las placas pieza a pieza, la compra, los pedidos y, en fachada, el 3D y los alzados con sus juntas. `archisim despiece` pone el habitual; `archisim cajas` ya lo trae.
+- **Pendiente.** Piezas de esquina y remate de otro formato; la banda superior en otro formato; confirmar 2,50 frente a los 2,70 que comentó Antonio.
+- **Qué debe probar Antonio.** `archisim despiece <su L-160 con cajas>.archisim out/l160-despiece.archisim` y `archisim compra out/l160-despiece.archisim out/l160`: en `tableros.csv`, el Tabihaus en 1200×3000 y 1200×580 alternos y la cerámica en 1200×2500 y 1200×810 con las lamas junto a los huecos. Abrir `out/l160-despiece.archisim` en la app y mirar la fachada en 3D. En Tipos y materiales, elegir la placa cerámica → «Despiece en placas», cambiar las líneas (por ejemplo «0; 2,70») y ver cómo cambia la fachada.
+
+## 2026-11-10 (151) · M17: el porche como módulo ligero de acero
+
+Rama `bloque/porche` (sobre la de M6, M15 y M16), con pull request. Sin cambios de formato.
+
+- **Qué se hizo.** En las propiedades de una caja, «Porche»: elige el lado y el fondo y hace pilares de tubo, vigas alrededor (las vueltas atadas al marco de techo de la caja) y la cubierta de chapa a esa altura, con tipos propios, y dice el peso de acero del bastidor. Se puede rehacer en el mismo sitio. `archisim cajas` pone uno en el ejemplo.
+- **Pendiente.** Placas de anclaje y apoyos del porche en la obra previa; la barandilla o las lamas si las lleva.
+- **Qué debe probar Antonio.** `archisim cajas out/` y abre `out/cajas.archisim`: en 3D, el porche de 2,40 m en una caja de la planta baja. Selecciona otra caja, Propiedades → «Porche», elige el lado y el fondo y pulsa «Hacer el porche». Mira el `out/cajas.ifc` en su visor (pilares, vigas y la cubierta).
+
+## 2026-11-10 (150) · M6, M15 y M16: instalaciones en el entramado, reglas del sistema, elecciones por cliente y fábrica
+
+Rama `bloque/reglas-fabrica` (sobre la de M14), con pull request. Sin cambios de formato.
+
+- **Qué se hizo.** Instalaciones: uniones en obra donde una tubería, conducto o cable cruza una junta entre cajas (o un montante pasa a la caja de encima), con su registro, y comprobación de los pasos por el alma de los montantes (40 % del canto, 25 cm del canal). Reglas del sistema como un apartado nuevo de la Comprobación CTE: avisos de cada caja, huecos junto a los pilares de esquina, huecos de más de 2,40 m, ventanas en lados que dan a otra caja, locales húmedos sobre una junta e instalaciones. Elecciones por cliente: las opciones de una caja tipo pueden ser acabados de muro y suelo, techos y equipamiento, además de puertas y ventanas. Fábrica: paneles acotados por caja (A3, 1:25), etiquetas con QR de cada pieza (A4), un pedido por caja y el fichero de la perfiladora (CSV abierto con operaciones en mm). Valores estándar en `docs/MODULAR.md`.
+- **Pendiente.** El formato real de la perfiladora cuando se elija la máquina; la distribución como elección; el patinillo como elemento.
+- **Qué debe probar Antonio.** `archisim cajas out/`: mira `out/cajas-paneles.pdf` (paneles de cada caja con sus cotas), `out/cajas-etiquetas.pdf` (lee un QR con el móvil: sale la pieza), `out/cajas-perfiladora.csv` y `out/cajas-pedido-MOD-01.csv`. En la app, abre `out/cajas.archisim`, Colaboración → Comprobación CTE, apartado «Sistema modular». Pon una ventana en el lado de una caja que da a otra y vuelve a comprobar: sale en rojo. Dibuja una tubería dentro de un muro de fachada de una caja y comprueba los pasos por montantes. En una caja tipo, añade una opción con un tipo de muro y elige otro en la copia de la vivienda.
+
+## 2026-11-10 (149) · M14 y M5: placas por piezas, lista de compra y montantes en el HE 1
+
+Rama `bloque/tableros` (sobre la de M13), con pull request. Sin cambios de formato.
+
+- **Qué se hizo.** Cada capa de placa o tablero de muros, suelos, cubiertas y falsos techos se coloca pieza a pieza en su formato comercial (juntas a media placa entre capas y filas, recortes alrededor de puertas y ventanas; las juntas de fachada caen sobre las de las cajas porque cada muro acaba en su caja). De ahí, las placas que hay que comprar (las enteras más los recortes empaquetados) y la lista de compra por caja y total: placas, perfiles en barras de 6 m, lana en paquetes, láminas en rollos, junta y uniones de M13, chasis en kg, soldadura y tornillería. `archisim compra` y Archivo → Exportar → «Lista de compra de las cajas (CSV)». En el HE 1, la U de los muros, suelos y cubiertas con entramado ligero cuenta los montantes (UNE-EN ISO 6946, media de los dos límites). Formatos y cuentas estándar en `docs/MODULAR.md`, a confirmar.
+- **Pendiente.** Confirmar formatos de placa con el proveedor; con todo el aislamiento entre montantes de acero la U casi se duplica, así que conviene mirar en la Envolvente si la fachada cumple; el valor del fabricante o un cálculo por elementos finitos sustituirá al método simplificado.
+- **Qué debe probar Antonio.** `archisim cajas out/` y abrir `out/cajas-compra.csv` en Excel (separador «;»): una tabla por caja y al final las líneas TOTAL. `out/cajas-tableros.csv` trae cada placa con su marca (muro·capa·pieza), su corte y si va entera, cortada o recortada. Con su L-160: `archisim compra <l160 con cajas>.archisim out/l160`. En la app, Colaboración → Envolvente y cargas térmicas sobre `out/cajas.archisim`: la U de la fachada de las cajas es ahora mayor que antes.
+
+## 2026-11-10 (148) · M13: la junta completa y las uniones de las cajas
+
+Rama `bloque/juntas-uniones` (sobre la de M12), con pull request. Sin cambios de formato.
+
+- **Qué se hizo.** Lo que cierra y une las juntas entre cajas, calculado desde las cajas (no se guarda): lana mineral en el hueco, banda impermeable en cubierta, membrana en los extremos de fachada, tapajuntas en suelo y techo si la junta es abierta; placas de unión atornilladas en el marco de suelo y de techo, orejetas de izado, placas de apoyo con pernos sobre los pilares de la obra previa; y las cuentas de tornillos de montante y metros de soldadura. Sale en 3D, en el IFC (4.3 e IFC4, valida con IfcOpenShell), en las mediciones (capítulo 17, una línea por caja) y en la hoja de taller de cada caja. `archisim cajas` escribe también `cajas-ifc4.ifc`. Valores estándar descritos en `docs/MODULAR.md` (M13), a confirmar.
+- **Pendiente.** Elegir con el fabricante las medidas reales de placas, tornillería y bandas; dibujar las placas en planta de cimentación.
+- **Qué debe probar Antonio.** `archisim cajas out/` y abrir `out/cajas.ifc` en su visor: dentro de cada caja (Caja modular) aparecen, además de los tubos, la lana, bandas, placas, orejetas y pernos. Abrir `out/cajas.archisim` en la app, mirar en 3D una junta de cerca y, en Mediciones, el capítulo 17. En `out/cajas-taller.pdf`, la tabla «Materiales» de cada caja trae las filas «Junta» y «Unión».
+
+## 2026-11-10 (147) · M12: las cajas de una vivienda importada (el L-160)
+
+Rama `bloque/cajas-importadas`, con pull request. Sin cambios de formato ni de IFC. Antes se unieron #196 (obra previa) y #197 (plantilla) a `main`, como pidió Antonio.
+
+**Qué hace.**
+- **Cajas sobre los suelos.** En las propiedades de la herramienta Caja hay un grupo nuevo, «Cajas sobre lo dibujado». También desde la línea de órdenes: `archisim cajas-sobre <proyecto> <salida> [--modulo 6.10x3.60] [--tipos carpeta --prefijo L160]`.
+  - Pone una caja sobre cada suelo del tamaño de una caja que esté cerrado por muros.
+  - La lleva al módulo si cabe sin pisar a la vecina.
+  - Lee sus lados de los muros de las juntas: con muro (si el muro está de su lado), abierto o libre.
+  - Con `--tipos`, guarda una caja tipo por caja, en diseño.
+- **Locales desde una lista** (`archisim locales <proyecto> <locales.csv> <salida>`, con nombre; uso; x; y). Cada local se cierra con los muros que hay alrededor de su punto. Si dos puntos caen en el mismo espacio, se avisa en vez de repetirlo.
+- **Locales de modelos de otros programas.** Los pilares cierran locales, como en Revit. Si no se cierra, se puentean los huecos de hasta 15 cm entre muros. Por eso el L-160 no cerraba: sus fachadas paran unos centímetros antes de cada junta.
+
+**Con el L-160** (su IFC y el plano 01, que no se suben):
+- **Cajas:** 8 de 6,10 × 3,60, en la misma disposición que el plano. Salón, comedor y cocina quedan con las juntas abiertas.
+- **Locales:** 10, con **160,26 m² útiles**. El salón-comedor-cocina con el pasillo es un solo espacio de 75,67 m², porque entre ellos solo hay huecos de paso. El dormitorio suite con su vestidor es otro.
+- **Avisos que vienen del modelo de Revit:** en cuatro juntas hay tabique de pladur en las dos cajas, uno al lado del otro. Debe llevarlo solo una.
+
+**Qué debe probar Antonio.**
+1. Importa tu IFC: `cargo run -p archisim-cli -- importar BIOKUBIK_VIVIENDA_L_160.ifc l160.archisim`.
+2. Pon las cajas: `cargo run -p archisim-cli -- cajas-sobre l160.archisim l160-cajas.archisim --tipos "Cajas tipo" --prefijo L160`. Mira el informe de cada caja y sus avisos.
+3. Pon los locales con el fichero `locales-L160.csv` que te paso: `cargo run -p archisim-cli -- locales l160-cajas.archisim locales-L160.csv l160-locales.archisim`.
+4. Comprueba el CTE: `cargo run -p archisim-cli -- cte l160-locales.archisim`. Ahora salen los 160 m² y la ocupación.
+5. En la aplicación, abre `l160.archisim`, elige la herramienta Caja y pulsa «Poner 8 cajas sobre los suelos».
+
+---
+
 ## 2026-11-10 (146) · M11: plantilla del sistema y perfiles del fabricante
 
 Rama `bloque/plantilla`, con pull request sobre #196. Sin cambios de formato ni de IFC. `docs/MODULAR.md` §3 ter, donde queda también el camino hasta el LOD 400 (M12 a M17).

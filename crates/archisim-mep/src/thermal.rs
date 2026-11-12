@@ -456,6 +456,62 @@ pub fn u_value(model: &Model, layers: &[archisim_core::Layer], rsi: f64, rse: f6
     1.0 / (rsi + model.layers_resistance(layers) + rse)
 }
 
+/// Conductivity of the steel of a light frame, W/m·K.
+pub const FRAME_STEEL_LAMBDA: f64 = 50.0;
+/// Conductivity of the timber of a frame, W/m·K.
+pub const FRAME_TIMBER_LAMBDA: f64 = 0.13;
+/// Weight of the upper bound in the combined method (UNE-EN ISO 6946,
+/// 6.7.2: the average of the two bounds).
+pub const FRAME_UPPER_SHARE: f64 = 0.5;
+
+/// The transmittance of a type's layers counting its frame (M5): when the
+/// type has a light frame, the layer the frame fills is two paths — the
+/// insulation between the studs and the studs themselves — and the
+/// resistance is the mean of the upper bound (paths side by side) and the
+/// lower one (layer by layer with the layer's mean conductivity), as in
+/// UNE-EN ISO 6946. A steel stud is its web (its thickness) across the
+/// width of its flange; a timber one, all of its width. Without a frame,
+/// as `u_value`.
+pub fn framed_u_value(
+    model: &Model,
+    type_id: u64,
+    layers: &[archisim_core::Layer],
+    rsi: f64,
+    rse: f64,
+) -> f64 {
+    let plain = u_value(model, layers, rsi, rse);
+    let Some(f) = model.type_framing(type_id) else {
+        return plain;
+    };
+    let Some(i) = Model::frame_layer(layers) else {
+        return plain;
+    };
+    let l = &layers[i];
+    let d = l.thickness;
+    let lambda_fill = model.conductivity(l.material);
+    let (width, lambda_stud) = match f.material {
+        archisim_core::FrameMaterial::Steel => {
+            let b = f.stud.width.max(1e-3);
+            let t = f.stud.thickness.min(b);
+            (b, (FRAME_STEEL_LAMBDA * t + lambda_fill * (b - t)) / b)
+        }
+        archisim_core::FrameMaterial::Timber => (f.stud.width, FRAME_TIMBER_LAMBDA),
+    };
+    let share = (width / f.spacing.max(width)).clamp(0.0, 1.0);
+    if share <= 0.0 || d <= 0.0 {
+        return plain;
+    }
+    let rest = rsi + rse + model.layers_resistance(layers) - d / lambda_fill;
+    // Upper bound: the two paths side by side.
+    let r_fill = rest + d / lambda_fill;
+    let r_stud = rest + d / lambda_stud;
+    let upper = 1.0 / ((1.0 - share) / r_fill + share / r_stud);
+    // Lower bound: the layer with its mean conductivity.
+    let lambda_mean = (1.0 - share) * lambda_fill + share * lambda_stud;
+    let lower = rest + d / lambda_mean;
+    1.0 / (FRAME_UPPER_SHARE * upper + (1.0 - FRAME_UPPER_SHARE) * lower)
+}
+
 /// K's limit for new dwellings by compactness (straight between V/A 1
 /// and 4).
 pub fn k_limit(zone: usize, compactness: f64) -> f64 {
@@ -859,7 +915,7 @@ pub fn thermal(model: &Model) -> Thermal {
                         add(&mut bridges, Junction::Pillar, ins, h);
                     }
                 }
-                let u_wall = u_value(model, &wtype.layers, RSI_WALL, RSE);
+                let u_wall = framed_u_value(model, wtype.id.0, &wtype.layers, RSI_WALL, RSE);
                 // Under the ground, the part of the wall against it by
                 // UNE-EN ISO 13370.
                 let buried = if depth > 0.05 { depth.min(h) } else { 0.0 };
@@ -907,7 +963,7 @@ pub fn thermal(model: &Model) -> Thermal {
                             Kind::Roof,
                             t.name.clone(),
                             area,
-                            u_value(model, &t.layers, RSI_UP, RSE),
+                            framed_u_value(model, t.id.0, &t.layers, RSI_UP, RSE),
                             Facing::Up,
                         ));
                     }
@@ -921,7 +977,7 @@ pub fn thermal(model: &Model) -> Thermal {
                     Kind::Roof,
                     t.name.clone(),
                     area,
-                    u_value(model, &t.layers, RSI_UP, RSE),
+                    framed_u_value(model, t.id.0, &t.layers, RSI_UP, RSE),
                     Facing::Up,
                 ));
             }
@@ -936,7 +992,7 @@ pub fn thermal(model: &Model) -> Thermal {
                         Kind::Ground,
                         t.name.clone(),
                         area,
-                        u_value(model, &t.layers, RSI_DOWN, 0.0),
+                        framed_u_value(model, t.id.0, &t.layers, RSI_DOWN, 0.0),
                         Facing::Up,
                     ));
                     let g = ground_of
@@ -964,7 +1020,7 @@ pub fn thermal(model: &Model) -> Thermal {
                             Kind::ExposedFloor,
                             t.name.clone(),
                             area,
-                            u_value(model, &t.layers, RSI_DOWN, RSE),
+                            framed_u_value(model, t.id.0, &t.layers, RSI_DOWN, RSE),
                             Facing::Up,
                         ));
                     }
@@ -1524,6 +1580,55 @@ pub fn report(model: &Model, t: &Thermal) -> String {
 mod tests {
     use super::*;
     use archisim_core::NewSlab;
+
+    #[test]
+    fn the_studs_of_a_steel_frame_raise_the_wall_s_transmittance() {
+        use archisim_core::{
+            CutPattern, FrameMaterial, Framing, Layer, LayerFunction, WallFunction,
+        };
+        let mut m = Model::new("T");
+        let gyp = m.add_material(
+            "Placa de yeso laminado",
+            "plaster",
+            [240, 240, 236],
+            CutPattern::Solid,
+        );
+        let wool = m.add_material(
+            "Lana mineral",
+            "insulation",
+            [235, 225, 150],
+            CutPattern::Solid,
+        );
+        let layer = |material, thickness, function| Layer {
+            material,
+            thickness,
+            function,
+        };
+        let layers = vec![
+            layer(gyp, 0.015, LayerFunction::Finish),
+            layer(wool, 0.100, LayerFunction::Structure),
+            layer(gyp, 0.015, LayerFunction::Finish),
+        ];
+        let t = m
+            .add_wall_type("Fachada", WallFunction::Exterior, layers.clone())
+            .unwrap();
+        let plain = u_value(&m, &layers, RSI_WALL, RSE);
+        // No frame yet: the same.
+        assert!((framed_u_value(&m, t.0, &layers, RSI_WALL, RSE) - plain).abs() < 1e-12);
+        m.set_type_framing(t.0, Some(Framing::for_depth(FrameMaterial::Steel, 0.10)))
+            .unwrap();
+        let steel = framed_u_value(&m, t.0, &layers, RSI_WALL, RSE);
+        // Much worse with all the insulation between the studs (a steel
+        // stud every 60 cm leaves about half of it working).
+        assert!(
+            steel > plain * 1.3 && steel < plain * 2.2,
+            "{plain} → {steel}"
+        );
+        m.set_type_framing(t.0, Some(Framing::for_depth(FrameMaterial::Timber, 0.10)))
+            .unwrap();
+        let timber = framed_u_value(&m, t.0, &layers, RSI_WALL, RSE);
+        assert!(timber > plain && timber < steel, "{plain} {timber} {steel}");
+    }
 
     #[test]
     fn the_limits() {

@@ -275,6 +275,24 @@ def main(path: str) -> int:
                         errors.append(f"caja {name}: {p.Name} weighs {kg:.1f} kg, its body {vol * 7850.0:.1f}")
                 except Exception as exc:
                     errors.append(f"caja {name}: {p.Name} geometry failed: {exc}")
+            # Its joints and connections (M13): one steel piece of each
+            # kind weighs what its body does; bands and wool have a body.
+            seen = set()
+            for p in tubes:
+                role = eu.get_psets(p)["ArchiSim_BoxPart"].get("Role")
+                if role in seen or p.is_a("IfcMember"):
+                    continue
+                seen.add(role)
+                try:
+                    shp = geom.create_shape(settings, p)
+                    vol = shape.get_volume(shp.geometry)
+                    if vol <= 0:
+                        errors.append(f"caja {name}: {p.Name} has no volume")
+                    kg = eu.get_psets(p)["ArchiSim_BoxPart"].get("Weight")
+                    if kg is not None and abs(vol * 7850.0 - kg) > max(0.05, 0.02 * kg):
+                        errors.append(f"caja {name}: {p.Name} weighs {kg:.2f} kg, its body {vol * 7850.0:.2f}")
+                except Exception as exc:
+                    errors.append(f"caja {name}: {p.Name} geometry failed: {exc}")
 
     # 14. Pools built in the ground (ArchiSim_Pool on an IfcElementAssembly):
     # contained in a storey, made of their floor, walls, lining and coping,

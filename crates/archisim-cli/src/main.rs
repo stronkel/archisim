@@ -13,6 +13,7 @@
 
 mod armado;
 mod cajas;
+mod cajas_sobre;
 mod calles;
 mod cartografia;
 mod catalogo;
@@ -27,12 +28,14 @@ mod entorno;
 mod entramado;
 mod equipo;
 mod escaleras;
+mod fabrica;
 mod fachadas;
 mod figuras;
 mod formas;
 mod gama;
 mod grande;
 mod instalaciones;
+mod locales;
 mod modelos;
 mod muestrario;
 mod muros_talud;
@@ -188,6 +191,31 @@ Uso:
       (lo que lleva cada caja y sus avisos, su peso e izado, el plan de
       grúa y el despiece) y los planos de taller (cajas-taller.pdf).
       Por defecto: ./out
+  archisim cajas-sobre <proyecto> <salida.archisim> [--modulo 6.10x3.60] [--tipos <carpeta> [--prefijo L160]]
+      Las cajas de una vivienda modular dibujada en otro programa e
+      importada: una caja sobre cada suelo del tamaño de una caja (llevado
+      al módulo si cabe), con sus lados leídos de los muros de las juntas
+      (del muro, abierto o libre). Con --tipos, una caja tipo por caja en
+      esa carpeta (<prefijo>-01, -02…), en diseño.
+  archisim locales <proyecto> <locales.csv> <salida.archisim>
+      Los locales de un proyecto desde una lista (nombre; uso; x; y, en
+      metros): cada uno se cierra con los muros alrededor de su punto,
+      como la herramienta Local. Para una vivienda importada sin locales.
+  archisim despiece <proyecto> <salida.archisim>
+      Pone en los materiales el despiece habitual del sistema modular: los
+      paneles aislantes de 1200 × 3000 en vertical y en cremallera, y la
+      placa cerámica de fachada en columnas de 1,20 con juntas a ±0,00 y
+      2,50, con madera alrededor de puertas y ventanas.
+  archisim compra <proyecto> [carpeta]
+      Las placas y tableros pieza a pieza (tableros.csv: marca, caja,
+      material, formato y corte) y la lista de compra por caja y total
+      (compra.csv): tableros en su formato comercial, perfiles en barras,
+      aislamiento, láminas, junta, uniones, chasis y tornillería.
+  archisim fabrica <proyecto> [carpeta]
+      Lo que necesita la fábrica: los paneles de cada caja acotados (A3),
+      las etiquetas de todas las piezas con su código QR (A4), un pedido
+      por caja y el fichero de la perfiladora (CSV abierto: pieza, perfil,
+      largo y operaciones en mm).
   archisim taller-cajas <proyecto> [carpeta]
       Los planos de taller de las cajas modulares de un proyecto, A3:
       montaje y plan de grúa (M-00) y una hoja por caja con su chasis en
@@ -679,6 +707,57 @@ fn main() -> ExitCode {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
             report(cajas::write(&dir))
         }
+        Some("cajas-sobre") => {
+            let flag = |name: &str| {
+                args.iter()
+                    .position(|a| a == name)
+                    .and_then(|i| args.get(i + 1))
+            };
+            let module = flag("--modulo")
+                .and_then(|m| {
+                    let (a, b) = m
+                        .replace(',', ".")
+                        .split_once(['x', '×'])
+                        .map(|(a, b)| (a.to_string(), b.to_string()))?;
+                    Some((a.trim().parse().ok()?, b.trim().parse().ok()?))
+                })
+                .unwrap_or((6.10, 3.60));
+            let types = flag("--tipos").map(PathBuf::from);
+            let prefix = flag("--prefijo").cloned().unwrap_or_else(|| "CB".into());
+            match (args.get(1), args.get(2)) {
+                (Some(input), Some(output))
+                    if !input.starts_with("--") && !output.starts_with("--") =>
+                {
+                    report((|| {
+                        let text = cajas_sobre::run(
+                            Path::new(input),
+                            Path::new(output),
+                            module,
+                            types.as_deref().map(|d| (d, prefix.as_str())),
+                        )?;
+                        print!("{text}");
+                        Ok(())
+                    })())
+                }
+                _ => {
+                    eprintln!("Uso: archisim cajas-sobre <proyecto> <salida.archisim> [--modulo 6.10x3.60] [--tipos <carpeta> [--prefijo L160]]");
+                    ExitCode::FAILURE
+                }
+            }
+        }
+        Some("locales") => match (args.get(1), args.get(2), args.get(3)) {
+            (Some(p), Some(l), Some(o)) => report((|| {
+                print!(
+                    "{}",
+                    locales::run(Path::new(p), Path::new(l), Path::new(o))?
+                );
+                Ok(())
+            })()),
+            _ => {
+                eprintln!("Uso: archisim locales <proyecto> <locales.csv> <salida.archisim>");
+                ExitCode::FAILURE
+            }
+        },
         Some("plantilla") => {
             let flag = |name: &str| args.iter().position(|a| a == name);
             let catalogue = flag("--perfiles")
@@ -706,6 +785,80 @@ fn main() -> ExitCode {
                 }
             }
         }
+        Some("despiece") => match (args.get(1), args.get(2)) {
+            (Some(project), Some(out)) => report((|| {
+                let mut m = archisim_file::open(PathBuf::from(project))?;
+                let done = archisim_library::modular_board_layouts(&mut m);
+                if done.is_empty() {
+                    println!("Ningún material del proyecto se reconoce como panel aislante o placa cerámica de fachada.");
+                } else {
+                    for n in &done {
+                        println!("  {n}");
+                    }
+                }
+                archisim_file::save(&m, PathBuf::from(out))?;
+                println!("Despiece puesto en {} materiales: {out}", done.len());
+                Ok(())
+            })()),
+            _ => {
+                eprintln!("Uso: archisim despiece <proyecto> <salida.archisim>");
+                std::process::exit(2);
+            }
+        },
+        Some("compra") => match args.get(1) {
+            Some(project) => {
+                let path = PathBuf::from(project);
+                let dir = PathBuf::from(args.get(2).map(String::as_str).unwrap_or("out"));
+                report((|| {
+                    let m = archisim_file::open(&path)?;
+                    std::fs::create_dir_all(&dir)?;
+                    let boards = archisim_geom::boards::all_boards(&m);
+                    std::fs::write(
+                        dir.join("tableros.csv"),
+                        archisim_geom::boards::boards_csv(&m),
+                    )?;
+                    std::fs::write(
+                        dir.join("compra.csv"),
+                        archisim_geom::boards::shopping_csv(&m),
+                    )?;
+                    let whole = boards.iter().filter(|b| b.whole()).count();
+                    println!(
+                        "{} piezas de placa y tablero ({whole} enteras) en {}",
+                        boards.len(),
+                        dir.join("tableros.csv").display()
+                    );
+                    println!("Lista de compra en {}", dir.join("compra.csv").display());
+                    Ok(())
+                })())
+            }
+            None => {
+                eprintln!("Uso: archisim compra <proyecto> [carpeta]");
+                std::process::exit(2);
+            }
+        },
+        Some("fabrica") => match args.get(1) {
+            Some(project) => {
+                let path = PathBuf::from(project);
+                let dir = PathBuf::from(args.get(2).map(String::as_str).unwrap_or("out"));
+                report((|| {
+                    let m = archisim_file::open(&path)?;
+                    if m.boxes().next().is_none() {
+                        println!("El proyecto no tiene cajas modulares.");
+                        return Ok(());
+                    }
+                    let stem = path
+                        .file_stem()
+                        .map(|s| s.to_string_lossy().to_string())
+                        .unwrap_or_else(|| "proyecto".into());
+                    print!("{}", fabrica::write(&m, &dir, &stem)?);
+                    Ok(())
+                })())
+            }
+            None => {
+                eprintln!("Uso: archisim fabrica <proyecto> [carpeta]");
+                std::process::exit(2);
+            }
+        },
         Some("taller-cajas") => match args.get(1) {
             Some(project) => {
                 let path = PathBuf::from(project);

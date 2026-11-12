@@ -314,6 +314,14 @@ impl CraneChart {
 /// Density of the chassis' steel, kg/m³.
 pub const STEEL_DENSITY: f64 = 7850.0;
 
+/// The names of the materials of the joints (M13; the library adds them with
+/// `archisim_library::joint_materials`).
+pub const JOINT_WOOL: &str = "Lana mineral de junta";
+pub const ROOF_BAND: &str = "Banda impermeable de junta";
+pub const FACADE_BAND: &str = "Membrana de junta";
+pub const COVER_STRIP: &str = "Tapajuntas de aluminio";
+pub const JOINT_MATERIALS: [&str; 4] = [JOINT_WOOL, ROOF_BAND, FACADE_BAND, COVER_STRIP];
+
 /// A rectangular hollow section of the chassis (§5 bis), in metres: its
 /// depth (upright as laid in a frame, or along the box in a post), its
 /// width and its wall.

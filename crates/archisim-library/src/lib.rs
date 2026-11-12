@@ -2458,6 +2458,88 @@ pub fn frame_material(m: &mut Model, kind: archisim_core::FrameMaterial) -> Mate
     material_named(m, name, cat, colour, CutPattern::Solid)
 }
 
+/// The materials of the boxes' joints (M13), added to the project if it
+/// has none of their names.
+pub fn joint_materials(m: &mut Model) {
+    use archisim_core::{COVER_STRIP, FACADE_BAND, JOINT_WOOL, ROOF_BAND};
+    for (name, cat, colour) in [
+        (JOINT_WOOL, "insulation", [214, 196, 120]),
+        (ROOF_BAND, "other", [58, 60, 64]),
+        (FACADE_BAND, "other", [222, 226, 232]),
+        (COVER_STRIP, "metal", [196, 198, 200]),
+    ] {
+        if !m.materials().any(|x| x.name == name) {
+            material_named(m, name, cat, colour, CutPattern::Solid);
+        }
+    }
+}
+
+/// The usual board layouts of a modular system (M18), set on the
+/// project's materials by their names: the insulating boards (names with
+/// «tabihaus» or «placa con aislamiento») 1200 × 3000 upright in a zipper;
+/// the exterior ceramic cladding (names with «cerámic» that are not
+/// inside: no «int») 1200 wide between joint lines at ±0,00 and 2,50 (the
+/// doors' head), with the columns round the doors and windows up to 2,50
+/// in a wood-look accent (the project's material with «madera» and
+/// «lama», or «madera» and «ext», or one added). Returns the materials
+/// laid out.
+pub fn modular_board_layouts(m: &mut Model) -> Vec<String> {
+    use archisim_core::{BoardAccent, BoardJoints, BoardLayout};
+    let mut done = Vec::new();
+    let lower = |s: &str| s.to_lowercase();
+    let accent = {
+        let named = |k: &str| {
+            m.materials()
+                .find(|x| {
+                    let n = lower(&x.name);
+                    n.contains("madera") && n.contains(k)
+                })
+                .map(|x| x.id)
+        };
+        let found = named("lama").or_else(|| named("ext"));
+        match found {
+            Some(id) => id,
+            None => material_named(
+                m,
+                "Lamas de madera (acento)",
+                "wood",
+                [168, 122, 78],
+                CutPattern::Solid,
+            ),
+        }
+    };
+    let ids: Vec<(MaterialId, String)> = m.materials().map(|x| (x.id, x.name.clone())).collect();
+    for (id, name) in ids {
+        let n = lower(&name);
+        let layout = if n.contains("tabihaus") || n.contains("placa con aislamiento") {
+            BoardLayout {
+                width: 1.20,
+                length: 3.00,
+                upright: true,
+                joints: BoardJoints::Zipper,
+                accent: None,
+            }
+        } else if (n.contains("cerámic") || n.contains("ceramic")) && !n.contains("int") {
+            BoardLayout {
+                width: 1.20,
+                length: 2.50,
+                upright: true,
+                joints: BoardJoints::Lines(vec![0.0, 2.50]),
+                accent: Some(BoardAccent {
+                    material: accent,
+                    up_to: 2.50,
+                }),
+            }
+        } else {
+            continue;
+        };
+        if m.set_board_layout(id, Some(layout)).is_ok() {
+            done.push(name);
+        }
+    }
+    done
+}
+
 /// A material of the cosy palette, added to the project if it has none of
 /// that name.
 pub fn palette_material(m: &mut Model, name: &str) -> Option<MaterialId> {

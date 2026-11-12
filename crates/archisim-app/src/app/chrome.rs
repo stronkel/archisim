@@ -288,6 +288,18 @@ impl ArchiSimApp {
                     self.export_box_drawings();
                 }
                 if ui
+                    .add(shortcut_button("Lista de compra de las cajas…", "CSV"))
+                    .clicked()
+                {
+                    self.export_shopping_list();
+                }
+                if ui
+                    .add(shortcut_button("Fábrica de las cajas…", "PDF, CSV"))
+                    .clicked()
+                {
+                    self.export_factory();
+                }
+                if ui
                     .add(shortcut_button("Esquema unifilar…", "PDF"))
                     .clicked()
                 {
@@ -533,6 +545,20 @@ impl ArchiSimApp {
                 .clicked()
             {
                 self.export_box_drawings();
+            }
+            if ui
+                .button("Lista de compra de las cajas (CSV)…")
+                .on_hover_text("Lo que hay que comprar por caja y en total: placas y tableros en su formato comercial, perfiles en barras, aislamiento, láminas, junta, uniones, chasis y tornillería; y al lado, las placas pieza a pieza")
+                .clicked()
+            {
+                self.export_shopping_list();
+            }
+            if ui
+                .button("Fábrica de las cajas (PDF y CSV)…")
+                .on_hover_text("En una carpeta: los paneles de cada caja acotados, las etiquetas de todas las piezas con su código QR, un pedido por caja y el fichero de la perfiladora")
+                .clicked()
+            {
+                self.export_factory();
             }
             if ui
                 .button("Ejes del entramado (DXF 3D)…")

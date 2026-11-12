@@ -931,6 +931,25 @@ fn materials(model: &Model, id: BoxId) -> Vec<Vec<String>> {
             });
         add("Carpintería", name, 1.0, "ud");
     }
+    // Its joints and connections (M13).
+    use archisim_geom::box_joints::{box_pieces, PieceKind};
+    for piece in box_pieces(model, id) {
+        let sz = piece.size();
+        let (amount, unit) = match piece.kind {
+            PieceKind::JointWool => (sz[0].max(sz[1]) * sz[2], "m²"),
+            PieceKind::RoofBand | PieceKind::FloorStrip | PieceKind::CeilingStrip => {
+                (sz[0].max(sz[1]), "m")
+            }
+            PieceKind::FacadeBand => (sz[2], "m"),
+            _ => (1.0, "ud"),
+        };
+        let what = if piece.kind.is_steel() {
+            "Unión"
+        } else {
+            "Junta"
+        };
+        add(what, piece.kind.label().to_string(), amount, unit);
+    }
     rows.into_iter()
         .map(|(what, name, amount, unit)| {
             vec![

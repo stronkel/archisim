@@ -197,6 +197,8 @@ pub(super) enum Action {
     RemoveMaterial(MaterialId),
     EditMaterial(MaterialId, String, String, [u8; 3], CutPattern),
     Appearance(MaterialId, archisim_core::Appearance),
+    /// How a material is laid in boards (M18).
+    BoardLayout(MaterialId, Option<archisim_core::BoardLayout>),
     MaterialPriority(MaterialId, Option<u16>),
     DuplicateWall(WallTypeId),
     RemoveWall(WallTypeId),
@@ -1190,6 +1192,151 @@ impl ArchiSimApp {
 
     // ---- Editors of each list ------------------------------------------------------
 
+    /// How the material is laid in boards (M18): format, upright, joints
+    /// and the accent round doors and windows.
+    fn board_layout_group(&mut self, ui: &mut Ui, id: MaterialId, actions: &mut Vec<Action>) {
+        use archisim_core::{BoardAccent, BoardJoints, BoardLayout};
+        let model = self.ed.model();
+        let current = model.board_layout(id).cloned();
+        let others: Vec<(MaterialId, String)> = model
+            .materials()
+            .filter(|m| m.id != id)
+            .map(|m| (m.id, m.name.clone()))
+            .collect();
+        let mut l = current.clone().unwrap_or(BoardLayout {
+            width: 1.20,
+            length: 2.50,
+            upright: true,
+            joints: BoardJoints::HalfBond,
+            accent: None,
+        });
+        let mut on = current.is_some();
+        let mm = |v: f64| format!("{:.0}", v * 1000.0);
+        let parse = |t: &str| {
+            t.trim()
+                .replace(',', ".")
+                .parse::<f64>()
+                .ok()
+                .map(|v| v / 1000.0)
+        };
+        props::group(ui, "types-material-boards", "Despiece en placas", |ui| {
+            props::note(
+                ui,
+                "Cómo se coloca este material donde sea una capa de placas: formato, posición y juntas. Sin despiece propio, el formato habitual por su nombre.",
+            );
+            ui.switch(&mut on, "Despiece propio");
+            if !on {
+                return;
+            }
+            props::row(ui, "Placa (mm)", "Ancho × largo", |ui, w| {
+                let half = (w - 24.0) / 2.0;
+                if let Some(v) =
+                    text_edit_committed(ui, Id::unique(("board-w", id.0)), &mm(l.width), half)
+                        .and_then(|t| parse(&t))
+                {
+                    l.width = v;
+                }
+                ui.label("×");
+                if let Some(v) =
+                    text_edit_committed(ui, Id::unique(("board-l", id.0)), &mm(l.length), half)
+                        .and_then(|t| parse(&t))
+                {
+                    l.length = v;
+                }
+            });
+            ui.switch(&mut l.upright, "En vertical");
+            let mut kind = l.joints.code();
+            props::row(ui, "Juntas", "", |ui, w| {
+                ComboBox::from_id_salt(("board-joints", id.0))
+                    .width(w - 8.0)
+                    .selected_text(l.joints.label())
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(&mut kind, "half", "A media placa");
+                        ui.selectable_value(&mut kind, "zipper", "En cremallera");
+                        ui.selectable_value(&mut kind, "lines", "Por líneas de junta");
+                    });
+            });
+            if kind != l.joints.code() {
+                l.joints = match kind {
+                    "zipper" => BoardJoints::Zipper,
+                    "lines" => BoardJoints::Lines(vec![0.0, 2.5]),
+                    _ => BoardJoints::HalfBond,
+                };
+            }
+            if let BoardJoints::Lines(lines) = &mut l.joints {
+                let text = lines
+                    .iter()
+                    .map(|h| format!("{:.2}", h).replace('.', ","))
+                    .collect::<Vec<_>>()
+                    .join("; ");
+                props::row(
+                    ui,
+                    "Líneas (m)",
+                    "Alturas de las juntas sobre la planta, separadas por «;»",
+                    |ui, w| {
+                        if let Some(t) = text_edit_committed(
+                            ui,
+                            Id::unique(("board-lines", id.0)),
+                            &text,
+                            w - 8.0,
+                        ) {
+                            let v: Vec<f64> = t
+                                .split(';')
+                                .filter_map(|x| x.trim().replace(',', ".").parse().ok())
+                                .collect();
+                            *lines = v;
+                        }
+                    },
+                );
+                let mut accent_on = l.accent.is_some();
+                ui.switch(&mut accent_on, "Acento alrededor de puertas y ventanas");
+                if accent_on {
+                    let mut a = l.accent.clone().unwrap_or(BoardAccent {
+                        material: others.first().map_or(id, |o| o.0),
+                        up_to: 2.5,
+                    });
+                    props::row(ui, "Material", "", |ui, w| {
+                        let name = others
+                            .iter()
+                            .find(|o| o.0 == a.material)
+                            .map_or(String::new(), |o| o.1.clone());
+                        ComboBox::from_id_salt(("board-accent", id.0))
+                            .width(w - 8.0)
+                            .selected_text(name)
+                            .show_ui(ui, |ui| {
+                                for (m, n) in &others {
+                                    ui.selectable_value(&mut a.material, *m, n);
+                                }
+                            });
+                    });
+                    props::row(
+                        ui,
+                        "Hasta (m)",
+                        "Altura de la banda de acento sobre la planta",
+                        |ui, w| {
+                            let t = format!("{:.2}", a.up_to).replace('.', ",");
+                            if let Some(v) =
+                                text_edit_committed(ui, Id::unique(("board-up", id.0)), &t, w - 8.0)
+                                    .and_then(|t| t.trim().replace(',', ".").parse::<f64>().ok())
+                            {
+                                a.up_to = v;
+                            }
+                        },
+                    );
+                    l.accent = Some(a);
+                } else {
+                    l.accent = None;
+                }
+            } else {
+                l.accent = None;
+            }
+        });
+        let wanted = on.then_some(l);
+        if wanted != current {
+            actions.push(Action::BoardLayout(id, wanted));
+        }
+    }
+
     fn material_editor(&mut self, ui: &mut Ui, id: MaterialId, actions: &mut Vec<Action>) {
         let m = self.ed.model();
         let Some(mat) = m.material(id).cloned() else {
@@ -1341,6 +1488,7 @@ impl ArchiSimApp {
         if bad_rgb {
             self.complain("El color se escribe como tres números de 0 a 255: rojo, verde, azul.");
         }
+        self.board_layout_group(ui, id, actions);
         // How it looks in 3D (a visualisation material).
         let a = self.ed.model().appearance(id);
         props::group(ui, "types-material-look", "Aspecto en 3D", |ui| {
@@ -2023,6 +2171,15 @@ impl ArchiSimApp {
                 self.report(r, "Material modificado.");
             }
             Action::ShowPriorities => self.show_priorities = true,
+            Action::BoardLayout(id, l) => {
+                let r = self
+                    .ed
+                    .transact("Despiece en placas", move |m| m.set_board_layout(id, l));
+                self.report(
+                    r,
+                    "Despiece cambiado: placas, lista de compra y fachada se rehacen con él.",
+                );
+            }
             Action::Appearance(id, a) => {
                 let r = self.ed.set_appearance(id, a);
                 self.report(r, "Aspecto en 3D cambiado.");

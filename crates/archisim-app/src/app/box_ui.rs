@@ -36,6 +36,8 @@ pub struct BoxSettings {
     pub ceiling_height: f64,
     /// How the work on site under the boxes is made (M10).
     pub base: archisim_core::BaseOptions,
+    /// How a porch is made (M17).
+    pub porch: archisim_core::PorchOptions,
 }
 
 impl BoxSettings {
@@ -59,6 +61,7 @@ impl BoxSettings {
             ceiling_type: slab(SlabFunction::Ceiling),
             ceiling_height: 2.93,
             base: archisim_core::BaseOptions::default(),
+            porch: archisim_core::PorchOptions::default(),
         }
     }
 
@@ -127,6 +130,7 @@ impl ArchiSimApp {
         let res = self.ed.transact("Caja modular", |m| {
             // The steel its chassis is drawn with.
             archisim_library::frame_material(m, archisim_core::FrameMaterial::Steel);
+            archisim_library::joint_materials(m);
             let b = m.add_box(spec)?;
             m.set_box_sides_from_neighbours(b)?;
             if s.fill {
@@ -196,7 +200,64 @@ impl ArchiSimApp {
             }
         });
         *self.box_settings() = s;
+        self.boxes_on_floors_group(ui);
         self.catalogue_group(ui);
+    }
+
+    /// A house drawn without boxes (imported from another program): one
+    /// box over each floor of a box's size, with its sides read from the
+    /// walls at the joints.
+    fn boxes_on_floors_group(&mut self, ui: &mut Ui) {
+        let floors = self.ed.model().box_floor_slabs();
+        let mut go = false;
+        group(ui, "tool-box-floors", "Cajas sobre lo dibujado", |ui| {
+            props::note(
+                ui,
+                "Para una vivienda importada (de Revit o ArchiCAD) sin cajas: una caja sobre cada suelo del tamaño de una caja, llevada al largo y ancho de arriba si cabe, con sus lados leídos de los muros de las juntas (del muro, abierto o libre).",
+            );
+            if floors.is_empty() {
+                props::note(ui, "No hay suelos del tamaño de una caja sin caja encima.");
+                return;
+            }
+            go = ui
+                .button(format!("Poner {} cajas sobre los suelos", floors.len()))
+                .clicked();
+        });
+        if go {
+            let module = (self.box_settings().length, self.box_settings().width);
+            let res = self.ed.transact("Cajas sobre los suelos", move |m| {
+                archisim_library::frame_material(m, archisim_core::FrameMaterial::Steel);
+                archisim_library::joint_materials(m);
+                let ids = m.boxes_on_floors(&floors, Some(module))?;
+                m.box_sides_from_walls(&ids)?;
+                Ok(ids)
+            });
+            match res {
+                Ok(ids) => {
+                    let issues: usize = ids
+                        .iter()
+                        .map(|id| {
+                            self.ed
+                                .model()
+                                .box_issues(*id)
+                                .iter()
+                                .filter(|i| i.is_error())
+                                .count()
+                        })
+                        .sum();
+                    self.say(format!(
+                        "{} cajas puestas{}.",
+                        ids.len(),
+                        if issues == 0 {
+                            String::new()
+                        } else {
+                            format!(": {issues} avisos que mirar en sus propiedades")
+                        }
+                    ));
+                }
+                Err(e) => self.complain(format!("No se pueden poner las cajas: {e}.")),
+            }
+        }
     }
 
     pub(super) fn box_properties(&mut self, ui: &mut Ui, id: BoxId) {
@@ -268,6 +329,7 @@ impl ArchiSimApp {
         self.lift_group(ui, id);
         self.crane_group(ui, id);
         self.base_group(ui, id);
+        self.porch_group(ui, id);
         let model = self.ed.model();
         let held = model.box_members(id);
         group(ui, "box-held", "Lo que lleva", |ui| {
@@ -538,6 +600,70 @@ impl ArchiSimApp {
 
     /// The work on site under the boxes (M10): its sizes, and the button
     /// that makes (or makes again) the slab, the supports and the plinth.
+    /// The porch of a box as a light steel module (M17).
+    fn porch_group(&mut self, ui: &mut Ui, id: BoxId) {
+        let mut o = self.box_settings().porch.clone();
+        let mut build = false;
+        group(ui, "box-porch", "Porche", |ui| {
+            props::note(
+                ui,
+                "Un módulo ligero de acero en un lado de la caja: pilares de tubo, vigas alrededor y cubierta de chapa a la altura del techo de la caja.",
+            );
+            row(ui, "Lado", "", |ui, w| {
+                egui::ComboBox::from_id_salt(("box-porch-side", id))
+                    .width(w - 8.0)
+                    .selected_text(archisim_core::SIDE_NAMES[o.side.min(3)])
+                    .show_ui(ui, |ui| {
+                        for (i, n) in archisim_core::SIDE_NAMES.iter().enumerate() {
+                            ui.selectable_value(&mut o.side, i, *n);
+                        }
+                    });
+            });
+            row(ui, "Fondo (mm)", "Lo que sale de la caja", |ui, w| {
+                if let Some(x) =
+                    length_field(ui, Id::unique(("box-porch", "depth")), o.depth, w - 8.0)
+                {
+                    o.depth = x;
+                }
+            });
+            row(ui, "Pilar (mm)", "Tubo cuadrado", |ui, w| {
+                if let Some(x) =
+                    length_field(ui, Id::unique(("box-porch", "post")), o.post, w - 8.0)
+                {
+                    o.post = x;
+                }
+            });
+            row(ui, "Viga (mm)", "Canto del tubo", |ui, w| {
+                if let Some(x) =
+                    length_field(ui, Id::unique(("box-porch", "beam")), o.beam_depth, w - 8.0)
+                {
+                    o.beam_depth = x;
+                }
+            });
+            build = ui.button("Hacer el porche").clicked();
+        });
+        if o != self.box_settings().porch {
+            self.box_settings().porch = o.clone();
+        }
+        if build {
+            let res = self.ed.transact("Porche", move |m| m.build_porch(id, &o));
+            match res {
+                Ok(made) => self.say(format!(
+                    "Porche: {} pilares, {} vigas y cubierta; {:.0} kg de acero{}.",
+                    made.posts.len(),
+                    made.beams.len(),
+                    made.steel,
+                    if made.replaced > 0 {
+                        ", en lugar del anterior"
+                    } else {
+                        ""
+                    }
+                )),
+                Err(e) => self.complain(format!("No se pudo hacer el porche: {e}.")),
+            }
+        }
+    }
+
     fn base_group(&mut self, ui: &mut Ui, id: BoxId) {
         let model = self.ed.model();
         let supports = model.box_supports();
@@ -890,6 +1016,110 @@ impl ArchiSimApp {
                 "Planos de taller: {} hojas A3 en {}.",
                 sheets.len(),
                 path.display()
+            )),
+            Err(e) => self.complain(format!("No se pudo exportar: {e}.")),
+        }
+    }
+
+    /// The shopping list of the boxes (M14), and their boards piece by
+    /// piece beside it, as CSV.
+    pub(super) fn export_shopping_list(&mut self) {
+        let model = self.ed.shown();
+        if model.boxes().next().is_none() {
+            self.complain("El proyecto no tiene cajas modulares.".to_string());
+            return;
+        }
+        let mut d = rfd::FileDialog::new()
+            .set_title("Lista de compra de las cajas (CSV)")
+            .add_filter("CSV", &["csv"])
+            .set_file_name(format!("{}-compra.csv", self.file_name_stem()));
+        if let Some(dir) = self.start_dir() {
+            d = d.set_directory(dir);
+        }
+        let Some(path) = d.save_file() else {
+            return;
+        };
+        let boards = path.with_file_name(format!(
+            "{}-tableros.csv",
+            path.file_stem().map_or("cajas".into(), |s| s
+                .to_string_lossy()
+                .trim_end_matches("-compra")
+                .to_string())
+        ));
+        let r = std::fs::write(&path, archisim_geom::boards::shopping_csv(&model))
+            .and_then(|_| std::fs::write(&boards, archisim_geom::boards::boards_csv(&model)));
+        match r {
+            Ok(()) => self.say(format!(
+                "Lista de compra en {} y placas pieza a pieza en {}.",
+                path.display(),
+                boards.display()
+            )),
+            Err(e) => self.complain(format!("No se pudo exportar: {e}.")),
+        }
+    }
+
+    /// What the factory needs (M16), to a folder: the panels dimensioned
+    /// and the labels as PDF, an order per box and the roll former's file.
+    pub(super) fn export_factory(&mut self) {
+        let model = self.ed.shown();
+        if model.boxes().next().is_none() {
+            self.complain("El proyecto no tiene cajas modulares.".to_string());
+            return;
+        }
+        let mut d = rfd::FileDialog::new().set_title("Carpeta para la fábrica de las cajas");
+        if let Some(dir) = self.start_dir() {
+            d = d.set_directory(dir);
+        }
+        let Some(dir) = d.pick_folder() else {
+            return;
+        };
+        let stem = self.file_name_stem();
+        let r = (|| -> Result<usize, String> {
+            let panels = archisim_plan::factory::panel_pages(&model);
+            if !panels.is_empty() {
+                let sheets: Vec<(String, String)> =
+                    panels.into_iter().map(|(code, svg)| (svg, code)).collect();
+                let bytes = crate::documents::pdf_of(&sheets, "Paneles de las cajas")?;
+                std::fs::write(dir.join(format!("{stem}-paneles.pdf")), bytes)
+                    .map_err(|e| e.to_string())?;
+            }
+            let labels = archisim_plan::factory::label_pages(&model);
+            if !labels.is_empty() {
+                let sheets: Vec<(String, String)> = labels
+                    .into_iter()
+                    .enumerate()
+                    .map(|(i, svg)| (svg, format!("Etiquetas {}", i + 1)))
+                    .collect();
+                let bytes = crate::documents::pdf_of(&sheets, "Etiquetas de las piezas")?;
+                std::fs::write(dir.join(format!("{stem}-etiquetas.pdf")), bytes)
+                    .map_err(|e| e.to_string())?;
+            }
+            std::fs::write(
+                dir.join(format!("{stem}-perfiladora.csv")),
+                archisim_geom::factory::machine_csv(&model),
+            )
+            .map_err(|e| e.to_string())?;
+            let mut n = 0;
+            for b in model.boxes() {
+                let mut s = String::from("Grupo;Concepto;Unidad;Cantidad\n");
+                for p in archisim_geom::boards::shopping_list(&model, b.id) {
+                    let amount = if p.unit == "ud" {
+                        format!("{:.0}", p.amount)
+                    } else {
+                        format!("{:.2}", p.amount).replace('.', ",")
+                    };
+                    s.push_str(&format!("{};{};{};{}\n", p.group, p.what, p.unit, amount));
+                }
+                std::fs::write(dir.join(format!("{stem}-pedido-{}.csv", b.mark)), s)
+                    .map_err(|e| e.to_string())?;
+                n += 1;
+            }
+            Ok(n)
+        })();
+        match r {
+            Ok(n) => self.say(format!(
+                "Fábrica: paneles, etiquetas, perfiladora y {n} pedidos en {}.",
+                dir.display()
             )),
             Err(e) => self.complain(format!("No se pudo exportar: {e}.")),
         }

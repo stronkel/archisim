@@ -25,6 +25,9 @@
 //! wall (or one of its layers) into the solid pieces between openings.
 
 pub mod anchors;
+pub mod boards;
+pub mod box_joints;
+pub mod box_services;
 pub mod boxes;
 pub mod ceilings;
 pub mod cover;
@@ -34,6 +37,7 @@ pub mod decals;
 pub mod elevators;
 pub mod env_buildings;
 pub mod facade;
+pub mod factory;
 pub mod forms;
 pub mod framing;
 pub mod growth;

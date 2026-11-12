@@ -231,13 +231,11 @@ impl ArchiSimApp {
             }
             return;
         };
-        let opening_names: Vec<String> = model.opening_types().map(|t| t.name.clone()).collect();
-        // Doors are swapped for doors and windows for windows.
-        let doors: Vec<String> = model
-            .opening_types()
-            .filter(|t| t.is_door())
-            .map(|t| t.name.clone())
-            .collect();
+        // Doors are swapped for doors, windows for windows, a wall's
+        // finish for another wall type, and so on (M15).
+        let slots = model.slot_types();
+        let opening_names: Vec<String> = slots.iter().map(|(_, n)| n.clone()).collect();
+        let kind_of = |name: &str| slots.iter().find(|(_, n)| n == name).map(|(k, _)| *k);
         let mut n = c.clone();
         let mut approve = false;
         let mut reopen = false;
@@ -290,7 +288,7 @@ impl ArchiSimApp {
         group(ui, "box-type-options", "Lo que elige cada vivienda", |ui| {
             props::note(
                 ui,
-                "Una puerta o ventana de la caja tipo que cada vivienda puede cambiar por otras del proyecto.",
+                "Un tipo de la caja tipo que cada vivienda puede cambiar por otros de su clase: puertas y ventanas, acabados de muros y suelos, techos y equipamiento.",
             );
             let mut remove = None;
             for (i, o) in n.options.iter_mut().enumerate() {
@@ -298,20 +296,24 @@ impl ArchiSimApp {
                     row(ui, "Opción", "", |ui, w| {
                         ui.add(egui::TextEdit::singleline(&mut o.name).desired_width(w - 8.0));
                     });
-                    row(ui, "Puerta o ventana", "La de la caja tipo", |ui, w| {
+                    row(ui, "Tipo", "El de la caja tipo", |ui, w| {
                         ComboBox::from_id_salt(("box-type-slot", i))
                             .width(w - 8.0)
                             .selected_text(o.slot.clone())
                             .show_ui(ui, |ui| {
-                                for t in &opening_names {
-                                    ui.selectable_value(&mut o.slot, t.clone(), t);
+                                for (k, t) in &slots {
+                                    ui.selectable_value(
+                                        &mut o.slot,
+                                        t.clone(),
+                                        format!("{} · {t}", k.label()),
+                                    );
                                 }
                             });
                     });
-                    let slot_door = doors.contains(&o.slot);
+                    let slot_kind = kind_of(&o.slot);
                     for t in opening_names
                         .iter()
-                        .filter(|t| **t != o.slot && doors.contains(t) == slot_door)
+                        .filter(|t| **t != o.slot && kind_of(t) == slot_kind)
                     {
                         let mut on = o.choices.contains(t);
                         if ui.checkbox(&mut on, t).changed() {

@@ -750,29 +750,49 @@ impl Model {
             )),
         };
         let maps = &maps;
-        let wall_type = |id: WallTypeId| maps.walls.get(&id).copied();
-        let slab_type = |id: SlabTypeId| maps.slabs.get(&id).copied();
-        // A door or window type swapped by the copy's choice (M8).
-        let chosen = |id: OpeningTypeId| -> OpeningTypeId {
-            let Some(c) = src.catalogue() else {
-                return id;
-            };
-            let Some(name) = src.opening_type(id).map(|t| t.name.clone()) else {
-                return id;
-            };
-            let Some(option) = c.option_for(&name) else {
-                return id;
-            };
+        // The type a copy's choice (M8, M15) puts in place of the box
+        // type's, by name: doors and windows, wall and floor types (the
+        // finishes), and object types (the equipment).
+        let chosen_name = |name: &str| -> Option<String> {
+            let option = src.catalogue()?.option_for(name)?;
             p.choices
                 .iter()
                 .find(|(o, v)| *o == option.name && option.choices.contains(v))
-                .and_then(|(_, v)| src.opening_types().find(|t| t.name == *v))
+                .map(|(_, v)| v.clone())
+        };
+        let wall_type = |id: WallTypeId| {
+            let id = src
+                .wall_type(id)
+                .and_then(|t| chosen_name(&t.name))
+                .and_then(|n| src.wall_types().find(|t| t.name == n))
+                .map_or(id, |t| t.id);
+            maps.walls.get(&id).copied()
+        };
+        let slab_type = |id: SlabTypeId| {
+            let id = src
+                .slab_type(id)
+                .and_then(|t| chosen_name(&t.name))
+                .and_then(|n| src.slab_types().find(|t| t.name == n))
+                .map_or(id, |t| t.id);
+            maps.slabs.get(&id).copied()
+        };
+        let chosen = |id: OpeningTypeId| -> OpeningTypeId {
+            src.opening_type(id)
+                .and_then(|t| chosen_name(&t.name))
+                .and_then(|n| src.opening_types().find(|t| t.name == n))
                 .map_or(id, |t| t.id)
         };
         let opening_type = |id: OpeningTypeId| maps.openings.get(&chosen(id)).copied();
         let member_type = |id: MemberTypeId| maps.members.get(&id).copied();
         let curtain_type = |id: CurtainTypeId| maps.curtains.get(&id).copied();
-        let object_type = |id: ObjectTypeId| maps.objects.get(&id).copied();
+        let object_type = |id: ObjectTypeId| {
+            let id = src
+                .object_type(id)
+                .and_then(|t| chosen_name(&t.name))
+                .and_then(|n| src.object_types().find(|t| t.name == n))
+                .map_or(id, |t| t.id);
+            maps.objects.get(&id).copied()
+        };
         let mat = |id: MaterialId| {
             let name = &src.material(id)?.name;
             self.materials().find(|m| m.name == *name).map(|m| m.id)
