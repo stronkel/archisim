@@ -38,6 +38,7 @@ mod temp_dims;
 mod type_drawing;
 mod type_preview;
 mod units;
+mod updates;
 mod view;
 mod view3d;
 mod wall_faces;
