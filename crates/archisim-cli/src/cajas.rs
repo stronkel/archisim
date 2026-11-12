@@ -253,6 +253,71 @@ pub fn build() -> Res<Model> {
             },
         )?;
     }
+    // One façade composed by hand (M20): the longest wall clad in boards,
+    // in panels of 1,20 m, the last piece by the corner fitted on site.
+    let face = m
+        .walls()
+        .filter_map(|w| {
+            let layer = archisim_geom::boards::wall_boards(&m, w.id)
+                .first()
+                .map(|p| p.layer)?;
+            Some((w.id, layer, w.length(), w.base_offset, w.height))
+        })
+        .max_by(|a, b| a.2.total_cmp(&b.2));
+    if let Some((wall, layer, len, base, height)) = face {
+        let mut joints = Vec::new();
+        let mut x = 1.2;
+        while x < len - 0.3 {
+            joints.push((Point2::new(x, base), Point2::new(x, base + height)));
+            x += 1.2;
+        }
+        m.set_board_face(
+            wall,
+            layer,
+            Some(archisim_core::BoardFace {
+                wall,
+                layer,
+                joints,
+                marks: vec![archisim_core::PieceMark {
+                    at: Point2::new(len - 0.1, base + height / 2.0),
+                    material: None,
+                    on_site: true,
+                }],
+                joint: None,
+            }),
+        )?;
+    }
+    // And one floor in plan: its top boards across, every 1,22 m.
+    let floor = m.slabs().find_map(|s| {
+        let layer = archisim_geom::boards::slab_boards(&m, s.id).first()?.layer;
+        Some((s.id, layer, s.outline.clone()))
+    });
+    if let Some((slab, layer, outline)) = floor {
+        let (x0, x1) = outline
+            .iter()
+            .fold((f64::MAX, f64::MIN), |(a, b), p| (a.min(p.x), b.max(p.x)));
+        let (y0, y1) = outline
+            .iter()
+            .fold((f64::MAX, f64::MIN), |(a, b), p| (a.min(p.y), b.max(p.y)));
+        let mut joints = Vec::new();
+        let mut x = x0 + 1.22;
+        while x < x1 - 0.3 {
+            joints.push((Point2::new(x, y0 - 0.1), Point2::new(x, y1 + 0.1)));
+            x += 1.22;
+        }
+        let host = archisim_core::PlanHost::Slab(slab);
+        m.set_board_plan(
+            host,
+            layer,
+            Some(archisim_core::BoardPlan {
+                host,
+                layer,
+                joints,
+                marks: Vec::new(),
+                joint: None,
+            }),
+        )?;
+    }
     Ok(m)
 }
 
@@ -275,6 +340,33 @@ pub fn workshop(m: &Model, dir: &Path, stem: &str) -> Result<usize, Box<dyn std:
     std::fs::write(
         dir.join(format!("{stem}-taller.pdf")),
         archisim_export::pdf::pdf(&pdf_pages, "Planos de taller de las cajas")?,
+    )?;
+    Ok(pages.len())
+}
+
+/// The drawings of the faces composed by hand (M20): one SVG per sheet and
+/// the PDF. Returns how many sheets.
+pub fn board_drawings(
+    m: &Model,
+    dir: &Path,
+    stem: &str,
+) -> Result<usize, Box<dyn std::error::Error>> {
+    let pages = archisim_plan::board_sheets::pages(m);
+    if pages.is_empty() {
+        return Ok(0);
+    }
+    let codes = archisim_plan::board_sheets::codes(pages.len());
+    for (svg, code) in pages.iter().zip(&codes) {
+        std::fs::write(dir.join(format!("{stem}-despiece-{code}.svg")), svg)?;
+    }
+    let pdf_pages: Vec<archisim_export::pdf::Page> = pages
+        .iter()
+        .zip(&codes)
+        .map(|(svg, title)| archisim_export::pdf::Page { svg, title })
+        .collect();
+    std::fs::write(
+        dir.join(format!("{stem}-despiece.pdf")),
+        archisim_export::pdf::pdf(&pdf_pages, "Despiece a mano de las fachadas")?,
     )?;
     Ok(pages.len())
 }
@@ -357,6 +449,11 @@ pub fn write(dir: &Path) -> Res {
     let text = format!("{}\n{}", list(&m), archisim_struct::boxes::boxes_report(&m));
     std::fs::write(dir.join("cajas.txt"), &text)?;
     let sheets = workshop(&m, dir, "cajas")?;
+    let faces = board_drawings(&m, dir, "cajas")?;
+    println!(
+        "  Despiece a mano: {faces} hojas A3 en {}",
+        dir.join("cajas-despiece.pdf").display()
+    );
     print!("{text}");
     println!(
         "  Planos de taller: {} hojas A3 en {}",

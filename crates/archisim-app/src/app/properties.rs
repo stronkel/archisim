@@ -744,6 +744,7 @@ impl ArchiSimApp {
                 &c.holes.len().to_string(),
             );
         });
+        self.board_plan_group(ui, archisim_core::PlanHost::Ceiling(id));
     }
 
     fn opening_tool_properties(&mut self, ui: &mut Ui, door: bool) {
@@ -2013,6 +2014,7 @@ impl ArchiSimApp {
         });
         self.slab_slope_group(ui, &s);
         self.slab_joists_group(ui, s.id);
+        self.board_plan_group(ui, archisim_core::PlanHost::Slab(id));
         group(ui, "slab-dimensions", "Dimensiones", |ui| {
             text_row(
                 ui,

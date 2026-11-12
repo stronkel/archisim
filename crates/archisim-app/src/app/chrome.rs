@@ -288,6 +288,12 @@ impl ArchiSimApp {
                     self.export_box_drawings();
                 }
                 if ui
+                    .add(shortcut_button("Despiece a mano de las fachadas…", "PDF"))
+                    .clicked()
+                {
+                    self.export_board_drawings();
+                }
+                if ui
                     .add(shortcut_button("Lista de compra de las cajas…", "CSV"))
                     .clicked()
                 {
@@ -545,6 +551,13 @@ impl ArchiSimApp {
                 .clicked()
             {
                 self.export_box_drawings();
+            }
+            if ui
+                .button("Despiece a mano de las fachadas (PDF)…")
+                .on_hover_text("Una hoja A3 por cara compuesta a mano, vista desde fuera, con las marcas de las piezas, las juntas acotadas y la tabla de piezas")
+                .clicked()
+            {
+                self.export_board_drawings();
             }
             if ui
                 .button("Lista de compra de las cajas (CSV)…")

@@ -38,6 +38,9 @@ pub enum SketchTarget {
     /// seen from outside (M20): loose lines, and the pieces they cut
     /// marked as an accent or on site.
     BoardFace(archisim_core::WallId, usize),
+    /// The joints of a slab's or a ceiling's layer of boards, drawn by
+    /// hand in plan: as `BoardFace`, in the plan's own coordinates.
+    BoardPlan(archisim_core::PlanHost, usize),
 }
 
 /// A contour being edited.
@@ -162,6 +165,23 @@ impl Sketch {
                     joint,
                 });
             }
+            SketchTarget::BoardPlan(host, layer) => {
+                model.plan_host_layers(host)?.get(layer)?;
+                let (joints, marks, joint) = match model.board_plan(host, layer) {
+                    Some(f) => (f.joints.clone(), f.marks.clone(), f.joint),
+                    None => (Vec::new(), Vec::new(), None),
+                };
+                return Some(Sketch {
+                    target,
+                    loops: joints.iter().map(|(a, b)| vec![*a, *b]).collect(),
+                    slopes: Vec::new(),
+                    terrain: Vec::new(),
+                    zones: Vec::new(),
+                    elevated: false,
+                    marks,
+                    joint,
+                });
+            }
             SketchTarget::WallFace(w, side) => {
                 model.wall(w)?;
                 let zones: Vec<_> = model
@@ -257,14 +277,20 @@ impl Sketch {
     pub fn is_open(&self) -> bool {
         matches!(
             self.target,
-            SketchTarget::Road(_) | SketchTarget::RoadEdges(_) | SketchTarget::BoardFace(..)
+            SketchTarget::Road(_)
+                | SketchTarget::RoadEdges(_)
+                | SketchTarget::BoardFace(..)
+                | SketchTarget::BoardPlan(..)
         )
     }
 
     /// Whether it is loose joint lines, any number of them (a face
     /// composed by hand).
     pub fn is_joints(&self) -> bool {
-        matches!(self.target, SketchTarget::BoardFace(..))
+        matches!(
+            self.target,
+            SketchTarget::BoardFace(..) | SketchTarget::BoardPlan(..)
+        )
     }
 
     /// Whether its loops are zones, any number of them, none needed.
@@ -294,6 +320,24 @@ impl Sketch {
             };
             return m
                 .set_board_face(w, layer, Some(face))
+                .map_err(SketchError::Model);
+        }
+        if let SketchTarget::BoardPlan(host, layer) = self.target {
+            let joints: Vec<(Point2, Point2)> = self
+                .loops
+                .iter()
+                .flat_map(|l| l.windows(2).map(|p| (p[0], p[1])).collect::<Vec<_>>())
+                .filter(|(a, b)| a.distance(*b) > 1e-4)
+                .collect();
+            let face = archisim_core::BoardPlan {
+                host,
+                layer,
+                joints,
+                marks: self.marks.clone(),
+                joint: self.joint,
+            };
+            return m
+                .set_board_plan(host, layer, Some(face))
                 .map_err(SketchError::Model);
         }
         if let SketchTarget::RoadEdges(id) = self.target {
@@ -403,6 +447,7 @@ impl Sketch {
             | SketchTarget::WallFace(..)
             | SketchTarget::WallProfile(_)
             | SketchTarget::BoardFace(..)
+            | SketchTarget::BoardPlan(..)
             | SketchTarget::Road(_)
             | SketchTarget::RoadEdges(_) => {}
             SketchTarget::TerrainPad(id, i) => {
@@ -702,6 +747,12 @@ impl Sketch {
             | SketchTarget::WallProfile(w)
             | SketchTarget::BoardFace(w, _) => crate::pick::Element::Wall(w),
             SketchTarget::Road(id) | SketchTarget::RoadEdges(id) => crate::pick::Element::Road(id),
+            SketchTarget::BoardPlan(archisim_core::PlanHost::Slab(id), _) => {
+                crate::pick::Element::Slab(id)
+            }
+            SketchTarget::BoardPlan(archisim_core::PlanHost::Ceiling(id), _) => {
+                crate::pick::Element::Ceiling(id)
+            }
         }
     }
 }

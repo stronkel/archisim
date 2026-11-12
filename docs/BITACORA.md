@@ -6,6 +6,14 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-12 (158) · v0.82: el despiece a mano, tercera vuelta (copiar, repartir, avisos, planos, forjados y techos)
+
+Rama `bloque/despiece-3` (sobre `bloque/actualizar`), con pull request. Versión 0.82.0. Formato versión 111 (`board_plans`: forjados y techos despiezados a mano; los ficheros anteriores se abren igual).
+
+- **Qué se hizo.** Lo que propuse a Antonio y aprobó: copiar el despiece a los muros iguales y en simetría (`Model::walls_like`, `copy_board_face`); marcar en obra de una vez las piezas de las juntas entre cajas (`boards::joint_end_pieces`); «Repartir» una pieza en N iguales; avisos de pieza demasiado grande o pequeña, junta junto a una jamba y junta sobre la de la capa vecina (`boards::face_warnings`, en el boceto y en la Comprobación CTE); planos de despiece A3 por cara (`archisim-plan::board_sheets`, `archisim despiece-planos`, Archivo → Exportar); y el despiece a mano en planta de forjados y falsos techos (`BoardPlan` con `PlanHost`, `SketchTarget::BoardPlan`, `boards::plan_pieces`/`plan_warnings`; lo siguen `slab_boards`/`ceiling_boards`, compra y pedidos). `archisim cajas` despieza a mano una fachada y un suelo de ejemplo y escribe `cajas-despiece.pdf`. Arreglado: las plantillas se llevaban los despieces a mano de muros que ya no estaban y no se abrían.
+- **Pendiente.** Forjados y techos despiezados a mano en 3D y en los planos de despiece; empezar su boceto con las juntas de la regla.
+- **Qué debe probar Antonio.** Actualiza desde Ayuda → «Buscar actualizaciones…» (debe ofrecer la 0.82 sin pasar por GitHub). En la L-160: en un muro de fachada ya despiezado, «Copiar a iguales» y «… en simetría»; abre «Dibujar…» y prueba «En obra en las juntas», «Repartir» (3 en columnas sobre una pieza ancha) y mira los avisos en rojo y ámbar (haz a propósito una pieza de 20 cm y una junta a 3 cm de una jamba). Archivo → Exportar → «Despiece a mano de las fachadas…» y mira el PDF. Selecciona un suelo de caja: «Despiece a mano» → «Dibujar…», traza dos juntas de lado a lado y deja una pieza en obra; luego Archivo → Exportar → lista de compra: debe salir en «En obra».
+
 ## 2026-11-12 (157) · v0.81: ArchiSim se actualiza desde el propio programa
 
 Rama `bloque/actualizar` (lleva también la 156), con pull request. Versión 0.81.0 (sin cambios de formato salvo los de la 156).

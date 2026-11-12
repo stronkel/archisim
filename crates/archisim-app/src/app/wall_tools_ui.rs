@@ -199,6 +199,8 @@ impl ArchiSimApp {
         }
         let mut draw: Option<usize> = None;
         let mut back: Option<usize> = None;
+        let mut copy: Option<(usize, bool)> = None;
+        let like_count = m.walls_like(id).len();
         group(ui, "wall-board-faces", "Despiece a mano", |ui| {
             for (i, name, by_hand) in &layers {
                 let state = match by_hand {
@@ -221,6 +223,26 @@ impl ArchiSimApp {
                 });
                 if by_hand.is_some() {
                     row(ui, "", "", |ui, _| {
+                        let like = like_count;
+                        let r = ui.add_enabled(like > 0, egui::Button::new(format!("Copiar a iguales ({like})")))
+                            .on_hover_text("A los muros del mismo tipo, largo y alto: las mismas juntas y piezas")
+                            .on_disabled_hover_text("No hay otro muro del mismo tipo, largo y alto");
+                        if r.clicked() {
+                            copy = Some((*i, false));
+                        }
+                    });
+                    row(ui, "", "", |ui, _| {
+                        if ui
+                            .add_enabled(like_count > 0, egui::Button::new("… en simetría"))
+                            .on_hover_text(
+                                "Lo mismo, reflejado: el inicio de este muro en el final del otro",
+                            )
+                            .clicked()
+                        {
+                            copy = Some((*i, true));
+                        }
+                    });
+                    row(ui, "", "", |ui, _| {
                         if ui
                             .button("A la regla")
                             .on_hover_text(
@@ -237,10 +259,108 @@ impl ArchiSimApp {
         if let Some(i) = draw {
             self.start_sketch(crate::sketch::SketchTarget::BoardFace(id, i));
         }
+        if let Some((i, reflected)) = copy {
+            let to = self.ed.model().walls_like(id);
+            match self.ed.transact("Copiar el despiece", |m| {
+                m.copy_board_face(id, i, &to, reflected)
+            }) {
+                Ok(n) => self.say(format!(
+                    "Despiece copiado a {n} muro{}.",
+                    if n == 1 { "" } else { "s" }
+                )),
+                Err(e) => self.complain(format!("No se puede copiar: {e}.")),
+            }
+        }
         if let Some(i) = back {
             match self
                 .ed
                 .transact("Volver a la regla", |m| m.set_board_face(id, i, None))
+            {
+                Ok(()) => self.say("La capa vuelve al despiece de su material."),
+                Err(e) => self.complain(format!("No se puede: {e}.")),
+            }
+        }
+    }
+
+    /// «Despiece a mano» of a slab or a ceiling: each layer of boards by
+    /// its material's rule or drawn by hand in plan.
+    pub(super) fn board_plan_group(&mut self, ui: &mut Ui, host: archisim_core::PlanHost) {
+        let m = self.ed.model();
+        let Some(layers) = m.plan_host_layers(host) else {
+            return;
+        };
+        type Row = (usize, String, Option<(usize, usize)>);
+        let layers: Vec<Row> = layers
+            .iter()
+            .enumerate()
+            .filter(|(_, l)| archisim_geom::boards::laying(m, l.material, l.thickness).is_some())
+            .map(|(i, l)| {
+                let name = m
+                    .material(l.material)
+                    .map_or_else(|| format!("capa {}", i + 1), |x| x.name.clone());
+                let by_hand = m
+                    .board_plan(host, i)
+                    .map(|f| (f.joints.len(), f.marks.iter().filter(|k| k.on_site).count()));
+                (i, name, by_hand)
+            })
+            .collect();
+        if layers.is_empty() {
+            return;
+        }
+        let mut draw: Option<usize> = None;
+        let mut back: Option<usize> = None;
+        group(ui, "plan-board-faces", "Despiece a mano", |ui| {
+            for (i, name, by_hand) in &layers {
+                let state = match by_hand {
+                    Some((j, 0)) => format!("A mano, {j} juntas"),
+                    Some((j, s)) => format!("A mano, {j} juntas, {s} en obra"),
+                    None => "Por la regla".to_string(),
+                };
+                row(ui, &format!("Capa {}", i + 1), name, |ui, _| {
+                    ui.add(egui::Label::new(state).truncate())
+                        .on_hover_text(name.as_str());
+                });
+                row(ui, "", "", |ui, _| {
+                    if ui
+                        .button("Dibujar…")
+                        .on_hover_text("El despiece de esta capa en planta: las juntas son líneas que cruzan de lado a lado; luego marca piezas de acento o para colocar en obra")
+                        .clicked()
+                    {
+                        draw = Some(*i);
+                    }
+                });
+                if by_hand.is_some() {
+                    row(ui, "", "", |ui, _| {
+                        if ui
+                            .button("A la regla")
+                            .on_hover_text(
+                                "Quita el despiece a mano de esta capa: vuelve el de su material",
+                            )
+                            .clicked()
+                        {
+                            back = Some(*i);
+                        }
+                    });
+                }
+            }
+        });
+        if let Some(i) = draw {
+            // Drawn on the plan of its level (a ceiling, on its ceiling plan).
+            let level = match host {
+                archisim_core::PlanHost::Slab(s) => self.ed.model().slab(s).map(|s| s.level),
+                archisim_core::PlanHost::Ceiling(c) => self.ed.model().ceiling(c).map(|c| c.level),
+            };
+            if let Some(level) = level {
+                if level != self.ed.level {
+                    self.go_to_level_plan(level);
+                }
+            }
+            self.start_sketch(crate::sketch::SketchTarget::BoardPlan(host, i));
+        }
+        if let Some(i) = back {
+            match self
+                .ed
+                .transact("Volver a la regla", |m| m.set_board_plan(host, i, None))
             {
                 Ok(()) => self.say("La capa vuelve al despiece de su material."),
                 Err(e) => self.complain(format!("No se puede: {e}.")),
