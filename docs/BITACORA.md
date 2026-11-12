@@ -6,6 +6,14 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-11 (154) · M19 bis: el chasis en el cálculo, «Equipar la vivienda» en la app y el despiece de los huecos
+
+Rama `bloque/chasis-calculo` (sobre la de M19), con pull request. Sin cambios de formato.
+
+- **Qué se hizo.** Estructura: el cálculo general ya sabe que el suelo y el techo de cada caja son su chasis (se comprueba como tal: los dos largueros con la mitad de la caja cada uno, apoyados en la obra previa, con su flecha, y el izado), en lugar de tomarlos por losas de hormigón; las vigas del porche que llegan al marco de la caja van articuladas a él (no en voladizo); la terraza sobre el terreno se apoya en él. `archisim equipar` pone seis puntos de izado y elige el tubo de los largueros por cálculo (en la L-160, 120×100×5 y 150×100×5 en vez de 250×150). Envolvente: los porches dan sombra a las ventanas en julio y la cubierta de las cajas se reconoce. Todo `equipar` pasa a su propio módulo y se puede lanzar desde la aplicación: Colaboración → «Equipar la vivienda…» (colección, U de las ventanas y n50; avisa si ya hay instalaciones; un solo paso de Deshacer). El despiece de los huecos (de la 153) queda como lo pidió Antonio: marcos de 30 cm, columnas de 1,20 desde cada jamba y piezas pequeñas en las esquinas, nunca de menos de 30 cm. La L-160 rehecha con Uw = 1,4.
+- **Pendiente.** Lo que queda en la comprobación CTE de la L-160 es de proyecto: la puerta del aseo (11 mm más de holgura o una rejilla) y la ventana V-02 en un lado de junta. La Uw de 1,4 hay que confirmarla con el carpintero.
+- **Qué debe probar Antonio.** En la app, abre una vivienda con locales con nombre y uso (por ejemplo el `cajas.archisim` de `archisim cajas out/` sin instalaciones, o su L-160 de Revit importada), Colaboración → «Equipar la vivienda…», elige colección y Uw y pulsa Equipar; mira el informe, las instalaciones en planta y 3D, y Ctrl+Z para quitarlo todo de una vez. Colaboración → Cálculo de la estructura: el apartado de las cajas («Chasis de la caja») y que el porche ya no sale como voladizo. Abre el `L-160-LOD400.archisim` que se le envía y `comprobacion-cte.txt`.
+
 ## 2026-11-11 (153) · M18 bis y M19: remates del despiece y `archisim equipar` (la L-160 a LOD 400)
 
 Rama `bloque/equipar` (sobre la del despiece), con pull request. Formato versión 108 (añade `accent_side` al despiece; sin migración).

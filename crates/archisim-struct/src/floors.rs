@@ -244,7 +244,7 @@ pub fn analyse(model: &Model, td: &Takedown) -> Vec<OneWayResult> {
         let Some(sys) = one_way(model, id) else {
             continue;
         };
-        if pl.base || pl.pitch > 0.05 || pl.outline.len() < 3 {
+        if pl.base || pl.boxed || pl.pitch > 0.05 || pl.outline.len() < 3 {
             continue;
         }
         let Some(dir) = joist_direction(model, id) else {

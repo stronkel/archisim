@@ -137,5 +137,6 @@ pub fn all_checks(model: &archisim_core::Model, a: &analysis::Analysis) -> Vec<l
     out.extend(masonry::check(model, &a.takedown));
     out.extend(foundations::check(model, &a.takedown));
     out.extend(retaining::check(model));
+    out.extend(boxes::chassis_checks(model));
     out
 }

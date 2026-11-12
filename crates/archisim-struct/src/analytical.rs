@@ -257,6 +257,15 @@ pub fn build(model: &Model, td: &Takedown, wind: Option<&BuildingWind>) -> Analy
             (geo::wall_path(w), base + w.height)
         })
         .collect();
+    // The modular boxes' chassis (M3): a beam that ends on a box's side
+    // (a porch's, M17) hangs from it.
+    let chassis: Vec<(Vec<Point2>, f64, f64)> = model
+        .boxes()
+        .map(|x| {
+            let z = level_z(model, x.level) + x.bottom;
+            (x.outline(), z, z + x.height)
+        })
+        .collect();
     // Walls under a beam hold it: where they cross it, and along it
     // where they run under it.
     for b in beams.iter_mut() {
@@ -324,7 +333,13 @@ pub fn build(model: &Model, td: &Takedown, wind: Option<&BuildingWind>) -> Analy
             let on_wall = walls.iter().any(|(path, wtop)| {
                 geo::to_path(p, path).0 < 0.35 && *wtop >= b.axis - 0.8 && *wtop <= b.top + 0.1
             });
-            if on_wall {
+            let on_chassis = chassis.iter().any(|(outline, lo, hi)| {
+                let k = outline.len();
+                (0..k).any(|i| geo::to_segment(p, outline[i], outline[(i + 1) % k]).0 < 0.35)
+                    && b.axis >= *lo - 0.1
+                    && b.axis <= *hi + 0.1
+            });
+            if on_wall || on_chassis {
                 supports.push((n, PINNED));
             }
         }

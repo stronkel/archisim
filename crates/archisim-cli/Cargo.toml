@@ -28,6 +28,7 @@ archisim-coord.workspace = true
 archisim-cte.workspace = true
 archisim-struct.workspace = true
 archisim-mep.workspace = true
+archisim-equip.workspace = true
 archisim-render.workspace = true
 # Looks a place up for `cartografia --lugar` (CartoCiudad, Nominatim,
 # the cadastre).

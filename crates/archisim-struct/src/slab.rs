@@ -175,7 +175,12 @@ pub fn analyse(model: &Model, td: &Takedown) -> Vec<SlabResult> {
         let PlateSource::Slab(id) = pl.source else {
             continue;
         };
-        if (pl.base && !pl.raft) || pl.span.is_some() || pl.pitch > 0.05 || pl.outline.len() < 3 {
+        if (pl.base && !pl.raft)
+            || pl.boxed
+            || pl.span.is_some()
+            || pl.pitch > 0.05
+            || pl.outline.len() < 3
+        {
             continue;
         }
         let Some(h) = concrete_slab(model, id) else {

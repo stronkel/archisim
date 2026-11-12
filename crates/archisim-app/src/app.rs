@@ -522,6 +522,7 @@ pub struct ArchiSimApp {
     /// The code check window.
     pub cte: cte_ui::CteWindow,
     pub calc: calc_ui::CalcWindow,
+    pub equip: equip_ui::EquipWindow,
     pub electrical: electrical_ui::ElectricalWindow,
     pub water: water_ui::WaterWindow,
     pub drain: drain_ui::DrainWindow,
@@ -918,6 +919,7 @@ impl ArchiSimApp {
             params: Default::default(),
             cte: Default::default(),
             calc: Default::default(),
+            equip: Default::default(),
             electrical: Default::default(),
             water: Default::default(),
             drain: Default::default(),
@@ -2596,6 +2598,7 @@ impl ArchiSimApp {
         self.params_dialog(ctx);
         self.cte_dialog(ctx);
         self.calc_dialog(ctx);
+        self.equip_dialog(ctx);
         self.earthworks_report_dialog(ctx);
         self.electrical_dialog(ctx);
         self.water_dialog(ctx);
@@ -2882,6 +2885,7 @@ mod dxf_import_ui;
 mod electrical_ui;
 mod elevator_ui;
 mod env_building_ui;
+mod equip_ui;
 mod facade_ui;
 mod fix_ui;
 mod floor_ui;

@@ -31,6 +31,7 @@ archisim-coord.workspace = true
 archisim-cte.workspace = true
 archisim-struct.workspace = true
 archisim-mep.workspace = true
+archisim-equip.workspace = true
 archisim-team.workspace = true
 archisim-render.workspace = true
 serde_json = "1"

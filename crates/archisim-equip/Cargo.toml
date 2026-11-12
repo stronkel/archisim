@@ -1,0 +1,16 @@
+[package]
+name = "archisim-equip"
+description = "A house fitted out by the use of its rooms: furniture of a list, electricity, water, drainage, rain and ventilation joined up for their calculations, and the modular boxes' system rules on a model from another program"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+archisim-core.workspace = true
+archisim-geom.workspace = true
+archisim-library.workspace = true
+archisim-struct.workspace = true
+archisim-mep.workspace = true

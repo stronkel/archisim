@@ -324,7 +324,11 @@ pub fn check(model: &Model, an: &Analysis) -> Vec<Check> {
             })
             .map(|l| l.thickness)
             .sum();
-        if concrete < 0.05 || model.type_framing(s.slab_type.0).is_some() {
+        // A box's floor and roof are its steel chassis, checked with the box.
+        if concrete < 0.05
+            || model.type_framing(s.slab_type.0).is_some()
+            || crate::gravity::in_box(model, s.level, &s.outline)
+        {
             continue;
         }
         let need = need_at(s.level);

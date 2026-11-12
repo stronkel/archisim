@@ -252,6 +252,165 @@ pub fn lift_check(model: &Model, id: BoxId) -> Option<LiftCheck> {
     })
 }
 
+/// A box's floor frame standing on its supports (`docs/MODULAR.md` §5):
+/// each long edge of the chassis carries half the box finished, with its
+/// use, as a continuous beam on its corner and middle supports (two spans
+/// of half the length). The floor itself (deck and joists) spans across
+/// between the edges and is the floor type's own (its maker's tables).
+#[derive(Debug, Clone, PartialEq)]
+pub struct InPlaceCheck {
+    /// Factored line load on the worse edge, kN/m.
+    pub load: f64,
+    /// Span between supports, m.
+    pub span: f64,
+    /// Bending over the middle support, kNm (factored), and what the
+    /// tube takes.
+    pub moment: f64,
+    pub resistance: f64,
+    /// Deflection in service, mm, and the limit (span / 300).
+    pub deflection: f64,
+    pub deflection_limit: f64,
+}
+
+impl InPlaceCheck {
+    pub fn usage(&self) -> f64 {
+        self.moment / self.resistance.max(1e-9)
+    }
+
+    pub fn passes(&self) -> bool {
+        self.usage() <= 1.0 && self.deflection <= self.deflection_limit
+    }
+}
+
+/// Checks a box's floor frame on its supports (only the boxes on the
+/// ground: one on another rests along its edges).
+pub fn in_place_check(model: &Model, id: BoxId) -> Option<InPlaceCheck> {
+    let b = model.modular_box(id)?;
+    if model.box_below(id).is_some() {
+        return None;
+    }
+    let weight = box_weight(model, id)?;
+    let area = b.length * b.width;
+    let (above_dead, above_use) = stack_above(model, id);
+    let dead = weight.kn() + above_dead;
+    let used = BOX_USE_LOAD * area + above_use;
+    let across = (weight.centre[1] / b.width).clamp(0.0, 1.0);
+    let share = across.max(1.0 - across);
+    let total = GAMMA_G * dead * share + GAMMA_Q * used / 2.0;
+    let service = dead * share + used / 2.0;
+    let span = b.length / 2.0;
+    let q = total / b.length;
+    let qs = service / b.length;
+    let tube = b.chassis.edge;
+    let ei = STEEL_E * 1e3 * tube.inertia();
+    Some(InPlaceCheck {
+        load: q,
+        span,
+        moment: q * span * span / 8.0,
+        resistance: tube.plastic_modulus() * STEEL_FY * 1e3 / GAMMA_M0,
+        // Two equal spans: 2,08 qL⁴/384EI at most.
+        deflection: 2.08 * qs * span.powi(4) / (384.0 * ei) * 1000.0,
+        deflection_limit: span / 300.0 * 1000.0,
+    })
+}
+
+/// The weight and use of the boxes stacked over one, kN.
+fn stack_above(model: &Model, id: BoxId) -> (f64, f64) {
+    let mut dead = 0.0;
+    let mut used = 0.0;
+    for up in model.boxes_above(id) {
+        if let (Some(w), Some(b)) = (box_weight(model, up), model.modular_box(up)) {
+            dead += w.kn();
+            used += BOX_USE_LOAD * b.length * b.width;
+        }
+        let (d, u) = stack_above(model, up);
+        dead += d;
+        used += u;
+    }
+    (dead, used)
+}
+
+/// The usual edge tubes of a chassis, lightest first (depth × width ×
+/// wall, mm): what [`suggest_edge`] picks from.
+pub const EDGE_TUBES: [(f64, f64, f64); 7] = [
+    (120.0, 100.0, 4.0),
+    (120.0, 100.0, 5.0),
+    (150.0, 100.0, 5.0),
+    (160.0, 80.0, 6.0),
+    (200.0, 100.0, 5.0),
+    (200.0, 100.0, 6.3),
+    (250.0, 150.0, 6.3),
+];
+
+/// The lightest edge tube with which a box both hangs from its slings and
+/// stands on its supports.
+pub fn suggest_edge(model: &Model, id: BoxId) -> Option<archisim_core::BoxTube> {
+    let mut m = model.clone();
+    for (d, w, t) in EDGE_TUBES {
+        let tube = archisim_core::BoxTube::mm(d, w, t);
+        m.edit_box(id, |x| x.chassis.edge = tube).ok()?;
+        let lifts = lift_check(&m, id).is_none_or(|c| c.passes());
+        let stands = in_place_check(&m, id).is_none_or(|c| c.passes());
+        if lifts && stands {
+            return Some(tube);
+        }
+    }
+    None
+}
+
+/// The checks of every box's chassis, for the calculation's list.
+pub fn chassis_checks(model: &Model) -> Vec<crate::lightframe::Check> {
+    use crate::lightframe::{Check, Status, Subject};
+    let mut out = Vec::new();
+    for b in model.boxes() {
+        let edge = b.chassis.edge;
+        if let Some(c) = in_place_check(model, b.id) {
+            out.push(Check {
+                subject: Subject::Building,
+                what: format!(
+                    "Chasis de {} sobre sus apoyos: borde {} en vanos de {} m con {} kN/m, {} / {} kNm; flecha {} / {} mm",
+                    b.mark,
+                    edge.label(),
+                    num(c.span, 2),
+                    num(c.load, 1),
+                    num(c.moment, 1),
+                    num(c.resistance, 1),
+                    num(c.deflection, 1),
+                    num(c.deflection_limit, 1)
+                ),
+                rule: "Chasis de la caja (DB-SE-A, 6.2.6)",
+                ratio: c.usage().max(c.deflection / c.deflection_limit.max(1e-9)),
+                status: if c.passes() { Status::Pass } else { Status::Fail },
+                advice: (!c.passes()).then(|| "un borde de más canto".into()),
+            });
+        }
+        if let Some(c) = lift_check(model, b.id) {
+            out.push(Check {
+                subject: Subject::Building,
+                what: format!(
+                    "Izado de {}: borde {}, {} / {} kNm; flecha {} / {} mm",
+                    b.mark,
+                    edge.label(),
+                    num(c.moment, 1),
+                    num(c.resistance, 1),
+                    num(c.deflection, 1),
+                    num(c.deflection_limit, 1)
+                ),
+                rule: "Izado de la caja (DB-SE-A, 6.2.6)",
+                ratio: c.usage(),
+                status: if c.passes() {
+                    Status::Pass
+                } else {
+                    Status::Fail
+                },
+                advice: (!c.passes())
+                    .then(|| "seis puntos de izado o un borde de más canto".into()),
+            });
+        }
+    }
+    out
+}
+
 /// The order the boxes are craned onto their supports: floor by floor
 /// from the bottom; on each floor, from the box nearest a corner of the
 /// whole (the lowest `x + y` of its centre), then each time the box that
