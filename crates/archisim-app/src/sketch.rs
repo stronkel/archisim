@@ -60,6 +60,8 @@ pub struct Sketch {
     /// A face composed by hand: what its pieces take, by a point inside
     /// each.
     pub marks: Vec<archisim_core::PieceMark>,
+    /// Its open joint, m, if not its material's.
+    pub joint: Option<f64>,
 }
 
 /// Why a sketch cannot be finished or an operation done.
@@ -131,6 +133,7 @@ impl Sketch {
                         zones: Vec::new(),
                         elevated: false,
                         marks: Vec::new(),
+                        joint: None,
                     });
                 }
                 let ring = t.boundary();
@@ -140,11 +143,12 @@ impl Sketch {
             }
             SketchTarget::BoardFace(w, layer) => {
                 model.wall(w)?;
-                let (joints, marks) = match model.board_face(w, layer) {
-                    Some(f) => (f.joints.clone(), f.marks.clone()),
+                let (joints, marks, joint) = match model.board_face(w, layer) {
+                    Some(f) => (f.joints.clone(), f.marks.clone(), f.joint),
                     None => (
                         archisim_geom::boards::rule_joints(model, w, layer),
                         Vec::new(),
+                        None,
                     ),
                 };
                 return Some(Sketch {
@@ -155,6 +159,7 @@ impl Sketch {
                     zones: Vec::new(),
                     elevated: true,
                     marks,
+                    joint,
                 });
             }
             SketchTarget::WallFace(w, side) => {
@@ -172,6 +177,7 @@ impl Sketch {
                     zones,
                     elevated: true,
                     marks: Vec::new(),
+                    joint: None,
                 });
             }
             SketchTarget::Road(id) => {
@@ -213,6 +219,7 @@ impl Sketch {
                     zones,
                     elevated: !model.zone_in_plan(id, face),
                     marks: Vec::new(),
+                    joint: None,
                 });
             }
         };
@@ -225,6 +232,7 @@ impl Sketch {
             zones: Vec::new(),
             elevated,
             marks: Vec::new(),
+            joint: None,
         })
     }
 
@@ -282,6 +290,7 @@ impl Sketch {
                 layer,
                 joints,
                 marks: self.marks.clone(),
+                joint: self.joint,
             };
             return m
                 .set_board_face(w, layer, Some(face))
@@ -874,6 +883,7 @@ mod tests {
             zones: Vec::new(),
             elevated: false,
             marks: Vec::new(),
+            joint: None,
         };
         // The east edge split in two.
         let r = s

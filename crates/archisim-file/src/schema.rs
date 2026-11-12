@@ -1333,6 +1333,9 @@ pub(crate) struct BoardFaceOf {
     pub joints: Vec<[Xy; 2]>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub pieces: Vec<PieceMarkOf>,
+    /// The open joint, m, if not its material's (version 110).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub joint: Option<f64>,
 }
 
 /// What a piece of a composed face takes, by a point inside it.
@@ -4262,6 +4265,7 @@ impl ProjectFile {
                             on_site: m.on_site,
                         })
                         .collect(),
+                    joint: f.joint,
                 })
                 .collect(),
             catalogue: p.catalogue.as_ref().map(|c| CatalogueOf {
@@ -6016,6 +6020,7 @@ impl ProjectFile {
                         on_site: m.on_site,
                     })
                     .collect(),
+                joint: f.joint,
             });
         }
         if let Some(c) = self.catalogue {

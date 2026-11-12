@@ -862,6 +862,7 @@ impl Model {
                         on_site: k.on_site,
                     })
                     .collect(),
+                joint: f.joint,
             });
         }
         for o in src.openings() {

@@ -6,6 +6,14 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-12 (156) · M20 bis: junta por cara, la capa a la vista y pintar arrastrando
+
+Rama `bloque/despiece-a-mano-2`, con pull request. Formato versión 110 (`joint` en cada cara despiezada; los ficheros anteriores se abren igual).
+
+- **Qué se hizo.** Lo que pidió Antonio para rematar el despiece a mano: la junta se elige en cada cara («Junta (mm)» en la barra de opciones; si no se toca, la del material), la barra y el propio alzado dicen qué capa se está dividiendo (nombre, grueso y junta), y «Acento» pasa a «Pintar»: el material se elige en «Pintar con» con las tarjetas de materiales y se pinta con un clic o arrastrando sobre las piezas (cada pieza una vez por pasada; un clic en una ya pintada así la devuelve). «En obra» y «Normal» también se arrastran.
+- **Pendiente.** Lo que propuse a Antonio (copiar caras, marcar en obra las de las juntas entre cajas de una vez, repartir un tramo en piezas iguales, avisos de piezas que no caben en la placa o demasiado pequeñas, plano acotado del despiece por fachada con la marca de cada pieza, despiece a mano en forjados y techos): espera a que elija.
+- **Qué debe probar Antonio.** En un muro de fachada de la L-160, «Despiece a mano» → «Dibujar…» de la capa 1: mira el título de la barra y el rótulo sobre la cara; cambia la junta a 10 y acepta (en 3D se abre la junta); vuelve a entrar, elige otro material en «Pintar con» y arrastra el ratón por varias piezas; con «En obra», arrastra por la columna del extremo.
+
 ## 2026-11-11 (155) · M20: el despiece a mano, cara a cara
 
 Rama `bloque/despiece-a-mano` (sobre la del chasis), con pull request. Formato versión 109 (`board_faces` y la junta del despiece; los ficheros anteriores se abren igual).

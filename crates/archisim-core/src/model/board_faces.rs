@@ -32,6 +32,9 @@ pub struct BoardFace {
     /// side; one that stops short splits nothing.
     pub joints: Vec<(Point2, Point2)>,
     pub marks: Vec<PieceMark>,
+    /// The open joint between its pieces, m; `None`: its material's
+    /// (version 110).
+    pub joint: Option<f64>,
 }
 
 impl BoardFace {
@@ -41,6 +44,9 @@ impl BoardFace {
             .iter()
             .all(|(a, b)| ok(a) && ok(b) && (*b - *a).length() > 1e-4)
             && self.marks.iter().all(|m| ok(&m.at))
+            && self
+                .joint
+                .is_none_or(|j| j.is_finite() && (0.0..=0.05).contains(&j))
     }
 }
 
@@ -137,6 +143,7 @@ mod tests {
                 material: None,
                 on_site: true,
             }],
+            joint: Some(0.008),
         };
         m.set_board_face(w, 0, Some(f.clone())).unwrap();
         assert_eq!(m.board_face(w, 0), Some(&f));

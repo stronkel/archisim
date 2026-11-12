@@ -884,7 +884,11 @@ pub fn cladding_solids(model: &Model) -> Vec<crate::solid::Solid> {
         if !by_lines && !by_hand {
             continue;
         }
-        let joint = layout.map_or(CLADDING_JOINT, |l| l.joint);
+        let joint = model
+            .board_face(w.id, 0)
+            .and_then(|f| f.joint)
+            .or(layout.map(|l| l.joint))
+            .unwrap_or(CLADDING_JOINT);
         let Some(u) = (w.end - w.start).normalized() else {
             continue;
         };
@@ -1706,6 +1710,7 @@ mod tests {
                     on_site: true,
                 },
             ],
+            joint: None,
         };
         m.set_board_face(w, 0, Some(face)).unwrap();
         let pieces: Vec<_> = wall_boards(&m, w)
@@ -1757,6 +1762,7 @@ mod tests {
                 layer: 0,
                 joints,
                 marks: Vec::new(),
+                joint: None,
             }),
         )
         .unwrap();

@@ -1448,9 +1448,9 @@ impl ArchiSimApp {
                         "Piezas",
                         9,
                         vec![
-                            piece(Glyph::Paint, "Acento", PieceMode::Accent, "Clic en una pieza: pasa al material de acento (el de la barra de opciones); otra vez, vuelve al de la capa"),
-                            piece(Glyph::ModularBox, "En obra", PieceMode::OnSite, "Clic en una pieza: se deja fuera de la fábrica y se coloca en obra con las cajas montadas (sale aparte en la compra y en los pedidos)"),
-                            piece(Glyph::Convert, "Normal", PieceMode::Plain, "Clic en una pieza: vuelve al material de la capa y a fábrica"),
+                            piece(Glyph::Paint, "Pintar", PieceMode::Paint, "Clic o arrastrar sobre las piezas: se pintan con el material de «Pintar con», en la barra de opciones; un clic en una ya pintada así la devuelve al de la capa"),
+                            piece(Glyph::ModularBox, "En obra", PieceMode::OnSite, "Clic o arrastrar sobre las piezas: se dejan fuera de la fábrica y se colocan en obra con las cajas montadas (salen aparte en la compra y en los pedidos)"),
+                            piece(Glyph::Convert, "Normal", PieceMode::Plain, "Clic o arrastrar sobre las piezas: vuelven al material de la capa y a fábrica"),
                         ],
                     )
                     .contextual(),
@@ -1836,15 +1836,15 @@ impl ArchiSimApp {
                         self.pick_fields(ui);
                         return;
                     }
-                    ui.add_space(6.0);
-                    ui.label(
-                        egui::RichText::new(format!("Modo boceto · {what}"))
-                            .font(strong_font(12.5))
-                            .color(super::sketch_ui::SKETCH),
-                    );
                     if self.sketch.as_ref().is_some_and(|s| s.sketch.is_joints()) {
-                        bar_separator(ui, &p);
-                        self.accent_choice(ui);
+                        self.board_face_bar(ui);
+                    } else {
+                        ui.add_space(6.0);
+                        ui.label(
+                            egui::RichText::new(format!("Modo boceto · {what}"))
+                                .font(strong_font(12.5))
+                                .color(super::sketch_ui::SKETCH),
+                        );
                     }
                     ui.add_space(8.0);
                     ui.add(
