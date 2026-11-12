@@ -53,15 +53,18 @@ pub(crate) struct SketchState {
     mirror: Option<f64>,
     /// A face composed by hand: what a click on a piece does to it.
     pub piece: Option<PieceMode>,
-    /// The material a click makes a piece of (the accent).
+    /// The material a click paints a piece with.
     pub accent: Option<archisim_core::MaterialId>,
+    /// The pieces painted in this stroke of the mouse (painted once
+    /// each while it is held).
+    pub stroke: Vec<Point2>,
 }
 
 /// What a click on a piece does, in a face composed by hand (M20).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PieceMode {
-    /// Another material: the accent.
-    Accent,
+    /// Painted with the chosen material.
+    Paint,
     /// Left out of the factory, fitted on site.
     OnSite,
     /// Back to the layer's material and the factory.
@@ -329,6 +332,7 @@ impl ArchiSimApp {
             mirror,
             piece: None,
             accent,
+            stroke: Vec::new(),
         });
     }
 
@@ -549,10 +553,10 @@ impl ArchiSimApp {
         };
         let note = if st.sketch.is_joints() {
             match st.piece {
-                Some(PieceMode::Accent) => "Clic en una pieza: pasa al material de acento (otra vez, vuelve al de la capa).",
-                Some(PieceMode::OnSite) => "Clic en una pieza: se coloca en obra, fuera de la fábrica (otra vez, vuelve a fábrica).",
-                Some(PieceMode::Plain) => "Clic en una pieza: vuelve al material de la capa y a fábrica.",
-                None => "Cada línea es una junta: corta las piezas que cruza de lado a lado (llévala hasta otra junta o el borde). Luego marca piezas de acento o en obra.",
+                Some(PieceMode::Paint) => "Clic o arrastrar sobre las piezas: se pintan con el material elegido (un clic en una ya pintada así la devuelve al de la capa).",
+                Some(PieceMode::OnSite) => "Clic o arrastrar sobre las piezas: se colocan en obra, fuera de la fábrica (un clic en una en obra la devuelve a fábrica).",
+                Some(PieceMode::Plain) => "Clic o arrastrar sobre las piezas: vuelven al material de la capa y a fábrica.",
+                None => "Cada línea es una junta: corta las piezas que cruza de lado a lado (llévala hasta otra junta o el borde). Luego pinta piezas o márcalas en obra.",
             }
         } else if matches!(st.sketch.target, SketchTarget::RoadEdges(_)) {
             "Cuatro líneas abiertas, de un extremo de la calle al otro: bordillo y fachada de cada lado. Donde las muevas, la calle cambia de sección con su transición; la calzada se queda en su sitio."
@@ -683,9 +687,15 @@ impl ArchiSimApp {
         self.tool == Tool::Arrow && self.sketch.as_ref().is_some_and(|s| s.piece.is_some())
     }
 
-    /// Marks the piece under a point (as drawn): an accent, on site, or
-    /// back to plain; a second click undoes it.
+    /// Marks the piece under a point (as drawn): painted, on site, or back
+    /// to plain; a second click undoes it.
     pub(super) fn sketch_mark_at(&mut self, p: Point2) {
+        self.sketch_mark(p, false);
+    }
+
+    /// Marks a piece under a point; `dragging`: as the mouse goes over the
+    /// pieces with the button held, each one once and without undoing.
+    pub(super) fn sketch_mark(&mut self, p: Point2, dragging: bool) {
         let Some(st) = self.sketch.as_ref() else {
             return;
         };
@@ -701,8 +711,8 @@ impl ArchiSimApp {
             return;
         };
         let accent = st.accent;
-        if mode == PieceMode::Accent && accent.is_none() {
-            self.complain("Elige primero el material de acento en la barra de opciones.");
+        if mode == PieceMode::Paint && accent.is_none() {
+            self.complain("Elige primero el material en «Pintar con» de la barra de opciones.");
             return;
         }
         let n = poly.len() as f64;
@@ -710,9 +720,29 @@ impl ArchiSimApp {
             poly.iter().map(|v| v.0).sum::<f64>() / n,
             poly.iter().map(|v| v.1).sum::<f64>() / n,
         );
+        let layer_material = match st.sketch.target {
+            SketchTarget::BoardFace(w, l) => self
+                .ed
+                .model()
+                .wall(w)
+                .and_then(|w| self.ed.model().wall_type(w.wall_type))
+                .and_then(|t| t.layers.get(l))
+                .map(|l| l.material),
+            _ => None,
+        };
         let Some(st) = self.sketch.as_mut() else {
             return;
         };
+        if dragging {
+            if st
+                .stroke
+                .iter()
+                .any(|q| archisim_geom::boards::inside_convex(&poly, (q.x, q.y)))
+            {
+                return;
+            }
+            st.stroke.push(centre);
+        }
         let marks = &mut st.sketch.marks;
         let at = marks
             .iter()
@@ -727,14 +757,19 @@ impl ArchiSimApp {
         };
         mark.at = centre;
         match mode {
-            PieceMode::Accent => {
-                mark.material = if mark.material.is_some() {
+            // A click on a piece already of that material gives it back
+            // to the layer's; dragging only paints.
+            PieceMode::Paint => {
+                mark.material = if !dragging && mark.material == accent {
                     None
                 } else {
                     accent
                 };
+                if mark.material == layer_material {
+                    mark.material = None;
+                }
             }
-            PieceMode::OnSite => mark.on_site = !mark.on_site,
+            PieceMode::OnSite => mark.on_site = dragging || !mark.on_site,
             PieceMode::Plain => {
                 mark.material = None;
                 mark.on_site = false;
@@ -749,6 +784,33 @@ impl ArchiSimApp {
     /// ones in wood, the ones on site in orange, and each one's size.
     fn draw_live_pieces(&self, st: &SketchState, painter: &egui::Painter, rect: Rect) {
         let m = self.ed.model();
+        // Which layer is cut, over the face.
+        if let SketchTarget::BoardFace(w, layer) = st.sketch.target {
+            if let Some(wall) = m.wall(w) {
+                let rule = m
+                    .wall_type(wall.wall_type)
+                    .and_then(|t| t.layers.get(layer))
+                    .and_then(|l| m.board_layout(l.material))
+                    .map_or(0.0, |l| l.joint);
+                let joint = st.sketch.joint.unwrap_or(rule);
+                let top = wall.base_offset + wall.height;
+                let at = self
+                    .view
+                    .to_screen(rect, Point2::new(wall.length() / 2.0, top));
+                painter.text(
+                    at + egui::vec2(0.0, -10.0),
+                    egui::Align2::CENTER_BOTTOM,
+                    format!(
+                        "Capa {} · {} · junta {:.0} mm · vista desde fuera",
+                        layer + 1,
+                        board_layer_name(m, w, layer),
+                        joint * 1000.0
+                    ),
+                    egui::FontId::proportional(13.0),
+                    SKETCH,
+                );
+            }
+        }
         for poly in self.live_pieces(st) {
             let mark = st
                 .sketch
@@ -801,32 +863,88 @@ impl ArchiSimApp {
 }
 
 impl ArchiSimApp {
-    /// The accent of a face composed by hand, in the options bar.
-    pub(super) fn accent_choice(&mut self, ui: &mut Ui) {
-        let Some(current) = self.sketch.as_ref().map(|s| s.accent) else {
+    /// The options bar of a face composed by hand: which layer is being
+    /// cut, its joint, and the material it paints with.
+    pub(super) fn board_face_bar(&mut self, ui: &mut Ui) {
+        let Some(st) = self.sketch.as_ref() else {
+            return;
+        };
+        let SketchTarget::BoardFace(w, layer) = st.sketch.target else {
             return;
         };
         let m = self.ed.model();
-        let name = |id: Option<archisim_core::MaterialId>| {
-            id.and_then(|x| m.material(x))
-                .map_or("—".to_string(), |x| x.name.clone())
-        };
-        let mut list: Vec<(archisim_core::MaterialId, String)> =
-            m.materials().map(|x| (x.id, x.name.clone())).collect();
-        list.sort_by(|a, b| a.1.cmp(&b.1));
-        let mut chosen = current;
-        ui.label("Acento");
-        egui::ComboBox::from_id_salt("board-face-accent")
-            .selected_text(name(current))
-            .width(170.0)
-            .show_ui(ui, |ui| {
-                for (id, n) in &list {
-                    ui.selectable_value(&mut chosen, Some(*id), n);
+        let layer_mat = m
+            .wall(w)
+            .and_then(|w| m.wall_type(w.wall_type))
+            .and_then(|t| t.layers.get(layer))
+            .map(|l| (l.material, l.thickness));
+        let rule = layer_mat
+            .and_then(|(mat, _)| m.board_layout(mat).map(|l| l.joint))
+            .unwrap_or(0.0);
+        let joint = st.sketch.joint.unwrap_or(rule);
+        let mut paint = st.accent.or(layer_mat.map(|l| l.0));
+        let title = format!(
+            "Despiece a mano · Capa {} · {}{}",
+            layer + 1,
+            board_layer_name(m, w, layer),
+            layer_mat.map_or(String::new(), |(_, t)| format!(" ({:.0} mm)", t * 1000.0))
+        );
+        ui.add_space(6.0);
+        ui.label(
+            egui::RichText::new(title)
+                .font(egui::FontId::proportional(12.5))
+                .strong()
+                .color(SKETCH),
+        );
+        ui.add_space(8.0);
+        ui.label("Junta (mm)");
+        let id = egui::Id::unique(("board-face-joint", w.0, layer));
+        let mut text = ui
+            .data(|d| d.get_temp::<String>(id))
+            .unwrap_or_else(|| format!("{:.0}", joint * 1000.0));
+        let r = ui
+            .add(egui::TextEdit::singleline(&mut text).desired_width(34.0))
+            .on_hover_text(format!(
+                "La junta abierta entre las piezas de esta cara; la de su material es de {:.0} mm",
+                rule * 1000.0
+            ));
+        if r.has_focus() {
+            ui.data_mut(|d| d.insert_temp(id, text.clone()));
+        } else {
+            ui.data_mut(|d| d.remove::<String>(id));
+        }
+        if r.lost_focus() {
+            if let Ok(v) = text.trim().replace(',', ".").parse::<f64>() {
+                let v = (v / 1000.0).clamp(0.0, 0.05);
+                if let Some(st) = self.sketch.as_mut() {
+                    st.sketch.joint = if (v - rule).abs() < 1e-6 {
+                        None
+                    } else {
+                        Some(v)
+                    };
                 }
-            });
-        if chosen != current {
+            }
+        }
+        ui.add_space(8.0);
+        ui.label("Pintar con");
+        if let Some(cur) = paint.as_mut() {
+            let before = *cur;
+            super::cards::material_button(
+                ui,
+                egui::Id::unique("board-face-paint"),
+                self.ed.model(),
+                cur,
+                170.0,
+            );
+            let chosen = *cur;
             if let Some(st) = self.sketch.as_mut() {
-                st.accent = chosen;
+                if st.accent != Some(chosen) {
+                    st.accent = Some(chosen);
+                }
+                if chosen != before {
+                    // Choosing a material is meant to paint with it.
+                    st.piece = Some(PieceMode::Paint);
+                }
             }
         }
     }

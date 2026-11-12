@@ -171,6 +171,17 @@ impl ArchiSimApp {
                     let p = self.view.to_model(rect, pos);
                     self.sketch_mark_at(p);
                 }
+            } else if response.dragged_by(PointerButton::Primary) {
+                // Painting as the mouse goes over the pieces.
+                if let Some(pos) = response.interact_pointer_pos() {
+                    let p = self.view.to_model(rect, pos);
+                    self.sketch_mark(p, true);
+                }
+            }
+            if response.drag_stopped() {
+                if let Some(st) = self.sketch.as_mut() {
+                    st.stroke.clear();
+                }
             }
             return;
         }

@@ -11560,6 +11560,21 @@ fn a_face_is_composed_by_hand_in_elevation() {
     h.app.set_piece_mode(super::sketch_ui::PieceMode::OnSite);
     assert!(h.app.sketch_marking());
     h.app.sketch_mark_at(p(3.8, 0.5));
+    // Painting by dragging over the two top pieces next to it: each once.
+    let wool = h
+        .model()
+        .materials()
+        .find(|m| m.name == "Lana")
+        .map(|m| m.id)
+        .unwrap();
+    if let Some(st) = h.app.sketch.as_mut() {
+        st.accent = Some(wool);
+        st.sketch.joint = Some(0.004);
+    }
+    h.app.set_piece_mode(super::sketch_ui::PieceMode::Paint);
+    for x in [3.9, 3.7, 3.5, 2.5, 2.3] {
+        h.app.sketch_mark(p(x, 2.0), true);
+    }
     h.frame();
     h.key(Key::Enter);
     assert!(
@@ -11569,9 +11584,13 @@ fn a_face_is_composed_by_hand_in_elevation() {
     );
     assert_eq!(h.app.ed.undo_label(), Some("Despiece a mano"));
     let f = h.model().board_face(w, 0).unwrap().clone();
-    assert_eq!(f.marks.len(), 1);
+    assert_eq!(f.joint, Some(0.004));
+    let site: Vec<_> = f.marks.iter().filter(|k| k.on_site).collect();
+    assert_eq!(site.len(), 1);
     // Mirrored back: by the wall's start.
-    assert!(f.marks[0].at.x < 1.3, "{:?}", f.marks[0]);
+    assert!(site[0].at.x < 1.3, "{:?}", site[0]);
+    let painted = f.marks.iter().filter(|k| k.material == Some(wool)).count();
+    assert!(painted >= 2, "{f:?}");
     let pieces: Vec<_> = archisim_geom::boards::wall_boards(h.model(), w)
         .into_iter()
         .filter(|b| b.layer == 0)
