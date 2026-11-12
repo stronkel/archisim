@@ -1294,6 +1294,7 @@ impl ArchiSimApp {
                     let mut a = l.accent.clone().unwrap_or(BoardAccent {
                         material: others.first().map_or(id, |o| o.0),
                         up_to: 2.5,
+                        side: 0.3,
                     });
                     props::row(ui, "Material", "", |ui, w| {
                         let name = others
@@ -1320,6 +1321,20 @@ impl ArchiSimApp {
                                     .and_then(|t| t.trim().replace(',', ".").parse::<f64>().ok())
                             {
                                 a.up_to = v;
+                            }
+                        },
+                    );
+                    props::row(
+                        ui,
+                        "Marco (m)",
+                        "Ancho de la franja de acento a cada lado del hueco (0: solo las columnas que cruza)",
+                        |ui, w| {
+                            let t = format!("{:.2}", a.side).replace('.', ",");
+                            if let Some(v) =
+                                text_edit_committed(ui, Id::unique(("board-side", id.0)), &t, w - 8.0)
+                                    .and_then(|t| t.trim().replace(',', ".").parse::<f64>().ok())
+                            {
+                                a.side = v.clamp(0.0, 1.2);
                             }
                         },
                     );

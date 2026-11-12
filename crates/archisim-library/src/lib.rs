@@ -2522,13 +2522,23 @@ pub fn modular_board_layouts(m: &mut Model) -> Vec<String> {
         } else if (n.contains("cerámic") || n.contains("ceramic")) && !n.contains("int") {
             BoardLayout {
                 width: 1.20,
-                length: 2.50,
+                length: 2.70,
                 upright: true,
                 joints: BoardJoints::Lines(vec![0.0, 2.50]),
                 accent: Some(BoardAccent {
                     material: accent,
                     up_to: 2.50,
+                    side: 0.30,
                 }),
+            }
+        } else if id == accent {
+            // The wood-look format of the accent: up to 1,20 × 2,70.
+            BoardLayout {
+                width: 1.20,
+                length: 2.70,
+                upright: true,
+                joints: BoardJoints::Lines(vec![0.0, 2.50]),
+                accent: None,
             }
         } else {
             continue;

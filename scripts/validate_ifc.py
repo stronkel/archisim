@@ -388,7 +388,10 @@ def main(path: str) -> int:
                 errors.append(f"{name}: missing {required}")
         if psets.get(f"Pset_{kind}Common", {}).get("LoadBearing") is not True:
             errors.append(f"{name}: not marked load-bearing")
-        if el.ContainedInStructure == ():
+        # A post or beam of a modular box (its porch, M17) is part of the
+        # box, in the storey through it.
+        in_box = any(r.RelatingObject.is_a("IfcElementAssembly") for r in el.Decomposes)
+        if el.ContainedInStructure == () and not in_box:
             errors.append(f"{name}: not contained in a storey")
         if geom_ok and qto_name in psets:
             try:
@@ -533,7 +536,10 @@ def main(path: str) -> int:
              if eu.get_type(e) is not None]
     objects = list(f.by_type("IfcFurniture")) + list(f.by_type("IfcSanitaryTerminal")) + typed
     for o in objects:
-        if not o.ContainedInStructure:
+        # The furniture of a modular box (M1) is part of the box, in the
+        # storey through it.
+        in_box = any(r.RelatingObject.is_a("IfcElementAssembly") for r in o.Decomposes)
+        if not o.ContainedInStructure and not in_box:
             errors.append(f"{o.Name}: not contained in a storey")
         if eu.get_type(o) is None:
             errors.append(f"{o.Name}: no type")

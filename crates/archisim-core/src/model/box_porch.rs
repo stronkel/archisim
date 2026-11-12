@@ -36,6 +36,10 @@ pub struct PorchOptions {
     pub beam_wall: f64,
     /// The steel deck of the roof, m.
     pub deck: f64,
+    /// Runs on past the box's side, along the boxes beside it (a porch
+    /// over two boxes, `docs/MODULAR.md` §5.3): `from` and `to` are not
+    /// cut to the side, up to 10 m long.
+    pub run_on: bool,
 }
 
 impl Default for PorchOptions {
@@ -51,6 +55,7 @@ impl Default for PorchOptions {
             beam_width: 0.08,
             beam_wall: 0.005,
             deck: 0.05,
+            run_on: false,
         }
     }
 }
@@ -92,8 +97,11 @@ impl Model {
         let u = (z - a)
             .normalized()
             .ok_or(ModelError::InvalidShape("a side without length"))?;
-        let from = o.from.clamp(0.0, side);
-        let to = o.to.min(side);
+        let (from, to) = if o.run_on {
+            (o.from, o.to.min(o.from + 10.0))
+        } else {
+            (o.from.clamp(0.0, side), o.to.min(side))
+        };
         if to - from < 0.5 {
             return Err(ModelError::InvalidShape("a porch shorter than 0,5 m"));
         }

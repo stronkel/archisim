@@ -1310,6 +1310,9 @@ pub(crate) struct BoardLayoutOf {
     pub accent_material: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub accent_up_to: Option<f64>,
+    /// The frame beside each jamb, m.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub accent_side: Option<f64>,
 }
 
 /// A box type of the catalogue (version 104).
@@ -4208,6 +4211,7 @@ impl ProjectFile {
                     },
                     accent_material: l.accent.as_ref().map(|a| a.material.0),
                     accent_up_to: l.accent.as_ref().map(|a| a.up_to),
+                    accent_side: l.accent.as_ref().map(|a| a.side).filter(|s| *s > 0.0),
                 })
                 .collect(),
             catalogue: p.catalogue.as_ref().map(|c| CatalogueOf {
@@ -5938,6 +5942,7 @@ impl ProjectFile {
                     accent: l.accent_material.map(|m| core::BoardAccent {
                         material: core::MaterialId(m),
                         up_to: l.accent_up_to.unwrap_or(2.5),
+                        side: l.accent_side.unwrap_or(0.0),
                     }),
                 },
             ));
