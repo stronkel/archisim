@@ -48,6 +48,8 @@ pub(super) enum Act {
     SketchCancel,
     /// «Elegir línea» in the sketch.
     SketchPick,
+    /// What a click on a piece of a face composed by hand does.
+    SketchPiece(super::sketch_ui::PieceMode),
     Pick(Pick),
     CreateSimilar,
 }
@@ -1425,10 +1427,36 @@ impl ArchiSimApp {
                     .hint("Clic en una línea del dibujo o en una cara o borde de muro, forjado, pilar, eje o plano de referencia: se copia como línea del boceto. Otra vez: dejar de elegir")
                     .mission("sketch:Elegir línea"),
             );
-            return vec![
+            let mut panels = vec![
                 Panel::new("Modo", 10, vec![accept, cancel]).contextual(),
                 Panel::new("Dibujar", 9, draw).contextual(),
             ];
+            if let Some(st) = self.sketch.as_ref().filter(|s| s.sketch.is_joints()) {
+                use super::sketch_ui::PieceMode;
+                let piece = |mark, label, mode, hint| {
+                    Item::new(
+                        Mark::Glyph(mark),
+                        label,
+                        Size::Small,
+                        Act::SketchPiece(mode),
+                    )
+                    .on(st.piece == Some(mode))
+                    .hint(hint)
+                };
+                panels.push(
+                    Panel::new(
+                        "Piezas",
+                        9,
+                        vec![
+                            piece(Glyph::Paint, "Acento", PieceMode::Accent, "Clic en una pieza: pasa al material de acento (el de la barra de opciones); otra vez, vuelve al de la capa"),
+                            piece(Glyph::ModularBox, "En obra", PieceMode::OnSite, "Clic en una pieza: se deja fuera de la fábrica y se coloca en obra con las cajas montadas (sale aparte en la compra y en los pedidos)"),
+                            piece(Glyph::Convert, "Normal", PieceMode::Plain, "Clic en una pieza: vuelve al material de la capa y a fábrica"),
+                        ],
+                    )
+                    .contextual(),
+                );
+            }
+            return panels;
         }
         if self.tool == Tool::Cad {
             let name = running.unwrap_or_default();
@@ -1735,6 +1763,7 @@ impl ArchiSimApp {
             Act::SketchCmd(cmd) => self.sketch_command(cmd),
             Act::SketchAccept => self.finish_sketch(),
             Act::SketchPick => self.toggle_sketch_pick(),
+            Act::SketchPiece(mode) => self.set_piece_mode(mode),
             Act::SketchCancel => self.cancel_sketch(),
             Act::Pick(p) => self.pick(p),
             Act::CreateSimilar => self.create_similar(),
@@ -1813,6 +1842,10 @@ impl ArchiSimApp {
                             .font(strong_font(12.5))
                             .color(super::sketch_ui::SKETCH),
                     );
+                    if self.sketch.as_ref().is_some_and(|s| s.sketch.is_joints()) {
+                        bar_separator(ui, &p);
+                        self.accent_choice(ui);
+                    }
                     ui.add_space(8.0);
                     ui.add(
                         egui::Label::new(

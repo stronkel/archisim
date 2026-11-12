@@ -34,6 +34,10 @@ pub enum SketchTarget {
     /// A street's kerbs and façade lines: open lines that become its
     /// changes of section (U2).
     RoadEdges(archisim_core::RoadId),
+    /// The joints of a wall's layer of boards, drawn by hand on the face
+    /// seen from outside (M20): loose lines, and the pieces they cut
+    /// marked as an accent or on site.
+    BoardFace(archisim_core::WallId, usize),
 }
 
 /// A contour being edited.
@@ -53,6 +57,9 @@ pub struct Sketch {
     /// A face standing up (a side of a column or a beam, a slab's edge):
     /// sketched in its own elevation.
     elevated: bool,
+    /// A face composed by hand: what its pieces take, by a point inside
+    /// each.
+    pub marks: Vec<archisim_core::PieceMark>,
 }
 
 /// Why a sketch cannot be finished or an operation done.
@@ -123,12 +130,32 @@ impl Sketch {
                         terrain: Vec::new(),
                         zones: Vec::new(),
                         elevated: false,
+                        marks: Vec::new(),
                     });
                 }
                 let ring = t.boundary();
                 let outline = ring.iter().map(|&i| t.points[i].at).collect();
                 let terrain = ring.iter().map(|&i| (Some(i), t.points[i].z)).collect();
                 (vec![outline], Vec::new(), terrain)
+            }
+            SketchTarget::BoardFace(w, layer) => {
+                model.wall(w)?;
+                let (joints, marks) = match model.board_face(w, layer) {
+                    Some(f) => (f.joints.clone(), f.marks.clone()),
+                    None => (
+                        archisim_geom::boards::rule_joints(model, w, layer),
+                        Vec::new(),
+                    ),
+                };
+                return Some(Sketch {
+                    target,
+                    loops: joints.iter().map(|(a, b)| vec![*a, *b]).collect(),
+                    slopes: Vec::new(),
+                    terrain: Vec::new(),
+                    zones: Vec::new(),
+                    elevated: true,
+                    marks,
+                });
             }
             SketchTarget::WallFace(w, side) => {
                 model.wall(w)?;
@@ -144,6 +171,7 @@ impl Sketch {
                     terrain: Vec::new(),
                     zones,
                     elevated: true,
+                    marks: Vec::new(),
                 });
             }
             SketchTarget::Road(id) => {
@@ -184,6 +212,7 @@ impl Sketch {
                     terrain: Vec::new(),
                     zones,
                     elevated: !model.zone_in_plan(id, face),
+                    marks: Vec::new(),
                 });
             }
         };
@@ -195,6 +224,7 @@ impl Sketch {
             terrain,
             zones: Vec::new(),
             elevated,
+            marks: Vec::new(),
         })
     }
 
@@ -219,8 +249,14 @@ impl Sketch {
     pub fn is_open(&self) -> bool {
         matches!(
             self.target,
-            SketchTarget::Road(_) | SketchTarget::RoadEdges(_)
+            SketchTarget::Road(_) | SketchTarget::RoadEdges(_) | SketchTarget::BoardFace(..)
         )
+    }
+
+    /// Whether it is loose joint lines, any number of them (a face
+    /// composed by hand).
+    pub fn is_joints(&self) -> bool {
+        matches!(self.target, SketchTarget::BoardFace(..))
     }
 
     /// Whether its loops are zones, any number of them, none needed.
@@ -234,6 +270,23 @@ impl Sketch {
     /// Puts the sketch into the model: the element's contour as sketched.
     /// The model checks it (a crossing outline, a hole outside the slab).
     pub fn apply(&self, m: &mut Model) -> Result<(), SketchError> {
+        if let SketchTarget::BoardFace(w, layer) = self.target {
+            let joints: Vec<(Point2, Point2)> = self
+                .loops
+                .iter()
+                .flat_map(|l| l.windows(2).map(|p| (p[0], p[1])).collect::<Vec<_>>())
+                .filter(|(a, b)| a.distance(*b) > 1e-4)
+                .collect();
+            let face = archisim_core::BoardFace {
+                wall: w,
+                layer,
+                joints,
+                marks: self.marks.clone(),
+            };
+            return m
+                .set_board_face(w, layer, Some(face))
+                .map_err(SketchError::Model);
+        }
         if let SketchTarget::RoadEdges(id) = self.target {
             let r = m
                 .road(id)
@@ -340,6 +393,7 @@ impl Sketch {
             SketchTarget::Zones(..)
             | SketchTarget::WallFace(..)
             | SketchTarget::WallProfile(_)
+            | SketchTarget::BoardFace(..)
             | SketchTarget::Road(_)
             | SketchTarget::RoadEdges(_) => {}
             SketchTarget::TerrainPad(id, i) => {
@@ -555,6 +609,11 @@ impl Sketch {
     /// take the nearest's); a terrain keeps the points it had where a
     /// vertex still is, and the new ones take the height of the nearest.
     pub fn with_loops(&self, mut loops: Vec<Vec<Point2>>) -> Result<Sketch, SketchError> {
+        if self.is_joints() {
+            let mut out = self.clone();
+            out.loops = loops;
+            return Ok(out);
+        }
         if matches!(self.target, SketchTarget::RoadEdges(_)) {
             if loops.is_empty() || loops.len() > 4 {
                 return Err(SketchError::OneLine);
@@ -630,9 +689,9 @@ impl Sketch {
                 crate::pick::Element::Terrain(id)
             }
             SketchTarget::Zones(e, _) => e,
-            SketchTarget::WallFace(w, _) | SketchTarget::WallProfile(w) => {
-                crate::pick::Element::Wall(w)
-            }
+            SketchTarget::WallFace(w, _)
+            | SketchTarget::WallProfile(w)
+            | SketchTarget::BoardFace(w, _) => crate::pick::Element::Wall(w),
             SketchTarget::Road(id) | SketchTarget::RoadEdges(id) => crate::pick::Element::Road(id),
         }
     }
@@ -814,6 +873,7 @@ mod tests {
             terrain: Vec::new(),
             zones: Vec::new(),
             elevated: false,
+            marks: Vec::new(),
         };
         // The east edge split in two.
         let r = s

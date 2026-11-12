@@ -15,6 +15,7 @@ use crate::ids::*;
 use crate::math::{is_simple_polygon, signed_area, Arc, Point2, Vec2, EPSILON, MIN_BULGE};
 
 mod appearance;
+mod board_faces;
 mod board_layouts;
 mod box_base;
 mod box_import;
@@ -83,6 +84,7 @@ mod wall_section;
 mod water;
 mod worktops;
 pub use appearance::*;
+pub use board_faces::*;
 pub use board_layouts::*;
 pub use box_base::*;
 pub use box_import::*;
@@ -1555,6 +1557,8 @@ pub struct ModelParts {
     pub catalogue: Option<CatalogueEntry>,
     /// How the studio lays each material in boards (M18, version 108).
     pub board_layouts: Vec<(MaterialId, BoardLayout)>,
+    /// Wall layers composed by hand (M20, version 109).
+    pub board_faces: Vec<BoardFace>,
     /// Road markings at will (U4).
     pub markings: Vec<Marking>,
     /// Pictures stuck on faces (U8).
@@ -1721,6 +1725,7 @@ pub struct Model {
     modular_site: ModularSite,
     catalogue: Option<CatalogueEntry>,
     board_layouts: BTreeMap<MaterialId, BoardLayout>,
+    board_faces: Vec<BoardFace>,
     markings: BTreeMap<MarkingId, Marking>,
     decals: BTreeMap<DecalId, Decal>,
     plantings: BTreeMap<PlantingId, Planting>,
@@ -1842,6 +1847,7 @@ impl Model {
             modular_site: ModularSite::default(),
             catalogue: None,
             board_layouts: BTreeMap::new(),
+            board_faces: Vec::new(),
             markings: BTreeMap::new(),
             decals: BTreeMap::new(),
             plantings: BTreeMap::new(),
@@ -4577,6 +4583,7 @@ impl Model {
                 .iter()
                 .map(|(m, l)| (*m, l.clone()))
                 .collect(),
+            board_faces: self.board_faces().cloned().collect(),
             markings: self.markings.values().cloned().collect(),
             decals: self.decals.values().cloned().collect(),
             plantings: self.plantings.values().cloned().collect(),
@@ -5023,6 +5030,14 @@ impl Model {
                 .set_board_layout(material, Some(layout))
                 .map_err(|error| RestoreError {
                     element: "board layout".into(),
+                    error,
+                })?;
+        }
+        for f in parts.board_faces {
+            model
+                .set_board_face(f.wall, f.layer, Some(f.clone()))
+                .map_err(|error| RestoreError {
+                    element: "composed face".into(),
                     error,
                 })?;
         }

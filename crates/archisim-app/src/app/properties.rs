@@ -1646,6 +1646,7 @@ impl ArchiSimApp {
             );
         });
         self.wall_tools_group(ui, id, &w);
+        self.board_face_group(ui, id, &w);
         self.wall_profile_group(ui, id, &w);
         self.wall_section_group(ui, id, &w);
         self.layers_group(ui, w.wall_type);

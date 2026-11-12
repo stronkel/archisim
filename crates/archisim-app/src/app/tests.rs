@@ -11478,3 +11478,104 @@ fn boxes_over_the_floors_of_a_house_drawn_without_them() {
     h.app.ed.undo();
     assert_eq!(h.model().boxes().count(), 0);
 }
+
+/// A face composed by hand (M20): the joints of a layer of boards drawn on
+/// its elevation, starting from its rule, and a piece left for the site.
+#[test]
+fn a_face_is_composed_by_hand_in_elevation() {
+    let mut ed = Editor::new_project();
+    let level = ed.level;
+    let w = ed
+        .transact("Muro", |m| {
+            let gyp = m.add_material(
+                "Placa de yeso laminado",
+                "plaster",
+                [240, 240, 236],
+                archisim_core::CutPattern::Solid,
+            );
+            let wool = m.add_material(
+                "Lana",
+                "insulation",
+                [235, 225, 150],
+                archisim_core::CutPattern::Solid,
+            );
+            let layer = |material, thickness, function| archisim_core::Layer {
+                material,
+                thickness,
+                function,
+            };
+            let wt = m.add_wall_type(
+                "Tabique de placas",
+                archisim_core::WallFunction::Interior,
+                vec![
+                    layer(gyp, 0.015, archisim_core::LayerFunction::Finish),
+                    layer(wool, 0.07, archisim_core::LayerFunction::Structure),
+                    layer(gyp, 0.015, archisim_core::LayerFunction::Finish),
+                ],
+            )?;
+            m.add_wall(archisim_core::NewWall {
+                wall_type: wt,
+                level,
+                start: Point2::new(0.0, 0.0),
+                end: Point2::new(4.0, 0.0),
+                reference: archisim_core::ReferenceLine::Center,
+                height: 2.5,
+                base_offset: 0.0,
+                bulge: 0.0,
+                top: archisim_core::WallTop::Unconnected,
+            })
+        })
+        .unwrap();
+    let mut h = Harness::new(ed);
+    h.frame();
+    h.app
+        .start_sketch(crate::sketch::SketchTarget::BoardFace(w, 0));
+    h.frame();
+    let layer = h.model().draw_layer_by_name("Boceto").unwrap().id;
+    let ViewMode::Drafting(v) = h.app.mode else {
+        panic!("drawn on a view of its own");
+    };
+    let rule = h
+        .model()
+        .drafts_in(archisim_core::ViewRef::Drafting(v))
+        .filter(|d| d.layer == layer)
+        .count();
+    assert!(rule >= 3, "it starts with the rule's joints: {rule}");
+    // A level joint across the face, then the bottom piece next to the
+    // wall's start (on the right, seen from outside) left for the site.
+    h.app
+        .ed
+        .transact("Junta", |m| {
+            m.add_draft(archisim_core::NewDraft::new(
+                archisim_core::ViewRef::Drafting(v),
+                layer,
+                archisim_core::Shape::Line {
+                    a: p(0.0, 1.0),
+                    b: p(4.0, 1.0),
+                },
+            ))
+            .map(|_| ())
+        })
+        .unwrap();
+    h.app.set_piece_mode(super::sketch_ui::PieceMode::OnSite);
+    assert!(h.app.sketch_marking());
+    h.app.sketch_mark_at(p(3.8, 0.5));
+    h.frame();
+    h.key(Key::Enter);
+    assert!(
+        h.app.sketch.is_none(),
+        "{:?}",
+        h.app.message.as_ref().map(|m| &m.text)
+    );
+    assert_eq!(h.app.ed.undo_label(), Some("Despiece a mano"));
+    let f = h.model().board_face(w, 0).unwrap().clone();
+    assert_eq!(f.marks.len(), 1);
+    // Mirrored back: by the wall's start.
+    assert!(f.marks[0].at.x < 1.3, "{:?}", f.marks[0]);
+    let pieces: Vec<_> = archisim_geom::boards::wall_boards(h.model(), w)
+        .into_iter()
+        .filter(|b| b.layer == 0)
+        .collect();
+    assert_eq!(pieces.iter().filter(|b| b.on_site).count(), 1);
+    assert!(pieces.iter().all(|b| b.size.1 < 1.6), "cut at 1,00");
+}

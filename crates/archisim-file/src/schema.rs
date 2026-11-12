@@ -179,6 +179,9 @@ pub(crate) struct ProjectFile {
     /// How the studio lays each material in boards (version 108).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub board_layouts: Vec<BoardLayoutOf>,
+    /// Wall layers composed by hand (version 109).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub board_faces: Vec<BoardFaceOf>,
     /// Road markings (version 65).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub markings: Vec<MarkingOf>,
@@ -1313,6 +1316,34 @@ pub(crate) struct BoardLayoutOf {
     /// The frame beside each jamb, m.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub accent_side: Option<f64>,
+    /// The open joint between pieces, m (version 109; before, 6 mm for
+    /// joint lines and none for the rest).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub joint: Option<f64>,
+}
+
+/// A wall layer composed by hand (version 109).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct BoardFaceOf {
+    pub wall: u64,
+    pub layer: usize,
+    /// Joint lines on the face: along the wall and up from the level.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub joints: Vec<[Xy; 2]>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pieces: Vec<PieceMarkOf>,
+}
+
+/// What a piece of a composed face takes, by a point inside it.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct PieceMarkOf {
+    pub at: Xy,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub material: Option<u64>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub on_site: bool,
 }
 
 /// A box type of the catalogue (version 104).
@@ -4212,6 +4243,25 @@ impl ProjectFile {
                     accent_material: l.accent.as_ref().map(|a| a.material.0),
                     accent_up_to: l.accent.as_ref().map(|a| a.up_to),
                     accent_side: l.accent.as_ref().map(|a| a.side).filter(|s| *s > 0.0),
+                    joint: Some(l.joint),
+                })
+                .collect(),
+            board_faces: p
+                .board_faces
+                .iter()
+                .map(|f| BoardFaceOf {
+                    wall: f.wall.0,
+                    layer: f.layer,
+                    joints: f.joints.iter().map(|(a, b)| [xy(*a), xy(*b)]).collect(),
+                    pieces: f
+                        .marks
+                        .iter()
+                        .map(|m| PieceMarkOf {
+                            at: xy(m.at),
+                            material: m.material.map(|x| x.0),
+                            on_site: m.on_site,
+                        })
+                        .collect(),
                 })
                 .collect(),
             catalogue: p.catalogue.as_ref().map(|c| CatalogueOf {
@@ -4982,6 +5032,7 @@ impl ProjectFile {
             modular_site: core::ModularSite::default(),
             catalogue: None,
             board_layouts: Vec::new(),
+            board_faces: Vec::new(),
             markings: Vec::new(),
             decals: Vec::new(),
             plantings: Vec::new(),
@@ -5938,6 +5989,9 @@ impl ProjectFile {
                     width: l.width,
                     length: l.length,
                     upright: l.upright,
+                    joint: l
+                        .joint
+                        .unwrap_or(if l.joints == "lines" { 0.006 } else { 0.0 }),
                     joints,
                     accent: l.accent_material.map(|m| core::BoardAccent {
                         material: core::MaterialId(m),
@@ -5946,6 +6000,23 @@ impl ProjectFile {
                     }),
                 },
             ));
+        }
+        for f in self.board_faces {
+            let p = |a: Xy| Point2::new(a[0], a[1]);
+            parts.board_faces.push(core::BoardFace {
+                wall: core::WallId(f.wall),
+                layer: f.layer,
+                joints: f.joints.iter().map(|j| (p(j[0]), p(j[1]))).collect(),
+                marks: f
+                    .pieces
+                    .iter()
+                    .map(|m| core::PieceMark {
+                        at: p(m.at),
+                        material: m.material.map(core::MaterialId),
+                        on_site: m.on_site,
+                    })
+                    .collect(),
+            });
         }
         if let Some(c) = self.catalogue {
             parts.catalogue = Some(core::CatalogueEntry {

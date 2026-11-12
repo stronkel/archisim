@@ -2516,6 +2516,7 @@ pub fn modular_board_layouts(m: &mut Model) -> Vec<String> {
                 width: 1.20,
                 length: 3.00,
                 upright: true,
+                joint: 0.0,
                 joints: BoardJoints::Zipper,
                 accent: None,
             }
@@ -2524,6 +2525,7 @@ pub fn modular_board_layouts(m: &mut Model) -> Vec<String> {
                 width: 1.20,
                 length: 2.70,
                 upright: true,
+                joint: 0.006,
                 joints: BoardJoints::Lines(vec![0.0, 2.50]),
                 accent: Some(BoardAccent {
                     material: accent,
@@ -2537,6 +2539,7 @@ pub fn modular_board_layouts(m: &mut Model) -> Vec<String> {
                 width: 1.20,
                 length: 2.70,
                 upright: true,
+                joint: 0.006,
                 joints: BoardJoints::Lines(vec![0.0, 2.50]),
                 accent: None,
             }

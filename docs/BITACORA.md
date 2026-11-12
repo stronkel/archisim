@@ -6,6 +6,14 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-11 (155) · M20: el despiece a mano, cara a cara
+
+Rama `bloque/despiece-a-mano` (sobre la del chasis), con pull request. Formato versión 109 (`board_faces` y la junta del despiece; los ficheros anteriores se abren igual).
+
+- **Qué se hizo.** Antonio quiere dibujar él la composición de cada fachada. En las propiedades del muro, «Despiece a mano»: por cada capa de placas (la cerámica, el Tabihaus, el yeso), «Dibujar el despiece…» abre el alzado de la cara visto desde fuera con las juntas de la regla como líneas para empezar; cada línea que se dibuja es una junta que corta las piezas de lado a lado, y se ven las piezas con su medida. En la cinta, «Acento», «En obra» y «Normal» marcan piezas con un clic (el material de acento se elige en la barra de opciones). La junta abierta es del material («Junta (mm)» en su despiece). Lo siguen las placas, la compra (las piezas en obra aparte, en su caja), `tableros.csv`, la fábrica, el 3D, los alzados y el render, y se copia con las cajas tipo.
+- **Pendiente.** Copiar el despiece de una cara a otra; marcar en obra de una vez las piezas junto a las juntas entre cajas; el despiece a mano en forjados y techos.
+- **Qué debe probar Antonio.** Abre `L-160-LOD400.archisim`, elige un muro de fachada (por ejemplo el de la fachada sur de MOD-01), Propiedades → «Despiece a mano» → capa 1 (placa cerámica) → «Dibujar el despiece…». Mueve o borra juntas, dibuja otras (Línea, Desfase), pulsa «Acento» y haz clic en dos piezas junto a una ventana, pulsa «En obra» y haz clic en la pieza del extremo junto a la otra caja, y Aceptar. Mira el muro en 3D y la compra (Archivo → Exportar → Lista de compra): las piezas en obra salen aparte. Luego lo mismo con la capa del Tabihaus.
+
 ## 2026-11-11 (154) · M19 bis: el chasis en el cálculo, «Equipar la vivienda» en la app y el despiece de los huecos
 
 Rama `bloque/chasis-calculo` (sobre la de M19), con pull request. Sin cambios de formato.
