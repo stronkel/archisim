@@ -115,7 +115,17 @@ jobs:
 
           **Windows**: descarga y ejecuta \`ArchiSim-Windows.exe\`.
 
-          Qué cambia en esta versión: \`docs/BITACORA.md\`.
           EOF
+          # What changes: this version's part of docs/NOVEDADES.md, which
+          # ArchiSim shows before updating itself.
+          {
+            echo
+            echo "## Novedades"
+            echo
+            awk -v v="$version" '
+              /^## / { on = ($2 == v) ; next }
+              on { print }
+            ' docs/NOVEDADES.md
+          } >> notas.md
           gh release create "$TAG" --target "$GITHUB_SHA" --title "ArchiSim $version" --notes-file notas.md \
             dist/ArchiSim-Mac.dmg dist/ArchiSim-Windows.exe dist/instalar-mac.sh

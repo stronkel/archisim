@@ -6,6 +6,14 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-12 (157) · v0.81: ArchiSim se actualiza desde el propio programa
+
+Rama `bloque/actualizar` (lleva también la 156), con pull request. Versión 0.81.0 (sin cambios de formato salvo los de la 156).
+
+- **Qué se hizo.** Antonio no quiere ir a GitHub a descargar cada versión. ArchiSim pregunta al abrirse por la última versión publicada y, si hay una nueva, avisa en una esquina; en Ayuda → «Buscar actualizaciones…» se ve qué cambia (de `docs/NOVEDADES.md`, nuevo), se descarga con una barra y se instala: se cierra, se pone la nueva (en Windows, el instalador sin preguntas; en Mac, la misma instalación que la línea de Terminal) y se vuelve a abrir con el mismo proyecto. Se puede desactivar y saltar una versión. Desde ahora, cada bloque que va a `main` sube la versión y escribe sus novedades (`docs/ACTUALIZAR.md`, y la rutina de cierre en `CLAUDE.md`), así que se publica solo.
+- **Pendiente.** Comprobar en el Mac de Antonio que macOS no vuelve a pedir permiso para abrir la versión instalada así (no debería: no pasa por el navegador). Lo siguiente del despiece (avisos, copiar caras, en obra de las juntas, repartir, plano por fachada, forjados y techos) va en la 0.82, que ya le llegará por el actualizador.
+- **Qué debe probar Antonio.** Instala la 0.81 a mano por última vez (la página de la versión en GitHub). Ábrela: Ayuda → «Buscar actualizaciones…» debe decir que es la última. Cuando publique la 0.82, al abrir ArchiSim saldrá el aviso: «Ver novedades y actualizar» → Descargar → Instalar y volver a abrir.
+
 ## 2026-11-12 (156) · M20 bis: junta por cara, la capa a la vista y pintar arrastrando
 
 Rama `bloque/despiece-a-mano-2`, con pull request. Formato versión 110 (`joint` en cada cara despiezada; los ficheros anteriores se abren igual).

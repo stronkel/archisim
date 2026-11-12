@@ -85,3 +85,23 @@ Root: HKA; Subkey: "Software\Classes\.ifc"; ValueType: string; ValueName: ""; Va
 
 [Run]
 Filename: "{app}\ArchiSim.exe"; Parameters: """{app}\ejemplos\demo.archisim"""; Description: "Abrir ArchiSim con la vivienda de prueba"; Flags: nowait postinstall skipifsilent
+; Updated from ArchiSim itself (/actualizar=1): open it again, with the
+; project that was open (/abrir=…), even though the installation is silent.
+Filename: "{app}\ArchiSim.exe"; Parameters: """{param:abrir}"""; Flags: nowait runasoriginaluser; Check: UpdatingWith
+Filename: "{app}\ArchiSim.exe"; Flags: nowait runasoriginaluser; Check: UpdatingWithout
+
+[Code]
+function Updating: Boolean;
+begin
+  Result := ExpandConstant('{param:actualizar|0}') = '1';
+end;
+
+function UpdatingWith: Boolean;
+begin
+  Result := Updating and (ExpandConstant('{param:abrir|}') <> '');
+end;
+
+function UpdatingWithout: Boolean;
+begin
+  Result := Updating and (ExpandConstant('{param:abrir|}') = '');
+end;

@@ -779,6 +779,17 @@ impl ArchiSimApp {
             if ui.button("Atajos de teclado y ratón (KS)").clicked() {
                 self.show_shortcuts = true;
             }
+            if ui
+                .button("Buscar actualizaciones…")
+                .on_hover_text(
+                    "Mira si hay una versión nueva de ArchiSim, qué cambia, y la instala",
+                )
+                .clicked()
+            {
+                self.update.open = true;
+                self.check_for_updates(false);
+                ui.close();
+            }
             if ui.button("Acerca de ArchiSim").clicked() {
                 self.show_about = true;
             }

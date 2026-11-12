@@ -523,6 +523,7 @@ pub struct ArchiSimApp {
     pub cte: cte_ui::CteWindow,
     pub calc: calc_ui::CalcWindow,
     pub equip: equip_ui::EquipWindow,
+    pub update: update_ui::UpdateState,
     pub electrical: electrical_ui::ElectricalWindow,
     pub water: water_ui::WaterWindow,
     pub drain: drain_ui::DrainWindow,
@@ -920,6 +921,7 @@ impl ArchiSimApp {
             cte: Default::default(),
             calc: Default::default(),
             equip: Default::default(),
+            update: Default::default(),
             electrical: Default::default(),
             water: Default::default(),
             drain: Default::default(),
@@ -2599,6 +2601,7 @@ impl ArchiSimApp {
         self.cte_dialog(ctx);
         self.calc_dialog(ctx);
         self.equip_dialog(ctx);
+        self.update_frame(ctx);
         self.earthworks_report_dialog(ctx);
         self.electrical_dialog(ctx);
         self.water_dialog(ctx);
@@ -2960,6 +2963,7 @@ mod toolbox;
 mod tools3d;
 mod type_views;
 mod types_ui;
+mod update_ui;
 mod urban_ui;
 mod ventilation_ui;
 mod vertex_ui;
