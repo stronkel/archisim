@@ -47,6 +47,13 @@ pub struct Underlay {
     /// source's own metres: a plan's x and y, a section's distance along
     /// it and height), before it is turned and moved (E17).
     pub crop: Option<[Point2; 2]>,
+    /// Drawn this much bigger, about its origin, before it is turned
+    /// (version 112): fitted to a known length or by two points.
+    pub scale: f64,
+    /// Locked: not moved, turned or scaled by mistake.
+    pub locked: bool,
+    /// Switched off without losing where it goes.
+    pub hidden: bool,
 }
 
 impl Underlay {
@@ -59,6 +66,64 @@ impl Underlay {
             offset: Point2::new(0.0, 0.0),
             rotation: 0.0,
             crop: None,
+            scale: 1.0,
+            locked: false,
+            hidden: false,
+        }
+    }
+
+    /// Where a point of the source is drawn: scaled, turned and moved.
+    pub fn place(&self, p: Point2) -> Point2 {
+        let (c, s) = (self.rotation.cos(), self.rotation.sin());
+        let (x, y) = (p.x * self.scale, p.y * self.scale);
+        Point2::new(x * c - y * s + self.offset.x, x * s + y * c + self.offset.y)
+    }
+
+    /// The point of the source drawn at `q`.
+    pub fn source_of(&self, q: Point2) -> Point2 {
+        let (c, s) = (self.rotation.cos(), self.rotation.sin());
+        let (x, y) = (q.x - self.offset.x, q.y - self.offset.y);
+        let k = if self.scale.abs() > 1e-12 {
+            self.scale
+        } else {
+            1.0
+        };
+        Point2::new((x * c + y * s) / k, (-x * s + y * c) / k)
+    }
+
+    /// Moved so that what is drawn at `a1` goes to `b1` and what is drawn
+    /// at `a2` towards `b2`: turned to line up, and, with `scale`, made
+    /// the size that puts `a2` on `b2` too.
+    pub fn fitted(&self, a1: Point2, a2: Point2, b1: Point2, b2: Point2, scale: bool) -> Self {
+        let (da, db) = (a2 - a1, b2 - b1);
+        let turn = db.y.atan2(db.x) - da.y.atan2(da.x);
+        let k = if scale && da.length() > 1e-9 && db.length() > 1e-9 {
+            db.length() / da.length()
+        } else {
+            1.0
+        };
+        self.mapped(turn, k, a1, b1)
+    }
+
+    /// Scaled by `k` about what is drawn at `at`.
+    pub fn scaled_about(&self, at: Point2, k: f64) -> Self {
+        self.mapped(0.0, k, at, at)
+    }
+
+    /// Followed by the move that turns by `turn` and scales by `k` what is
+    /// drawn about `from`, and puts it at `to`.
+    fn mapped(&self, turn: f64, k: f64, from: Point2, to: Point2) -> Self {
+        let (c, s) = (turn.cos(), turn.sin());
+        let d = self.offset - from;
+        let off = Point2::new(
+            (d.x * c - d.y * s) * k + to.x,
+            (d.x * s + d.y * c) * k + to.y,
+        );
+        Underlay {
+            offset: off,
+            rotation: self.rotation + turn,
+            scale: self.scale * k,
+            ..*self
         }
     }
 
@@ -169,6 +234,11 @@ impl Model {
     fn check_underlay(&self, u: &Underlay) -> Result<(), ModelError> {
         finite_point(u.offset, "underlay offset")?;
         finite(u.rotation, "underlay rotation")?;
+        if !(u.scale.is_finite() && u.scale > 0.0) {
+            return Err(ModelError::InvalidParameter(
+                "the scale of an underlay must be more than 0".into(),
+            ));
+        }
         if let Some([a, b]) = u.crop {
             finite_point(a, "underlay crop")?;
             finite_point(b, "underlay crop")?;
@@ -314,5 +384,25 @@ mod tests {
         m.remove_draft_view(d).unwrap();
         assert_eq!(m.drafts_in(ViewRef::Drafting(d)).count(), 0);
         assert!(m.level_underlays(p1).is_empty());
+    }
+
+    #[test]
+    fn an_underlay_is_fitted_by_two_points() {
+        let p = Point2::new;
+        let u = Underlay::of(UnderlaySource::Level(crate::LevelId(1)));
+        // Its points (0,0) and (2,0) go to (5,5) and (5,9): moved, turned
+        // a quarter and twice the size.
+        let f = u.fitted(p(0.0, 0.0), p(2.0, 0.0), p(5.0, 5.0), p(5.0, 9.0), true);
+        assert!(f.place(p(0.0, 0.0)).distance(p(5.0, 5.0)) < 1e-9);
+        assert!(f.place(p(2.0, 0.0)).distance(p(5.0, 9.0)) < 1e-9);
+        assert!((f.scale - 2.0).abs() < 1e-9);
+        assert!(f.source_of(p(5.0, 9.0)).distance(p(2.0, 0.0)) < 1e-9);
+        // Without scaling, only lined up.
+        let g = f.fitted(p(5.0, 5.0), p(5.0, 9.0), p(0.0, 0.0), p(1.0, 0.0), false);
+        assert!(g.place(p(0.0, 0.0)).distance(p(0.0, 0.0)) < 1e-9);
+        assert!((g.scale - 2.0).abs() < 1e-9);
+        // A known length: 4 m drawn that are really 6.
+        let h = f.scaled_about(p(5.0, 5.0), 1.5);
+        assert!(h.place(p(2.0, 0.0)).distance(p(5.0, 11.0)) < 1e-9);
     }
 }

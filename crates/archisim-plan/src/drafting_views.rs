@@ -25,12 +25,8 @@ pub fn drafting_extent(model: &Model, id: DraftViewId, k: f64) -> Option<(Point2
     // The cropped underlays where they are put.
     for u in model.draft_view(id).map_or(&[][..], |v| &v.underlays[..]) {
         let Some([a, b]) = u.crop else { continue };
-        let (c, sn) = (u.rotation.cos(), u.rotation.sin());
         for p in [a, b, Point2::new(a.x, b.y), Point2::new(b.x, a.y)] {
-            let q = Point2::new(
-                p.x * c - p.y * sn + u.offset.x,
-                p.x * sn + p.y * c + u.offset.y,
-            );
+            let q = u.place(p);
             out = Some(match out {
                 None => (q, q),
                 Some((lo, hi)) => (
@@ -118,7 +114,7 @@ pub fn draw_underlays(
     underlays: &[Underlay],
     options: &PlanOptions,
 ) {
-    for u in underlays.iter().filter(|u| u.opacity > 0.0) {
+    for u in underlays.iter().filter(|u| u.opacity > 0.0 && !u.hidden) {
         let Some(svg) = underlay_svg(model, u.source, options) else {
             continue;
         };
@@ -130,11 +126,12 @@ pub fn draw_underlays(
         // The drawings have y down (−y): turned the other way round.
         let _ = writeln!(
             s,
-            r#"<g class="underlay" opacity="{}" transform="translate({} {}) rotate({})">"#,
+            r#"<g class="underlay" opacity="{}" transform="translate({} {}) rotate({}) scale({})">"#,
             num(u.opacity),
             num(u.offset.x),
             num(-u.offset.y),
-            num(-u.rotation.to_degrees())
+            num(-u.rotation.to_degrees()),
+            num(u.scale)
         );
         match u.crop {
             // Only the rectangle (its y down, like the drawing).

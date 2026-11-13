@@ -314,6 +314,9 @@ impl ArchiSimApp {
             ctx.set_cursor_icon(egui::CursorIcon::PointingHand);
         }
         self.section_move(&ctx, &response, &painter, rect, id, under);
+        if response.hovered() || ctx.memory(|m| m.focused().is_none()) {
+            self.nudge_keys(&ctx, Some(id));
+        }
     }
 
     /// The rectangle of a detail (E17): two clicks give its corners and a
@@ -492,44 +495,51 @@ impl ArchiSimApp {
         if response.drag_stopped() {
             let d = drag.delta;
             if d.length() > 1e-6 {
-                let along = self.ed.model().section(id).and_then(|s| s.along());
                 let elements = drag.elements.clone();
-                let r = self.ed.transact("Mover en la sección", |m| {
-                    let Some(u) = along else {
-                        return Ok(());
-                    };
-                    for e in &elements {
-                        match e {
-                            Element::Object(o) => m.edit_object(*o, |x| {
-                                x.position = x.position + u * d.x;
-                                x.base_offset += d.y;
-                            })?,
-                            Element::Opening(o) => {
-                                let Some(op) = m.opening(*o).cloned() else {
-                                    continue;
-                                };
-                                let w = m
-                                    .wall(op.wall)
-                                    .and_then(|w| (w.end - w.start).normalized())
-                                    .unwrap_or(u);
-                                let k = w.dot(u);
-                                let along = if k.abs() > 0.3 {
-                                    op.along + d.x * k
-                                } else {
-                                    op.along
-                                };
-                                m.move_opening(*o, along, op.sill + d.y)?;
-                            }
-                            _ => {}
-                        }
-                    }
-                    Ok(())
-                });
-                self.report(r.map_err(|e| e.to_string()), "Movido.");
+                self.move_in_section(id, &elements, d);
             }
             return;
         }
         self.section_drag = Some(drag);
+    }
+
+    /// Moves objects, doors and windows in a section: `d.x` along it, `d.y`
+    /// up (objects rise, doors and windows change their sill).
+    pub(super) fn move_in_section(&mut self, id: SectionId, elements: &[Element], d: Point2) {
+        let along = self.ed.model().section(id).and_then(|s| s.along());
+        let elements = elements.to_vec();
+        let r = self.ed.transact("Mover en la sección", |m| {
+            let Some(u) = along else {
+                return Ok(());
+            };
+            for e in &elements {
+                match e {
+                    Element::Object(o) => m.edit_object(*o, |x| {
+                        x.position = x.position + u * d.x;
+                        x.base_offset += d.y;
+                    })?,
+                    Element::Opening(o) => {
+                        let Some(op) = m.opening(*o).cloned() else {
+                            continue;
+                        };
+                        let w = m
+                            .wall(op.wall)
+                            .and_then(|w| (w.end - w.start).normalized())
+                            .unwrap_or(u);
+                        let k = w.dot(u);
+                        let along = if k.abs() > 0.3 {
+                            op.along + d.x * k
+                        } else {
+                            op.along
+                        };
+                        m.move_opening(*o, along, op.sill + d.y)?;
+                    }
+                    _ => {}
+                }
+            }
+            Ok(())
+        });
+        self.report(r.map_err(|e| e.to_string()), "Movido.");
     }
 
     /// The selected elements over the section drawing, and the one under

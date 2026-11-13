@@ -503,6 +503,11 @@ impl ArchiSimApp {
                                 self.cad_feed(Input::Option("INVERT"));
                             }
                         }
+                        // Reflejar takes the edge of what is there even if
+                        // nothing is picked (a slab's or a box's edge).
+                        None if self.cad.as_ref().is_some_and(|c| c.name() == "REFLEJAR") => {
+                            self.cad_feed(Input::Point(raw));
+                        }
                         None => self.cmdline.log("No hay nada ahí.", true),
                     }
                 }

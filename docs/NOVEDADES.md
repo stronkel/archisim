@@ -2,7 +2,19 @@
 
 Lo que cambia en cada versión, en pocas líneas. ArchiSim enseña la parte de su versión antes de actualizarse (Ayuda → «Buscar actualizaciones…»), y la página de cada versión en GitHub la lleva también. El detalle, día a día, está en `BITACORA.md`.
 
-Cada versión empieza con una línea `## <versión>` (por ejemplo `## 0.83.0
+Cada versión empieza con una línea `## <versión>` (por ejemplo `## 0.84.0
+
+- **Mover el calco con el ratón.** En las propiedades de la planta o de la vista de dibujo, cada calco tiene «Mover…», «Encajar…», «Encajar y escalar…» y «Escalar por medida…».
+  - Los puntos se enganchan a las líneas del propio calco y al modelo, con líneas de rastreo.
+  - «Encajar» pide dos puntos del calco y dónde van: lo mueve, lo gira y, si se quiere, lo escala.
+  - «Escalar por medida» pide dos puntos y cuánto mide eso de verdad.
+  - Cada calco tiene **escala**, **candado** para no moverlo sin querer y **visible** para apagarlo sin perderlo.
+- **Flechas del teclado.** Mueven lo seleccionado en planta, alzado, sección y vistas de dibujo, como en Revit: cuanto más cerca estás, más fino es el paso. Con Mayúsculas, diez veces más.
+- **Guías al mover y estirar.** Al arrastrar un mueble, un pilar o una caja en planta, sus esquinas, medios y centro se alinean con los de lo que hay alrededor, con la línea guía azul. Al estirar, se ve la medida nueva.
+- **Reflejar sobre cualquier arista.** El eje puede ser el canto de un forjado, el lado de una caja, un falso techo, un eje o un plano de referencia, aunque no haya nada seleccionable ahí. Antes de hacer clic se ve el eje y cómo quedaría lo reflejado.
+- **Copiar en fila** (Modificar, o `FILA`): N copias a una distancia, o repartidas hasta un punto. Sirve para cajas, pilares o muebles.
+
+## 0.83.0
 
 - **Dibujar el despiece con precisión.** En el boceto en alzado hay forzados (final, medio, intersección, perpendicular, jambas y juntas de la capa de al lado) y líneas de rastreo. Al elegir una junta salen sus cotas azules: se hace clic en la cifra y se escribe otra.
 - **Mover sabiendo cuánto.** Al arrastrar se ve la distancia junto al cursor; si escribes un número y pulsas Intro, se mueve justo eso. **0,2 ya es 0,2**: la coma es decimal; las coordenadas se escriben con punto y coma (2;1).

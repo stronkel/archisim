@@ -11838,3 +11838,155 @@ fn a_joint_is_placed_exactly() {
     // 0,00 · 0,60 · 1,20 · 1,80 · … · 3,60 inside a 4 m face: six joints.
     assert_eq!(joints.len(), 6, "{joints:?}");
 }
+
+/// An underlay moved and fitted with the mouse; the selection moved with
+/// the arrow keys.
+#[test]
+fn an_underlay_is_moved_by_hand_and_the_arrows_nudge() {
+    use super::underlay_ui::{UnderlayHost, UnderlayMode};
+    let mut ed = Editor::new_project();
+    let level = ed.level;
+    let (dv, layer) = ed
+        .transact("Calco", |m| {
+            let dv = m.add_draft_view("DXF", 50.0)?;
+            let layer = m.add_draw_layer(archisim_core::DrawLayer::new(
+                "DXF",
+                [0, 0, 0],
+                0.25,
+                archisim_core::LineStyle::Continuous,
+            ))?;
+            m.add_draft(archisim_core::NewDraft::new(
+                archisim_core::ViewRef::Drafting(dv),
+                layer,
+                archisim_core::Shape::Line {
+                    a: p(0.0, 0.0),
+                    b: p(4.0, 0.0),
+                },
+            ))?;
+            m.set_level_underlays(
+                level,
+                vec![archisim_core::Underlay::of(
+                    archisim_core::UnderlaySource::Drafting(dv),
+                )],
+            )?;
+            Ok((dv, layer))
+        })
+        .unwrap();
+    let _ = layer;
+    let mut h = Harness::new(ed);
+    h.frame();
+    let host = UnderlayHost::Level(level);
+    // «Mover»: base on the end of its line, destination two metres up.
+    h.app.start_underlay_pick(host, 0, UnderlayMode::Move);
+    h.frame();
+    h.app.underlay_click(p(4.0, 0.0));
+    h.app.underlay_click(p(4.0, 2.0));
+    let u = h.model().level_underlays(level)[0];
+    assert!(u.offset.distance(p(0.0, 2.0)) < 1e-9, "{u:?}");
+    assert!(h.app.underlay_pick.is_none());
+    // «Encajar y escalar»: its line, now from (0,2) to (4,2), onto (1,1)–(1,9).
+    h.app
+        .start_underlay_pick(host, 0, UnderlayMode::Fit { scale: true });
+    for q in [p(0.0, 2.0), p(4.0, 2.0), p(1.0, 1.0), p(1.0, 9.0)] {
+        h.app.underlay_click(q);
+    }
+    let u = h.model().level_underlays(level)[0];
+    assert!(u.place(p(0.0, 0.0)).distance(p(1.0, 1.0)) < 1e-9, "{u:?}");
+    assert!(u.place(p(4.0, 0.0)).distance(p(1.0, 9.0)) < 1e-9, "{u:?}");
+    assert!((u.scale - 2.0).abs() < 1e-9);
+    // Locked, it does not move.
+    let mut locked = u;
+    locked.locked = true;
+    h.app
+        .ed
+        .transact("Candado", |m| m.set_level_underlays(level, vec![locked]))
+        .unwrap();
+    h.app.start_underlay_pick(host, 0, UnderlayMode::Move);
+    assert!(h.app.underlay_pick.is_none());
+    let _ = dv;
+    // The arrows: a wall selected moves one step right; with Shift, ten.
+    let w = h
+        .app
+        .ed
+        .transact("Muro", |m| {
+            let t = m.wall_types().next().unwrap().id;
+            m.add_wall(archisim_core::NewWall {
+                wall_type: t,
+                level,
+                start: p(0.0, 0.0),
+                end: p(3.0, 0.0),
+                reference: archisim_core::ReferenceLine::Center,
+                height: 2.5,
+                base_offset: 0.0,
+                bulge: 0.0,
+                top: archisim_core::WallTop::Unconnected,
+            })
+        })
+        .unwrap();
+    h.app.ed.selection = [Element::Wall(w)].into_iter().collect();
+    h.frame();
+    let step = super::nudge::nudge_step(h.app.view.to_metres(1.0));
+    h.key(Key::ArrowRight);
+    let x = h.model().wall(w).unwrap().start.x;
+    assert!((x - step).abs() < 1e-9, "{x} {step}");
+    h.set_modifiers(Modifiers::SHIFT);
+    h.key(Key::ArrowUp);
+    h.set_modifiers(Modifiers::NONE);
+    let y = h.model().wall(w).unwrap().start.y;
+    assert!((y - 10.0 * step).abs() < 1e-9, "{y}");
+}
+
+/// Reflejar on the edge of a slab: the axis is the slab's edge, picked
+/// or not.
+#[test]
+fn mirror_takes_the_edge_of_a_slab() {
+    let mut h = Harness::new(Editor::new_project());
+    h.app.keys_autocad = true;
+    let lv = h.app.ed.level;
+    h.app
+        .ed
+        .transact("Forjado", |m| {
+            let t = m.slab_types().next().unwrap().id;
+            m.add_slab(archisim_core::NewSlab {
+                slab_type: t,
+                level: lv,
+                outline: vec![p(0.0, 0.0), p(6.0, 0.0), p(6.0, 4.0), p(0.0, 4.0)],
+                top_offset: 0.0,
+            })
+        })
+        .unwrap();
+    let w = add_test_wall(&mut h, p(1.0, 0.5), p(1.0, 3.5));
+    h.app.ed.selection = [Element::Wall(w)].into_iter().collect();
+    command(&mut h, "mm");
+    h.click_at(p(6.0, 2.0));
+    let xs: Vec<f64> = h.model().walls().map(|x| x.start.x).collect();
+    assert!(xs.iter().any(|x| (x - 11.0).abs() < 1e-9), "{xs:?}");
+}
+
+/// Copiar en fila: three copies a step apart, or shared out to a point.
+#[test]
+fn copies_go_in_a_row() {
+    let mut h = Harness::new(Editor::new_project());
+    h.app.keys_autocad = true;
+    let w = add_test_wall(&mut h, p(0.0, 0.0), p(0.0, 3.0));
+    h.app.ed.selection = [Element::Wall(w)].into_iter().collect();
+    command(&mut h, "fila");
+    command(&mut h, "3");
+    h.click_at(p(0.0, 0.0));
+    h.click_at(p(2.0, 0.0));
+    let mut xs: Vec<f64> = h.model().walls().map(|x| x.start.x).collect();
+    xs.sort_by(f64::total_cmp);
+    assert_eq!(xs.len(), 4, "{xs:?}");
+    assert!((xs[3] - 6.0).abs() < 1e-6, "{xs:?}");
+    // Shared out: two copies up to 10 m, at 5 and 10.
+    h.key(Key::Escape);
+    h.app.ed.selection = [Element::Wall(w)].into_iter().collect();
+    command(&mut h, "fila");
+    command(&mut h, "2");
+    h.click_at(p(0.0, 0.0));
+    command(&mut h, "r");
+    h.click_at(p(10.0, 0.0));
+    let xs: Vec<f64> = h.model().walls().map(|x| x.start.x).collect();
+    assert!(xs.iter().any(|x| (x - 5.0).abs() < 1e-6), "{xs:?}");
+    assert!(xs.iter().any(|x| (x - 10.0).abs() < 1e-6), "{xs:?}");
+}

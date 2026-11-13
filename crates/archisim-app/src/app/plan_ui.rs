@@ -67,6 +67,7 @@ impl ArchiSimApp {
         self.draw_team(&painter, rect);
         self.draw_origin(&painter, rect);
         self.draw_selection(&painter, rect);
+        self.draw_underlay_pick(&painter, rect);
         self.draw_cte_route(&painter, rect);
         self.draw_temp_dims(&painter, rect);
         self.draw_anchor_drag(&painter, rect);
@@ -294,6 +295,10 @@ impl ArchiSimApp {
         self.space_held = ctx.input(|i| i.key_down(Key::Space));
         let raw = self.view.to_model(rect, pos);
         let reach = self.view.to_metres(REACH);
+        if self.underlay_pick.is_some() {
+            self.underlay_cursor(ctx, raw, reach);
+            return;
+        }
         let model = self.ed.model();
         match self.tool {
             Tool::Cad => self.cad_cursor(ctx, raw, reach),
@@ -568,6 +573,43 @@ impl ArchiSimApp {
                 } else {
                     s = self.track_at(d.from, s);
                 }
+                // Its corners, middles and centre line up with those of
+                // what is around (moving), or the side pulled does
+                // (stretching), unless snapped to a point or Shift held.
+                self.object_guides.clear();
+                let lining = matches!(d.grip, Grip::Body | Grip::ObjectSize { .. })
+                    && d.typed.is_empty()
+                    && !ctx.input(|i| i.modifiers.shift)
+                    && matches!(
+                        s.kind,
+                        SnapKind::Free | SnapKind::OnEdge | SnapKind::Aligned
+                    );
+                if lining {
+                    let moving: Vec<Point2> = if d.grip == Grip::Body {
+                        self.ed
+                            .selection
+                            .iter()
+                            .filter_map(|e| crate::pick::outline(&self.ed, *e))
+                            .flat_map(|o| super::nudge::key_points(&o))
+                            .collect()
+                    } else {
+                        vec![d.from]
+                    };
+                    if !moving.is_empty() && moving.len() < 400 {
+                        let around = self.points_around(s.point, 12.0);
+                        let (fix, guides) = super::nudge::align_points(
+                            &moving,
+                            &around,
+                            s.point - d.from,
+                            self.view.to_metres(TRACK_REACH),
+                        );
+                        s = Snap::at(s.point + fix, s.kind);
+                        self.object_guides = guides;
+                    }
+                }
+                let Some(d) = &self.drag else {
+                    return;
+                };
                 self.cursor = Some(s);
                 self.hover = None;
                 self.hover_grip = None;
@@ -640,6 +682,9 @@ impl ArchiSimApp {
         });
         if self.drag.is_some() {
             self.keyboard_while_dragging(ctx, &events, enter, escape, backspace);
+            return;
+        }
+        if self.underlay_keys(ctx) || self.nudge_keys(ctx, None) {
             return;
         }
         if ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, Key::F8)) {
@@ -1043,6 +1088,14 @@ impl ArchiSimApp {
     }
 
     pub(super) fn clicks(&mut self, ctx: &egui::Context, response: &egui::Response, rect: Rect) {
+        if self.underlay_pick.is_some() {
+            if response.clicked_by(PointerButton::Primary) {
+                if let Some(c) = self.cursor {
+                    self.underlay_click(c.point);
+                }
+            }
+            return;
+        }
         let shift = ctx.input(|i| i.modifiers.shift || i.modifiers.command);
         // The values of the temporary dimensions and the flip arrows come
         // before the tool, as in Revit.
@@ -1919,6 +1972,16 @@ impl ArchiSimApp {
                 fmt_angle(delta.y.atan2(delta.x))
             )
         };
+        // Stretching an object: its size as it will be.
+        if let (Grip::ObjectSize { .. }, Some((_, _, Ok(polys)))) = (d.grip, &self.drag_preview) {
+            if let Some(o) = polys.first().filter(|o| o.len() >= 4) {
+                text = format!(
+                    "{action}  {} × {}",
+                    crate::units::fmt_len(o[0].distance(o[1])),
+                    crate::units::fmt_len(o[1].distance(o[2]))
+                );
+            }
+        }
         if let Some(p) = problem {
             text.push_str(&format!("\nNo se puede: {p}"));
         }
@@ -2388,8 +2451,14 @@ impl ArchiSimApp {
     /// horizontal, vertical or at 45°, a blue line across the view through
     /// its start says so (Revit's and ArchiCAD's tracking line).
     pub(super) fn draw_tracking(&self, painter: &egui::Painter, rect: Rect) {
-        // Alignment guides: from the point they come from, past the cursor.
-        for (from, to) in &self.guides {
+        // Alignment guides: from the point they come from, past the cursor;
+        // and while moving or stretching, those of its corners.
+        let object_guides: &[(Point2, Point2)] = if self.drag.is_some() {
+            &self.object_guides
+        } else {
+            &[]
+        };
+        for (from, to) in self.guides.iter().chain(object_guides) {
             let Some(dir) = (*to - *from).normalized() else {
                 continue;
             };

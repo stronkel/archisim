@@ -69,7 +69,9 @@ impl ArchiSimApp {
             Some(pos) => {
                 let raw = self.view.to_model(rect, pos);
                 let reach = self.view.to_metres(REACH);
-                if self.tool == Tool::Cad {
+                if self.underlay_pick.is_some() {
+                    self.underlay_cursor(&ctx, raw, reach);
+                } else if self.tool == Tool::Cad {
                     self.cad_cursor(&ctx, raw, reach);
                 } else if let Some(d) = self.drag.clone() {
                     // Moving or copying what is selected: it snaps to the
@@ -124,6 +126,7 @@ impl ArchiSimApp {
         self.draw_sketch_candidate(&ctx, &painter, rect);
         self.draw_selection(&painter, rect);
         self.draw_temp_dims(&painter, rect);
+        self.draw_underlay_pick(&painter, rect);
         self.draw_cad(&painter, rect);
         self.draw_drag_preview(&painter, rect);
         self.draw_tracking(&painter, rect);
@@ -174,6 +177,9 @@ impl ArchiSimApp {
         {
             self.toggle_ortho();
         }
+        if self.underlay_keys(ctx) || self.nudge_keys(ctx, None) {
+            return;
+        }
         if self.drag.is_some() && self.tool != Tool::Cad {
             // A distance typed while dragging, and Enter or Esc.
             self.keyboard_while_dragging(ctx, &events, enter, escape, backspace);
@@ -201,6 +207,14 @@ impl ArchiSimApp {
         rect: Rect,
         id: DraftViewId,
     ) {
+        if self.underlay_pick.is_some() {
+            if response.clicked_by(PointerButton::Primary) {
+                if let Some(c) = self.cursor {
+                    self.underlay_click(c.point);
+                }
+            }
+            return;
+        }
         if self.tool == Tool::Cad {
             self.cad_clicks(ctx, response, rect);
             return;
@@ -508,6 +522,7 @@ impl ArchiSimApp {
                 .map_or_else(|| "—".to_string(), |(_, n)| n.clone())
         };
         let mut changed = false;
+        let mut act: Option<(usize, super::underlay_ui::UnderlayMode)> = None;
         group(
             ui,
             &format!("underlays-{}-{}", salt.0, salt.1),
@@ -522,6 +537,63 @@ impl ArchiSimApp {
                 let mut remove = None;
                 for (i, u) in list.iter_mut().enumerate() {
                     ui.label(egui::RichText::new(name_of(u.source)).strong());
+                    row(
+                        ui,
+                        "Visible",
+                        "Apagado no se ve, pero no pierde dónde va",
+                        |ui, _| {
+                            let mut on = !u.hidden;
+                            if ui.switch(&mut on, "").changed() {
+                                u.hidden = !on;
+                                changed = true;
+                            }
+                        },
+                    );
+                    row(
+                        ui,
+                        "Bloqueado",
+                        "Con el candado no se mueve, gira ni escala",
+                        |ui, _| {
+                            if ui.switch(&mut u.locked, "").changed() {
+                                changed = true;
+                            }
+                        },
+                    );
+                    // With the mouse: moved, fitted by two points or scaled
+                    // by a length it should have.
+                    use super::underlay_ui::UnderlayMode as M;
+                    ui.add_enabled_ui(!u.locked, |ui| {
+                        ui.horizontal_wrapped(|ui| {
+                            if ui
+                                .button("Mover…")
+                                .on_hover_text("Punto base y destino, con enganches al calco y al modelo")
+                                .clicked()
+                            {
+                                act = Some((i, M::Move));
+                            }
+                            if ui
+                                .button("Encajar…")
+                                .on_hover_text("Dos puntos del calco y dónde van: lo mueve y lo gira")
+                                .clicked()
+                            {
+                                act = Some((i, M::Fit { scale: false }));
+                            }
+                            if ui
+                                .button("Encajar y escalar…")
+                                .on_hover_text("Igual, y además lo escala para que el segundo punto caiga en su sitio")
+                                .clicked()
+                            {
+                                act = Some((i, M::Fit { scale: true }));
+                            }
+                            if ui
+                                .button("Escalar por medida…")
+                                .on_hover_text("Dos puntos del calco y cuánto mide eso de verdad")
+                                .clicked()
+                            {
+                                act = Some((i, M::Measure));
+                            }
+                        });
+                    });
                     row(
                         ui,
                         "Color",
@@ -550,7 +622,29 @@ impl ArchiSimApp {
                             changed = true;
                         }
                     });
+                    let free = !u.locked;
+                    row(ui, "Escala", "Tamaño del calco (1 = el suyo)", |ui, w| {
+                        let mut k = u.scale;
+                        if ui
+                            .add_enabled(
+                                free,
+                                egui::DragValue::new(&mut k)
+                                    .speed(0.001)
+                                    .range(0.001..=1000.0)
+                                    .max_decimals(4),
+                            )
+                            .changed()
+                            && k > 0.0
+                        {
+                            u.scale = k;
+                            changed = true;
+                        }
+                        let _ = w;
+                    });
                     for (label, axis) in [("Mover X (m)", 0), ("Mover Y (m)", 1)] {
+                        if !free {
+                            continue;
+                        }
                         row(ui, label, "", |ui, w| {
                             let mut v = if axis == 0 { u.offset.x } else { u.offset.y };
                             if ui
@@ -574,6 +668,10 @@ impl ArchiSimApp {
                         "Girar (°)",
                         "Sobre su origen, antes de moverlo",
                         |ui, w| {
+                            if !free {
+                                ui.label(format!("{:.2}", u.rotation.to_degrees()));
+                                return;
+                            }
                             let mut deg = u.rotation.to_degrees();
                             if ui
                                 .add_sized(
@@ -607,6 +705,16 @@ impl ArchiSimApp {
                 });
             },
         );
+        if let Some((i, mode)) = act {
+            let host = match own {
+                UnderlaySource::Level(l) => Some(super::underlay_ui::UnderlayHost::Level(l)),
+                UnderlaySource::Drafting(d) => Some(super::underlay_ui::UnderlayHost::Drafting(d)),
+                UnderlaySource::Section(_) => None,
+            };
+            if let Some(host) = host {
+                self.start_underlay_pick(host, i, mode);
+            }
+        }
         changed
     }
 

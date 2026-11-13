@@ -1008,6 +1008,13 @@ pub(crate) struct Underlay {
     /// Only this rectangle of the source (version 52): `[[x, y], [x, y]]`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub crop: Option<[Xy; 2]>,
+    /// Version 112: its scale, and whether locked or switched off.
+    #[serde(default = "one", skip_serializing_if = "is_one")]
+    pub scale: f64,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub locked: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub hidden: bool,
 }
 
 /// The underlays of a level's plan (version 48).
@@ -1037,6 +1044,9 @@ impl Underlay {
             offset: xy(u.offset),
             rotation: u.rotation,
             crop: u.crop.map(|[a, b]| [xy(a), xy(b)]),
+            scale: u.scale,
+            locked: u.locked,
+            hidden: u.hidden,
         }
     }
 
@@ -1059,6 +1069,9 @@ impl Underlay {
             offset: pt(self.offset),
             rotation: self.rotation,
             crop: self.crop.map(|[a, b]| [pt(a), pt(b)]),
+            scale: self.scale,
+            locked: self.locked,
+            hidden: self.hidden,
         })
     }
 }

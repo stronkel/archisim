@@ -757,6 +757,151 @@ impl Command for Fillet {
     }
 }
 
+// ---- FILA ---------------------------------------------------------------------------
+
+/// Copies of the selection in a row (any element: boxes, pillars,
+/// furniture): how many, then a base point and a second point, which is
+/// the step between copies or, with «Repartir», where the last one goes.
+#[derive(Default)]
+pub struct Row {
+    items: Option<BTreeSet<Element>>,
+    count: Option<usize>,
+    base: Option<Point2>,
+    /// The second point is the last copy, the rest shared out between.
+    spread: bool,
+}
+
+impl Row {
+    fn steps(&self, to: Point2) -> Vec<Point2> {
+        let (Some(n), Some(b)) = (self.count, self.base) else {
+            return Vec::new();
+        };
+        let d = to - b;
+        (1..=n)
+            .map(|i| {
+                if self.spread {
+                    d * (i as f64 / n as f64)
+                } else {
+                    d * i as f64
+                }
+            })
+            .collect()
+    }
+}
+
+impl Command for Row {
+    fn name(&self) -> &'static str {
+        "FILA"
+    }
+
+    fn start(&mut self, cx: &Ctx<'_, dyn Geo + '_>, _st: &mut CadSettings) -> Step {
+        let sel = take_selection(cx);
+        if !sel.is_empty() {
+            self.items = Some(sel);
+        }
+        Step::Next
+    }
+
+    fn prompt(&self) -> Prompt {
+        if self.items.is_none() {
+            return Prompt::new("Designe objetos e Intro", Want::Select);
+        }
+        match (self.count, self.base) {
+            (None, _) => Prompt::new("Número de copias", Want::Value).default("3"),
+            (Some(_), None) => Prompt::new("Punto base", Want::Point),
+            (Some(_), Some(_)) => Prompt::new(
+                if self.spread {
+                    "Dónde va la última copia (las demás, repartidas)"
+                } else {
+                    "Segundo punto: la distancia entre copias"
+                },
+                Want::Point,
+            )
+            .opts(&[opt("R", "Repartir sí/no")]),
+        }
+    }
+
+    fn feed(&mut self, input: Input, cx: &Ctx<'_, dyn Geo + '_>, _st: &mut CadSettings) -> Step {
+        if self.items.is_none() {
+            if input == Input::Enter {
+                let sel = take_selection(cx);
+                if sel.is_empty() {
+                    return Step::Refuse("No hay nada seleccionado.".into());
+                }
+                self.items = Some(sel);
+            }
+            return Step::Next;
+        }
+        if self.count.is_none() {
+            let n = match &input {
+                Input::Value(v) => parse_number(v),
+                Input::Enter => Some(3.0),
+                _ => None,
+            };
+            return match n {
+                Some(n) if (1.0..=500.0).contains(&n) => {
+                    self.count = Some(n.round() as usize);
+                    Step::Next
+                }
+                _ => Step::Refuse("Escriba cuántas copias (1 a 500).".into()),
+            };
+        }
+        match input {
+            Input::Option("R") => {
+                self.spread = !self.spread;
+                Step::Next
+            }
+            Input::Point(p) if self.base.is_none() => {
+                self.base = Some(p);
+                Step::Next
+            }
+            Input::Point(p) => {
+                if self.base.is_some_and(|b| b.distance(p) < 1e-6) {
+                    return Step::Refuse("Los dos puntos coinciden.".into());
+                }
+                let items = self.items.clone().unwrap_or_default();
+                let changes = self
+                    .steps(p)
+                    .into_iter()
+                    .map(|d| Change::Transform {
+                        items: items.clone(),
+                        t: Transform::translate(d),
+                        copy: true,
+                    })
+                    .collect();
+                Step::Done(Some(Changes {
+                    label: "Copiar en fila",
+                    changes,
+                }))
+            }
+            Input::Enter => Step::Done(None),
+            _ => Step::Next,
+        }
+    }
+
+    fn base(&self) -> Option<Point2> {
+        self.base
+    }
+
+    fn preview(&self, cx: &Ctx<'_, dyn Geo + '_>, _st: &CadSettings) -> Vec<Shape> {
+        let mut out = Vec::new();
+        for d in self.steps(cx.cursor) {
+            for e in self.items.iter().flatten() {
+                if let Some(o) = crate::pick::outline(cx.geo, *e) {
+                    let n = o.len();
+                    for i in 0..n {
+                        out.push(Shape::Line {
+                            a: o[i] + d,
+                            b: o[(i + 1) % n] + d,
+                        });
+                    }
+                }
+            }
+        }
+        out
+    }
+}
+
 // ---- MATRIZ -------------------------------------------------------------------------
 
 /// Arrays of the selection (any element): rectangular or polar.
@@ -793,8 +938,8 @@ impl Command for Array {
                 match self.values.len() {
                     0 => "Número de filas",
                     1 => "Número de columnas",
-                    2 => "Distancia entre filas (mm, negativa hacia abajo)",
-                    _ => "Distancia entre columnas (mm, negativa a la izquierda)",
+                    2 => "Distancia entre filas (negativa hacia abajo)",
+                    _ => "Distancia entre columnas (negativa a la izquierda)",
                 },
                 Want::Value,
             ),
