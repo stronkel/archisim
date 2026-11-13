@@ -225,7 +225,7 @@ impl ArchiSimApp {
         ui.add_space(4.0);
         props::note(
             ui,
-            "Escribe valores en la línea de órdenes (bajo el dibujo): 3000,2000 · @1500,0 · @2000<45 · o una distancia en la dirección del cursor. Intro o Espacio aceptan; Esc termina.",
+            "Escribe valores en la línea de órdenes (bajo el dibujo): 3000;2000 · @1500;0 · @2000<45 · o una distancia en la dirección del cursor. Intro o Espacio aceptan; Esc termina.",
         );
     }
 

@@ -190,7 +190,7 @@ Lo que falta para montar una vivienda con detalle de fabricación y trabajar có
 
 **M20 · El despiece a mano, cara a cara.** Hecho (11/11/2026; formato versión 109). Pedido de Antonio: dibujar él la composición de cada fachada (la placa exterior y el Tabihaus) en lugar de la regla del material, con la junta ya fijada, y controlar el acento y las piezas de las juntas entre cajas, que se colocan en obra.
 - **Dónde**: propiedades del muro → «Despiece a mano»: una fila por cada capa de placas, con «Dibujar el despiece…» y, si ya está hecho, «Volver a la regla».
-- **Cómo**: se abre el alzado de la cara visto desde fuera, como «Dividir cara», con las juntas que da la regla del material como líneas de boceto para empezar. Cada línea es una junta: corta las piezas que cruza de lado a lado (llevándola hasta otra junta o el borde, con 2 cm de margen); una que se queda corta no corta nada. Se dibuja con las órdenes de siempre (Línea, Desfase, Recortar, Mover, Copiar…), también en diagonal. Las piezas se ven mientras se dibuja con su medida (120×270).
+- **Cómo**: se abre el alzado de la cara visto desde fuera, como «Dividir cara», con las juntas que da la regla del material como líneas de boceto para empezar. Cada línea es una junta: corta las piezas que cruza de lado a lado (llevándola hasta otra junta o el borde, con 5 cm de margen); una que se queda corta no corta nada. Se dibuja con las órdenes de siempre (Línea, Desfase, Recortar, Mover, Copiar…), también en diagonal. Las piezas se ven mientras se dibuja con su medida (120×270).
 - **Piezas**: en la cinta, «Acento» (clic en una pieza: pasa al material de acento, que se elige en la barra de opciones; empieza con el acento del material o una madera), «En obra» (se deja fuera de la fábrica) y «Normal». Otro clic lo deshace.
 - **La junta** es del material: «Junta (mm)» en su despiece (6 mm la cerámica y la madera, 0 el Tabihaus). En 3D cada pieza va con la junta abierta alrededor.
 - **Lo que sigue**: las placas pieza a pieza, la compra (las piezas en obra salen aparte, «En obra», en la caja que las lleva), los pedidos de fábrica, `tableros.csv` (columna «Dónde»: fábrica o en obra), el 3D, los alzados y el render. Se copia con las cajas tipo y los módulos (en simetría, reflejado).
@@ -203,7 +203,19 @@ Lo que falta para montar una vivienda con detalle de fabricación y trabajar có
   - **Planos de despiece** (Archivo → Exportar → «Despiece a mano de las fachadas…», `archisim despiece-planos <proyecto> [carpeta]`): una hoja A3 por cara compuesta a mano, vista desde fuera, con cada pieza y su marca (las de obra en naranja, las pintadas en su color), los huecos, las juntas acotadas abajo y a un lado y la tabla de piezas (marca, material, medida, fábrica u obra) con los totales por material.
   - **Forjados y falsos techos en planta**: el mismo grupo «Despiece a mano» en sus propiedades. «Dibujar…» abre el boceto sobre la planta (empieza sin líneas): cada línea que cruza el forjado de lado a lado es una junta, y las piezas se pintan, se dejan en obra o se reparten igual que en los muros. Lo siguen las placas pieza a pieza, la compra, `tableros.csv` y los pedidos; en 3D, los forjados siguen como capa continua.
   - **Plantillas**: «Guardar como plantilla…» ya no se lleva los despieces a mano (antes una plantilla de un proyecto con caras despiezadas no se podía abrir).
-- **Pendiente**: el despiece de forjados y techos en 3D y en los planos de despiece; empezar el boceto de un forjado con las juntas de su regla.
+- **Cuarta vuelta (13/11/2026, sin cambios de formato)**, lo que pidió Antonio al probarlo:
+  - **Quitar** (antes «Normal»): clic o arrastrar; la pieza pierde la pintura y la marca de obra.
+  - **Los huecos se ven como huecos** en el boceto (gris claro con su aspa, «hueco»): ninguna pieza los tapa y no se pintan.
+  - **La pieza bajo el cursor se resalta** con su ancho × alto mientras se pinta, se marca o se reparte.
+  - **Forzados y rastreo en el boceto en alzado**: final, punto medio, intersección y perpendicular de las juntas, del borde de la cara y de las jambas, antepechos y dinteles, y de las juntas de las capas de al lado (en azul discontinuo); con su marca verde, al dibujar, al mover y al copiar, también arrastrando la línea con la flecha.
+  - **Cotas azules**: con una junta elegida, su distancia a la línea siguiente a cada lado; clic en la cifra, se escribe otra (0,2 o 20cm) y la junta se mueve.
+  - **Mover con precisión**: al arrastrar sale la distancia y el ángulo junto al cursor y las líneas en su sitio nuevo; un número tecleado mientras se arrastra (con coma decimal) es la distancia, y con Intro se suelta. En la línea de órdenes, `0,2` es una distancia con coma decimal (antes se leía como el punto 0;2) y las coordenadas van con punto y coma (`2;1`).
+  - **Juntas cada…** (cinta, «Piezas»): el paso en la barra de opciones (1,20 por defecto), verticales u horizontales; clic en una jamba, un borde o una junta (se engancha) y salen las juntas a ese paso hasta los dos bordes.
+  - **Matriz** en las órdenes del boceto: copias de las líneas elegidas a paso fijo.
+  - **Una junta que se queda corta por menos de 5 cm** cuenta como que llega (antes 2 cm).
+  - **Forjados y techos** empiezan el boceto con las juntas de la regla de su material.
+  - **Despiece a mano en la cinta**: al elegir un muro, un forjado o un falso techo, el grupo «Despiece a mano» con un botón por capa de placas, «Capa 1 · Placa cerámica»; en Propiedades, cada capa también por su material.
+- **Pendiente**: el despiece de forjados y techos en 3D y en los planos de despiece.
 
 ## 3 bis. Cómo se organiza: componentes, cajas tipo y vivienda (9/11/2026)
 

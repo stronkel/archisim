@@ -999,7 +999,7 @@ impl ArchiSimApp {
 
     /// While dragging: a typed distance and Enter drop the selection that
     /// far towards the cursor; Esc cancels.
-    fn keyboard_while_dragging(
+    pub(super) fn keyboard_while_dragging(
         &mut self,
         ctx: &egui::Context,
         events: &[egui::Event],
@@ -1853,7 +1853,7 @@ impl ArchiSimApp {
 
     /// The selection being dragged: the outlines it would have, the line
     /// from where it was grabbed to the cursor, and the distance.
-    fn draw_drag_preview(&self, painter: &egui::Painter, rect: Rect) {
+    pub(super) fn draw_drag_preview(&self, painter: &egui::Painter, rect: Rect) {
         let (Some(d), Some(c)) = (&self.drag, self.cursor) else {
             return;
         };
@@ -2387,7 +2387,7 @@ impl ArchiSimApp {
     /// The tracking line: when the line being drawn runs exactly
     /// horizontal, vertical or at 45°, a blue line across the view through
     /// its start says so (Revit's and ArchiCAD's tracking line).
-    fn draw_tracking(&self, painter: &egui::Painter, rect: Rect) {
+    pub(super) fn draw_tracking(&self, painter: &egui::Painter, rect: Rect) {
         // Alignment guides: from the point they come from, past the cursor.
         for (from, to) in &self.guides {
             let Some(dir) = (*to - *from).normalized() else {
@@ -2432,7 +2432,7 @@ impl ArchiSimApp {
         ));
     }
 
-    fn draw_cursor(&self, painter: &egui::Painter, rect: Rect) {
+    pub(super) fn draw_cursor(&self, painter: &egui::Painter, rect: Rect) {
         let cad_points = self.tool == Tool::Cad
             && matches!(
                 self.cad_want(),
@@ -2443,7 +2443,9 @@ impl ArchiSimApp {
                 && !(self.tool == Tool::Slab && self.slab_settings.wand)
                 && !(self.tool == Tool::Zone && self.zone_wand())
                 && !(self.tool == Tool::Roof && self.roof_wand());
-        let (true, Some(c)) = (points || self.drag.is_some(), self.cursor) else {
+        let stepping =
+            self.sketch.as_ref().and_then(|s| s.piece) == Some(super::sketch_ui::PieceMode::Step);
+        let (true, Some(c)) = (points || stepping || self.drag.is_some(), self.cursor) else {
             return;
         };
         let p = self.view.to_screen(rect, c.point);

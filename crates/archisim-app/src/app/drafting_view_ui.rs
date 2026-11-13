@@ -71,6 +71,37 @@ impl ArchiSimApp {
                 let reach = self.view.to_metres(REACH);
                 if self.tool == Tool::Cad {
                     self.cad_cursor(&ctx, raw, reach);
+                } else if let Some(d) = self.drag.clone() {
+                    // Moving or copying what is selected: it snaps to the
+                    // lines of the view, with the tracking lines, and the
+                    // moved lines follow the cursor.
+                    let s = self.drafting_snap(&ctx, id, raw, reach, Some(d.from), &d.skip);
+                    self.cursor = Some(s);
+                    self.hover = None;
+                    let variant = ctx.input(|i| i.modifiers.command);
+                    let to = d.target(s.point);
+                    let fresh = self
+                        .drag_preview
+                        .as_ref()
+                        .is_some_and(|p| p.0 == to && p.1 == variant);
+                    if !fresh {
+                        let drag = crate::drag::Drag {
+                            grip: d.grip,
+                            from: d.from,
+                            to,
+                            variant,
+                        };
+                        let ghost = crate::drag::preview(&self.ed, &self.ed.selection, &drag)
+                            .map_err(|e| crate::units::explain(&e));
+                        self.drag_preview = Some((to, variant, ghost));
+                    }
+                } else if self.sketch.as_ref().and_then(|s| s.piece)
+                    == Some(super::sketch_ui::PieceMode::Step)
+                {
+                    // «Juntas cada…» starts at a jamb, an edge or a joint.
+                    self.cursor =
+                        Some(self.drafting_snap(&ctx, id, raw, reach, None, &BTreeSet::new()));
+                    self.hover = None;
                 } else {
                     self.cursor = Some(Snap::at(raw, SnapKind::Free));
                     self.hover = crate::pick::pick_drafts(self.ed.model(), view, raw, reach);
@@ -92,7 +123,11 @@ impl ArchiSimApp {
         self.draw_sketch(&painter, rect);
         self.draw_sketch_candidate(&ctx, &painter, rect);
         self.draw_selection(&painter, rect);
+        self.draw_temp_dims(&painter, rect);
         self.draw_cad(&painter, rect);
+        self.draw_drag_preview(&painter, rect);
+        self.draw_tracking(&painter, rect);
+        self.draw_cursor(&painter, rect);
         if let (Some(a), Some(c)) = (self.window_start, self.cursor) {
             let r = Rect::from_two_pos(
                 self.view.to_screen(rect, a),
@@ -106,6 +141,7 @@ impl ArchiSimApp {
                 StrokeKind::Inside,
             );
         }
+        self.temp_edit_ui(&ctx);
         if let (true, Some(c)) = (self.tool == Tool::Cad, self.cursor) {
             let p = self.view.to_screen(rect, c.point);
             let s = Stroke::new(1.0, ACCENT);
@@ -138,6 +174,11 @@ impl ArchiSimApp {
         {
             self.toggle_ortho();
         }
+        if self.drag.is_some() && self.tool != Tool::Cad {
+            // A distance typed while dragging, and Enter or Esc.
+            self.keyboard_while_dragging(ctx, &events, enter, escape, backspace);
+            return;
+        }
         if self.command_keys(&events, enter, escape, backspace, space) {
             return;
         }
@@ -164,11 +205,24 @@ impl ArchiSimApp {
             self.cad_clicks(ctx, response, rect);
             return;
         }
+        // The value of a blue dimension, before anything else.
+        if response.clicked_by(PointerButton::Primary) {
+            if let Some(pos) = response.interact_pointer_pos() {
+                if self.click_temp_controls(rect, pos) {
+                    return;
+                }
+            }
+        }
         // A face composed by hand: a click marks a piece.
         if self.sketch_marking() {
             if response.clicked_by(PointerButton::Primary) {
                 if let Some(pos) = response.interact_pointer_pos() {
-                    let p = self.view.to_model(rect, pos);
+                    let stepping = self.sketch.as_ref().and_then(|s| s.piece)
+                        == Some(super::sketch_ui::PieceMode::Step);
+                    let p = match (stepping, self.cursor) {
+                        (true, Some(c)) => c.point,
+                        _ => self.view.to_model(rect, pos),
+                    };
                     self.sketch_mark_at(p);
                 }
             } else if response.dragged_by(PointerButton::Primary) {
@@ -225,33 +279,35 @@ impl ArchiSimApp {
                 );
                 match on {
                     Some(e) if self.ed.selection.contains(&e) => {
+                        // Grabbed by the nearest point of the line, snapped
+                        // to its ends or middle, so it lands exactly.
+                        let reach = self.view.to_metres(REACH);
+                        let from = crate::snap::snap_view(
+                            self.ed.model(),
+                            ViewRef::Drafting(id),
+                            o,
+                            reach,
+                            &[],
+                            self.snap_filter,
+                            None,
+                        )
+                        .point;
                         self.drag = Some(DragState {
                             grip: crate::drag::Grip::Body,
-                            from: o,
+                            from,
                             typed: String::new(),
-                            skip: [e].into_iter().collect(),
+                            skip: self.ed.selection.clone(),
                         });
+                        self.drag_preview = None;
                     }
                     _ => self.window_start = Some(o),
                 }
             }
         }
         if response.drag_stopped() {
-            if let (Some(d), Some(c)) = (self.drag.take(), self.cursor) {
-                let delta = archisim_draft::Transform::translate(c.point - d.from);
+            if let (Some(_), Some(c)) = (&self.drag, self.cursor) {
                 let copy = ctx.input(|i| i.modifiers.command);
-                let step = crate::cad::Changes {
-                    label: if copy { "Copiar" } else { "Mover" },
-                    changes: vec![crate::cad::Change::Transform {
-                        items: self.ed.selection.clone(),
-                        t: delta,
-                        copy,
-                    }],
-                };
-                let st = self.cad_settings.clone();
-                if let Err(e) = self.ed.apply_cad(ViewRef::Drafting(id), &st, &step) {
-                    self.complain(format!("No se puede: {e}."));
-                }
+                self.finish_drag(c.point, copy);
             }
             if let (Some(a), Some(c)) = (self.window_start.take(), self.cursor) {
                 let found = crate::pick::in_window_drafts(
@@ -552,5 +608,42 @@ impl ArchiSimApp {
             },
         );
         changed
+    }
+
+    /// Where the cursor snaps in a drafting view (the elevation of a sketch
+    /// too), from `base` if something is being placed or moved: the ends,
+    /// middles and crossings of its lines, square to them, and the
+    /// tracking lines; Shift keeps to 45°, and orthogonal mode (F8) to the
+    /// horizontal or the vertical.
+    pub(super) fn drafting_snap(
+        &self,
+        ctx: &egui::Context,
+        id: DraftViewId,
+        raw: Point2,
+        reach: f64,
+        base: Option<Point2>,
+        skip: &BTreeSet<Element>,
+    ) -> Snap {
+        let extra: Vec<Point2> = base.into_iter().collect();
+        let mut s = crate::snap::snap_view_except(
+            self.ed.model(),
+            ViewRef::Drafting(id),
+            raw,
+            reach,
+            &extra,
+            self.snap_filter,
+            base,
+            skip,
+        );
+        if let Some(b) = base {
+            if self.cad_settings.ortho && matches!(s.kind, SnapKind::Free | SnapKind::OnEdge) {
+                s = Snap::at(crate::cad::ortho(b, s.point), SnapKind::Constrained);
+            } else if ctx.input(|i| i.modifiers.shift) {
+                s = crate::snap::constrain(b, s);
+            } else if self.snap_filter.tracking {
+                s = crate::snap::track(b, s, self.view.to_metres(TRACK_REACH));
+            }
+        }
+        s
     }
 }

@@ -1949,9 +1949,9 @@ impl ArchiSimApp {
             to,
             variant,
         };
-        let dist = fmt_mm(d.from.distance(to));
+        let dist = crate::units::fmt_len(d.from.distance(to));
         match self.ed.drag(&drag) {
-            Ok(label) => self.say(format!("{label}: {dist} mm.")),
+            Ok(label) => self.say(format!("{label}: {dist}.")),
             Err(e) => self.complain(format!("No se puede: {e}.")),
         }
     }

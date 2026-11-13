@@ -718,10 +718,12 @@ pub fn parse_angle(text: &str) -> Option<f64> {
     parse_number(t).map(f64::to_radians)
 }
 
-fn pair(text: &str) -> Option<(f64, f64)> {
+/// Two lengths: `x;y`, or `x,y` only where a single number makes no sense
+/// (after `@` or `#`). A lone `0,2` is a length with a decimal comma.
+fn pair(text: &str, comma: bool) -> Option<(f64, f64)> {
     let (a, b) = if text.contains(';') {
         text.split_once(';')?
-    } else if text.matches(',').count() == 1 {
+    } else if comma && text.matches(',').count() == 1 {
         text.split_once(',')?
     } else {
         return None;
@@ -731,8 +733,9 @@ fn pair(text: &str) -> Option<(f64, f64)> {
 
 /// A point typed in the command line, as in AutoCAD (millimetres, or with
 /// `m`/`cm`):
-/// - `3000,2000` or `3000;2000` absolute (also `#3000,2000`);
-/// - `@3000,2000` relative to the last point;
+/// - `3000;2000` absolute (also `#3000,2000`); a lone `0,2` is a
+///   distance with a decimal comma, not a point;
+/// - `@3000;2000` or `@3000,2000` relative to the last point;
 /// - `@3000<45` polar from the last point (degrees);
 /// - `3000` alone: that distance from the last point towards the cursor.
 pub fn parse_point(text: &str, base: Option<Point2>, cursor: Point2) -> Option<Point2> {
@@ -747,11 +750,12 @@ pub fn parse_point(text: &str, base: Option<Point2>, cursor: Point2) -> Option<P
             let a = parse_angle(a)?;
             return Some(b + Point2::new(a.cos(), a.sin()) * d);
         }
-        let (x, y) = pair(rel)?;
+        let (x, y) = pair(rel, true)?;
         return Some(b + Point2::new(x, y));
     }
+    let hash = t.starts_with('#');
     let abs = t.strip_prefix('#').unwrap_or(&t);
-    if let Some((x, y)) = pair(abs) {
+    if let Some((x, y)) = pair(abs, hash) {
         return Some(Point2::new(x, y));
     }
     if let Some((d, a)) = abs.split_once('<') {
@@ -843,7 +847,11 @@ mod tests {
     fn coordinates_as_in_autocad() {
         let base = Some(p(1.0, 1.0));
         let cur = p(10.0, 1.0);
-        assert_eq!(parse_point("3000,2000", base, cur), Some(p(3.0, 2.0)));
+        assert_eq!(parse_point("#3000,2000", base, cur), Some(p(3.0, 2.0)));
+        // A lone decimal comma is a distance towards the cursor.
+        assert!(parse_point("200,5", base, cur)
+            .unwrap()
+            .approx_eq(p(1.2005, 1.0)));
         assert_eq!(parse_point("3000;2000", base, cur), Some(p(3.0, 2.0)));
         assert_eq!(parse_point("@3000,-500", base, cur), Some(p(4.0, 0.5)));
         let polar = parse_point("@2000<90", base, cur).unwrap();

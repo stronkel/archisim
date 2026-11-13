@@ -513,7 +513,7 @@ fn lay_with(face: Rect, laying: &Laying, shift: f64, holes: &[Rect]) -> Vec<Laid
 
 /// How near a joint line must reach the edge of a piece to split it, m: a
 /// line drawn to another one is taken as reaching it.
-pub const JOINT_REACH: f64 = 0.02;
+pub const JOINT_REACH: f64 = 0.05;
 
 /// A polygon on a face, in the face's axes.
 type FacePoly = Vec<(f64, f64)>;
@@ -1106,6 +1106,73 @@ pub fn rule_joints(
     }
     for (x, a, b) in join(upright) {
         out.push((Point2::new(x, a), Point2::new(x, b)));
+    }
+    out
+}
+
+/// The joints a slab's or a ceiling's layer has by its material's rule, in
+/// plan: where a layer composed by hand starts from.
+pub fn plan_rule_joints(
+    model: &Model,
+    host: archisim_core::PlanHost,
+    layer: usize,
+) -> Vec<(Point2, Point2)> {
+    let Some((outline, _)) = model.plan_host_outline(host) else {
+        return Vec::new();
+    };
+    if outline.len() < 3 {
+        return Vec::new();
+    }
+    let (o, u, v) = plan_axes(outline);
+    let local: Vec<(f64, f64)> = outline
+        .iter()
+        .map(|p| {
+            let d = *p - o;
+            (d.x * u.x + d.y * u.y, d.x * v.x + d.y * v.y)
+        })
+        .collect();
+    let face = bounds(&local);
+    let mut m = model.clone();
+    let _ = m.set_board_plan(host, layer, None);
+    let pieces = match host {
+        archisim_core::PlanHost::Slab(s) => slab_boards(&m, s),
+        archisim_core::PlanHost::Ceiling(c) => ceiling_boards(&m, c),
+    };
+    let on_edge = |x: f64, a: f64, b: f64| (x - a).abs() < 1e-4 || (x - b).abs() < 1e-4;
+    let mut level: Vec<(f64, f64, f64)> = Vec::new();
+    let mut upright: Vec<(f64, f64, f64)> = Vec::new();
+    for p in pieces.into_iter().filter(|p| p.layer == layer) {
+        let (x0, y0) = p.at;
+        let (x1, y1) = (x0 + p.size.0, y0 + p.size.1);
+        for y in [y0, y1] {
+            if !on_edge(y, face[1], face[3]) {
+                level.push((y, x0, x1));
+            }
+        }
+        for x in [x0, x1] {
+            if !on_edge(x, face[0], face[2]) {
+                upright.push((x, y0, y1));
+            }
+        }
+    }
+    let join = |mut l: Vec<(f64, f64, f64)>| {
+        l.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.total_cmp(&b.1)));
+        let mut out: Vec<(f64, f64, f64)> = Vec::new();
+        for s in l {
+            match out.last_mut() {
+                Some(k) if (k.0 - s.0).abs() < 1e-4 && s.1 <= k.2 + 1e-4 => k.2 = k.2.max(s.2),
+                _ => out.push(s),
+            }
+        }
+        out
+    };
+    let back = |x: f64, y: f64| o + u * x + v * y;
+    let mut out = Vec::new();
+    for (y, a, b) in join(level) {
+        out.push((back(a, y), back(b, y)));
+    }
+    for (x, a, b) in join(upright) {
+        out.push((back(x, a), back(x, b)));
     }
     out
 }
@@ -2320,6 +2387,10 @@ mod tests {
             warn.iter().any(|w| w.kind == FaceWarningKind::TooBig),
             "{warn:?}"
         );
+        // By its rule, the boards of OSB give joints inside it.
+        let rule = plan_rule_joints(&m, host, 0);
+        assert!(!rule.is_empty());
+        assert!(rule.iter().all(|(a, b)| a.distance(*b) > 0.1));
     }
 
     fn plaster_wall_of(length: f64, height: f64) -> (Model, archisim_core::WallId) {

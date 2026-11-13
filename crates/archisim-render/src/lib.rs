@@ -533,8 +533,9 @@ impl Scene {
                 continue;
             }
             if node.count > 0 {
-                for i in node.start as usize..(node.start + node.count) as usize {
-                    let t = &self.tris[i];
+                let first = node.start as usize;
+                let last = (node.start + node.count) as usize;
+                for (i, t) in self.tris.iter().enumerate().take(last).skip(first) {
                     // Möller–Trumbore.
                     let p = cross(d, t.e2);
                     let det = dot(t.e1, p);

@@ -167,9 +167,14 @@ impl Sketch {
             }
             SketchTarget::BoardPlan(host, layer) => {
                 model.plan_host_layers(host)?.get(layer)?;
+                // Started from the joints of its material's rule.
                 let (joints, marks, joint) = match model.board_plan(host, layer) {
                     Some(f) => (f.joints.clone(), f.marks.clone(), f.joint),
-                    None => (Vec::new(), Vec::new(), None),
+                    None => (
+                        archisim_geom::boards::plan_rule_joints(model, host, layer),
+                        Vec::new(),
+                        None,
+                    ),
                 };
                 return Some(Sketch {
                     target,

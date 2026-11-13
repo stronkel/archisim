@@ -600,6 +600,30 @@ pub fn snap_view(
     filter: SnapFilter,
     from: Option<Point2>,
 ) -> Snap {
+    snap_view_except(
+        model,
+        view,
+        cursor,
+        tolerance,
+        extra,
+        filter,
+        from,
+        &BTreeSet::new(),
+    )
+}
+
+/// [`snap_view`] leaving out some elements (the ones being dragged).
+#[allow(clippy::too_many_arguments)]
+pub fn snap_view_except(
+    model: &archisim_core::Model,
+    view: archisim_core::ViewRef,
+    cursor: Point2,
+    tolerance: f64,
+    extra: &[Point2],
+    filter: SnapFilter,
+    from: Option<Point2>,
+    skip: &BTreeSet<Element>,
+) -> Snap {
     let mut points: Vec<(Point2, SnapKind)> =
         extra.iter().map(|p| (*p, SnapKind::Endpoint)).collect();
     let mut curves = Vec::new();
@@ -608,7 +632,7 @@ pub fn snap_view(
         view,
         cursor,
         tolerance,
-        &BTreeSet::new(),
+        skip,
         &mut points,
         &mut curves,
     );
