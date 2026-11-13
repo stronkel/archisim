@@ -1406,8 +1406,8 @@ impl Model {
         }
         // A joined side that is partly on the outside: open, a hole in the
         // façade; with the wall, part of it is façade.
-        for side in 0..4 {
-            if !b.sides[side].joined() || n_is_none(&self.box_neighbours(id), side) {
+        for (side, state) in b.sides.iter().copied().enumerate() {
+            if !state.joined() || n_is_none(&self.box_neighbours(id), side) {
                 continue;
             }
             let exposed = self.box_side_exposed(id, side);
@@ -1415,7 +1415,7 @@ impl Model {
                 issues.push(BoxIssue::PartlyExposed {
                     side,
                     exposed,
-                    open: b.sides[side] == SideState::Open,
+                    open: state == SideState::Open,
                 });
             }
         }
