@@ -53,6 +53,8 @@ pub fn tower_on(
 }
 
 /// A tower of glass: a lobby, the curtain wall, the screen of its plant.
+// `i` is both the face of the polygon and its side.
+#[allow(clippy::needless_range_loop)]
 fn glass_tower(
     b: &mut Builder,
     plan: &Plan,

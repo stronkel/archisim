@@ -418,6 +418,8 @@ fn roof_over(
 
 /// A flat roof over the whole plan: the slab, the parapets (a balustrade
 /// to the street), and what stands on it.
+// `i` is both the face of the polygon and its side.
+#[allow(clippy::needless_range_loop)]
 fn flat_roof(b: &mut Builder, plan: &Plan, l: &Look, o: &Shape, top: f64) {
     let poly = &plan.poly;
     let n = poly.len();
