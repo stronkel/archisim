@@ -45,6 +45,13 @@ pub enum Target {
     /// The length of the wall's drawn line (from `from` metres along it
     /// to its end), changed from its end.
     WallLength { wall: WallId, from: f64 },
+    /// The clear distance from a straight line of the drawing to the next
+    /// line beside it; `towards` is the unit vector from this line to that
+    /// one (the joints of a sketch, the face's edges, the jambs).
+    DraftLine {
+        draft: archisim_core::DraftId,
+        towards: Point2,
+    },
 }
 
 /// Which dimension of the selection a [`TempDim`] is: stays the same when
@@ -58,6 +65,9 @@ pub enum Slot {
     WallLength(WallId),
     /// The clear distance on the wall's exterior side (0) or interior (1).
     WallSide(WallId, u8),
+    /// From a straight line of the drawing to the next on its left (0) or
+    /// on its right (1).
+    DraftSide(archisim_core::DraftId, u8),
 }
 
 /// The witness ends of a dimension moved by hand.
@@ -120,8 +130,69 @@ pub fn temp_dims_anchored<G: Geo + ?Sized>(
     match selection.iter().next() {
         Some(Element::Opening(id)) => opening_dims(geo, *id, anchors),
         Some(Element::Wall(id)) => wall_dims(model, *id, anchors),
+        Some(Element::Draft(id)) => draft_dims(model, *id),
         _ => Vec::new(),
     }
+}
+
+/// The two dimensions of a straight line of the drawing: from its middle,
+/// square to it, to the nearest line on each side (any line of its view
+/// that the square crosses: other joints, the face's outline, the jambs
+/// and heads of the openings).
+pub fn draft_dims(model: &Model, id: archisim_core::DraftId) -> Vec<TempDim> {
+    let Some(d) = model.draft(id) else {
+        return Vec::new();
+    };
+    let archisim_core::Shape::Line { a, b } = d.shape else {
+        return Vec::new();
+    };
+    let Some(u) = (b - a).normalized() else {
+        return Vec::new();
+    };
+    let n = Point2::new(-u.y, u.x);
+    let m = (a + b) * 0.5;
+    let mut best = [None::<f64>, None::<f64>];
+    for other in model.drafts_in(d.view) {
+        if other.id == id || !model.draft_visible(other) {
+            continue;
+        }
+        for seg in archisim_draft::boundary_segs(&other.shape) {
+            let archisim_draft::Seg::Line { a: p, b: q } = seg else {
+                continue;
+            };
+            // Where the square through the middle crosses p–q.
+            let e = q - p;
+            let den = n.x * e.y - n.y * e.x;
+            if den.abs() < 1e-9 {
+                continue;
+            }
+            let w = p - m;
+            let t = (w.x * e.y - w.y * e.x) / den;
+            let s = (w.x * n.y - w.y * n.x) / den;
+            if !(-1e-9..=1.0 + 1e-9).contains(&s) || t.abs() < 1e-6 || t.abs() > MAX_REACH {
+                continue;
+            }
+            let k = usize::from(t < 0.0);
+            if best[k].is_none_or(|b| t.abs() < b) {
+                best[k] = Some(t.abs());
+            }
+        }
+    }
+    best.iter()
+        .enumerate()
+        .filter_map(|(k, d)| {
+            let d = (*d)?;
+            let towards = if k == 0 { n } else { n * -1.0 };
+            Some(TempDim {
+                a: m + towards * d,
+                b: m,
+                side: Point2::new(0.0, 0.0),
+                value: d,
+                target: Target::DraftLine { draft: id, towards },
+                slot: Slot::DraftSide(id, k as u8),
+            })
+        })
+        .collect()
 }
 
 /// Where the own end of a dimension goes when dropped at `p`: the nearest
@@ -152,7 +223,7 @@ pub fn own_choice(model: &Model, slot: Slot, p: Point2) -> Option<f64> {
                 .into_iter()
                 .min_by(|a, b| (a - o).abs().total_cmp(&(b - o).abs()))
         }
-        Slot::WallLength(_) => None,
+        Slot::WallLength(_) | Slot::DraftSide(..) => None,
     }
 }
 
@@ -418,6 +489,21 @@ pub fn edit(model: &Model, dim: &TempDim, value: f64) -> Option<(BTreeSet<Elemen
                     grip: Grip::Body,
                     from: w.start,
                     to: w.start - towards * change,
+                    variant: false,
+                },
+            ))
+        }
+        Target::DraftLine { draft, towards } => {
+            let d = model.draft(draft)?;
+            let archisim_core::Shape::Line { a, .. } = d.shape else {
+                return None;
+            };
+            Some((
+                [Element::Draft(draft)].into_iter().collect(),
+                Drag {
+                    grip: Grip::Body,
+                    from: a,
+                    to: a - towards * change,
                     variant: false,
                 },
             ))

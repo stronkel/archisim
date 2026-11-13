@@ -6,6 +6,32 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-13 (159) · v0.83: dibujar el despiece con precisión
+
+Rama `bloque/despiece-4`, con pull request. Versión 0.83.0. Sin cambios de formato.
+
+- **Qué se hizo.** Lo que pidió Antonio al probar la 0.82 y lo que propuse y aceptó:
+  - **«Quitar»** en lugar de «Normal».
+  - **Los huecos se dibujan como huecos** en el boceto (`live_holes`; no se pintan) y **la pieza bajo el cursor se resalta** con su medida.
+  - **Vista de dibujo, forzados.** No dibujaba la marca del forzado ni el rastreo (`draw_overlays` estaba vacío); ahora lo hace (`draw_cursor`, `draw_tracking`). Arrastrar con la flecha se engancha (`drafting_snap`, `snap::snap_view_except`), enseña las líneas movidas y la distancia (`draw_drag_preview`), acepta una distancia tecleada (`keyboard_while_dragging`) y suelta con `finish_drag`. Las órdenes con punto base enseñan distancia y ángulo junto al cursor.
+  - **Cotas azules en las líneas del dibujo** (`temp_dims::draft_dims`, `Target::DraftLine`, `Slot::DraftSide`), también en las vistas de dibujo.
+  - **Línea de órdenes.** `0,2` es una distancia con coma decimal; las coordenadas, `x;y` (o `@x,y`, `#x,y`). Era el fallo de «desplazar 0,2».
+  - **«Juntas cada…»** (`PieceMode::Step`, `step_joints`) y **Matriz** en el boceto.
+  - **`JOINT_REACH`** pasa a 5 cm.
+  - **Forjados y techos.** Empiezan con las juntas de su regla (`boards::plan_rule_joints`).
+  - **Juntas de las capas de al lado** en azul discontinuo en el boceto (`neighbour_joints`, capa «Boceto · capa vecina»).
+  - **Grupo «Despiece a mano» en la cinta** con «Capa N · material», y lo mismo en Propiedades.
+- **Pendiente.** No he podido manejar la app con el ratón en el servidor (sin `xdotool`); lo de pantalla está cubierto por las pruebas, pero conviene mirarlo. Forjados y techos despiezados a mano en 3D y en los planos de despiece.
+- **Qué debe probar Antonio.**
+  1. Actualiza con Ayuda → «Buscar actualizaciones…».
+  2. Elige un muro de fachada. En la cinta, «Despiece a mano» → «Capa 1 · …».
+  3. Mira que las ventanas salen como huecos con su aspa y que la pieza bajo el cursor se resalta con su medida.
+  4. Elige una junta: deben salir dos cotas azules. Haz clic en una, escribe 0,6 e Intro.
+  5. Arrastra otra junta con la flecha: mira la marca verde de los forzados al pasar por una jamba y la distancia junto al cursor. Escribe 0,2 e Intro.
+  6. Prueba «Juntas cada…» con 1,20 haciendo clic en una jamba.
+  7. «Quitar» sobre una pieza pintada.
+  8. En un suelo de caja, «Despiece a mano»: debe empezar con las juntas de su placa.
+
 ## 2026-11-12 (158) · v0.82: el despiece a mano, tercera vuelta (copiar, repartir, avisos, planos, forjados y techos)
 
 Rama `bloque/despiece-3` (sobre `bloque/actualizar`), con pull request. Versión 0.82.0. Formato versión 111 (`board_plans`: forjados y techos despiezados a mano; los ficheros anteriores se abren igual).

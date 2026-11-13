@@ -3445,14 +3445,14 @@ fn lines_rectangles_and_typed_coordinates() {
     // Enter on an empty line repeats LINEA; Esc keeps what was drawn.
     h.key(Key::Enter);
     assert_eq!(h.app.cad.as_ref().map(|c| c.name()), Some("LINEA"));
-    command(&mut h, "10000,0");
-    command(&mut h, "12000,0");
+    command(&mut h, "10000;0");
+    command(&mut h, "12000;0");
     h.key(Key::Escape);
     assert_eq!(drafts(&h).len(), 4);
     assert!(h.app.cad.is_none());
     // A rectangle by its size.
     command(&mut h, "rec");
-    command(&mut h, "0,5000");
+    command(&mut h, "0;5000");
     command(&mut h, "@4000,3000");
     let rect = drafts(&h).last().unwrap().shape.clone();
     assert!((archisim_draft::area(&rect).unwrap() - 12.0).abs() < 1e-9);
@@ -3668,8 +3668,8 @@ fn vertices_added_dragged_and_removed() {
     let mut h = Harness::new(Editor::new_project());
     h.app.keys_autocad = true;
     command(&mut h, "rellrect");
-    command(&mut h, "0,0");
-    command(&mut h, "4000,3000");
+    command(&mut h, "0;0");
+    command(&mut h, "4000;3000");
     let fill = drafts(&h)[0].clone();
     let area = |h: &Harness| archisim_draft::area(&drafts(h)[0].shape).unwrap();
     assert!((area(&h) - 12.0).abs() < 1e-9);
@@ -3712,8 +3712,8 @@ fn offset_trim_hatch_and_move() {
     let mut h = Harness::new(Editor::new_project());
     h.app.keys_autocad = true;
     command(&mut h, "rec");
-    command(&mut h, "0,0");
-    command(&mut h, "4000,3000");
+    command(&mut h, "0;0");
+    command(&mut h, "4000;3000");
     // EQUIDIST 500 outwards.
     command(&mut h, "eq");
     command(&mut h, "500");
@@ -3725,8 +3725,8 @@ fn offset_trim_hatch_and_move() {
     assert!((archisim_draft::area(&d[1].shape).unwrap() - 20.0).abs() < 1e-9);
     // A line across both, trimmed between them on the right.
     command(&mut h, "l");
-    command(&mut h, "-2000,1500");
-    command(&mut h, "6000,1500");
+    command(&mut h, "-2000;1500");
+    command(&mut h, "6000;1500");
     h.key(Key::Enter);
     command(&mut h, "rr");
     h.click_at(p(4.25, 1.5));
@@ -3992,7 +3992,7 @@ fn angular_radius_and_arc_dimensions() {
     let id = drafts(&h).pop().unwrap().id;
     h.app.ed.selection = [Element::Draft(id)].into_iter().collect();
     command(&mut h, "es");
-    command(&mut h, "8000,2000");
+    command(&mut h, "8000;2000");
     command(&mut h, "2");
     let archisim_core::Shape::Dim(m) = h.model().draft(id).unwrap().shape else {
         panic!()
@@ -10496,7 +10496,9 @@ fn ribbon_panels_follow_what_is_in_hand() {
     h.app.ed.selection = [Element::Wall(wid)].into_iter().collect();
     h.frame();
     let panels = h.app.ribbon_panels();
-    let last = panels.last().unwrap();
+    // (Its layers of boards, if it has any, come after, in «Despiece a
+    // mano».)
+    let last = panels.iter().rev().find(|p| p.title != "Despiece a mano").unwrap();
     assert_eq!(last.title, "Muro");
     assert!(last.contextual);
     let names: Vec<&str> = last.items.iter().map(|i| i.name.as_str()).collect();
@@ -11713,9 +11715,122 @@ fn a_slab_is_composed_by_hand_in_plan() {
         "{:?}",
         h.app.message.as_ref().map(|m| &m.text)
     );
+    // It started from the joints of the plasterboard's rule, and has the
+    // two drawn across too.
     let f = h.model().board_plan(host, 0).unwrap();
-    assert_eq!(f.joints.len(), 2);
+    assert!(f.joints.len() > 2, "{:?}", f.joints);
     let pieces = archisim_geom::boards::slab_boards(h.model(), s);
-    assert_eq!(pieces.len(), 3, "{pieces:?}");
+    assert!(pieces.len() >= 3, "{pieces:?}");
+    assert!(pieces.iter().all(|b| b.size.0 <= 1.2 + 1e-6), "{pieces:?}");
     assert_eq!(pieces.iter().filter(|b| b.on_site).count(), 1);
+}
+
+/// The sketch of a face: a joint line selected has its blue dimensions to
+/// the lines beside it, and typing one moves it; «Juntas cada…» fills the
+/// face from a point; a typed «0,2» moves 0,2 m.
+#[test]
+fn a_joint_is_placed_exactly() {
+    let mut h = Harness::new(Editor::new_project());
+    let lv = h.app.ed.level;
+    let w = h
+        .app
+        .ed
+        .transact("Muro", |m| {
+            let cer = m.add_material(
+                "Placa cerámica",
+                "ceramic",
+                [190, 120, 90],
+                archisim_core::CutPattern::Solid,
+            );
+            let t = m.add_wall_type(
+                "Fachada",
+                archisim_core::WallFunction::Exterior,
+                vec![archisim_core::Layer {
+                    material: cer,
+                    thickness: 0.012,
+                    function: archisim_core::LayerFunction::Finish,
+                }],
+            )?;
+            m.add_wall(archisim_core::NewWall {
+                wall_type: t,
+                level: lv,
+                start: Point2::new(0.0, 0.0),
+                end: Point2::new(4.0, 0.0),
+                reference: archisim_core::ReferenceLine::Center,
+                height: 2.5,
+                base_offset: 0.0,
+                bulge: 0.0,
+                top: archisim_core::WallTop::Unconnected,
+            })
+        })
+        .unwrap();
+    h.frame();
+    h.app
+        .start_sketch(crate::sketch::SketchTarget::BoardFace(w, 0));
+    h.frame();
+    let (view, layer) = {
+        let st = h.app.sketch.as_ref().unwrap();
+        (st.view, st.layer)
+    };
+    // Clear the rule's joints and draw one at 1,00 (seen from outside, x
+    // is mirrored: the sketch shows the wall's start on the right).
+    let ids: Vec<_> = h
+        .model()
+        .drafts_in(view)
+        .filter(|d| d.layer == layer)
+        .map(|d| d.id)
+        .collect();
+    let mir = h.app.sketch.as_ref().unwrap().mirror;
+    let x = move |along: f64| mir.map_or(along, |l| l - along);
+    let xa = x(1.0);
+    let line = h
+        .app
+        .ed
+        .transact("Junta", |m| {
+            for id in &ids {
+                m.remove_draft(*id)?;
+            }
+            m.add_draft(archisim_core::NewDraft::new(
+                view,
+                layer,
+                archisim_core::Shape::Line {
+                    a: Point2::new(xa, 0.0),
+                    b: Point2::new(xa, 2.5),
+                },
+            ))
+        })
+        .unwrap();
+    h.app.ed.selection.clear();
+    h.app.ed.selection.insert(Element::Draft(line));
+    h.frame();
+    let dims = h.app.shown_temp_dims();
+    assert_eq!(dims.len(), 2, "{dims:?}");
+    let mut values: Vec<f64> = dims.iter().map(|d| d.value).collect();
+    values.sort_by(f64::total_cmp);
+    assert!(
+        (values[0] - 1.0).abs() < 1e-6 && (values[1] - 3.0).abs() < 1e-6,
+        "{values:?}"
+    );
+    // Typed: the joint goes to 1,20 from the wall's start.
+    let to_start = dims
+        .iter()
+        .find(|d| (d.value - 1.0).abs() < 1e-6)
+        .copied()
+        .unwrap();
+    h.app.apply_temp_edit(&to_start, "1,2m");
+    let at = match h.model().draft(line).unwrap().shape {
+        archisim_core::Shape::Line { a, .. } => a.x,
+        _ => unreachable!(),
+    };
+    assert!((at - x(1.2)).abs() < 1e-6, "{at}");
+    // «Juntas cada…» 0,60 from the joint: every 0,60 across the face.
+    if let Some(st) = h.app.sketch.as_mut() {
+        st.step = (0.6, true);
+    }
+    h.app.set_piece_mode(super::sketch_ui::PieceMode::Step);
+    h.app.sketch_mark_at(Point2::new(x(1.2), 1.0));
+    let st = h.app.sketch.as_ref().unwrap();
+    let joints = h.app.live_joints(st);
+    // 0,00 · 0,60 · 1,20 · 1,80 · … · 3,60 inside a 4 m face: six joints.
+    assert_eq!(joints.len(), 6, "{joints:?}");
 }

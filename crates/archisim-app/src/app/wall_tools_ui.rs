@@ -208,9 +208,18 @@ impl ArchiSimApp {
                     Some((j, s)) => format!("A mano, {j} juntas, {s} en obra"),
                     None => "Por la regla".to_string(),
                 };
-                row(ui, &format!("Capa {}", i + 1), name, |ui, _| {
-                    ui.add(egui::Label::new(state).truncate())
-                        .on_hover_text(name.as_str());
+                // The layer by its material: «Capa 1 · Placa cerámica».
+                ui.add(
+                    egui::Label::new(
+                        egui::RichText::new(format!("Capa {} · {name}", i + 1))
+                            .size(12.0)
+                            .strong(),
+                    )
+                    .truncate(),
+                )
+                .on_hover_text(format!("Capa {} · {name}", i + 1));
+                row(ui, "Despiece", "", |ui, _| {
+                    ui.add(egui::Label::new(state).truncate());
                 });
                 row(ui, "", "", |ui, _| {
                     if ui
@@ -316,9 +325,18 @@ impl ArchiSimApp {
                     Some((j, s)) => format!("A mano, {j} juntas, {s} en obra"),
                     None => "Por la regla".to_string(),
                 };
-                row(ui, &format!("Capa {}", i + 1), name, |ui, _| {
-                    ui.add(egui::Label::new(state).truncate())
-                        .on_hover_text(name.as_str());
+                // The layer by its material: «Capa 1 · Placa cerámica».
+                ui.add(
+                    egui::Label::new(
+                        egui::RichText::new(format!("Capa {} · {name}", i + 1))
+                            .size(12.0)
+                            .strong(),
+                    )
+                    .truncate(),
+                )
+                .on_hover_text(format!("Capa {} · {name}", i + 1));
+                row(ui, "Despiece", "", |ui, _| {
+                    ui.add(egui::Label::new(state).truncate());
                 });
                 row(ui, "", "", |ui, _| {
                     if ui

@@ -50,7 +50,7 @@ pub(crate) struct SketchState {
     elevation: Option<(archisim_core::DraftViewId, DrawLayerId)>,
     /// The exterior face is seen from outside: its start on the right
     /// (`x` drawn as the wall's length minus `x`).
-    mirror: Option<f64>,
+    pub(super) mirror: Option<f64>,
     /// A face composed by hand: what a click on a piece does to it.
     pub piece: Option<PieceMode>,
     /// The material a click paints a piece with.
@@ -61,6 +61,8 @@ pub(crate) struct SketchState {
     /// «Repartir»: into how many pieces a click splits a piece, and
     /// whether with upright joints.
     pub split: (usize, bool),
+    /// «Juntas cada…»: the step, m, and whether the joints are upright.
+    pub step: (f64, bool),
 }
 
 /// What a click on a piece does, in a face composed by hand (M20).
@@ -74,6 +76,9 @@ pub enum PieceMode {
     Plain,
     /// Split into equal pieces (`SketchState::split`).
     Split,
+    /// Joints every so far from the point clicked, across the whole face
+    /// (`SketchState::step`).
+    Step,
 }
 
 /// How much of the rest of the drawing the sketch's veil hides (of 255).
@@ -150,6 +155,31 @@ fn wall_references(m: &archisim_core::Model, target: SketchTarget) -> Vec<Vec<Po
     out
 }
 
+/// The joints of the layers on either side of the one composed by hand,
+/// in the face's axes: shown dashed, to snap to and to keep off.
+fn neighbour_joints(m: &archisim_core::Model, target: SketchTarget) -> Vec<Vec<Point2>> {
+    let SketchTarget::BoardFace(w, layer) = target else {
+        return Vec::new();
+    };
+    let Some(t) = m.wall(w).and_then(|x| m.wall_type(x.wall_type)) else {
+        return Vec::new();
+    };
+    [layer.checked_sub(1), Some(layer + 1)]
+        .into_iter()
+        .flatten()
+        .filter(|i| {
+            t.layers.get(*i).is_some_and(|l| {
+                archisim_geom::boards::laying(m, l.material, l.thickness).is_some()
+            })
+        })
+        .flat_map(|i| archisim_geom::boards::layer_joints(m, w, i))
+        .map(|(a, b)| vec![a, b])
+        .collect()
+}
+
+/// The layer of the joints of the layers beside, in a sketch.
+pub const SKETCH_NEIGHBOUR_LAYER: &str = "Boceto · capa vecina";
+
 /// The colour of a sketch, as Revit's.
 pub(super) const SKETCH: Color32 = Color32::from_rgb(196, 30, 150);
 /// The sketch layer's name.
@@ -182,6 +212,11 @@ pub(super) const SKETCH_EDITS: &[(&str, &str, &str)] = &[
     ("Partir", "PARTEPUNTO", "Partir una línea en un punto"),
     ("Desfase", "EQUIDIST", "Una línea paralela a una distancia"),
     ("Mover", "DESPLAZA", "Mover las líneas elegidas"),
+    (
+        "Matriz",
+        "MATRIZ",
+        "Copias de las líneas elegidas a paso fijo, en filas y columnas",
+    ),
     ("Copiar", "COPIA", "Copiar las líneas elegidas"),
     ("Borrar", "BORRA", "Borrar las líneas elegidas"),
 ];
@@ -237,6 +272,7 @@ impl ArchiSimApp {
             _ => String::new(),
         };
         let references = wall_references(self.ed.model(), sketch.target);
+        let neighbours = neighbour_joints(self.ed.model(), sketch.target);
         let open = sketch.is_open();
         let mark = self.ed.undo_mark();
         let loops = sketch.loops.clone();
@@ -272,6 +308,27 @@ impl ArchiSimApp {
                             Shape::Line {
                                 a: mirrored(mirror, lp[i]),
                                 b: mirrored(mirror, lp[(i + 1) % n]),
+                            },
+                        ))?;
+                    }
+                }
+                if !neighbours.is_empty() {
+                    let dashed = match m.draw_layer_by_name(SKETCH_NEIGHBOUR_LAYER) {
+                        Some(l) => l.id,
+                        None => m.add_draw_layer(DrawLayer::new(
+                            SKETCH_NEIGHBOUR_LAYER,
+                            [70, 130, 200],
+                            0.13,
+                            LineStyle::Dashed,
+                        ))?,
+                    };
+                    for lp in &neighbours {
+                        m.add_draft(NewDraft::new(
+                            ViewRef::Drafting(v),
+                            dashed,
+                            Shape::Line {
+                                a: mirrored(mirror, lp[0]),
+                                b: mirrored(mirror, lp[1]),
                             },
                         ))?;
                     }
@@ -345,6 +402,7 @@ impl ArchiSimApp {
             accent,
             stroke: Vec::new(),
             split: (2, true),
+            step: (1.2, true),
         });
     }
 
@@ -572,8 +630,9 @@ impl ArchiSimApp {
             match st.piece {
                 Some(PieceMode::Paint) => "Clic o arrastrar sobre las piezas: se pintan con el material elegido (un clic en una ya pintada así la devuelve al de la capa).",
                 Some(PieceMode::OnSite) => "Clic o arrastrar sobre las piezas: se colocan en obra, fuera de la fábrica (un clic en una en obra la devuelve a fábrica).",
-                Some(PieceMode::Plain) => "Clic o arrastrar sobre las piezas: vuelven al material de la capa y a fábrica.",
+                Some(PieceMode::Plain) => "Quitar: clic o arrastrar sobre las piezas; pierden la pintura y la marca de obra y vuelven a ser de la capa, de fábrica.",
                 Some(PieceMode::Split) => "Clic en una pieza: se reparte en piezas iguales con juntas verticales u horizontales (en la barra de opciones).",
+                Some(PieceMode::Step) => "Clic en un punto (una jamba, un borde, una junta: se engancha): juntas a ese paso hasta los dos bordes de la cara.",
                 None => "Cada línea es una junta: corta las piezas que cruza de lado a lado (llévala hasta otra junta o el borde). Luego pinta piezas o márcalas en obra.",
             }
         } else if matches!(st.sketch.target, SketchTarget::RoadEdges(_)) {
@@ -702,6 +761,31 @@ impl ArchiSimApp {
         archisim_geom::boards::face_pieces(face, &self.live_joints(st))
     }
 
+    /// The doors, windows and holes of what is being composed, in the
+    /// same axes as [`Self::live_pieces`]: they are not pieces.
+    pub(super) fn live_holes(&self, st: &SketchState) -> Vec<Vec<(f64, f64)>> {
+        let m = self.ed.model();
+        match st.sketch.target {
+            SketchTarget::BoardFace(w, _) => archisim_geom::openings_in_wall(m, w)
+                .iter()
+                .map(|o| {
+                    let (a, b) = (o.t0, o.t1);
+                    vec![(a, o.sill), (b, o.sill), (b, o.head), (a, o.head)]
+                })
+                .collect(),
+            SketchTarget::BoardPlan(host, _) => m
+                .plan_host_outline(host)
+                .map(|(_, holes)| {
+                    holes
+                        .iter()
+                        .map(|h| h.iter().map(|p| (p.x, p.y)).collect())
+                        .collect()
+                })
+                .unwrap_or_default(),
+            _ => Vec::new(),
+        }
+    }
+
     /// The joints of a face composed by hand as they are drawn now, in the
     /// face's own axes (not mirrored).
     pub(super) fn live_joints(&self, st: &SketchState) -> Vec<(Point2, Point2)> {
@@ -779,6 +863,21 @@ impl ArchiSimApp {
             return;
         };
         let q = mirrored(st.mirror, p);
+        if mode == PieceMode::Step {
+            if !dragging {
+                let (step, upright) = st.step;
+                self.step_joints(q, step, upright);
+            }
+            return;
+        }
+        // Not through a door, a window or a hole: there is no piece there.
+        if self
+            .live_holes(st)
+            .iter()
+            .any(|h| archisim_geom::boards::inside_piece(h, (q.x, q.y)))
+        {
+            return;
+        }
         let pieces = self.live_pieces(st);
         let Some(poly) = pieces
             .into_iter()
@@ -798,11 +897,7 @@ impl ArchiSimApp {
             self.complain("Elige primero el material en «Pintar con» de la barra de opciones.");
             return;
         }
-        let n = poly.len() as f64;
-        let centre = Point2::new(
-            poly.iter().map(|v| v.0).sum::<f64>() / n,
-            poly.iter().map(|v| v.1).sum::<f64>() / n,
-        );
+        let centre = inner_point(&poly);
         let layer_material = sketch_layer(self.ed.model(), st.sketch.target).map(|l| l.material);
         let Some(st) = self.sketch.as_mut() else {
             return;
@@ -848,7 +943,7 @@ impl ArchiSimApp {
                 mark.material = None;
                 mark.on_site = false;
             }
-            PieceMode::Split => {}
+            PieceMode::Split | PieceMode::Step => {}
         }
         if mark.material.is_some() || mark.on_site {
             marks.push(mark);
@@ -931,6 +1026,89 @@ impl ArchiSimApp {
                     text,
                     egui::FontId::proportional(11.0),
                     Color32::from_gray(70),
+                );
+            }
+        }
+        // The doors, windows and holes, as what they are: no piece there.
+        for h in self.live_holes(st) {
+            let pts: Vec<egui::Pos2> = h
+                .iter()
+                .map(|v| {
+                    self.view
+                        .to_screen(rect, mirrored(st.mirror, Point2::new(v.0, v.1)))
+                })
+                .collect();
+            if pts.len() < 3 {
+                continue;
+            }
+            painter.add(egui::Shape::convex_polygon(
+                pts.clone(),
+                Color32::from_rgb(232, 238, 244),
+                Stroke::new(1.2, Color32::from_gray(110)),
+            ));
+            // The cross of an opening in elevation.
+            if pts.len() == 4 {
+                let s = Stroke::new(0.8, Color32::from_gray(150));
+                painter.line_segment([pts[0], pts[2]], s);
+                painter.line_segment([pts[1], pts[3]], s);
+            }
+            let (lo, hi) = pts.iter().fold(
+                (
+                    egui::pos2(f32::MAX, f32::MAX),
+                    egui::pos2(f32::MIN, f32::MIN),
+                ),
+                |(a, b), p| (a.min(*p), b.max(*p)),
+            );
+            if hi.x - lo.x > 40.0 && hi.y - lo.y > 20.0 {
+                painter.text(
+                    lo + (hi - lo) * 0.5,
+                    egui::Align2::CENTER_CENTER,
+                    match st.sketch.target {
+                        SketchTarget::BoardFace(..) => "hueco",
+                        _ => "hueco del forjado",
+                    },
+                    egui::FontId::proportional(11.0),
+                    Color32::from_gray(90),
+                );
+            }
+        }
+        // The piece under the cursor, when pieces are being marked: what a
+        // click would take, with its size.
+        if let (Some(_), Some(c)) = (st.piece, self.cursor) {
+            let q = mirrored(st.mirror, c.point);
+            let in_hole = self
+                .live_holes(st)
+                .iter()
+                .any(|h| archisim_geom::boards::inside_piece(h, (q.x, q.y)));
+            let under = self
+                .live_pieces(st)
+                .into_iter()
+                .find(|poly| archisim_geom::boards::inside_piece(poly, (q.x, q.y)));
+            if let (false, Some(poly)) = (in_hole, under) {
+                let mut ring: Vec<egui::Pos2> = poly
+                    .iter()
+                    .map(|v| {
+                        self.view
+                            .to_screen(rect, mirrored(st.mirror, Point2::new(v.0, v.1)))
+                    })
+                    .collect();
+                if let Some(f) = ring.first().copied() {
+                    ring.push(f);
+                }
+                painter.add(egui::Shape::line(ring, Stroke::new(2.5, ACCENT)));
+                let (x0, x1, y0, y1) = poly.iter().fold(
+                    (f64::MAX, f64::MIN, f64::MAX, f64::MIN),
+                    |(a, b, c, d), v| (a.min(v.0), b.max(v.0), c.min(v.1), d.max(v.1)),
+                );
+                self.draw_label(
+                    painter,
+                    rect,
+                    c.point,
+                    format!(
+                        "{} × {}",
+                        crate::units::fmt_len(x1 - x0),
+                        crate::units::fmt_len(y1 - y0)
+                    ),
                 );
             }
         }
@@ -1128,6 +1306,98 @@ impl ArchiSimApp {
         }
     }
 
+    /// The face (or the slab's box in plan) being composed, in the axes of
+    /// [`Self::live_pieces`]: left, bottom, right, top.
+    fn live_face(&self, st: &SketchState) -> Option<[f64; 4]> {
+        let m = self.ed.model();
+        match st.sketch.target {
+            SketchTarget::BoardFace(w, _) => {
+                let w = m.wall(w)?;
+                Some([0.0, w.base_offset, w.length(), w.base_offset + w.height])
+            }
+            SketchTarget::BoardPlan(host, _) => {
+                let (outline, _) = m.plan_host_outline(host)?;
+                Some(
+                    outline
+                        .iter()
+                        .fold([f64::MAX, f64::MAX, f64::MIN, f64::MIN], |r, p| {
+                            [r[0].min(p.x), r[1].min(p.y), r[2].max(p.x), r[3].max(p.y)]
+                        }),
+                )
+            }
+            _ => None,
+        }
+    }
+
+    /// «Juntas cada…»: joints every `step` from `q` (in the face's axes)
+    /// to both edges of the face, the one through `q` included, upright or
+    /// level, as sketch lines from edge to edge.
+    pub(super) fn step_joints(&mut self, q: Point2, step: f64, upright: bool) {
+        let Some(st) = self.sketch.as_ref() else {
+            return;
+        };
+        let Some(face) = self.live_face(st) else {
+            return;
+        };
+        if step < 0.05 {
+            return;
+        }
+        let (layer, view, mirror) = (st.layer, st.view, st.mirror);
+        let (lo, hi, at) = if upright {
+            (face[0], face[2], q.x)
+        } else {
+            (face[1], face[3], q.y)
+        };
+        // The joints already there, so none is drawn twice.
+        let have: Vec<f64> = self
+            .live_joints(st)
+            .iter()
+            .filter(|(a, b)| {
+                if upright {
+                    (a.x - b.x).abs() < 1e-3
+                } else {
+                    (a.y - b.y).abs() < 1e-3
+                }
+            })
+            .map(|(a, _)| if upright { a.x } else { a.y })
+            .collect();
+        let first = at - ((at - lo) / step).floor() * step;
+        let mut lines = Vec::new();
+        let mut v = first;
+        while v < hi - 1e-3 {
+            if v > lo + 1e-3 && !have.iter().any(|h| (h - v).abs() < 1e-3) {
+                lines.push(if upright {
+                    (Point2::new(v, face[1]), Point2::new(v, face[3]))
+                } else {
+                    (Point2::new(face[0], v), Point2::new(face[2], v))
+                });
+            }
+            v += step;
+        }
+        if lines.is_empty() {
+            self.say("Ya hay juntas a ese paso.");
+            return;
+        }
+        let n = lines.len();
+        let r = self.ed.transact("Juntas a paso fijo", |m| {
+            for (a, b) in &lines {
+                m.add_draft(NewDraft::new(
+                    view,
+                    layer,
+                    Shape::Line {
+                        a: mirrored(mirror, *a),
+                        b: mirrored(mirror, *b),
+                    },
+                ))?;
+            }
+            Ok(())
+        });
+        match r {
+            Ok(()) => self.say(format!("{n} juntas cada {}.", crate::units::fmt_len(step))),
+            Err(e) => self.complain(format!("No se pueden poner: {e}.")),
+        }
+    }
+
     /// Marks on site, at once, the pieces at the ends of the wall that meet
     /// a joint between boxes.
     pub(super) fn joint_pieces_on_site(&mut self) {
@@ -1181,6 +1451,20 @@ impl ArchiSimApp {
         let Some(st) = self.sketch.as_mut() else {
             return;
         };
+        if st.piece == Some(PieceMode::Step) {
+            ui.add_space(8.0);
+            ui.label("Juntas cada");
+            let mut text = crate::units::fmt_len(st.step.0);
+            let r = ui.add(egui::TextEdit::singleline(&mut text).desired_width(64.0));
+            if r.changed() {
+                if let Some(v) = crate::units::parse_length(&text).filter(|v| *v >= 0.05) {
+                    st.step.0 = v;
+                }
+            }
+            ui.selectable_value(&mut st.step.1, true, "verticales");
+            ui.selectable_value(&mut st.step.1, false, "horizontales");
+            return;
+        }
         if st.piece != Some(PieceMode::Split) {
             return;
         }
@@ -1192,4 +1476,29 @@ impl ArchiSimApp {
         ui.selectable_value(&mut st.split.1, true, "columnas");
         ui.selectable_value(&mut st.split.1, false, "filas");
     }
+}
+
+/// A point inside a piece, convex or not: its centre if it is inside,
+/// else the centre of the first of its corner triangles that is.
+pub(super) fn inner_point(poly: &[(f64, f64)]) -> Point2 {
+    let n = poly.len().max(1) as f64;
+    let c = (
+        poly.iter().map(|v| v.0).sum::<f64>() / n,
+        poly.iter().map(|v| v.1).sum::<f64>() / n,
+    );
+    if archisim_geom::boards::inside_piece(poly, c) || poly.len() < 3 {
+        return Point2::new(c.0, c.1);
+    }
+    for i in 0..poly.len() {
+        let (a, b, d) = (
+            poly[i],
+            poly[(i + 1) % poly.len()],
+            poly[(i + 2) % poly.len()],
+        );
+        let t = ((a.0 + b.0 + d.0) / 3.0, (a.1 + b.1 + d.1) / 3.0);
+        if archisim_geom::boards::inside_piece(poly, t) {
+            return Point2::new(t.0, t.1);
+        }
+    }
+    Point2::new(c.0, c.1)
 }

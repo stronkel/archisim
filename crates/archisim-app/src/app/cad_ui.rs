@@ -252,7 +252,7 @@ impl ArchiSimApp {
                         return;
                     }
                     if parse_length(v).is_none() {
-                        self.cmdline.log("Punto no válido: escribe x,y · @dx,dy · @distancia<ángulo · o una distancia.", true);
+                        self.cmdline.log("Punto no válido: escribe x;y · @dx;dy · @distancia<ángulo · o una distancia.", true);
                         return;
                     }
                 }
@@ -647,6 +647,23 @@ impl ArchiSimApp {
         if !self.cmdline.buffer.is_empty() {
             if let Some(c) = self.cursor {
                 self.draw_label(painter, rect, c.point, format!("{}▏", self.cmdline.buffer));
+            }
+        } else if let (Some(b), Some(c), Some(Want::Point)) =
+            (cmd.base(), self.cursor, self.cad_want())
+        {
+            // How far from the base point, as it is moved by hand.
+            let d = c.point - b;
+            if d.length() > 1e-6 {
+                self.draw_label(
+                    painter,
+                    rect,
+                    c.point,
+                    format!(
+                        "{}   {}",
+                        crate::units::fmt_len(d.length()),
+                        fmt_angle(d.y.atan2(d.x))
+                    ),
+                );
             }
         }
     }

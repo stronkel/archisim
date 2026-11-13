@@ -45,7 +45,13 @@ impl ArchiSimApp {
             || self.wall_tool.is_drawing()
             || self.slab_tool.is_drawing()
             || self.dim_tool.is_active()
-            || self.mode != ViewMode::Plan;
+            || !(self.mode == ViewMode::Plan
+                || matches!(self.mode, ViewMode::Drafting(_))
+                    && self
+                        .ed
+                        .selection
+                        .iter()
+                        .all(|e| matches!(e, Element::Draft(_))));
         // With the arrow, or with the tool that has just drawn the element
         // (as Revit leaves the last wall or door selected); other tools
         // keep their clicks.
@@ -83,6 +89,7 @@ impl ArchiSimApp {
     pub(super) fn anchor_at(&self, rect: Rect, pos: Pos2) -> Option<(Slot, End)> {
         self.shown_temp_dims()
             .iter()
+            .filter(|d| !matches!(d.slot, Slot::DraftSide(..)))
             .flat_map(|d| {
                 let (a, b, ..) = self.temp_layout(rect, d);
                 let own = !matches!(d.slot, Slot::WallLength(_));

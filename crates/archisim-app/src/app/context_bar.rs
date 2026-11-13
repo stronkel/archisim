@@ -1452,8 +1452,9 @@ impl ArchiSimApp {
                         vec![
                             piece(Glyph::Paint, "Pintar", PieceMode::Paint, "Clic o arrastrar sobre las piezas: se pintan con el material de «Pintar con», en la barra de opciones; un clic en una ya pintada así la devuelve al de la capa"),
                             piece(Glyph::ModularBox, "En obra", PieceMode::OnSite, "Clic o arrastrar sobre las piezas: se dejan fuera de la fábrica y se colocan en obra con las cajas montadas (salen aparte en la compra y en los pedidos)"),
-                            piece(Glyph::Convert, "Normal", PieceMode::Plain, "Clic o arrastrar sobre las piezas: vuelven al material de la capa y a fábrica"),
+                            piece(Glyph::Convert, "Quitar", PieceMode::Plain, "Quitar pintura y obra: clic o arrastrar sobre las piezas; vuelven al material de la capa y a fábrica"),
                             piece(Glyph::DivideFace, "Repartir", PieceMode::Split, "Clic en una pieza: se reparte en piezas iguales (cuántas, y en columnas o filas, en la barra de opciones)"),
+                            piece(Glyph::Grid, "Juntas cada…", PieceMode::Step, "Clic en un punto (una jamba, un borde, una junta): juntas a paso fijo hasta los dos bordes (el paso, en la barra de opciones)"),
                         ]
                         .into_iter()
                         .chain(
@@ -1629,14 +1630,69 @@ impl ArchiSimApp {
                 .hint("Cada línea del grupo, por su cuenta"),
             );
         }
-        if items.is_empty() {
+        // Its layers of boards, to compose by hand (M20): one button each,
+        // with the layer's material.
+        let host = match sel {
+            [Element::Wall(w)] => Some((Some(*w), None)),
+            [Element::Slab(s)] => Some((None, Some(archisim_core::PlanHost::Slab(*s)))),
+            [Element::Ceiling(c)] => Some((None, Some(archisim_core::PlanHost::Ceiling(*c)))),
+            _ => None,
+        };
+        let mut boards = Vec::new();
+        if let Some((wall, plan)) = host {
+            let m = self.ed.model();
+            let layers: Vec<archisim_core::Layer> = match (wall, plan) {
+                (Some(w), _) => m
+                    .wall(w)
+                    .and_then(|w| m.wall_type(w.wall_type))
+                    .map(|t| t.layers.clone())
+                    .unwrap_or_default(),
+                (_, Some(h)) => m.plan_host_layers(h).map(<[_]>::to_vec).unwrap_or_default(),
+                _ => Vec::new(),
+            };
+            for (i, l) in layers.iter().enumerate() {
+                if archisim_geom::boards::laying(m, l.material, l.thickness).is_none() {
+                    continue;
+                }
+                let name = m
+                    .material(l.material)
+                    .map_or_else(|| "?".to_string(), |x| x.name.clone());
+                let (target, by_hand) = match (wall, plan) {
+                    (Some(w), _) => (T::BoardFace(w, i), m.board_face(w, i).is_some()),
+                    (_, Some(h)) => (T::BoardPlan(h, i), m.board_plan(h, i).is_some()),
+                    _ => continue,
+                };
+                boards.push(
+                    Item::new(
+                        Mark::Glyph(Glyph::DivideFace),
+                        format!("Capa {} · {name}", i + 1),
+                        Size::Named,
+                        Act::Sketch(target),
+                    )
+                    .on(by_hand)
+                    .hint(if by_hand {
+                        "Despiece a mano de esta capa (ya compuesto): ábrelo para seguir"
+                    } else {
+                        "Despiece a mano de esta capa: se empieza con las juntas de la regla de su material"
+                    }),
+                );
+            }
+        }
+        if items.is_empty() && boards.is_empty() {
             return Vec::new();
         }
         let title = match selection_label(sel) {
             l if l.starts_with("Selección") => "Selección".to_string(),
             l => l.split(" (").next().unwrap_or("").to_string(),
         };
-        vec![Panel::new(title, 9, items).contextual()]
+        let mut out = Vec::new();
+        if !items.is_empty() {
+            out.push(Panel::new(title, 9, items).contextual());
+        }
+        if !boards.is_empty() {
+            out.push(Panel::new("Despiece a mano", 9, boards).contextual());
+        }
+        out
     }
 
     /// The tool and the type «Crear similar» would take from the

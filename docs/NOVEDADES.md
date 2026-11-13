@@ -2,7 +2,16 @@
 
 Lo que cambia en cada versión, en pocas líneas. ArchiSim enseña la parte de su versión antes de actualizarse (Ayuda → «Buscar actualizaciones…»), y la página de cada versión en GitHub la lleva también. El detalle, día a día, está en `BITACORA.md`.
 
-Cada versión empieza con una línea `## <versión>` (por ejemplo `## 0.82.0
+Cada versión empieza con una línea `## <versión>` (por ejemplo `## 0.83.0
+
+- **Dibujar el despiece con precisión.** En el boceto en alzado hay forzados (final, medio, intersección, perpendicular, jambas y juntas de la capa de al lado) y líneas de rastreo. Al elegir una junta salen sus cotas azules: se hace clic en la cifra y se escribe otra.
+- **Mover sabiendo cuánto.** Al arrastrar se ve la distancia junto al cursor; si escribes un número y pulsas Intro, se mueve justo eso. **0,2 ya es 0,2**: la coma es decimal; las coordenadas se escriben con punto y coma (2;1).
+- **Juntas cada…** Clic en una jamba o un borde y salen juntas a un paso fijo (1,20 por defecto) hasta los dos bordes. Y **Matriz** para copiar líneas a paso fijo.
+- **Los huecos se ven como huecos** en el despiece, y la pieza bajo el cursor se resalta con su medida.
+- **«Quitar»** (antes «Normal») borra la pintura y la marca de obra de una pieza.
+- **Despiece a mano en la cinta** al elegir un muro, un forjado o un techo, con cada capa por su material («Capa 1 · Placa cerámica»). Los forjados y techos empiezan con las juntas de su regla.
+
+## 0.82.0
 
 - **Despiece a mano, tercera vuelta.** Un despiece se copia a los muros iguales (también en simetría). Las piezas de las juntas entre cajas se marcan «en obra» de una vez. «Repartir» parte una pieza en tantas iguales como digas.
 - **Avisos del despiece.** Mientras dibujas, y en la Comprobación CTE: en rojo la pieza que no sale de una placa; en ámbar la de menos de 30 cm, la junta pegada a una jamba y la que cae sobre una junta de la capa de al lado.

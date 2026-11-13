@@ -70,7 +70,7 @@ En la barra inferior, como AutoCAD:
 - **Se escribe y se pulsa Intro o Espacio**: `L` línea, `PL` polilínea, `C` círculo, `A` arco, `REC` rectángulo, `D` desplazar, `CP` copiar, `GI` girar, `SI` simetría, `EQ` equidistancia, `RR` recortar, `AL` alargar, `EM` empalme, `CHA` chaflán, `MA` matriz, `ES` escala, `EST` estirar, `PA` partir, `JUN` juntar, `DESCOMP` descomponer, `B` borrar, `SB` sombreado, `TX` texto, `DI` distancia, `AA` área, `CA` capas… Valen también los nombres completos en español y las órdenes y alias en inglés (`LINE`, `MOVE`, `TRIM`, `O`, `TR`, `EX`…).
 - Las herramientas BIM también: `MURO`, `FORJADO`, `PUERTA`, `VENTANA`, `COTA`…
 - **Intro o Espacio con la línea vacía repite la última orden.** Esc cancela.
-- **Coordenadas** cuando se pide un punto: `3000,2000` absolutas, `@3000,2000` relativas, `@3000<45` polares, o solo `3000` en la dirección del cursor (entrada directa de distancia). En milímetros, como el resto de la interfaz; con `m` o `cm` detrás si se quiere.
+- **Coordenadas** cuando se pide un punto: `3000;2000` absolutas (o `#3000,2000`), `@3000;2000` o `@3000,2000` relativas, `@3000<45` polares, o solo una distancia en la dirección del cursor (entrada directa: `0,2` es 0,2 con coma decimal, no un punto). En la unidad del proyecto; con `m`, `cm` o `mm` detrás si se quiere.
 - La orden en curso dice qué espera y sus opciones entre corchetes: `CIRCULO Precise centro o [3P/2P]:`; las opciones se eligen escribiendo su letra o con un clic.
 - **Teclas inmediatas** (ArchiCAD) como alternativa: M, F, P, V, C, N activan las herramientas BIM al momento, como hasta ahora (interruptor en la barra inferior).
 
