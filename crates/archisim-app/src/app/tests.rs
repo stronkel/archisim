@@ -10498,7 +10498,11 @@ fn ribbon_panels_follow_what_is_in_hand() {
     let panels = h.app.ribbon_panels();
     // (Its layers of boards, if it has any, come after, in «Despiece a
     // mano».)
-    let last = panels.iter().rev().find(|p| p.title != "Despiece a mano").unwrap();
+    let last = panels
+        .iter()
+        .rev()
+        .find(|p| p.title != "Despiece a mano")
+        .unwrap();
     assert_eq!(last.title, "Muro");
     assert!(last.contextual);
     let names: Vec<&str> = last.items.iter().map(|i| i.name.as_str()).collect();
