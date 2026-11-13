@@ -6,6 +6,29 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-13 (160) · v0.84: calcos, flechas, guías, reflejar y copiar en fila
+
+Rama `bloque/mover-calcos`, con pull request. Versión 0.84.0. Formato versión 112: `scale`, `locked` y `hidden` en cada calco; los ficheros anteriores se abren igual.
+
+- **Qué se hizo.** Lo que pidió Antonio:
+  - **Calcos con el ratón.** `app/underlay_ui`: `UnderlayPick` con `UnderlayMode` Mover, Encajar (con o sin escala) y Escalar por medida. Los puntos se enganchan al calco (`underlay_points`: líneas de la vista de dibujo, muros y forjados de la planta) y al modelo. En el núcleo, `Underlay::place`, `source_of`, `fitted` y `scaled_about`. Escala, candado y visible en las propiedades; la escala se dibuja en `draw_underlays`.
+  - **Flechas del teclado.** `app/nudge` (`nudge_step` por el zoom; Mayúsculas ×10) en planta, vistas de dibujo y secciones (`section_ui::move_in_section`).
+  - **Guías de alineación al mover y estirar en planta.** `nudge::align_points`, `key_points`, `points_around`, `object_guides`. La medida nueva al estirar va en `draw_drag_preview`.
+  - **Reflejar sobre cualquier arista.** `revit::axis_near`: muros, forjados, cajas, techos, ejes, planos y líneas, también sin nada elegido. Vista previa del eje y de lo reflejado.
+  - **Copiar en fila.** `modify::Row`, orden `FILA`/`CF`, en la cinta.
+- **Pendiente.**
+  - Las mismas guías de alineación en alzado y sección (ahí ya se engancha a las esquinas).
+  - Enganche a las líneas de un calco que sea una sección.
+- **Qué debe probar Antonio.**
+  1. En una planta con un DXF como calco, ve a Propiedades → Calcos → «Mover…»: clic en una esquina del DXF y clic en la esquina de un muro.
+  2. «Encajar y escalar…»: dos puntos del DXF y dónde van.
+  3. «Escalar por medida…»: dos extremos de una cota del DXF y escribe su medida.
+  4. Pon el candado y comprueba que ya no deja moverlo.
+  5. Selecciona un muro o un mueble y muévelo con las flechas, de cerca y de lejos, y con Mayúsculas.
+  6. Arrastra un mueble cerca de otro: deben salir las guías azules.
+  7. Reflejar (MM) con clic en el canto de un forjado.
+  8. «Copiar en fila» con 3 copias.
+
 ## 2026-11-13 (159) · v0.83: dibujar el despiece con precisión
 
 Rama `bloque/despiece-4`, con pull request. Versión 0.83.0. Sin cambios de formato.

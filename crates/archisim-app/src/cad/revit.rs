@@ -437,6 +437,41 @@ impl Mirror {
     }
 }
 
+/// Every straight edge that can be a mirror's axis near `at`: the lines of
+/// the element picked, and those of the walls, slabs, boxes, ceilings and
+/// 2D lines of the view (the edge of a slab or of a box is an axis too).
+fn axis_near(cx: &Ctx<'_, dyn Geo + '_>, e: Option<Element>, at: Point2) -> Option<Line2> {
+    let mut lines: Vec<Line2> = e.map(|e| element_lines(cx, e)).unwrap_or_default();
+    for s in cx.edges() {
+        if let archisim_draft::Seg::Line { a, b } = s {
+            if a.distance(b) > 1e-6 {
+                lines.push(Line2 { a, b });
+            }
+        }
+    }
+    if let ViewRef::Level(level) = cx.view {
+        let m = cx.model();
+        let more: Vec<Element> = m
+            .boxes()
+            .filter(|b| b.level == level)
+            .map(|b| Element::Box(b.id))
+            .chain(
+                m.ceilings()
+                    .filter(|c| c.level == level)
+                    .map(|c| Element::Ceiling(c.id)),
+            )
+            .chain(m.grids().map(|g| Element::Grid(g.id)))
+            .chain(m.ref_planes().map(|r| Element::RefPlane(r.id)))
+            .collect();
+        for e in more {
+            lines.extend(element_lines(cx, e));
+        }
+    }
+    lines
+        .into_iter()
+        .min_by(|l, m| l.distance(at).total_cmp(&m.distance(at)))
+}
+
 /// The selection a mirror takes: doors and windows go with their walls.
 fn mirror_selection(cx: &Ctx<'_, dyn Geo + '_>) -> BTreeSet<Element> {
     cx.selection
@@ -512,11 +547,15 @@ impl Command for Mirror {
                 self.first = None;
                 Step::Next
             }
-            Input::Pick(e, at) if !self.draw => match nearest_line(cx, e, at) {
+            Input::Pick(e, at) if !self.draw => match axis_near(cx, Some(e), at) {
                 Some(l) => self.mirror(l.a, l.b),
                 None => {
                     Step::Refuse("Ese elemento no tiene una línea recta que sirva de eje.".into())
                 }
+            },
+            Input::Point(p) if !self.draw => match axis_near(cx, None, p) {
+                Some(l) if l.distance(p) < 0.5 => self.mirror(l.a, l.b),
+                _ => Step::Refuse("No hay ninguna arista ahí que sirva de eje.".into()),
             },
             Input::Point(p) if self.draw => match self.first {
                 None => {
@@ -536,10 +575,31 @@ impl Command for Mirror {
     }
 
     fn preview(&self, cx: &Ctx<'_, dyn Geo + '_>, _st: &CadSettings) -> Vec<Shape> {
-        // The axis being drawn.
-        match self.first {
-            Some(a) if self.draw => vec![Shape::Line { a, b: cx.cursor }],
-            _ => Vec::new(),
+        // The axis being drawn, or the edge under the cursor that would be
+        // the axis; and the selection reflected on it.
+        let axis = match (self.draw, self.first) {
+            (true, Some(a)) if a.distance(cx.cursor) > 1e-6 => Some((a, cx.cursor)),
+            (true, _) => None,
+            (false, _) => axis_near(cx, None, cx.cursor)
+                .filter(|l| l.distance(cx.cursor) < 3.0 * cx.k)
+                .map(|l| (l.a, l.b)),
+        };
+        let Some((a, b)) = axis else {
+            return Vec::new();
+        };
+        let mut out = vec![Shape::Line { a, b }];
+        let t = archisim_draft::Transform::mirror(a, b);
+        for e in self.items.iter().flatten() {
+            if let Some(o) = crate::pick::outline(cx.geo, *e) {
+                let n = o.len();
+                for i in 0..n {
+                    out.push(Shape::Line {
+                        a: t.apply(o[i]),
+                        b: t.apply(o[(i + 1) % n]),
+                    });
+                }
+            }
         }
+        out
     }
 }

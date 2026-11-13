@@ -237,6 +237,13 @@ const TRANSFORM: &[Order] = &[
         key: "MA",
         hint: "Copias en filas y columnas o alrededor de un centro",
     },
+    Order {
+        command: "FILA",
+        mark: Mark::Icon(Icon::Array),
+        name: "Copiar en fila",
+        key: "CF",
+        hint: "N copias a una distancia, o repartidas hasta un punto (cajas, pilares, muebles)",
+    },
 ];
 
 const GEOMETRY: &[Order] = &[

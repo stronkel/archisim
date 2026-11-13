@@ -437,6 +437,9 @@ pub struct ArchiSimApp {
     pub acquired: Vec<Point2>,
     /// Alignment guides through the cursor, to draw: (from, to).
     pub guides: Vec<(Point2, Point2)>,
+    /// While moving or stretching: the lines that line its corners, middles
+    /// or centre up with those of what is around.
+    pub object_guides: Vec<(Point2, Point2)>,
     pub railing_settings: crate::editor::RailingSettings,
     pub object_settings: crate::editor::ObjectSettings,
     /// Part of the library the object tool offers (Vegetación, Mobiliario
@@ -594,6 +597,8 @@ pub struct ArchiSimApp {
     vertex: Option<Grip>,
     /// The contour being sketched (E4), instead of the usual clicks.
     sketch: Option<sketch_ui::SketchState>,
+    /// An underlay being moved, fitted or scaled with the mouse.
+    underlay_pick: Option<underlay_ui::UnderlayPick>,
     /// The band and the split being prepared in a wall's properties (E3).
     wall_band: wall_tools_ui::WallBand,
     /// A wall's elevation profile being drawn in its window (E3).
@@ -878,6 +883,7 @@ impl ArchiSimApp {
             curtain_anchor: None,
             acquired: Vec::new(),
             guides: Vec::new(),
+            object_guides: Vec::new(),
             railing_settings: Default::default(),
             object_settings: Default::default(),
             object_scope: None,
@@ -959,6 +965,7 @@ impl ArchiSimApp {
             hover_grip: None,
             vertex: None,
             sketch: None,
+            underlay_pick: None,
             wall_band: Default::default(),
             profile_edit: None,
             mesh_import: None,
@@ -2911,6 +2918,7 @@ mod missions_ui;
 mod module_ui;
 mod mouse3d;
 mod navigator;
+mod nudge;
 mod object_bar;
 mod object_gallery;
 mod object_ui;
@@ -2963,6 +2971,7 @@ mod toolbox;
 mod tools3d;
 mod type_views;
 mod types_ui;
+mod underlay_ui;
 mod update_ui;
 mod urban_ui;
 mod ventilation_ui;
