@@ -254,6 +254,7 @@ dependencies = [
  "rfd",
  "serde_json",
  "ureq",
+ "uuid",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",

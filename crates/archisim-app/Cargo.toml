@@ -62,6 +62,8 @@ js-sys = "0.3"
 web-sys = { version = "0.3", features = ["Window", "Document", "Element", "HtmlCanvasElement", "HtmlElement", "Response", "console", "Location"] }
 # Random numbers from the browser, for the hashes of egui.
 getrandom = { version = "0.3", features = ["wasm_js"] }
+# The GUIDs of new elements, from the browser's random numbers.
+uuid = { version = "1", features = ["js"] }
 
 # macOS: receive the files opened from the Finder or dropped on the Dock
 # icon (`application:openURLs:`, added to winit's application delegate).
