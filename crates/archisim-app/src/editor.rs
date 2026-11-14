@@ -180,6 +180,11 @@ impl Editor {
         self.set_saved(self.doc.model().clone());
     }
 
+    /// Counts the project as not saved anywhere (closing asks first).
+    pub fn mark_unhanded(&mut self) {
+        self.set_saved(Model::new(""));
+    }
+
     /// Opens a `.archisim` project.
     pub fn open(path: &Path) -> EditResult<Self> {
         let model = archisim_file::open(path).map_err(|e| explain_file(&e))?;
@@ -193,7 +198,13 @@ impl Editor {
     /// added.
     pub fn import(path: &Path) -> EditResult<(Self, ImportReport, bool)> {
         let bytes = std::fs::read(path).map_err(|e| format!("no se puede leer el fichero: {e}"))?;
-        let text = String::from_utf8_lossy(&bytes);
+        Self::import_bytes(path, &bytes)
+    }
+
+    /// The same, from the file's bytes (on the web, where it comes from
+    /// the file picker); `path` is only its name.
+    pub fn import_bytes(path: &Path, bytes: &[u8]) -> EditResult<(Self, ImportReport, bool)> {
+        let text = String::from_utf8_lossy(bytes);
         let imported = import_ifc(&text).map_err(|e| e.to_string())?;
         let mut model = imported.model;
         let lacks_types = model.wall_types().next().is_none()
@@ -208,7 +219,7 @@ impl Editor {
         }
         let mut ed = Self::with_model(model, None);
         // Not saved anywhere yet: closing asks first.
-        ed.set_saved(Model::new(""));
+        ed.mark_unhanded();
         ed.imported_from = Some(path.to_path_buf());
         Ok((ed, imported.report, lacks_types))
     }
@@ -331,7 +342,13 @@ impl Editor {
             .file_name()
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_else(|| "proyecto.ifc".into());
-        let text = export_ifc(
+        let text = self.ifc_text(file_name, schema);
+        std::fs::write(path, text).map_err(|e| format!("no se pudo escribir el IFC: {e}"))
+    }
+
+    /// The project as IFC text, for a file called `file_name`.
+    pub fn ifc_text(&self, file_name: String, schema: archisim_ifc::Schema) -> String {
+        export_ifc(
             self.model(),
             &ExportOptions {
                 file_name,
@@ -340,8 +357,7 @@ impl Editor {
                 timestamp: None,
                 schema,
             },
-        );
-        std::fs::write(path, text).map_err(|e| format!("no se pudo escribir el IFC: {e}"))
+        )
     }
 
     /// Writes the plan of the active level as SVG at a scale (50 for

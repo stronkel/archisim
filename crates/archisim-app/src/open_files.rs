@@ -52,6 +52,14 @@ pub fn take_quit() -> bool {
     QUIT.swap(false, Ordering::SeqCst)
 }
 
+/// Wakes the window (a file arrived some other way, as on the web).
+#[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+pub fn wake() {
+    if let Some(ctx) = CONTEXT.get() {
+        ctx.request_repaint();
+    }
+}
+
 /// The window's context, to wake it when a file arrives.
 pub fn set_context(ctx: &egui::Context) {
     let _ = CONTEXT.set(ctx.clone());

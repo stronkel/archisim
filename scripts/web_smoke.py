@@ -53,6 +53,57 @@ def picture(page, name):
     return path
 
 
+DEMO_IFC = pathlib.Path("out/web-demo/demo.ifc").resolve()
+
+
+def files(page):
+    """Opening, importing and saving, as the person would: Ctrl+O and the
+    picker card, Ctrl+S and «Descargar», and the copy kept in the browser
+    when the page opens again."""
+    global failed
+    try:
+        page.focus("#archisim")
+        page.keyboard.press("Control+O")
+        page.wait_for_selector(".as-veil", timeout=10_000)
+        page.set_input_files("input[type=file]", str(site / "demo.archisim"))
+        page.wait_for_selector(".as-veil", state="detached", timeout=30_000)
+        page.wait_for_timeout(4_000)
+        picture(page, "webgl-3-abierto")
+        if DEMO_IFC.exists():
+            page.focus("#archisim")
+            page.keyboard.press("Control+O")
+            page.wait_for_selector(".as-veil", timeout=10_000)
+            page.set_input_files("input[type=file]", str(DEMO_IFC))
+            page.wait_for_selector(".as-veil", state="detached", timeout=30_000)
+            page.wait_for_timeout(6_000)
+            picture(page, "webgl-4-ifc")
+        page.focus("#archisim")
+        page.keyboard.press("Control+S")
+        page.wait_for_selector(".as-veil", timeout=10_000)
+        with page.expect_download(timeout=30_000) as d:
+            page.click("text=Descargar")
+        target = out / d.value.suggested_filename
+        d.value.save_as(str(target))
+        size = target.stat().st_size
+        text = target.read_text(encoding="utf-8")[:1]
+        print(f"descargado {target.name}: {size} bytes")
+        if size < 1000 or text != "{":
+            print("La descarga no es un proyecto")
+            failed = True
+        # Leaving the page and coming back opens the copy kept.
+        page.reload()
+        page.wait_for_selector("#cargando", state="detached", timeout=180_000)
+        page.wait_for_timeout(5_000)
+        kept = any("Abierta la copia guardada" in c for c in console)
+        print(f"copia del navegador al volver: {kept}")
+        if not kept:
+            failed = True
+        picture(page, "webgl-5-copia")
+    except Exception as e:  # noqa: BLE001 - any failure is reported
+        print(f"Archivos: {e}")
+        failed = True
+
+
 MODES = {
     # WebGPU, as in Safari 26 (a software adapter here: its pictures may
     # come out blank in a headless browser, but errors would show).
@@ -74,6 +125,7 @@ with sync_playwright() as p:
         page = browser.new_page(viewport={"width": 1280, "height": 800})
         page.on("console", lambda m: console.append(f"[{m.type}] {m.text}"))
         page.on("pageerror", lambda e: console.append(f"[pageerror] {e}"))
+        page.on("dialog", lambda d: d.accept())
         page.goto(url)
         gpu = page.evaluate("() => !!navigator.gpu")
         print(f"{mode}: navigator.gpu = {gpu}")
@@ -88,6 +140,8 @@ with sync_playwright() as p:
             print(f"{mode}: ArchiSim no ha arrancado: {text}")
         page.wait_for_timeout(8_000)
         picture(page, f"{mode}-1-planta")
+        if mode == "webgl":
+            files(page)
         # The 3D view: F3, with the canvas focused.
         page.focus("#archisim")
         page.keyboard.press("F3")
