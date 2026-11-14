@@ -450,6 +450,16 @@ impl View3dState {
             .pick_in(ray, self.clip_box().as_ref(), self.cut_rule().as_ref())
     }
 
+    /// Everything under a point of the view, the nearest first.
+    pub fn owners_at(&self, pos: Vec2, size: Vec2) -> Vec<Owner> {
+        let ray = self.camera.ray(
+            glam::Vec2::new(pos.x, pos.y),
+            glam::Vec2::new(size.x, size.y),
+        );
+        self.scene
+            .owners_in(ray, self.clip_box().as_ref(), self.cut_rule().as_ref())
+    }
+
     /// What is under a point of the view: the point hit, its triangle's
     /// normal and what it belongs to.
     pub fn hit(&self, pos: Vec2, size: Vec2) -> Option<(glam::Vec3, glam::Vec3, Owner)> {
@@ -1043,8 +1053,71 @@ impl ArchiSimApp {
                 self.open_context_menu(pos, e, None, frame);
             }
         }
-        // Selection: a click picks what is under the cursor.
+        // Several things one behind another: Tab (Shift+Tab back) selects
+        // the next under the cursor, and a click on what is already
+        // selected goes to the one behind it.
+        let model_elements = |this: &Self, pos: Pos2| -> Vec<Element> {
+            let mut v: Vec<Element> = Vec::new();
+            for o in this.v3d.owners_at(pos - rect.min, size) {
+                if let Owner::Model(e) = o {
+                    let e = crate::pick::solid_of(e)
+                        .and_then(|so| this.ed.model().module_of_flat_id(so.id()))
+                        .map_or(e, Element::Module);
+                    if !v.contains(&e) {
+                        v.push(e);
+                    }
+                }
+            }
+            v
+        };
+        if let (Some((at, _)), Some(pos)) = (self.section_tab, response.hover_pos()) {
+            if at.distance(pos) > 4.0 {
+                self.section_tab = None;
+            }
+        }
+        if !tool3d && response.hovered() && ctx.memory(|m| m.focused().is_none()) {
+            let back = ctx.input_mut(|i| i.consume_key(egui::Modifiers::SHIFT, egui::Key::Tab));
+            let tab = back || ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Tab));
+            if let (true, Some(pos)) = (tab, response.hover_pos()) {
+                let here = model_elements(self, pos);
+                let n = here.len();
+                if n > 0 {
+                    let i = self.section_tab.map_or(0, |(_, i)| i % n);
+                    let i = if back { (i + n - 1) % n } else { (i + 1) % n };
+                    self.section_tab = Some((pos, i));
+                    self.ed.selection = [here[i]].into_iter().collect();
+                    self.say(format!(
+                        "Tab: {} ({} de {n}).",
+                        super::context_bar::element_name(&here[i]),
+                        i + 1
+                    ));
+                }
+            }
+        }
+        let mut taken = false;
         if !tool3d && response.clicked_by(PointerButton::Primary) {
+            let add = ctx.input(|i| i.modifiers.shift || i.modifiers.command);
+            if let (false, Some(pos)) = (add, response.interact_pointer_pos()) {
+                let here = model_elements(self, pos);
+                let n = here.len();
+                let current = (self.ed.selection.len() == 1)
+                    .then(|| here.iter().position(|e| self.ed.selection.contains(e)))
+                    .flatten();
+                if let (true, Some(i)) = (n > 1, current) {
+                    let i = (i + 1) % n;
+                    self.section_tab = Some((pos, i));
+                    self.ed.selection = [here[i]].into_iter().collect();
+                    self.say(format!(
+                        "{} ({} de {n}): otro clic, el de detrás.",
+                        super::context_bar::element_name(&here[i]),
+                        i + 1
+                    ));
+                    taken = true;
+                }
+            }
+        }
+        // Selection: a click picks what is under the cursor.
+        if !tool3d && !taken && response.clicked_by(PointerButton::Primary) {
             if let Some(pos) = response.interact_pointer_pos() {
                 let owner = self.v3d.pick(pos - rect.min, size);
                 let add = ctx.input(|i| i.modifiers.shift || i.modifiers.command);

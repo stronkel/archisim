@@ -313,7 +313,7 @@ pub const GHOST_ALPHA: f32 = 0.12;
 
 /// What a triangle belongs to: an element of the project, or an element
 /// of a linked model (link, element index).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Owner {
     Model(Element),
     Linked(usize, usize),
@@ -1489,6 +1489,41 @@ impl Scene {
         cut: Option<&CutRule>,
     ) -> Option<Hit> {
         let mut best: Option<Hit> = None;
+        self.each_hit(ray, clip, cut, |h| {
+            if best.as_ref().is_none_or(|b| h.distance < b.distance) {
+                best = Some(h);
+            }
+        });
+        best
+    }
+
+    /// Every element a ray passes through (inside the section box), the
+    /// nearest first, each once: for Tab over things one behind another.
+    pub fn owners_in(
+        &self,
+        ray: Ray,
+        clip: Option<&super::section_box::SectionBox>,
+        cut: Option<&CutRule>,
+    ) -> Vec<Owner> {
+        let mut near: HashMap<Owner, f32> = HashMap::new();
+        self.each_hit(ray, clip, cut, |h| {
+            let d = near.entry(h.owner).or_insert(h.distance);
+            if h.distance < *d {
+                *d = h.distance;
+            }
+        });
+        let mut v: Vec<(Owner, f32)> = near.into_iter().collect();
+        v.sort_by(|a, b| a.1.total_cmp(&b.1));
+        v.into_iter().map(|(o, _)| o).collect()
+    }
+
+    fn each_hit(
+        &self,
+        ray: Ray,
+        clip: Option<&super::section_box::SectionBox>,
+        cut: Option<&CutRule>,
+        mut found: impl FnMut(Hit),
+    ) {
         let mut consider = |d: f32, tri: [Vec3; 3], owner: Owner, code: [f32; 4]| {
             let at = ray.origin + ray.dir * d;
             if clip.is_some_and(|bx| !bx.contains(at)) {
@@ -1497,13 +1532,11 @@ impl Scene {
             if cut.is_some_and(|r| at.z > r.top_of(code) + 1e-4) {
                 return;
             }
-            if best.as_ref().is_none_or(|b| d < b.distance) {
-                best = Some(Hit {
-                    distance: d,
-                    triangle: tri,
-                    owner,
-                });
-            }
+            found(Hit {
+                distance: d,
+                triangle: tri,
+                owner,
+            });
         };
         for c in self.opaque.iter().chain(&self.glass) {
             if !ray_meets_box(ray, c.lo, c.hi) {
@@ -1535,7 +1568,6 @@ impl Scene {
                 }
             }
         }
-        best
     }
 
     /// The triangles of one element, where they are.

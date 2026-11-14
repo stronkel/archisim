@@ -289,13 +289,56 @@ impl ArchiSimApp {
             return;
         }
         // Selection, as in plan: click an element cut or seen (Shift adds
-        // or takes it), click nothing to clear.
-        let under = self
-            .section_hover
-            .and_then(|p| self.section_cache.as_ref()?.drawing.pick(p))
-            .map(crate::pick::of_solid);
+        // or takes it), click nothing to clear. Where several are on top of
+        // each other, Tab (Shift+Tab back) or a second click in the same
+        // place goes to the next, front to back.
+        let here: Vec<Element> = {
+            let mut v: Vec<Element> = Vec::new();
+            if let (Some(p), Some(c)) = (self.section_hover, self.section_cache.as_ref()) {
+                for o in c.drawing.pick_all(p) {
+                    let e = crate::pick::of_solid(o);
+                    if !v.contains(&e) {
+                        v.push(e);
+                    }
+                }
+            }
+            v
+        };
+        let pos = response.hover_pos();
+        if let (Some((at, _)), Some(pos)) = (self.section_tab, pos) {
+            if at.distance(pos) > 4.0 {
+                self.section_tab = None;
+            }
+        }
+        let n = here.len();
+        if n > 1 && response.hovered() && ctx.memory(|m| m.focused().is_none()) {
+            let back = ctx.input_mut(|i| i.consume_key(egui::Modifiers::SHIFT, egui::Key::Tab));
+            if back || ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Tab)) {
+                let i = self.section_tab.map_or(0, |(_, i)| i % n);
+                let i = if back { (i + n - 1) % n } else { (i + 1) % n };
+                if let Some(pos) = pos {
+                    self.section_tab = Some((pos, i));
+                }
+            }
+        }
+        let index = self.section_tab.map_or(0, |(_, i)| i % n.max(1));
+        let mut under = here.get(index).copied();
         if response.clicked_by(egui::PointerButton::Primary) {
             let shift = ctx.input(|i| i.modifiers.shift || i.modifiers.command);
+            // A click again on what is already selected, with more under
+            // it: the next one down.
+            if !shift
+                && n > 1
+                && under.is_some_and(|e| self.ed.selection.len() == 1 && self.ed.selection.contains(&e))
+            {
+                let i = (index + 1) % n;
+                if let Some(pos) = pos {
+                    self.section_tab = Some((pos, i));
+                }
+                under = here.get(i).copied();
+            } else if let Some(pos) = pos {
+                self.section_tab = Some((pos, index));
+            }
             match (under, shift) {
                 (Some(e), true) => {
                     if !self.ed.selection.remove(&e) {
@@ -310,6 +353,17 @@ impl ArchiSimApp {
             }
         }
         self.draw_section_selection(&painter, rect, under);
+        // What a click takes, by the cursor: its name and, with more there,
+        // which of them.
+        if let (Some(e), Some(p)) = (under, self.section_hover) {
+            let name = context_bar::element_name(&e);
+            let text = if n > 1 {
+                format!("{name}  ({} de {n} · Tab)", index + 1)
+            } else {
+                name.to_string()
+            };
+            self.draw_label(&painter, rect, p, text);
+        }
         if under.is_some() {
             ctx.set_cursor_icon(egui::CursorIcon::PointingHand);
         }
@@ -557,27 +611,17 @@ impl ArchiSimApp {
             let Some(owner) = crate::pick::solid_of(e) else {
                 continue;
             };
-            let (cut, faces) = cache.drawing.shape_of(owner);
-            let alpha = if selected { 110 } else { 60 };
-            let tint = Color32::from_rgba_unmultiplied(ACCENT.r(), ACCENT.g(), ACCENT.b(), alpha);
-            let mut mesh = egui::Mesh::default();
-            for poly in &faces {
-                let pts = self.polygon(rect, poly);
-                let base = mesh.vertices.len() as u32;
-                for p in &pts {
-                    mesh.colored_vertex(*p, tint);
-                }
-                for i in 1..pts.len().saturating_sub(1) as u32 {
-                    mesh.add_triangle(base, base + i, base + i + 1);
-                }
-            }
-            painter.add(Shape::mesh(mesh));
+            // Only its outline: what is selected in a thicker line, what a
+            // click would take in a thinner one; the drawing shows through.
+            let colour = if selected {
+                ACCENT
+            } else {
+                Color32::from_rgba_unmultiplied(ACCENT.r(), ACCENT.g(), ACCENT.b(), 190)
+            };
             let width = if selected { 2.5 } else { 1.5 };
-            for l in &cut {
-                painter.add(Shape::closed_line(
-                    self.polygon(rect, l),
-                    Stroke::new(width, ACCENT),
-                ));
+            for [a, b] in cache.drawing.outline_of(owner) {
+                let (a, b) = (self.view.to_screen(rect, a), self.view.to_screen(rect, b));
+                painter.line_segment([a, b], Stroke::new(width, colour));
             }
         }
     }

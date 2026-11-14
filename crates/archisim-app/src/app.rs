@@ -414,6 +414,9 @@ pub struct ArchiSimApp {
     shared_model: Option<(u64, std::sync::Arc<archisim_core::Model>)>,
     /// Where the pointer is over the section shown (along, height).
     pub section_hover: Option<Point2>,
+    /// Tab in a section or an elevation: where it started (on screen) and
+    /// which of the elements there is shown.
+    pub section_tab: Option<(egui::Pos2, usize)>,
     /// Objects, doors or windows being moved in a section or elevation.
     pub section_drag: Option<section_ui::SectionDrag>,
     /// Drawing the rectangle of a detail in a section (E17): the section
@@ -870,6 +873,7 @@ impl ArchiSimApp {
             sheet_pending: None,
             shared_model: None,
             section_hover: None,
+            section_tab: None,
             section_drag: None,
             detail_pick: None,
             dxf_import: None,
