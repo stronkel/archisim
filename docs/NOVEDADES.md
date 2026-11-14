@@ -4,6 +4,14 @@ Lo que cambia en cada versión, en pocas líneas. ArchiSim enseña la parte de s
 
 Cada versión empieza con una línea `## <versión>` (por ejemplo `## 0.81.0`): es la que busca la publicación.
 
+## 0.86.0
+
+- **ArchiSim en el iPad (primera vuelta).** ArchiSim funciona también en el navegador, con la gráfica del iPad (Safari 26). Se sirve desde tu NAS con usuario y contraseña y se pone al día solo con cada versión (`scripts/nas/README.md`).
+  - Abre la casa de ejemplo en planta y en 3D.
+  - Todavía no abre ni guarda archivos (llega en la próxima vuelta), ni descarga el entorno.
+  - En el iPad: Compartir → «Añadir a pantalla de inicio» lo deja como una app.
+- En el escritorio no cambia nada.
+
 ## 0.85.0
 
 - **Todo responde al instante, también en proyectos grandes.** La ventana rehacía en cada momento las tablas y los recuentos del navegador; en un edificio grande eso la frenaba en cualquier vista. Ahora se cuentan solo cuando cambia el modelo.

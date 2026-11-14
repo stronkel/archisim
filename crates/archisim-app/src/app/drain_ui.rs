@@ -211,7 +211,7 @@ impl ArchiSimApp {
 
     /// The drainage diagrams as a PDF of A3 pages.
     pub(super) fn export_drain_pdf(&mut self) {
-        let mut d = rfd::FileDialog::new()
+        let mut d = crate::file_dialog::FileDialog::new()
             .set_title("Esquemas de saneamiento (PDF)")
             .add_filter("PDF", &["pdf"])
             .set_file_name(format!("{}-saneamiento.pdf", self.file_name_stem()));
@@ -245,7 +245,7 @@ impl ArchiSimApp {
 
     /// The drainage diagrams in DXF: one file per page.
     pub(super) fn export_drain_dxf(&mut self) {
-        let mut d = rfd::FileDialog::new()
+        let mut d = crate::file_dialog::FileDialog::new()
             .set_title("Esquemas de saneamiento (DXF)")
             .add_filter("DXF", &["dxf"])
             .set_file_name(format!("{}-saneamiento.dxf", self.file_name_stem()));

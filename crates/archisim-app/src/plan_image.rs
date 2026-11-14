@@ -202,7 +202,7 @@ mod timing {
             ((-0.5, 3.0), (1.5, 4.5), [1600, 1000]),
             ((-2.0, -2.0), (8.0, 6.0), [3200, 2000]),
         ] {
-            let t = std::time::Instant::now();
+            let t = web_time::Instant::now();
             let n = 10;
             for _ in 0..n {
                 super::rasterize(

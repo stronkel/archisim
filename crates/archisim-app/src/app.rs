@@ -653,7 +653,7 @@ pub struct ArchiSimApp {
     /// When the plan or section view last moved (panning or zooming)
     /// since its picture was last drawn in full: while it moves, the last
     /// picture is moved with it instead of being drawn again.
-    view_moved_at: Option<std::time::Instant>,
+    view_moved_at: Option<web_time::Instant>,
     /// What [`ArchiSimApp::other_walls`] was worked out for: revision,
     /// level, cut plane and reference level.
     other_walls_key: Option<(u64, LevelId, u64, Option<LevelId>)>,
@@ -856,7 +856,9 @@ impl ArchiSimApp {
             render: Default::default(),
             budget: Default::default(),
             start: start_ui::StartScreen {
-                open: !cfg!(test),
+                // On the web it opens with the demo house (until T2 can
+                // open files, the start screen has nothing to offer).
+                open: !cfg!(test) && !crate::platform::WEB,
                 ..Default::default()
             },
             grid_anchor: None,
@@ -1298,7 +1300,7 @@ impl ArchiSimApp {
             }
             Pending::FromTemplate(path) => {
                 let path = path.or_else(|| {
-                    let mut d = rfd::FileDialog::new()
+                    let mut d = crate::file_dialog::FileDialog::new()
                         .set_title("Nuevo desde plantilla")
                         .add_filter("Plantilla o proyecto ArchiSim", &[archisim_file::EXTENSION]);
                     if let Some(dir) = self.start_dir() {
@@ -1312,7 +1314,7 @@ impl ArchiSimApp {
             }
             Pending::Open(path) => {
                 let path = path.or_else(|| {
-                    let mut d = rfd::FileDialog::new()
+                    let mut d = crate::file_dialog::FileDialog::new()
                         .set_title("Abrir proyecto")
                         .add_filter("Proyecto ArchiSim", &[archisim_file::EXTENSION]);
                     if let Some(dir) = self.start_dir() {
@@ -1326,7 +1328,7 @@ impl ArchiSimApp {
             }
             Pending::Import(path) => {
                 let path = path.or_else(|| {
-                    let mut d = rfd::FileDialog::new()
+                    let mut d = crate::file_dialog::FileDialog::new()
                         .set_title("Importar IFC")
                         .add_filter("IFC", &["ifc", "IFC"]);
                     if let Some(dir) = self.start_dir() {
@@ -1359,6 +1361,10 @@ impl ArchiSimApp {
         // Tests run in parallel and never read the operating system's queue.
         #[cfg(not(test))]
         let paths = [paths, crate::open_files::take()].concat();
+        #[cfg(target_arch = "wasm32")]
+        for note in crate::web::take_notes() {
+            self.say(note);
+        }
         self.open_files(paths);
         #[cfg(all(target_os = "macos", not(test)))]
         crate::open_files::macos::quit_for_check(ctx);
@@ -1490,7 +1496,7 @@ impl ArchiSimApp {
 
     /// Saves the project as a template: the same file with nothing drawn.
     fn save_as_template(&mut self) {
-        let mut d = rfd::FileDialog::new()
+        let mut d = crate::file_dialog::FileDialog::new()
             .set_title("Guardar como plantilla")
             .add_filter("Plantilla ArchiSim", &[archisim_file::EXTENSION])
             .set_file_name(format!(
@@ -1533,7 +1539,7 @@ impl ArchiSimApp {
             return self.team_save();
         }
         let target = if ask || self.ed.path.is_none() {
-            let mut d = rfd::FileDialog::new()
+            let mut d = crate::file_dialog::FileDialog::new()
                 .set_title("Guardar proyecto")
                 .add_filter("Proyecto ArchiSim", &[archisim_file::EXTENSION])
                 .set_file_name(format!(
@@ -1669,7 +1675,7 @@ impl ArchiSimApp {
             archisim_ifc::Schema::Ifc4x3 => ("IFC 4.3", format!("{}.ifc", self.file_name_stem())),
             archisim_ifc::Schema::Ifc4 => ("IFC4", format!("{} (IFC4).ifc", self.file_name_stem())),
         };
-        let mut d = rfd::FileDialog::new()
+        let mut d = crate::file_dialog::FileDialog::new()
             .set_title(format!("Exportar {title}"))
             .add_filter("IFC", &["ifc"])
             .set_file_name(name);
@@ -1686,7 +1692,7 @@ impl ArchiSimApp {
 
     /// The project as a `.glb`, for D5, Twinmotion or Blender.
     fn export_glb(&mut self) {
-        let mut d = rfd::FileDialog::new()
+        let mut d = crate::file_dialog::FileDialog::new()
             .set_title("Exportar modelo 3D (glTF)")
             .add_filter("glTF", &["glb"])
             .set_file_name(format!("{}.glb", self.file_name_stem()));
@@ -1728,7 +1734,7 @@ impl ArchiSimApp {
             .level(self.ed.level)
             .map(|l| l.name.clone())
             .unwrap_or_default();
-        let mut d = rfd::FileDialog::new()
+        let mut d = crate::file_dialog::FileDialog::new()
             .set_title(format!("Exportar planta 1:{scale}"))
             .add_filter("PDF (para imprimir)", &["pdf"])
             .add_filter("DXF (para otros programas de CAD)", &["dxf"])
@@ -1762,7 +1768,7 @@ impl ArchiSimApp {
             .section(id)
             .map(|s| s.title())
             .unwrap_or_default();
-        let mut d = rfd::FileDialog::new()
+        let mut d = crate::file_dialog::FileDialog::new()
             .set_title(format!("Exportar {title} 1:{scale}"))
             .add_filter("PDF (para imprimir)", &["pdf"])
             .add_filter("DXF (para otros programas de CAD)", &["dxf"])
@@ -1808,7 +1814,7 @@ impl ArchiSimApp {
             (false, Some(s)) => format!("{} - {} {}.pdf", self.file_name_stem(), s.number, s.name),
             _ => format!("{} - planos.pdf", self.file_name_stem()),
         };
-        let mut d = rfd::FileDialog::new()
+        let mut d = crate::file_dialog::FileDialog::new()
             .set_title(if all {
                 "Exportar todos los planos"
             } else {
@@ -1839,7 +1845,7 @@ impl ArchiSimApp {
 
     /// Brings a DXF into the view shown (plan or sheet) as 2D drafting.
     fn import_dxf(&mut self) {
-        let mut d = rfd::FileDialog::new()
+        let mut d = crate::file_dialog::FileDialog::new()
             .set_title("Importar DXF en la vista")
             .add_filter("DXF", &["dxf"]);
         if let Some(dir) = self.start_dir() {
@@ -2617,7 +2623,7 @@ impl ArchiSimApp {
             );
             return;
         };
-        let mut d = rfd::FileDialog::new()
+        let mut d = crate::file_dialog::FileDialog::new()
             .set_title("Guardar captura")
             .add_filter("PNG", &["png"])
             .set_file_name(format!("{} - captura.png", self.file_name_stem()));
@@ -2646,7 +2652,7 @@ impl ArchiSimApp {
             );
             return;
         };
-        let mut d = rfd::FileDialog::new()
+        let mut d = crate::file_dialog::FileDialog::new()
             .set_title("Guardar imagen 3D")
             .add_filter("PNG", &["png"])
             .set_file_name(format!("{} - 3D.png", self.file_name_stem()));
@@ -2795,7 +2801,7 @@ impl eframe::App for ArchiSimApp {
         }
         crate::crash::frame_start();
         crate::crash::stage("ventana");
-        let started = std::time::Instant::now();
+        let started = web_time::Instant::now();
         if self.saving.is_some() {
             self.saving_done(false);
             ui.ctx()

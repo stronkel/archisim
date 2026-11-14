@@ -219,7 +219,7 @@ impl ArchiSimApp {
 
     /// The single-line diagrams as a PDF of A3 pages.
     pub(super) fn export_single_line_pdf(&mut self) {
-        let mut d = rfd::FileDialog::new()
+        let mut d = crate::file_dialog::FileDialog::new()
             .set_title("Esquema unifilar (PDF)")
             .add_filter("PDF", &["pdf"])
             .set_file_name(format!("{}-unifilar.pdf", self.file_name_stem()));
@@ -253,7 +253,7 @@ impl ArchiSimApp {
 
     /// The single-line diagrams in DXF: one file per board.
     pub(super) fn export_single_line_dxf(&mut self) {
-        let mut d = rfd::FileDialog::new()
+        let mut d = crate::file_dialog::FileDialog::new()
             .set_title("Esquema unifilar (DXF)")
             .add_filter("DXF", &["dxf"])
             .set_file_name(format!("{}-unifilar.dxf", self.file_name_stem()));

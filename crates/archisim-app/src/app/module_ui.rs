@@ -4,7 +4,7 @@
 //! when a module's file has changed and updates it.
 
 use super::widgets::SwitchExt as _;
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use archisim_core::{ModuleId, ModuleSourceId, ModuleTransform, Point2};
 use eframe::egui::{self, Id, Ui};
@@ -56,7 +56,7 @@ impl ArchiSimApp {
 
     /// Asks for a project to load as a module.
     pub(super) fn load_module_dialog(&mut self) {
-        let mut d = rfd::FileDialog::new()
+        let mut d = crate::file_dialog::FileDialog::new()
             .set_title("Cargar un proyecto como módulo")
             .add_filter("ArchiSim", &[archisim_file::EXTENSION]);
         if let Some(dir) = self.start_dir() {

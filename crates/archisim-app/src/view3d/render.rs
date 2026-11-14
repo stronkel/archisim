@@ -3,7 +3,6 @@
 
 use bytemuck::{Pod, Zeroable};
 use eframe::wgpu;
-use eframe::wgpu::util::DeviceExt;
 
 use super::camera::Camera;
 use super::scene::{Chunk, Group, Instance, Scene, Vertex};
@@ -215,6 +214,11 @@ pub struct Renderer {
     focus: Option<(glam::Vec3, glam::Vec3)>,
     /// Counts the scenes and overlays uploaded, so the shadows know.
     uploads: u64,
+    /// Triangles uploaded since the last picture and not yet copied into
+    /// their buffers: they go with the queue at the start of `render`
+    /// (a buffer mapped when made can be refused in the browser when it is
+    /// a few megabytes, `docs/IPAD.md`).
+    writes: Vec<(wgpu::Buffer, Vec<u8>)>,
     glass_pipeline: wgpu::RenderPipeline,
     edges_pipeline: wgpu::RenderPipeline,
     globals: wgpu::Buffer,
@@ -753,6 +757,7 @@ impl Renderer {
             bounds: (glam::Vec3::ZERO, glam::Vec3::ONE),
             focus: None,
             uploads: 0,
+            writes: Vec::new(),
             glass_pipeline,
             edges_pipeline,
             globals,
@@ -838,7 +843,7 @@ impl Renderer {
     /// Uploads (or clears) the filled sections of the objects the section
     /// box cuts.
     pub fn set_fill(&mut self, device: &wgpu::Device, fill: &[Chunk]) {
-        self.fill = upload(device, fill, false);
+        self.fill = upload(device, &mut self.writes, fill, false);
     }
 
     /// Sets (or clears) the cut away walls of the next pictures.
@@ -853,8 +858,8 @@ impl Renderer {
         let wire = self.wired;
         self.overlay = overlay.map(|o| {
             (
-                upload(device, &o.opaque, wire),
-                upload(device, &o.glass, wire),
+                upload(device, &mut self.writes, &o.opaque, wire),
+                upload(device, &mut self.writes, &o.glass, wire),
             )
         });
     }
@@ -890,13 +895,13 @@ impl Renderer {
         self.bounds = (scene.lo, scene.hi);
         let wire = self.style == 3;
         self.wired = wire;
-        self.opaque = upload(device, &scene.opaque, wire);
-        self.grass = upload(device, &scene.grass, false);
-        self.glass = upload(device, &scene.glass, wire);
+        self.opaque = upload(device, &mut self.writes, &scene.opaque, wire);
+        self.grass = upload(device, &mut self.writes, &scene.grass, false);
+        self.glass = upload(device, &mut self.writes, &scene.glass, wire);
         self.groups = scene
             .groups
             .iter()
-            .map(|g| upload_group(device, g, wire))
+            .map(|g| upload_group(device, &mut self.writes, g, wire))
             .collect();
         self.selected = scene.has_selection();
         self.lamps = scene.lamps.clone();
@@ -990,6 +995,9 @@ impl Renderer {
         size: [u32; 2],
         edge_step: u32,
     ) -> &wgpu::Texture {
+        for (buffer, bytes) in self.writes.drain(..) {
+            queue.write_buffer(&buffer, 0, &bytes);
+        }
         if self.pictures_pending {
             self.pictures_pending = false;
             upload_pictures(queue, &self.pictures);
@@ -1521,6 +1529,7 @@ fn draw_mesh(
 /// One mesh on the card (none if it has no triangles).
 fn upload_mesh(
     device: &wgpu::Device,
+    writes: &mut Writes,
     mesh: &super::scene::Mesh,
     lo: glam::Vec3,
     hi: glam::Vec3,
@@ -1531,25 +1540,31 @@ fn upload_mesh(
             let edges = feature_edges(mesh, n.min(mesh.indices.len()));
             (!edges.is_empty()).then(|| {
                 (
-                    device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                        label: Some("wire"),
-                        contents: bytemuck::cast_slice(&edges),
-                        usage: wgpu::BufferUsages::INDEX,
-                    }),
+                    buffer_with(
+                        device,
+                        writes,
+                        "wire",
+                        bytemuck::cast_slice(&edges),
+                        wgpu::BufferUsages::INDEX,
+                    ),
                     edges.len() as u32,
                 )
             })
         }),
-        vertices: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("corners"),
-            contents: bytemuck::cast_slice(&mesh.vertices),
-            usage: wgpu::BufferUsages::VERTEX,
-        }),
-        indices: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("triangles"),
-            contents: bytemuck::cast_slice(&mesh.indices),
-            usage: wgpu::BufferUsages::INDEX,
-        }),
+        vertices: buffer_with(
+            device,
+            writes,
+            "corners",
+            bytemuck::cast_slice(&mesh.vertices),
+            wgpu::BufferUsages::VERTEX,
+        ),
+        indices: buffer_with(
+            device,
+            writes,
+            "triangles",
+            bytemuck::cast_slice(&mesh.indices),
+            wgpu::BufferUsages::INDEX,
+        ),
         count: mesh.indices.len() as u32,
         lo,
         hi,
@@ -1615,23 +1630,75 @@ fn feature_edges(mesh: &super::scene::Mesh, n: usize) -> Vec<u32> {
 
 /// The chunks of the elements drawn once (each well under the size of
 /// buffer every card takes: 32 768 triangles).
-fn upload(device: &wgpu::Device, chunks: &[Chunk], wire: bool) -> Vec<GpuMesh> {
+fn upload(
+    device: &wgpu::Device,
+    writes: &mut Writes,
+    chunks: &[Chunk],
+    wire: bool,
+) -> Vec<GpuMesh> {
     chunks
         .iter()
-        .filter_map(|c| upload_mesh(device, &c.mesh, c.lo, c.hi, wire.then_some(usize::MAX)))
+        .filter_map(|c| {
+            upload_mesh(
+                device,
+                writes,
+                &c.mesh,
+                c.lo,
+                c.hi,
+                wire.then_some(usize::MAX),
+            )
+        })
         .collect()
 }
 
-fn upload_group(device: &wgpu::Device, g: &Group, wire: bool) -> GpuGroup {
+/// Buffers made and the bytes to copy into them (`Renderer::writes`).
+type Writes = Vec<(wgpu::Buffer, Vec<u8>)>;
+
+/// A buffer for `bytes`, filled by the queue at the next picture.
+fn buffer_with(
+    device: &wgpu::Device,
+    writes: &mut Writes,
+    label: &str,
+    bytes: &[u8],
+    usage: wgpu::BufferUsages,
+) -> wgpu::Buffer {
+    // The queue copies whole groups of four bytes.
+    let mut bytes = bytes.to_vec();
+    bytes.resize(bytes.len().next_multiple_of(4).max(4), 0);
+    let buffer = device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some(label),
+        size: bytes.len() as u64,
+        usage: usage | wgpu::BufferUsages::COPY_DST,
+        mapped_at_creation: false,
+    });
+    writes.push((buffer.clone(), bytes));
+    buffer
+}
+
+fn upload_group(device: &wgpu::Device, writes: &mut Writes, g: &Group, wire: bool) -> GpuGroup {
     // The wireframe of its finest version.
     let finest = g
         .levels
         .first()
         .map_or(usize::MAX, |l| (l.0 + l.1) as usize);
     GpuGroup {
-        opaque: upload_mesh(device, &g.opaque, g.lo, g.hi, wire.then_some(finest)),
+        opaque: upload_mesh(
+            device,
+            writes,
+            &g.opaque,
+            g.lo,
+            g.hi,
+            wire.then_some(finest),
+        ),
         levels: g.levels.clone(),
-        glass: upload_mesh(device, &g.glass, g.lo, g.hi, wire.then_some(usize::MAX)),
+        glass: upload_mesh(
+            device,
+            writes,
+            &g.glass,
+            g.lo,
+            g.hi,
+            wire.then_some(usize::MAX),
+        ),
         instances: g.instances.clone(),
         bounds: g.bounds.clone(),
         radius: g.radius(),

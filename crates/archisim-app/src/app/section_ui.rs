@@ -214,7 +214,7 @@ impl ArchiSimApp {
         let model_for = model.clone();
         let work = move || {
             let model = model_for;
-            let started = std::time::Instant::now();
+            let started = web_time::Instant::now();
             let sec = model.section(id).cloned();
             let phased = archisim_plan::phases::phase_model(&model, phase_view);
             let m = phased.as_ref().unwrap_or(&model);

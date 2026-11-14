@@ -41,6 +41,13 @@ struct Download {
 }
 
 /// Downloads a file to `to`, telling how much has come.
+#[cfg(target_arch = "wasm32")]
+fn fetch_file(_url: &str, _to: &PathBuf, _progress: &Arc<Mutex<Download>>) -> Result<(), String> {
+    Err("la versión web se actualiza sola al recargar la página".into())
+}
+
+/// Downloads a file to `to`, telling how much has come.
+#[cfg(not(target_arch = "wasm32"))]
 fn fetch_file(url: &str, to: &PathBuf, progress: &Arc<Mutex<Download>>) -> Result<(), String> {
     let agent = ureq::AgentBuilder::new()
         .timeout_connect(Duration::from_secs(20))
@@ -81,7 +88,7 @@ impl ArchiSimApp {
     pub(super) fn check_for_updates(&mut self, quiet: bool) {
         let slot = Arc::new(Mutex::new(None));
         let out = slot.clone();
-        std::thread::spawn(move || {
+        crate::platform::spawn(move || {
             let answer = super::carto_download_ui::http_get(updates::LATEST_URL, None)
                 .map_err(|e| format!("no se ha podido preguntar a GitHub: {e}"))
                 .and_then(|b| updates::read_release(&String::from_utf8_lossy(&b)));
@@ -99,7 +106,7 @@ impl ArchiSimApp {
     /// Every frame: the look when opening, its answer, the note of a new
     /// version and the window.
     pub(super) fn update_frame(&mut self, ctx: &egui::Context) {
-        if !self.update.asked && self.prefs.check_updates && !cfg!(test) {
+        if !self.update.asked && self.prefs.check_updates && !cfg!(test) && !crate::platform::WEB {
             self.check_for_updates(true);
         }
         let answer = self
@@ -312,7 +319,7 @@ impl ArchiSimApp {
             let state = Arc::new(Mutex::new(Download::default()));
             let s = state.clone();
             let to = updates::download_path(&version);
-            std::thread::spawn(move || {
+            crate::platform::spawn(move || {
                 let done = fetch_file(&url, &to, &s).map(|()| to);
                 if let Ok(mut d) = s.lock() {
                     d.done = Some(done);

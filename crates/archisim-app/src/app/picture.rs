@@ -11,7 +11,7 @@
 //!   once, so a small project stays as crisp as before.
 
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use eframe::egui::{self, ColorImage, TextureHandle, TextureOptions};
 

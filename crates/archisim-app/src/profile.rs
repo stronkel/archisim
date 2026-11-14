@@ -4,7 +4,7 @@
 
 use std::cell::RefCell;
 use std::collections::BTreeMap;
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 thread_local! {
     static PARTS: RefCell<BTreeMap<&'static str, (Duration, u32)>> = const { RefCell::new(BTreeMap::new()) };

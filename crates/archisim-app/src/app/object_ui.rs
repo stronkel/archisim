@@ -484,7 +484,7 @@ impl ArchiSimApp {
             }
         });
         if picture_add {
-            let mut d = rfd::FileDialog::new()
+            let mut d = crate::file_dialog::FileDialog::new()
                 .set_title("Imagen para plantas de presentación (PNG)")
                 .add_filter("Imagen PNG", &["png"]);
             if let Some(dir) = self.start_dir() {
@@ -620,7 +620,7 @@ impl ArchiSimApp {
             self.pick_from_library_for(t, super::symbol_pick::PickFor::Elevation { side });
         }
         if let Some((image, side)) = add {
-            let mut d = rfd::FileDialog::new().set_title(if image {
+            let mut d = crate::file_dialog::FileDialog::new().set_title(if image {
                 "Imagen para alzados (PNG con fondo transparente)"
             } else {
                 "Dibujo para alzados (DXF)"
@@ -758,7 +758,7 @@ impl ArchiSimApp {
     /// Asks for a DXF and puts its drawing as the type's symbol: stretched
     /// to the type for vegetation, at its own size for the rest.
     pub(super) fn pick_symbol(&mut self, t: ObjectTypeId) {
-        let mut d = rfd::FileDialog::new()
+        let mut d = crate::file_dialog::FileDialog::new()
             .set_title("Símbolo de planta (DXF)")
             .add_filter("Dibujo DXF", &["dxf"]);
         if let Some(dir) = self.start_dir() {
@@ -868,8 +868,8 @@ impl ArchiSimApp {
                         .get("plant_seed")
                         .and_then(|v| v.as_number())
                         .unwrap_or(0.0) as u64;
-                    let t = std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
+                    let t = web_time::SystemTime::now()
+                        .duration_since(web_time::UNIX_EPOCH)
                         .map(|d| d.as_nanos() as u64)
                         .unwrap_or(1);
                     let seed = archisim_core::flora::seed_of(old ^ t, id.0) % 999_983 + 1;

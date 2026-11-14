@@ -7,6 +7,11 @@
 
 // Windows: no console window behind the application in release builds.
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
+// The web version leaves out what only the desktop does (`docs/IPAD.md`).
+#![cfg_attr(
+    target_arch = "wasm32",
+    allow(dead_code, unused_imports, unused_variables, unused_mut)
+)]
 
 mod app;
 mod bar_schedule;
@@ -19,6 +24,7 @@ mod dim_tool;
 mod documents;
 mod drag;
 mod editor;
+mod file_dialog;
 mod flip;
 mod geo;
 mod missions;
@@ -28,6 +34,7 @@ mod paper;
 mod pick;
 mod placing;
 mod plan_image;
+mod platform;
 mod prefs;
 mod profile;
 mod sketch;
@@ -44,11 +51,20 @@ mod view;
 mod view3d;
 mod wall_faces;
 mod wall_tool;
+#[cfg(target_arch = "wasm32")]
+mod web;
 mod xform;
 
 use app::ArchiSimApp;
 use editor::Editor;
 
+/// In the browser: the page calls this when the program has loaded.
+#[cfg(target_arch = "wasm32")]
+fn main() {
+    web::start();
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 fn main() -> eframe::Result {
     crash::install();
     crash::watch_frames();

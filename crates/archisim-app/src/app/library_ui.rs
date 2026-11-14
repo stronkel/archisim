@@ -70,7 +70,7 @@ impl ArchiSimApp {
         });
         ui.horizontal(|ui| {
             if ui.button("Cambiar carpeta…").clicked() {
-                if let Some(dir) = rfd::FileDialog::new().set_directory(&lib.dir).pick_folder() {
+                if let Some(dir) = crate::file_dialog::FileDialog::new().set_directory(&lib.dir).pick_folder() {
                     match library::set_library_dir(&dir) {
                         Ok(()) => self.say(format!("Biblioteca en {}.", dir.display())),
                         Err(e) => self.complain(format!("No se puede recordar la carpeta: {e}.")),

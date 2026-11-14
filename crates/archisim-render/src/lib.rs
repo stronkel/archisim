@@ -808,64 +808,71 @@ pub fn render(model: &Model, view: &View, opt: &Options, progress: &(dyn Fn(f64)
     let mut rgb = vec![0u8; w * h * 3];
     let next = AtomicUsize::new(0);
     let done = AtomicUsize::new(0);
-    let threads = std::thread::available_parallelism().map_or(4, |n| n.get());
+    // In the browser there are no threads of our own: one worker, here.
+    let threads = if cfg!(target_arch = "wasm32") {
+        1
+    } else {
+        std::thread::available_parallelism().map_or(4, |n| n.get())
+    };
     let rows: Vec<std::sync::Mutex<Option<Vec<u8>>>> =
         (0..h).map(|_| std::sync::Mutex::new(None)).collect();
-    std::thread::scope(|sc| {
-        for _ in 0..threads {
-            sc.spawn(|| loop {
-                let y = next.fetch_add(1, Ordering::Relaxed);
-                if y >= h {
-                    break;
-                }
-                let mut rng =
-                    Rng(0x9E37_79B9_7F4A_7C15 ^ (y as u64 + 1).wrapping_mul(0x2545_F491_4F6C_DD1D));
-                let mut row = vec![0u8; w * 3];
-                for x in 0..w {
-                    let mut acc = [0.0; 3];
-                    for sy in 0..samples {
-                        for sx in 0..samples {
-                            let fx =
-                                (x as f64 + (sx as f64 + rng.next()) / samples as f64) / w as f64;
-                            let fy =
-                                (y as f64 + (sy as f64 + rng.next()) / samples as f64) / h as f64;
-                            let ndc = [2.0 * fx - 1.0, 1.0 - 2.0 * fy];
-                            let offset =
-                                add(mul(right, ndc[0] * half * aspect), mul(up, ndc[1] * half));
-                            let (o, d) = if view.perspective {
-                                (view.eye, norm(sub(add(view.target, offset), view.eye)))
-                            } else {
-                                (
-                                    add(sub(view.target, mul(forward, dist * 4.0)), offset),
-                                    forward,
-                                )
-                            };
-                            acc = add(acc, scene.trace(o, d, &mut rng, opt.sky_rays));
-                        }
-                    }
-                    let c = mul(acc, 1.0 / (samples * samples) as f64);
-                    // An illustration's colours: a little livelier.
-                    let l = 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
-                    let c = c.map(|v| (l + (v - l) * 1.2).max(0.0));
-                    // A gentle tone curve, so the sun does not burn.
-                    let tone = |v: f64| {
-                        let v = v * 0.85;
-                        v / (1.0 + v * 0.35)
-                    };
-                    for k in 0..3 {
-                        row[x * 3 + k] = linear_to_srgb(tone(c[k]));
-                    }
-                }
-                if let Ok(mut slot) = rows[y].lock() {
-                    *slot = Some(row);
-                }
-                let n = done.fetch_add(1, Ordering::Relaxed) + 1;
-                if n.is_multiple_of(8) || n == h {
-                    progress(n as f64 / h as f64);
-                }
-            });
+    let work = || loop {
+        let y = next.fetch_add(1, Ordering::Relaxed);
+        if y >= h {
+            break;
         }
-    });
+        let mut rng =
+            Rng(0x9E37_79B9_7F4A_7C15 ^ (y as u64 + 1).wrapping_mul(0x2545_F491_4F6C_DD1D));
+        let mut row = vec![0u8; w * 3];
+        for x in 0..w {
+            let mut acc = [0.0; 3];
+            for sy in 0..samples {
+                for sx in 0..samples {
+                    let fx = (x as f64 + (sx as f64 + rng.next()) / samples as f64) / w as f64;
+                    let fy = (y as f64 + (sy as f64 + rng.next()) / samples as f64) / h as f64;
+                    let ndc = [2.0 * fx - 1.0, 1.0 - 2.0 * fy];
+                    let offset = add(mul(right, ndc[0] * half * aspect), mul(up, ndc[1] * half));
+                    let (o, d) = if view.perspective {
+                        (view.eye, norm(sub(add(view.target, offset), view.eye)))
+                    } else {
+                        (
+                            add(sub(view.target, mul(forward, dist * 4.0)), offset),
+                            forward,
+                        )
+                    };
+                    acc = add(acc, scene.trace(o, d, &mut rng, opt.sky_rays));
+                }
+            }
+            let c = mul(acc, 1.0 / (samples * samples) as f64);
+            // An illustration's colours: a little livelier.
+            let l = 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+            let c = c.map(|v| (l + (v - l) * 1.2).max(0.0));
+            // A gentle tone curve, so the sun does not burn.
+            let tone = |v: f64| {
+                let v = v * 0.85;
+                v / (1.0 + v * 0.35)
+            };
+            for k in 0..3 {
+                row[x * 3 + k] = linear_to_srgb(tone(c[k]));
+            }
+        }
+        if let Ok(mut slot) = rows[y].lock() {
+            *slot = Some(row);
+        }
+        let n = done.fetch_add(1, Ordering::Relaxed) + 1;
+        if n.is_multiple_of(8) || n == h {
+            progress(n as f64 / h as f64);
+        }
+    };
+    if threads == 1 {
+        work();
+    } else {
+        std::thread::scope(|sc| {
+            for _ in 0..threads {
+                sc.spawn(work);
+            }
+        });
+    }
     for (y, slot) in rows.into_iter().enumerate() {
         if let Some(row) = slot.into_inner().ok().flatten() {
             rgb[y * w * 3..(y + 1) * w * 3].copy_from_slice(&row);

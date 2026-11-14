@@ -89,7 +89,7 @@ impl Geo for Indexed<'_> {
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeSet;
-    use std::time::Instant;
+    use web_time::Instant;
 
     use archisim_core::Point2;
 

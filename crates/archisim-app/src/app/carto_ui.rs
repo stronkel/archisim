@@ -99,7 +99,7 @@ pub const WHERE_FROM: [(&str, &str); 4] = [
 impl ArchiSimApp {
     /// Asks for the files and opens the window.
     pub(super) fn pick_carto(&mut self) {
-        let mut d = rfd::FileDialog::new()
+        let mut d = crate::file_dialog::FileDialog::new()
             .set_title("Traer el entorno (Catastro, OpenStreetMap, MDT)")
             .add_filter(
                 "Cartografía (GML, OSM, ASC, PNG con .pgw)",

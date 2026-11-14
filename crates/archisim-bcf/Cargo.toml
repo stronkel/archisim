@@ -9,6 +9,7 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+web-time.workspace = true
 uuid.workspace = true
 roxmltree = "0.21"
 flate2 = "1"
