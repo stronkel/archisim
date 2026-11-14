@@ -10,7 +10,8 @@ cd "$(dirname "$0")/.."
 
 rm -rf dist/web dist/archisim-web.zip
 mkdir -p dist
-trunk build --release --public-url ./ --dist dist/web crates/archisim-app/web/index.html
+# Trunk finds the program's package from the folder it is run in.
+(cd crates/archisim-app && trunk build --release --public-url ./ --dist "$PWD/../../dist/web" index.html)
 
 # The demo house, opened when the page starts.
 cargo run --release -p archisim-cli -- demo out/web-demo

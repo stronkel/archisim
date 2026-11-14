@@ -1,6 +1,6 @@
 //! ArchiSim in the browser (`docs/IPAD.md`, T1).
 //!
-//! The page (`web/index.html`) has a canvas `archisim`; the program starts
+//! The page (`index.html` of this crate) has a canvas `archisim`; the program starts
 //! there with eframe's web runner (WebGPU where the browser has it, WebGL
 //! if not). It opens the demo house that the build puts next to the page
 //! (`demo.archisim`), or a new project if it is not there.
