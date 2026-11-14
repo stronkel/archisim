@@ -23,6 +23,9 @@ pub fn write(what: &str) {
     if cfg!(test) {
         return;
     }
+    // In the browser, to its console (there is no settings folder).
+    #[cfg(target_arch = "wasm32")]
+    web_sys::console::error_1(&what.into());
     let Some(path) = log_file() else {
         return;
     };
