@@ -132,7 +132,15 @@ impl ArchiSimApp {
         }
         let shown = self.ed.shown();
         let model: &archisim_core::Model = &shown;
-        let chapters = archisim_plan::schedules::measurements(model);
+        let revision = self.ed.revision();
+        let chapters = match &self.measure_cache {
+            Some((r, c)) if *r == revision => c.clone(),
+            _ => {
+                let c = std::rc::Rc::new(archisim_plan::schedules::measurements(model));
+                self.measure_cache = Some((revision, c.clone()));
+                c
+            }
+        };
         let mut actions: Vec<(String, Option<PriceConcept>)> = Vec::new();
         let mut open_bank = false;
         let mut pick = None;
@@ -182,7 +190,7 @@ impl ArchiSimApp {
                     ui.label(egui::RichText::new(h).strong());
                 }
                 ui.end_row();
-                for (code, title, items) in &chapters {
+                for (code, title, items) in chapters.iter() {
                     let mut chapter_total = 0.0;
                     ui.label(egui::RichText::new(code.to_string()).strong());
                     ui.label("");

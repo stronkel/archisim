@@ -24,7 +24,7 @@ impl ArchiSimApp {
             }
         }
 
-        self.navigate(&ctx, &response, rect);
+        crate::profile::time("planta: navigate", || self.navigate(&ctx, &response, rect));
         let reference = self.reference_level();
         let walls_key = (
             self.ed.revision(),
@@ -42,66 +42,142 @@ impl ArchiSimApp {
             .ids();
             self.other_walls_key = Some(walls_key);
         }
-        self.track_cursor(&ctx, &response, rect);
-        self.sculpt_follow(&ctx);
+        crate::profile::time("planta: track_cursor", || {
+            self.track_cursor(&ctx, &response, rect)
+        });
+        crate::profile::time("planta: sculpt_follow", || self.sculpt_follow(&ctx));
         // Keys go to the plan unless a field is being typed in (a temporary
         // dimension's too: egui lets go of the focus on Esc before the plan
         // sees it).
         if !crate::app::typing_in_text(&ctx) && self.temp_edit.is_none() {
             self.keyboard_in_view(&ctx);
         }
-        self.clicks(&ctx, &response, rect);
+        crate::profile::time("planta: clicks", || self.clicks(&ctx, &response, rect));
 
         // Paper, grid, the plan itself, then what is being done on top.
         painter.rect_filled(rect, CornerRadius::ZERO, PAPER);
         if self.show_grid {
             self.draw_grid(&painter, rect);
         }
-        self.draw_plan(&ctx, &painter, rect);
+        crate::profile::time("planta: draw_plan", || self.draw_plan(&ctx, &painter, rect));
         // In a sketch, the rest of the plan behind a veil (before what is
         // drawn over the plan: selection, previews, the order running).
-        self.draw_sketch(&painter, rect);
-        self.draw_sketch_candidate(&ctx, &painter, rect);
-        self.draw_plan_ghost(&ctx, &painter, rect);
-        self.draw_links_in_plan(&painter, rect);
-        self.draw_team(&painter, rect);
-        self.draw_origin(&painter, rect);
-        self.draw_selection(&painter, rect);
-        self.draw_underlay_pick(&painter, rect);
-        self.draw_cte_route(&painter, rect);
-        self.draw_temp_dims(&painter, rect);
-        self.draw_anchor_drag(&painter, rect);
-        self.draw_flip_controls(&painter, rect);
-        self.draw_hotspots(&painter, rect);
-        self.draw_wall_preview(&painter, rect);
-        self.draw_concept_drop(&painter, rect);
-        self.draw_slab_preview(&painter, rect);
-        self.draw_opening_preview(&painter, rect);
-        self.draw_member_preview(&painter, rect);
-        self.draw_foundation_preview(&painter, rect);
-        self.draw_module_preview(&painter, rect);
-        self.draw_concept_preview(&painter, rect);
-        self.draw_urban_preview(&painter, rect);
-        self.draw_marking_preview(&painter, rect);
-        self.draw_pool_preview(&painter, rect);
-        self.draw_planting_preview(&painter, rect);
-        self.draw_services_preview(&painter, rect);
-        self.draw_method_preview(&painter, rect);
-        self.draw_space_preview(&painter, rect);
-        self.draw_section_preview(&painter, rect);
-        self.draw_roof_preview(&painter, rect);
-        self.draw_stair_preview(&painter, rect);
-        self.draw_terrain_preview(&painter, rect);
-        self.draw_brush_plan(&painter, rect);
-        self.draw_curtain_preview(&painter, rect);
-        self.draw_railing_preview(&painter, rect);
-        self.draw_object_preview(&painter, rect);
-        self.draw_wand_preview(&painter, rect);
-        self.draw_dim_preview(&painter, rect);
-        self.draw_drag_preview(&painter, rect);
-        self.draw_cad(&painter, rect);
-        self.draw_tracking(&painter, rect);
-        self.draw_cursor(&painter, rect);
+        crate::profile::time("planta: draw_sketch", || self.draw_sketch(&painter, rect));
+        crate::profile::time("planta: draw_sketch_candidate", || {
+            self.draw_sketch_candidate(&ctx, &painter, rect)
+        });
+        crate::profile::time("planta: draw_plan_ghost", || {
+            self.draw_plan_ghost(&ctx, &painter, rect)
+        });
+        crate::profile::time("planta: draw_links_in_plan", || {
+            self.draw_links_in_plan(&painter, rect)
+        });
+        crate::profile::time("planta: draw_team", || self.draw_team(&painter, rect));
+        crate::profile::time("planta: draw_origin", || self.draw_origin(&painter, rect));
+        crate::profile::time("planta: draw_selection", || {
+            self.draw_selection(&painter, rect)
+        });
+        crate::profile::time("planta: draw_underlay_pick", || {
+            self.draw_underlay_pick(&painter, rect)
+        });
+        crate::profile::time("planta: draw_cte_route", || {
+            self.draw_cte_route(&painter, rect)
+        });
+        crate::profile::time("planta: draw_temp_dims", || {
+            self.draw_temp_dims(&painter, rect)
+        });
+        crate::profile::time("planta: draw_anchor_drag", || {
+            self.draw_anchor_drag(&painter, rect)
+        });
+        crate::profile::time("planta: draw_flip_controls", || {
+            self.draw_flip_controls(&painter, rect)
+        });
+        crate::profile::time("planta: draw_hotspots", || {
+            self.draw_hotspots(&painter, rect)
+        });
+        crate::profile::time("planta: draw_wall_preview", || {
+            self.draw_wall_preview(&painter, rect)
+        });
+        crate::profile::time("planta: draw_concept_drop", || {
+            self.draw_concept_drop(&painter, rect)
+        });
+        crate::profile::time("planta: draw_slab_preview", || {
+            self.draw_slab_preview(&painter, rect)
+        });
+        crate::profile::time("planta: draw_opening_preview", || {
+            self.draw_opening_preview(&painter, rect)
+        });
+        crate::profile::time("planta: draw_member_preview", || {
+            self.draw_member_preview(&painter, rect)
+        });
+        crate::profile::time("planta: draw_foundation_preview", || {
+            self.draw_foundation_preview(&painter, rect)
+        });
+        crate::profile::time("planta: draw_module_preview", || {
+            self.draw_module_preview(&painter, rect)
+        });
+        crate::profile::time("planta: draw_concept_preview", || {
+            self.draw_concept_preview(&painter, rect)
+        });
+        crate::profile::time("planta: draw_urban_preview", || {
+            self.draw_urban_preview(&painter, rect)
+        });
+        crate::profile::time("planta: draw_marking_preview", || {
+            self.draw_marking_preview(&painter, rect)
+        });
+        crate::profile::time("planta: draw_pool_preview", || {
+            self.draw_pool_preview(&painter, rect)
+        });
+        crate::profile::time("planta: draw_planting_preview", || {
+            self.draw_planting_preview(&painter, rect)
+        });
+        crate::profile::time("planta: draw_services_preview", || {
+            self.draw_services_preview(&painter, rect)
+        });
+        crate::profile::time("planta: draw_method_preview", || {
+            self.draw_method_preview(&painter, rect)
+        });
+        crate::profile::time("planta: draw_space_preview", || {
+            self.draw_space_preview(&painter, rect)
+        });
+        crate::profile::time("planta: draw_section_preview", || {
+            self.draw_section_preview(&painter, rect)
+        });
+        crate::profile::time("planta: draw_roof_preview", || {
+            self.draw_roof_preview(&painter, rect)
+        });
+        crate::profile::time("planta: draw_stair_preview", || {
+            self.draw_stair_preview(&painter, rect)
+        });
+        crate::profile::time("planta: draw_terrain_preview", || {
+            self.draw_terrain_preview(&painter, rect)
+        });
+        crate::profile::time("planta: draw_brush_plan", || {
+            self.draw_brush_plan(&painter, rect)
+        });
+        crate::profile::time("planta: draw_curtain_preview", || {
+            self.draw_curtain_preview(&painter, rect)
+        });
+        crate::profile::time("planta: draw_railing_preview", || {
+            self.draw_railing_preview(&painter, rect)
+        });
+        crate::profile::time("planta: draw_object_preview", || {
+            self.draw_object_preview(&painter, rect)
+        });
+        crate::profile::time("planta: draw_wand_preview", || {
+            self.draw_wand_preview(&painter, rect)
+        });
+        crate::profile::time("planta: draw_dim_preview", || {
+            self.draw_dim_preview(&painter, rect)
+        });
+        crate::profile::time("planta: draw_drag_preview", || {
+            self.draw_drag_preview(&painter, rect)
+        });
+        crate::profile::time("planta: draw_cad", || self.draw_cad(&painter, rect));
+        crate::profile::time("planta: draw_tracking", || {
+            self.draw_tracking(&painter, rect)
+        });
+        crate::profile::time("planta: draw_cursor", || self.draw_cursor(&painter, rect));
         if let (Some(a), Some(c)) = (self.window_start, self.cursor) {
             let r = Rect::from_two_pos(
                 self.view.to_screen(rect, a),
@@ -116,10 +192,14 @@ impl ArchiSimApp {
             );
         }
 
-        self.draw_overlays(&ctx, &painter, rect);
-        self.template_pill(ui, rect);
-        self.temp_edit_ui(&ctx);
-        self.terrain_z_editor(&ctx, rect);
+        crate::profile::time("planta: draw_overlays", || {
+            self.draw_overlays(&ctx, &painter, rect)
+        });
+        crate::profile::time("planta: template_pill", || self.template_pill(ui, rect));
+        crate::profile::time("planta: temp_edit_ui", || self.temp_edit_ui(&ctx));
+        crate::profile::time("planta: terrain_z_editor", || {
+            self.terrain_z_editor(&ctx, rect)
+        });
 
         let icon = match self.tool {
             Tool::Wall
@@ -1701,40 +1781,24 @@ impl ArchiSimApp {
             style: self.view_style.clone(),
             ceiling: self.active_ceiling(),
         };
-        let stale = self.plan.as_ref().filter(|p| p.0 != key);
-        if let Some((old, tex)) = stale {
-            if old.same_but_view(&key) && self.view_moving(ctx) {
-                self.paint_moved(painter, rect, tex, old.lo, old.hi);
-                return;
-            }
-        }
-        if self.plan.as_ref().map(|p| &p.0) != Some(&key) {
-            self.view_moved_at = None;
-            let started = web_time::Instant::now();
+        let moving = self.view_moving(ctx);
+        let mut picture = std::mem::replace(&mut self.plan, super::picture::Picture::new("plan"));
+        let shown = picture.update(ctx, &key, moving, self.at_once, || {
+            let model = self.shared_model();
             let shadows = self.plan_shadows();
             let mut options = self.screen_plan_options(lo, hi);
             options.shadows = shadows;
-            let image = rasterize_with(&self.ed.shown(), self.ed.level, size, &options);
-            self.last_plan_ms = started.elapsed().as_secs_f64() * 1000.0;
-            match &mut self.plan {
-                Some((k, tex)) => {
-                    tex.set(image, TextureOptions::LINEAR);
-                    *k = key;
-                }
-                None => {
-                    let tex = ctx.load_texture("plan", image, TextureOptions::LINEAR);
-                    self.plan = Some((key, tex));
-                }
-            }
+            Box::new(move |k: PlanKey| {
+                let mut options = options.clone();
+                options.viewport = Some((k.lo, k.hi));
+                rasterize_with(&model, k.level, k.size, &options)
+            })
+        });
+        if let Some((k, tex)) = shown {
+            self.paint_moved(painter, rect, tex, k.lo, k.hi);
         }
-        if let Some((_, tex)) = &self.plan {
-            painter.image(
-                tex.id(),
-                rect,
-                Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)),
-                Color32::WHITE,
-            );
-        }
+        self.last_plan_ms = picture.last().as_secs_f64() * 1000.0;
+        self.plan = picture;
     }
 
     /// The project origin (0, 0, ±0,00), as the survey mark of a hotspot:
@@ -1778,6 +1842,31 @@ impl ArchiSimApp {
                         Stroke::new(2.0, ACCENT.gamma_multiply(0.5)),
                     ));
                 }
+            }
+            // What a click takes, by the cursor, and with more there, which
+            // of them (Tab goes on).
+            // As Revit: once the cursor rests a moment (or there is more
+            // than one there).
+            let rest = painter
+                .ctx()
+                .input(|i| i.pointer.time_since_last_movement())
+                >= 0.35;
+            if !rest {
+                painter
+                    .ctx()
+                    .request_repaint_after(std::time::Duration::from_millis(360));
+            }
+            let still = self.drag.is_none()
+                && self.window_start.is_none()
+                && (rest || self.under_cursor.len() > 1);
+            if let (Tool::Arrow, true, Some(c)) = (self.tool, still, self.cursor) {
+                let n = self.under_cursor.len();
+                let name = super::context_bar::element_name(&h);
+                let text = match self.under_cursor.iter().position(|e| *e == h) {
+                    Some(i) if n > 1 => format!("{name}  ({} de {n} · Tab)", i + 1),
+                    _ => name.to_string(),
+                };
+                self.draw_label(painter, rect, c.point, text);
             }
         }
         for e in &self.ed.selection {

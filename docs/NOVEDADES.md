@@ -2,13 +2,24 @@
 
 Lo que cambia en cada versión, en pocas líneas. ArchiSim enseña la parte de su versión antes de actualizarse (Ayuda → «Buscar actualizaciones…»), y la página de cada versión en GitHub la lleva también. El detalle, día a día, está en `BITACORA.md`.
 
-Cada versión empieza con una línea `## <versión>` (por ejemplo `## 0.85.0
+Cada versión empieza con una línea `## <versión>` (por ejemplo `## 0.81.0`): es la que busca la publicación.
+
+## 0.86.0
 
 - **ArchiSim en el iPad (primera vuelta).** ArchiSim funciona también en el navegador, con la gráfica del iPad (Safari 26). Se sirve desde tu NAS con usuario y contraseña y se pone al día solo con cada versión (`scripts/nas/README.md`).
   - Abre la casa de ejemplo en planta y en 3D.
   - Todavía no abre ni guarda archivos (llega en la próxima vuelta), ni descarga el entorno.
   - En el iPad: Compartir → «Añadir a pantalla de inicio» lo deja como una app.
 - En el escritorio no cambia nada.
+
+## 0.85.0
+
+- **Todo responde al instante, también en proyectos grandes.** La ventana rehacía en cada momento las tablas y los recuentos del navegador; en un edificio grande eso la frenaba en cualquier vista. Ahora se cuentan solo cuando cambia el modelo.
+- **Zoom y desplazamiento sin esperas.** La planta, los alzados y las secciones se dibujan con un margen alrededor y en segundo plano: mientras llega el dibujo fino se ve el anterior, sin que la ventana se pare.
+- **Alzados, secciones y 3D se preparan aparte.** Al abrirlos o cambiar el modelo, la ventana sigue respondiendo («Dibujando la sección…», «Preparando el 3D…»). Elegir en 3D es inmediato.
+- **Se ve qué vas a coger.** En alzados, secciones y 3D, al pasar el ratón sale el contorno azul del elemento y su nombre; al elegirlo, solo su contorno, sin relleno. Donde hay varios uno encima de otro, **Tab** o un segundo clic coge el de detrás («2 de 4 · Tab»).
+- **Guardar sin pararse.** Ctrl+S guarda en segundo plano.
+- **Medidor** (Ctrl+Alt+F): cuánto tarda cada fotograma y qué parte de la ventana se lleva el tiempo, para avisarnos si algo va lento.
 
 ## 0.84.0
 
@@ -38,7 +49,6 @@ Cada versión empieza con una línea `## <versión>` (por ejemplo `## 0.85.0
 - **Planos de despiece.** Archivo → Exportar → «Despiece a mano de las fachadas…»: una hoja A3 por cara, vista desde fuera, con las marcas de las piezas, las juntas acotadas y la tabla de piezas para el taller y la obra.
 - **Forjados y falsos techos despiezados a mano**, en planta: las mismas líneas, pinturas y piezas en obra que en los muros. Lo siguen la compra y los pedidos.
 
-## 0.81.0`): es la que busca la publicación.
 
 ## 0.81.0
 

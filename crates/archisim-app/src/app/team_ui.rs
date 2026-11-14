@@ -288,7 +288,7 @@ impl ArchiSimApp {
                     team.counted_revision = self.ed.revision();
                     team.local = 0;
                 }
-                self.plan = None;
+                self.plan.clear();
                 if report.dropped.is_empty() && report.skipped.is_empty() {
                     self.say(report.to_string());
                 } else {

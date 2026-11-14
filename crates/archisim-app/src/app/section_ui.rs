@@ -42,22 +42,6 @@ pub struct SectionKey {
     style: archisim_core::ViewStyle,
 }
 
-impl SectionKey {
-    /// Whether `other` is the same picture of another region or size (the
-    /// view has only moved or zoomed). A picture marked to be drawn again
-    /// (size 0, after the model changed) is not.
-    fn same_but_view(&self, other: &SectionKey) -> bool {
-        self.size != [0, 0]
-            && *other
-                == SectionKey {
-                    lo: other.lo,
-                    hi: other.hi,
-                    size: other.size,
-                    ..self.clone()
-                }
-    }
-}
-
 /// How a section is drawn for the picture of `key`.
 fn section_options(key: &SectionKey) -> archisim_plan::PlanOptions {
     let (lo, hi) = (key.lo, key.hi);
@@ -82,12 +66,16 @@ const STASHED: usize = 4;
 /// The drawing of the section shown, worked out once per revision of the
 /// model, and its picture on screen.
 pub struct SectionCache {
-    revision: u64,
+    pub(super) revision: u64,
     section: SectionId,
     phase_view: archisim_plan::phases::PhaseView,
     drawing: std::sync::Arc<SectionDrawing>,
-    picture: Option<(SectionKey, TextureHandle)>,
+    pub(super) picture: super::picture::Picture<SectionKey>,
 }
+
+/// What a section's drawing is of: the model's revision, the section and
+/// the phases shown.
+pub type DrawingKey = (u64, SectionId, archisim_plan::phases::PhaseView);
 
 /// Depths offered by the tool (metres).
 const DEPTHS: [f64; 5] = [2.0, 4.0, 8.0, 15.0, 30.0];
@@ -187,20 +175,19 @@ impl ArchiSimApp {
 
     // ---- The view --------------------------------------------------------
 
-    /// Keeps the drawing of the section shown up to date.
-    fn refresh_section(&mut self, id: SectionId) {
+    /// Keeps the drawing of the section shown up to date. Working it out
+    /// can take seconds in a big building: then it is done on another
+    /// thread while the one before stays on screen.
+    fn refresh_section(&mut self, ctx: &egui::Context, id: SectionId) {
         let revision = self.ed.revision();
         let phase_view = self.phase_view;
-        let fresh = self.section_cache.as_ref().is_some_and(|c| {
-            c.revision == revision && c.section == id && c.phase_view == phase_view
-        });
-        if fresh {
-            return;
-        }
-        // A section seen before, unchanged since: back to it as it was.
         let up_to_date = |c: &SectionCache| {
             c.revision == revision && c.section == id && c.phase_view == phase_view
         };
+        if self.section_cache.as_ref().is_some_and(up_to_date) {
+            return;
+        }
+        // A section seen before, unchanged since: back to it as it was.
         if let Some(i) = self.section_stash.iter().position(up_to_date) {
             let back = self.section_stash.remove(i);
             if let Some(old) = self.section_cache.replace(back) {
@@ -208,33 +195,70 @@ impl ArchiSimApp {
             }
             return;
         }
-        let shown = self.ed.shown();
-        let model: &archisim_core::Model = &shown;
-        let Some(sec) = model.section(id) else {
+        let want: DrawingKey = (revision, id, phase_view);
+        if let Some(p) = self.section_pending.as_ref().filter(|p| p.key == want) {
+            match p.take() {
+                Some(drawing) => {
+                    self.section_pending = None;
+                    self.install_section(want, drawing);
+                }
+                None => ctx.request_repaint_after(std::time::Duration::from_millis(30)),
+            }
+            return;
+        }
+        let model = self.shared_model();
+        if model.section(id).is_none() {
+            return;
+        }
+        let took = self.section_took.clone();
+        let model_for = model.clone();
+        let work = move || {
+            let model = model_for;
+            let started = web_time::Instant::now();
+            let sec = model.section(id).cloned();
+            let phased = archisim_plan::phases::phase_model(&model, phase_view);
+            let m = phased.as_ref().unwrap_or(&model);
+            let drawing = sec.map(|sec| section_drawing(m, &sec));
+            if let Ok(mut t) = took.lock() {
+                *t = started.elapsed();
+            }
+            drawing
+        };
+        let last = self.section_took.lock().map(|t| *t).unwrap_or_default();
+        if !super::picture::aside(last, self.at_once, &model) {
+            self.section_pending = None;
+            self.install_section(want, work());
+        } else {
+            self.section_pending = Some(super::background::Pending::start(want, work));
+            ctx.request_repaint_after(std::time::Duration::from_millis(30));
+        }
+    }
+
+    /// Puts the drawing of `key` on screen; the picture of the same
+    /// section shown before stays until the new one is made.
+    fn install_section(&mut self, key: DrawingKey, drawing: Option<SectionDrawing>) {
+        let Some(drawing) = drawing else {
             return;
         };
-        let phased = archisim_plan::phases::phase_model(model, phase_view);
-        let drawing = section_drawing(phased.as_ref().unwrap_or(model), sec);
-        // The texture of the one shown before is reused when it was this
-        // section; another section is put aside to come back to.
+        let (revision, section, phase_view) = key;
         let picture = match self.section_cache.take() {
-            Some(c) if c.section == id => c.picture,
+            Some(c) if c.section == section => {
+                let mut p = c.picture;
+                p.outdated();
+                p
+            }
             Some(c) => {
                 self.stash_section(c);
-                None
+                super::picture::Picture::new("section")
             }
-            None => None,
+            None => super::picture::Picture::new("section"),
         };
         self.section_cache = Some(SectionCache {
             revision,
-            section: id,
+            section,
             phase_view,
             drawing: std::sync::Arc::new(drawing),
-            picture: picture.map(|(mut k, t)| {
-                // Same texture, new picture.
-                k.size = [0, 0];
-                (k, t)
-            }),
+            picture,
         });
     }
 
@@ -262,8 +286,16 @@ impl ArchiSimApp {
         let Some(id) = self.active_section() else {
             return;
         };
-        self.refresh_section(id);
-        let Some(cache) = self.section_cache.as_ref() else {
+        self.refresh_section(&ctx, id);
+        let Some(cache) = self.section_cache.as_ref().filter(|c| c.section == id) else {
+            // A section seen for the first time, still being worked out.
+            painter.text(
+                rect.center(),
+                egui::Align2::CENTER_CENTER,
+                "Dibujando la sección…",
+                egui::FontId::proportional(14.0),
+                Color32::from_gray(120),
+            );
             return;
         };
         if self.fit_requested && rect.width() > 50.0 {
@@ -289,13 +321,57 @@ impl ArchiSimApp {
             return;
         }
         // Selection, as in plan: click an element cut or seen (Shift adds
-        // or takes it), click nothing to clear.
-        let under = self
-            .section_hover
-            .and_then(|p| self.section_cache.as_ref()?.drawing.pick(p))
-            .map(crate::pick::of_solid);
+        // or takes it), click nothing to clear. Where several are on top of
+        // each other, Tab (Shift+Tab back) or a second click in the same
+        // place goes to the next, front to back.
+        let here: Vec<Element> = {
+            let mut v: Vec<Element> = Vec::new();
+            if let (Some(p), Some(c)) = (self.section_hover, self.section_cache.as_ref()) {
+                for o in c.drawing.pick_all(p) {
+                    let e = crate::pick::of_solid(o);
+                    if !v.contains(&e) {
+                        v.push(e);
+                    }
+                }
+            }
+            v
+        };
+        let pos = response.hover_pos();
+        if let (Some((at, _)), Some(pos)) = (self.section_tab, pos) {
+            if at.distance(pos) > 4.0 {
+                self.section_tab = None;
+            }
+        }
+        let n = here.len();
+        if n > 1 && response.hovered() && ctx.memory(|m| m.focused().is_none()) {
+            let back = ctx.input_mut(|i| i.consume_key(egui::Modifiers::SHIFT, egui::Key::Tab));
+            if back || ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Tab)) {
+                let i = self.section_tab.map_or(0, |(_, i)| i % n);
+                let i = if back { (i + n - 1) % n } else { (i + 1) % n };
+                if let Some(pos) = pos {
+                    self.section_tab = Some((pos, i));
+                }
+            }
+        }
+        let index = self.section_tab.map_or(0, |(_, i)| i % n.max(1));
+        let mut under = here.get(index).copied();
         if response.clicked_by(egui::PointerButton::Primary) {
             let shift = ctx.input(|i| i.modifiers.shift || i.modifiers.command);
+            // A click again on what is already selected, with more under
+            // it: the next one down.
+            if !shift
+                && n > 1
+                && under
+                    .is_some_and(|e| self.ed.selection.len() == 1 && self.ed.selection.contains(&e))
+            {
+                let i = (index + 1) % n;
+                if let Some(pos) = pos {
+                    self.section_tab = Some((pos, i));
+                }
+                under = here.get(i).copied();
+            } else if let Some(pos) = pos {
+                self.section_tab = Some((pos, index));
+            }
             match (under, shift) {
                 (Some(e), true) => {
                     if !self.ed.selection.remove(&e) {
@@ -310,6 +386,17 @@ impl ArchiSimApp {
             }
         }
         self.draw_section_selection(&painter, rect, under);
+        // What a click takes, by the cursor: its name and, with more there,
+        // which of them.
+        if let (Some(e), Some(p)) = (under, self.section_hover) {
+            let name = context_bar::element_name(&e);
+            let text = if n > 1 {
+                format!("{name}  ({} de {n} · Tab)", index + 1)
+            } else {
+                name.to_string()
+            };
+            self.draw_label(&painter, rect, p, text);
+        }
         if under.is_some() {
             ctx.set_cursor_icon(egui::CursorIcon::PointingHand);
         }
@@ -557,27 +644,17 @@ impl ArchiSimApp {
             let Some(owner) = crate::pick::solid_of(e) else {
                 continue;
             };
-            let (cut, faces) = cache.drawing.shape_of(owner);
-            let alpha = if selected { 110 } else { 60 };
-            let tint = Color32::from_rgba_unmultiplied(ACCENT.r(), ACCENT.g(), ACCENT.b(), alpha);
-            let mut mesh = egui::Mesh::default();
-            for poly in &faces {
-                let pts = self.polygon(rect, poly);
-                let base = mesh.vertices.len() as u32;
-                for p in &pts {
-                    mesh.colored_vertex(*p, tint);
-                }
-                for i in 1..pts.len().saturating_sub(1) as u32 {
-                    mesh.add_triangle(base, base + i, base + i + 1);
-                }
-            }
-            painter.add(Shape::mesh(mesh));
+            // Only its outline: what is selected in a thicker line, what a
+            // click would take in a thinner one; the drawing shows through.
+            let colour = if selected {
+                ACCENT
+            } else {
+                Color32::from_rgba_unmultiplied(ACCENT.r(), ACCENT.g(), ACCENT.b(), 190)
+            };
             let width = if selected { 2.5 } else { 1.5 };
-            for l in &cut {
-                painter.add(Shape::closed_line(
-                    self.polygon(rect, l),
-                    Stroke::new(width, ACCENT),
-                ));
+            for [a, b] in cache.drawing.outline_of(owner) {
+                let (a, b) = (self.view.to_screen(rect, a), self.view.to_screen(rect, b));
+                painter.line_segment([a, b], Stroke::new(width, colour));
             }
         }
     }
@@ -604,84 +681,28 @@ impl ArchiSimApp {
                 .unwrap_or_default(),
         };
         let moving = self.view_moving(ctx);
-        let only_moved = self
-            .section_cache
-            .as_ref()
-            .and_then(|c| c.picture.as_ref())
-            .is_some_and(|p| p.0 != key && p.0.same_but_view(&key));
-        if only_moved {
-            // While it moves, and then while its new picture is made aside,
-            // the old one moved.
-            let ready = match &self.section_pending {
-                Some(p) if p.key == key => p.take(),
-                _ if moving => None,
-                _ => {
-                    let model = self.shared_model();
-                    let Some(drawing) = self.section_cache.as_ref().map(|c| c.drawing.clone())
-                    else {
-                        return;
-                    };
-                    let options = section_options(&key);
-                    let size = key.size;
-                    self.section_pending =
-                        Some(super::background::Pending::start(key.clone(), move || {
-                            let svg = render_section(&model, &drawing, &options);
-                            crate::plan_image::rasterize_svg(&svg, size)
-                        }));
-                    None
-                }
-            };
-            match ready {
-                Some(image) => {
-                    self.section_pending = None;
-                    self.view_moved_at = None;
-                    if let Some((k, tex)) =
-                        self.section_cache.as_mut().and_then(|c| c.picture.as_mut())
-                    {
-                        tex.set(image, TextureOptions::LINEAR);
-                        *k = key.clone();
-                    }
-                }
-                None => {
-                    if let Some((old, tex)) =
-                        self.section_cache.as_ref().and_then(|c| c.picture.as_ref())
-                    {
-                        self.paint_moved(painter, rect, tex, old.lo, old.hi);
-                    }
-                    ctx.request_repaint_after(std::time::Duration::from_millis(30));
-                    return;
-                }
-            }
-        }
-        let shown = self.ed.shown();
-        let model: &archisim_core::Model = &shown;
-        let Some(cache) = self.section_cache.as_mut() else {
+        let at_once = self.at_once;
+        let Some((drawing, mut picture)) = self.section_cache.as_mut().map(|c| {
+            let blank = super::picture::Picture::new("section");
+            (c.drawing.clone(), std::mem::replace(&mut c.picture, blank))
+        }) else {
             return;
         };
-        if cache.picture.as_ref().map(|p| &p.0) != Some(&key) {
-            self.view_moved_at = None;
-            self.section_pending = None;
-            let options = section_options(&key);
-            let svg = render_section(model, &cache.drawing, &options);
-            let image = crate::plan_image::rasterize_svg(&svg, size);
-            match &mut cache.picture {
-                Some((k, tex)) => {
-                    tex.set(image, TextureOptions::LINEAR);
-                    *k = key;
-                }
-                None => {
-                    let tex = ctx.load_texture("section", image, TextureOptions::LINEAR);
-                    cache.picture = Some((key, tex));
-                }
-            }
+        let shown = picture
+            .update(ctx, &key, moving, at_once, || {
+                let model = self.shared_model();
+                let drawing = drawing.clone();
+                Box::new(move |k: SectionKey| {
+                    let svg = render_section(&model, &drawing, &section_options(&k));
+                    crate::plan_image::rasterize_svg(&svg, k.size)
+                })
+            })
+            .map(|(k, t)| (k.lo, k.hi, t.clone()));
+        if let Some(c) = self.section_cache.as_mut() {
+            c.picture = picture;
         }
-        if let Some((_, tex)) = &cache.picture {
-            painter.image(
-                tex.id(),
-                rect,
-                Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)),
-                Color32::WHITE,
-            );
+        if let Some((lo, hi, tex)) = shown {
+            self.paint_moved(painter, rect, &tex, lo, hi);
         }
     }
 
@@ -977,4 +998,24 @@ pub struct SectionDrag {
     targets: Vec<Point2>,
     levels: Vec<f64>,
     snapped: Option<Point2>,
+}
+
+impl super::picture::Region for SectionKey {
+    fn lo(&self) -> Point2 {
+        self.lo
+    }
+    fn hi(&self) -> Point2 {
+        self.hi
+    }
+    fn size(&self) -> [usize; 2] {
+        self.size
+    }
+    fn with_view(&self, lo: Point2, hi: Point2, size: [usize; 2]) -> Self {
+        SectionKey {
+            lo,
+            hi,
+            size,
+            ..self.clone()
+        }
+    }
 }

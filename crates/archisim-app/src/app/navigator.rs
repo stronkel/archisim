@@ -54,7 +54,10 @@ pub(super) fn row_menu(
 }
 
 /// A type row of the model tree.
-struct TypeRow {
+/// The navigator's categories, each with its rows of types.
+pub(super) type TypeRows = Vec<(&'static str, Icon, Vec<TypeRow>)>;
+
+pub(super) struct TypeRow {
     /// Doors, windows and objects: the type, to save it in the library.
     family_type: Option<archisim_core::FamilyTypeRef>,
     /// Walls and slabs: the type, to save it in the library.
@@ -127,16 +130,20 @@ impl ArchiSimApp {
             .show(ui, |ui| {
                 match self.nav_tab {
                     NavTab::Project => {
-                        self.nav_views(ui);
-                        self.nav_sheets(ui);
-                        nav_section(ui, "nav-tables", "TABLAS", |ui| self.nav_table_rows(ui));
-                        self.nav_modules(ui);
+                        crate::profile::time("navegador: vistas", || self.nav_views(ui));
+                        crate::profile::time("navegador: planos", || self.nav_sheets(ui));
+                        nav_section(ui, "nav-tables", "TABLAS", |ui| {
+                            crate::profile::time("navegador: tablas", || self.nav_table_rows(ui))
+                        });
+                        crate::profile::time("navegador: módulos", || self.nav_modules(ui));
                     }
                     NavTab::Model => {
                         nav_section(ui, "nav-disciplines", "DISCIPLINAS", |ui| {
-                            self.nav_disciplines(ui)
+                            crate::profile::time("navegador: disciplinas", || {
+                                self.nav_disciplines(ui)
+                            })
                         });
-                        self.nav_model(ui);
+                        crate::profile::time("navegador: modelo", || self.nav_model(ui));
                     }
                 }
                 ui.add_space(6.0);
@@ -522,7 +529,7 @@ impl ArchiSimApp {
         }
     }
 
-    fn type_rows(&self) -> Vec<(&'static str, Icon, Vec<TypeRow>)> {
+    fn type_rows(&self) -> TypeRows {
         let m = self.ed.model();
         let on_level = crate::pick::elements_on_level(m, self.ed.level);
         let walls = m
@@ -801,7 +808,20 @@ impl ArchiSimApp {
 
     fn nav_model(&mut self, ui: &mut Ui) {
         let p = Palette::current(ui.ctx());
-        let categories = self.type_rows();
+        // Counted once per change of the model or the level: counting the
+        // elements of every type at every frame took most of a big
+        // project's frame.
+        let key = (self.ed.revision(), self.ed.level);
+        let categories = match &self.nav_rows {
+            Some((k, rows)) if *k == key => rows.clone(),
+            _ => {
+                let rows = std::rc::Rc::new(crate::profile::time("navegador: tipos", || {
+                    self.type_rows()
+                }));
+                self.nav_rows = Some((key, rows.clone()));
+                rows
+            }
+        };
         let materials = self.ed.model().materials().count();
         let mut select: Option<(Vec<Element>, String)> = None;
         let mut select_all: Option<(Vec<Element>, String)> = None;
@@ -811,7 +831,7 @@ impl ArchiSimApp {
         let mut layered_to_library = None;
         let mut open_library = false;
         nav_section(ui, "nav-model", "MODELO", |ui| {
-            for (name, icon, rows) in &categories {
+            for (name, icon, rows) in categories.iter() {
                 let total: usize = rows.iter().map(|r| r.count).sum();
                 let id = ui.make_persistent_id(("nav-cat", *name));
                 let mut state = CollapsingState::load_with_default_open(ui.ctx(), id, false);

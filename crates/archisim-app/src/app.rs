@@ -14,8 +14,8 @@ use archisim_core::{
 use archisim_geom::{opening_geometry, room_outline, Contour};
 use eframe::egui::{
     self, Align2, Color32, CornerRadius, CursorIcon, FontId, Id, Key, KeyboardShortcut, Modifiers,
-    PointerButton, Pos2, Rect, Sense, Shape, Stroke, StrokeKind, TextEdit, TextureHandle,
-    TextureOptions, Ui, Vec2,
+    PointerButton, Pos2, Rect, Sense, Shape, Stroke, StrokeKind, TextEdit, TextureOptions, Ui,
+    Vec2,
 };
 
 use crate::dim_tool::{DimSettings, DimTool};
@@ -409,11 +409,34 @@ pub struct ArchiSimApp {
     section_stash: Vec<section_ui::SectionCache>,
     /// Pictures of a section and a sheet being drawn aside, and the model
     /// those threads draw from.
-    section_pending: Option<background::Pending<section_ui::SectionKey>>,
+    section_pending: Option<
+        background::Pending<section_ui::DrawingKey, Option<archisim_plan::section::SectionDrawing>>,
+    >,
+    /// The navigator's rows of types, for a revision and level.
+    nav_rows: Option<((u64, LevelId), std::rc::Rc<navigator::TypeRows>)>,
+    /// The tables shown in a schedule tab, for a revision, tab and level.
+    tables_cache: Option<(TablesKey, std::rc::Rc<Tables>)>,
+    /// The measurements of the budget, for a revision.
+    measure_cache: Option<(u64, std::rc::Rc<archisim_plan::schedules::Chapters>)>,
+    /// How many rows each table of the navigator has, for a revision.
+    table_rows: Option<(u64, Vec<usize>)>,
+    /// How many elements each discipline has, for a revision.
+    discipline_counts: Option<(u64, Vec<(archisim_core::ElementDiscipline, usize)>)>,
+    /// How long the last frames took to make, for the meter
+    /// (Ctrl+Alt+F shows it).
+    frame_times: std::collections::VecDeque<f32>,
+    pub show_meter: bool,
+    /// The project being written to its file on another thread.
+    saving: Option<background::Pending<std::path::PathBuf, Result<(), String>>>,
+    /// How long the last section drawing took to work out.
+    section_took: std::sync::Arc<std::sync::Mutex<std::time::Duration>>,
     sheet_pending: Option<background::Pending<sheet_ui::SheetKey>>,
     shared_model: Option<(u64, std::sync::Arc<archisim_core::Model>)>,
     /// Where the pointer is over the section shown (along, height).
     pub section_hover: Option<Point2>,
+    /// Tab in a section or an elevation: where it started (on screen) and
+    /// which of the elements there is shown.
+    pub section_tab: Option<(egui::Pos2, usize)>,
     /// Objects, doors or windows being moved in a section or elevation.
     pub section_drag: Option<section_ui::SectionDrag>,
     /// Drawing the rectangle of a detail in a section (E17): the section
@@ -626,7 +649,7 @@ pub struct ArchiSimApp {
     temp_anchors: (BTreeSet<Element>, crate::temp_dims::Anchors),
     /// The witness end being dragged.
     anchor_drag: Option<(crate::temp_dims::Slot, crate::temp_dims::End)>,
-    plan: Option<(PlanKey, TextureHandle)>,
+    plan: picture::Picture<PlanKey>,
     /// When the plan or section view last moved (panning or zooming)
     /// since its picture was last drawn in full: while it moves, the last
     /// picture is moved with it instead of being drawn again.
@@ -651,6 +674,10 @@ pub struct ArchiSimApp {
     pub import_report: Option<String>,
     /// Last time the plan picture took to draw, in milliseconds.
     pub last_plan_ms: f64,
+    /// Pictures and drawings that took less than this are made at once;
+    /// longer ones on another thread (`picture`). The tests make all at
+    /// once, but the ones that try the other way.
+    pub at_once: std::time::Duration,
     /// Screen area of the plan view in the last frame.
     pub canvas: Rect,
     /// Plan or 3D in the central area (what the active tab shows).
@@ -869,9 +896,19 @@ impl ArchiSimApp {
             section_cache: None,
             section_stash: Vec::new(),
             section_pending: None,
+            section_took: Default::default(),
+            saving: None,
+            frame_times: Default::default(),
+            nav_rows: None,
+            discipline_counts: None,
+            table_rows: None,
+            tables_cache: None,
+            measure_cache: None,
+            show_meter: !cfg!(test) && std::env::var_os("ARCHISIM_MEDIDOR").is_some(),
             sheet_pending: None,
             shared_model: None,
             section_hover: None,
+            section_tab: None,
             section_drag: None,
             detail_pick: None,
             dxf_import: None,
@@ -980,7 +1017,7 @@ impl ArchiSimApp {
             temp_edit: None,
             temp_anchors: Default::default(),
             anchor_drag: None,
-            plan: None,
+            plan: picture::Picture::new("plan"),
             view_moved_at: None,
             other_walls_key: None,
             shadow_cache: None,
@@ -992,6 +1029,11 @@ impl ArchiSimApp {
             show_about: false,
             import_report: None,
             last_plan_ms: 0.0,
+            at_once: if cfg!(test) {
+                std::time::Duration::from_secs(3600)
+            } else {
+                picture::AT_ONCE
+            },
             canvas: Rect::NOTHING,
             mode: ViewMode::Plan,
             tabs: vec![ViewTab::plan(level)],
@@ -1187,7 +1229,7 @@ impl ArchiSimApp {
         self.drag = None;
         self.wall_tool.finish();
         self.slab_tool.finish();
-        self.plan = None;
+        self.plan.clear();
         self.fit_requested = true;
         self.v3d.reset();
         // A project opened starts with its lowest plan, as a new window.
@@ -1490,6 +1532,8 @@ impl ArchiSimApp {
     /// Saves; with `ask` or without a file yet, asks where. Returns whether
     /// the project ended up saved.
     fn save(&mut self, ask: bool) -> bool {
+        // A save still being written aside ends first.
+        self.saving_done(true);
         // In a shared project, the working copy goes to the folder.
         if self.team.is_some() && !ask {
             return self.team_save();
@@ -1525,6 +1569,103 @@ impl ArchiSimApp {
             Err(e) => {
                 self.complain(format!("No se pudo guardar: {e}."));
                 false
+            }
+        }
+    }
+
+    /// The frame-time meter, top right: how long the window takes to make
+    /// each frame, and the last picture of the plan and section.
+    fn frame_meter(&mut self, ctx: &egui::Context, took: std::time::Duration) {
+        let toggle = KeyboardShortcut::new(Modifiers::COMMAND | Modifiers::ALT, Key::F);
+        if ctx.input_mut(|i| i.consume_shortcut(&toggle)) {
+            self.show_meter = !self.show_meter;
+        }
+        self.frame_times.push_back(took.as_secs_f32() * 1000.0);
+        while self.frame_times.len() > 120 {
+            self.frame_times.pop_front();
+        }
+        if !self.show_meter {
+            crate::profile::take(1);
+            return;
+        }
+        let n = self.frame_times.len().max(1) as f32;
+        let mean = self.frame_times.iter().sum::<f32>() / n;
+        let worst = self.frame_times.iter().copied().fold(0.0, f32::max);
+        let section = self.section_took.lock().map(|t| *t).unwrap_or_default();
+        let parts = crate::profile::take(1);
+        let mut text = format!(
+            "fotograma {mean:.1} ms (peor {worst:.0}) · planta {:.0} ms · sección {:.0} ms{}",
+            self.last_plan_ms,
+            section.as_secs_f64() * 1000.0,
+            if self.saving.is_some() {
+                " · guardando…"
+            } else if self.plan.busy() || self.v3d.building() {
+                " · dibujando aparte…"
+            } else {
+                ""
+            }
+        );
+        for (part, ms) in parts.iter().take(6).filter(|p| p.1 >= 0.5) {
+            text.push_str(&format!("\n{part}: {ms:.1} ms"));
+        }
+        let painter = ctx.layer_painter(egui::LayerId::new(
+            egui::Order::Foreground,
+            egui::Id::unique("frame-meter"),
+        ));
+        // Bottom right, over the drawing, clear of the bars.
+        let at = ctx.content_rect().right_bottom() + Vec2::new(-22.0, -64.0);
+        let font = egui::FontId::monospace(11.0);
+        let galley = painter.layout_no_wrap(text, font, Color32::WHITE);
+        let r = Rect::from_min_size(at - galley.size(), galley.size()).expand(5.0);
+        painter.rect_filled(r, CornerRadius::same(4), Color32::from_black_alpha(170));
+        painter.galley(r.min + Vec2::splat(5.0), galley, Color32::WHITE);
+        ctx.request_repaint_after(std::time::Duration::from_millis(250));
+    }
+
+    /// Ctrl+S: a project that has its file is written on another thread,
+    /// so a big one does not stop the window; the rest as [`Self::save`].
+    pub(super) fn save_quick(&mut self) {
+        if self.team.is_some() || self.saving.is_some() || cfg!(test) {
+            self.save(false);
+            return;
+        }
+        let Some((path, model)) = self.ed.save_aside() else {
+            self.save(false);
+            return;
+        };
+        let to = path.clone();
+        self.saving = Some(background::Pending::start(path, move || {
+            archisim_file::save(&model, &to).map_err(|e| e.to_string())
+        }));
+    }
+
+    /// Ends a save written aside, once it is done (or, with `wait`,
+    /// waiting for it).
+    pub(super) fn saving_done(&mut self, wait: bool) {
+        let Some(p) = &self.saving else {
+            return;
+        };
+        let mut done = p.take();
+        while done.is_none() && wait {
+            std::thread::sleep(std::time::Duration::from_millis(5));
+            done = p.take();
+        }
+        let Some(result) = done else {
+            return;
+        };
+        let path = p.key.clone();
+        self.saving = None;
+        match result {
+            Ok(()) => {
+                self.note_recent(&path);
+                self.say(format!("Guardado en {}.", path.display()));
+                if let Err(e) = self.coord.save_beside(&path) {
+                    self.complain(format!("No se pudieron guardar los vínculos: {e}."));
+                }
+            }
+            Err(e) => {
+                self.ed.save_failed();
+                self.complain(format!("No se pudo guardar: {e}."));
             }
         }
     }
@@ -2039,7 +2180,7 @@ impl ArchiSimApp {
         }
         missions_ui::clear_marks(&ctx);
         widgets::note_click(&ctx);
-        self.ed.select_whole_groups();
+        crate::profile::time("grupos de dibujo", || self.ed.select_whole_groups());
         // Sketching, Intro with no command running accepts the sketch
         // (before it can repeat the last command).
         if matches!(self.mode, ViewMode::Plan | ViewMode::Drafting(_)) {
@@ -2047,7 +2188,7 @@ impl ArchiSimApp {
         }
         // Texts are measured and drawn in the project's lettering.
         archisim_draft::font::set_font(self.ed.model().graphics.font);
-        self.handle_close(&ctx);
+        crate::profile::time("cerrar", || self.handle_close(&ctx));
         // Escape with the right click's menu open only closes it (the
         // selection stays).
         if self.context_menu.is_some()
@@ -2078,16 +2219,16 @@ impl ArchiSimApp {
         } else {
             self.v3d.flying = false;
         }
-        self.handle_shortcuts(&ctx);
+        crate::profile::time("teclas", || self.handle_shortcuts(&ctx));
         self.command_search_window(&ctx);
-        self.drop_locked_from_selection();
-        self.keep_tool_types_valid();
+        crate::profile::time("bloqueados", || self.drop_locked_from_selection());
+        crate::profile::time("tipos de las herramientas", || self.keep_tool_types_valid());
         self.receive_files(&ctx);
-        self.coord_poll(&ctx);
-        self.team_poll(&ctx);
-        self.sync_tabs();
-        self.sync_views(&ctx);
-        self.update_title(&ctx);
+        crate::profile::time("coordinación", || self.coord_poll(&ctx));
+        crate::profile::time("equipo", || self.team_poll(&ctx));
+        crate::profile::time("pestañas", || self.sync_tabs());
+        crate::profile::time("plantillas de vista", || self.sync_views(&ctx));
+        crate::profile::time("título", || self.update_title(&ctx));
         self.age_message(ctx.input(|i| i.time));
         crate::pick::set_scale(match self.mode {
             ViewMode::Sheet(_) => 1.0,
@@ -2097,12 +2238,14 @@ impl ArchiSimApp {
         if self.maquette {
             self.maquette_frame(ui);
         } else {
-            self.technical_frame(ui);
+            crate::profile::time("ventana", || self.technical_frame(ui));
         }
-        self.context_menu_ui(&ctx);
-        self.toast_area(&ctx);
-        self.new_level_bubble(&ctx);
-        self.after_frame(&ctx);
+        crate::profile::time("menú y avisos", || {
+            self.context_menu_ui(&ctx);
+            self.toast_area(&ctx);
+            self.new_level_bubble(&ctx);
+        });
+        crate::profile::time("después del fotograma", || self.after_frame(&ctx));
     }
 
     /// The window of the technical environment: disciplines, tools and
@@ -2143,7 +2286,9 @@ impl ArchiSimApp {
                 })
                 .inner_margin(egui::Margin::symmetric(10, 3)),
             )
-            .show(ui, |ui| self.top_bar(ui));
+            .show(ui, |ui| {
+                crate::profile::time("barra superior", || self.top_bar(ui))
+            });
         egui::Panel::bottom("bottom-bar")
             .frame(
                 island(egui::Margin {
@@ -2154,7 +2299,9 @@ impl ArchiSimApp {
                 })
                 .inner_margin(egui::Margin::symmetric(10, 3)),
             )
-            .show(ui, |ui| self.bottom_bar(ui));
+            .show(ui, |ui| {
+                crate::profile::time("barra inferior", || self.bottom_bar(ui))
+            });
         // The drawing stays in the middle of the window: the column on the
         // right (navigator) is as wide as the two on the left (disciplines,
         // and tools with properties). Dragging the edge of the tools widens
@@ -2163,7 +2310,9 @@ impl ArchiSimApp {
             .resizable(false)
             .exact_size(RAIL_WIDTH + (gap * 3) as f32)
             .frame(island(side(gap * 2, gap)).inner_margin(egui::Margin::symmetric(4, 6)))
-            .show(ui, |ui| self.discipline_rail(ui));
+            .show(ui, |ui| {
+                crate::profile::time("disciplinas", || self.discipline_rail(ui))
+            });
         // The tools of the discipline and, below them, Properties, as
         // Revit's palette: choosing a tool and its type is a short move of
         // the mouse.
@@ -2173,7 +2322,9 @@ impl ArchiSimApp {
             .min_size(MIN_SIDE_WIDTH - RAIL_WIDTH)
             .max_size(MAX_SIDE_WIDTH - RAIL_WIDTH)
             .frame(island(side(gap, gap)).inner_margin(egui::Margin::symmetric(10, 6)))
-            .show(ui, |ui| self.tool_column(ui));
+            .show(ui, |ui| {
+                crate::profile::time("herramientas y propiedades", || self.tool_column(ui))
+            });
         self.side_width = RAIL_WIDTH + shown.response.rect.width();
         if self.show_navigator {
             let panel = egui::Panel::right("navigator")
@@ -2182,7 +2333,9 @@ impl ArchiSimApp {
             panel
                 .resizable(false)
                 .exact_size(self.side_width)
-                .show(ui, |ui| self.navigator(ui));
+                .show(ui, |ui| {
+                    crate::profile::time("navegador", || self.navigator(ui))
+                });
         }
         let centre = egui::Frame::new()
             .fill(p.panel)
@@ -2192,7 +2345,7 @@ impl ArchiSimApp {
             .inner_margin(egui::Margin::same(1));
         egui::CentralPanel::default().frame(centre).show(ui, |ui| {
             ui.spacing_mut().item_spacing.y = 0.0;
-            self.tab_strip(ui);
+            crate::profile::time("pestañas de vistas", || self.tab_strip(ui));
             if self.mode != ViewMode::Schedule {
                 // Revit's ribbon and, under it, its options bar.
                 egui::Panel::top("ribbon")
@@ -2208,7 +2361,7 @@ impl ArchiSimApp {
                             .inner_margin(egui::Margin::symmetric(6, 0))
                             .stroke(Stroke::new(1.0, p.line)),
                     )
-                    .show(ui, |ui| self.ribbon(ui));
+                    .show(ui, |ui| crate::profile::time("cinta", || self.ribbon(ui)));
                 egui::Panel::top("options-bar")
                     .resizable(false)
                     .exact_size(context_bar::OPTIONS_BAR_HEIGHT)
@@ -2218,7 +2371,9 @@ impl ArchiSimApp {
                             .inner_margin(egui::Margin::symmetric(8, 0))
                             .stroke(Stroke::new(1.0, p.line)),
                     )
-                    .show(ui, |ui| self.options_bar(ui));
+                    .show(ui, |ui| {
+                        crate::profile::time("barra de opciones", || self.options_bar(ui))
+                    });
             }
             if !matches!(self.mode, ViewMode::ThreeD | ViewMode::Schedule)
                 && self.command_line_shown()
@@ -2235,9 +2390,9 @@ impl ArchiSimApp {
                     .show(ui, |ui| self.command_line(ui));
             }
             match self.mode {
-                ViewMode::Plan => self.plan_view(ui),
-                ViewMode::ThreeD => self.view_3d(ui),
-                ViewMode::Section => self.section_view(ui),
+                ViewMode::Plan => crate::profile::time("planta", || self.plan_view(ui)),
+                ViewMode::ThreeD => crate::profile::time("3D", || self.view_3d(ui)),
+                ViewMode::Section => crate::profile::time("sección", || self.section_view(ui)),
                 ViewMode::Schedule => {
                     if let Some(tabs::TabKind::Schedule(w)) =
                         self.tabs.get(self.active_tab).map(|t| t.kind)
@@ -2324,7 +2479,7 @@ impl ArchiSimApp {
         if consume(cmd_shift, Key::S) {
             self.save(true);
         } else if consume(cmd, Key::S) {
-            self.save(false);
+            self.save_quick();
         }
         if consume(cmd, Key::N) {
             self.guarded(Pending::New);
@@ -2646,10 +2801,22 @@ impl eframe::App for ArchiSimApp {
         }
         crate::crash::frame_start();
         crate::crash::stage("ventana");
+        let started = web_time::Instant::now();
+        if self.saving.is_some() {
+            self.saving_done(false);
+            ui.ctx()
+                .request_repaint_after(std::time::Duration::from_millis(50));
+        }
         self.show(ui);
+        self.frame_meter(ui.ctx(), started.elapsed());
         crate::crash::frame_done();
     }
 }
+
+/// What the tables of a schedule tab were made for: revision, tab, level.
+type TablesKey = (u64, tabs::SchedTab, Option<LevelId>);
+/// The tables of a schedule tab.
+type Tables = Vec<(archisim_core::ScheduleKind, archisim_plan::schedules::Table)>;
 
 /// The mouse and drawing keys, at the end of the list of shortcuts
 /// (`revit_keys::shortcuts_dialog`).
@@ -2931,6 +3098,7 @@ mod object_ui;
 mod paint_ui;
 mod params_ui;
 mod phases_ui;
+pub(crate) mod picture;
 mod placing;
 mod plan_ui;
 mod planting_ui;
