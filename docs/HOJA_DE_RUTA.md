@@ -321,11 +321,11 @@ Lo que pidió al cerrar H1–H7, más lo que quedó pendiente de H6 y H7. Se hac
 
 ## 13. ArchiSim en el iPad (14/11/2026)
 
-Pedido de Antonio: modelar en serio desde el sofá, con Apple Pencil, teclado y trackpad o solo los dedos. Decidido (D29): primero en el navegador (Safari con WebGPU), después la app nativa. Diseño completo en `docs/IPAD.md`.
+Pedido de Antonio: modelar en serio desde el sofá, con Apple Pencil, teclado y trackpad o solo los dedos. Decidido (D29): primero en el navegador (Safari con WebGPU), después la app nativa; (D30) servido desde el NAS con usuario y contraseña. Diseño completo en `docs/IPAD.md`.
 
 | Bloque | Qué | Estado |
 |---|---|---|
-| T1 | ArchiSim en el navegador, publicado por la integración continua | Pendiente |
+| T1 | ArchiSim en el navegador, servido desde el NAS con contraseña | Hecho, rama `bloque/ipad` (falta probarlo en el iPad) |
 | T2 | Abrir y guardar desde Archivos e iCloud, copia automática | Pendiente |
 | T3 | Gestos y Pencil (el Pencil dibuja, el dedo mueve) | Pendiente |
 | T4 | Tamaño táctil, teclado numérico de cotas, «El dedo dibuja» con lupa | Pendiente |

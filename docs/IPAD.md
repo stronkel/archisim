@@ -6,7 +6,7 @@ Pedido de Antonio (14/11/2026): **modelar en serio desde el sofá**, con el Appl
 
 - ArchiSim se dibuja con egui sobre wgpu, y los dos funcionan en el navegador. Safari 26 (iPadOS 26) trae WebGPU, así que el 3D usa la gráfica del iPad, sin pasar por WebGL.
 - Se prueba con un enlace: sin Xcode, sin App Store, sin cuenta de desarrollador. Cada versión llega al recargar la página.
-- El repositorio es público, así que se puede publicar gratis en GitHub Pages (`stronkel.github.io/archisim`). También se puede servir desde el NAS de casa, con Tailscale.
+- **Se sirve desde el NAS de casa con usuario y contraseña** (D30), no en una web abierta: un contenedor con Caddy pide la contraseña y otro descarga solo cada versión publicada (`scripts/nas/`, con sus pasos en `scripts/nas/README.md`). Tailscale Funnel le pone el HTTPS que Safari exige para usar la gráfica.
 - Todo lo que se haga para el tacto (gestos, Pencil, botones grandes) vale igual para la app nativa de después. El paso a nativa es sobre todo de empaquetado.
 
 ## 2. Cómo se maneja (modo táctil)
@@ -70,4 +70,11 @@ Los gestos y el tamaño táctil (T3 y T4) sirven también en las pantallas táct
 ## 6. Decisiones
 
 - **D29** (14/11/2026, Antonio): iPad por la web primero y la app nativa después; Pencil, teclado y dedos.
-- Pendiente de Antonio: si la web se publica en GitHub Pages (pública, cualquiera con el enlace puede abrir el programa, sin ver proyectos de nadie: los proyectos nunca salen del iPad) o solo en el NAS de casa con Tailscale.
+- **D30** (14/11/2026, Antonio): la versión web no se publica abierta; se sirve desde el NAS con usuario y contraseña (el código sigue público en GitHub).
+
+## 7. Cómo está hecho (T1)
+
+- `crates/archisim-app` compila también para `wasm32-unknown-unknown`. Lo que solo existe en el escritorio va aparte por plataforma: diálogos de archivo (`file_dialog`: en la web contestan «cancelado» y avisan), hilos (`platform::spawn`: en la web se hace en el momento), descargas (`http_get`), el reloj (`web_time`), el bucle de ventana propio de `main.rs` y lo de macOS. El render usa un solo hilo en la web.
+- `web.rs` arranca el programa en el lienzo de `index.html` (con `eframe::WebRunner`) y abre `demo.archisim`, que la compilación pone al lado.
+- `scripts/build_web.sh` lo compila con trunk y hace `dist/archisim-web.zip`; la integración continua lo compila en cada cambio, lo abre en Chromium (`scripts/web_smoke.py`: planta y 3D) y lo adjunta a cada versión publicada.
+- El programa pesa unos 51 MB (13 MB comprimido). Afinarlo (wasm-opt) va en T5.

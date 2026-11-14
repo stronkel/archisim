@@ -2,7 +2,15 @@
 
 Lo que cambia en cada versión, en pocas líneas. ArchiSim enseña la parte de su versión antes de actualizarse (Ayuda → «Buscar actualizaciones…»), y la página de cada versión en GitHub la lleva también. El detalle, día a día, está en `BITACORA.md`.
 
-Cada versión empieza con una línea `## <versión>` (por ejemplo `## 0.84.0
+Cada versión empieza con una línea `## <versión>` (por ejemplo `## 0.85.0
+
+- **ArchiSim en el iPad (primera vuelta).** ArchiSim funciona también en el navegador, con la gráfica del iPad (Safari 26). Se sirve desde tu NAS con usuario y contraseña y se pone al día solo con cada versión (`scripts/nas/README.md`).
+  - Abre la casa de ejemplo en planta y en 3D.
+  - Todavía no abre ni guarda archivos (llega en la próxima vuelta), ni descarga el entorno.
+  - En el iPad: Compartir → «Añadir a pantalla de inicio» lo deja como una app.
+- En el escritorio no cambia nada.
+
+## 0.84.0
 
 - **Mover el calco con el ratón.** En las propiedades de la planta o de la vista de dibujo, cada calco tiene «Mover…», «Encajar…», «Encajar y escalar…» y «Escalar por medida…».
   - Los puntos se enganchan a las líneas del propio calco y al modelo, con líneas de rastreo.
