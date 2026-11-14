@@ -1371,12 +1371,13 @@ impl ArchiSimApp {
     /// dropped on the Dock icon: a project is opened, an IFC imported, as
     /// with the File menu (asking first if there are unsaved changes).
     fn receive_files(&mut self, ctx: &egui::Context) {
+        // On the web the dropped files have only a name: `web_files` reads them.
         let paths: Vec<PathBuf> = ctx.input(|i| {
             i.raw
                 .dropped_files
                 .iter()
                 .map(|f| f.path().to_path_buf())
-                .filter(|p| !p.as_os_str().is_empty())
+                .filter(|p| !p.as_os_str().is_empty() && !crate::platform::WEB)
                 .collect()
         });
         // Tests run in parallel and never read the operating system's queue.
@@ -1396,20 +1397,23 @@ impl ArchiSimApp {
         for note in crate::web::take_notes() {
             self.say(note);
         }
-        let dropped: Vec<crate::web::Picked> = ctx.input(|i| {
-            i.raw
-                .dropped_files
-                .iter()
-                .filter_map(|f| {
-                    Some(crate::web::Picked {
+        // Files dropped on the page are read by the browser, and come back
+        // as chosen ones.
+        let dropped = ctx.input(|i| i.raw.dropped_files.clone());
+        for f in dropped {
+            wasm_bindgen_futures::spawn_local(async move {
+                let name = f.path().to_string_lossy().into_owned();
+                match f.bytes_async().await {
+                    Ok(bytes) => crate::web::push_picked(crate::web::Picked {
                         purpose: crate::web::Purpose::Open,
-                        name: f.name.clone(),
-                        bytes: f.bytes.as_ref()?.to_vec(),
-                    })
-                })
-                .collect()
-        });
-        for file in dropped.into_iter().chain(crate::web::take_picked()) {
+                        name,
+                        bytes,
+                    }),
+                    Err(e) => crate::web::note(&format!("No se puede leer {name}: {e}.")),
+                }
+            });
+        }
+        for file in crate::web::take_picked() {
             self.open_picked(file);
         }
         // A copy in the browser half a minute after each change.
