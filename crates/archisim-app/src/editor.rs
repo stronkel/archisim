@@ -110,6 +110,9 @@ pub struct Editor {
     pub imported_from: Option<PathBuf>,
     /// The model as last saved (or opened), to know if there are changes.
     saved: Model,
+    /// Whether the model differed from `saved`, for a revision: comparing
+    /// two big models at every frame (the title bar asks) took time.
+    modified: std::cell::Cell<Option<(u64, bool)>>,
     /// Grows with every change to the model, so views know when to redraw.
     revision: u64,
     /// The plan geometry of every wall, for this revision.
@@ -148,6 +151,7 @@ impl Editor {
             .unwrap_or(LevelId(0));
         Self {
             saved: model.clone(),
+            modified: Default::default(),
             doc: Document::new(model),
             path,
             imported_from: None,
@@ -165,7 +169,7 @@ impl Editor {
     /// Puts another version of the project in place (received from the
     /// team): no undo across it, and it counts as saved.
     pub fn reset_model(&mut self, model: Model) {
-        self.saved = model.clone();
+        self.set_saved(model.clone());
         self.doc = Document::new(model);
         self.changed();
     }
@@ -173,7 +177,7 @@ impl Editor {
     /// The project as it is now counts as saved (in a shared project, the
     /// working copy was written to the folder).
     pub fn mark_saved(&mut self) {
-        self.saved = self.doc.model().clone();
+        self.set_saved(self.doc.model().clone());
     }
 
     /// Opens a `.archisim` project.
@@ -204,7 +208,7 @@ impl Editor {
         }
         let mut ed = Self::with_model(model, None);
         // Not saved anywhere yet: closing asks first.
-        ed.saved = Model::new("");
+        ed.set_saved(Model::new(""));
         ed.imported_from = Some(path.to_path_buf());
         Ok((ed, imported.report, lacks_types))
     }
@@ -254,7 +258,20 @@ impl Editor {
 
     /// Whether there are changes since the project was opened or saved.
     pub fn is_modified(&self) -> bool {
-        self.doc.model() != &self.saved
+        if let Some((r, m)) = self.modified.get() {
+            if r == self.revision {
+                return m;
+            }
+        }
+        let m = self.doc.model() != &self.saved;
+        self.modified.set(Some((self.revision, m)));
+        m
+    }
+
+    /// Sets what counts as saved.
+    fn set_saved(&mut self, model: Model) {
+        self.saved = model;
+        self.modified.set(None);
     }
 
     /// File name to show in the title bar.
@@ -282,10 +299,30 @@ impl Editor {
             target.set_extension(archisim_file::EXTENSION);
         }
         archisim_file::save(self.model(), &target).map_err(|e| explain_file(&e))?;
-        self.saved = self.model().clone();
+        self.set_saved(self.model().clone());
         self.path = Some(target.clone());
         self.imported_from = None;
         Ok(target)
+    }
+
+    /// Gets the project ready to be saved to its file on another thread:
+    /// it counts as saved from now, and the copy to write and where are
+    /// given back. `None` if it has no file yet.
+    pub fn save_aside(&mut self) -> Option<(PathBuf, Model)> {
+        let mut target = self.path.clone()?;
+        if target.extension().is_none() {
+            target.set_extension(archisim_file::EXTENSION);
+        }
+        let model = self.model().clone();
+        self.set_saved(model.clone());
+        self.path = Some(target.clone());
+        self.imported_from = None;
+        Some((target, model))
+    }
+
+    /// A save made aside failed: the project has changes to save again.
+    pub fn save_failed(&mut self) {
+        self.set_saved(Model::new(""));
     }
 
     /// Writes the IFC file of the whole project, in IFC 4.3 or IFC4.

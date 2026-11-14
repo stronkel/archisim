@@ -126,7 +126,7 @@ impl ArchiSimApp {
                 ui.separator();
                 self.deliver_button(ui);
                 if icon_button(ui, Icon::Save, "Guardar (Ctrl+S)", false).clicked() {
-                    self.save(false);
+                    self.save_quick();
                 }
                 let redo = match self.ed.redo_label() {
                     Some(l) => format!("Rehacer «{l}» (Ctrl+Y)"),
@@ -375,7 +375,7 @@ impl ArchiSimApp {
             self.recent_menu(ui);
             ui.separator();
             if ui.add(shortcut_button("Guardar", "Ctrl+S")).clicked() {
-                self.save(false);
+                self.save_quick();
             }
             if ui
                 .add(shortcut_button("Guardar como…", "Ctrl+Mayús+S"))

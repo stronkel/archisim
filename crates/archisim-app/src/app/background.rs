@@ -10,14 +10,14 @@ use eframe::egui::ColorImage;
 use super::ArchiSimApp;
 
 /// A picture being made for `key`.
-pub struct Pending<K> {
+pub struct Pending<K, T = ColorImage> {
     pub key: K,
-    slot: Arc<Mutex<Option<ColorImage>>>,
+    slot: Arc<Mutex<Option<T>>>,
 }
 
-impl<K> Pending<K> {
+impl<K, T: Send + 'static> Pending<K, T> {
     /// Starts making the picture of `key` with `work`, on another thread.
-    pub fn start(key: K, work: impl FnOnce() -> ColorImage + Send + 'static) -> Self {
+    pub fn start(key: K, work: impl FnOnce() -> T + Send + 'static) -> Self {
         let slot = Arc::new(Mutex::new(None));
         let to = slot.clone();
         std::thread::spawn(move || {
@@ -30,7 +30,7 @@ impl<K> Pending<K> {
     }
 
     /// The picture, once made.
-    pub fn take(&self) -> Option<ColorImage> {
+    pub fn take(&self) -> Option<T> {
         self.slot.lock().ok().and_then(|mut s| s.take())
     }
 }

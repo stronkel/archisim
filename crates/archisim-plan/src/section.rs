@@ -251,7 +251,11 @@ impl SectionDrawing {
         use std::collections::HashMap;
         let key = |p: Point2| ((p.x * 2000.0).round() as i64, (p.y * 2000.0).round() as i64);
         let mut edges: HashMap<((i64, i64), (i64, i64)), ([Point2; 2], u32)> = HashMap::new();
-        for f in self.faces.iter().filter(|f| f.owner == owner && f.poly.len() >= 3) {
+        for f in self
+            .faces
+            .iter()
+            .filter(|f| f.owner == owner && f.poly.len() >= 3)
+        {
             let n = f.poly.len();
             for i in 0..n {
                 let (a, b) = (f.poly[i], f.poly[(i + 1) % n]);

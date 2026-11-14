@@ -27,15 +27,31 @@ impl ArchiSimApp {
         if r.clicked() {
             self.open_view(TabKind::Schedule(SchedTab::Takeoff));
         }
-        for kind in ScheduleKind::ALL {
-            let t = archisim_plan::schedules::table(&self.ed.shown(), kind, None);
+        // How many rows each table has, counted once per change: making
+        // every table at every frame took most of a big project's frame.
+        let revision = self.ed.revision();
+        if self.table_rows.as_ref().is_none_or(|(r, _)| *r != revision) {
+            let shown = self.ed.shown();
+            let counts = ScheduleKind::ALL
+                .iter()
+                .map(|k| archisim_plan::schedules::table(&shown, *k, None).rows.len())
+                .collect();
+            self.table_rows = Some((revision, counts));
+        }
+        let counts = self
+            .table_rows
+            .as_ref()
+            .map(|(_, c)| c.clone())
+            .unwrap_or_default();
+        for (i, kind) in ScheduleKind::ALL.into_iter().enumerate() {
+            let rows = counts.get(i).copied().unwrap_or(0);
             let open = active == Some(TabKind::Schedule(SchedTab::Kind(kind)));
             let r = super::widgets::list_row_draggable(
                 ui,
                 Some(Icon::Measure),
                 None,
                 kind.label(),
-                &format!("{} filas", t.rows.len()),
+                &format!("{rows} filas"),
                 open,
                 10.0,
             )
@@ -133,10 +149,22 @@ impl ArchiSimApp {
             SchedTab::Kind(k) => vec![k],
             SchedTab::Takeoff => ScheduleKind::ALL.to_vec(),
         };
-        let tables: Vec<(ScheduleKind, archisim_plan::schedules::Table)> = kinds
-            .iter()
-            .map(|k| (*k, archisim_plan::schedules::table(model, *k, level)))
-            .collect();
+        // Made once per change of the model, not at every frame.
+        let key = (self.ed.revision(), which, level);
+        let tables = match &self.tables_cache {
+            Some((k, t)) if *k == key => t.clone(),
+            _ => {
+                let t: std::rc::Rc<Vec<(ScheduleKind, archisim_plan::schedules::Table)>> =
+                    std::rc::Rc::new(
+                        kinds
+                            .iter()
+                            .map(|k| (*k, archisim_plan::schedules::table(model, *k, level)))
+                            .collect(),
+                    );
+                self.tables_cache = Some((key, t.clone()));
+                t
+            }
+        };
         drop(shown);
         egui::ScrollArea::both()
             .auto_shrink([false, false])
@@ -145,7 +173,7 @@ impl ArchiSimApp {
                     self.budget_section(ui);
                     ui.add_space(14.0);
                 }
-                for (k, table) in &tables {
+                for (k, table) in tables.iter() {
                     if which == SchedTab::Takeoff {
                         ui.add_space(6.0);
                         ui.label(

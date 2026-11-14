@@ -52,7 +52,10 @@ impl Harness {
             ..Default::default()
         };
         let app = &mut self.app;
-        let mut output = self.ctx.run_ui(input, |ui| app.show(ui));
+        let mut output = crate::profile::time("todo el fotograma", || {
+            self.ctx
+                .run_ui(input, |ui| crate::profile::time("show", || app.show(ui)))
+        });
         output.textures_delta.clear();
         self.time += 0.05;
     }
@@ -497,7 +500,7 @@ fn drawn_project_saves_and_exports() {
     assert!(ifc.contains("Fachada doble hoja 26,5"));
     // The plan drawn on screen is up to date and not empty.
     h.frame();
-    assert!(h.app.plan.is_some());
+    assert!(h.app.plan.shown().is_some());
 
     // Importing that IFC gives back the same building, as a new project
     // that still has to be saved.
@@ -1270,10 +1273,10 @@ fn view_tabs_keep_their_level_framing_and_scale() {
     assert_eq!(h.app.tabs.len(), 1);
     // The plan is drawn at the scale of its tab.
     h.frame();
-    assert_eq!(h.app.plan.as_ref().unwrap().0.scale, 50.0);
+    assert_eq!(h.app.plan.shown().unwrap().0.scale, 50.0);
     h.app.set_scale(100.0);
     h.frame();
-    assert_eq!(h.app.plan.as_ref().unwrap().0.scale, 100.0);
+    assert_eq!(h.app.plan.shown().unwrap().0.scale, 100.0);
     assert_eq!(h.app.tabs[0].kind, TabKind::Plan(ground));
 
     // A level added becomes current, in a new tab beside.
@@ -2090,7 +2093,7 @@ fn construction_modes_by_clicks() {
     assert!(diffs.is_empty(), "{}", diffs.join("\n"));
     // The plan draws.
     h.frame();
-    assert!(h.app.plan.is_some());
+    assert!(h.app.plan.shown().is_some());
 }
 
 /// A stair hole cut through a slab with the slab tool, the slab moved with
@@ -2418,26 +2421,46 @@ fn sections_and_elevations() {
     // until it is ready.
     let rect = h.app.canvas;
     let saved = h.app.view;
+    h.app.at_once = std::time::Duration::ZERO;
+    let busy = |h: &Harness| {
+        h.app
+            .section_cache
+            .as_ref()
+            .is_some_and(|c| c.picture.busy())
+    };
     h.app.view.zoom_at(rect, rect.center(), 1.3);
     h.frame();
-    assert!(h.app.section_pending.is_some(), "drawn aside");
+    assert!(busy(&h), "drawn aside");
     for _ in 0..200 {
-        if h.app.section_pending.is_none() {
+        if !busy(&h) {
             break;
         }
         std::thread::sleep(std::time::Duration::from_millis(10));
         h.frame();
     }
-    assert!(h.app.section_pending.is_none(), "the new picture arrived");
+    assert!(!busy(&h), "the new picture arrived");
+    // Moved a little: the picture made covers it, nothing is drawn.
+    h.app.view.pan(egui::Vec2::new(40.0, 20.0));
+    h.frame();
+    assert!(!busy(&h), "within the margin");
+    // The model changes: its drawing is worked out aside, the one before
+    // shown meanwhile.
+    let before = h.app.section_cache.as_ref().unwrap().revision;
+    let w = h.app.ed.model().walls().next().unwrap().id;
+    h.app.ed.selection = [Element::Wall(w)].into_iter().collect();
+    h.key(Key::Delete);
+    for _ in 0..300 {
+        if h.app.section_cache.as_ref().unwrap().revision != before && !busy(&h) {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        h.frame();
+    }
+    assert_ne!(h.app.section_cache.as_ref().unwrap().revision, before);
+    h.app.ed.undo();
+    h.app.at_once = std::time::Duration::from_secs(3600);
     h.app.view = saved;
     h.frame();
-    for _ in 0..200 {
-        if h.app.section_pending.is_none() {
-            break;
-        }
-        std::thread::sleep(std::time::Duration::from_millis(10));
-        h.frame();
-    }
     // Elements are selected in the section (R5): the west wall where it is
     // cut, the north wall seen beyond; Esc clears.
     h.click_at(p(0.8, 1.5));
@@ -11989,4 +12012,140 @@ fn copies_go_in_a_row() {
     let xs: Vec<f64> = h.model().walls().map(|x| x.start.x).collect();
     assert!(xs.iter().any(|x| (x - 5.0).abs() < 1e-6), "{xs:?}");
     assert!(xs.iter().any(|x| (x - 10.0).abs() < 1e-6), "{xs:?}");
+}
+
+/// How long the window takes per frame with a big project, as Antonio
+/// works (0.85, «que todo responda al instante»):
+/// `ARCHISIM_GRANDE=carpeta/edificio.archisim cargo test --release -p
+/// archisim-app -- --ignored big_project_frames --nocapture`.
+#[test]
+#[ignore]
+fn big_project_frames() {
+    let Ok(path) = std::env::var("ARCHISIM_GRANDE") else {
+        return;
+    };
+    let ed = Editor::open(std::path::Path::new(&path)).unwrap();
+    let mut h = Harness::new(ed);
+    h.app.at_once = super::picture::AT_ONCE;
+    let settle = |h: &mut Harness| {
+        for _ in 0..400 {
+            h.frame();
+            let busy = h.app.plan.busy()
+                || h.app.section_pending.is_some()
+                || h.app
+                    .section_cache
+                    .as_ref()
+                    .is_some_and(|c| c.picture.busy());
+            if !busy {
+                return;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+    };
+    let timed =
+        |h: &mut Harness, what: &str, n: usize, step: &mut dyn FnMut(&mut Harness, usize)| {
+            let mut worst = 0.0f64;
+            crate::profile::take(1);
+            let started = std::time::Instant::now();
+            for i in 0..n {
+                let t = std::time::Instant::now();
+                step(h, i);
+                worst = worst.max(t.elapsed().as_secs_f64() * 1000.0);
+            }
+            let mean = started.elapsed().as_secs_f64() * 1000.0 / n as f64;
+            println!("{what}: {mean:.1} ms por fotograma (peor {worst:.0} ms)");
+            for (part, ms) in crate::profile::take(n as u32).iter() {
+                if *ms >= 0.3 {
+                    println!("    {part}: {ms:.1} ms");
+                }
+            }
+        };
+    settle(&mut h);
+    let c = h.app.canvas.center();
+    let at = h.app.view.to_model(h.app.canvas, c);
+    let r0 = h.app.ed.revision();
+    timed(&mut h, "Planta, ratón quieto", 20, &mut |h, _| h.frame());
+    println!("    (revisión {r0} → {})", h.app.ed.revision());
+    timed(&mut h, "Planta, ratón moviéndose", 40, &mut |h, i| {
+        h.move_to(at + Point2::new(0.05 * i as f64, 0.03 * i as f64))
+    });
+    h.app.nav_tab = super::navigator::NavTab::Project;
+    timed(&mut h, "Planta, navegador en Proyecto", 20, &mut |h, _| {
+        h.frame()
+    });
+    h.app.nav_tab = super::navigator::NavTab::Model;
+    let wall = h.app.ed.model().walls().next().map(|w| w.id).unwrap();
+    h.app.ed.selection = [Element::Wall(wall)].into_iter().collect();
+    h.frame();
+    timed(&mut h, "Planta con un muro elegido", 20, &mut |h, _| {
+        h.frame()
+    });
+    timed(
+        &mut h,
+        "Planta, desplazar (dentro del margen)",
+        20,
+        &mut |h, _| {
+            h.app.view.pan(Vec2::new(6.0, 0.0));
+            h.frame();
+        },
+    );
+    timed(&mut h, "Planta, zoom", 10, &mut |h, _| {
+        let r = h.app.canvas;
+        h.app.view.zoom_at(r, r.center(), 1.15);
+        h.frame();
+    });
+    settle(&mut h);
+    h.app.ed.selection.clear();
+    let Some(sec) = h.app.ed.model().sections().next().map(|s| s.id) else {
+        return;
+    };
+    let started = std::time::Instant::now();
+    h.app.open_view(TabKind::Section(sec));
+    h.frame();
+    println!(
+        "Abrir una sección: primer fotograma a los {:.0} ms",
+        started.elapsed().as_secs_f64() * 1000.0
+    );
+    settle(&mut h);
+    println!(
+        "  … dibujada a los {:.0} ms",
+        started.elapsed().as_secs_f64() * 1000.0
+    );
+    timed(&mut h, "Sección, ratón moviéndose", 30, &mut |h, i| {
+        h.move_to(at + Point2::new(0.05 * i as f64, 0.0))
+    });
+    timed(&mut h, "Sección, zoom", 10, &mut |h, _| {
+        let r = h.app.canvas;
+        h.app.view.zoom_at(r, r.center(), 1.15);
+        h.frame();
+    });
+    // The 3D view: its first frame, and when its scene is ready.
+    h.app.v3d.at_once = super::picture::AT_ONCE;
+    h.key(Key::Escape);
+    let started = std::time::Instant::now();
+    h.key(Key::F3);
+    println!(
+        "Abrir el 3D: primer fotograma a los {:.0} ms",
+        started.elapsed().as_secs_f64() * 1000.0
+    );
+    for _ in 0..3000 {
+        if !h.app.v3d.building() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        h.frame();
+    }
+    println!(
+        "  … escena hecha a los {:.0} ms",
+        started.elapsed().as_secs_f64() * 1000.0
+    );
+    let wall = h.app.ed.model().walls().nth(3).map(|w| w.id).unwrap();
+    let t = std::time::Instant::now();
+    h.app.ed.selection = [Element::Wall(wall)].into_iter().collect();
+    h.frame();
+    println!(
+        "3D, elegir un muro: {:.0} ms",
+        t.elapsed().as_secs_f64() * 1000.0
+    );
+    timed(&mut h, "3D, ratón quieto", 10, &mut |h, _| h.frame());
 }
