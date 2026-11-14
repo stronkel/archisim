@@ -57,10 +57,18 @@ jobs:
         with:
           tool: trunk
       - run: scripts/build_web.sh
+      # It starts in a browser: plan and 3D, pictures in the log.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install playwright && playwright install --with-deps chromium
+      - run: python scripts/web_smoke.py dist/web out/web-fotos
       - uses: actions/upload-artifact@v4
         with:
           name: web
-          path: dist/archisim-web.zip
+          path: |
+            dist/archisim-web.zip
+            out/web-fotos/
 
   validate-ifc:
     runs-on: ubuntu-latest
