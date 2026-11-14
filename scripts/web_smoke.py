@@ -53,40 +53,47 @@ def picture(page, name):
     return path
 
 
+MODES = {
+    # WebGPU, as in Safari 26 (a software adapter here: its pictures may
+    # come out blank in a headless browser, but errors would show).
+    "webgpu": [
+        "--enable-unsafe-webgpu",
+        "--enable-features=Vulkan",
+        "--use-webgpu-adapter=swiftshader",
+        "--use-angle=swiftshader",
+        "--ignore-gpu-blocklist",
+    ],
+    # Without WebGPU the program draws with WebGL: the pictures show it.
+    "webgl": ["--disable-features=WebGPU", "--use-angle=swiftshader"],
+}
+
 with sync_playwright() as p:
-    browser = p.chromium.launch(
-        headless=True,
-        args=[
-            "--enable-unsafe-webgpu",
-            "--enable-features=Vulkan",
-            "--use-webgpu-adapter=swiftshader",
-            "--use-angle=swiftshader",
-            "--ignore-gpu-blocklist",
-        ],
-    )
-    page = browser.new_page(viewport={"width": 1280, "height": 800})
-    page.on("console", lambda m: console.append(f"[{m.type}] {m.text}"))
-    page.on("pageerror", lambda e: console.append(f"[pageerror] {e}"))
-    page.goto(url)
-    gpu = page.evaluate("() => !!navigator.gpu")
-    print(f"navigator.gpu: {gpu}")
-    try:
-        page.wait_for_selector("#cargando", state="detached", timeout=180_000)
-        print("ArchiSim ha arrancado")
-    except Exception:
-        failed = True
-        text = page.evaluate(
-            "() => document.getElementById('cargando')?.innerText ?? ''"
-        )
-        print(f"ArchiSim no ha arrancado: {text}")
-    page.wait_for_timeout(8_000)
-    picture(page, "1-planta")
-    # The 3D view: F3, with the canvas focused.
-    page.focus("#archisim")
-    page.keyboard.press("F3")
-    page.wait_for_timeout(10_000)
-    picture(page, "2-vista3d")
-    browser.close()
+    for mode, args in MODES.items():
+        console.append(f"=== {mode} ===")
+        browser = p.chromium.launch(headless=True, args=args)
+        page = browser.new_page(viewport={"width": 1280, "height": 800})
+        page.on("console", lambda m: console.append(f"[{m.type}] {m.text}"))
+        page.on("pageerror", lambda e: console.append(f"[pageerror] {e}"))
+        page.goto(url)
+        gpu = page.evaluate("() => !!navigator.gpu")
+        print(f"{mode}: navigator.gpu = {gpu}")
+        try:
+            page.wait_for_selector("#cargando", state="detached", timeout=180_000)
+            print(f"{mode}: ArchiSim ha arrancado")
+        except Exception:
+            failed = True
+            text = page.evaluate(
+                "() => document.getElementById('cargando')?.innerText ?? ''"
+            )
+            print(f"{mode}: ArchiSim no ha arrancado: {text}")
+        page.wait_for_timeout(8_000)
+        picture(page, f"{mode}-1-planta")
+        # The 3D view: F3, with the canvas focused.
+        page.focus("#archisim")
+        page.keyboard.press("F3")
+        page.wait_for_timeout(10_000)
+        picture(page, f"{mode}-2-vista3d")
+        browser.close()
 
 print("--- consola del navegador ---")
 for line in console[-200:]:
