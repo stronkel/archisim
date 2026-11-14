@@ -226,6 +226,68 @@ impl SectionDrawing {
             .map(|f| f.owner)
     }
 
+    /// Everything at `p`, front first: what the section cuts there, then
+    /// what is seen beyond it from the nearest back; each once.
+    pub fn pick_all(&self, p: Point2) -> Vec<SolidOwner> {
+        let mut out: Vec<SolidOwner> = Vec::new();
+        for (_, loops, _, owner) in self.cuts.iter().rev() {
+            let n = loops.iter().filter(|l| inside(p, l)).count();
+            if n % 2 == 1 && !out.contains(owner) {
+                out.push(*owner);
+            }
+        }
+        for f in self.faces.iter().rev() {
+            if f.poly.len() >= 3 && !out.contains(&f.owner) && inside(p, &f.poly) {
+                out.push(f.owner);
+            }
+        }
+        out
+    }
+
+    /// The outline of an element as drawn: the edges of its cut and of the
+    /// faces seen that no other face of it shares (the lines inside it,
+    /// where its faces meet, are left out).
+    pub fn outline_of(&self, owner: SolidOwner) -> Vec<[Point2; 2]> {
+        use std::collections::HashMap;
+        /// A corner rounded to half a millimetre.
+        type Corner = (i64, i64);
+        let key = |p: Point2| ((p.x * 2000.0).round() as i64, (p.y * 2000.0).round() as i64);
+        let mut edges: HashMap<(Corner, Corner), ([Point2; 2], u32)> = HashMap::new();
+        for f in self
+            .faces
+            .iter()
+            .filter(|f| f.owner == owner && f.poly.len() >= 3)
+        {
+            let n = f.poly.len();
+            for i in 0..n {
+                let (a, b) = (f.poly[i], f.poly[(i + 1) % n]);
+                let (ka, kb) = (key(a), key(b));
+                if ka == kb {
+                    continue;
+                }
+                let k = if ka < kb { (ka, kb) } else { (kb, ka) };
+                edges.entry(k).or_insert(([a, b], 0)).1 += 1;
+            }
+        }
+        let mut out: Vec<[Point2; 2]> = edges
+            .into_values()
+            .filter(|(_, n)| *n == 1)
+            .map(|(e, _)| e)
+            .collect();
+        for (_, loops, _, o) in &self.cuts {
+            if *o != owner {
+                continue;
+            }
+            for l in loops {
+                let n = l.len();
+                for i in 0..n {
+                    out.push([l[i], l[(i + 1) % n]]);
+                }
+            }
+        }
+        out
+    }
+
     /// Whether an object is seen in the section (cut or beyond).
     pub fn pick_object(&self, id: archisim_core::ObjectId) -> bool {
         let me = SolidOwner::Object(id);
@@ -2620,6 +2682,16 @@ mod tests {
         assert_eq!(d.pick(Point2::new(1.0, 1.5)), wall(0));
         assert_eq!(d.pick(Point2::new(3.0, 1.5)), wall(2));
         assert_eq!(d.pick(Point2::new(3.0, 3.5)), None);
+        // Everything at a point, front first: where a cut wall stands in
+        // front of the far one, both; the outline of the far one is its
+        // edges only, not the lines inside it.
+        let here = d.pick_all(Point2::new(3.0, 1.5));
+        assert_eq!(here.first().copied(), wall(2));
+        let outline = d.outline_of(SolidOwner::Wall(walls[2]));
+        assert!(!outline.is_empty());
+        let (_, faces) = d.shape_of(SolidOwner::Wall(walls[2]));
+        let all_edges: usize = faces.iter().map(|f| f.len()).sum();
+        assert!(outline.len() <= all_edges, "{} {all_edges}", outline.len());
         let (cut, faces) = d.shape_of(SolidOwner::Wall(walls[0]));
         assert_eq!(cut.len(), 2);
         assert!(faces.is_empty());

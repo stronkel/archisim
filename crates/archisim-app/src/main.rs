@@ -29,6 +29,7 @@ mod pick;
 mod placing;
 mod plan_image;
 mod prefs;
+mod profile;
 mod sketch;
 mod slab_tool;
 mod snap;

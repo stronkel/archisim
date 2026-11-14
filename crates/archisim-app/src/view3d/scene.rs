@@ -313,7 +313,7 @@ pub const GHOST_ALPHA: f32 = 0.12;
 
 /// What a triangle belongs to: an element of the project, or an element
 /// of a linked model (link, element index).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Owner {
     Model(Element),
     Linked(usize, usize),
@@ -1250,6 +1250,44 @@ impl Scene {
         self.opaque.is_empty() && self.glass.is_empty() && self.groups.is_empty()
     }
 
+    /// Marks another selection without building the scene again: the
+    /// corners of what was or is now selected, and the objects drawn from
+    /// a group. (Building a big project's scene again took seconds, and
+    /// it was done at every click.)
+    pub fn reselect(&mut self, from: &BTreeSet<Element>, to: &BTreeSet<Element>) {
+        let changed: BTreeSet<Element> = from.symmetric_difference(to).copied().collect();
+        if changed.is_empty() {
+            return;
+        }
+        for chunk in self.opaque.iter_mut().chain(self.glass.iter_mut()) {
+            for (t, owner) in chunk.owners.iter().enumerate() {
+                let Owner::Model(e) = owner else {
+                    continue;
+                };
+                if !changed.contains(e) {
+                    continue;
+                }
+                let on = u8::from(to.contains(e));
+                for k in 0..3 {
+                    if let Some(&i) = chunk.mesh.indices.get(3 * t + k) {
+                        if let Some(v) = chunk.mesh.vertices.get_mut(i as usize) {
+                            if v.misc[1] < 2 {
+                                v.misc[1] = on;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        for g in &mut self.groups {
+            for (inst, e) in g.instances.iter_mut().zip(&g.owners) {
+                if changed.contains(e) && inst.flags[0] >= 0.0 {
+                    inst.flags[0] = if to.contains(e) { 1.0 } else { 0.0 };
+                }
+            }
+        }
+    }
+
     /// Whether anything in it is selected (to outline it).
     pub fn has_selection(&self) -> bool {
         self.opaque
@@ -1489,6 +1527,41 @@ impl Scene {
         cut: Option<&CutRule>,
     ) -> Option<Hit> {
         let mut best: Option<Hit> = None;
+        self.each_hit(ray, clip, cut, |h| {
+            if best.as_ref().is_none_or(|b| h.distance < b.distance) {
+                best = Some(h);
+            }
+        });
+        best
+    }
+
+    /// Every element a ray passes through (inside the section box), the
+    /// nearest first, each once: for Tab over things one behind another.
+    pub fn owners_in(
+        &self,
+        ray: Ray,
+        clip: Option<&super::section_box::SectionBox>,
+        cut: Option<&CutRule>,
+    ) -> Vec<Owner> {
+        let mut near: HashMap<Owner, f32> = HashMap::new();
+        self.each_hit(ray, clip, cut, |h| {
+            let d = near.entry(h.owner).or_insert(h.distance);
+            if h.distance < *d {
+                *d = h.distance;
+            }
+        });
+        let mut v: Vec<(Owner, f32)> = near.into_iter().collect();
+        v.sort_by(|a, b| a.1.total_cmp(&b.1));
+        v.into_iter().map(|(o, _)| o).collect()
+    }
+
+    fn each_hit(
+        &self,
+        ray: Ray,
+        clip: Option<&super::section_box::SectionBox>,
+        cut: Option<&CutRule>,
+        mut found: impl FnMut(Hit),
+    ) {
         let mut consider = |d: f32, tri: [Vec3; 3], owner: Owner, code: [f32; 4]| {
             let at = ray.origin + ray.dir * d;
             if clip.is_some_and(|bx| !bx.contains(at)) {
@@ -1497,13 +1570,11 @@ impl Scene {
             if cut.is_some_and(|r| at.z > r.top_of(code) + 1e-4) {
                 return;
             }
-            if best.as_ref().is_none_or(|b| d < b.distance) {
-                best = Some(Hit {
-                    distance: d,
-                    triangle: tri,
-                    owner,
-                });
-            }
+            found(Hit {
+                distance: d,
+                triangle: tri,
+                owner,
+            });
         };
         for c in self.opaque.iter().chain(&self.glass) {
             if !ray_meets_box(ray, c.lo, c.hi) {
@@ -1535,7 +1606,6 @@ impl Scene {
                 }
             }
         }
-        best
     }
 
     /// The triangles of one element, where they are.
@@ -1995,6 +2065,28 @@ mod tests {
             .map(|c| c.mesh.vertices.iter().filter(|v| v.select() > 0.5).count())
             .sum();
         assert!(marked > 0 && marked < before.len());
+        // Marking the selection on the scene there is gives the same
+        // triangles marked as building it again.
+        let marked_triangles = |s: &Scene| -> usize {
+            s.opaque
+                .iter()
+                .map(|c| {
+                    c.mesh
+                        .indices
+                        .chunks(3)
+                        .filter(|t| {
+                            t.iter()
+                                .all(|&i| c.mesh.vertices[i as usize].select() > 0.5)
+                        })
+                        .count()
+                })
+                .sum()
+        };
+        let mut again = Scene::build(&m, &BTreeSet::new());
+        again.reselect(&BTreeSet::new(), &sel);
+        assert_eq!(marked_triangles(&again), marked_triangles(&s));
+        again.reselect(&sel, &BTreeSet::new());
+        assert_eq!(marked_triangles(&again), 0);
         let mut a = before.clone();
         let mut b = colours(&s);
         a.sort_unstable();

@@ -117,20 +117,33 @@ impl ArchiSimApp {
     /// The eye and the lock of each discipline, at the top of the model.
     pub(super) fn nav_disciplines(&mut self, ui: &mut Ui) {
         let p = Palette::current(ui.ctx());
-        let model = self.ed.model();
-        let counts: Vec<(ElementDiscipline, usize)> = ElementDiscipline::ALL
-            .iter()
-            .map(|d| {
-                let n = model
+        let revision = self.ed.revision();
+        let counts: Vec<(ElementDiscipline, usize)> = match &self.discipline_counts {
+            Some((r, c)) if *r == revision => c.clone(),
+            _ => {
+                // Once per change: every element of every level, counted
+                // by its discipline.
+                let model = self.ed.model();
+                let mut by: std::collections::BTreeMap<ElementDiscipline, usize> =
+                    Default::default();
+                for id in model
                     .levels()
                     .iter()
                     .flat_map(|l| crate::pick::elements_on_level(model, l.id))
                     .filter_map(element_id)
-                    .filter(|id| model.discipline(*id) == Some(*d))
-                    .count();
-                (*d, n)
-            })
-            .collect();
+                {
+                    if let Some(d) = model.discipline(id) {
+                        *by.entry(d).or_default() += 1;
+                    }
+                }
+                let c: Vec<(ElementDiscipline, usize)> = ElementDiscipline::ALL
+                    .iter()
+                    .map(|d| (*d, by.get(d).copied().unwrap_or(0)))
+                    .collect();
+                self.discipline_counts = Some((revision, c.clone()));
+                c
+            }
+        };
         let mut toggle_eye = None;
         let mut toggle_lock = None;
         for (d, n) in counts {

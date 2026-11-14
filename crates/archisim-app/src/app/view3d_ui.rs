@@ -35,6 +35,16 @@ fn supersample(ppp: f32) -> f32 {
     }
 }
 
+/// What a scene is built from: model revision, selection, the phases
+/// shown, the state of the linked models and the disciplines.
+type SceneKey = (
+    u64,
+    BTreeSet<Element>,
+    archisim_plan::phases::PhaseView,
+    u64,
+    crate::view3d::scene::Disciplines,
+);
+
 /// The largest side of the picture, in pixels.
 const MAX_SIDE: f32 = 4096.0;
 
@@ -144,13 +154,14 @@ pub struct View3dState {
     scene: Scene,
     /// What the scene was built from: model revision, selection, the
     /// phases shown and the state of the linked models.
-    scene_key: Option<(
-        u64,
-        BTreeSet<Element>,
-        archisim_plan::phases::PhaseView,
-        u64,
-        crate::view3d::scene::Disciplines,
-    )>,
+    scene_key: Option<SceneKey>,
+    /// The scene being built on another thread for a new revision of the
+    /// model (the one before stays on screen meanwhile).
+    scene_job: Option<super::background::Pending<SceneKey, (Scene, std::time::Duration)>>,
+    /// How long the last scene took to build.
+    scene_took: std::time::Duration,
+    /// Scenes that took less than this are built at once.
+    pub at_once: std::time::Duration,
     gpu: Option<Gpu>,
     /// What the last picture was drawn with.
     drawn: Option<Drawn>,
@@ -246,6 +257,13 @@ impl Default for View3dState {
             frames: false,
             scene: Scene::default(),
             scene_key: None,
+            scene_job: None,
+            scene_took: std::time::Duration::ZERO,
+            at_once: if cfg!(test) {
+                std::time::Duration::from_secs(3600)
+            } else {
+                super::picture::AT_ONCE
+            },
             gpu: None,
             drawn: None,
             scene_serial: 0,
@@ -379,13 +397,37 @@ impl View3dState {
         self.fit_requested = true;
     }
 
+    /// Whether the scene would have to be built again for this model
+    /// (not only marked with another selection).
+    pub fn scene_outdated(
+        &self,
+        revision: u64,
+        phases: archisim_plan::phases::PhaseView,
+        coord: &crate::coord::Coord,
+        disciplines: &crate::view3d::scene::Disciplines,
+    ) -> bool {
+        !self.scene_key.as_ref().is_some_and(|k| {
+            k.0 == revision && k.2 == phases && k.3 == coord.serial && &k.4 == disciplines
+        })
+    }
+
+    /// Whether a scene is being built aside.
+    pub fn building(&self) -> bool {
+        self.scene_job.is_some()
+    }
+
     /// Builds the scene again if the model, the selection or the linked
-    /// models changed.
+    /// models changed. With `shared` (the model shown, shared with other
+    /// threads) a scene that takes long is built on another thread, and
+    /// the one before stays meanwhile.
+    #[allow(clippy::too_many_arguments)]
     fn refresh_scene(
         &mut self,
+        ctx: &egui::Context,
         revision: u64,
         selection: &BTreeSet<Element>,
         model: &archisim_core::Model,
+        shared: Option<std::sync::Arc<archisim_core::Model>>,
         phases: archisim_plan::phases::PhaseView,
         coord: &crate::coord::Coord,
         disciplines: &crate::view3d::scene::Disciplines,
@@ -397,39 +439,110 @@ impl View3dState {
             coord.serial,
             disciplines.clone(),
         );
-        if self.scene_key.as_ref() != Some(&key) {
-            let parts = coord.parts();
-            let linked: Vec<LinkedPart> = parts
-                .iter()
-                .map(|p| LinkedPart {
-                    triangles: &p.element.mesh.triangles,
-                    color: p.color,
-                    alpha: p.alpha,
-                    link: p.link,
-                    index: p.index,
-                })
-                .collect();
-            let shown = archisim_plan::phases::phase_model(model, phases);
-            let build = || {
-                Scene::build_with(
-                    shown.as_ref().unwrap_or(model),
-                    selection,
-                    &linked,
-                    coord.isolate,
-                    disciplines,
-                )
-            };
-            self.scene = if self.frames {
-                archisim_geom::framing::with_frames_shown(build)
-            } else {
-                build()
-            };
-            self.scene_key = Some(key);
-            self.scene_serial += 1;
-            self.sun = model
-                .sun_direction()
-                .map(|d| glam::Vec3::new(d[0] as f32, d[1] as f32, d[2] as f32));
+        // A scene built aside, ready.
+        if let Some(job) = &self.scene_job {
+            if let Some((scene, took)) = job.take() {
+                let mut done = self.scene_job.take().map(|j| j.key);
+                self.scene = scene;
+                self.scene_took = took;
+                if let Some(k) = done.as_mut() {
+                    if k.1 != key.1 && !coord.isolate {
+                        self.scene.reselect(&k.1, &key.1);
+                        k.1 = key.1.clone();
+                    }
+                }
+                self.scene_key = done;
+                self.scene_serial += 1;
+                self.sun = model
+                    .sun_direction()
+                    .map(|d| glam::Vec3::new(d[0] as f32, d[1] as f32, d[2] as f32));
+            }
         }
+        // Only the selection changed: marked on the scene there is.
+        if let Some(old) = self.scene_key.as_mut() {
+            let same_but_selection =
+                old.0 == key.0 && old.2 == key.2 && old.3 == key.3 && old.4 == key.4;
+            if same_but_selection && old.1 != key.1 && !coord.isolate {
+                self.scene.reselect(&old.1, &key.1);
+                old.1 = key.1.clone();
+                self.scene_serial += 1;
+            }
+        }
+        if self.scene_key.as_ref() == Some(&key) {
+            self.scene_job = None;
+            return;
+        }
+        // Being built for this model already.
+        let coming = self.scene_job.as_ref().is_some_and(|j| {
+            j.key.0 == key.0 && j.key.2 == key.2 && j.key.3 == key.3 && j.key.4 == key.4
+        });
+        if coming {
+            ctx.request_repaint_after(std::time::Duration::from_millis(30));
+            return;
+        }
+        let aside = shared.filter(|m| {
+            super::picture::aside(self.scene_took, self.at_once, m) && coord.parts().is_empty()
+        });
+        if let Some(model) = aside {
+            let (selection, isolate, disciplines) =
+                (selection.clone(), coord.isolate, disciplines.clone());
+            let frames = self.frames;
+            self.scene_job = Some(super::background::Pending::start(key, move || {
+                let started = std::time::Instant::now();
+                let shown = archisim_plan::phases::phase_model(&model, phases);
+                let build = || {
+                    Scene::build_with(
+                        shown.as_ref().unwrap_or(&model),
+                        &selection,
+                        &[],
+                        isolate,
+                        &disciplines,
+                    )
+                };
+                let scene = if frames {
+                    archisim_geom::framing::with_frames_shown(build)
+                } else {
+                    build()
+                };
+                (scene, started.elapsed())
+            }));
+            ctx.request_repaint_after(std::time::Duration::from_millis(30));
+            return;
+        }
+        let started = std::time::Instant::now();
+        let parts = coord.parts();
+        let linked: Vec<LinkedPart> = parts
+            .iter()
+            .map(|p| LinkedPart {
+                triangles: &p.element.mesh.triangles,
+                color: p.color,
+                alpha: p.alpha,
+                link: p.link,
+                index: p.index,
+            })
+            .collect();
+        let shown = archisim_plan::phases::phase_model(model, phases);
+        let build = || {
+            Scene::build_with(
+                shown.as_ref().unwrap_or(model),
+                selection,
+                &linked,
+                coord.isolate,
+                disciplines,
+            )
+        };
+        self.scene = if self.frames {
+            archisim_geom::framing::with_frames_shown(build)
+        } else {
+            build()
+        };
+        self.scene_took = started.elapsed();
+        self.scene_job = None;
+        self.scene_key = Some(key);
+        self.scene_serial += 1;
+        self.sun = model
+            .sun_direction()
+            .map(|d| glam::Vec3::new(d[0] as f32, d[1] as f32, d[2] as f32));
     }
 
     /// Puts the camera's target at the depth of what is under a point of
@@ -448,6 +561,16 @@ impl View3dState {
         );
         self.scene
             .pick_in(ray, self.clip_box().as_ref(), self.cut_rule().as_ref())
+    }
+
+    /// Everything under a point of the view, the nearest first.
+    pub fn owners_at(&self, pos: Vec2, size: Vec2) -> Vec<Owner> {
+        let ray = self.camera.ray(
+            glam::Vec2::new(pos.x, pos.y),
+            glam::Vec2::new(size.x, size.y),
+        );
+        self.scene
+            .owners_in(ray, self.clip_box().as_ref(), self.cut_rule().as_ref())
     }
 
     /// What is under a point of the view: the point hit, its triangle's
@@ -851,17 +974,29 @@ impl ArchiSimApp {
             hidden: self.hidden_disciplines.clone(),
         };
         crate::crash::stage("3D: preparar la escena");
+        let shared = self
+            .v3d
+            .scene_outdated(
+                self.ed.revision(),
+                self.phase_view,
+                &self.coord,
+                &disciplines,
+            )
+            .then(|| self.shared_model());
         let v = &mut self.v3d;
         v.refresh_scene(
+            &ctx,
             self.ed.revision(),
             &self.ed.selection,
             &self.ed.shown(),
+            shared,
             self.phase_view,
             &self.coord,
             &disciplines,
         );
         let size = rect.size();
-        if v.fit_requested && size.x > 50.0 && size.y > 50.0 {
+        let waiting = v.building() && v.scene.is_empty();
+        if v.fit_requested && !waiting && size.x > 50.0 && size.y > 50.0 {
             v.fit_requested = false;
             v.camera.fit(v.scene.lo, v.scene.hi, size.x / size.y);
         }
@@ -1043,8 +1178,72 @@ impl ArchiSimApp {
                 self.open_context_menu(pos, e, None, frame);
             }
         }
-        // Selection: a click picks what is under the cursor.
+        // Several things one behind another: Tab (Shift+Tab back) selects
+        // the next under the cursor, and a click on what is already
+        // selected goes to the one behind it.
+        let model_elements = |this: &Self, pos: Pos2| -> Vec<Element> {
+            let mut v: Vec<Element> = Vec::new();
+            for o in this.v3d.owners_at(pos - rect.min, size) {
+                if let Owner::Model(e) = o {
+                    let e = crate::pick::solid_of(e)
+                        .and_then(|so| this.ed.model().module_of_flat_id(so.id()))
+                        .map_or(e, Element::Module);
+                    if !v.contains(&e) {
+                        v.push(e);
+                    }
+                }
+            }
+            v
+        };
+        if let (Some((at, _)), Some(pos)) = (self.section_tab, response.hover_pos()) {
+            if at.distance(pos) > 4.0 {
+                self.section_tab = None;
+            }
+        }
+        if !tool3d && response.hovered() && ctx.memory(|m| m.focused().is_none()) {
+            let back = ctx.input_mut(|i| i.consume_key(egui::Modifiers::SHIFT, egui::Key::Tab));
+            let tab =
+                back || ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Tab));
+            if let (true, Some(pos)) = (tab, response.hover_pos()) {
+                let here = model_elements(self, pos);
+                let n = here.len();
+                if n > 0 {
+                    let i = self.section_tab.map_or(0, |(_, i)| i % n);
+                    let i = if back { (i + n - 1) % n } else { (i + 1) % n };
+                    self.section_tab = Some((pos, i));
+                    self.ed.selection = [here[i]].into_iter().collect();
+                    self.say(format!(
+                        "Tab: {} ({} de {n}).",
+                        super::context_bar::element_name(&here[i]),
+                        i + 1
+                    ));
+                }
+            }
+        }
+        let mut taken = false;
         if !tool3d && response.clicked_by(PointerButton::Primary) {
+            let add = ctx.input(|i| i.modifiers.shift || i.modifiers.command);
+            if let (false, Some(pos)) = (add, response.interact_pointer_pos()) {
+                let here = model_elements(self, pos);
+                let n = here.len();
+                let current = (self.ed.selection.len() == 1)
+                    .then(|| here.iter().position(|e| self.ed.selection.contains(e)))
+                    .flatten();
+                if let (true, Some(i)) = (n > 1, current) {
+                    let i = (i + 1) % n;
+                    self.section_tab = Some((pos, i));
+                    self.ed.selection = [here[i]].into_iter().collect();
+                    self.say(format!(
+                        "{} ({} de {n}): otro clic, el de detrás.",
+                        super::context_bar::element_name(&here[i]),
+                        i + 1
+                    ));
+                    taken = true;
+                }
+            }
+        }
+        // Selection: a click picks what is under the cursor.
+        if !tool3d && !taken && response.clicked_by(PointerButton::Primary) {
             if let Some(pos) = response.interact_pointer_pos() {
                 let owner = self.v3d.pick(pos - rect.min, size);
                 let add = ctx.input(|i| i.modifiers.shift || i.modifiers.command);
@@ -1089,11 +1288,22 @@ impl ArchiSimApp {
             hidden: self.hidden_disciplines.clone(),
         };
         crate::crash::stage("3D: preparar la escena");
+        let shared = self
+            .v3d
+            .scene_outdated(
+                self.ed.revision(),
+                self.phase_view,
+                &self.coord,
+                &disciplines,
+            )
+            .then(|| self.shared_model());
         let v = &mut self.v3d;
         v.refresh_scene(
+            &ctx,
             self.ed.revision(),
             &self.ed.selection,
             &self.ed.shown(),
+            shared,
             self.phase_view,
             &self.coord,
             &disciplines,
@@ -1166,6 +1376,26 @@ impl ArchiSimApp {
                     Color32::from_gray(60),
                 );
             }
+        }
+        if self.v3d.building() {
+            // Built aside: the one before stays; the first one says so.
+            let first = self.v3d.scene.is_empty();
+            let at = if first {
+                rect.center()
+            } else {
+                rect.left_bottom() + Vec2::new(14.0, -14.0)
+            };
+            painter.text(
+                at,
+                if first {
+                    Align2::CENTER_CENTER
+                } else {
+                    Align2::LEFT_BOTTOM
+                },
+                "Preparando el 3D…",
+                FontId::proportional(if first { 14.0 } else { 11.5 }),
+                Color32::from_gray(90),
+            );
         }
         let v = &self.v3d;
         draw_section_box(&painter, rect, v);

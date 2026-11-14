@@ -453,8 +453,11 @@ fn earthworks(model: &Model) -> Vec<Item> {
     items
 }
 
+/// The measurements' chapters: code, title and items.
+pub type Chapters = Vec<(&'static str, &'static str, Vec<Item>)>;
+
 /// The chapters of a budget's measurements: (code, title, items).
-pub fn measurements(model: &Model) -> Vec<(&'static str, &'static str, Vec<Item>)> {
+pub fn measurements(model: &Model) -> Chapters {
     let level_name = |l: LevelId| model.level(l).map_or(String::new(), |l| l.name.clone());
     // A refurbishment: what is there and stays is not measured; what is
     // demolished goes to its own chapter.

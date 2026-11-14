@@ -33,20 +33,6 @@ pub struct PlanKey {
     pub ceiling: bool,
 }
 
-impl PlanKey {
-    /// Whether `other` is the same picture of another region or size: the
-    /// view has only moved or zoomed.
-    pub fn same_but_view(&self, other: &PlanKey) -> bool {
-        let moved = PlanKey {
-            lo: other.lo,
-            hi: other.hi,
-            size: other.size,
-            ..self.clone()
-        };
-        moved == *other
-    }
-}
-
 /// Draws the region `lo`–`hi` of a level into an image of `size` pixels,
 /// at 1:50 with the default cut plane.
 #[cfg(test)]
@@ -190,17 +176,17 @@ mod tests {
             size: [900, 600],
             ..key.clone()
         };
-        assert!(key.same_but_view(&moved));
+        assert!(crate::app::picture::Region::same_drawing(&key, &moved));
         let edited = PlanKey {
             revision: 4,
             ..moved.clone()
         };
-        assert!(!key.same_but_view(&edited));
+        assert!(!crate::app::picture::Region::same_drawing(&key, &edited));
         let thin = PlanKey {
             thin_lines: true,
             ..moved
         };
-        assert!(!key.same_but_view(&thin));
+        assert!(!crate::app::picture::Region::same_drawing(&key, &thin));
     }
 }
 
