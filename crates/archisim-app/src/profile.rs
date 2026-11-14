@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 use std::time::{Duration, Instant};
 
 thread_local! {
-    static PARTS: RefCell<BTreeMap<&'static str, (Duration, u32)>> = RefCell::new(BTreeMap::new());
+    static PARTS: RefCell<BTreeMap<&'static str, (Duration, u32)>> = const { RefCell::new(BTreeMap::new()) };
 }
 
 /// Runs `f`, adding the time it takes to `part`.

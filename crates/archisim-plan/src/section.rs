@@ -249,8 +249,10 @@ impl SectionDrawing {
     /// where its faces meet, are left out).
     pub fn outline_of(&self, owner: SolidOwner) -> Vec<[Point2; 2]> {
         use std::collections::HashMap;
+        /// A corner rounded to half a millimetre.
+        type Corner = (i64, i64);
         let key = |p: Point2| ((p.x * 2000.0).round() as i64, (p.y * 2000.0).round() as i64);
-        let mut edges: HashMap<((i64, i64), (i64, i64)), ([Point2; 2], u32)> = HashMap::new();
+        let mut edges: HashMap<(Corner, Corner), ([Point2; 2], u32)> = HashMap::new();
         for f in self
             .faces
             .iter()

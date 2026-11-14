@@ -415,10 +415,7 @@ pub struct ArchiSimApp {
     /// The navigator's rows of types, for a revision and level.
     nav_rows: Option<((u64, LevelId), std::rc::Rc<navigator::TypeRows>)>,
     /// The tables shown in a schedule tab, for a revision, tab and level.
-    tables_cache: Option<(
-        (u64, tabs::SchedTab, Option<LevelId>),
-        std::rc::Rc<Vec<(archisim_core::ScheduleKind, archisim_plan::schedules::Table)>>,
-    )>,
+    tables_cache: Option<(TablesKey, std::rc::Rc<Tables>)>,
     /// The measurements of the budget, for a revision.
     measure_cache: Option<(u64, std::rc::Rc<archisim_plan::schedules::Chapters>)>,
     /// How many rows each table of the navigator has, for a revision.
@@ -905,7 +902,7 @@ impl ArchiSimApp {
             table_rows: None,
             tables_cache: None,
             measure_cache: None,
-            show_meter: false,
+            show_meter: !cfg!(test) && std::env::var_os("ARCHISIM_MEDIDOR").is_some(),
             sheet_pending: None,
             shared_model: None,
             section_hover: None,
@@ -1596,6 +1593,8 @@ impl ArchiSimApp {
             section.as_secs_f64() * 1000.0,
             if self.saving.is_some() {
                 " · guardando…"
+            } else if self.plan.busy() || self.v3d.building() {
+                " · dibujando aparte…"
             } else {
                 ""
             }
@@ -1607,11 +1606,11 @@ impl ArchiSimApp {
             egui::Order::Foreground,
             egui::Id::unique("frame-meter"),
         ));
-        let at = ctx.content_rect().right_top() + Vec2::new(-12.0, 44.0);
+        // Bottom right, over the drawing, clear of the bars.
+        let at = ctx.content_rect().right_bottom() + Vec2::new(-22.0, -64.0);
         let font = egui::FontId::monospace(11.0);
         let galley = painter.layout_no_wrap(text, font, Color32::WHITE);
-        let r =
-            Rect::from_min_size(at - Vec2::new(galley.size().x, 0.0), galley.size()).expand(5.0);
+        let r = Rect::from_min_size(at - galley.size(), galley.size()).expand(5.0);
         painter.rect_filled(r, CornerRadius::same(4), Color32::from_black_alpha(170));
         painter.galley(r.min + Vec2::splat(5.0), galley, Color32::WHITE);
         ctx.request_repaint_after(std::time::Duration::from_millis(250));
@@ -2807,6 +2806,11 @@ impl eframe::App for ArchiSimApp {
         crate::crash::frame_done();
     }
 }
+
+/// What the tables of a schedule tab were made for: revision, tab, level.
+type TablesKey = (u64, tabs::SchedTab, Option<LevelId>);
+/// The tables of a schedule tab.
+type Tables = Vec<(archisim_core::ScheduleKind, archisim_plan::schedules::Table)>;
 
 /// The mouse and drawing keys, at the end of the list of shortcuts
 /// (`revit_keys::shortcuts_dialog`).

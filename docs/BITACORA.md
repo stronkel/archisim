@@ -6,6 +6,30 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-14 (161) · v0.85: que todo responda al instante
+
+Rama `bloque/fluidez`, con pull request. Versión 0.85.0. Sin cambios de formato.
+
+- **Qué se hizo.** Lo que pidió Antonio («no se siente snappy», «tarda un segundo en cargar al hacer zoom», «en alzados no se ve qué se pilla»), medido sobre el edificio de Florence Street (`archisim edificio`) con la prueba nueva `big_project_frames`:
+  - **La causa principal**: el navegador, en la pestaña Proyecto, rehacía **todas las tablas** del proyecto a cada fotograma solo para escribir «N filas», y en la pestaña Modelo contaba los elementos de cada tipo y de cada disciplina. En Florence Street eran **unos 200 ms por fotograma** en cualquier vista, con el ratón quieto; ahora **2–4 ms**. Se cuentan una vez por cambio del modelo (`nav_rows`, `discipline_counts`, `table_rows`), y lo mismo las tablas abiertas en pestaña y las mediciones (`tables_cache`, `measure_cache`). `Editor::is_modified` (que comparaba el modelo entero con el guardado dos veces por fotograma) se guarda por revisión.
+  - **Planta y secciones con margen y en otro hilo** (`app/picture`): cada imagen cubre un 20 % más por cada lado, así que desplazarse dentro de ese margen no dibuja nada; la imagen nueva (zoom, cambio del modelo) se hace aparte mientras se ve la anterior movida y escalada; si no hay nada cercano a ese zoom, primero una a media resolución. Las imágenes que tardan poco (proyectos pequeños) siguen haciéndose al momento.
+  - **El dibujo de las secciones y alzados** (2,5–4 s en Florence Street) y **la escena 3D** (5–13 s) se preparan en otro hilo: la ventana responde desde el primer fotograma, con «Dibujando la sección…» o «Preparando el 3D…», y tras un cambio se ve la versión anterior hasta que llega la nueva. Elegir algo en 3D ya no rehace la escena (`Scene::reselect`): de ~1 s a ~20 ms.
+  - **Selección en alzados, secciones y 3D**: solo el contorno del elemento (`SectionDrawing::outline_of`), azul fino al pasar por encima y grueso al elegirlo, sin relleno; junto al cursor, qué se va a coger y, si hay varios, «2 de 4 · Tab». Tab (Mayúsculas+Tab atrás) y un segundo clic en el mismo sitio cogen lo de detrás (`pick_all`, `Scene::owners_in`). En planta, el nombre sale al pararse el cursor.
+  - **Guardar en otro hilo** (Ctrl+S y el botón: `save_quick`; si falla, el proyecto vuelve a tener cambios sin guardar).
+  - **Medidor de fotogramas**: Ctrl+Alt+F (o `ARCHISIM_MEDIDOR=1`) enseña arriba a la derecha cuánto tarda cada fotograma, la última planta y sección, y las partes que más tardan (`crate::profile`).
+- **Medidas (servidor de 2 núcleos, Florence Street):** fotograma con el ratón quieto 190 → 2 ms; moviéndolo en planta 230 → 3 ms; en sección 260 → 11 ms; abrir una sección, primer fotograma 240 → 7 ms; abrir el 3D, primer fotograma 1,3–2 s → 11 ms; elegir un muro en 3D ~1 s → 22 ms.
+- **Pendiente.**
+  - Los planos (hojas) ya se dibujaban aparte, pero sin margen.
+  - Los trabajos en otro hilo no se cancelan: si se cambia mucho seguido, el que va de camino termina antes de empezar el siguiente.
+  - Las teselas por nivel de zoom y adelantar el dibujo de alrededor quedan para cuando haga falta: con el margen y el fotograma en 2 ms no se nota.
+- **Qué debe probar Antonio.**
+  1. Abre un proyecto grande (el edificio de Florence Street: `archisim edificio carpeta`, o uno del estudio) y pulsa **Ctrl+Alt+F**: arriba a la derecha sale el medidor. Con el ratón quieto debe marcar pocos milisegundos.
+  2. Desplázate y haz zoom en la planta: no debe quedarse parada; el dibujo fino llega enseguida.
+  3. Abre una sección o un alzado: la ventana responde desde el principio («Dibujando la sección…»). Cambia un muro y vuelve: se ve la anterior hasta que llega la nueva.
+  4. En el alzado, pasa el ratón por encima de muros y ventanas: contorno azul y el nombre junto al cursor; donde haya varios, Tab o un segundo clic para el de detrás.
+  5. En 3D, haz clic en varias cosas seguidas: debe elegir al momento. Tab coge lo de detrás.
+  6. Guarda con Ctrl+S un proyecto grande: no debe parar la ventana.
+
 ## 2026-11-13 (160) · v0.84: calcos, flechas, guías, reflejar y copiar en fila
 
 Rama `bloque/mover-calcos`, con pull request. Versión 0.84.0. Formato versión 112: `scale`, `locked` y `hidden` en cada calco; los ficheros anteriores se abren igual.

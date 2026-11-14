@@ -131,6 +131,7 @@ impl<K: Region> Picture<K> {
     }
 
     /// The key and texture of what is shown.
+    #[cfg(test)]
     pub fn shown(&self) -> Option<&(K, TextureHandle)> {
         self.shown.as_ref()
     }

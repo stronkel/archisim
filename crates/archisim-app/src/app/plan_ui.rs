@@ -1843,6 +1843,31 @@ impl ArchiSimApp {
                     ));
                 }
             }
+            // What a click takes, by the cursor, and with more there, which
+            // of them (Tab goes on).
+            // As Revit: once the cursor rests a moment (or there is more
+            // than one there).
+            let rest = painter
+                .ctx()
+                .input(|i| i.pointer.time_since_last_movement())
+                >= 0.35;
+            if !rest {
+                painter
+                    .ctx()
+                    .request_repaint_after(std::time::Duration::from_millis(360));
+            }
+            let still = self.drag.is_none()
+                && self.window_start.is_none()
+                && (rest || self.under_cursor.len() > 1);
+            if let (Tool::Arrow, true, Some(c)) = (self.tool, still, self.cursor) {
+                let n = self.under_cursor.len();
+                let name = super::context_bar::element_name(&h);
+                let text = match self.under_cursor.iter().position(|e| *e == h) {
+                    Some(i) if n > 1 => format!("{name}  ({} de {n} · Tab)", i + 1),
+                    _ => name.to_string(),
+                };
+                self.draw_label(painter, rect, c.point, text);
+            }
         }
         for e in &self.ed.selection {
             let Some(poly) = outline(&self.ed, *e) else {
