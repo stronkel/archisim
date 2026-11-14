@@ -366,7 +366,7 @@ impl ArchiSimApp {
     }
 
     fn pick_title_logo(&mut self) {
-        let Some(path) = rfd::FileDialog::new()
+        let Some(path) = crate::file_dialog::FileDialog::new()
             .set_title("Logotipo del cajetín")
             .add_filter("Imagen PNG", &["png", "PNG"])
             .pick_file()

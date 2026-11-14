@@ -38,6 +38,8 @@ repository = "https://github.com/stronkel/archisim"
 
 [workspace.dependencies]
 uuid = { version = "1", features = ["v4"] }
+# A clock that also works in the browser (`docs/IPAD.md`).
+web-time = "1"
 archisim-family = { path = "crates/archisim-family" }
 archisim-dxf = { path = "crates/archisim-dxf" }
 archisim-carto = { path = "crates/archisim-carto" }

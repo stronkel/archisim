@@ -189,7 +189,7 @@ impl ArchiSimApp {
             }
         }
         if self.view != before {
-            self.view_moved_at = Some(std::time::Instant::now());
+            self.view_moved_at = Some(web_time::Instant::now());
         }
         self.sheet_cursor(&ctx, &response, rect, id);
         if ctx.memory(|m| m.focused().is_none()) {

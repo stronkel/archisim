@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <!-- The page does not zoom: pinching and dragging go to ArchiSim. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="ArchiSim">
+  <meta name="theme-color" content="#1f2328">
+  <title>ArchiSim</title>
+  <link data-trunk rel="rust" href="../Cargo.toml" data-bin="archisim-app" data-wasm-opt="0">
+  <link data-trunk rel="copy-file" href="../assets/icon.png">
+  <link data-trunk rel="copy-file" href="manifest.json">
+  <link rel="icon" href="icon.png">
+  <link rel="apple-touch-icon" href="icon.png">
+  <link rel="manifest" href="manifest.json">
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #1f2328;
+      /* No text selection, callouts or double-tap zoom over the program. */
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-touch-callout: none;
+      touch-action: none;
+      overscroll-behavior: none;
+    }
+    #archisim {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      outline: none;
+    }
+    #cargando {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #c9d1d9;
+      font: 16px -apple-system, "Segoe UI", sans-serif;
+      text-align: center;
+      padding: 2em;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="archisim"></canvas>
+  <div id="cargando">Cargando ArchiSim…</div>
+</body>
+</html>

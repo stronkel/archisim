@@ -78,7 +78,7 @@ pub enum ObjectPick {
 /// The object types of the library folder, loaded into a model of their
 /// own for their pictures.
 pub struct FolderObjects {
-    read: std::time::Instant,
+    read: web_time::Instant,
     lib: crate::editor::library::Library,
     model: archisim_core::Model,
     /// File, type in it, the type in `model`, its `GlobalId`.
@@ -251,7 +251,7 @@ impl FolderObjects {
         model_files(&lib.dir, 0, &mut files);
         let models = files.iter().filter_map(|p| folder_model(p)).collect();
         Self {
-            read: std::time::Instant::now(),
+            read: web_time::Instant::now(),
             lib,
             model,
             types,

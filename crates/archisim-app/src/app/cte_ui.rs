@@ -478,7 +478,7 @@ impl ArchiSimApp {
     }
 
     fn cte_export(&mut self, report: &Report) {
-        let mut d = rfd::FileDialog::new()
+        let mut d = crate::file_dialog::FileDialog::new()
             .set_title("Exportar la comprobación CTE")
             .add_filter("CSV", &["csv"])
             .set_file_name(format!("{}-cte.csv", self.ed.display_name()));

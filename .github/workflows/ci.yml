@@ -44,6 +44,24 @@ jobs:
           name: demo-${{ matrix.os }}
           path: out/
 
+  # ArchiSim in the browser (docs/IPAD.md): it must keep building.
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: trunk
+      - run: scripts/build_web.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web
+          path: dist/archisim-web.zip
+
   validate-ifc:
     runs-on: ubuntu-latest
     steps:

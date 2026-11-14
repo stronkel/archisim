@@ -20,7 +20,7 @@ impl<K> Pending<K> {
     pub fn start(key: K, work: impl FnOnce() -> ColorImage + Send + 'static) -> Self {
         let slot = Arc::new(Mutex::new(None));
         let to = slot.clone();
-        std::thread::spawn(move || {
+        crate::platform::spawn(move || {
             let image = work();
             if let Ok(mut s) = to.lock() {
                 *s = Some(image);

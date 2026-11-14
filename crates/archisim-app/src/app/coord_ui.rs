@@ -210,7 +210,7 @@ impl ArchiSimApp {
     }
 
     pub(super) fn link_ifc_dialog(&mut self) {
-        let mut d = rfd::FileDialog::new()
+        let mut d = crate::file_dialog::FileDialog::new()
             .set_title("Vincular modelos IFC")
             .add_filter("IFC", &["ifc"]);
         if let Some(dir) = self.start_dir() {
@@ -232,7 +232,7 @@ impl ArchiSimApp {
     }
 
     pub(super) fn requirements_dialog(&mut self) {
-        let mut d = rfd::FileDialog::new()
+        let mut d = crate::file_dialog::FileDialog::new()
             .set_title("Requisitos de información (IDS)")
             .add_filter("IDS", &["ids", "xml"]);
         if let Some(dir) = self.start_dir() {
@@ -655,7 +655,7 @@ impl ArchiSimApp {
     fn issues_tab(&mut self, ui: &mut Ui) {
         ui.horizontal(|ui| {
             if ui.button("Abrir BCF…").clicked() {
-                let mut d = rfd::FileDialog::new()
+                let mut d = crate::file_dialog::FileDialog::new()
                     .set_title("Abrir incidencias")
                     .add_filter("BCF", &["bcf", "bcfzip"]);
                 if let Some(dir) = self.start_dir() {
@@ -883,7 +883,7 @@ impl ArchiSimApp {
 
     fn save_issues(&mut self, ask: bool) {
         let path = if ask {
-            let mut d = rfd::FileDialog::new()
+            let mut d = crate::file_dialog::FileDialog::new()
                 .set_title("Guardar incidencias")
                 .add_filter("BCF", &["bcf"])
                 .set_file_name(format!("{} - incidencias.bcf", self.file_name_stem()));

@@ -1,0 +1,10 @@
+{
+  "name": "ArchiSim",
+  "short_name": "ArchiSim",
+  "lang": "es",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#1f2328",
+  "theme_color": "#1f2328",
+  "icons": [{ "src": "icon.png", "sizes": "1024x1024", "type": "image/png" }]
+}

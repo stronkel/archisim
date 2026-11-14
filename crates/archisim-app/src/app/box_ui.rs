@@ -997,7 +997,7 @@ impl ArchiSimApp {
             self.complain("El proyecto no tiene cajas modulares.".to_string());
             return;
         }
-        let mut d = rfd::FileDialog::new()
+        let mut d = crate::file_dialog::FileDialog::new()
             .set_title("Planos de taller de las cajas (PDF)")
             .add_filter("PDF", &["pdf"])
             .set_file_name(format!("{}-taller.pdf", self.file_name_stem()));
@@ -1029,7 +1029,7 @@ impl ArchiSimApp {
             self.complain("No hay caras con despiece a mano.".to_string());
             return;
         }
-        let mut d = rfd::FileDialog::new()
+        let mut d = crate::file_dialog::FileDialog::new()
             .set_title("Despiece a mano de las fachadas (PDF)")
             .add_filter("PDF", &["pdf"])
             .set_file_name(format!("{}-despiece.pdf", self.file_name_stem()));
@@ -1061,7 +1061,7 @@ impl ArchiSimApp {
             self.complain("El proyecto no tiene cajas modulares.".to_string());
             return;
         }
-        let mut d = rfd::FileDialog::new()
+        let mut d = crate::file_dialog::FileDialog::new()
             .set_title("Lista de compra de las cajas (CSV)")
             .add_filter("CSV", &["csv"])
             .set_file_name(format!("{}-compra.csv", self.file_name_stem()));
@@ -1098,7 +1098,8 @@ impl ArchiSimApp {
             self.complain("El proyecto no tiene cajas modulares.".to_string());
             return;
         }
-        let mut d = rfd::FileDialog::new().set_title("Carpeta para la fábrica de las cajas");
+        let mut d =
+            crate::file_dialog::FileDialog::new().set_title("Carpeta para la fábrica de las cajas");
         if let Some(dir) = self.start_dir() {
             d = d.set_directory(dir);
         }

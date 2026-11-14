@@ -462,7 +462,7 @@ impl ArchiSimApp {
     /// The installations' report («Memoria de instalaciones») as a PDF of
     /// A4 pages.
     pub(super) fn export_services_report(&mut self) {
-        let mut d = rfd::FileDialog::new()
+        let mut d = crate::file_dialog::FileDialog::new()
             .set_title("Memoria de instalaciones (PDF)")
             .add_filter("PDF", &["pdf"])
             .set_file_name(format!(

@@ -194,7 +194,7 @@ pub struct View3dState {
     /// The scene has water seen through (worked out with the scene).
     has_water: bool,
     /// When the view was made, for the water's clock.
-    clock: std::time::Instant,
+    clock: web_time::Instant,
     /// How the materials' textures (brick, wood, stone…) are drawn.
     pub textures: TextureMode,
     /// What is being stretched, as it will be, drawn in place of the
@@ -213,7 +213,7 @@ pub struct View3dState {
     pub light: crate::view3d::look::Light,
     /// Where and when the wheel last aimed the camera at what is under the
     /// cursor (looked up again when the cursor moves or after a pause).
-    zoom_aim: Option<(std::time::Instant, Pos2)>,
+    zoom_aim: Option<(web_time::Instant, Pos2)>,
     /// What the right button turns the view about, chosen when it is
     /// pressed (§12.5: what is under the cursor).
     pub orbit_pivot: Option<glam::Vec3>,
@@ -263,7 +263,7 @@ impl Default for View3dState {
             walk_eye: None,
             water_motion: true,
             has_water: false,
-            clock: std::time::Instant::now(),
+            clock: web_time::Instant::now(),
             textures: default_textures(),
             cutaway: Cutaway::Up,
             level_z: 0.0,
@@ -629,7 +629,7 @@ impl View3dState {
             self.atmosphere.clone(),
         );
         if self.drawn.as_ref() != Some(&wanted) || gpu.texture.is_none() {
-            let started = std::time::Instant::now();
+            let started = web_time::Instant::now();
             crate::crash::stage("3D: dibujar en la tarjeta gráfica");
             gpu.renderer.set_clip(clip.map(|b| (b.lo, b.hi)));
             gpu.renderer.set_caps(self.caps);
@@ -988,7 +988,7 @@ impl ArchiSimApp {
                 let local = pos - rect.min;
                 // Towards what is under the cursor: looked up once per
                 // turn of the wheel, not at every step of it.
-                let now = std::time::Instant::now();
+                let now = web_time::Instant::now();
                 let fresh = v.zoom_aim.is_some_and(|(t, p)| {
                     now.duration_since(t).as_secs_f32() < 0.4 && p.distance(pos) < 6.0
                 });

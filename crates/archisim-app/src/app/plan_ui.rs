@@ -245,7 +245,7 @@ impl ArchiSimApp {
             }
         }
         if self.view != before {
-            self.view_moved_at = Some(std::time::Instant::now());
+            self.view_moved_at = Some(web_time::Instant::now());
         }
     }
 
@@ -1710,7 +1710,7 @@ impl ArchiSimApp {
         }
         if self.plan.as_ref().map(|p| &p.0) != Some(&key) {
             self.view_moved_at = None;
-            let started = std::time::Instant::now();
+            let started = web_time::Instant::now();
             let shadows = self.plan_shadows();
             let mut options = self.screen_plan_options(lo, hi);
             options.shadows = shadows;

@@ -119,14 +119,14 @@ pub fn watch_frames() {
         .name("vigilante".into())
         .spawn(|| {
             let mut last = FRAMES.load(Ordering::Relaxed);
-            let mut since = std::time::Instant::now();
+            let mut since = web_time::Instant::now();
             let mut written = false;
             loop {
                 std::thread::sleep(std::time::Duration::from_millis(500));
                 let now = FRAMES.load(Ordering::Relaxed);
                 if now != last || !IN_FRAME.load(Ordering::Relaxed) {
                     last = now;
-                    since = std::time::Instant::now();
+                    since = web_time::Instant::now();
                     written = false;
                 } else if !written && since.elapsed().as_secs() >= 4 {
                     written = true;

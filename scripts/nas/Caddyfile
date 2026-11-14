@@ -1,0 +1,19 @@
+# La versión web de ArchiSim, con usuario y contraseña (docs/IPAD.md).
+:80 {
+	basic_auth {
+		{$ARCHISIM_USUARIO} {$ARCHISIM_CLAVE_CIFRADA}
+	}
+
+	root * /srv/web/actual
+	encode zstd gzip
+
+	# La página y la casa de ejemplo se piden de nuevo cada vez, para que
+	# una versión nueva llegue al recargar; el programa (.wasm, .js) lleva
+	# su huella en el nombre y se guarda.
+	@siempre_nuevo path / /index.html /demo.archisim /version.txt /manifest.json /icon.png
+	header @siempre_nuevo Cache-Control "no-cache"
+	@con_huella not path / /index.html /demo.archisim /version.txt /manifest.json /icon.png
+	header @con_huella Cache-Control "public, max-age=31536000, immutable"
+
+	file_server
+}

@@ -242,7 +242,7 @@ impl ArchiSimApp {
                 {
                     match archisim_plan::profile::run_profile_svg(self.ed.model(), id) {
                         Some(svg) => {
-                            let file = rfd::FileDialog::new()
+                            let file = crate::file_dialog::FileDialog::new()
                                 .set_title("Guardar el perfil longitudinal")
                                 .set_file_name(format!("perfil-{}.svg", r.system.code()))
                                 .add_filter("SVG", &["svg"])

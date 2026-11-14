@@ -89,7 +89,7 @@ pub fn library_files() -> Vec<PathBuf> {
 /// drive).
 pub fn has_library_files() -> bool {
     use std::cell::Cell;
-    use std::time::{Duration, Instant};
+    use web_time::{Duration, Instant};
     thread_local! {
         static SEEN: Cell<Option<(Instant, bool)>> = const { Cell::new(None) };
     }

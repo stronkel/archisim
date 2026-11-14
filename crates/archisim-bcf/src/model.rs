@@ -219,8 +219,8 @@ pub fn new_guid() -> String {
 
 /// The current time as BCF writes it (UTC, seconds).
 pub fn now() -> String {
-    let secs = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
+    let secs = web_time::SystemTime::now()
+        .duration_since(web_time::UNIX_EPOCH)
         .map(|d| d.as_secs() as i64)
         .unwrap_or(0);
     iso_utc(secs)
