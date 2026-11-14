@@ -318,3 +318,16 @@ Lo que pidió al cerrar H1–H7, más lo que quedó pendiente de H6 y H7. Se hac
 | V2 | **Ortofoto del PNOA** sobre el terreno y las calles traídas, en la vista 3D, el render y el glTF. | ✅ rama `bloque/ortofoto` (descargada del PNOA o PNG con `.pgw`; 3D, render, glTF y planta; `archisim ortofoto` hace una de ensayo) |
 | V3 | **Altura real de los edificios** con el LiDAR del PNOA (MDS − MDT da las plantas). | ✅ rama `bloque/lidar` (MDS05 en «Traer el entorno», al traer los edificios o después) |
 | V4 | **Vida en la calle, oficio en las casas y luz de ilustración** (pedido tras ver CityRT, 02/11/2026): árboles de alineación, farolas, bancos, papeleras, coches aparcados, personas y jardines delanteros al traer el entorno; tejas por hiladas, ventanas de cubierta, chimeneas pareadas en las medianeras, canalón y bajante, tejadillo sobre la puerta, carpintería blanca y vidrio claro; sol cálido, penumbra en los rincones, colores más vivos y cielo azul en la Maqueta y el render. | ✅ rama `bloque/vida-calle` (`archisim vida-calle` para un proyecto ya traído) |
+
+## 13. ArchiSim en el iPad (14/11/2026)
+
+Pedido de Antonio: modelar en serio desde el sofá, con Apple Pencil, teclado y trackpad o solo los dedos. Decidido (D29): primero en el navegador (Safari con WebGPU), después la app nativa. Diseño completo en `docs/IPAD.md`.
+
+| Bloque | Qué | Estado |
+|---|---|---|
+| T1 | ArchiSim en el navegador, publicado por la integración continua | Pendiente |
+| T2 | Abrir y guardar desde Archivos e iCloud, copia automática | Pendiente |
+| T3 | Gestos y Pencil (el Pencil dibuja, el dedo mueve) | Pendiente |
+| T4 | Tamaño táctil, teclado numérico de cotas, «El dedo dibuja» con lupa | Pendiente |
+| T5 | Render y cálculos en hilos del navegador, proyectos grandes, entorno desde el NAS | Pendiente |
+| T6 | App nativa para iPad con TestFlight | Pendiente |
