@@ -829,7 +829,9 @@ impl ArchiSimApp {
             render: Default::default(),
             budget: Default::default(),
             start: start_ui::StartScreen {
-                open: !cfg!(test),
+                // On the web it opens with the demo house (until T2 can
+                // open files, the start screen has nothing to offer).
+                open: !cfg!(test) && !crate::platform::WEB,
                 ..Default::default()
             },
             grid_anchor: None,
