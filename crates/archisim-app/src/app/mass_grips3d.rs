@@ -282,7 +282,7 @@ impl ArchiSimApp {
         self.mass_handles_3d()
             .into_iter()
             .filter_map(|h| Some((h, self.mass_grab_point(rect, h.1, h.2)?.distance(pos))))
-            .filter(|(_, d)| *d <= REACH)
+            .filter(|(_, d)| *d <= crate::touch::reach(REACH))
             .min_by(|a, b| a.1.total_cmp(&b.1))
             .map(|(h, _)| h)
     }

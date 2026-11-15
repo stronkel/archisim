@@ -54,7 +54,7 @@ impl ArchiSimApp {
 
     /// The column under `p`, on the active level.
     fn column_under(&self, p: Point2) -> Option<archisim_core::ColumnId> {
-        let reach = self.view.to_metres(REACH);
+        let reach = self.view.to_metres(crate::touch::reach(REACH));
         match pick(&self.ed, self.ed.level, p, reach) {
             Some(Element::Column(c)) => Some(c),
             _ => None,
@@ -63,7 +63,7 @@ impl ArchiSimApp {
 
     /// The straight wall under `p`, on the active level.
     fn wall_under(&self, p: Point2) -> Option<archisim_core::WallId> {
-        let reach = self.view.to_metres(REACH);
+        let reach = self.view.to_metres(crate::touch::reach(REACH));
         crate::opening_tool::wall_at(&self.ed, self.ed.level, p, reach)
             .filter(|w| self.ed.model().wall_centre_line(*w).is_some())
     }

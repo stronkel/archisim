@@ -102,7 +102,8 @@ impl ArchiSimApp {
             DrawMethod::Spline if self.spline_closes().is_some() => {
                 // Open by default; a click on its first point closes it.
                 if self.spline_points.len() >= 3
-                    && self.spline_points[0].distance(p) < self.view.to_metres(REACH)
+                    && self.spline_points[0].distance(p)
+                        < self.view.to_metres(crate::touch::reach(REACH))
                 {
                     self.finish_spline_as(true);
                 } else if !self.spline_points.last().is_some_and(|q| q.approx_eq(p)) {
@@ -111,7 +112,7 @@ impl ArchiSimApp {
                 true
             }
             DrawMethod::PickLine if self.picks_lines() => {
-                let reach = self.view.to_metres(REACH);
+                let reach = self.view.to_metres(crate::touch::reach(REACH));
                 let view = archisim_core::ViewRef::Level(self.ed.level);
                 match self.line_at(p, reach, view, None) {
                     Some(l) => self.follow_line(l),

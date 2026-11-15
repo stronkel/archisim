@@ -90,6 +90,11 @@ pub struct Prefs {
     /// Whether one finger draws (as the Pencil) instead of moving the view
     /// (`docs/IPAD.md` §2); None: it does until a Pencil is seen.
     pub finger_draws: Option<bool>,
+    /// The touch size: bigger buttons and handles (`docs/IPAD.md` §3);
+    /// None: on once the screen has been touched.
+    pub touch_size: Option<bool>,
+    /// The number keypad on the drawing, on a touch screen.
+    pub keypad: bool,
 }
 
 /// How the 3D view moves: speeds from 1 to 10 (5 is as it always was) and
@@ -153,6 +158,8 @@ impl Default for Prefs {
             check_updates: true,
             skipped_version: None,
             finger_draws: None,
+            touch_size: None,
+            keypad: true,
         }
     }
 }
@@ -205,6 +212,8 @@ impl Prefs {
             "buscar_actualizaciones": self.check_updates,
             "version_saltada": self.skipped_version,
             "dedo_dibuja": self.finger_draws,
+            "tamano_tactil": self.touch_size,
+            "teclado_numerico": self.keypad,
         });
         serde_json::to_string_pretty(&v).unwrap_or_default()
     }
@@ -291,6 +300,8 @@ impl Prefs {
             check_updates: flag("buscar_actualizaciones", d.check_updates),
             skipped_version: v["version_saltada"].as_str().map(str::to_string),
             finger_draws: v["dedo_dibuja"].as_bool(),
+            touch_size: v["tamano_tactil"].as_bool(),
+            keypad: flag("teclado_numerico", d.keypad),
         }
     }
 
@@ -379,6 +390,8 @@ mod tests {
             check_updates: false,
             skipped_version: Some("0.81.0".into()),
             finger_draws: Some(true),
+            touch_size: Some(true),
+            keypad: false,
         };
         assert_eq!(Prefs::from_json(&p.to_json()), p);
         assert!((Navigation::factor(5) - 1.0).abs() < 1e-6);

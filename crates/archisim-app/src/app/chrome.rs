@@ -1046,6 +1046,28 @@ impl ArchiSimApp {
             self.prefs.finger_draws = Some(on);
             self.prefs.save();
         }
+        let mut large = self.prefs.touch_size.unwrap_or(true);
+        let before = large;
+        chip(
+            ui,
+            &mut large,
+            "Tamaño táctil",
+            "Botones y filas más grandes, y los tiradores y puntos se cogen desde más lejos con el dedo",
+        );
+        if large != before {
+            self.prefs.touch_size = Some(large);
+            self.prefs.save();
+        }
+        let before = self.prefs.keypad;
+        chip(
+            ui,
+            &mut self.prefs.keypad,
+            "Teclado numérico",
+            "Teclas sobre el dibujo para escribir las cotas y las teclas de las herramientas sin teclado",
+        );
+        if self.prefs.keypad != before {
+            self.prefs.save();
+        }
     }
 
     fn thin_lines_chip(&mut self, ui: &mut Ui) {

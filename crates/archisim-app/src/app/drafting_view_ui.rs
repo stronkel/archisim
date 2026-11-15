@@ -72,7 +72,7 @@ impl ArchiSimApp {
         match response.hover_pos() {
             Some(pos) => {
                 let raw = self.view.to_model(rect, pos);
-                let reach = self.view.to_metres(REACH);
+                let reach = self.view.to_metres(crate::touch::reach(REACH));
                 if self.underlay_pick.is_some() {
                     self.underlay_cursor(&ctx, raw, reach);
                 } else if self.tool == Tool::Cad {
@@ -114,7 +114,11 @@ impl ArchiSimApp {
                 }
             }
             None => {
-                self.cursor = None;
+                // On a touch screen, where the finger last drew (see
+                // `track_cursor`).
+                if !self.touch.seen {
+                    self.cursor = None;
+                }
                 self.hover = None;
             }
         }
@@ -293,13 +297,13 @@ impl ArchiSimApp {
                     self.ed.model(),
                     ViewRef::Drafting(id),
                     o,
-                    self.view.to_metres(REACH),
+                    self.view.to_metres(crate::touch::reach(REACH)),
                 );
                 match on {
                     Some(e) if self.ed.selection.contains(&e) => {
                         // Grabbed by the nearest point of the line, snapped
                         // to its ends or middle, so it lands exactly.
-                        let reach = self.view.to_metres(REACH);
+                        let reach = self.view.to_metres(crate::touch::reach(REACH));
                         let from = crate::snap::snap_view(
                             self.ed.model(),
                             ViewRef::Drafting(id),

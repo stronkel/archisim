@@ -312,7 +312,7 @@ impl ArchiSimApp {
                 SlabOutcome::Nothing => {}
             },
             Tool::Dimension => {
-                let reach = self.view.to_metres(REACH);
+                let reach = self.view.to_metres(crate::touch::reach(REACH));
                 let out = self
                     .dim_tool
                     .click(&self.ed, self.ed.level, self.dim_settings, p, reach);
@@ -491,7 +491,7 @@ impl ArchiSimApp {
                         return;
                     };
                     let raw = self.view.to_model(rect, pos);
-                    let reach = self.view.to_metres(REACH);
+                    let reach = self.view.to_metres(crate::touch::reach(REACH));
                     match self.pick_here(raw, reach) {
                         Some(e) => {
                             let shift = ctx.input(|i| i.modifiers.shift);

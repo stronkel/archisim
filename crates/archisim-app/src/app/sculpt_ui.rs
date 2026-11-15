@@ -112,7 +112,7 @@ impl ArchiSimApp {
                 normal,
             });
         }
-        let reach = self.view.to_metres(REACH);
+        let reach = self.view.to_metres(crate::touch::reach(REACH));
         let model = self.ed.model();
         if sides {
             // The side nearest the click, of any volume near it.
@@ -422,7 +422,7 @@ impl ArchiSimApp {
         let Some(target) = self.concept.pick_profile.take() else {
             return;
         };
-        let reach = self.view.to_metres(REACH);
+        let reach = self.view.to_metres(crate::touch::reach(REACH));
         let model = self.ed.model();
         let outline = match crate::pick::pick(&self.ed, self.ed.level, p, reach) {
             Some(Element::Draft(id)) => match model.draft(id).map(|d| &d.shape) {

@@ -439,6 +439,15 @@ pub struct ArchiSimApp {
     pub(crate) touch: crate::touch::Touches,
     /// Where the drawing was in the last frame, for the fingers.
     pub(crate) touch_area: Option<crate::touch::Area>,
+    /// Keys typed on the keypad, for the next frame's input.
+    keypad_queue: Vec<egui::Event>,
+    /// Whether the keypad is open (or folded into its button).
+    keypad_open: bool,
+    /// The touch size last applied to the style.
+    touch_large_applied: Option<bool>,
+    /// The plan's picture as last painted (texture and where), for the
+    /// magnifier.
+    loupe_source: Option<(egui::TextureId, Rect)>,
     /// How long the last section drawing took to work out.
     section_took: std::sync::Arc<std::sync::Mutex<std::time::Duration>>,
     sheet_pending: Option<background::Pending<sheet_ui::SheetKey>>,
@@ -913,6 +922,10 @@ impl ArchiSimApp {
             web_unsaved: false,
             touch: Default::default(),
             touch_area: None,
+            keypad_queue: Vec::new(),
+            keypad_open: true,
+            touch_large_applied: None,
+            loupe_source: None,
             frame_times: Default::default(),
             nav_rows: None,
             discipline_counts: None,
@@ -2269,7 +2282,7 @@ impl ArchiSimApp {
     /// Places the door or window shown under the cursor.
     fn place_opening(&mut self) {
         let Some(pl) = self.placement.clone() else {
-            let reach = self.view.to_metres(REACH);
+            let reach = self.view.to_metres(crate::touch::reach(REACH));
             let curved = self.cursor.and_then(|c| {
                 crate::opening_tool::wall_at(&self.ed, self.ed.level, c.point, reach)
             });
@@ -2959,6 +2972,8 @@ impl eframe::App for ArchiSimApp {
     /// The fingers and the Pencil, before egui reads the touches
     /// (`crate::touch`).
     fn raw_input_hook(&mut self, ctx: &egui::Context, raw: &mut egui::RawInput) {
+        // The keys typed on the keypad, as if from a keyboard.
+        raw.events.append(&mut self.keypad_queue);
         let finger_draws = self.finger_draws();
         let over_drawing = |p: Pos2| {
             ctx.layer_id_at(p)
@@ -2998,6 +3013,7 @@ impl eframe::App for ArchiSimApp {
                 .request_repaint_after(std::time::Duration::from_millis(50));
         }
         self.show(ui);
+        self.touch_overlays(ui.ctx());
         self.frame_meter(ui.ctx(), started.elapsed());
         crate::crash::frame_done();
     }
@@ -3270,6 +3286,7 @@ mod grips3d;
 mod handles;
 mod hatch_ui;
 mod icons;
+mod keypad_ui;
 mod levels_ui;
 mod library_ui;
 mod maquette_ui;

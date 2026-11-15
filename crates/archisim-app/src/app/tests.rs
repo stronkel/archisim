@@ -42,6 +42,10 @@ impl Harness {
     }
 
     fn frame(&mut self) {
+        // The keys typed on the keypad, as `raw_input_hook` does.
+        let mut events = std::mem::take(&mut self.app.keypad_queue);
+        events.append(&mut self.events);
+        self.events = events;
         let input = RawInput {
             screen_rect: Some(Rect::from_min_size(
                 Pos2::ZERO,
@@ -53,8 +57,10 @@ impl Harness {
         };
         let app = &mut self.app;
         let mut output = crate::profile::time("todo el fotograma", || {
-            self.ctx
-                .run_ui(input, |ui| crate::profile::time("show", || app.show(ui)))
+            self.ctx.run_ui(input, |ui| {
+                crate::profile::time("show", || app.show(ui));
+                app.touch_overlays(ui.ctx());
+            })
         });
         output.textures_delta.clear();
         self.time += 0.05;
@@ -12148,4 +12154,53 @@ fn big_project_frames() {
         t.elapsed().as_secs_f64() * 1000.0
     );
     timed(&mut h, "3D, ratón quieto", 10, &mut |h, _| h.frame());
+}
+
+/// The number keypad of a touch screen (T4): its keys reach the wall tool
+/// as from a keyboard, so a wall gets its length typed with no keyboard.
+#[test]
+fn the_keypad_types_a_length() {
+    use super::keypad_ui::Press;
+    let mut h = Harness::new(Editor::new_project());
+    h.app.touch.seen = true;
+    // The touch size is shared by every test running at once: left off.
+    h.app.prefs.touch_size = Some(false);
+    assert!(!h.app.keypad_wanted(), "with nothing in hand, no keypad");
+    h.type_text("m");
+    h.key(Key::M);
+    assert_eq!(h.app.tool, Tool::Wall);
+    assert!(h.app.keypad_wanted());
+    h.click_at(p(0.0, 0.0));
+    h.set_modifiers(Modifiers::SHIFT);
+    h.move_to(p(2.0, 0.2));
+    for k in ["4", "0", "0", "0"] {
+        h.app.type_key(Press::Text(k));
+        h.frame();
+    }
+    assert_eq!(h.app.wall_tool.typed, "4000");
+    // A finger on the keypad's «0» types it and puts no point in the plan.
+    let area = h.app.touch_area.expect("the plan sets its area").rect;
+    let width = 4.0 * 46.0 + 3.0 * 6.0 + 20.0;
+    let height = 5.0 * 46.0 + 4.0 * 6.0 + 20.0;
+    let at = area.right_bottom() - Vec2::new(width + 12.0, height + 12.0);
+    let zero = at + Vec2::new(11.0 + 46.0 + 6.0 + 23.0, 11.0 + 3.0 * 52.0 + 23.0);
+    let shift = h.modifiers;
+    h.modifiers = Modifiers::NONE;
+    h.click_screen(zero);
+    h.modifiers = shift;
+    h.frame();
+    assert_eq!(h.app.wall_tool.typed, "40000");
+    assert_eq!(h.model().walls().count(), 0);
+    h.app.type_key(Press::Key(Key::Backspace));
+    h.frame();
+    assert_eq!(h.app.wall_tool.typed, "4000");
+    h.app.type_key(Press::Key(Key::Enter));
+    h.frame();
+    h.set_modifiers(Modifiers::NONE);
+    h.app.type_key(Press::Key(Key::Escape));
+    h.frame();
+    let walls: Vec<_> = h.model().walls().collect();
+    assert_eq!(walls.len(), 1);
+    let w = walls[0];
+    assert!((w.length() - 4.0).abs() < 1e-6);
 }
