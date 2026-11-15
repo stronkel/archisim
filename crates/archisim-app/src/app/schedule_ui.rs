@@ -221,7 +221,7 @@ impl ArchiSimApp {
                 d = d.set_directory(dir);
             }
             if let Some(path) = d.save_file() {
-                match std::fs::write(&path, csv) {
+                match crate::files::write(&path, csv) {
                     Ok(()) => self.say(format!("Tabla exportada en {}.", path.display())),
                     Err(e) => self.complain(format!("No se pudo exportar: {e}.")),
                 }
@@ -273,7 +273,7 @@ impl ArchiSimApp {
         let Some(path) = d.save_file() else {
             return;
         };
-        match std::fs::write(&path, book) {
+        match crate::files::write(&path, book) {
             Ok(()) => self.say(format!("Despiece de entramados en {}.", path.display())),
             Err(e) => self.complain(format!("No se pudo exportar: {e}.")),
         }
@@ -297,7 +297,7 @@ impl ArchiSimApp {
         let Some(path) = d.save_file() else {
             return;
         };
-        match std::fs::write(&path, text) {
+        match crate::files::write(&path, text) {
             Ok(()) => self.say(format!("Ejes del entramado en {}.", path.display())),
             Err(e) => self.complain(format!("No se pudo exportar: {e}.")),
         }
@@ -319,7 +319,7 @@ impl ArchiSimApp {
         let model = self.ed.shown();
         let sheets = doc.sheets(&model);
         let r = crate::documents::pdf_of(&sheets, doc.title())
-            .and_then(|bytes| std::fs::write(&path, bytes).map_err(|e| e.to_string()));
+            .and_then(|bytes| crate::files::write(&path, bytes).map_err(|e| e.to_string()));
         match r {
             Ok(()) => self.say(format!(
                 "{}: {} hoja(s) A3 en {}.",

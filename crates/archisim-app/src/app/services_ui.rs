@@ -248,7 +248,7 @@ impl ArchiSimApp {
                                 .add_filter("SVG", &["svg"])
                                 .save_file();
                             if let Some(path) = file {
-                                match std::fs::write(&path, svg) {
+                                match crate::files::write(&path, svg) {
                                     Ok(()) => self.say(format!("Perfil guardado en {}.", path.display())),
                                     Err(e) => self.complain(format!("No se puede guardar el perfil: {e}.")),
                                 }

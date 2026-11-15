@@ -215,7 +215,22 @@ impl ArchiSimApp {
                     self.export_glb();
                 }
                 head(ui, "Planos y documentos");
-                if ui
+                if crate::platform::WEB {
+                    // No dialog to choose the kind in the browser: one
+                    // entry each.
+                    for (label, ext) in [
+                        ("Este plano en PDF…", "pdf"),
+                        ("Este plano en DXF…", "dxf"),
+                        ("Este plano en imagen…", "png"),
+                    ] {
+                        if ui
+                            .add_enabled(on_sheet, shortcut_button(label, &ext.to_uppercase()))
+                            .clicked()
+                        {
+                            self.export_sheets_as(false, ext);
+                        }
+                    }
+                } else if ui
                     .add_enabled(on_sheet, shortcut_button("Este plano…", "PDF · DXF · SVG"))
                     .clicked()
                 {

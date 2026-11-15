@@ -480,9 +480,9 @@ mod tests {
             .unwrap()
             .starts_with(b"%PDF"));
         if let Ok(dir) = std::env::var("ARCHISIM_TEST_OUT") {
-            let _ = std::fs::create_dir_all(&dir);
+            let _ = crate::files::create_dir_all(&dir);
             for (i, (svg, _)) in sheets.iter().enumerate() {
-                let _ = std::fs::write(format!("{dir}/despiece-{}.svg", i + 1), svg);
+                let _ = crate::files::write(format!("{dir}/despiece-{}.svg", i + 1), svg);
             }
         }
     }

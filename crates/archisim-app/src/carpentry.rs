@@ -365,11 +365,11 @@ mod tests {
             let demo =
                 std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../out/demo.archisim");
             let m = archisim_file::open(&demo).unwrap_or(m);
-            std::fs::create_dir_all(&dir).unwrap();
+            crate::files::create_dir_all(&dir).unwrap();
             for (i, (svg, _)) in super::carpentry_sheets(&m).iter().enumerate() {
-                std::fs::write(format!("{dir}/carpinterias-{}.svg", i + 1), svg).unwrap();
+                crate::files::write(format!("{dir}/carpinterias-{}.svg", i + 1), svg).unwrap();
             }
-            std::fs::write(
+            crate::files::write(
                 format!("{dir}/carpinterias.pdf"),
                 crate::documents::pdf_of(&super::carpentry_sheets(&m), "Carpinterías").unwrap(),
             )

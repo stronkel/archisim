@@ -423,7 +423,7 @@ impl ArchiSimApp {
         let result = path
             .parent()
             .map_or(Ok(()), std::fs::create_dir_all)
-            .and_then(|()| std::fs::write(&path, shared_parameters_text(&all)));
+            .and_then(|()| crate::files::write(&path, shared_parameters_text(&all)));
         match result {
             Ok(()) => self.say(format!("{n} parámetros compartidos en {}.", path.display())),
             Err(e) => self.complain(format!("No se puede escribir {}: {e}.", path.display())),

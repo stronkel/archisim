@@ -1,12 +1,22 @@
 //! The system's file dialogs.
 //!
-//! On the desktop, the dialogs of `rfd`. On the web there is no folder to
-//! open or save in yet (T2 of `docs/IPAD.md` brings the iPad's file
-//! picker and downloads): the same calls answer «nothing chosen», so the
-//! window carries on as if the person had cancelled, and says why.
+//! On the desktop, the dialogs of `rfd`. On the web there is no folder:
+//! opening goes through the iPad's file picker (`web::pick`), so these
+//! answer «nothing chosen» and say why; saving answers a place under
+//! `files::WEB_OUT`, and what is written there is handed over as a file
+//! (`files::write`).
 
 #[cfg(not(target_arch = "wasm32"))]
 pub use rfd::FileDialog;
+
+/// A folder to export several files to (in the browser, handed over one
+/// after the other).
+pub fn pick_export_folder(d: FileDialog) -> Option<std::path::PathBuf> {
+    #[cfg(not(target_arch = "wasm32"))]
+    return d.pick_folder();
+    #[cfg(target_arch = "wasm32")]
+    return d.pick_export_folder();
+}
 
 #[cfg(target_arch = "wasm32")]
 pub use web::FileDialog;
@@ -20,6 +30,7 @@ mod web {
     #[derive(Default, Clone, Debug)]
     pub struct FileDialog {
         title: String,
+        name: String,
     }
 
     impl FileDialog {
@@ -35,7 +46,8 @@ mod web {
             self
         }
 
-        pub fn set_file_name(self, _name: impl Into<String>) -> Self {
+        pub fn set_file_name(mut self, name: impl Into<String>) -> Self {
+            self.name = name.into();
             self
         }
 
@@ -56,8 +68,21 @@ mod web {
             self.not_yet()
         }
 
+        /// The browser has no folders: a file to hand over, by the name
+        /// given (`crate::files::write`).
         pub fn save_file(self) -> Option<PathBuf> {
-            self.not_yet()
+            let name = if self.name.is_empty() {
+                "archisim".to_string()
+            } else {
+                self.name.clone()
+            };
+            Some(Path::new(crate::files::WEB_OUT).join(name))
+        }
+
+        /// A folder to export several files to: they are handed over one
+        /// after the other.
+        pub fn pick_export_folder(self) -> Option<PathBuf> {
+            Some(PathBuf::from(crate::files::WEB_OUT))
         }
 
         fn not_yet<T>(&self) -> Option<T> {

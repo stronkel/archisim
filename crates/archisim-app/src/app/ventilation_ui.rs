@@ -330,7 +330,7 @@ impl ArchiSimApp {
             return;
         }
         let r = crate::documents::pdf_of(&sheets, "Esquemas de ventilación")
-            .and_then(|bytes| std::fs::write(&path, bytes).map_err(|e| e.to_string()));
+            .and_then(|bytes| crate::files::write(&path, bytes).map_err(|e| e.to_string()));
         match r {
             Ok(()) => self.say(format!(
                 "Esquemas de ventilación: {} hojas A3 en {}.",
@@ -365,7 +365,7 @@ impl ArchiSimApp {
         for (i, svg) in sheets.iter().enumerate() {
             let file = path.with_file_name(format!("{stem}-ve-{:02}.dxf", i + 1));
             if let Err(e) = archisim_export::dxf::page_dxf(&model, svg)
-                .and_then(|t| std::fs::write(&file, t).map_err(|e| e.to_string()))
+                .and_then(|t| crate::files::write(&file, t).map_err(|e| e.to_string()))
             {
                 self.complain(format!("No se pudo exportar: {e}."));
                 return;

@@ -343,7 +343,7 @@ impl Editor {
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_else(|| "proyecto.ifc".into());
         let text = self.ifc_text(file_name, schema);
-        std::fs::write(path, text).map_err(|e| format!("no se pudo escribir el IFC: {e}"))
+        crate::files::write(path, text).map_err(|e| format!("no se pudo escribir el IFC: {e}"))
     }
 
     /// The project as IFC text, for a file called `file_name`.
@@ -381,7 +381,7 @@ impl Editor {
             }
             _ => render_plan(model, self.level, options).into_bytes(),
         };
-        std::fs::write(path, bytes).map_err(|e| format!("no se pudo escribir la planta: {e}"))
+        crate::files::write(path, bytes).map_err(|e| format!("no se pudo escribir la planta: {e}"))
     }
 
     /// Writes a section or elevation, as the file's extension says: PDF
@@ -413,7 +413,7 @@ impl Editor {
             }
             _ => archisim_plan::section::render_section(shown, &d, options).into_bytes(),
         };
-        std::fs::write(path, bytes).map_err(|e| format!("no se pudo escribir la sección: {e}"))
+        crate::files::write(path, bytes).map_err(|e| format!("no se pudo escribir la sección: {e}"))
     }
 
     /// Writes sheets: several in one PDF, or one as PDF, DXF or SVG.
@@ -447,7 +447,7 @@ impl Editor {
             }
             _ => return Err("los planos se exportan en PDF, DXF, SVG o PNG (uno a uno)".into()),
         };
-        std::fs::write(path, bytes).map_err(|e| format!("no se pudo escribir el plano: {e}"))
+        crate::files::write(path, bytes).map_err(|e| format!("no se pudo escribir el plano: {e}"))
     }
 
     /// Groups of drafting elements are picked whole: a member selected
@@ -1097,7 +1097,7 @@ impl Editor {
     pub fn export_bc3(&self, path: &Path) -> EditResult {
         let date = archisim_export::bc3::bc3_date(&archisim_ifc::utc_now());
         let bytes = archisim_export::bc3::bc3(&self.shown(), &date, env!("CARGO_PKG_VERSION"));
-        std::fs::write(path, bytes).map_err(|e| format!("no se pudo escribir el BC3: {e}"))
+        crate::files::write(path, bytes).map_err(|e| format!("no se pudo escribir el BC3: {e}"))
     }
 
     /// The project's data for the title blocks.
@@ -1932,7 +1932,7 @@ mod tests {
     #[test]
     fn save_open_and_export() {
         let dir = std::env::temp_dir().join(format!("archisim-editor-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
+        crate::files::create_dir_all(&dir).unwrap();
         let (m, _, _) = room();
         let mut ed = Editor::with_model(m, None);
         assert!(ed.save(None).is_err(), "no file yet");
@@ -1954,7 +1954,7 @@ mod tests {
         }
         let ifc = std::fs::read_to_string(dir.join("casa.ifc")).unwrap();
         assert!(ifc.contains("IFCWALL("));
-        std::fs::write(dir.join("roto.archisim"), "{").unwrap();
+        crate::files::write(dir.join("roto.archisim"), "{").unwrap();
         let err = Editor::open(&dir.join("roto.archisim")).err().unwrap();
         assert!(err.starts_with("el fichero está mal escrito"), "{err}");
         std::fs::remove_dir_all(&dir).ok();

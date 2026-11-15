@@ -240,7 +240,7 @@ impl ArchiSimApp {
         };
         let bytes =
             archisim_export::png::encode_rgb(img.width as u32, img.height as u32, &img.rgb, 96.0);
-        match std::fs::write(&path, bytes) {
+        match crate::files::write(&path, bytes) {
             Ok(()) => self.say(format!("Imagen guardada en {}.", path.display())),
             Err(e) => self.complain(format!("No se pudo guardar la imagen: {e}.")),
         }

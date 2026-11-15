@@ -99,8 +99,8 @@ pub fn save_layered_type(lib: &Library, model: &Model, t: LayeredRef) -> Result<
     }
     let text = layered_catalog_text(&catalog);
     parse_layered_catalog(&text)?;
-    std::fs::create_dir_all(&lib.dir).map_err(|e| e.to_string())?;
-    std::fs::write(&path, text).map_err(|e| e.to_string())?;
+    crate::files::create_dir_all(&lib.dir).map_err(|e| e.to_string())?;
+    crate::files::write(&path, text).map_err(|e| e.to_string())?;
     Ok(path)
 }
 
@@ -149,9 +149,9 @@ pub fn set_library_dir(dir: &Path) -> std::io::Result<()> {
         return Ok(());
     };
     if let Some(parent) = f.parent() {
-        std::fs::create_dir_all(parent)?;
+        crate::files::create_dir_all(parent)?;
     }
-    std::fs::write(f, dir.to_string_lossy().as_bytes())
+    crate::files::write(f, dir.to_string_lossy().as_bytes())
 }
 
 /// Reads one family file.
@@ -189,8 +189,8 @@ pub fn install_extended(dir: &Path) -> Result<usize, String> {
             _ => "Otros",
         };
         let sub = base.join(folder);
-        std::fs::create_dir_all(&sub).map_err(|e| e.to_string())?;
-        std::fs::write(sub.join(file_name(&family)), text).map_err(|e| e.to_string())?;
+        crate::files::create_dir_all(&sub).map_err(|e| e.to_string())?;
+        crate::files::write(sub.join(file_name(&family)), text).map_err(|e| e.to_string())?;
     }
     Ok(n)
 }
@@ -314,8 +314,8 @@ pub fn save_type(lib: &Library, entry: &CatalogEntry, version: u32) -> Result<Pa
     // What is written must read back.
     let expanded = archisim_core::family::expand_shared_pieces(&text).map_err(|e| e.to_string())?;
     archisim_family::parse(&expanded).map_err(|e| e.to_string())?;
-    std::fs::create_dir_all(&lib.dir).map_err(|e| e.to_string())?;
-    std::fs::write(&path, text).map_err(|e| e.to_string())?;
+    crate::files::create_dir_all(&lib.dir).map_err(|e| e.to_string())?;
+    crate::files::write(&path, text).map_err(|e| e.to_string())?;
     Ok(path)
 }
 

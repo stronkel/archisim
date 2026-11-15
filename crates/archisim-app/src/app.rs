@@ -448,6 +448,8 @@ pub struct ArchiSimApp {
     /// The plan's picture as last painted (texture and where), for the
     /// magnifier.
     loupe_source: Option<(egui::TextureId, Rect)>,
+    /// The 3D picture asked to the graphics in the browser, to save.
+    picture_reading: Option<crate::view3d::render::Reading>,
     /// How long the last section drawing took to work out.
     section_took: std::sync::Arc<std::sync::Mutex<std::time::Duration>>,
     sheet_pending: Option<background::Pending<sheet_ui::SheetKey>>,
@@ -926,6 +928,7 @@ impl ArchiSimApp {
             keypad_open: true,
             touch_large_applied: None,
             loupe_source: None,
+            picture_reading: None,
             frame_times: Default::default(),
             nav_rows: None,
             discipline_counts: None,
@@ -1660,8 +1663,10 @@ impl ArchiSimApp {
         let Some(path) = d.save_file() else {
             return;
         };
-        let res = archisim_file::template_of(self.ed.model())
-            .and_then(|t| archisim_file::save(&t, &path));
+        let res = archisim_file::template_of(self.ed.model()).and_then(|t| {
+            crate::files::write(&path, archisim_file::to_string(&t))
+                .map_err(archisim_file::FileError::Io)
+        });
         match res {
             Ok(()) => self.say(format!("Plantilla guardada en {}.", path.display())),
             Err(e) => self.complain(format!("No se pudo guardar la plantilla: {e}.")),
@@ -1877,7 +1882,7 @@ impl ArchiSimApp {
         }
         if let Some(path) = d.save_file() {
             let bytes = archisim_render::glb::project_glb(&self.ed.shown());
-            match std::fs::write(&path, &bytes) {
+            match crate::files::write(&path, &bytes) {
                 Ok(()) => self.say(format!(
                     "Modelo 3D exportado ({:.1} MB) en {}.",
                     bytes.len() as f64 / 1e6,
@@ -1977,6 +1982,12 @@ impl ArchiSimApp {
 
     /// Exports sheets: the one shown (PDF, DXF or SVG) or all (one PDF).
     fn export_sheets(&mut self, all: bool) {
+        self.export_sheets_as(all, "pdf");
+    }
+
+    /// The sheets to a file of the kind `ext` (pdf, dxf, svg, png) as the
+    /// file's name starts; on the desktop the dialog can change it.
+    pub(super) fn export_sheets_as(&mut self, all: bool, ext: &str) {
         let model = self.ed.model();
         let ids: Vec<archisim_core::SheetId> = match (all, self.mode) {
             (false, ViewMode::Sheet(s)) => vec![s],
@@ -1987,8 +1998,10 @@ impl ArchiSimApp {
             return;
         }
         let name = match (all, model.sheet(ids[0])) {
-            (false, Some(s)) => format!("{} - {} {}.pdf", self.file_name_stem(), s.number, s.name),
-            _ => format!("{} - planos.pdf", self.file_name_stem()),
+            (false, Some(s)) => {
+                format!("{} - {} {}.{ext}", self.file_name_stem(), s.number, s.name)
+            }
+            _ => format!("{} - planos.{ext}", self.file_name_stem()),
         };
         let mut d = crate::file_dialog::FileDialog::new()
             .set_title(if all {
@@ -2811,7 +2824,8 @@ impl ArchiSimApp {
         };
         let saved = resvg::tiny_skia::IntSize::from_wh(w, h)
             .and_then(|size| resvg::tiny_skia::Pixmap::from_vec(px, size))
-            .map(|pixmap| pixmap.save_png(&path));
+            .and_then(|pixmap| pixmap.encode_png().ok())
+            .map(|png| crate::files::write(&path, png));
         match saved {
             Some(Ok(())) => self.say(format!(
                 "Captura de {w} × {h} guardada en {}.",
@@ -2822,12 +2836,47 @@ impl ArchiSimApp {
     }
 
     fn export_3d_picture(&mut self) {
-        let Some((w, h, px)) = self.v3d.picture() else {
+        // In the browser the picture comes a frame or two later
+        // (`picture_reading`).
+        if crate::platform::WEB {
+            match self.v3d.start_picture() {
+                Some(r) => self.picture_reading = Some(r),
+                None => self.complain(
+                    "No hay imagen 3D que guardar (la vista 3D necesita la tarjeta gráfica).",
+                ),
+            }
+            return;
+        }
+        let Some(picture) = self.v3d.picture() else {
             self.complain(
                 "No hay imagen 3D que guardar (la vista 3D necesita la tarjeta gráfica).",
             );
             return;
         };
+        self.save_3d_picture(picture);
+    }
+
+    /// When the picture asked in the browser has come, it is saved.
+    pub(super) fn picture_came(&mut self, ctx: &egui::Context) {
+        let Some(r) = &self.picture_reading else {
+            return;
+        };
+        match r.take() {
+            None => ctx.request_repaint(),
+            Some(got) => {
+                self.picture_reading = None;
+                match got {
+                    Some(got) => {
+                        let picture = self.v3d.finish_picture(got);
+                        self.save_3d_picture(picture);
+                    }
+                    None => self.complain("No se pudo leer la imagen 3D."),
+                }
+            }
+        }
+    }
+
+    fn save_3d_picture(&mut self, (w, h, px): (u32, u32, Vec<u8>)) {
         let mut d = crate::file_dialog::FileDialog::new()
             .set_title("Guardar imagen 3D")
             .add_filter("PNG", &["png"])
@@ -2840,7 +2889,8 @@ impl ArchiSimApp {
         };
         let saved = resvg::tiny_skia::IntSize::from_wh(w, h)
             .and_then(|size| resvg::tiny_skia::Pixmap::from_vec(px, size))
-            .map(|pixmap| pixmap.save_png(&path));
+            .and_then(|pixmap| pixmap.encode_png().ok())
+            .map(|png| crate::files::write(&path, png));
         match saved {
             Some(Ok(())) => self.say(format!("Imagen 3D guardada en {}.", path.display())),
             _ => self.complain("No se pudo guardar la imagen 3D."),
@@ -3052,6 +3102,7 @@ impl eframe::App for ArchiSimApp {
         }
         self.show(ui);
         self.touch_overlays(ui.ctx());
+        self.picture_came(ui.ctx());
         #[cfg(target_arch = "wasm32")]
         {
             crate::web::note_memory();

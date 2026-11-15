@@ -180,10 +180,11 @@ pub fn with_template(mut all: Vec<SavedTemplate>, t: SavedTemplate) -> Vec<Saved
 fn save_template(t: SavedTemplate) -> Result<std::path::PathBuf, String> {
     let path = template_file();
     if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+        crate::files::create_dir_all(dir).map_err(|e| e.to_string())?;
     }
     let all = with_template(library_templates(), t);
-    std::fs::write(&path, archisim_file::templates_to_string(&all)).map_err(|e| e.to_string())?;
+    crate::files::write(&path, archisim_file::templates_to_string(&all))
+        .map_err(|e| e.to_string())?;
     Ok(path)
 }
 

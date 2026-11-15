@@ -223,7 +223,7 @@ mod tests {
     #[test]
     fn modules_are_loaded_placed_and_updated() {
         let dir = std::env::temp_dir().join(format!("archisim-modulos-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
+        crate::files::create_dir_all(&dir).unwrap();
         // A house type of the starter library with one wall.
         let mut house = Editor::new_project();
         let ws = crate::editor::WallSettings {

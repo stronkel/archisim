@@ -150,7 +150,7 @@ impl ArchiSimApp {
             return;
         };
         let dir = self.catalogue_dir();
-        let _ = std::fs::create_dir_all(&dir);
+        let _ = crate::files::create_dir_all(&dir);
         let suggested = format!("CB-{}.{}", b.mark, archisim_file::EXTENSION);
         let mut d = crate::file_dialog::FileDialog::new()
             .set_title("Guardar la caja como caja tipo")
@@ -185,7 +185,7 @@ impl ArchiSimApp {
         match made {
             Ok(mut t) => {
                 t.project_name = name;
-                match archisim_file::save(&t, path) {
+                match crate::files::write(path, archisim_file::to_string(&t)) {
                     Ok(()) => {
                         self.box_catalogue = None;
                         self.say(format!(

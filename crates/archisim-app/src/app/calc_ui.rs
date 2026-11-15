@@ -538,7 +538,7 @@ impl ArchiSimApp {
             .map(|(i, svg)| (svg, format!("Anejo de cálculo {}", i + 1)))
             .collect();
         let r = crate::documents::pdf_of(&sheets, "Anejo de cálculo de la estructura")
-            .and_then(|bytes| std::fs::write(&path, bytes).map_err(|e| e.to_string()));
+            .and_then(|bytes| crate::files::write(&path, bytes).map_err(|e| e.to_string()));
         match r {
             Ok(()) => self.say(format!(
                 "Anejo de cálculo: {} hojas A4 en {}.",
@@ -569,7 +569,7 @@ impl ArchiSimApp {
             .map(|(i, svg)| (svg, format!("E-{:02}", i + 1)))
             .collect();
         let r = crate::documents::pdf_of(&sheets, "Planos de estructura")
-            .and_then(|bytes| std::fs::write(&path, bytes).map_err(|e| e.to_string()));
+            .and_then(|bytes| crate::files::write(&path, bytes).map_err(|e| e.to_string()));
         match r {
             Ok(()) => self.say(format!(
                 "Planos de estructura: {} hojas A3 en {}.",

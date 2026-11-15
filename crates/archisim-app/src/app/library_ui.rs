@@ -505,7 +505,8 @@ impl ArchiSimApp {
                     .unwrap_or_default();
                 let dir = library::library_dir().join("Modelos 3D").join(kind.label());
                 let path = dir.join(format!("{name}.glb"));
-                let r = std::fs::create_dir_all(&dir).and_then(|_| std::fs::write(&path, glb));
+                let r = crate::files::create_dir_all(&dir)
+                    .and_then(|_| crate::files::write(&path, glb));
                 match r {
                     Ok(()) => self.say(format!(
                         "Modelo 3D «{name}» guardado en la biblioteca (Modelos 3D/{}/{name}.glb).",

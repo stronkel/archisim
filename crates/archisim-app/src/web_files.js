@@ -79,7 +79,14 @@ export function archisim_pick(title, text) {
 // Hands a file over: to the share sheet (on the iPad, «Guardar en
 // Archivos» lets the person choose iCloud Drive or any folder) or as a
 // download. Resolves when the card is closed.
+// Several files (an export to a folder) come one card after another.
+let DELIVERING = Promise.resolve();
 export function archisim_deliver(name, bytes, mime) {
+  DELIVERING = DELIVERING.then(() => deliverOne(name, bytes, mime));
+  return DELIVERING;
+}
+
+function deliverOne(name, bytes, mime) {
   return new Promise((resolve) => {
     const file = new File([bytes], name, { type: mime });
     const { veil, box } = card("Guardar «" + name + "»",

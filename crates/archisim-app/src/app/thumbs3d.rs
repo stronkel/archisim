@@ -393,7 +393,7 @@ mod tests {
             let (model, _) = crate::type_preview::opening_model_3d(&lib, &ty).unwrap();
             let (w, h, px) = draw_seen(&mut r, &device, &queue, &model, [240, 174], FRONT).unwrap();
             if let Some(dir) = &out {
-                std::fs::create_dir_all(dir).unwrap();
+                crate::files::create_dir_all(dir).unwrap();
                 resvg::tiny_skia::Pixmap::from_vec(
                     px.clone(),
                     resvg::tiny_skia::IntSize::from_wh(w, h).unwrap(),
@@ -438,7 +438,7 @@ mod tests {
             let (w, h, px) =
                 draw_seen(&mut r, &device, &queue, &model, [240, 174], OUTSIDE).unwrap();
             if let Some(dir) = &out {
-                std::fs::create_dir_all(dir).unwrap();
+                crate::files::create_dir_all(dir).unwrap();
                 resvg::tiny_skia::Pixmap::from_vec(
                     px.clone(),
                     resvg::tiny_skia::IntSize::from_wh(w, h).unwrap(),

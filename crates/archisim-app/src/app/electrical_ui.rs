@@ -240,7 +240,7 @@ impl ArchiSimApp {
             return;
         }
         let r = crate::documents::pdf_of(&sheets, "Esquema unifilar")
-            .and_then(|bytes| std::fs::write(&path, bytes).map_err(|e| e.to_string()));
+            .and_then(|bytes| crate::files::write(&path, bytes).map_err(|e| e.to_string()));
         match r {
             Ok(()) => self.say(format!(
                 "Esquema unifilar: {} hojas A3 en {}.",
@@ -279,7 +279,7 @@ impl ArchiSimApp {
                 path.clone()
             };
             match archisim_export::dxf::page_dxf(&model, svg)
-                .and_then(|t| std::fs::write(&file, t).map_err(|e| e.to_string()))
+                .and_then(|t| crate::files::write(&file, t).map_err(|e| e.to_string()))
             {
                 Ok(()) => written += 1,
                 Err(e) => {

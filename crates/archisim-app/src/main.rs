@@ -25,6 +25,7 @@ mod documents;
 mod drag;
 mod editor;
 mod file_dialog;
+mod files;
 mod flip;
 mod geo;
 mod missions;

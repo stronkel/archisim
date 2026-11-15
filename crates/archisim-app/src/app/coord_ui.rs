@@ -1181,10 +1181,10 @@ mod tests {
     #[test]
     fn coordination_window_flow() {
         let dir = std::env::temp_dir().join(format!("archisim-coordui-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
+        crate::files::create_dir_all(&dir).unwrap();
         let link = dir.join("estructura.ifc");
         // A beam through the room's west wall, cut by the plan's cut plane.
-        std::fs::write(
+        crate::files::write(
             &link,
             "ISO-10303-21;HEADER;FILE_DESCRIPTION((''),'2;1');FILE_NAME('e.ifc','',(''),(''),'','Prueba','');\
              FILE_SCHEMA(('IFC4'));ENDSEC;DATA;\
@@ -1247,7 +1247,7 @@ mod tests {
         assert!(!topic.viewpoints[0].selection.is_empty());
         // Requirements: the sample IDS against the room.
         let ids = dir.join("requisitos.ids");
-        std::fs::write(
+        crate::files::write(
             &ids,
             include_str!("../../../archisim-ids/tests/fixtures/vivienda.ids"),
         )

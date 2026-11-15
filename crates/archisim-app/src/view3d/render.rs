@@ -1476,12 +1476,21 @@ impl Renderer {
         }))
     }
 
-    /// The last picture as RGBA bytes (sRGB), row by row.
+    /// The last picture as RGBA bytes (sRGB), row by row, waiting for it
+    /// (not in the browser, which cannot wait: `start_reading`).
     pub fn read_pixels(
         &self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
     ) -> Option<(u32, u32, Vec<u8>)> {
+        let reading = self.start_reading(device, queue)?;
+        device.poll(wgpu::PollType::wait_indefinitely()).ok()?;
+        reading.take()?
+    }
+
+    /// Asks the graphics for the last picture; it comes later
+    /// (`Reading::take`).
+    pub fn start_reading(&self, device: &wgpu::Device, queue: &wgpu::Queue) -> Option<Reading> {
         let t = self.targets.as_ref()?;
         let [w, h] = t.size;
         let row = (w * 4).div_ceil(256) * 256;
@@ -1509,22 +1518,51 @@ impl Renderer {
             },
         );
         queue.submit([encoder.finish()]);
-        let slice = buffer.slice(..);
-        let (tx, rx) = std::sync::mpsc::channel();
-        slice.map_async(wgpu::MapMode::Read, move |r| {
-            let _ = tx.send(r);
+        let ready = std::sync::Arc::new(std::sync::Mutex::new(None));
+        let tell = ready.clone();
+        buffer.slice(..).map_async(wgpu::MapMode::Read, move |r| {
+            if let Ok(mut t) = tell.lock() {
+                *t = Some(r.is_ok());
+            }
         });
-        device.poll(wgpu::PollType::wait_indefinitely()).ok()?;
-        rx.recv().ok()?.ok()?;
-        let data = slice.get_mapped_range().ok()?;
+        Some(Reading {
+            buffer,
+            size: [w, h],
+            row,
+            ready,
+        })
+    }
+}
+
+/// A picture asked to the graphics (`Renderer::start_reading`).
+pub struct Reading {
+    buffer: wgpu::Buffer,
+    size: [u32; 2],
+    row: u32,
+    ready: std::sync::Arc<std::sync::Mutex<Option<bool>>>,
+}
+
+impl Reading {
+    /// `None` while it has not come; then the picture, or `None` if it
+    /// failed.
+    pub fn take(&self) -> Option<Option<(u32, u32, Vec<u8>)>> {
+        let ok = (*self.ready.lock().ok()?)?;
+        if !ok {
+            return Some(None);
+        }
+        let [w, h] = self.size;
+        let slice = self.buffer.slice(..);
+        let Ok(data) = slice.get_mapped_range() else {
+            return Some(None);
+        };
         let mut out = Vec::with_capacity((w * h * 4) as usize);
         for y in 0..h {
-            let start = (y * row) as usize;
+            let start = (y * self.row) as usize;
             out.extend_from_slice(&data[start..start + (w * 4) as usize]);
         }
         drop(data);
-        buffer.unmap();
-        Some((w, h, out))
+        self.buffer.unmap();
+        Some(Some((w, h, out)))
     }
 }
 

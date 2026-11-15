@@ -138,7 +138,7 @@ pub fn start_install(installer: &Path, project: Option<&Path>) -> Result<(), Str
             .ok_or("no se sabe dónde está ArchiSim")?
             .to_path_buf();
         let script = std::env::temp_dir().join("instalar-archisim.sh");
-        std::fs::write(&script, MAC_INSTALLER).map_err(|e| e.to_string())?;
+        crate::files::write(&script, MAC_INSTALLER).map_err(|e| e.to_string())?;
         let reopen = match project {
             Some(p) => format!("open -a {} {}", quote(&dest.join("ArchiSim.app")), quote(p)),
             None => format!("open {}", quote(&dest.join("ArchiSim.app"))),
