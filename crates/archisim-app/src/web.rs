@@ -27,6 +27,18 @@ extern "C" {
     fn archisim_set_unsaved(unsaved: bool);
     fn archisim_watch_pencil(canvas_id: &str);
     fn archisim_is_pen(identifier: i32) -> bool;
+    fn archisim_workers() -> u32;
+    fn archisim_run_aside(
+        module: &JsValue,
+        kind: &str,
+        input: &js_sys::Uint8Array,
+        params: &str,
+        on_progress: &js_sys::Function,
+    ) -> js_sys::Promise;
+    #[wasm_bindgen(catch)]
+    fn archisim_http_sync(url: &str, form: Option<String>) -> Result<js_sys::Uint8Array, JsValue>;
+    fn archisim_has_bridge() -> bool;
+    fn archisim_note_memory(bytes: f64);
 }
 
 /// Whether a touch (egui's id: the browser's `identifier`) is the Pencil.
@@ -187,8 +199,13 @@ async fn fetch_text(url: &str) -> Option<String> {
     text.as_string()
 }
 
-/// Starts the program in the page's canvas.
+/// Starts the program in the page's canvas (in the page only: the
+/// browser's workers load the same program, and there it waits for jobs,
+/// `archisim_worker_job`).
 pub fn start() {
+    if web_sys::window().is_none() {
+        return;
+    }
     wasm_bindgen_futures::spawn_local(async {
         let Some(canvas) = web_sys::window()
             .and_then(|w| w.document())
@@ -253,4 +270,260 @@ pub fn start() {
             }
         }
     });
+}
+
+// --- Lo pesado (T5): the browser's workers, the NAS's bridge, memory ---
+
+/// How much memory the program holds now, in bytes: what the browser
+/// gave its WebAssembly memory, which only grows.
+pub fn memory_bytes() -> usize {
+    core::arch::wasm32::memory_size::<0>() * 65536
+}
+
+/// Leaves the memory where the page's tests read it.
+pub fn note_memory() {
+    archisim_note_memory(memory_bytes() as f64);
+}
+
+/// One address, waiting for its answer: through the NAS's bridge when the
+/// page has it (`platform::bridged`).
+pub fn http_get(url: &str, form: Option<&str>) -> Result<Vec<u8>, String> {
+    let url = crate::platform::bridged(url, archisim_has_bridge());
+    archisim_http_sync(&url, form.map(str::to_string))
+        .map(|b| b.to_vec())
+        .map_err(|e| e.as_string().unwrap_or_else(|| format!("{e:?}")))
+}
+
+/// Whether the page is served by the NAS with its bridge.
+pub fn has_bridge() -> bool {
+    archisim_has_bridge()
+}
+
+/// A job for a worker (`archisim_worker_job` there): its answer, or why
+/// not. `progress` hears how far it has gone, from 0 to 1.
+fn aside(
+    kind: &str,
+    input: &js_sys::Uint8Array,
+    params: &str,
+    progress: impl Fn(f64) + 'static,
+) -> impl std::future::Future<Output = Result<Vec<u8>, String>> {
+    let on_progress = Closure::<dyn Fn(f64)>::new(progress);
+    let promise = archisim_run_aside(
+        &wasm_bindgen::module(),
+        kind,
+        input,
+        params,
+        on_progress.as_ref().unchecked_ref(),
+    );
+    async move {
+        let answer = JsFuture::from(promise).await;
+        drop(on_progress);
+        match answer {
+            Ok(v) => Ok(js_sys::Uint8Array::new(&v).to_vec()),
+            Err(e) => Err(e.as_string().unwrap_or_else(|| format!("{e:?}"))),
+        }
+    }
+}
+
+/// The picture of the render in the browser's workers (each its rows,
+/// `archisim_render::render_rows`), into `slot`; here, as on the desktop,
+/// if the browser has no workers or they fail.
+pub fn render_aside(
+    model: archisim_core::Model,
+    view: archisim_render::View,
+    options: archisim_render::Options,
+    slot: std::sync::Arc<Mutex<Option<archisim_render::Image>>>,
+    progress: std::sync::Arc<std::sync::atomic::AtomicU32>,
+) {
+    use std::sync::atomic::Ordering;
+    let parts = archisim_workers() as usize;
+    let p = progress.clone();
+    let here = move |model: &archisim_core::Model| {
+        archisim_render::render(model, &view, &options, &|f| {
+            progress.store((f * 1000.0) as u32, Ordering::Relaxed)
+        })
+    };
+    if parts == 0 {
+        let image = here(&model);
+        if let Ok(mut s) = slot.lock() {
+            *s = Some(image);
+        }
+        return;
+    }
+    let text = archisim_file::to_string(&model);
+    let input = js_sys::Uint8Array::from(text.as_bytes());
+    let done = std::rc::Rc::new(std::cell::RefCell::new(vec![0.0f64; parts]));
+    wasm_bindgen_futures::spawn_local(async move {
+        let mut jobs = Vec::new();
+        for k in 0..parts {
+            let params = render_params(&view, &options, k, parts);
+            let (done, p) = (done.clone(), p.clone());
+            jobs.push(aside("render", &input, &params, move |f| {
+                let mut d = done.borrow_mut();
+                d[k] = f;
+                let all = d.iter().sum::<f64>() / d.len() as f64;
+                p.store((all * 1000.0) as u32, Ordering::Relaxed);
+            }));
+        }
+        let (w, h) = (options.width.max(1), options.height.max(1));
+        let mut rgb = vec![0u8; w * h * 3];
+        let mut failed = None;
+        for (k, job) in jobs.into_iter().enumerate() {
+            match job.await {
+                Ok(rows) => {
+                    for (i, y) in (0..h).filter(|y| y % parts == k).enumerate() {
+                        let row = w * 3;
+                        if let Some(src) = rows.get(i * row..(i + 1) * row) {
+                            rgb[y * row..(y + 1) * row].copy_from_slice(src);
+                        }
+                    }
+                }
+                Err(e) => failed = Some(e),
+            }
+        }
+        let image = match failed {
+            None => archisim_render::Image {
+                width: w,
+                height: h,
+                rgb,
+            },
+            Some(e) => {
+                note(&format!(
+                    "El render no ha podido hacerse aparte ({e}); se hace aquí, con la ventana quieta."
+                ));
+                here(&model)
+            }
+        };
+        if let Ok(mut s) = slot.lock() {
+            *s = Some(image);
+        }
+    });
+}
+
+/// What a worker needs to know of a render besides the project.
+fn render_params(
+    view: &archisim_render::View,
+    o: &archisim_render::Options,
+    part: usize,
+    parts: usize,
+) -> String {
+    let light = match o.light {
+        archisim_render::Light::Day => 0,
+        archisim_render::Light::Evening => 1,
+        archisim_render::Light::Night => 2,
+    };
+    serde_json::json!({
+        "eye": view.eye,
+        "target": view.target,
+        "fov_y": view.fov_y,
+        "perspective": view.perspective,
+        "half_height": view.half_height,
+        "width": o.width,
+        "height": o.height,
+        "samples": o.samples,
+        "sky_rays": o.sky_rays,
+        "light": light,
+        "textures": o.textures,
+        "part": part,
+        "parts": parts,
+    })
+    .to_string()
+}
+
+/// In a worker: does a job of the page (`aside`) and gives its answer.
+/// `render`: the project (`.archisim`) and `render_params`; answers the
+/// rows `y % parts == part` of the picture.
+#[wasm_bindgen]
+pub fn archisim_worker_job(
+    kind: &str,
+    input: &[u8],
+    params: &str,
+    progress: &js_sys::Function,
+) -> Result<Vec<u8>, JsValue> {
+    let fail = |e: String| JsValue::from_str(&e);
+    match kind {
+        "render" => {
+            let p: serde_json::Value =
+                serde_json::from_str(params).map_err(|e| fail(e.to_string()))?;
+            let text = std::str::from_utf8(input).map_err(|e| fail(e.to_string()))?;
+            let model = archisim_file::from_str(text).map_err(|e| fail(e.to_string()))?;
+            let v3 = |k: &str| -> [f64; 3] {
+                let a = &p[k];
+                [0, 1, 2].map(|i| a[i].as_f64().unwrap_or(0.0))
+            };
+            let num = |k: &str| p[k].as_f64().unwrap_or(0.0);
+            let int = |k: &str| p[k].as_u64().unwrap_or(1) as usize;
+            let view = archisim_render::View {
+                eye: v3("eye"),
+                target: v3("target"),
+                fov_y: num("fov_y"),
+                perspective: p["perspective"].as_bool().unwrap_or(true),
+                half_height: num("half_height"),
+            };
+            let options = archisim_render::Options {
+                width: int("width"),
+                height: int("height"),
+                samples: int("samples"),
+                sky_rays: int("sky_rays"),
+                light: match p["light"].as_u64() {
+                    Some(1) => archisim_render::Light::Evening,
+                    Some(2) => archisim_render::Light::Night,
+                    _ => archisim_render::Light::Day,
+                },
+                textures: p["textures"].as_bool().unwrap_or(true),
+            };
+            let (part, parts) = (int("part"), int("parts").max(1));
+            let rows: Vec<usize> = (0..options.height.max(1))
+                .filter(|y| y % parts == part)
+                .collect();
+            let tell = OneThread(progress);
+            let image = archisim_render::render_rows(&model, &view, &options, &rows, &|f| {
+                let _ = tell.0.call1(&JsValue::NULL, &JsValue::from_f64(f));
+            });
+            Ok(image.rgb)
+        }
+        _ => Err(fail(format!("trabajo desconocido «{kind}»"))),
+    }
+}
+
+/// Something of JavaScript used from one thread only: a worker has no
+/// threads of its own, so what the render asks to share between threads
+/// is never shared.
+struct OneThread<'a>(&'a js_sys::Function);
+// SAFETY: WebAssembly without threads (this program in the browser) runs
+// everything on one thread.
+unsafe impl Sync for OneThread<'_> {}
+
+// --- The page's own tests (scripts/web_heavy.py): `?prueba=render,lugar` ---
+
+static FRAMES: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+/// Whether the page's address asks for the test `name`, once, a few
+/// frames after starting.
+pub fn test_due(name: &str) -> bool {
+    use std::sync::atomic::Ordering;
+    const AT: u32 = 30;
+    if FRAMES.load(Ordering::Relaxed) != AT {
+        return false;
+    }
+    let search = web_sys::window()
+        .and_then(|w| w.location().search().ok())
+        .unwrap_or_default();
+    search
+        .trim_start_matches('?')
+        .split('&')
+        .filter_map(|kv| kv.strip_prefix("prueba="))
+        .any(|v| v.split(',').any(|t| t == name))
+}
+
+/// One frame more (for `test_due`).
+pub fn count_frame() {
+    FRAMES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Leaves a number where the page's tests read it (`window[key]`).
+pub fn report(key: &str, value: f64) {
+    if let Some(w) = web_sys::window() {
+        let _ = js_sys::Reflect::set(&w, &JsValue::from_str(key), &JsValue::from_f64(value));
+    }
 }

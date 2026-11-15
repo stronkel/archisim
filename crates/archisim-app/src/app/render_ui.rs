@@ -113,6 +113,12 @@ impl ArchiSimApp {
         self.render.job = Some(slot.clone());
         self.render.started = Some(web_time::Instant::now());
         self.render.open = true;
+        // In the browser, in its workers.
+        #[cfg(target_arch = "wasm32")]
+        {
+            crate::web::render_aside(model, view, options, slot, progress);
+        }
+        #[cfg(not(target_arch = "wasm32"))]
         crate::platform::spawn(move || {
             let image = archisim_render::render(&model, &view, &options, &|f| {
                 progress.store((f * 1000.0) as u32, Ordering::Relaxed);
@@ -140,6 +146,8 @@ impl ArchiSimApp {
                         TextureOptions::LINEAR,
                     );
                     self.render.texture = Some(tex);
+                    #[cfg(target_arch = "wasm32")]
+                    crate::web::report("archisimRender", self.render.seconds);
                     self.render.image = Some(image);
                     self.render.job = None;
                 }

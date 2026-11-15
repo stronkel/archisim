@@ -87,6 +87,9 @@ pub struct CartoDownload {
     pub preview: Option<Preview>,
     /// How addresses are asked (the tests give their own).
     pub fetch: Fetch,
+    /// In the browser, the download that goes one address each frame.
+    #[cfg(target_arch = "wasm32")]
+    pub runner: Option<Runner>,
 }
 
 impl Default for CartoDownload {
@@ -96,6 +99,8 @@ impl Default for CartoDownload {
                 radius: 200.0,
                 ..CartoOptions::default()
             },
+            #[cfg(target_arch = "wasm32")]
+            runner: None,
             job: None,
             failures: Vec::new(),
             query: String::new(),
@@ -269,19 +274,54 @@ pub fn run(
     progress: &Mutex<Progress>,
     fetch: impl Fn(&str, Option<&str>) -> Result<Vec<u8>, String>,
 ) {
-    if let Ok(mut p) = progress.lock() {
-        p.total = requests.len();
-    }
-    // The tiles of heights that arrived, to make the terrain at the end.
-    let mut heights: std::collections::HashMap<(u32, u32), archisim_geom::decals::Pixels> =
-        Default::default();
-    let mut terrain = None;
-    for r in requests {
+    let mut runner = Runner::new(requests.to_vec(), progress);
+    while runner.step(progress, &fetch) {}
+}
+
+/// The download address by address: on the desktop all at once on a
+/// thread (`run`), in the browser one address each frame, so the window
+/// says how it goes.
+pub struct Runner {
+    requests: std::collections::VecDeque<Request>,
+    /// The tiles of heights that arrived, to make the terrain at the end.
+    heights: std::collections::HashMap<(u32, u32), archisim_geom::decals::Pixels>,
+    terrain: Option<download::TerrainTile>,
+}
+
+impl Runner {
+    pub fn new(requests: Vec<Request>, progress: &Mutex<Progress>) -> Self {
         if let Ok(mut p) = progress.lock() {
-            if p.stop {
-                break;
+            p.total = requests.len();
+        }
+        Self {
+            requests: requests.into(),
+            heights: Default::default(),
+            terrain: None,
+        }
+    }
+
+    /// The next address; false when there are no more (or it was stopped),
+    /// and then the terrain is made and the download ends.
+    pub fn step(
+        &mut self,
+        progress: &Mutex<Progress>,
+        fetch: &impl Fn(&str, Option<&str>) -> Result<Vec<u8>, String>,
+    ) -> bool {
+        let Some(r) = self.requests.pop_front() else {
+            self.finish(progress);
+            return false;
+        };
+        let r = &r;
+        let stopped = match progress.lock() {
+            Ok(mut p) => {
+                p.current = r.source.name().to_string();
+                p.stop
             }
-            p.current = r.source.name().to_string();
+            Err(_) => true,
+        };
+        if stopped {
+            self.finish(progress);
+            return false;
         }
         // The address, or its attempts in turn until one answers (each
         // one's failure kept, to say them all).
@@ -303,25 +343,27 @@ pub fn run(
             }
             got.ok_or_else(|| why.join("; "))
         };
-        let Ok(mut p) = progress.lock() else { return };
+        let Ok(mut p) = progress.lock() else {
+            return false;
+        };
         if let Some(t) = r.tile {
-            terrain = Some(t);
+            self.terrain = Some(t);
             // A tile out of Spain or at sea is not there: no harm.
             if let Some(px) = got
                 .as_deref()
                 .ok()
                 .and_then(archisim_geom::decals::decode_png)
             {
-                heights.insert((t.x, t.y), px);
+                self.heights.insert((t.x, t.y), px);
             }
             p.done += 1;
-            continue;
+            return true;
         }
         let got = match (got, r.source, r.bbox) {
             (Ok(b), download::Source::Orthophoto, Some(bbox)) if download::is_png(&b) => {
                 p.picture = Some((r.name.clone(), b, bbox));
                 p.done += 1;
-                continue;
+                return true;
             }
             (Ok(b), _, _) => download::answer_text(r.source, &String::from_utf8_lossy(&b))
                 .and_then(|t| {
@@ -340,27 +382,32 @@ pub fn run(
                 .push((r.source.name().to_string(), e, r.url.clone())),
         }
         p.done += 1;
+        true
     }
-    // The terrain, from its tiles of heights.
-    if let Some(t) = terrain {
-        let grid = download::terrain_grid(&t, |x, y, u, v| {
-            let px = heights.get(&(x, y))?;
-            let c = px.at(u, 1.0 - v);
-            (c[3] > 0).then_some([c[0], c[1], c[2]])
-        });
-        if let Ok(mut p) = progress.lock() {
-            match grid {
-                Some(text) => p.files.push(("ign-mdt.asc".into(), text)),
-                None => p.failures.push((
-                    download::Source::Terrain.name().to_string(),
-                    "no han llegado las alturas".into(),
-                    format!("{}/{}/{}/{}.png", download::IGN_HEIGHTS, t.z, t.x, t.y),
-                )),
+
+    /// The end: the terrain from its tiles, and the download finished.
+    fn finish(&mut self, progress: &Mutex<Progress>) {
+        // The terrain, from its tiles of heights.
+        if let Some(t) = self.terrain {
+            let grid = download::terrain_grid(&t, |x, y, u, v| {
+                let px = self.heights.get(&(x, y))?;
+                let c = px.at(u, 1.0 - v);
+                (c[3] > 0).then_some([c[0], c[1], c[2]])
+            });
+            if let Ok(mut p) = progress.lock() {
+                match grid {
+                    Some(text) => p.files.push(("ign-mdt.asc".into(), text)),
+                    None => p.failures.push((
+                        download::Source::Terrain.name().to_string(),
+                        "no han llegado las alturas".into(),
+                        format!("{}/{}/{}/{}.png", download::IGN_HEIGHTS, t.z, t.x, t.y),
+                    )),
+                }
             }
         }
-    }
-    if let Ok(mut p) = progress.lock() {
-        p.finished = true;
+        if let Ok(mut p) = progress.lock() {
+            p.finished = true;
+        }
     }
 }
 
@@ -373,8 +420,8 @@ fn host_of(url: &str) -> &str {
 /// One address, by HTTP (through the system's proxy if it has one): a GET,
 /// or a POST of a form.
 #[cfg(target_arch = "wasm32")]
-pub fn http_get(_url: &str, _form: Option<&str>) -> Result<Vec<u8>, String> {
-    Err("la versión web aún no descarga de otros servicios (llega en T5)".into())
+pub fn http_get(url: &str, form: Option<&str>) -> Result<Vec<u8>, String> {
+    crate::web::http_get(url, form)
 }
 
 /// One address, by HTTP (through the system's proxy if it has one): a GET,
@@ -473,12 +520,28 @@ impl ArchiSimApp {
         let job = Arc::new(Mutex::new(Progress::default()));
         d.job = Some(job.clone());
         let fetch = d.fetch;
+        // In the browser, one address each frame (`finish_carto_download`),
+        // through the NAS's bridge.
+        #[cfg(target_arch = "wasm32")]
+        {
+            let _ = fetch;
+            d.runner = Some(Runner::new(requests, &job));
+        }
+        #[cfg(not(target_arch = "wasm32"))]
         crate::platform::spawn(move || run(&requests, &job, fetch));
         Ok(())
     }
 
     /// When the download has ended, «Traer el entorno» with what arrived.
     pub fn finish_carto_download(&mut self) {
+        #[cfg(target_arch = "wasm32")]
+        if let Some(d) = &mut self.carto_download {
+            if let (Some(runner), Some(job)) = (&mut d.runner, &d.job) {
+                if !runner.step(job, &d.fetch) {
+                    d.runner = None;
+                }
+            }
+        }
         let Some(d) = &self.carto_download else {
             return;
         };
@@ -549,6 +612,17 @@ impl ArchiSimApp {
             .default_width(560.0)
             .show(ctx, |ui| {
                 let p = Palette::current(ui.ctx());
+                // In the browser, the services answer only through the NAS.
+                #[cfg(target_arch = "wasm32")]
+                if !crate::web::has_bridge() {
+                    ui.label(
+                        egui::RichText::new(
+                            "Esta página no tiene el puente del NAS: el navegador no deja pedir al Catastro, al IGN ni a OpenStreetMap. Ábrela desde el NAS (scripts/nas) o suelta aquí los ficheros descargados.",
+                        )
+                        .small()
+                        .color(p.bad),
+                    );
+                }
                 if let Some(job) = &running {
                     let (done, total, current) = job
                         .lock()

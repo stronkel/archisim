@@ -187,3 +187,122 @@ export function archisim_watch_pencil(canvasId) {
 export function archisim_is_pen(identifier) {
   return PENS.has(identifier);
 }
+
+// --- Lo pesado (T5) ---
+
+// The program's own script (wasm-bindgen's), which the workers load: the
+// page has it as a module preload, or in its starting script.
+function glueUrl() {
+  const link = document.querySelector('link[rel="modulepreload"][href$=".js"]');
+  if (link) return new URL(link.getAttribute("href"), document.baseURI).href;
+  for (const s of document.querySelectorAll('script[type="module"]')) {
+    const m = /['"]([^'"]+\.js)['"]/.exec(s.textContent || "");
+    if (m) return new URL(m[1], document.baseURI).href;
+  }
+  return null;
+}
+
+let WORKER_URL;
+function workerUrl() {
+  if (WORKER_URL !== undefined) return WORKER_URL;
+  WORKER_URL = null;
+  const glue = glueUrl();
+  if (!glue || typeof Worker === "undefined") return null;
+  const code = `import init, { archisim_worker_job } from ${JSON.stringify(glue)};
+self.onmessage = async (e) => {
+  const { kind, input, params, module } = e.data;
+  try {
+    await init({ module_or_path: module });
+    const out = archisim_worker_job(kind, input, params, (f) => self.postMessage({ progress: f }));
+    self.postMessage({ out }, [out.buffer]);
+  } catch (err) {
+    self.postMessage({ error: String((err && err.message) || err) });
+  }
+};`;
+  WORKER_URL = URL.createObjectURL(new Blob([code], { type: "text/javascript" }));
+  return WORKER_URL;
+}
+
+// How many workers share a long job: one per core but one, up to four
+// (each holds its own copy of the project).
+export function archisim_workers() {
+  if (!workerUrl()) return 0;
+  return Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 2) - 1));
+}
+
+// A job in a worker of its own, ended (and its memory freed) when the job
+// ends. `module` is the program, already compiled.
+export function archisim_run_aside(module, kind, input, params, onProgress) {
+  return new Promise((resolve, reject) => {
+    const url = workerUrl();
+    if (!url) {
+      reject("este navegador no tiene hilos aparte");
+      return;
+    }
+    const w = new Worker(url, { type: "module" });
+    w.onmessage = (e) => {
+      const d = e.data;
+      if ("progress" in d) {
+        onProgress(d.progress);
+        return;
+      }
+      w.terminate();
+      if (d.error !== undefined) reject(d.error);
+      else resolve(d.out);
+    };
+    w.onerror = (e) => {
+      w.terminate();
+      reject((e && e.message) || "el hilo aparte ha fallado");
+    };
+    w.postMessage({ kind, input, params, module });
+  });
+}
+
+// A request that waits for its answer (the services of the surroundings,
+// which the program asks one after the other), as bytes. Through the NAS's
+// bridge when there is one (`archisim_has_bridge`).
+export function archisim_http_sync(url, form) {
+  const x = new XMLHttpRequest();
+  x.open(form == null ? "GET" : "POST", url, false);
+  // Bytes, not text: each byte comes as one character.
+  x.overrideMimeType("text/plain; charset=x-user-defined");
+  if (form != null) x.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
+  try {
+    x.send(form == null ? null : form);
+  } catch (e) {
+    throw "no se llega al servicio (" + ((e && e.message) || e) + ")";
+  }
+  if (x.status === 0) {
+    throw "el navegador no deja pedírselo a ese servicio desde la página; hace falta el puente del NAS";
+  }
+  const t = x.responseText || "";
+  const out = new Uint8Array(t.length);
+  for (let i = 0; i < t.length; i++) out[i] = t.charCodeAt(i) & 0xff;
+  if (x.status < 200 || x.status >= 300) {
+    const body = new TextDecoder().decode(out.slice(0, 120)).trim();
+    throw "el servicio responde " + x.status + " " + body;
+  }
+  return out;
+}
+
+// Whether the page is served by the NAS with its bridge (scripts/nas).
+let BRIDGE;
+export function archisim_has_bridge() {
+  if (BRIDGE !== undefined) return BRIDGE;
+  BRIDGE = false;
+  try {
+    const x = new XMLHttpRequest();
+    x.open("GET", "proxy/", false);
+    x.send(null);
+    BRIDGE = x.status === 200 && (x.responseText || "").startsWith("archisim-proxy");
+  } catch (e) {
+    BRIDGE = false;
+  }
+  return BRIDGE;
+}
+
+// How much memory the program holds (its WebAssembly memory), in bytes,
+// left where the page's tests read it.
+export function archisim_note_memory(bytes) {
+  window.archisimMemoria = bytes;
+}
