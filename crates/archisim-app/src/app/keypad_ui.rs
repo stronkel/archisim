@@ -67,6 +67,20 @@ impl ArchiSimApp {
     /// Once per frame, after the window: the touch size, the keypad and
     /// the magnifier.
     pub(super) fn touch_overlays(&mut self, ctx: &egui::Context) {
+        // The first time a screen is touched: the ribbon folded (once, so
+        // what the person changes stays) and, on a narrow screen, the
+        // navigator put away, to leave the drawing room.
+        if self.touch.seen && !self.touch_layout_applied {
+            self.touch_layout_applied = true;
+            if !self.prefs.touch_layout {
+                self.prefs.touch_layout = true;
+                self.prefs.ribbon_compact = true;
+                self.prefs.save();
+            }
+            if ctx.content_rect().width() < 1400.0 {
+                self.show_navigator = false;
+            }
+        }
         let large = self.prefs.touch_size.unwrap_or(self.touch.seen);
         if self.touch_large_applied != Some(large) {
             self.touch_large_applied = Some(large);
@@ -77,6 +91,8 @@ impl ArchiSimApp {
             self.keypad(ctx);
         }
         self.loupe(ctx);
+        // Each view says it again when it paints.
+        self.loupe_source = None;
     }
 
     /// Whether the keypad is useful now: a tool in hand, or something
@@ -114,7 +130,11 @@ impl ArchiSimApp {
         } else {
             44.0
         };
-        let at = area.rect.right_bottom() - Vec2::new(width + 12.0, height + 12.0);
+        let at = keypad_place(
+            area.rect,
+            Vec2::new(width, height),
+            self.keypad_point(area.rect),
+        );
         egui::Area::new(egui::Id::unique("teclado-numerico"))
             .order(Order::Foreground)
             .fixed_pos(at)
@@ -178,6 +198,20 @@ impl ArchiSimApp {
                         });
                     });
             });
+    }
+
+    /// Where on the screen the point being placed is, if there is one: the
+    /// keypad goes beside it.
+    pub(super) fn keypad_point(&self, rect: Rect) -> Option<Pos2> {
+        if !matches!(
+            self.mode,
+            ViewMode::Plan | ViewMode::Section | ViewMode::Drafting(_)
+        ) {
+            return None;
+        }
+        let snap = self.cursor.as_ref()?;
+        let p = self.view.to_screen(rect, snap.point);
+        rect.contains(p).then_some(p)
     }
 
     /// Types a key of the keypad: it reaches the tools in the next frame,
@@ -265,5 +299,50 @@ impl ArchiSimApp {
                 painter.circle_filled(s, 2.5, p.accent);
             }
         }
+    }
+}
+
+/// Where the keypad goes: beside the point being placed (to its right and
+/// below, or wherever it fits without covering it), or, with no point, at
+/// the bottom right of the drawing.
+pub(super) fn keypad_place(area: Rect, size: Vec2, point: Option<Pos2>) -> Pos2 {
+    const GAP: f32 = 48.0;
+    let corner = area.right_bottom() - size - Vec2::splat(12.0);
+    let Some(p) = point else {
+        return corner;
+    };
+    let fits = |at: Pos2| {
+        area.shrink(4.0)
+            .contains_rect(Rect::from_min_size(at, size))
+    };
+    [
+        p + Vec2::new(GAP, GAP),
+        p + Vec2::new(-GAP - size.x, GAP),
+        p + Vec2::new(GAP, -GAP - size.y),
+        p + Vec2::new(-GAP - size.x, -GAP - size.y),
+    ]
+    .into_iter()
+    .find(|&at| fits(at))
+    .unwrap_or(corner)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_keypad_goes_beside_the_point() {
+        let area = Rect::from_min_size(Pos2::ZERO, Vec2::new(1000.0, 700.0));
+        let size = Vec2::new(220.0, 300.0);
+        // Room to the right and below.
+        let at = keypad_place(area, size, Some(Pos2::new(200.0, 150.0)));
+        assert_eq!(at, Pos2::new(248.0, 198.0));
+        // At the bottom right: above and to the left, never over it.
+        let p = Pos2::new(900.0, 600.0);
+        let at = keypad_place(area, size, Some(p));
+        assert!(!Rect::from_min_size(at, size).expand(20.0).contains(p));
+        assert!(area.contains_rect(Rect::from_min_size(at, size)));
+        // No point: the corner.
+        assert_eq!(keypad_place(area, size, None), Pos2::new(768.0, 388.0));
     }
 }

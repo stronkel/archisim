@@ -445,6 +445,8 @@ pub struct ArchiSimApp {
     keypad_open: bool,
     /// The touch size last applied to the style.
     touch_large_applied: Option<bool>,
+    /// Whether the window has been set out for touch in this session.
+    touch_layout_applied: bool,
     /// The plan's picture as last painted (texture and where), for the
     /// magnifier.
     loupe_source: Option<(egui::TextureId, Rect)>,
@@ -927,6 +929,7 @@ impl ArchiSimApp {
             keypad_queue: Vec::new(),
             keypad_open: true,
             touch_large_applied: None,
+            touch_layout_applied: false,
             loupe_source: None,
             picture_reading: None,
             frame_times: Default::default(),

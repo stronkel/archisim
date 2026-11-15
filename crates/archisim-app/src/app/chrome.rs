@@ -867,7 +867,8 @@ impl ArchiSimApp {
         // The same segments in the same order in every view (§12.3): Vista
         // · Anotar · Ayudas · coordinates. What does not apply to a view is
         // shown faint, not taken away.
-        ui.horizontal(|ui| {
+        let mut body = |ui: &mut Ui| {
+            ui.horizontal(|ui| {
             ui.set_min_height(30.0);
             ui.spacing_mut().item_spacing.x = 6.0;
             let caption = |ui: &mut Ui, text: &str| {
@@ -984,6 +985,8 @@ impl ArchiSimApp {
                 }
                 self.snap_toggles(ui);
             });
+            // The coordinates, at the right (not when it slides sideways).
+            if !crate::touch::large() {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let level = self
                     .ed
@@ -1035,7 +1038,18 @@ impl ArchiSimApp {
                     );
                 }
             });
+            }
         });
+        };
+        // With the touch size it may not fit: it slides sideways.
+        if crate::touch::large() {
+            egui::ScrollArea::horizontal()
+                .id_salt("bottom-bar")
+                .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden)
+                .show(ui, body);
+        } else {
+            body(ui);
+        }
     }
 
     /// «Grosores de impresión»: on, every line with its true weight at the
@@ -1045,44 +1059,48 @@ impl ArchiSimApp {
     /// to its look.
     /// «El dedo dibuja» (`docs/IPAD.md` §2), once a touch has been seen:
     /// one finger draws as the Pencil, and two move the view.
+    /// What a touch screen adds, in one menu of the bottom bar (once the
+    /// screen has been touched): «El dedo dibuja», the touch size and the
+    /// keypad.
     fn finger_chip(&mut self, ui: &mut Ui) {
         if !self.touch.seen {
             return;
         }
-        let mut on = self.finger_draws();
-        let before = on;
-        chip(
-            ui,
-            &mut on,
-            "El dedo dibuja",
-            "Un dedo dibuja como el lápiz y dos mueven la vista; apagado, el lápiz dibuja y un dedo mueve la vista",
-        );
-        if on != before {
-            self.prefs.finger_draws = Some(on);
-            self.prefs.save();
-        }
-        let mut large = self.prefs.touch_size.unwrap_or(true);
-        let before = large;
-        chip(
-            ui,
-            &mut large,
-            "Tamaño táctil",
-            "Botones y filas más grandes, y los tiradores y puntos se cogen desde más lejos con el dedo",
-        );
-        if large != before {
-            self.prefs.touch_size = Some(large);
-            self.prefs.save();
-        }
-        let before = self.prefs.keypad;
-        chip(
-            ui,
-            &mut self.prefs.keypad,
-            "Teclado numérico",
-            "Teclas sobre el dibujo para escribir las cotas y las teclas de las herramientas sin teclado",
-        );
-        if self.prefs.keypad != before {
-            self.prefs.save();
-        }
+        ui.menu_button("Táctil ▾", |ui| {
+            let mut on = self.finger_draws();
+            if ui
+                .switch(&mut on, "El dedo dibuja")
+                .on_hover_text(
+                    "Un dedo dibuja como el lápiz y dos mueven la vista; apagado, el lápiz dibuja y un dedo mueve la vista",
+                )
+                .changed()
+            {
+                self.prefs.finger_draws = Some(on);
+                self.prefs.save();
+            }
+            let mut large = self.prefs.touch_size.unwrap_or(true);
+            if ui
+                .switch(&mut large, "Tamaño táctil")
+                .on_hover_text(
+                    "Botones y filas más grandes, y los tiradores y puntos se cogen desde más lejos con el dedo",
+                )
+                .changed()
+            {
+                self.prefs.touch_size = Some(large);
+                self.prefs.save();
+            }
+            if ui
+                .switch(&mut self.prefs.keypad, "Teclado numérico")
+                .on_hover_text(
+                    "Teclas junto al punto para escribir las cotas y las teclas de las herramientas sin teclado",
+                )
+                .changed()
+            {
+                self.prefs.save();
+            }
+        })
+        .response
+        .on_hover_text("El dedo, el tamaño táctil y el teclado numérico");
     }
 
     fn thin_lines_chip(&mut self, ui: &mut Ui) {

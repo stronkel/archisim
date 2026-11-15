@@ -703,6 +703,14 @@ impl ArchiSimApp {
         }
         if let Some((lo, hi, tex)) = shown {
             self.paint_moved(painter, rect, &tex, lo, hi);
+            // For the magnifier, as in the plan.
+            let a = self
+                .view
+                .to_screen(rect, archisim_core::Point2::new(lo.x, hi.y));
+            let b = self
+                .view
+                .to_screen(rect, archisim_core::Point2::new(hi.x, lo.y));
+            self.loupe_source = Some((tex.id(), egui::Rect::from_min_max(a, b)));
         }
     }
 
