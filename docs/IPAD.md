@@ -46,11 +46,11 @@ La regla es la de los programas de dibujo de tableta: **el Pencil dibuja, los de
 |---|---|---|
 | Abrir y guardar en carpetas | «Abrir» con el selector de archivos del iPad (Archivos, iCloud Drive, Google Drive), «Guardar» descarga el `.archisim`. Copia de seguridad automática en el propio navegador cada pocos minutos | Guardar encima del mismo archivo (en la app nativa) |
 | Biblioteca del estudio en una carpeta | La biblioteca de la plantilla, más los ficheros que se carguen a mano | Biblioteca en una carpeta de iCloud o del NAS |
-| Render, cálculos y descargas en otro hilo | El render en los hilos del navegador (desde la 0.90); los cálculos, en el mismo hilo | Los cálculos también en los hilos |
+| Render, cálculos y descargas en otro hilo | El render (0.90) y los cálculos de estructura y electricidad (0.91) en los hilos del navegador; «Arreglar» y lo corto, en la página | — |
 | Traer el entorno (Catastro, OSM, IGN) | Por el puente del NAS (desde la 0.90), o soltando los ficheros descargados a mano | — |
 | Trabajo en equipo sobre una carpeta compartida | No | En la app nativa |
 | Actualizar desde el programa | No hace falta: al recargar está la última | — |
-| Exportar IFC, PDF, DXF, BC3, glTF | Igual, como descargas | — |
+| Exportar IFC, PDF, DXF, BC3, glTF, imágenes | Igual, como ficheros que se guardan en Archivos o se descargan (todo desde la 0.91) | — |
 
 **Memoria.** Safari limita la memoria de una página. Se medirá con la casa de la demo, con el L-160 y con Florence Street, y en el iPad la vista 3D usará antes las versiones de lejos.
 
@@ -113,3 +113,20 @@ Los gestos y el tamaño táctil (T3 y T4) sirven también en las pantallas táct
 - **Prueba de la integración continua** (`scripts/web_heavy.py`): la página servida por Caddy con el `Caddyfile` del NAS y contraseña. Sin contraseña no entra; el puente responde, CartoCiudad contesta por él y un servidor fuera de la lista no; el programa busca un lugar por el puente (`?prueba=lugar`); un render en borrador en los hilos (`?prueba=render`), con su tiempo; y Florence Street abierto con Ctrl+O, con la memoria al empezar, al abrir y en 3D.
 - **Lo medido** (integración continua, Chromium, 15/11/2026): el render en borrador de la casa de ejemplo (800 × 500), 23 s con tres hilos; el programa recién abierto, 29 MB; con Florence Street abierto en planta, 54 MB; con Florence Street en 3D, **1,16 GB**. En el escritorio, la escena 3D de Florence Street son unos 400 MB (263 MB de lo que se dibuja una vez y 142 MB de 92 modelos repetidos; prueba `scene_memory` con `ARCHISIM_MEDIR_PROYECTO`), con un máximo de 670 MB al hacerla; en la web la memoria de WebAssembly no se devuelve, así que queda el máximo y algo más. Un iPad con 8 GB debería poder; uno con 4 GB, probablemente no: es lo primero que hay que probar en el iPad.
 - Pendiente: los cálculos (estructura, instalaciones, «Arreglar») y la escena 3D siguen en la página; que la escena 3D ocupe menos en el navegador (versiones de lejos antes, vértices más pequeños); el programa pesa unos 51 MB sin optimizar (`wasm-opt`).
+
+## 12. Cómo está hecho (remates, 0.91)
+
+- **Memoria del 3D.** Florence Street en 3D en el navegador: de 1,16 GB a **635 MB** (integración continua). Tres cosas:
+  - La escena se subía a la tarjeta gráfica desde una copia que se guardaba hasta el primer dibujo: la escena entera dos veces en memoria. Ahora la tarjeta la recibe según se hace (`Renderer::set_queue`, `Writes`).
+  - La escena se hace pieza a pieza (`archisim_geom::solid::model_solids_each`, de 64 en 64 sólidos), sin tener a la vez todos los sólidos del modelo; dónde está cada muro, para los muros recortados, se mira antes.
+  - En el navegador, las piezas redondas con menos lados (`archisim_props::build::set_coarse`, 10 en lugar de 20; tuberías y lámparas, `archisim_geom::solid::set_coarse`, 10 en lugar de 24) y las plantas en su versión media (`Scene::build_with`).
+  - Prueba `scene_memory` (`ARCHISIM_MEDIR_PROYECTO`, y `ARCHISIM_COMO_WEB=1` para medir como el navegador): qué ocupa la escena y qué elementos, objetos y aparatos pesan más.
+- **Cálculos aparte** (`calc_aside`): la estructura y la instalación eléctrica se calculan en otro hilo en el escritorio y en un worker en el navegador; la ventana dice «Calculando… puedes seguir trabajando» y los enseña cuando llegan. Al worker van el proyecto como `.archisim` y vuelve el resultado como JSON (`run`, `read`, `blocks_to_json`; prueba `a_calculation_as_text_is_the_calculation`: lo calculado allí es lo calculado aquí). «Arreglar lo que no cumple» y los cálculos cortos (fontanería, saneamiento, ventilación, térmica, renovables: centésimas de segundo con Florence Street) siguen en la página.
+- **Tamaño del programa.** En la web se compila entero de una vez (LTO), sin símbolos, optimizado por tamaño y pasado por `wasm-opt` (`scripts/build_web.sh`, `index.html`): de 51 MB a 26 MB, 9,3 MB comprimido. El render tarda algo más (de 20 a 23–30 s el borrador de la casa en la integración continua).
+- **Exportar en la web** (`files`): los diálogos de guardar contestan un sitio en `/Descargas` y `files::write` entrega el fichero (Guardar en Archivos o Descargar); si son varios, una tarjeta detrás de otra. Así funcionan todas las exportaciones del menú: planos en PDF, DXF o imagen (`export_sheets_as`, una entrada por formato en la web), documentos, anejos, esquemas, BC3, glTF, Excel, CSV, el render y la imagen del 3D (que en la web se lee de la tarjeta un fotograma después: `Renderer::start_reading`, `Reading`, `picture_came`).
+- **Interfaz del iPad.**
+  - La primera vez que se toca la pantalla, la cinta se recoge (una vez: lo que cambies se queda, `Prefs::touch_layout`) y, en pantallas de menos de 1400 puntos, el Navegador se guarda (se abre con su botón de arriba).
+  - El teclado numérico sale junto al punto que se coloca, sin taparlo (`keypad_place`), o en la esquina si no hay punto.
+  - La lupa también en secciones y alzados.
+  - En la barra de abajo, «Táctil ▾» junta «El dedo dibuja», el tamaño táctil y el teclado; con el tamaño táctil la barra se desliza de lado si no cabe.
+- **3D con WebGL** (Safari anterior al 26, o sin WebGPU): la hierba escribe también las normales cuando la tarjeta no deja mezclar cada destino a su manera (`set_independent_blend`, de las capacidades del adaptador), y la copia del dibujo para la ventana se dibuja con un sombreador (`BLIT_SHADER`) en lugar de copiarse, que WebGL no deja entre esos formatos. La prueba de la integración continua abre el 3D con WebGL.
