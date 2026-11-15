@@ -2848,6 +2848,31 @@ fn scene_memory() {
             *kinds.entry(name).or_default() += 1;
         }
     }
+    // Which objects and devices, by type.
+    let mut types: std::collections::BTreeMap<String, usize> = Default::default();
+    for c in &scene.opaque {
+        for o in &c.owners {
+            let name = match o {
+                super::scene::Owner::Model(crate::pick::Element::Object(id)) => m
+                    .object(*id)
+                    .and_then(|o| m.object_type(o.object_type))
+                    .map(|t| format!("objeto {}", t.name)),
+                super::scene::Owner::Model(crate::pick::Element::Device(id)) => m
+                    .devices()
+                    .find(|d| d.id == *id)
+                    .map(|d| format!("aparato {:?}", d.kind)),
+                _ => None,
+            };
+            if let Some(n) = name {
+                *types.entry(n).or_default() += 1;
+            }
+        }
+    }
+    let mut types: Vec<_> = types.into_iter().collect();
+    types.sort_by_key(|k| std::cmp::Reverse(k.1));
+    for (k, n) in types.iter().take(10) {
+        println!("  {k}: {n} triángulos");
+    }
     let mut kinds: Vec<_> = kinds.into_iter().collect();
     kinds.sort_by_key(|k| std::cmp::Reverse(k.1));
     for (k, n) in kinds.iter().take(12) {
