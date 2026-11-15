@@ -435,6 +435,10 @@ pub struct ArchiSimApp {
     /// On the web: whether leaving the page asks first.
     #[allow(dead_code)]
     web_unsaved: bool,
+    /// The fingers and the Pencil (`docs/IPAD.md` §2).
+    pub(crate) touch: crate::touch::Touches,
+    /// Where the drawing was in the last frame, for the fingers.
+    pub(crate) touch_area: Option<crate::touch::Area>,
     /// How long the last section drawing took to work out.
     section_took: std::sync::Arc<std::sync::Mutex<std::time::Duration>>,
     sheet_pending: Option<background::Pending<sheet_ui::SheetKey>>,
@@ -907,6 +911,8 @@ impl ArchiSimApp {
             saving: None,
             web_kept: (0, None),
             web_unsaved: false,
+            touch: Default::default(),
+            touch_area: None,
             frame_times: Default::default(),
             nav_rows: None,
             discipline_counts: None,
@@ -2941,7 +2947,41 @@ impl ArchiSimApp {
     }
 }
 
+impl ArchiSimApp {
+    /// Whether one finger draws (as the Pencil): as chosen, or while no
+    /// Pencil has been seen.
+    pub(crate) fn finger_draws(&self) -> bool {
+        self.prefs.finger_draws.unwrap_or(!self.touch.pen_seen)
+    }
+}
+
 impl eframe::App for ArchiSimApp {
+    /// The fingers and the Pencil, before egui reads the touches
+    /// (`crate::touch`).
+    fn raw_input_hook(&mut self, ctx: &egui::Context, raw: &mut egui::RawInput) {
+        let finger_draws = self.finger_draws();
+        let over_drawing = |p: Pos2| {
+            ctx.layer_id_at(p)
+                .is_none_or(|l| l.order == egui::Order::Background)
+        };
+        #[cfg(target_arch = "wasm32")]
+        let is_pen = |id: egui::TouchId| crate::web::is_pen(id.0);
+        #[cfg(not(target_arch = "wasm32"))]
+        let is_pen = |_: egui::TouchId| false;
+        let actions =
+            self.touch
+                .translate(raw, self.touch_area, over_drawing, is_pen, finger_draws);
+        for a in actions {
+            match a {
+                crate::touch::Action::Undo => self.undo(),
+                crate::touch::Action::Redo => self.redo(),
+            }
+        }
+        if self.touch.busy() {
+            ctx.request_repaint_after(web_time::Duration::from_millis(100));
+        }
+    }
+
     fn ui(&mut self, ui: &mut Ui, frame: &mut eframe::Frame) {
         if self.gpu.is_none() {
             self.gpu = frame.wgpu_render_state().cloned();

@@ -859,6 +859,7 @@ impl ArchiSimApp {
                 ui.label(egui::RichText::new(text).size(10.5).color(p.muted));
             };
             caption(ui, "Vista");
+            self.finger_chip(ui);
             match self.mode {
                 ViewMode::Plan | ViewMode::Section => {
                     self.scale_and_zoom(ui);
@@ -1027,6 +1028,26 @@ impl ArchiSimApp {
     /// line one pixel wide, as ArchiCAD's «Líneas finas». Plans, sections,
     /// elevations, sheets and drafting views; the 3D view's contours belong
     /// to its look.
+    /// «El dedo dibuja» (`docs/IPAD.md` §2), once a touch has been seen:
+    /// one finger draws as the Pencil, and two move the view.
+    fn finger_chip(&mut self, ui: &mut Ui) {
+        if !self.touch.seen {
+            return;
+        }
+        let mut on = self.finger_draws();
+        let before = on;
+        chip(
+            ui,
+            &mut on,
+            "El dedo dibuja",
+            "Un dedo dibuja como el lápiz y dos mueven la vista; apagado, el lápiz dibuja y un dedo mueve la vista",
+        );
+        if on != before {
+            self.prefs.finger_draws = Some(on);
+            self.prefs.save();
+        }
+    }
+
     fn thin_lines_chip(&mut self, ui: &mut Ui) {
         let mut print = !self.thin_lines;
         chip(

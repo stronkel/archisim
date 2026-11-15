@@ -308,6 +308,10 @@ impl ArchiSimApp {
     }
 
     pub(super) fn navigate(&mut self, ctx: &egui::Context, response: &egui::Response, rect: Rect) {
+        self.touch_area = Some(crate::touch::Area {
+            rect,
+            three_d: false,
+        });
         let before = self.view;
         if response.dragged_by(PointerButton::Middle)
             || response.dragged_by(PointerButton::Secondary)

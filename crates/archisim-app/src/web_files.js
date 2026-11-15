@@ -141,3 +141,49 @@ export function archisim_kept(key) {
 export function archisim_set_unsaved(unsaved) {
   window.onbeforeunload = unsaved ? (e) => { e.preventDefault(); e.returnValue = ""; return ""; } : null;
 }
+
+// The Apple Pencil (docs/IPAD.md §2): which touches are the Pencil
+// (Safari says so in `touchType`), and the Pencil held over the screen
+// without touching it, which moves the cursor (iPad Pro and Air M2 or
+// later), passed on as the mouse moving.
+const PENS = new Set();
+
+export function archisim_watch_pencil(canvasId) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const note = (e) => {
+    for (const t of e.changedTouches) {
+      if (t.touchType === "stylus") PENS.add(t.identifier);
+    }
+  };
+  // Before the program's own listeners, on the way down.
+  canvas.addEventListener("touchstart", note, { capture: true, passive: true });
+  const forget = (e) => {
+    for (const t of e.changedTouches) {
+      const id = t.identifier;
+      setTimeout(() => PENS.delete(id), 2000);
+    }
+  };
+  canvas.addEventListener("touchend", forget, { capture: true, passive: true });
+  canvas.addEventListener("touchcancel", forget, { capture: true, passive: true });
+  // A finger or the Pencil also comes as a pointer, before it comes as a
+  // touch; the program reads touches (crate::touch), so the pointer copy
+  // stops here, or a finger meant to move the view would first press the
+  // left button.
+  const onlyTouches = (e) => {
+    if (e.pointerType !== "mouse" && e.target === canvas) e.stopPropagation();
+  };
+  window.addEventListener("pointerdown", onlyTouches, { capture: true });
+  window.addEventListener("pointerup", onlyTouches, { capture: true });
+  canvas.addEventListener("pointermove", (e) => {
+    if (e.pointerType === "pen" && e.buttons === 0) {
+      canvas.dispatchEvent(new MouseEvent("mousemove", {
+        clientX: e.clientX, clientY: e.clientY, bubbles: true,
+      }));
+    }
+  }, { passive: true });
+}
+
+export function archisim_is_pen(identifier) {
+  return PENS.has(identifier);
+}

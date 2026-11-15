@@ -43,6 +43,7 @@ mod snap;
 mod spline;
 mod team;
 mod temp_dims;
+mod touch;
 mod type_drawing;
 mod type_preview;
 mod units;

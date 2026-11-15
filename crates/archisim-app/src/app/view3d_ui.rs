@@ -959,6 +959,10 @@ impl ArchiSimApp {
 
     pub(super) fn view_3d(&mut self, ui: &mut Ui) {
         let (rect, response) = ui.allocate_exact_size(ui.available_size(), Sense::click_and_drag());
+        self.touch_area = Some(crate::touch::Area {
+            rect,
+            three_d: true,
+        });
         let ctx = ui.ctx().clone();
         let painter = ui.painter_at(rect);
         let level_z = self
