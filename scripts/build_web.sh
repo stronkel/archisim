@@ -15,12 +15,15 @@ mkdir -p dist
 export CARGO_PROFILE_RELEASE_LTO=true
 export CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1
 export CARGO_PROFILE_RELEASE_STRIP=true
+# Optimised for size: a third less to load on the iPad (the render goes in
+# the workers, a little slower).
+export CARGO_PROFILE_RELEASE_OPT_LEVEL=s
 # Trunk finds the program's package from the folder it is run in.
 (cd crates/archisim-app && trunk build --release --public-url ./ --dist "$PWD/../../dist/web" index.html)
 
 # The demo house, opened when the page starts (built as usual, not as
 # the web program).
-unset CARGO_PROFILE_RELEASE_LTO CARGO_PROFILE_RELEASE_CODEGEN_UNITS CARGO_PROFILE_RELEASE_STRIP
+unset CARGO_PROFILE_RELEASE_LTO CARGO_PROFILE_RELEASE_CODEGEN_UNITS CARGO_PROFILE_RELEASE_STRIP CARGO_PROFILE_RELEASE_OPT_LEVEL
 cargo run --release -p archisim-cli -- demo out/web-demo
 cp out/web-demo/demo.archisim dist/web/demo.archisim
 
