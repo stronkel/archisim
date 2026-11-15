@@ -259,7 +259,7 @@ pub struct Renderer {
     /// their buffers: they go with the queue at the start of `render`
     /// (a buffer mapped when made can be refused in the browser when it is
     /// a few megabytes, `docs/IPAD.md`).
-    writes: Vec<(wgpu::Buffer, Vec<u8>)>,
+    writes: Writes,
     glass_pipeline: wgpu::RenderPipeline,
     edges_pipeline: wgpu::RenderPipeline,
     globals: wgpu::Buffer,
@@ -851,7 +851,7 @@ impl Renderer {
             bounds: (glam::Vec3::ZERO, glam::Vec3::ONE),
             focus: None,
             uploads: 0,
-            writes: Vec::new(),
+            writes: Writes::default(),
             glass_pipeline,
             edges_pipeline,
             globals,
@@ -979,6 +979,12 @@ impl Renderer {
     }
 
     /// Uploads the scene's triangles.
+    /// The queue to fill the buffers with as they are made (without it,
+    /// at the next picture, from a copy: a big scene twice in memory).
+    pub fn set_queue(&mut self, queue: &wgpu::Queue) {
+        self.writes.queue = Some(queue.clone());
+    }
+
     pub fn set_scene(&mut self, device: &wgpu::Device, scene: &Scene) {
         self.uploads += 1;
         let key = scene.orthophoto.as_ref().map(OrthoKey::of);
@@ -1103,7 +1109,10 @@ impl Renderer {
         size: [u32; 2],
         edge_step: u32,
     ) -> &wgpu::Texture {
-        for (buffer, bytes) in self.writes.drain(..) {
+        if self.writes.queue.is_none() {
+            self.writes.queue = Some(queue.clone());
+        }
+        for (buffer, bytes) in self.writes.pending.drain(..) {
             queue.write_buffer(&buffer, 0, &bytes);
         }
         if self.pictures_pending {
@@ -1812,8 +1821,13 @@ fn upload(
         .collect()
 }
 
-/// Buffers made and the bytes to copy into them (`Renderer::writes`).
-type Writes = Vec<(wgpu::Buffer, Vec<u8>)>;
+/// How buffers are filled (`Renderer::writes`): by the queue at once when
+/// it is known, or from a copy at the next picture.
+#[derive(Default)]
+struct Writes {
+    queue: Option<wgpu::Queue>,
+    pending: Vec<(wgpu::Buffer, Vec<u8>)>,
+}
 
 /// A buffer for `bytes`, filled by the queue at the next picture.
 fn buffer_with(
@@ -1824,15 +1838,24 @@ fn buffer_with(
     usage: wgpu::BufferUsages,
 ) -> wgpu::Buffer {
     // The queue copies whole groups of four bytes.
-    let mut bytes = bytes.to_vec();
-    bytes.resize(bytes.len().next_multiple_of(4).max(4), 0);
+    let size = bytes.len().next_multiple_of(4).max(4);
     let buffer = device.create_buffer(&wgpu::BufferDescriptor {
         label: Some(label),
-        size: bytes.len() as u64,
+        size: size as u64,
         usage: usage | wgpu::BufferUsages::COPY_DST,
         mapped_at_creation: false,
     });
-    writes.push((buffer.clone(), bytes));
+    match &writes.queue {
+        Some(queue) if size == bytes.len() => queue.write_buffer(&buffer, 0, bytes),
+        _ => {
+            let mut bytes = bytes.to_vec();
+            bytes.resize(size, 0);
+            match &writes.queue {
+                Some(queue) => queue.write_buffer(&buffer, 0, &bytes),
+                None => writes.pending.push((buffer.clone(), bytes)),
+            }
+        }
+    }
     buffer
 }
 

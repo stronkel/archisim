@@ -705,6 +705,7 @@ impl View3dState {
         let wire_changed = gpu.renderer.wired() != (self.style == 3);
         if gpu.uploaded != self.scene_serial || wire_changed {
             crate::crash::stage("3D: subir la escena a la tarjeta gráfica");
+            gpu.renderer.set_queue(&gpu.state.queue);
             gpu.renderer.set_scene(&gpu.state.device, &self.scene);
             gpu.uploaded = self.scene_serial;
             self.has_water = self.scene.has_water();
