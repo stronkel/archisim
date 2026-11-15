@@ -328,6 +328,6 @@ Pedido de Antonio: modelar en serio desde el sofá, con Apple Pencil, teclado y 
 | T1 | ArchiSim en el navegador, servido desde el NAS con contraseña | Hecho, rama `bloque/ipad` (falta probarlo en el iPad) |
 | T2 | Abrir y guardar desde Archivos e iCloud, copia automática | Hecho, rama `bloque/ipad-t2` (#214) |
 | T3 | Gestos y Pencil (el Pencil dibuja, el dedo mueve) | Hecho, rama `bloque/ipad-t3` (#215) |
-| T4 | Tamaño táctil, teclado numérico de cotas, «El dedo dibuja» con lupa | Hecho, rama `bloque/ipad-t4` |
-| T5 | Render y cálculos en hilos del navegador, proyectos grandes, entorno desde el NAS | Pendiente |
+| T4 | Tamaño táctil, teclado numérico de cotas, «El dedo dibuja» con lupa | Hecho, rama `bloque/ipad-t4` (#216) |
+| T5 | Render y cálculos en hilos del navegador, proyectos grandes, entorno desde el NAS | Hecho el render en hilos, el puente del NAS y la medida de la memoria, rama `bloque/ipad-t5` (#217); los cálculos en hilos, pendientes |
 | T6 | App nativa para iPad con TestFlight | Pendiente |

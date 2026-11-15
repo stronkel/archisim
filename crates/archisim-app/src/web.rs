@@ -501,11 +501,15 @@ static FRAMES: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(
 /// Whether the page's address asks for the test `name`, once, a few
 /// frames after starting.
 pub fn test_due(name: &str) -> bool {
-    use std::sync::atomic::Ordering;
-    const AT: u32 = 30;
-    if FRAMES.load(Ordering::Relaxed) != AT {
-        return false;
-    }
+    FRAMES.load(std::sync::atomic::Ordering::Relaxed) == TEST_FRAME && tests_asked(name)
+}
+
+/// The frame the tests start at.
+const TEST_FRAME: u32 = 10;
+
+/// Whether the page's address asks for the test `name` (or for any, with
+/// an empty name).
+fn tests_asked(name: &str) -> bool {
     let search = web_sys::window()
         .and_then(|w| w.location().search().ok())
         .unwrap_or_default();
@@ -513,7 +517,13 @@ pub fn test_due(name: &str) -> bool {
         .trim_start_matches('?')
         .split('&')
         .filter_map(|kv| kv.strip_prefix("prueba="))
-        .any(|v| v.split(',').any(|t| t == name))
+        .any(|v| name.is_empty() || v.split(',').any(|t| t == name))
+}
+
+/// Whether frames must follow without waiting for the mouse, until the
+/// tests start.
+pub fn tests_waiting() -> bool {
+    FRAMES.load(std::sync::atomic::Ordering::Relaxed) <= TEST_FRAME && tests_asked("")
 }
 
 /// One frame more (for `test_due`).

@@ -150,10 +150,10 @@ try:
             fail("el render no ha terminado")
         page.wait_for_timeout(2_000)
         picture(page, "pesado-1-render")
-        if not any("hace aquí" in c for c in console):
-            print("el render se ha hecho en los hilos del navegador")
-        else:
+        if any("hace aquí" in c for c in console):
             fail("el render no se ha podido hacer en los hilos del navegador")
+        elif seconds is not None:
+            print("el render se ha hecho en los hilos del navegador")
 
         # 4. Florence Street, with WebGPU (as in Safari 26; with WebGL the
         # 3D does not start).

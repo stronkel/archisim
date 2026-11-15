@@ -3048,6 +3048,9 @@ impl eframe::App for ArchiSimApp {
         #[cfg(target_arch = "wasm32")]
         {
             crate::web::note_memory();
+            if crate::web::tests_waiting() {
+                ui.ctx().request_repaint();
+            }
             self.web_tests();
             crate::web::count_frame();
         }
