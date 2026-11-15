@@ -59,7 +59,7 @@ winit = "0.30"
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
 js-sys = "0.3"
-web-sys = { version = "0.3", features = ["Window", "Document", "Element", "HtmlCanvasElement", "HtmlElement", "Response", "console", "Location"] }
+web-sys = { version = "0.3", features = ["Window", "Document", "Element", "HtmlCanvasElement", "HtmlElement", "Response", "console", "Location", "Storage"] }
 # Random numbers from the browser, for the hashes of egui.
 getrandom = { version = "0.3", features = ["wasm_js"] }
 # The GUIDs of new elements, from the browser's random numbers.
