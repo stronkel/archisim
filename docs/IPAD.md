@@ -86,3 +86,13 @@ Los gestos y el tamaño táctil (T3 y T4) sirven también en las pantallas táct
 - **Copia en el navegador**: medio minuto después de cada cambio, y al guardar, el proyecto se guarda también en el propio navegador (IndexedDB). Al volver a abrir la página se abre esa copia, con un aviso de cuándo es; si no la hay, la casa de ejemplo. Si se cierra la página con cambios sin guardar, el navegador pregunta antes.
 - Las preferencias (tamaño de letra, tema, teclas, misiones hechas) se guardan en el navegador (`prefs`, `localStorage`).
 - Código: `web.rs` (`pick`, `deliver`, `keep`, `kept`, `set_unsaved`) sobre `web_files.js`; en la ventana, `ArchiSimApp::web_files` y `open_picked`; `Editor::import_bytes`, `ifc_text`, `mark_unhanded`. La prueba de la integración continua abre la casa con Ctrl+O, importa un IFC, guarda con «Descargar» y comprueba que al recargar abre la copia.
+
+## 9. Cómo está hecho (T3: el Pencil y los dedos)
+
+- `crate::touch` (`Touches::translate`) lee los toques antes que egui (`eframe::App::raw_input_hook`) y pone en su lugar lo que la ventana ya entiende: el lápiz, como el botón izquierdo del ratón; un dedo que se arrastra sobre el dibujo, como la rueda pulsada (en planta, sección, plano o vista de dibujo, desplaza) o el botón derecho (en 3D, gira); dos dedos, la rueda pulsada en su centro (desplaza) y `Zoom` al separarse o juntarse; un toque, un clic; un dedo quieto medio segundo (`LONG_PRESS`), el botón derecho (el menú); dos dedos tocados y levantados enseguida, Deshacer; tres, Rehacer.
+- Solo sobre el dibujo: la zona la apunta cada vista al dibujarse (`ArchiSimApp::touch_area`), y no cuenta lo que tapa un menú o un diálogo (capas que no son el fondo). En los paneles, la cinta y los diálogos, un dedo es un ratón.
+- **El dedo dibuja** (`Prefs::finger_draws`, botón en la barra de abajo en cuanto se toca la pantalla): un dedo hace lo del lápiz y dos mueven la vista. Viene encendido hasta que el iPad ve un Pencil; desde ese momento se apaga solo (y se recuerda), y se puede cambiar a mano.
+- En el navegador, `web_files.js` (`archisim_watch_pencil`) mira qué toques son del Pencil (`touchType` «stylus»), pasa el Pencil que se mueve sobre la pantalla sin tocarla como el ratón que se mueve (en los iPad que lo detectan) y quita la copia «puntero» de los toques, que llega antes que el toque y apretaría el botón izquierdo.
+- Pruebas: `touch::tests` (lápiz, arrastre, toque, pulsación larga, pellizco, deshacer y rehacer, dedo que dibuja, paneles) y, en la integración continua, dos dedos sobre la planta que la desplazan y la acercan (`fingers` en `scripts/web_smoke.py`).
+- También sirve en el escritorio con pantalla táctil (Windows), donde no se distingue lápiz de dedo.
+

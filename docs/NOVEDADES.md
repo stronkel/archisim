@@ -4,6 +4,18 @@ Lo que cambia en cada versión, en pocas líneas. ArchiSim enseña la parte de s
 
 Cada versión empieza con una línea `## <versión>` (por ejemplo `## 0.81.0`): es la que busca la publicación.
 
+## 0.88.0
+
+- **ArchiSim en el iPad: el Pencil y los dedos.** Sobre el dibujo (planta, sección, plano o 3D):
+  - El **Apple Pencil dibuja**: muros, forjados, cotas, seleccionar y arrastrar, como el ratón.
+  - **Un dedo mueve la vista**: en planta la desplaza, en 3D la gira.
+  - **Dos dedos**: pellizca para acercar o alejar, arrástralos para desplazar.
+  - **Toque** con el dedo: un clic. **Mantener** el dedo quieto: el menú del botón derecho.
+  - **Tocar con dos dedos**: Deshacer. **Con tres**: Rehacer.
+  - Sin Pencil, **«El dedo dibuja»** (en la barra de abajo): un dedo dibuja y dos mueven la vista. Viene encendido hasta que el iPad ve el Pencil.
+  - En los paneles, la cinta y los diálogos el dedo funciona como el ratón.
+- También en un ordenador con pantalla táctil.
+
 ## 0.87.0
 
 - **ArchiSim en el iPad: abrir y guardar.** En la versión web ya se abren proyectos e IFC y se guardan.
