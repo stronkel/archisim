@@ -3033,6 +3033,13 @@ impl eframe::App for ArchiSimApp {
             self.gpu = frame.wgpu_render_state().cloned();
             if let Some(g) = &self.gpu {
                 crate::crash::watch_device(&g.device);
+                // WebGL (Safari before 26) draws every target the same way.
+                crate::view3d::render::set_independent_blend(
+                    g.adapter
+                        .get_downlevel_capabilities()
+                        .flags
+                        .contains(eframe::wgpu::DownlevelFlags::INDEPENDENT_BLEND),
+                );
             }
         }
         crate::crash::frame_start();

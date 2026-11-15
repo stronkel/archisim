@@ -10,10 +10,17 @@ cd "$(dirname "$0")/.."
 
 rm -rf dist/web dist/archisim-web.zip
 mkdir -p dist
+# Smaller: the whole program optimised at once, without symbols (and
+# wasm-opt, in index.html).
+export CARGO_PROFILE_RELEASE_LTO=true
+export CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1
+export CARGO_PROFILE_RELEASE_STRIP=true
 # Trunk finds the program's package from the folder it is run in.
 (cd crates/archisim-app && trunk build --release --public-url ./ --dist "$PWD/../../dist/web" index.html)
 
-# The demo house, opened when the page starts.
+# The demo house, opened when the page starts (built as usual, not as
+# the web program).
+unset CARGO_PROFILE_RELEASE_LTO CARGO_PROFILE_RELEASE_CODEGEN_UNITS CARGO_PROFILE_RELEASE_STRIP
 cargo run --release -p archisim-cli -- demo out/web-demo
 cp out/web-demo/demo.archisim dist/web/demo.archisim
 
@@ -21,5 +28,9 @@ cp out/web-demo/demo.archisim dist/web/demo.archisim
 sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1 > dist/web/version.txt
 
 ls -la dist/web
+# How big the program is, as it goes and as it travels (gzip).
+for f in dist/web/*.wasm; do
+  echo "programa: $(du -h "$f" | cut -f1), comprimido: $(gzip -9c "$f" | wc -c | awk '{printf "%.1f MB", $1/1048576}')"
+done
 (cd dist/web && zip -qr ../archisim-web.zip .)
 ls -la dist/archisim-web.zip

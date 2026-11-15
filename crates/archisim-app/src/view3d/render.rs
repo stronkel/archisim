@@ -177,6 +177,15 @@ struct Targets {
     display: Option<wgpu::Texture>,
 }
 
+/// Whether the graphics can blend each target of a pass its own way (not
+/// WebGL): `set_independent_blend`, from the adapter, before the first
+/// renderer.
+static INDEPENDENT_BLEND: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+
+pub fn set_independent_blend(on: bool) {
+    INDEPENDENT_BLEND.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
 pub struct Renderer {
     /// The orthophoto's picture (group 3 of the model's passes): its bind
     /// group, what it holds (the picture and where it lies) and the one
@@ -347,6 +356,13 @@ pub fn shader_source(mode: TextureMode) -> String {
 
 impl Renderer {
     pub fn new(device: &wgpu::Device, view_formats: bool, textures: TextureMode) -> Self {
+        // Without independent blending (WebGL), the grass writes the
+        // normals too: lines may show between its blades.
+        let grass_normals = if INDEPENDENT_BLEND.load(std::sync::atomic::Ordering::Relaxed) {
+            wgpu::ColorWrites::empty()
+        } else {
+            wgpu::ColorWrites::ALL
+        };
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("archisim 3d"),
             source: wgpu::ShaderSource::Wgsl(shader_source(textures).into()),
@@ -633,7 +649,7 @@ impl Renderer {
                     Some(wgpu::ColorTargetState {
                         format: NORMAL_FORMAT,
                         blend: None,
-                        write_mask: wgpu::ColorWrites::empty(),
+                        write_mask: grass_normals,
                     }),
                 ],
             }),
