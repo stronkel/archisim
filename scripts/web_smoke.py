@@ -81,7 +81,7 @@ def files(page):
         page.keyboard.press("Control+S")
         page.wait_for_selector(".as-veil", timeout=10_000)
         with page.expect_download(timeout=30_000) as d:
-            page.click("text=Descargar")
+            page.click("button:has-text('Descargar')")
         target = out / d.value.suggested_filename
         d.value.save_as(str(target))
         size = target.stat().st_size
