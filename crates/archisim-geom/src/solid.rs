@@ -4094,6 +4094,47 @@ pub fn model_solids_except_detailed(
     detailed: &std::collections::HashSet<OpeningId>,
 ) -> Vec<Solid> {
     let mut out = Vec::new();
+    model_solids_each(model, skip, detailed, &mut |s| out.push(s));
+    out
+}
+
+/// Where `model_solids_each` puts each solid as it is made: dropped if
+/// it has no triangles or its element is drawn by its frame.
+struct SolidSink<'a> {
+    put: &'a mut dyn FnMut(Solid),
+    model: &'a Model,
+    framed: bool,
+}
+
+impl SolidSink<'_> {
+    fn push(&mut self, s: Solid) {
+        if s.triangles.is_empty() || (self.framed && crate::framing::is_framed(self.model, s.owner))
+        {
+            return;
+        }
+        (self.put)(s);
+    }
+
+    fn extend(&mut self, solids: impl IntoIterator<Item = Solid>) {
+        for s in solids {
+            self.push(s);
+        }
+    }
+}
+
+/// The solids of [`model_solids_except_detailed`], one by one as they are
+/// made, without holding them all (the 3D view of a big building in the
+/// browser, short of memory).
+pub fn model_solids_each(
+    model: &Model,
+    skip: &std::collections::HashSet<archisim_core::ObjectId>,
+    detailed: &std::collections::HashSet<OpeningId>,
+    put: &mut dyn FnMut(Solid),
+) {
+    // The bare frames of the framed walls, floors and roofs, in place of
+    // their layers («Entramado a la vista»).
+    let framed = crate::framing::frames_shown() && model.framings().next().is_some();
+    let mut out = SolidSink { put, model, framed };
     let idx = WallIndex::new(model);
     let pieces = facade_pieces_wanted();
     for w in model.walls() {
@@ -4231,14 +4272,13 @@ pub fn model_solids_except_detailed(
     for d in model.devices() {
         out.extend(device_solids(model, d.id));
     }
-    // The bare frames of the framed walls, floors and roofs, in place of
-    // their layers («Entramado a la vista»).
-    if crate::framing::frames_shown() && model.framings().next().is_some() {
-        out.retain(|s| !crate::framing::is_framed(model, s.owner));
-        out.extend(crate::framing::frame_solids(model));
+    if framed {
+        for s in crate::framing::frame_solids(model) {
+            if !s.triangles.is_empty() {
+                (out.put)(s);
+            }
+        }
     }
-    out.retain(|s| !s.triangles.is_empty());
-    out
 }
 
 /// The solid of a footing: its outline from its top face down its depth.

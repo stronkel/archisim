@@ -1060,27 +1060,30 @@ impl Scene {
             }
         }
         let mut loose = Loose::default();
-        let solids: Vec<_> = if dressed.is_empty() {
-            archisim_geom::solid::model_solids_except_detailed(model, &skip, &detailed)
-        } else {
-            archisim_geom::solid::without_dressed(|| {
-                archisim_geom::solid::model_solids_except_detailed(model, &skip, &detailed)
-            })
+        // Where each wall is (for the cut away walls), from its own solids
+        // and its accessories', before the rest.
+        let anchors = {
+            let idx = archisim_geom::WallIndex::new(model);
+            let mut walls = Vec::new();
+            for w in model.walls() {
+                walls.extend(archisim_geom::solid::wall_solids_in(&idx, w.id));
+                for p in archisim_geom::sweeps::wall_sweep_pieces_in(&idx, w.id) {
+                    walls.push(archisim_geom::solid::Solid {
+                        owner: SolidOwner::Wall(w.id),
+                        material: p.material,
+                        triangles: archisim_geom::solid::mesh_triangles(&p.mesh),
+                    });
+                }
+            }
+            anchors(&walls)
         };
-        let anchors = anchors(&solids);
         // The faces with painted zones (G3): their elements' solids.
-        let zone_solids: Vec<archisim_geom::solid::Solid> = {
-            let ids: std::collections::BTreeSet<u64> = model
-                .face_zones()
-                .filter(|z| z.material.is_some())
-                .map(|z| z.element)
-                .collect();
-            solids
-                .iter()
-                .filter(|s| ids.contains(&s.owner.id()))
-                .cloned()
-                .collect()
-        };
+        let zone_ids: std::collections::BTreeSet<u64> = model
+            .face_zones()
+            .filter(|z| z.material.is_some())
+            .map(|z| z.element)
+            .collect();
+        let mut zone_solids: Vec<archisim_geom::solid::Solid> = Vec::new();
         // The detailed doors and windows are cut as their walls.
         for g in &mut s.groups {
             for (inst, owner) in g.instances.iter_mut().zip(&g.owners) {
@@ -1099,7 +1102,28 @@ impl Scene {
             shared: false,
             between: false,
         };
-        add_solids(model, solids, &look, &mut loose);
+        // The solids as they are made, a few at a time: a big building's
+        // all at once would not fit in the browser's memory.
+        {
+            let mut batch = Vec::new();
+            let mut put = |solid: archisim_geom::solid::Solid| {
+                if zone_ids.contains(&solid.owner.id()) {
+                    zone_solids.push(solid.clone());
+                }
+                batch.push(solid);
+                if batch.len() >= 64 {
+                    add_solids(model, std::mem::take(&mut batch), &look, &mut loose);
+                }
+            };
+            if dressed.is_empty() {
+                archisim_geom::solid::model_solids_each(model, &skip, &detailed, &mut put);
+            } else {
+                archisim_geom::solid::without_dressed(|| {
+                    archisim_geom::solid::model_solids_each(model, &skip, &detailed, &mut put)
+                });
+            }
+            add_solids(model, batch, &look, &mut loose);
+        }
         // Where the layers of a wall, a slab or a roof touch: seen only
         // through a cut.
         let idx = archisim_geom::WallIndex::new(model);
