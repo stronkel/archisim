@@ -11,7 +11,7 @@
 //! `glass` a push panel's, `light` the car's ceiling light, `dark` the
 //! gaps and the pit's ladder.
 
-use crate::build::{Builder, ROUND};
+use crate::build::{round, Builder};
 use crate::{Params, PropMesh};
 
 /// The roles of a lift's model, in the order their colours are given.
@@ -257,7 +257,7 @@ fn landing_door(b: &mut Builder, face: f64, z: f64, w: f64, h: f64) {
         [x, y0 + 0.016, z + 1.09],
         0.014,
         0.012,
-        ROUND,
+        round(),
     );
 }
 
@@ -382,7 +382,7 @@ fn car(b: &mut Builder, at: [f64; 3], w: f64, d: f64, h: f64, door_w: f64, door_
             [x + hw - 0.012, y + hd - 0.175, zz],
             0.012,
             0.011,
-            ROUND,
+            round(),
         );
     }
 }

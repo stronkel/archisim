@@ -17,6 +17,7 @@ mod app;
 mod bar_schedule;
 mod brush;
 mod cad;
+mod calc_aside;
 mod carpentry;
 mod coord;
 mod crash;

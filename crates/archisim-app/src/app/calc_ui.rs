@@ -24,6 +24,8 @@ pub struct CalcWindow {
     proposals: Option<(u64, Vec<(archisim_struct::proposals::Proposal, bool)>)>,
     /// «Arreglar lo que no cumple», while it is worked out or shown.
     fix: Option<super::fix_ui::FixState<archisim_struct::fix::Fix>>,
+    /// The calculation being worked out aside.
+    aside: Option<crate::calc_aside::Aside>,
 }
 
 impl ArchiSimApp {
@@ -261,25 +263,36 @@ impl ArchiSimApp {
         );
         ui.separator();
         let rev = self.ed.revision();
+        // One calculation for both, aside: the annex's blocks, and its text.
         if self.calc.results.as_ref().is_none_or(|r| r.0 != rev) {
-            let model = self.ed.shown();
-            // One calculation for both: the annex's blocks, and its text.
-            let blocks = archisim_struct::report::report(&model);
-            let text = archisim_struct::report::to_text(&blocks);
-            let fails = blocks
-                .iter()
-                .filter(|b| {
-                    matches!(
-                        b,
-                        archisim_struct::report::Block::Check {
-                            status: archisim_struct::lightframe::Status::Fail,
-                            ..
-                        }
-                    )
-                })
-                .count();
-            self.calc.blocks = blocks;
-            self.calc.results = Some((rev, text, fails));
+            if self.calc.aside.as_ref().is_none_or(|a| a.revision != rev) {
+                let model = (*self.ed.shown()).clone();
+                self.calc.aside = Some(crate::calc_aside::Aside::start(
+                    crate::calc_aside::Calc::Structure,
+                    model,
+                    rev,
+                    ui.ctx(),
+                ));
+            }
+            match self.calc.aside.as_ref().and_then(|a| a.take()) {
+                Some(Ok((text, fails, blocks))) => {
+                    self.calc.aside = None;
+                    self.calc.blocks = blocks;
+                    self.calc.results = Some((rev, text, fails));
+                }
+                Some(Err(e)) => {
+                    self.calc.aside = None;
+                    ui.colored_label(egui::Color32::RED, format!("No se ha podido calcular: {e}"));
+                    return;
+                }
+                None => {
+                    ui.horizontal(|ui| {
+                        ui.spinner();
+                        ui.label("Calculando la estructura aparte… puedes seguir trabajando.");
+                    });
+                    return;
+                }
+            }
         }
         let (_, text, fails) = self.calc.results.clone().expect("just made");
         let mut export = false;

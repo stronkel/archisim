@@ -602,6 +602,24 @@ impl Scene {
         isolate: bool,
         disciplines: &Disciplines,
     ) -> Self {
+        // In the browser, short of memory (`docs/IPAD.md` §12), the plants
+        // in their medium version, all of them.
+        use archisim_core::flora::Lod;
+        if crate::platform::WEB && model.plant_detail() == Lod::Full {
+            return archisim_geom::solid::with_plant_lod(Lod::Medium, || {
+                Self::build_here(model, selection, linked, isolate, disciplines)
+            });
+        }
+        Self::build_here(model, selection, linked, isolate, disciplines)
+    }
+
+    fn build_here(
+        model: &Model,
+        selection: &BTreeSet<Element>,
+        linked: &[LinkedPart],
+        isolate: bool,
+        disciplines: &Disciplines,
+    ) -> Self {
         let mut s = Scene {
             lo: Vec3::splat(f32::INFINITY),
             hi: Vec3::splat(f32::NEG_INFINITY),
