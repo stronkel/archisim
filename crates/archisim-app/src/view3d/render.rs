@@ -159,6 +159,32 @@ struct GroupDraws {
     shadow_level: usize,
 }
 
+/// Draws the sRGB picture into a plain 8-bit texture, keeping its bytes:
+/// it reads the values (decoded) and encodes them again.
+const BLIT_SHADER: &str = r#"
+@group(0) @binding(0) var picture: texture_2d<f32>;
+
+@vertex
+fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4<f32> {
+    let x = f32((i << 1u) & 2u);
+    let y = f32(i & 2u);
+    return vec4<f32>(x * 2.0 - 1.0, 1.0 - y * 2.0, 0.0, 1.0);
+}
+
+fn encode(c: f32) -> f32 {
+    if (c <= 0.0031308) {
+        return c * 12.92;
+    }
+    return 1.055 * pow(c, 1.0 / 2.4) - 0.055;
+}
+
+@fragment
+fn fs(@builtin(position) p: vec4<f32>) -> @location(0) vec4<f32> {
+    let c = textureLoad(picture, vec2<i32>(p.xy), 0);
+    return vec4<f32>(encode(c.r), encode(c.g), encode(c.b), c.a);
+}
+"#;
+
 /// Render targets of one size.
 struct Targets {
     size: [u32; 2],
@@ -173,8 +199,11 @@ struct Targets {
     depth_view: wgpu::TextureView,
     edges_bind: wgpu::BindGroup,
     /// A plain 8-bit copy of the picture for egui, on graphics cards that
-    /// cannot view the sRGB picture as plain values (some OpenGL drivers).
-    display: Option<wgpu::Texture>,
+    /// cannot view the sRGB picture as plain values (some OpenGL drivers,
+    /// WebGL): drawn from the picture by `blit_pipeline`, which encodes
+    /// its values (a copy between the two formats is not allowed in
+    /// WebGL).
+    display: Option<(wgpu::Texture, wgpu::BindGroup)>,
 }
 
 /// Whether the graphics can blend each target of a pass its own way (not
@@ -187,6 +216,9 @@ pub fn set_independent_blend(on: bool) {
 }
 
 pub struct Renderer {
+    /// Draws the picture into its plain copy (`Targets::display`).
+    blit_pipeline: wgpu::RenderPipeline,
+    blit_layout: wgpu::BindGroupLayout,
     /// The orthophoto's picture (group 3 of the model's passes): its bind
     /// group, what it holds (the picture and where it lies) and the one
     /// still to be sent to the card.
@@ -392,6 +424,50 @@ impl Renderer {
                 },
                 count: None,
             }],
+        });
+        let blit_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("3d display copy"),
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Texture {
+                    sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    multisampled: false,
+                },
+                count: None,
+            }],
+        });
+        let blit_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("3d display copy"),
+            source: wgpu::ShaderSource::Wgsl(BLIT_SHADER.into()),
+        });
+        let blit_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("3d display copy"),
+            layout: Some(
+                &device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                    label: Some("3d display copy"),
+                    bind_group_layouts: &[Some(&blit_layout)],
+                    immediate_size: 0,
+                }),
+            ),
+            vertex: wgpu::VertexState {
+                module: &blit_shader,
+                entry_point: Some("vs"),
+                compilation_options: Default::default(),
+                buffers: &[],
+            },
+            primitive: Default::default(),
+            depth_stencil: None,
+            multisample: Default::default(),
+            fragment: Some(wgpu::FragmentState {
+                module: &blit_shader,
+                entry_point: Some("fs"),
+                compilation_options: Default::default(),
+                targets: &[Some(DISPLAY_FORMAT.into())],
+            }),
+            multiview_mask: None,
+            cache: None,
         });
         let globals = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("globals"),
@@ -752,6 +828,8 @@ impl Renderer {
             cache: None,
         });
         Self {
+            blit_pipeline,
+            blit_layout,
             ortho_layout,
             ortho_sampler,
             ortho_bind,
@@ -958,11 +1036,13 @@ impl Renderer {
                 },
                 1,
             );
-            let display = (!self.view_formats).then(|| {
+            let display_texture = (!self.view_formats).then(|| {
                 texture(
                     "3d display copy",
                     DISPLAY_FORMAT,
-                    wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+                    wgpu::TextureUsages::TEXTURE_BINDING
+                        | wgpu::TextureUsages::COPY_DST
+                        | wgpu::TextureUsages::RENDER_ATTACHMENT,
                     &[],
                     1,
                 )
@@ -986,9 +1066,21 @@ impl Renderer {
                     resource: wgpu::BindingResource::TextureView(&normal_view),
                 }],
             });
+            let color_view = color.create_view(&Default::default());
+            let display = display_texture.map(|d| {
+                let bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("3d display copy"),
+                    layout: &self.blit_layout,
+                    entries: &[wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(&color_view),
+                    }],
+                });
+                (d, bind)
+            });
             self.targets = Some(Targets {
                 size,
-                color_view: color.create_view(&Default::default()),
+                color_view,
                 color,
                 color_ms_view: color_ms.create_view(&Default::default()),
                 normal_ms_view: normal_ms.create_view(&Default::default()),
@@ -1448,12 +1540,27 @@ impl Renderer {
             pass.set_bind_group(1, &t.edges_bind, &[]);
             pass.draw(0..3, 0..1);
         }
-        if let Some(display) = &t.display {
-            encoder.copy_texture_to_texture(
-                t.color.as_image_copy(),
-                display.as_image_copy(),
-                t.color.size(),
-            );
+        if let Some((display, bind)) = &t.display {
+            let view = display.create_view(&Default::default());
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("3d display copy"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            pass.set_pipeline(&self.blit_pipeline);
+            pass.set_bind_group(0, bind, &[]);
+            pass.draw(0..3, 0..1);
         }
         queue.submit([encoder.finish()]);
         &t.color
@@ -1467,7 +1574,7 @@ impl Renderer {
     /// A view of the last picture for egui (gamma-encoded values).
     pub fn display_view(&self) -> Option<wgpu::TextureView> {
         let t = self.targets.as_ref()?;
-        if let Some(display) = &t.display {
+        if let Some((display, _)) = &t.display {
             return Some(display.create_view(&Default::default()));
         }
         Some(t.color.create_view(&wgpu::TextureViewDescriptor {
