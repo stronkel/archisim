@@ -4,6 +4,12 @@ Lo que cambia en cada versión, en pocas líneas. ArchiSim enseña la parte de s
 
 Cada versión empieza con una línea `## <versión>` (por ejemplo `## 0.81.0`): es la que busca la publicación.
 
+## 0.92.0
+
+- **El muro cede al pilar.** Donde un pilar está metido en un muro, desaparecen las capas del muro que el pilar atraviesa; si el muro es más grueso y su trasdosado o revestimiento pasa por delante del pilar, ese sigue por encima. En planta, en 3D, en secciones y en el IFC.
+- **Juntas a medida en el despiece a mano.** Elige una junta (un clic, aunque tengas Pintar activo): salen sus extremos y su largo en azul. Arrastra un extremo y la junta se acorta o alarga sin torcerse, por ejemplo para que una vertical pare en una horizontal; o escribe el largo en la cota.
+- **Más fluidez.** El alzado del despiece se dibuja con margen y en segundo plano, como la planta; elegir en alzados y secciones es más rápido; el medidor (Ctrl+Alt+F) dice también lo que tarda pintar la ventana.
+
 ## 0.91.0
 
 - **ArchiSim en el iPad, remates.**

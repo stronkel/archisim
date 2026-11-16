@@ -426,6 +426,8 @@ pub struct ArchiSimApp {
     /// (Ctrl+Alt+F shows it).
     frame_times: std::collections::VecDeque<f32>,
     pub show_meter: bool,
+    /// What the last frame took in all (eframe's count, with drawing it).
+    last_cpu: Option<f32>,
     /// The project being written to its file on another thread.
     saving: Option<background::Pending<std::path::PathBuf, Result<(), String>>>,
     /// On the web: the revision last kept in the browser, and since when
@@ -730,7 +732,7 @@ pub struct ArchiSimApp {
     /// The sheet picture and what it was drawn for.
     sheet_image: Option<(sheet_ui::SheetKey, egui::TextureHandle)>,
     /// The picture of the view for drawing shown (E7).
-    drafting_image: Option<(drafting_view_ui::DraftingKey, egui::TextureHandle)>,
+    drafting_image: picture::Picture<drafting_view_ui::DraftingKey>,
     /// The view selected on the sheet shown.
     pub sheet_sel: Option<sheet_ui::Placed>,
     /// The view of the sheet under the cursor.
@@ -933,6 +935,7 @@ impl ArchiSimApp {
             loupe_source: None,
             picture_reading: None,
             frame_times: Default::default(),
+            last_cpu: None,
             nav_rows: None,
             discipline_counts: None,
             table_rows: None,
@@ -1081,7 +1084,7 @@ impl ArchiSimApp {
             presentation: Default::default(),
             title_blocks_ui: Default::default(),
             sheet_image: None,
-            drafting_image: None,
+            drafting_image: picture::Picture::new("drafting"),
             sheet_sel: None,
             sheet_hover: None,
             sheet_drag: None,
@@ -1762,8 +1765,12 @@ impl ArchiSimApp {
         let worst = self.frame_times.iter().copied().fold(0.0, f32::max);
         let section = self.section_took.lock().map(|t| *t).unwrap_or_default();
         let parts = crate::profile::take(1);
+        let whole = self
+            .last_cpu
+            .map(|c| format!(" · con pintar {:.1} ms", c * 1000.0))
+            .unwrap_or_default();
         let mut text = format!(
-            "fotograma {mean:.1} ms (peor {worst:.0}) · planta {:.0} ms · sección {:.0} ms{}",
+            "fotograma {mean:.1} ms (peor {worst:.0}){whole} · planta {:.0} ms · sección {:.0} ms{}",
             self.last_plan_ms,
             section.as_secs_f64() * 1000.0,
             if self.saving.is_some() {
@@ -3115,6 +3122,8 @@ impl eframe::App for ArchiSimApp {
             self.web_tests();
             crate::web::count_frame();
         }
+        // The whole of the last frame, drawing it on screen included.
+        self.last_cpu = frame.info().cpu_usage;
         self.frame_meter(ui.ctx(), started.elapsed());
         crate::crash::frame_done();
     }

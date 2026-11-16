@@ -570,16 +570,21 @@ impl Editor {
         }
         let guard = &mut self.team;
         let mut refused = None;
+        let started = std::time::Instant::now();
         let result = self
             .doc
             .transact(label, |m| {
                 // Dimensions follow what they measure (and new or moved
                 // ones are tied to what is under their points).
-                let before = archisim_geom::anchors::snapshot(m);
+                let before = crate::profile::time("cambio: cotas (antes)", || {
+                    archisim_geom::anchors::snapshot(m)
+                });
                 // Rooms bounded by walls follow them too.
                 let rooms = m.rooms().any(|r| r.bounded);
                 let walls = if rooms {
-                    archisim_geom::room::wall_signatures(m)
+                    crate::profile::time("cambio: locales (antes)", || {
+                        archisim_geom::room::wall_signatures(m)
+                    })
                 } else {
                     Default::default()
                 };
@@ -593,7 +598,7 @@ impl Editor {
                 // An approved box type is frozen (M8): only a new revision
                 // opens it.
                 let frozen = m.catalogue().filter(|c| c.approved()).map(|c| c.label());
-                let r = edit(m)?;
+                let r = crate::profile::time("cambio: el cambio", || edit(m))?;
                 if let Some(label) = frozen.filter(|_| m.is_frozen()) {
                     let e = format!(
                         "esta caja tipo está aprobada ({label}): abre una revisión nueva para cambiarla"
@@ -628,10 +633,14 @@ impl Editor {
                     }
                 }
                 if m.dimensions().next().is_some() {
-                    archisim_geom::anchors::follow(m, &before);
+                    crate::profile::time("cambio: cotas", || {
+                        archisim_geom::anchors::follow(m, &before)
+                    });
                 }
                 if rooms {
-                    archisim_geom::room::follow_walls(m, &walls);
+                    crate::profile::time("cambio: locales", || {
+                        archisim_geom::room::follow_walls(m, &walls)
+                    });
                 }
                 if m.tags().next().is_some() {
                     m.remove_orphan_tags();
@@ -639,7 +648,8 @@ impl Editor {
                 Ok(r)
             })
             .map_err(|e| refused.take().unwrap_or_else(|| explain(&e)))?;
-        self.changed();
+        crate::profile::record("cambio: todo", started.elapsed());
+        crate::profile::time("cambio: después", || self.changed());
         Ok(result)
     }
 

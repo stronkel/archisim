@@ -24,6 +24,16 @@ pub fn time<T>(part: &'static str, f: impl FnOnce() -> T) -> T {
     out
 }
 
+/// Adds `took` to `part`.
+pub fn record(part: &'static str, took: Duration) {
+    PARTS.with(|p| {
+        let mut p = p.borrow_mut();
+        let e = p.entry(part).or_default();
+        e.0 += took;
+        e.1 += 1;
+    });
+}
+
 /// The parts measured since the last call, slowest first: name and
 /// milliseconds per frame over `frames` frames.
 pub fn take(frames: u32) -> Vec<(&'static str, f64)> {
