@@ -1766,6 +1766,13 @@ impl ArchiSimApp {
                 ""
             }
         );
+        // In the browser, the memory the program holds (Safari ends a page
+        // that takes too much).
+        #[cfg(target_arch = "wasm32")]
+        text.push_str(&format!(
+            " · memoria {:.0} MB",
+            crate::web::memory_bytes() as f64 / 1_048_576.0
+        ));
         for (part, ms) in parts.iter().take(6).filter(|p| p.1 >= 0.5) {
             text.push_str(&format!("\n{part}: {ms:.1} ms"));
         }
@@ -2961,6 +2968,30 @@ impl ArchiSimApp {
 }
 
 impl ArchiSimApp {
+    /// The page's own tests, asked in its address (`?prueba=render,lugar`,
+    /// scripts/web_heavy.py): a render in the browser's workers, and a
+    /// place looked up through the NAS's bridge.
+    #[cfg(target_arch = "wasm32")]
+    fn web_tests(&mut self) {
+        if crate::web::test_due("render") {
+            self.render.quality = render_ui::RenderQuality::Draft;
+            self.start_render();
+        }
+        if crate::web::test_due("lugar") {
+            let found =
+                archisim_library::geocode::search("Plaza de las Monjas, Huelva", &mut |url| {
+                    crate::web::http_get(url, None)
+                });
+            match &found {
+                Ok(places) => crate::web::report("archisimLugares", places.len() as f64),
+                Err(e) => {
+                    crate::web::note(&format!("Búsqueda de prueba: {e}"));
+                    crate::web::report("archisimLugares", -1.0);
+                }
+            }
+        }
+    }
+
     /// Whether one finger draws (as the Pencil): as chosen, or while no
     /// Pencil has been seen.
     pub(crate) fn finger_draws(&self) -> bool {
@@ -3014,6 +3045,15 @@ impl eframe::App for ArchiSimApp {
         }
         self.show(ui);
         self.touch_overlays(ui.ctx());
+        #[cfg(target_arch = "wasm32")]
+        {
+            crate::web::note_memory();
+            if crate::web::tests_waiting() {
+                ui.ctx().request_repaint();
+            }
+            self.web_tests();
+            crate::web::count_frame();
+        }
         self.frame_meter(ui.ctx(), started.elapsed());
         crate::crash::frame_done();
     }

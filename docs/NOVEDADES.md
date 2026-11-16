@@ -4,6 +4,13 @@ Lo que cambia en cada versión, en pocas líneas. ArchiSim enseña la parte de s
 
 Cada versión empieza con una línea `## <versión>` (por ejemplo `## 0.81.0`): es la que busca la publicación.
 
+## 0.90.0
+
+- **ArchiSim en el iPad: lo pesado.**
+  - **Render sin parar la pantalla**: en el navegador, la imagen realista se reparte entre varios hilos (hasta cuatro) y la ventana sigue respondiendo mientras avanza la barra.
+  - **Traer el entorno desde el iPad**: Catastro, OpenStreetMap, IGN, la ortofoto y el buscador de lugares funcionan en la versión web a través del NAS, que hace de puente. Solo a esos servicios, y sin pasarles tu contraseña. Hay que copiar el `Caddyfile` nuevo al NAS.
+  - **Memoria**: el medidor (Ctrl+Alt+F) dice cuánta memoria usa el programa en el navegador.
+
 ## 0.89.0
 
 - **ArchiSim en el iPad: a la medida del dedo.**

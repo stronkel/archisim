@@ -63,12 +63,19 @@ jobs:
           python-version: "3.12"
       - run: pip install playwright && playwright install --with-deps chromium
       - run: python scripts/web_smoke.py dist/web out/web-fotos
+      # Lo pesado (T5), served as on the NAS (Caddy with its Caddyfile):
+      # the bridge, a render in the browser's workers and the memory with
+      # Florence Street.
+      - run: cargo run --release -p archisim-cli -- edificio out/edificio
+      - run: curl -sSL https://github.com/caddyserver/caddy/releases/download/v2.10.2/caddy_2.10.2_linux_amd64.tar.gz | sudo tar xz -C /usr/local/bin caddy
+      - run: python scripts/web_heavy.py dist/web out/edificio/edificio.archisim out/web-pesado
       - uses: actions/upload-artifact@v4
         with:
           name: web
           path: |
             dist/archisim-web.zip
             out/web-fotos/
+            out/web-pesado/
 
   validate-ifc:
     runs-on: ubuntu-latest

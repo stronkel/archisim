@@ -6,6 +6,28 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-15 (166) · v0.90: iPad T5, lo pesado
+
+Rama `bloque/ipad-t5`, con pull request (#217) sobre la de T4 (#216). Versión 0.90.0. Sin cambios de formato ni de IFC.
+
+- **Qué se hizo.** T5 de `docs/IPAD.md` (§11).
+  - Render en los hilos del navegador (*workers*): cada hilo carga el mismo programa y hace sus filas (`archisim_render::render_rows`, `web::render_aside`); juntas, la misma imagen que en el escritorio.
+  - Puente del NAS (`scripts/nas/Caddyfile`): `/proxy/<servidor>/…` solo a los servicios de la lista, sin la contraseña. En la web, la descarga del entorno y la búsqueda de lugares van por él, la descarga dirección a dirección para que la ventana diga cómo va.
+  - Memoria del programa en el medidor y en las pruebas.
+  - `scripts/web_heavy.py` en la integración continua, con Caddy y el `Caddyfile` del NAS: sin contraseña no entra (401); el puente responde y CartoCiudad contesta por él; un servidor fuera de la lista no (403); el programa encuentra un lugar por el puente; render en borrador de la casa en 23 s en tres hilos; Florence Street abierto.
+- **Medido.** Florence Street en el navegador: 54 MB en planta, **1,16 GB en 3D**. Es mucho para un iPad con poca memoria.
+- **Pendiente.**
+  - Que la escena 3D ocupe menos en el navegador (Florence Street).
+  - Los cálculos («Arreglar», estructura, instalaciones) en hilos: siguen en la página.
+  - Optimizar el tamaño del programa (51 MB, `wasm-opt`).
+  - T6, la aplicación nativa.
+- **Qué debe probar Antonio** (con la 0.90 publicada y el `Caddyfile` nuevo en el NAS):
+  1. Copia `scripts/nas/Caddyfile` al NAS y reinicia el proyecto (`docker compose up -d`).
+  2. En el iPad, desde la dirección del NAS: Archivo → Traer el entorno → descargar. Busca «Plaza Poetas Andaluces, Punta Umbría», elige el lugar y descarga con un radio de 150 m. La barra debe avanzar por servicios (Catastro, OpenStreetMap, alturas, ortofoto) y al final traer edificios, calles y terreno.
+  3. Vista 3D → Renderizado → Borrador: la ventana debe seguir respondiendo mientras avanza. Dime cuánto tarda.
+  4. Abre Florence Street (genéralo en el PC con `cargo run --release -p archisim-cli -- edificio out/` y pásalo a iCloud) y entra en 3D. Si Safari recarga la página, el iPad se ha quedado sin memoria: dime qué modelo de iPad es.
+  5. Pulsa Ctrl+Alt+F con el teclado: abajo a la derecha sale la memoria que usa el programa.
+
 ## 2026-11-15 (165) · v0.89: iPad T4, tamaño táctil, teclado numérico y lupa
 
 Rama `bloque/ipad-t4`, con pull request sobre la de T3 (#215). Versión 0.89.0. Sin cambios de formato ni de IFC.

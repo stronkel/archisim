@@ -1,19 +1,59 @@
 # La versión web de ArchiSim, con usuario y contraseña (docs/IPAD.md).
+
+# El puente a un servicio de cartografía (T5): el navegador no deja a una
+# página pedir al Catastro, al IGN o a OpenStreetMap, pero sí a su propio
+# servidor; «/proxy/<servidor>/…» se lo pide el NAS. Solo a los servidores
+# de la lista de abajo (la misma que `BRIDGED_HOSTS` del programa), y sin
+# pasarles la contraseña de ArchiSim.
+(puente) {
+	handle_path /proxy/{args[0]}/* {
+		reverse_proxy https://{args[0]} {
+			header_up Host {upstream_hostport}
+			header_up -Authorization
+			header_up -Cookie
+			header_up -Referer
+			header_up -Origin
+			header_up User-Agent "ArchiSim (+https://github.com/stronkel/archisim)"
+			header_down -Set-Cookie
+		}
+	}
+}
+
 :80 {
 	basic_auth {
 		{$ARCHISIM_USUARIO} {$ARCHISIM_CLAVE_CIFRADA}
 	}
 
-	root * /srv/web/actual
-	encode zstd gzip
+	# El programa pregunta aquí si hay puente.
+	handle /proxy/ {
+		respond "archisim-proxy" 200
+	}
+	import puente ovc.catastro.meh.es
+	import puente overpass-api.de
+	import puente overpass.kumi.systems
+	import puente overpass.private.coffee
+	import puente api.openstreetmap.org
+	import puente nominatim.openstreetmap.org
+	import puente www.cartociudad.es
+	import puente www.ign.es
+	import puente xyz-mdt.idee.es
+	import puente wcs-mds.idee.es
+	handle /proxy/* {
+		respond "Servidor fuera de la lista del puente" 403
+	}
 
-	# La página y la casa de ejemplo se piden de nuevo cada vez, para que
-	# una versión nueva llegue al recargar; el programa (.wasm, .js) lleva
-	# su huella en el nombre y se guarda.
-	@siempre_nuevo path / /index.html /demo.archisim /version.txt /manifest.json /icon.png
-	header @siempre_nuevo Cache-Control "no-cache"
-	@con_huella not path / /index.html /demo.archisim /version.txt /manifest.json /icon.png
-	header @con_huella Cache-Control "public, max-age=31536000, immutable"
+	handle {
+		root * /srv/web/actual
+		encode zstd gzip
 
-	file_server
+		# La página y la casa de ejemplo se piden de nuevo cada vez, para que
+		# una versión nueva llegue al recargar; el programa (.wasm, .js) lleva
+		# su huella en el nombre y se guarda.
+		@siempre_nuevo path / /index.html /demo.archisim /version.txt /manifest.json /icon.png
+		header @siempre_nuevo Cache-Control "no-cache"
+		@con_huella not path / /index.html /demo.archisim /version.txt /manifest.json /icon.png
+		header @con_huella Cache-Control "public, max-age=31536000, immutable"
+
+		file_server
+	}
 }

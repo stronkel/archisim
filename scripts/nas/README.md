@@ -16,6 +16,10 @@ La versión web de ArchiSim (`docs/IPAD.md`) servida desde el NAS de casa, con u
 4. **Arráncalo.** En Docker de UGOS Pro: *Proyecto* → *Crear*, elige esta carpeta (usa `docker-compose.yml`) y *Desplegar*. O en Terminal, dentro de la carpeta: `docker compose up -d`.
 5. **Pruébalo en casa**: `http://<ip-del-nas>:4200` (la del NAS, la misma con la que entras a UGOS). Pide usuario y contraseña y abre ArchiSim con la casa de ejemplo. La primera vez tarda un par de minutos en llegar la versión (`docker compose logs actualizador` dice cuándo está lista).
 
+## El puente para traer el entorno
+
+Desde una página, el navegador no deja pedir datos al Catastro, al IGN ni a OpenStreetMap. El NAS hace de puente: lo que ArchiSim pide en `/proxy/<servidor>/…` se lo pide el NAS a ese servidor. El puente solo va a los servidores de la lista del `Caddyfile` (la misma que la del programa), no les pasa tu contraseña y no hay que configurarlo: viene en el `Caddyfile`. Si actualizas desde una versión anterior a la 0.90, copia el `Caddyfile` nuevo y reinicia el proyecto.
+
 ## Desde el iPad y fuera de casa: Tailscale Funnel
 
 Safari solo deja usar la gráfica a una página con **HTTPS**, y la dirección `http://<ip>:4200` no lo es. Tailscale lo pone, como con Ensembli:

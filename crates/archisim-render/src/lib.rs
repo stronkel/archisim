@@ -792,8 +792,25 @@ fn basis(n: V3) -> (V3, V3) {
 /// Renders the model. `progress` hears how much is done (0 to 1), from
 /// any thread.
 pub fn render(model: &Model, view: &View, opt: &Options, progress: &(dyn Fn(f64) + Sync)) -> Image {
+    let all: Vec<usize> = (0..opt.height.max(1)).collect();
+    render_rows(model, view, opt, &all, progress)
+}
+
+/// Some rows of the picture (`rows`, from the top), as an [`Image`] of
+/// those rows in that order: what [`render`] gives for them, pixel by
+/// pixel. The browser shares a picture between its workers this way
+/// (each its rows, `y % n == k`).
+pub fn render_rows(
+    model: &Model,
+    view: &View,
+    opt: &Options,
+    rows_wanted: &[usize],
+    progress: &(dyn Fn(f64) + Sync),
+) -> Image {
     let scene = Scene::build(model, opt);
     let (w, h) = (opt.width.max(1), opt.height.max(1));
+    let rows_wanted: Vec<usize> = rows_wanted.iter().copied().filter(|&y| y < h).collect();
+    let count = rows_wanted.len();
     let forward = norm(sub(view.target, view.eye));
     let right = norm(cross(forward, [0.0, 0.0, 1.0]));
     let up = cross(right, forward);
@@ -805,7 +822,7 @@ pub fn render(model: &Model, view: &View, opt: &Options, progress: &(dyn Fn(f64)
         view.half_height
     };
     let samples = opt.samples.max(1);
-    let mut rgb = vec![0u8; w * h * 3];
+    let mut rgb = vec![0u8; w * count * 3];
     let next = AtomicUsize::new(0);
     let done = AtomicUsize::new(0);
     // In the browser there are no threads of our own: one worker, here.
@@ -815,12 +832,13 @@ pub fn render(model: &Model, view: &View, opt: &Options, progress: &(dyn Fn(f64)
         std::thread::available_parallelism().map_or(4, |n| n.get())
     };
     let rows: Vec<std::sync::Mutex<Option<Vec<u8>>>> =
-        (0..h).map(|_| std::sync::Mutex::new(None)).collect();
+        (0..count).map(|_| std::sync::Mutex::new(None)).collect();
     let work = || loop {
-        let y = next.fetch_add(1, Ordering::Relaxed);
-        if y >= h {
+        let i = next.fetch_add(1, Ordering::Relaxed);
+        if i >= count {
             break;
         }
+        let y = rows_wanted[i];
         let mut rng =
             Rng(0x9E37_79B9_7F4A_7C15 ^ (y as u64 + 1).wrapping_mul(0x2545_F491_4F6C_DD1D));
         let mut row = vec![0u8; w * 3];
@@ -856,12 +874,12 @@ pub fn render(model: &Model, view: &View, opt: &Options, progress: &(dyn Fn(f64)
                 row[x * 3 + k] = linear_to_srgb(tone(c[k]));
             }
         }
-        if let Ok(mut slot) = rows[y].lock() {
+        if let Ok(mut slot) = rows[i].lock() {
             *slot = Some(row);
         }
         let n = done.fetch_add(1, Ordering::Relaxed) + 1;
-        if n.is_multiple_of(8) || n == h {
-            progress(n as f64 / h as f64);
+        if n.is_multiple_of(8) || n == count {
+            progress(n as f64 / count as f64);
         }
     };
     if threads == 1 {
@@ -880,7 +898,7 @@ pub fn render(model: &Model, view: &View, opt: &Options, progress: &(dyn Fn(f64)
     }
     Image {
         width: w,
-        height: h,
+        height: count,
         rgb,
     }
 }
@@ -940,6 +958,34 @@ mod tests {
         let max = img.rgb.chunks(3).map(lum).max().unwrap();
         let min = img.rgb.chunks(3).map(lum).min().unwrap();
         assert!(max > min + 120, "{min} {max}");
+    }
+
+    /// The rows of a picture shared between workers (the browser's), put
+    /// back together, are the picture.
+    #[test]
+    fn rows_in_turn_make_the_whole_picture() {
+        let m = lamp_corner();
+        let view = View::fit(&m);
+        let opt = Options {
+            width: 48,
+            height: 30,
+            samples: 1,
+            sky_rays: 3,
+            ..Default::default()
+        };
+        let whole = render(&m, &view, &opt, &|_| {});
+        let n = 3;
+        let mut joined = vec![0u8; whole.rgb.len()];
+        for k in 0..n {
+            let rows: Vec<usize> = (0..opt.height).filter(|y| y % n == k).collect();
+            let part = render_rows(&m, &view, &opt, &rows, &|_| {});
+            assert_eq!(part.height, rows.len());
+            for (i, &y) in rows.iter().enumerate() {
+                let row = 48 * 3;
+                joined[y * row..(y + 1) * row].copy_from_slice(&part.rgb[i * row..(i + 1) * row]);
+            }
+        }
+        assert!(joined == whole.rgb);
     }
 
     /// A corner of two walls and a floor lamp in front of it.

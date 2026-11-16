@@ -2779,3 +2779,57 @@ fn building_picture(
     let (w, h, px) = r.read_pixels(&gpu.0, &gpu.1).unwrap();
     Pixmap::from_vec(px, IntSize::from_wh(w, h).unwrap()).unwrap()
 }
+
+/// How much the 3D scene of a project takes (for the browser, whose memory
+/// is short; docs/IPAD.md §11): `ARCHISIM_MEDIR_PROYECTO=fichero.archisim
+/// cargo test --release -p archisim-app scene_memory -- --nocapture`.
+#[test]
+fn scene_memory() {
+    let Ok(p) = std::env::var("ARCHISIM_MEDIR_PROYECTO") else {
+        return;
+    };
+    let peak = || {
+        std::fs::read_to_string("/proc/self/status")
+            .ok()
+            .and_then(|s| {
+                s.lines()
+                    .find(|l| l.starts_with("VmHWM"))
+                    .map(|l| l.to_string())
+            })
+            .unwrap_or_default()
+    };
+    let m = archisim_file::open(Path::new(&p)).expect("proyecto");
+    println!("abierto: {}", peak());
+    let scene = Scene::build(&m, &BTreeSet::new());
+    println!("escena: {}", peak());
+    let v = std::mem::size_of::<super::scene::Vertex>();
+    let mesh = |m: &super::scene::Mesh| m.vertices.len() * v + m.indices.len() * 4;
+    let chunks = |c: &[super::scene::Chunk]| c.iter().map(|c| mesh(&c.mesh)).sum::<usize>();
+    let mb = |b: usize| b as f64 / 1_048_576.0;
+    println!(
+        "opaco {:.0} MB, vidrio {:.0} MB, hierba {:.0} MB, {} grupos {:.0} MB ({} ejemplares)",
+        mb(chunks(&scene.opaque)),
+        mb(chunks(&scene.glass)),
+        mb(chunks(&scene.grass)),
+        scene.groups.len(),
+        mb(scene
+            .groups
+            .iter()
+            .map(|g| mesh(&g.opaque) + mesh(&g.glass))
+            .sum()),
+        scene
+            .groups
+            .iter()
+            .map(|g| g.instances.len())
+            .sum::<usize>(),
+    );
+    let mut big: Vec<(usize, usize)> = scene
+        .groups
+        .iter()
+        .map(|g| (mesh(&g.opaque) + mesh(&g.glass), g.instances.len()))
+        .collect();
+    big.sort_by(|a, b| b.cmp(a));
+    for (bytes, n) in big.iter().take(8) {
+        println!("  grupo {:.1} MB × {n}", mb(*bytes));
+    }
+}

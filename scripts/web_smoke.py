@@ -155,6 +155,10 @@ def files(page):
         failed = True
 
 
+WELCOMED = (
+    "if (!localStorage.getItem('archisim-preferencias')) localStorage.setItem('archisim-preferencias', JSON.stringify({ bienvenida: true }))"
+)
+
 MODES = {
     # WebGPU, as in Safari 26 (a software adapter here: its pictures may
     # come out blank in a headless browser, but errors would show).
@@ -177,6 +181,8 @@ with sync_playwright() as p:
         page.on("console", lambda m: console.append(f"[{m.type}] {m.text}"))
         page.on("pageerror", lambda e: console.append(f"[pageerror] {e}"))
         page.on("dialog", lambda d: d.accept())
+        # Not the first time: no welcome card over the plan.
+        page.add_init_script(WELCOMED)
         page.goto(url)
         gpu = page.evaluate("() => !!navigator.gpu")
         print(f"{mode}: navigator.gpu = {gpu}")
