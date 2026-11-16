@@ -331,3 +331,19 @@ Pedido de Antonio: modelar en serio desde el sofá, con Apple Pencil, teclado y 
 | T4 | Tamaño táctil, teclado numérico de cotas, «El dedo dibuja» con lupa | Hecho, rama `bloque/ipad-t4` (#216) |
 | T5 | Render y cálculos en hilos del navegador, proyectos grandes, entorno desde el NAS | Hecho, rama `bloque/ipad-t5` (#217); remates en `bloque/ipad-remates` (#218): memoria del 3D, cálculos aparte, tamaño, exportar, interfaz y WebGL |
 | T6 | App nativa para iPad con TestFlight | Pendiente |
+
+## 14. Taller del territorio (16/11/2026)
+
+Pedido de Antonio: traer un terreno a la realidad con todas las opciones de urbanismo, como trabaja Cityburg en Cities: Skylines con sus mods (sobre todo Node Controller Renewal), sin perder fluidez. Diseño completo en `docs/TERRITORIO.md`; decisiones pendientes en su §5.
+
+| Bloque | Qué | Estado |
+|---|---|---|
+| N0 | Fluidez del territorio: escenario de 1 km², teselas, rehacer solo lo tocado, cruces con cache, en paralelo, detalle por distancia | Propuesto (primero) |
+| N1 | Nudos: identidad estable, tipos, retranqueo, esquinas, pasos, desplazar, plano/inclinado, IFC | Propuesto |
+| N2 | Trazado sin reglas y con precisión (Anarquía, pendiente uniforme, paralelas, glorieta sobre un nudo) | Propuesto |
+| N3 | Carriles y marcas atadas al nudo; flechas y señales | Propuesto |
+| N4 | Cambios por tramo y «Sustituir todos» | Propuesto |
+| N5 | Superficies por contorno con encintado | Propuesto |
+| N6 | Mover y ocultar cualquier pieza urbana | Propuesto |
+| N7 | Manzanas, parcelas y llenado | Propuesto |
+| N8 | Área grande (2 × 2 km) con conexiones de fuera y vista de mapa | Propuesto |

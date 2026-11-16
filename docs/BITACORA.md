@@ -6,6 +6,14 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-16 (168) · Taller del territorio: diseño
+
+En `main`, solo documentación. Sin cambios de versión, de formato ni de IFC.
+
+- **Qué se hizo.** Diseño del taller del territorio en `docs/TERRITORIO.md` (y §14 de `docs/HOJA_DE_RUTA.md`), a partir de la colección de mods de Cityburg (55 mods): qué hace cada uno, qué tiene ya ArchiSim y qué falta; los **nudos** al estilo Node Controller Renewal (identidad estable del cruce y ajustes guardados por brazo y esquina, que hoy no existen porque los cruces se calculan); ocho tandas N1–N8; y la tanda **N0 de fluidez** (escenario de 1 km² de Punta Umbría con objetivos medidos, teselas de 100 m, rehacer solo lo tocado, cruces con cache, cálculo en paralelo, detalle por distancia y ejemplares repetidos).
+- **Pendiente.** Las cinco decisiones de `docs/TERRITORIO.md` §5; después, empezar por N0.
+- **Qué debe probar Antonio.** Nada que ejecutar: leer `docs/TERRITORIO.md` y contestar las decisiones del §5.
+
 ## 2026-11-15 (167) · v0.91: iPad, remates (memoria, cálculos aparte, tamaño, exportar, interfaz, WebGL)
 
 Rama `bloque/ipad-remates`, con pull request (#218) sobre la de T5 (#217). Versión 0.91.0. Sin cambios de formato ni de IFC.

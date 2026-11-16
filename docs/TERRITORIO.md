@@ -1,0 +1,123 @@
+# Taller del territorio: traer un terreno a la realidad
+
+Pedido por Antonio el 16/11/2026: una forma mucho mejor de traer un terreno a la realidad, con todas las opciones de urbanismo, tomando como modelo la forma de trabajar de **Cityburg** en Cities: Skylines y su colección de mods sin recursos (Steam, colección 3364126935, 55 mods). Lo más importante para él: algo como **Node Controller Renewal**. Condición: **el programa tiene que seguir yendo fluido** después de todo esto.
+
+Este documento ordena el trabajo en tandas, como `CALLES_TALLER.md` y `EDIFICIOS_TALLER.md`, de las que es continuación. Rama prevista: `bloque/territorio`.
+
+## 1. Cómo trabaja Cityburg (y qué copiamos)
+
+Cityburg no «dibuja calles»: **reconstruye un sitio real por capas**, y en cada capa tiene control total y la posibilidad de saltarse las reglas del juego.
+
+| Paso | Mods que usa | Qué hace | En ArchiSim |
+|---|---|---|---|
+| 1. Referencia | CSL Map View, 81 Tiles 2, Optimised / Unlimited Outside Connections | Ver el mapa entero y trabajar en un área grande con sus conexiones de fuera | Traer el entorno (Catastro, OSM, IGN, ortofoto, LiDAR) ya existe. **Falta**: área grande por teselas y la ortofoto como calco a escala en planta y 3D a la vez |
+| 2. Red | Network Anarchy, Precision Engineering, Network Multitool, Network Extensions 2, One-Way Train Tracks, Metro Overhaul | Trazar sin que el juego impida nada: alturas libres, solapes, ángulos y pendientes exactos, pendiente uniforme entre dos puntos, paralelas | Trazado por tramos y curva continua (C1). **Falta**: modo «sin reglas», pendiente uniforme entre dos puntos, paralela a otra calle, cotas de ángulo y radio al trazar |
+| 3. **Nudos** | **Node Controller Renewal** | Cada nudo se decide a mano: tipo, retranqueo de las esquinas, pasos de peatones, plano o con la rasante, desplazado, sin marcas | Los cruces **se calculan y no se guardan**: no se pueden tocar. **Es la pieza que falta** (§2) |
+| 4. Marcas | Intersection Marking Tool | Marcas de cruce libres: líneas entre carriles concretos, rellenos, cebras, isletas pintadas | Marcas de la 8.2-IC sueltas (U4). **Falta**: marcas atadas a los carriles del nudo que lo siguen |
+| 5. Reglas | TM:PE, Better Train Boarding, Stops & Stations, Improved Public Transport | Carriles con su flecha, prioridades, prohibido aparcar, paradas | **Falta**: conexiones de carril que pintan sus flechas y ponen sus señales. Sin simulación de tráfico (§5) |
+| 6. Suelo | Surface Painter, Extra Landscaping Tools, No Radioactive Desert | Pintar el suelo por zonas exactas, no a brochazos | Pincel (C8) y cubiertas del suelo. **Falta**: superficies por contorno con su borde (rigola, bordillo, encintado) |
+| 7. Formas libres | Procedural Objects, Move It, Picker, Hide It, Prop/Tree Control | Piezas a medida (muretes, escalones, isletas), mover cualquier cosa al milímetro, cuentagotas, ocultar piezas del juego | Concepto, mover con precisión (0.84) y cuentagotas ya están. **Falta**: mover cualquier pieza urbana (mobiliario, marcas, árboles de alineación) con Move It y ocultar piezas sueltas del nudo |
+| 8. Variar | Network Skins, BOB, Repaint, Customize It | Otro árbol, otra farola u otro pavimento **en un solo tramo**; sustituir en bloque | **Falta**: cambios por tramo (no por tipo de calle) y «Sustituir todos los X por Y» |
+| 9. Llenar | Zoning Adjuster, Ploppable RICO, Plop the Growables, Historical Districts | Parcelas exactas y edificios donde él quiere, que no cambian solos | Edificios del mundo colocados a mano (tanda 16). **Falta**: manzanas → parcelas → edificios (C5 de calles) |
+| 10. Fluidez | Loading Screen Mod, UI Resolution, Yet Another Toolbar, UUI | Cargar y moverse con todo eso puesto | §4 de este documento |
+
+Lo de simulación (Realistic Population, Lifecycle, Rebalanced Industries, Transfer Manager, Demand Controller, Advanced Vehicle Options) no aplica: ArchiSim no simula la ciudad.
+
+## 2. Nudos (el «Node Controller» de ArchiSim)
+
+### 2.1 Qué ve Antonio
+
+Herramienta **Nudo** en Urbanismo (y botón en la barra de la calle seleccionada). Al pasar el ratón por un cruce, una L, una T o el extremo de una calle, se ilumina el **nudo**; al pinchar, se abren sus **tarjetas** y sus **tiradores** en planta y en 3D:
+
+- **Tipo de nudo** (tarjetas):
+  - **Cruce** — el de hoy, con esquinas y bordillos.
+  - **Plataforma única** — calzada a la cota de la acera, sin bordillos, con bolardos (calles de coexistencia).
+  - **Cruce elevado** — meseta con sus rampas (`raised_plateau` ya existe para marcas).
+  - **Continuo** — la calle sigue sin cruce: une dos tramos sin esquinas (cambio de sección o de material sin «costura»).
+  - **Doblez** — una curva cerrada de la misma calle, sin aceras de esquina.
+  - **Fin** — fondo de saco: recto, en raqueta (círculo de giro) o en martillo.
+  - **Sin nudo** — se cruzan sin tocarse (paso a distinto nivel forzado, el `OVERPASS` a mano).
+- **Por cada brazo** (una fila por calle que llega, tiradores en planta):
+  - **Retranqueo**: cuánto se separa el final del brazo del centro (arrastrando su borde).
+  - **Paso de peatones**: sí/no, y a qué distancia.
+  - **Bordillo rebajado y pavimento táctil**: sí/no.
+  - **Ceda el paso, stop, semáforo**: la señal y su marca (§5).
+  - **Rasante**: el brazo llega con la pendiente de su calle o se aplana los últimos X metros.
+- **Por cada esquina** (tirador en el arco):
+  - **Radio** propio (hoy uno por calle).
+  - **Forma**: arco, chaflán (Barcelona), recta, en punta.
+  - **Acera de esquina**: sí/no, y si se ensancha (orejas de acera, «bump-out»).
+- **El nudo entero**:
+  - **Desplazar** el centro sin mover las calles (como «Shift» de Node Controller).
+  - **Plano / inclinado**: plano a una cota, o siguiendo la rasante de la calle principal.
+  - **Calle principal**: cuál manda en la cota y en la prioridad.
+  - **Ocultar** piezas: sin marcas, sin cebras, sin acera en una esquina (Hide It).
+  - **Restablecer**: vuelve a lo calculado.
+
+Todo con vista previa al arrastrar, un paso de Deshacer por cambio, y en la Maqueta igual.
+
+### 2.2 Cómo se hace (para el programador)
+
+Hoy `archisim_geom::crossroads::junctions(model, level)` rehace todos los cruces de una planta cada vez y `Junction` no tiene identidad. El cambio:
+
+1. **Identidad estable del nudo** (`archisim-core::model::nodes`):
+   - `NodeKey`: planta + calles que llegan (ids ordenados) + extremo o eje de cada una. No depende de la posición exacta: si una calle se mueve, el nudo sigue siendo el mismo mientras lleguen las mismas calles.
+   - `NodeSettings` guardado en `Model::nodes` (formato nuevo): `kind`, `shift`, `flat`, `main`, `hidden` y `arms: Vec<ArmSettings>` (por `RoadId` y sentido: retranqueo, paso, rebaje, señal, aplanado) y `corners: Vec<CornerSettings>` (por pareja de brazos: radio, forma, oreja). Solo se guarda lo que Antonio cambia; lo demás sigue calculándose.
+   - Al cambiar las calles, `Model::reconcile_nodes` busca para cada ajuste su nudo; si ya no existe (se borró una calle), se deja aparte y la app avisa (como los ajustes huérfanos de Node Controller).
+2. **`junctions` lee los ajustes**: `assemble` usa el retranqueo, el radio y la forma de cada esquina; los tipos nuevos son variantes de `assemble` (`flat_plate`, `raised`, `seamless`, `bend`, `dead_end`).
+3. **IFC**: el cruce ya sale como piezas; los ajustes van en un pset `ArchiSim_Node` en el `IfcBuildingElementProxy` del cruce para que vuelvan al importar.
+4. **App**: `app/node_ui` (`Tool::Node`, `Pick::Node`, `Grip::NodeArm`, `Grip::NodeCorner`, `Grip::NodeShift`), tarjetas con `cards::option_cards` dibujadas en 3D como las de los tipos de calle.
+
+## 3. Lo demás, por tandas
+
+| Tanda | Qué | Mods de referencia | Tamaño |
+|---|---|---|---|
+| **N0** | **Fluidez del territorio** (§4): teselas, rehacer solo lo tocado, cruces con índice. Va **primero**: sin ella, N1–N7 hacen el programa lento | Loading Screen Mod, 81 Tiles | G |
+| **N1** | **Nudos** (§2): identidad, ajustes, tipos, tiradores, IFC | Node Controller Renewal | G |
+| **N2** | **Trazado sin reglas y con precisión**: modo «Anarquía» (alturas libres, solapes sin cruce, sin recorte del terreno), pendiente uniforme entre dos puntos, paralela a otra calle a una distancia, ángulo y radio tecleados al trazar, «hacer glorieta» sobre un nudo | Network Anarchy, Precision Engineering, Network Multitool | M |
+| **N3** | **Carriles y marcas del nudo**: conexiones de carril en el nudo (de qué carril a cuál), sus flechas pintadas, isletas pintadas y rellenos, líneas de detención; atadas al nudo, lo siguen al cambiarlo | Intersection Marking Tool, TM:PE | G |
+| **N4** | **Cambios por tramo**: en un trozo de calle, otro árbol, farola, pavimento o bordillo; «Sustituir todos» en el proyecto o en una zona | Network Skins, BOB, Repaint | M |
+| **N5** | **Superficies por contorno**: plazas, isletas, medianas, aparcamientos y jardines dibujados por su borde con su encintado y sus juntas; snap a bordillos y fachadas | Surface Painter, Parking Lot Snapping | M |
+| **N6** | **Mover y ocultar cualquier pieza urbana**: mobiliario, árboles de alineación, señales y marcas se sueltan de la calle y se mueven al milímetro (Move It); ocultar piezas sueltas | Move It, Hide It, Picker | P |
+| **N7** | **Manzanas, parcelas y llenado**: lo de C5 de calles; parcelas exactas por la línea de fachada, llenar con edificios del lugar por zonas, y bloquear lo que no debe cambiar | Zoning Adjuster, Ploppable RICO, Plop the Growables, Historical Districts | G |
+| **N8** | **Área grande**: hasta 2 × 2 km traídos de una vez, con las conexiones de fuera (las calles que salen del recuadro se cortan con su sección, no en punta) y vista de mapa | 81 Tiles 2, CSL Map View, Outside Connections | M |
+
+Lo que ya está en `CALLES_TALLER.md` (túneles, puentes, catálogo regional, detalle C4) sigue su camino; N1–N3 le dan la parte de cruces que allí faltaba.
+
+## 4. Fluidez: el presupuesto antes que las funciones
+
+Lo que hoy hace lento el urbanismo, medido en el código:
+
+- **Los cruces se rehacen enteros** cada vez que se piden (`crossroads::junctions` se llama desde once sitios: planta, 3D, IFC, marcas, terreno…), y comparan cada calle con todas.
+- **El terreno modelado por las calles** (`road_ground::shaped_ground`) se rehace entero al tocar una calle.
+- **La escena 3D** se rehace entera en otro hilo (`scene_job`): ya no congela, pero tarda más cuanto más grande es el sitio.
+- **No hay cálculo en paralelo** fuera del render.
+
+El plan, en este orden, cada paso con su medida antes y después:
+
+1. **Escenario de referencia** (`archisim territorio-grande out/`): 1 × 1 km de Punta Umbría traído del Catastro y OSM, con terreno, ortofoto, ~600 edificios vestidos, ~200 calles, ~300 nudos, vegetación y mobiliario. Objetivos, en el PC de Antonio (RTX 5080) y en el MacBook:
+   - navegar en 3D a **60 fotogramas** (MacBook: 30);
+   - tocar un nudo o arrastrar un tramo y verlo en **menos de 50 ms**;
+   - abrir el proyecto en **menos de 5 s**;
+   - en el iPad, menos de 800 MB.
+   Se añade al medidor (`archisim medir`) y a la integración continua para que no empeore sin que se vea.
+2. **Teselas del territorio**: el sitio se reparte en cuadrados de 100 × 100 m. Cada tesela guarda su trozo de terreno modelado, sus calles, cruces, marcas, vegetación y mobiliario ya en triángulos (en la planta y en el 3D).
+3. **Rehacer solo lo tocado**: cada cambio dice qué rectángulo toca (la calle antes y después, más el alcance del talud, 30 m); solo se rehacen las teselas que cruza. Arrastrar un nudo rehace una o dos teselas, no el sitio.
+4. **Cruces con índice y cache**: un índice por celdas de las calles (como `WallIndex` para los muros); los cruces se guardan por `NodeKey` y solo se recalculan los de las calles que han cambiado. Los once sitios piden el mismo cache.
+5. **En paralelo**: las teselas son independientes, así que se hacen a la vez en todos los núcleos (crate `rayon` en escritorio; en la web, los *workers* que ya usa el render).
+6. **Nivel de detalle por tesela**: cerca, todo; a media distancia, sin marcas finas ni mobiliario pequeño y con los edificios en su versión ligera; lejos, una sola malla simplificada por tesela con la ortofoto o los colores horneados, y los árboles como imágenes planas (ya decidido en `CALLES_TALLER.md` §3).
+7. **Repetir en lugar de copiar**: farolas, bancos, bolardos, árboles de alineación, señales y piezas de bordillo se dibujan como ejemplares de un mismo modelo (como ya se hace con los muebles), no como triángulos copiados.
+8. **Planta por teselas**: la imagen de la planta se guarda por tesela y escala; al cambiar algo, solo se redibujan las teselas tocadas.
+9. **Ficheros**: las teselas no se guardan en el `.archisim` (se rehacen al abrir, en paralelo); si abrir un sitio grande pasa de 5 s, se guarda un cache aparte junto al proyecto.
+
+## 5. Decisiones para Antonio
+
+1. **Orden**: N0 (fluidez) primero y luego N1 (nudos), o N1 primero con un N0 mínimo (solo cruces con cache y teselas en 3D). Propuesta: **N0 completo primero**, porque todo lo demás lo carga.
+2. **Tráfico**: ArchiSim no simula coches. Propuesta: las «reglas» de TM:PE se quedan en lo que se dibuja y se mide (flechas, señales, prioridad, prohibido aparcar, semáforos), sin simulación. ¿Te vale, o quieres ver circular coches (más adelante, aparte)?
+3. **Nudos huérfanos**: si borras una calle y su nudo desaparece, ¿se pierden sus ajustes o se guardan por si la vuelves a dibujar?
+4. **Área grande**: ¿2 × 2 km basta para los proyectos reales de AD5 (urbanizaciones, el concurso de INSUR), o hace falta más?
+5. **Esquinas en chaflán**: ¿tamaño del chaflán por defecto según el lugar (Barcelona 20 m) o siempre a mano?
+
+## 6. Qué probar en cada tanda
+
+Cada tanda trae su orden de ejemplo (`archisim nudos out/`, `archisim territorio-grande out/`…) y sus fotos de prueba como las de los edificios del mundo; en la bitácora se dice qué abrir y qué mirar.
