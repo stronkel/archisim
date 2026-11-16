@@ -19,6 +19,8 @@ pub struct ElectricalWindow {
     results: Option<(u64, String, usize, Vec<archisim_struct::report::Block>)>,
     /// Shown as typed text.
     as_text: bool,
+    /// The calculation being worked out aside.
+    aside: Option<crate::calc_aside::Aside>,
 }
 
 impl ArchiSimApp {
@@ -170,12 +172,40 @@ impl ArchiSimApp {
         );
         ui.separator();
         let rev = self.ed.revision();
+        // Worked out aside: a big building takes seconds.
         if self.electrical.results.as_ref().is_none_or(|r| r.0 != rev) {
-            let model = self.ed.shown();
-            let text = archisim_mep::electrical::report(&model);
-            let all = archisim_mep::electrical::analysis(&model);
-            let blocks = archisim_plan::services_report::electricity(&model, &all);
-            self.electrical.results = Some((rev, text, all.installations.len(), blocks));
+            if self
+                .electrical
+                .aside
+                .as_ref()
+                .is_none_or(|a| a.revision != rev)
+            {
+                let model = (*self.ed.shown()).clone();
+                self.electrical.aside = Some(crate::calc_aside::Aside::start(
+                    crate::calc_aside::Calc::Electrical,
+                    model,
+                    rev,
+                    ui.ctx(),
+                ));
+            }
+            match self.electrical.aside.as_ref().and_then(|a| a.take()) {
+                Some(Ok((text, boards, blocks))) => {
+                    self.electrical.aside = None;
+                    self.electrical.results = Some((rev, text, boards, blocks));
+                }
+                Some(Err(e)) => {
+                    self.electrical.aside = None;
+                    ui.colored_label(egui::Color32::RED, format!("No se ha podido calcular: {e}"));
+                    return;
+                }
+                None => {
+                    ui.horizontal(|ui| {
+                        ui.spinner();
+                        ui.label("Calculando la instalación aparte… puedes seguir trabajando.");
+                    });
+                    return;
+                }
+            }
         }
         let (_, text, boards, blocks) = self.electrical.results.clone().expect("just made");
         let (mut pdf, mut dxf) = (false, false);
@@ -240,7 +270,7 @@ impl ArchiSimApp {
             return;
         }
         let r = crate::documents::pdf_of(&sheets, "Esquema unifilar")
-            .and_then(|bytes| std::fs::write(&path, bytes).map_err(|e| e.to_string()));
+            .and_then(|bytes| crate::files::write(&path, bytes).map_err(|e| e.to_string()));
         match r {
             Ok(()) => self.say(format!(
                 "Esquema unifilar: {} hojas A3 en {}.",
@@ -279,7 +309,7 @@ impl ArchiSimApp {
                 path.clone()
             };
             match archisim_export::dxf::page_dxf(&model, svg)
-                .and_then(|t| std::fs::write(&file, t).map_err(|e| e.to_string()))
+                .and_then(|t| crate::files::write(&file, t).map_err(|e| e.to_string()))
             {
                 Ok(()) => written += 1,
                 Err(e) => {

@@ -705,6 +705,7 @@ impl View3dState {
         let wire_changed = gpu.renderer.wired() != (self.style == 3);
         if gpu.uploaded != self.scene_serial || wire_changed {
             crate::crash::stage("3D: subir la escena a la tarjeta gráfica");
+            gpu.renderer.set_queue(&gpu.state.queue);
             gpu.renderer.set_scene(&gpu.state.device, &self.scene);
             gpu.uploaded = self.scene_serial;
             self.has_water = self.scene.has_water();
@@ -927,9 +928,23 @@ impl View3dState {
 
     pub fn picture(&self) -> Option<(u32, u32, Vec<u8>)> {
         let gpu = self.gpu.as_ref()?;
-        let (w, h, mut px) = gpu
+        let got = gpu
             .renderer
             .read_pixels(&gpu.state.device, &gpu.state.queue)?;
+        Some(self.finish_picture(got))
+    }
+
+    /// Asks the graphics for the picture, to come later (the browser
+    /// cannot wait for it): `finish_picture` when it comes.
+    pub fn start_picture(&self) -> Option<crate::view3d::render::Reading> {
+        let gpu = self.gpu.as_ref()?;
+        gpu.renderer
+            .start_reading(&gpu.state.device, &gpu.state.queue)
+    }
+
+    /// The picture read, with its background.
+    pub fn finish_picture(&self, got: (u32, u32, Vec<u8>)) -> (u32, u32, Vec<u8>) {
+        let (w, h, mut px) = got;
         // Drawn over the ground grid (transparent, premultiplied): put the
         // background back.
         if self.under {
@@ -941,7 +956,7 @@ impl View3dState {
                 p[3] = 255;
             }
         }
-        Some((w, h, px))
+        (w, h, px)
     }
 }
 

@@ -206,6 +206,9 @@ pub fn start() {
     if web_sys::window().is_none() {
         return;
     }
+    // Short of memory: round pieces with fewer sides (§12).
+    archisim_core::props::build::set_coarse(true);
+    archisim_geom::solid::set_coarse(true);
     wasm_bindgen_futures::spawn_local(async {
         let Some(canvas) = web_sys::window()
             .and_then(|w| w.document())
@@ -400,6 +403,42 @@ pub fn render_aside(
     });
 }
 
+/// A calculation in a worker (`calc_aside`), into `slot`; here, if the
+/// browser cannot.
+pub fn calc_aside(
+    calc: crate::calc_aside::Calc,
+    model: &archisim_core::Model,
+    slot: std::sync::Arc<Mutex<Option<Result<crate::calc_aside::Outcome, String>>>>,
+    ctx: eframe::egui::Context,
+) {
+    let put = move |r| {
+        if let Ok(mut s) = slot.lock() {
+            *s = Some(r);
+        }
+        ctx.request_repaint();
+    };
+    if archisim_workers() == 0 {
+        put(Ok(crate::calc_aside::calculate(calc, model)));
+        return;
+    }
+    let text = archisim_file::to_string(model);
+    let input = js_sys::Uint8Array::from(text.as_bytes());
+    let job = aside("calc", &input, calc.name(), |_| {});
+    let model = model.clone();
+    wasm_bindgen_futures::spawn_local(async move {
+        let r = match job.await {
+            Ok(bytes) => crate::calc_aside::read(&String::from_utf8_lossy(&bytes)),
+            Err(e) => {
+                note(&format!(
+                    "El cálculo no ha podido hacerse aparte ({e}); se hace aquí."
+                ));
+                Ok(crate::calc_aside::calculate(calc, &model))
+            }
+        };
+        put(r);
+    });
+}
+
 /// What a worker needs to know of a render besides the project.
 fn render_params(
     view: &archisim_render::View,
@@ -481,6 +520,13 @@ pub fn archisim_worker_job(
                 let _ = tell.0.call1(&JsValue::NULL, &JsValue::from_f64(f));
             });
             Ok(image.rgb)
+        }
+        "calc" => {
+            let calc = crate::calc_aside::Calc::from_name(params)
+                .ok_or_else(|| fail(format!("cálculo desconocido «{params}»")))?;
+            let text = std::str::from_utf8(input).map_err(|e| fail(e.to_string()))?;
+            let model = archisim_file::from_str(text).map_err(|e| fail(e.to_string()))?;
+            Ok(crate::calc_aside::run(calc, &model).into_bytes())
         }
         _ => Err(fail(format!("trabajo desconocido «{kind}»"))),
     }

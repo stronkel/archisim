@@ -30,10 +30,10 @@ fn library_file() -> PathBuf {
 pub fn save_street(t: &SavedStreet) -> Result<PathBuf, String> {
     let path = library_file();
     if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+        crate::files::create_dir_all(dir).map_err(|e| e.to_string())?;
     }
     let old = std::fs::read_to_string(&path).unwrap_or_default();
-    std::fs::write(&path, t.into_file(&old)).map_err(|e| e.to_string())?;
+    crate::files::write(&path, t.into_file(&old)).map_err(|e| e.to_string())?;
     Ok(path)
 }
 
@@ -343,7 +343,7 @@ mod tests {
             }
         }
         if let Some(dir) = out {
-            std::fs::create_dir_all(&dir).unwrap();
+            crate::files::create_dir_all(&dir).unwrap();
             resvg::tiny_skia::Pixmap::from_vec(
                 sheet,
                 resvg::tiny_skia::IntSize::from_wh(cols * cw, rows * ch).unwrap(),

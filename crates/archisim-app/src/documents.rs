@@ -553,15 +553,15 @@ mod tests {
         // To look at them: DOCUMENTOS_OUT=folder (the demo's, if made).
         if let Ok(dir) = std::env::var("DOCUMENTOS_OUT") {
             let m = demo().unwrap_or(m);
-            std::fs::create_dir_all(&dir).unwrap();
+            crate::files::create_dir_all(&dir).unwrap();
             for (name, sheets) in [
                 ("memoria", carpentry_report_sheets(&m)),
                 ("superficies", areas_sheets(&m)),
             ] {
                 for (i, (svg, _)) in sheets.iter().enumerate() {
-                    std::fs::write(format!("{dir}/{name}-{}.svg", i + 1), svg).unwrap();
+                    crate::files::write(format!("{dir}/{name}-{}.svg", i + 1), svg).unwrap();
                 }
-                std::fs::write(format!("{dir}/{name}.pdf"), pdf_of(&sheets, name).unwrap())
+                crate::files::write(format!("{dir}/{name}.pdf"), pdf_of(&sheets, name).unwrap())
                     .unwrap();
             }
         }

@@ -561,10 +561,10 @@ impl ArchiSimApp {
         let (glb, _) = archisim_library::imported::export_glb(self.ed.model(), t)
             .ok_or("el tipo no tiene modelo 3D")?;
         if let Some(dir) = glb_path.parent() {
-            std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+            crate::files::create_dir_all(dir).map_err(|e| e.to_string())?;
         }
-        std::fs::write(&glb_path, glb).map_err(|e| e.to_string())?;
-        std::fs::write(&json_path, maker.to_json(name, kind)).map_err(|e| e.to_string())?;
+        crate::files::write(&glb_path, glb).map_err(|e| e.to_string())?;
+        crate::files::write(&json_path, maker.to_json(name, kind)).map_err(|e| e.to_string())?;
         self.folder_objects = None;
         self.library.refresh();
         Ok(Some(glb_path))

@@ -12182,7 +12182,8 @@ fn the_keypad_types_a_length() {
     let area = h.app.touch_area.expect("the plan sets its area").rect;
     let width = 4.0 * 46.0 + 3.0 * 6.0 + 20.0;
     let height = 5.0 * 46.0 + 4.0 * 6.0 + 20.0;
-    let at = area.right_bottom() - Vec2::new(width + 12.0, height + 12.0);
+    let at =
+        super::keypad_ui::keypad_place(area, Vec2::new(width, height), h.app.keypad_point(area));
     let zero = at + Vec2::new(11.0 + 46.0 + 6.0 + 23.0, 11.0 + 3.0 * 52.0 + 23.0);
     let shift = h.modifiers;
     h.modifiers = Modifiers::NONE;

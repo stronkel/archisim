@@ -123,9 +123,9 @@ pub fn save_thumbnail(path: &Path, model: &Model) {
         .collect();
     let png = archisim_export::png::encode_rgb(THUMB[0] as u32, THUMB[1] as u32, &rgb, 96.0);
     if let Some(dir) = file.parent() {
-        let _ = std::fs::create_dir_all(dir);
+        let _ = crate::files::create_dir_all(dir);
     }
-    let _ = std::fs::write(file, png);
+    let _ = crate::files::write(file, png);
 }
 
 fn canonical(path: &Path) -> PathBuf {

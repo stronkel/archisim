@@ -4094,6 +4094,47 @@ pub fn model_solids_except_detailed(
     detailed: &std::collections::HashSet<OpeningId>,
 ) -> Vec<Solid> {
     let mut out = Vec::new();
+    model_solids_each(model, skip, detailed, &mut |s| out.push(s));
+    out
+}
+
+/// Where `model_solids_each` puts each solid as it is made: dropped if
+/// it has no triangles or its element is drawn by its frame.
+struct SolidSink<'a> {
+    put: &'a mut dyn FnMut(Solid),
+    model: &'a Model,
+    framed: bool,
+}
+
+impl SolidSink<'_> {
+    fn push(&mut self, s: Solid) {
+        if s.triangles.is_empty() || (self.framed && crate::framing::is_framed(self.model, s.owner))
+        {
+            return;
+        }
+        (self.put)(s);
+    }
+
+    fn extend(&mut self, solids: impl IntoIterator<Item = Solid>) {
+        for s in solids {
+            self.push(s);
+        }
+    }
+}
+
+/// The solids of [`model_solids_except_detailed`], one by one as they are
+/// made, without holding them all (the 3D view of a big building in the
+/// browser, short of memory).
+pub fn model_solids_each(
+    model: &Model,
+    skip: &std::collections::HashSet<archisim_core::ObjectId>,
+    detailed: &std::collections::HashSet<OpeningId>,
+    put: &mut dyn FnMut(Solid),
+) {
+    // The bare frames of the framed walls, floors and roofs, in place of
+    // their layers («Entramado a la vista»).
+    let framed = crate::framing::frames_shown() && model.framings().next().is_some();
+    let mut out = SolidSink { put, model, framed };
     let idx = WallIndex::new(model);
     let pieces = facade_pieces_wanted();
     for w in model.walls() {
@@ -4231,14 +4272,13 @@ pub fn model_solids_except_detailed(
     for d in model.devices() {
         out.extend(device_solids(model, d.id));
     }
-    // The bare frames of the framed walls, floors and roofs, in place of
-    // their layers («Entramado a la vista»).
-    if crate::framing::frames_shown() && model.framings().next().is_some() {
-        out.retain(|s| !crate::framing::is_framed(model, s.owner));
-        out.extend(crate::framing::frame_solids(model));
+    if framed {
+        for s in crate::framing::frame_solids(model) {
+            if !s.triangles.is_empty() {
+                (out.put)(s);
+            }
+        }
     }
-    out.retain(|s| !s.triangles.is_empty());
-    out
 }
 
 /// The solid of a footing: its outline from its top face down its depth.
@@ -4622,8 +4662,22 @@ pub fn sweep_segment(section: &[(f64, f64)], a: P3, b: P3) -> Vec<[P3; 3]> {
 
 /// The solids of a pipe or duct: one piece along each stretch of its
 /// path, round (twelve sides) or rectangular.
-/// Facets of a round pipe or light.
-const ROUND_FACETS: usize = 24;
+/// Facets of a round pipe or light (fewer when coarse: `set_coarse`).
+fn round_facets() -> usize {
+    if COARSE.load(std::sync::atomic::Ordering::Relaxed) {
+        10
+    } else {
+        24
+    }
+}
+
+/// Whether round pipes and lights are made with fewer facets: the
+/// browser, short of memory (`docs/IPAD.md` §12), says so at the start.
+static COARSE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn set_coarse(on: bool) {
+    COARSE.store(on, std::sync::atomic::Ordering::Relaxed);
+}
 
 pub fn run_solids(model: &Model, id: archisim_core::RunId) -> Vec<Solid> {
     let Some(r) = model.run(id) else {
@@ -4637,9 +4691,9 @@ pub fn run_solids(model: &Model, id: archisim_core::RunId) -> Vec<Solid> {
     } else {
         // Facets that turn less than the 3D view's crease angle: a round
         // pipe, not a ribbed one.
-        (0..ROUND_FACETS)
+        (0..round_facets())
             .map(|i| {
-                let a = i as f64 * std::f64::consts::TAU / ROUND_FACETS as f64;
+                let a = i as f64 * std::f64::consts::TAU / round_facets() as f64;
                 (r.width / 2.0 * a.cos(), r.width / 2.0 * a.sin())
             })
             .collect()
@@ -4755,9 +4809,9 @@ pub fn fitting_solids(model: &Model) -> Vec<Solid> {
             let (w, h) = ((r.width + grow) / 2.0, (r.height + grow) / 2.0);
             vec![(-w, -h), (w, -h), (w, h), (-w, h)]
         } else {
-            (0..ROUND_FACETS)
+            (0..round_facets())
                 .map(|i| {
-                    let a = i as f64 * std::f64::consts::TAU / ROUND_FACETS as f64;
+                    let a = i as f64 * std::f64::consts::TAU / round_facets() as f64;
                     let rad = (r.width + grow) / 2.0;
                     (rad * a.cos(), rad * a.sin())
                 })
@@ -4860,9 +4914,9 @@ pub fn fitting_solids(model: &Model) -> Vec<Solid> {
                 let c = [d.position.x, d.position.y, z];
                 let a = [c[0] + away.x * rad, c[1] + away.y * rad, z];
                 let b = [c[0], c[1], z + down * rad];
-                let section: Vec<(f64, f64)> = (0..ROUND_FACETS)
+                let section: Vec<(f64, f64)> = (0..round_facets())
                     .map(|i| {
-                        let t = i as f64 * std::f64::consts::TAU / ROUND_FACETS as f64;
+                        let t = i as f64 * std::f64::consts::TAU / round_facets() as f64;
                         (
                             r.width / 2.0 * 1.08 * t.cos(),
                             r.width / 2.0 * 1.08 * t.sin(),
@@ -4974,9 +5028,9 @@ pub fn device_solids(model: &Model, id: archisim_core::DeviceId) -> Vec<Solid> {
             .collect();
     }
     let outline = if d.kind == archisim_core::DeviceKind::Light || d.kind.is_vertical() {
-        (0..ROUND_FACETS)
+        (0..round_facets())
             .map(|i| {
-                let a = i as f64 * std::f64::consts::TAU / ROUND_FACETS as f64;
+                let a = i as f64 * std::f64::consts::TAU / round_facets() as f64;
                 d.position + Point2::new(a.cos(), a.sin()) * (d.width / 2.0)
             })
             .collect()

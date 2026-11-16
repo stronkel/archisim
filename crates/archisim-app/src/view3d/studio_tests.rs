@@ -2800,7 +2800,19 @@ fn scene_memory() {
     };
     let m = archisim_file::open(Path::new(&p)).expect("proyecto");
     println!("abierto: {}", peak());
-    let scene = Scene::build(&m, &BTreeSet::new());
+    // `ARCHISIM_COMO_WEB=1`: as the browser makes it (§12).
+    let web = std::env::var_os("ARCHISIM_COMO_WEB").is_some();
+    if web {
+        archisim_core::props::build::set_coarse(true);
+        archisim_geom::solid::set_coarse(true);
+    }
+    let scene = if web {
+        archisim_geom::solid::with_plant_lod(archisim_core::flora::Lod::Medium, || {
+            Scene::build(&m, &BTreeSet::new())
+        })
+    } else {
+        Scene::build(&m, &BTreeSet::new())
+    };
     println!("escena: {}", peak());
     let v = std::mem::size_of::<super::scene::Vertex>();
     let mesh = |m: &super::scene::Mesh| m.vertices.len() * v + m.indices.len() * 4;
@@ -2823,13 +2835,67 @@ fn scene_memory() {
             .map(|g| g.instances.len())
             .sum::<usize>(),
     );
-    let mut big: Vec<(usize, usize)> = scene
+    // What the triangles drawn once are of.
+    let mut kinds: std::collections::BTreeMap<String, usize> = Default::default();
+    for c in &scene.opaque {
+        for o in &c.owners {
+            let name = format!("{o:?}");
+            let name = name
+                .split(['(', '{', ' '])
+                .take(2)
+                .collect::<Vec<_>>()
+                .join(" ");
+            *kinds.entry(name).or_default() += 1;
+        }
+    }
+    // Which objects and devices, by type.
+    let mut types: std::collections::BTreeMap<String, usize> = Default::default();
+    for c in &scene.opaque {
+        for o in &c.owners {
+            let name = match o {
+                super::scene::Owner::Model(crate::pick::Element::Object(id)) => m
+                    .object(*id)
+                    .and_then(|o| m.object_type(o.object_type))
+                    .map(|t| format!("objeto {}", t.name)),
+                super::scene::Owner::Model(crate::pick::Element::Device(id)) => m
+                    .devices()
+                    .find(|d| d.id == *id)
+                    .map(|d| format!("aparato {:?}", d.kind)),
+                _ => None,
+            };
+            if let Some(n) = name {
+                *types.entry(n).or_default() += 1;
+            }
+        }
+    }
+    let mut types: Vec<_> = types.into_iter().collect();
+    types.sort_by_key(|k| std::cmp::Reverse(k.1));
+    for (k, n) in types.iter().take(10) {
+        println!("  {k}: {n} triángulos");
+    }
+    let mut kinds: Vec<_> = kinds.into_iter().collect();
+    kinds.sort_by_key(|k| std::cmp::Reverse(k.1));
+    for (k, n) in kinds.iter().take(12) {
+        println!("  {k}: {n} triángulos");
+    }
+    let mut big: Vec<(usize, usize, String)> = scene
         .groups
         .iter()
-        .map(|g| (mesh(&g.opaque) + mesh(&g.glass), g.instances.len()))
+        .map(|g| {
+            let what = match g.owners.first() {
+                Some(crate::pick::Element::Object(id)) => m
+                    .object(*id)
+                    .and_then(|o| m.object_type(o.object_type))
+                    .map(|t| t.name.clone())
+                    .unwrap_or_default(),
+                Some(e) => format!("{e:?}"),
+                None => String::new(),
+            };
+            (mesh(&g.opaque) + mesh(&g.glass), g.instances.len(), what)
+        })
         .collect();
     big.sort_by(|a, b| b.cmp(a));
-    for (bytes, n) in big.iter().take(8) {
-        println!("  grupo {:.1} MB × {n}", mb(*bytes));
+    for (bytes, n, what) in big.iter().take(8) {
+        println!("  grupo {:.1} MB × {n}: {what}", mb(*bytes));
     }
 }

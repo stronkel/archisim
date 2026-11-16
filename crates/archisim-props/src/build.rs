@@ -8,8 +8,27 @@ use std::collections::BTreeMap;
 
 pub type P3 = [f64; 3];
 
+/// Segments of a round piece (`round`), full and coarse.
+const ROUND_FULL: usize = 20;
+const ROUND_COARSE: usize = 10;
+
+/// Whether the models are made with fewer segments in round pieces: the
+/// browser, short of memory (`docs/IPAD.md` §12), says so before making
+/// any (the models are cached, `mesh_of`).
+static COARSE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn set_coarse(on: bool) {
+    COARSE.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
 /// Segments of a round piece.
-pub const ROUND: usize = 20;
+pub fn round() -> usize {
+    if COARSE.load(std::sync::atomic::Ordering::Relaxed) {
+        ROUND_COARSE
+    } else {
+        ROUND_FULL
+    }
+}
 
 #[derive(Default)]
 pub struct Builder {
@@ -260,7 +279,7 @@ impl Builder {
     }
 
     pub fn cyl(&mut self, role: &'static str, a: P3, b: P3, r: f64) {
-        self.cone(role, a, b, r, r, ROUND);
+        self.cone(role, a, b, r, r, round());
     }
 
     /// A profile (radius, height) turned round the vertical through `c`,
@@ -282,7 +301,7 @@ impl Builder {
         if area < 0.0 {
             prof.reverse();
         }
-        let seg = ROUND + 4;
+        let seg = round() + 4;
         let rings: Vec<Vec<u32>> = prof
             .iter()
             .map(|(r, z)| {
@@ -325,7 +344,7 @@ impl Builder {
 
     /// An ellipsoid with these half-axes.
     pub fn ellipsoid(&mut self, role: &'static str, c: P3, r: P3) {
-        self.ellipsoid_n(role, c, r, ROUND);
+        self.ellipsoid_n(role, c, r, round());
     }
 
     /// A small ellipsoid of few sides (a knob, a flower, a fruit on a

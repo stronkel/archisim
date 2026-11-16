@@ -463,7 +463,9 @@ impl ArchiSimApp {
         let result = path
             .parent()
             .map_or(Ok(()), std::fs::create_dir_all)
-            .and_then(|()| std::fs::write(&path, archisim_core::presentation_styles_text(&all)));
+            .and_then(|()| {
+                crate::files::write(&path, archisim_core::presentation_styles_text(&all))
+            });
         match result {
             Ok(()) => self.say(format!("{n} estilos en {}.", path.display())),
             Err(e) => self.complain(format!("No se puede escribir {}: {e}.", path.display())),

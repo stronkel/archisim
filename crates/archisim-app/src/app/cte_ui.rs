@@ -486,7 +486,7 @@ impl ArchiSimApp {
             d = d.set_directory(dir);
         }
         if let Some(path) = d.save_file() {
-            match std::fs::write(&path, report.to_csv(self.ed.model())) {
+            match crate::files::write(&path, report.to_csv(self.ed.model())) {
                 Ok(()) => self.say(format!("Informe guardado en {}.", path.display())),
                 Err(e) => self.complain(format!("No se puede guardar el informe: {e}.")),
             }

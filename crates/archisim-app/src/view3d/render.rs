@@ -159,6 +159,32 @@ struct GroupDraws {
     shadow_level: usize,
 }
 
+/// Draws the sRGB picture into a plain 8-bit texture, keeping its bytes:
+/// it reads the values (decoded) and encodes them again.
+const BLIT_SHADER: &str = r#"
+@group(0) @binding(0) var picture: texture_2d<f32>;
+
+@vertex
+fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4<f32> {
+    let x = f32((i << 1u) & 2u);
+    let y = f32(i & 2u);
+    return vec4<f32>(x * 2.0 - 1.0, 1.0 - y * 2.0, 0.0, 1.0);
+}
+
+fn encode(c: f32) -> f32 {
+    if (c <= 0.0031308) {
+        return c * 12.92;
+    }
+    return 1.055 * pow(c, 1.0 / 2.4) - 0.055;
+}
+
+@fragment
+fn fs(@builtin(position) p: vec4<f32>) -> @location(0) vec4<f32> {
+    let c = textureLoad(picture, vec2<i32>(p.xy), 0);
+    return vec4<f32>(encode(c.r), encode(c.g), encode(c.b), c.a);
+}
+"#;
+
 /// Render targets of one size.
 struct Targets {
     size: [u32; 2],
@@ -173,11 +199,26 @@ struct Targets {
     depth_view: wgpu::TextureView,
     edges_bind: wgpu::BindGroup,
     /// A plain 8-bit copy of the picture for egui, on graphics cards that
-    /// cannot view the sRGB picture as plain values (some OpenGL drivers).
-    display: Option<wgpu::Texture>,
+    /// cannot view the sRGB picture as plain values (some OpenGL drivers,
+    /// WebGL): drawn from the picture by `blit_pipeline`, which encodes
+    /// its values (a copy between the two formats is not allowed in
+    /// WebGL).
+    display: Option<(wgpu::Texture, wgpu::BindGroup)>,
+}
+
+/// Whether the graphics can blend each target of a pass its own way (not
+/// WebGL): `set_independent_blend`, from the adapter, before the first
+/// renderer.
+static INDEPENDENT_BLEND: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+
+pub fn set_independent_blend(on: bool) {
+    INDEPENDENT_BLEND.store(on, std::sync::atomic::Ordering::Relaxed);
 }
 
 pub struct Renderer {
+    /// Draws the picture into its plain copy (`Targets::display`).
+    blit_pipeline: wgpu::RenderPipeline,
+    blit_layout: wgpu::BindGroupLayout,
     /// The orthophoto's picture (group 3 of the model's passes): its bind
     /// group, what it holds (the picture and where it lies) and the one
     /// still to be sent to the card.
@@ -218,7 +259,7 @@ pub struct Renderer {
     /// their buffers: they go with the queue at the start of `render`
     /// (a buffer mapped when made can be refused in the browser when it is
     /// a few megabytes, `docs/IPAD.md`).
-    writes: Vec<(wgpu::Buffer, Vec<u8>)>,
+    writes: Writes,
     glass_pipeline: wgpu::RenderPipeline,
     edges_pipeline: wgpu::RenderPipeline,
     globals: wgpu::Buffer,
@@ -347,6 +388,13 @@ pub fn shader_source(mode: TextureMode) -> String {
 
 impl Renderer {
     pub fn new(device: &wgpu::Device, view_formats: bool, textures: TextureMode) -> Self {
+        // Without independent blending (WebGL), the grass writes the
+        // normals too: lines may show between its blades.
+        let grass_normals = if INDEPENDENT_BLEND.load(std::sync::atomic::Ordering::Relaxed) {
+            wgpu::ColorWrites::empty()
+        } else {
+            wgpu::ColorWrites::ALL
+        };
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("archisim 3d"),
             source: wgpu::ShaderSource::Wgsl(shader_source(textures).into()),
@@ -376,6 +424,50 @@ impl Renderer {
                 },
                 count: None,
             }],
+        });
+        let blit_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("3d display copy"),
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Texture {
+                    sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    multisampled: false,
+                },
+                count: None,
+            }],
+        });
+        let blit_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("3d display copy"),
+            source: wgpu::ShaderSource::Wgsl(BLIT_SHADER.into()),
+        });
+        let blit_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("3d display copy"),
+            layout: Some(
+                &device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                    label: Some("3d display copy"),
+                    bind_group_layouts: &[Some(&blit_layout)],
+                    immediate_size: 0,
+                }),
+            ),
+            vertex: wgpu::VertexState {
+                module: &blit_shader,
+                entry_point: Some("vs"),
+                compilation_options: Default::default(),
+                buffers: &[],
+            },
+            primitive: Default::default(),
+            depth_stencil: None,
+            multisample: Default::default(),
+            fragment: Some(wgpu::FragmentState {
+                module: &blit_shader,
+                entry_point: Some("fs"),
+                compilation_options: Default::default(),
+                targets: &[Some(DISPLAY_FORMAT.into())],
+            }),
+            multiview_mask: None,
+            cache: None,
         });
         let globals = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("globals"),
@@ -633,7 +725,7 @@ impl Renderer {
                     Some(wgpu::ColorTargetState {
                         format: NORMAL_FORMAT,
                         blend: None,
-                        write_mask: wgpu::ColorWrites::empty(),
+                        write_mask: grass_normals,
                     }),
                 ],
             }),
@@ -736,6 +828,8 @@ impl Renderer {
             cache: None,
         });
         Self {
+            blit_pipeline,
+            blit_layout,
             ortho_layout,
             ortho_sampler,
             ortho_bind,
@@ -757,7 +851,7 @@ impl Renderer {
             bounds: (glam::Vec3::ZERO, glam::Vec3::ONE),
             focus: None,
             uploads: 0,
-            writes: Vec::new(),
+            writes: Writes::default(),
             glass_pipeline,
             edges_pipeline,
             globals,
@@ -885,6 +979,12 @@ impl Renderer {
     }
 
     /// Uploads the scene's triangles.
+    /// The queue to fill the buffers with as they are made (without it,
+    /// at the next picture, from a copy: a big scene twice in memory).
+    pub fn set_queue(&mut self, queue: &wgpu::Queue) {
+        self.writes.queue = Some(queue.clone());
+    }
+
     pub fn set_scene(&mut self, device: &wgpu::Device, scene: &Scene) {
         self.uploads += 1;
         let key = scene.orthophoto.as_ref().map(OrthoKey::of);
@@ -942,11 +1042,13 @@ impl Renderer {
                 },
                 1,
             );
-            let display = (!self.view_formats).then(|| {
+            let display_texture = (!self.view_formats).then(|| {
                 texture(
                     "3d display copy",
                     DISPLAY_FORMAT,
-                    wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+                    wgpu::TextureUsages::TEXTURE_BINDING
+                        | wgpu::TextureUsages::COPY_DST
+                        | wgpu::TextureUsages::RENDER_ATTACHMENT,
                     &[],
                     1,
                 )
@@ -970,9 +1072,21 @@ impl Renderer {
                     resource: wgpu::BindingResource::TextureView(&normal_view),
                 }],
             });
+            let color_view = color.create_view(&Default::default());
+            let display = display_texture.map(|d| {
+                let bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("3d display copy"),
+                    layout: &self.blit_layout,
+                    entries: &[wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(&color_view),
+                    }],
+                });
+                (d, bind)
+            });
             self.targets = Some(Targets {
                 size,
-                color_view: color.create_view(&Default::default()),
+                color_view,
                 color,
                 color_ms_view: color_ms.create_view(&Default::default()),
                 normal_ms_view: normal_ms.create_view(&Default::default()),
@@ -995,7 +1109,10 @@ impl Renderer {
         size: [u32; 2],
         edge_step: u32,
     ) -> &wgpu::Texture {
-        for (buffer, bytes) in self.writes.drain(..) {
+        if self.writes.queue.is_none() {
+            self.writes.queue = Some(queue.clone());
+        }
+        for (buffer, bytes) in self.writes.pending.drain(..) {
             queue.write_buffer(&buffer, 0, &bytes);
         }
         if self.pictures_pending {
@@ -1432,12 +1549,27 @@ impl Renderer {
             pass.set_bind_group(1, &t.edges_bind, &[]);
             pass.draw(0..3, 0..1);
         }
-        if let Some(display) = &t.display {
-            encoder.copy_texture_to_texture(
-                t.color.as_image_copy(),
-                display.as_image_copy(),
-                t.color.size(),
-            );
+        if let Some((display, bind)) = &t.display {
+            let view = display.create_view(&Default::default());
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("3d display copy"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            pass.set_pipeline(&self.blit_pipeline);
+            pass.set_bind_group(0, bind, &[]);
+            pass.draw(0..3, 0..1);
         }
         queue.submit([encoder.finish()]);
         &t.color
@@ -1451,7 +1583,7 @@ impl Renderer {
     /// A view of the last picture for egui (gamma-encoded values).
     pub fn display_view(&self) -> Option<wgpu::TextureView> {
         let t = self.targets.as_ref()?;
-        if let Some(display) = &t.display {
+        if let Some((display, _)) = &t.display {
             return Some(display.create_view(&Default::default()));
         }
         Some(t.color.create_view(&wgpu::TextureViewDescriptor {
@@ -1460,12 +1592,21 @@ impl Renderer {
         }))
     }
 
-    /// The last picture as RGBA bytes (sRGB), row by row.
+    /// The last picture as RGBA bytes (sRGB), row by row, waiting for it
+    /// (not in the browser, which cannot wait: `start_reading`).
     pub fn read_pixels(
         &self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
     ) -> Option<(u32, u32, Vec<u8>)> {
+        let reading = self.start_reading(device, queue)?;
+        device.poll(wgpu::PollType::wait_indefinitely()).ok()?;
+        reading.take()?
+    }
+
+    /// Asks the graphics for the last picture; it comes later
+    /// (`Reading::take`).
+    pub fn start_reading(&self, device: &wgpu::Device, queue: &wgpu::Queue) -> Option<Reading> {
         let t = self.targets.as_ref()?;
         let [w, h] = t.size;
         let row = (w * 4).div_ceil(256) * 256;
@@ -1493,22 +1634,51 @@ impl Renderer {
             },
         );
         queue.submit([encoder.finish()]);
-        let slice = buffer.slice(..);
-        let (tx, rx) = std::sync::mpsc::channel();
-        slice.map_async(wgpu::MapMode::Read, move |r| {
-            let _ = tx.send(r);
+        let ready = std::sync::Arc::new(std::sync::Mutex::new(None));
+        let tell = ready.clone();
+        buffer.slice(..).map_async(wgpu::MapMode::Read, move |r| {
+            if let Ok(mut t) = tell.lock() {
+                *t = Some(r.is_ok());
+            }
         });
-        device.poll(wgpu::PollType::wait_indefinitely()).ok()?;
-        rx.recv().ok()?.ok()?;
-        let data = slice.get_mapped_range().ok()?;
+        Some(Reading {
+            buffer,
+            size: [w, h],
+            row,
+            ready,
+        })
+    }
+}
+
+/// A picture asked to the graphics (`Renderer::start_reading`).
+pub struct Reading {
+    buffer: wgpu::Buffer,
+    size: [u32; 2],
+    row: u32,
+    ready: std::sync::Arc<std::sync::Mutex<Option<bool>>>,
+}
+
+impl Reading {
+    /// `None` while it has not come; then the picture, or `None` if it
+    /// failed.
+    pub fn take(&self) -> Option<Option<(u32, u32, Vec<u8>)>> {
+        let ok = (*self.ready.lock().ok()?)?;
+        if !ok {
+            return Some(None);
+        }
+        let [w, h] = self.size;
+        let slice = self.buffer.slice(..);
+        let Ok(data) = slice.get_mapped_range() else {
+            return Some(None);
+        };
         let mut out = Vec::with_capacity((w * h * 4) as usize);
         for y in 0..h {
-            let start = (y * row) as usize;
+            let start = (y * self.row) as usize;
             out.extend_from_slice(&data[start..start + (w * 4) as usize]);
         }
         drop(data);
-        buffer.unmap();
-        Some((w, h, out))
+        self.buffer.unmap();
+        Some(Some((w, h, out)))
     }
 }
 
@@ -1651,8 +1821,13 @@ fn upload(
         .collect()
 }
 
-/// Buffers made and the bytes to copy into them (`Renderer::writes`).
-type Writes = Vec<(wgpu::Buffer, Vec<u8>)>;
+/// How buffers are filled (`Renderer::writes`): by the queue at once when
+/// it is known, or from a copy at the next picture.
+#[derive(Default)]
+struct Writes {
+    queue: Option<wgpu::Queue>,
+    pending: Vec<(wgpu::Buffer, Vec<u8>)>,
+}
 
 /// A buffer for `bytes`, filled by the queue at the next picture.
 fn buffer_with(
@@ -1663,15 +1838,24 @@ fn buffer_with(
     usage: wgpu::BufferUsages,
 ) -> wgpu::Buffer {
     // The queue copies whole groups of four bytes.
-    let mut bytes = bytes.to_vec();
-    bytes.resize(bytes.len().next_multiple_of(4).max(4), 0);
+    let size = bytes.len().next_multiple_of(4).max(4);
     let buffer = device.create_buffer(&wgpu::BufferDescriptor {
         label: Some(label),
-        size: bytes.len() as u64,
+        size: size as u64,
         usage: usage | wgpu::BufferUsages::COPY_DST,
         mapped_at_creation: false,
     });
-    writes.push((buffer.clone(), bytes));
+    match &writes.queue {
+        Some(queue) if size == bytes.len() => queue.write_buffer(&buffer, 0, bytes),
+        _ => {
+            let mut bytes = bytes.to_vec();
+            bytes.resize(size, 0);
+            match &writes.queue {
+                Some(queue) => queue.write_buffer(&buffer, 0, &bytes),
+                None => writes.pending.push((buffer.clone(), bytes)),
+            }
+        }
+    }
     buffer
 }
 

@@ -287,8 +287,8 @@ impl Identity {
             return;
         }
         let Some(dir) = settings_dir() else { return };
-        if std::fs::create_dir_all(&dir).is_ok() {
-            let _ = std::fs::write(
+        if crate::files::create_dir_all(&dir).is_ok() {
+            let _ = crate::files::write(
                 dir.join("equipo.txt"),
                 format!("{}\n{}\n", self.name, self.machine),
             );

@@ -4,6 +4,16 @@ Lo que cambia en cada versión, en pocas líneas. ArchiSim enseña la parte de s
 
 Cada versión empieza con una línea `## <versión>` (por ejemplo `## 0.81.0`): es la que busca la publicación.
 
+## 0.91.0
+
+- **ArchiSim en el iPad, remates.**
+  - **Menos memoria en 3D**: Florence Street en 3D pasa de 1,16 GB a 635 MB en el navegador. En el iPad, las piezas redondas llevan menos lados y las plantas van en su versión media.
+  - **Cálculos sin parar la pantalla**: la estructura y la instalación eléctrica se calculan aparte, también en el escritorio; mientras, puedes seguir trabajando.
+  - **Programa más ligero**: de 51 MB a 26 MB (9 MB por la red); carga antes la primera vez.
+  - **Exportar en la web**: planos en PDF, DXF o imagen, documentos, anejos, esquemas, BC3, Excel, modelo 3D, render e imagen del 3D, como ficheros que guardas en Archivos o descargas.
+  - **Interfaz del iPad**: al tocar la pantalla, la cinta se recoge y el Navegador se guarda en pantallas estrechas; el teclado numérico sale junto al punto; la lupa también en secciones; «Táctil ▾» en la barra de abajo, que se desliza si no cabe.
+  - **3D sin WebGPU**: la vista 3D funciona también con WebGL (Safari anterior al 26).
+
 ## 0.90.0
 
 - **ArchiSim en el iPad: lo pesado.**

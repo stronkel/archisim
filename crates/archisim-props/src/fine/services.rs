@@ -26,7 +26,7 @@
 //! a tank, a booster set, a water heater; and a row of panels or collectors
 //! tilted in their box.
 
-use crate::build::{Builder, ROUND};
+use crate::build::{round, Builder};
 use crate::PropMesh;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock};
@@ -238,7 +238,7 @@ fn cup(b: &mut Builder, face: f64, zc: f64, r: f64) {
         [0.0, face + 0.006, zc],
         r + 0.004,
         r + 0.003,
-        ROUND * 2,
+        round() * 2,
     );
     b.cone(
         "dark",
@@ -246,7 +246,7 @@ fn cup(b: &mut Builder, face: f64, zc: f64, r: f64) {
         [0.0, face + 0.0062, zc],
         r,
         r,
-        ROUND * 2,
+        round() * 2,
     );
     // The floor of the cup, back to the cover's colour.
     b.cone(
@@ -255,7 +255,7 @@ fn cup(b: &mut Builder, face: f64, zc: f64, r: f64) {
         [0.0, face + 0.0063, zc],
         r - 0.0012,
         r - 0.0012,
-        ROUND * 2,
+        round() * 2,
     );
 }
 
@@ -316,7 +316,7 @@ fn tv_socket(b: &mut Builder, w: f64, back: f64, h: f64) {
             [0.0, face + 0.012, z],
             r,
             r,
-            ROUND,
+            round(),
         );
         b.cone(
             "dark",
@@ -408,7 +408,7 @@ fn panel(b: &mut Builder, w: f64, d: f64, h: f64) {
         [w / 2.0 - m * 2.5, front + 0.006, h / 2.0],
         0.006,
         0.006,
-        ROUND,
+        round(),
     );
     b.rbox(
         "dark",
@@ -477,7 +477,7 @@ fn radiator(b: &mut Builder, w: f64, d: f64, h: f64) {
                 [x + half, y0 + deep * 0.45, z],
                 0.022,
                 0.022,
-                ROUND,
+                round(),
             );
         }
     }
@@ -490,7 +490,7 @@ fn radiator(b: &mut Builder, w: f64, d: f64, h: f64) {
             [span / 2.0 + 0.012, ym, z],
             0.016,
             0.016,
-            ROUND,
+            round(),
         );
     }
     // The bleed screw, top right.
@@ -512,7 +512,7 @@ fn radiator(b: &mut Builder, w: f64, d: f64, h: f64) {
         [xl - 0.005, ym, zv],
         0.011,
         0.011,
-        ROUND,
+        round(),
     );
     b.cone(
         "body",
@@ -520,7 +520,7 @@ fn radiator(b: &mut Builder, w: f64, d: f64, h: f64) {
         [xl, ym, zv + 0.05],
         0.014,
         0.013,
-        ROUND,
+        round(),
     );
     b.cone(
         "body",
@@ -528,7 +528,7 @@ fn radiator(b: &mut Builder, w: f64, d: f64, h: f64) {
         [xl, ym, zv + 0.075],
         0.016,
         0.016,
-        ROUND,
+        round(),
     );
     let xr = span / 2.0 + 0.025;
     b.cone(
@@ -537,7 +537,7 @@ fn radiator(b: &mut Builder, w: f64, d: f64, h: f64) {
         [xr + 0.005, ym, zv],
         0.011,
         0.011,
-        ROUND,
+        round(),
     );
     b.cone("metal", [xr, ym, zv], [xr, ym, zv + 0.02], 0.009, 0.008, 12);
     for x in [xl, xr] {
@@ -647,7 +647,7 @@ fn diffuser(b: &mut Builder, w: f64, d: f64, h: f64) {
         [0.0, 0.0, top - face],
         w.min(d) * 0.08,
         w.min(d) * 0.1,
-        ROUND,
+        round(),
     );
 }
 
@@ -664,7 +664,7 @@ fn downlight(b: &mut Builder, w: f64, d: f64, h: f64) {
         [0.0, 0.0, top],
         r * 0.94,
         r,
-        ROUND * 2,
+        round() * 2,
     );
     b.cone(
         "metal",
@@ -672,7 +672,7 @@ fn downlight(b: &mut Builder, w: f64, d: f64, h: f64) {
         [0.0, 0.0, top - t + 0.0005],
         r * 0.78,
         r * 0.8,
-        ROUND * 2,
+        round() * 2,
     );
     b.cone(
         "shade",
@@ -680,7 +680,7 @@ fn downlight(b: &mut Builder, w: f64, d: f64, h: f64) {
         [0.0, 0.0, top - t - 0.001],
         r * 0.62,
         r * 0.66,
-        ROUND * 2,
+        round() * 2,
     );
 }
 
@@ -714,7 +714,7 @@ fn boiler(b: &mut Builder, w: f64, d: f64, h: f64) {
             [x, d / 2.0 + 0.016, zc],
             0.013,
             0.012,
-            ROUND,
+            round(),
         );
     }
     b.rbox(
@@ -730,7 +730,7 @@ fn boiler(b: &mut Builder, w: f64, d: f64, h: f64) {
         [0.0, 0.0, h + 0.0],
         0.05,
         0.05,
-        ROUND * 2,
+        round() * 2,
     );
     // The pipes down from the bottom: gas, flow, return, hot and cold.
     if pipes > 0.01 {
@@ -764,7 +764,7 @@ fn exhaust_vent(b: &mut Builder, w: f64, h: f64) {
         [0.0, 0.0, h],
         r,
         r,
-        ROUND * 2,
+        round() * 2,
     );
     b.cone(
         "dark",
@@ -772,7 +772,7 @@ fn exhaust_vent(b: &mut Builder, w: f64, h: f64) {
         [0.0, 0.0, h - ring],
         r * 0.75,
         r * 0.75,
-        ROUND * 2,
+        round() * 2,
     );
     b.cone(
         "plate",
@@ -780,7 +780,7 @@ fn exhaust_vent(b: &mut Builder, w: f64, h: f64) {
         [0.0, 0.0, h - ring - 0.002],
         r * 0.55,
         r * 0.25,
-        ROUND * 2,
+        round() * 2,
     );
 }
 
@@ -789,7 +789,7 @@ fn exhaust_vent(b: &mut Builder, w: f64, h: f64) {
 fn air_shaft(b: &mut Builder, w: f64, d: f64, h: f64) {
     if (w - d).abs() < 1e-6 {
         let r = w / 2.0;
-        b.cone("metal", [0.0, 0.0, 0.0], [0.0, 0.0, h], r, r, ROUND * 2);
+        b.cone("metal", [0.0, 0.0, 0.0], [0.0, 0.0, h], r, r, round() * 2);
         let n = ((h / 1.2).floor() as usize).max(1);
         for k in 1..=n {
             let z = (h * k as f64 / (n + 1) as f64).min(h - 0.02);
@@ -799,7 +799,7 @@ fn air_shaft(b: &mut Builder, w: f64, d: f64, h: f64) {
                 [0.0, 0.0, z + 0.015],
                 r * 1.04,
                 r * 1.04,
-                ROUND * 2,
+                round() * 2,
             );
         }
     } else {
@@ -828,7 +828,7 @@ fn roof_fan(b: &mut Builder, w: f64, d: f64, h: f64) {
         [0.0, 0.0, base + (h - base) * 0.35],
         r * 0.95,
         r * 0.95,
-        ROUND * 2,
+        round() * 2,
     );
     b.cone(
         "dark",
@@ -836,7 +836,7 @@ fn roof_fan(b: &mut Builder, w: f64, d: f64, h: f64) {
         [0.0, 0.0, base + (h - base) * 0.55],
         r * 0.8,
         r * 0.8,
-        ROUND * 2,
+        round() * 2,
     );
     b.cone(
         "metal",
@@ -844,7 +844,7 @@ fn roof_fan(b: &mut Builder, w: f64, d: f64, h: f64) {
         [0.0, 0.0, h],
         r * 0.95,
         r * 0.3,
-        ROUND * 2,
+        round() * 2,
     );
 }
 
@@ -859,7 +859,7 @@ fn air_valve(b: &mut Builder, w: f64, h: f64) {
         [0.0, 0.0, socket],
         r * 0.75,
         r * 0.75,
-        ROUND * 2,
+        round() * 2,
     );
     b.cone(
         "body",
@@ -867,7 +867,7 @@ fn air_valve(b: &mut Builder, w: f64, h: f64) {
         [0.0, 0.0, h * 0.8],
         r * 0.85,
         r,
-        ROUND * 2,
+        round() * 2,
     );
     b.cone(
         "dark",
@@ -875,7 +875,7 @@ fn air_valve(b: &mut Builder, w: f64, h: f64) {
         [0.0, 0.0, h * 0.86],
         r * 0.95,
         r * 0.95,
-        ROUND * 2,
+        round() * 2,
     );
     b.cone(
         "body",
@@ -883,7 +883,7 @@ fn air_valve(b: &mut Builder, w: f64, h: f64) {
         [0.0, 0.0, h],
         r,
         r * 0.55,
-        ROUND * 2,
+        round() * 2,
     );
 }
 
@@ -897,7 +897,7 @@ fn trap_box(b: &mut Builder, w: f64, d: f64, h: f64) {
         [0.0, 0.0, h * 0.85],
         r * 0.9,
         r * 0.9,
-        ROUND * 2,
+        round() * 2,
     );
     b.cone(
         "metal",
@@ -905,7 +905,7 @@ fn trap_box(b: &mut Builder, w: f64, d: f64, h: f64) {
         [0.0, 0.0, h],
         r,
         r,
-        ROUND * 2,
+        round() * 2,
     );
     for k in [-0.5, 0.0, 0.5] {
         b.rbox(
@@ -919,7 +919,7 @@ fn trap_box(b: &mut Builder, w: f64, d: f64, h: f64) {
 
 fn riser(b: &mut Builder, w: f64, h: f64, downpipe: bool) {
     let r = w / 2.0;
-    b.cone("pipe", [0.0, 0.0, 0.0], [0.0, 0.0, h], r, r, ROUND * 2);
+    b.cone("pipe", [0.0, 0.0, 0.0], [0.0, 0.0, h], r, r, round() * 2);
     let collar = |b: &mut Builder, z: f64, k: f64, l: f64, role: &'static str| {
         b.cone(
             role,
@@ -927,7 +927,7 @@ fn riser(b: &mut Builder, w: f64, h: f64, downpipe: bool) {
             [0.0, 0.0, z + l / 2.0],
             r * k,
             r * k,
-            ROUND * 2,
+            round() * 2,
         );
     };
     if downpipe {
@@ -986,7 +986,7 @@ fn sprinkler(b: &mut Builder, w: f64, h: f64) {
         [0.0, 0.0, h],
         r,
         r,
-        ROUND * 2,
+        round() * 2,
     );
     b.cone(
         "metal",
@@ -994,7 +994,7 @@ fn sprinkler(b: &mut Builder, w: f64, h: f64) {
         [0.0, 0.0, h - 0.006],
         r * 0.25,
         r * 0.3,
-        ROUND,
+        round(),
     );
     for s in [-1.0, 1.0] {
         b.obox(
@@ -1012,7 +1012,7 @@ fn sprinkler(b: &mut Builder, w: f64, h: f64) {
         [0.0, 0.0, 0.003],
         r * 0.75,
         r * 0.75,
-        ROUND * 2,
+        round() * 2,
     );
     b.cone(
         "metal",
@@ -1082,7 +1082,7 @@ fn hose_reel(b: &mut Builder, w: f64, d: f64, h: f64) {
         [0.0, y0 + 0.01, zc],
         rr,
         rr,
-        ROUND * 2,
+        round() * 2,
     );
     b.cone(
         "metal",
@@ -1090,7 +1090,7 @@ fn hose_reel(b: &mut Builder, w: f64, d: f64, h: f64) {
         [0.0, y1, zc],
         rr,
         rr,
-        ROUND * 2,
+        round() * 2,
     );
     b.cone(
         "red",
@@ -1098,7 +1098,7 @@ fn hose_reel(b: &mut Builder, w: f64, d: f64, h: f64) {
         [0.0, y1 - 0.01, zc],
         rr * 0.85,
         rr * 0.85,
-        ROUND * 2,
+        round() * 2,
     );
     b.cone(
         "metal",
@@ -1106,7 +1106,7 @@ fn hose_reel(b: &mut Builder, w: f64, d: f64, h: f64) {
         [0.0, y1 + 0.005, zc],
         rr * 0.15,
         rr * 0.15,
-        ROUND,
+        round(),
     );
     // The valve and the nozzle at the bottom.
     b.cone(
@@ -1115,7 +1115,7 @@ fn hose_reel(b: &mut Builder, w: f64, d: f64, h: f64) {
         [w * 0.3, y0 + 0.03, zc - rr],
         0.018,
         0.018,
-        ROUND,
+        round(),
     );
     b.cone(
         "dark",
@@ -1123,7 +1123,7 @@ fn hose_reel(b: &mut Builder, w: f64, d: f64, h: f64) {
         [-w * 0.3, y1 - 0.03, 0.2],
         0.015,
         0.02,
-        ROUND,
+        round(),
     );
 }
 
@@ -1154,7 +1154,7 @@ fn extinguisher(b: &mut Builder, w: f64, d: f64, h: f64) {
         [0.0, yc, body + h * 0.08],
         r * 0.3,
         r * 0.25,
-        ROUND,
+        round(),
     );
     b.obox(
         "dark",
@@ -1169,7 +1169,7 @@ fn extinguisher(b: &mut Builder, w: f64, d: f64, h: f64) {
         [r * 0.3 + 0.012, yc, body + h * 0.05],
         0.015,
         0.015,
-        ROUND,
+        round(),
     );
     // The hose down the front, to its nozzle.
     b.cone(
@@ -1207,7 +1207,14 @@ fn extinguisher(b: &mut Builder, w: f64, d: f64, h: f64) {
 /// its red light.
 fn smoke_detector(b: &mut Builder, w: f64, h: f64) {
     let r = (w / 2.0).max(0.03);
-    b.cone("plate", [0.0, 0.0, h * 0.7], [0.0, 0.0, h], r, r, ROUND * 2);
+    b.cone(
+        "plate",
+        [0.0, 0.0, h * 0.7],
+        [0.0, 0.0, h],
+        r,
+        r,
+        round() * 2,
+    );
     b.lathe(
         "plate",
         [0.0, 0.0, 0.0],
@@ -1258,7 +1265,7 @@ fn siren(b: &mut Builder, w: f64, d: f64, h: f64) {
         [0.0, d / 2.0 - d * 0.25, h / 2.0],
         r,
         r * 0.85,
-        ROUND * 2,
+        round() * 2,
     );
     b.cone(
         "shade",
@@ -1266,7 +1273,7 @@ fn siren(b: &mut Builder, w: f64, d: f64, h: f64) {
         [0.0, d / 2.0, h / 2.0],
         r * 0.55,
         r * 0.4,
-        ROUND * 2,
+        round() * 2,
     );
 }
 
@@ -1368,7 +1375,14 @@ fn exit_sign(b: &mut Builder, w: f64, d: f64, h: f64) {
 fn valve(b: &mut Builder, w: f64, d: f64, h: f64) {
     let zc = h * 0.4;
     let r = (d.min(h) * 0.22).max(0.008);
-    b.cone("pipe", [-w / 2.0, 0.0, zc], [w / 2.0, 0.0, zc], r, r, ROUND);
+    b.cone(
+        "pipe",
+        [-w / 2.0, 0.0, zc],
+        [w / 2.0, 0.0, zc],
+        r,
+        r,
+        round(),
+    );
     b.ellipsoid("metal", [0.0, 0.0, zc], [w * 0.2, r * 1.7, r * 1.7]);
     for s in [-1.0, 1.0] {
         b.cone(
@@ -1420,7 +1434,7 @@ fn water_meter(b: &mut Builder, w: f64, d: f64, h: f64) {
         [0.0, d / 2.0 + 0.003, h * 0.6],
         r,
         r,
-        ROUND * 2,
+        round() * 2,
     );
     b.cone(
         "dark",
@@ -1428,7 +1442,7 @@ fn water_meter(b: &mut Builder, w: f64, d: f64, h: f64) {
         [0.0, d / 2.0 + 0.004, h * 0.6],
         r * 0.25,
         r * 0.25,
-        ROUND,
+        round(),
     );
     for s in [-1.0, 1.0] {
         b.cone(
@@ -1437,7 +1451,7 @@ fn water_meter(b: &mut Builder, w: f64, d: f64, h: f64) {
             [s * w * 0.3, 0.0, 0.07],
             0.012,
             0.012,
-            ROUND,
+            round(),
         );
     }
 }
@@ -1469,7 +1483,7 @@ fn tank(b: &mut Builder, w: f64, d: f64, h: f64) {
             [0.0, 0.0, z + 0.015],
             r * 1.015,
             r * 1.015,
-            ROUND * 2,
+            round() * 2,
         );
     }
     b.cone(
@@ -1478,7 +1492,7 @@ fn tank(b: &mut Builder, w: f64, d: f64, h: f64) {
         [0.0, 0.0, h + 0.0],
         r * 0.28,
         r * 0.28,
-        ROUND * 2,
+        round() * 2,
     );
     b.cone(
         "pipe",
@@ -1486,7 +1500,7 @@ fn tank(b: &mut Builder, w: f64, d: f64, h: f64) {
         [r * 1.0, 0.0, h * 0.85],
         0.03,
         0.03,
-        ROUND,
+        round(),
     );
     b.cone(
         "pipe",
@@ -1494,7 +1508,7 @@ fn tank(b: &mut Builder, w: f64, d: f64, h: f64) {
         [0.0, r * 1.0, 0.1],
         0.03,
         0.03,
-        ROUND,
+        round(),
     );
 }
 
@@ -1511,14 +1525,14 @@ fn pump(b: &mut Builder, w: f64, d: f64, h: f64) {
     let mut xs = vec![-w * 0.15, w * 0.1];
     xs.retain(|x| x.abs() + r < w / 2.0);
     for &x in &xs {
-        b.cone("pipe", [x, 0.0, 0.06], [x, 0.0, h * 0.5], r, r, ROUND * 2);
+        b.cone("pipe", [x, 0.0, 0.06], [x, 0.0, h * 0.5], r, r, round() * 2);
         b.cone(
             "metal",
             [x, 0.0, h * 0.5],
             [x, 0.0, h * 0.95],
             r * 0.85,
             r * 0.8,
-            ROUND * 2,
+            round() * 2,
         );
         b.cone(
             "dark",
@@ -1526,7 +1540,7 @@ fn pump(b: &mut Builder, w: f64, d: f64, h: f64) {
             [x, 0.0, h],
             r * 0.5,
             r * 0.4,
-            ROUND,
+            round(),
         );
     }
     let rp = r * 0.4;
@@ -1537,10 +1551,10 @@ fn pump(b: &mut Builder, w: f64, d: f64, h: f64) {
             [w * 0.25, y, z],
             rp,
             rp,
-            ROUND,
+            round(),
         );
         for &x in &xs {
-            b.cone("pipe", [x, y, z], [x, 0.0, z], rp * 0.8, rp * 0.8, ROUND);
+            b.cone("pipe", [x, y, z], [x, 0.0, z], rp * 0.8, rp * 0.8, round());
         }
     }
     let rv = (d * 0.3).min(w * 0.12).max(0.05);
@@ -1579,7 +1593,7 @@ fn water_heater(b: &mut Builder, w: f64, d: f64, h: f64) {
         [0.0, back + r * 2.0 + 0.01, pipes + 0.15],
         0.05,
         0.05,
-        ROUND,
+        round(),
     );
     b.ellipsoid(
         "red",
@@ -1593,7 +1607,7 @@ fn water_heater(b: &mut Builder, w: f64, d: f64, h: f64) {
             [s * r * 0.35, back + r, pipes + 0.01],
             0.011,
             0.011,
-            ROUND,
+            round(),
         );
     }
     // The hooks on the wall.
@@ -1689,7 +1703,7 @@ fn solar_row(b: &mut Builder, w: f64, d: f64, h: f64, thermal: bool) {
             [w / 2.0, -d / 2.0 + 0.03, z.min(h)],
             0.02,
             0.02,
-            ROUND,
+            round(),
         );
     }
 }

@@ -6,6 +6,30 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-15 (167) · v0.91: iPad, remates (memoria, cálculos aparte, tamaño, exportar, interfaz, WebGL)
+
+Rama `bloque/ipad-remates`, con pull request (#218) sobre la de T5 (#217). Versión 0.91.0. Sin cambios de formato ni de IFC.
+
+- **Qué se hizo** (`docs/IPAD.md` §12), lo que Antonio pidió tras T5:
+  - **Memoria del 3D**: Florence Street en 3D en el navegador, de 1,16 GB a 635 MB. La escena ya no se guarda copiada hasta el primer dibujo (`Writes` con la cola), se hace pieza a pieza (`model_solids_each`) y en la web lleva piezas redondas con menos lados y plantas en versión media. Prueba `scene_memory` con `ARCHISIM_COMO_WEB`.
+  - **Cálculos aparte** (`calc_aside`): estructura y electricidad en otro hilo (escritorio) o en un worker (web), con el resultado como JSON.
+  - **Tamaño**: LTO, sin símbolos, optimizado por tamaño y `wasm-opt`: 26 MB (9,3 MB comprimido).
+  - **Exportar en la web** (`files`): todas las exportaciones del menú como ficheros entregados; la imagen del 3D leída de la tarjeta sin esperar (`Reading`).
+  - **Interfaz**: cinta recogida y Navegador guardado al tocar la pantalla; teclado junto al punto (`keypad_place`); lupa en secciones; menú «Táctil ▾»; barra de abajo que se desliza.
+  - **WebGL**: la hierba y la copia del dibujo para la ventana (`BLIT_SHADER`); el 3D se ve con WebGL en la integración continua.
+- **Medido** (integración continua): render en borrador de la casa en 23–30 s (algo más lento por optimizar por tamaño); Florence Street, 54 MB en planta y 635 MB en 3D.
+- **Pendiente.**
+  - «Arreglar lo que no cumple» sigue en la página (para la ventana mientras busca).
+  - En la foto del 3D con WebGL de la integración continua, el árbol de bola de la casa de ejemplo sale como una caja verde: hay que mirar si pasa en el iPad y por qué.
+  - Los aparatos (cuadros, lámparas, aireadores) y las barandillas son lo que más ocupa ya en Florence Street; repetir el modelo de los aparatos iguales lo bajaría más.
+  - T6, la aplicación nativa.
+- **Qué debe probar Antonio** (con la 0.91 publicada; el `Caddyfile` es el de la 0.90):
+  1. En el iPad, abre Florence Street y entra en 3D: ¿aguanta sin recargarse?
+  2. Colaboración → Cálculo de la estructura: debe decir «Calculando la estructura aparte…» y dejarte mover la planta mientras.
+  3. Archivo → Exportar → un plano en PDF y en DXF, el BC3 y la imagen del 3D: cada uno sale con «Guardar en Archivos» y «Descargar».
+  4. Al tocar la pantalla por primera vez, la cinta debe recogerse; con la herramienta Muro, el teclado numérico debe salir junto al punto.
+  5. Si tienes un iPad con Safari anterior al 26, la vista 3D debe verse (con WebGL).
+
 ## 2026-11-15 (166) · v0.90: iPad T5, lo pesado
 
 Rama `bloque/ipad-t5`, con pull request (#217) sobre la de T4 (#216). Versión 0.90.0. Sin cambios de formato ni de IFC.

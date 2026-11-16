@@ -116,7 +116,7 @@ pub fn keep_in_library(path: &Path) -> Option<PathBuf> {
     if path.parent() == Some(dir.as_path()) || to.exists() {
         return None;
     }
-    std::fs::create_dir_all(&dir).ok()?;
+    crate::files::create_dir_all(&dir).ok()?;
     std::fs::copy(path, &to).ok()?;
     Some(to)
 }

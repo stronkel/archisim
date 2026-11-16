@@ -519,7 +519,7 @@ impl Coord {
             (None, Some(p)) => p.clone(),
             (None, None) => return Err("Falta elegir dónde guardar las incidencias.".into()),
         };
-        std::fs::write(&path, archisim_bcf::write_bcf(&issues.bcf))
+        crate::files::write(&path, archisim_bcf::write_bcf(&issues.bcf))
             .map_err(|e| format!("{}: {e}", path.display()))?;
         issues.path = Some(path.clone());
         issues.modified = false;
@@ -714,7 +714,7 @@ impl Coord {
         }
         let file = Self::sidecar(project);
         if any {
-            std::fs::write(file, s)
+            crate::files::write(file, s)
         } else {
             match std::fs::remove_file(file) {
                 Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e),
@@ -831,9 +831,9 @@ mod tests {
     #[test]
     fn link_clash_issue_and_reload() {
         let dir = std::env::temp_dir().join(format!("archisim-coord-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
+        crate::files::create_dir_all(&dir).unwrap();
         let link_path = dir.join("estructura.ifc");
-        std::fs::write(&link_path, beam_ifc(0.0)).unwrap();
+        crate::files::write(&link_path, beam_ifc(0.0)).unwrap();
         let (model, _, _) = crate::pick::tests::room();
 
         let mut c = Coord::new();
@@ -876,7 +876,7 @@ mod tests {
         assert!(again.issues.is_some());
 
         // The engineer moves the beam out of the wall: reload shows it.
-        std::fs::write(&link_path, beam_ifc(2.0)).unwrap();
+        crate::files::write(&link_path, beam_ifc(2.0)).unwrap();
         let said = again.reload(0).unwrap();
         assert!(
             said.contains("0 nuevos, 0 borrados, 1 modificados"),

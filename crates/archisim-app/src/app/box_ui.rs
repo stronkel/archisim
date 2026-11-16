@@ -1010,7 +1010,7 @@ impl ArchiSimApp {
         let codes = archisim_plan::box_sheets::codes(pages.len());
         let sheets: Vec<(String, String)> = pages.into_iter().zip(codes).collect();
         let r = crate::documents::pdf_of(&sheets, "Planos de taller de las cajas")
-            .and_then(|bytes| std::fs::write(&path, bytes).map_err(|e| e.to_string()));
+            .and_then(|bytes| crate::files::write(&path, bytes).map_err(|e| e.to_string()));
         match r {
             Ok(()) => self.say(format!(
                 "Planos de taller: {} hojas A3 en {}.",
@@ -1042,7 +1042,7 @@ impl ArchiSimApp {
         let codes = archisim_plan::board_sheets::codes(pages.len());
         let sheets: Vec<(String, String)> = pages.into_iter().zip(codes).collect();
         let r = crate::documents::pdf_of(&sheets, "Despiece a mano de las fachadas")
-            .and_then(|bytes| std::fs::write(&path, bytes).map_err(|e| e.to_string()));
+            .and_then(|bytes| crate::files::write(&path, bytes).map_err(|e| e.to_string()));
         match r {
             Ok(()) => self.say(format!(
                 "Despiece a mano: {} hojas A3 en {}.",
@@ -1078,8 +1078,8 @@ impl ArchiSimApp {
                 .trim_end_matches("-compra")
                 .to_string())
         ));
-        let r = std::fs::write(&path, archisim_geom::boards::shopping_csv(&model))
-            .and_then(|_| std::fs::write(&boards, archisim_geom::boards::boards_csv(&model)));
+        let r = crate::files::write(&path, archisim_geom::boards::shopping_csv(&model))
+            .and_then(|_| crate::files::write(&boards, archisim_geom::boards::boards_csv(&model)));
         match r {
             Ok(()) => self.say(format!(
                 "Lista de compra en {} y placas pieza a pieza en {}.",
@@ -1103,7 +1103,7 @@ impl ArchiSimApp {
         if let Some(dir) = self.start_dir() {
             d = d.set_directory(dir);
         }
-        let Some(dir) = d.pick_folder() else {
+        let Some(dir) = crate::file_dialog::pick_export_folder(d) else {
             return;
         };
         let stem = self.file_name_stem();
@@ -1113,7 +1113,7 @@ impl ArchiSimApp {
                 let sheets: Vec<(String, String)> =
                     panels.into_iter().map(|(code, svg)| (svg, code)).collect();
                 let bytes = crate::documents::pdf_of(&sheets, "Paneles de las cajas")?;
-                std::fs::write(dir.join(format!("{stem}-paneles.pdf")), bytes)
+                crate::files::write(dir.join(format!("{stem}-paneles.pdf")), bytes)
                     .map_err(|e| e.to_string())?;
             }
             let labels = archisim_plan::factory::label_pages(&model);
@@ -1124,10 +1124,10 @@ impl ArchiSimApp {
                     .map(|(i, svg)| (svg, format!("Etiquetas {}", i + 1)))
                     .collect();
                 let bytes = crate::documents::pdf_of(&sheets, "Etiquetas de las piezas")?;
-                std::fs::write(dir.join(format!("{stem}-etiquetas.pdf")), bytes)
+                crate::files::write(dir.join(format!("{stem}-etiquetas.pdf")), bytes)
                     .map_err(|e| e.to_string())?;
             }
-            std::fs::write(
+            crate::files::write(
                 dir.join(format!("{stem}-perfiladora.csv")),
                 archisim_geom::factory::machine_csv(&model),
             )
@@ -1143,7 +1143,7 @@ impl ArchiSimApp {
                     };
                     s.push_str(&format!("{};{};{};{}\n", p.group, p.what, p.unit, amount));
                 }
-                std::fs::write(dir.join(format!("{stem}-pedido-{}.csv", b.mark)), s)
+                crate::files::write(dir.join(format!("{stem}-pedido-{}.csv", b.mark)), s)
                     .map_err(|e| e.to_string())?;
                 n += 1;
             }

@@ -484,7 +484,7 @@ impl ArchiSimApp {
             .map(|(i, svg)| (svg, format!("Memoria de instalaciones {}", i + 1)))
             .collect();
         let r = crate::documents::pdf_of(&sheets, "Memoria de instalaciones")
-            .and_then(|bytes| std::fs::write(&path, bytes).map_err(|e| e.to_string()));
+            .and_then(|bytes| crate::files::write(&path, bytes).map_err(|e| e.to_string()));
         match r {
             Ok(()) => self.say(format!(
                 "Memoria de instalaciones: {} hojas A4 en {}.",

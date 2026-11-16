@@ -95,6 +95,9 @@ pub struct Prefs {
     pub touch_size: Option<bool>,
     /// The number keypad on the drawing, on a touch screen.
     pub keypad: bool,
+    /// The window already set out for a touch screen once (the ribbon
+    /// folded): not again, so what the person changes stays.
+    pub touch_layout: bool,
 }
 
 /// How the 3D view moves: speeds from 1 to 10 (5 is as it always was) and
@@ -160,6 +163,7 @@ impl Default for Prefs {
             finger_draws: None,
             touch_size: None,
             keypad: true,
+            touch_layout: false,
         }
     }
 }
@@ -214,6 +218,7 @@ impl Prefs {
             "dedo_dibuja": self.finger_draws,
             "tamano_tactil": self.touch_size,
             "teclado_numerico": self.keypad,
+            "disposicion_tactil": self.touch_layout,
         });
         serde_json::to_string_pretty(&v).unwrap_or_default()
     }
@@ -302,6 +307,7 @@ impl Prefs {
             finger_draws: v["dedo_dibuja"].as_bool(),
             touch_size: v["tamano_tactil"].as_bool(),
             keypad: flag("teclado_numerico", d.keypad),
+            touch_layout: flag("disposicion_tactil", d.touch_layout),
         }
     }
 
@@ -392,6 +398,7 @@ mod tests {
             finger_draws: Some(true),
             touch_size: Some(true),
             keypad: false,
+            touch_layout: true,
         };
         assert_eq!(Prefs::from_json(&p.to_json()), p);
         assert!((Navigation::factor(5) - 1.0).abs() < 1e-6);

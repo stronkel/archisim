@@ -415,7 +415,7 @@ mod tests {
             }
         }
         if let Some(dir) = out {
-            std::fs::create_dir_all(&dir).unwrap();
+            crate::files::create_dir_all(&dir).unwrap();
             resvg::tiny_skia::Pixmap::from_vec(
                 sheet,
                 resvg::tiny_skia::IntSize::from_wh(cols * cw, rows * ch).unwrap(),
