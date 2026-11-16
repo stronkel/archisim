@@ -25,6 +25,13 @@ extern "C" {
     fn archisim_keep(key: &str, name: &str, bytes: &JsValue) -> js_sys::Promise;
     fn archisim_kept(key: &str) -> js_sys::Promise;
     fn archisim_set_unsaved(unsaved: bool);
+    fn archisim_watch_pencil(canvas_id: &str);
+    fn archisim_is_pen(identifier: i32) -> bool;
+}
+
+/// Whether a touch (egui's id: the browser's `identifier`) is the Pencil.
+pub fn is_pen(id: u64) -> bool {
+    archisim_is_pen(id as i32)
 }
 
 /// What a chosen file is for.
@@ -220,6 +227,7 @@ pub fn start() {
             },
         };
         let app = ArchiSimApp::new(ed);
+        archisim_watch_pencil("archisim");
         let started = eframe::WebRunner::new()
             .start(
                 canvas,

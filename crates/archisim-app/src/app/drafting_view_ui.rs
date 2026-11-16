@@ -45,6 +45,10 @@ impl ArchiSimApp {
             self.view.fit_exact(rect, lo, hi, 30.0);
         }
         let before = self.view;
+        self.touch_area = Some(crate::touch::Area {
+            rect,
+            three_d: false,
+        });
         if response.dragged_by(PointerButton::Middle)
             || response.dragged_by(PointerButton::Secondary)
         {

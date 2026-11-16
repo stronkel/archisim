@@ -6,6 +6,27 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-15 (164) · v0.88: iPad T3, el Pencil y los dedos
+
+Rama `bloque/ipad-t3`, con pull request (#215) sobre la de T2 (#214). Versión 0.88.0. Sin cambios de formato ni de IFC.
+
+- **Qué se hizo.** T3 de `docs/IPAD.md` (§2 y §9).
+  - `crate::touch`: los toques, antes de que los lea egui (`raw_input_hook`), se convierten en lo que la ventana ya entiende. El Pencil, el ratón; un dedo arrastrado, la rueda pulsada (desplazar) o, en 3D, el botón derecho (girar); dos dedos, desplazar y `Zoom`; toque, clic; pulsación larga, el menú; dos dedos tocados, Deshacer; tres, Rehacer. Solo sobre el dibujo (`touch_area`, que apuntan la planta, las secciones, los planos, las vistas de dibujo y el 3D) y no bajo un menú o un diálogo.
+  - «El dedo dibuja» (`Prefs::finger_draws`, en la barra de abajo cuando se ha tocado la pantalla): encendido hasta que se ve un Pencil, que lo apaga y queda recordado.
+  - En el navegador (`web_files.js`): qué toques son del Pencil, el Pencil sobre la pantalla sin tocar como cursor, y fuera la copia «puntero» de los toques (apretaba el botón izquierdo antes de saber que era un dedo).
+  - Pruebas: seis de `touch::tests`, y en la integración continua dos dedos sobre la planta de la casa la desplazan y la acercan (del 19 % al 50 %).
+- **Pendiente.**
+  - T4: botones y pinzamientos más grandes con el dedo, teclado numérico para las cotas, la lupa con «El dedo dibuja».
+  - El Pencil sobre la pantalla sin tocar solo se ha podido programar, no probar: necesita un iPad que lo detecte (Pro, o Air M2 o posterior).
+  - En la Maqueta, mover un mueble arrastrándolo con el dedo: con «El dedo dibuja» apagado, el dedo gira la vista; se arrastra con el Pencil.
+- **Qué debe probar Antonio** (con la 0.88 publicada en el NAS, en Safari del iPad):
+  1. Con el Pencil: dibuja unos muros en planta y un forjado; selecciona y arrastra un muro.
+  2. Con un dedo: desplaza la planta; en 3D (F3, o la vista 3D del Navegador), gira.
+  3. Con dos dedos: pellizca para acercar y alejar, y arrastra.
+  4. Mantén un dedo quieto sobre un muro: ¿sale el menú? Toca con dos dedos: ¿deshace?
+  5. Apaga y enciende «El dedo dibuja» en la barra de abajo y prueba a dibujar con el dedo.
+  6. Dime qué gesto te resulta raro o echas de menos (por ejemplo, para mover muebles en la Maqueta).
+
 ## 2026-11-15 (163) · v0.87: iPad T2, abrir y guardar en la web
 
 Rama `bloque/ipad-t2`, con pull request (#214) sobre la de T1 (#212). Versión 0.87.0. Sin cambios de formato ni de IFC.

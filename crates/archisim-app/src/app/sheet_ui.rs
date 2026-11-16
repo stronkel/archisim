@@ -173,6 +173,10 @@ impl ArchiSimApp {
         }
         // Pan and zoom as in plan.
         let before = self.view;
+        self.touch_area = Some(crate::touch::Area {
+            rect,
+            three_d: false,
+        });
         if response.dragged_by(PointerButton::Middle)
             || response.dragged_by(PointerButton::Secondary)
         {
