@@ -1930,7 +1930,7 @@ impl ArchiSimApp {
     /// Handles of the selection: wall ends and slab corners (black
     /// squares, to stretch) and slab edges (white diamonds, to move the
     /// edge); the one under the cursor is highlighted.
-    fn draw_hotspots(&self, painter: &egui::Painter, rect: Rect) {
+    pub(super) fn draw_hotspots(&self, painter: &egui::Painter, rect: Rect) {
         for h in hotspots(self.ed.model(), &self.ed.selection) {
             let c = self.view.to_screen(rect, h.point);
             let picked = self.picked_vertex() == Some(h.grip);

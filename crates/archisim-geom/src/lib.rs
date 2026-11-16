@@ -333,6 +333,12 @@ pub struct WallGeometry {
     pub layers: Vec<LayerBand>,
     /// Where other walls butt into this one.
     pub notches: Vec<Notch>,
+    /// The columns standing in it (their heights from project zero): the
+    /// layers they cut through give way.
+    pub columns: Vec<junctions::ColumnCut>,
+    /// The elevation of the wall's level (to read the columns' heights
+    /// above it).
+    pub level_z: f64,
     /// The two ends as point lists from the exterior face to the interior
     /// one (one point per layer boundary at a T-junction).
     ends: (Vec<Point2>, Vec<Point2>),
@@ -358,7 +364,32 @@ impl WallGeometry {
                     .collect();
             }
         }
-        pieces
+        // The columns standing in the wall take what they cut through.
+        let columns: Vec<junctions::Shape> = self
+            .columns
+            .iter()
+            .filter(|c| {
+                z.is_none_or(|z| {
+                    let z = z + self.level_z;
+                    z > c.z.0 - EPSILON && z < c.z.1 + EPSILON
+                })
+            })
+            .map(|c| (c.outline.clone(), Vec::new()))
+            .collect();
+        if columns.is_empty() {
+            return pieces;
+        }
+        let as_shapes: Vec<junctions::Shape> = pieces
+            .into_iter()
+            .map(|p| (ensure_ccw(p), Vec::new()))
+            .collect();
+        // (A column wholly inside a layer would leave a hole: the piece is
+        // kept whole, under the column drawn over it.)
+        junctions::difference(&as_shapes, &columns)
+            .into_iter()
+            .map(|(outer, _)| outer)
+            .filter(|p| p.len() >= 3 && signed_area(p).abs() > EPSILON * EPSILON)
+            .collect()
     }
 
     /// The outline at height `z` above the level: only the walls butting in
@@ -549,6 +580,8 @@ pub fn wall_geometry_with(
         outline: Vec::new(),
         layers,
         notches: joins::notches_in(idx, wall),
+        columns: junctions::wall_column_cuts(model, wall.id),
+        level_z: model.level(wall.level).map_or(0.0, |l| l.elevation),
     };
     g.outline = build_outline(&g, None);
     Some(g)

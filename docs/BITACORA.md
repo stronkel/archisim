@@ -6,9 +6,9 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
-## 2026-11-16 (169) · v0.92: territorio N0, primera vuelta (cota del terreno y cruces guardados)
+## 2026-11-16 (170) · v0.93: territorio N0, primera vuelta (cota del terreno y cruces guardados)
 
-Rama `bloque/territorio`, con pull request. Versión 0.92.0. Sin cambios de formato ni de IFC.
+Rama `bloque/territorio`, con pull request. Versión 0.93.0. Sin cambios de formato ni de IFC.
 
 - **Decisiones de Antonio** sobre `docs/TERRITORIO.md` §5: N0 primero; tráfico solo dibujado y, como plus, circulación de ilustración al final (N9); los ajustes de un nudo cuya calle se borra se pierden; 2 × 2 km basta; chaflán estándar por lugar y luego a mano.
 - **Qué se hizo.**
@@ -17,10 +17,28 @@ Rama `bloque/territorio`, con pull request. Versión 0.92.0. Sin cambios de form
   - **Cruces guardados** (`crossroads::shared_junctions`) y búsqueda de encuentros solo entre calles cercanas.
   - Resultado (tabla en `docs/TERRITORIO.md` §4.1): calles 13,9 s → 0,8 s; terreno 17,4 s → 3,8 s; 3D del sitio 55 s → 32 s; mover una calle, de ~30 s a menos de 5 s.
 - **Pendiente** (N0, segunda vuelta): terreno por teselas para rehacer solo lo tocado; repetir el modelo de los objetos fuera de la vista 3D (render, glTF, IFC) y detalle por distancia; planta del sitio por teselas; medir la escena de la aplicación con el sitio; encontrar por qué los triángulos de las plantas varían un poco de una vez a otra.
-- **Qué debe probar Antonio** (con la 0.92 publicada):
-  1. Abre un proyecto tuyo con terreno y calles que sigan el terreno (o `out/trazado.archisim` tras `archisim trazado out/`). Arrastra una calle: el 3D y la planta deben rehacerse claramente antes que con la 0.91.
+- **Qué debe probar Antonio** (con la 0.93 publicada):
+  1. Abre un proyecto tuyo con terreno y calles que sigan el terreno (o `out/trazado.archisim` tras `archisim trazado out/`). Arrastra una calle: el 3D y la planta deben rehacerse claramente antes que con la 0.92.
   2. Tras «Traer el entorno» de Punta Umbría con un radio de 300 m, mueve una calle y dime cuánto tarda en verse.
   3. En una terminal: `archisim territorio-grande out/` y mándame `out/territorio-medidas.txt`: son los tiempos en tu PC.
+## 2026-11-16 (169) · v0.92: muros y pilares, juntas a medida y más fluidez
+
+Rama `bloque/muro-pilar`, con pull request. Versión 0.92.0. Sin cambios de formato.
+
+- **Qué se hizo.** Lo que pidió Antonio el 16/11:
+  - **El muro cede al pilar**: donde un pilar está metido en un muro, las capas del muro que el pilar atraviesa desaparecen; las que pasan por delante (un trasdosado más grueso que el pilar, un revestimiento) siguen por encima. En 3D por celdas como los encuentros con forjados (`junctions::ColumnCut`, `wall_column_cuts`, `WallGeometry::columns`, `solid::wall_parts_plain` y `wall_parts_in`), en planta (`WallGeometry::layer_pieces` resta los pilares, también para el despiece en planta), y en el IFC el muro lleva restado el pilar (`wall_column_voids`, `IfcBooleanResult`). Prueba `a_column_takes_the_layers_it_cuts`; dibujo de prueba con `ARCHISIM_PILARES_OUT` (`members::wall_column_tests`).
+  - **Despiece a mano, juntas a medida**: con una línea elegida salen sus extremos; arrastrando uno, la línea se alarga o acorta sin torcerse (Ctrl para moverlo libre; `along_dragged_line`). Su largo sale como cota azul, que se escribe (`Target::DraftLength`: se queda el extremo de abajo, o el de la izquierda si está tumbada). Con un modo de pintar activo, un clic sobre una línea la elige en vez de pintar, y arrastrar desde su extremo la estira. Pruebas `a_joint_is_made_shorter_from_its_top` y `a_joint_of_a_face_is_shortened_by_its_end`.
+  - **Fluidez**: las vistas de dibujo (el alzado del despiece) se dibujan como la planta desde la 0.85 (con margen y aparte cuando tarda: `Picture<DraftingKey>`); elegir en alzados y secciones mira primero la caja de cada cara (`SectionDrawing::face_boxes`); el medidor (Ctrl+Alt+F) dice también lo que tarda pintar la ventana (`con pintar`), y en `big_project_frames` hay ya medidas de mover un muro y del despiece a mano.
+- **Medido en Florence Street** (servidor de 2 núcleos): fotograma en planta 1–3 ms; mover un muro con las flechas, 15–20 ms el fotograma del cambio y ~110 ms hasta verlo dibujado; despiece a mano 2 ms por fotograma.
+- **Pendiente.**
+  - Un pilar cuya cara corta una capa por la mitad la quita entera o la deja entera (según por dónde pase el centro de la capa), no la parte.
+  - Los muros curvos y los de sección variable no ceden aún a los pilares.
+  - Si con el medidor ves que «con pintar» es mucho mayor que «fotograma», lo lento es dibujar en la tarjeta gráfica: mándame la captura.
+- **Qué debe probar Antonio.**
+  1. Dibuja un muro de fachada con trasdosado y mete un pilar en él (más estrecho que el muro): en planta, en 3D y en sección, la capa de fábrica debe desaparecer donde está el pilar y el trasdosado seguir por delante. Con un pilar más ancho que el muro, el muro debe quedar cortado.
+  2. Exporta el IFC y ábrelo en otro programa: el muro no debe solaparse con el pilar.
+  3. En el despiece a mano de un muro, haz clic en una junta vertical (aunque tengas «Pintar» activo): salen sus extremos y su largo en azul. Arrastra el extremo de arriba hasta una junta horizontal, o escribe el largo en la cota: la junta debe quedarse recta y parar ahí.
+  4. Con Ctrl+Alt+F, mira el medidor mientras trabajas en tus proyectos y dime qué marca cuando lo notes lento.
 
 ## 2026-11-16 (168) · Taller del territorio: diseño
 
