@@ -138,7 +138,7 @@ impl ArchiSimApp {
                     self.paint_face(id.0, FaceRef::Top, material);
                     return;
                 }
-                let reach = self.view.to_metres(REACH);
+                let reach = self.view.to_metres(crate::touch::reach(REACH));
                 match crate::pick::pick(&self.ed, self.ed.level, p, reach) {
                     Some(Element::Wall(w)) => {
                         let side = self.wall_side(w, p);

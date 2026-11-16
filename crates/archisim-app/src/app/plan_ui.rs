@@ -372,13 +372,18 @@ impl ArchiSimApp {
         rect: Rect,
     ) {
         let Some(pos) = response.hover_pos() else {
-            self.cursor = None;
+            // On a touch screen the pointer goes where the finger taps
+            // (the keypad, a button): the point stays where it was drawn,
+            // so a typed length keeps its direction.
+            if !self.touch.seen {
+                self.cursor = None;
+            }
             self.hover = None;
             return;
         };
         self.space_held = ctx.input(|i| i.key_down(Key::Space));
         let raw = self.view.to_model(rect, pos);
-        let reach = self.view.to_metres(REACH);
+        let reach = self.view.to_metres(crate::touch::reach(REACH));
         if self.underlay_pick.is_some() {
             self.underlay_cursor(ctx, raw, reach);
             return;
@@ -1359,7 +1364,7 @@ impl ArchiSimApp {
                     self.dim_tool.enough();
                 } else if response.clicked_by(PointerButton::Primary) {
                     if let Some(c) = self.cursor {
-                        let reach = self.view.to_metres(REACH);
+                        let reach = self.view.to_metres(crate::touch::reach(REACH));
                         let out = self.dim_tool.click(
                             &self.ed,
                             self.ed.level,
@@ -1625,7 +1630,7 @@ impl ArchiSimApp {
                     .flatten()
                     .filter(|p| {
                         let at = self.view.to_model(rect, *p);
-                        let reach = self.view.to_metres(REACH);
+                        let reach = self.view.to_metres(crate::touch::reach(REACH));
                         !matches!(
                             grip_at(&self.ed, &self.ed.selection, at, reach),
                             Some((g, _)) if g != Grip::Body
@@ -1638,7 +1643,7 @@ impl ArchiSimApp {
                     let origin = ctx
                         .input(|i| i.pointer.press_origin())
                         .map(|p| self.view.to_model(rect, p));
-                    let reach = self.view.to_metres(REACH);
+                    let reach = self.view.to_metres(crate::touch::reach(REACH));
                     let grip = origin.and_then(|o| grip_at(&self.ed, &self.ed.selection, o, reach));
                     match grip {
                         Some((grip, from)) => {
@@ -1800,6 +1805,9 @@ impl ArchiSimApp {
         });
         if let Some((k, tex)) = shown {
             self.paint_moved(painter, rect, tex, k.lo, k.hi);
+            let a = self.view.to_screen(rect, Point2::new(k.lo.x, k.hi.y));
+            let b = self.view.to_screen(rect, Point2::new(k.hi.x, k.lo.y));
+            self.loupe_source = Some((tex.id(), Rect::from_min_max(a, b)));
         }
         self.last_plan_ms = picture.last().as_secs_f64() * 1000.0;
         self.plan = picture;

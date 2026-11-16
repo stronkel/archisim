@@ -6,6 +6,28 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-15 (165) · v0.89: iPad T4, tamaño táctil, teclado numérico y lupa
+
+Rama `bloque/ipad-t4`, con pull request sobre la de T3 (#215). Versión 0.89.0. Sin cambios de formato ni de IFC.
+
+- **Qué se hizo.** T4 de `docs/IPAD.md` (§2, §3 y §10).
+  - Tamaño táctil (`Prefs::touch_size`, encendido al tocar la pantalla): botones y filas de 44 puntos, barras de desplazamiento fijas, y tiradores, forzados y selección al doble de distancia (`touch::reach`).
+  - Teclado numérico (`app/keypad_ui`, `Prefs::keypad`): sus teclas entran como del teclado en el fotograma siguiente, así que valen para todas las herramientas y la línea de órdenes. Con pantalla táctil el punto de la planta se queda donde dibujó el dedo al tocar el teclado.
+  - Lupa con «El dedo dibuja», con la imagen de la planta que ya hay en pantalla.
+  - Pruebas: `the_keypad_types_a_length`; en la integración continua, la foto del teclado después de tocar la pantalla.
+- **Pendiente.**
+  - El teclado sale abajo a la derecha del dibujo, no junto al punto; si tapa lo que dibujas, dímelo y lo llevo junto a la cota.
+  - Cinta recogida y paneles laterales que se esconden en el iPad (§3): no entran en T4; van con lo que digas al probar.
+  - La lupa solo en planta y en vistas de dibujo, no en secciones ni en 3D.
+  - T5 (lo pesado en segundo plano, memoria, entorno por el NAS) y T6 (la aplicación nativa).
+- **Qué debe probar Antonio** (con la 0.89 publicada en el NAS, en Safari del iPad, sin teclado):
+  1. Toca la pantalla: los botones de la cinta y las filas de Propiedades deben crecer. Apaga y enciende «Tamaño táctil» en la barra de abajo para comparar.
+  2. Coge la herramienta Muro, pon el primer punto, apunta hacia la derecha y escribe 4000 en el teclado de la pantalla, luego Intro: un muro de 4 m. Prueba Tab para pasar de la longitud al ángulo y Espacio para girar una puerta al colocarla.
+  3. Recoge el teclado con «▾» y ábrelo con «123».
+  4. Con «El dedo dibuja» encendido, dibuja un muro con el dedo y mira la lupa: ¿se ve bien dónde se engancha el punto (esquina, cara del muro)?
+  5. Coge los tiradores de un muro seleccionado con el dedo: ¿es fácil acertar?
+  6. Dime si el teclado estorba donde está y qué botones te siguen pareciendo pequeños.
+
 ## 2026-11-15 (164) · v0.88: iPad T3, el Pencil y los dedos
 
 Rama `bloque/ipad-t3`, con pull request (#215) sobre la de T2 (#214). Versión 0.88.0. Sin cambios de formato ni de IFC.

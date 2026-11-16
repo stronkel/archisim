@@ -146,7 +146,7 @@ impl ArchiSimApp {
             return;
         }
         // A polygon, closed by clicking on its first corner.
-        let reach = self.view.to_metres(REACH);
+        let reach = self.view.to_metres(crate::touch::reach(REACH));
         if self.terrain_line.len() >= 3 && self.terrain_line[0].distance(p) <= reach {
             self.finish_pad();
             return;
@@ -369,7 +369,7 @@ impl ArchiSimApp {
         }
         if self.terrain_settings.outline {
             // Closed by clicking on its first corner.
-            let reach = self.view.to_metres(REACH);
+            let reach = self.view.to_metres(crate::touch::reach(REACH));
             if self.terrain_line.len() >= 3 && self.terrain_line[0].distance(p) <= reach {
                 self.finish_terrain_outline();
                 return;
@@ -400,7 +400,7 @@ impl ArchiSimApp {
         // With a terrain on the level, a click goes straight into it: on
         // one of its points, it takes the height; elsewhere, a new point.
         if let Some(id) = self.level_terrain() {
-            let reach = self.view.to_metres(REACH);
+            let reach = self.view.to_metres(crate::touch::reach(REACH));
             let r = match self.terrain_point_at(id, p, reach) {
                 Some(i) => self
                     .ed
@@ -441,7 +441,7 @@ impl ArchiSimApp {
     /// drawing clicked becomes a contour line of the terrain, at the height
     /// of the nearest text that reads as a number (or the one written).
     fn terrain_wand(&mut self, p: Point2) {
-        let reach = self.view.to_metres(REACH);
+        let reach = self.view.to_metres(crate::touch::reach(REACH));
         let Some((path, z, read)) = contour_from_drawing(self.ed.model(), self.ed.level, p, reach)
         else {
             self.complain("Haz clic sobre una línea del dibujo (una curva de nivel de un DXF).");
@@ -590,7 +590,7 @@ impl ArchiSimApp {
             return false;
         };
         let p = self.view.to_model(rect, pos);
-        let reach = self.view.to_metres(REACH);
+        let reach = self.view.to_metres(crate::touch::reach(REACH));
         // On a height written beside a point: type it there (E5).
         if let Some(i) = self.terrain_height_at(id, p) {
             let z = self.ed.model().terrain(id).map_or(0.0, |t| t.points[i].z);

@@ -22,6 +22,7 @@
 //! tested with made-up touches.
 
 use std::collections::BTreeMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use eframe::egui;
 use egui::{Event, Modifiers, PointerButton, Pos2, Rect, TouchId, TouchPhase, Vec2};
@@ -32,6 +33,31 @@ pub const SLOP: f32 = 10.0;
 pub const LONG_PRESS: f64 = 0.5;
 /// The longest a tap of two or three fingers lasts (seconds).
 const MULTI_TAP: f64 = 0.35;
+
+/// The touch size (`docs/IPAD.md` §3): bigger buttons and handles, and
+/// handles caught from further away.
+static LARGE: AtomicBool = AtomicBool::new(false);
+
+/// Turns the touch size on or off.
+pub fn set_large(on: bool) {
+    LARGE.store(on, Ordering::Relaxed);
+}
+
+/// Whether the touch size is on.
+pub fn large() -> bool {
+    LARGE.load(Ordering::Relaxed)
+}
+
+/// How near (pixels) a handle or a point must be to be caught: `px` with
+/// the mouse, twice that with the touch size (a fingertip is about 40
+/// points wide).
+pub fn reach(px: f32) -> f32 {
+    if large() {
+        px * 2.0
+    } else {
+        px
+    }
+}
 
 /// What touched.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -114,6 +140,15 @@ impl Default for Touches {
 }
 
 impl Touches {
+    /// Where the finger that draws is, while it touches the drawing (for
+    /// the magnifier, with «El dedo dibuja»).
+    pub fn drawing_finger(&self) -> Option<Pos2> {
+        match self.mode {
+            Mode::Waiting | Mode::Drag(PointerButton::Primary) => self.only_finger().map(|t| t.pos),
+            _ => None,
+        }
+    }
+
     /// Whether a gesture is going on (the window should keep looking at
     /// the clock, for the long press).
     pub fn busy(&self) -> bool {

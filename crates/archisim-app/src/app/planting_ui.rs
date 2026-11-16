@@ -94,7 +94,7 @@ impl ArchiSimApp {
     }
 
     pub(super) fn planting_click(&mut self, p: Point2) {
-        let reach = self.view.to_metres(REACH);
+        let reach = self.view.to_metres(crate::touch::reach(REACH));
         if self.planting_points.len() >= 3 && self.planting_points[0].distance(p) < reach {
             self.finish_planting(true);
             return;

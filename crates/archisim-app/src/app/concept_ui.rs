@@ -194,7 +194,7 @@ impl ArchiSimApp {
 
     /// The mass under `p` on the active level.
     pub(super) fn mass_under(&self, p: Point2) -> Option<MassId> {
-        let reach = self.view.to_metres(REACH);
+        let reach = self.view.to_metres(crate::touch::reach(REACH));
         self.ed
             .model()
             .masses_on_level(self.ed.level)
@@ -381,7 +381,7 @@ impl ArchiSimApp {
             return;
         }
         if self.drawing_edges() {
-            let reach = self.view.to_metres(REACH);
+            let reach = self.view.to_metres(crate::touch::reach(REACH));
             // In 3D, the height the point is at (up a face).
             let z = self.point_height();
             self.concept.path_z.resize(self.concept.path.len(), 0.0);
@@ -537,7 +537,7 @@ impl ArchiSimApp {
     /// close a contour, that contour becomes a face (and the edges that
     /// made it go); else they stay as an edge.
     pub(super) fn finish_edges(&mut self, path: Vec<Point2>, heights: Vec<f64>) {
-        let reach = self.view.to_metres(REACH).max(1e-6);
+        let reach = self.view.to_metres(crate::touch::reach(REACH)).max(1e-6);
         let level = self.ed.level;
         // Level edges close faces with the level edges at their height;
         // edges up a face stay edges (they divide it, for Pintar).
@@ -743,7 +743,9 @@ impl ArchiSimApp {
                 pts.push(c.point);
                 painter.add(Shape::line(self.polygon(rect, &pts), ink));
                 let first = self.concept.path[0];
-                if pts.len() >= 4 && first.distance(c.point) <= self.view.to_metres(REACH) {
+                if pts.len() >= 4
+                    && first.distance(c.point) <= self.view.to_metres(crate::touch::reach(REACH))
+                {
                     let s = self.view.to_screen(rect, first);
                     painter.circle_stroke(s, 6.0, Stroke::new(1.5, ACCENT));
                     self.draw_label(painter, rect, c.point, "Cerrar: cara".to_string());

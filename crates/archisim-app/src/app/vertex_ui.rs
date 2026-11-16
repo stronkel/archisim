@@ -60,7 +60,7 @@ impl ArchiSimApp {
     /// A double click at `at`: a new vertex on the nearest edge of a
     /// selected line, polyline, fill or slab. Returns whether one was added.
     pub(super) fn vertex_double_click(&mut self, at: Point2) -> bool {
-        let reach = self.view.to_metres(REACH);
+        let reach = self.view.to_metres(crate::touch::reach(REACH));
         let model = self.ed.model();
         let mut best: Option<Candidate> = None;
         for e in &self.ed.selection {

@@ -4,6 +4,14 @@ Lo que cambia en cada versión, en pocas líneas. ArchiSim enseña la parte de s
 
 Cada versión empieza con una línea `## <versión>` (por ejemplo `## 0.81.0`): es la que busca la publicación.
 
+## 0.89.0
+
+- **ArchiSim en el iPad: a la medida del dedo.**
+  - **Tamaño táctil**: en cuanto tocas la pantalla, botones y filas más grandes, y los puntos de los muros, los tiradores y lo que seleccionas se cogen desde más lejos. Se apaga en la barra de abajo.
+  - **Teclado numérico** sobre el dibujo mientras tienes una herramienta en la mano o algo seleccionado: cifras, coma, menos, Retroceso, Tab para pasar a la siguiente cota, Intro, Esc y Espacio para girar. Escribe las longitudes de los muros y las cotas temporales sin teclado. Se recoge en «123».
+  - **Lupa** con «El dedo dibuja»: mientras dibujas con el dedo, encima sale lo que tapa la yema, al doble, con el punto que se va a coger.
+- También en un ordenador con pantalla táctil.
+
 ## 0.88.0
 
 - **ArchiSim en el iPad: el Pencil y los dedos.** Sobre el dibujo (planta, sección, plano o 3D):

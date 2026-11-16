@@ -91,6 +91,14 @@ def fingers(page):
         send("touchStart", [(600.0, 450.0), (680.0, 450.0)])
         send("touchEnd", [])
         page.wait_for_timeout(1_000)
+        # The screen has been touched: bigger buttons, and with the wall
+        # tool in hand the number keypad over the plan (T4).
+        page.focus("#archisim")
+        page.keyboard.press("m")
+        page.wait_for_timeout(2_000)
+        picture(page, "webgl-7-teclado")
+        page.keyboard.press("Escape")
+        page.wait_for_timeout(500)
     except Exception as e:  # noqa: BLE001 - any failure is reported
         print(f"Dedos: {e}")
         failed = True

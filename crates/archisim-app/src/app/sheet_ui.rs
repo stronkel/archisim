@@ -408,7 +408,7 @@ impl ArchiSimApp {
             return;
         };
         let raw = self.view.to_model(rect, pos);
-        let reach = self.view.to_metres(REACH);
+        let reach = self.view.to_metres(crate::touch::reach(REACH));
         if self.tool == Tool::Cad {
             self.cad_cursor(ctx, raw, reach);
             self.sheet_hover = None;
@@ -520,8 +520,12 @@ impl ArchiSimApp {
                 .map(|p| self.view.to_model(rect, p));
             if let Some(o) = origin {
                 let on_view = self.viewport_at(id, o);
-                let on_draft =
-                    crate::pick::pick_on_sheet(self.ed.model(), id, o, self.view.to_metres(REACH));
+                let on_draft = crate::pick::pick_on_sheet(
+                    self.ed.model(),
+                    id,
+                    o,
+                    self.view.to_metres(crate::touch::reach(REACH)),
+                );
                 match (on_draft, on_view) {
                     (None, Some(item)) => {
                         let model = self.ed.model();

@@ -138,8 +138,9 @@ pub fn install_fonts(ctx: &egui::Context) {
 
 /// Applies both themes' styles and chooses one.
 pub fn apply(ctx: &egui::Context, dark: bool) {
-    ctx.set_style_of(Theme::Light, style(Palette::light(), false));
-    ctx.set_style_of(Theme::Dark, style(Palette::dark(), true));
+    let touch = crate::touch::large();
+    ctx.set_style_of(Theme::Light, style(Palette::light(), false, touch));
+    ctx.set_style_of(Theme::Dark, style(Palette::dark(), true, touch));
     ctx.set_theme(if dark {
         ThemePreference::Dark
     } else {
@@ -147,7 +148,7 @@ pub fn apply(ctx: &egui::Context, dark: bool) {
     });
 }
 
-fn style(p: Palette, dark: bool) -> egui::Style {
+fn style(p: Palette, dark: bool, touch: bool) -> egui::Style {
     let mut s = egui::Style {
         text_styles: [
             (TextStyle::Small, FontId::proportional(11.0)),
@@ -168,6 +169,18 @@ fn style(p: Palette, dark: bool) -> egui::Style {
     s.spacing.menu_margin = Margin::same(6);
     s.spacing.window_margin = Margin::same(12);
     s.spacing.combo_width = 120.0;
+    if touch {
+        // The touch size (`docs/IPAD.md` §3): what is pressed with a
+        // finger, about 40 points; a little more room between things.
+        s.spacing.item_spacing = Vec2::new(10.0, 8.0);
+        s.spacing.button_padding = Vec2::new(12.0, 9.0);
+        s.spacing.interact_size = Vec2::new(44.0, 38.0);
+        s.spacing.icon_width = 20.0;
+        s.spacing.icon_width_inner = 12.0;
+        s.spacing.scroll.bar_width = 14.0;
+        s.spacing.scroll.floating = false;
+        s.spacing.combo_width = 140.0;
+    }
 
     let mut v = if dark {
         egui::Visuals::dark()

@@ -1017,7 +1017,7 @@ impl ArchiSimApp {
                         .project_to_screen(b.handle(*f), gsize)
                         .map(|s| (*f, s.distance(p)))
                 })
-                .filter(|(_, d)| *d <= HANDLE_REACH)
+                .filter(|(_, d)| *d <= crate::touch::reach(HANDLE_REACH))
                 .min_by(|a, b| a.1.total_cmp(&b.1))
                 .map(|(f, _)| f)
         };

@@ -96,3 +96,11 @@ Los gestos y el tamaño táctil (T3 y T4) sirven también en las pantallas táct
 - Pruebas: `touch::tests` (lápiz, arrastre, toque, pulsación larga, pellizco, deshacer y rehacer, dedo que dibuja, paneles) y, en la integración continua, dos dedos sobre la planta que la desplazan y la acercan (`fingers` en `scripts/web_smoke.py`).
 - También sirve en el escritorio con pantalla táctil (Windows), donde no se distingue lápiz de dedo.
 
+
+## 10. Cómo está hecho (T4: tamaño táctil, teclado numérico y lupa)
+
+- **Tamaño táctil** (`Prefs::touch_size`, «Tamaño táctil» en la barra de abajo): se enciende solo en cuanto se toca la pantalla. Botones y filas de al menos 44 × 38 puntos, más separación y barras de desplazamiento anchas que no se esconden (`theme::style` con `touch`); los tiradores, los puntos de forzado y lo que se elige se cogen desde el doble de lejos (`crate::touch::reach`, que usan todas las herramientas donde antes había una distancia fija en píxeles).
+- **Teclado numérico** (`app/keypad_ui`, `Prefs::keypad`, «Teclado numérico» en la barra de abajo): abajo a la derecha del dibujo, cuando hay una herramienta en la mano o algo seleccionado. Cifras, coma, menos, Retroceso, Tab (siguiente cota), Intro, Esc y Espacio (girar). Las teclas entran como si fueran del teclado (`keypad_queue`, que `raw_input_hook` pone en el fotograma siguiente), así que valen para las cotas temporales, la línea de órdenes y los métodos de todas las herramientas. Se recoge en un botón «123».
+- **El punto no se pierde al tocar fuera.** Con pantalla táctil, el cursor de la planta y de las vistas de dibujo se queda donde dibujó el dedo cuando se toca el teclado o un botón: la cota tecleada sigue la dirección que tenía.
+- **Lupa** (con «El dedo dibuja»): mientras un dedo dibuja en planta, un cuadrado encima del dedo enseña lo que hay debajo al doble, con una cruz en la yema y un círculo en el punto que se cogerá (el forzado). Se dibuja con la imagen de la planta que ya está en pantalla (`loupe_source`), sin rehacer nada.
+- Prueba: `the_keypad_types_a_length` (con la herramienta Muro, cuatro metros tecleados con el teclado de la pantalla, un toque en el «0» que escribe y no pone punto, Retroceso e Intro), y en la integración continua la planta con el teclado a la vista después de tocar la pantalla (`webgl-7-teclado`).

@@ -233,7 +233,7 @@ impl ArchiSimApp {
                 };
                 Some((h, at.distance(pos)))
             })
-            .filter(|(_, d)| *d <= REACH)
+            .filter(|(_, d)| *d <= crate::touch::reach(REACH))
             .min_by(|a, b| a.1.total_cmp(&b.1))
             .map(|(h, _)| h)
     }
@@ -476,7 +476,8 @@ impl ArchiSimApp {
             let Some((p, dir)) = self.handle_on_screen(rect, *key, *at) else {
                 continue;
             };
-            let near = hover.is_some_and(|h| h.distance(p + dir * ARROW_GRAB) <= REACH);
+            let near = hover
+                .is_some_and(|h| h.distance(p + dir * ARROW_GRAB) <= crate::touch::reach(REACH));
             super::handles::arrow(
                 painter,
                 p + dir * (ARROW_GAP + 3.0),
