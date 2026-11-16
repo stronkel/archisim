@@ -298,6 +298,13 @@ impl Prefs {
                 ..Default::default()
             };
         }
+        // In the browser, in its own storage (there is no settings folder).
+        #[cfg(target_arch = "wasm32")]
+        return web_storage()
+            .and_then(|s| s.get_item(WEB_KEY).ok().flatten())
+            .map(|t| Prefs::from_json(&t))
+            .unwrap_or_default();
+        #[cfg(not(target_arch = "wasm32"))]
         file()
             .and_then(|f| std::fs::read_to_string(f).ok())
             .map(|t| Prefs::from_json(&t))
@@ -306,6 +313,11 @@ impl Prefs {
 
     pub fn save(&self) {
         if cfg!(test) {
+            return;
+        }
+        #[cfg(target_arch = "wasm32")]
+        if let Some(s) = web_storage() {
+            let _ = s.set_item(WEB_KEY, &self.to_json());
             return;
         }
         if let Some(f) = file() {
@@ -318,6 +330,15 @@ impl Prefs {
             }
         }
     }
+}
+
+/// The browser's storage for the preferences (`docs/IPAD.md`).
+#[cfg(target_arch = "wasm32")]
+const WEB_KEY: &str = "archisim-preferencias";
+
+#[cfg(target_arch = "wasm32")]
+fn web_storage() -> Option<web_sys::Storage> {
+    web_sys::window()?.local_storage().ok().flatten()
 }
 
 #[cfg(test)]

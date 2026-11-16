@@ -62,7 +62,7 @@ mod web {
 
         fn not_yet<T>(&self) -> Option<T> {
             crate::web::note(&format!(
-                "«{}»: abrir y guardar archivos llega a la versión web en T2.",
+                "«{}» todavía no está en la versión web (sí abrir, guardar e importar y exportar IFC).",
                 self.title
             ));
             None

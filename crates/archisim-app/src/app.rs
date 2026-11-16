@@ -428,6 +428,13 @@ pub struct ArchiSimApp {
     pub show_meter: bool,
     /// The project being written to its file on another thread.
     saving: Option<background::Pending<std::path::PathBuf, Result<(), String>>>,
+    /// On the web: the revision last kept in the browser, and since when
+    /// there are changes to keep.
+    #[allow(dead_code)]
+    web_kept: (u64, Option<web_time::Instant>),
+    /// On the web: whether leaving the page asks first.
+    #[allow(dead_code)]
+    web_unsaved: bool,
     /// How long the last section drawing took to work out.
     section_took: std::sync::Arc<std::sync::Mutex<std::time::Duration>>,
     sheet_pending: Option<background::Pending<sheet_ui::SheetKey>>,
@@ -898,6 +905,8 @@ impl ArchiSimApp {
             section_pending: None,
             section_took: Default::default(),
             saving: None,
+            web_kept: (0, None),
+            web_unsaved: false,
             frame_times: Default::default(),
             nav_rows: None,
             discipline_counts: None,
@@ -1298,6 +1307,18 @@ impl ArchiSimApp {
                 self.replace_editor(Editor::new_project());
                 self.say("Proyecto nuevo con la plantilla de ArchiSim.");
             }
+            Pending::FromTemplate(None) if crate::platform::WEB => {
+                #[cfg(target_arch = "wasm32")]
+                crate::web::pick(crate::web::Purpose::Template);
+            }
+            Pending::Open(None) if crate::platform::WEB => {
+                #[cfg(target_arch = "wasm32")]
+                crate::web::pick(crate::web::Purpose::Open);
+            }
+            Pending::Import(None) if crate::platform::WEB => {
+                #[cfg(target_arch = "wasm32")]
+                crate::web::pick(crate::web::Purpose::Import);
+            }
             Pending::FromTemplate(path) => {
                 let path = path.or_else(|| {
                     let mut d = crate::file_dialog::FileDialog::new()
@@ -1350,24 +1371,134 @@ impl ArchiSimApp {
     /// dropped on the Dock icon: a project is opened, an IFC imported, as
     /// with the File menu (asking first if there are unsaved changes).
     fn receive_files(&mut self, ctx: &egui::Context) {
+        // On the web the dropped files have only a name: `web_files` reads them.
         let paths: Vec<PathBuf> = ctx.input(|i| {
             i.raw
                 .dropped_files
                 .iter()
                 .map(|f| f.path().to_path_buf())
-                .filter(|p| !p.as_os_str().is_empty())
+                .filter(|p| !p.as_os_str().is_empty() && !crate::platform::WEB)
                 .collect()
         });
         // Tests run in parallel and never read the operating system's queue.
         #[cfg(not(test))]
         let paths = [paths, crate::open_files::take()].concat();
         #[cfg(target_arch = "wasm32")]
-        for note in crate::web::take_notes() {
-            self.say(note);
-        }
+        self.web_files(ctx);
         self.open_files(paths);
         #[cfg(all(target_os = "macos", not(test)))]
         crate::open_files::macos::quit_for_check(ctx);
+    }
+
+    /// On the web: the notes left for the person, the files chosen in the
+    /// picker or dropped on the page, and the copy kept in the browser.
+    #[cfg(target_arch = "wasm32")]
+    fn web_files(&mut self, ctx: &egui::Context) {
+        for note in crate::web::take_notes() {
+            self.say(note);
+        }
+        // Files dropped on the page are read by the browser, and come back
+        // as chosen ones.
+        let dropped = ctx.input(|i| i.raw.dropped_files.clone());
+        for f in dropped {
+            wasm_bindgen_futures::spawn_local(async move {
+                let name = f.path().to_string_lossy().into_owned();
+                match f.bytes_async().await {
+                    Ok(bytes) => crate::web::push_picked(crate::web::Picked {
+                        purpose: crate::web::Purpose::Open,
+                        name,
+                        bytes,
+                    }),
+                    Err(e) => crate::web::note(&format!("No se puede leer {name}: {e}.")),
+                }
+            });
+        }
+        for file in crate::web::take_picked() {
+            self.open_picked(file);
+        }
+        // A copy in the browser half a minute after each change.
+        let revision = self.ed.revision();
+        let now = web_time::Instant::now();
+        if revision != self.web_kept.0 {
+            if self.web_kept.1.is_none() {
+                self.web_kept.1 = Some(now);
+            }
+            if self
+                .web_kept
+                .1
+                .is_some_and(|t| now - t > web_time::Duration::from_secs(30))
+            {
+                let name = format!("{}.{}", self.file_name_stem(), archisim_file::EXTENSION);
+                crate::web::keep(&name, archisim_file::to_string(self.ed.model()).as_bytes());
+                self.web_kept = (revision, None);
+            } else {
+                ctx.request_repaint_after(web_time::Duration::from_secs(5));
+            }
+        }
+        let unsaved = self.ed.is_modified();
+        if unsaved != self.web_unsaved {
+            self.web_unsaved = unsaved;
+            crate::web::set_unsaved(unsaved);
+        }
+    }
+
+    /// A file chosen or dropped on the web, by what it is.
+    #[cfg(target_arch = "wasm32")]
+    fn open_picked(&mut self, file: crate::web::Picked) {
+        use crate::web::Purpose;
+        let name = PathBuf::from(&file.name);
+        let ext = name
+            .extension()
+            .map(|e| e.to_string_lossy().to_lowercase())
+            .unwrap_or_default();
+        let as_project = || {
+            String::from_utf8(file.bytes.clone())
+                .map_err(|_| "no es un proyecto de ArchiSim".to_string())
+                .and_then(|t| archisim_file::from_str(&t).map_err(|e| e.to_string()))
+        };
+        match (file.purpose, ext.as_str()) {
+            (Purpose::Template, _) => match as_project()
+                .and_then(|m| archisim_file::template_of(&m).map_err(|e| e.to_string()))
+            {
+                Ok(model) => {
+                    self.replace_editor(Editor::with_model(model, None));
+                    self.say(format!("Proyecto nuevo con la plantilla {}.", file.name));
+                }
+                Err(e) => self.complain(format!(
+                    "No se puede usar {} como plantilla: {e}.",
+                    file.name
+                )),
+            },
+            (_, "ifc") => match Editor::import_bytes(&name, &file.bytes) {
+                Ok((ed, report, library)) => {
+                    self.replace_editor(ed);
+                    let mut text = report.to_string();
+                    if library {
+                        text.push_str(
+                            "\nSe ha añadido la plantilla de ArchiSim porque el fichero no trae tipos de todas las herramientas.\n",
+                        );
+                    }
+                    self.import_report = Some(text);
+                    self.say(format!("Importado {}: {}.", file.name, report.summary()));
+                }
+                Err(e) => self.complain(format!("No se puede importar {}: {e}.", file.name)),
+            },
+            (Purpose::Import, _) => {
+                self.complain(format!("{} no es un fichero IFC (.ifc).", file.name));
+            }
+            (_, e) if e == archisim_file::EXTENSION => match as_project() {
+                Ok(model) => {
+                    let ed = Editor::with_model(model, Some(name));
+                    self.replace_editor(ed);
+                    self.say(format!("Abierto {}.", file.name));
+                }
+                Err(e) => self.complain(format!("No se puede abrir {}: {e}.", file.name)),
+            },
+            _ => self.complain(format!(
+                "{}: en la versión web se abren proyectos de ArchiSim (.archisim) e IFC (.ifc).",
+                file.name
+            )),
+        }
     }
 
     /// Opens the first project or IFC file of a list (one at a time: a
@@ -1538,6 +1669,17 @@ impl ArchiSimApp {
         if self.team.is_some() && !ask {
             return self.team_save();
         }
+        // On the web it is handed over: share sheet or download.
+        #[cfg(target_arch = "wasm32")]
+        {
+            let name = format!("{}.{}", self.file_name_stem(), archisim_file::EXTENSION);
+            let text = archisim_file::to_string(self.ed.model());
+            crate::web::deliver(&name, text.as_bytes(), "application/json");
+            crate::web::keep(&name, text.as_bytes());
+            self.ed.mark_saved();
+            self.ed.path = Some(PathBuf::from(&name));
+            return true;
+        }
         let target = if ask || self.ed.path.is_none() {
             let mut d = crate::file_dialog::FileDialog::new()
                 .set_title("Guardar proyecto")
@@ -1625,7 +1767,7 @@ impl ArchiSimApp {
     /// Ctrl+S: a project that has its file is written on another thread,
     /// so a big one does not stop the window; the rest as [`Self::save`].
     pub(super) fn save_quick(&mut self) {
-        if self.team.is_some() || self.saving.is_some() || cfg!(test) {
+        if self.team.is_some() || self.saving.is_some() || cfg!(test) || crate::platform::WEB {
             self.save(false);
             return;
         }
@@ -1678,7 +1820,15 @@ impl ArchiSimApp {
         let mut d = crate::file_dialog::FileDialog::new()
             .set_title(format!("Exportar {title}"))
             .add_filter("IFC", &["ifc"])
-            .set_file_name(name);
+            .set_file_name(name.clone());
+        // On the web it is handed over: share sheet or download.
+        #[cfg(target_arch = "wasm32")]
+        {
+            let _ = d;
+            let text = self.ed.ifc_text(name.clone(), schema);
+            crate::web::deliver(&name, text.as_bytes(), "application/x-step");
+            return;
+        }
         if let Some(dir) = self.start_dir() {
             d = d.set_directory(dir);
         }

@@ -4,6 +4,16 @@ Lo que cambia en cada versión, en pocas líneas. ArchiSim enseña la parte de s
 
 Cada versión empieza con una línea `## <versión>` (por ejemplo `## 0.81.0`): es la que busca la publicación.
 
+## 0.87.0
+
+- **ArchiSim en el iPad: abrir y guardar.** En la versión web ya se abren proyectos e IFC y se guardan.
+  - **Abrir** (Ctrl+O o Archivo → Abrir): «Elegir archivo…» deja coger el proyecto de Archivos, iCloud Drive o cualquier carpeta del iPad. También se pueden soltar sobre la página.
+  - **Guardar** (Ctrl+S): «Guardar en Archivos…» deja escoger la carpeta, también iCloud Drive; «Descargar» lo deja en Descargas. Exportar IFC 4.3 e IFC4, igual.
+  - **No se pierde nada**: el navegador guarda una copia medio minuto después de cada cambio y la abre la próxima vez. Si cierras la página con cambios sin guardar, pregunta antes.
+  - Las preferencias (tamaño de letra, tema, misiones) se recuerdan.
+  - Lo demás que se exporta (PDF, DXF, BC3, imágenes…) aún no está en la web; lo dice al pedirlo.
+- En el escritorio no cambia nada.
+
 ## 0.86.0
 
 - **ArchiSim en el iPad (primera vuelta).** ArchiSim funciona también en el navegador, con la gráfica del iPad (Safari 26). Se sirve desde tu NAS con usuario y contraseña y se pone al día solo con cada versión (`scripts/nas/README.md`).

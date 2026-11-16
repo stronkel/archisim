@@ -78,3 +78,11 @@ Los gestos y el tamaño táctil (T3 y T4) sirven también en las pantallas táct
 - `web.rs` arranca el programa en el lienzo de `index.html` (con `eframe::WebRunner`) y abre `demo.archisim`, que la compilación pone al lado.
 - `scripts/build_web.sh` lo compila con trunk y hace `dist/archisim-web.zip`; la integración continua lo compila en cada cambio, lo abre en Chromium (`scripts/web_smoke.py`: planta y 3D) y lo adjunta a cada versión publicada.
 - El programa pesa unos 51 MB (13 MB comprimido). Afinarlo (wasm-opt) va en T5.
+
+## 8. Cómo está hecho (T2: archivos)
+
+- **Abrir** (Archivo → Abrir, Ctrl+O, «Nuevo desde plantilla», Importar IFC): sale una tarjeta sobre el programa con «Elegir archivo…». Safari solo abre el selector de archivos al tocar un botón de verdad, y los toques del programa le llegan un instante tarde; por eso la tarjeta. El selector del iPad deja coger de Archivos, iCloud Drive, el iPad o cualquier app con carpeta. No se le dice qué tipos: en el iPad saldrían en gris los `.archisim`, que no conoce. Abre `.archisim` e IFC; también soltándolos sobre la página.
+- **Guardar** (Ctrl+S, Archivo → Guardar): otra tarjeta con «Guardar en Archivos…» (la hoja de compartir del iPad, que deja escoger carpeta, también iCloud Drive) y «Descargar» (a Descargas). Igual para exportar IFC 4.3 e IFC4. Lo demás que se exporta (PDF, DXF, BC3, imágenes…) todavía no; lo dice al pedirlo.
+- **Copia en el navegador**: medio minuto después de cada cambio, y al guardar, el proyecto se guarda también en el propio navegador (IndexedDB). Al volver a abrir la página se abre esa copia, con un aviso de cuándo es; si no la hay, la casa de ejemplo. Si se cierra la página con cambios sin guardar, el navegador pregunta antes.
+- Las preferencias (tamaño de letra, tema, teclas, misiones hechas) se guardan en el navegador (`prefs`, `localStorage`).
+- Código: `web.rs` (`pick`, `deliver`, `keep`, `kept`, `set_unsaved`) sobre `web_files.js`; en la ventana, `ArchiSimApp::web_files` y `open_picked`; `Editor::import_bytes`, `ifc_text`, `mark_unhanded`. La prueba de la integración continua abre la casa con Ctrl+O, importa un IFC, guarda con «Descargar» y comprueba que al recargar abre la copia.

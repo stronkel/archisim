@@ -6,6 +6,27 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-15 (163) · v0.87: iPad T2, abrir y guardar en la web
+
+Rama `bloque/ipad-t2`, con pull request (#214) sobre la de T1 (#212). Versión 0.87.0. Sin cambios de formato ni de IFC.
+
+- **Qué se hizo.** T2 de `docs/IPAD.md` (§8).
+  - **Abrir, importar y «Nuevo desde plantilla»** en la web: una tarjeta sobre el programa con «Elegir archivo…» (Safari solo abre el selector si se toca un botón de verdad). El selector no lleva tipos, para que el iPad no ponga en gris los `.archisim`. Abre `.archisim` e IFC, también soltados sobre la página (`ArchiSimApp::web_files`, `open_picked`; `Editor::import_bytes`).
+  - **Guardar y exportar IFC**: tarjeta con «Guardar en Archivos…» (hoja de compartir del iPad, si el navegador la ofrece para ese fichero) y «Descargar» (`web::deliver`; `Editor::ifc_text`). Ctrl+S en la web guarda así (sin hilo aparte).
+  - **Copia en el navegador** (IndexedDB, `web::keep`/`kept`): 30 s después de cada cambio y al guardar; al abrir la página se abre esa copia, con aviso de su hora, y si no la hay la casa de ejemplo. Al cerrar la página con cambios sin guardar, el navegador pregunta (`set_unsaved`).
+  - **Preferencias** en `localStorage` (`prefs`): la bienvenida y las misiones ya no salen cada vez.
+  - La parte del navegador está en `src/web_files.js` (tarjetas, selector, compartir, descarga, IndexedDB).
+  - **Probado en la integración continua** (`scripts/web_smoke.py`, Chromium con WebGL): Ctrl+O abre la casa de ejemplo desde el selector, importa `demo.ifc` (con su informe de importación), Ctrl+S → «Descargar» baja un `.archisim` de 286 KB, y al recargar la página abre la copia del navegador.
+- **Pendiente.**
+  - Lo demás que se exporta (PDF de planos, DXF, BC3, glTF, imágenes, cálculos) aún no está en la web: dice «todavía no está en la versión web».
+  - «Guardar en Archivos…» depende de que Safari deje compartir ese tipo de fichero; si no sale, «Descargar» deja el fichero en Archivos → Descargas.
+  - Luego, T3: el Pencil y los gestos.
+- **Qué debe probar Antonio** (con la 0.87 publicada y el NAS sirviéndola):
+  1. En Safari del iPad, Archivo → Abrir: «Elegir archivo…», coge un proyecto `.archisim` de iCloud Drive. ¿Se abre?
+  2. Cambia algo y Archivo → Guardar: prueba «Guardar en Archivos…» (elige una carpeta de iCloud Drive) y «Descargar». Ábrelo luego en el PC desde iCloud.
+  3. Archivo → Importar IFC con un IFC de Revit o ArchiCAD.
+  4. Cierra la pestaña y vuelve a abrir la dirección: debe abrir tu proyecto con el aviso de la copia del navegador.
+
 ## 2026-11-14 (162) · v0.86: iPad T1, ArchiSim en el navegador y en el NAS
 
 Rama `bloque/ipad`, con pull request (#212). Versión 0.86.0. Sin cambios de formato ni de IFC.
