@@ -63,7 +63,7 @@ Hoy `archisim_geom::crossroads::junctions(model, level)` rehace todos los cruces
 1. **Identidad estable del nudo** (`archisim-core::model::nodes`):
    - `NodeKey`: planta + calles que llegan (ids ordenados) + extremo o eje de cada una. No depende de la posición exacta: si una calle se mueve, el nudo sigue siendo el mismo mientras lleguen las mismas calles.
    - `NodeSettings` guardado en `Model::nodes` (formato nuevo): `kind`, `shift`, `flat`, `main`, `hidden` y `arms: Vec<ArmSettings>` (por `RoadId` y sentido: retranqueo, paso, rebaje, señal, aplanado) y `corners: Vec<CornerSettings>` (por pareja de brazos: radio, forma, oreja). Solo se guarda lo que Antonio cambia; lo demás sigue calculándose.
-   - Al cambiar las calles, `Model::reconcile_nodes` busca para cada ajuste su nudo; si ya no existe (se borró una calle), se deja aparte y la app avisa (como los ajustes huérfanos de Node Controller).
+   - Al cambiar las calles, `Model::reconcile_nodes` busca para cada ajuste su nudo; si ya no existe (se borró una calle), sus ajustes se quitan (decisión 3 de §5).
 2. **`junctions` lee los ajustes**: `assemble` usa el retranqueo, el radio y la forma de cada esquina; los tipos nuevos son variantes de `assemble` (`flat_plate`, `raised`, `seamless`, `bend`, `dead_end`).
 3. **IFC**: el cruce ya sale como piezas; los ajustes van en un pset `ArchiSim_Node` en el `IfcBuildingElementProxy` del cruce para que vuelvan al importar.
 4. **App**: `app/node_ui` (`Tool::Node`, `Pick::Node`, `Grip::NodeArm`, `Grip::NodeCorner`, `Grip::NodeShift`), tarjetas con `cards::option_cards` dibujadas en 3D como las de los tipos de calle.
