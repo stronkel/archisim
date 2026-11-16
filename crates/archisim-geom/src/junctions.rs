@@ -260,6 +260,92 @@ pub fn slab_wall_cuts_with(
 /// bottom and top from project zero.
 pub type Void = (Vec<Shape>, f64, f64);
 
+/// A column standing in a wall: the wall gives way to it. Every layer of
+/// the wall the column cuts through is not there; the layers that pass in
+/// front of it (a lining over the column, where the wall is thicker)
+/// carry on.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ColumnCut {
+    pub column: archisim_core::ColumnId,
+    /// Its bottom and top, from project zero.
+    pub z: (f64, f64),
+    /// The column in plan.
+    pub outline: Vec<Point2>,
+}
+
+impl ColumnCut {
+    /// Whether `p` lies in the column (in plan).
+    pub fn contains(&self, p: Point2) -> bool {
+        inside(p, &self.outline)
+    }
+}
+
+/// Segments of a round column, in the walls it stands in.
+const COLUMN_ROUND: usize = 24;
+
+/// The columns standing in a straight or curved wall, over its height.
+pub fn wall_column_cuts(model: &Model, wall: WallId) -> Vec<ColumnCut> {
+    let Some(w) = model.wall(wall) else {
+        return Vec::new();
+    };
+    if model.columns().next().is_none() {
+        return Vec::new();
+    }
+    let range = wall_z_range(model, w);
+    let wbox = bounds(model, w);
+    model
+        .columns()
+        .filter_map(|c| {
+            let t = model.member_type(c.member_type)?;
+            let base = model.level(c.level)?.elevation + c.base_offset;
+            let z = (base, base + c.height);
+            if !overlap(z, range) {
+                return None;
+            }
+            // Far from the wall: not worked out (a building has many walls
+            // and columns).
+            let (sw, sd) = t.profile.size();
+            let r = (sw.hypot(sd)) / 2.0;
+            let near = boxes_meet(
+                wbox,
+                (
+                    Point2::new(c.position.x - r, c.position.y - r),
+                    Point2::new(c.position.x + r, c.position.y + r),
+                ),
+            );
+            if !near {
+                return None;
+            }
+            let outline = ensure_ccw(c.plan_outline(t.profile, COLUMN_ROUND));
+            (outline.len() >= 3 && boxes_meet(wbox, box_of(&outline))).then_some(ColumnCut {
+                column: c.id,
+                z,
+                outline,
+            })
+        })
+        .collect()
+}
+
+/// What the columns standing in a wall take of it, as prisms: for the IFC
+/// (the wall's body less these).
+pub fn wall_column_voids(model: &Model, g: &crate::WallGeometry) -> Vec<Void> {
+    let Some(w) = model.wall(g.wall) else {
+        return Vec::new();
+    };
+    let range = wall_z_range(model, w);
+    let level = model.level(w.level).map_or(0.0, |l| l.elevation);
+    wall_column_cuts(model, g.wall)
+        .into_iter()
+        .filter_map(|cut| {
+            let (z0, z1) = (cut.z.0.max(range.0), cut.z.1.min(range.1));
+            let mid = (z0 + z1) / 2.0 - level;
+            let outline = vec![(ensure_ccw(g.outline_at(Some(mid))), Vec::new())];
+            let shapes = intersection(&slab_shape(&cut.outline, &[]), &outline);
+            (!shapes.is_empty() && z1 - z0 > EPSILON).then_some((shapes, z0, z1))
+        })
+        .collect()
+}
+
 fn slab_shape(outline: &[Point2], holes: &[Vec<Point2>]) -> Vec<Shape> {
     vec![(ensure_ccw(outline.to_vec()), holes.to_vec())]
 }

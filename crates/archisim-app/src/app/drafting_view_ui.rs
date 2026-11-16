@@ -22,6 +22,26 @@ pub struct DraftingKey {
     thin: bool,
 }
 
+impl super::picture::Region for DraftingKey {
+    fn lo(&self) -> Point2 {
+        self.lo
+    }
+    fn hi(&self) -> Point2 {
+        self.hi
+    }
+    fn size(&self) -> [usize; 2] {
+        self.size
+    }
+    fn with_view(&self, lo: Point2, hi: Point2, size: [usize; 2]) -> Self {
+        DraftingKey {
+            lo,
+            hi,
+            size,
+            ..*self
+        }
+    }
+}
+
 impl ArchiSimApp {
     /// The tab of a view for drawing.
     pub(super) fn drafting_view(&mut self, ui: &mut Ui, id: DraftViewId) {
@@ -81,10 +101,15 @@ impl ArchiSimApp {
                     // Moving or copying what is selected: it snaps to the
                     // lines of the view, with the tracking lines, and the
                     // moved lines follow the cursor.
-                    let s = self.drafting_snap(&ctx, id, raw, reach, Some(d.from), &d.skip);
+                    let mut s = self.drafting_snap(&ctx, id, raw, reach, Some(d.from), &d.skip);
+                    let variant = ctx.input(|i| i.modifiers.command);
+                    // An end of a straight line keeps the line's direction
+                    // (shortening a joint), unless Ctrl.
+                    if !variant {
+                        s.point = self.along_dragged_line(&d, s.point);
+                    }
                     self.cursor = Some(s);
                     self.hover = None;
-                    let variant = ctx.input(|i| i.modifiers.command);
                     let to = d.target(s.point);
                     let fresh = self
                         .drag_preview
@@ -111,6 +136,10 @@ impl ArchiSimApp {
                 } else {
                     self.cursor = Some(Snap::at(raw, SnapKind::Free));
                     self.hover = crate::pick::pick_drafts(self.ed.model(), view, raw, reach);
+                    self.hover_grip =
+                        crate::drag::grip_at(&self.ed, &self.ed.selection, raw, reach)
+                            .map(|(g, _)| g)
+                            .filter(|g| *g != crate::drag::Grip::Body);
                 }
             }
             None => {
@@ -125,20 +154,41 @@ impl ArchiSimApp {
         if ctx.memory(|m| m.focused().is_none()) {
             self.drafting_keys(&ctx);
         }
-        self.drafting_clicks(&ctx, &response, rect, id);
+        crate::profile::time("dibujo: drafting_clicks", || {
+            self.drafting_clicks(&ctx, &response, rect, id)
+        });
 
         painter.rect_filled(rect, CornerRadius::ZERO, Color32::WHITE);
-        self.draw_drafting_image(&ctx, &painter, rect, id, dv.scale);
+        crate::profile::time("dibujo: draw_drafting_image", || {
+            self.draw_drafting_image(&ctx, &painter, rect, id, dv.scale)
+        });
         // A wall's sketch in elevation is drawn here, the rest behind a veil.
-        self.draw_sketch(&painter, rect);
-        self.draw_sketch_candidate(&ctx, &painter, rect);
-        self.draw_selection(&painter, rect);
-        self.draw_temp_dims(&painter, rect);
-        self.draw_underlay_pick(&painter, rect);
-        self.draw_cad(&painter, rect);
-        self.draw_drag_preview(&painter, rect);
-        self.draw_tracking(&painter, rect);
-        self.draw_cursor(&painter, rect);
+        crate::profile::time("dibujo: draw_sketch", || self.draw_sketch(&painter, rect));
+        crate::profile::time("dibujo: draw_sketch_candidate", || {
+            self.draw_sketch_candidate(&ctx, &painter, rect)
+        });
+        crate::profile::time("dibujo: draw_selection", || {
+            self.draw_selection(&painter, rect)
+        });
+        // The ends of the selected lines, to stretch them (a joint that
+        // should stop short of the top).
+        if self.tool != Tool::Cad && self.drag.is_none() {
+            self.draw_hotspots(&painter, rect);
+        }
+        crate::profile::time("dibujo: draw_temp_dims", || {
+            self.draw_temp_dims(&painter, rect)
+        });
+        crate::profile::time("dibujo: draw_underlay_pick", || {
+            self.draw_underlay_pick(&painter, rect)
+        });
+        crate::profile::time("dibujo: draw_cad", || self.draw_cad(&painter, rect));
+        crate::profile::time("dibujo: draw_drag_preview", || {
+            self.draw_drag_preview(&painter, rect)
+        });
+        crate::profile::time("dibujo: draw_tracking", || {
+            self.draw_tracking(&painter, rect)
+        });
+        crate::profile::time("dibujo: draw_cursor", || self.draw_cursor(&painter, rect));
         if let (Some(a), Some(c)) = (self.window_start, self.cursor) {
             let r = Rect::from_two_pos(
                 self.view.to_screen(rect, a),
@@ -152,14 +202,16 @@ impl ArchiSimApp {
                 StrokeKind::Inside,
             );
         }
-        self.temp_edit_ui(&ctx);
+        crate::profile::time("dibujo: temp_edit_ui", || self.temp_edit_ui(&ctx));
         if let (true, Some(c)) = (self.tool == Tool::Cad, self.cursor) {
             let p = self.view.to_screen(rect, c.point);
             let s = Stroke::new(1.0, ACCENT);
             painter.line_segment([p - Vec2::new(10.0, 0.0), p + Vec2::new(10.0, 0.0)], s);
             painter.line_segment([p - Vec2::new(0.0, 10.0), p + Vec2::new(0.0, 10.0)], s);
         }
-        self.draw_overlays(&ctx, &painter, rect);
+        crate::profile::time("dibujo: draw_overlays", || {
+            self.draw_overlays(&ctx, &painter, rect)
+        });
         if response.hovered() {
             ctx.set_cursor_icon(if self.tool == Tool::Cad {
                 CursorIcon::Crosshair
@@ -167,6 +219,26 @@ impl ArchiSimApp {
                 CursorIcon::Default
             });
         }
+    }
+
+    /// Where the dragged end of a straight line goes for `p`: on the line,
+    /// so it keeps its direction.
+    fn along_dragged_line(&self, d: &DragState, p: Point2) -> Point2 {
+        let crate::drag::Grip::DraftPoint { draft, index } = d.grip else {
+            return p;
+        };
+        let Some(archisim_core::Shape::Line { a, b }) =
+            self.ed.model().draft(draft).map(|d| d.shape.clone())
+        else {
+            return p;
+        };
+        if index > 1 {
+            return p;
+        }
+        let Some(u) = (b - a).normalized() else {
+            return p;
+        };
+        a + u * (p - a).dot(u)
     }
 
     fn drafting_keys(&mut self, ctx: &egui::Context) {
@@ -235,8 +307,41 @@ impl ArchiSimApp {
                 }
             }
         }
-        // A face composed by hand: a click marks a piece.
-        if self.sketch_marking() {
+        // A face composed by hand: a click marks a piece. But on a joint
+        // line it takes the line, and from the end of a line taken it
+        // stretches it (Revit: lines are picked in a sketch too).
+        let press = ctx
+            .input(|i| i.pointer.press_origin())
+            .map(|p| self.view.to_model(rect, p));
+        let reach = self.view.to_metres(crate::touch::reach(REACH)) * 0.6;
+        let on_grip = press.is_some_and(|o| {
+            crate::drag::grip_at(&self.ed, &self.ed.selection, o, reach)
+                .is_some_and(|(g, _)| g != crate::drag::Grip::Body)
+        });
+        let on_line = response
+            .interact_pointer_pos()
+            .map(|p| self.view.to_model(rect, p))
+            .or(press)
+            .and_then(|o| {
+                crate::pick::pick_drafts(self.ed.model(), ViewRef::Drafting(id), o, reach)
+            });
+        let stepping =
+            self.sketch.as_ref().and_then(|s| s.piece) == Some(super::sketch_ui::PieceMode::Step);
+        let marking = self.sketch_marking() && !stepping;
+        if marking && response.clicked_by(PointerButton::Primary) {
+            if let Some(e) = on_line {
+                if ctx.input(|i| i.modifiers.shift) {
+                    self.ed.selection.insert(e);
+                } else {
+                    self.ed.selection.clear();
+                    self.ed.selection.insert(e);
+                }
+                return;
+            }
+        }
+        let stretching =
+            self.drag.is_some() || on_grip && response.drag_started_by(PointerButton::Primary);
+        if self.sketch_marking() && !stretching {
             if response.clicked_by(PointerButton::Primary) {
                 if let Some(pos) = response.interact_pointer_pos() {
                     let stepping = self.sketch.as_ref().and_then(|s| s.piece)
@@ -293,36 +398,45 @@ impl ArchiSimApp {
                 .input(|i| i.pointer.press_origin())
                 .map(|p| self.view.to_model(rect, p));
             if let Some(o) = origin {
-                let on = crate::pick::pick_drafts(
-                    self.ed.model(),
-                    ViewRef::Drafting(id),
-                    o,
-                    self.view.to_metres(crate::touch::reach(REACH)),
-                );
-                match on {
-                    Some(e) if self.ed.selection.contains(&e) => {
-                        // Grabbed by the nearest point of the line, snapped
-                        // to its ends or middle, so it lands exactly.
-                        let reach = self.view.to_metres(crate::touch::reach(REACH));
-                        let from = crate::snap::snap_view(
-                            self.ed.model(),
-                            ViewRef::Drafting(id),
-                            o,
-                            reach,
-                            &[],
-                            self.snap_filter,
-                            None,
-                        )
-                        .point;
-                        self.drag = Some(DragState {
-                            grip: crate::drag::Grip::Body,
-                            from,
-                            typed: String::new(),
-                            skip: self.ed.selection.clone(),
-                        });
-                        self.drag_preview = None;
+                let reach = self.view.to_metres(crate::touch::reach(REACH));
+                // An end of a selected line: stretched from there.
+                let grip = crate::drag::grip_at(&self.ed, &self.ed.selection, o, reach)
+                    .filter(|(g, _)| *g != crate::drag::Grip::Body);
+                let on = crate::pick::pick_drafts(self.ed.model(), ViewRef::Drafting(id), o, reach);
+                if let Some((grip, point)) = grip {
+                    self.drag = Some(DragState {
+                        grip,
+                        from: point,
+                        typed: String::new(),
+                        skip: self.ed.selection.clone(),
+                    });
+                    self.drag_preview = None;
+                } else {
+                    match on {
+                        Some(e) if self.ed.selection.contains(&e) => {
+                            // Grabbed by the nearest point of the line, snapped
+                            // to its ends or middle, so it lands exactly.
+                            let reach = self.view.to_metres(crate::touch::reach(REACH));
+                            let from = crate::snap::snap_view(
+                                self.ed.model(),
+                                ViewRef::Drafting(id),
+                                o,
+                                reach,
+                                &[],
+                                self.snap_filter,
+                                None,
+                            )
+                            .point;
+                            self.drag = Some(DragState {
+                                grip: crate::drag::Grip::Body,
+                                from,
+                                typed: String::new(),
+                                skip: self.ed.selection.clone(),
+                            });
+                            self.drag_preview = None;
+                        }
+                        _ => self.window_start = Some(o),
                     }
-                    _ => self.window_start = Some(o),
                 }
             }
         }
@@ -370,40 +484,37 @@ impl ArchiSimApp {
             size,
             thin: self.thin_lines,
         };
-        if self.drafting_image.as_ref().map(|p| &p.0) != Some(&key) {
-            let px_per_m = size[0] as f64 / (hi.x - lo.x).max(1e-9);
-            let svg = render_drafting_view(
-                &self.ed.shown(),
-                id,
-                &archisim_plan::PlanOptions {
-                    scale,
-                    viewport: Some((lo, hi)),
-                    px_per_mm: Some(px_per_m * scale / 1000.0),
-                    title: false,
-                    thin_lines: self.thin_lines,
-                    ..Default::default()
-                },
-            );
-            let image = crate::plan_image::rasterize_svg(&svg, size);
-            match &mut self.drafting_image {
-                Some((k, tex)) => {
-                    tex.set(image, TextureOptions::LINEAR);
-                    *k = key;
-                }
-                None => {
-                    let tex = ctx.load_texture("drafting", image, TextureOptions::LINEAR);
-                    self.drafting_image = Some((key, tex));
-                }
-            }
+        // As the plan (0.85): with a margin, and on another thread when
+        // it takes long, the one before moved and scaled meanwhile.
+        let moving = self.view_moving(ctx);
+        let mut picture = std::mem::replace(
+            &mut self.drafting_image,
+            super::picture::Picture::new("drafting"),
+        );
+        let shown = picture.update(ctx, &key, moving, self.at_once, || {
+            let model = self.shared_model();
+            let thin = self.thin_lines;
+            Box::new(move |k: DraftingKey| {
+                let px_per_m = k.size[0] as f64 / (k.hi.x - k.lo.x).max(1e-9);
+                let svg = render_drafting_view(
+                    &model,
+                    k.view,
+                    &archisim_plan::PlanOptions {
+                        scale,
+                        viewport: Some((k.lo, k.hi)),
+                        px_per_mm: Some(px_per_m * scale / 1000.0),
+                        title: false,
+                        thin_lines: thin,
+                        ..Default::default()
+                    },
+                );
+                crate::plan_image::rasterize_svg(&svg, k.size)
+            })
+        });
+        if let Some((k, tex)) = shown {
+            self.paint_moved(painter, rect, tex, k.lo, k.hi);
         }
-        if let Some((_, tex)) = &self.drafting_image {
-            painter.image(
-                tex.id(),
-                rect,
-                Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)),
-                Color32::WHITE,
-            );
-        }
+        self.drafting_image = picture;
     }
 
     /// A new view for drawing, opened in its tab.

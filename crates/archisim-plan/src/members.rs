@@ -232,3 +232,75 @@ fn draw_column_rebar(s: &mut String, model: &Model, id: u64, k: f64) {
         }
     }
 }
+
+#[cfg(test)]
+mod wall_column_tests {
+    use archisim_core::*;
+
+    /// A wall with a column in its core, one flush with a face and one
+    /// bigger than the wall: the plan, to look at.
+    pub(crate) fn wall_with_columns() -> (Model, LevelId) {
+        let mut m = Model::new("Muro y pilares");
+        let l0 = m.add_level("Planta baja", 0.0);
+        let lib = archisim_library::add_library(&mut m).unwrap();
+        let brick = m.add_material("Ladrillo", "brick", [200, 100, 80], CutPattern::Diagonal);
+        let plaster = m.add_material("Yeso", "plaster", [240, 240, 240], CutPattern::Solid);
+        let layer = |material, thickness| Layer {
+            material,
+            thickness,
+            function: LayerFunction::Structure,
+        };
+        let wt = m
+            .add_wall_type(
+                "Fachada con trasdosado",
+                WallFunction::Exterior,
+                vec![
+                    layer(plaster, 0.02),
+                    layer(brick, 0.24),
+                    layer(plaster, 0.06),
+                ],
+            )
+            .unwrap();
+        m.add_wall(NewWall {
+            wall_type: wt,
+            level: l0,
+            start: Point2::new(0.0, 0.0),
+            end: Point2::new(8.0, 0.0),
+            bulge: 0.0,
+            reference: ReferenceLine::Center,
+            height: 3.0,
+            base_offset: 0.0,
+            top: WallTop::Unconnected,
+        })
+        .unwrap();
+        for (x, y) in [(2.0, 0.02), (6.0, -0.12)] {
+            m.add_column(NewColumn {
+                member_type: lib.column,
+                level: l0,
+                position: Point2::new(x, y),
+                rotation: 0.0,
+                base_offset: 0.0,
+                top: WallTop::Unconnected,
+                height: 3.0,
+            })
+            .unwrap();
+        }
+        (m, l0)
+    }
+
+    #[test]
+    fn plan_of_a_wall_with_columns() {
+        let Ok(dir) = std::env::var("ARCHISIM_PILARES_OUT") else {
+            return;
+        };
+        let (m, l0) = wall_with_columns();
+        for (scale, name) in [(50.0, "50"), (20.0, "20")] {
+            let o = crate::PlanOptions {
+                scale,
+                ..Default::default()
+            };
+            let svg = crate::render_plan(&m, l0, &o);
+            std::fs::write(format!("{dir}/muro-pilar-{name}.svg"), svg).unwrap();
+        }
+    }
+}

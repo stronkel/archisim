@@ -626,6 +626,12 @@ fn wall_parts_in(idx: &WallIndex, id: WallId, between: bool) -> Vec<Solid> {
         .map(|h| frame.prism(h, reach))
         .collect();
     cutters.extend(opening_cutters(idx, wall, &frame, reach));
+    // The columns standing in it.
+    cutters.extend(
+        g.columns
+            .iter()
+            .map(|c| mass_mesh_of(&prism(&c.outline, c.z.0, c.z.1))),
+    );
     let n = frame.u.perp_left();
     let mut out = Vec::new();
     let mut at = g.exterior_offset;
@@ -1122,6 +1128,29 @@ fn wall_parts_plain(idx: &WallIndex, id: WallId, between: bool) -> Vec<Solid> {
             }
         }
     }
+    // Columns standing in the wall: a line across it where a side of the
+    // column crosses the middle of each layer (the layers it cuts give way
+    // to it, cell by cell).
+    for cut in &g.columns {
+        let ring = &cut.outline;
+        let m = ring.len();
+        for i in 0..m {
+            let (p, q) = (ring[i], ring[(i + 1) % m]);
+            for k in 0..layers {
+                let off = (offsets[k] + offsets[k + 1]) / 2.0;
+                let o = a + n * off;
+                let (sp, sq) = ((p - o).cross(u), (q - o).cross(u));
+                if (sp > 0.0) == (sq > 0.0) || (sp - sq).abs() < 1e-12 {
+                    continue;
+                }
+                let x = p + (q - p) * (sp / (sp - sq));
+                let t = (x - a).dot(u);
+                if t > EPSILON && t < len - EPSILON {
+                    inner.push(Line::new(a + u * t, n));
+                }
+            }
+        }
+    }
     let mid = (offsets[0] + offsets[layers]) / 2.0;
     let mut keyed: Vec<(f64, Line)> = inner
         .into_iter()
@@ -1194,6 +1223,11 @@ fn wall_parts_plain(idx: &WallIndex, id: WallId, between: bool) -> Vec<Solid> {
             heights.push((z - level, z - level));
         }
     }
+    for cut in &g.columns {
+        for z in [cut.z.0, cut.z.1] {
+            heights.push((z - level, z - level));
+        }
+    }
     for cut in [&g.start_cut, &g.end_cut] {
         if let EndCut::Tee(t) = cut {
             if let Some(h) = model.wall(t.host) {
@@ -1241,7 +1275,11 @@ fn wall_parts_plain(idx: &WallIndex, id: WallId, between: bool) -> Vec<Solid> {
         let in_slab = slab_cuts
             .iter()
             .any(|cut| z > cut.z.0 && z < cut.z.1 && cut.taken.contains(&k) && cut.contains(p));
-        !in_opening && !in_notch && !in_slab
+        let in_column = g
+            .columns
+            .iter()
+            .any(|cut| z > cut.z.0 && z < cut.z.1 && cut.contains(p));
+        !in_opening && !in_notch && !in_slab && !in_column
     };
     // A cell of a shaped opening's box the wall partly fills back in (over
     // an arch's spring, or round an oculus): its neighbours leave no face
@@ -6070,6 +6108,96 @@ mod tests {
             assert_eq!(*n, 1);
             assert_eq!(edges.get(&(*b, *a)), Some(&1), "edge without its twin");
         }
+    }
+
+    /// A column standing in a wall takes the layers it cuts through; the
+    /// lining in front of it carries on (Antonio, 16/11/2026).
+    #[test]
+    fn a_column_takes_the_layers_it_cuts() {
+        use archisim_core::{MemberUsage, NewColumn, Profile};
+        let mut m = Model::new("T");
+        let lvl = m.add_level("PB", 0.0);
+        let brick = m.add_material("Ladrillo", "brick", [200, 100, 80], CutPattern::Diagonal);
+        let layer = |t| Layer {
+            material: brick,
+            thickness: t,
+            function: LayerFunction::Structure,
+        };
+        // Render, core and lining, 0.32 in all; the core from +0.14 to
+        // -0.10 across the line.
+        let wt = m
+            .add_wall_type(
+                "M",
+                WallFunction::Exterior,
+                vec![layer(0.02), layer(0.24), layer(0.06)],
+            )
+            .unwrap();
+        let w = m
+            .add_wall(NewWall {
+                wall_type: wt,
+                level: lvl,
+                start: p(0.0, 0.0),
+                end: p(6.0, 0.0),
+                reference: ReferenceLine::Center,
+                height: 3.0,
+                base_offset: 0.0,
+                bulge: 0.0,
+                top: archisim_core::WallTop::Unconnected,
+            })
+            .unwrap();
+        let volume = |m: &Model| -> f64 { wall_solids(m, w).iter().map(|s| s.volume()).sum() };
+        let whole = volume(&m);
+        let ct = m
+            .add_member_type(
+                "P",
+                MemberUsage::Column,
+                brick,
+                Profile::Rectangle {
+                    width: 0.24,
+                    depth: 0.24,
+                },
+            )
+            .unwrap();
+        let c = m
+            .add_column(NewColumn {
+                member_type: ct,
+                level: lvl,
+                position: p(3.0, 0.02),
+                rotation: 0.0,
+                base_offset: 0.0,
+                top: archisim_core::WallTop::Unconnected,
+                height: 3.0,
+            })
+            .unwrap();
+        // The core only: the render and the lining go over the column.
+        let lost = whole - volume(&m);
+        assert!((lost - 0.24 * 0.24 * 3.0).abs() < 1e-6, "{lost}");
+        // The plan: the core in two pieces, the render and lining whole.
+        let g = crate::wall_geometry(&m, w).unwrap();
+        assert_eq!(g.layer_pieces(1, Some(1.0)).len(), 2);
+        assert_eq!(g.layer_pieces(0, Some(1.0)).len(), 1);
+        assert_eq!(g.layer_pieces(2, Some(1.0)).len(), 1);
+        // A column as thick as the wall and more: nothing of it there.
+        let mut wider = m.clone();
+        let big = wider
+            .add_member_type(
+                "P2",
+                MemberUsage::Column,
+                brick,
+                Profile::Rectangle {
+                    width: 0.4,
+                    depth: 0.4,
+                },
+            )
+            .unwrap();
+        wider.edit_column(c, |col| col.member_type = big).unwrap();
+        let lost = whole - volume(&wider);
+        assert!((lost - 0.4 * 0.32 * 3.0).abs() < 1e-6, "{lost}");
+        // Half the height: half of it.
+        let mut low = m.clone();
+        low.edit_column(c, |col| col.height = 1.5).unwrap();
+        let lost = whole - volume(&low);
+        assert!((lost - 0.24 * 0.24 * 1.5).abs() < 1e-6, "{lost}");
     }
 
     /// A 6 m wall, 0.3 m thick in two layers, 3 m high on a level at +1,

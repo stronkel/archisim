@@ -52,6 +52,14 @@ pub enum Target {
         draft: archisim_core::DraftId,
         towards: Point2,
     },
+    /// The length of a straight line of the drawing, changed from its
+    /// upper end (its right one if it lies flat): a joint that should stop
+    /// short of the top.
+    DraftLength {
+        draft: archisim_core::DraftId,
+        /// Whether the end that moves is `b` (else `a`).
+        moves_b: bool,
+    },
 }
 
 /// Which dimension of the selection a [`TempDim`] is: stays the same when
@@ -68,6 +76,8 @@ pub enum Slot {
     /// From a straight line of the drawing to the next on its left (0) or
     /// on its right (1).
     DraftSide(archisim_core::DraftId, u8),
+    /// A straight line's length.
+    DraftLength(archisim_core::DraftId),
 }
 
 /// The witness ends of a dimension moved by hand.
@@ -151,6 +161,17 @@ pub fn draft_dims(model: &Model, id: archisim_core::DraftId) -> Vec<TempDim> {
     };
     let n = Point2::new(-u.y, u.x);
     let m = (a + b) * 0.5;
+    // Its length, kept from the lower end (the left one if it lies flat).
+    let moves_b = (b.y - a.y).abs() > 1e-6 && b.y > a.y || (b.y - a.y).abs() <= 1e-6 && b.x > a.x;
+    let (fixed, moved) = if moves_b { (a, b) } else { (b, a) };
+    let length = TempDim {
+        a: fixed,
+        b: moved,
+        side: n,
+        value: a.distance(b),
+        target: Target::DraftLength { draft: id, moves_b },
+        slot: Slot::DraftLength(id),
+    };
     let mut best = [None::<f64>, None::<f64>];
     for other in model.drafts_in(d.view) {
         if other.id == id || !model.draft_visible(other) {
@@ -192,6 +213,7 @@ pub fn draft_dims(model: &Model, id: archisim_core::DraftId) -> Vec<TempDim> {
                 slot: Slot::DraftSide(id, k as u8),
             })
         })
+        .chain(std::iter::once(length))
         .collect()
 }
 
@@ -223,7 +245,7 @@ pub fn own_choice(model: &Model, slot: Slot, p: Point2) -> Option<f64> {
                 .into_iter()
                 .min_by(|a, b| (a - o).abs().total_cmp(&(b - o).abs()))
         }
-        Slot::WallLength(_) | Slot::DraftSide(..) => None,
+        Slot::WallLength(_) | Slot::DraftSide(..) | Slot::DraftLength(_) => None,
     }
 }
 
@@ -508,6 +530,26 @@ pub fn edit(model: &Model, dim: &TempDim, value: f64) -> Option<(BTreeSet<Elemen
                 },
             ))
         }
+        Target::DraftLength { draft, moves_b } => {
+            let d = model.draft(draft)?;
+            let archisim_core::Shape::Line { a, b } = d.shape else {
+                return None;
+            };
+            let (fixed, moved) = if moves_b { (a, b) } else { (b, a) };
+            let u = (moved - fixed).normalized()?;
+            Some((
+                [Element::Draft(draft)].into_iter().collect(),
+                Drag {
+                    grip: Grip::DraftPoint {
+                        draft,
+                        index: usize::from(moves_b),
+                    },
+                    from: moved,
+                    to: fixed + u * value,
+                    variant: false,
+                },
+            ))
+        }
         Target::WallLength { wall, from } => {
             let w = model.wall(wall)?;
             let u = (w.end - w.start).normalized()?;
@@ -528,6 +570,44 @@ pub fn edit(model: &Model, dim: &TempDim, value: f64) -> Option<(BTreeSet<Elemen
 mod tests {
     use super::*;
     use crate::pick::tests::room;
+
+    /// A joint of a sketch: its length is a blue dimension, and typing a
+    /// shorter one brings its upper end down (Antonio, 16/11/2026: a
+    /// vertical joint that should not reach the top).
+    #[test]
+    fn a_joint_is_made_shorter_from_its_top() {
+        let mut m = Model::new("t");
+        let v = m.add_draft_view("Cara", 20.0).unwrap();
+        let layer = m.draw_layers()[0].id;
+        let id = m
+            .add_draft(archisim_core::NewDraft {
+                view: archisim_core::ViewRef::Drafting(v),
+                layer,
+                shape: archisim_core::Shape::Line {
+                    a: Point2::new(1.2, 2.6),
+                    b: Point2::new(1.2, 0.0),
+                },
+                color: None,
+                weight: None,
+                line: None,
+            })
+            .unwrap();
+        let dims = draft_dims(&m, id);
+        let length = dims
+            .iter()
+            .find(|d| d.slot == Slot::DraftLength(id))
+            .copied()
+            .unwrap();
+        assert!((length.value - 2.6).abs() < 1e-9);
+        let (sel, drag) = edit(&m, &length, 1.25).unwrap();
+        crate::drag::apply(&mut m, &sel, &drag).unwrap();
+        let archisim_core::Shape::Line { a, b } = m.draft(id).unwrap().shape else {
+            panic!()
+        };
+        // The bottom stays; the top comes down.
+        assert!(b.approx_eq(Point2::new(1.2, 0.0)), "{b:?}");
+        assert!(a.approx_eq(Point2::new(1.2, 1.25)), "{a:?}");
+    }
 
     fn close(a: f64, b: f64) -> bool {
         (a - b).abs() < 1e-6

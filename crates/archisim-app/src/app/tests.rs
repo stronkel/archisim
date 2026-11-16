@@ -11682,6 +11682,78 @@ fn a_face_is_composed_by_hand_in_elevation() {
     assert_eq!(after, before + 2, "{before} → {after}");
 }
 
+/// In the sketch of a face, with a way of marking pieces on, a joint is
+/// taken by clicking on it and shortened by dragging its top end: it keeps
+/// going straight down (Antonio, 16/11/2026).
+#[test]
+fn a_joint_of_a_face_is_shortened_by_its_end() {
+    let mut ed = Editor::new_project();
+    let level = ed.level;
+    let w = ed
+        .transact("Muro", |m| {
+            let t = m.wall_types().next().unwrap().id;
+            m.add_wall(archisim_core::NewWall {
+                wall_type: t,
+                level,
+                start: Point2::new(0.0, 0.0),
+                end: Point2::new(4.0, 0.0),
+                reference: archisim_core::ReferenceLine::Center,
+                height: 2.5,
+                base_offset: 0.0,
+                bulge: 0.0,
+                top: archisim_core::WallTop::Unconnected,
+            })
+        })
+        .unwrap();
+    let mut h = Harness::new(ed);
+    h.frame();
+    h.app
+        .start_sketch(crate::sketch::SketchTarget::BoardFace(w, 0));
+    h.frame();
+    let layer = h.model().draw_layer_by_name("Boceto").unwrap().id;
+    let ViewMode::Drafting(v) = h.app.mode else {
+        panic!("drawn on a view of its own");
+    };
+    let mut joint = None;
+    h.app
+        .ed
+        .transact("Juntas", |m| {
+            for (a, b) in [(p(0.0, 1.0), p(4.0, 1.0)), (p(2.1, 0.0), p(2.1, 2.5))] {
+                let id = m.add_draft(archisim_core::NewDraft::new(
+                    archisim_core::ViewRef::Drafting(v),
+                    layer,
+                    archisim_core::Shape::Line { a, b },
+                ))?;
+                joint = Some(id);
+            }
+            Ok(())
+        })
+        .unwrap();
+    let joint = joint.unwrap();
+    h.app.set_piece_mode(super::sketch_ui::PieceMode::Paint);
+    h.frame();
+    // A click on the line takes it, it does not paint.
+    h.click_at(p(2.1, 1.8));
+    assert!(
+        h.app
+            .ed
+            .selection
+            .contains(&crate::pick::Element::Draft(joint)),
+        "{:?}",
+        h.app.ed.selection
+    );
+    // Its top end, down to the level joint (the cursor a bit to the side).
+    h.drag(p(2.1, 2.5), p(2.16, 1.0));
+    let archisim_core::Shape::Line { a, b } = h.model().draft(joint).unwrap().shape else {
+        panic!()
+    };
+    let (lo, hi) = if a.y < b.y { (a, b) } else { (b, a) };
+    assert!(lo.approx_eq(p(2.1, 0.0)), "{lo:?} {hi:?}");
+    let said = h.app.message.as_ref().map(|m| m.text.clone());
+    assert!((hi.x - 2.1).abs() < 1e-9, "straight: {hi:?} {said:?}");
+    assert!((hi.y - 1.0).abs() < 0.02, "{hi:?} {said:?}");
+}
+
 /// A slab's layer of boards composed by hand in plan: lines across it and
 /// a piece left for the site.
 #[test]
@@ -11836,7 +11908,13 @@ fn a_joint_is_placed_exactly() {
     h.app.ed.selection.clear();
     h.app.ed.selection.insert(Element::Draft(line));
     h.frame();
-    let dims = h.app.shown_temp_dims();
+    // To the lines on each side, and its own length (0.92).
+    let all = h.app.shown_temp_dims();
+    assert_eq!(all.len(), 3, "{all:?}");
+    let dims: Vec<_> = all
+        .into_iter()
+        .filter(|d| !matches!(d.slot, crate::temp_dims::Slot::DraftLength(_)))
+        .collect();
     assert_eq!(dims.len(), 2, "{dims:?}");
     let mut values: Vec<f64> = dims.iter().map(|d| d.value).collect();
     values.sort_by(f64::total_cmp);
@@ -12101,6 +12179,26 @@ fn big_project_frames() {
         h.frame();
     });
     settle(&mut h);
+    // An edit: the selected wall moved 10 cm with the arrows.
+    for i in 0..3 {
+        crate::profile::take(1);
+        let t = std::time::Instant::now();
+        h.key(if i % 2 == 0 {
+            Key::ArrowUp
+        } else {
+            Key::ArrowDown
+        });
+        let first = t.elapsed().as_secs_f64() * 1000.0;
+        let parts = crate::profile::take(1);
+        settle(&mut h);
+        println!(
+            "Mover un muro con las flechas: {first:.0} ms el fotograma del cambio, {:.0} ms hasta verlo dibujado",
+            t.elapsed().as_secs_f64() * 1000.0
+        );
+        for (part, ms) in parts.iter().take(8).filter(|p| p.1 >= 1.0) {
+            println!("    {part}: {ms:.1} ms");
+        }
+    }
     h.app.ed.selection.clear();
     let Some(sec) = h.app.ed.model().sections().next().map(|s| s.id) else {
         return;
@@ -12154,6 +12252,39 @@ fn big_project_frames() {
         t.elapsed().as_secs_f64() * 1000.0
     );
     timed(&mut h, "3D, ratón quieto", 10, &mut |h, _| h.frame());
+    // The sketch of a face (the boards by hand) of the longest wall.
+    h.key(Key::Escape);
+    h.key(Key::F2);
+    let wall = h
+        .app
+        .ed
+        .model()
+        .walls()
+        .max_by(|a, b| a.length().total_cmp(&b.length()))
+        .map(|w| w.id)
+        .unwrap();
+    let t = std::time::Instant::now();
+    h.app
+        .start_sketch(crate::sketch::SketchTarget::BoardFace(wall, 0));
+    h.frame();
+    println!(
+        "Despiece a mano, abrir: {:.0} ms",
+        t.elapsed().as_secs_f64() * 1000.0
+    );
+    settle(&mut h);
+    h.app.at_once = super::picture::AT_ONCE;
+    timed(&mut h, "Despiece, ratón quieto", 20, &mut |h, _| h.frame());
+    let c = h.app.view.to_model(h.app.canvas, h.app.canvas.center());
+    timed(&mut h, "Despiece, ratón moviéndose", 30, &mut |h, i| {
+        h.move_to(c + Point2::new(0.03 * i as f64, 0.02 * i as f64))
+    });
+    h.app.set_piece_mode(super::sketch_ui::PieceMode::Paint);
+    timed(
+        &mut h,
+        "Despiece pintando, ratón moviéndose",
+        30,
+        &mut |h, i| h.move_to(c + Point2::new(0.03 * i as f64, 0.02 * i as f64)),
+    );
 }
 
 /// The number keypad of a touch screen (T4): its keys reach the wall tool

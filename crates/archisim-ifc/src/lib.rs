@@ -1996,10 +1996,13 @@ impl<'a> Exporter<'a> {
                 }
             }
             // What the slabs it meets take (see `archisim_geom::junctions`).
+            // And the columns standing in it.
             let voids = if section.is_some() {
                 Vec::new()
             } else {
-                archisim_geom::junctions::wall_slab_voids(&idx, &geo)
+                let mut v = archisim_geom::junctions::wall_slab_voids(&idx, &geo);
+                v.extend(archisim_geom::junctions::wall_column_voids(model, &geo));
+                v
             };
             geometries.insert(wall.id, geo.clone());
             let slab_lost: f64 = voids
@@ -2527,6 +2530,45 @@ mod tests {
         CutPattern, NewOpening, NewOpeningType, NewSlab, NewWall, ReferenceLine, SlabFunction,
         WallSide,
     };
+
+    /// A wall with a column in it: its body less the column (0.92). With
+    /// `ARCHISIM_PILAR_IFC=fichero.ifc`, written out to validate it.
+    #[test]
+    fn a_wall_gives_way_to_a_column() {
+        let mut m = Model::new("Muro y pilar");
+        let l0 = m.add_level("Planta baja", 0.0);
+        let lib = archisim_library::add_library(&mut m).unwrap();
+        m.add_wall(NewWall {
+            wall_type: lib.facade,
+            level: l0,
+            start: Point2::new(0.0, 0.0),
+            end: Point2::new(6.0, 0.0),
+            bulge: 0.0,
+            reference: ReferenceLine::Center,
+            height: 3.0,
+            base_offset: 0.0,
+            top: archisim_core::WallTop::Unconnected,
+        })
+        .unwrap();
+        m.add_column(archisim_core::NewColumn {
+            member_type: lib.column,
+            level: l0,
+            position: Point2::new(3.0, 0.0),
+            rotation: 0.0,
+            base_offset: 0.0,
+            top: archisim_core::WallTop::Unconnected,
+            height: 3.0,
+        })
+        .unwrap();
+        let ifc = export_ifc(&m, &ExportOptions::default());
+        assert!(
+            ifc.contains("IFCBOOLEANRESULT(.DIFFERENCE."),
+            "the column taken"
+        );
+        if let Ok(path) = std::env::var("ARCHISIM_PILAR_IFC") {
+            std::fs::write(path, &ifc).unwrap();
+        }
+    }
 
     fn model() -> Model {
         let mut m = Model::new("Casa de prueba");

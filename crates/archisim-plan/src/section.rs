@@ -57,6 +57,9 @@ pub struct SectionDrawing {
     pub lo: Point2,
     pub hi: Point2,
     pub title: String,
+    /// The box round each face (made the first time the cursor asks what
+    /// is under it: a façade has tens of thousands).
+    boxes: std::sync::OnceLock<Vec<(Point2, Point2)>>,
 }
 
 /// A cut solid: its material, loops, which loop edges are heavy, and the
@@ -221,9 +224,17 @@ impl SectionDrawing {
         }
         self.faces
             .iter()
+            .zip(self.face_boxes())
             .rev()
-            .find(|f| f.poly.len() >= 3 && inside(p, &f.poly))
-            .map(|f| f.owner)
+            .find(|(f, (lo, hi))| {
+                p.x >= lo.x
+                    && p.x <= hi.x
+                    && p.y >= lo.y
+                    && p.y <= hi.y
+                    && f.poly.len() >= 3
+                    && inside(p, &f.poly)
+            })
+            .map(|(f, _)| f.owner)
     }
 
     /// Everything at `p`, front first: what the section cuts there, then
@@ -236,12 +247,39 @@ impl SectionDrawing {
                 out.push(*owner);
             }
         }
-        for f in self.faces.iter().rev() {
+        let boxes = self.face_boxes();
+        for (f, (lo, hi)) in self.faces.iter().zip(boxes).rev() {
+            if p.x < lo.x || p.x > hi.x || p.y < lo.y || p.y > hi.y {
+                continue;
+            }
             if f.poly.len() >= 3 && !out.contains(&f.owner) && inside(p, &f.poly) {
                 out.push(f.owner);
             }
         }
         out
+    }
+
+    /// The box round each face, in the order of the faces.
+    fn face_boxes(&self) -> &[(Point2, Point2)] {
+        self.boxes.get_or_init(|| {
+            self.faces
+                .iter()
+                .map(|f| {
+                    f.poly.iter().fold(
+                        (
+                            Point2::new(f64::INFINITY, f64::INFINITY),
+                            Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY),
+                        ),
+                        |(lo, hi), q| {
+                            (
+                                Point2::new(lo.x.min(q.x), lo.y.min(q.y)),
+                                Point2::new(hi.x.max(q.x), hi.y.max(q.y)),
+                            )
+                        },
+                    )
+                })
+                .collect()
+        })
     }
 
     /// The outline of an element as drawn: the edges of its cut and of the
