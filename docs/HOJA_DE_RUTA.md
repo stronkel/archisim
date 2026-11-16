@@ -334,11 +334,11 @@ Pedido de Antonio: modelar en serio desde el sofá, con Apple Pencil, teclado y 
 
 ## 14. Taller del territorio (16/11/2026)
 
-Pedido de Antonio: traer un terreno a la realidad con todas las opciones de urbanismo, como trabaja Cityburg en Cities: Skylines con sus mods (sobre todo Node Controller Renewal), sin perder fluidez. Diseño completo en `docs/TERRITORIO.md`; decisiones pendientes en su §5.
+Pedido de Antonio: traer un terreno a la realidad con todas las opciones de urbanismo, como trabaja Cityburg en Cities: Skylines con sus mods (sobre todo Node Controller Renewal), sin perder fluidez. Diseño completo en `docs/TERRITORIO.md`; decisiones de Antonio (16/11/2026) en su §5: N0 primero, tráfico solo dibujado (circulación de ilustración aparte, N9), los ajustes de un nudo borrado se pierden, 2 × 2 km basta, chaflán estándar y luego a mano.
 
 | Bloque | Qué | Estado |
 |---|---|---|
-| N0 | Fluidez del territorio: escenario de 1 km², teselas, rehacer solo lo tocado, cruces con cache, en paralelo, detalle por distancia | Propuesto (primero) |
+| N0 | Fluidez del territorio: escenario de 1 km², teselas, rehacer solo lo tocado, cruces con cache, en paralelo, detalle por distancia | Primera vuelta en v0.92 (cota del terreno guardada, cruces guardados, sitio de referencia); falta teselas, objetos repetidos y planta por teselas |
 | N1 | Nudos: identidad estable, tipos, retranqueo, esquinas, pasos, desplazar, plano/inclinado, IFC | Propuesto |
 | N2 | Trazado sin reglas y con precisión (Anarquía, pendiente uniforme, paralelas, glorieta sobre un nudo) | Propuesto |
 | N3 | Carriles y marcas atadas al nudo; flechas y señales | Propuesto |
@@ -347,3 +347,4 @@ Pedido de Antonio: traer un terreno a la realidad con todas las opciones de urba
 | N6 | Mover y ocultar cualquier pieza urbana | Propuesto |
 | N7 | Manzanas, parcelas y llenado | Propuesto |
 | N8 | Área grande (2 × 2 km) con conexiones de fuera y vista de mapa | Propuesto |
+| N9 | Tráfico de ilustración: coches y personas circulando por carriles y aceras | Propuesto (al final) |

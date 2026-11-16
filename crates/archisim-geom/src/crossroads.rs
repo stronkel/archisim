@@ -17,6 +17,8 @@
 //! Nothing here is stored: it is worked out from the roads each time, so
 //! it follows them as they move.
 
+use std::sync::{Arc, Mutex};
+
 use archisim_core::{
     offset_path, strip, IslandFinish, LevelId, MaterialId, Model, Point2, Road, RoadBand, RoadId,
     Roundabout, RoundaboutId, Vec2,
@@ -205,8 +207,49 @@ fn meeting_points(roads: &[&Road]) -> Vec<(Point2, Vec<(usize, f64)>)> {
             }
         }
     };
-    for i in 0..roads.len() {
-        for j in i + 1..roads.len() {
+    // Only pairs whose boxes (their axes and their width round them)
+    // touch can meet: swept along x, so a town of hundreds of streets does
+    // not compare each with all the others.
+    let boxes: Vec<(Point2, Point2)> = roads
+        .iter()
+        .map(|r| {
+            let grow = r.widest() + 1.0;
+            let (lo, hi) = r.axis.iter().fold(
+                (
+                    Point2::new(f64::INFINITY, f64::INFINITY),
+                    Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY),
+                ),
+                |(lo, hi), p| {
+                    (
+                        Point2::new(lo.x.min(p.x), lo.y.min(p.y)),
+                        Point2::new(hi.x.max(p.x), hi.y.max(p.y)),
+                    )
+                },
+            );
+            (
+                Point2::new(lo.x - grow, lo.y - grow),
+                Point2::new(hi.x + grow, hi.y + grow),
+            )
+        })
+        .collect();
+    let mut by_x: Vec<usize> = (0..roads.len()).collect();
+    by_x.sort_by(|&a, &b| boxes[a].0.x.total_cmp(&boxes[b].0.x));
+    let mut pairs: Vec<(usize, usize)> = Vec::new();
+    for (k, &a) in by_x.iter().enumerate() {
+        for &b in &by_x[k + 1..] {
+            if boxes[b].0.x > boxes[a].1.x {
+                break;
+            }
+            if boxes[b].0.y <= boxes[a].1.y && boxes[a].0.y <= boxes[b].1.y {
+                pairs.push((a.min(b), a.max(b)));
+            }
+        }
+    }
+    // In the same order as comparing each with all, so the junctions come
+    // out the same.
+    pairs.sort_unstable();
+    for (i, j) in pairs {
+        {
             let (a, b) = (roads[i], roads[j]);
             // Axes that cross.
             let mut sa = 0.0;
@@ -525,12 +568,69 @@ pub const OVERPASS: f64 = 3.5;
 /// The junctions of the roads of a level: at its roundabouts and squares
 /// and wherever roads meet away from them (but where one passes over the
 /// other, `OVERPASS`).
+///
+/// They depend only on the level's roads and roundabouts, and the plan,
+/// the 3D, the IFC and the tools ask for them many times between two
+/// changes: the last few are kept with what they came from
+/// ([`shared_junctions`]) and given back while those are the same.
 pub fn junctions(model: &Model, level: LevelId) -> Vec<Junction> {
+    shared_junctions(model, level).as_ref().clone()
+}
+
+/// What some junctions were worked out from, and them.
+struct Kept {
+    roads: Vec<Road>,
+    rings: Vec<Roundabout>,
+    junctions: Arc<Vec<Junction>>,
+}
+
+/// The junctions kept: one per level or so of the last models asked
+/// about (the plan of one level and the 3D of all of them).
+const KEPT: usize = 8;
+static KEPT_JUNCTIONS: Mutex<Vec<Kept>> = Mutex::new(Vec::new());
+
+/// [`junctions`] without copying them: the same ones while the level's
+/// roads and roundabouts stay the same.
+pub fn shared_junctions(model: &Model, level: LevelId) -> Arc<Vec<Junction>> {
     let mut roads: Vec<&Road> = model.roads_on_level(level).collect();
     roads.sort_by_key(|r| r.id.0);
+    let mut rings: Vec<&Roundabout> = model.roundabouts_on_level(level).collect();
+    rings.sort_by_key(|r| r.id.0);
+    let same = |k: &Kept| {
+        k.roads.len() == roads.len()
+            && k.rings.len() == rings.len()
+            && k.roads.iter().zip(&roads).all(|(a, b)| a == *b)
+            && k.rings.iter().zip(&rings).all(|(a, b)| a == *b)
+    };
+    if let Ok(mut kept) = KEPT_JUNCTIONS.lock() {
+        if let Some(i) = kept.iter().position(same) {
+            // The most recent last.
+            let k = kept.remove(i);
+            let out = k.junctions.clone();
+            kept.push(k);
+            return out;
+        }
+    }
+    let out = Arc::new(work_out_junctions(model, &roads, &rings));
+    if let Ok(mut kept) = KEPT_JUNCTIONS.lock() {
+        if kept.len() >= KEPT {
+            kept.remove(0);
+        }
+        kept.push(Kept {
+            roads: roads.iter().map(|r| (*r).clone()).collect(),
+            rings: rings.iter().map(|r| (*r).clone()).collect(),
+            junctions: out.clone(),
+        });
+    }
+    out
+}
+
+/// The junctions of these roads and roundabouts (of one level, roads
+/// sorted by their ids).
+fn work_out_junctions(model: &Model, roads: &[&Road], rings: &[&Roundabout]) -> Vec<Junction> {
+    let roads = roads.to_vec();
     let mut out = Vec::new();
-    let rings: Vec<&Roundabout> = model.roundabouts_on_level(level).collect();
-    for c in &rings {
+    for c in rings {
         let arms = ring_arms(&roads, c);
         if let Some(j) = assemble(model, &roads, arms, c.centre, Some(c)) {
             out.push(j);
@@ -834,6 +934,30 @@ mod tests {
         let a = add(&mut m, Point2::new(-50.0, 0.0), Point2::new(50.0, 0.0));
         let b = add(&mut m, Point2::new(0.0, -50.0), Point2::new(0.0, 50.0));
         (m, level, a, b)
+    }
+
+    /// The junctions kept are given back only while the roads are the
+    /// same: moving one gives new ones, and moving it back the first ones.
+    #[test]
+    fn kept_junctions_follow_the_roads() {
+        let (mut m, level, a, _) = town();
+        let first = junctions(&m, level);
+        assert!(Arc::ptr_eq(
+            &shared_junctions(&m, level),
+            &shared_junctions(&m, level)
+        ));
+        let axis = m.road(a).unwrap().axis.clone();
+        m.edit_road(a, |r| {
+            for p in &mut r.axis {
+                p.y += 3.0;
+            }
+        })
+        .unwrap();
+        let moved = junctions(&m, level);
+        assert_ne!(first, moved);
+        assert!((moved[0].at.y - first[0].at.y - 3.0).abs() < 1e-9);
+        m.edit_road(a, |r| r.axis = axis).unwrap();
+        assert_eq!(junctions(&m, level), first);
     }
 
     #[test]

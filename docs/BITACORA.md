@@ -6,6 +6,22 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-16 (169) · v0.92: territorio N0, primera vuelta (cota del terreno y cruces guardados)
+
+Rama `bloque/territorio`, con pull request. Versión 0.92.0. Sin cambios de formato ni de IFC.
+
+- **Decisiones de Antonio** sobre `docs/TERRITORIO.md` §5: N0 primero; tráfico solo dibujado y, como plus, circulación de ilustración al final (N9); los ajustes de un nudo cuya calle se borra se pierden; 2 × 2 km basta; chaflán estándar por lugar y luego a mano.
+- **Qué se hizo.**
+  - **Sitio de referencia** `archisim territorio-grande [carpeta] [--sin-vida]`: 1 × 1 km inventado (90 calles que siguen el terreno, 219 cruces, 5 glorietas, 560 edificios del mundo, 13 692 objetos de vida de la calle) y sus tiempos en `territorio-medidas.txt`.
+  - **Lo lento era la cota del terreno**: cada consulta volvía a triangular el levantamiento. Ahora `Terrain::surface` lo triangula una vez y lo guarda con un índice por celdas (misma respuesta que antes, comprobado con 2 000 puntos, con y sin borde dibujado).
+  - **Cruces guardados** (`crossroads::shared_junctions`) y búsqueda de encuentros solo entre calles cercanas.
+  - Resultado (tabla en `docs/TERRITORIO.md` §4.1): calles 13,9 s → 0,8 s; terreno 17,4 s → 3,8 s; 3D del sitio 55 s → 32 s; mover una calle, de ~30 s a menos de 5 s.
+- **Pendiente** (N0, segunda vuelta): terreno por teselas para rehacer solo lo tocado; repetir el modelo de los objetos fuera de la vista 3D (render, glTF, IFC) y detalle por distancia; planta del sitio por teselas; medir la escena de la aplicación con el sitio; encontrar por qué los triángulos de las plantas varían un poco de una vez a otra.
+- **Qué debe probar Antonio** (con la 0.92 publicada):
+  1. Abre un proyecto tuyo con terreno y calles que sigan el terreno (o `out/trazado.archisim` tras `archisim trazado out/`). Arrastra una calle: el 3D y la planta deben rehacerse claramente antes que con la 0.91.
+  2. Tras «Traer el entorno» de Punta Umbría con un radio de 300 m, mueve una calle y dime cuánto tarda en verse.
+  3. En una terminal: `archisim territorio-grande out/` y mándame `out/territorio-medidas.txt`: son los tiempos en tu PC.
+
 ## 2026-11-16 (168) · Taller del territorio: diseño
 
 En `main`, solo documentación. Sin cambios de versión, de formato ni de IFC.

@@ -81,6 +81,7 @@ Hoy `archisim_geom::crossroads::junctions(model, level)` rehace todos los cruces
 | **N6** | **Mover y ocultar cualquier pieza urbana**: mobiliario, árboles de alineación, señales y marcas se sueltan de la calle y se mueven al milímetro (Move It); ocultar piezas sueltas | Move It, Hide It, Picker | P |
 | **N7** | **Manzanas, parcelas y llenado**: lo de C5 de calles; parcelas exactas por la línea de fachada, llenar con edificios del lugar por zonas, y bloquear lo que no debe cambiar | Zoning Adjuster, Ploppable RICO, Plop the Growables, Historical Districts | G |
 | **N8** | **Área grande**: hasta 2 × 2 km traídos de una vez, con las conexiones de fuera (las calles que salen del recuadro se cortan con su sección, no en punta) y vista de mapa | 81 Tiles 2, CSL Map View, Outside Connections | M |
+| **N9** | **Tráfico de ilustración** (el plus que pidió Antonio): coches y personas que circulan por los carriles y aceras según las conexiones de carril de N3 y los semáforos, en la vista 3D y en el render; sin cálculo de capacidad | TM:PE (lo que se ve) | M |
 
 Lo que ya está en `CALLES_TALLER.md` (túneles, puentes, catálogo regional, detalle C4) sigue su camino; N1–N3 le dan la parte de cruces que allí faltaba.
 
@@ -110,13 +111,37 @@ El plan, en este orden, cada paso con su medida antes y después:
 8. **Planta por teselas**: la imagen de la planta se guarda por tesela y escala; al cambiar algo, solo se redibujan las teselas tocadas.
 9. **Ficheros**: las teselas no se guardan en el `.archisim` (se rehacen al abrir, en paralelo); si abrir un sitio grande pasa de 5 s, se guarda un cache aparte junto al proyecto.
 
-## 5. Decisiones para Antonio
+### 4.1 Medido (N0, primera vuelta, 16/11/2026)
 
-1. **Orden**: N0 (fluidez) primero y luego N1 (nudos), o N1 primero con un N0 mínimo (solo cruces con cache y teselas en 3D). Propuesta: **N0 completo primero**, porque todo lo demás lo carga.
-2. **Tráfico**: ArchiSim no simula coches. Propuesta: las «reglas» de TM:PE se quedan en lo que se dibuja y se mide (flechas, señales, prioridad, prohibido aparcar, semáforos), sin simulación. ¿Te vale, o quieres ver circular coches (más adelante, aparte)?
-3. **Nudos huérfanos**: si borras una calle y su nudo desaparece, ¿se pierden sus ajustes o se guardan por si la vuelves a dibujar?
-4. **Área grande**: ¿2 × 2 km basta para los proyectos reales de AD5 (urbanizaciones, el concurso de INSUR), o hace falta más?
-5. **Esquinas en chaflán**: ¿tamaño del chaflán por defecto según el lugar (Barcelona 20 m) o siempre a mano?
+`archisim territorio-grande out/` hace el sitio de referencia (inventado, porque desde aquí no se puede descargar el Catastro): 1 × 1 km de terreno ondulado, 90 calles en cuadrícula que siguen el terreno, calles cortas en T, 5 glorietas, 219 cruces, 560 edificios del mundo y 13 692 objetos de la vida de la calle. Escribe `territorio.archisim` y `territorio-medidas.txt`. Tiempos en la máquina de pruebas (2 núcleos, más lenta que el PC de Antonio):
+
+| Qué | Antes | Ahora |
+|---|---|---|
+| Crear el sitio (trazar las calles siguiendo el terreno) | 2,0 s | 0,2 s |
+| Cruces de la planta | 5 ms | 4 ms la primera vez, 0,5 ms las demás |
+| Sólidos de las calles | 13,9 s | 0,8 s |
+| Terreno modelado por las calles | 17,4 s | 3,8 s |
+| 3D de todo el sitio (76 millones de triángulos) | 55,5 s | 31,7 s |
+| Mover una calle: calles y terreno de nuevo | 14,6 s + 17 s | 1,0 s + 3,6 s |
+| Planta en pantalla, 200 × 120 m a 1:500 | — | 0,46 s |
+| Planta en pantalla, todo el sitio a 1:2000 | — | 5,6 s |
+| Guardar / abrir | — | 0,10 s / 0,07 s |
+
+Qué era lo lento: **cada vez que se preguntaba la cota del terreno en un punto se volvía a triangular el levantamiento entero**. Una calle que sigue el terreno pregunta cada pocos metros, y 90 calles lo hacían cientos de miles de veces. Ahora la superficie del terreno se triangula una vez y se guarda con un índice por celdas (`Terrain::surface`) mientras sus puntos no cambian. Los cruces se guardan igual (`crossroads::shared_junctions`) y solo comparan las calles cuyas cajas se tocan.
+
+Lo que falta de N0, por orden de lo que más pesa:
+- **El terreno se rehace entero** al mover una calle (3,6 s): hay que partirlo en teselas y rehacer solo las que toca la calle (pasos 2 y 3).
+- **Los objetos de la vida de la calle** son 69 de los 76 millones de triángulos (árboles con todo su detalle): repetir el modelo y detalle por distancia (pasos 6 y 7). La vista 3D ya los repite; el render, el glTF y el IFC no.
+- **La planta del sitio entero** (5,6 s): por teselas (paso 8).
+- Se ha visto que el número de triángulos de los objetos **cambia un poco de una vez a otra** con el mismo proyecto (unas miles de 69 millones): algo en las plantas no es repetible y hay que encontrarlo.
+
+## 5. Decisiones de Antonio (16/11/2026)
+
+1. **Orden**: N0 completo primero, después N1 y el resto en el orden de §3.
+2. **Tráfico**: las reglas se dibujan y se miden (flechas, señales, prioridad, prohibido aparcar, semáforos). Ver circular coches sería un plus muy interesante: se deja como tanda aparte al final (**N9, tráfico de ilustración**: coches y personas moviéndose por los carriles y aceras según las conexiones de carril, solo para ver y para el render, sin cálculo de capacidad).
+3. **Nudos huérfanos**: si una calle se borra y su nudo desaparece, sus ajustes se pierden. Al volver a dibujarla sale el nudo calculado y se ajusta otra vez a mano.
+4. **Área grande**: 2 × 2 km basta.
+5. **Chaflanes**: sale un tamaño estándar (por defecto el del lugar, p. ej. 20 m en el Ensanche de Barcelona) y luego se ajusta a mano por esquina.
 
 ## 6. Qué probar en cada tanda
 

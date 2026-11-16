@@ -43,6 +43,7 @@ mod muros_talud;
 mod ortofoto;
 mod plantilla;
 mod taller;
+mod territorio;
 mod tierras;
 mod tramas;
 mod trazado;
@@ -284,6 +285,13 @@ Uso:
       IfcEarthworksCut e IfcEarthworksFill), tierras-ifc4.ifc, la planta a
       1:200 con el desmonte y el terraplén coloreados y el informe de
       tierras. Por defecto: ./out
+  archisim territorio-grande [carpeta] [--sin-vida]
+      El sitio de referencia del taller del territorio: 1 × 1 km con terreno
+      ondulado, una cuadrícula de avenidas y calles que siguen el terreno,
+      calles cortas en T, glorietas, cientos de edificios del mundo y la vida
+      de la calle. Mide los cruces, las calles, el terreno, el 3D, la planta
+      y lo que cuesta mover una calle: territorio.archisim y
+      territorio-medidas.txt. Por defecto: ./out
   archisim gama [carpeta]
       La gama estilizada de materiales: un muestrario con cada uno (fachadas,
       cubiertas, suelos, pavimentos y pinturas) y una calle con acantilado,
@@ -927,6 +935,11 @@ fn main() -> ExitCode {
         Some("entramado") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
             report(entramado::write(&dir))
+        }
+        Some("territorio-grande") => {
+            let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
+            let life = !args.iter().any(|a| a == "--sin-vida");
+            report(territorio::measure(&dir, life))
         }
         Some("trazado") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
