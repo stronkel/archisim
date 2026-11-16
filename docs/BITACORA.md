@@ -6,21 +6,25 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
-## 2026-11-16 (170) · v0.93: territorio N0, primera vuelta (cota del terreno y cruces guardados)
+## 2026-11-16 (170) · v0.93: territorio N0, fluidez (primera y segunda vuelta)
 
-Rama `bloque/territorio`, con pull request. Versión 0.93.0. Sin cambios de formato ni de IFC.
+Rama `bloque/territorio`, pull request #220. Versión 0.93.0. Sin cambios de formato. El IFC es el mismo salvo el orden de los triángulos del terreno.
 
 - **Decisiones de Antonio** sobre `docs/TERRITORIO.md` §5: N0 primero; tráfico solo dibujado y, como plus, circulación de ilustración al final (N9); los ajustes de un nudo cuya calle se borra se pierden; 2 × 2 km basta; chaflán estándar por lugar y luego a mano.
-- **Qué se hizo.**
-  - **Sitio de referencia** `archisim territorio-grande [carpeta] [--sin-vida]`: 1 × 1 km inventado (90 calles que siguen el terreno, 219 cruces, 5 glorietas, 560 edificios del mundo, 13 692 objetos de vida de la calle) y sus tiempos en `territorio-medidas.txt`.
-  - **Lo lento era la cota del terreno**: cada consulta volvía a triangular el levantamiento. Ahora `Terrain::surface` lo triangula una vez y lo guarda con un índice por celdas (misma respuesta que antes, comprobado con 2 000 puntos, con y sin borde dibujado).
-  - **Cruces guardados** (`crossroads::shared_junctions`) y búsqueda de encuentros solo entre calles cercanas.
-  - Resultado (tabla en `docs/TERRITORIO.md` §4.1): calles 13,9 s → 0,8 s; terreno 17,4 s → 3,8 s; 3D del sitio 55 s → 32 s; mover una calle, de ~30 s a menos de 5 s.
-- **Pendiente** (N0, segunda vuelta): terreno por teselas para rehacer solo lo tocado; repetir el modelo de los objetos fuera de la vista 3D (render, glTF, IFC) y detalle por distancia; planta del sitio por teselas; medir la escena de la aplicación con el sitio; encontrar por qué los triángulos de las plantas varían un poco de una vez a otra.
+- **Qué se hizo** (tablas en `docs/TERRITORIO.md` §4.1 y §4.2):
+  - **Sitio de referencia** `archisim territorio-grande [carpeta] [--sin-vida]` y prueba de la escena de la aplicación `territory_scene`.
+  - **Cota del terreno guardada** (`Terrain::surface`), cruces guardados, cada calle guardada con lo que la hace.
+  - **Terreno por cuadrados de 100 m**, guardados y hechos en todos los núcleos; índice de calles por celdas.
+  - **Caché de plantas** sin vaciados enteros (antes los 4 662 árboles volvían a crecer en cada cambio).
+  - **Vista 3D**: árboles convertidos una vez y colocados; edificios vestidos, árboles cercanos y piezas de terreno, calles y marcas guardados por huella.
+  - **Planta**: objetos y piezas de calle fuera de la vista descartados antes de calcularlos.
+  - Resultado: **la escena 3D tras mover una calle pasa de 40 s a 2,2 s** en esta máquina de 2 núcleos, con los mismos triángulos.
+- **Pendiente** (N0, tercera vuelta, para bajar a menos de 50 ms): saber qué elementos cambian en cada paso; que la tarjeta gráfica conserve los trozos sin cambios; repetir el modelo de los árboles en glTF, render e IFC (hoy unos 5 GB con miles de árboles a todo detalle); piezas de calles largas en planta. Y la pequeña variación de triángulos de las plantas entre ejecuciones con todo el detalle.
 - **Qué debe probar Antonio** (con la 0.93 publicada):
-  1. Abre un proyecto tuyo con terreno y calles que sigan el terreno (o `out/trazado.archisim` tras `archisim trazado out/`). Arrastra una calle: el 3D y la planta deben rehacerse claramente antes que con la 0.92.
-  2. Tras «Traer el entorno» de Punta Umbría con un radio de 300 m, mueve una calle y dime cuánto tarda en verse.
-  3. En una terminal: `archisim territorio-grande out/` y mándame `out/territorio-medidas.txt`: son los tiempos en tu PC.
+  1. Ejecuta `archisim territorio-grande out/` y ábrelo con ArchiSim: `out/territorio.archisim`. Mira el 3D, arrastra una calle y suéltala: cuenta cuánto tarda en verse el cambio. Mira también que los árboles, edificios, calles y terreno se vean igual que antes.
+  2. Haz lo mismo con un proyecto tuyo con terreno y calles, o con «Traer el entorno» de Punta Umbría a 300 m.
+  3. Mándame `out/territorio-medidas.txt`: son los tiempos en tu PC.
+
 ## 2026-11-16 (169) · v0.92: muros y pilares, juntas a medida y más fluidez
 
 Rama `bloque/muro-pilar`, con pull request. Versión 0.92.0. Sin cambios de formato.

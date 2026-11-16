@@ -116,7 +116,10 @@ pub fn draw_roads(
         crate::dim::element(s, r.id.0, |s| {
             // Its junctions: the plate, the kerbs round the corners and the
             // sidewalks at them (U1).
-            for j in junctions.iter().filter(|j| j.owner == r.id) {
+            for j in junctions
+                .iter()
+                .filter(|j| j.owner == r.id && visible(&j.plate))
+            {
                 let plate_fill = if j
                     .ring
                     .and_then(|c| model.roundabout(c))
@@ -154,6 +157,9 @@ pub fn draw_roads(
                 }
             }
             for p in r.plan_pieces_except(&gaps) {
+                if !visible(&p.outline) {
+                    continue;
+                }
                 let (fill, width) = match p.band {
                     RoadBand::Carriageway => ("#dcdcdc", pens().view),
                     RoadBand::Parking => ("#e6e6e6", pens().view),
@@ -186,6 +192,9 @@ pub fn draw_roads(
             }
             // The tree pits of its sidewalks (U3).
             for pit in r.tree_pits_except(&gaps) {
+                if !visible(&pit) {
+                    continue;
+                }
                 let _ = writeln!(
                     s,
                     r##"<path d="{}" fill="#c9b48f" stroke="{INK}" stroke-width="{}"/>"##,
@@ -204,6 +213,9 @@ pub fn draw_roads(
             }
             // The road markings: lane lines, parking bays, zebra crossings.
             for m in r.markings_except(&gaps) {
+                if !visible(&m) {
+                    continue;
+                }
                 let _ = writeln!(
                     s,
                     r#"<path d="{}" fill="white" stroke="{INK}" stroke-width="{}"/>"#,

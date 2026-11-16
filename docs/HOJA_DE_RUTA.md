@@ -338,7 +338,7 @@ Pedido de Antonio: traer un terreno a la realidad con todas las opciones de urba
 
 | Bloque | Qué | Estado |
 |---|---|---|
-| N0 | Fluidez del territorio: escenario de 1 km², teselas, rehacer solo lo tocado, cruces con cache, en paralelo, detalle por distancia | Primera vuelta en v0.92 (cota del terreno guardada, cruces guardados, sitio de referencia); falta teselas, objetos repetidos y planta por teselas |
+| N0 | Fluidez del territorio: escenario de 1 km², teselas, rehacer solo lo tocado, cruces con cache, en paralelo, detalle por distancia | Dos vueltas en v0.93 (escena 3D tras mover una calle: 40 s → 2,2 s); falta la tercera (cambios por elemento, buffers en la tarjeta gráfica, árboles repetidos al exportar) |
 | N1 | Nudos: identidad estable, tipos, retranqueo, esquinas, pasos, desplazar, plano/inclinado, IFC | Propuesto |
 | N2 | Trazado sin reglas y con precisión (Anarquía, pendiente uniforme, paralelas, glorieta sobre un nudo) | Propuesto |
 | N3 | Carriles y marcas atadas al nudo; flechas y señales | Propuesto |

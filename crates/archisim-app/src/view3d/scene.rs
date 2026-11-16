@@ -402,6 +402,43 @@ impl Loose {
     }
 }
 
+impl Loose {
+    /// A whole mesh of one element at once, its corners as they are (not
+    /// matched against those before: a plant placed from its model).
+    fn push_block(&mut self, pass: Pass, vertices: Vec<Vertex>, indices: &[u32], owner: Owner) {
+        let n = indices.len() / 3;
+        if n == 0 {
+            return;
+        }
+        let (chunks, builder) = &mut self.passes[pass as usize];
+        let full = chunks.last().is_none_or(|c| c.owners.len() + n > CHUNK);
+        if full {
+            if let Some(c) = chunks.last_mut() {
+                c.mesh = std::mem::take(&mut builder.mesh);
+            }
+            builder.seen.clear();
+            chunks.push(Chunk {
+                lo: Vec3::splat(f32::INFINITY),
+                hi: Vec3::splat(f32::NEG_INFINITY),
+                ..Default::default()
+            });
+        }
+        let c = chunks.last_mut().expect("a chunk");
+        for v in &vertices {
+            let p = Vec3::from_array(v.pos);
+            c.lo = c.lo.min(p);
+            c.hi = c.hi.max(p);
+        }
+        c.owners.extend(std::iter::repeat_n(owner, n));
+        let base = builder.mesh.vertices.len() as u32;
+        builder.mesh.vertices.extend(vertices);
+        builder
+            .mesh
+            .indices
+            .extend(indices.iter().map(|i| i + base));
+    }
+}
+
 impl Sink for Loose {
     fn push(&mut self, pass: Pass, tri: [Vertex; 3], owner: Owner) {
         let (chunks, builder) = &mut self.passes[pass as usize];
@@ -630,7 +667,12 @@ impl Scene {
         // whose ghosts are drawn see-through one by one).
         let mut skip = std::collections::HashSet::new();
         let mut keys: HashMap<(usize, Vec<archisim_core::MaterialId>), usize> = HashMap::new();
+        // The box of each group's model, in its own axes.
+        let mut boxes: HashMap<usize, (Vec3, Vec3)> = HashMap::new();
         let mut groups: Vec<(Shared, Group)> = Vec::new();
+        // The groups whose finished model is to be kept, by their key.
+        let mut to_keep: HashMap<usize, u64> = HashMap::new();
+        let span = archisim_geom::meter::span("escena: objetos repetidos");
         if !isolate {
             for o in model.objects() {
                 if model.hidden_by_discipline(&disciplines.hidden, o.id.0) {
@@ -693,19 +735,36 @@ impl Scene {
                         0.0,
                     ],
                 };
-                // Its box where it stands, from the model's corners.
+                // Its box where it stands, from the corners of the model's
+                // box (worked out once per model).
+                let (mlo, mhi) = *boxes.entry(g).or_insert_with(|| {
+                    let mut lo = Vec3::splat(f32::INFINITY);
+                    let mut hi = Vec3::splat(f32::NEG_INFINITY);
+                    for v in shared
+                        .opaque
+                        .mesh
+                        .vertices
+                        .iter()
+                        .chain(&shared.glass.mesh.vertices)
+                    {
+                        lo = lo.min(Vec3::from_array(v.pos));
+                        hi = hi.max(Vec3::from_array(v.pos));
+                    }
+                    (lo, hi)
+                });
                 let mut lo = Vec3::splat(f32::INFINITY);
                 let mut hi = Vec3::splat(f32::NEG_INFINITY);
-                for v in shared
-                    .opaque
-                    .mesh
-                    .vertices
-                    .iter()
-                    .chain(&shared.glass.mesh.vertices)
-                {
-                    let p = instance.place(Vec3::from_array(v.pos));
-                    lo = lo.min(p);
-                    hi = hi.max(p);
+                if mlo.x <= mhi.x {
+                    for k in 0..8 {
+                        let corner = Vec3::new(
+                            if k & 1 == 0 { mlo.x } else { mhi.x },
+                            if k & 2 == 0 { mlo.y } else { mhi.y },
+                            if k & 4 == 0 { mlo.z } else { mhi.z },
+                        );
+                        let p = instance.place(corner);
+                        lo = lo.min(p);
+                        hi = hi.max(p);
+                    }
                 }
                 if lo.x > hi.x {
                     continue;
@@ -730,6 +789,8 @@ impl Scene {
         // or farther with fewer triangles; the rest of their body (frame,
         // transom, sidelights) as before. Their cut is their wall's, set
         // once the walls are known.
+        drop(span);
+        let span = archisim_geom::meter::span("escena: puertas y ventanas");
         let mut detailed = std::collections::HashSet::new();
         let mut opening_walls: HashMap<archisim_core::OpeningId, archisim_core::WallId> =
             HashMap::new();
@@ -880,6 +941,7 @@ impl Scene {
             } else {
                 Default::default()
             };
+            let _span = archisim_geom::meter::span("escena: edificios vestidos");
             for m in model.masses() {
                 if m.dress.is_none() || model.hidden_by_discipline(&disciplines.hidden, m.id.0) {
                     continue;
@@ -890,34 +952,49 @@ impl Scene {
                     continue;
                 }
                 dressed.insert(m.id);
-                let look = Look {
-                    selection,
-                    isolate: false,
-                    disciplines,
-                    anchors: &HashMap::new(),
-                    shared: true,
-                    between: false,
+                let light = near
+                    .then(|| archisim_geom::env_buildings::dressed_solids_detail(model, m, true));
+                // Made before as it is now: its model as it was.
+                let key = model_key(
+                    model,
+                    &full,
+                    light.as_deref().unwrap_or(&[]),
+                    u64::from(near),
+                );
+                let kept = kept_model(key);
+                let (lo, hi, made) = match &kept {
+                    Some(k) => (k.lo, k.hi, None),
+                    None => {
+                        let look = Look {
+                            selection,
+                            isolate: false,
+                            disciplines,
+                            anchors: &HashMap::new(),
+                            shared: true,
+                            between: false,
+                        };
+                        let mut shared = Shared::default();
+                        add_solids(model, full, &look, &mut shared);
+                        if let Some(light) = light {
+                            let mut plain = Shared::default();
+                            add_solids(model, light, &look, &mut plain);
+                            shared.simple = Some(plain.opaque.mesh);
+                        }
+                        let mut lo = Vec3::splat(f32::INFINITY);
+                        let mut hi = Vec3::splat(f32::NEG_INFINITY);
+                        for v in shared
+                            .opaque
+                            .mesh
+                            .vertices
+                            .iter()
+                            .chain(&shared.glass.mesh.vertices)
+                        {
+                            lo = lo.min(Vec3::from_array(v.pos));
+                            hi = hi.max(Vec3::from_array(v.pos));
+                        }
+                        (lo, hi, Some(shared))
+                    }
                 };
-                let mut shared = Shared::default();
-                add_solids(model, full, &look, &mut shared);
-                if near {
-                    let light = archisim_geom::env_buildings::dressed_solids_detail(model, m, true);
-                    let mut plain = Shared::default();
-                    add_solids(model, light, &look, &mut plain);
-                    shared.simple = Some(plain.opaque.mesh);
-                }
-                let mut lo = Vec3::splat(f32::INFINITY);
-                let mut hi = Vec3::splat(f32::NEG_INFINITY);
-                for v in shared
-                    .opaque
-                    .mesh
-                    .vertices
-                    .iter()
-                    .chain(&shared.glass.mesh.vertices)
-                {
-                    lo = lo.min(Vec3::from_array(v.pos));
-                    hi = hi.max(Vec3::from_array(v.pos));
-                }
                 if lo.x > hi.x {
                     continue;
                 }
@@ -946,7 +1023,20 @@ impl Scene {
                 group.instances.push(instance);
                 group.owners.push(Element::Mass(m.id));
                 group.bounds.push((lo, hi));
-                groups.push((shared.done(), group));
+                match (kept, made) {
+                    (Some(k), _) => {
+                        group.opaque = k.opaque.clone();
+                        group.glass = k.glass.clone();
+                        group.levels = k.levels.clone();
+                        (group.lo, group.hi) = (k.lo, k.hi);
+                        s.groups.push(group);
+                    }
+                    (None, Some(shared)) => {
+                        to_keep.insert(groups.len(), key);
+                        groups.push((shared.done(), group));
+                    }
+                    _ => {}
+                }
             }
         }
         // The plants nearest the project (its origin) with every leaf,
@@ -954,6 +1044,7 @@ impl Scene {
         // their full version near and the project's farther away.
         if !isolate {
             use archisim_core::flora::Lod;
+            let _span = archisim_geom::meter::span("escena: plantas");
             let base = model.plant_detail();
             if base != Lod::Full {
                 let mut near: Vec<(f64, archisim_core::ObjectId)> = model
@@ -975,30 +1066,36 @@ impl Scene {
                 };
                 for (_, id) in near {
                     let full = archisim_geom::solid::with_plant_lod(Lod::Full, || {
-                        let solids = archisim_geom::solid::plant_solids(model, id)?;
-                        let mut shared = Shared::default();
-                        add_solids(model, solids, &look, &mut shared);
-                        Some(shared)
+                        archisim_geom::solid::plant_solids(model, id)
                     });
                     let far = archisim_geom::solid::with_plant_lod(base, || {
-                        let solids = archisim_geom::solid::plant_solids(model, id)?;
-                        let mut plain = Shared::default();
-                        add_solids(model, solids, &look, &mut plain);
-                        Some(plain)
+                        archisim_geom::solid::plant_solids(model, id)
                     });
-                    let (Some(mut shared), Some(plain)) = (full, far) else {
+                    let (Some(full), Some(far)) = (full, far) else {
                         continue;
                     };
-                    let mut lo = Vec3::splat(f32::INFINITY);
-                    let mut hi = Vec3::splat(f32::NEG_INFINITY);
-                    for v in shared.opaque.mesh.vertices.iter() {
-                        lo = lo.min(Vec3::from_array(v.pos));
-                        hi = hi.max(Vec3::from_array(v.pos));
-                    }
+                    let key = model_key(model, &full, &far, 2);
+                    let kept = kept_model(key);
+                    let (lo, hi, made) = match &kept {
+                        Some(k) => (k.lo, k.hi, None),
+                        None => {
+                            let mut shared = Shared::default();
+                            add_solids(model, full, &look, &mut shared);
+                            let mut plain = Shared::default();
+                            add_solids(model, far, &look, &mut plain);
+                            let mut lo = Vec3::splat(f32::INFINITY);
+                            let mut hi = Vec3::splat(f32::NEG_INFINITY);
+                            for v in shared.opaque.mesh.vertices.iter() {
+                                lo = lo.min(Vec3::from_array(v.pos));
+                                hi = hi.max(Vec3::from_array(v.pos));
+                            }
+                            shared.simple = Some(plain.opaque.mesh);
+                            (lo, hi, Some(shared))
+                        }
+                    };
                     if lo.x > hi.x {
                         continue;
                     }
-                    shared.simple = Some(plain.opaque.mesh);
                     skip.insert(id);
                     let c = (lo + hi) / 2.0;
                     let instance = Instance {
@@ -1026,11 +1123,26 @@ impl Scene {
                     group.instances.push(instance);
                     group.owners.push(Element::Object(id));
                     group.bounds.push((lo, hi));
-                    groups.push((shared.done(), group));
+                    match (kept, made) {
+                        (Some(k), _) => {
+                            group.opaque = k.opaque.clone();
+                            group.glass = k.glass.clone();
+                            group.levels = k.levels.clone();
+                            (group.lo, group.hi) = (k.lo, k.hi);
+                            s.groups.push(group);
+                        }
+                        (None, Some(shared)) => {
+                            to_keep.insert(groups.len(), key);
+                            groups.push((shared.done(), group));
+                        }
+                        _ => {}
+                    }
                 }
             }
         }
-        for (shared, mut group) in groups {
+        drop(span);
+        let span = archisim_geom::meter::span("escena: modelos repetidos");
+        for (gi, (shared, mut group)) in groups.into_iter().enumerate() {
             group.opaque = shared.opaque.mesh;
             group.glass = shared.glass.mesh;
             let mut lo = Vec3::splat(f32::INFINITY);
@@ -1055,10 +1167,24 @@ impl Scene {
                 }
                 _ => levels_of(&mut group.opaque, size),
             };
+            if let Some(key) = to_keep.get(&gi) {
+                keep_model(
+                    *key,
+                    FinishedModel {
+                        opaque: group.opaque.clone(),
+                        glass: group.glass.clone(),
+                        levels: group.levels.clone(),
+                        lo: group.lo,
+                        hi: group.hi,
+                    },
+                );
+            }
             if !group.instances.is_empty() {
                 s.groups.push(group);
             }
         }
+        drop(span);
+        let span = archisim_geom::meter::span("escena: muros para el corte");
         let mut loose = Loose::default();
         // Where each wall is (for the cut away walls), from its own solids
         // and its accessories', before the rest.
@@ -1077,6 +1203,7 @@ impl Scene {
             }
             anchors(&walls)
         };
+        drop(span);
         // The faces with painted zones (G3): their elements' solids.
         let zone_ids: std::collections::BTreeSet<u64> = model
             .face_zones()
@@ -1102,13 +1229,72 @@ impl Scene {
             shared: false,
             between: false,
         };
+        // The plants (each grows its own): their models made once in their
+        // own axes and kept, here only turned and moved to where each
+        // stands. Not those greyed or with painted zones (as before).
+        if !isolate {
+            let _span = archisim_geom::meter::span("escena: plantas colocadas");
+            let lod = archisim_geom::solid::plant_lod(model);
+            for o in model.objects() {
+                if skip.contains(&o.id)
+                    || !model.type_grows(o.object_type)
+                    || model.dimmed(disciplines.focus, o.id.0)
+                    || zone_ids.contains(&o.id.0)
+                {
+                    continue;
+                }
+                if model.hidden_by_discipline(&disciplines.hidden, o.id.0) {
+                    skip.insert(o.id);
+                    continue;
+                }
+                let Some((mesh, parts)) = model.plant_mesh(o.id, lod) else {
+                    continue;
+                };
+                let local = plant_model(model, o.id, mesh, &parts, lod);
+                place_plant(
+                    &mut loose,
+                    model,
+                    o,
+                    &local,
+                    selection.contains(&Element::Object(o.id)),
+                );
+                skip.insert(o.id);
+            }
+        }
         // The solids as they are made, a few at a time: a big building's
         // all at once would not fit in the browser's memory.
         {
+            let _span = archisim_geom::meter::span("escena: sólidos sueltos");
             let mut batch = Vec::new();
+            let generation = next_piece_generation();
             let mut put = |solid: archisim_geom::solid::Solid| {
                 if zone_ids.contains(&solid.owner.id()) {
                     zone_solids.push(solid.clone());
+                }
+                // The ground, the streets and their markings, kept as they
+                // were made: moving a street makes again only what changed.
+                if let Some(key) = piece_key(model, &solid, &look) {
+                    if model.hidden_by_discipline(&look.disciplines.hidden, solid.owner.id()) {
+                        return;
+                    }
+                    let owner = Owner::Model(element(solid.owner));
+                    let made = kept_piece(key, generation).unwrap_or_else(|| {
+                        let mut c = Capture::default();
+                        add_solids(model, vec![solid], &look, &mut c);
+                        let made = std::sync::Arc::new(c.passes.map(|b| b.mesh));
+                        keep_piece(key, made.clone(), generation);
+                        made
+                    });
+                    for (k, pass) in [Pass::Opaque, Pass::Glass, Pass::Grass]
+                        .into_iter()
+                        .enumerate()
+                    {
+                        let m = &made[k];
+                        if !m.is_empty() {
+                            loose.push_block(pass, m.vertices.clone(), &m.indices, owner);
+                        }
+                    }
+                    return;
                 }
                 batch.push(solid);
                 if batch.len() >= 64 {
@@ -1123,6 +1309,7 @@ impl Scene {
                 });
             }
             add_solids(model, batch, &look, &mut loose);
+            forget_pieces_before(generation);
         }
         // Where the layers of a wall, a slab or a roof touch: seen only
         // through a cut.
@@ -1150,6 +1337,7 @@ impl Scene {
             },
             &mut loose,
         );
+        let _rest = archisim_geom::meter::span("escena: el resto");
         // Painted zones of walls' faces, just off them.
         for (wall, tri, [r, g, b]) in archisim_geom::solid::paint_zone_triangles(model) {
             if model.hidden_by_discipline(&disciplines.hidden, wall.0) {
@@ -1693,6 +1881,317 @@ fn ray_meets_box(ray: Ray, lo: Vec3, hi: Vec3) -> bool {
 
 /// Adds solids of the model to where they go, each triangle with its
 /// owner.
+/// Where [`add_solids`] puts the triangles of a piece to keep: by pass,
+/// corners shared.
+#[derive(Default)]
+struct Capture {
+    passes: [MeshBuilder; 3],
+}
+
+impl Sink for Capture {
+    fn push(&mut self, pass: Pass, tri: [Vertex; 3], _owner: Owner) {
+        self.passes[pass as usize].push(tri);
+    }
+
+    fn glow(&mut self, _id: u64, _p: Vec3, _reach: f32) {}
+}
+
+/// A piece of the ground, a street or a marking made for the 3D, by pass,
+/// with the scene it was last used in.
+type Piece = std::sync::Arc<[Mesh; 3]>;
+/// The number of the last scene, and the pieces kept with the last scene
+/// that used each.
+type KeptPieces = (u64, HashMap<u64, (Piece, u64)>);
+static KEPT_PIECES: std::sync::Mutex<Option<KeptPieces>> = std::sync::Mutex::new(None);
+
+/// A new scene's number, for the pieces it uses.
+fn next_piece_generation() -> u64 {
+    let mut k = KEPT_PIECES.lock().unwrap_or_else(|e| e.into_inner());
+    let k = k.get_or_insert_with(|| (0, HashMap::new()));
+    k.0 += 1;
+    k.0
+}
+
+fn kept_piece(key: u64, generation: u64) -> Option<Piece> {
+    let mut k = KEPT_PIECES.lock().ok()?;
+    let e = k.as_mut()?.1.get_mut(&key)?;
+    e.1 = generation;
+    Some(e.0.clone())
+}
+
+fn keep_piece(key: u64, piece: Piece, generation: u64) {
+    if let Ok(mut k) = KEPT_PIECES.lock() {
+        k.get_or_insert_with(|| (0, HashMap::new()))
+            .1
+            .insert(key, (piece, generation));
+    }
+}
+
+/// Lets go the pieces not used by this scene nor the one before.
+fn forget_pieces_before(generation: u64) {
+    if let Ok(mut k) = KEPT_PIECES.lock() {
+        if let Some(k) = k.as_mut() {
+            k.1.retain(|_, e| e.1 + 1 >= generation);
+        }
+    }
+}
+
+/// The key a piece is kept by, if it is kept: the ground, streets and
+/// markings, by what they are made of and how they are shown (selected,
+/// greyed); never while a clash is isolated.
+fn piece_key(model: &Model, solid: &archisim_geom::solid::Solid, look: &Look) -> Option<u64> {
+    if look.isolate || look.shared || look.between {
+        return None;
+    }
+    if !matches!(
+        solid.owner,
+        SolidOwner::Terrain(_) | SolidOwner::Road(_) | SolidOwner::Marking(_)
+    ) {
+        return None;
+    }
+    let id = solid.owner.id();
+    let selected = look.selection.contains(&element(solid.owner));
+    let dimmed = model.dimmed(look.disciplines.focus, id);
+    let salt = 0x7e44_0000 | (u64::from(selected) << 1) | u64::from(dimmed);
+    Some(model_key(model, std::slice::from_ref(solid), &[], salt))
+}
+
+/// A group's model finished (its versions for farther away included), kept
+/// to be given again while what it is made of stays the same.
+struct FinishedModel {
+    opaque: Mesh,
+    glass: Mesh,
+    levels: Vec<(u32, u32)>,
+    lo: Vec3,
+    hi: Vec3,
+}
+
+static KEPT_MODELS: std::sync::Mutex<Option<HashMap<u64, std::sync::Arc<FinishedModel>>>> =
+    std::sync::Mutex::new(None);
+/// How many corners of finished models are kept at most (48 bytes each).
+const KEPT_MODEL_CORNERS: usize = if cfg!(target_arch = "wasm32") {
+    2_000_000
+} else {
+    40_000_000
+};
+
+fn kept_model(key: u64) -> Option<std::sync::Arc<FinishedModel>> {
+    KEPT_MODELS
+        .lock()
+        .ok()
+        .and_then(|k| k.as_ref().and_then(|k| k.get(&key).cloned()))
+}
+
+fn keep_model(key: u64, model: FinishedModel) {
+    if let Ok(mut k) = KEPT_MODELS.lock() {
+        let k = k.get_or_insert_with(HashMap::new);
+        let corners: usize = k
+            .values()
+            .map(|m| m.opaque.vertices.len() + m.glass.vertices.len())
+            .sum();
+        if corners > KEPT_MODEL_CORNERS {
+            k.clear();
+        }
+        k.insert(key, std::sync::Arc::new(model));
+    }
+}
+
+/// A key for what a model is made of: its solids (owners, materials and
+/// corners), how their materials look and what a building of the
+/// surroundings is dressed with, and `salt`.
+fn model_key(
+    model: &Model,
+    solids: &[archisim_geom::solid::Solid],
+    more: &[archisim_geom::solid::Solid],
+    salt: u64,
+) -> u64 {
+    let mut h = FastHash::new(salt);
+    let mut seen = std::collections::BTreeSet::new();
+    for (k, list) in [solids, more].into_iter().enumerate() {
+        h.add(k as u64);
+        for s in list {
+            h.add(s.owner.id());
+            h.add(s.material.0);
+            h.add(s.triangles.len() as u64);
+            for t in &s.triangles {
+                for p in t {
+                    for c in p {
+                        h.add(c.to_bits());
+                    }
+                }
+            }
+            seen.insert(s.material);
+            if let SolidOwner::Mass(m) = s.owner {
+                if let Some(m) = model.mass(m) {
+                    h.add_str(&format!("{:?}", m.dress));
+                }
+            }
+        }
+    }
+    for m in seen {
+        h.add_str(&format!("{:?}", model.material(m)));
+        h.add_str(&format!("{:?}", model.appearance(m)));
+    }
+    h.finish()
+}
+
+/// A quick hash of numbers (not for anything an adversary chooses).
+struct FastHash(u64);
+
+impl FastHash {
+    const K: u64 = 0x517c_c1b7_2722_0a95;
+
+    fn new(seed: u64) -> Self {
+        FastHash(seed ^ Self::K)
+    }
+
+    fn add(&mut self, v: u64) {
+        self.0 = (self.0.rotate_left(5) ^ v).wrapping_mul(Self::K);
+    }
+
+    fn add_str(&mut self, s: &str) {
+        for c in s.as_bytes().chunks(8) {
+            let mut b = [0u8; 8];
+            b[..c.len()].copy_from_slice(c);
+            self.add(u64::from_le_bytes(b));
+        }
+        self.add(s.len() as u64);
+    }
+
+    fn finish(&self) -> u64 {
+        let mut x = self.0;
+        x ^= x >> 33;
+        x = x.wrapping_mul(0xff51_afd7_ed55_8ccd);
+        x ^= x >> 33;
+        x
+    }
+}
+
+/// A plant's model in its own axes, made as any solid is, opaque and see
+/// through (with its mesh, so that the mesh it was made from stays the
+/// same one while it is kept).
+struct PlantModel {
+    _from: std::sync::Arc<archisim_core::flora::FloraMesh>,
+    opaque: Mesh,
+    glass: Mesh,
+}
+
+/// The plant models kept, by mesh, its parts' materials and detail.
+type PlantKey = (usize, Vec<u64>, archisim_core::flora::Lod);
+static PLANT_MODELS: std::sync::Mutex<Option<HashMap<PlantKey, std::sync::Arc<PlantModel>>>> =
+    std::sync::Mutex::new(None);
+/// How many plant models are kept at most.
+const PLANT_MODELS_MAX: usize = 20_000;
+
+/// The model of plant `id` from its mesh: kept, the same for every plant
+/// that grows the same.
+fn plant_model(
+    model: &Model,
+    id: archisim_core::ObjectId,
+    mesh: std::sync::Arc<archisim_core::flora::FloraMesh>,
+    parts: &[(archisim_core::MaterialId, Vec<[u32; 3]>)],
+    lod: archisim_core::flora::Lod,
+) -> std::sync::Arc<PlantModel> {
+    let key: PlantKey = (
+        std::sync::Arc::as_ptr(&mesh) as usize,
+        parts.iter().map(|p| p.0 .0).collect(),
+        lod,
+    );
+    if let Some(m) = PLANT_MODELS
+        .lock()
+        .ok()
+        .and_then(|k| k.as_ref().and_then(|k| k.get(&key).cloned()))
+    {
+        return m;
+    }
+    let solids: Vec<archisim_geom::solid::Solid> = parts
+        .iter()
+        .map(|(material, tris)| archisim_geom::solid::Solid {
+            owner: SolidOwner::Object(id),
+            material: *material,
+            triangles: tris
+                .iter()
+                .map(|t| t.map(|i| mesh.positions[i as usize].map(|c| c as f64)))
+                .collect(),
+        })
+        .collect();
+    let mut shared = Shared::default();
+    add_solids(
+        model,
+        solids,
+        &Look {
+            selection: &BTreeSet::new(),
+            isolate: false,
+            disciplines: &Disciplines::default(),
+            anchors: &HashMap::new(),
+            shared: true,
+            between: false,
+        },
+        &mut shared,
+    );
+    let shared = shared.done();
+    let made = std::sync::Arc::new(PlantModel {
+        _from: mesh,
+        opaque: shared.opaque.mesh,
+        glass: shared.glass.mesh,
+    });
+    if let Ok(mut k) = PLANT_MODELS.lock() {
+        let k = k.get_or_insert_with(HashMap::new);
+        if k.len() >= PLANT_MODELS_MAX {
+            k.clear();
+        }
+        k.insert(key, made.clone());
+    }
+    made
+}
+
+/// A plant's model turned and moved to where the plant stands, into the
+/// elements drawn once.
+fn place_plant(
+    loose: &mut Loose,
+    model: &Model,
+    o: &archisim_core::Object,
+    plant: &PlantModel,
+    selected: bool,
+) {
+    let z0 = model.level(o.level).map_or(0.0, |l| l.elevation) + o.base_offset;
+    let (sn, cs) = o.rotation.sin_cos();
+    let cut = [
+        cutaway::OBJECT,
+        o.position.x as f32,
+        o.position.y as f32,
+        z0 as f32,
+    ];
+    for (pass, mesh) in [(Pass::Opaque, &plant.opaque), (Pass::Glass, &plant.glass)] {
+        if mesh.is_empty() {
+            continue;
+        }
+        let vertices: Vec<Vertex> = mesh
+            .vertices
+            .iter()
+            .map(|v| {
+                let mut w = *v;
+                let q = o.to_plan(v.pos[0] as f64, v.pos[1] as f64);
+                w.pos = [q.x as f32, q.y as f32, (z0 + v.pos[2] as f64) as f32];
+                let (nx, ny) = (v.normal[0] as f64, v.normal[1] as f64);
+                w.normal[0] = (nx * cs - ny * sn).round().clamp(-32767.0, 32767.0) as i16;
+                w.normal[1] = (nx * sn + ny * cs).round().clamp(-32767.0, 32767.0) as i16;
+                w.cut = cut;
+                if w.misc[1] < 2 {
+                    w.misc[1] = u8::from(selected);
+                }
+                w
+            })
+            .collect();
+        loose.push_block(
+            pass,
+            vertices,
+            &mesh.indices,
+            Owner::Model(Element::Object(o.id)),
+        );
+    }
+}
+
 fn add_solids(
     model: &Model,
     solids: Vec<archisim_geom::solid::Solid>,
@@ -1710,6 +2209,13 @@ fn add_solids(
         if !look.shared && model.hidden_by_discipline(&look.disciplines.hidden, id) {
             continue;
         }
+        let _span = archisim_geom::meter::span(match solid.owner {
+            SolidOwner::Terrain(_) => "conversión: terreno",
+            SolidOwner::Road(_) => "conversión: calles",
+            SolidOwner::Object(_) => "conversión: objetos",
+            SolidOwner::Mass(_) => "conversión: volúmenes",
+            _ => "conversión: lo demás",
+        });
         // The orthophoto is picked as the terrain under it.
         let owner = Owner::Model(match solid.owner {
             SolidOwner::Orthophoto => model

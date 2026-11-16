@@ -2268,7 +2268,7 @@ fn coarseness(l: archisim_core::flora::Lod) -> usize {
 
 /// The level of detail of the plants: the views', no finer than asked by
 /// [`with_plant_detail`].
-fn plant_lod(model: &Model) -> archisim_core::flora::Lod {
+pub fn plant_lod(model: &Model) -> archisim_core::flora::Lod {
     if let Some(l) = PLANT_EXACT.with(|c| c.get()) {
         return l;
     }
@@ -2762,6 +2762,18 @@ pub fn loose_railing_solids(model: &Model, id: archisim_core::RailingId) -> Vec<
 }
 
 pub fn terrain_solids(model: &Model, id: archisim_core::TerrainId) -> Vec<Solid> {
+    terrain_solids_by(model, id, false)
+}
+
+/// [`terrain_solids`] with its ground in pieces, a tile of
+/// [`crate::road_ground::GROUND_TILE`] each, then its walls round holes,
+/// bottom and sides together (for the 3D, which keeps what it has made
+/// of each piece: moving a street makes again only the tiles it crosses).
+pub fn terrain_solids_tiled(model: &Model, id: archisim_core::TerrainId) -> Vec<Solid> {
+    terrain_solids_by(model, id, true)
+}
+
+fn terrain_solids_by(model: &Model, id: archisim_core::TerrainId, tiled: bool) -> Vec<Solid> {
     let Some(t) = model.terrain(id) else {
         return Vec::new();
     };
@@ -2781,39 +2793,76 @@ pub fn terrain_solids(model: &Model, id: archisim_core::TerrainId) -> Vec<Solid>
         .collect();
     // Shaped to its streets: lowered under them and sloping to their
     // edges, made finer round them.
-    let whole =
-        crate::road_ground::shaped_ground(&whole, &crate::road_ground::Shaper::of(model, t.level));
+    let shaper = crate::meter::time("terreno: calles cercanas", || {
+        crate::road_ground::Shaper::of(model, t.level)
+    });
+    let border = Border::of(&whole);
+    let tiles = crate::meter::time("terreno: modelado", || {
+        crate::road_ground::shaped_tiles(&whole, &shaper)
+    });
     let holes = terrain_holes(model, &poly);
-    let surface = crate::pools::cut_surface(&whole, &holes);
-    let mut out = surface.clone();
-    out.extend(crate::pools::hole_faces(&surface, &holes, &poly));
+    // Each tile less the room the holes take out of it: kept with the
+    // tile and the holes over it.
+    let cut_tiles: Vec<std::sync::Arc<Vec<[P3; 3]>>> =
+        crate::meter::time("terreno: huecos", || cut_ground_tiles(id, &tiles, &holes));
+    let whole: Vec<[P3; 3]> = if tiled {
+        Vec::new()
+    } else {
+        crate::meter::time("terreno: juntar", || {
+            let mut v = Vec::with_capacity(cut_tiles.iter().map(|t| t.len()).sum());
+            for t in &cut_tiles {
+                v.extend_from_slice(t);
+            }
+            v
+        })
+    };
+    let top = whole.len();
+    let mut out = whole;
+    // The walls round the holes: from the triangles that reach their
+    // edges (two corners on one), only in the tiles near them.
+    crate::meter::time("terreno: paredes de los huecos", || {
+        if holes.is_empty() {
+            out.extend(crate::pools::hole_faces(&[], &holes, &poly));
+            return;
+        }
+        let edges = Border::of_lines(holes.iter().map(|h| h.outline.as_slice()));
+        let near: Vec<[P3; 3]> = tiles
+            .iter()
+            .zip(&cut_tiles)
+            .filter(|(t, _)| {
+                holes.iter().any(|h| {
+                    let b = bbox_of(&h.outline);
+                    b[0] <= t.hi.x && b[2] >= t.lo.x && b[1] <= t.hi.y && b[3] >= t.lo.y
+                })
+            })
+            .flat_map(|(_, c)| c.iter())
+            .filter(|t| t.iter().filter(|p| edges.has(**p)).count() >= 2)
+            .copied()
+            .collect();
+        out.extend(crate::pools::hole_faces(&near, &holes, &poly));
+    });
     for [a, b, c] in triangulate(&poly) {
         out.push([low(ring[a]), low(ring[c]), low(ring[b])]);
     }
     // Its sides: down from each edge of the top that no other triangle
-    // shares (the top may have been made finer along its border).
-    type Key = (i64, i64);
-    let mut edges: std::collections::BTreeMap<(Key, Key), (P3, P3)> = Default::default();
-    let key = |p: P3| ((p[0] * 1e4).round() as i64, (p[1] * 1e4).round() as i64);
-    for t in &whole {
-        for k in 0..3 {
-            let (a, b) = (t[k], t[(k + 1) % 3]);
-            if edges.remove(&(key(b), key(a))).is_none() {
-                edges.insert((key(a), key(b)), (a, b));
-            }
-        }
-    }
-    let down = |p: P3| [p[0], p[1], floor];
-    for (a, b) in edges.into_values() {
-        out.push([down(a), down(b), b]);
-        out.push([down(a), b, a]);
-    }
-    let mut solids = vec![Solid {
-        owner: SolidOwner::Terrain(id),
-        material: t.material,
-        triangles: out,
-    }];
+    // shares (the top may have been made finer along its border). Only
+    // the triangles with two corners on the border of the survey's
+    // triangles can have one.
+    let edges = crate::meter::time("terreno: bordes", || {
+        unshared_edges(
+            tiles
+                .iter()
+                .zip(&cut_tiles)
+                .filter(|(t, _)| border.touches(t.lo, t.hi))
+                .flat_map(|(_, c)| c.iter())
+                .filter(|t| t.iter().filter(|p| border.has(**p)).count() >= 2),
+        )
+        .into_iter()
+        .filter(|(a, b)| border.has(*a) && border.has(*b))
+        .collect::<Vec<_>>()
+    });
     // The areas painted over it: a thin closed layer each, on the ground.
+    let mut patches = Vec::new();
     for patch in &t.patches {
         let regions = if holes.is_empty() {
             patch.regions.clone()
@@ -2824,16 +2873,190 @@ pub fn terrain_solids(model: &Model, id: archisim_core::TerrainId) -> Vec<Solid>
                 .collect();
             crate::junctions::difference(&patch.regions, &cut)
         };
-        let layer = patch_layer(&surface, &regions, PATCH_THICKNESS);
+        let layer = if tiled {
+            let near: Vec<[P3; 3]> = cut_tiles.iter().flat_map(|c| c.iter().copied()).collect();
+            patch_layer(&near, &regions, PATCH_THICKNESS)
+        } else {
+            patch_layer(&out[..top], &regions, PATCH_THICKNESS)
+        };
         if !layer.is_empty() {
-            solids.push(Solid {
+            patches.push(Solid {
                 owner: SolidOwner::Terrain(id),
                 material: patch.material,
                 triangles: layer,
             });
         }
     }
+    let down = |p: P3| [p[0], p[1], floor];
+    for (a, b) in edges {
+        out.push([down(a), down(b), b]);
+        out.push([down(a), b, a]);
+    }
+    let mut solids = Vec::new();
+    if tiled {
+        solids.extend(cut_tiles.iter().map(|c| Solid {
+            owner: SolidOwner::Terrain(id),
+            material: t.material,
+            triangles: c.as_ref().clone(),
+        }));
+    }
+    solids.push(Solid {
+        owner: SolidOwner::Terrain(id),
+        material: t.material,
+        triangles: out,
+    });
+    solids.extend(patches);
     solids
+}
+
+/// The ground's tiles less the room the holes take out of them, each kept
+/// (per terrain) with the tile it came from and the holes over it.
+fn cut_ground_tiles(
+    terrain: archisim_core::TerrainId,
+    tiles: &[crate::road_ground::ShapedTile],
+    holes: &[archisim_core::Excavation],
+) -> Vec<std::sync::Arc<Vec<[P3; 3]>>> {
+    type Kept = Vec<(
+        std::sync::Arc<Vec<[P3; 3]>>,
+        Vec<archisim_core::Excavation>,
+        std::sync::Arc<Vec<[P3; 3]>>,
+    )>;
+    static KEPT: std::sync::Mutex<std::collections::BTreeMap<u64, Kept>> =
+        std::sync::Mutex::new(std::collections::BTreeMap::new());
+    let near: Vec<Vec<archisim_core::Excavation>> = tiles
+        .iter()
+        .map(|t| {
+            holes
+                .iter()
+                .filter(|h| {
+                    let b = bbox_of(&h.outline);
+                    b[0] <= t.hi.x && b[2] >= t.lo.x && b[1] <= t.hi.y && b[3] >= t.lo.y
+                })
+                .cloned()
+                .collect()
+        })
+        .collect();
+    let had: Kept = KEPT
+        .lock()
+        .map(|mut k| k.remove(&terrain.0).unwrap_or_default())
+        .unwrap_or_default();
+    let out: Vec<std::sync::Arc<Vec<[P3; 3]>>> =
+        crate::parallel::map(&tiles.iter().zip(&near).collect::<Vec<_>>(), |(t, h)| {
+            if h.is_empty() {
+                return t.tris.clone();
+            }
+            if let Some((_, _, cut)) = had
+                .iter()
+                .find(|(from, hs, _)| std::sync::Arc::ptr_eq(from, &t.tris) && hs == *h)
+            {
+                return cut.clone();
+            }
+            std::sync::Arc::new(crate::pools::cut_surface(&t.tris, h))
+        });
+    let keep: Kept = tiles
+        .iter()
+        .zip(near)
+        .zip(&out)
+        .filter(|((_, h), _)| !h.is_empty())
+        .map(|((t, h), c)| (t.tris.clone(), h, c.clone()))
+        .collect();
+    if let Ok(mut k) = KEPT.lock() {
+        k.insert(terrain.0, keep);
+    }
+    out
+}
+
+/// The edges of some triangles that no other of them shares (in the
+/// same direction back), sorted by their corners in plan.
+fn unshared_edges<'a>(tris: impl IntoIterator<Item = &'a [P3; 3]>) -> Vec<(P3, P3)> {
+    type Key = (i64, i64);
+    let mut edges: std::collections::BTreeMap<(Key, Key), (P3, P3)> = Default::default();
+    let key = |p: P3| ((p[0] * 1e4).round() as i64, (p[1] * 1e4).round() as i64);
+    for t in tris {
+        for k in 0..3 {
+            let (a, b) = (t[k], t[(k + 1) % 3]);
+            if edges.remove(&(key(b), key(a))).is_none() {
+                edges.insert((key(a), key(b)), (a, b));
+            }
+        }
+    }
+    edges.into_values().collect()
+}
+
+/// The border of a surface of triangles in plan, to ask whether a point
+/// is on it: its edges by cells.
+struct Border {
+    edges: Vec<(Point2, Point2)>,
+    cells: std::collections::HashMap<(i64, i64), Vec<u32>>,
+}
+
+impl Border {
+    const CELL: f64 = 10.0;
+    const NEAR: f64 = 1e-5;
+
+    fn of(tris: &[[P3; 3]]) -> Border {
+        Self::of_edges(
+            unshared_edges(tris)
+                .into_iter()
+                .map(|(a, b)| (Point2::new(a[0], a[1]), Point2::new(b[0], b[1])))
+                .collect(),
+        )
+    }
+
+    /// The edges of some closed outlines.
+    fn of_lines<'a>(lines: impl IntoIterator<Item = &'a [Point2]>) -> Border {
+        let mut edges = Vec::new();
+        for l in lines {
+            for k in 0..l.len() {
+                edges.push((l[k], l[(k + 1) % l.len()]));
+            }
+        }
+        Self::of_edges(edges)
+    }
+
+    fn of_edges(edges: Vec<(Point2, Point2)>) -> Border {
+        let mut cells: std::collections::HashMap<(i64, i64), Vec<u32>> = Default::default();
+        for (k, (a, b)) in edges.iter().enumerate() {
+            let (x0, x1) = (a.x.min(b.x) - Self::NEAR, a.x.max(b.x) + Self::NEAR);
+            let (y0, y1) = (a.y.min(b.y) - Self::NEAR, a.y.max(b.y) + Self::NEAR);
+            let c = |v: f64| (v / Self::CELL).floor() as i64;
+            for i in c(x0)..=c(x1) {
+                for j in c(y0)..=c(y1) {
+                    cells.entry((i, j)).or_default().push(k as u32);
+                }
+            }
+        }
+        Border { edges, cells }
+    }
+
+    /// Whether some of the border may be in a box.
+    fn touches(&self, lo: Point2, hi: Point2) -> bool {
+        let c = |v: f64| (v / Self::CELL).floor() as i64;
+        (c(lo.x - Self::NEAR)..=c(hi.x + Self::NEAR)).any(|i| {
+            (c(lo.y - Self::NEAR)..=c(hi.y + Self::NEAR)).any(|j| self.cells.contains_key(&(i, j)))
+        })
+    }
+
+    /// Whether a point is on the border (in plan).
+    fn has(&self, p: P3) -> bool {
+        let q = Point2::new(p[0], p[1]);
+        let c = (
+            (q.x / Self::CELL).floor() as i64,
+            (q.y / Self::CELL).floor() as i64,
+        );
+        self.cells.get(&c).is_some_and(|ks| {
+            ks.iter().any(|&k| {
+                let (a, b) = self.edges[k as usize];
+                let ab = b - a;
+                let l2 = ab.dot(ab);
+                if l2 < 1e-18 {
+                    return a.distance(q) < Self::NEAR;
+                }
+                let t = ((q - a).dot(ab) / l2).clamp(0.0, 1.0);
+                (a + ab * t).distance(q) < Self::NEAR
+            })
+        })
+    }
 }
 
 /// The excavations of the model's pools that reach into a terrain's
@@ -4176,7 +4399,7 @@ pub fn model_solids_each(
     let idx = WallIndex::new(model);
     let pieces = facade_pieces_wanted();
     for w in model.walls() {
-        let solids = wall_solids_in(&idx, w.id);
+        let solids = crate::meter::time("muros", || wall_solids_in(&idx, w.id));
         // The bricks, blocks or panels of its façade (E9).
         if pieces && crate::facade::has_facade(model, w.id) {
             out.extend(crate::facade::facade_solids_in(&idx, w.id, &solids));
@@ -4188,7 +4411,9 @@ pub fn model_solids_each(
         out.extend(solids);
     }
     for s in model.slabs() {
-        out.extend(slab_solids_in(&idx, s.id));
+        out.extend(crate::meter::time("forjados", || {
+            slab_solids_in(&idx, s.id)
+        }));
     }
     // False ceilings (M7).
     for c in model.ceilings() {
@@ -4252,9 +4477,13 @@ pub fn model_solids_each(
         out.extend(stair_solids(model, s.id));
     }
     for t in model.terrains() {
-        out.extend(terrain_solids(model, t.id));
+        out.extend(crate::meter::time("terreno", || {
+            terrain_solids_tiled(model, t.id)
+        }));
         if growth_wanted() {
-            out.extend(crate::growth::growth_solids(model, t.id));
+            out.extend(crate::meter::time("hierba", || {
+                crate::growth::growth_solids(model, t.id)
+            }));
         }
     }
     for c in model.curtain_walls() {
@@ -4270,7 +4499,7 @@ pub fn model_solids_each(
             }
             continue;
         }
-        out.extend(object_solids(model, o.id));
+        out.extend(crate::meter::time("objetos", || object_solids(model, o.id)));
     }
     for f in model.footings() {
         out.extend(footing_solids(model, f.id));
@@ -4288,20 +4517,28 @@ pub fn model_solids_each(
         out.extend(crate::elevators::elevator_solids(model, e.id));
     }
     for m in model.masses() {
-        out.extend(mass_solids(model, m.id));
+        out.extend(crate::meter::time("volúmenes y edificios", || {
+            mass_solids(model, m.id)
+        }));
     }
     for l in model.levels() {
-        out.extend(level_road_solids(model, l.id));
+        out.extend(crate::meter::time("calles", || {
+            level_road_solids(model, l.id)
+        }));
     }
     for m in model.markings() {
-        out.extend(marking_solids(model, m.id));
+        out.extend(crate::meter::time("marcas viales", || {
+            marking_solids(model, m.id)
+        }));
     }
     // Pictures stuck on faces (U8), for the 3D, the render and the glTF.
     if pieces {
         for d in model.decals() {
             out.extend(crate::decals::decal_solids(model, d.id));
         }
-        out.extend(crate::orthophoto::orthophoto_solids(model));
+        out.extend(crate::meter::time("ortofoto", || {
+            crate::orthophoto::orthophoto_solids(model)
+        }));
     }
     for r in model.runs() {
         out.extend(run_solids(model, r.id));
@@ -4422,11 +4659,124 @@ pub fn road_solids(model: &Model, id: archisim_core::RoadId) -> Vec<Solid> {
 
 /// The solids of the roads of a level, their junctions worked out once.
 pub fn level_road_solids(model: &Model, level: archisim_core::LevelId) -> Vec<Solid> {
-    let junctions = crate::crossroads::junctions(model, level);
-    model
-        .roads_on_level(level)
-        .flat_map(|r| road_solids_with(model, r.id, &junctions))
+    let junctions = crate::crossroads::shared_junctions(model, level);
+    let roads: Vec<&archisim_core::Road> = model.roads_on_level(level).collect();
+    // Each road kept with what makes it: moving one street makes again
+    // only it and those it meets.
+    let keys: Vec<RoadKey> = roads
+        .iter()
+        .map(|r| RoadKey::of(model, r, &junctions))
+        .collect();
+    let mut parts: Vec<Option<std::sync::Arc<Vec<Solid>>>> = vec![None; roads.len()];
+    let mut missing = Vec::new();
+    if let Ok(kept) = KEPT_ROADS.lock() {
+        for (k, key) in keys.iter().enumerate() {
+            match kept.get(&key.road.id) {
+                Some((had, solids)) if had == key => parts[k] = Some(solids.clone()),
+                _ => missing.push(k),
+            }
+        }
+    } else {
+        missing = (0..roads.len()).collect();
+    }
+    let made = crate::parallel::map(&missing, |&k| {
+        (
+            k,
+            std::sync::Arc::new(road_solids_with(model, roads[k].id, &junctions)),
+        )
+    });
+    if let Ok(mut kept) = KEPT_ROADS.lock() {
+        if kept.len() > KEPT_ROADS_MAX {
+            kept.clear();
+        }
+        for (k, solids) in &made {
+            kept.insert(keys[*k].road.id, (keys[*k].clone(), solids.clone()));
+        }
+    }
+    for (k, solids) in made {
+        parts[k] = Some(solids);
+    }
+    parts
+        .into_iter()
+        .flatten()
+        .flat_map(|p| p.as_ref().clone())
         .collect()
+}
+
+/// How many roads' solids are kept at most.
+const KEPT_ROADS_MAX: usize = 8192;
+
+/// A road's solids kept, with what they were made from.
+type KeptRoad = (RoadKey, std::sync::Arc<Vec<Solid>>);
+static KEPT_ROADS: std::sync::Mutex<std::collections::BTreeMap<archisim_core::RoadId, KeptRoad>> =
+    std::sync::Mutex::new(std::collections::BTreeMap::new());
+
+/// Everything a road's solids come from ([`road_solids_with`]): the road,
+/// the height of its level, the junctions it is cut by or owns and the
+/// roads that meet there, the ground under it (its terrains' surfaces,
+/// kept while they do not change) and the materials it may take.
+#[derive(Clone)]
+struct RoadKey {
+    road: archisim_core::Road,
+    base: f64,
+    junctions: Vec<crate::crossroads::Junction>,
+    met: Vec<archisim_core::Road>,
+    grounds: Vec<std::sync::Arc<archisim_core::Surface>>,
+    materials: Vec<(archisim_core::MaterialId, String)>,
+}
+
+impl PartialEq for RoadKey {
+    fn eq(&self, o: &Self) -> bool {
+        self.road == o.road
+            && self.base == o.base
+            && self.junctions == o.junctions
+            && self.met == o.met
+            && self.grounds.len() == o.grounds.len()
+            && self
+                .grounds
+                .iter()
+                .zip(&o.grounds)
+                .all(|(a, b)| std::sync::Arc::ptr_eq(a, b))
+            && self.materials == o.materials
+    }
+}
+
+impl RoadKey {
+    fn of(
+        model: &Model,
+        r: &archisim_core::Road,
+        junctions: &[crate::crossroads::Junction],
+    ) -> RoadKey {
+        let mine: Vec<crate::crossroads::Junction> = junctions
+            .iter()
+            .filter(|j| j.owner == r.id || j.arms.iter().any(|a| a.road == r.id))
+            .cloned()
+            .collect();
+        let mut met: Vec<archisim_core::RoadId> = mine
+            .iter()
+            .flat_map(|j| j.arms.iter().map(|a| a.road))
+            .filter(|id| *id != r.id)
+            .collect();
+        met.sort_by_key(|id| id.0);
+        met.dedup();
+        RoadKey {
+            road: r.clone(),
+            base: model.level(r.level).map_or(0.0, |l| l.elevation),
+            junctions: mine,
+            met: met
+                .iter()
+                .filter_map(|id| model.road(*id).cloned())
+                .collect(),
+            grounds: model
+                .terrains_on_level(r.level)
+                .map(|t| t.surface())
+                .collect(),
+            materials: model
+                .materials()
+                .map(|m| (m.id, m.category.clone()))
+                .collect(),
+        }
+    }
 }
 
 /// A road's pieces (but where its junctions are), following its profile,

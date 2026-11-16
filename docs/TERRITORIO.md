@@ -135,6 +135,33 @@ Lo que falta de N0, por orden de lo que más pesa:
 - **La planta del sitio entero** (5,6 s): por teselas (paso 8).
 - Se ha visto que el número de triángulos de los objetos **cambia un poco de una vez a otra** con el mismo proyecto (unas miles de 69 millones): algo en las plantas no es repetible y hay que encontrarlo.
 
+### 4.2 Segunda vuelta (16/11/2026, noche)
+
+Lo que se mide ahora es lo que ve Antonio: **cuánto tarda la vista 3D de la aplicación en rehacerse después de un cambio** (prueba `territory_scene`; `ARCHISIM_TERRITORIO=out/territorio.archisim cargo test --release -p archisim-app -- territory_scene --nocapture`). En la 0.92 eran **40 s** con este sitio, aunque solo se moviera una calle. Ahora:
+
+| Después de mover una calle 1 m | 0.92 | 0.93 |
+|---|---|---|
+| Escena 3D entera de nuevo | 40 s | **2,2 s** |
+| Árboles de alineación (4 662) | 31 s | 0,3 s |
+| Edificios vestidos (560) | 6,5 s | 0,6 s |
+| Terreno y calles | 3,5 s | 0,3 s |
+| Calles y terreno sin la vista (el cálculo) | 14,6 s + 17 s | 0,06 s + 0,2 s |
+| Planta en pantalla, 200 × 120 m | 0,46 s | 0,30 s |
+| Planta del sitio entero | 5,6 s | 1,8 s |
+
+Lo que se ha hecho:
+- **Terreno por cuadrados de 100 m**: cada cuadrado se modela con las calles que le llegan y se guarda con ellas; al mover una calle se rehacen solo los cuadrados que cruza, en todos los núcleos a la vez. Cada punto mira solo las calles de su celda de 20 m, no todas. El borde y las paredes de los huecos se buscan solo en los cuadrados que los tocan.
+- **Cada calle se guarda** con lo que la hace (su trazado, sus cruces, las calles que llegan a ellos y el terreno de debajo): al mover una, se rehacen ella y las que cruza.
+- **Los árboles ya no se vuelven a hacer crecer**: la caché de plantas se vaciaba entera al pasar de 3 000, y con 4 662 árboles se vaciaba en cada vuelta. Ahora guarda por tamaño y olvida primero lo que lleva más tiempo sin usarse.
+- **En la vista 3D**, cada árbol se convierte una vez en sus propios ejes y en cada vuelta solo se gira y se coloca. Los edificios vestidos, los árboles de cerca y cada cuadrado de terreno, calle y marca se guardan convertidos bajo una huella de sus triángulos y colores, y se reutilizan si no han cambiado.
+- **En planta** se descartan antes de calcularlos los objetos lejos de la vista, y las piezas de calle, alcorques y marcas fuera de ella.
+
+Lo que falta para bajar de 2 s a menos de 50 ms (siguiente vuelta, N0-3):
+- **Saber qué elementos cambiaron** en cada paso de Deshacer, para no volver a generar lo que no ha cambiado (hoy se genera todo y se reconoce por su huella; lo caro ya no se repite, pero recorrerlo todo sigue costando unos 2 s en esta máquina de 2 núcleos).
+- **Que la tarjeta gráfica conserve los trozos que no cambian** (hoy se vuelve a subir la escena entera).
+- **Exportar a glTF, render o IFC con miles de árboles a todo detalle** ocupa unos 5 GB de memoria: hay que repetir el modelo de cada árbol también ahí.
+- **Las piezas de las calles largas en planta** (≈90 ms por vista).
+
 ## 5. Decisiones de Antonio (16/11/2026)
 
 1. **Orden**: N0 completo primero, después N1 y el resto en el orden de §3.

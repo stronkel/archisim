@@ -269,23 +269,30 @@ pub fn measure(dir: &Path, life: bool) -> Res {
     note("Terreno modelado por las calles", ms);
     let ground_tris: usize = ground.iter().map(|s| s.triangles.len()).sum();
     println!("  {:<56} {:>10}", "  triángulos", ground_tris);
-    let (solids, ms) = timed("Sólidos 3D de todo el sitio", || {
-        archisim_geom::solid::model_solids(&m)
+    // Counted as they are made, not kept: millions of triangles.
+    archisim_geom::meter::take();
+    let mut by_kind: std::collections::BTreeMap<String, usize> = Default::default();
+    let (_, ms) = timed("Sólidos 3D de todo el sitio", || {
+        archisim_geom::solid::model_solids_each(
+            &m,
+            &Default::default(),
+            &Default::default(),
+            &mut |s| {
+                let kind = format!("{:?}", s.owner);
+                let kind = kind.split('(').next().unwrap_or("").to_string();
+                *by_kind.entry(kind).or_default() += s.triangles.len();
+            },
+        )
     });
     note("Sólidos 3D de todo el sitio", ms);
-    let mut by_kind: std::collections::BTreeMap<String, usize> = Default::default();
-    for s in &solids {
-        let kind = format!("{:?}", s.owner);
-        let kind = kind.split('(').next().unwrap_or("").to_string();
-        *by_kind.entry(kind).or_default() += s.triangles.len();
+    for (part, ms) in archisim_geom::meter::take() {
+        println!("  {:<56} {:>10.1} ms", format!("    {part}"), ms);
     }
     let all: usize = by_kind.values().sum();
     println!("  {:<56} {:>10}", "  triángulos", all);
     for (k, n) in &by_kind {
         println!("  {:<56} {:>10}", format!("    {k}"), n);
     }
-    // Millions of triangles: let them go before going on.
-    drop(solids);
     // Moving one street a metre, as dragging it does: what has to be done
     // again before the screen can show it.
     let mut moved = m.clone();
@@ -327,6 +334,7 @@ pub fn measure(dir: &Path, life: bool) -> Res {
             },
         )
     };
+    archisim_geom::meter::take();
     let (_, ms) = timed("Planta en pantalla, 200 × 120 m a 1:500", || {
         plan(
             (Point2::new(-100.0, -60.0), Point2::new(100.0, 60.0)),
@@ -334,10 +342,17 @@ pub fn measure(dir: &Path, life: bool) -> Res {
         )
     });
     note("Planta, zona de 200 × 120 m", ms);
+    for (part, ms) in archisim_geom::meter::take().into_iter().take(6) {
+        println!("  {:<56} {:>10.1} ms", format!("    {part}"), ms);
+    }
+    archisim_geom::meter::take();
     let (_, ms) = timed("Planta en pantalla, todo el sitio a 1:2000", || {
         plan((Point2::new(-HALF, -HALF), Point2::new(HALF, HALF)), 2000.0)
     });
     note("Planta, todo el sitio", ms);
+    for (part, ms) in archisim_geom::meter::take().into_iter().take(6) {
+        println!("  {:<56} {:>10.1} ms", format!("    {part}"), ms);
+    }
     std::fs::create_dir_all(dir)?;
     let path = dir.join(format!("territorio.{}", archisim_file::EXTENSION));
     let (saved, ms) = timed("Guardar el proyecto (.archisim)", || {

@@ -2899,3 +2899,49 @@ fn scene_memory() {
         println!("  grupo {:.1} MB × {n}: {what}", mb(*bytes));
     }
 }
+
+/// What the 3D of a site of the territory costs (`docs/TERRITORIO.md`
+/// §4): the scene built, built again without changes, and after moving
+/// one street a metre, with the parts of the solids that took longest
+/// (`ARCHISIM_TERRITORIO=out/territorio.archisim cargo test --release -p
+/// archisim-app -- territory_scene --nocapture`, after `archisim
+/// territorio-grande out/`).
+#[test]
+fn territory_scene() {
+    let Some(path) = std::env::var_os("ARCHISIM_TERRITORIO") else {
+        return;
+    };
+    let mut m = archisim_file::open(Path::new(&path)).expect("proyecto");
+    let none = BTreeSet::new();
+    let measure = |what: &str, m: &archisim_core::Model| {
+        archisim_geom::meter::take();
+        let t = std::time::Instant::now();
+        let scene = Scene::build(m, &none);
+        let took = t.elapsed().as_secs_f64() * 1000.0;
+        let tris: usize = scene
+            .opaque
+            .iter()
+            .chain(&scene.glass)
+            .chain(&scene.grass)
+            .map(|c| c.mesh.indices.len() / 3)
+            .sum();
+        println!("{what:<44} {took:>9.1} ms  ({tris} triángulos sueltos)");
+        for (part, ms) in archisim_geom::meter::take().into_iter().take(14) {
+            println!("    {part:<40} {ms:>9.1} ms");
+        }
+    };
+    measure("Escena, la primera vez", &m);
+    measure("Escena, otra vez sin cambios", &m);
+    let id = m
+        .roads()
+        .nth(m.roads().count() / 2)
+        .map(|r| r.id)
+        .expect("calles");
+    m.edit_road(id, |r| {
+        for p in &mut r.axis {
+            p.x += 1.0;
+        }
+    })
+    .expect("mover");
+    measure("Escena tras mover una calle 1 m", &m);
+}
