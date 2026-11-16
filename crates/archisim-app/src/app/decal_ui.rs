@@ -39,7 +39,7 @@ impl ArchiSimApp {
     /// Asks for the picture of the decals (a PNG). False if none was
     /// chosen.
     pub(super) fn choose_decal_image(&mut self) -> bool {
-        let Some(path) = rfd::FileDialog::new()
+        let Some(path) = crate::file_dialog::FileDialog::new()
             .set_title("Imagen de la pegatina")
             .add_filter("Imagen PNG", &["png", "PNG"])
             .pick_file()

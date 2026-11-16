@@ -6,7 +6,7 @@
 
 use std::path::PathBuf;
 use std::sync::Mutex;
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use archisim_core::{
     parse_section_catalogue, steel_studs, steel_tracks, timber_sections, FrameMaterial,

@@ -321,7 +321,7 @@ impl ArchiSimApp {
     pub(super) fn pick_mesh(&mut self) {
         let mut exts: Vec<&str> = archisim_mesh::EXTENSIONS.to_vec();
         exts.push("zip");
-        let mut d = rfd::FileDialog::new()
+        let mut d = crate::file_dialog::FileDialog::new()
             .set_title("Importar modelo 3D")
             .add_filter(
                 "Modelos 3D (FBX, OBJ, glTF, GLB, COLLADA, 3DS, STL o el .zip del fabricante)",
@@ -339,7 +339,7 @@ impl ArchiSimApp {
     pub(super) fn pick_concept_mesh(&mut self) {
         let mut exts: Vec<&str> = archisim_mesh::EXTENSIONS.to_vec();
         exts.push("zip");
-        let mut d = rfd::FileDialog::new()
+        let mut d = crate::file_dialog::FileDialog::new()
             .set_title("Traer volúmenes de Concepto")
             .add_filter(
                 "Modelos de volúmenes (DAE de SketchUp, OBJ, STL, glTF, FBX, 3DS o un .zip)",
@@ -470,7 +470,7 @@ impl ArchiSimApp {
         let options = imp.import_options();
         if imp.slow() {
             let (tx, rx) = std::sync::mpsc::channel();
-            std::thread::spawn(move || {
+            crate::platform::spawn(move || {
                 let _ = tx.send(archisim_library::imported::prepare(mesh, &options));
             });
             imp.preparing = Some(rx);

@@ -2454,8 +2454,8 @@ fn window_partitioning(leaves: usize) -> &'static str {
 
 /// Current UTC time as `YYYY-MM-DDThh:mm:ss`, as IFC writes times.
 pub fn utc_now() -> String {
-    let secs = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
+    let secs = web_time::SystemTime::now()
+        .duration_since(web_time::UNIX_EPOCH)
         .map(|d| d.as_secs() as i64)
         .unwrap_or(0);
     let (days, rem) = (secs.div_euclid(86_400), secs.rem_euclid(86_400));

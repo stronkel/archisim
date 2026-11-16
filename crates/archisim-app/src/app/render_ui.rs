@@ -51,7 +51,7 @@ pub struct RenderState {
     /// Thousandths done, written by the thread.
     progress: Arc<AtomicU32>,
     job: Option<Arc<Mutex<Option<archisim_render::Image>>>>,
-    started: Option<std::time::Instant>,
+    started: Option<web_time::Instant>,
     pub image: Option<archisim_render::Image>,
     seconds: f64,
     texture: Option<egui::TextureHandle>,
@@ -111,9 +111,9 @@ impl ArchiSimApp {
         let progress = Arc::new(AtomicU32::new(0));
         self.render.progress = progress.clone();
         self.render.job = Some(slot.clone());
-        self.render.started = Some(std::time::Instant::now());
+        self.render.started = Some(web_time::Instant::now());
         self.render.open = true;
-        std::thread::spawn(move || {
+        crate::platform::spawn(move || {
             let image = archisim_render::render(&model, &view, &options, &|f| {
                 progress.store((f * 1000.0) as u32, Ordering::Relaxed);
             });
@@ -220,7 +220,7 @@ impl ArchiSimApp {
         let Some(img) = &self.render.image else {
             return;
         };
-        let mut d = rfd::FileDialog::new()
+        let mut d = crate::file_dialog::FileDialog::new()
             .set_title("Guardar el renderizado")
             .add_filter("PNG", &["png"])
             .set_file_name(format!("{} - render.png", self.file_name_stem()));

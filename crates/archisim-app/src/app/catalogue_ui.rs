@@ -152,7 +152,7 @@ impl ArchiSimApp {
         let dir = self.catalogue_dir();
         let _ = std::fs::create_dir_all(&dir);
         let suggested = format!("CB-{}.{}", b.mark, archisim_file::EXTENSION);
-        let mut d = rfd::FileDialog::new()
+        let mut d = crate::file_dialog::FileDialog::new()
             .set_title("Guardar la caja como caja tipo")
             .add_filter("ArchiSim", &[archisim_file::EXTENSION])
             .set_file_name(suggested);

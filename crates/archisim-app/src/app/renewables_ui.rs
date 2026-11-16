@@ -302,7 +302,7 @@ impl ArchiSimApp {
     }
 
     fn read_pvgis_into(&mut self, new: &mut archisim_core::RenewablesSite) {
-        let mut d = rfd::FileDialog::new()
+        let mut d = crate::file_dialog::FileDialog::new()
             .set_title("Leer el clima de PVGIS")
             .add_filter("PVGIS (CSV o texto)", &["csv", "txt", "CSV", "TXT"]);
         if let Some(dir) = self.start_dir() {

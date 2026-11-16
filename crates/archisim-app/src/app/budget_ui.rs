@@ -88,7 +88,7 @@ impl ArchiSimApp {
     }
 
     fn choose_price_bank(&mut self) {
-        let mut d = rfd::FileDialog::new()
+        let mut d = crate::file_dialog::FileDialog::new()
             .set_title("Abrir banco de precios (BC3)")
             .add_filter("BC3 (FIEBDC-3)", &["bc3", "BC3"]);
         if let Some(dir) = self.start_dir() {

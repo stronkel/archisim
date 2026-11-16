@@ -146,7 +146,7 @@ fn sample_fetch(url: &str, _form: Option<&str>) -> Result<Vec<u8>, String> {
 }
 
 /// When Nominatim was last asked: its policy is one request a second.
-static NOMINATIM_LAST: Mutex<Option<std::time::Instant>> = Mutex::new(None);
+static NOMINATIM_LAST: Mutex<Option<web_time::Instant>> = Mutex::new(None);
 
 /// `fetch` for the search: a GET, waiting so that Nominatim is asked no
 /// more than once a second.
@@ -155,11 +155,11 @@ fn paced(fetch: Fetch, url: &str) -> Result<Vec<u8>, String> {
         if let Ok(mut last) = NOMINATIM_LAST.lock() {
             if let Some(t) = *last {
                 let gap = Duration::from_millis(1100);
-                if t.elapsed() < gap {
+                if t.elapsed() < gap && !crate::platform::WEB {
                     std::thread::sleep(gap - t.elapsed());
                 }
             }
-            *last = Some(std::time::Instant::now());
+            *last = Some(web_time::Instant::now());
         }
     }
     fetch(url, None)
@@ -171,7 +171,7 @@ fn spawn<T: Send + 'static>(
 ) -> Pending<T> {
     let pending: Pending<T> = Arc::new(Mutex::new(None));
     let out = pending.clone();
-    std::thread::spawn(move || {
+    crate::platform::spawn(move || {
         let r = job();
         if let Ok(mut p) = out.lock() {
             *p = Some(r);
@@ -372,6 +372,14 @@ fn host_of(url: &str) -> &str {
 
 /// One address, by HTTP (through the system's proxy if it has one): a GET,
 /// or a POST of a form.
+#[cfg(target_arch = "wasm32")]
+pub fn http_get(_url: &str, _form: Option<&str>) -> Result<Vec<u8>, String> {
+    Err("la versión web aún no descarga de otros servicios (llega en T5)".into())
+}
+
+/// One address, by HTTP (through the system's proxy if it has one): a GET,
+/// or a POST of a form.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn http_get(url: &str, form: Option<&str>) -> Result<Vec<u8>, String> {
     let agent = ureq::AgentBuilder::new()
         .timeout_connect(Duration::from_secs(20))
@@ -465,7 +473,7 @@ impl ArchiSimApp {
         let job = Arc::new(Mutex::new(Progress::default()));
         d.job = Some(job.clone());
         let fetch = d.fetch;
-        std::thread::spawn(move || run(&requests, &job, fetch));
+        crate::platform::spawn(move || run(&requests, &job, fetch));
         Ok(())
     }
 

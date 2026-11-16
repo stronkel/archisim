@@ -23,6 +23,9 @@ pub fn write(what: &str) {
     if cfg!(test) {
         return;
     }
+    // In the browser, to its console (there is no settings folder).
+    #[cfg(target_arch = "wasm32")]
+    web_sys::console::error_1(&what.into());
     let Some(path) = log_file() else {
         return;
     };
@@ -119,14 +122,14 @@ pub fn watch_frames() {
         .name("vigilante".into())
         .spawn(|| {
             let mut last = FRAMES.load(Ordering::Relaxed);
-            let mut since = std::time::Instant::now();
+            let mut since = web_time::Instant::now();
             let mut written = false;
             loop {
                 std::thread::sleep(std::time::Duration::from_millis(500));
                 let now = FRAMES.load(Ordering::Relaxed);
                 if now != last || !IN_FRAME.load(Ordering::Relaxed) {
                     last = now;
-                    since = std::time::Instant::now();
+                    since = web_time::Instant::now();
                     written = false;
                 } else if !written && since.elapsed().as_secs() >= 4 {
                     written = true;

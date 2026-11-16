@@ -206,7 +206,7 @@ fn fmt_m(v: f64) -> String {
 impl ArchiSimApp {
     /// Asks for the survey file and opens its window.
     pub(super) fn pick_survey(&mut self) {
-        let mut d = rfd::FileDialog::new()
+        let mut d = crate::file_dialog::FileDialog::new()
             .set_title("Importar topografía")
             .add_filter(
                 "Levantamiento (DXF, CSV, TXT)",

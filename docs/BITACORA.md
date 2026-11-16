@@ -6,6 +6,29 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-14 (162) · v0.86: iPad T1, ArchiSim en el navegador y en el NAS
+
+Rama `bloque/ipad`, con pull request (#212). Versión 0.86.0. Sin cambios de formato ni de IFC.
+
+- **Qué se hizo.** Antonio quiere modelar en serio en el iPad, con Pencil, teclado y dedos. Plan en `docs/IPAD.md` (T1–T6). Decisiones: web primero y app nativa después (D29), servida desde su NAS con usuario y contraseña (D30).
+  - **El programa compila para el navegador** (`wasm32-unknown-unknown`, WebGPU con WebGL de reserva). Lo que solo existe en el escritorio va aparte: `file_dialog` (en la web, «cancelado» con aviso), `platform::spawn` (en la web, en el momento), `http_get` y la descarga del actualizador, `web_time` para el reloj (también en el IFC y el BCF), el bucle propio de `main.rs`, lo de macOS. El render usa un hilo en la web.
+  - **`web.rs`** arranca en el lienzo de `crates/archisim-app/index.html` y abre `demo.archisim`; los avisos para la persona salen como mensajes (`web::note`). La página no hace zoom ni selecciona texto, y se puede añadir a la pantalla de inicio (`web/manifest.json`).
+  - **`scripts/build_web.sh`** (trunk) hace `dist/archisim-web.zip`. La integración continua lo compila y lo abre en Chromium dos veces (`scripts/web_smoke.py`): con WebGPU (como Safari 26) arranca, abre la casa y pasa al 3D sin ningún error de la gráfica; con WebGL las fotos (en el registro del trabajo, entre `PNG-INICIO` y `PNG-FIN`) enseñan la ventana entera y la planta de la casa. `release.yml` lo adjunta a cada versión.
+  - **3D en el navegador.** Los triángulos se suben con la cola al empezar cada imagen (`Renderer::writes`, `buffer_with`) en lugar de con búferes mapeados al crearlos: Chromium rechazaba los de unos megabytes. También en el escritorio (las pruebas de la vista 3D pasan igual). Los errores de la gráfica van a la consola del navegador.
+  - En la web no sale la pantalla de inicio: abre directamente la casa de ejemplo.
+  - **`scripts/nas/`**: `docker-compose.yml` con Caddy (usuario y contraseña cifrada en `.env`, compresión, la página sin caché y el programa con caché) y un actualizador que cada 10 minutos baja la última versión publicada; `README.md` con los pasos para UGOS Pro y Tailscale Funnel.
+- **Pendiente.**
+  - T2: abrir y guardar desde Archivos e iCloud. Después, T3 y T4: Pencil, gestos y tamaño táctil.
+  - El programa pesa 51 MB (13 MB comprimido): afinarlo con wasm-opt en T5.
+  - Con WebGL (navegadores sin WebGPU) la planta va bien pero el 3D se para: la hierba pide una mezcla de colores que WebGL no tiene. No afecta al iPad con iPadOS 26 (WebGPU); se arreglará si hace falta.
+  - Las fotos del 3D con WebGPU salen en blanco en el navegador sin pantalla de la integración continua: la prueba de verdad del 3D es el iPad.
+  - En esta sesión no se puede compilar para la web (no deja bajar esa parte de Rust): se compila y se prueba en la integración continua.
+- **Qué debe probar Antonio** (cuando esté unida y publicada la 0.86):
+  1. Instalarlo en el NAS siguiendo `scripts/nas/README.md` (pasos 1 a 5).
+  2. En el PC, `http://<ip-del-nas>:4200`: pide usuario y contraseña y abre la casa de ejemplo. Mira la planta y pulsa F3 para el 3D.
+  3. Publicarlo con `tailscale funnel --bg --https=8443 4200` y abrir la dirección `https://…:8443` en Safari del iPad.
+  4. En el iPad: ¿arranca?, ¿se ve el 3D?, ¿cuánto tarda en cargar la primera vez y la segunda? Moverse con el dedo y el Pencil (todavía con el manejo de ratón: los gestos llegan en T3).
+  5. Compartir → «Añadir a pantalla de inicio» y abrirlo desde el icono.
 ## 2026-11-14 (161) · v0.85: que todo responda al instante
 
 Rama `bloque/fluidez`, con pull request. Versión 0.85.0. Sin cambios de formato.

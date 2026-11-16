@@ -92,8 +92,28 @@ jobs:
           name: windows
           path: dist/ArchiSim-Windows.exe
 
+  # ArchiSim in the browser (docs/IPAD.md): the NAS downloads this zip.
+  web:
+    needs: decide
+    if: needs.decide.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: trunk
+      - run: scripts/build_web.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web
+          path: dist/archisim-web.zip
+
   publish:
-    needs: [decide, mac, windows]
+    needs: [decide, mac, windows, web]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -115,6 +135,8 @@ jobs:
 
           **Windows**: descarga y ejecuta \`ArchiSim-Windows.exe\`.
 
+          **iPad y navegador**: \`archisim-web.zip\` es la versión web; el NAS la descarga sola (\`docs/IPAD.md\`).
+
           EOF
           # What changes: this version's part of docs/NOVEDADES.md, which
           # ArchiSim shows before updating itself.
@@ -128,4 +150,4 @@ jobs:
             ' docs/NOVEDADES.md
           } >> notas.md
           gh release create "$TAG" --target "$GITHUB_SHA" --title "ArchiSim $version" --notes-file notas.md \
-            dist/ArchiSim-Mac.dmg dist/ArchiSim-Windows.exe dist/instalar-mac.sh
+            dist/ArchiSim-Mac.dmg dist/ArchiSim-Windows.exe dist/instalar-mac.sh dist/archisim-web.zip

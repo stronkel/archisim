@@ -213,7 +213,7 @@ impl ArchiSimApp {
                     }
                 })
                 .collect();
-            let mut d = rfd::FileDialog::new()
+            let mut d = crate::file_dialog::FileDialog::new()
                 .set_title("Exportar tabla (CSV)")
                 .add_filter("CSV (hoja de cálculo)", &["csv"])
                 .set_file_name(format!("{} - {name}.csv", self.file_name_stem()));
@@ -234,7 +234,7 @@ impl ArchiSimApp {
 
     /// Exports the measurements as a BC3 budget.
     pub(super) fn export_bc3(&mut self) {
-        let mut d = rfd::FileDialog::new()
+        let mut d = crate::file_dialog::FileDialog::new()
             .set_title("Exportar mediciones (BC3)")
             .add_filter("BC3 (FIEBDC-3)", &["bc3"])
             .set_file_name(format!("{}.bc3", self.file_name_stem()));
@@ -260,7 +260,7 @@ impl ArchiSimApp {
             self.complain("El proyecto no tiene tipos de muro, forjado o cubierta con entramado: actívalo en Tipos y materiales → Entramado ligero.".to_string());
             return;
         };
-        let mut d = rfd::FileDialog::new()
+        let mut d = crate::file_dialog::FileDialog::new()
             .set_title("Despiece de entramados (Excel)")
             .add_filter("Excel", &["xlsx"])
             .set_file_name(format!(
@@ -287,7 +287,7 @@ impl ArchiSimApp {
             self.complain("El proyecto no tiene tipos de muro, forjado o cubierta con entramado: actívalo en Tipos y materiales → Entramado ligero.".to_string());
             return;
         };
-        let mut d = rfd::FileDialog::new()
+        let mut d = crate::file_dialog::FileDialog::new()
             .set_title("Ejes del entramado (DXF 3D)")
             .add_filter("DXF", &["dxf"])
             .set_file_name(format!("{}-ejes-entramado.dxf", self.file_name_stem()));
@@ -306,7 +306,7 @@ impl ArchiSimApp {
     /// A document of A3 sheets (the carpentry sheets, the carpentry
     /// report or the table of areas) as a PDF.
     pub(super) fn export_document(&mut self, doc: crate::documents::Document) {
-        let mut d = rfd::FileDialog::new()
+        let mut d = crate::file_dialog::FileDialog::new()
             .set_title(format!("{} (PDF)", doc.title()))
             .add_filter("PDF", &["pdf"])
             .set_file_name(format!("{}-{}.pdf", self.file_name_stem(), doc.file()));

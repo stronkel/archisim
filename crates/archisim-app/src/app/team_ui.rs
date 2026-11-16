@@ -118,7 +118,7 @@ impl ArchiSimApp {
     }
 
     pub(super) fn pick_team_folder(&mut self) {
-        let mut d = rfd::FileDialog::new()
+        let mut d = crate::file_dialog::FileDialog::new()
             .set_title("Abrir proyecto de equipo (la carpeta compartida o su equipo.asequipo)")
             .add_filter("Proyecto de equipo", &[archisim_team::EXTENSION]);
         if let Some(dir) = self.start_dir() {
@@ -538,7 +538,7 @@ impl ArchiSimApp {
             if d.share {
                 ui.horizontal(|ui| {
                     if ui.button("Elegir carpeta…").clicked() {
-                        if let Some(dir) = rfd::FileDialog::new()
+                        if let Some(dir) = crate::file_dialog::FileDialog::new()
                             .set_title("Carpeta compartida del proyecto (vacía)")
                             .pick_folder()
                         {

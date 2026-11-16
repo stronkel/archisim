@@ -519,7 +519,7 @@ impl ArchiSimApp {
 
     /// The calculation report as a PDF of A4 pages.
     pub(super) fn export_calc_report(&mut self) {
-        let mut d = rfd::FileDialog::new()
+        let mut d = crate::file_dialog::FileDialog::new()
             .set_title("Anejo de cálculo de la estructura (PDF)")
             .add_filter("PDF", &["pdf"])
             .set_file_name(format!("{}-anejo-calculo.pdf", self.file_name_stem()));
@@ -551,7 +551,7 @@ impl ArchiSimApp {
 
     /// The structure drawings as a PDF of A3 pages.
     pub(super) fn export_structure_drawings(&mut self) {
-        let mut d = rfd::FileDialog::new()
+        let mut d = crate::file_dialog::FileDialog::new()
             .set_title("Planos de estructura (PDF)")
             .add_filter("PDF", &["pdf"])
             .set_file_name(format!("{}-planos-estructura.pdf", self.file_name_stem()));

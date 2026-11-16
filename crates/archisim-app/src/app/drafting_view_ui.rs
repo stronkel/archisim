@@ -61,7 +61,7 @@ impl ArchiSimApp {
             }
         }
         if self.view != before {
-            self.view_moved_at = Some(std::time::Instant::now());
+            self.view_moved_at = Some(web_time::Instant::now());
         }
         // The cursor, keys and clicks.
         let view = ViewRef::Drafting(id);

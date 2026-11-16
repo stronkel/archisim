@@ -45,8 +45,8 @@ impl Default for PlantingSettings {
 
 /// A new number to start the chance with.
 fn new_seed(old: u64) -> u64 {
-    let t = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
+    let t = web_time::SystemTime::now()
+        .duration_since(web_time::UNIX_EPOCH)
         .map(|d| d.as_nanos() as u64)
         .unwrap_or(0);
     archisim_core::flora::seed_of(old ^ t, 1) % 999_983 + 1

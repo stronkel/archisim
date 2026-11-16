@@ -46,7 +46,7 @@ impl<F: Send + 'static> FixState<F> {
         work: impl FnOnce(&archisim_core::Model) -> Shown<F> + Send + 'static,
     ) -> Self {
         let (tx, rx) = channel();
-        std::thread::spawn(move || {
+        crate::platform::spawn(move || {
             let _ = tx.send(work(&model));
             ctx.request_repaint();
         });

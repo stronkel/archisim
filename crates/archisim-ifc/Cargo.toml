@@ -9,6 +9,7 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+web-time.workspace = true
 archisim-core.workspace = true
 archisim-geom.workspace = true
 
