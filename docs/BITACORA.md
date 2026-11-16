@@ -6,7 +6,7 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
-## 2026-11-16 (168) · v0.92: muros y pilares, juntas a medida y más fluidez
+## 2026-11-16 (169) · v0.92: muros y pilares, juntas a medida y más fluidez
 
 Rama `bloque/muro-pilar`, con pull request. Versión 0.92.0. Sin cambios de formato.
 
