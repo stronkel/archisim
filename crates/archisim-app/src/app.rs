@@ -387,6 +387,8 @@ pub struct ArchiSimApp {
     pub roundabout_settings: roundabout_ui::RoundaboutSettings,
     /// The node the tool Nudo picked (N1).
     pub node_pick: Option<archisim_core::NodeKey>,
+    /// The handle of the picked node being dragged (N1).
+    pub node_grab: Option<node_ui::NodeGrab>,
     /// The box tool's settings, made from the project the first time.
     pub box_settings: Option<box_ui::BoxSettings>,
     /// The box types of the library folder, read when first shown.
@@ -913,6 +915,7 @@ impl ArchiSimApp {
             road_settings,
             roundabout_settings: Default::default(),
             node_pick: None,
+            node_grab: None,
             box_settings: None,
             box_catalogue: None,
             world_settings: Default::default(),

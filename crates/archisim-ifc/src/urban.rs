@@ -185,7 +185,7 @@ impl Exporter<'_> {
                         plate_up.clone(),
                     ));
                 }
-                for k in &j.kerbs {
+                for k in j.kerbs.iter().chain(&j.bump_kerbs) {
                     parts.push((
                         RoadBand::Kerb,
                         k.clone(),

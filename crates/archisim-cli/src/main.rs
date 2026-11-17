@@ -99,9 +99,11 @@ Uso:
 
   archisim nudos [carpeta]
       Los nudos de las calles cambiados a mano (N1): un cruce de cada tipo
-      (cruce, elevado, plataforma única, sin nudo), una T con chaflanes y
-      retranqueo y una L con esquina en punta y sin acera: nudos.archisim,
-      nudos.ifc, planta y axonometría.
+      (cruce con ceda el paso y orejas, elevado y plano, plataforma única
+      sin marcas, sin nudo), una T con chaflanes, stop y retranqueo, una L
+      en punta, un fondo de saco con círculo de giro, una doblez y una
+      avenida que se estrecha sin costura: nudos.archisim, nudos.ifc,
+      planta y axonometría.
   archisim calles [carpeta]
       Unas calles en una ladera que se encuentran de todas las maneras:
       un cruce, tres en T y una esquina en L, con las esquinas redondeadas

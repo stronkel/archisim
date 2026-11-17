@@ -67,15 +67,39 @@ pub enum NodeKind {
     /// No node: the streets pass without meeting (one over the other, or
     /// simply laid one on the other).
     Open,
+    /// Two streets that go on one into the other without a crossing: the
+    /// kerbs and sidewalks straight from one to the other, over a stretch
+    /// where the section changes (a change of width without a seam).
+    Continuous,
+    /// A bend of two streets that go on one into the other: the inside
+    /// corner with its radius, the outside one round the same centre, and
+    /// the sidewalks following the curve (no corner sidewalks).
+    Bend,
+    /// The end of a street with nothing beyond (a cul-de-sac): ends
+    /// straight unless it has a turning circle (`end_radius`).
+    DeadEnd,
 }
 
 impl NodeKind {
-    pub const ALL: [NodeKind; 4] = [
+    pub const ALL: [NodeKind; 7] = [
         NodeKind::Crossing,
         NodeKind::Raised,
         NodeKind::Shared,
+        NodeKind::Continuous,
+        NodeKind::Bend,
+        NodeKind::DeadEnd,
         NodeKind::Open,
     ];
+
+    /// Whether a node of `arms` arms (and `ends` free ends) can be of this
+    /// kind: a continuous one and a bend join two arms, a dead end is one.
+    pub fn fits(self, arms: usize) -> bool {
+        match self {
+            NodeKind::DeadEnd => arms == 1,
+            NodeKind::Continuous | NodeKind::Bend => arms == 2,
+            _ => arms >= 2,
+        }
+    }
 
     /// Its name for Antonio.
     pub fn label(self) -> &'static str {
@@ -84,6 +108,9 @@ impl NodeKind {
             NodeKind::Raised => "Cruce elevado",
             NodeKind::Shared => "Plataforma única",
             NodeKind::Open => "Sin nudo",
+            NodeKind::Continuous => "Continuo",
+            NodeKind::Bend => "Doblez",
+            NodeKind::DeadEnd => "Fin",
         }
     }
 
@@ -93,6 +120,9 @@ impl NodeKind {
             NodeKind::Raised => "raised",
             NodeKind::Shared => "shared",
             NodeKind::Open => "open",
+            NodeKind::Continuous => "continuous",
+            NodeKind::Bend => "bend",
+            NodeKind::DeadEnd => "dead-end",
         }
     }
 
@@ -138,6 +168,52 @@ impl CornerShape {
     }
 }
 
+/// The sign that stops or gives way the traffic that comes into a node by
+/// an arm, with its mark on the road (Norma 8.2-IC: M-4.1 stop line, M-4.2
+/// give-way line).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum ArmSign {
+    #[default]
+    None,
+    /// Give way (R-1): a dashed line across the lanes coming in.
+    Yield,
+    /// Stop (R-2): a continuous line across the lanes coming in.
+    Stop,
+    /// Traffic lights: a continuous line and the lights on their post.
+    Lights,
+}
+
+impl ArmSign {
+    pub const ALL: [ArmSign; 4] = [
+        ArmSign::None,
+        ArmSign::Yield,
+        ArmSign::Stop,
+        ArmSign::Lights,
+    ];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            ArmSign::None => "Sin señal",
+            ArmSign::Yield => "Ceda el paso",
+            ArmSign::Stop => "Stop",
+            ArmSign::Lights => "Semáforo",
+        }
+    }
+
+    fn code(self) -> &'static str {
+        match self {
+            ArmSign::None => "",
+            ArmSign::Yield => "yield",
+            ArmSign::Stop => "stop",
+            ArmSign::Lights => "lights",
+        }
+    }
+
+    fn of_code(c: &str) -> Option<ArmSign> {
+        ArmSign::ALL.into_iter().find(|k| k.code() == c)
+    }
+}
+
 /// An arm of a node: a street going out of it one way (along the street,
 /// `forward`, or back).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -151,6 +227,8 @@ pub struct ArmRef {
 pub struct ArmSettings {
     /// How far from the node the arm ends at least, metres (its setback).
     pub setback: Option<f64>,
+    /// The sign for the traffic coming in by it.
+    pub sign: Option<ArmSign>,
 }
 
 /// What is changed of a corner: the one from an arm to the next one round
@@ -162,6 +240,9 @@ pub struct CornerSettings {
     pub shape: Option<CornerShape>,
     /// Whether it has a sidewalk (it has unless changed).
     pub sidewalk: Option<bool>,
+    /// How far its sidewalk is brought out over the carriageway (over the
+    /// parking, a bump-out or «oreja»), metres.
+    pub bump: Option<f64>,
 }
 
 /// What Antonio changed of a node: only that is kept, the rest is worked
@@ -173,6 +254,16 @@ pub struct NodeSettings {
     pub arms: Vec<(ArmRef, ArmSettings)>,
     /// By the arm the corner starts from.
     pub corners: Vec<(ArmRef, CornerSettings)>,
+    /// Flat at the height of its centre (unless changed, it follows the
+    /// streets that meet there).
+    pub flat: Option<bool>,
+    /// The street that rules: the node takes its height and its paving, and
+    /// the others come to it.
+    pub main: Option<RoadId>,
+    /// Without its road markings (zebras, lines and stop lines) near it.
+    pub hide_marks: Option<bool>,
+    /// A dead end's turning circle: the radius of its kerb, metres.
+    pub end_radius: Option<f64>,
 }
 
 impl NodeSettings {
@@ -183,18 +274,30 @@ impl NodeSettings {
             kind: None,
             arms: Vec::new(),
             corners: Vec::new(),
+            flat: None,
+            main: None,
+            hide_marks: None,
+            end_radius: None,
         }
     }
 
     /// Whether nothing is changed.
     pub fn is_plain(&self) -> bool {
         self.kind.is_none_or(|k| k == NodeKind::Crossing)
-            && self.arms.iter().all(|(_, a)| a.setback.is_none())
+            && self
+                .arms
+                .iter()
+                .all(|(_, a)| a.setback.is_none() && a.sign.is_none_or(|s| s == ArmSign::None))
             && self.corners.iter().all(|(_, c)| {
                 c.radius.is_none()
                     && c.shape.is_none_or(|s| s == CornerShape::Arc)
                     && c.sidewalk.is_none_or(|s| s)
+                    && c.bump.is_none_or(|b| b <= 0.0)
             })
+            && self.flat.is_none_or(|f| !f)
+            && self.main.is_none()
+            && self.hide_marks.is_none_or(|h| !h)
+            && self.end_radius.is_none()
     }
 
     pub fn kind(&self) -> NodeKind {
@@ -245,35 +348,53 @@ impl NodeSettings {
             .iter()
             .map(|(r, e)| format!("{}:{}", name(*r), e.code()))
             .collect();
+        let opt = |v: Option<f64>| v.map(|r| r.to_string()).unwrap_or_default();
         let arms: Vec<String> = self
             .arms
             .iter()
-            .filter_map(|(a, s)| Some(format!("{}={}", arm(a), s.setback?)))
+            .map(|(a, s)| {
+                format!(
+                    "{}={}/{}",
+                    arm(a),
+                    opt(s.setback),
+                    s.sign.map(|k| k.code()).unwrap_or_default()
+                )
+            })
             .collect();
         let corners: Vec<String> = self
             .corners
             .iter()
             .map(|(a, s)| {
                 format!(
-                    "{}={}/{}/{}",
+                    "{}={}/{}/{}/{}",
                     arm(a),
-                    s.radius.map(|r| r.to_string()).unwrap_or_default(),
+                    opt(s.radius),
                     s.shape.map(|s| s.code()).unwrap_or_default(),
                     match s.sidewalk {
                         Some(true) => "1",
                         Some(false) => "0",
                         None => "",
-                    }
+                    },
+                    opt(s.bump)
                 )
             })
             .collect();
+        let flag = |v: Option<bool>| match v {
+            Some(true) => "1",
+            Some(false) => "0",
+            None => "",
+        };
         format!(
-            "{};{};{};{};{}",
+            "{};{};{};{};{};{};{};{};{}",
             self.key.nth,
             self.kind.map(|k| k.code()).unwrap_or_default(),
             roads.join(","),
             arms.join("|"),
-            corners.join("|")
+            corners.join("|"),
+            flag(self.flat),
+            self.main.map(&name).unwrap_or_default(),
+            flag(self.hide_marks),
+            opt(self.end_radius)
         )
     }
 
@@ -302,15 +423,22 @@ impl NodeSettings {
             roads.push((road(g)?, NodeEnd::of_code(e)?));
         }
         roads.sort();
+        let num = |t: Option<&str>| -> Option<Option<f64>> {
+            match t.unwrap_or("") {
+                "" => Some(None),
+                x => Some(Some(x.parse().ok()?)),
+            }
+        };
         let mut arms = Vec::new();
         for a in f.next().unwrap_or("").split('|').filter(|a| !a.is_empty()) {
             let (r, v) = a.split_once('=')?;
-            arms.push((
-                arm(r)?,
-                ArmSettings {
-                    setback: Some(v.parse().ok()?),
-                },
-            ));
+            let mut p = v.split('/');
+            let setback = num(p.next())?;
+            let sign = match p.next().unwrap_or("") {
+                "" => None,
+                x => Some(ArmSign::of_code(x)?),
+            };
+            arms.push((arm(r)?, ArmSettings { setback, sign }));
         }
         let mut corners = Vec::new();
         for c in f.next().unwrap_or("").split('|').filter(|c| !c.is_empty()) {
@@ -329,20 +457,38 @@ impl NodeSettings {
                 "0" => Some(false),
                 _ => None,
             };
+            let bump = num(p.next())?;
             corners.push((
                 arm(r)?,
                 CornerSettings {
                     radius,
                     shape,
                     sidewalk,
+                    bump,
                 },
             ));
         }
+        let flag = |t: Option<&str>| match t.unwrap_or("") {
+            "1" => Some(true),
+            "0" => Some(false),
+            _ => None,
+        };
+        let flat = flag(f.next());
+        let main = match f.next().unwrap_or("") {
+            "" => None,
+            g => Some(road(g)?),
+        };
+        let hide_marks = flag(f.next());
+        let end_radius = num(f.next())?;
         Some(NodeSettings {
             key: NodeKey { level, roads, nth },
             kind,
             arms,
             corners,
+            flat,
+            main,
+            hide_marks,
+            end_radius,
         })
     }
 }
@@ -378,7 +524,28 @@ impl Model {
                 }
             }
         }
+        if let Some(m) = s.main {
+            if !s.key.road_ids().any(|r| r == m) {
+                return Err(ModelError::UnknownElement(m.0));
+            }
+        }
+        if let Some(v) = s.end_radius {
+            if !v.is_finite() {
+                return Err(ModelError::NotFinite("radio de giro"));
+            }
+            if v <= 0.0 {
+                return Err(ModelError::NonPositive("radio de giro"));
+            }
+        }
         for (_, c) in &s.corners {
+            if let Some(v) = c.bump {
+                if !v.is_finite() {
+                    return Err(ModelError::NotFinite("oreja"));
+                }
+                if v < 0.0 {
+                    return Err(ModelError::NonPositive("oreja"));
+                }
+            }
             if let Some(v) = c.radius {
                 if !v.is_finite() {
                     return Err(ModelError::NotFinite("radio de esquina"));
@@ -447,6 +614,7 @@ mod tests {
             a,
             ArmSettings {
                 setback: Some(12.5),
+                sign: Some(ArmSign::Stop),
             },
         );
         s.set_corner(
@@ -455,8 +623,13 @@ mod tests {
                 radius: Some(8.0),
                 shape: Some(CornerShape::Chamfer),
                 sidewalk: Some(false),
+                bump: Some(1.5),
             },
         );
+        s.flat = Some(true);
+        s.main = Some(RoadId(5));
+        s.hide_marks = Some(true);
+        s.end_radius = Some(9.0);
         assert!(!s.is_plain());
         let text = s.encode(|r| format!("g{}", r.0));
         let back = NodeSettings::decode(&text, LevelId(1), |g| {
@@ -464,5 +637,15 @@ mod tests {
         })
         .unwrap();
         assert_eq!(back, s);
+        // As the first version wrote it (0.94: setbacks and three corner
+        // fields, nothing after them).
+        let old = "0;raised;g5:T,g7:S;g7:F=12.5;g7:F=8/chamfer/0".to_string();
+        let read = NodeSettings::decode(&old, LevelId(1), |g| {
+            g.strip_prefix('g')?.parse().ok().map(RoadId)
+        })
+        .unwrap();
+        assert_eq!(read.arm(a).setback, Some(12.5));
+        assert_eq!(read.corner(a).shape, Some(CornerShape::Chamfer));
+        assert!(read.flat.is_none() && read.end_radius.is_none());
     }
 }

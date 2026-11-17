@@ -1,11 +1,16 @@
 //! The nodes of the streets (N1, `docs/TERRITORIO.md` §2): the tool Nudo
-//! picks the crossing under a click and its properties change it — what it
-//! is (crossing, raised, shared surface, no node), how far each arm ends
-//! from it, and each corner's radius, shape and sidewalk.
+//! picks the crossing (or the free end of a street) under a click and its
+//! properties change it — what it is (crossing, raised, shared surface,
+//! continuous, bend, dead end, no node), its height and main street, each
+//! arm's setback, sign and zebra crossing, and each corner's radius,
+//! shape, sidewalk and bump-out. The arms' ends and the corners have
+//! handles in plan.
 
-use archisim_core::{CornerShape, Model, NodeKey, NodeKind, NodeSettings, Point2};
+use archisim_core::{
+    ArmSign, CornerSettings, CornerShape, Model, NodeKey, NodeKind, NodeSettings, Point2,
+};
 use archisim_geom::crossroads::{self, Arm, Junction};
-use eframe::egui::{self, Color32, ComboBox, Id, Rect, Shape, Stroke, Ui};
+use eframe::egui::{self, Color32, ComboBox, Id, Pos2, Rect, Sense, Shape, Stroke, Ui, Vec2};
 
 use super::props::{self, group, row};
 use super::widgets::SwitchExt;
@@ -13,6 +18,10 @@ use super::*;
 
 /// How far from a node's centre a click still picks it, metres.
 const PICK_REACH: f64 = 15.0;
+/// How near a handle a press grabs it, screen points.
+const HANDLE_REACH: f32 = 10.0;
+/// The handles' colour.
+const HANDLE: Color32 = Color32::from_rgb(230, 120, 40);
 
 /// Where an arm goes, as a point of the compass.
 fn heading(a: &Arm) -> &'static str {
@@ -39,6 +48,7 @@ pub fn node_title(m: &Model, key: &NodeKey) -> String {
     names.dedup();
     match names.len() {
         0 => "Nudo".into(),
+        1 if key.roads.len() == 1 => format!("Final de {}", names[0]),
         1 => format!("Nudo de {}", names[0]),
         _ => {
             let last = names.pop().unwrap_or_default();
@@ -47,70 +57,411 @@ pub fn node_title(m: &Model, key: &NodeKey) -> String {
     }
 }
 
+/// What explains each kind of node.
+fn kind_note(k: NodeKind) -> &'static str {
+    match k {
+        NodeKind::Crossing => "Las calles se unen con sus esquinas y bordillos.",
+        NodeKind::Raised => {
+            "La calzada sube a la cota de la acera, con una rampa de 2 m en cada calle."
+        }
+        NodeKind::Shared => {
+            "Plataforma única: calzada a la cota de la acera, con su pavimento, sin bordillos y con bolardos en las esquinas."
+        }
+        NodeKind::Continuous => {
+            "Una calle sigue en la otra sin cruce: bordillos y aceras rectos de una sección a la otra, en 6 m por cada lado."
+        }
+        NodeKind::Bend => {
+            "Una curva de la misma calle: la esquina de dentro con su radio y la de fuera alrededor del mismo centro, con las aceras siguiendo la curva."
+        }
+        NodeKind::DeadEnd => {
+            "Fondo de saco: la calle acaba en un círculo de giro con su bordillo y su acera."
+        }
+        NodeKind::Open => "Las calles se cruzan sin unirse (como un paso a distinto nivel).",
+    }
+}
+
+/// A small drawing of a kind of node, for its card: streets in grey, the
+/// sidewalks' edges in ink.
+fn paint_kind(p: &egui::Painter, r: Rect, k: NodeKind, ink: Color32) {
+    let road = Color32::from_gray(200);
+    let raised = Color32::from_gray(160);
+    let paving = Color32::from_rgb(232, 222, 200);
+    let c = r.center();
+    let w = r.width().min(r.height());
+    let half = w * 0.16;
+    let reach = w * 0.45;
+    let bar = |p: &egui::Painter, a: Pos2, b: Pos2, col: Color32| {
+        p.line_segment([a, b], Stroke::new(half * 2.0, col));
+    };
+    let thin = Stroke::new(1.0, ink);
+    match k {
+        NodeKind::Crossing | NodeKind::Raised | NodeKind::Shared | NodeKind::Open => {
+            bar(
+                p,
+                c - Vec2::new(reach, 0.0),
+                c + Vec2::new(reach, 0.0),
+                road,
+            );
+            if k == NodeKind::Open {
+                // One over the other: a gap round the upper one.
+                p.line_segment(
+                    [c - Vec2::new(0.0, reach), c - Vec2::new(0.0, half * 1.6)],
+                    Stroke::new(half * 2.0, road),
+                );
+                p.line_segment(
+                    [c + Vec2::new(0.0, half * 1.6), c + Vec2::new(0.0, reach)],
+                    Stroke::new(half * 2.0, road),
+                );
+                for y in [-1.0, 1.0] {
+                    p.line_segment(
+                        [
+                            c + Vec2::new(-reach, y * half),
+                            c + Vec2::new(reach, y * half),
+                        ],
+                        thin,
+                    );
+                }
+                return;
+            }
+            bar(
+                p,
+                c - Vec2::new(0.0, reach),
+                c + Vec2::new(0.0, reach),
+                road,
+            );
+            let square = Rect::from_center_size(c, Vec2::splat(half * 2.0));
+            match k {
+                NodeKind::Raised => {
+                    p.rect_filled(square, 0.0, raised);
+                }
+                NodeKind::Shared => {
+                    p.rect_filled(square.expand(half * 0.6), 2.0, paving);
+                    for (dx, dy) in [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)] {
+                        p.circle_filled(c + Vec2::new(dx, dy) * half * 1.4, 1.5, ink);
+                    }
+                }
+                _ => {}
+            }
+        }
+        NodeKind::Continuous => {
+            // A wide street going on into a narrow one.
+            let pts = vec![
+                c + Vec2::new(-reach, -half * 1.3),
+                c + Vec2::new(-half, -half * 1.3),
+                c + Vec2::new(half, -half * 0.7),
+                c + Vec2::new(reach, -half * 0.7),
+                c + Vec2::new(reach, half * 0.7),
+                c + Vec2::new(half, half * 0.7),
+                c + Vec2::new(-half, half * 1.3),
+                c + Vec2::new(-reach, half * 1.3),
+            ];
+            p.add(Shape::convex_polygon(pts, road, thin));
+        }
+        NodeKind::Bend => {
+            let centre = c + Vec2::new(-reach, reach);
+            let steps = 12;
+            for rad in [reach * 1.4 - half * 2.0, reach * 1.4] {
+                let pts: Vec<Pos2> = (0..=steps)
+                    .map(|i| {
+                        let t = -std::f32::consts::FRAC_PI_2 * i as f32 / steps as f32;
+                        centre + Vec2::new(t.cos(), t.sin()) * rad
+                    })
+                    .collect();
+                p.add(Shape::line(pts, thin));
+            }
+            let mid: Vec<Pos2> = (0..=steps)
+                .map(|i| {
+                    let t = -std::f32::consts::FRAC_PI_2 * i as f32 / steps as f32;
+                    centre + Vec2::new(t.cos(), t.sin()) * (reach * 1.4 - half)
+                })
+                .collect();
+            p.add(Shape::line(mid, Stroke::new(half * 1.8, road)));
+        }
+        NodeKind::DeadEnd => {
+            bar(p, c - Vec2::new(reach, 0.0), c + Vec2::new(half, 0.0), road);
+            p.circle(c + Vec2::new(half, 0.0), half * 2.0, road, thin);
+        }
+    }
+}
+
+/// A card for a kind of node: its drawing and its name. Whether it was
+/// clicked.
+fn kind_card(ui: &mut Ui, k: NodeKind, on: bool) -> bool {
+    let size = Vec2::new(78.0, 70.0);
+    let (rect, resp) = ui.allocate_exact_size(size, Sense::click());
+    let visuals = ui.visuals();
+    let ink = visuals.text_color();
+    let frame = if on {
+        visuals.selection.bg_fill
+    } else if resp.hovered() {
+        visuals.widgets.hovered.bg_fill
+    } else {
+        visuals.widgets.inactive.bg_fill
+    };
+    let p = ui.painter_at(rect);
+    p.rect_filled(rect, 6.0, frame);
+    let picture = Rect::from_min_size(rect.min + Vec2::new(4.0, 4.0), Vec2::new(70.0, 46.0));
+    p.rect_filled(picture, 4.0, Color32::WHITE);
+    paint_kind(&p, picture.shrink(3.0), k, Color32::from_gray(60));
+    p.text(
+        Pos2::new(rect.center().x, rect.max.y - 9.0),
+        egui::Align2::CENTER_CENTER,
+        k.label(),
+        egui::FontId::proportional(11.0),
+        ink,
+    );
+    resp.on_hover_text(kind_note(k)).clicked()
+}
+
+/// A handle of the picked node being dragged (N1).
+#[derive(Debug, Clone, PartialEq)]
+pub struct NodeGrab {
+    key: NodeKey,
+    what: Grab,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+enum Grab {
+    /// An arm's end: dragging along it changes its setback.
+    Setback(Arm),
+    /// A corner's middle: dragging along its bisector changes its radius.
+    Radius {
+        from: archisim_core::ArmRef,
+        apex: Point2,
+        bis: archisim_core::Vec2,
+        half: f64,
+    },
+}
+
+impl Grab {
+    /// The value the handle takes at `p`.
+    fn value_at(&self, p: Point2) -> f64 {
+        match self {
+            Grab::Setback(a) => (p - a.origin).dot(a.dir).max(0.5),
+            Grab::Radius {
+                apex, bis, half, ..
+            } => crossroads::corner_radius_at(*apex, *bis, *half, p),
+        }
+    }
+}
+
+/// The usual radius of a corner from `a` to `b`: the smaller of their
+/// streets'.
+fn usual_radius(m: &Model, a: &Arm, b: &Arm) -> f64 {
+    let of = |id| {
+        m.road(id)
+            .map_or(4.0, |r: &archisim_core::Road| r.section.corner_radius)
+            .max(0.0)
+    };
+    of(a.road).min(of(b.road))
+}
+
 impl ArchiSimApp {
-    /// A click with the tool Nudo: picks the node under it.
+    /// A click with the tool Nudo: picks the node under it (or the free
+    /// end of a street).
     pub(super) fn node_click(&mut self, p: Point2) {
         let level = self.ed.level;
-        match crossroads::node_at(self.ed.model(), level, p, PICK_REACH) {
-            Some(j) => {
-                let key = j.key.clone();
-                if let Some(k) = &key {
-                    let title = node_title(self.ed.model(), k);
-                    self.say(format!("{title}: cámbialo en Propiedades."));
-                }
-                self.node_pick = key;
+        match crossroads::node_key_at(self.ed.model(), level, p, PICK_REACH) {
+            Some(k) => {
+                let title = node_title(self.ed.model(), &k);
+                self.say(format!(
+                    "{title}: cámbialo en Propiedades o con sus tiradores."
+                ));
+                self.node_pick = Some(k);
             }
             None => {
                 self.node_pick = None;
-                self.say("Aquí no se encuentran calles.");
+                self.say("Aquí no se encuentran calles ni acaba ninguna.");
             }
         }
     }
 
-    /// The node picked, if it is still there.
-    fn picked_node(&self) -> Option<(NodeKey, Junction)> {
+    /// The node picked, if it is still there: its key, its junction (none
+    /// for a plain dead end) and its arms.
+    fn picked_node(&self) -> Option<(NodeKey, Option<Junction>, Vec<Arm>)> {
         let key = self.node_pick.clone()?;
-        let j = crossroads::node_junction(self.ed.model(), &key)?;
-        Some((key, j))
+        let model = self.ed.model();
+        let j = crossroads::node_junction(model, &key);
+        let arms = match &j {
+            Some(j) => j.arms.clone(),
+            None => crossroads::node_arms(model, &key),
+        };
+        if arms.is_empty() {
+            return None;
+        }
+        Some((key, j, arms))
     }
 
-    /// The picked node's outline, over the plan.
+    /// The handles of the picked node: where each is and what it changes.
+    fn node_handles(&self) -> Vec<(Point2, Grab)> {
+        let Some((key, _, arms)) = self.picked_node() else {
+            return Vec::new();
+        };
+        let model = self.ed.model();
+        let n = model.node(&key);
+        let mut out: Vec<(Point2, Grab)> = arms
+            .iter()
+            .map(|a| (a.origin + a.dir * a.cut, Grab::Setback(a.clone())))
+            .collect();
+        let count = arms.len();
+        if count >= 2 && n.is_none_or(|n| n.kind() != NodeKind::Continuous) {
+            for i in 0..count {
+                let (a, b) = (&arms[i], &arms[(i + 1) % count]);
+                let from = Junction::arm_ref(a);
+                let c = n.map(|n| n.corner(from)).unwrap_or_default();
+                if c.shape == Some(CornerShape::Sharp) {
+                    continue;
+                }
+                let Some((apex, bis, half)) = crossroads::corner_frame(a, b) else {
+                    continue;
+                };
+                let r = c.radius.unwrap_or_else(|| usual_radius(model, a, b));
+                out.push((
+                    crossroads::corner_middle(apex, bis, half, r),
+                    Grab::Radius {
+                        from,
+                        apex,
+                        bis,
+                        half,
+                    },
+                ));
+            }
+        }
+        out
+    }
+
+    /// Dragging a handle of the picked node: its arm's setback or its
+    /// corner's radius.
+    pub(super) fn node_drag(&mut self, ctx: &egui::Context, rect: Rect, response: &egui::Response) {
+        if response.drag_started_by(egui::PointerButton::Primary) {
+            let origin = ctx.input(|i| i.pointer.press_origin());
+            if let (Some(o), Some(key)) = (origin, self.node_pick.clone()) {
+                let at = self.view.to_model(rect, o);
+                let reach = self.view.to_metres(crate::touch::reach(HANDLE_REACH));
+                self.node_grab = self
+                    .node_handles()
+                    .into_iter()
+                    .filter(|(p, _)| p.distance(at) < reach)
+                    .min_by(|a, b| a.0.distance(at).total_cmp(&b.0.distance(at)))
+                    .map(|(_, what)| NodeGrab { key, what });
+            }
+        }
+        if response.drag_stopped() {
+            let at = ctx
+                .input(|i| i.pointer.interact_pos())
+                .map(|p| self.view.to_model(rect, p));
+            let (Some(g), Some(c)) = (self.node_grab.take(), at) else {
+                return;
+            };
+            let v = (g.what.value_at(c) * 100.0).round() / 100.0;
+            let mut n = self
+                .ed
+                .model()
+                .node(&g.key)
+                .cloned()
+                .unwrap_or_else(|| NodeSettings::new(g.key.clone()));
+            let done = match &g.what {
+                Grab::Setback(a) => {
+                    let r = Junction::arm_ref(a);
+                    let mut s = n.arm(r);
+                    s.setback = Some(v);
+                    n.set_arm(r, s);
+                    format!("Retranqueo: {} m.", fmt_m(v))
+                }
+                Grab::Radius { from, .. } => {
+                    let mut s = n.corner(*from);
+                    s.radius = Some(v);
+                    n.set_corner(*from, s);
+                    format!("Radio de la esquina: {} m.", fmt_m(v))
+                }
+            };
+            let res = self.ed.transact("Nudo", |m| m.set_node(n.clone()));
+            self.report(res, &done);
+        }
+    }
+
+    /// The picked node's outline and handles, over the plan; while a
+    /// handle is dragged, where it would go.
     pub(super) fn draw_node_pick(&self, painter: &egui::Painter, rect: Rect) {
         if self.tool != Tool::Node {
             return;
         }
-        let Some((_, j)) = self.picked_node() else {
+        let Some((_, j, arms)) = self.picked_node() else {
             return;
         };
-        let mut outline = j.plate.clone();
-        if let Some(f) = outline.first().copied() {
-            outline.push(f);
+        if let Some(j) = &j {
+            let mut outline = j.plate.clone();
+            if let Some(f) = outline.first().copied() {
+                outline.push(f);
+            }
+            painter.add(Shape::line(
+                self.polygon(rect, &outline),
+                Stroke::new(2.5, ACCENT),
+            ));
         }
-        painter.add(Shape::line(
-            self.polygon(rect, &outline),
-            Stroke::new(2.5, ACCENT),
-        ));
         // The arms' ends.
-        for a in &j.arms {
+        for a in &arms {
             let n = a.dir.perp_left();
             let end = a.origin + a.dir * a.cut;
             let line = [end - n * a.edge_right, end + n * a.edge_left];
             painter.add(Shape::line(
                 self.polygon(rect, &line),
-                Stroke::new(1.5, Color32::from_rgb(230, 120, 40)),
+                Stroke::new(1.5, HANDLE),
             ));
+        }
+        for (p, _) in self.node_handles() {
+            let at = self.view.to_screen(rect, p);
+            painter.circle(at, 5.0, Color32::WHITE, Stroke::new(2.0, HANDLE));
+        }
+        // Where the dragged handle would go, and its value.
+        let at = painter
+            .ctx()
+            .input(|i| i.pointer.interact_pos())
+            .map(|p| self.view.to_model(rect, p));
+        if let (Some(g), Some(c)) = (&self.node_grab, at) {
+            let v = g.what.value_at(c);
+            let (p, text) = match &g.what {
+                Grab::Setback(a) => {
+                    let n = a.dir.perp_left();
+                    let end = a.origin + a.dir * v;
+                    let line = [end - n * a.edge_right, end + n * a.edge_left];
+                    painter.add(Shape::dashed_line(
+                        &self.polygon(rect, &line),
+                        Stroke::new(1.5, ACCENT),
+                        6.0,
+                        4.0,
+                    ));
+                    (end, format!("Retranqueo {} m", fmt_m(v)))
+                }
+                Grab::Radius {
+                    apex, bis, half, ..
+                } => (
+                    crossroads::corner_middle(*apex, *bis, *half, v),
+                    format!("Radio {} m", fmt_m(v)),
+                ),
+            };
+            let at = self.view.to_screen(rect, p);
+            painter.circle_filled(at, 5.0, ACCENT);
+            painter.text(
+                at + Vec2::new(10.0, -10.0),
+                egui::Align2::LEFT_BOTTOM,
+                text,
+                egui::FontId::proportional(13.0),
+                ACCENT,
+            );
         }
     }
 
     pub(super) fn node_tool_properties(&mut self, ui: &mut Ui) {
-        let Some((key, j)) = self.picked_node() else {
+        let Some((key, j, arms)) = self.picked_node() else {
             props::title(ui, "Herramienta Nudo");
             group(ui, "tool-node", "Nudo", |ui| {
                 props::note(
                     ui,
-                    "Haz clic en un cruce, una T o una L de calles para cambiarlo: tipo de nudo, retranqueo de cada calle y radio, forma y acera de cada esquina.",
+                    "Haz clic en un cruce, una T, una L o el final de una calle para cambiarlo: tipo de nudo, cota, calle principal, retranqueo, señales y paso de peatones de cada calle, y radio, forma, acera y oreja de cada esquina. Los tiradores naranjas se arrastran.",
                 );
             });
+            self.node_level_group(ui);
             return;
         };
         let model = self.ed.model();
@@ -120,37 +471,104 @@ impl ArchiSimApp {
             .cloned()
             .unwrap_or_else(|| NodeSettings::new(key.clone()));
         let mut n = before.clone();
-        let radius_of = |id: archisim_core::RoadId| {
-            model
-                .road(id)
-                .map_or(4.0, |r| r.section.corner_radius)
-                .max(0.0)
-        };
+        // Zebra crossings to lay or take away (edits of the streets).
+        let mut crossings: Vec<(Arm, bool)> = Vec::new();
+        let count = arms.len();
         group(ui, "node-kind", "Tipo de nudo", |ui| {
             ui.horizontal_wrapped(|ui| {
                 for k in NodeKind::ALL {
-                    if ui.selectable_label(n.kind() == k, k.label()).clicked() {
+                    if !k.fits(count) && !(k == NodeKind::Open && count >= 2) {
+                        continue;
+                    }
+                    if kind_card(ui, k, n.kind() == k) {
                         n.kind = (k != NodeKind::Crossing).then_some(k);
                     }
                 }
             });
-            props::note(
-                ui,
-                match n.kind() {
-                    NodeKind::Crossing => "Las calles se unen con sus esquinas y bordillos.",
-                    NodeKind::Raised => "La calzada sube a la cota de la acera, con una rampa de 2 m en cada calle.",
-                    NodeKind::Shared => "Plataforma única: calzada a la cota de la acera, con su pavimento, sin bordillos y con bolardos en las esquinas.",
-                    NodeKind::Open => "Las calles se cruzan sin unirse (como un paso a distinto nivel).",
-                },
-            );
+            props::note(ui, kind_note(n.kind()));
+            if count == 1 && n.kind() != NodeKind::DeadEnd {
+                props::note(
+                    ui,
+                    "La calle acaba recta. Elige Fin para darle un círculo de giro.",
+                );
+            }
         });
-        if n.kind() != NodeKind::Open {
-            group(ui, "node-arms", "Calles que llegan · retranqueo", |ui| {
-                for a in &j.arms {
+        if n.kind() == NodeKind::DeadEnd {
+            group(ui, "node-end", "Círculo de giro", |ui| {
+                row(ui, "Radio (mm)", "El del bordillo del círculo", |ui, w| {
+                    if let Some(v) = length_field(
+                        ui,
+                        Id::unique(("node-end-radius", &key)),
+                        n.end_radius.unwrap_or(crossroads::TURNING_RADIUS),
+                        w - 8.0,
+                    ) {
+                        n.end_radius = Some(v.max(1.0));
+                    }
+                });
+            });
+        }
+        let open = n.kind() == NodeKind::Open;
+        if !open && count >= 2 {
+            group(ui, "node-whole", "El nudo entero", |ui| {
+                let mut flat = n.flat.unwrap_or(false);
+                ui.switch(&mut flat, "Plano a la cota de su centro");
+                n.flat = flat.then_some(true);
+                row(
+                    ui,
+                    "Calle principal",
+                    "La que manda en la cota y el pavimento",
+                    |ui, w| {
+                        let names: Vec<(archisim_core::RoadId, String)> = {
+                            let mut ids: Vec<archisim_core::RoadId> = key.road_ids().collect();
+                            ids.dedup();
+                            ids.into_iter()
+                                .map(|r| {
+                                    (r, model.road(r).map_or("calle".into(), |x| x.name.clone()))
+                                })
+                                .collect()
+                        };
+                        let shown = n
+                            .main
+                            .and_then(|m| names.iter().find(|x| x.0 == m))
+                            .map_or("Ninguna (la más cercana)".to_string(), |x| x.1.clone());
+                        ComboBox::from_id_salt(("node-main", &key))
+                            .width(w - 8.0)
+                            .selected_text(shown)
+                            .show_ui(ui, |ui| {
+                                ui.selectable_value(&mut n.main, None, "Ninguna (la más cercana)");
+                                for (id, name) in &names {
+                                    ui.selectable_value(&mut n.main, Some(*id), name);
+                                }
+                            });
+                    },
+                );
+                if let Some(main) = n.main {
+                    if ui
+                        .button("Ceda el paso en las demás calles")
+                        .on_hover_text("Pone ceda el paso a las calles que llegan a la principal")
+                        .clicked()
+                    {
+                        for a in arms.iter().filter(|a| a.road != main) {
+                            let r = Junction::arm_ref(a);
+                            let mut s = n.arm(r);
+                            s.sign = Some(ArmSign::Yield);
+                            n.set_arm(r, s);
+                        }
+                    }
+                }
+                let mut quiet = n.hide_marks.unwrap_or(false);
+                ui.switch(&mut quiet, "Sin marcas viales cerca del nudo");
+                n.hide_marks = quiet.then_some(true);
+            });
+        }
+        if !open {
+            group(ui, "node-arms", "Calles que llegan", |ui| {
+                for a in &arms {
                     let r = Junction::arm_ref(a);
                     let mut s = n.arm(r);
+                    ui.label(egui::RichText::new(arm_name(model, a)).strong());
                     let hint = "Hasta dónde llega el nudo por esta calle, desde su centro";
-                    row(ui, &arm_name(model, a), hint, |ui, w| {
+                    row(ui, "Retranqueo (mm)", hint, |ui, w| {
                         let shown = s.setback.unwrap_or(a.cut);
                         if let Some(v) =
                             length_field(ui, Id::unique(("node-arm", &key, r)), shown, w - 8.0)
@@ -158,20 +576,62 @@ impl ArchiSimApp {
                             s.setback = Some(v.max(0.0));
                         }
                     });
+                    if count >= 2 {
+                        row(
+                            ui,
+                            "Señal",
+                            "Para el tráfico que entra al nudo por esta calle",
+                            |ui, w| {
+                                let mut sign = s.sign.unwrap_or_default();
+                                ComboBox::from_id_salt(("node-sign", &key, r))
+                                    .width(w - 8.0)
+                                    .selected_text(sign.label())
+                                    .show_ui(ui, |ui| {
+                                        for k in ArmSign::ALL {
+                                            ui.selectable_value(&mut sign, k, k.label());
+                                        }
+                                    });
+                                s.sign = (sign != ArmSign::None).then_some(sign);
+                            },
+                        );
+                        let had = crossroads::arm_crossing(model, a).is_some();
+                        let mut zebra = had;
+                        ui.switch(&mut zebra, "Paso de peatones (con su bordillo rebajado)");
+                        if zebra != had {
+                            crossings.push((a.clone(), zebra));
+                        }
+                    }
                     n.set_arm(r, s);
                 }
             });
+        }
+        if !open && count >= 2 && n.kind() != NodeKind::Continuous {
+            let chamfer = crossroads::standard_chamfer(model);
             group(ui, "node-corners", "Esquinas", |ui| {
-                let count = j.arms.len();
+                if ui
+                    .button(format!("Chaflán estándar ({} m) en todas", fmt_m(chamfer)))
+                    .on_hover_text(
+                        "El habitual del lugar del proyecto; luego cambia el que quieras",
+                    )
+                    .clicked()
+                {
+                    for a in &arms {
+                        let r = Junction::arm_ref(a);
+                        let mut c = n.corner(r);
+                        c.shape = Some(CornerShape::Chamfer);
+                        c.radius = Some(chamfer);
+                        n.set_corner(r, c);
+                    }
+                }
                 for i in 0..count {
-                    let (a, b) = (&j.arms[i], &j.arms[(i + 1) % count]);
+                    let (a, b) = (&arms[i], &arms[(i + 1) % count]);
                     let r = Junction::arm_ref(a);
                     let mut c = n.corner(r);
                     ui.label(
                         egui::RichText::new(format!("Entre el {} y el {}", heading(a), heading(b)))
                             .strong(),
                     );
-                    let usual = radius_of(a.road).min(radius_of(b.road));
+                    let usual = usual_radius(model, a, b);
                     row(
                         ui,
                         "Radio (mm)",
@@ -202,6 +662,21 @@ impl ArchiSimApp {
                     let mut walk = c.sidewalk.unwrap_or(true);
                     ui.switch(&mut walk, "Acera en la esquina");
                     c.sidewalk = (!walk).then_some(false);
+                    row(
+                        ui,
+                        "Oreja (mm)",
+                        "Cuánto sale la acera de la esquina sobre la calzada (el aparcamiento)",
+                        |ui, w| {
+                            if let Some(v) = length_field(
+                                ui,
+                                Id::unique(("node-bump", &key, r)),
+                                c.bump.unwrap_or(0.0),
+                                w - 8.0,
+                            ) {
+                                c.bump = (v > 0.0).then_some(v);
+                            }
+                        },
+                    );
                     n.set_corner(r, c);
                 }
             });
@@ -219,11 +694,78 @@ impl ArchiSimApp {
         if reset {
             n = NodeSettings::new(key.clone());
         }
+        let _ = j;
         if n != before {
             let res = self.ed.transact("Nudo", |m| m.set_node(n.clone()));
             self.report(res, "Nudo cambiado.");
         }
+        for (a, on) in crossings {
+            let res = self.ed.transact("Paso de peatones", |m| {
+                crossroads::set_arm_crossing(m, &a, on)
+            });
+            self.report(
+                res,
+                if on {
+                    "Paso de peatones puesto."
+                } else {
+                    "Paso de peatones quitado."
+                },
+            );
+        }
+        self.node_level_group(ui);
     }
+
+    /// What the tool does to every node of the level: the standard chamfer
+    /// on every corner.
+    fn node_level_group(&mut self, ui: &mut Ui) {
+        let model = self.ed.model();
+        let level = self.ed.level;
+        let chamfer = crossroads::standard_chamfer(model);
+        let mut all = false;
+        group(ui, "node-level", "Todos los nudos de la planta", |ui| {
+            props::note(
+                ui,
+                "El chaflán habitual del lugar del proyecto en todas las esquinas de los cruces de esta planta; después puedes cambiar cada uno.",
+            );
+            all = ui
+                .button(format!(
+                    "Chaflán estándar ({} m) en toda la planta",
+                    fmt_m(chamfer)
+                ))
+                .clicked();
+        });
+        if all {
+            let res = self.ed.transact("Chaflanes", |m| {
+                for j in crossroads::junctions(m, level) {
+                    let Some(key) = j.key.clone() else { continue };
+                    if j.arms.len() < 2 || matches!(j.kind, NodeKind::Continuous | NodeKind::Bend) {
+                        continue;
+                    }
+                    let mut n = m
+                        .node(&key)
+                        .cloned()
+                        .unwrap_or_else(|| NodeSettings::new(key.clone()));
+                    for a in &j.arms {
+                        let r = Junction::arm_ref(a);
+                        let c = CornerSettings {
+                            shape: Some(CornerShape::Chamfer),
+                            radius: Some(chamfer),
+                            ..n.corner(r)
+                        };
+                        n.set_corner(r, c);
+                    }
+                    m.set_node(n)?;
+                }
+                Ok::<(), archisim_core::ModelError>(())
+            });
+            self.report(res, "Chaflanes puestos en todos los cruces de la planta.");
+        }
+    }
+}
+
+/// Metres with a decimal comma.
+fn fmt_m(v: f64) -> String {
+    format!("{v:.2}").replace('.', ",")
 }
 
 #[cfg(test)]

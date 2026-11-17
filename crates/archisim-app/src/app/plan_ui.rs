@@ -1484,6 +1484,7 @@ impl ArchiSimApp {
                 }
             }
             Tool::Node => {
+                self.node_drag(ctx, rect, response);
                 if response.clicked_by(PointerButton::Primary) {
                     if let Some(c) = self.cursor {
                         self.node_click(c.point);

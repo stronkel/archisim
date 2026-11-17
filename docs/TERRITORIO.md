@@ -78,7 +78,25 @@ Hoy `archisim_geom::crossroads::junctions(model, level)` rehace todos los cruces
 - **Guardado**: solo lo cambiado, por la identidad del nudo (calles que llegan y por qué extremo; si se mueve una calle, el nudo sigue siendo el mismo). Si se borra una calle, sus ajustes se pierden. Formato 113; en el IFC, en el pset `ArchiSim_Road` de la primera calle del nudo (propiedad `Nodes`), y vuelven al importar.
 - **Ejemplo**: `archisim nudos out/`.
 
-**Pendiente para la segunda vuelta**: Continuo, Doblez y Fin (fondo de saco); paso de peatones, rebaje, señales y aplanado por brazo; orejas de acera; desplazar el nudo, plano o inclinado y calle principal; ocultar marcas; tiradores en planta y 3D, tarjetas con dibujo y vista previa al arrastrar; el chaflán estándar por lugar.
+### 2.4 Hecho en la segunda vuelta (N1, 17/11/2026, versión 0.94)
+
+- **Tipos nuevos**, en tarjetas con su dibujo (solo salen los que caben en el nudo):
+  - **Continuo**: dos calles que se continúan; bordillos y aceras rectos de una sección a la otra en 6 m por cada lado (una avenida que se estrecha sin costura).
+  - **Doblez**: dos calles que forman una curva; la esquina de dentro con su radio y la de fuera alrededor del mismo centro, con las aceras siguiendo la curva.
+  - **Fin**: el final libre de una calle (un clic en él lo elige); con Fin lleva un círculo de giro con su bordillo y su acera (radio de 9 m si no se cambia).
+  - Las calles que acaban una donde empieza la otra, en línea, no forman nudo por sí solas (así siguen las calles trazadas por tramos); se eligen con la herramienta y entonces se les puede poner Continuo o Doblez.
+- **El nudo entero**: **plano** a la cota de su centro; **calle principal**, que manda en la cota y en el pavimento, y un botón «Ceda el paso en las demás calles»; **sin marcas viales** cerca del nudo (quita cebras, líneas y las líneas de detención en 15 m pasado cada brazo).
+- **Por brazo**: **señal** (ceda el paso con su línea discontinua M-4.2, stop con su línea continua M-4.1, semáforo con su línea y su báculo), con la línea solo sobre los carriles que entran (no sobre el aparcamiento) y el poste en la acera a la derecha del tráfico; en planta, triángulo, octógono o círculo. **Paso de peatones** sí/no: pone o quita el paso de la calle justo pasado el nudo, con su bordillo rebajado.
+- **Por esquina**: **oreja** (la acera sale sobre el aparcamiento, dejando al menos un carril de 2,75 m), con su bordillo que cierra el aparcamiento.
+- **Chaflán estándar**: en las esquinas de un nudo o de toda la planta; 9 m en Barcelona (por la georreferencia), 7 m en Cataluña y Valencia, 5 m en lo demás. Luego se cambia cada uno a mano.
+- **Tiradores en planta**: el extremo de cada brazo (retranqueo) y el centro del arco de cada esquina (radio), con la medida mientras se arrastra.
+- Sin cambio de formato (sigue en el 113): los ajustes nuevos van en el mismo texto, que lee también lo de la primera vuelta.
+
+**No hecho, y por qué**:
+- **Desplazar el centro** sin mover las calles: con las esquinas, el retranqueo por brazo y las orejas ya se coloca el nudo donde haga falta; mover su centro sin mover los ejes dejaría los bordillos fuera de las calles. Si lo echas en falta, dime en qué caso.
+- **Aplanar un brazo** los últimos metros: el nudo plano con un retranqueo largo da lo mismo en el nudo; aplanar la calle fuera del nudo es cambiar su rasante, que ya se hace en la calle.
+- **Fondo de saco en martillo**: solo el recto y el círculo de giro.
+- **Tiradores en 3D y en la Maqueta**: los nudos se cambian desde la planta.
 
 ## 3. Lo demás, por tandas
 

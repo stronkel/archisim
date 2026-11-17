@@ -9576,6 +9576,7 @@ fn nodes_with_the_tool() {
         arm,
         ArmSettings {
             setback: Some(12.0),
+            ..Default::default()
         },
     );
     n.set_corner(
@@ -9599,11 +9600,61 @@ fn nodes_with_the_tool() {
     assert!(h.model().node(&key).is_none());
     h.app.ed.redo();
     assert!(h.model().node(&key).is_some());
+    // The setback by its handle: dragging the end of an arm out.
+    let j = archisim_geom::crossroads::node_junction(h.model(), &key).unwrap();
+    let a = j.arms[1].clone();
+    let end = a.origin + a.dir * a.cut;
+    h.drag(end, end + a.dir * 6.0);
+    let got = h
+        .model()
+        .node(&key)
+        .unwrap()
+        .arm(archisim_geom::crossroads::Junction::arm_ref(&a))
+        .setback
+        .unwrap();
+    assert!((got - (a.cut + 6.0)).abs() < 0.05, "{got} {}", a.cut);
+    // A corner's handle: dragged out along its bisector, a larger radius.
+    let j = archisim_geom::crossroads::node_junction(h.model(), &key).unwrap();
+    let (c0, c1) = (j.arms[1].clone(), j.arms[2].clone());
+    let (apex, bis, half) = archisim_geom::crossroads::corner_frame(&c0, &c1).unwrap();
+    let r0 = h
+        .model()
+        .node(&key)
+        .unwrap()
+        .corner(archisim_geom::crossroads::Junction::arm_ref(&c0))
+        .radius
+        .unwrap_or(4.0);
+    let from = archisim_geom::crossroads::corner_middle(apex, bis, half, r0);
+    let to = archisim_geom::crossroads::corner_middle(apex, bis, half, 9.0);
+    h.drag(from, to);
+    let got = h
+        .model()
+        .node(&key)
+        .unwrap()
+        .corner(archisim_geom::crossroads::Junction::arm_ref(&c0))
+        .radius
+        .unwrap();
+    assert!((got - 9.0).abs() < 0.1, "{got}");
+    // The free end of a street: picked, and made a dead end.
+    h.click_at(p(49.0, 0.0));
+    let end_key = h.app.node_pick.clone().unwrap();
+    assert_eq!(end_key.roads.len(), 1);
+    h.frame();
+    let mut n = NodeSettings::new(end_key.clone());
+    n.kind = Some(NodeKind::DeadEnd);
+    let r = h.app.ed.transact("Nudo", |m| m.set_node(n.clone()));
+    assert!(r.is_ok(), "{r:?}");
+    h.frame();
+    assert!(
+        archisim_geom::crossroads::node_junction(h.model(), &end_key)
+            .is_some_and(|j| j.kind == NodeKind::DeadEnd)
+    );
+    h.click_at(p(2.0, -1.0));
     // A street deleted: the node goes with it.
     let road = key.road_ids().next().unwrap();
     let r = h.app.ed.transact("Borrar", |m| m.remove_road(road));
     assert!(r.is_ok(), "{r:?}");
-    assert_eq!(h.model().nodes().count(), 0);
+    assert!(h.model().node(&key).is_none());
 }
 
 /// Road markings with the tool (U4): a zebra across a road becomes the

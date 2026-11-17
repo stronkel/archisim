@@ -1,17 +1,20 @@
 //! `archisim nudos`: the nodes of the streets changed by hand (N1,
 //! `docs/TERRITORIO.md` §2) — a grid of four streets with one crossing of
-//! each kind (crossing, raised, shared surface and no node), a T with a
-//! chamfered corner and longer setbacks, and an L with a sharp corner and
-//! no sidewalk at one corner. In plan, in 3D and in the IFC (whose
-//! `ArchiSim_Road` sets keep the nodes' settings, read back on import).
+//! each kind (crossing with give-way signs and bump-outs on the main
+//! street, raised and flat, shared surface without markings and no
+//! node), a T with chamfered corners, a stop and a longer setback, an L
+//! with a sharp corner and no sidewalk at one corner, a dead end with its
+//! turning circle, a bend and a street that narrows without a seam. In
+//! plan, in 3D and in the IFC (whose `ArchiSim_Road` sets keep the nodes'
+//! settings, read back on import).
 
 use std::path::Path;
 
 use archisim_core::{
-    ArmSettings, CornerSettings, CornerShape, LevelId, MaterialId, Model, NewRoad, NewWall,
-    NodeKind, NodeSettings, Point2, ReferenceLine, RoadSection, WallTop,
+    ArmSettings, ArmSign, CornerSettings, CornerShape, LevelId, MaterialId, Model, NewRoad,
+    NewWall, NodeKind, NodeSettings, Point2, ReferenceLine, RoadSection, WallTop,
 };
-use archisim_geom::crossroads::{self, Junction};
+use archisim_geom::crossroads::{self, Arm, Junction};
 
 type Res<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
@@ -19,20 +22,20 @@ fn material(m: &Model, category: &str) -> Option<MaterialId> {
     m.materials().find(|x| x.category == category).map(|x| x.id)
 }
 
-/// The node at `p` changed by `f`.
+/// The node at `p` changed by `f` (given its arms).
 fn change(
     m: &mut Model,
     level: LevelId,
     p: Point2,
-    f: impl FnOnce(&mut NodeSettings, &Junction),
+    f: impl FnOnce(&mut NodeSettings, &[Arm]),
 ) -> Res {
-    let j = crossroads::node_at(m, level, p, 5.0).ok_or("no hay nudo")?;
-    let key = j.key.clone().ok_or("nudo sin clave")?;
+    let key = crossroads::node_key_at(m, level, p, 5.0).ok_or("no hay nudo")?;
+    let arms = crossroads::node_arms(m, &key);
     let mut n = m
         .node(&key)
         .cloned()
         .unwrap_or_else(|| NodeSettings::new(key));
-    f(&mut n, &j);
+    f(&mut n, &arms);
     m.set_node(n)?;
     Ok(())
 }
@@ -46,12 +49,26 @@ pub fn build() -> Res<Model> {
         .ok_or("sin asfalto")?;
     let stone = material(&m, "stone").unwrap_or(asphalt);
     let paving = material(&m, "ceramic").unwrap_or(stone);
-    let add = |m: &mut Model, name: &str, a: Point2, b: Point2| -> Res {
+    let paint = m.add_material(
+        "Pintura vial blanca",
+        "paint",
+        [245, 245, 240],
+        archisim_core::CutPattern::Solid,
+    );
+    let usual = RoadSection {
+        markings: Some(paint),
+        ..RoadSection::default()
+    };
+    let wide = RoadSection {
+        markings: Some(paint),
+        ..RoadSection::classic(9.0, 2.2, 0.15, 4.0)
+    };
+    let add_with = |m: &mut Model, name: &str, axis: Vec<Point2>, section: &RoadSection| -> Res {
         m.add_road(NewRoad {
             name: name.into(),
             level: pb,
-            axis: vec![a, b],
-            section: RoadSection::default(),
+            axis,
+            section: section.clone(),
             top_offset: 0.0,
             profile: Vec::new(),
             changes: Vec::new(),
@@ -60,6 +77,9 @@ pub fn build() -> Res<Model> {
             sidewalk_material: paving,
         })?;
         Ok(())
+    };
+    let add = |m: &mut Model, name: &str, a: Point2, b: Point2| -> Res {
+        add_with(m, name, vec![a, b], &usual)
     };
     let p = Point2::new;
     // A grid of two streets each way: four crossings.
@@ -71,20 +91,62 @@ pub fn build() -> Res<Model> {
     add(&mut m, "Calle del Sauce", p(0.0, 0.0), p(0.0, -60.0))?;
     add(&mut m, "Calle Alta", p(120.0, 100.0), p(160.0, 100.0))?;
     add(&mut m, "Calle Baja", p(120.0, 100.0), p(120.0, 60.0))?;
-    // One crossing of each kind.
+    // A bend of two streets, and a wide avenue that goes on narrower.
+    add(&mut m, "Calle del Río", p(120.0, -40.0), p(160.0, -40.0))?;
+    add(&mut m, "Ronda del Río", p(160.0, -40.0), p(185.0, -5.0))?;
+    add_with(
+        &mut m,
+        "Avenida Ancha",
+        vec![p(120.0, 30.0), p(170.0, 30.0)],
+        &wide,
+    )?;
+    add(&mut m, "Calle Estrecha", p(170.0, 30.0), p(230.0, 30.0))?;
+    // One crossing of each kind: the raised one flat, the shared one
+    // without markings.
     change(&mut m, pb, p(40.0, 0.0), |n, _| {
-        n.kind = Some(NodeKind::Raised)
+        n.kind = Some(NodeKind::Raised);
+        n.flat = Some(true);
     })?;
     change(&mut m, pb, p(-40.0, 60.0), |n, _| {
-        n.kind = Some(NodeKind::Shared)
+        n.kind = Some(NodeKind::Shared);
+        n.hide_marks = Some(true);
+    })?;
+    // The Calle Mayor rules where the Calle del Olmo crosses it: give way
+    // on the Olmo and bump-outs on its four corners.
+    let mayor = m
+        .roads()
+        .find(|r| r.name == "Calle Mayor")
+        .map(|r| r.id)
+        .ok_or("sin Calle Mayor")?;
+    change(&mut m, pb, p(-40.0, 0.0), |n, arms| {
+        n.main = Some(mayor);
+        for a in arms {
+            let r = Junction::arm_ref(a);
+            if a.road != mayor {
+                n.set_arm(
+                    r,
+                    ArmSettings {
+                        sign: Some(ArmSign::Yield),
+                        ..Default::default()
+                    },
+                );
+            }
+            n.set_corner(
+                r,
+                CornerSettings {
+                    bump: Some(2.0),
+                    ..Default::default()
+                },
+            );
+        }
     })?;
     change(&mut m, pb, p(40.0, 60.0), |n, _| {
         n.kind = Some(NodeKind::Open)
     })?;
     // The T: chamfered corners (Barcelona) of 6 m and the street that ends
     // there set back 18 m.
-    change(&mut m, pb, p(0.0, 0.0), |n, j| {
-        for a in &j.arms {
+    change(&mut m, pb, p(0.0, 0.0), |n, arms| {
+        for a in arms {
             let r = Junction::arm_ref(a);
             n.set_corner(
                 r,
@@ -96,18 +158,19 @@ pub fn build() -> Res<Model> {
             );
         }
         // The Calle del Sauce: the only arm going south.
-        if let Some(a) = j.arms.iter().find(|a| a.dir.y < -0.9) {
+        if let Some(a) = arms.iter().find(|a| a.dir.y < -0.9) {
             n.set_arm(
                 Junction::arm_ref(a),
                 ArmSettings {
                     setback: Some(18.0),
+                    sign: Some(ArmSign::Stop),
                 },
             );
         }
     })?;
     // The L: a sharp corner inside and no sidewalk outside.
-    change(&mut m, pb, p(120.0, 100.0), |n, j| {
-        for a in &j.arms {
+    change(&mut m, pb, p(120.0, 100.0), |n, arms| {
+        for a in arms {
             let r = Junction::arm_ref(a);
             n.set_corner(
                 r,
@@ -118,6 +181,27 @@ pub fn build() -> Res<Model> {
                 },
             );
         }
+    })?;
+    // The Calle del Sauce ends in a turning circle; the bend and the
+    // avenue that narrows.
+    change(&mut m, pb, p(0.0, -60.0), |n, _| {
+        n.kind = Some(NodeKind::DeadEnd);
+        n.end_radius = Some(10.0);
+    })?;
+    change(&mut m, pb, p(160.0, -40.0), |n, arms| {
+        n.kind = Some(NodeKind::Bend);
+        for a in arms {
+            n.set_corner(
+                Junction::arm_ref(a),
+                CornerSettings {
+                    radius: Some(12.0),
+                    ..Default::default()
+                },
+            );
+        }
+    })?;
+    change(&mut m, pb, p(170.0, 30.0), |n, _| {
+        n.kind = Some(NodeKind::Continuous);
     })?;
     // A house in the block between the four crossings.
     let corners = [p(-10.0, 15.0), p(10.0, 15.0), p(10.0, 28.0), p(-10.0, 28.0)];
@@ -170,15 +254,35 @@ pub fn write(dir: &Path) -> Res {
             .road_ids()
             .filter_map(|r| m.road(r).map(|x| x.name.clone()))
             .collect();
+        let mut extra = Vec::new();
+        if !j.signs.is_empty() {
+            extra.push(match j.signs.len() {
+                1 => "1 señal".to_string(),
+                n => format!("{n} señales"),
+            });
+        }
+        if !j.bump_kerbs.is_empty() {
+            extra.push("orejas".to_string());
+        }
+        if j.flat && j.kind != NodeKind::DeadEnd {
+            extra.push("plano".to_string());
+        }
+        if !j.quiet.is_empty() {
+            extra.push("sin marcas".to_string());
+        }
         println!(
-            "  {} ({} calles): {}{}",
+            "  {}: {}{}{}",
             names.join(" y "),
-            j.arms.len(),
             j.kind.label(),
             if m.node(k).is_some() {
                 ", cambiado"
             } else {
                 ""
+            },
+            if extra.is_empty() {
+                String::new()
+            } else {
+                format!(" ({})", extra.join(", "))
             }
         );
     }
@@ -212,10 +316,18 @@ mod tests {
             .filter(|j| j.key.is_some())
             .map(|j| j.kind)
             .collect();
-        for k in [NodeKind::Crossing, NodeKind::Raised, NodeKind::Shared] {
+        for k in [
+            NodeKind::Crossing,
+            NodeKind::Raised,
+            NodeKind::Shared,
+            NodeKind::DeadEnd,
+            NodeKind::Bend,
+            NodeKind::Continuous,
+        ] {
             assert!(kinds.contains(&k), "{k:?}");
         }
-        assert_eq!(m.nodes().count(), 5);
+        let here = m.nodes().count();
+        assert_eq!(here, 9);
         // The file.
         let text = archisim_file::to_string(&m);
         let back = archisim_file::from_str(&text).unwrap();
@@ -226,7 +338,7 @@ mod tests {
         // The IFC: the same settings, by the streets brought back.
         let ifc = crate::ifc_text(&m, "nudos", None);
         let imported = archisim_ifc::import_ifc(&ifc).unwrap().model;
-        assert_eq!(imported.nodes().count(), 5);
+        assert_eq!(imported.nodes().count(), here);
         let kinds_back: Vec<Option<NodeKind>> = imported.nodes().map(|n| n.kind).collect();
         let kinds_here: Vec<Option<NodeKind>> = m.nodes().map(|n| n.kind).collect();
         let mut a = kinds_back.clone();

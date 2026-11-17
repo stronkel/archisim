@@ -6,6 +6,27 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-17 (173) · v0.94: territorio N1, segunda vuelta de los nudos
+
+Rama `bloque/nudos`, pull request #222 (sobre `bloque/territorio`, #220). Versión 0.94.0. Formato 113, sin cambios de estructura (los ajustes nuevos van en el texto de cada nudo).
+
+- **Qué se hizo** (`docs/TERRITORIO.md` §2.4):
+  - **Tipos nuevos**: Continuo, Doblez y Fin con círculo de giro (`NodeKind::Continuous`, `Bend`, `DeadEnd`, `fits`); los finales libres y las calles que acaban una donde empieza la otra se eligen y guardan como nudos (`crossroads::loose_ends`, `dead_ends`, `joints`, `node_key_at`, `node_arms`), pero solo hacen cruce si se cambian a mano.
+  - **Nudo entero**: plano, calle principal y sin marcas (`NodeSettings::flat`, `main`, `hide_marks`; `Junction::flat`, `main`, `quiet`, `marking_gaps`).
+  - **Por brazo**: señal con su línea (`ArmSign`, `Junction::marks`, `signs`; `Arm::lanes_left`), paso de peatones sobre la calle (`arm_crossing`, `set_arm_crossing`).
+  - **Por esquina**: oreja (`CornerSettings::bump`, `Junction::bump_kerbs`).
+  - **Chaflán estándar** por lugar (`standard_chamfer`), en un nudo o en toda la planta.
+  - **App**: tarjetas dibujadas de los tipos, tiradores en planta para retranqueo y radio (`NodeGrab`, `corner_frame`, `corner_middle`, `corner_radius_at`), con la medida al arrastrar.
+  - Planta (marcas, señales y bordillos de oreja por encima de las calles), 3D (marcas con la pintura de la calle, postes y placas) e IFC (bordillos de oreja y postes).
+  - Ejemplo `archisim nudos out/` con todo; pruebas de geometría, fichero, IFC y aplicación (con arrastre de tiradores).
+- **Pendiente**: desplazar el centro, aplanar un brazo, fondo de saco en martillo y tiradores en 3D (explicado en §2.4). Después, N2–N9 y la cuarta vuelta de fluidez.
+- **Qué debe probar Antonio** (con la 0.94):
+  1. `archisim nudos out/` y abre `out/nudos.archisim`: el cruce de la Calle Mayor con la del Olmo con orejas y ceda el paso; la T con stop; el fondo de saco de la Calle del Sauce; la doblez del Río y la Avenida Ancha que se estrecha.
+  2. Herramienta **Nudo** (NU): pincha un cruce y mira las tarjetas de tipo; arrastra el tirador naranja del extremo de una calle y el del centro de una esquina.
+  3. Pon Calle principal y pulsa «Ceda el paso en las demás calles»; activa «Paso de peatones» en una calle; prueba «Sin marcas viales».
+  4. Pincha el final libre de una calle y ponle Fin con 10 m de radio.
+  5. Pulsa «Chaflán estándar en toda la planta» y mira la planta.
+
 ## 2026-11-17 (172) · v0.94: territorio N1, nudos al estilo Node Controller (primera vuelta)
 
 Rama `bloque/nudos`, sobre `bloque/territorio` (#220). Versión 0.94.0. Formato `.archisim` versión 113.

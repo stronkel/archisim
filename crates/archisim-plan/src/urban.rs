@@ -160,6 +160,27 @@ pub fn draw_roads(
                         num(width * k)
                     );
                 }
+                // Its bump-outs' kerbs, stop and give-way lines and signs
+                // (N1) lie on its roads, so they go over them.
+                for b in &j.bump_kerbs {
+                    let _ = writeln!(
+                        over,
+                        r##"<path d="{}" fill="#ffffff" stroke="{INK}" stroke-width="{}"/>"##,
+                        path(b),
+                        num(pens().cut * k)
+                    );
+                }
+                for m in &j.marks {
+                    let _ = writeln!(
+                        over,
+                        r#"<path d="{}" fill="white" stroke="{INK}" stroke-width="{}"/>"#,
+                        path(m),
+                        num(pens().thin * k * 0.5)
+                    );
+                }
+                for (at, dir, sign) in &j.signs {
+                    draw_sign(&mut over, *at, *dir, *sign, k);
+                }
             }
             for p in r.plan_pieces_except(&gaps) {
                 if !visible(&p.outline) {
@@ -216,8 +237,10 @@ pub fn draw_roads(
                     num(pens().cut * k)
                 );
             }
-            // The road markings: lane lines, parking bays, zebra crossings.
-            for m in r.markings_except(&gaps) {
+            // The road markings: lane lines, parking bays, zebra crossings
+            // (not near a node that hides them, N1).
+            let mark_gaps = archisim_geom::crossroads::marking_gaps(&junctions, r.id);
+            for m in r.markings_except(&mark_gaps) {
                 if !visible(&m) {
                     continue;
                 }
@@ -381,4 +404,44 @@ pub fn draw_roads(
     }
     s.push_str(&over);
     s.push_str("</g>\n");
+}
+
+/// A sign of a node seen from above (N1): a triangle (give way), an octagon
+/// (stop) or a circle (traffic lights), 0,9 m across on paper's scale,
+/// beside its post.
+fn draw_sign(
+    s: &mut String,
+    at: Point2,
+    dir: archisim_core::Vec2,
+    sign: archisim_core::ArmSign,
+    k: f64,
+) {
+    use archisim_core::ArmSign;
+    // At least 3 mm on paper so it reads at 1:500.
+    let r = (0.45_f64).max(1.5 * k);
+    let c = at + dir * r;
+    let ring = |n: usize, turn: f64| -> Vec<Point2> {
+        (0..n)
+            .map(|i| {
+                let t = turn + std::f64::consts::TAU * i as f64 / n as f64;
+                c + Point2::new(t.cos(), t.sin()) * r
+            })
+            .collect()
+    };
+    let (poly, fill) = match sign {
+        ArmSign::None => return,
+        // Pointing down the street, towards the traffic.
+        ArmSign::Yield => (
+            ring(3, dir.y.atan2(dir.x) + std::f64::consts::PI),
+            "#ffffff",
+        ),
+        ArmSign::Stop => (ring(8, std::f64::consts::PI / 8.0), "#d9534f"),
+        ArmSign::Lights => (ring(16, 0.0), "#5a5a5a"),
+    };
+    let _ = writeln!(
+        s,
+        r#"<path d="{}" fill="{fill}" stroke="{INK}" stroke-width="{}"/>"#,
+        path(&poly),
+        num(pens().thin * k)
+    );
 }

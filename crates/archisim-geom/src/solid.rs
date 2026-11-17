@@ -5201,7 +5201,8 @@ pub fn road_solids_with(
     let _rest = crate::meter::span("calle: marcas, alcorques y cruces");
     if let Some(m) = s.markings {
         let mut tris = Vec::new();
-        for poly in r.markings_except(&gaps) {
+        let mark_gaps = crate::crossroads::marking_gaps(junctions, id);
+        for poly in r.markings_except(&mark_gaps) {
             tris.extend(draped_prism(&poly, |q| {
                 let top = base + r.top_under(q);
                 (top, top + 0.004)
@@ -5265,13 +5266,23 @@ pub fn road_solids_with(
             for x in [j.at.x, j.at.y, j.top, j.kerb_height, j.depth, j.lift] {
                 h.add(x.to_bits());
             }
+            // The node's settings (N1): flat, main street, its marks.
+            h.add_str(&format!("{:?}{:?}{}{:?}", j.key, j.main, j.flat, j.kind));
+            h.add(
+                model
+                    .road(id)
+                    .and_then(|r| r.section.markings)
+                    .map_or(0, |m| m.0),
+            );
             for m in [j.pavement, j.kerb_material, j.sidewalk_material] {
                 h.add(m.0);
             }
             for poly in std::iter::once(&j.plate)
                 .chain(&j.ramps)
                 .chain(&j.kerbs)
+                .chain(&j.bump_kerbs)
                 .chain(&j.sidewalks)
+                .chain(&j.marks)
                 .chain(j.parts.iter().map(|p| &p.outline))
             {
                 h.add(poly.len() as u64);
@@ -5334,7 +5345,7 @@ pub fn road_solids_with(
                 }),
             });
         }
-        for k in &j.kerbs {
+        for k in j.kerbs.iter().chain(&j.bump_kerbs) {
             out.push(Solid {
                 owner: SolidOwner::Road(id),
                 material: j.kerb_material,
@@ -5348,7 +5359,27 @@ pub fn road_solids_with(
                 triangles: draped(w, kh - 0.2, kh),
             });
         }
-        // A roundabout's island and apron (U3).
+        // Its stop and give-way lines (N1), painted as the road's markings.
+        if let Some(m) = model.road(id).and_then(|r| r.section.markings) {
+            let tris: Vec<[P3; 3]> = j
+                .marks
+                .iter()
+                .flat_map(|poly| {
+                    draped_prism(poly, |q| {
+                        let t = base + j.plate_top(model, q);
+                        (t, t + 0.004)
+                    })
+                })
+                .collect();
+            if !tris.is_empty() {
+                out.push(Solid {
+                    owner: SolidOwner::Road(id),
+                    material: m,
+                    triangles: tris,
+                });
+            }
+        }
+        // A roundabout's island and apron (U3), bollards and signs (N1).
         for p in &j.parts {
             out.push(Solid {
                 owner: SolidOwner::Road(id),

@@ -6,12 +6,15 @@ Cada versión empieza con una línea `## <versión>` (por ejemplo `## 0.81.0`): 
 
 ## 0.94.0
 
-- **Nudos de las calles, a mano (N1).** Herramienta **Nudo** en Urbanismo (NU): pincha un cruce, una T o una L y cámbialo en Propiedades.
-  - **Tipo**: cruce normal, **cruce elevado** (meseta a la cota de la acera con rampas), **plataforma única** (todo al nivel de la acera, sin bordillos, con bolardos) o **sin nudo** (las calles se cruzan sin cruce).
-  - **Cada brazo**: hasta dónde llega el cruce por esa calle (retranqueo).
-  - **Cada esquina**: su radio, su forma (arco, **chaflán** o en punta) y si lleva acera.
+- **Nudos de las calles, a mano (N1).** Herramienta **Nudo** en Urbanismo (NU): pincha un cruce, una T, una L o el final de una calle y cámbialo en Propiedades o con sus tiradores naranjas.
+  - **Tipo**, en tarjetas con dibujo: cruce normal, **cruce elevado** (meseta con rampas), **plataforma única** (sin bordillos, con bolardos), **continuo** (una calle sigue en otra y cambia de sección sin costura), **doblez** (una curva con las aceras siguiendo el giro), **fin** (fondo de saco con círculo de giro) o **sin nudo**.
+  - **El nudo entero**: plano a una cota, la **calle principal** que manda (y ceda el paso en las demás de un clic) y sin marcas viales cerca.
+  - **Cada calle que llega**: retranqueo, **ceda el paso, stop o semáforo** con su línea en la calzada y su señal, y **paso de peatones** con su bordillo rebajado.
+  - **Cada esquina**: radio, forma (arco, **chaflán** o en punta), acera y **oreja** sobre el aparcamiento.
+  - **Chaflán estándar** del lugar del proyecto en un nudo o en toda la planta.
+  - **Tiradores en planta** para el retranqueo y el radio, con la medida mientras arrastras.
   - Solo se guarda lo cambiado; si mueves una calle el nudo conserva sus ajustes, y si la borras se pierden. Van en el fichero y en el IFC.
-  - `archisim nudos` hace un ejemplo con cada tipo.
+  - `archisim nudos` hace un ejemplo con todo.
 
 ## 0.93.0
 
