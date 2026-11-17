@@ -98,6 +98,17 @@ Hoy `archisim_geom::crossroads::junctions(model, level)` rehace todos los cruces
 - **Fondo de saco en martillo**: solo el recto y el círculo de giro.
 - **Tiradores en 3D y en la Maqueta**: los nudos se cambian desde la planta.
 
+### 2.5 N2 hecho: trazado sin reglas y con precisión (17/11/2026, versión 0.95)
+
+- **Anarquía**: interruptor en la herramienta Calle y en las propiedades de cada calle. La calle no se une a las que pisa (ni cruce ni cebras) y no modela el terreno; queda a la cota que se le dé. Sirve para pasos elevados, rampas, solapes de maqueta o calles que van a otra cota. Se guarda en la calle (formato 114) y en el IFC (`ArchiSim_Road.Free`).
+- **Pendiente uniforme**: en Propiedades de la calle, grupo «Trazado»: desde, hasta, cota inicial y final (o «Cotas actuales»), con la pendiente que resulta antes de aplicarla. Los puntos de rasante de en medio se quitan; lo demás no cambia.
+- **Paralela**: a la izquierda o a la derecha a la distancia tecleada entre ejes, con la misma sección, materiales y rasante.
+- **Precisión al trazar** (por tramos): mientras se dibuja, Propiedades enseña la longitud, el giro y el radio de la curva tangente hasta el cursor; con «Poner la curva» sale un tramo en curva del radio y el giro tecleados, tangente al anterior. La longitud y el ángulo ya se tecleaban en la barra de opciones (L y ∠).
+- **Hacer glorieta** sobre un nudo de tres calles o más: herramienta Nudo, «Hacer glorieta aquí»; el radio crece si las calles son anchas.
+- Ejemplo: `archisim nudos out/` lleva un carril libre que pisa las calles del Olmo y del Pino, la Calle Alta del Parque paralela a la Real subiendo al 2,5 % y la Calle Estrecha acabando en una curva de 25 m.
+
+**No hecho**: la pendiente uniforme eligiendo los dos puntos con el ratón (se teclean las distancias); el giro y el radio en la barra de opciones (están en Propiedades).
+
 ## 3. Lo demás, por tandas
 
 | Tanda | Qué | Mods de referencia | Tamaño |

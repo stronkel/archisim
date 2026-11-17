@@ -4,6 +4,15 @@ Lo que cambia en cada versión, en pocas líneas. ArchiSim enseña la parte de s
 
 Cada versión empieza con una línea `## <versión>` (por ejemplo `## 0.81.0`): es la que busca la publicación.
 
+## 0.95.0
+
+- **Trazar calles sin reglas y con precisión (N2).**
+  - **Anarquía**: una calle que no se une a las que pisa ni modela el terreno, a la cota que le des (pasos elevados, rampas, maquetas). En la herramienta Calle y en cada calle.
+  - **Pendiente uniforme** entre dos puntos de una calle, con la pendiente que resulta a la vista antes de aplicarla.
+  - **Paralela** a una calle a la distancia que teclees, con su sección y su rasante.
+  - **Al trazar**, la longitud, el giro y el radio hasta el cursor, y un tramo en curva de radio y giro tecleados, tangente al anterior.
+  - **Hacer glorieta** sobre un cruce desde la herramienta Nudo.
+
 ## 0.94.0
 
 - **Nudos de las calles, a mano (N1).** Herramienta **Nudo** en Urbanismo (NU): pincha un cruce, una T, una L o el final de una calle y cámbialo en Propiedades o con sus tiradores naranjas.

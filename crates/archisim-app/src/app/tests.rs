@@ -9657,6 +9657,98 @@ fn nodes_with_the_tool() {
     assert!(h.model().node(&key).is_none());
 }
 
+/// Drawing streets without rules and with precision (N2): in anarchy a
+/// street crosses another without a junction; a curve typed by its radius
+/// and turn is tangent to the stretch before; a street gets a uniform
+/// grade and a parallel one; a node becomes a roundabout.
+#[test]
+fn streets_without_rules_and_with_precision() {
+    let mut h = Harness::new(Editor::new_project());
+    let canvas = h.app.canvas;
+    h.app
+        .view
+        .fit_exact(canvas, p(-80.0, -80.0), p(80.0, 80.0), 0.0);
+    h.app.set_discipline(super::toolbox::Discipline::Site);
+    // A street east–west.
+    h.type_text("w");
+    h.click_at(p(-60.0, 0.0));
+    h.click_at(p(60.0, 0.0));
+    h.key(Key::Enter);
+    h.key(Key::Escape);
+    let first = h.model().roads().next().unwrap().id;
+    // Another across it, in anarchy: no crossing.
+    h.type_text("w");
+    h.app.road_settings.anarchy = true;
+    h.click_at(p(0.0, -60.0));
+    h.click_at(p(0.0, 60.0));
+    // Then a curve typed: 20 m of radius, a quarter turn to the left.
+    h.app.road_settings.radius = 20.0;
+    h.app.road_settings.turn = 90.0;
+    let a = *h.app.road_points.first().unwrap();
+    let (id, end) = h.app.road_chain.unwrap();
+    let dir = archisim_core::road_end_direction(h.model(), id, end).unwrap();
+    let arc = archisim_core::arc_stretch(a, dir, 20.0, std::f64::consts::FRAC_PI_2, 2.0);
+    let tip = *arc.last().unwrap();
+    h.app.road_typed_arc = Some(arc);
+    h.app.road_click(tip);
+    h.app.road_typed_arc = None;
+    h.key(Key::Enter);
+    h.key(Key::Escape);
+    let level = h.app.ed.level;
+    let free: Vec<_> = h.model().roads().filter(|r| r.free).collect();
+    assert!(!free.is_empty());
+    assert!(free
+        .iter()
+        .any(|r| r.axis.iter().any(|q| q.distance(tip) < 1e-6)));
+    // The free street meets nothing.
+    let js = archisim_geom::crossroads::junctions(h.model(), level);
+    assert!(
+        js.iter().all(|j| j.arms.iter().all(|x| x.road == first)),
+        "{}",
+        js.len()
+    );
+    // A uniform grade on the first street and a parallel one 25 m north.
+    let r = h.app.ed.transact("Pendiente", |m| {
+        m.road_uniform_grade(first, 0.0, 120.0, Some((0.0, 6.0)))
+    });
+    assert!(r.is_ok(), "{r:?}");
+    assert!((h.model().road(first).unwrap().top_at(60.0) - 3.0).abs() < 1e-9);
+    let r = h
+        .app
+        .ed
+        .transact("Paralela", |m| m.parallel_road(first, 25.0));
+    assert!(r.is_ok(), "{r:?}");
+    // The properties of the street draw its group «Trazado».
+    h.key(Key::Escape);
+    h.app.ed.selection = [Element::Road(first)].into_iter().collect();
+    h.frame();
+    // A crossing made a roundabout: a third street north–south, not free.
+    h.app.road_settings.anarchy = false;
+    let mat = h.model().materials().next().unwrap().id;
+    let r = h.app.ed.transact("Calle", |m| {
+        m.add_road(archisim_core::NewRoad {
+            name: "Norte".into(),
+            level,
+            axis: vec![p(-50.0, -60.0), p(-50.0, 60.0)],
+            section: archisim_core::RoadSection::default(),
+            top_offset: 0.0,
+            profile: Vec::new(),
+            changes: Vec::new(),
+            pavement: mat,
+            kerb_material: mat,
+            sidewalk_material: mat,
+        })
+    });
+    assert!(r.is_ok(), "{r:?}");
+    let j = archisim_geom::crossroads::node_at(h.model(), level, p(-50.0, 0.0), 5.0).unwrap();
+    let rings = h.model().roundabouts().count();
+    h.app.roundabout_at_node(j.at, &j.arms);
+    assert_eq!(h.model().roundabouts().count(), rings + 1);
+    let c = h.model().roundabouts().last().unwrap().clone();
+    assert!(c.centre.distance(j.at) < 1e-6);
+    assert!(c.radius >= 15.0);
+}
+
 /// Road markings with the tool (U4): a zebra across a road becomes the
 /// road's crossing (with its lowered kerbs), an arrow turns with its
 /// lane, a dashed line is drawn by its points; markings can be picked.

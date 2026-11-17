@@ -203,6 +203,38 @@ pub fn build() -> Res<Model> {
     change(&mut m, pb, p(170.0, 30.0), |n, _| {
         n.kind = Some(NodeKind::Continuous);
     })?;
+    // Without rules and with precision (N2): a lane in anarchy across the
+    // Olmo and the Pino without crossings, a street parallel to the Calle
+    // Real 30 m north, climbing at a uniform grade, and a curve typed by
+    // its radius going on from the end of the Calle Estrecha.
+    add(&mut m, "Carril libre", p(-80.0, 42.0), p(80.0, 42.0))?;
+    let free = m
+        .roads()
+        .find(|r| r.name == "Carril libre")
+        .map(|r| r.id)
+        .ok_or("sin carril libre")?;
+    m.set_road_free(free, true)?;
+    let real = m
+        .roads()
+        .find(|r| r.name == "Calle Real")
+        .map(|r| r.id)
+        .ok_or("sin Calle Real")?;
+    let north = m.parallel_road(real, 40.0)?;
+    m.edit_road(north, |r| r.name = "Calle Alta del Parque".into())?;
+    m.road_uniform_grade(north, 0.0, 160.0, Some((0.0, 4.0)))?;
+    let arc = archisim_core::arc_stretch(
+        p(230.0, 30.0),
+        archisim_core::Vec2::new(1.0, 0.0),
+        25.0,
+        std::f64::consts::FRAC_PI_2,
+        2.0,
+    );
+    let narrow = m
+        .roads()
+        .find(|r| r.name == "Calle Estrecha")
+        .map(|r| r.id)
+        .ok_or("sin Calle Estrecha")?;
+    m.edit_road(narrow, |r| r.axis.extend(arc.iter().skip(1).copied()))?;
     // A house in the block between the four crossings.
     let corners = [p(-10.0, 15.0), p(10.0, 15.0), p(10.0, 28.0), p(-10.0, 28.0)];
     for i in 0..4 {
@@ -328,6 +360,12 @@ mod tests {
         }
         let here = m.nodes().count();
         assert_eq!(here, 9);
+        // The lane in anarchy crosses the Olmo and the Pino without
+        // junctions.
+        let free = m.roads().find(|r| r.free).unwrap().id;
+        assert!(crossroads::junctions(&m, pb)
+            .iter()
+            .all(|j| j.arms.iter().all(|a| a.road != free)));
         // The file.
         let text = archisim_file::to_string(&m);
         let back = archisim_file::from_str(&text).unwrap();
@@ -339,6 +377,8 @@ mod tests {
         let ifc = crate::ifc_text(&m, "nudos", None);
         let imported = archisim_ifc::import_ifc(&ifc).unwrap().model;
         assert_eq!(imported.nodes().count(), here);
+        assert_eq!(imported.roads().filter(|r| r.free).count(), 1);
+        assert_eq!(back.roads().filter(|r| r.free).count(), 1);
         let kinds_back: Vec<Option<NodeKind>> = imported.nodes().map(|n| n.kind).collect();
         let kinds_here: Vec<Option<NodeKind>> = m.nodes().map(|n| n.kind).collect();
         let mut a = kinds_back.clone();

@@ -6,6 +6,24 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-17 (174) · v0.95: territorio N2, trazado sin reglas y con precisión
+
+Rama `bloque/trazado` sobre `bloque/nudos` (#222). Versión 0.95.0. Formato `.archisim` versión 114.
+
+- **Qué se hizo** (`docs/TERRITORIO.md` §2.5):
+  - **Anarquía**: `Road::free` (`Model::set_road_free`), que `crossroads::meeting_points` deja fuera de los cruces y `road_ground::Shaper` del terreno; IFC `ArchiSim_Road.Free`; en la app, `RoadSettings::anarchy` (sin forzar al eje de otras calles, sin cebras ni seguir el terreno) y el interruptor del grupo «Trazado».
+  - **Pendiente uniforme** (`Model::road_uniform_grade`) y **paralela** (`Model::parallel_road`), en el grupo «Trazado» de la calle (`road_layout_group`).
+  - **Precisión al trazar**: `arc_stretch`, `arc_through`; en la herramienta, `road_precision_group` con la lectura hasta el cursor y «Poner la curva» (`road_typed_arc`).
+  - **Hacer glorieta** desde la herramienta Nudo (`roundabout_at_node`).
+  - Ejemplo en `archisim nudos out/`; pruebas en el núcleo, la línea de órdenes (fichero e IFC) y la aplicación.
+- **Pendiente**: elegir con el ratón los dos puntos de la pendiente uniforme; giro y radio en la barra de opciones. Después, N3.
+- **Qué debe probar Antonio** (con la 0.95):
+  1. `archisim nudos out/` y abre `out/nudos.archisim`: el Carril libre pisa las calles del Olmo y del Pino sin cruces; la Calle Alta del Parque sube al 2,5 %; la Calle Estrecha acaba en una curva de 25 m.
+  2. Herramienta Calle por tramos: activa **Anarquía** y traza una calle que pise otra; no debe hacer cruce ni tocar el terreno.
+  3. Trazando, mira en Propiedades la longitud, el giro y el radio hasta el cursor; pon 30 m de radio y 45° y pulsa **Poner la curva**.
+  4. Elige una calle: en **Trazado**, pon una pendiente uniforme entre dos distancias y crea una **paralela** a 20 m.
+  5. Herramienta Nudo en un cruce de cuatro calles: **Hacer glorieta aquí**.
+
 ## 2026-11-17 (173) · v0.94: territorio N1, segunda vuelta de los nudos
 
 Rama `bloque/nudos`, pull request #222 (sobre `bloque/territorio`, #220). Versión 0.94.0. Formato 113, sin cambios de estructura (los ajustes nuevos van en el texto de cada nudo).

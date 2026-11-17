@@ -1592,6 +1592,9 @@ pub(crate) struct Road {
     pub pavement: u64,
     pub kerb_material: u64,
     pub sidewalk_material: u64,
+    /// Laid in anarchy (version 114): no crossings, no ground shaped.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub free: bool,
 }
 
 /// A planting (version 25): its line, its rules and the objects it made.
@@ -4433,6 +4436,7 @@ impl ProjectFile {
                     pavement: r.pavement.0,
                     kerb_material: r.kerb_material.0,
                     sidewalk_material: r.sidewalk_material.0,
+                    free: r.free,
                 })
                 .collect(),
             runs: p
@@ -5915,6 +5919,7 @@ impl ProjectFile {
                 pavement: core::MaterialId(r.pavement),
                 kerb_material: core::MaterialId(r.kerb_material),
                 sidewalk_material: core::MaterialId(r.sidewalk_material),
+                free: r.free,
             });
         }
         for x in self.decals {

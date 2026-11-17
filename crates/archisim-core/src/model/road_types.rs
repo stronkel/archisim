@@ -828,6 +828,7 @@ mod tests {
             pavement: MaterialId(0),
             kerb_material: MaterialId(0),
             sidewalk_material: MaterialId(0),
+            free: false,
         };
         let st = r.tree_pit_stations();
         assert_eq!(st.len(), 10);

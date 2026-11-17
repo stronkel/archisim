@@ -364,6 +364,13 @@ impl Exporter<'_> {
                             string(&nodes.join("~"))
                         )));
                     }
+                    // Laid in anarchy (N2).
+                    if r.free {
+                        props.push(
+                            self.w
+                                .add("IFCPROPERTYSINGLEVALUE('Free',$,IFCBOOLEAN(.T.),$)"),
+                        );
+                    }
                     for (key, v) in [
                         ("KerbHeight", s.kerb_height),
                         ("Depth", s.depth),

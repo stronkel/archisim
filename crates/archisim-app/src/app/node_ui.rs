@@ -473,6 +473,8 @@ impl ArchiSimApp {
         let mut n = before.clone();
         // Zebra crossings to lay or take away (edits of the streets).
         let mut crossings: Vec<(Arm, bool)> = Vec::new();
+        // A roundabout to put at the node (N2).
+        let mut roundabout: Option<(Point2, Vec<Arm>)> = None;
         let count = arms.len();
         group(ui, "node-kind", "Tipo de nudo", |ui| {
             ui.horizontal_wrapped(|ui| {
@@ -559,6 +561,14 @@ impl ArchiSimApp {
                 let mut quiet = n.hide_marks.unwrap_or(false);
                 ui.switch(&mut quiet, "Sin marcas viales cerca del nudo");
                 n.hide_marks = quiet.then_some(true);
+                if count >= 3
+                    && ui
+                        .button("Hacer glorieta aquí")
+                        .on_hover_text("Una glorieta en el centro del nudo, de radio suficiente para sus calles; sus ajustes se pierden")
+                        .clicked()
+                {
+                    roundabout = j.as_ref().map(|j| (j.at, arms.clone()));
+                }
             });
         }
         if !open {
@@ -694,7 +704,11 @@ impl ArchiSimApp {
         if reset {
             n = NodeSettings::new(key.clone());
         }
-        let _ = j;
+        if let Some((at, arms)) = roundabout {
+            self.roundabout_at_node(at, &arms);
+            self.node_pick = None;
+            return;
+        }
         if n != before {
             let res = self.ed.transact("Nudo", |m| m.set_node(n.clone()));
             self.report(res, "Nudo cambiado.");
@@ -713,6 +727,24 @@ impl ArchiSimApp {
             );
         }
         self.node_level_group(ui);
+    }
+
+    /// A roundabout at a node's centre (N2): the usual one, larger if its
+    /// streets are wide (a ring of at least 6,5 m round their carriageways).
+    pub(super) fn roundabout_at_node(&mut self, at: Point2, arms: &[Arm]) {
+        let keep = self.roundabout_settings.clone();
+        let wide = arms
+            .iter()
+            .map(|a| a.kerb_left.max(a.kerb_right))
+            .fold(0.0, f64::max);
+        let s = &mut self.roundabout_settings;
+        let need = wide + 6.5 + s.apron + 2.0;
+        if need > s.radius {
+            s.island = (need - 6.5 - s.apron).max(2.0);
+            s.radius = need;
+        }
+        self.roundabout_click(at);
+        self.roundabout_settings = keep;
     }
 
     /// What the tool does to every node of the level: the standard chamfer

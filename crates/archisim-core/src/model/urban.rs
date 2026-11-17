@@ -581,6 +581,10 @@ pub struct Road {
     pub pavement: MaterialId,
     pub kerb_material: MaterialId,
     pub sidewalk_material: MaterialId,
+    /// Laid «in anarchy» (N2): it makes no crossings with the streets it
+    /// overlaps and does not shape the ground under it, at the heights
+    /// given.
+    pub free: bool,
 }
 
 /// Data needed to make a road.
@@ -1147,6 +1151,7 @@ impl Model {
                 pavement: spec.pavement,
                 kerb_material: spec.kerb_material,
                 sidewalk_material: spec.sidewalk_material,
+                free: false,
             },
         );
         Ok(id)

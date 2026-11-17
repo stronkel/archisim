@@ -389,6 +389,8 @@ pub struct ArchiSimApp {
     pub node_pick: Option<archisim_core::NodeKey>,
     /// The handle of the picked node being dragged (N1).
     pub node_grab: Option<node_ui::NodeGrab>,
+    /// A street's curve typed by its radius and turn (N2), while it is laid.
+    pub road_typed_arc: Option<Vec<archisim_core::Point2>>,
     /// The box tool's settings, made from the project the first time.
     pub box_settings: Option<box_ui::BoxSettings>,
     /// The box types of the library folder, read when first shown.
@@ -916,6 +918,7 @@ impl ArchiSimApp {
             roundabout_settings: Default::default(),
             node_pick: None,
             node_grab: None,
+            road_typed_arc: None,
             box_settings: None,
             box_catalogue: None,
             world_settings: Default::default(),

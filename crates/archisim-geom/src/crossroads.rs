@@ -321,6 +321,11 @@ fn meeting_points(roads: &[&Road]) -> Vec<(Point2, Vec<(usize, f64)>)> {
     // out the same.
     pairs.sort_unstable();
     for (i, j) in pairs {
+        // A street laid in anarchy crosses the others without meeting them
+        // (N2).
+        if roads[i].free || roads[j].free {
+            continue;
+        }
         {
             let (a, b) = (roads[i], roads[j]);
             // Axes that cross.

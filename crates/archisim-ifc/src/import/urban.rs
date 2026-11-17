@@ -232,6 +232,13 @@ impl<'a> Importer<'a> {
                 sidewalk_material,
             })
             .map_err(|e| explain(&e))?;
+        if self
+            .property_own(id, "ArchiSim_Road", "Free")
+            .and_then(|v| v.as_bool())
+            == Some(true)
+        {
+            let _ = self.model.set_road_free(rid, true);
+        }
         self.report.roads += 1;
         self.sources.push((rid.0, id));
         // Its pieces are not loose elements.

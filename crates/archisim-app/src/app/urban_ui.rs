@@ -98,6 +98,13 @@ pub struct RoadSettings {
     /// The street follows the ground, its grade under `max_grade`.
     pub follow_ground: bool,
     pub max_grade: f64,
+    /// Laid «in anarchy» (N2): no crossings with the streets it overlaps,
+    /// the ground left as it is, at the height given.
+    pub anarchy: bool,
+    /// A curve typed: its radius and turn (degrees, to the left if
+    /// positive) for the next stretch.
+    pub radius: f64,
+    pub turn: f64,
     pub reference: RoadReference,
     pub section: RoadSection,
     pub top_offset: f64,
@@ -118,6 +125,9 @@ impl RoadSettings {
             draw: RoadDraw::Smooth,
             follow_ground: true,
             max_grade: 0.08,
+            anarchy: false,
+            radius: 30.0,
+            turn: 45.0,
             reference: RoadReference::Axis,
             section: RoadSection::default(),
             top_offset: 0.0,
@@ -564,8 +574,13 @@ impl ArchiSimApp {
                 pavement: s.pavement,
                 kerb_material: s.kerb,
                 sidewalk_material: s.sidewalk,
-                follow_ground: s.follow_ground.then_some(s.max_grade),
+                follow_ground: (s.follow_ground && !s.anarchy).then_some(s.max_grade),
             })?;
+            if s.anarchy {
+                // In anarchy: it meets nothing, and so lays no zebras.
+                m.set_road_free(id, true)?;
+                return Ok(id);
+            }
             // Zebra crossings where it meets other streets.
             for q in &joins {
                 m.crossings_at(level, *q)?;
@@ -611,7 +626,9 @@ impl ArchiSimApp {
                 return (q, Some((id, Some(at_end))));
             }
         }
-        if let Some((id, q)) = archisim_core::road_axis_near(model, level, p, 0.0) {
+        if let Some((id, q)) = archisim_core::road_axis_near(model, level, p, 0.0)
+            .filter(|_| !self.road_settings.anarchy)
+        {
             if own.is_none_or(|(c, _)| c != id) {
                 return (q, Some((id, None)));
             }
@@ -625,6 +642,14 @@ impl ArchiSimApp {
         let a = *self.road_points.first()?;
         if a.distance(p) < 0.5 {
             return None;
+        }
+        // A curve typed (N2), ending there.
+        if let Some(arc) = self
+            .road_typed_arc
+            .as_ref()
+            .filter(|arc| arc.last().is_some_and(|l| l.distance(p) < 1e-6))
+        {
+            return Some(arc.clone());
         }
         Some(match (self.road_settings.draw, self.road_points.get(1)) {
             (RoadDraw::Curve, Some(c)) => archisim_core::curve_points(a, *c, p, 2.0),
@@ -682,7 +707,9 @@ impl ArchiSimApp {
                 kerb_material: s.kerb,
                 sidewalk_material: s.sidewalk,
             })?;
-            if s.follow_ground {
+            if s.anarchy {
+                m.set_road_free(id, true)?;
+            } else if s.follow_ground {
                 if let Some(profile) = m.road_profile_following(id, s.max_grade) {
                     m.edit_road(id, |r| r.profile = profile)?;
                 }
@@ -975,12 +1002,16 @@ impl ArchiSimApp {
                     "Eje o bordes de las aceras: se elige en «Referencia», en la barra bajo las pestañas.",
                 );
             }
-            super::widgets::switch(
-                ui,
-                &mut s.follow_ground,
-                "Sigue el terreno (rasante suavizada)",
-            );
-            if s.follow_ground {
+            super::widgets::switch(ui, &mut s.anarchy, "Anarquía: sin cruces ni terreno")
+                .on_hover_text("La calle no se une a las que pisa ni modela el terreno: queda a la cota que le des (pasos elevados, rampas, maquetas)");
+            if !s.anarchy {
+                super::widgets::switch(
+                    ui,
+                    &mut s.follow_ground,
+                    "Sigue el terreno (rasante suavizada)",
+                );
+            }
+            if s.follow_ground && !s.anarchy {
                 row(
                     ui,
                     "Pendiente máxima (%)",
@@ -1027,7 +1058,88 @@ impl ArchiSimApp {
                 s.sidewalk = material_combo(ui, Id::unique("tool-road-side"), model, s.sidewalk, w);
             });
         });
+        if s.draw.by_stretches() {
+            self.road_precision_group(ui, &mut s);
+        }
         self.road_settings = s;
+    }
+
+    /// Where the next stretch leaves from and which way (the street it
+    /// goes on from), if it is being drawn.
+    fn road_leaving(&self) -> Option<(Point2, archisim_core::Vec2)> {
+        let a = *self.road_points.first()?;
+        let (id, end) = self.road_chain?;
+        let dir = archisim_core::road_end_direction(self.ed.model(), id, end)?;
+        Some((a, dir))
+    }
+
+    /// Drawing with precision (N2): the radius and turn of the curve to the
+    /// cursor, and a curve typed by its radius and turn.
+    fn road_precision_group(&mut self, ui: &mut Ui, s: &mut RoadSettings) {
+        let leaving = self.road_leaving();
+        let cursor = self.cursor.map(|c| c.point);
+        let mut lay = None;
+        group(ui, "tool-road-precision", "Con precisión", |ui| {
+            match (leaving, cursor) {
+                (Some((a, dir)), Some(p)) => {
+                    let d = p - a;
+                    let ang = archisim_core::Vec2::new(dir.x, dir.y);
+                    let turn = ang.cross(d).atan2(ang.dot(d)).to_degrees();
+                    let text = match archisim_core::arc_through(a, dir, p) {
+                        Some((r, t)) => format!(
+                            "Hasta el cursor: {} m, giro {}°, radio de la curva tangente {} m",
+                            comma(d.length(), 2),
+                            comma(turn, 1),
+                            comma(r, 2)
+                        ) + if t.abs() > std::f64::consts::PI { " (vuelta larga)" } else { "" },
+                        None => format!("Hasta el cursor: {} m, recto", comma(d.length(), 2)),
+                    };
+                    props::note(ui, &text);
+                }
+                _ => props::note(
+                    ui,
+                    "Mientras trazas, aquí salen la longitud, el giro y el radio hasta el cursor. Teclea longitud y ángulo en la barra de opciones (L y ∠), o un radio y un giro aquí.",
+                ),
+            }
+            row(ui, "Radio (mm)", "De la curva tecleada", |ui, w| {
+                if let Some(v) = length_field(ui, Id::unique("tool-road-radius"), s.radius, w - 8.0)
+                {
+                    s.radius = v.max(1.0);
+                }
+            });
+            row(ui, "Giro (°)", "Positivo a la izquierda", |ui, w| {
+                ui.add_sized(
+                    [w - 8.0, 20.0],
+                    egui::DragValue::new(&mut s.turn)
+                        .range(-180.0..=180.0)
+                        .speed(1.0)
+                        .suffix(" °"),
+                );
+            });
+            if ui
+                .add_enabled(leaving.is_some(), egui::Button::new("Poner la curva"))
+                .on_hover_text("Un tramo en curva de ese radio y ese giro, tangente al anterior")
+                .clicked()
+            {
+                if let Some((a, dir)) = leaving {
+                    lay = Some(archisim_core::arc_stretch(
+                        a,
+                        dir,
+                        s.radius,
+                        s.turn.to_radians(),
+                        2.0,
+                    ));
+                }
+            }
+        });
+        if let Some(arc) = lay {
+            if let Some(&end) = arc.last() {
+                self.road_settings = s.clone();
+                self.road_typed_arc = Some(arc);
+                self.road_click(end);
+                self.road_typed_arc = None;
+            }
+        }
     }
 
     pub(super) fn plot_properties(&mut self, ui: &mut Ui, id: PlotId) {
@@ -1188,6 +1300,7 @@ impl ArchiSimApp {
         });
         self.road_changes_group(ui, id);
         self.road_profile_group(ui, id);
+        self.road_layout_group(ui, id);
         group(ui, "road-figures", "Mediciones", |ui| {
             text_row(ui, "Longitud del eje (m)", "", &comma(r.length(), 2));
             for band in RoadBand::ALL {
@@ -1437,7 +1550,139 @@ impl ArchiSimApp {
     }
 }
 
+/// What is typed in the group «Trazado» of a street.
+#[derive(Clone, Copy)]
+struct LayoutForm {
+    from: f64,
+    to: f64,
+    z_from: f64,
+    z_to: f64,
+    parallel: f64,
+}
+
 impl ArchiSimApp {
+    /// The layout of a street (N2): in anarchy, a constant grade between
+    /// two points, and a street parallel to it.
+    fn road_layout_group(&mut self, ui: &mut Ui, id: RoadId) {
+        let Some(r) = self.ed.model().road(id).cloned() else {
+            return;
+        };
+        let len = r.length();
+        let key = Id::unique(("road-layout", id));
+        let mut f = ui
+            .data(|d| d.get_temp::<LayoutForm>(key))
+            .unwrap_or(LayoutForm {
+                from: 0.0,
+                to: len,
+                z_from: r.top_at(0.0),
+                z_to: r.top_at(len),
+                parallel: 20.0,
+            });
+        let mut free = r.free;
+        let mut grade = false;
+        let mut parallel = None;
+        group(ui, "road-layout", "Trazado", |ui| {
+            super::widgets::switch(ui, &mut free, "Anarquía: sin cruces ni terreno")
+                .on_hover_text("No se une a las calles que pisa ni modela el terreno");
+            ui.label(egui::RichText::new("Pendiente uniforme").strong());
+            for (name, v, at) in [
+                ("Desde (mm)", &mut f.from, true),
+                ("Hasta (mm)", &mut f.to, false),
+            ] {
+                row(ui, name, "A lo largo del eje, desde su inicio", |ui, w| {
+                    if let Some(x) =
+                        length_field(ui, Id::unique(("road-grade-at", id, at)), *v, w - 8.0)
+                    {
+                        *v = x.clamp(0.0, len);
+                    }
+                });
+            }
+            for (name, v, at) in [
+                ("Cota inicial (mm)", &mut f.z_from, true),
+                ("Cota final (mm)", &mut f.z_to, false),
+            ] {
+                row(ui, name, "Sobre la planta", |ui, w| {
+                    if let Some(x) =
+                        length_field(ui, Id::unique(("road-grade-z", id, at)), *v, w - 8.0)
+                    {
+                        *v = x;
+                    }
+                });
+            }
+            let span = (f.to - f.from).abs();
+            if span > 0.5 {
+                props::note(
+                    ui,
+                    &format!(
+                        "Pendiente de {} % en {} m.",
+                        comma((f.z_to - f.z_from) / (f.to - f.from) * 100.0, 2),
+                        comma(span, 2)
+                    ),
+                );
+            }
+            ui.horizontal_wrapped(|ui| {
+                grade = ui.button("Aplicar la pendiente uniforme").clicked();
+                if ui
+                    .small_button("Cotas actuales")
+                    .on_hover_text("Las que tiene ahora la calle en esos dos puntos")
+                    .clicked()
+                {
+                    f.z_from = r.top_at(f.from);
+                    f.z_to = r.top_at(f.to);
+                }
+            });
+            ui.label(egui::RichText::new("Paralela").strong());
+            row(ui, "Distancia (mm)", "Entre los ejes", |ui, w| {
+                if let Some(x) =
+                    length_field(ui, Id::unique(("road-parallel", id)), f.parallel, w - 8.0)
+                {
+                    f.parallel = x.abs().max(0.5);
+                }
+            });
+            ui.horizontal_wrapped(|ui| {
+                if ui.button("A la izquierda").clicked() {
+                    parallel = Some(f.parallel);
+                }
+                if ui.button("A la derecha").clicked() {
+                    parallel = Some(-f.parallel);
+                }
+            });
+            props::note(
+                ui,
+                "Izquierda y derecha, mirando del inicio al final del eje.",
+            );
+        });
+        ui.data_mut(|d| d.insert_temp(key, f));
+        if free != r.free {
+            let res = self.ed.transact("Anarquía", |m| m.set_road_free(id, free));
+            self.report(
+                res,
+                if free {
+                    "La calle ya no se cruza con las demás ni modela el terreno."
+                } else {
+                    "La calle vuelve a cruzarse con las demás."
+                },
+            );
+        }
+        if grade {
+            let res = self.ed.transact("Pendiente uniforme", |m| {
+                m.road_uniform_grade(id, f.from, f.to, Some((f.z_from, f.z_to)))
+            });
+            self.report(res, "Pendiente uniforme puesta.");
+        }
+        if let Some(d) = parallel {
+            let mut made = None;
+            let res = self.ed.transact("Calle paralela", |m| {
+                made = Some(m.parallel_road(id, d)?);
+                Ok::<(), archisim_core::ModelError>(())
+            });
+            if let (Ok(()), Some(p)) = (&res, made) {
+                self.ed.selection = [Element::Road(p)].into_iter().collect();
+            }
+            self.report(res, "Calle paralela creada.");
+        }
+    }
+
     /// Where the road's strips change along it («Cambios de sección», U2):
     /// from a distance, with a transition, other strips — of a street type
     /// or changed one by one.
