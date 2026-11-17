@@ -439,6 +439,15 @@ impl View3dState {
             coord.serial,
             disciplines.clone(),
         );
+        // A scene that could not be built aside: built here from now on.
+        if self
+            .scene_job
+            .as_ref()
+            .is_some_and(|j| j.failed().is_some())
+        {
+            self.scene_job = None;
+            self.scene_took = std::time::Duration::from_millis(1);
+        }
         // A scene built aside, ready.
         if let Some(job) = &self.scene_job {
             if let Some((scene, took)) = job.take() {

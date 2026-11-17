@@ -4,6 +4,11 @@ Lo que cambia en cada versión, en pocas líneas. ArchiSim enseña la parte de s
 
 Cada versión empieza con una línea `## <versión>` (por ejemplo `## 0.81.0`): es la que busca la publicación.
 
+## 0.92.1
+
+- **La planta y las secciones ya no se quedan esperando.** Si un dibujo no se puede hacer, la vista lo dice en rojo con el motivo (y queda anotado en `errores.log`) en lugar de quedarse en blanco o en «Dibujando la sección…» para siempre.
+- **Vista → «Dibujar aparte».** Apagado, las plantas, secciones y alzados se dibujan al momento, como antes de la 0.85.
+
 ## 0.92.0
 
 - **El muro cede al pilar.** Donde un pilar está metido en un muro, desaparecen las capas del muro que el pilar atraviesa; si el muro es más grueso y su trasdosado o revestimiento pasa por delante del pilar, ese sigue por encima. En planta, en 3D, en secciones y en el IFC.
