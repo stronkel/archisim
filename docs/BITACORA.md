@@ -6,6 +6,21 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-17 (170) · v0.92.1: la planta y las secciones no se quedan esperando
+
+Rama `bloque/dibujo-aparte`. Versión 0.92.1. Sin cambios de formato.
+
+- **Qué pasó.** Antonio, con la 0.92: la planta no dibuja nada (sí los contornos al pasar el ratón), las secciones y alzados se quedan en «Dibujando la sección…» para siempre y el 3D va bien. No lo he podido reproducir: con la demo, Florence Street y los proyectos de ejemplo (`every_project_draws_its_plan_and_sections`, ignorada, con `ARCHISIM_PROYECTOS`) todo se dibuja. Lo más probable es que el dibujo que se hace en otro hilo falle (un pánico) con sus proyectos o en su ordenador: ese hilo moría sin avisar y la ventana se quedaba esperando su resultado sin fin.
+- **Qué se hizo.**
+  - El trabajo aparte (`background::Pending`) recoge los fallos (`catch_unwind`, `failed`, `panic_text`) y lleva su hora de inicio.
+  - Si un dibujo falla aparte, se intenta una vez más en el hilo de la ventana, protegido; si vuelve a fallar, la vista lo dice en rojo («No se pudo dibujar la planta: …») y queda en `errores.log`, en lugar de esperar para siempre (`Picture::error`, `picture::note`, `section_failed`). Mientras se dibuja más de 3 s, dice cuánto lleva. La escena 3D que falla aparte se hace en el hilo de la ventana.
+  - Vista → «Dibujar aparte» (preferencia `dibujar_aparte`, o `ARCHISIM_SIN_HILOS=1`): apagado, todo se dibuja al momento, como antes de la 0.85.
+- **Pendiente.** Encontrar la causa con el `errores.log` de Antonio.
+- **Qué debe probar Antonio.**
+  1. Actualiza y abre el mismo proyecto. Si la planta o la sección siguen sin verse, debe salir abajo en rojo «No se pudo dibujar…» con el motivo: mándame una captura.
+  2. Prueba Vista → «Dibujar aparte» apagado: dime si así se dibujan.
+  3. Mándame el fichero `errores.log` (en Windows, `%APPDATA%\ArchiSim\errores.log`; en Mac, `~/Library/Application Support/ArchiSim/errores.log`).
+
 ## 2026-11-16 (169) · v0.92: muros y pilares, juntas a medida y más fluidez
 
 Rama `bloque/muro-pilar`, con pull request. Versión 0.92.0. Sin cambios de formato.
