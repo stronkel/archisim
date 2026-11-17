@@ -30,14 +30,18 @@ pub fn map<T: Sync, U: Send>(items: &[T], f: impl Fn(&T) -> U + Sync) -> Vec<U> 
                             };
                             mine.push((k, f(item)));
                         }
-                        mine
+                        (mine, crate::meter::take_raw())
                     })
                 })
                 .collect();
-            handles
-                .into_iter()
-                .flat_map(|h| h.join().expect("a worker failed"))
-                .collect()
+            let mut all = Vec::new();
+            for h in handles {
+                let (mine, parts) = h.join().expect("a worker failed");
+                // What the workers measured, added to this thread's.
+                crate::meter::add(parts);
+                all.extend(mine);
+            }
+            all
         });
         done.sort_by_key(|(k, _)| *k);
         done.into_iter().map(|(_, u)| u).collect()

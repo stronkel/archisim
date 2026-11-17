@@ -41,6 +41,22 @@ pub fn take() -> Vec<(&'static str, f64)> {
     v
 }
 
+/// Adds parts measured on another thread (a worker of
+/// [`crate::parallel::map`]) to this thread's.
+pub fn add(parts: Vec<(&'static str, Duration)>) {
+    PARTS.with(|p| {
+        let mut p = p.borrow_mut();
+        for (k, d) in parts {
+            *p.entry(k).or_default() += d;
+        }
+    });
+}
+
+/// The parts measured on this thread, taken out as they are.
+pub fn take_raw() -> Vec<(&'static str, Duration)> {
+    PARTS.with(|p| std::mem::take(&mut *p.borrow_mut()).into_iter().collect())
+}
+
 /// A part measured from now until it is dropped (see [`time`]).
 pub struct Span {
     part: &'static str,

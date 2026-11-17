@@ -339,13 +339,20 @@ impl Model {
                 )
             })
             .collect();
+        // The pool types (most objects are not: their parameters are not
+        // worked out).
+        let mut pools: std::collections::BTreeMap<ObjectTypeId, Option<archisim_props::Params>> =
+            Default::default();
         for o in self.objects.values() {
-            let Some((kind, params)) = self.prop_params(o.object_type) else {
+            let params = pools.entry(o.object_type).or_insert_with(|| {
+                if !self.type_prop_is(o.object_type, "fine_pool") {
+                    return None;
+                }
+                self.prop_params(o.object_type).map(|(_, p)| p)
+            });
+            let Some(params) = params.clone() else {
                 continue;
             };
-            if kind != "fine_pool" {
-                continue;
-            }
             let (hole, bottom) = archisim_props::fine::pool::excavation(&params);
             let (c, s) = (o.rotation.cos(), o.rotation.sin());
             let outline = hole

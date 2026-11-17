@@ -162,6 +162,32 @@ Lo que falta para bajar de 2 s a menos de 50 ms (siguiente vuelta, N0-3):
 - **Exportar a glTF, render o IFC con miles de árboles a todo detalle** ocupa unos 5 GB de memoria: hay que repetir el modelo de cada árbol también ahí.
 - **Las piezas de las calles largas en planta** (≈90 ms por vista).
 
+### 4.3 Tercera vuelta (17/11/2026)
+
+La escena 3D ya no se hace entera tras cada cambio: **se conserva y se rehace solo lo tocado**.
+
+- **Qué cambió**: el modelo se compara con el de antes elemento a elemento (`Model::changes_since`). Un tipo, un material o una planta cambiados rehacen todo; lo demás, solo sus elementos.
+- **Lo que depende de ello**, por alcance: una calle rehace sus cruces, las calles que llegan, el terreno de debajo y los edificios a 30 m que la miran; un mueble, los de al lado; un árbol, nada más.
+- **Celdas de 64 m**: las piezas de la escena van por celdas y capas (muebles, terreno, calles, lo demás); las piezas grandes, en celdas propias. Al rehacer, solo se tocan esas celdas; las demás siguen igual **y la tarjeta gráfica no las vuelve a recibir**.
+- **Terreno por cuadrados de 50 m**, cada uno con su borde y sus paredes guardados; cada tramo de calle y cada cruce, guardados por lo que los hace.
+
+Medido en la máquina de pruebas (2 núcleos lentos), sitio de 1 km²:
+
+| Tras… | 0.92 | 0.93, 2.ª vuelta | 0.93, 3.ª vuelta |
+|---|---|---|---|
+| Nada (otra vez igual) | 40 s | 1,9 s | **0,02 s** |
+| Mover un árbol | 40 s | ≈2 s | **0,03 s** |
+| Girar un banco | 40 s | ≈2 s | **0,03 s** |
+| Subir un edificio una planta | 40 s | ≈2 s | **0,03 s** |
+| Mover una calle | 40 s | 1,8 s | **0,12 s** |
+
+Con los muebles, los árboles y los edificios ya se cumplen los 50 ms. Con las calles, no en esta máquina: la mitad del tiempo es rehacer y convertir los cuadrados de terreno que modela, que se reparten entre los núcleos, así que en el PC de Antonio (muchos más núcleos y más rápidos) debería quedar cerca de 40–60 ms. Falta medirlo allí.
+
+Lo que queda:
+- **Abrir el sitio** sigue tardando ~30 s la primera vez (los 4 662 árboles y los 560 edificios se hacen enteros).
+- **Exportar a glTF, render o IFC** con miles de árboles a todo detalle sigue ocupando mucha memoria.
+- Si en el PC de Antonio las calles pasan de 50 ms: convertir el terreno más fino, por trozos de cuadrado.
+
 ## 5. Decisiones de Antonio (16/11/2026)
 
 1. **Orden**: N0 completo primero, después N1 y el resto en el orden de §3.

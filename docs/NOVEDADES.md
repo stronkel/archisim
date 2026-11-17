@@ -7,10 +7,11 @@ Cada versión empieza con una línea `## <versión>` (por ejemplo `## 0.81.0`): 
 ## 0.93.0
 
 - **Taller del territorio: fluidez.**
-  - **La vista 3D, mucho antes después de un cambio**: en un sitio de 1 km² con 90 calles, 560 edificios y 4 662 árboles, mover una calle rehacía el 3D en unos 40 s; ahora en unos 2 s. Los árboles no vuelven a crecer, los edificios y el terreno que no cambian se aprovechan tal cual, y el terreno se rehace solo en los cuadrados de 100 m por donde pasa la calle.
+  - **La vista 3D, mucho antes después de un cambio**: en un sitio de 1 km² con 90 calles, 560 edificios y 4 662 árboles, mover una calle rehacía el 3D en unos 40 s; ahora en unos 0,1 s. Los árboles no vuelven a crecer, los edificios y el terreno que no cambian se aprovechan tal cual, y el terreno se rehace solo en los cuadrados de 50 m por donde pasa la calle.
   - **Terreno mucho más rápido**: la cota del terreno bajo un punto ya no vuelve a triangular todo el levantamiento cada vez. Trazar las calles pasa de 2 s a 0,2 s y el terreno que modelan, de 17 s a 0,2 s al mover una calle.
   - **Cruces y calles guardados**: la planta, el 3D y el IFC comparten los cruces y cada calle mientras no cambian.
   - **Planta más ligera**: lo que queda fuera de la vista no se calcula.
+  - **La vista 3D se rehace solo donde cambia**: mover un árbol, girar un banco o cambiar un edificio se ve en unas centésimas de segundo, y mover una calle en una décima, aunque el sitio tenga un kilómetro cuadrado. La tarjeta gráfica solo recibe los trozos nuevos.
   - **Sitio de prueba**: `archisim territorio-grande` hace un kilómetro cuadrado de ciudad inventada y mide lo que cuesta cada cosa.
 
 ## 0.92.0

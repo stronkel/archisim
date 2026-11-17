@@ -6,6 +6,24 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-17 (171) · v0.93: territorio N0, tercera vuelta (escena que se conserva)
+
+Rama `bloque/territorio`, pull request #220. Versión 0.93.0. Sin cambios de formato ni de IFC.
+
+- **Qué se hizo** (tabla en `docs/TERRITORIO.md` §4.3):
+  - **Qué cambió entre dos versiones del modelo** (`Model::changes_since`, que nombra cada campo del modelo: si se añade uno, no compila hasta decir si es de un elemento, general o no se ve en 3D).
+  - **Escena 3D que se conserva** (`view3d::scene_build`, `SceneBuilder`): unidades por elemento, celdas de 64 m por capa, piezas grandes en celdas propias, modelos compartidos; lo que depende de lo cambiado por alcance; la selección se marca después. La aplicación la usa siempre que no se aísla una interferencia ni hay vínculos.
+  - **Tarjeta gráfica**: `Renderer::set_scene` sube solo los trozos y modelos nuevos (`Chunk::key`, `Group::key`).
+  - **Geometría**: sólidos de solo unos elementos (`model_solids_units`, `Only`, `Unit`), terreno en partes guardadas (`terrain_parts`: cuadrados de 50 m, bordes por cuadrado, paredes por hueco), tramos de calle y cruces guardados por lo que los hace, piscinas sin calcular los parámetros de cada objeto (`type_prop_is`), el medidor también en los hilos.
+  - **Prueba** `a_kept_scene_is_the_whole_one`: la escena rehecha a trozos es igual, triángulo a triángulo, a la hecha entera, tras mover calles, árboles, muros y edificios, quitar cosas y seleccionar.
+  - Resultado en la máquina de pruebas (2 núcleos): un árbol, un banco o un edificio, ~30 ms; una calle, ~120 ms (antes 40 s y luego 2 s).
+- **Pendiente**: comprobar las calles en el PC de Antonio (aquí, 120 ms con 2 núcleos); abrir el sitio por primera vez sigue costando ~30 s; exportar con miles de árboles a todo detalle.
+- **Qué debe probar Antonio** (con la 0.93):
+  1. `archisim territorio-grande out/`, abre `out/territorio.archisim` y ve a la vista 3D (la primera vez tarda).
+  2. Mueve un árbol, gira un banco, cambia la altura de un edificio y arrastra una calle: el cambio debe verse casi al instante y sin que el resto parpadee ni desaparezca.
+  3. Selecciona cosas, deshaz (Ctrl+Z) y rehaz: lo que vuelve debe verse igual que antes.
+  4. Si puedes, mándame `out/territorio-medidas.txt` y dime si arrastrar una calle se nota fluido.
+
 ## 2026-11-16 (170) · v0.93: territorio N0, fluidez (primera y segunda vuelta)
 
 Rama `bloque/territorio`, pull request #220. Versión 0.93.0. Sin cambios de formato. El IFC es el mismo salvo el orden de los triángulos del terreno.

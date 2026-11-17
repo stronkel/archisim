@@ -160,6 +160,9 @@ pub struct View3dState {
     scene_job: Option<super::background::Pending<SceneKey, (Scene, std::time::Duration)>>,
     /// How long the last scene took to build.
     scene_took: std::time::Duration,
+    /// What the last scene was made of, kept to make again only what
+    /// changes (shared with the thread that builds it).
+    builder: std::sync::Arc<std::sync::Mutex<crate::view3d::scene::SceneBuilder>>,
     /// Scenes that took less than this are built at once.
     pub at_once: std::time::Duration,
     gpu: Option<Gpu>,
@@ -258,6 +261,7 @@ impl Default for View3dState {
             scene: Scene::default(),
             scene_key: None,
             scene_job: None,
+            builder: Default::default(),
             scene_took: std::time::Duration::ZERO,
             at_once: if cfg!(test) {
                 std::time::Duration::from_secs(3600)
@@ -480,61 +484,62 @@ impl View3dState {
             ctx.request_repaint_after(std::time::Duration::from_millis(30));
             return;
         }
-        let aside = shared.filter(|m| {
-            super::picture::aside(self.scene_took, self.at_once, m) && coord.parts().is_empty()
-        });
+        // Kept and made again only where it changes, but to see an
+        // isolated clash or with linked models (made whole).
+        let keep = coord.parts().is_empty() && !coord.isolate;
+        let aside = shared
+            .clone()
+            .filter(|m| super::picture::aside(self.scene_took, self.at_once, m) && keep);
         if let Some(model) = aside {
-            let (selection, isolate, disciplines) =
-                (selection.clone(), coord.isolate, disciplines.clone());
+            let (selection, disciplines) = (selection.clone(), disciplines.clone());
             let frames = self.frames;
+            let builder = self.builder.clone();
             self.scene_job = Some(super::background::Pending::start(key, move || {
                 let started = web_time::Instant::now();
-                let shown = archisim_plan::phases::phase_model(&model, phases);
-                let build = || {
-                    Scene::build_with(
-                        shown.as_ref().unwrap_or(&model),
-                        &selection,
-                        &[],
-                        isolate,
-                        &disciplines,
-                    )
-                };
-                let scene = if frames {
-                    archisim_geom::framing::with_frames_shown(build)
-                } else {
-                    build()
-                };
+                let scene = build_kept(&builder, &model, phases, &selection, &disciplines, frames);
                 (scene, started.elapsed())
             }));
             ctx.request_repaint_after(std::time::Duration::from_millis(30));
             return;
         }
         let started = web_time::Instant::now();
-        let parts = coord.parts();
-        let linked: Vec<LinkedPart> = parts
-            .iter()
-            .map(|p| LinkedPart {
-                triangles: &p.element.mesh.triangles,
-                color: p.color,
-                alpha: p.alpha,
-                link: p.link,
-                index: p.index,
-            })
-            .collect();
-        let shown = archisim_plan::phases::phase_model(model, phases);
-        let build = || {
-            Scene::build_with(
-                shown.as_ref().unwrap_or(model),
+        self.scene = match shared.filter(|_| keep) {
+            Some(model) => build_kept(
+                &self.builder,
+                &model,
+                phases,
                 selection,
-                &linked,
-                coord.isolate,
                 disciplines,
-            )
-        };
-        self.scene = if self.frames {
-            archisim_geom::framing::with_frames_shown(build)
-        } else {
-            build()
+                self.frames,
+            ),
+            None => {
+                let parts = coord.parts();
+                let linked: Vec<LinkedPart> = parts
+                    .iter()
+                    .map(|p| LinkedPart {
+                        triangles: &p.element.mesh.triangles,
+                        color: p.color,
+                        alpha: p.alpha,
+                        link: p.link,
+                        index: p.index,
+                    })
+                    .collect();
+                let shown = archisim_plan::phases::phase_model(model, phases);
+                let build = || {
+                    Scene::build_with(
+                        shown.as_ref().unwrap_or(model),
+                        selection,
+                        &linked,
+                        coord.isolate,
+                        disciplines,
+                    )
+                };
+                if self.frames {
+                    archisim_geom::framing::with_frames_shown(build)
+                } else {
+                    build()
+                }
+            }
         };
         self.scene_took = started.elapsed();
         self.scene_job = None;
@@ -1660,4 +1665,27 @@ pub(super) fn caps_choice(ui: &mut Ui, caps: &mut CapStyle) {
             }
         }
     });
+}
+
+/// The scene of a model with the scene kept from the last one: made again
+/// only where it changed.
+fn build_kept(
+    builder: &std::sync::Mutex<crate::view3d::scene::SceneBuilder>,
+    model: &std::sync::Arc<archisim_core::Model>,
+    phases: archisim_plan::phases::PhaseView,
+    selection: &BTreeSet<Element>,
+    disciplines: &crate::view3d::scene::Disciplines,
+    frames: bool,
+) -> Scene {
+    let shown = match archisim_plan::phases::phase_model(model, phases) {
+        Some(m) => std::sync::Arc::new(m),
+        None => model.clone(),
+    };
+    let mut b = builder.lock().unwrap_or_else(|e| e.into_inner());
+    let build = || b.build_scene(shown, selection, disciplines);
+    if frames {
+        archisim_geom::framing::with_frames_shown(build)
+    } else {
+        build()
+    }
 }

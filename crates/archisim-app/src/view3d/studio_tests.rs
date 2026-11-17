@@ -2838,7 +2838,7 @@ fn scene_memory() {
     // What the triangles drawn once are of.
     let mut kinds: std::collections::BTreeMap<String, usize> = Default::default();
     for c in &scene.opaque {
-        for o in &c.owners {
+        for o in c.owners.iter() {
             let name = format!("{o:?}");
             let name = name
                 .split(['(', '{', ' '])
@@ -2851,7 +2851,7 @@ fn scene_memory() {
     // Which objects and devices, by type.
     let mut types: std::collections::BTreeMap<String, usize> = Default::default();
     for c in &scene.opaque {
-        for o in &c.owners {
+        for o in c.owners.iter() {
             let name = match o {
                 super::scene::Owner::Model(crate::pick::Element::Object(id)) => m
                     .object(*id)
@@ -2913,11 +2913,31 @@ fn territory_scene() {
     };
     let mut m = archisim_file::open(Path::new(&path)).expect("proyecto");
     let none = BTreeSet::new();
-    let measure = |what: &str, m: &archisim_core::Model| {
+    let disciplines = crate::view3d::scene::Disciplines::default();
+    let mut builder = crate::view3d::scene::SceneBuilder::default();
+    // The graphics card, if asked for (a software one takes the scene in
+    // memory again).
+    let gpu = std::env::var_os("ARCHISIM_TERRITORIO_GPU").and_then(|_| super::gpu_tests::gpu());
+    let mut renderer = gpu
+        .as_ref()
+        .map(|(d, _, vf)| super::render::Renderer::new(d, *vf, super::render::TextureMode::Full));
+    let mut measure = |what: &str, m: &archisim_core::Model| {
         archisim_geom::meter::take();
         let t = std::time::Instant::now();
-        let scene = Scene::build(m, &none);
+        let shared = std::sync::Arc::new(m.clone());
+        let copy = t.elapsed().as_secs_f64() * 1000.0;
+        let (scene, stats) = builder.build(shared, &none, &disciplines);
         let took = t.elapsed().as_secs_f64() * 1000.0;
+        let card = match (&gpu, renderer.as_mut()) {
+            (Some((device, queue, _)), Some(r)) => {
+                let t = std::time::Instant::now();
+                r.set_queue(queue);
+                r.set_scene(device, &scene);
+                queue.submit([]);
+                t.elapsed().as_secs_f64() * 1000.0
+            }
+            _ => f64::NAN,
+        };
         let tris: usize = scene
             .opaque
             .iter()
@@ -2925,8 +2945,13 @@ fn territory_scene() {
             .chain(&scene.grass)
             .map(|c| c.mesh.indices.len() / 3)
             .sum();
-        println!("{what:<44} {took:>9.1} ms  ({tris} triángulos sueltos)");
-        for (part, ms) in archisim_geom::meter::take().into_iter().take(14) {
+        println!(
+            "{what:<40} {took:>8.1} ms (copia del modelo {copy:.1} ms; tarjeta {card:.1} ms; \
+             {} unidades, {tris} triángulos sueltos, {} grupos)",
+            stats.units,
+            scene.groups.len()
+        );
+        for (part, ms) in archisim_geom::meter::take().into_iter().take(24) {
             println!("    {part:<40} {ms:>9.1} ms");
         }
     };
@@ -2943,5 +2968,39 @@ fn territory_scene() {
         }
     })
     .expect("mover");
-    measure("Escena tras mover una calle 1 m", &m);
+    measure("Tras mover una calle 1 m", &m);
+    // The shortest street: a side street.
+    let short = m
+        .roads()
+        .min_by(|a, b| a.length().total_cmp(&b.length()))
+        .map(|r| r.id)
+        .expect("calles");
+    m.edit_road(short, |r| {
+        for p in &mut r.axis {
+            p.x += 1.0;
+        }
+    })
+    .expect("mover");
+    measure("Tras mover una calle corta 1 m", &m);
+    let tree = m
+        .objects()
+        .find(|o| m.type_grows(o.object_type))
+        .map(|o| o.id)
+        .expect("árbol");
+    m.edit_object(tree, |o| o.position.x += 1.0).expect("árbol");
+    measure("Tras mover un árbol 1 m", &m);
+    let bench = m
+        .objects()
+        .find(|o| !m.type_grows(o.object_type))
+        .map(|o| o.id)
+        .expect("objeto");
+    m.edit_object(bench, |o| o.rotation += 0.3).expect("objeto");
+    measure("Tras girar un banco", &m);
+    let mass = m
+        .masses()
+        .find(|x| x.dress.is_some())
+        .map(|x| x.id)
+        .expect("edificio");
+    m.edit_mass(mass, |x| x.height += 3.0).expect("edificio");
+    measure("Tras subir un edificio una planta", &m);
 }

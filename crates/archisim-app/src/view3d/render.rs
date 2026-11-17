@@ -126,6 +126,7 @@ type ShadowKey = (
 
 /// Triangles on the card: their corners, which corners each joins, how
 /// many indices, and the box round them.
+#[derive(Clone)]
 struct GpuMesh {
     vertices: wgpu::Buffer,
     indices: wgpu::Buffer,
@@ -273,6 +274,12 @@ pub struct Renderer {
     glass: Vec<GpuMesh>,
     /// The furniture shared by type.
     groups: Vec<GpuGroup>,
+    /// The chunks and the groups' models on the card, by their number
+    /// (`Chunk::key`, `Group::key`): a new scene uploads only those that
+    /// changed. With the wireframe or without (as they were uploaded).
+    kept: std::collections::HashMap<u64, Option<GpuMesh>>,
+    kept_models: std::collections::HashMap<u64, (Option<GpuMesh>, Option<GpuMesh>)>,
+    kept_wire: bool,
     /// Where the objects drawn this picture stand (first, the one of the
     /// elements drawn once), and room for how many.
     instance_buffer: wgpu::Buffer,
@@ -862,6 +869,9 @@ impl Renderer {
             grass: Vec::new(),
             glass: Vec::new(),
             groups: Vec::new(),
+            kept: Default::default(),
+            kept_models: Default::default(),
+            kept_wire: false,
             instance_buffer: instance_buffer(device, 1024),
             instance_room: 1024,
             overlay: None,
@@ -995,14 +1005,60 @@ impl Renderer {
         self.bounds = (scene.lo, scene.hi);
         let wire = self.style == 3;
         self.wired = wire;
-        self.opaque = upload(device, &mut self.writes, &scene.opaque, wire);
-        self.grass = upload(device, &mut self.writes, &scene.grass, false);
-        self.glass = upload(device, &mut self.writes, &scene.glass, wire);
+        // What was on the card before and is in the scene now stays.
+        if self.kept_wire != wire {
+            self.kept.clear();
+            self.kept_models.clear();
+            self.kept_wire = wire;
+        }
+        let mut had = std::mem::take(&mut self.kept);
+        let mut kept = std::collections::HashMap::new();
+        let mut take = |chunks: &[Chunk], wire: bool, writes: &mut Writes| -> Vec<GpuMesh> {
+            chunks
+                .iter()
+                .filter_map(|c| {
+                    let m = had.remove(&c.key).unwrap_or_else(|| {
+                        upload_mesh(
+                            device,
+                            writes,
+                            &c.mesh,
+                            c.lo,
+                            c.hi,
+                            wire.then_some(usize::MAX),
+                        )
+                    });
+                    kept.insert(c.key, m.clone());
+                    m
+                })
+                .collect()
+        };
+        self.opaque = take(&scene.opaque, wire, &mut self.writes);
+        self.grass = take(&scene.grass, false, &mut self.writes);
+        self.glass = take(&scene.glass, wire, &mut self.writes);
+        self.kept = kept;
+        let mut had = std::mem::take(&mut self.kept_models);
+        let mut kept = std::collections::HashMap::new();
         self.groups = scene
             .groups
             .iter()
-            .map(|g| upload_group(device, &mut self.writes, g, wire))
+            .map(|g| {
+                let meshes = had
+                    .remove(&g.key)
+                    .or_else(|| kept.get(&g.key).cloned())
+                    .unwrap_or_else(|| group_meshes(device, &mut self.writes, g, wire));
+                kept.insert(g.key, meshes.clone());
+                GpuGroup {
+                    opaque: meshes.0,
+                    levels: g.levels.clone(),
+                    glass: meshes.1,
+                    instances: g.instances.clone(),
+                    bounds: g.bounds.clone(),
+                    radius: g.radius(),
+                    exact_shadow: g.exact_shadow,
+                }
+            })
             .collect();
+        self.kept_models = kept;
         self.selected = scene.has_selection();
         self.lamps = scene.lamps.clone();
     }
@@ -1859,14 +1915,20 @@ fn buffer_with(
     buffer
 }
 
-fn upload_group(device: &wgpu::Device, writes: &mut Writes, g: &Group, wire: bool) -> GpuGroup {
+/// A group's model on the card: its opaque and glass triangles.
+fn group_meshes(
+    device: &wgpu::Device,
+    writes: &mut Writes,
+    g: &Group,
+    wire: bool,
+) -> (Option<GpuMesh>, Option<GpuMesh>) {
     // The wireframe of its finest version.
     let finest = g
         .levels
         .first()
         .map_or(usize::MAX, |l| (l.0 + l.1) as usize);
-    GpuGroup {
-        opaque: upload_mesh(
+    (
+        upload_mesh(
             device,
             writes,
             &g.opaque,
@@ -1874,8 +1936,7 @@ fn upload_group(device: &wgpu::Device, writes: &mut Writes, g: &Group, wire: boo
             g.hi,
             wire.then_some(finest),
         ),
-        levels: g.levels.clone(),
-        glass: upload_mesh(
+        upload_mesh(
             device,
             writes,
             &g.glass,
@@ -1883,11 +1944,7 @@ fn upload_group(device: &wgpu::Device, writes: &mut Writes, g: &Group, wire: boo
             g.hi,
             wire.then_some(usize::MAX),
         ),
-        instances: g.instances.clone(),
-        bounds: g.bounds.clone(),
-        radius: g.radius(),
-        exact_shadow: g.exact_shadow,
-    }
+    )
 }
 
 fn instance_buffer(device: &wgpu::Device, room: u64) -> wgpu::Buffer {

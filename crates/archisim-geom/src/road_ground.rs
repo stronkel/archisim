@@ -246,7 +246,7 @@ struct Sample {
 /// How the ground is shaped round the streets of a level: lowered under
 /// them and meeting their edges in slopes of fill or cut.
 pub struct Shaper {
-    roads: Vec<RoadLine>,
+    roads: Vec<std::sync::Arc<RoadLine>>,
     /// For each cell of [`SHAPER_CELL`] metres, the stretches of axis (road
     /// and segment, in order) that may come within [`REACH`] of its edge
     /// from inside it: a point asks only those, not every street.
@@ -269,7 +269,7 @@ type KeptLine = (
     archisim_core::Road,
     f64,
     Vec<std::sync::Arc<archisim_core::Surface>>,
-    RoadLine,
+    std::sync::Arc<RoadLine>,
 );
 static KEPT_LINES: std::sync::Mutex<std::collections::BTreeMap<archisim_core::RoadId, KeptLine>> =
     std::sync::Mutex::new(std::collections::BTreeMap::new());
@@ -362,11 +362,11 @@ impl Shaper {
                         return line.clone();
                     }
                 }
-                let line = road_line(model, r);
+                let line = std::sync::Arc::new(road_line(model, r));
                 kept.insert(r.id, (r.clone(), base, grounds.clone(), line.clone()));
                 line
             })
-            .collect::<Vec<RoadLine>>();
+            .collect::<Vec<std::sync::Arc<RoadLine>>>();
         drop(kept);
         // Each stretch of axis into the cells within its reach: walked
         // along in steps of a cell, the cells round each step.
@@ -548,7 +548,7 @@ pub fn shaped_tiles(tris: &[[P3; 3]], shaper: &Shaper) -> Vec<ShapedTile> {
     let tiles = ground_tiles(tris);
     let mut parts: Vec<Option<std::sync::Arc<Vec<[P3; 3]>>>> = vec![None; tiles.len()];
     let mut missing = Vec::new();
-    let near_roads: Vec<Vec<RoadLine>> = tiles
+    let near_roads: Vec<Vec<std::sync::Arc<RoadLine>>> = tiles
         .iter()
         .map(|t| shaper.roads_over(t.lo, t.hi))
         .collect();
@@ -560,8 +560,14 @@ pub fn shaped_tiles(tris: &[[P3; 3]], shaper: &Shaper) -> Vec<ShapedTile> {
     if let Ok(mut kept) = KEPT_TILES.lock() {
         for (k, t) in tiles.iter().enumerate() {
             if let Some(e) = kept.get_mut(&t.key).and_then(|v| {
-                v.iter_mut()
-                    .find(|e| e.tris == t.tris && e.roads == near_roads[k])
+                v.iter_mut().find(|e| {
+                    e.roads.len() == near_roads[k].len()
+                        && e.roads
+                            .iter()
+                            .zip(&near_roads[k])
+                            .all(|(a, b)| std::sync::Arc::ptr_eq(a, b) || a == b)
+                        && e.tris == t.tris
+                })
             }) {
                 e.used = generation;
                 parts[k] = Some(e.out.clone());
@@ -617,9 +623,9 @@ pub fn shaped_tiles(tris: &[[P3; 3]], shaper: &Shaper) -> Vec<ShapedTile> {
 }
 
 /// The side of the tiles [`shaped_ground`] keeps.
-pub const GROUND_TILE: f64 = 100.0;
-/// How many tiles are kept, at most (a site of 2 × 2 km has 400).
-const KEPT_TILES_MAX: usize = 2000;
+pub const GROUND_TILE: f64 = 50.0;
+/// How many tiles are kept, at most (a site of 2 × 2 km has 1 600).
+const KEPT_TILES_MAX: usize = 8000;
 
 /// A tile of the ground: its triangles and their box.
 struct GroundTile {
@@ -659,7 +665,8 @@ fn ground_tiles(tris: &[[P3; 3]]) -> Vec<GroundTile> {
 
 struct KeptTile {
     tris: Vec<[P3; 3]>,
-    roads: Vec<RoadLine>,
+    /// The streets' lines it was shaped with (the same while they are).
+    roads: Vec<std::sync::Arc<RoadLine>>,
     out: std::sync::Arc<Vec<[P3; 3]>>,
     used: u64,
 }
@@ -670,7 +677,7 @@ static TILE_GENERATION: std::sync::Mutex<u64> = std::sync::Mutex::new(0);
 
 impl Shaper {
     /// The streets whose reach overlaps a box, in their order.
-    fn roads_over(&self, lo: Point2, hi: Point2) -> Vec<RoadLine> {
+    fn roads_over(&self, lo: Point2, hi: Point2) -> Vec<std::sync::Arc<RoadLine>> {
         self.roads
             .iter()
             .filter(|r| r.lo.x <= hi.x && r.hi.x >= lo.x && r.lo.y <= hi.y && r.hi.y >= lo.y)
