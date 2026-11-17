@@ -4,6 +4,15 @@ Lo que cambia en cada versión, en pocas líneas. ArchiSim enseña la parte de s
 
 Cada versión empieza con una línea `## <versión>` (por ejemplo `## 0.81.0`): es la que busca la publicación.
 
+## 0.94.0
+
+- **Nudos de las calles, a mano (N1).** Herramienta **Nudo** en Urbanismo (NU): pincha un cruce, una T o una L y cámbialo en Propiedades.
+  - **Tipo**: cruce normal, **cruce elevado** (meseta a la cota de la acera con rampas), **plataforma única** (todo al nivel de la acera, sin bordillos, con bolardos) o **sin nudo** (las calles se cruzan sin cruce).
+  - **Cada brazo**: hasta dónde llega el cruce por esa calle (retranqueo).
+  - **Cada esquina**: su radio, su forma (arco, **chaflán** o en punta) y si lleva acera.
+  - Solo se guarda lo cambiado; si mueves una calle el nudo conserva sus ajustes, y si la borras se pierden. Van en el fichero y en el IFC.
+  - `archisim nudos` hace un ejemplo con cada tipo.
+
 ## 0.93.0
 
 - **Taller del territorio: fluidez.**

@@ -141,6 +141,7 @@ impl Model {
             plots,
             roads,
             roundabouts,
+            nodes,
             ceilings,
             boxes,
             markings,
@@ -246,6 +247,18 @@ impl Model {
             diff_map(plots, &b.plots, |k| k.0, o);
             diff_map(roads, &b.roads, |k| k.0, o);
             diff_map(roundabouts, &b.roundabouts, |k| k.0, o);
+            // A node changed: its streets (their pieces and its own).
+            let by_key = |v: &Vec<super::NodeSettings>| {
+                v.iter()
+                    .map(|n| (n.key.clone(), n.clone()))
+                    .collect::<BTreeMap<_, _>>()
+            };
+            let (now, was) = (by_key(nodes), by_key(&b.nodes));
+            for k in now.keys().chain(was.keys()) {
+                if now.get(k) != was.get(k) {
+                    o.extend(k.road_ids().map(|r| r.0));
+                }
+            }
             diff_map(ceilings, &b.ceilings, |k| k.0, o);
             diff_map(boxes, &b.boxes, |k| k.0, o);
             diff_map(markings, &b.markings, |k| k.0, o);

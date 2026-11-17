@@ -68,6 +68,18 @@ Hoy `archisim_geom::crossroads::junctions(model, level)` rehace todos los cruces
 3. **IFC**: el cruce ya sale como piezas; los ajustes van en un pset `ArchiSim_Node` en el `IfcBuildingElementProxy` del cruce para que vuelvan al importar.
 4. **App**: `app/node_ui` (`Tool::Node`, `Pick::Node`, `Grip::NodeArm`, `Grip::NodeCorner`, `Grip::NodeShift`), tarjetas con `cards::option_cards` dibujadas en 3D como las de los tipos de calle.
 
+### 2.3 Hecho en la primera vuelta (N1, 17/11/2026, versión 0.94)
+
+- **Herramienta Nudo** en Urbanismo (tecla NU): un clic cerca de un cruce, una T o una L lo elige (se marca en azul, con los extremos de los brazos en naranja) y Propiedades enseña sus ajustes.
+- **Tipo de nudo**: Cruce, Cruce elevado (meseta a la cota del bordillo con rampas de 2 m en cada brazo), Plataforma única (pavimento de acera, sin bordillos, bolardos cada 1,5 m) y Sin nudo (las calles se cruzan sin cruce).
+- **Por brazo**: retranqueo (hasta dónde llega la placa del cruce por esa calle).
+- **Por esquina**: radio propio, forma (arco, chaflán o en punta) y acera de esquina sí/no.
+- **Restablecer**: vuelve a lo calculado.
+- **Guardado**: solo lo cambiado, por la identidad del nudo (calles que llegan y por qué extremo; si se mueve una calle, el nudo sigue siendo el mismo). Si se borra una calle, sus ajustes se pierden. Formato 113; en el IFC, en el pset `ArchiSim_Road` de la primera calle del nudo (propiedad `Nodes`), y vuelven al importar.
+- **Ejemplo**: `archisim nudos out/`.
+
+**Pendiente para la segunda vuelta**: Continuo, Doblez y Fin (fondo de saco); paso de peatones, rebaje, señales y aplanado por brazo; orejas de acera; desplazar el nudo, plano o inclinado y calle principal; ocultar marcas; tiradores en planta y 3D, tarjetas con dibujo y vista previa al arrastrar; el chaflán estándar por lugar.
+
 ## 3. Lo demás, por tandas
 
 | Tanda | Qué | Mods de referencia | Tamaño |

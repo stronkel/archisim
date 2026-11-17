@@ -119,17 +119,42 @@ impl<'a> Importer<'a> {
         let mut ids = self.file.of_kind("IFCPAVEMENT");
         ids.extend(self.file.of_kind("IFCBUILDINGELEMENTPROXY"));
         ids.sort_unstable();
+        let mut nodes: Vec<(archisim_core::LevelId, String)> = Vec::new();
         for id in ids {
             if self.property_own(id, "ArchiSim_Road", "Axis").is_none() {
                 continue;
             }
-            if let Err(why) = self.import_road(id) {
-                self.report.skip("viales", why);
+            match self.import_road(id) {
+                Ok(level) => {
+                    if let Some(t) = self
+                        .property_own(id, "ArchiSim_Road", "Nodes")
+                        .and_then(|v| v.as_str())
+                    {
+                        nodes.extend(t.split('~').map(|n| (level, n.to_string())));
+                    }
+                }
+                Err(why) => self.report.skip("viales", why),
+            }
+        }
+        // What was changed of their nodes (N1), the streets by their
+        // GlobalId.
+        for (level, text) in nodes {
+            let roads = &self.guids.roads;
+            let found = archisim_core::NodeSettings::decode(&text, level, |g| {
+                roads.iter().find(|(_, x)| x == g).map(|(r, _)| *r)
+            });
+            match found {
+                Some(n) => {
+                    if let Err(e) = self.model.set_node(n) {
+                        self.report.skip("nudos", explain(&e));
+                    }
+                }
+                None => self.report.skip("nudos", format!("«{text}» no es un nudo")),
             }
         }
     }
 
-    fn import_road(&mut self, id: u64) -> Result<(), String> {
+    fn import_road(&mut self, id: u64) -> Result<archisim_core::LevelId, String> {
         let num = |s: &Self, key: &str, default: f64| {
             s.property_own(id, "ArchiSim_Road", key)
                 .and_then(|v| v.as_f64())
@@ -227,7 +252,7 @@ impl<'a> Importer<'a> {
             }
         }
         self.guids.roads.push((rid, guid));
-        Ok(())
+        Ok(level)
     }
 
     /// Roundabouts and squares (U3), from their `ArchiSim_Roundabout` set.

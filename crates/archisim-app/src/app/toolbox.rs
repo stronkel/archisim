@@ -729,6 +729,13 @@ const SITE: &[Tile] = &[
                 "Glorieta o plaza donde se encuentran las calles: clic en el cruce; las calles se recortan en su círculo",
             ),
             tile(
+                Pick::Tool(Tool::Node),
+                Glyph::Roundabout,
+                "Nudo",
+                "NU",
+                "Cambia un cruce, una T o una L: tipo de nudo, retranqueo de cada calle y radio, forma y acera de cada esquina",
+            ),
+            tile(
                 Pick::Tool(Tool::Marking),
                 Glyph::Marking,
                 "Marca vial",

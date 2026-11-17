@@ -164,6 +164,9 @@ pub(crate) struct ProjectFile {
     /// Roundabouts and squares (version 64).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub roundabouts: Vec<RoundaboutOf>,
+    /// What is changed by hand of the nodes of the streets (version 113).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub nodes: Vec<NodeOf>,
     /// False ceilings (version 102).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub ceilings: Vec<CeilingOf>,
@@ -1429,6 +1432,15 @@ pub(crate) struct ModularSiteOf {
 pub(crate) struct CraneChartOf {
     pub name: String,
     pub rows: Vec<[f64; 2]>,
+}
+
+/// What is changed of a node of the streets (version 113): its level and
+/// `NodeSettings::encode` with the streets' ids.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct NodeOf {
+    pub level: u64,
+    pub node: String,
 }
 
 /// A roundabout or a square where streets meet (version 64).
@@ -4333,6 +4345,14 @@ impl ProjectFile {
                     })
                     .collect(),
             }),
+            nodes: p
+                .nodes
+                .iter()
+                .map(|n| NodeOf {
+                    level: n.key.level.0,
+                    node: n.encode(|r| r.0.to_string()),
+                })
+                .collect(),
             roundabouts: p
                 .roundabouts
                 .iter()
@@ -5079,6 +5099,7 @@ impl ProjectFile {
             plots: Vec::new(),
             roads: Vec::new(),
             roundabouts: Vec::new(),
+            nodes: Vec::new(),
             ceilings: Vec::new(),
             boxes: Vec::new(),
             modular_site: core::ModularSite::default(),
@@ -6141,6 +6162,16 @@ impl ProjectFile {
                     }),
                 rigging: m.rigging.unwrap_or(usual.rigging),
             };
+        }
+        for n in self.nodes {
+            let settings = core::NodeSettings::decode(&n.node, core::LevelId(n.level), |r| {
+                r.parse().ok().map(core::RoadId)
+            })
+            .ok_or_else(|| FileError::Value {
+                element: "node".into(),
+                message: format!("«{}» is not a node", n.node),
+            })?;
+            parts.nodes.push(settings);
         }
         for c in self.roundabouts {
             let element = format!("roundabout {} «{}»", c.id, c.name);

@@ -126,10 +126,15 @@ pub fn draw_roads(
                     .is_some_and(|c| c.plaza)
                 {
                     "#ece6d8"
+                } else if j.kind == archisim_core::NodeKind::Shared {
+                    // A shared surface: paved as the sidewalks (N1).
+                    "#f1eee6"
                 } else {
                     "#dcdcdc"
                 };
                 let parts = std::iter::once((&j.plate, plate_fill, pens().view))
+                    // The ramps of a raised node, a little darker.
+                    .chain(j.ramps.iter().map(|w| (w, "#cfcfcf", pens().thin)))
                     .chain(j.sidewalks.iter().map(|w| (w, "#f1eee6", pens().view)))
                     .chain(j.kerbs.iter().map(|w| (w, "#ffffff", pens().cut)))
                     .chain(j.parts.iter().map(|p| {

@@ -620,6 +620,11 @@ impl Editor {
                 if !decals.is_empty() {
                     m.decals_follow(&decals);
                 }
+                // The settings of the nodes no longer there go (N1).
+                if m.nodes().next().is_some() {
+                    let keys = archisim_geom::crossroads::all_node_keys(m);
+                    m.keep_nodes(&keys);
+                }
                 for (id, at, anchor) in tags {
                     let Some(t) = m.tag(id) else { continue };
                     if t.at != at {

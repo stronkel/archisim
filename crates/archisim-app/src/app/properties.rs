@@ -371,6 +371,7 @@ impl ArchiSimApp {
             Tool::Pool => self.pool_tool_properties(ui),
             Tool::Road => self.road_tool_properties(ui),
             Tool::Roundabout => self.roundabout_tool_properties(ui),
+            Tool::Node => self.node_tool_properties(ui),
             Tool::ModularBox => self.box_tool_properties(ui),
             Tool::World => self.world_tool_properties(ui),
             Tool::Decal => self.decal_tool_properties(ui),

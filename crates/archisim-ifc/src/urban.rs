@@ -34,6 +34,9 @@ enum Height {
     /// A junction's piece following the roads that meet there (U4): the
     /// index of the junction.
     Junction(usize),
+    /// A junction's carriageway (raised on a raised node, N1): the index
+    /// of the junction.
+    Plate(usize),
 }
 
 impl Exporter<'_> {
@@ -167,14 +170,21 @@ impl Exporter<'_> {
                     Height::Fixed(j.top - r.top_offset)
                 };
                 let jk = j.kerb_height;
-                parts.push((
-                    RoadBand::Carriageway,
-                    j.plate.clone(),
-                    j.pavement,
-                    -j.depth,
-                    0.0,
-                    up.clone(),
-                ));
+                let plate_up = if draped || j.lift > 0.0 {
+                    Height::Plate(ji)
+                } else {
+                    up.clone()
+                };
+                for poly in std::iter::once(&j.plate).chain(&j.ramps) {
+                    parts.push((
+                        RoadBand::Carriageway,
+                        poly.clone(),
+                        j.pavement,
+                        -j.depth,
+                        0.0,
+                        plate_up.clone(),
+                    ));
+                }
                 for k in &j.kerbs {
                     parts.push((
                         RoadBand::Kerb,
@@ -211,7 +221,7 @@ impl Exporter<'_> {
             for (i, (band, outline, material, z0, z1, height)) in parts.into_iter().enumerate() {
                 let follow = match height {
                     Height::Road => sloped,
-                    Height::Junction(_) | Height::Lowered(_) => true,
+                    Height::Junction(_) | Height::Plate(_) | Height::Lowered(_) => true,
                     Height::Fixed(_) => false,
                 };
                 let shape = if follow {
@@ -220,11 +230,14 @@ impl Exporter<'_> {
                     let base = elevation(r.level) + r.top_offset;
                     let tris = archisim_geom::solid::draped_prism(&outline, |q| {
                         let top = match &height {
-                            Height::Junction(ji) => junctions[*ji].top_under(model, q),
+                            Height::Junction(ji) | Height::Plate(ji) => {
+                                junctions[*ji].top_under(model, q)
+                            }
                             _ => r.top_under(q),
                         };
                         let t = elevation(r.level) + top;
                         match &height {
+                            Height::Plate(ji) => (t + z0, t + junctions[*ji].lift_at(q)),
                             Height::Lowered(p) => {
                                 let up = p.top_at(r.station_of(q), kh);
                                 let under = if p.band == RoadBand::Kerb {
@@ -329,6 +342,26 @@ impl Exporter<'_> {
                         props.push(self.w.add(format!(
                             "IFCPROPERTYSINGLEVALUE('Profile',$,IFCTEXT({}),$)",
                             string(&r.encode_profile())
+                        )));
+                    }
+                    // What is changed of the nodes this road leads (N1),
+                    // the streets by their GlobalId.
+                    let nodes: Vec<String> = model
+                        .nodes()
+                        .filter(|n| n.key.roads.first().is_some_and(|f| f.0 == r.id))
+                        .map(|n| {
+                            n.encode(|id| {
+                                model
+                                    .road(id)
+                                    .map(|x| x.guid.to_string())
+                                    .unwrap_or_default()
+                            })
+                        })
+                        .collect();
+                    if !nodes.is_empty() {
+                        props.push(self.w.add(format!(
+                            "IFCPROPERTYSINGLEVALUE('Nodes',$,IFCTEXT({}),$)",
+                            string(&nodes.join("~"))
                         )));
                     }
                     for (key, v) in [

@@ -9542,6 +9542,70 @@ fn a_roundabout_on_a_crossing() {
     assert!(now.distance(p(5.0, 0.0)) < 1e-6, "{now:?}");
 }
 
+/// The Node tool (N1): a click near a crossing picks its node and the
+/// properties are drawn; a change of kind, corner and setback is kept by
+/// the node's key, undone in one step, and lost when a street goes.
+#[test]
+fn nodes_with_the_tool() {
+    use archisim_core::{ArmSettings, CornerSettings, CornerShape, NodeKind, NodeSettings};
+    let mut h = Harness::new(Editor::new_project());
+    let canvas = h.app.canvas;
+    h.app
+        .view
+        .fit_exact(canvas, p(-60.0, -60.0), p(60.0, 60.0), 0.0);
+    h.app.set_discipline(super::toolbox::Discipline::Site);
+    for (a, b) in [(p(-50.0, 0.0), p(50.0, 0.0)), (p(0.0, -50.0), p(0.0, 50.0))] {
+        h.type_text("w");
+        h.click_at(a);
+        h.click_at(b);
+        h.key(Key::Enter);
+        h.key(Key::Escape);
+    }
+    h.app.set_tool(Tool::Node);
+    h.frame();
+    h.click_at(p(2.0, -1.0));
+    let level = h.app.ed.level;
+    let key = super::node_ui::first_node(h.model(), level).unwrap();
+    assert_eq!(h.app.node_pick.as_ref(), Some(&key));
+    h.frame();
+    let j = archisim_geom::crossroads::node_junction(h.model(), &key).unwrap();
+    let arm = archisim_geom::crossroads::Junction::arm_ref(&j.arms[0]);
+    let mut n = NodeSettings::new(key.clone());
+    n.kind = Some(NodeKind::Raised);
+    n.set_arm(
+        arm,
+        ArmSettings {
+            setback: Some(12.0),
+        },
+    );
+    n.set_corner(
+        arm,
+        CornerSettings {
+            radius: Some(5.0),
+            shape: Some(CornerShape::Chamfer),
+            ..Default::default()
+        },
+    );
+    let r = h.app.ed.transact("Nudo", |m| m.set_node(n.clone()));
+    assert!(r.is_ok(), "{r:?}");
+    h.frame();
+    assert_eq!(h.model().node(&key), Some(&n));
+    let j = archisim_geom::crossroads::node_junction(h.model(), &key).unwrap();
+    assert_eq!(j.kind, NodeKind::Raised);
+    assert!(!j.ramps.is_empty());
+    assert!(j.plate.len() >= 3);
+    // Undone in one step.
+    h.app.ed.undo();
+    assert!(h.model().node(&key).is_none());
+    h.app.ed.redo();
+    assert!(h.model().node(&key).is_some());
+    // A street deleted: the node goes with it.
+    let road = key.road_ids().next().unwrap();
+    let r = h.app.ed.transact("Borrar", |m| m.remove_road(road));
+    assert!(r.is_ok(), "{r:?}");
+    assert_eq!(h.model().nodes().count(), 0);
+}
+
 /// Road markings with the tool (U4): a zebra across a road becomes the
 /// road's crossing (with its lowered kerbs), an arrow turns with its
 /// lane, a dashed line is drawn by its points; markings can be picked.

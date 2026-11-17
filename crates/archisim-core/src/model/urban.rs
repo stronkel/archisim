@@ -1180,9 +1180,13 @@ impl Model {
     }
 
     pub fn remove_road(&mut self, id: RoadId) -> Result<Road, ModelError> {
-        self.roads
+        let r = self
+            .roads
             .remove(&id)
-            .ok_or(ModelError::UnknownElement(id.0))
+            .ok_or(ModelError::UnknownElement(id.0))?;
+        // Its nodes' settings go with it (N1).
+        self.drop_nodes_of_gone_roads();
+        Ok(r)
     }
 
     pub fn road(&self, id: RoadId) -> Option<&Road> {

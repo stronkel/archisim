@@ -5262,13 +5262,14 @@ pub fn road_solids_with(
             let mut h = Fnv::new(base.to_bits() ^ 0x4a75_6e63);
             h.add(id.0);
             h.add_str(&format!("{:?}", j.ring));
-            for x in [j.at.x, j.at.y, j.top, j.kerb_height, j.depth] {
+            for x in [j.at.x, j.at.y, j.top, j.kerb_height, j.depth, j.lift] {
                 h.add(x.to_bits());
             }
             for m in [j.pavement, j.kerb_material, j.sidewalk_material] {
                 h.add(m.0);
             }
             for poly in std::iter::once(&j.plate)
+                .chain(&j.ramps)
                 .chain(&j.kerbs)
                 .chain(&j.sidewalks)
                 .chain(j.parts.iter().map(|p| &p.outline))
@@ -5314,11 +5315,25 @@ pub fn road_solids_with(
                 (t + z0, t + z1)
             })
         };
+        // Its carriageway, raised on a raised node (N1).
         out.push(Solid {
             owner: SolidOwner::Road(id),
             material: j.pavement,
-            triangles: draped(&j.plate, -j.depth, 0.0),
+            triangles: draped_prism(&j.plate, |q| {
+                let t = at(q);
+                (t - j.depth, base + j.plate_top(model, q))
+            }),
         });
+        for r in &j.ramps {
+            out.push(Solid {
+                owner: SolidOwner::Road(id),
+                material: j.pavement,
+                triangles: draped_prism(r, |q| {
+                    let t = at(q);
+                    (t - j.depth, base + j.plate_top(model, q))
+                }),
+            });
+        }
         for k in &j.kerbs {
             out.push(Solid {
                 owner: SolidOwner::Road(id),

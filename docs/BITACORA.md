@@ -6,6 +6,23 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-17 (172) · v0.94: territorio N1, nudos al estilo Node Controller (primera vuelta)
+
+Rama `bloque/nudos`, sobre `bloque/territorio` (#220). Versión 0.94.0. Formato `.archisim` versión 113.
+
+- **Qué se hizo** (`docs/TERRITORIO.md` §2.3):
+  - **Identidad de los nudos** (`archisim-core::model::nodes`: `NodeKey` por planta, calles y extremo; `NodeSettings` con tipo, brazos y esquinas; `Model::set_node`, `keep_nodes`). Se reconcilian en cada cambio (`Editor::transact`) y se pierden al borrar una calle.
+  - **Cruces que leen los ajustes** (`crossroads::assemble`): radio y forma por esquina (arco, chaflán, en punta), retranqueo por brazo, acera de esquina, cruce elevado con meseta y rampas, plataforma única con bolardos, sin nudo.
+  - Planta, 3D e IFC (pset `ArchiSim_Road`, propiedad `Nodes`, leída al importar).
+  - **Herramienta Nudo** (`app/node_ui`, `Tool::Node`, tecla NU) con sus propiedades y Restablecer.
+  - Ejemplo `archisim nudos out/` y pruebas de fichero, IFC y aplicación.
+- **Pendiente** (N1, segunda vuelta): Continuo, Doblez, Fin; paso, rebaje, señales y aplanado por brazo; orejas; desplazar, plano/inclinado, calle principal, ocultar; tiradores, tarjetas dibujadas y vista previa; chaflán estándar por lugar. Luego N2–N9 y la cuarta vuelta de fluidez (planta, secciones, abrir, y todo lo nuevo).
+- **Qué debe probar Antonio** (con la 0.94):
+  1. `archisim nudos out/` y abre `out/nudos.archisim`: en planta y en 3D, un cruce de cada tipo, la T con chaflanes y la L en punta.
+  2. En Urbanismo, herramienta **Nudo** (NU): pincha otro cruce, ponlo como cruce elevado o plataforma única y mira el 3D; cambia el radio y la forma de una esquina y el retranqueo de un brazo.
+  3. Mueve una de sus calles: el nudo conserva lo cambiado. Borra una: sus ajustes desaparecen. Ctrl+Z deshace cada cambio.
+  4. Exporta el IFC y ábrelo de nuevo en ArchiSim: los nudos vuelven igual.
+
 ## 2026-11-17 (171) · v0.93: territorio N0, tercera vuelta (escena que se conserva)
 
 Rama `bloque/territorio`, pull request #220. Versión 0.93.0. Sin cambios de formato ni de IFC.

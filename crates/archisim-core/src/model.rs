@@ -47,6 +47,7 @@ mod markings;
 mod meshes;
 mod modules;
 mod networks;
+mod nodes;
 mod objects;
 mod orthophoto;
 mod paint;
@@ -116,6 +117,7 @@ pub use markings::*;
 pub use meshes::*;
 pub use modules::*;
 pub use networks::*;
+pub use nodes::*;
 pub use objects::*;
 pub use orthophoto::*;
 pub use paint::*;
@@ -1549,6 +1551,8 @@ pub struct ModelParts {
     pub roads: Vec<Road>,
     /// Roundabouts and squares where streets meet (U3).
     pub roundabouts: Vec<Roundabout>,
+    /// What is changed by hand of the nodes of the streets (N1).
+    pub nodes: Vec<NodeSettings>,
     /// False ceilings (M7, version 96).
     pub ceilings: Vec<Ceiling>,
     /// Modular boxes and the limits they keep (M1, version 97).
@@ -1724,6 +1728,8 @@ pub struct Model {
     plots: BTreeMap<PlotId, Plot>,
     roads: BTreeMap<RoadId, Road>,
     roundabouts: BTreeMap<RoundaboutId, Roundabout>,
+    /// What is changed by hand of the nodes of the streets (N1).
+    nodes: Vec<NodeSettings>,
     ceilings: BTreeMap<CeilingId, Ceiling>,
     boxes: BTreeMap<BoxId, ModularBox>,
     modular_site: ModularSite,
@@ -1847,6 +1853,7 @@ impl Model {
             plots: BTreeMap::new(),
             roads: BTreeMap::new(),
             roundabouts: BTreeMap::new(),
+            nodes: Vec::new(),
             ceilings: BTreeMap::new(),
             boxes: BTreeMap::new(),
             modular_site: ModularSite::default(),
@@ -4580,6 +4587,7 @@ impl Model {
             plots: self.plots.values().cloned().collect(),
             roads: self.roads.values().cloned().collect(),
             roundabouts: self.roundabouts.values().cloned().collect(),
+            nodes: self.nodes.clone(),
             ceilings: self.ceilings.values().cloned().collect(),
             boxes: self.boxes.values().cloned().collect(),
             modular_site: self.modular_site.clone(),
@@ -5024,6 +5032,12 @@ impl Model {
             })?;
         model.restore_urban(parts.plots, parts.roads, &mut claim)?;
         model.restore_roundabouts(parts.roundabouts, &mut claim)?;
+        model
+            .restore_nodes(parts.nodes)
+            .map_err(|error| RestoreError {
+                element: "nudo".into(),
+                error,
+            })?;
         model.restore_ceilings(parts.ceilings, &mut claim)?;
         model.restore_boxes(parts.boxes, &mut claim)?;
         model

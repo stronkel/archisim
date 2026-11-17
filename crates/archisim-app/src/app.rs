@@ -113,6 +113,8 @@ pub enum Tool {
     Road,
     /// Roundabouts and squares, by their centre (U3).
     Roundabout,
+    /// The nodes of the streets: crossings, T and L, changed by hand (N1).
+    Node,
     /// A modular box (M1).
     ModularBox,
     /// Buildings of the world put by hand, as in CityRT (tanda 16).
@@ -173,6 +175,7 @@ impl Tool {
                 | Tool::Pool
                 | Tool::Road
                 | Tool::Roundabout
+                | Tool::Node
                 | Tool::ModularBox
                 | Tool::World
                 | Tool::Decal
@@ -222,6 +225,7 @@ impl Tool {
             "ps" => Some(Tool::Pool),
             "as" => Some(Tool::Elevator),
             "gl" => Some(Tool::Roundabout),
+            "nu" => Some(Tool::Node),
             "cm" => Some(Tool::ModularBox),
             "em" => Some(Tool::World),
             "pe" => Some(Tool::Decal),
@@ -381,6 +385,8 @@ pub struct ArchiSimApp {
     pub road_start_join: Option<Point2>,
     pub road_settings: urban_ui::RoadSettings,
     pub roundabout_settings: roundabout_ui::RoundaboutSettings,
+    /// The node the tool Nudo picked (N1).
+    pub node_pick: Option<archisim_core::NodeKey>,
     /// The box tool's settings, made from the project the first time.
     pub box_settings: Option<box_ui::BoxSettings>,
     /// The box types of the library folder, read when first shown.
@@ -906,6 +912,7 @@ impl ArchiSimApp {
             road_start_join: None,
             road_settings,
             roundabout_settings: Default::default(),
+            node_pick: None,
             box_settings: None,
             box_catalogue: None,
             world_settings: Default::default(),
@@ -3408,6 +3415,7 @@ mod missions_ui;
 mod module_ui;
 mod mouse3d;
 mod navigator;
+mod node_ui;
 mod nudge;
 mod object_bar;
 mod object_gallery;

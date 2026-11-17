@@ -505,6 +505,7 @@ impl ArchiSimApp {
                 ),
                 Tool::Road => ("Vial", None, "Varita", ""),
                 Tool::Roundabout => ("Glorieta", None, "Varita", ""),
+                Tool::Node => ("Nudo", None, "", ""),
                 Tool::ModularBox => ("Caja modular", None, "", ""),
                 Tool::World => ("Edificio del mundo", None, "", ""),
                 Tool::Decal => ("Pegatina", None, "Varita", ""),

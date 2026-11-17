@@ -40,6 +40,7 @@ mod locales;
 mod modelos;
 mod muestrario;
 mod muros_talud;
+mod nudos;
 mod ortofoto;
 mod plantilla;
 mod taller;
@@ -96,6 +97,11 @@ Uso:
       origen, con --en-el-origen). --resultado elige otro de los
       encontrados; con --enlaces, las direcciones de la descarga.
 
+  archisim nudos [carpeta]
+      Los nudos de las calles cambiados a mano (N1): un cruce de cada tipo
+      (cruce, elevado, plataforma única, sin nudo), una T con chaflanes y
+      retranqueo y una L con esquina en punta y sin acera: nudos.archisim,
+      nudos.ifc, planta y axonometría.
   archisim calles [carpeta]
       Unas calles en una ladera que se encuentran de todas las maneras:
       un cruce, tres en T y una esquina en L, con las esquinas redondeadas
@@ -948,6 +954,10 @@ fn main() -> ExitCode {
         Some("calles") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
             report(calles::write(&dir))
+        }
+        Some("nudos") => {
+            let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
+            report(nudos::write(&dir))
         }
         Some("ortofoto") => {
             match args.get(1) {
