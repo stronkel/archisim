@@ -4,6 +4,14 @@ Lo que cambia en cada versión, en pocas líneas. ArchiSim enseña la parte de s
 
 Cada versión empieza con una línea `## <versión>` (por ejemplo `## 0.81.0`): es la que busca la publicación.
 
+## 0.93.0
+
+- **Montar un proyecto desde los planos de AutoCAD.** La nave SUMO (antiguo CEOSA) se ha montado desde el DXF del proyecto básico, con sus referencias unidas: 4 plantas (baja ±0,00, primera +4,45, cubierta +8,45 y cubierta del castillete +12,35), 302 muros con su espesor real, 99 puertas, ventanas y huecos, 62 tramos acristalados como muros cortina, forjados y los 104 locales con su nombre.
+  - Los muros salen de las dos líneas de corte de cada muro, y las puertas del arco de su hoja (con su mano y hacia dónde abren).
+  - Nueva orden `archisim montar <descripción.txt> <proyecto.archisim>`: levanta plantas, muros, carpinterías, muros cortina, forjados y locales desde una lista de texto. Los guiones de `scripts/montar_dxf/` escriben esa lista desde un DXF dibujado en capas.
+- **IFC: forjados atravesados por muchos muros.** Cuando los muros formaban un anillo cerrado, el hueco que dejaban en el forjado se escribía como un contorno que se tocaba a sí mismo, y otros programas le quitaban de más (hasta 1 m³). Ahora se escribe un hueco por muro y el volumen cuadra.
+  - Al importar, ArchiSim lee también los forjados con cadenas largas de huecos.
+
 ## 0.92.1
 
 - **La planta y las secciones ya no se quedan esperando.** Si un dibujo no se puede hacer, la vista lo dice en rojo con el motivo (y queda anotado en `errores.log`) en lugar de quedarse en blanco o en «Dibujando la sección…» para siempre.
