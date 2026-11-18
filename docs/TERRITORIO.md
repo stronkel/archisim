@@ -158,7 +158,7 @@ Hoy `archisim_geom::crossroads::junctions(model, level)` rehace todos los cruces
 ### 2.10 N7 hecho: manzanas, parcelas y llenado por zonas (18/11/2026, versión 0.101)
 
 - **Manzanas**: las calles que se cierran (con sus cruces y glorietas) dejan huecos; cada hueco de más de 80 m² es una manzana, por su línea de fachada. Las calles en anarquía no cuentan.
-- **Parcelar** (Zoning Adjuster): Urbanismo → **Manzanas** abre el panel. Se elige la zona y, si se quiere, el frente y el fondo de parcela (si no, los habituales de la zona). Luego se pincha dentro de una manzana, o «Parcelar todas».
+- **Parcelar** (Zoning Adjuster): Urbanismo → Territorio → **Manzanas** abre el panel. Se elige la zona y, si se quiere, el frente y el fondo de parcela (si no, los habituales de la zona). Luego se pincha dentro de una manzana, o «Parcelar todas».
   - Las parcelas van en escuadra con su fachada.
   - Cada esquina es una parcela que da a las dos calles.
   - Queda un patio de manzana si el fondo cabe; una manzana pequeña es una sola parcela.
@@ -174,7 +174,7 @@ Hoy `archisim_geom::crossroads::junctions(model, level)` rehace todos los cruces
 
 - **Área del entorno**: al traer el entorno se guarda lo que se trajo, el círculo de su radio o, con la opción nueva «recuadro», un cuadrado de lado el doble del radio (hasta 2 × 2 km con radio 1 000 m). Lo que se trae queda dentro del recuadro: edificios, árboles, terreno y calles.
 - **Conexiones con fuera** (Outside Connections): las calles se cortan en el borde del área con toda su sección, en escuadra con su eje, y cada extremo cortado es una conexión con fuera. En planta, el borde del área va en trazo largo y cada conexión lleva una flecha hacia fuera con el nombre de la calle.
-- **Vista de mapa** (CSL Map View): Urbanismo → **Mapa** abre una ventana con toda el área, plana y en color:
+- **Vista de mapa** (CSL Map View): Urbanismo → Territorio → **Mapa** abre una ventana con toda el área, plana y en color:
   - Calles y avenidas (las de 20 m o más, en amarillo) con sus nombres.
   - Edificios del entorno, con los equipamientos en otro color, y el edificio del proyecto en rojo teja.
   - Árboles, jardines, piscinas y las zonas de las parcelas.
@@ -196,7 +196,7 @@ Hoy `archisim_geom::crossroads::junctions(model, level)` rehace todos los cruces
   - Guardan la distancia con el de delante en su carril.
   - Al salir por un fondo de saco o por una conexión con fuera, aparecen en otro sitio.
 - **Personas por las aceras**: van y vuelven, cada una a su paso.
-- **Vista 3D**: Urbanismo → **Tráfico** lo pone en marcha en la vista 3D y vuelve a pulsarse para pararlo. Hay un coche cada 40 m de calle y una persona cada 25 m, en colores variados. Al cambiar las calles empieza de nuevo sobre las calles nuevas.
+- **Vista 3D**: Urbanismo → Territorio → **Tráfico** lo pone en marcha en la vista 3D y vuelve a pulsarse para pararlo. Hay un coche cada 40 m de calle y una persona cada 25 m, en colores variados. Al cambiar las calles empieza de nuevo sobre las calles nuevas.
 - **Render**: con el tráfico en marcha, el render lo saca como está a los 20 s. En la línea de órdenes, `archisim render … --trafico`.
 - Es para ilustrar: no calcula capacidades, colas ni prioridades. Dos coches de calles distintas pueden coincidir dentro del cruce.
 - No toca el proyecto: no se guarda ni sale en el IFC.

@@ -20,7 +20,7 @@ Rama `bloque/trafico` sobre `bloque/area-grande` (#230). Versión 0.103.0. Sin c
 - **Pendiente**: §7 de `TERRITORIO.md`. Con esto se acaban las tandas N1–N9; sigue la cuarta vuelta de fluidez sobre todo lo de N1–N9 y el repaso de §7.
 - **Qué debe probar Antonio** (con la 0.103):
   1. `archisim trafico out/` y mira `out/trafico.png` y `out/trafico-planta.svg`.
-  2. Abre `out/nudos.archisim`, pon un semáforo en un cruce con la herramienta Nudo, pulsa Urbanismo → **Tráfico** y mira el cruce en 3D: los coches paran en rojo.
+  2. Abre `out/nudos.archisim`, pon un semáforo en un cruce con la herramienta Nudo, pulsa Urbanismo → Territorio → **Tráfico** y mira el cruce en 3D: los coches paran en rojo.
   3. Con el tráfico en marcha, haz un render.
 
 ## 2026-11-18 (181) · v0.102: territorio N8, área grande y vista de mapa
@@ -39,7 +39,7 @@ Rama `bloque/area-grande` sobre `bloque/manzanas` (#229). Versión 0.102.0. Form
 - **Pendiente**: §7 de `TERRITORIO.md`. Siguiente, N9.
 - **Qué debe probar Antonio** (con la 0.102):
   1. `archisim area-grande out/`: mira `out/area-grande-mapa.png` y abre `out/area-grande.archisim`.
-  2. Urbanismo → **Mapa**: pincha en una esquina del mapa y mira que la planta va allí; luego «Ver toda el área».
+  2. Urbanismo → Territorio → **Mapa**: pincha en una esquina del mapa y mira que la planta va allí; luego «Ver toda el área».
   3. Al traer un entorno real, pide un recuadro de radio 1 000 m y mira que las calles acaban en el borde con su flecha.
 
 ## 2026-11-18 (180) · v0.101: territorio N7, manzanas, parcelas y llenado
@@ -56,7 +56,7 @@ Rama `bloque/manzanas` sobre `bloque/ocultar` (#228). Versión 0.101.0. Formato 
 - **Pendiente**: §7 de `TERRITORIO.md`. Siguiente, N8.
 - **Qué debe probar Antonio** (con la 0.101):
   1. `archisim manzanas out/` y abre `out/manzanas.archisim`: cuatro manzanas de colores, cada una con sus edificios; la casa bloqueada del casco antiguo lo dice en sus propiedades.
-  2. En un proyecto nuevo, traza cuatro calles en cuadro; Urbanismo → **Manzanas**, elige «Viviendas aisladas», «Parcelar una manzana» y pincha dentro; luego «Llenar las vacías».
+  2. En un proyecto nuevo, traza cuatro calles en cuadro; Urbanismo → Territorio → **Manzanas**, elige «Viviendas aisladas», «Parcelar una manzana» y pincha dentro; luego «Llenar las vacías».
   3. Bloquea una parcela, cambia la zona de otra y pulsa «Rehacer»: la bloqueada no cambia.
 
 ## 2026-11-18 (179) · v0.100: territorio N6, ocultar y soltar piezas

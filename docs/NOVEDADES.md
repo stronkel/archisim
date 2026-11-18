@@ -6,15 +6,15 @@ Cada versión empieza con una línea `## <versión>` (por ejemplo `## 0.81.0`): 
 
 ## 0.103.0
 
-- **Tráfico de ilustración (N9).** Urbanismo → Tráfico pone coches y personas en la vista 3D. Los coches van por sus carriles, giran por donde mandan las conexiones de cada cruce y paran en los semáforos y en los stop. Las personas pasean por las aceras. El render los saca también. Es solo para ilustrar: no se guarda en el proyecto ni calcula capacidades.
+- **Tráfico de ilustración (N9).** Urbanismo → Territorio → Tráfico pone coches y personas en la vista 3D. Los coches van por sus carriles, giran por donde mandan las conexiones de cada cruce y paran en los semáforos y en los stop. Las personas pasean por las aceras. El render los saca también. Es solo para ilustrar: no se guarda en el proyecto ni calcula capacidades.
 
 ## 0.102.0
 
-- **Área grande y vista de mapa (N8).** El entorno se puede traer en un recuadro de hasta 2 × 2 km. Las calles se cortan en su borde con toda su sección y quedan como conexiones con fuera, con una flecha y su nombre. Urbanismo → Mapa enseña toda el área plana y en color, con sus calles, edificios, árboles y zonas; un clic en el mapa lleva la planta a ese sitio.
+- **Área grande y vista de mapa (N8).** El entorno se puede traer en un recuadro de hasta 2 × 2 km. Las calles se cortan en su borde con toda su sección y quedan como conexiones con fuera, con una flecha y su nombre. Urbanismo → Territorio → Mapa enseña toda el área plana y en color, con sus calles, edificios, árboles y zonas; un clic en el mapa lleva la planta a ese sitio.
 
 ## 0.101.0
 
-- **Manzanas y parcelas (N7).** Urbanismo → Manzanas: las calles que se cierran forman manzanas; un clic las parte en parcelas por la línea de fachada (con sus parcelas de esquina y su patio) y se llenan con edificios del lugar según su zona: casco antiguo, bloques, viviendas aisladas, comercio o equipamiento. «Rehacer» las vuelve a llenar; una parcela bloqueada no cambia.
+- **Manzanas y parcelas (N7).** Urbanismo → Territorio → Manzanas: las calles que se cierran forman manzanas; un clic las parte en parcelas por la línea de fachada (con sus parcelas de esquina y su patio) y se llenan con edificios del lugar según su zona: casco antiguo, bloques, viviendas aisladas, comercio o equipamiento. «Rehacer» las vuelve a llenar; una parcela bloqueada no cambia.
 
 ## 0.100.0
 
