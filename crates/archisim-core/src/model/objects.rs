@@ -12,10 +12,11 @@ use super::*;
 
 /// Families whose objects ArchiSim places on a level: furniture, sanitary
 /// ware, kitchen units, the site (vegetation, street furniture, rocks and
-/// other natural things), people
-/// and vehicles; and railing types (`railing`), which are not placed as
+/// other natural things), people,
+/// vehicles and what stands in front of a façade (`facade`: louvre
+/// panels); and railing types (`railing`), which are not placed as
 /// objects but give their look to railings.
-pub const OBJECT_CATEGORIES: [&str; 9] = [
+pub const OBJECT_CATEGORIES: [&str; 10] = [
     "furniture",
     "sanitary",
     "kitchen",
@@ -24,6 +25,7 @@ pub const OBJECT_CATEGORIES: [&str; 9] = [
     "nature",
     "people",
     "vehicle",
+    "facade",
     "railing",
 ];
 
@@ -1035,20 +1037,24 @@ mod tests {
             assert!(!ev.parts.is_empty(), "{name}");
             let category = m.family(f).unwrap().def().category.clone();
             // Trees, shrubs and people stand on their point.
-            let centred = name == "Mesa" || category == "people" || category == "nature" || {
-                (category == "site" && name != "Seto")
-                    || matches!(
-                        name.as_str(),
-                        "Farola"
-                            | "Papelera"
-                            | "Bolardo"
-                            | "Alcorque"
-                            | "Aparcabicis"
-                            | "Señal de tráfico"
-                            | "Ducha de piscina"
-                            | "Mampara acústica"
-                    )
-            };
+            let centred = name == "Mesa"
+                || category == "people"
+                || category == "nature"
+                || category == "facade"
+                || {
+                    (category == "site" && name != "Seto")
+                        || matches!(
+                            name.as_str(),
+                            "Farola"
+                                | "Papelera"
+                                | "Bolardo"
+                                | "Alcorque"
+                                | "Aparcabicis"
+                                | "Señal de tráfico"
+                                | "Ducha de piscina"
+                                | "Mampara acústica"
+                        )
+                };
             for p in &ev.parts {
                 // On the floor; against the wall (nothing behind the
                 // origin) but for tables, which have chairs all round.
@@ -1070,7 +1076,8 @@ mod tests {
                 "IfcLightFixture",
                 "IfcVehicle",
                 "IfcRailing",
-                "IfcTransportElement"
+                "IfcTransportElement",
+                "IfcShadingDevice"
             ]
             .contains(&ev.outputs["ifc_class"].as_text().unwrap()));
             assert!(!m.family(f).unwrap().def().folder.is_empty(), "{name}");

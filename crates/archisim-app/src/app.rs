@@ -467,6 +467,8 @@ pub struct ArchiSimApp {
     loupe_source: Option<(egui::TextureId, Rect)>,
     /// The 3D picture asked to the graphics in the browser, to save.
     picture_reading: Option<crate::view3d::render::Reading>,
+    /// A section drawing that could not be worked out, and why.
+    section_failed: Option<(section_ui::DrawingKey, String)>,
     /// How long the last section drawing took to work out.
     section_took: std::sync::Arc<std::sync::Mutex<std::time::Duration>>,
     sheet_pending: Option<background::Pending<sheet_ui::SheetKey>>,
@@ -953,6 +955,7 @@ impl ArchiSimApp {
             section_stash: Vec::new(),
             section_pending: None,
             section_took: Default::default(),
+            section_failed: None,
             saving: None,
             web_kept: (0, None),
             web_unsaved: false,
@@ -3148,6 +3151,16 @@ impl eframe::App for ArchiSimApp {
         }
         crate::crash::frame_start();
         crate::crash::stage("ventana");
+        // Drawing aside can be turned off (Vista → «Dibujar aparte»), and
+        // with ARCHISIM_SIN_HILOS: everything at once, as before 0.85.
+        let aside = self.prefs.draw_aside && std::env::var_os("ARCHISIM_SIN_HILOS").is_none();
+        let at_once = if aside {
+            picture::AT_ONCE
+        } else {
+            std::time::Duration::from_secs(3600)
+        };
+        self.at_once = at_once;
+        self.v3d.at_once = at_once;
         let started = web_time::Instant::now();
         if self.saving.is_some() {
             self.saving_done(false);

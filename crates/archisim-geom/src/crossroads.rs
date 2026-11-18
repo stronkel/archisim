@@ -2096,7 +2096,7 @@ const STOP_LINE: f64 = 0.4;
 const YIELD_DASH: f64 = 0.8;
 const YIELD_GAP: f64 = 0.4;
 /// Half the side of a sign's post, metres.
-const POST: f64 = 0.04;
+pub(crate) const POST: f64 = 0.04;
 /// How far past an arm's end its road's own markings are left out when
 /// a node hides them, metres (where the zebras stand).
 const QUIET_REACH: f64 = 15.0;

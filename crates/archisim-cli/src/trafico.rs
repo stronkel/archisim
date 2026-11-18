@@ -79,6 +79,18 @@ pub fn write(dir: &Path) -> Res {
             d.join(" ")
         );
     }
+    // The lit lamp of each traffic light.
+    for l in t.lamps() {
+        if l.colour.iter().map(|c| *c as u32).sum::<u32>() < 300 {
+            continue;
+        }
+        let [r, g, bl] = l.colour;
+        let _ = writeln!(
+            over,
+            r#"<circle cx="{:.3}" cy="{:.3}" r="0.6" fill="rgb({r},{g},{bl})" stroke="black" stroke-width="0.08"/>"#,
+            l.at[0], -l.at[1]
+        );
+    }
     over.push_str("</g>\n");
     if let Some(end) = svg.rfind("</svg>") {
         svg.insert_str(end, &over);

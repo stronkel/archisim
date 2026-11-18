@@ -9702,7 +9702,9 @@ fn hide_pieces_and_let_a_zebra_go() {
     // The zebra let go: a marking, selected.
     h.app.act(super::toolbox::Action::DetachCrossing);
     h.click_at(p(0.5, 1.0));
-    assert!(h.model().road(road).unwrap().section.crossings.is_empty());
+    // The street keeps its lowered kerbs; the bars are the marking's now.
+    assert_eq!(h.model().road(road).unwrap().section.crossings.len(), 1);
+    assert!(h.model().road(road).unwrap().visible_markings(&[]).len() < after.len());
     assert_eq!(h.model().markings().count(), 1);
     assert!(matches!(
         h.app.ed.selection.iter().next(),
@@ -12873,12 +12875,34 @@ fn blocks_cut_into_plots_and_filled() {
         .model()
         .plots()
         .all(|x| x.zone == Some(archisim_core::BlockZone::Houses)));
-    // The plots are selected, and a second click on the same block cuts
-    // nothing more.
+    // The plots are selected, and a second click on the same block, with
+    // one plot locked, cuts the rest again into wider flats.
     assert_eq!(h.app.ed.selection.len(), plots.len());
+    let locked = plots[2];
+    let kept = h.model().plot(locked).unwrap().outline.clone();
+    let r = h
+        .app
+        .ed
+        .transact("Bloquear", |m| m.edit_plot(locked, |x| x.locked = true));
+    assert!(r.is_ok());
+    h.app.blocks.zone = archisim_core::BlockZone::Flats;
+    h.app.blocks.frontage = Some(25.0);
     h.app.blocks.picking = true;
     h.click_at(p(0.0, 0.0));
+    let again: Vec<_> = h.model().plots().map(|x| x.id).collect();
+    assert!(again.len() < plots.len(), "{} plots", again.len());
+    assert_eq!(h.model().plot(locked).unwrap().outline, kept);
+    assert_eq!(
+        h.model()
+            .plots()
+            .filter(|x| x.zone == Some(archisim_core::BlockZone::Flats))
+            .count(),
+        again.len() - 1
+    );
+    // Undone in one step, and back to the houses.
+    h.app.ed.undo();
     assert_eq!(h.model().plots().count(), plots.len());
+    let plots: Vec<_> = h.model().plots().map(|x| x.id).collect();
     // A plot's properties: its zone, its lock and filling it alone.
     h.app.blocks.picking = false;
     h.app.ed.selection = [Element::Plot(plots[0])].into_iter().collect();
@@ -12971,4 +12995,80 @@ fn traffic_runs_in_the_3d_view() {
     h.app.act(super::toolbox::Action::Traffic);
     assert!(!h.app.v3d.traffic_on());
     h.frame();
+}
+
+/// Every project of a folder (`ARCHISIM_PROYECTOS`): its plan and its
+/// sections come, drawn aside as on a real computer, and none fails or
+/// waits for ever (0.92.1).
+#[test]
+#[ignore]
+fn every_project_draws_its_plan_and_sections() {
+    let Ok(dir) = std::env::var("ARCHISIM_PROYECTOS") else {
+        return;
+    };
+    let mut files: Vec<std::path::PathBuf> = std::fs::read_dir(&dir)
+        .unwrap()
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| p.extension().is_some_and(|e| e == "archisim"))
+        .collect();
+    files.sort();
+    let mut bad = Vec::new();
+    for f in files {
+        let ed = Editor::open(&f).unwrap();
+        let mut h = Harness::new(ed);
+        h.app.at_once = std::time::Duration::ZERO;
+        let wait = |h: &mut Harness, what: &str| -> Option<String> {
+            let t = std::time::Instant::now();
+            loop {
+                h.frame();
+                if let Some(e) = h.app.plan.error() {
+                    return Some(format!("{what}: {e}"));
+                }
+                if let Some((_, e)) = &h.app.section_failed {
+                    return Some(format!("{what}: {e}"));
+                }
+                let busy = h.app.plan.busy()
+                    || h.app.section_pending.is_some()
+                    || h.app
+                        .section_cache
+                        .as_ref()
+                        .is_some_and(|c| c.picture.busy());
+                if !busy {
+                    return None;
+                }
+                if t.elapsed().as_secs() > 120 {
+                    return Some(format!("{what}: no llega en 2 minutos"));
+                }
+                std::thread::sleep(std::time::Duration::from_millis(20));
+            }
+        };
+        let name = f.file_name().unwrap().to_string_lossy().to_string();
+        let levels: Vec<_> = h.model().levels().iter().map(|l| l.id).collect();
+        for l in levels {
+            h.app.ed.level = l;
+            h.app.fit_requested = true;
+            for z in [1.0, 2.5, 0.4] {
+                let r = h.app.canvas;
+                h.app.view.zoom_at(r, r.center(), z);
+                if let Some(e) = wait(&mut h, &format!("{name} planta")) {
+                    bad.push(e);
+                }
+            }
+            if h.app.plan.shown().is_none() {
+                bad.push(format!("{name}: planta sin imagen"));
+            }
+        }
+        let sections: Vec<_> = h.model().sections().map(|s| s.id).collect();
+        for s in sections {
+            h.app.open_view(TabKind::Section(s));
+            if let Some(e) = wait(&mut h, &format!("{name} sección")) {
+                bad.push(e);
+            }
+            if h.app.section_cache.as_ref().is_none_or(|c| c.section != s) {
+                bad.push(format!("{name}: sección sin dibujo"));
+            }
+        }
+        println!("{name}: hecho");
+    }
+    assert!(bad.is_empty(), "{bad:#?}");
 }

@@ -311,6 +311,7 @@ impl Scene {
                     &t.bodies(model),
                     material,
                 ));
+                solids.extend(archisim_geom::traffic::lamp_solids(&t.lamps(), material));
             }
         }
         let zones = archisim_geom::solid::face_zone_solids(model, &solids);

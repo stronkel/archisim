@@ -1,7 +1,7 @@
 //! Curtain walls: an `IfcCurtainWall` in its storey, typed by an
 //! `IfcCurtainWallType`, made of `IfcMember` (`MULLION`: the border,
 //! mullions, transoms and caps), `IfcPlate` (`CURTAIN_PANEL`) and
-//! `IfcShadingDevice` (`LOUVER`) aggregated to it, each a box extruded
+//! `IfcShadingDevice` (`USERDEFINED`, «Lama») aggregated to it, each a box extruded
 //! upwards. `ArchiSim_CurtainWall` (on the wall: line, top, height) and
 //! `ArchiSim_CurtainWallType` (on the type: grid, frames, panels, extras;
 //! materials by name) let ArchiSim read it back as one.
@@ -216,8 +216,11 @@ impl Exporter<'_> {
                     CurtainPieceKind::Louvre => {
                         nl += 1;
                         let guid = derived_guid(&c.guid, &format!("louvre {nl}"));
+                        // Neither IFC4 nor IFC 4.3 has a louvre among the
+                        // shading devices: user-defined, named in its
+                        // ObjectType (which then is required).
                         self.w.add(format!(
-                            "IFCSHADINGDEVICE({},$,{},$,$,{ppl},{shape},$,.LOUVER.)",
+                            "IFCSHADINGDEVICE({},$,{},$,'Lama',{ppl},{shape},$,.USERDEFINED.)",
                             string(guid.as_str()),
                             string(&format!("{name} · lama {nl}")),
                         ))
