@@ -532,6 +532,71 @@ impl Exporter<'_> {
             self.pset(el, &m.guid, "ArchiSim_Marking", &props);
             on_site.push(el);
         }
+        // Urban surfaces (N5): their paving, edge and bays as triangles,
+        // and what they are to read them back.
+        for x in model.surfaces() {
+            let base = elevation(x.level);
+            let solids = archisim_geom::urban_surfaces::surface_solids(model, x.id);
+            let tris: Vec<[[f64; 3]; 3]> =
+                solids.iter().flat_map(|s| s.triangles.clone()).collect();
+            if tris.is_empty() {
+                continue;
+            }
+            let loc = self.point3(0.0, 0.0, base);
+            let pl = self.placement(Some(site_pl), loc, None);
+            let shape = self.triangulated_shape(&tris, base);
+            let el = self.w.add(format!(
+                "IFCBUILDINGELEMENTPROXY({},$,{},$,{},{pl},{shape},$,.USERDEFINED.)",
+                string(x.guid.as_str()),
+                string(&x.name),
+                string(x.kind.label())
+            ));
+            if let Some(m) = materials.get(&x.material) {
+                self.w.add(format!(
+                    "IFCRELASSOCIATESMATERIAL({},$,$,$,({el}),{m})",
+                    string(derived_guid(&x.guid, "material").as_str())
+                ));
+            }
+            let outline: Vec<String> = x
+                .outline
+                .iter()
+                .map(|p| format!("{},{}", real(p.x), real(p.y)))
+                .collect();
+            let mut props = vec![
+                self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('Settings',$,IFCTEXT({}),$)",
+                    string(&x.encode())
+                )),
+                self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('Outline',$,IFCTEXT({}),$)",
+                    string(&outline.join(";"))
+                )),
+                self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('Level',$,IFCIDENTIFIER({}),$)",
+                    string(&level_guid(x.level))
+                )),
+                self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('Area',$,IFCAREAMEASURE({}),$)",
+                    real(x.area())
+                )),
+            ];
+            for (key, m) in [("Material", x.material), ("EdgeMaterial", x.edge_material)] {
+                if let Some(mm) = model.material(m) {
+                    props.push(self.w.add(format!(
+                        "IFCPROPERTYSINGLEVALUE('{key}',$,IFCLABEL({}),$)",
+                        string(&mm.name)
+                    )));
+                }
+            }
+            if x.bays.is_some() {
+                props.push(self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('Bays',$,IFCCOUNTMEASURE({}),$)",
+                    x.bay_count()
+                )));
+            }
+            self.pset(el, &x.guid, "ArchiSim_UrbanSurface", &props);
+            on_site.push(el);
+        }
         // Buildings of the surroundings (U6): a proxy with its façades
         // and roof, by material, and what makes them again.
         for m in model.env_buildings() {

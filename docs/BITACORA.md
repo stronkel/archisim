@@ -6,6 +6,21 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-18 (178) · v0.99: territorio N5, superficies por contorno
+
+Rama `bloque/superficies` sobre `bloque/tramos` (#226). Versión 0.99.0. Formato `.archisim` versión 117.
+
+- **Qué se hizo** (`docs/TERRITORIO.md` §2.8):
+  - **Modelo** (`archisim-core::model::urban_surfaces`): `UrbanSurface` con `SurfaceKind` (plaza, isleta, mediana, aparcamiento, jardín; `usual`), `SurfaceEdge`, `Bays`, `inner`, `bay_lines`/`bay_count`, `joint_lines`, `encode`/`decode_into`; `Model::add_surface`, `edit_surface`, `copy_surface`, `remove_surface`, `surfaces_on_level`, `next_surface_name`; `SurfaceId`; en `changes`, en el fichero (`surfaces`, versión 117) y al borrar una planta.
+  - **3D** en `archisim-geom::urban_surfaces::surface_solids` (dueño `SolidOwner::Surface`, sobre `Model::surface_at`); **planta** en `archisim-plan::urban`; **IFC** proxy con `ArchiSim_UrbanSurface` e `import_surfaces`.
+  - **App**: `Element::Surface` (elegir, mover, copiar, transformar, borrar, cambiar de planta), `app/surface_ui` (`build_surface`, `surface_tool_properties`, `surface_properties`), la herramienta Parcela en modo superficie (`ArchiSimApp::surface_draw`, `Action::Surface`), forzados a bordillos, líneas de parcela y superficies en `snap::snap_filtered`; en la escena, `Class::Surface` se rehace con las calles y el terreno.
+  - Ejemplo en `archisim nudos out/`; pruebas en el núcleo, la línea de órdenes (fichero e IFC) y la aplicación con clics.
+- **Pendiente**: §7 de `TERRITORIO.md`. Siguiente, N6.
+- **Qué debe probar Antonio** (con la 0.99):
+  1. `archisim nudos out/` y abre `out/nudos.archisim`: en la manzana de la casa, un aparcamiento con sus plazas y un jardín; al lado, una plaza de adoquín; al final de la Avenida de los Carriles, una mediana. Míralo en planta a 1:100 (juntas) y en 3D.
+  2. Urbanismo → Calle → **Aparcamiento**: dibuja uno junto a una acera (se pega al bordillo); en Propiedades cambia el ángulo a 45° y mira cuántas plazas salen.
+  3. **Isleta** dibujada sobre un cruce: queda sobre la calzada con su bordillo.
+
 ## 2026-11-18 (177) · v0.98: territorio N4, cambios por tramo y «Sustituir todos»
 
 Rama `bloque/tramos` sobre `bloque/carriles` (#225). Versión 0.98.0. Formato `.archisim` versión 116.

@@ -248,6 +248,20 @@ pub fn transform(
                     out.insert(*e);
                 }
             }
+            Element::Surface(id) => {
+                let x = model
+                    .surface(id)
+                    .ok_or(ModelError::UnknownElement(id.0))?
+                    .clone();
+                let outline: Vec<_> = x.outline.iter().map(|p| t.apply(*p)).collect();
+                if copy {
+                    let new = model.copy_surface(id, outline)?;
+                    out.insert(Element::Surface(new));
+                } else {
+                    model.edit_surface(id, |s| s.outline = outline)?;
+                    out.insert(*e);
+                }
+            }
             Element::Roundabout(id) => {
                 let x = model
                     .roundabout(id)

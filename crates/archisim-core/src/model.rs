@@ -80,6 +80,7 @@ mod sweeps;
 mod thermal;
 mod title_blocks;
 mod urban;
+mod urban_surfaces;
 mod ventilation_site;
 mod views;
 mod wall_profile;
@@ -149,6 +150,7 @@ pub use sweeps::*;
 pub use thermal::*;
 pub use title_blocks::*;
 pub use urban::*;
+pub use urban_surfaces::*;
 pub use ventilation_site::*;
 pub use views::*;
 pub use wall_profile::*;
@@ -1553,6 +1555,8 @@ pub struct ModelParts {
     pub roads: Vec<Road>,
     /// Roundabouts and squares where streets meet (U3).
     pub roundabouts: Vec<Roundabout>,
+    /// Squares, islands, medians, car parks and gardens (N5).
+    pub surfaces: Vec<UrbanSurface>,
     /// What is changed by hand of the nodes of the streets (N1).
     pub nodes: Vec<NodeSettings>,
     /// False ceilings (M7, version 96).
@@ -1730,6 +1734,7 @@ pub struct Model {
     plots: BTreeMap<PlotId, Plot>,
     roads: BTreeMap<RoadId, Road>,
     roundabouts: BTreeMap<RoundaboutId, Roundabout>,
+    surfaces: BTreeMap<SurfaceId, UrbanSurface>,
     /// What is changed by hand of the nodes of the streets (N1).
     nodes: Vec<NodeSettings>,
     ceilings: BTreeMap<CeilingId, Ceiling>,
@@ -1855,6 +1860,7 @@ impl Model {
             plots: BTreeMap::new(),
             roads: BTreeMap::new(),
             roundabouts: BTreeMap::new(),
+            surfaces: BTreeMap::new(),
             nodes: Vec::new(),
             ceilings: BTreeMap::new(),
             boxes: BTreeMap::new(),
@@ -2027,6 +2033,7 @@ impl Model {
         self.plots.retain(|_, p| p.level != id);
         self.roads.retain(|_, r| r.level != id);
         self.roundabouts.retain(|_, r| r.level != id);
+        self.surfaces.retain(|_, s| s.level != id);
         self.ceilings.retain(|_, c| c.level != id);
         self.boxes.retain(|_, b| b.level != id);
         self.markings.retain(|_, r| r.level != id);
@@ -4589,6 +4596,7 @@ impl Model {
             plots: self.plots.values().cloned().collect(),
             roads: self.roads.values().cloned().collect(),
             roundabouts: self.roundabouts.values().cloned().collect(),
+            surfaces: self.surfaces.values().cloned().collect(),
             nodes: self.nodes.clone(),
             ceilings: self.ceilings.values().cloned().collect(),
             boxes: self.boxes.values().cloned().collect(),
@@ -5034,6 +5042,7 @@ impl Model {
             })?;
         model.restore_urban(parts.plots, parts.roads, &mut claim)?;
         model.restore_roundabouts(parts.roundabouts, &mut claim)?;
+        model.restore_surfaces(parts.surfaces, &mut claim)?;
         model
             .restore_nodes(parts.nodes)
             .map_err(|error| RestoreError {

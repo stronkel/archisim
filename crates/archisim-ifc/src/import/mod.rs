@@ -353,6 +353,7 @@ struct GuidPlan {
     ceilings: Vec<(archisim_core::CeilingId, String)>,
     boxes: Vec<(archisim_core::BoxId, String)>,
     markings: Vec<(archisim_core::MarkingId, String)>,
+    surfaces: Vec<(archisim_core::SurfaceId, String)>,
     masses: Vec<(archisim_core::MassId, String)>,
     decals: Vec<(archisim_core::DecalId, String)>,
     pools: Vec<(archisim_core::PoolId, String)>,
@@ -3210,6 +3211,7 @@ impl<'a> Importer<'a> {
         self.import_roads();
         self.import_roundabouts();
         self.import_markings();
+        self.import_surfaces();
         self.import_env_buildings();
         self.import_decals();
         self.import_services();
@@ -3273,6 +3275,7 @@ impl<'a> Importer<'a> {
         restore!(ceilings, ceilings);
         restore!(boxes, boxes);
         restore!(markings, markings);
+        restore!(surfaces, surfaces);
         restore!(masses, masses);
         restore!(decals, decals);
         restore!(pools, pools);

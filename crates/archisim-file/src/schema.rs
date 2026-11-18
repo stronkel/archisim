@@ -164,6 +164,9 @@ pub(crate) struct ProjectFile {
     /// Roundabouts and squares (version 64).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub roundabouts: Vec<RoundaboutOf>,
+    /// Squares, islands, medians, car parks and gardens (version 117).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub surfaces: Vec<SurfaceOf>,
     /// What is changed by hand of the nodes of the streets (version 113).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub nodes: Vec<NodeOf>,
@@ -1441,6 +1444,21 @@ pub(crate) struct CraneChartOf {
 pub(crate) struct NodeOf {
     pub level: u64,
     pub node: String,
+}
+
+/// An urban surface drawn by its outline (version 117): its kind, edge,
+/// height, joints and bays in `settings` (`UrbanSurface::encode`).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct SurfaceOf {
+    pub id: u64,
+    pub guid: String,
+    pub name: String,
+    pub level: u64,
+    pub outline: Vec<Xy>,
+    pub material: u64,
+    pub edge_material: u64,
+    pub settings: String,
 }
 
 /// A roundabout or a square where streets meet (version 64).
@@ -4364,6 +4382,20 @@ impl ProjectFile {
                     node: n.encode(|r| r.0.to_string()),
                 })
                 .collect(),
+            surfaces: p
+                .surfaces
+                .iter()
+                .map(|x| SurfaceOf {
+                    id: x.id.0,
+                    guid: x.guid.to_string(),
+                    name: x.name.clone(),
+                    level: x.level.0,
+                    outline: x.outline.iter().copied().map(xy).collect(),
+                    material: x.material.0,
+                    edge_material: x.edge_material.0,
+                    settings: x.encode(),
+                })
+                .collect(),
             roundabouts: p
                 .roundabouts
                 .iter()
@@ -5126,6 +5158,7 @@ impl ProjectFile {
             plots: Vec::new(),
             roads: Vec::new(),
             roundabouts: Vec::new(),
+            surfaces: Vec::new(),
             nodes: Vec::new(),
             ceilings: Vec::new(),
             boxes: Vec::new(),
@@ -6212,6 +6245,32 @@ impl ProjectFile {
                 message: format!("«{}» is not a node", n.node),
             })?;
             parts.nodes.push(settings);
+        }
+        for x in self.surfaces {
+            let element = format!("surface {} «{}»", x.id, x.name);
+            let mut surface = core::UrbanSurface {
+                id: core::SurfaceId(x.id),
+                guid: guid(&element, &x.guid)?,
+                name: x.name,
+                level: core::LevelId(x.level),
+                kind: core::SurfaceKind::Square,
+                outline: x.outline.into_iter().map(pt).collect(),
+                material: core::MaterialId(x.material),
+                edge: core::SurfaceEdge::None,
+                edge_width: 0.0,
+                edge_material: core::MaterialId(x.edge_material),
+                raise: 0.0,
+                joints: 0.0,
+                joint_angle: 0.0,
+                bays: None,
+            };
+            surface
+                .decode_into(&x.settings)
+                .ok_or_else(|| FileError::Value {
+                    element: element.clone(),
+                    message: format!("«{}» are not a surface's settings", x.settings),
+                })?;
+            parts.surfaces.push(surface);
         }
         for c in self.roundabouts {
             let element = format!("roundabout {} «{}»", c.id, c.name);

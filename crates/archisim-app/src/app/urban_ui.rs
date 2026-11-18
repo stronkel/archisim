@@ -494,6 +494,10 @@ impl ArchiSimApp {
     }
 
     pub(super) fn build_plot(&mut self, outline: Vec<Point2>) {
+        if let Some(kind) = self.surface_draw {
+            self.build_surface(kind, outline);
+            return;
+        }
         let level = self.ed.level;
         let setback = self.plot_setback;
         let r = self.ed.transact("Crear parcela", |m| {
@@ -891,6 +895,9 @@ impl ArchiSimApp {
             Tool::Plot if self.plot_tool.is_drawing() => {
                 "Clic: siguiente esquina de la linde · Clic en la primera o Intro: cerrar · Esc: quitar la última"
             }
+            Tool::Plot if self.surface_draw.is_some() && !self.plot_tool.is_drawing() => {
+                "Superficie: clic en la primera esquina (se pega a bordillos y fachadas) · Esc: flecha"
+            }
             Tool::Plot => "Clic: primera esquina de la linde · Esc: flecha",
             Tool::Road if self.road_settings.draw == RoadDraw::Curve && self.road_points.len() == 1 => {
                 "Clic: hacia dónde tira la curva · Esc: quitarlo"
@@ -919,6 +926,10 @@ impl ArchiSimApp {
     // ---- Properties ---------------------------------------------------------
 
     pub(super) fn plot_tool_properties(&mut self, ui: &mut Ui) {
+        if let Some(kind) = self.surface_draw {
+            self.surface_tool_properties(ui, kind);
+            return;
+        }
         props::title(ui, "Herramienta Parcela · lo que vas a dibujar");
         group(ui, "tool-plot", "Parcela", |ui| {
             row(

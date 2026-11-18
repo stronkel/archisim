@@ -9662,6 +9662,64 @@ fn nodes_with_the_tool() {
 /// and turn is tangent to the stretch before; a street gets a uniform
 /// grade and a parallel one; a node becomes a roundabout.
 #[test]
+fn surfaces_drawn_by_their_outline() {
+    let mut h = Harness::new(Editor::new_project());
+    let canvas = h.app.canvas;
+    h.app
+        .view
+        .fit_exact(canvas, p(-60.0, -60.0), p(60.0, 60.0), 0.0);
+    h.app.set_discipline(super::toolbox::Discipline::Site);
+    // A street east–west to snap to.
+    h.type_text("w");
+    h.click_at(p(-50.0, 0.0));
+    h.click_at(p(50.0, 0.0));
+    h.key(Key::Enter);
+    h.key(Key::Escape);
+    // A car park north of it, by its corners.
+    h.app.act(super::toolbox::Action::Surface(
+        archisim_core::SurfaceKind::Parking,
+    ));
+    assert_eq!(h.app.tool, Tool::Plot);
+    h.frame();
+    for q in [p(-20.0, 15.0), p(20.0, 15.0), p(20.0, 35.0), p(-20.0, 35.0)] {
+        h.click_at(q);
+    }
+    h.click_at(p(-20.0, 15.0));
+    let s = h.model().surfaces().next().expect("a car park").clone();
+    assert_eq!(s.kind, archisim_core::SurfaceKind::Parking);
+    assert!(s.bay_count() > 20, "{}", s.bay_count());
+    // No plot was made.
+    assert_eq!(h.model().plots().count(), 0);
+    // Its properties, and a change of edge.
+    h.app.set_tool(Tool::Arrow);
+    h.app.ed.selection = [Element::Surface(s.id)].into_iter().collect();
+    h.frame();
+    let r = h.app.ed.transact("Borde", |m| {
+        m.edit_surface(s.id, |x| x.edge = archisim_core::SurfaceEdge::Kerb)
+    });
+    assert!(r.is_ok());
+    // Copied 50 m away: the same settings.
+    let r = h.app.ed.transact("Copia", |m| {
+        crate::drag::copy(
+            m,
+            &[Element::Surface(s.id)].into_iter().collect(),
+            p(0.0, -50.0),
+        )
+        .map(|_| ())
+    });
+    assert!(r.is_ok(), "{r:?}");
+    assert_eq!(h.model().surfaces().count(), 2);
+    assert!(h
+        .model()
+        .surfaces()
+        .all(|x| x.edge == archisim_core::SurfaceEdge::Kerb && x.bays.is_some()));
+    // The 3D has it.
+    let solids = archisim_geom::urban_surfaces::surface_solids(h.model(), s.id);
+    assert!(solids.len() >= 3);
+    h.frame();
+}
+
+#[test]
 fn stretches_and_replace_all() {
     let mut h = Harness::new(Editor::new_project());
     let canvas = h.app.canvas;

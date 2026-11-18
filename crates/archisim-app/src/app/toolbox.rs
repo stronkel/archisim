@@ -243,6 +243,8 @@ pub enum Action {
     /// «Sustituir todos»: a type of object or a street material for
     /// another (N4).
     Replace,
+    /// Draw an urban surface of a kind by its outline (N5).
+    Surface(archisim_core::SurfaceKind),
     /// Ask for the surroundings to the free services.
     DownloadSurroundings,
     /// The sun of the project, in its panel.
@@ -737,6 +739,34 @@ const SITE: &[Tile] = &[
                 "Nudo",
                 "NU",
                 "Cambia un cruce, una T o una L: tipo de nudo, retranqueo de cada calle y radio, forma y acera de cada esquina",
+            ),
+            tile(
+                Pick::Action(Action::Surface(archisim_core::SurfaceKind::Square)),
+                Glyph::Plot,
+                "Plaza",
+                "",
+                "Plaza o zona pavimentada dibujada por su contorno, con su encintado y sus juntas",
+            ),
+            tile(
+                Pick::Action(Action::Surface(archisim_core::SurfaceKind::Island)),
+                Glyph::Plot,
+                "Isleta",
+                "",
+                "Isleta o mediana elevada con su bordillo, dibujada por su contorno",
+            ),
+            tile(
+                Pick::Action(Action::Surface(archisim_core::SurfaceKind::Parking)),
+                Glyph::Plot,
+                "Aparcamiento",
+                "",
+                "Aparcamiento dibujado por su contorno, con sus plazas pintadas",
+            ),
+            tile(
+                Pick::Action(Action::Surface(archisim_core::SurfaceKind::Garden)),
+                Glyph::Plot,
+                "Jardín",
+                "",
+                "Jardín o parterre con su bordillo, dibujado por su contorno",
             ),
             tile(
                 Pick::Action(Action::Replace),
@@ -1566,6 +1596,7 @@ impl ArchiSimApp {
                 ),
                 Action::Render => self.render.open,
                 Action::Replace => self.replace.open,
+                Action::Surface(k) => self.tool == Tool::Plot && self.surface_draw == Some(k),
                 Action::Styles => self.presentation.open,
                 Action::Walk => self.v3d.walk_eye.is_some(),
                 Action::Elevations
@@ -1701,6 +1732,10 @@ impl ArchiSimApp {
             Action::DraftingView => self.new_drafting_view(),
             Action::BringSurroundings => self.pick_carto(),
             Action::Replace => self.replace.open = !self.replace.open,
+            Action::Surface(k) => {
+                self.set_tool(Tool::Plot);
+                self.surface_draw = Some(k);
+            }
             Action::DownloadSurroundings => self.open_carto_download(),
             Action::Sun => {
                 self.presentation.sun_open = true;

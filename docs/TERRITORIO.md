@@ -132,6 +132,21 @@ Hoy `archisim_geom::crossroads::junctions(model, level)` rehace todos los cruces
 - Un paso de Deshacer por sustitución.
 - Ejemplo: `archisim nudos out/` pone adoquín de granito en la Calle Real entre la del Olmo y la del Pino.
 
+### 2.8 N5 hecho: superficies por contorno (18/11/2026, versión 0.99)
+
+- **Fichas nuevas** en Urbanismo → Calle: **Plaza**, **Isleta**, **Aparcamiento** y **Jardín** (y **Mediana** desde las tarjetas de la herramienta). Se dibujan como una parcela: clic en cada esquina (o rectángulo) y se cierran en la primera o con Intro.
+- **Se pegan** a los bordillos de las calles, a las líneas de las parcelas (fachadas) y a otras superficies (Parking Lot Snapping).
+- **Cada clase trae lo suyo**, y todo se cambia en Propiedades:
+  - plaza con encintado de 30 cm y juntas cada metro;
+  - isleta y mediana elevadas 15 cm con su bordillo;
+  - aparcamiento con rigola y plazas de 2,50 × 5,00 m en batería, en filas a lo largo del lado más largo con calle de 6 m entre cada dos (ancho, fondo y ángulo: 90° en batería, 45° o 60° en espiga), con el número de plazas;
+  - jardín con bordillo de 10 cm.
+- **Se apoyan** en el terreno o en la calle que tengan debajo (una isleta sobre un cruce va sobre su calzada) y suben su altura.
+- **Planta**: pavimento, borde, juntas desde 1:200 y plazas pintadas. **3D**: pavimento, borde (el bordillo un poco por encima) y pintura de las plazas.
+- **IFC**: `IfcBuildingElementProxy` con su pset `ArchiSim_UrbanSurface` (superficie y número de plazas incluidos); vuelven al importar.
+- Se mueven, copian, giran, reflejan y cambian de planta como lo demás. Formato 117.
+- Ejemplo: `archisim nudos out/`: aparcamiento y jardín en la manzana de la casa, plaza de adoquín en la de al lado y una mediana al final de la Avenida de los Carriles.
+
 ## 3. Lo demás, por tandas
 
 | Tanda | Qué | Mods de referencia | Tamaño |
@@ -287,6 +302,13 @@ Lo que se deja para después, tanda a tanda, para repasarlo junto con la cuarta 
 - Árbol, farola o banco «por tramo» de la calle: hoy se cambian los objetos que haya (Sustituir todos en un tramo); la calle no genera su mobiliario por sí sola, lo pone «La vida de la calle».
 - La zona es un rectángulo; un contorno libre o una parcela/manzana elegida.
 - Los tramos se cambian tecleando; tiradores en planta para arrastrar sus extremos.
+
+**De N5 (superficies)**
+- Sin huecos (un alcorque o una fuente dentro de la plaza) ni contornos curvos.
+- Las plazas de aparcamiento no dejan el sitio de las de movilidad reducida ni las numeran; no siguen un lado inclinado (van paralelas al más largo).
+- La superficie no recorta el terreno: se apoya sobre él (un jardín hundido o una plaza en bajada, no).
+- Mover sus esquinas con tiradores; hoy se rehace con Editar contorno o se dibuja de nuevo.
+- Las juntas son una cuadrícula; aparejos (espiga, rombo) y despiece del encintado, no.
 
 **De N2 (trazado)**
 - La pendiente uniforme elegida con el ratón no enseña marcas en planta entre los dos clics (solo el aviso).

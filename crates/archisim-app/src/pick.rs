@@ -59,6 +59,8 @@ pub enum Element {
     Roundabout(archisim_core::RoundaboutId),
     /// A road marking, picked on its paint or along its path.
     Marking(archisim_core::MarkingId),
+    /// A square, island, median, car park or garden (N5).
+    Surface(archisim_core::SurfaceId),
     Decal(archisim_core::DecalId),
     /// A false ceiling (M7), picked inside its outline in a ceiling plan.
     Ceiling(archisim_core::CeilingId),
@@ -166,6 +168,7 @@ pub fn outline<G: Geo + ?Sized>(geo: &G, element: Element) -> Option<Vec<Point2>
         Element::Road(id) => model.road(id).map(|r| r.outline()),
         Element::Roundabout(id) => model.roundabout(id).map(|r| r.outline()),
         Element::Marking(id) => model.marking(id).map(marking_outline),
+        Element::Surface(id) => model.surface(id).map(|s| s.outline.clone()),
         Element::Decal(id) => model.decal(id).map(|d| decal_outline(model, d)),
         Element::Pool(id) => model.pool(id).map(|p| p.coping_outline()),
         Element::Elevator(id) => model.elevator(id).map(|e| e.outside()),
@@ -475,6 +478,11 @@ pub fn elements_on_level(model: &Model, level: LevelId) -> Vec<Element> {
             .markings_on_level(level)
             .map(|m| Element::Marking(m.id)),
     );
+    v.extend(
+        model
+            .surfaces_on_level(level)
+            .map(|s| Element::Surface(s.id)),
+    );
     v.extend(model.decals_on_level(level).map(|d| Element::Decal(d.id)));
     v.extend(
         model
@@ -542,6 +550,7 @@ pub fn type_of(model: &Model, e: Element) -> Option<TypeOf> {
         | Element::Road(_)
         | Element::Roundabout(_)
         | Element::Marking(_)
+        | Element::Surface(_)
         | Element::Decal(_)
         | Element::Pool(_)
         | Element::Elevator(_)
@@ -596,7 +605,9 @@ pub fn category(model: &archisim_core::Model, e: Element) -> Option<archisim_cor
         Element::RefPlane(_) => C::RefPlanes,
         Element::Mass(_) | Element::Edge(_) => C::Masses,
         Element::Plot(_) => C::Plots,
-        Element::Road(_) | Element::Roundabout(_) | Element::Marking(_) => C::Roads,
+        Element::Road(_) | Element::Roundabout(_) | Element::Marking(_) | Element::Surface(_) => {
+            C::Roads
+        }
         Element::Pool(_) => C::Pools,
         Element::Ceiling(_) => C::Ceilings,
         Element::Box(_) => C::Boxes,
@@ -685,6 +696,8 @@ pub fn pick_all<G: Geo + ?Sized>(
         Element::Road(_) => 5,
         Element::Roundabout(_) => 4,
         Element::Marking(_) => 3,
+        // On the street or the ground, under what stands on it.
+        Element::Surface(_) => 4,
         // Small, on what it is stuck to.
         Element::Decal(_) => 1,
         // In the ground, as a slab.
@@ -816,6 +829,7 @@ pub fn of_solid(owner: archisim_geom::solid::SolidOwner) -> Element {
         SolidOwner::Mass(id) => Element::Mass(id),
         SolidOwner::Road(id) => Element::Road(id),
         SolidOwner::Marking(id) => Element::Marking(id),
+        SolidOwner::Surface(id) => Element::Surface(id),
         SolidOwner::Decal(id) => Element::Decal(id),
         SolidOwner::Pool(id) => Element::Pool(id),
         SolidOwner::Elevator(id) => Element::Elevator(id),
@@ -850,6 +864,7 @@ pub fn solid_of(e: Element) -> Option<archisim_geom::solid::SolidOwner> {
         Element::Mass(id) => SolidOwner::Mass(id),
         Element::Road(id) => SolidOwner::Road(id),
         Element::Marking(id) => SolidOwner::Marking(id),
+        Element::Surface(id) => SolidOwner::Surface(id),
         Element::Decal(id) => SolidOwner::Decal(id),
         Element::Pool(id) => SolidOwner::Pool(id),
         Element::Elevator(id) => SolidOwner::Elevator(id),

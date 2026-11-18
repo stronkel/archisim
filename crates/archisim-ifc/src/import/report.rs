@@ -40,6 +40,7 @@ pub struct ImportReport {
     pub roads: usize,
     pub roundabouts: usize,
     pub markings: usize,
+    pub surfaces: usize,
     /// Buildings of the surroundings (U6).
     pub env_buildings: usize,
     /// Decals (U8).
@@ -234,6 +235,9 @@ impl ImportReport {
         }
         if self.env_buildings > 0 {
             members.push_str(&format!(", {} edificios del entorno", self.env_buildings));
+        }
+        if self.surfaces > 0 {
+            members.push_str(&format!(", {} superficies urbanas", self.surfaces));
         }
         if self.markings > 0 {
             members.push_str(&format!(", {} marcas viales", self.markings));

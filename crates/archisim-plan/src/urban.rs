@@ -99,6 +99,7 @@ pub fn draw_roads(
 ) {
     if model.roads_on_level(level).next().is_none()
         && model.markings_on_level(level).next().is_none()
+        && model.surfaces_on_level(level).next().is_none()
     {
         return;
     }
@@ -347,6 +348,69 @@ pub fn draw_roads(
                         crate::lettering::paint(h, INK)
                     );
                 }
+            }
+        });
+    }
+    // The urban surfaces (N5): their paving, their edge, their joints
+    // (from 1:200) and their bays, over the streets.
+    for x in model.surfaces_on_level(level) {
+        if !visible(&x.outline) {
+            continue;
+        }
+        use archisim_core::SurfaceKind as K;
+        let fill = match x.kind {
+            K::Square => "#ebe5d8",
+            K::Island | K::Median => "#dcdcdc",
+            K::Parking => "#d2d2d2",
+            K::Garden => "#d3e6bb",
+        };
+        crate::dim::element(s, x.id.0, |s| {
+            let inner = x.inner();
+            let edged =
+                x.edge != archisim_core::SurfaceEdge::None && inner.len() == x.outline.len();
+            if edged {
+                // The edge: the outline with the inner one as a hole.
+                let mut back = inner.clone();
+                back.reverse();
+                let _ = writeln!(
+                    s,
+                    r##"<path d="{} {}" fill="#bdb6a8" fill-rule="evenodd" stroke="none"/>"##,
+                    path(&x.outline),
+                    path(&back)
+                );
+            }
+            let _ = writeln!(
+                s,
+                r#"<path d="{}" fill="{fill}" stroke="{INK}" stroke-width="{}"/>"#,
+                path(if edged { &inner } else { &x.outline }),
+                num(pens().thin * k)
+            );
+            if k <= 0.2 {
+                for (a, b) in x.joint_lines() {
+                    let _ = writeln!(
+                        s,
+                        r##"<path d="M{},{} L{},{}" stroke="#9c9486" stroke-width="{}" fill="none"/>"##,
+                        num(a.x),
+                        num(-a.y),
+                        num(b.x),
+                        num(-b.y),
+                        num(pens().thin * k * 0.5)
+                    );
+                }
+            }
+            let _ = writeln!(
+                s,
+                r#"<path d="{}" fill="none" stroke="{INK}" stroke-width="{}"/>"#,
+                path(&x.outline),
+                num(pens().view * k)
+            );
+            for b in x.bay_lines() {
+                let _ = writeln!(
+                    s,
+                    r#"<path d="{}" fill="white" stroke="{INK}" stroke-width="{}"/>"#,
+                    path(&b),
+                    num(pens().thin * k * 0.5)
+                );
             }
         });
     }

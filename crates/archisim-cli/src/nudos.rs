@@ -330,6 +330,48 @@ pub fn build() -> Res<Model> {
     skin.pavement = Some(setts);
     skin.kerb = Some(stone);
     m.set_road_skins(real, vec![skin])?;
+    // Surfaces by their outline (N5): a car park and a garden in the
+    // block of the house, a square in the next one and a median at the end of
+    // the avenue.
+    let surface =
+        |m: &mut Model, kind: archisim_core::SurfaceKind, pts: &[(f64, f64)], mat| -> Res {
+            let id = m.add_surface(archisim_core::NewSurface {
+                name: m.next_surface_name(kind),
+                level: pb,
+                kind,
+                outline: pts.iter().map(|&(x, y)| p(x, y)).collect(),
+                material: mat,
+                edge_material: stone,
+            })?;
+            let _ = id;
+            Ok(())
+        };
+    use archisim_core::SurfaceKind as SK;
+    surface(
+        &mut m,
+        SK::Parking,
+        &[(14.0, 10.0), (34.0, 10.0), (34.0, 33.0), (14.0, 33.0)],
+        asphalt,
+    )?;
+    let soil = material(&m, "soil").unwrap_or(paving);
+    surface(
+        &mut m,
+        SK::Garden,
+        &[(-34.0, 10.0), (-14.0, 10.0), (-14.0, 30.0), (-34.0, 30.0)],
+        soil,
+    )?;
+    surface(
+        &mut m,
+        SK::Square,
+        &[(48.0, 10.0), (76.0, 10.0), (76.0, 33.0), (48.0, 33.0)],
+        setts,
+    )?;
+    surface(
+        &mut m,
+        SK::Median,
+        &[(368.0, -0.8), (398.0, -0.8), (398.0, 0.8), (368.0, 0.8)],
+        paving,
+    )?;
     // A house in the block between the four crossings.
     let corners = [p(-10.0, 15.0), p(10.0, 15.0), p(10.0, 28.0), p(-10.0, 28.0)];
     for i in 0..4 {
@@ -504,6 +546,16 @@ mod tests {
         a.sort_by_key(|k| format!("{k:?}"));
         b.sort_by_key(|k| format!("{k:?}"));
         assert_eq!(a, b);
+        // The surfaces too (N5).
+        assert_eq!(m.surfaces().count(), 4);
+        assert_eq!(
+            back.surfaces().collect::<Vec<_>>(),
+            m.surfaces().collect::<Vec<_>>()
+        );
+        assert_eq!(imported.surfaces().count(), 4);
+        let bays = |m: &Model| -> usize { m.surfaces().map(|s| s.bay_count()).sum() };
+        assert!(bays(&m) > 10);
+        assert_eq!(bays(&imported), bays(&m));
         // The stretch with its own paving comes back too (N4).
         let skins = |m: &Model| -> usize { m.roads().map(|r| r.skins.len()).sum() };
         assert_eq!(skins(&m), 1);

@@ -95,6 +95,8 @@ enum Class {
     Road,
     Pool,
     Marking,
+    /// An urban surface (N5): on the ground or the street.
+    Surface,
     /// Walls, slabs, roofs, doors, stairs, pipes…
     General,
     /// Not drawn (rooms, plots…).
@@ -128,6 +130,8 @@ impl Class {
             }
         } else if model.marking(MarkingId(id)).is_some() {
             Class::Marking
+        } else if model.surface(SurfaceId(id)).is_some() {
+            Class::Surface
         } else if model.room(RoomId(id)).is_some()
             || model.plot(PlotId(id)).is_some()
             || model.planting(PlantingId(id)).is_some()
@@ -157,6 +161,7 @@ impl Class {
             // Its party walls and the streets it faces.
             Class::Dressed => matches!(changed, Class::Dressed | Class::Road),
             Class::Road | Class::Marking => matches!(changed, Class::Road),
+            Class::Surface => matches!(changed, Class::Road | Class::Terrain),
             Class::General => matches!(changed, Class::General),
             _ => false,
         }
@@ -176,7 +181,7 @@ impl Class {
         match self {
             Class::Plant | Class::Object | Class::PoolObject => 0,
             Class::Terrain => 1,
-            Class::Road | Class::Marking => 2,
+            Class::Road | Class::Marking | Class::Surface => 2,
             _ => 3,
         }
     }

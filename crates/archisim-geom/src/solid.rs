@@ -50,6 +50,8 @@ pub enum SolidOwner {
     Road(archisim_core::RoadId),
     /// A road marking (U4).
     Marking(archisim_core::MarkingId),
+    /// A square, island, median, car park or garden (N5).
+    Surface(archisim_core::SurfaceId),
     /// A picture stuck on a face (U8).
     Decal(archisim_core::DecalId),
     /// A pipe or duct.
@@ -94,6 +96,7 @@ impl SolidOwner {
             SolidOwner::Mass(x) => x.0,
             SolidOwner::Road(x) => x.0,
             SolidOwner::Marking(x) => x.0,
+            SolidOwner::Surface(x) => x.0,
             SolidOwner::Decal(x) => x.0,
             SolidOwner::Run(x) => x.0,
             SolidOwner::Device(x) => x.0,
@@ -4763,6 +4766,9 @@ pub fn model_solids_units(
             marking_solids(model, m.id)
         }));
     }
+    for s in model.surfaces().filter(|s| want(s.id.0)) {
+        out.extend(crate::urban_surfaces::surface_solids(model, s.id));
+    }
     // Pictures stuck on faces (U8), for the 3D, the render and the glTF.
     if pieces {
         for d in model.decals().filter(|d| want(d.id.0)) {
@@ -6765,6 +6771,7 @@ pub fn level_solids(model: &Model, level: LevelId) -> Vec<Solid> {
         SolidOwner::Mass(m) => model.mass(m).is_some_and(|m| m.level == level),
         SolidOwner::Road(r) => model.road(r).is_some_and(|r| r.level == level),
         SolidOwner::Marking(m) => model.marking(m).is_some_and(|m| m.level == level),
+        SolidOwner::Surface(s) => model.surface(s).is_some_and(|s| s.level == level),
         SolidOwner::Decal(d) => model.decal(d).is_some_and(|d| d.level == level),
         SolidOwner::Run(r) => model.run(r).is_some_and(|r| r.level == level),
         SolidOwner::Device(d) => model.device(d).is_some_and(|d| d.level == level),

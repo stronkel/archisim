@@ -490,6 +490,8 @@ pub struct ArchiSimApp {
     pub road_grade_pick: Option<(archisim_core::RoadId, Option<f64>)>,
     /// The window «Sustituir todos» (N4).
     pub replace: replace_ui::ReplaceState,
+    /// The plot's tool draws an urban surface of this kind (N5).
+    pub surface_draw: Option<archisim_core::SurfaceKind>,
     pub room_settings: crate::editor::RoomSettings,
     pub roof_settings: crate::editor::RoofSettings,
     pub roof_tool: SlabTool,
@@ -974,6 +976,7 @@ impl ArchiSimApp {
             rebar_pick: false,
             road_grade_pick: None,
             replace: Default::default(),
+            surface_draw: None,
             room_settings: Default::default(),
             roof_settings,
             stair_settings,
@@ -1210,6 +1213,7 @@ impl ArchiSimApp {
         self.rebar_pick = false;
         self.road_grade_pick = None;
         self.node_mode = node_ui::NodeMode::Pick;
+        self.surface_draw = None;
         if tool != Tool::Cad && self.cad.is_some() {
             // Another tool ends the command (keeping what it drew).
             self.end_command(true);
@@ -3477,6 +3481,7 @@ mod stair_ui;
 mod start_ui;
 mod street_types_ui;
 mod structure_ui;
+mod surface_ui;
 mod survey_ui;
 mod symbol_pick;
 mod tabs;
