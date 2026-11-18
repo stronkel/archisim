@@ -112,6 +112,154 @@ pub fn road_end_direction(model: &Model, id: RoadId, at_end: bool) -> Option<Vec
     (to - from).normalized()
 }
 
+/// A circular stretch leaving `a` along `dir` with `radius`, turning
+/// `turn` radians (to the left if positive), as points every `step` metres
+/// at most (N2: radius and turn typed while drawing).
+pub fn arc_stretch(a: Point2, dir: Vec2, radius: f64, turn: f64, step: f64) -> Vec<Point2> {
+    let Some(dir) = dir.normalized() else {
+        return vec![a];
+    };
+    if radius <= EPSILON || turn.abs() <= EPSILON {
+        return vec![a];
+    }
+    let side = if turn > 0.0 { 1.0 } else { -1.0 };
+    let centre = a + dir.perp_left() * (radius * side);
+    let from = a - centre;
+    let a0 = from.y.atan2(from.x);
+    let n = ((radius * turn.abs() / step.max(0.5)).ceil() as usize).max(2);
+    (0..=n)
+        .map(|k| {
+            let t = a0 + turn * k as f64 / n as f64;
+            centre + Point2::new(t.cos(), t.sin()) * radius
+        })
+        .collect()
+}
+
+/// Turning from `dir` to the line `a`→`p` at a constant radius: the
+/// radius of the arc leaving `a` along `dir` that passes through `p`, and
+/// its turn (N2). None if `p` is straight ahead or behind.
+pub fn arc_through(a: Point2, dir: Vec2, p: Point2) -> Option<(f64, f64)> {
+    let dir = dir.normalized()?;
+    let d = p - a;
+    let side = d.cross(dir);
+    // Lateral offset to the left of `dir`.
+    let left = -side;
+    if left.abs() < 1e-6 {
+        return None;
+    }
+    let radius = d.dot(d) / (2.0 * left.abs());
+    let ahead = d.dot(dir);
+    let half = (d.length() / (2.0 * radius)).clamp(-1.0, 1.0).asin();
+    let turn = if ahead >= 0.0 {
+        2.0 * half
+    } else {
+        2.0 * (std::f64::consts::PI - half)
+    };
+    Some((radius, if left > 0.0 { turn } else { -turn }))
+}
+
+impl Model {
+    /// Lays a street «in anarchy» or as usual (N2): free of crossings with
+    /// the streets it overlaps and of shaping the ground.
+    pub fn set_road_free(&mut self, id: RoadId, free: bool) -> Result<(), ModelError> {
+        self.edit_road(id, |r| r.free = free)
+    }
+
+    /// A constant grade between two points of a street (N2): from `from`
+    /// to `to` along its axis (metres from its start), its height going
+    /// straight from the one it has at `from` to the one at `to`, or to the
+    /// heights given (over its level). The points of its profile between
+    /// them go.
+    pub fn road_uniform_grade(
+        &mut self,
+        id: RoadId,
+        from: f64,
+        to: f64,
+        heights: Option<(f64, f64)>,
+    ) -> Result<(), ModelError> {
+        let r = self.road(id).ok_or(ModelError::UnknownElement(id.0))?;
+        let len = r.length();
+        let (a, b) = (from.min(to).clamp(0.0, len), from.max(to).clamp(0.0, len));
+        if b - a < 0.5 {
+            return Err(ModelError::NonPositive("tramo de pendiente uniforme"));
+        }
+        let (za, zb) = match heights {
+            Some((x, y)) if from <= to => (x, y),
+            Some((x, y)) => (y, x),
+            None => (r.top_at(a), r.top_at(b)),
+        };
+        if !za.is_finite() || !zb.is_finite() {
+            return Err(ModelError::NotFinite("cota"));
+        }
+        let off = r.top_offset;
+        // The rest of the profile keeps its heights (a road without a
+        // profile is level at its height).
+        let level = r.top_offset;
+        let mut profile: Vec<ProfilePoint> = if r.profile.is_empty() {
+            [0.0, len]
+                .into_iter()
+                .filter(|s| *s < a - 1e-6 || *s > b + 1e-6)
+                .map(|s| ProfilePoint {
+                    at: s,
+                    z: level - off,
+                    curve: 0.0,
+                })
+                .collect()
+        } else {
+            r.profile
+                .iter()
+                .filter(|p| p.at < a - 1e-6 || p.at > b + 1e-6)
+                .copied()
+                .collect()
+        };
+        profile.push(ProfilePoint {
+            at: a,
+            z: za - off,
+            curve: 0.0,
+        });
+        profile.push(ProfilePoint {
+            at: b,
+            z: zb - off,
+            curve: 0.0,
+        });
+        profile.sort_by(|x, y| x.at.total_cmp(&y.at));
+        self.edit_road(id, |r| r.profile = profile)
+    }
+
+    /// A street parallel to another at `distance` from its axis (N2; to its
+    /// left if positive, looking along it), with its section, materials and
+    /// heights. Its id.
+    pub fn parallel_road(&mut self, id: RoadId, distance: f64) -> Result<RoadId, ModelError> {
+        let r = self
+            .road(id)
+            .ok_or(ModelError::UnknownElement(id.0))?
+            .clone();
+        if !distance.is_finite() {
+            return Err(ModelError::NotFinite("distancia"));
+        }
+        if distance.abs() < 0.5 {
+            return Err(ModelError::NonPositive("distancia"));
+        }
+        let axis = super::offset_path(&r.axis, distance)
+            .ok_or(ModelError::NonPositive("eje de la calle"))?;
+        let name = self.next_road_name();
+        let new = self.add_road(NewRoad {
+            name,
+            level: r.level,
+            axis,
+            section: r.section.clone(),
+            top_offset: r.top_offset,
+            profile: r.profile.clone(),
+            changes: r.changes.clone(),
+            pavement: r.pavement,
+            kerb_material: r.kerb_material,
+            sidewalk_material: r.sidewalk_material,
+        })?;
+        self.edit_road(new, |x| x.free = r.free)?;
+        Ok(new)
+    }
+}
+
 /// Heights of the ground along a polyline, every `step` metres: station
 /// and height, where there is ground.
 fn ground_along(model: &Model, level: LevelId, axis: &[Point2], step: f64) -> Vec<(f64, f64)> {
@@ -439,5 +587,79 @@ mod tests {
         for w in z.windows(2) {
             assert!((w[1].1 - w[0].1).abs() <= 1.0 + 1e-9, "{z:?}");
         }
+    }
+
+    #[test]
+    fn arcs_typed_and_through_a_point() {
+        let a = Point2::new(0.0, 0.0);
+        let e = Vec2::new(1.0, 0.0);
+        // A quarter turn to the left, radius 10: ends at (10, 10).
+        let arc = arc_stretch(a, e, 10.0, std::f64::consts::FRAC_PI_2, 2.0);
+        assert!(arc.last().unwrap().distance(Point2::new(10.0, 10.0)) < 1e-9);
+        // Back: the arc through that point has that radius and turn.
+        let (r, t) = arc_through(a, e, Point2::new(10.0, 10.0)).unwrap();
+        assert!((r - 10.0).abs() < 1e-9 && (t - std::f64::consts::FRAC_PI_2).abs() < 1e-9);
+        // To the right.
+        let (r, t) = arc_through(a, e, Point2::new(10.0, -10.0)).unwrap();
+        assert!((r - 10.0).abs() < 1e-9 && t < 0.0);
+        assert!(arc_through(a, e, Point2::new(5.0, 0.0)).is_none());
+    }
+
+    #[test]
+    fn uniform_grade_and_parallel() {
+        let mut m = Model::new("N2");
+        let level = m.add_level("PB", 0.0);
+        let mat = m.add_material("A", "asphalt", [0, 0, 0], CutPattern::Solid);
+        let id = m
+            .add_road(NewRoad {
+                name: "Calle".into(),
+                level,
+                axis: vec![Point2::new(0.0, 0.0), Point2::new(100.0, 0.0)],
+                section: RoadSection::default(),
+                top_offset: 0.0,
+                profile: vec![
+                    ProfilePoint {
+                        at: 0.0,
+                        z: 0.0,
+                        curve: 0.0,
+                    },
+                    ProfilePoint {
+                        at: 40.0,
+                        z: 3.0,
+                        curve: 10.0,
+                    },
+                    ProfilePoint {
+                        at: 100.0,
+                        z: 5.0,
+                        curve: 0.0,
+                    },
+                ],
+                changes: Vec::new(),
+                pavement: mat,
+                kerb_material: mat,
+                sidewalk_material: mat,
+            })
+            .unwrap();
+        m.road_uniform_grade(id, 0.0, 100.0, None).unwrap();
+        let r = m.road(id).unwrap();
+        assert_eq!(r.grades().len(), 1);
+        assert!((r.top_at(50.0) - 2.5).abs() < 1e-9);
+        // Between two heights given, in the middle of a level street.
+        m.edit_road(id, |r| r.profile.clear()).unwrap();
+        m.road_uniform_grade(id, 20.0, 60.0, Some((0.0, 2.0)))
+            .unwrap();
+        let r = m.road(id).unwrap();
+        assert!((r.top_at(40.0) - 1.0).abs() < 1e-9);
+        // The rest keeps its height: the ends stay where they were.
+        assert!((r.top_at(10.0)).abs() < 1e-9 && r.top_at(100.0).abs() < 1e-9);
+        assert_eq!(r.grades().len(), 3);
+        // A parallel one, 30 m to the left.
+        let p = m.parallel_road(id, 30.0).unwrap();
+        let q = m.road(p).unwrap();
+        assert!(q.axis[0].distance(Point2::new(0.0, 30.0)) < 1e-9);
+        assert_eq!(q.profile, m.road(id).unwrap().profile);
+        // In anarchy.
+        m.set_road_free(p, true).unwrap();
+        assert!(m.road(p).unwrap().free);
     }
 }

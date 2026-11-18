@@ -353,6 +353,7 @@ struct GuidPlan {
     ceilings: Vec<(archisim_core::CeilingId, String)>,
     boxes: Vec<(archisim_core::BoxId, String)>,
     markings: Vec<(archisim_core::MarkingId, String)>,
+    surfaces: Vec<(archisim_core::SurfaceId, String)>,
     masses: Vec<(archisim_core::MassId, String)>,
     decals: Vec<(archisim_core::DecalId, String)>,
     pools: Vec<(archisim_core::PoolId, String)>,
@@ -820,6 +821,32 @@ impl<'a> Importer<'a> {
             }
         }
         None
+    }
+
+    /// The area of the surroundings as ArchiSim writes it (N8).
+    fn read_surroundings(&mut self) {
+        let Some(&project) = self.file.of_kind("IFCPROJECT").first() else {
+            return;
+        };
+        let Some(text) = self
+            .property_own(project, "ArchiSim_Surroundings", "Area")
+            .and_then(|v| v.as_str().map(str::to_string))
+        else {
+            return;
+        };
+        let points: Option<Vec<archisim_core::Point2>> = text
+            .split('|')
+            .map(|p| {
+                let mut it = p.split_whitespace().map(|x| x.parse::<f64>().ok());
+                Some(archisim_core::Point2::new(it.next()??, it.next()??))
+            })
+            .collect();
+        if let Some(points) = points {
+            if self.model.set_surroundings(Some(points)).is_err() {
+                self.report
+                    .warn("El área del entorno no se puede leer.".to_string());
+            }
+        }
     }
 
     /// The project's parameters as ArchiSim writes them (their
@@ -3210,11 +3237,13 @@ impl<'a> Importer<'a> {
         self.import_roads();
         self.import_roundabouts();
         self.import_markings();
+        self.import_surfaces();
         self.import_env_buildings();
         self.import_decals();
         self.import_services();
         self.read_reinforcements();
         self.read_parameters();
+        self.read_surroundings();
         self.read_statuses();
         self.count_unsupported();
     }
@@ -3273,6 +3302,7 @@ impl<'a> Importer<'a> {
         restore!(ceilings, ceilings);
         restore!(boxes, boxes);
         restore!(markings, markings);
+        restore!(surfaces, surfaces);
         restore!(masses, masses);
         restore!(decals, decals);
         restore!(pools, pools);

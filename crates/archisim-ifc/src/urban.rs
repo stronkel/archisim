@@ -34,6 +34,9 @@ enum Height {
     /// A junction's piece following the roads that meet there (U4): the
     /// index of the junction.
     Junction(usize),
+    /// A junction's carriageway (raised on a raised node, N1): the index
+    /// of the junction.
+    Plate(usize),
 }
 
 impl Exporter<'_> {
@@ -86,7 +89,7 @@ impl Exporter<'_> {
                     ("GrossPerimeter", "IFCQUANTITYLENGTH", p.perimeter()),
                 ],
             );
-            let props = [
+            let mut props = vec![
                 self.w.add(format!(
                     "IFCPROPERTYSINGLEVALUE('Setback',$,IFCLENGTHMEASURE({}),$)",
                     real(p.setback)
@@ -96,6 +99,19 @@ impl Exporter<'_> {
                     string(&level_guid(p.level))
                 )),
             ];
+            // Its zone and its lock (N7).
+            if let Some(z) = p.zone {
+                props.push(self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('Zone',$,IFCIDENTIFIER({}),$)",
+                    string(z.code())
+                )));
+            }
+            if p.locked {
+                props.push(
+                    self.w
+                        .add("IFCPROPERTYSINGLEVALUE('Locked',$,IFCBOOLEAN(.T.),$)"),
+                );
+            }
             self.pset(el, &p.guid, "ArchiSim_Plot", &props);
             plots.push(el);
         }
@@ -167,15 +183,22 @@ impl Exporter<'_> {
                     Height::Fixed(j.top - r.top_offset)
                 };
                 let jk = j.kerb_height;
-                parts.push((
-                    RoadBand::Carriageway,
-                    j.plate.clone(),
-                    j.pavement,
-                    -j.depth,
-                    0.0,
-                    up.clone(),
-                ));
-                for k in &j.kerbs {
+                let plate_up = if draped || j.lift > 0.0 {
+                    Height::Plate(ji)
+                } else {
+                    up.clone()
+                };
+                for poly in std::iter::once(&j.plate).chain(&j.ramps) {
+                    parts.push((
+                        RoadBand::Carriageway,
+                        poly.clone(),
+                        j.pavement,
+                        -j.depth,
+                        0.0,
+                        plate_up.clone(),
+                    ));
+                }
+                for k in j.kerbs.iter().chain(&j.bump_kerbs) {
                     parts.push((
                         RoadBand::Kerb,
                         k.clone(),
@@ -211,7 +234,7 @@ impl Exporter<'_> {
             for (i, (band, outline, material, z0, z1, height)) in parts.into_iter().enumerate() {
                 let follow = match height {
                     Height::Road => sloped,
-                    Height::Junction(_) | Height::Lowered(_) => true,
+                    Height::Junction(_) | Height::Plate(_) | Height::Lowered(_) => true,
                     Height::Fixed(_) => false,
                 };
                 let shape = if follow {
@@ -220,11 +243,14 @@ impl Exporter<'_> {
                     let base = elevation(r.level) + r.top_offset;
                     let tris = archisim_geom::solid::draped_prism(&outline, |q| {
                         let top = match &height {
-                            Height::Junction(ji) => junctions[*ji].top_under(model, q),
+                            Height::Junction(ji) | Height::Plate(ji) => {
+                                junctions[*ji].top_under(model, q)
+                            }
                             _ => r.top_under(q),
                         };
                         let t = elevation(r.level) + top;
                         match &height {
+                            Height::Plate(ji) => (t + z0, t + junctions[*ji].lift_at(q)),
                             Height::Lowered(p) => {
                                 let up = p.top_at(r.station_of(q), kh);
                                 let under = if p.band == RoadBand::Kerb {
@@ -330,6 +356,53 @@ impl Exporter<'_> {
                             "IFCPROPERTYSINGLEVALUE('Profile',$,IFCTEXT({}),$)",
                             string(&r.encode_profile())
                         )));
+                    }
+                    // What is changed of the nodes this road leads (N1),
+                    // the streets by their GlobalId.
+                    let nodes: Vec<String> = model
+                        .nodes()
+                        .filter(|n| n.key.roads.first().is_some_and(|f| f.0 == r.id))
+                        .map(|n| {
+                            n.encode(|id| {
+                                model
+                                    .road(id)
+                                    .map(|x| x.guid.to_string())
+                                    .unwrap_or_default()
+                            })
+                        })
+                        .collect();
+                    if !nodes.is_empty() {
+                        props.push(self.w.add(format!(
+                            "IFCPROPERTYSINGLEVALUE('Nodes',$,IFCTEXT({}),$)",
+                            string(&nodes.join("~"))
+                        )));
+                    }
+                    // Stretches with their own materials (N4), by name.
+                    if !r.skins.is_empty() {
+                        let text = r.encode_skins(|m| {
+                            model
+                                .material(m)
+                                .map(|x| x.name.clone())
+                                .unwrap_or_default()
+                        });
+                        props.push(self.w.add(format!(
+                            "IFCPROPERTYSINGLEVALUE('Skins',$,IFCTEXT({}),$)",
+                            string(&text)
+                        )));
+                    }
+                    // Pieces hidden by hand (N6).
+                    if !r.hidden.is_empty() {
+                        props.push(self.w.add(format!(
+                            "IFCPROPERTYSINGLEVALUE('Hidden',$,IFCTEXT({}),$)",
+                            string(&r.encode_hidden())
+                        )));
+                    }
+                    // Laid in anarchy (N2).
+                    if r.free {
+                        props.push(
+                            self.w
+                                .add("IFCPROPERTYSINGLEVALUE('Free',$,IFCBOOLEAN(.T.),$)"),
+                        );
                     }
                     for (key, v) in [
                         ("KerbHeight", s.kerb_height),
@@ -477,6 +550,71 @@ impl Exporter<'_> {
                 )));
             }
             self.pset(el, &m.guid, "ArchiSim_Marking", &props);
+            on_site.push(el);
+        }
+        // Urban surfaces (N5): their paving, edge and bays as triangles,
+        // and what they are to read them back.
+        for x in model.surfaces() {
+            let base = elevation(x.level);
+            let solids = archisim_geom::urban_surfaces::surface_solids(model, x.id);
+            let tris: Vec<[[f64; 3]; 3]> =
+                solids.iter().flat_map(|s| s.triangles.clone()).collect();
+            if tris.is_empty() {
+                continue;
+            }
+            let loc = self.point3(0.0, 0.0, base);
+            let pl = self.placement(Some(site_pl), loc, None);
+            let shape = self.triangulated_shape(&tris, base);
+            let el = self.w.add(format!(
+                "IFCBUILDINGELEMENTPROXY({},$,{},$,{},{pl},{shape},$,.USERDEFINED.)",
+                string(x.guid.as_str()),
+                string(&x.name),
+                string(x.kind.label())
+            ));
+            if let Some(m) = materials.get(&x.material) {
+                self.w.add(format!(
+                    "IFCRELASSOCIATESMATERIAL({},$,$,$,({el}),{m})",
+                    string(derived_guid(&x.guid, "material").as_str())
+                ));
+            }
+            let outline: Vec<String> = x
+                .outline
+                .iter()
+                .map(|p| format!("{},{}", real(p.x), real(p.y)))
+                .collect();
+            let mut props = vec![
+                self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('Settings',$,IFCTEXT({}),$)",
+                    string(&x.encode())
+                )),
+                self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('Outline',$,IFCTEXT({}),$)",
+                    string(&outline.join(";"))
+                )),
+                self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('Level',$,IFCIDENTIFIER({}),$)",
+                    string(&level_guid(x.level))
+                )),
+                self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('Area',$,IFCAREAMEASURE({}),$)",
+                    real(x.area())
+                )),
+            ];
+            for (key, m) in [("Material", x.material), ("EdgeMaterial", x.edge_material)] {
+                if let Some(mm) = model.material(m) {
+                    props.push(self.w.add(format!(
+                        "IFCPROPERTYSINGLEVALUE('{key}',$,IFCLABEL({}),$)",
+                        string(&mm.name)
+                    )));
+                }
+            }
+            if x.bays.is_some() {
+                props.push(self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('Bays',$,IFCCOUNTMEASURE({}),$)",
+                    x.bay_count()
+                )));
+            }
+            self.pset(el, &x.guid, "ArchiSim_UrbanSurface", &props);
             on_site.push(el);
         }
         // Buildings of the surroundings (U6): a proxy with its façades

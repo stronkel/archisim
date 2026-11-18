@@ -91,6 +91,20 @@ impl<'a> Importer<'a> {
                 reference,
             })
             .map_err(|e| explain(&e))?;
+        let zone = self
+            .property_own(id, "ArchiSim_Plot", "Zone")
+            .and_then(|v| v.as_str().map(str::to_string))
+            .and_then(|c| archisim_core::BlockZone::from_code(&c));
+        let locked = self
+            .property_own(id, "ArchiSim_Plot", "Locked")
+            .and_then(|v| v.as_bool())
+            == Some(true);
+        if zone.is_some() || locked {
+            let _ = self.model.edit_plot(pid, |p| {
+                p.zone = zone;
+                p.locked = locked;
+            });
+        }
         self.report.plots += 1;
         self.sources.push((pid.0, id));
         self.guids
@@ -119,17 +133,42 @@ impl<'a> Importer<'a> {
         let mut ids = self.file.of_kind("IFCPAVEMENT");
         ids.extend(self.file.of_kind("IFCBUILDINGELEMENTPROXY"));
         ids.sort_unstable();
+        let mut nodes: Vec<(archisim_core::LevelId, String)> = Vec::new();
         for id in ids {
             if self.property_own(id, "ArchiSim_Road", "Axis").is_none() {
                 continue;
             }
-            if let Err(why) = self.import_road(id) {
-                self.report.skip("viales", why);
+            match self.import_road(id) {
+                Ok(level) => {
+                    if let Some(t) = self
+                        .property_own(id, "ArchiSim_Road", "Nodes")
+                        .and_then(|v| v.as_str())
+                    {
+                        nodes.extend(t.split('~').map(|n| (level, n.to_string())));
+                    }
+                }
+                Err(why) => self.report.skip("viales", why),
+            }
+        }
+        // What was changed of their nodes (N1), the streets by their
+        // GlobalId.
+        for (level, text) in nodes {
+            let roads = &self.guids.roads;
+            let found = archisim_core::NodeSettings::decode(&text, level, |g| {
+                roads.iter().find(|(_, x)| x == g).map(|(r, _)| *r)
+            });
+            match found {
+                Some(n) => {
+                    if let Err(e) = self.model.set_node(n) {
+                        self.report.skip("nudos", explain(&e));
+                    }
+                }
+                None => self.report.skip("nudos", format!("«{text}» no es un nudo")),
             }
         }
     }
 
-    fn import_road(&mut self, id: u64) -> Result<(), String> {
+    fn import_road(&mut self, id: u64) -> Result<archisim_core::LevelId, String> {
         let num = |s: &Self, key: &str, default: f64| {
             s.property_own(id, "ArchiSim_Road", key)
                 .and_then(|v| v.as_f64())
@@ -207,6 +246,24 @@ impl<'a> Importer<'a> {
                 sidewalk_material,
             })
             .map_err(|e| explain(&e))?;
+        if self
+            .property_own(id, "ArchiSim_Road", "Free")
+            .and_then(|v| v.as_bool())
+            == Some(true)
+        {
+            let _ = self.model.set_road_free(rid, true);
+        }
+        if let Some(h) = text(self, "Hidden").and_then(|t| archisim_core::Road::decode_hidden(&t)) {
+            let _ = self.model.edit_road(rid, |r| r.hidden = h);
+        }
+        if let Some(t) = text(self, "Skins") {
+            let skins = archisim_core::Road::decode_skins(&t, |n| {
+                self.model.materials().find(|m| m.name == n).map(|m| m.id)
+            });
+            if let Some(k) = skins {
+                let _ = self.model.set_road_skins(rid, k);
+            }
+        }
         self.report.roads += 1;
         self.sources.push((rid.0, id));
         // Its pieces are not loose elements.
@@ -227,7 +284,7 @@ impl<'a> Importer<'a> {
             }
         }
         self.guids.roads.push((rid, guid));
-        Ok(())
+        Ok(level)
     }
 
     /// Roundabouts and squares (U3), from their `ArchiSim_Roundabout` set.
@@ -375,6 +432,79 @@ impl<'a> Importer<'a> {
             .and_then(|e| e.arg(0).as_str().map(str::to_string))
         {
             self.guids.markings.push((mid, g));
+        }
+        Ok(())
+    }
+
+    /// Urban surfaces (N5), from their `ArchiSim_UrbanSurface` set.
+    pub(super) fn import_surfaces(&mut self) {
+        for id in self.file.of_kind("IFCBUILDINGELEMENTPROXY") {
+            if self
+                .property_own(id, "ArchiSim_UrbanSurface", "Settings")
+                .is_none()
+            {
+                continue;
+            }
+            if let Err(why) = self.import_surface(id) {
+                self.report.skip("superficies urbanas", why);
+            }
+            self.road_ids.insert(id);
+        }
+    }
+
+    fn import_surface(&mut self, id: u64) -> Result<(), String> {
+        let text = |s: &Self, key: &str| {
+            s.property_own(id, "ArchiSim_UrbanSurface", key)
+                .and_then(|v| v.as_str())
+                .map(str::to_string)
+        };
+        let settings = text(self, "Settings").ok_or("sin ajustes")?;
+        let outline: Vec<Point2> = text(self, "Outline")
+            .unwrap_or_default()
+            .split(';')
+            .filter_map(|p| {
+                let (x, y) = p.split_once(',')?;
+                Some(Point2::new(
+                    snap(x.trim().parse().ok()?),
+                    snap(y.trim().parse().ok()?),
+                ))
+            })
+            .collect();
+        let level = self.level_by_guid(id, "ArchiSim_UrbanSurface", 0.0);
+        let fallback = self.single_material(id);
+        let mat = |s: &Self, key: &str| {
+            text(s, key)
+                .and_then(|n| s.model.materials().find(|m| m.name == n).map(|m| m.id))
+                .unwrap_or(fallback)
+        };
+        let (material, edge_material) = (mat(self, "Material"), mat(self, "EdgeMaterial"));
+        let name = self
+            .ent(id)
+            .and_then(|e| e.arg(2).as_str().map(str::to_string))
+            .unwrap_or_else(|| "Superficie".into());
+        let sid = self
+            .model
+            .add_surface(archisim_core::NewSurface {
+                name,
+                level,
+                kind: archisim_core::SurfaceKind::Square,
+                outline,
+                material,
+                edge_material,
+            })
+            .map_err(|e| explain(&e))?;
+        self.model
+            .edit_surface(sid, |x| {
+                let _ = x.decode_into(&settings);
+            })
+            .map_err(|e| explain(&e))?;
+        self.report.surfaces += 1;
+        self.sources.push((sid.0, id));
+        if let Some(g) = self
+            .ent(id)
+            .and_then(|e| e.arg(0).as_str().map(str::to_string))
+        {
+            self.guids.surfaces.push((sid, g));
         }
         Ok(())
     }

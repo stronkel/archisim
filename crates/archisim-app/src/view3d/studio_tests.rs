@@ -3003,4 +3003,59 @@ fn territory_scene() {
         .expect("edificio");
     m.edit_mass(mass, |x| x.height += 3.0).expect("edificio");
     measure("Tras subir un edificio una planta", &m);
+    // What N1–N9 added (`docs/TERRITORIO.md` §4.4).
+    let key = archisim_geom::crossroads::all_node_keys(&m)
+        .into_iter()
+        .nth(40)
+        .expect("nudos");
+    let mut node = archisim_core::NodeSettings::new(key);
+    node.kind = Some(archisim_core::NodeKind::Raised);
+    m.set_node(node).expect("nudo");
+    measure("N1: tras elevar un cruce", &m);
+    let (road, mid) = m
+        .roads()
+        .nth(10)
+        .map(|r| (r.id, r.axis_at(r.length() / 2.0).0))
+        .expect("calles");
+    let len = m.road(road).map(|r| r.length()).unwrap_or(0.0);
+    let stone = m.materials().next().map(|x| x.id).expect("material");
+    m.set_road_skins(
+        road,
+        vec![archisim_core::RoadSkin {
+            from: len * 0.25,
+            to: len * 0.5,
+            pavement: Some(stone),
+            kerb: None,
+            sidewalk: None,
+            planting: None,
+        }],
+    )
+    .expect("tramo");
+    measure("N4: tras cambiar el pavimento de un tramo", &m);
+    m.add_surface(archisim_core::NewSurface {
+        name: "Plaza".into(),
+        level: m.road(road).map(|r| r.level).expect("planta"),
+        kind: archisim_core::SurfaceKind::Parking,
+        outline: vec![
+            mid + archisim_core::Vec2::new(30.0, 30.0),
+            mid + archisim_core::Vec2::new(60.0, 30.0),
+            mid + archisim_core::Vec2::new(60.0, 50.0),
+            mid + archisim_core::Vec2::new(30.0, 50.0),
+        ],
+        material: stone,
+        edge_material: stone,
+    })
+    .expect("superficie");
+    measure("N5: tras añadir un aparcamiento", &m);
+    let tree_pit = m.roads().find_map(|r| {
+        r.visible_tree_pits(&[])
+            .into_iter()
+            .nth(3)
+            .map(|t| (r.id, archisim_core::centroid(&t)))
+    });
+    if let Some((road, p)) = tree_pit {
+        m.hide_piece(road, archisim_core::PieceKind::TreePit, p)
+            .expect("ocultar");
+        measure("N6: tras ocultar un alcorque", &m);
+    }
 }

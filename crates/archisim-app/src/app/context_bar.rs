@@ -358,6 +358,7 @@ pub(super) fn element_name(e: &Element) -> &'static str {
         Element::Road(_) => "Vial",
         Element::Roundabout(_) => "Glorieta",
         Element::Marking(_) => "Marca vial",
+        Element::Surface(_) => "Superficie",
         Element::Decal(_) => "Pegatina",
         Element::Planting(_) => "Plantación",
         Element::Run(_) => "Instalación",
@@ -505,6 +506,7 @@ impl ArchiSimApp {
                 ),
                 Tool::Road => ("Vial", None, "Varita", ""),
                 Tool::Roundabout => ("Glorieta", None, "Varita", ""),
+                Tool::Node => ("Nudo", None, "", ""),
                 Tool::ModularBox => ("Caja modular", None, "", ""),
                 Tool::World => ("Edificio del mundo", None, "", ""),
                 Tool::Decal => ("Pegatina", None, "Varita", ""),
@@ -1952,6 +1954,7 @@ impl ArchiSimApp {
                     self.place_fields(ui);
                     self.brush_fields(ui);
                     self.length_angle_fields(ui);
+                    self.road_arc_fields(ui);
                     self.tool_step(ui);
                     return;
                 }

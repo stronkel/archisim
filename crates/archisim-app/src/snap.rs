@@ -321,6 +321,47 @@ pub fn snap_filtered<G: Geo + ?Sized>(
             }
         }
     }
+    // The site (N5): the lines of the plots (façade lines), the urban
+    // surfaces and the kerbs of the streets near the cursor, so squares,
+    // islands and car parks are drawn up to them.
+    let near = |poly: &[Point2]| {
+        let (mut lo, mut hi) = (
+            Point2::new(f64::MAX, f64::MAX),
+            Point2::new(f64::MIN, f64::MIN),
+        );
+        for q in poly {
+            lo = Point2::new(lo.x.min(q.x), lo.y.min(q.y));
+            hi = Point2::new(hi.x.max(q.x), hi.y.max(q.y));
+        }
+        let r = tolerance + 1.0;
+        cursor.x >= lo.x - r && cursor.x <= hi.x + r && cursor.y >= lo.y - r && cursor.y <= hi.y + r
+    };
+    for p in model.plots_on_level(level) {
+        if !skip.contains(&Element::Plot(p.id)) && near(&p.outline) {
+            outline_snaps(&p.outline, &mut points, &mut edges);
+        }
+    }
+    for x in model.surfaces_on_level(level) {
+        if !skip.contains(&Element::Surface(x.id)) && near(&x.outline) {
+            outline_snaps(&x.outline, &mut points, &mut edges);
+        }
+    }
+    for r in model.roads_on_level(level) {
+        if skip.contains(&Element::Road(r.id)) || !near(&r.outline()) {
+            continue;
+        }
+        for piece in r.plan_pieces_except(&[]) {
+            if piece.band == archisim_core::RoadBand::Kerb && near(&piece.outline) {
+                let n = piece.outline.len();
+                for i in 0..n {
+                    let (a, b) = (piece.outline[i], piece.outline[(i + 1) % n]);
+                    if a.distance(b) > 0.3 {
+                        edges.push((a, b));
+                    }
+                }
+            }
+        }
+    }
     for b in model.beams_on_level(level) {
         if skip.contains(&Element::Beam(b.id)) {
             continue;
