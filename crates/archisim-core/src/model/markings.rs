@@ -279,7 +279,7 @@ fn dashes(path: &[Point2], a: f64, b: f64, dash: f64, gap: f64) -> Vec<Vec<Point
 }
 
 /// Where a line crosses a polygon's inside: (from, to) along `a → b`.
-fn inside_spans(poly: &[Point2], a: Point2, b: Point2) -> Vec<(f64, f64)> {
+pub(super) fn inside_spans(poly: &[Point2], a: Point2, b: Point2) -> Vec<(f64, f64)> {
     let d = b - a;
     let mut ts = Vec::new();
     for i in 0..poly.len() {

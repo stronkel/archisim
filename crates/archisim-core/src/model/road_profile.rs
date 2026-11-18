@@ -252,6 +252,8 @@ mod tests {
             kerb_material: MaterialId(0),
             sidewalk_material: MaterialId(0),
             free: false,
+            skins: Vec::new(),
+            hidden: Vec::new(),
         }
     }
 

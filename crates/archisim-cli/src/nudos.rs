@@ -318,6 +318,82 @@ pub fn build() -> Res<Model> {
             paint: archisim_core::IslandPaint::Fill,
         });
     })?;
+    // A stretch of its own (N4): the Calle Real paved in setts with
+    // granite kerbs between the Olmo and the Pino.
+    let setts = m.add_material(
+        "Adoquín de granito",
+        "stone",
+        [150, 140, 130],
+        archisim_core::CutPattern::Solid,
+    );
+    let mut skin = archisim_core::RoadSkin::new(50.0, 110.0);
+    skin.pavement = Some(setts);
+    skin.kerb = Some(stone);
+    m.set_road_skins(real, vec![skin])?;
+    // Surfaces by their outline (N5): a car park and a garden in the
+    // block of the house, a square in the next one and a median at the end of
+    // the avenue.
+    let surface =
+        |m: &mut Model, kind: archisim_core::SurfaceKind, pts: &[(f64, f64)], mat| -> Res {
+            let id = m.add_surface(archisim_core::NewSurface {
+                name: m.next_surface_name(kind),
+                level: pb,
+                kind,
+                outline: pts.iter().map(|&(x, y)| p(x, y)).collect(),
+                material: mat,
+                edge_material: stone,
+            })?;
+            let _ = id;
+            Ok(())
+        };
+    use archisim_core::SurfaceKind as SK;
+    surface(
+        &mut m,
+        SK::Parking,
+        &[(14.0, 10.0), (34.0, 10.0), (34.0, 33.0), (14.0, 33.0)],
+        asphalt,
+    )?;
+    let soil = material(&m, "soil").unwrap_or(paving);
+    surface(
+        &mut m,
+        SK::Garden,
+        &[(-34.0, 10.0), (-14.0, 10.0), (-14.0, 30.0), (-34.0, 30.0)],
+        soil,
+    )?;
+    surface(
+        &mut m,
+        SK::Square,
+        &[(48.0, 10.0), (76.0, 10.0), (76.0, 33.0), (48.0, 33.0)],
+        setts,
+    )?;
+    surface(
+        &mut m,
+        SK::Median,
+        &[(368.0, -0.8), (398.0, -0.8), (398.0, 0.8), (368.0, 0.8)],
+        paving,
+    )?;
+    // Pieces hidden by hand (N6): a bollard of the shared surface and the
+    // give-way sign of the Olmo coming from the south.
+    let shared = crossroads::junctions(&m, pb)
+        .into_iter()
+        .find(|j| j.kind == NodeKind::Shared)
+        .ok_or("sin plataforma única")?;
+    if let Some(b) = shared
+        .parts
+        .iter()
+        .find(|x| x.z1 - x.z0 > 0.5 && x.z1 - x.z0 < 1.5)
+    {
+        let c = archisim_core::middle_of(&b.outline);
+        let road = shared.arms[0].road;
+        m.hide_piece(road, archisim_core::PieceKind::Bollard, c)?;
+    }
+    let olmo = crossroads::junctions(&m, pb)
+        .into_iter()
+        .find(|j| j.signs.len() == 2)
+        .ok_or("sin el cruce del Olmo")?;
+    if let Some((post, _, _)) = olmo.signs.iter().min_by(|a, b| a.0.y.total_cmp(&b.0.y)) {
+        m.hide_piece(mayor, archisim_core::PieceKind::Sign, *post)?;
+    }
     // A house in the block between the four crossings.
     let corners = [p(-10.0, 15.0), p(10.0, 15.0), p(10.0, 28.0), p(-10.0, 28.0)];
     for i in 0..4 {
@@ -492,6 +568,29 @@ mod tests {
         a.sort_by_key(|k| format!("{k:?}"));
         b.sort_by_key(|k| format!("{k:?}"));
         assert_eq!(a, b);
+        // The pieces hidden too (N6).
+        let hidden = |m: &Model| -> usize { m.roads().map(|r| r.hidden.len()).sum() };
+        assert_eq!(hidden(&m), 2);
+        assert_eq!(hidden(&back), 2);
+        assert_eq!(hidden(&imported), 2);
+        assert!(crossroads::junctions(&m, pb)
+            .iter()
+            .any(|j| j.signs.len() == 1 && !j.bump_kerbs.is_empty()));
+        // The surfaces too (N5).
+        assert_eq!(m.surfaces().count(), 4);
+        assert_eq!(
+            back.surfaces().collect::<Vec<_>>(),
+            m.surfaces().collect::<Vec<_>>()
+        );
+        assert_eq!(imported.surfaces().count(), 4);
+        let bays = |m: &Model| -> usize { m.surfaces().map(|s| s.bay_count()).sum() };
+        assert!(bays(&m) > 10);
+        assert_eq!(bays(&imported), bays(&m));
+        // The stretch with its own paving comes back too (N4).
+        let skins = |m: &Model| -> usize { m.roads().map(|r| r.skins.len()).sum() };
+        assert_eq!(skins(&m), 1);
+        assert_eq!(skins(&back), 1);
+        assert_eq!(skins(&imported), 1);
         let islands =
             |m: &Model| -> usize { m.nodes().map(|n| n.islands.len() + n.links.len()).sum() };
         assert_eq!(islands(&imported), islands(&m));

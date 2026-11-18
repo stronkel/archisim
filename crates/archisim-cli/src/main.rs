@@ -11,6 +11,7 @@
 //! archisim --version
 //! ```
 
+mod area_grande;
 mod armado;
 mod cajas;
 mod cajas_sobre;
@@ -37,7 +38,9 @@ mod gama;
 mod grande;
 mod instalaciones;
 mod locales;
+mod manzanas;
 mod modelos;
+mod montar;
 mod muestrario;
 mod muros_talud;
 mod nudos;
@@ -46,6 +49,7 @@ mod plantilla;
 mod taller;
 mod territorio;
 mod tierras;
+mod trafico;
 mod tramas;
 mod trazado;
 mod vivero;
@@ -97,6 +101,26 @@ Uso:
       origen, con --en-el-origen). --resultado elige otro de los
       encontrados; con --enlaces, las direcciones de la descarga.
 
+  archisim area-grande [carpeta]
+      Un área del entorno de 2 × 2 km (N8): avenidas y calles en cuadrícula
+      que se cortan en el borde con su sección (conexiones con fuera) y las
+      manzanas del centro llenas: area-grande.archisim, area-grande.ifc, el
+      mapa (SVG y PNG), la planta y lo que tarda cada cosa.
+  archisim trafico [carpeta]
+      El tráfico de ilustración (N9) en las calles de «archisim nudos»,
+      con semáforos en su cruce principal: medio minuto de coches por los
+      carriles y personas por las aceras; la planta con ellos
+      (trafico-planta.svg) y una imagen (trafico.png).
+  archisim mapa <proyecto> [carpeta]
+      La vista de mapa de un proyecto (N8): el área entera, plana y en
+      color, con calles, edificios, árboles, zonas y conexiones con fuera.
+  archisim manzanas [carpeta]
+      Manzanas, parcelas y llenado por zonas (N7): tres calles en cada
+      sentido cierran cuatro manzanas, que se parcelan por la línea de
+      fachada y se llenan con edificios del lugar (casco antiguo,
+      bloques, viviendas aisladas, comercio y un colegio); una parcela
+      bloqueada guarda su casa al vaciar y volver a llenar:
+      manzanas.archisim, manzanas.ifc, planta y axonometría.
   archisim nudos [carpeta]
       Los nudos de las calles cambiados a mano (N1): un cruce de cada tipo
       (cruce con ceda el paso y orejas, elevado y plano, plataforma única
@@ -402,6 +426,7 @@ fn main() -> ExitCode {
                 archisim_render::Light::Day
             };
             let textures = !args.iter().any(|a| a == "--sin-texturas");
+            let traffic = args.iter().any(|a| a == "--trafico");
             // `--camara=x,y,z,tx,ty,tz`: from where and to where it looks.
             let camera: Option<[f64; 6]> = args
                 .iter()
@@ -423,10 +448,12 @@ fn main() -> ExitCode {
                         .map(PathBuf::from)
                         .unwrap_or_else(|| project.with_extension("png"));
                     let width: usize = plain.get(2).and_then(|w| w.parse().ok()).unwrap_or(1600);
-                    report(run_render(&project, &png, width, light, textures, camera))
+                    report(run_render(
+                        &project, &png, width, light, textures, traffic, camera,
+                    ))
                 }
                 None => {
-                    eprintln!("Falta el proyecto: archisim render <proyecto.archisim> [imagen.png] [ancho] [--atardecer | --noche] [--sin-texturas] [--camara=x,y,z,tx,ty,tz]");
+                    eprintln!("Falta el proyecto: archisim render <proyecto.archisim> [imagen.png] [ancho] [--atardecer | --noche] [--sin-texturas] [--trafico] [--camara=x,y,z,tx,ty,tz]");
                     ExitCode::FAILURE
                 }
             }
@@ -957,6 +984,28 @@ fn main() -> ExitCode {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
             report(calles::write(&dir))
         }
+        Some("area-grande") => {
+            let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
+            report(area_grande::write(&dir))
+        }
+        Some("trafico") => {
+            let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
+            report(trafico::write(&dir))
+        }
+        Some("mapa") => match args.get(1) {
+            Some(file) => {
+                let dir = PathBuf::from(args.get(2).map(String::as_str).unwrap_or("out"));
+                report(area_grande::map_of(&PathBuf::from(file), &dir))
+            }
+            None => {
+                eprintln!("Uso: archisim mapa <proyecto> [carpeta]");
+                ExitCode::FAILURE
+            }
+        },
+        Some("manzanas") => {
+            let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
+            report(manzanas::write(&dir))
+        }
         Some("nudos") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
             report(nudos::write(&dir))
@@ -1037,6 +1086,16 @@ fn main() -> ExitCode {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
             report(vivero::write(&dir))
         }
+        Some("montar") => match (args.get(1), args.get(2)) {
+            (Some(spec), Some(out)) => {
+                let name = args.get(3).map_or("Proyecto montado", |s| s.as_str());
+                report(montar::run(Path::new(spec), Path::new(out), name))
+            }
+            _ => {
+                eprintln!("Uso: archisim montar <descripción.txt> <proyecto.archisim> [nombre]");
+                ExitCode::FAILURE
+            }
+        },
         Some("muestrario") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
             report(muestrario::write(&dir))
@@ -1820,6 +1879,7 @@ fn run_render(
     width: usize,
     light: archisim_render::Light,
     textures: bool,
+    traffic: bool,
     camera: Option<[f64; 6]>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let model = archisim_file::open(project)
@@ -1831,6 +1891,7 @@ fn run_render(
         height: width * 5 / 8,
         light,
         textures,
+        traffic: traffic.then_some(20.0),
         ..Default::default()
     };
     let mut view = archisim_render::View::fit(&model);

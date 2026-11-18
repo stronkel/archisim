@@ -95,6 +95,8 @@ enum Class {
     Road,
     Pool,
     Marking,
+    /// An urban surface (N5): on the ground or the street.
+    Surface,
     /// Walls, slabs, roofs, doors, stairs, pipes…
     General,
     /// Not drawn (rooms, plots…).
@@ -128,6 +130,8 @@ impl Class {
             }
         } else if model.marking(MarkingId(id)).is_some() {
             Class::Marking
+        } else if model.surface(SurfaceId(id)).is_some() {
+            Class::Surface
         } else if model.room(RoomId(id)).is_some()
             || model.plot(PlotId(id)).is_some()
             || model.planting(PlantingId(id)).is_some()
@@ -157,6 +161,7 @@ impl Class {
             // Its party walls and the streets it faces.
             Class::Dressed => matches!(changed, Class::Dressed | Class::Road),
             Class::Road | Class::Marking => matches!(changed, Class::Road),
+            Class::Surface => matches!(changed, Class::Road | Class::Terrain),
             Class::General => matches!(changed, Class::General),
             _ => false,
         }
@@ -176,7 +181,7 @@ impl Class {
         match self {
             Class::Plant | Class::Object | Class::PoolObject => 0,
             Class::Terrain => 1,
-            Class::Road | Class::Marking => 2,
+            Class::Road | Class::Marking | Class::Surface => 2,
             _ => 3,
         }
     }
@@ -1343,6 +1348,93 @@ fn squares(lo: Vec3, hi: Vec3) -> impl Iterator<Item = (i32, i32)> {
     (x0..=x1).flat_map(move |x| (y0..=y1).map(move |y| (x, y)))
 }
 
+/// Where a street changed, if only some of it did: its nodes changed, the
+/// paving of some stretches or some pieces hidden, but not its shape. The
+/// boxes round those places (on plan; any height). None: it changed
+/// whole (or it is not a street in both).
+fn local_road_change(old: &Model, new: &Model, id: u64) -> Option<Vec<(Vec3, Vec3)>> {
+    use archisim_core::{Point2, RoadId};
+    let road = RoadId(id);
+    let (a, b) = (old.road(road)?, new.road(road)?);
+    // The same street but for what changes only where it is.
+    let mut same = a.clone();
+    same.skins = b.skins.clone();
+    same.hidden = b.hidden.clone();
+    if &same != b {
+        return None;
+    }
+    let mut out: Vec<(Vec3, Vec3)> = Vec::new();
+    let mut around = |pts: &[Point2]| {
+        if pts.is_empty() {
+            return;
+        }
+        let (mut lo, mut hi) = (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN));
+        for p in pts {
+            lo = lo.min(Vec3::new(p.x as f32, p.y as f32, -1.0e4));
+            hi = hi.max(Vec3::new(p.x as f32, p.y as f32, 1.0e4));
+        }
+        // The street's width about them.
+        let w = b.section.width() as f32;
+        out.push((lo - Vec3::new(w, w, 0.0), hi + Vec3::new(w, w, 0.0)));
+    };
+    // The stretches whose paving changed: their ends and the axis between.
+    let stretch = |r: &archisim_core::Road, from: f64, to: f64| -> Vec<Point2> {
+        let (from, to) = (from.min(to), from.max(to));
+        let mut pts = vec![r.axis_at(from).0, r.axis_at(to).0];
+        let mut s = 0.0;
+        for w in r.axis.windows(2) {
+            if (from..=to).contains(&s) {
+                pts.push(w[0]);
+            }
+            s += w[0].distance(w[1]);
+        }
+        pts
+    };
+    for k in a.skins.iter().filter(|k| !b.skins.contains(k)) {
+        around(&stretch(a, k.from, k.to));
+    }
+    for k in b.skins.iter().filter(|k| !a.skins.contains(k)) {
+        around(&stretch(b, k.from, k.to));
+    }
+    // The pieces hidden or shown again.
+    for h in a
+        .hidden
+        .iter()
+        .filter(|h| !b.hidden.contains(h))
+        .chain(b.hidden.iter().filter(|h| !a.hidden.contains(h)))
+    {
+        let (q, u) = b.axis_at(h.at);
+        around(&[q + u.perp_left() * h.off]);
+    }
+    // The nodes of the street that changed: their junctions, as they were
+    // and as they are.
+    let nodes = |m: &Model| -> BTreeMap<archisim_core::NodeKey, archisim_core::NodeSettings> {
+        m.nodes()
+            .filter(|n| n.key.road_ids().any(|r| r == road))
+            .map(|n| (n.key.clone(), n.clone()))
+            .collect()
+    };
+    let (was, now) = (nodes(old), nodes(new));
+    for key in was.keys().chain(now.keys()) {
+        if was.get(key) == now.get(key) {
+            continue;
+        }
+        for m in [old, new] {
+            if let Some(j) = archisim_geom::crossroads::node_junction(m, key) {
+                let pts: Vec<Point2> = std::iter::once(&j.plate)
+                    .chain(&j.sidewalks)
+                    .chain(&j.kerbs)
+                    .flatten()
+                    .copied()
+                    .chain(j.arms.iter().map(|x| x.origin))
+                    .collect();
+                around(&pts);
+            }
+        }
+    }
+    Some(out)
+}
+
 fn overlaps(a: (Vec3, Vec3), b: (Vec3, Vec3)) -> bool {
     a.0.x <= b.1.x
         && b.0.x <= a.1.x
@@ -1612,6 +1704,16 @@ impl State {
         let mut area: Vec<((Vec3, Vec3), Class)> = Vec::new();
         for (id, c) in &classes {
             let r = Vec3::new(c.reach(), c.reach(), c.reach());
+            // A street that changed only near some points (a node, a
+            // stretch's paving, a hidden piece): what is round those.
+            if *c == Class::Road {
+                if let Some(local) = local_road_change(&self.model, &model, *id) {
+                    for b in local {
+                        area.push(((b.0 - r, b.1 + r), *c));
+                    }
+                    continue;
+                }
+            }
             let old = self.units.get(&(ELEMENT, *id)).map(|k| k.boxes.clone());
             let new = made.get(&(ELEMENT, *id)).map(boxes_of);
             for b in old.into_iter().chain(new).flatten() {
@@ -2189,6 +2291,45 @@ mod tests {
         })
         .unwrap();
         check(&mut builder, &m, &none_selected, "edificio movido");
+        // A node raised, a stretch paved apart and a piece hidden: only
+        // round them.
+        if let Some(key) = archisim_geom::crossroads::all_node_keys(&m)
+            .into_iter()
+            .next()
+        {
+            let mut node = archisim_core::NodeSettings::new(key);
+            node.kind = Some(archisim_core::NodeKind::Raised);
+            m.set_node(node).unwrap();
+            check(&mut builder, &m, &none_selected, "nudo elevado");
+        }
+        let (road, len) = m
+            .roads()
+            .map(|r| (r.id, r.length()))
+            .max_by(|a, b| a.1.total_cmp(&b.1))
+            .unwrap();
+        let pav = m.materials().last().unwrap().id;
+        m.set_road_skins(
+            road,
+            vec![archisim_core::RoadSkin {
+                from: len * 0.2,
+                to: len * 0.4,
+                pavement: Some(pav),
+                kerb: None,
+                sidewalk: Some(pav),
+                planting: None,
+            }],
+        )
+        .unwrap();
+        check(&mut builder, &m, &none_selected, "tramo pavimentado");
+        let mark = m
+            .road(road)
+            .and_then(|r| r.visible_markings(&[]).into_iter().nth(2))
+            .map(|x| archisim_core::centroid(&x));
+        if let Some(p) = mark {
+            m.hide_piece(road, archisim_core::PieceKind::Marking, p)
+                .unwrap();
+            check(&mut builder, &m, &none_selected, "marca oculta");
+        }
         // Selecting.
         let selected = BTreeSet::from([Element::Wall(id), Element::Object(bench)]);
         check(&mut builder, &m, &selected, "selección");

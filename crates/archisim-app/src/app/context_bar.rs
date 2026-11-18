@@ -358,6 +358,7 @@ pub(super) fn element_name(e: &Element) -> &'static str {
         Element::Road(_) => "Vial",
         Element::Roundabout(_) => "Glorieta",
         Element::Marking(_) => "Marca vial",
+        Element::Surface(_) => "Superficie",
         Element::Decal(_) => "Pegatina",
         Element::Planting(_) => "Plantación",
         Element::Run(_) => "Instalación",
