@@ -1,0 +1,49 @@
+family "Panel de lamas orientable"
+  category facade
+  host none
+  version 1
+  description "Panel de lamas verticales que gira sobre su eje para tapar o dejar pasar el sol, delante de una fachada; el punto de inserción es su eje, en el centro del panel"
+  folder "Protección solar"
+
+type_params
+  section "Dimensiones"
+    width  length = 1.20 range 0.40..3.00 label "Ancho del panel"
+    height length = 3.20 range 1.00..6.00 label "Altura"
+  section "Lamas"
+    slat  length = 0.045 range 0.02..0.20 label "Ancho de lama"
+    depth length = 0.04 range 0.015..0.15 label "Grueso de lama"
+    gap   length = 0.03 range 0.005..0.20 label "Separación entre lamas"
+    rail  length = 0.05 range 0.02..0.15 label "Bastidor arriba y abajo"
+  section "Materiales"
+    wood  material = "Teca" label "Lamas"
+    frame material = "Teca" label "Bastidor"
+    metal material = "Metal negro" label "Eje y herrajes"
+
+body
+  let n = max(1, floor((width + gap) / (slat + gap)))
+  let pitch = if n > 1 then (width - slat) / (n - 1) else 0
+  # The pivot: a pin at the foot and at the head, on the panel's axis; the
+  # panel turns between them and reaches the whole height with them.
+  let pin = 0.02
+  box (-0.01, -0.01, 0) to (0.01, 0.01, pin) material metal
+  box (-0.01, -0.01, height - pin) to (0.01, 0.01, height) material metal
+  # The frame: a rail at the foot and at the head, the whole width.
+  box (-width / 2, -depth / 2, pin) to (width / 2, depth / 2, pin + rail) material frame
+  box (-width / 2, -depth / 2, height - pin - rail) to (width / 2, depth / 2, height - pin) material frame
+  # The slats, vertical, evenly over the width.
+  repeat i in 0..n
+    let x = -width / 2 + i * pitch
+    box (x, -depth / 2, pin + rail) to (x + slat, depth / 2, height - pin - rail) material wood
+
+plan 1:100
+  polygon (-width / 2, -depth / 2) (width / 2, -depth / 2) (width / 2, depth / 2) (-width / 2, depth / 2) pen cut filled
+
+plan 1:50
+  polygon (-width / 2, -depth / 2) (width / 2, -depth / 2) (width / 2, depth / 2) (-width / 2, depth / 2) pen cut filled
+  # The axis it turns on.
+  line (-0.05, 0) to (0.05, 0) pen thin
+  line (0, -0.05) to (0, 0.05) pen thin
+
+outputs
+  ifc_class = "IfcShadingDevice"
+  ifc_type = "USERDEFINED"

@@ -58,6 +58,7 @@ impl ArchiSimApp {
         let mut open = true;
         let mut go_to: Option<Point2> = None;
         let mut fit = false;
+        let mut save = false;
         let canvas = self.canvas;
         let view = self.view;
         super::widgets::dialog("Mapa")
@@ -116,6 +117,13 @@ impl ArchiSimApp {
                     if ui.button("Ver toda el área").clicked() {
                         fit = true;
                     }
+                    if ui
+                        .button("Guardar el mapa…")
+                        .on_hover_text("Como imagen PNG o como dibujo SVG, con su leyenda")
+                        .clicked()
+                    {
+                        save = true;
+                    }
                     let ends = self.ed.model().outside_ends(self.ed.level).len();
                     if ends > 0 {
                         ui.label(format!("{ends} conexiones con fuera"));
@@ -130,6 +138,41 @@ impl ArchiSimApp {
             if let Some((lo, hi)) = self.map.frame() {
                 self.view.fit_exact(self.canvas, lo, hi, 8.0);
             }
+        }
+        if save {
+            self.export_map();
+        }
+    }
+
+    /// The map of the level as a PNG or an SVG, 2000 pixels across.
+    pub(super) fn export_map(&mut self) {
+        let model = self.ed.shown();
+        let Some(svg) = archisim_plan::map::render_map(&model, self.ed.level, 2000.0) else {
+            self.complain("Esta planta no tiene nada que poner en un mapa.".to_string());
+            return;
+        };
+        let mut d = crate::file_dialog::FileDialog::new()
+            .set_title("Guardar el mapa")
+            .add_filter("Imagen PNG", &["png"])
+            .add_filter("Dibujo SVG", &["svg"])
+            .set_file_name(format!("{}-mapa.png", self.file_name_stem()));
+        if let Some(dir) = self.start_dir() {
+            d = d.set_directory(dir);
+        }
+        let Some(path) = d.save_file() else {
+            return;
+        };
+        let svg_out = path
+            .extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case("svg"));
+        let bytes = if svg_out {
+            Ok(svg.into_bytes())
+        } else {
+            archisim_export::png::png(&svg, 96.0)
+        };
+        match bytes.and_then(|b| crate::files::write(&path, b).map_err(|e| e.to_string())) {
+            Ok(()) => self.say(format!("Mapa guardado en {}.", path.display())),
+            Err(e) => self.complain(format!("No se pudo guardar el mapa: {e}.")),
         }
     }
 }

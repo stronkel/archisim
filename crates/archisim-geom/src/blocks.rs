@@ -270,6 +270,57 @@ pub fn add_block_plots(
     Ok(out)
 }
 
+/// Cuts a block that already has plots again (N7): its plots that are not
+/// locked go, with their buildings, and the new lots that do not fall on a
+/// locked plot take their place. The new plots' ids and how many went.
+pub fn replot_block(
+    model: &mut Model,
+    level: LevelId,
+    block: &[Point2],
+    number: usize,
+    zone: BlockZone,
+    frontage: Option<f64>,
+    depth: Option<f64>,
+) -> Result<(Vec<archisim_core::PlotId>, usize), ModelError> {
+    let inside: Vec<archisim_core::Plot> = model
+        .plots_on_level(level)
+        .filter(|p| archisim_core::point_in_polygon(centroid(&p.outline), block))
+        .cloned()
+        .collect();
+    let (locked, loose): (Vec<_>, Vec<_>) = inside.into_iter().partition(|p| p.locked);
+    let gone: Vec<archisim_core::PlotId> = loose.iter().map(|p| p.id).collect();
+    clear_plots(model, level, Some(&gone))?;
+    for id in &gone {
+        model.remove_plot(*id)?;
+    }
+    let f = frontage.unwrap_or_else(|| zone_frontage(model, zone));
+    let d = depth.unwrap_or_else(|| zone_depth(model, zone));
+    // The names of the locked plots stay; the new ones go on after them.
+    let mut k = locked.len();
+    let mut out = Vec::new();
+    for lot in block_lots(block, f, d) {
+        let c = centroid(&lot.outline);
+        let on_locked = locked.iter().any(|p| {
+            archisim_core::point_in_polygon(c, &p.outline)
+                || archisim_core::point_in_polygon(centroid(&p.outline), &lot.outline)
+        });
+        if on_locked {
+            continue;
+        }
+        k += 1;
+        let id = model.add_plot(NewPlot {
+            name: format!("Manzana {number} · {k}"),
+            level,
+            outline: lot.outline,
+            setback: 0.0,
+            reference: String::new(),
+        })?;
+        model.edit_plot(id, |p| p.zone = Some(zone))?;
+        out.push(id);
+    }
+    Ok((out, gone.len()))
+}
+
 /// The front of a plot on its block's façade line: of its sides, the one
 /// that has a street just outside it (else its longest).
 pub fn plot_front(model: &Model, plot: &archisim_core::Plot) -> Option<(Point2, Point2)> {
@@ -538,6 +589,44 @@ mod tests {
         // Another zone: blocks of flats on the free plots.
         let again = fill_plots(&mut m, level, Some(&ids), Some(BlockZone::Flats)).unwrap();
         assert!(again > 0);
+    }
+
+    #[test]
+    fn a_block_cut_again_keeps_its_locked_plots() {
+        let (mut m, level) = town();
+        let block = city_blocks(&m, level).remove(0);
+        let ids = add_block_plots(&mut m, level, &block, 1, BlockZone::Flats, None, None).unwrap();
+        let first = ids.len();
+        let keep = ids[1];
+        fill_plots(&mut m, level, None, None).unwrap();
+        m.edit_plot(keep, |p| p.locked = true).unwrap();
+        let kept = m.plot(keep).unwrap().outline.clone();
+        assert!(plot_built(&m, m.plot(keep).unwrap()));
+        let buildings = m.masses().count();
+        // Cut again with wider plots: fewer, the locked one as it was, with
+        // its building, and none over it.
+        let (new, gone) = replot_block(
+            &mut m,
+            level,
+            &block,
+            1,
+            BlockZone::Houses,
+            Some(30.0),
+            None,
+        )
+        .unwrap();
+        assert_eq!(gone, first - 1);
+        assert!(new.len() < first - 1, "{} plots", new.len());
+        assert_eq!(m.plot(keep).unwrap().outline, kept);
+        assert_eq!(m.masses().count(), 1, "of {buildings}");
+        for id in &new {
+            let p = m.plot(*id).unwrap();
+            assert!(!archisim_core::point_in_polygon(
+                centroid(&p.outline),
+                &kept
+            ));
+            assert_eq!(p.zone, Some(BlockZone::Houses));
+        }
     }
 
     #[test]
