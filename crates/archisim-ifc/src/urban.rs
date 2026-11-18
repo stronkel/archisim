@@ -89,7 +89,7 @@ impl Exporter<'_> {
                     ("GrossPerimeter", "IFCQUANTITYLENGTH", p.perimeter()),
                 ],
             );
-            let props = [
+            let mut props = vec![
                 self.w.add(format!(
                     "IFCPROPERTYSINGLEVALUE('Setback',$,IFCLENGTHMEASURE({}),$)",
                     real(p.setback)
@@ -99,6 +99,19 @@ impl Exporter<'_> {
                     string(&level_guid(p.level))
                 )),
             ];
+            // Its zone and its lock (N7).
+            if let Some(z) = p.zone {
+                props.push(self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('Zone',$,IFCIDENTIFIER({}),$)",
+                    string(z.code())
+                )));
+            }
+            if p.locked {
+                props.push(
+                    self.w
+                        .add("IFCPROPERTYSINGLEVALUE('Locked',$,IFCBOOLEAN(.T.),$)"),
+                );
+            }
             self.pset(el, &p.guid, "ArchiSim_Plot", &props);
             plots.push(el);
         }
@@ -375,6 +388,13 @@ impl Exporter<'_> {
                         props.push(self.w.add(format!(
                             "IFCPROPERTYSINGLEVALUE('Skins',$,IFCTEXT({}),$)",
                             string(&text)
+                        )));
+                    }
+                    // Pieces hidden by hand (N6).
+                    if !r.hidden.is_empty() {
+                        props.push(self.w.add(format!(
+                            "IFCPROPERTYSINGLEVALUE('Hidden',$,IFCTEXT({}),$)",
+                            string(&r.encode_hidden())
                         )));
                     }
                     // Laid in anarchy (N2).

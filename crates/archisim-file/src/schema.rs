@@ -1498,6 +1498,11 @@ pub(crate) struct Plot {
     pub setback: f64,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub reference: String,
+    /// Its zone's code (version 119).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub zone: String,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub locked: bool,
 }
 
 /// A pool built in the ground (version 42): its outline is the inside
@@ -1617,6 +1622,9 @@ pub(crate) struct Road {
     /// pavement, kerb, sidewalk, planting]`, the materials by id or null.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub skins: Vec<SkinOf>,
+    /// Its pieces hidden by hand (version 118): `Road::encode_hidden`.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub hidden: String,
 }
 
 /// A stretch of a road with its own materials (version 116): from, to,
@@ -2904,6 +2912,9 @@ pub(crate) struct Project {
     /// The aerial picture on the ground (version 69).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub orthophoto: Option<OrthophotoOf>,
+    /// The area of the surroundings (version 120).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub surroundings: Vec<Xy>,
     /// Use, accessibility and sprinklers for the code checks (version
     /// 12); absent: a dwelling, without either.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -3504,6 +3515,7 @@ impl ProjectFile {
                     v: o.v,
                     on_roads: o.on_roads,
                 }),
+                surroundings: p.surroundings.iter().flatten().copied().map(xy).collect(),
                 code: (p.code != core::CodeSettings::default()).then(|| Code {
                     building_use: p.code.building_use.code().into(),
                     accessibility: p.code.accessibility.code().into(),
@@ -4114,6 +4126,8 @@ impl ProjectFile {
                     outline: x.outline.iter().copied().map(xy).collect(),
                     setback: x.setback,
                     reference: x.reference.clone(),
+                    zone: x.zone.map(|z| z.code().to_string()).unwrap_or_default(),
+                    locked: x.locked,
                 })
                 .collect(),
             pools: p
@@ -4492,6 +4506,7 @@ impl ProjectFile {
                             )
                         })
                         .collect(),
+                    hidden: r.encode_hidden(),
                 })
                 .collect(),
             runs: p
@@ -5224,6 +5239,8 @@ impl ProjectFile {
                     })
                 }
             },
+            surroundings: (!project.surroundings.is_empty())
+                .then(|| project.surroundings.iter().copied().map(pt).collect()),
             code: match &project.code {
                 None => core::CodeSettings::default(),
                 Some(c) => core::CodeSettings {
@@ -5773,6 +5790,8 @@ impl ProjectFile {
                 outline: x.outline.into_iter().map(pt).collect(),
                 setback: x.setback,
                 reference: x.reference,
+                zone: core::BlockZone::from_code(&x.zone),
+                locked: x.locked,
             });
         }
         for x in self.pools {
@@ -5988,6 +6007,10 @@ impl ProjectFile {
                         planting: d.map(core::MaterialId),
                     })
                     .collect(),
+                hidden: core::Road::decode_hidden(&r.hidden).ok_or_else(|| FileError::Value {
+                    element: format!("road {}", r.id),
+                    message: format!("«{}» are not hidden pieces", r.hidden),
+                })?,
             });
         }
         for x in self.decals {

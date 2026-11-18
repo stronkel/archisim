@@ -48,6 +48,31 @@ pub fn big(model: &archisim_core::Model) -> bool {
         > 600
 }
 
+/// Says on the view why its picture is not there, or how long it has
+/// been in the making (so nothing waits silently for ever).
+pub fn note<K: Region>(
+    painter: &egui::Painter,
+    rect: egui::Rect,
+    what: &str,
+    picture: &Picture<K>,
+) {
+    let text = if let Some(e) = picture.error() {
+        format!("No se pudo dibujar {what}: {e}\n(queda anotado en errores.log; mándamelo)")
+    } else if let Some(w) = picture.waiting().filter(|w| w.as_secs() >= 3) {
+        format!("Dibujando {what}… {} s", w.as_secs())
+    } else {
+        return;
+    };
+    let at = rect.left_bottom() + egui::vec2(14.0, -14.0);
+    painter.text(
+        at,
+        egui::Align2::LEFT_BOTTOM,
+        text,
+        egui::FontId::proportional(12.5),
+        egui::Color32::from_rgb(170, 40, 30),
+    );
+}
+
 /// What a picture is of: the region and the size, and the rest (what is
 /// drawn and how), which must be the same to reuse it moved.
 pub trait Region: Clone + PartialEq + Send + 'static {
@@ -99,6 +124,9 @@ pub struct Picture<K: Region> {
     /// The drawing changed: what is shown is the one before, shown until
     /// the new one is ready.
     stale: bool,
+    /// The last picture that could not be made (for which drawing), and
+    /// why: not tried again until the drawing changes.
+    failed: Option<(K, String)>,
 }
 
 /// Makes the picture of a key.
@@ -114,7 +142,18 @@ impl<K: Region> Picture<K> {
             quick: None,
             took: Arc::new(Mutex::new(Duration::ZERO)),
             stale: false,
+            failed: None,
         }
+    }
+
+    /// Why the picture shown could not be made, if it could not.
+    pub fn error(&self) -> Option<&str> {
+        self.failed.as_ref().map(|(_, e)| e.as_str())
+    }
+
+    /// How long the picture on the way has been in the making.
+    pub fn waiting(&self) -> Option<Duration> {
+        self.full.as_ref().map(|p| p.started.elapsed())
     }
 
     /// The drawing changed (the model, for a picture whose key does not
@@ -192,6 +231,37 @@ impl<K: Region> Picture<K> {
         at_once: Duration,
         mut make: impl FnMut() -> Maker<K>,
     ) -> Option<&(K, TextureHandle)> {
+        // A picture that failed aside: once more here, guarded; if it fails
+        // again, said on screen instead of waited for ever.
+        if let Some(why) = self.full.as_ref().and_then(|p| p.failed()) {
+            let key = self.full.take().map(|p| p.key);
+            self.quick = None;
+            if let Some(key) = key {
+                let work = make();
+                let k = key.clone();
+                match std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || work(k))) {
+                    Ok(image) => {
+                        self.put(ctx, key, image);
+                        self.rough = false;
+                        self.stale = false;
+                        self.failed = None;
+                    }
+                    Err(e) => {
+                        let again = super::background::panic_text(e.as_ref());
+                        crate::crash::write(&format!("Dibujo aparte: {why}; al momento: {again}"));
+                        self.failed = Some((key, again));
+                    }
+                }
+            }
+        }
+        if self
+            .failed
+            .as_ref()
+            .is_some_and(|(k, _)| k.same_drawing(view))
+        {
+            return self.shown.as_ref();
+        }
+        self.failed = None;
         // Finished pictures.
         if let Some(image) = self.full.as_ref().and_then(|p| p.take()) {
             if let Some(key) = self.full.take().map(|p| p.key) {
@@ -227,7 +297,16 @@ impl<K: Region> Picture<K> {
             if self.last() < at_once && (nothing || !moving) {
                 // Cheap pictures: at once, as before.
                 let started = Instant::now();
-                let image = make()(want.clone());
+                let work = make();
+                let w = want.clone();
+                let image =
+                    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || work(w))) {
+                        Ok(image) => image,
+                        Err(e) => {
+                            self.failed = Some((want, super::background::panic_text(e.as_ref())));
+                            return self.shown.as_ref();
+                        }
+                    };
                 if let Ok(mut t) = self.took.lock() {
                     *t = started.elapsed();
                 }
@@ -346,5 +425,46 @@ mod tests {
             ..view.clone()
         };
         assert!(!Picture::<K>::serves(&w, &other));
+    }
+
+    /// A picture whose drawing fails says why, aside or at once, and
+    /// does not wait for ever (0.92.1).
+    #[test]
+    fn a_picture_that_fails_says_so() {
+        let ctx = egui::Context::default();
+        let p = Point2::new;
+        let view = K {
+            lo: p(0.0, 0.0),
+            hi: p(10.0, 5.0),
+            size: [100, 50],
+            what: 1,
+        };
+        let failing = || -> Maker<K> { Box::new(|_k: K| panic!("una prueba")) };
+        // At once.
+        let mut pic = Picture::<K>::new("prueba");
+        pic.update(&ctx, &view, false, Duration::from_secs(3600), failing);
+        assert_eq!(pic.error(), Some("una prueba"));
+        // Aside: it fails there, then once more here, and says so.
+        let mut pic = Picture::<K>::new("prueba");
+        pic.update(&ctx, &view, false, Duration::ZERO, failing);
+        for _ in 0..200 {
+            if pic.error().is_some() {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(5));
+            pic.update(&ctx, &view, false, Duration::ZERO, failing);
+        }
+        assert_eq!(pic.error(), Some("una prueba"));
+        assert!(!pic.busy());
+        // Another drawing: tried again, and drawn.
+        let other = K {
+            what: 2,
+            ..view.clone()
+        };
+        let fine =
+            || -> Maker<K> { Box::new(|k: K| ColorImage::filled(k.size, egui::Color32::WHITE)) };
+        pic.update(&ctx, &other, false, Duration::from_secs(3600), fine);
+        assert!(pic.error().is_none());
+        assert!(pic.shown().is_some());
     }
 }
