@@ -989,18 +989,38 @@ impl<'a> Geo<'a> {
                 // Only the first operand: clippings only remove material.
                 // ArchiSim writes a junction with a slab (what the slab
                 // takes from the wall, and the reverse) as a plain boolean
-                // difference (see `Body::differenced`).
-                let op = e.arg(0).as_enum().unwrap_or("DIFFERENCE");
-                if op != "UNION" {
+                // difference (see `Body::differenced`). A slab crossed by
+                // many walls is a long chain of differences, one per wall:
+                // it is walked down here without counting each link
+                // towards the depth limit (at most `MAX_CHAIN` of them).
+                const MAX_CHAIN: usize = 10_000;
+                let mut e = e;
+                for _ in 0..MAX_CHAIN {
+                    let op = e.arg(0).as_enum().unwrap_or("DIFFERENCE");
+                    if op == "UNION" {
+                        self.item(e.arg(1), xf, body, depth + 1);
+                        self.item(e.arg(2), xf, body, depth + 1);
+                        return;
+                    }
                     if e.kind == "IFCBOOLEANRESULT" {
                         body.differenced = true;
                     } else {
                         body.clipped = true;
                     }
-                }
-                self.item(e.arg(1), xf, body, depth + 1);
-                if op == "UNION" {
-                    self.item(e.arg(2), xf, body, depth + 1);
+                    match self.ent(e.arg(1)) {
+                        Some(next)
+                            if matches!(
+                                next.kind.as_str(),
+                                "IFCBOOLEANRESULT" | "IFCBOOLEANCLIPPINGRESULT"
+                            ) =>
+                        {
+                            e = next;
+                        }
+                        _ => {
+                            self.item(e.arg(1), xf, body, depth + 1);
+                            return;
+                        }
+                    }
                 }
             }
             // A CSG solid: its tree (ArchiSim wraps the bands of a wall
