@@ -186,6 +186,24 @@ Hoy `archisim_geom::crossroads::junctions(model, level)` rehace todos los cruces
   - `archisim area-grande out/` hace un área de 2 × 2 km con 36 conexiones y 544 edificios. Escribe su mapa y su planta y dice cuánto tarda cada cosa (el IFC unos 3 s; el mapa y la planta, centésimas).
   - `archisim mapa <proyecto>` saca el mapa de cualquier proyecto.
 
+### 2.12 N9 hecho: tráfico de ilustración (18/11/2026, versión 0.103)
+
+- **Coches por los carriles**:
+  - Por la derecha, en cada carril de cada calle.
+  - En los cruces siguen las conexiones de carril de N3 (los giros de cada carril y las conexiones a mano), por la misma curva que dibuja el nudo.
+  - Paran en rojo y en ámbar. Los semáforos de un cruce van en dos fases, una para cada dirección: 16 s en verde y 3 s en ámbar.
+  - En los stop se detienen un momento.
+  - Guardan la distancia con el de delante en su carril.
+  - Al salir por un fondo de saco o por una conexión con fuera, aparecen en otro sitio.
+- **Personas por las aceras**: van y vuelven, cada una a su paso.
+- **Vista 3D**: Urbanismo → **Tráfico** lo pone en marcha en la vista 3D y vuelve a pulsarse para pararlo. Hay un coche cada 40 m de calle y una persona cada 25 m, en colores variados. Al cambiar las calles empieza de nuevo sobre las calles nuevas.
+- **Render**: con el tráfico en marcha, el render lo saca como está a los 20 s. En la línea de órdenes, `archisim render … --trafico`.
+- Es para ilustrar: no calcula capacidades, colas ni prioridades. Dos coches de calles distintas pueden coincidir dentro del cruce.
+- No toca el proyecto: no se guarda ni sale en el IFC.
+- **Ejemplo**: `archisim trafico out/` toma las calles de `archisim nudos`, con semáforos en su cruce principal, y escribe:
+  - la planta con los coches y las personas (`trafico-planta.svg`);
+  - una imagen del cruce (`trafico.png`).
+
 ## 3. Lo demás, por tandas
 
 | Tanda | Qué | Mods de referencia | Tamaño |
@@ -370,6 +388,14 @@ Lo que se deja para después, tanda a tanda, para repasarlo junto con la cuarta 
 - El terreno se trae con unos 4 000 puntos: en 2 × 2 km quedan a unos 30 m; con más detalle, por teselas.
 - El mapa no se exporta desde la aplicación (sí desde `archisim mapa`) ni tiene leyenda ni capas que encender y apagar.
 - Las conexiones con fuera no dicen a dónde van (el pueblo o la carretera de destino).
+
+**De N9 (tráfico)**
+- Dos coches que entran al cruce desde calles distintas pueden pisarse dentro: no se ceden el paso (ni ceda el paso ni prioridad a la derecha), solo se respetan semáforos y stop.
+- Los semáforos no se ven encenderse en 3D (el poste no cambia de color) y su ciclo es fijo.
+- Coches y personas son cajas de colores; usar los modelos de coche y persona de la biblioteca (con sus versiones de lejos) cuando el rendimiento lo permita.
+- Las personas no cruzan por los pasos de peatones ni entran en plazas o parques.
+- Sin autobuses en su carril ni tranvía.
+- En la Maqueta no hay botón propio; se pone desde Urbanismo.
 
 **De N2 (trazado)**
 - La pendiente uniforme elegida con el ratón no enseña marcas en planta entre los dos clics (solo el aviso).

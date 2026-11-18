@@ -48,6 +48,7 @@ mod plantilla;
 mod taller;
 mod territorio;
 mod tierras;
+mod trafico;
 mod tramas;
 mod trazado;
 mod vivero;
@@ -104,6 +105,11 @@ Uso:
       que se cortan en el borde con su sección (conexiones con fuera) y las
       manzanas del centro llenas: area-grande.archisim, area-grande.ifc, el
       mapa (SVG y PNG), la planta y lo que tarda cada cosa.
+  archisim trafico [carpeta]
+      El tráfico de ilustración (N9) en las calles de «archisim nudos»,
+      con semáforos en su cruce principal: medio minuto de coches por los
+      carriles y personas por las aceras; la planta con ellos
+      (trafico-planta.svg) y una imagen (trafico.png).
   archisim mapa <proyecto> [carpeta]
       La vista de mapa de un proyecto (N8): el área entera, plana y en
       color, con calles, edificios, árboles, zonas y conexiones con fuera.
@@ -419,6 +425,7 @@ fn main() -> ExitCode {
                 archisim_render::Light::Day
             };
             let textures = !args.iter().any(|a| a == "--sin-texturas");
+            let traffic = args.iter().any(|a| a == "--trafico");
             // `--camara=x,y,z,tx,ty,tz`: from where and to where it looks.
             let camera: Option<[f64; 6]> = args
                 .iter()
@@ -440,10 +447,12 @@ fn main() -> ExitCode {
                         .map(PathBuf::from)
                         .unwrap_or_else(|| project.with_extension("png"));
                     let width: usize = plain.get(2).and_then(|w| w.parse().ok()).unwrap_or(1600);
-                    report(run_render(&project, &png, width, light, textures, camera))
+                    report(run_render(
+                        &project, &png, width, light, textures, traffic, camera,
+                    ))
                 }
                 None => {
-                    eprintln!("Falta el proyecto: archisim render <proyecto.archisim> [imagen.png] [ancho] [--atardecer | --noche] [--sin-texturas] [--camara=x,y,z,tx,ty,tz]");
+                    eprintln!("Falta el proyecto: archisim render <proyecto.archisim> [imagen.png] [ancho] [--atardecer | --noche] [--sin-texturas] [--trafico] [--camara=x,y,z,tx,ty,tz]");
                     ExitCode::FAILURE
                 }
             }
@@ -977,6 +986,10 @@ fn main() -> ExitCode {
         Some("area-grande") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
             report(area_grande::write(&dir))
+        }
+        Some("trafico") => {
+            let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
+            report(trafico::write(&dir))
         }
         Some("mapa") => match args.get(1) {
             Some(file) => {
@@ -1855,6 +1868,7 @@ fn run_render(
     width: usize,
     light: archisim_render::Light,
     textures: bool,
+    traffic: bool,
     camera: Option<[f64; 6]>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let model = archisim_file::open(project)
@@ -1866,6 +1880,7 @@ fn run_render(
         height: width * 5 / 8,
         light,
         textures,
+        traffic: traffic.then_some(20.0),
         ..Default::default()
     };
     let mut view = archisim_render::View::fit(&model);

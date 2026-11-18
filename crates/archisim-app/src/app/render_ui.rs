@@ -106,6 +106,8 @@ impl ArchiSimApp {
                 crate::view3d::look::Light::Night => archisim_render::Light::Night,
             },
             textures: self.v3d.textures != crate::view3d::render::TextureMode::Off,
+            // The traffic, if it runs in the 3D view.
+            traffic: self.v3d.traffic_on().then_some(20.0),
         };
         let slot = Arc::new(Mutex::new(None));
         let progress = Arc::new(AtomicU32::new(0));

@@ -6,6 +6,23 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-18 (182) · v0.103: territorio N9, tráfico de ilustración
+
+Rama `bloque/trafico` sobre `bloque/area-grande` (#230). Versión 0.103.0. Sin cambios de formato.
+
+- **Qué se hizo** (`docs/TERRITORIO.md` §2.12):
+  - **Geometría** (`archisim-geom::traffic`): tramos por carril entre cruces, caminos por las conexiones de carril, semáforos en dos fases, stop, distancia al de delante, personas por las aceras; repetible por semilla; cajas de colores con `SolidOwner::Traffic`.
+  - **Vista 3D**: `set_traffic`/`step_traffic`, `Scene::of_traffic` y `Renderer::set_traffic`, encima de la escena y sin rehacerla.
+  - **Render**: `Options::traffic`.
+  - **App**: ficha «Tráfico» en Urbanismo.
+  - **Línea de órdenes**: `archisim trafico` y `archisim render --trafico`.
+  - Pruebas en la geometría, la línea de órdenes y la aplicación.
+- **Pendiente**: §7 de `TERRITORIO.md`. Con esto se acaban las tandas N1–N9; sigue la cuarta vuelta de fluidez sobre todo lo de N1–N9 y el repaso de §7.
+- **Qué debe probar Antonio** (con la 0.103):
+  1. `archisim trafico out/` y mira `out/trafico.png` y `out/trafico-planta.svg`.
+  2. Abre `out/nudos.archisim`, pon un semáforo en un cruce con la herramienta Nudo, pulsa Urbanismo → **Tráfico** y mira el cruce en 3D: los coches paran en rojo.
+  3. Con el tráfico en marcha, haz un render.
+
 ## 2026-11-18 (181) · v0.102: territorio N8, área grande y vista de mapa
 
 Rama `bloque/area-grande` sobre `bloque/manzanas` (#229). Versión 0.102.0. Formato `.archisim` versión 120.

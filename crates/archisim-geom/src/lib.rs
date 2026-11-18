@@ -59,6 +59,7 @@ pub mod slice;
 pub mod solid;
 pub mod stairs;
 pub mod sweeps;
+pub mod traffic;
 pub mod urban_surfaces;
 pub mod wall_section;
 

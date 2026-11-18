@@ -12936,3 +12936,39 @@ fn the_map_view_of_a_large_area() {
     assert!(a.x <= -1000.0 && b.x >= 1000.0, "{a:?} {b:?}");
     h.frame();
 }
+
+#[test]
+fn traffic_runs_in_the_3d_view() {
+    let mut h = Harness::new(Editor::new_project());
+    h.app.set_discipline(super::toolbox::Discipline::Site);
+    let level = h.app.ed.level;
+    let mat = h.model().materials().next().unwrap().id;
+    let r = h.app.ed.transact("Calles", |m| {
+        for (a, b) in [(p(-80.0, 0.0), p(80.0, 0.0)), (p(0.0, -80.0), p(0.0, 80.0))] {
+            m.add_road(archisim_core::NewRoad {
+                name: "Calle".into(),
+                level,
+                axis: vec![a, b],
+                section: archisim_core::RoadSection::default(),
+                top_offset: 0.0,
+                profile: Vec::new(),
+                changes: Vec::new(),
+                pavement: mat,
+                kerb_material: mat,
+                sidewalk_material: mat,
+            })?;
+        }
+        Ok::<(), archisim_core::ModelError>(())
+    });
+    assert!(r.is_ok());
+    h.app.act(super::toolbox::Action::Traffic);
+    assert!(h.app.v3d.traffic_on());
+    assert_eq!(h.app.mode, ViewMode::ThreeD);
+    h.frame();
+    h.frame();
+    assert!(h.app.v3d.traffic_cars().is_some_and(|n| n > 0));
+    // Off again: nothing drawn.
+    h.app.act(super::toolbox::Action::Traffic);
+    assert!(!h.app.v3d.traffic_on());
+    h.frame();
+}

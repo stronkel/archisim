@@ -717,7 +717,7 @@ fn arm_of(r: &Road, origin: Point2, s: f64, forward: bool) -> Arm {
 
 /// How near the axis the middle of a lane is for it to be a lane both ways
 /// (a single lane on the axis), metres.
-const LANE_ON_AXIS: f64 = 0.3;
+pub(crate) const LANE_ON_AXIS: f64 = 0.3;
 
 /// The arms of the roads that reach a roundabout: those whose axis goes
 /// through its circle (two arms) or ends in it or near it (one, measured
