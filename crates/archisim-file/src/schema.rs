@@ -1595,7 +1595,15 @@ pub(crate) struct Road {
     /// Laid in anarchy (version 114): no crossings, no ground shaped.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub free: bool,
+    /// Stretches with their own materials (version 116): `[from, to,
+    /// pavement, kerb, sidewalk, planting]`, the materials by id or null.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub skins: Vec<SkinOf>,
 }
+
+/// A stretch of a road with its own materials (version 116): from, to,
+/// pavement, kerb, sidewalk and planting.
+pub(crate) type SkinOf = (f64, f64, Option<u64>, Option<u64>, Option<u64>, Option<u64>);
 
 /// A planting (version 25): its line, its rules and the objects it made.
 #[derive(Debug, Serialize, Deserialize)]
@@ -4437,6 +4445,21 @@ impl ProjectFile {
                     kerb_material: r.kerb_material.0,
                     sidewalk_material: r.sidewalk_material.0,
                     free: r.free,
+                    skins: r
+                        .skins
+                        .iter()
+                        .map(|k| {
+                            let m = |x: Option<core::MaterialId>| x.map(|m| m.0);
+                            (
+                                k.from,
+                                k.to,
+                                m(k.pavement),
+                                m(k.kerb),
+                                m(k.sidewalk),
+                                m(k.planting),
+                            )
+                        })
+                        .collect(),
                 })
                 .collect(),
             runs: p
@@ -5920,6 +5943,18 @@ impl ProjectFile {
                 kerb_material: core::MaterialId(r.kerb_material),
                 sidewalk_material: core::MaterialId(r.sidewalk_material),
                 free: r.free,
+                skins: r
+                    .skins
+                    .iter()
+                    .map(|&(from, to, a, b, c, d)| core::RoadSkin {
+                        from,
+                        to,
+                        pavement: a.map(core::MaterialId),
+                        kerb: b.map(core::MaterialId),
+                        sidewalk: c.map(core::MaterialId),
+                        planting: d.map(core::MaterialId),
+                    })
+                    .collect(),
             });
         }
         for x in self.decals {

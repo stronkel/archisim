@@ -4,6 +4,12 @@ Lo que cambia en cada versión, en pocas líneas. ArchiSim enseña la parte de s
 
 Cada versión empieza con una línea `## <versión>` (por ejemplo `## 0.81.0`): es la que busca la publicación.
 
+## 0.98.0
+
+- **Calles por tramos y «Sustituir todos» (N4).**
+  - **Por tramos**: un trozo de una calle con otro pavimento, bordillo, acera o tierra (grupo «Por tramos» de la calle).
+  - **Sustituir todos**: cambia de una vez un tipo de objeto (árbol, farola, banco…) o un material de las calles por otro, en todo el proyecto, en la planta, en una zona dibujada o en un tramo de calle.
+
 ## 0.97.0
 
 - **Carriles y marcas de los cruces (N3).** Con la herramienta Nudo:

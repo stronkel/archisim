@@ -364,6 +364,19 @@ impl Exporter<'_> {
                             string(&nodes.join("~"))
                         )));
                     }
+                    // Stretches with their own materials (N4), by name.
+                    if !r.skins.is_empty() {
+                        let text = r.encode_skins(|m| {
+                            model
+                                .material(m)
+                                .map(|x| x.name.clone())
+                                .unwrap_or_default()
+                        });
+                        props.push(self.w.add(format!(
+                            "IFCPROPERTYSINGLEVALUE('Skins',$,IFCTEXT({}),$)",
+                            string(&text)
+                        )));
+                    }
                     // Laid in anarchy (N2).
                     if r.free {
                         props.push(

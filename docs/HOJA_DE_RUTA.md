@@ -342,7 +342,7 @@ Pedido de Antonio: traer un terreno a la realidad con todas las opciones de urba
 | N1 | Nudos: identidad estable, tipos, retranqueo, esquinas, pasos, desplazar, plano/inclinado, IFC | Hecho en 0.94 en dos vueltas (siete tipos, plano y calle principal, señales y pasos, esquinas con chaflán y oreja, tiradores en planta, IFC); sin desplazar el centro ni tiradores en 3D (§2.4 de `TERRITORIO.md`) |
 | N2 | Trazado sin reglas y con precisión (Anarquía, pendiente uniforme, paralelas, glorieta sobre un nudo) | Hecho en 0.95 (anarquía, pendiente uniforme, paralela, radio y giro al trazar, hacer glorieta); remates en 0.96 (pendiente con el ratón, R y Giro en la barra) |
 | N3 | Carriles y marcas atadas al nudo; flechas y señales | Hecho en 0.97 (conexiones de carril calculadas y a mano, giros por carril, flechas y líneas entre carriles, detención retrasada, isletas pintadas) |
-| N4 | Cambios por tramo y «Sustituir todos» | Propuesto |
+| N4 | Cambios por tramo y «Sustituir todos» | Hecho en 0.98 (materiales por tramo de calle; sustituir tipos de objeto y materiales de calle en proyecto, planta, zona o tramo) |
 | N5 | Superficies por contorno con encintado | Propuesto |
 | N6 | Mover y ocultar cualquier pieza urbana | Propuesto |
 | N7 | Manzanas, parcelas y llenado | Propuesto |

@@ -1140,6 +1140,7 @@ impl ArchiSimApp {
                     self.ed.selection.clear();
                     self.rebar_pick = false;
                     self.road_grade_pick = None;
+                    self.replace.picking = None;
                 }
             }
         }
@@ -1260,6 +1261,14 @@ impl ArchiSimApp {
             if response.clicked_by(PointerButton::Primary) {
                 if let Some(c) = self.cursor {
                     self.concept_drop_click(c.point);
+                }
+            }
+            return;
+        }
+        if self.replace.picking.is_some() && self.tool == Tool::Arrow {
+            if response.clicked_by(PointerButton::Primary) {
+                if let Some(c) = self.cursor {
+                    self.replace_area_click(c.point);
                 }
             }
             return;

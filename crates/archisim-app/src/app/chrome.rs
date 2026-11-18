@@ -1151,6 +1151,11 @@ impl ArchiSimApp {
 
     /// What the keys and the mouse do now, as "Clic: … · Esc: …".
     pub(super) fn hint_text(&self) -> &'static str {
+        match self.replace.picking {
+            Some(None) => return "Sustituir todos: clic en una esquina de la zona · Esc: dejarlo",
+            Some(Some(_)) => return "Sustituir todos: clic en la esquina opuesta · Esc: dejarlo",
+            None => {}
+        }
         match self.road_grade_pick {
             Some((_, None)) => {
                 return "Pendiente uniforme: clic en la calle donde empieza · Esc: dejarlo"

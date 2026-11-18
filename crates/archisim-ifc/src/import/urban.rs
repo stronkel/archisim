@@ -239,6 +239,14 @@ impl<'a> Importer<'a> {
         {
             let _ = self.model.set_road_free(rid, true);
         }
+        if let Some(t) = text(self, "Skins") {
+            let skins = archisim_core::Road::decode_skins(&t, |n| {
+                self.model.materials().find(|m| m.name == n).map(|m| m.id)
+            });
+            if let Some(k) = skins {
+                let _ = self.model.set_road_skins(rid, k);
+            }
+        }
         self.report.roads += 1;
         self.sources.push((rid.0, id));
         // Its pieces are not loose elements.

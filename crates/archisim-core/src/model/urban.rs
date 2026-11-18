@@ -585,6 +585,8 @@ pub struct Road {
     /// overlaps and does not shape the ground under it, at the heights
     /// given.
     pub free: bool,
+    /// Stretches with their own materials (N4; `road_skins`).
+    pub skins: Vec<RoadSkin>,
 }
 
 /// Data needed to make a road.
@@ -651,6 +653,7 @@ impl Road {
             cuts.extend(self.profile_cuts());
         }
         cuts.extend(self.change_cuts().into_iter().map(|c| c.clamp(0.0, len)));
+        cuts.extend(self.skin_cuts());
         cuts.sort_by(f64::total_cmp);
         cuts.dedup_by(|a, b| (*a - *b).abs() < 1e-6);
         let mut out = Vec::new();
@@ -741,19 +744,17 @@ impl Road {
                 if outline.len() < 3 || signed_area(&outline).abs() < 1e-9 {
                     continue;
                 }
+                // Its own materials on a stretch (N4).
+                let (pavement, kerb, walk, plant) = self.materials_at(mid);
                 let material = match band {
                     RoadBand::Carriageway
                     | RoadBand::Parking
                     | RoadBand::BusLane
-                    | RoadBand::Shoulder => self.pavement,
-                    RoadBand::BikeLane | RoadBand::BikePath => s.bike.unwrap_or(self.pavement),
-                    RoadBand::Kerb => self.kerb_material,
-                    RoadBand::Sidewalk | RoadBand::Median | RoadBand::TreePits => {
-                        self.sidewalk_material
-                    }
-                    RoadBand::Planting | RoadBand::Tram | RoadBand::Ditch => {
-                        s.planting.unwrap_or(self.sidewalk_material)
-                    }
+                    | RoadBand::Shoulder => pavement,
+                    RoadBand::BikeLane | RoadBand::BikePath => s.bike.unwrap_or(pavement),
+                    RoadBand::Kerb => kerb,
+                    RoadBand::Sidewalk | RoadBand::Median | RoadBand::TreePits => walk,
+                    RoadBand::Planting | RoadBand::Tram | RoadBand::Ditch => plant.unwrap_or(walk),
                 };
                 let lowered = match lowering {
                     Some(l) if s.raised(band) && lowered_strips.contains(&i) => l,
@@ -1152,6 +1153,7 @@ impl Model {
                 kerb_material: spec.kerb_material,
                 sidewalk_material: spec.sidewalk_material,
                 free: false,
+                skins: Vec::new(),
             },
         );
         Ok(id)

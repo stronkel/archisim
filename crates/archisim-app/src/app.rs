@@ -488,6 +488,8 @@ pub struct ArchiSimApp {
     /// Picking on the plan the two ends of a uniform grade (N2): the
     /// street and, after the first click, where it starts.
     pub road_grade_pick: Option<(archisim_core::RoadId, Option<f64>)>,
+    /// The window «Sustituir todos» (N4).
+    pub replace: replace_ui::ReplaceState,
     pub room_settings: crate::editor::RoomSettings,
     pub roof_settings: crate::editor::RoofSettings,
     pub roof_tool: SlabTool,
@@ -971,6 +973,7 @@ impl ArchiSimApp {
             dxf_import: None,
             rebar_pick: false,
             road_grade_pick: None,
+            replace: Default::default(),
             room_settings: Default::default(),
             roof_settings,
             stair_settings,
@@ -3022,6 +3025,7 @@ impl ArchiSimApp {
         self.carto_dialog(ctx);
         self.types_dialog(ctx);
         self.library_dialog(ctx);
+        self.replace_dialog(ctx);
         self.mesh_import_dialog(ctx);
         self.dxf_import_dialog(ctx);
         self.params_dialog(ctx);
@@ -3452,6 +3456,7 @@ mod railing_ui;
 mod rebar_ui;
 mod render_ui;
 mod renewables_ui;
+mod replace_ui;
 mod report_view;
 mod revit_keys;
 mod ribbon;

@@ -122,6 +122,16 @@ Hoy `archisim_geom::crossroads::junctions(model, level)` rehace todos los cruces
 - Todo se guarda en el texto del nudo (formato 115) y vuelve del IFC.
 - Ejemplo: `archisim nudos out/` añade la Avenida de los Carriles (dos carriles por sentido) con la Calle de la Isleta.
 
+### 2.7 N4 hecho: cambios por tramo y «Sustituir todos» (18/11/2026, versión 0.98)
+
+- **Por tramos** (Network Skins, Repaint): en las propiedades de una calle, grupo «Por tramos»: «Nuevo tramo», desde y hasta a lo largo del eje, y el material de la calzada, el bordillo, la acera y la tierra de ese trozo (vacío: el de la calle). Se ve en 3D, sale en el IFC con sus piezas y se guarda (formato 116).
+- **Sustituir todos** (BOB): ficha «Sustituir todos» en Urbanismo → Calle, o el botón «Sustituir todos…» de la calle. Cambia:
+  - **objetos de un tipo** por otro tipo (un árbol por otro, una farola por otra, un banco…), conservando su sitio, giro y valores;
+  - **un material de las calles** por otro.
+- **Dónde**: en todo el proyecto, en esta planta, en una **zona** (dos clics en planta, un rectángulo) o en un **tramo de la calle elegida** (desde y hasta). Los materiales en una zona o un tramo se cambian creando tramos propios en las calles, sin tocar el resto; en el proyecto o la planta, la calle entera.
+- Un paso de Deshacer por sustitución.
+- Ejemplo: `archisim nudos out/` pone adoquín de granito en la Calle Real entre la del Olmo y la del Pino.
+
 ## 3. Lo demás, por tandas
 
 | Tanda | Qué | Mods de referencia | Tamaño |
@@ -271,6 +281,12 @@ Lo que se deja para después, tanda a tanda, para repasarlo junto con la cuarta 
 - Las conexiones se ven solo en planta y con la herramienta Nudo; no en 3D ni en la Maqueta.
 - Isletas: no se editan sus esquinas una vez dibujadas (se quitan y se dibujan otra vez).
 - Carriles bus y tranvía: el bus cuenta como carril; el tranvía, no.
+
+**De N4 (tramos y sustituir)**
+- En planta los tramos no se distinguen: la planta dibuja las franjas, no su material (salvo con presentación). Pintarlos con su color o una trama.
+- Árbol, farola o banco «por tramo» de la calle: hoy se cambian los objetos que haya (Sustituir todos en un tramo); la calle no genera su mobiliario por sí sola, lo pone «La vida de la calle».
+- La zona es un rectángulo; un contorno libre o una parcela/manzana elegida.
+- Los tramos se cambian tecleando; tiradores en planta para arrastrar sus extremos.
 
 **De N2 (trazado)**
 - La pendiente uniforme elegida con el ratón no enseña marcas en planta entre los dos clics (solo el aviso).

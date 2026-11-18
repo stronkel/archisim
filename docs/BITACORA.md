@@ -6,6 +6,21 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-18 (177) · v0.98: territorio N4, cambios por tramo y «Sustituir todos»
+
+Rama `bloque/tramos` sobre `bloque/carriles` (#225). Versión 0.98.0. Formato `.archisim` versión 116.
+
+- **Qué se hizo** (`docs/TERRITORIO.md` §2.7):
+  - **Modelo** (`archisim-core::model::road_skins`): `Road::skins` (`RoadSkin`: desde, hasta y materiales opcionales), `skin_at`, `skin_cuts`, `materials_at` (que usa `cut_pieces` para el material de cada pieza), `encode_skins`/`decode_skins`; `Model::set_road_skins`; `ReplaceScope` (proyecto, planta, zona, tramo de calle), `objects_in`, `replace_object_type`, `replace_road_material` (en zona o tramo crea tramos propios, `stretches_inside`).
+  - **Fichero** `skins` en cada calle (versión 116); **IFC** `ArchiSim_Road.Skins` con los materiales por nombre.
+  - **App**: grupo «Por tramos» de la calle (`urban_ui::road_skins_group`) y la ventana «Sustituir todos» (`app/replace_ui`: `ReplaceState`, `ReplaceWhat`, `ReplaceWhere`, zona con dos clics `replace_area_click`), ficha en Urbanismo → Calle (`Action::Replace`).
+  - Ejemplo en `archisim nudos out/` (Calle Real con adoquín); pruebas en el núcleo, la línea de órdenes (fichero e IFC) y la aplicación.
+- **Pendiente**: §7 de `TERRITORIO.md`. Siguiente, N5.
+- **Qué debe probar Antonio** (con la 0.98):
+  1. `archisim nudos out/` y abre `out/nudos.archisim`: en 3D, la Calle Real entre la del Olmo y la del Pino es de adoquín con bordillo de piedra.
+  2. Elige una calle → **Por tramos** → **Nuevo tramo**: cambia desde y hasta y el material de la acera; míralo en 3D.
+  3. Trae el entorno con vida de la calle (o pon unas farolas) y abre **Urbanismo → Calle → Sustituir todos**: cambia las farolas de un tipo por otro en una zona elegida con dos clics.
+
 ## 2026-11-18 (176) · v0.97: territorio N3, carriles y marcas del nudo
 
 Rama `bloque/carriles` sobre `bloque/trazado-2` (#224). Versión 0.97.0. Formato `.archisim` versión 115 (más datos en el texto de cada nudo).

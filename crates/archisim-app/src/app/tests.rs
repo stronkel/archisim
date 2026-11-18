@@ -9662,6 +9662,59 @@ fn nodes_with_the_tool() {
 /// and turn is tangent to the stretch before; a street gets a uniform
 /// grade and a parallel one; a node becomes a roundabout.
 #[test]
+fn stretches_and_replace_all() {
+    let mut h = Harness::new(Editor::new_project());
+    let canvas = h.app.canvas;
+    h.app
+        .view
+        .fit_exact(canvas, p(-60.0, -60.0), p(60.0, 60.0), 0.0);
+    h.app.set_discipline(super::toolbox::Discipline::Site);
+    h.type_text("w");
+    h.click_at(p(-50.0, 0.0));
+    h.click_at(p(50.0, 0.0));
+    h.key(Key::Enter);
+    h.key(Key::Escape);
+    let road = h.model().roads().next().unwrap().id;
+    // A stretch of its own: the properties draw it.
+    let other = h
+        .model()
+        .materials()
+        .map(|m| m.id)
+        .find(|m| *m != h.model().road(road).unwrap().pavement)
+        .unwrap();
+    let mut k = archisim_core::RoadSkin::new(20.0, 40.0);
+    k.pavement = Some(other);
+    let r = h
+        .app
+        .ed
+        .transact("Tramo", |m| m.set_road_skins(road, vec![k]));
+    assert!(r.is_ok(), "{r:?}");
+    h.app.ed.selection = [Element::Road(road)].into_iter().collect();
+    h.frame();
+    // «Sustituir todos»: open it, pick an area on the plan.
+    h.app.act(super::toolbox::Action::Replace);
+    assert!(h.app.replace.open);
+    h.frame();
+    h.app.replace.picking = Some(None);
+    h.click_at(p(-45.0, -20.0));
+    h.click_at(p(-35.0, 20.0));
+    assert!(h.app.replace.picking.is_none());
+    let scope = h.app.replace.scope(h.app.ed.level).unwrap();
+    let pave = h.model().road(road).unwrap().pavement;
+    let r = h.app.ed.transact("Sustituir", |m| {
+        m.replace_road_material(pave, other, &scope).map(|_| ())
+    });
+    assert!(r.is_ok(), "{r:?}");
+    let rr = h.model().road(road).unwrap();
+    assert_eq!(rr.skins.len(), 2);
+    assert_eq!(rr.materials_at(10.0).0, other);
+    assert_eq!(rr.materials_at(80.0).0, pave);
+    // The window with the materials page.
+    h.app.replace.what = super::replace_ui::ReplaceWhat::Materials;
+    h.frame();
+}
+
+#[test]
 fn lanes_and_islands_with_the_node_tool() {
     use archisim_geom::crossroads::{self, Junction};
     let mut h = Harness::new(Editor::new_project());

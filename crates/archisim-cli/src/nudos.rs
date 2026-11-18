@@ -318,6 +318,18 @@ pub fn build() -> Res<Model> {
             paint: archisim_core::IslandPaint::Fill,
         });
     })?;
+    // A stretch of its own (N4): the Calle Real paved in setts with
+    // granite kerbs between the Olmo and the Pino.
+    let setts = m.add_material(
+        "Adoquín de granito",
+        "stone",
+        [150, 140, 130],
+        archisim_core::CutPattern::Solid,
+    );
+    let mut skin = archisim_core::RoadSkin::new(50.0, 110.0);
+    skin.pavement = Some(setts);
+    skin.kerb = Some(stone);
+    m.set_road_skins(real, vec![skin])?;
     // A house in the block between the four crossings.
     let corners = [p(-10.0, 15.0), p(10.0, 15.0), p(10.0, 28.0), p(-10.0, 28.0)];
     for i in 0..4 {
@@ -492,6 +504,11 @@ mod tests {
         a.sort_by_key(|k| format!("{k:?}"));
         b.sort_by_key(|k| format!("{k:?}"));
         assert_eq!(a, b);
+        // The stretch with its own paving comes back too (N4).
+        let skins = |m: &Model| -> usize { m.roads().map(|r| r.skins.len()).sum() };
+        assert_eq!(skins(&m), 1);
+        assert_eq!(skins(&back), 1);
+        assert_eq!(skins(&imported), 1);
         let islands =
             |m: &Model| -> usize { m.nodes().map(|n| n.islands.len() + n.links.len()).sum() };
         assert_eq!(islands(&imported), islands(&m));

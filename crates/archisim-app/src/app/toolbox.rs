@@ -240,6 +240,9 @@ pub enum Action {
     DraftingView,
     /// Bring the surroundings from downloaded files.
     BringSurroundings,
+    /// «Sustituir todos»: a type of object or a street material for
+    /// another (N4).
+    Replace,
     /// Ask for the surroundings to the free services.
     DownloadSurroundings,
     /// The sun of the project, in its panel.
@@ -734,6 +737,13 @@ const SITE: &[Tile] = &[
                 "Nudo",
                 "NU",
                 "Cambia un cruce, una T o una L: tipo de nudo, retranqueo de cada calle y radio, forma y acera de cada esquina",
+            ),
+            tile(
+                Pick::Action(Action::Replace),
+                Glyph::Road,
+                "Sustituir todos",
+                "",
+                "Cambia de una vez un tipo de objeto (árbol, farola, banco…) o un material de las calles por otro, en todo el proyecto, en una zona o en un tramo de calle",
             ),
             tile(
                 Pick::Tool(Tool::Marking),
@@ -1555,6 +1565,7 @@ impl ArchiSimApp {
                     )))
                 ),
                 Action::Render => self.render.open,
+                Action::Replace => self.replace.open,
                 Action::Styles => self.presentation.open,
                 Action::Walk => self.v3d.walk_eye.is_some(),
                 Action::Elevations
@@ -1662,7 +1673,7 @@ impl ArchiSimApp {
         }
     }
 
-    fn act(&mut self, action: Action) {
+    pub(super) fn act(&mut self, action: Action) {
         let coord_tab = |app: &mut Self, tab| {
             app.coord_window.open = true;
             app.coord_window.tab = tab;
@@ -1689,6 +1700,7 @@ impl ArchiSimApp {
             ))),
             Action::DraftingView => self.new_drafting_view(),
             Action::BringSurroundings => self.pick_carto(),
+            Action::Replace => self.replace.open = !self.replace.open,
             Action::DownloadSurroundings => self.open_carto_download(),
             Action::Sun => {
                 self.presentation.sun_open = true;
