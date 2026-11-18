@@ -9,7 +9,9 @@
 use std::path::Path;
 use std::time::Instant;
 
-use archisim_core::{BlockZone, MaterialId, Model, NewRoad, Point2, RoadSection};
+use archisim_core::{
+    BlockZone, MaterialId, Model, NewRoad, NewWall, Point2, ReferenceLine, RoadSection, WallTop,
+};
 use archisim_geom::blocks;
 
 type Res<T = ()> = Result<T, Box<dyn std::error::Error>>;
@@ -28,7 +30,7 @@ fn material(m: &Model, category: &str) -> Option<MaterialId> {
 pub fn build() -> Res<Model> {
     let mut m = Model::new("Área grande de ArchiSim");
     let pb = m.add_level("Planta baja", 0.0);
-    archisim_library::add_library(&mut m)?;
+    let lib = archisim_library::add_library(&mut m)?;
     let asphalt = material(&m, "asphalt")
         .or_else(|| material(&m, "concrete"))
         .ok_or("sin asfalto")?;
@@ -101,6 +103,26 @@ pub fn build() -> Res<Model> {
         blocks::add_block_plots(&mut m, pb, block, k + 1, zone, frontage, None)?;
     }
     blocks::fill_plots(&mut m, pb, None, None)?;
+    // The project's own house, in a block outside the middle.
+    let corners = [
+        Point2::new(-560.0, 540.0),
+        Point2::new(-545.0, 540.0),
+        Point2::new(-545.0, 550.0),
+        Point2::new(-560.0, 550.0),
+    ];
+    for i in 0..4 {
+        m.add_wall(NewWall {
+            wall_type: lib.bearing_wall,
+            level: pb,
+            start: corners[i],
+            end: corners[(i + 1) % 4],
+            reference: ReferenceLine::ExteriorFace,
+            height: 3.0,
+            base_offset: 0.0,
+            bulge: 0.0,
+            top: WallTop::Unconnected,
+        })?;
+    }
     Ok(m)
 }
 
