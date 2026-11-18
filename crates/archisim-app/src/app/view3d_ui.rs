@@ -461,7 +461,11 @@ impl View3dState {
             .materials()
             .find(|m| m.category != "glass")
             .map_or(archisim_core::MaterialId(0), |m| m.id);
-        let solids = archisim_geom::traffic::traffic_solids(&t.sim.bodies(model), material);
+        let mut solids = archisim_geom::traffic::traffic_solids(&t.sim.bodies(model), material);
+        solids.extend(archisim_geom::traffic::lamp_solids(
+            &t.sim.lamps(),
+            material,
+        ));
         self.traffic_scene = Some(Scene::of_traffic(model, solids));
         self.traffic_serial += 1;
         ctx.request_repaint_after(std::time::Duration::from_millis(40));

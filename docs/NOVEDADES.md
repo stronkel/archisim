@@ -4,6 +4,14 @@ Lo que cambia en cada versión, en pocas líneas. ArchiSim enseña la parte de s
 
 Cada versión empieza con una línea `## <versión>` (por ejemplo `## 0.81.0`): es la que busca la publicación.
 
+## 0.104.0
+
+- **Cuarta vuelta de fluidez del territorio.** Cambiar un nudo, el pavimento de un tramo o una pieza oculta de una calle ya no rehace en 3D todo lo que hay a lo largo de la calle, solo lo de alrededor: en un sitio de 1 km², elevar un cruce pasa de medio segundo a una décima.
+- **Tráfico más creíble.** Los coches ya no se pisan dentro de los cruces: esperan a que pase el que cruza, y con ceda el paso o stop dejan pasar a quien viene por la otra calle. Los semáforos se ven en rojo, ámbar y verde en 3D y en el render.
+- **Volver a parcelar una manzana.** Un clic en una manzana que ya tiene parcelas la parte de nuevo con la zona y las medidas elegidas, sin tocar las parcelas bloqueadas.
+- **Mapa con leyenda y para guardar.** La ventana Mapa tiene «Guardar el mapa…» (PNG o SVG) y una leyenda con las zonas que hay.
+- **Soltar un paso de peatones** deja los bordillos rebajados de la calle donde estaban.
+
 ## 0.103.0
 
 - **Tráfico de ilustración (N9).** Urbanismo → Territorio → Tráfico pone coches y personas en la vista 3D. Los coches van por sus carriles, giran por donde mandan las conexiones de cada cruce y paran en los semáforos y en los stop. Las personas pasean por las aceras. El render los saca también. Es solo para ilustrar: no se guarda en el proyecto ni calcula capacidades.

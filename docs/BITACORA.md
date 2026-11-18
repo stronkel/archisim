@@ -6,6 +6,24 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-18 (183) · v0.104: cuarta vuelta de fluidez del territorio y repaso de §7
+
+Rama `bloque/fluidez-4` sobre `bloque/trafico` (#231). Versión 0.104.0. Sin cambios de formato.
+
+- **Qué se hizo** (`docs/TERRITORIO.md` §4.4 y §7):
+  - **Medido** lo de N1–N9 en el sitio de 1 km² (`archisim territorio-grande` y la prueba `territory_scene`). Lo único que pasaba del presupuesto: un nudo, un tramo o una pieza oculta rehacían toda la calle y lo que hay a 30 m de ella. Ahora solo lo de alrededor (`scene_build::local_road_change`): elevar un cruce, de 512 a 95 ms; un tramo, de 430 a 170 ms. Comprobado en `a_kept_scene_is_the_whole_one`.
+  - **Tráfico**: los coches no entran en un camino que cruza otro ocupado, y con ceda el paso o stop esperan a quien llega por una calle sin señal (`Way::conflicts`, `waits_to_cross`). Las luces de los semáforos encendidas (`Traffic::lamps`, `lamp_solids`) en la vista 3D, el render y la planta de `archisim trafico`.
+  - **Manzanas**: volver a parcelar una manzana ya parcelada sin tocar las bloqueadas (`blocks::replot_block`).
+  - **Mapa**: leyenda y «Guardar el mapa…» en PNG o SVG.
+  - **Soltar una cebra**: la calle oculta sus barras y conserva los rebajes.
+  - Arreglado el fallo de la versión web de #231 (faltaba `traffic` en el render de la web).
+- **Pendiente**: lo que sigue sin tachar en §7 de `TERRITORIO.md` (tiradores en 3D, cotas mientras se traza, plazas de movilidad reducida, casas de esquina, capas del mapa, prioridad a la derecha, flechas repetidas…). Medir la vista 3D en el PC de Antonio.
+- **Qué debe probar Antonio** (con la 0.104):
+  1. Abre `out/territorio.archisim` (de `archisim territorio-grande out/`) en 3D, elige la herramienta Nudo y cambia un cruce a elevado: debe verse casi al momento.
+  2. `archisim trafico out/`, abre `out/nudos.archisim`, pon semáforos en un cruce y enciende Tráfico: mira en 3D cómo cambian de color y que los coches que giran no atraviesan a los que van rectos.
+  3. En `out/manzanas.archisim`, bloquea una parcela, abre Manzanas, elige «Viviendas aisladas» y haz clic dentro de esa manzana: se parcela de nuevo y la bloqueada sigue.
+  4. Mapa → «Guardar el mapa…» y mira la leyenda.
+
 ## 2026-11-18 (182) · v0.103: territorio N9, tráfico de ilustración
 
 Rama `bloque/trafico` sobre `bloque/area-grande` (#230). Versión 0.103.0. Sin cambios de formato.

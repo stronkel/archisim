@@ -8,7 +8,7 @@
 
 use std::fmt::Write as _;
 
-use archisim_core::{LevelId, Model, Point2, SurfaceKind};
+use archisim_core::{BlockZone, LevelId, Model, Point2, SurfaceKind};
 
 use crate::lettering::{text_path, Align};
 use crate::{num, path, pt};
@@ -321,8 +321,90 @@ pub fn render_map(model: &Model, level: LevelId, width_px: f64) -> Option<String
         ),
         crate::lettering::paint(text_h, TEXT)
     );
+    legend(&mut s, model, level, hi, margin, px, text_h);
     s.push_str("</svg>\n");
     Some(s)
+}
+
+/// The legend, top right: what the colours of the map are (the zones only
+/// those the plots of the level have).
+fn legend(
+    s: &mut String,
+    model: &Model,
+    level: LevelId,
+    hi: Point2,
+    margin: f64,
+    px: f64,
+    text_h: f64,
+) {
+    let mut rows: Vec<(String, String)> = vec![
+        ("Calle".into(), STREET.into()),
+        ("Avenida".into(), AVENUE.into()),
+        ("Edificio".into(), BUILDING.into()),
+        ("Edificio público".into(), FACILITY.into()),
+        ("Proyecto".into(), OWN.into()),
+    ];
+    if model
+        .surfaces_on_level(level)
+        .any(|x| x.kind == SurfaceKind::Garden)
+    {
+        rows.push(("Jardín".into(), GARDEN.into()));
+    }
+    for z in BlockZone::ALL {
+        if model.plots_on_level(level).any(|p| p.zone == Some(z)) {
+            let [r, g, b] = z.rgb();
+            // As faint as on the map, over the land.
+            let mix = |c: u8, l: u8| (0.18 * c as f64 + 0.82 * l as f64).round() as u8;
+            rows.push((
+                format!("Zona: {}", z.label().to_lowercase()),
+                format!("rgb({},{},{})", mix(r, 0xf2), mix(g, 0xef), mix(b, 0xe9)),
+            ));
+        }
+    }
+    let line = text_h * 1.8;
+    let swatch = text_h * 1.2;
+    let widest = rows
+        .iter()
+        .map(|(t, _)| t.chars().count())
+        .max()
+        .unwrap_or(4) as f64;
+    let width = swatch + text_h * (1.0 + widest * 0.75) + 2.0 * text_h;
+    let height = line * rows.len() as f64 + text_h;
+    let corner = Point2::new(hi.x - margin * 0.6 - width, hi.y - margin * 0.6);
+    let _ = writeln!(
+        s,
+        r#"<g class="map-legend"><rect x="{}" y="{}" width="{}" height="{}" fill="white" fill-opacity="0.85" stroke="{STREET_EDGE}" stroke-width="{}"/>"#,
+        num(corner.x),
+        num(-corner.y),
+        num(width),
+        num(height),
+        num(px)
+    );
+    for (k, (text, fill)) in rows.iter().enumerate() {
+        let y = corner.y - text_h - k as f64 * line;
+        let _ = writeln!(
+            s,
+            r#"<rect x="{}" y="{}" width="{}" height="{}" fill="{fill}" stroke="{STREET_EDGE}" stroke-width="{}"/>"#,
+            num(corner.x + text_h),
+            num(-y),
+            num(swatch),
+            num(swatch),
+            num(px)
+        );
+        let _ = writeln!(
+            s,
+            r#"<path d="{}" {}/>"#,
+            text_path(
+                text,
+                Point2::new(corner.x + 2.0 * text_h + swatch, y - swatch * 0.85),
+                archisim_core::Vec2::new(1.0, 0.0),
+                text_h,
+                Align::Left
+            ),
+            crate::lettering::paint(text_h, TEXT)
+        );
+    }
+    s.push_str("</g>\n");
 }
 
 #[cfg(test)]

@@ -324,6 +324,24 @@ Lo que queda:
 - **Exportar a glTF, render o IFC** con miles de árboles a todo detalle sigue ocupando mucha memoria.
 - Si en el PC de Antonio las calles pasan de 50 ms: convertir el terreno más fino, por trozos de cuadrado.
 
+### 4.4 Cuarta vuelta (18/11/2026): lo de N1–N9
+
+Medido en el mismo sitio de 1 km² (`archisim territorio-grande out/`, que ahora mide también nudos, superficies, manzanas, mapa y tráfico; y la prueba `territory_scene`, que mide la vista 3D tras cada cambio):
+
+| Qué | Antes | Ahora |
+|---|---|---|
+| Vista 3D tras elevar un cruce (N1) | 512 ms (36 piezas rehechas) | **95 ms** (3) |
+| Vista 3D tras cambiar el pavimento de un tramo (N4) | 430 ms (18) | **170 ms** (6) |
+| Vista 3D tras añadir un aparcamiento (N5) | 37 ms | 30 ms |
+| Cambiar 60 nudos / cruces de nuevo (N1) | — | 0,6 ms / 6 ms |
+| Buscar las 130 manzanas / partirlas en 1 633 parcelas (N7) | — | 5 ms / 0,2 ms |
+| Mapa de todo el sitio, 1 600 px (N8) | — | 16 ms |
+| Un paso del tráfico con 400 coches y 600 personas / sus cuerpos (N9) | — | 0,15 ms / 1,6 ms |
+
+Lo que era lento: **un nudo, un tramo o una pieza oculta contaban como si cambiase la calle entera**. La vista 3D rehacía todo lo que está a 30 m de la calle, y en una avenida de 1 km eso son decenas de calles y edificios. Ahora, si la calle no ha cambiado de forma, solo se mira alrededor de lo tocado: el cruce del nudo, el tramo o la pieza (`local_road_change` en `view3d::scene_build`). La prueba `a_kept_scene_is_the_whole_one` lo comprueba con un nudo elevado, un tramo pavimentado y una marca oculta.
+
+Lo demás de N1–N9 ya cumple el presupuesto en esta máquina de 2 núcleos. Queda lo de antes: la planta del sitio entero a 1:2000 (1,5 s, casi todo los 13 692 objetos) y abrir el sitio la primera vez (~27 s).
+
 ## 5. Decisiones de Antonio (16/11/2026)
 
 1. **Orden**: N0 completo primero, después N1 y el resto en el orden de §3.
@@ -368,7 +386,7 @@ Lo que se deja para después, tanda a tanda, para repasarlo junto con la cuarta 
 - Las juntas son una cuadrícula; aparejos (espiga, rombo) y despiece del encintado, no.
 
 **De N6 (ocultar y soltar)**
-- Al soltar una cebra, los bordillos rebajados se quitan con ella; habría que dejarlos donde estaban o moverlos con la cebra.
+~~Al soltar una cebra, los bordillos rebajados se quitan con ella; habría que dejarlos donde estaban o moverlos con la cebra.~~ **Hecho (cuarta vuelta)**: la calle oculta las barras y se queda con los rebajes donde estaban.
 - Soltar también las flechas y líneas de un nudo (hoy solo se ocultan) y las señales (pasarían a ser un objeto «señal»).
 - Ocultar por ventana (varias piezas de una vez) y ver las ocultas en gris para devolverlas una a una.
 - Ocultar en 3D y en la Maqueta (hoy, desde la planta).
@@ -376,22 +394,22 @@ Lo que se deja para después, tanda a tanda, para repasarlo junto con la cuarta 
 **De N7 (manzanas)**
 - Al mover una calle, las parcelas y los edificios que la miran no la siguen; hay que vaciar, borrar las parcelas y volver a parcelar (C5 de calles).
 - Al trazar una calle sobre edificios del mundo, no avisa ni los quita.
-- Las manzanas no se guardan: se buscan cada vez. Parcelar una manzana ya parcelada se niega (habría que poder «volver a parcelar» quitando lo no bloqueado).
+~~Las manzanas no se guardan: se buscan cada vez. Parcelar una manzana ya parcelada se niega (habría que poder «volver a parcelar» quitando lo no bloqueado).~~ **Hecho en parte (cuarta vuelta)**: un clic en una manzana ya parcelada la vuelve a parcelar sin tocar las bloqueadas (`blocks::replot_block`). Siguen buscándose cada vez (5 ms en 1 km²).
 - Las parcelas son de un frente fijo; mezclar anchos (como un casco real) o leer la parcelación del Catastro y respetarla.
 - Los edificios de esquina son un rectángulo a una calle: falta la casa de esquina con dos fachadas.
 - Pintar zonas con un pincel sobre varias parcelas a la vez.
-- La planta tiñe las parcelas y las rotula solo si cabe el texto; una leyenda de zonas.
+~~La planta tiñe las parcelas y las rotula solo si cabe el texto; una leyenda de zonas.~~ **Hecho en el mapa (cuarta vuelta)**; en la planta no.
 
 **De N8 (área grande)**
 - El recuadro no se puede girar ni dibujar a mano (un contorno libre o el término municipal).
 - Las calles que ya estaban en el proyecto no se recortan al cambiar el área (solo se cortan al traerlas).
 - El terreno se trae con unos 4 000 puntos: en 2 × 2 km quedan a unos 30 m; con más detalle, por teselas.
-- El mapa no se exporta desde la aplicación (sí desde `archisim mapa`) ni tiene leyenda ni capas que encender y apagar.
+~~El mapa no se exporta desde la aplicación (sí desde `archisim mapa`) ni tiene leyenda ni capas que encender y apagar.~~ **Hecho en parte (cuarta vuelta)**: «Guardar el mapa…» en PNG o SVG, con leyenda. Faltan las capas.
 - Las conexiones con fuera no dicen a dónde van (el pueblo o la carretera de destino).
 
 **De N9 (tráfico)**
-- Dos coches que entran al cruce desde calles distintas pueden pisarse dentro: no se ceden el paso (ni ceda el paso ni prioridad a la derecha), solo se respetan semáforos y stop.
-- Los semáforos no se ven encenderse en 3D (el poste no cambia de color) y su ciclo es fijo.
+~~Dos coches que entran al cruce desde calles distintas pueden pisarse dentro: no se ceden el paso (ni ceda el paso ni prioridad a la derecha), solo se respetan semáforos y stop.~~ **Hecho (cuarta vuelta)**: no entra nadie en un camino que cruza otro ocupado, y con ceda el paso o stop se espera a quien llega por una calle sin señal. La prioridad a la derecha, no.
+~~Los semáforos no se ven encenderse en 3D (el poste no cambia de color) y su ciclo es fijo.~~ **Hecho en parte (cuarta vuelta)**: rojo, ámbar y verde encendidos en cada cabeza (`Traffic::lamps`). El ciclo sigue fijo.
 - Coches y personas son cajas de colores; usar los modelos de coche y persona de la biblioteca (con sus versiones de lejos) cuando el rendimiento lo permita.
 - Las personas no cruzan por los pasos de peatones ni entran en plazas o parques.
 - Sin autobuses en su carril ni tranvía.

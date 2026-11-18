@@ -9702,7 +9702,9 @@ fn hide_pieces_and_let_a_zebra_go() {
     // The zebra let go: a marking, selected.
     h.app.act(super::toolbox::Action::DetachCrossing);
     h.click_at(p(0.5, 1.0));
-    assert!(h.model().road(road).unwrap().section.crossings.is_empty());
+    // The street keeps its lowered kerbs; the bars are the marking's now.
+    assert_eq!(h.model().road(road).unwrap().section.crossings.len(), 1);
+    assert!(h.model().road(road).unwrap().visible_markings(&[]).len() < after.len());
     assert_eq!(h.model().markings().count(), 1);
     assert!(matches!(
         h.app.ed.selection.iter().next(),
@@ -12873,12 +12875,34 @@ fn blocks_cut_into_plots_and_filled() {
         .model()
         .plots()
         .all(|x| x.zone == Some(archisim_core::BlockZone::Houses)));
-    // The plots are selected, and a second click on the same block cuts
-    // nothing more.
+    // The plots are selected, and a second click on the same block, with
+    // one plot locked, cuts the rest again into wider flats.
     assert_eq!(h.app.ed.selection.len(), plots.len());
+    let locked = plots[2];
+    let kept = h.model().plot(locked).unwrap().outline.clone();
+    let r = h
+        .app
+        .ed
+        .transact("Bloquear", |m| m.edit_plot(locked, |x| x.locked = true));
+    assert!(r.is_ok());
+    h.app.blocks.zone = archisim_core::BlockZone::Flats;
+    h.app.blocks.frontage = Some(25.0);
     h.app.blocks.picking = true;
     h.click_at(p(0.0, 0.0));
+    let again: Vec<_> = h.model().plots().map(|x| x.id).collect();
+    assert!(again.len() < plots.len(), "{} plots", again.len());
+    assert_eq!(h.model().plot(locked).unwrap().outline, kept);
+    assert_eq!(
+        h.model()
+            .plots()
+            .filter(|x| x.zone == Some(archisim_core::BlockZone::Flats))
+            .count(),
+        again.len() - 1
+    );
+    // Undone in one step, and back to the houses.
+    h.app.ed.undo();
     assert_eq!(h.model().plots().count(), plots.len());
+    let plots: Vec<_> = h.model().plots().map(|x| x.id).collect();
     // A plot's properties: its zone, its lock and filling it alone.
     h.app.blocks.picking = false;
     h.app.ed.selection = [Element::Plot(plots[0])].into_iter().collect();

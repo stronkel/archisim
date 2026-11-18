@@ -348,3 +348,4 @@ Pedido de Antonio: traer un terreno a la realidad con todas las opciones de urba
 | N7 | Manzanas, parcelas y llenado | Hecho en 0.101 (parcelar manzanas por la línea de fachada, llenar por zonas con edificios del lugar, bloquear parcelas) |
 | N8 | Área grande | Hecho en 0.102 (recuadro hasta 2 × 2 km, conexiones con fuera, vista de mapa) |
 | N9 | Tráfico de ilustración | Hecho en 0.103 (coches por los carriles siguiendo las conexiones de N3, semáforos y stop; personas por las aceras; en la vista 3D y en el render) |
+| N0-4 | Cuarta vuelta de fluidez y repaso de §7 | Hecho en 0.104 (nudos, tramos y piezas ocultas rehacen solo lo de alrededor; cruces sin choques, semáforos encendidos, volver a parcelar, mapa con leyenda y para guardar) |

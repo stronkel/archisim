@@ -82,6 +82,11 @@ impl Stretch {
 #[derive(Debug, Clone)]
 struct Way {
     junction: usize,
+    /// The arm it comes in by.
+    from: ArmRef,
+    /// The ways of its junction it crosses or meets at its end: while a
+    /// car is on one of them, none goes into this one.
+    conflicts: Vec<usize>,
     path: Vec<Point2>,
     /// Along the path, from its start.
     along: Vec<f64>,
@@ -125,6 +130,10 @@ struct Rule {
     /// Each arm's sign and, for the lights, which of the two ways it is.
     arms: Vec<(ArmRef, ArmSign, usize)>,
     top: f64,
+    /// Its traffic lights: the head's face towards the cars coming in, the
+    /// way it faces, which of the two ways it is and its height over the
+    /// junction's top.
+    lights: Vec<(Point2, Vec2, usize, f64)>,
 }
 
 /// Where a road meets a junction: the junction, and the cut of its arm
@@ -139,6 +148,20 @@ pub struct Body {
     pub dir: Vec2,
     pub colour: [u8; 3],
 }
+
+/// A traffic light's lamp as it is now: red, amber or green, lit or not.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Lamp {
+    /// The middle of its face.
+    pub at: P3,
+    /// The way it faces (the way the cars it stops come from).
+    pub dir: Vec2,
+    pub colour: [u8; 3],
+}
+
+/// The colours of the lamps: red, amber and green, lit and off.
+const LIT: [[u8; 3]; 3] = [[235, 40, 30], [250, 170, 20], [40, 220, 90]];
+const OFF: [[u8; 3]; 3] = [[70, 30, 28], [72, 58, 28], [28, 64, 40]];
 
 /// The traffic of a level.
 #[derive(Debug, Clone)]
@@ -221,6 +244,20 @@ impl Traffic {
                     0
                 };
                 rule.arms.push((arm, sign, way));
+                if sign == ArmSign::Lights {
+                    let kerb = model.road(a.road).map_or(0.15, |r| r.section.kerb_height);
+                    if let Some((post, dir, _)) = j
+                        .signs
+                        .iter()
+                        .filter(|(_, d, s)| *s == ArmSign::Lights && d.dot(a.dir) > 0.999)
+                        .min_by(|x, y| x.0.distance(a.origin).total_cmp(&y.0.distance(a.origin)))
+                    {
+                        // The head stands on the post's side towards the
+                        // junction's outside, as `crossroads` builds it.
+                        let face = *post + *dir * (crossroads::POST + 0.31);
+                        rule.lights.push((face, *dir, way, kerb));
+                    }
+                }
                 let list = stops.entry(a.road).or_default();
                 let at = match list
                     .iter_mut()
@@ -383,10 +420,29 @@ impl Traffic {
                     .push(ways.len());
                 ways.push(Way {
                     junction: ji,
+                    from: c.from,
+                    conflicts: Vec::new(),
                     path: c.path.clone(),
                     along,
                     then: starts.get(&(ji, c.to, c.to_lane)).copied(),
                 });
+            }
+        }
+        // Which ways of a junction get in each other's way: they cross, or
+        // they end in the same lane; not those out of the same lane (the
+        // car in front is kept to by its gap).
+        let mut by_junction: HashMap<usize, Vec<usize>> = HashMap::new();
+        for (k, w) in ways.iter().enumerate() {
+            by_junction.entry(w.junction).or_default().push(k);
+        }
+        for list in by_junction.values() {
+            for (n, &i) in list.iter().enumerate() {
+                for &k in &list[n + 1..] {
+                    if ways_meet(&ways[i].path, &ways[k].path) {
+                        ways[i].conflicts.push(k);
+                        ways[k].conflicts.push(i);
+                    }
+                }
             }
         }
         let elevation = model.level(level).map_or(0.0, |l| l.elevation);
@@ -542,6 +598,57 @@ impl Traffic {
         (0.0..GREEN).contains(&t)
     }
 
+    /// Whether a car on stretch `s` waits at the line of another arm of
+    /// junction `ji` than `arm`, without a sign, to go by one of `crossing`.
+    fn waits_to_cross(
+        &self,
+        c: &Car,
+        s: usize,
+        ji: usize,
+        arm: ArmRef,
+        crossing: &[usize],
+    ) -> bool {
+        let st = &self.stretches[s];
+        let Some((j, other, _)) = st.into else {
+            return false;
+        };
+        if j != ji || other == arm || c.at < st.length() - 1.0 {
+            return false;
+        }
+        let sign = self.sign(ji, other);
+        if matches!(sign, ArmSign::Yield | ArmSign::Stop) || !self.green(ji, other) {
+            return false;
+        }
+        crossing.iter().any(|w| self.ways[*w].from == other)
+    }
+
+    /// The lamps of the traffic lights as they are now: each head's red,
+    /// amber and green.
+    pub fn lamps(&self) -> Vec<Lamp> {
+        let period = 2.0 * (GREEN + AMBER);
+        let mut out = Vec::new();
+        for rule in &self.rules {
+            for &(face, dir, way, kerb) in &rule.lights {
+                let t = (self.time % period) - way as f64 * (GREEN + AMBER);
+                let lit = if (0.0..GREEN).contains(&t) {
+                    2
+                } else if (GREEN..GREEN + AMBER).contains(&t) {
+                    1
+                } else {
+                    0
+                };
+                for (k, h) in [3.0, 2.75, 2.5].into_iter().enumerate() {
+                    out.push(Lamp {
+                        at: [face.x, face.y, self.elevation + rule.top + kerb + h],
+                        dir,
+                        colour: if k == lit { LIT[k] } else { OFF[k] },
+                    });
+                }
+            }
+        }
+        out
+    }
+
     fn sign(&self, junction: usize, arm: ArmRef) -> ArmSign {
         self.rules
             .get(junction)
@@ -606,11 +713,20 @@ impl Traffic {
                                 }
                                 let pick =
                                     ways[(self.unit() * ways.len() as f64) as usize % ways.len()];
-                                // Only in if the way is clear at its start.
-                                let clear = self
-                                    .cars
-                                    .iter()
-                                    .all(|c| c.on != On::Way(pick) || c.at >= CAR_GAP);
+                                // Only in if the way is clear at its start,
+                                // no car is on a way it crosses, and (with a
+                                // give way or a stop) no car waits to come in
+                                // on a way it crosses from an arm without one.
+                                let crossing = &self.ways[pick].conflicts;
+                                let yields = matches!(sign, ArmSign::Yield | ArmSign::Stop);
+                                let clear = self.cars.iter().all(|c| match c.on {
+                                    On::Way(w) => {
+                                        !(w == pick && c.at < CAR_GAP) && !crossing.contains(&w)
+                                    }
+                                    On::Stretch(s) => {
+                                        !yields || !self.waits_to_cross(c, s, ji, arm, crossing)
+                                    }
+                                });
                                 if clear {
                                     on = On::Way(pick);
                                     at -= len;
@@ -750,6 +866,47 @@ fn rect(c: Point2, dir: Vec2, l: f64, w: f64) -> Vec<Point2> {
     vec![c - u - n, c + u - n, c + u + n, c - u + n]
 }
 
+/// The lamps as solids: a small square on the face of each head, in the
+/// colour it has now (`SolidOwner::Traffic`).
+pub fn lamp_solids(lamps: &[Lamp], material: MaterialId) -> Vec<Solid> {
+    lamps
+        .iter()
+        .map(|l| {
+            let c = Point2::new(l.at[0], l.at[1]) + l.dir * 0.02;
+            Solid {
+                owner: SolidOwner::Traffic(l.colour),
+                material,
+                triangles: prism(&rect(c, l.dir, 0.04, 0.18), l.at[2] - 0.09, l.at[2] + 0.09),
+            }
+        })
+        .collect()
+}
+
+/// Whether two ways through a junction get in each other's way: they end
+/// in the same place, or they cross away from their starts.
+fn ways_meet(a: &[Point2], b: &[Point2]) -> bool {
+    let (Some(a0), Some(b0)) = (a.first(), b.first()) else {
+        return false;
+    };
+    if a0.distance(*b0) < 0.5 {
+        return false;
+    }
+    if let (Some(a1), Some(b1)) = (a.last(), b.last()) {
+        if a1.distance(*b1) < 0.5 {
+            return true;
+        }
+    }
+    a.windows(2)
+        .any(|p| b.windows(2).any(|q| segments_cross(p[0], p[1], q[0], q[1])))
+}
+
+fn segments_cross(p: Point2, q: Point2, r: Point2, s: Point2) -> bool {
+    let d = |a: Point2, b: Point2, c: Point2| (b - a).cross(c - a);
+    let (d1, d2) = (d(r, s, p), d(r, s, q));
+    let (d3, d4) = (d(p, q, r), d(p, q, s));
+    d1 * d2 < 0.0 && d3 * d4 < 0.0
+}
+
 /// The bodies as solids, simple boxes in their colours: a car's body and
 /// cabin, a person's clothes and head. Their material is `material`; their
 /// colour comes with them (`SolidOwner::Traffic`).
@@ -856,5 +1013,53 @@ mod tests {
         assert!(t.cars() >= 12);
         let solids = traffic_solids(&t.bodies(&m), MaterialId(0));
         assert_eq!(solids.len(), 2 * t.cars());
+        // Four heads of three lamps; two green and two red, then amber.
+        let lamps = t.lamps();
+        assert_eq!(lamps.len(), 12);
+        let lit = |t: &Traffic, c: [u8; 3]| t.lamps().iter().filter(|l| l.colour == c).count();
+        let mut t = Traffic::new(&m, level, 0, 0, 3);
+        t.step(&m, 1.0);
+        assert_eq!((lit(&t, LIT[2]), lit(&t, LIT[0])), (2, 2));
+        t.step(&m, GREEN);
+        assert_eq!((lit(&t, LIT[1]), lit(&t, LIT[0])), (2, 2));
+        assert_eq!(lamp_solids(&lamps, MaterialId(0)).len(), 12);
+    }
+
+    #[test]
+    fn cars_do_not_meet_inside_a_crossing() {
+        let (m, level) = town();
+        let mut t = Traffic::new(&m, level, 24, 0, 11);
+        // The left turn across the way straight on from the other side.
+        assert!(t.ways.iter().any(|w| !w.conflicts.is_empty()));
+        let mut entered = 0;
+        let mut before: Vec<On> = t.cars.iter().map(|c| c.on).collect();
+        for _ in 0..1500 {
+            t.step(&m, 0.1);
+            let on: Vec<usize> = t
+                .cars
+                .iter()
+                .filter_map(|c| match c.on {
+                    On::Way(w) => Some(w),
+                    _ => None,
+                })
+                .collect();
+            for (n, a) in on.iter().enumerate() {
+                for b in &on[n + 1..] {
+                    assert!(
+                        !t.ways[*a].conflicts.contains(b),
+                        "two cars on crossing ways {a} and {b} at {}",
+                        t.time()
+                    );
+                }
+            }
+            let now: Vec<On> = t.cars.iter().map(|c| c.on).collect();
+            entered += now
+                .iter()
+                .zip(&before)
+                .filter(|(a, b)| matches!(a, On::Way(_)) && !matches!(b, On::Way(_)))
+                .count();
+            before = now;
+        }
+        assert!(entered > 20, "the junction let few cars by: {entered}");
     }
 }
