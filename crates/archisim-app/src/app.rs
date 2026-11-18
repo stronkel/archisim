@@ -492,6 +492,8 @@ pub struct ArchiSimApp {
     pub replace: replace_ui::ReplaceState,
     /// The plot's tool draws an urban surface of this kind (N5).
     pub surface_draw: Option<archisim_core::SurfaceKind>,
+    /// Hiding pieces of the streets or letting zebras go (N6).
+    pub piece_pick: Option<pieces_ui::PiecePick>,
     pub room_settings: crate::editor::RoomSettings,
     pub roof_settings: crate::editor::RoofSettings,
     pub roof_tool: SlabTool,
@@ -977,6 +979,7 @@ impl ArchiSimApp {
             road_grade_pick: None,
             replace: Default::default(),
             surface_draw: None,
+            piece_pick: None,
             room_settings: Default::default(),
             roof_settings,
             stair_settings,
@@ -1214,6 +1217,7 @@ impl ArchiSimApp {
         self.road_grade_pick = None;
         self.node_mode = node_ui::NodeMode::Pick;
         self.surface_draw = None;
+        self.piece_pick = None;
         if tool != Tool::Cad && self.cad.is_some() {
             // Another tool ends the command (keeping what it drew).
             self.end_command(true);
@@ -3448,6 +3452,7 @@ mod paint_ui;
 mod params_ui;
 mod phases_ui;
 pub(crate) mod picture;
+mod pieces_ui;
 mod placing;
 mod plan_ui;
 mod planting_ui;

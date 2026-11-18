@@ -239,6 +239,9 @@ impl<'a> Importer<'a> {
         {
             let _ = self.model.set_road_free(rid, true);
         }
+        if let Some(h) = text(self, "Hidden").and_then(|t| archisim_core::Road::decode_hidden(&t)) {
+            let _ = self.model.edit_road(rid, |r| r.hidden = h);
+        }
         if let Some(t) = text(self, "Skins") {
             let skins = archisim_core::Road::decode_skins(&t, |n| {
                 self.model.materials().find(|m| m.name == n).map(|m| m.id)

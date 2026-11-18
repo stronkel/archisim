@@ -245,6 +245,10 @@ pub enum Action {
     Replace,
     /// Draw an urban surface of a kind by its outline (N5).
     Surface(archisim_core::SurfaceKind),
+    /// Hide pieces of the streets one by one (N6).
+    HidePieces,
+    /// Let a zebra of a street go, to move it (N6).
+    DetachCrossing,
     /// Ask for the surroundings to the free services.
     DownloadSurroundings,
     /// The sun of the project, in its panel.
@@ -767,6 +771,20 @@ const SITE: &[Tile] = &[
                 "Jardín",
                 "",
                 "Jardín o parterre con su bordillo, dibujado por su contorno",
+            ),
+            tile(
+                Pick::Action(Action::HidePieces),
+                Glyph::Marking,
+                "Ocultar piezas",
+                "",
+                "Oculta una a una las piezas que pone la calle: una raya, una plaza pintada, un alcorque, una señal o un bolardo",
+            ),
+            tile(
+                Pick::Action(Action::DetachCrossing),
+                Glyph::Marking,
+                "Soltar paso de peatones",
+                "",
+                "Convierte la cebra de una calle en una marca vial suelta para moverla o girarla",
             ),
             tile(
                 Pick::Action(Action::Replace),
@@ -1596,6 +1614,10 @@ impl ArchiSimApp {
                 ),
                 Action::Render => self.render.open,
                 Action::Replace => self.replace.open,
+                Action::HidePieces => self.piece_pick == Some(super::pieces_ui::PiecePick::Hide),
+                Action::DetachCrossing => {
+                    self.piece_pick == Some(super::pieces_ui::PiecePick::Detach)
+                }
                 Action::Surface(k) => self.tool == Tool::Plot && self.surface_draw == Some(k),
                 Action::Styles => self.presentation.open,
                 Action::Walk => self.v3d.walk_eye.is_some(),
@@ -1732,6 +1754,16 @@ impl ArchiSimApp {
             Action::DraftingView => self.new_drafting_view(),
             Action::BringSurroundings => self.pick_carto(),
             Action::Replace => self.replace.open = !self.replace.open,
+            Action::HidePieces | Action::DetachCrossing => {
+                let want = if action == Action::HidePieces {
+                    super::pieces_ui::PiecePick::Hide
+                } else {
+                    super::pieces_ui::PiecePick::Detach
+                };
+                let on = self.piece_pick == Some(want);
+                self.set_tool(Tool::Arrow);
+                self.piece_pick = (!on).then_some(want);
+            }
             Action::Surface(k) => {
                 self.set_tool(Tool::Plot);
                 self.surface_draw = Some(k);

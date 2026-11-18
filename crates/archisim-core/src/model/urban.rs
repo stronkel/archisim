@@ -587,6 +587,8 @@ pub struct Road {
     pub free: bool,
     /// Stretches with their own materials (N4; `road_skins`).
     pub skins: Vec<RoadSkin>,
+    /// Its pieces hidden by hand (N6; `hidden_pieces`).
+    pub hidden: Vec<HiddenPiece>,
 }
 
 /// Data needed to make a road.
@@ -1154,6 +1156,7 @@ impl Model {
                 sidewalk_material: spec.sidewalk_material,
                 free: false,
                 skins: Vec::new(),
+                hidden: Vec::new(),
             },
         );
         Ok(id)

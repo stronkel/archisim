@@ -377,6 +377,13 @@ impl Exporter<'_> {
                             string(&text)
                         )));
                     }
+                    // Pieces hidden by hand (N6).
+                    if !r.hidden.is_empty() {
+                        props.push(self.w.add(format!(
+                            "IFCPROPERTYSINGLEVALUE('Hidden',$,IFCTEXT({}),$)",
+                            string(&r.encode_hidden())
+                        )));
+                    }
                     // Laid in anarchy (N2).
                     if r.free {
                         props.push(

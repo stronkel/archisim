@@ -1151,6 +1151,11 @@ impl ArchiSimApp {
 
     /// What the keys and the mouse do now, as "Clic: … · Esc: …".
     pub(super) fn hint_text(&self) -> &'static str {
+        match self.piece_pick {
+            Some(super::pieces_ui::PiecePick::Hide) => return "Ocultar piezas: clic en una raya, una plaza pintada, un alcorque, una señal o un bolardo de una calle · Esc: dejarlo",
+            Some(super::pieces_ui::PiecePick::Detach) => return "Soltar paso de peatones: clic en una cebra de una calle · Esc: dejarlo",
+            None => {}
+        }
         match self.replace.picking {
             Some(None) => return "Sustituir todos: clic en una esquina de la zona · Esc: dejarlo",
             Some(Some(_)) => return "Sustituir todos: clic en la esquina opuesta · Esc: dejarlo",

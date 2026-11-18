@@ -1617,6 +1617,9 @@ pub(crate) struct Road {
     /// pavement, kerb, sidewalk, planting]`, the materials by id or null.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub skins: Vec<SkinOf>,
+    /// Its pieces hidden by hand (version 118): `Road::encode_hidden`.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub hidden: String,
 }
 
 /// A stretch of a road with its own materials (version 116): from, to,
@@ -4492,6 +4495,7 @@ impl ProjectFile {
                             )
                         })
                         .collect(),
+                    hidden: r.encode_hidden(),
                 })
                 .collect(),
             runs: p
@@ -5988,6 +5992,10 @@ impl ProjectFile {
                         planting: d.map(core::MaterialId),
                     })
                     .collect(),
+                hidden: core::Road::decode_hidden(&r.hidden).ok_or_else(|| FileError::Value {
+                    element: format!("road {}", r.id),
+                    message: format!("«{}» are not hidden pieces", r.hidden),
+                })?,
             });
         }
         for x in self.decals {

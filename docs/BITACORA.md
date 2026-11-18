@@ -6,6 +6,22 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-18 (179) · v0.100: territorio N6, ocultar y soltar piezas
+
+Rama `bloque/ocultar` sobre `bloque/superficies` (#227). Versión 0.100.0. Formato `.archisim` versión 118.
+
+- **Qué se hizo** (`docs/TERRITORIO.md` §2.9):
+  - **Modelo** (`archisim-core::model::hidden_pieces`): `Road::hidden` (`HiddenPiece` con `PieceKind` marca, alcorque, señal o bolardo, a lo largo y al lado de la calle), `place_of`, `hides`, `visible_markings`, `visible_tree_pits`, `encode_hidden`/`decode_hidden`, `middle_of`; `Model::hide_piece`, `show_pieces`, `detach_crossing` (la cebra pasa a `Marking` `Zebra`).
+  - La planta y el 3D usan `visible_markings`/`visible_tree_pits`; `crossroads::assemble` deja fuera las señales y bolardos ocultos de cualquiera de sus calles.
+  - **Fichero** (`hidden` en cada calle, versión 118) e **IFC** (`ArchiSim_Road.Hidden`).
+  - **App**: `app/pieces_ui` (`PiecePick`, `piece_at`, `piece_click`), fichas «Ocultar piezas» y «Soltar paso de peatones» (`Action::HidePieces`, `Action::DetachCrossing`), y «Mostrar las piezas ocultas» en el grupo «Por tramos» de la calle.
+  - Ejemplo en `archisim nudos out/`; pruebas en el núcleo, la línea de órdenes (fichero e IFC) y la aplicación con clics.
+- **Pendiente**: §7 de `TERRITORIO.md`. Siguiente, N7.
+- **Qué debe probar Antonio** (con la 0.100):
+  1. `archisim nudos out/` y abre `out/nudos.archisim`: a la plataforma única le falta un bolardo y al cruce del Olmo con la Mayor, la señal del sur.
+  2. Urbanismo → Calle → **Ocultar piezas**: pincha rayas de un carril y una plaza pintada; mueve la calle y mira que siguen ocultas; en la calle, **Mostrar las piezas ocultas**.
+  3. **Soltar paso de peatones** sobre una cebra y muévela con las flechas del teclado.
+
 ## 2026-11-18 (178) · v0.99: territorio N5, superficies por contorno
 
 Rama `bloque/superficies` sobre `bloque/tramos` (#226). Versión 0.99.0. Formato `.archisim` versión 117.

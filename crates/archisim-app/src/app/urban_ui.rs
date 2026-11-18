@@ -1708,6 +1708,7 @@ impl ArchiSimApp {
         let mut skins = r.skins.clone();
         let mut gone = None;
         let mut replace = false;
+        let mut show_hidden = false;
         group(ui, "road-skins", "Por tramos", |ui| {
             props::note(
                 ui,
@@ -1763,6 +1764,12 @@ impl ArchiSimApp {
                     gone = Some(i);
                 }
             }
+            if !r.hidden.is_empty() {
+                props::note(ui, &format!("{} piezas ocultas a mano.", r.hidden.len()));
+                if ui.button("Mostrar las piezas ocultas").clicked() {
+                    show_hidden = true;
+                }
+            }
             ui.horizontal_wrapped(|ui| {
                 if ui.button("Nuevo tramo").clicked() {
                     let mid = len / 2.0;
@@ -1776,6 +1783,12 @@ impl ArchiSimApp {
         });
         if let Some(i) = gone {
             skins.remove(i);
+        }
+        if show_hidden {
+            let res = self
+                .ed
+                .transact("Mostrar piezas", |m| m.show_pieces(id).map(|_| ()));
+            self.report(res, "Piezas ocultas devueltas.");
         }
         if replace {
             self.replace.open = true;

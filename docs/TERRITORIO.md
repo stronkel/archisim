@@ -147,6 +147,14 @@ Hoy `archisim_geom::crossroads::junctions(model, level)` rehace todos los cruces
 - Se mueven, copian, giran, reflejan y cambian de planta como lo demás. Formato 117.
 - Ejemplo: `archisim nudos out/`: aparcamiento y jardín en la manzana de la casa, plaza de adoquín en la de al lado y una mediana al final de la Avenida de los Carriles.
 
+### 2.9 N6 hecho: ocultar y soltar piezas de la calle (18/11/2026, versión 0.100)
+
+- **Ocultar piezas** (Hide It): ficha «Ocultar piezas» en Urbanismo → Calle; cada clic oculta la pieza de calle que hay debajo: una raya de las líneas de carril, una plaza pintada del aparcamiento, una barra de cebra, un alcorque, la señal de un nudo (con su poste) o un bolardo. Se guardan por dónde están a lo largo de la calle y a su lado, así que siguen ocultas si la calle se mueve. En la calle, «Mostrar las piezas ocultas» las devuelve (y dice cuántas hay).
+- **Soltar paso de peatones** (Move It): un clic en una cebra de una calle la convierte en una marca vial suelta, elegida, que se mueve, gira o copia con las órdenes de siempre (arrastrar, flechas del teclado, Mover con distancia). El rebaje de los bordillos se queda con la calle; se quita con la cebra.
+- El mobiliario, los árboles de alineación y las marcas sueltas ya eran elementos propios: se mueven al milímetro con lo de la 0.84 (flechas, distancia tecleada, guías).
+- Se guarda en la calle (formato 118) y en el IFC (`ArchiSim_Road.Hidden`).
+- Ejemplo: `archisim nudos out/` oculta un bolardo de la plataforma única y la señal sur del cruce del Olmo.
+
 ## 3. Lo demás, por tandas
 
 | Tanda | Qué | Mods de referencia | Tamaño |
@@ -309,6 +317,12 @@ Lo que se deja para después, tanda a tanda, para repasarlo junto con la cuarta 
 - La superficie no recorta el terreno: se apoya sobre él (un jardín hundido o una plaza en bajada, no).
 - Mover sus esquinas con tiradores; hoy se rehace con Editar contorno o se dibuja de nuevo.
 - Las juntas son una cuadrícula; aparejos (espiga, rombo) y despiece del encintado, no.
+
+**De N6 (ocultar y soltar)**
+- Al soltar una cebra, los bordillos rebajados se quitan con ella; habría que dejarlos donde estaban o moverlos con la cebra.
+- Soltar también las flechas y líneas de un nudo (hoy solo se ocultan) y las señales (pasarían a ser un objeto «señal»).
+- Ocultar por ventana (varias piezas de una vez) y ver las ocultas en gris para devolverlas una a una.
+- Ocultar en 3D y en la Maqueta (hoy, desde la planta).
 
 **De N2 (trazado)**
 - La pendiente uniforme elegida con el ratón no enseña marcas en planta entre los dos clics (solo el aviso).

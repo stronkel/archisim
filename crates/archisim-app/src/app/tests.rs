@@ -9662,6 +9662,64 @@ fn nodes_with_the_tool() {
 /// and turn is tangent to the stretch before; a street gets a uniform
 /// grade and a parallel one; a node becomes a roundabout.
 #[test]
+fn hide_pieces_and_let_a_zebra_go() {
+    let mut h = Harness::new(Editor::new_project());
+    let canvas = h.app.canvas;
+    h.app
+        .view
+        .fit_exact(canvas, p(-60.0, -60.0), p(60.0, 60.0), 0.0);
+    h.app.set_discipline(super::toolbox::Discipline::Site);
+    h.type_text("w");
+    h.click_at(p(-50.0, 0.0));
+    h.click_at(p(50.0, 0.0));
+    h.key(Key::Enter);
+    h.key(Key::Escape);
+    let road = h.model().roads().next().unwrap().id;
+    // Markings and a zebra at its middle.
+    let mat = h.model().road(road).unwrap().pavement;
+    let r = h.app.ed.transact("Paso", |m| {
+        m.edit_road(road, |x| {
+            x.section.markings = Some(mat);
+            x.section.crossings.push(archisim_core::Crossing {
+                at: 50.0,
+                width: 4.0,
+            });
+        })
+    });
+    assert!(r.is_ok());
+    let before = h.model().road(road).unwrap().visible_markings(&[]);
+    // A dash of the lane line, west of the zebra.
+    let dash = before
+        .iter()
+        .map(|m| archisim_core::middle_of(m))
+        .find(|c| c.y.abs() < 0.2 && c.x < -10.0 && c.x > -25.0)
+        .expect("a dash");
+    h.app.act(super::toolbox::Action::HidePieces);
+    assert!(h.app.piece_pick.is_some());
+    h.click_at(dash);
+    let after = h.model().road(road).unwrap().visible_markings(&[]);
+    assert_eq!(after.len(), before.len() - 1);
+    // The zebra let go: a marking, selected.
+    h.app.act(super::toolbox::Action::DetachCrossing);
+    h.click_at(p(0.5, 1.0));
+    assert!(h.model().road(road).unwrap().section.crossings.is_empty());
+    assert_eq!(h.model().markings().count(), 1);
+    assert!(matches!(
+        h.app.ed.selection.iter().next(),
+        Some(Element::Marking(_))
+    ));
+    // The street's properties show the pieces hidden.
+    h.app.ed.selection = [Element::Road(road)].into_iter().collect();
+    h.frame();
+    let r = h
+        .app
+        .ed
+        .transact("Mostrar", |m| m.show_pieces(road).map(|_| ()));
+    assert!(r.is_ok());
+    assert!(h.model().road(road).unwrap().hidden.is_empty());
+}
+
+#[test]
 fn surfaces_drawn_by_their_outline() {
     let mut h = Harness::new(Editor::new_project());
     let canvas = h.app.canvas;

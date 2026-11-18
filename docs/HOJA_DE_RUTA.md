@@ -344,7 +344,7 @@ Pedido de Antonio: traer un terreno a la realidad con todas las opciones de urba
 | N3 | Carriles y marcas atadas al nudo; flechas y señales | Hecho en 0.97 (conexiones de carril calculadas y a mano, giros por carril, flechas y líneas entre carriles, detención retrasada, isletas pintadas) |
 | N4 | Cambios por tramo y «Sustituir todos» | Hecho en 0.98 (materiales por tramo de calle; sustituir tipos de objeto y materiales de calle en proyecto, planta, zona o tramo) |
 | N5 | Superficies por contorno con encintado | Hecho en 0.99 (plaza, isleta, mediana, aparcamiento con plazas y jardín por contorno, con borde, juntas y forzado a bordillos y fachadas) |
-| N6 | Mover y ocultar cualquier pieza urbana | Propuesto |
+| N6 | Mover y ocultar cualquier pieza urbana | Hecho en 0.100 (ocultar rayas, plazas, alcorques, señales y bolardos de la calle; soltar cebras como marcas) |
 | N7 | Manzanas, parcelas y llenado | Propuesto |
 | N8 | Área grande (2 × 2 km) con conexiones de fuera y vista de mapa | Propuesto |
 | N9 | Tráfico de ilustración: coches y personas circulando por carriles y aceras | Propuesto (al final) |

@@ -218,7 +218,7 @@ pub fn draw_roads(
                 );
             }
             // The tree pits of its sidewalks (U3).
-            for pit in r.tree_pits_except(&gaps) {
+            for pit in r.visible_tree_pits(&gaps) {
                 if !visible(&pit) {
                     continue;
                 }
@@ -241,7 +241,7 @@ pub fn draw_roads(
             // The road markings: lane lines, parking bays, zebra crossings
             // (not near a node that hides them, N1).
             let mark_gaps = archisim_geom::crossroads::marking_gaps(&junctions, r.id);
-            for m in r.markings_except(&mark_gaps) {
+            for m in r.visible_markings(&mark_gaps) {
                 if !visible(&m) {
                     continue;
                 }

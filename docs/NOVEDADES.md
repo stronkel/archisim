@@ -4,6 +4,10 @@ Lo que cambia en cada versión, en pocas líneas. ArchiSim enseña la parte de s
 
 Cada versión empieza con una línea `## <versión>` (por ejemplo `## 0.81.0`): es la que busca la publicación.
 
+## 0.100.0
+
+- **Ocultar y soltar piezas de las calles (N6).** «Ocultar piezas» quita de un clic una raya, una plaza pintada, un alcorque, una señal o un bolardo que pone la calle, y siguen ocultos aunque la calle se mueva. «Soltar paso de peatones» convierte la cebra de una calle en una marca vial suelta para moverla o girarla.
+
 ## 0.99.0
 
 - **Plazas, isletas, medianas, aparcamientos y jardines (N5).** Se dibujan por su contorno, pegándose a los bordillos y a las líneas de fachada, con su borde (bordillo, rigola o encintado), su altura sobre lo de debajo, las juntas del pavimento y, en los aparcamientos, las plazas pintadas en batería o en espiga, con su número.

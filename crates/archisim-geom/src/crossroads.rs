@@ -1629,7 +1629,12 @@ fn assemble(
             owner.kerb_material,
         ),
     };
+    // Pieces hidden by hand on any of its streets (N6).
+    let hidden = |kind: archisim_core::PieceKind, p: Point2| roads.iter().any(|r| r.hides(kind, p));
     for b in bollards {
+        if hidden(archisim_core::PieceKind::Bollard, b) {
+            continue;
+        }
         parts.push(JunctionPart {
             band: RoadBand::Kerb,
             outline: square(b, BOLLARD),
@@ -1693,6 +1698,9 @@ fn assemble(
                 a.kerb_left + 0.3
             };
             let post = a.origin + a.dir * (s0 + 1.0) + na * out;
+            if hidden(archisim_core::PieceKind::Sign, post) {
+                continue;
+            }
             signs.push((post, a.dir, sign));
             let up = kerb_height;
             parts.push(JunctionPart {

@@ -372,6 +372,28 @@ pub fn build() -> Res<Model> {
         &[(368.0, -0.8), (398.0, -0.8), (398.0, 0.8), (368.0, 0.8)],
         paving,
     )?;
+    // Pieces hidden by hand (N6): a bollard of the shared surface and the
+    // give-way sign of the Olmo coming from the south.
+    let shared = crossroads::junctions(&m, pb)
+        .into_iter()
+        .find(|j| j.kind == NodeKind::Shared)
+        .ok_or("sin plataforma única")?;
+    if let Some(b) = shared
+        .parts
+        .iter()
+        .find(|x| x.z1 - x.z0 > 0.5 && x.z1 - x.z0 < 1.5)
+    {
+        let c = archisim_core::middle_of(&b.outline);
+        let road = shared.arms[0].road;
+        m.hide_piece(road, archisim_core::PieceKind::Bollard, c)?;
+    }
+    let olmo = crossroads::junctions(&m, pb)
+        .into_iter()
+        .find(|j| j.signs.len() == 2)
+        .ok_or("sin el cruce del Olmo")?;
+    if let Some((post, _, _)) = olmo.signs.iter().min_by(|a, b| a.0.y.total_cmp(&b.0.y)) {
+        m.hide_piece(mayor, archisim_core::PieceKind::Sign, *post)?;
+    }
     // A house in the block between the four crossings.
     let corners = [p(-10.0, 15.0), p(10.0, 15.0), p(10.0, 28.0), p(-10.0, 28.0)];
     for i in 0..4 {
@@ -546,6 +568,14 @@ mod tests {
         a.sort_by_key(|k| format!("{k:?}"));
         b.sort_by_key(|k| format!("{k:?}"));
         assert_eq!(a, b);
+        // The pieces hidden too (N6).
+        let hidden = |m: &Model| -> usize { m.roads().map(|r| r.hidden.len()).sum() };
+        assert_eq!(hidden(&m), 2);
+        assert_eq!(hidden(&back), 2);
+        assert_eq!(hidden(&imported), 2);
+        assert!(crossroads::junctions(&m, pb)
+            .iter()
+            .any(|j| j.signs.len() == 1 && !j.bump_kerbs.is_empty()));
         // The surfaces too (N5).
         assert_eq!(m.surfaces().count(), 4);
         assert_eq!(

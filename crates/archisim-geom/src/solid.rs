@@ -5208,7 +5208,7 @@ pub fn road_solids_with(
     if let Some(m) = s.markings {
         let mut tris = Vec::new();
         let mark_gaps = crate::crossroads::marking_gaps(junctions, id);
-        for poly in r.markings_except(&mark_gaps) {
+        for poly in r.visible_markings(&mark_gaps) {
             tris.extend(draped_prism(&poly, |q| {
                 let top = base + r.top_under(q);
                 (top, top + 0.004)
@@ -5247,7 +5247,7 @@ pub fn road_solids_with(
     out.extend(crate::road_ground::road_ground_solids(model, id));
     // Its tree pits: the soil, flush with the sidewalk (U3).
     let pits: Vec<[P3; 3]> = r
-        .tree_pits_except(&gaps)
+        .visible_tree_pits(&gaps)
         .iter()
         .flat_map(|poly| {
             draped_prism(poly, |q| {

@@ -830,6 +830,7 @@ mod tests {
             sidewalk_material: MaterialId(0),
             free: false,
             skins: Vec::new(),
+            hidden: Vec::new(),
         };
         let st = r.tree_pit_stations();
         assert_eq!(st.len(), 10);
