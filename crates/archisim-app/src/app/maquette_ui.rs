@@ -433,6 +433,7 @@ impl ArchiSimApp {
         let ctx = ui.ctx().clone();
         let canvas = self.v3d.canvas;
         self.object_bar(&ctx, canvas);
+        self.street_bar(&ctx, canvas);
         self.maquette_more(&ctx);
         self.brush_panel_maquette(&ctx, canvas.left(), canvas.top(), canvas.bottom());
     }

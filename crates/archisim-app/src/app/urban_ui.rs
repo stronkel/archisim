@@ -111,6 +111,11 @@ pub struct RoadSettings {
     pub pavement: MaterialId,
     pub kerb: MaterialId,
     pub sidewalk: MaterialId,
+    /// Not drawing: a grid, a parallel street or «Mejorar» (N10).
+    pub act: Option<super::street_bar::RoadAct>,
+    /// The distance between the streets of a grid, and of a parallel.
+    pub grid_spacing: f64,
+    pub parallel: f64,
 }
 
 impl RoadSettings {
@@ -134,6 +139,9 @@ impl RoadSettings {
             pavement: by(&["asphalt", "concrete"]),
             kerb: by(&["stone", "concrete"]),
             sidewalk: by(&["ceramic", "stone", "concrete"]),
+            act: None,
+            grid_spacing: 80.0,
+            parallel: 30.0,
         }
     }
 }
@@ -531,6 +539,9 @@ impl ArchiSimApp {
     // ---- Road tool ----------------------------------------------------------
 
     pub(super) fn road_click(&mut self, p: Point2) {
+        if self.road_act_click(p) {
+            return;
+        }
         if !self.road_settings.draw.by_stretches() {
             if self.road_points.last().is_some_and(|l| l.approx_eq(p)) {
                 self.finish_road();
@@ -955,7 +966,7 @@ impl ArchiSimApp {
     }
 
     /// The 3D pictures of the street types' cards that are ready.
-    fn street_thumbs(
+    pub(super) fn street_thumbs(
         &mut self,
         ctx: &egui::Context,
     ) -> std::collections::HashMap<String, super::thumbs::Thumb> {

@@ -6,6 +6,14 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-18 (186) · v0.106: la barra de calles (N10)
+
+Rama `bloque/calles-cs2` sobre `bloque/encajar-entorno` (#234). Pedido de Antonio: una forma de trazar y editar calles como en Cities: Skylines 2, ágil, minimalista y con control de todo. Sin cambios de formato.
+
+- **Qué se hizo** (`docs/TERRITORIO.md` §2.13): `app/street_bar`, la barra flotante de la herramienta Calle en planta, 3D y Maqueta (tipo con tarjetas, modos de trazado, Cuadrícula, Paralela, Mejorar, Terreno, Anarquía y altura con RePág/AvPág) y las medidas junto al cursor (longitud, rumbo, radio y pendiente). Pruebas `a_grid_fits_its_spacing`, `three_points_give_their_radius` y `the_street_bar_lays_grids_parallels_and_upgrades`.
+- **Pendiente**: tiradores en 3D para la curva mientras se traza; arrastrar la altura de un tramo ya hecho con la rueda; el resto de §7.
+- **Qué debe probar Antonio**: Urbanismo → Calle. Mira la barra abajo. Pulsa «Cuadrícula», haz clic en una esquina, en el final del primer lado y en el fondo: deben salir las calles con sus cruces; Ctrl+Z las quita todas de una vez. Luego «Paralela» y clic al lado de una calle; luego elige otro tipo en el nombre de la barra, «Mejorar» y clic en una calle. Traza un tramo con «Continua» y mira la etiqueta azul junto al cursor; pulsa RePág dos veces y traza otro: debe ir en viaducto a +2 m.
+
 ## 2026-11-18 (185) · v0.105: encajar el entorno
 
 Rama `bloque/encajar-entorno`. Pedido de Antonio a raíz de la nave SUMO: el entorno traído se solapaba con el proyecto y no había forma cómoda de moverlo sin saber las coordenadas y el ángulo. Sin cambios de formato.
