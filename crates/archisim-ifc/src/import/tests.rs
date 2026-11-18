@@ -2081,3 +2081,36 @@ fn modular_boxes_round_trip() {
     let back = model.boxes().find(|x| x.mark == "MOD-01").unwrap();
     assert_eq!(model.box_members(back.id).count(), held);
 }
+
+/// A louvre panel in front of a façade goes out as an `IfcShadingDevice`
+/// (user-defined: neither schema has louvres) with its type, and comes
+/// back as the same object, turned as it was.
+#[test]
+fn louvre_panels_round_trip() {
+    let mut m = Model::new("Lamas");
+    let pb = m.add_level("PB", 0.0);
+    archisim_library::add_library(&mut m).unwrap();
+    let t = archisim_library::add_object_entry(&mut m, "Panel de lamas de madera 120").unwrap();
+    for (i, turn) in [0.0, 0.6, -0.4].into_iter().enumerate() {
+        m.add_object(archisim_core::NewObject {
+            level: pb,
+            object_type: t,
+            position: Point2::new(1.5 * i as f64, -1.0),
+            rotation: turn,
+            base_offset: 0.0,
+        })
+        .unwrap();
+    }
+    let ifc = export(&m);
+    assert_eq!(ifc.matches("IFCSHADINGDEVICE(").count(), 3);
+    assert_eq!(ifc.matches("IFCSHADINGDEVICETYPE(").count(), 1);
+    assert!(ifc.contains("'Panel de lamas orientable',.USERDEFINED.)"));
+    assert!(!ifc.contains(".LOUVER."));
+    let Imported { model, .. } = import_ifc(&ifc).unwrap();
+    let mut turns: Vec<f64> = model.objects().map(|o| o.rotation).collect();
+    turns.sort_by(f64::total_cmp);
+    assert_eq!(turns.len(), 3);
+    for (a, b) in turns.iter().zip([-0.4, 0.0, 0.6]) {
+        assert!((a - b).abs() < 1e-6, "{turns:?}");
+    }
+}

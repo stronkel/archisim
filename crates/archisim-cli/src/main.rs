@@ -40,6 +40,7 @@ mod instalaciones;
 mod locales;
 mod manzanas;
 mod modelos;
+mod montar;
 mod muestrario;
 mod muros_talud;
 mod nudos;
@@ -1085,6 +1086,16 @@ fn main() -> ExitCode {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
             report(vivero::write(&dir))
         }
+        Some("montar") => match (args.get(1), args.get(2)) {
+            (Some(spec), Some(out)) => {
+                let name = args.get(3).map_or("Proyecto montado", |s| s.as_str());
+                report(montar::run(Path::new(spec), Path::new(out), name))
+            }
+            _ => {
+                eprintln!("Uso: archisim montar <descripción.txt> <proyecto.archisim> [nombre]");
+                ExitCode::FAILURE
+            }
+        },
         Some("muestrario") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
             report(muestrario::write(&dir))

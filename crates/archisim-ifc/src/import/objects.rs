@@ -20,6 +20,9 @@ impl<'a> Importer<'a> {
         ids.extend(self.file.of_kind("IFCVEHICLE"));
         // Lifts' cars alone (a whole lift has no type: read as a lift).
         ids.extend(self.file.of_kind("IFCTRANSPORTELEMENT"));
+        // Louvres in front of a façade (a curtain wall's own louvres have
+        // no type of a family, and are left to the curtain wall).
+        ids.extend(self.file.of_kind("IFCSHADINGDEVICE"));
         ids.sort_unstable();
         for id in ids {
             if let Err(why) = self.import_object(id) {

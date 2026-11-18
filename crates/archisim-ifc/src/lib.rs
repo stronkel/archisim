@@ -2269,7 +2269,8 @@ impl<'a> Exporter<'a> {
                 .iter()
                 .map(|(s, z0, z1)| archisim_geom::junctions::area(s) * (z1 - z0))
                 .sum();
-            let (pl, shape) = self.slab_shape(slab, thickness, storey_pl, &voids);
+            let cutters = archisim_geom::junctions::slab_wall_cutters(&idx, slab.id, &geometries);
+            let (pl, shape) = self.slab_shape(slab, thickness, storey_pl, &cutters);
             let name = format!("{} {}", stype.name, slab.id.0);
             let sl = self.w.add(format!(
                 "IFCSLAB({},$,{},$,{},{pl},{shape},{},.{}.)",
