@@ -6,6 +6,83 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-18 (184) · v0.104 en `main`: territorio N0–N9 unido
+
+Pedido de Antonio («únelos»). La cadena #220, #222–#231 y #233 (fluidez del territorio, nudos, trazado, carriles, tramos, superficies, ocultar, manzanas, área grande, tráfico y la cuarta vuelta de fluidez) se une a `main` encima de #221 (dibujo aparte, 0.92.1) y #232 (la nave SUMO desde el DXF, 0.93.0). Conflictos solo en documentación, versión y pruebas de la app: se juntan las dos partes. En `NOVEDADES.md` la 0.93.0 lleva lo del territorio y lo de la nave SUMO. Formato `.archisim` versión 120.
+
+- **Qué debe probar Antonio**: actualizar desde Ayuda → «Buscar actualizaciones…» a la 0.104.0 y abrir la nave SUMO (`archisim montar`) y `out/territorio.archisim` para ver que siguen bien.
+
+## 2026-11-18 (183) · v0.104: cuarta vuelta de fluidez del territorio y repaso de §7
+
+Rama `bloque/fluidez-4` sobre `bloque/trafico` (#231). Versión 0.104.0. Sin cambios de formato.
+
+- **Qué se hizo** (`docs/TERRITORIO.md` §4.4 y §7):
+  - **Medido** lo de N1–N9 en el sitio de 1 km² (`archisim territorio-grande` y la prueba `territory_scene`). Lo único que pasaba del presupuesto: un nudo, un tramo o una pieza oculta rehacían toda la calle y lo que hay a 30 m de ella. Ahora solo lo de alrededor (`scene_build::local_road_change`): elevar un cruce, de 512 a 95 ms; un tramo, de 430 a 170 ms. Comprobado en `a_kept_scene_is_the_whole_one`.
+  - **Tráfico**: los coches no entran en un camino que cruza otro ocupado, y con ceda el paso o stop esperan a quien llega por una calle sin señal (`Way::conflicts`, `waits_to_cross`). Las luces de los semáforos encendidas (`Traffic::lamps`, `lamp_solids`) en la vista 3D, el render y la planta de `archisim trafico`.
+  - **Manzanas**: volver a parcelar una manzana ya parcelada sin tocar las bloqueadas (`blocks::replot_block`).
+  - **Mapa**: leyenda y «Guardar el mapa…» en PNG o SVG.
+  - **Soltar una cebra**: la calle oculta sus barras y conserva los rebajes.
+  - Arreglado el fallo de la versión web de #231 (faltaba `traffic` en el render de la web).
+- **Pendiente**: lo que sigue sin tachar en §7 de `TERRITORIO.md` (tiradores en 3D, cotas mientras se traza, plazas de movilidad reducida, casas de esquina, capas del mapa, prioridad a la derecha, flechas repetidas…). Medir la vista 3D en el PC de Antonio.
+- **Qué debe probar Antonio** (con la 0.104):
+  1. Abre `out/territorio.archisim` (de `archisim territorio-grande out/`) en 3D, elige la herramienta Nudo y cambia un cruce a elevado: debe verse casi al momento.
+  2. `archisim trafico out/`, abre `out/nudos.archisim`, pon semáforos en un cruce y enciende Tráfico: mira en 3D cómo cambian de color y que los coches que giran no atraviesan a los que van rectos.
+  3. En `out/manzanas.archisim`, bloquea una parcela, abre Manzanas, elige «Viviendas aisladas» y haz clic dentro de esa manzana: se parcela de nuevo y la bloqueada sigue.
+  4. Mapa → «Guardar el mapa…» y mira la leyenda.
+
+## 2026-11-18 (182) · v0.103: territorio N9, tráfico de ilustración
+
+Rama `bloque/trafico` sobre `bloque/area-grande` (#230). Versión 0.103.0. Sin cambios de formato.
+
+- **Qué se hizo** (`docs/TERRITORIO.md` §2.12):
+  - **Geometría** (`archisim-geom::traffic`): tramos por carril entre cruces, caminos por las conexiones de carril, semáforos en dos fases, stop, distancia al de delante, personas por las aceras; repetible por semilla; cajas de colores con `SolidOwner::Traffic`.
+  - **Vista 3D**: `set_traffic`/`step_traffic`, `Scene::of_traffic` y `Renderer::set_traffic`, encima de la escena y sin rehacerla.
+  - **Render**: `Options::traffic`.
+  - **App**: ficha «Tráfico» en Urbanismo.
+  - **Línea de órdenes**: `archisim trafico` y `archisim render --trafico`.
+  - Pruebas en la geometría, la línea de órdenes y la aplicación.
+- **Pendiente**: §7 de `TERRITORIO.md`. Con esto se acaban las tandas N1–N9; sigue la cuarta vuelta de fluidez sobre todo lo de N1–N9 y el repaso de §7.
+- **Qué debe probar Antonio** (con la 0.103):
+  1. `archisim trafico out/` y mira `out/trafico.png` y `out/trafico-planta.svg`.
+  2. Abre `out/nudos.archisim`, pon un semáforo en un cruce con la herramienta Nudo, pulsa Urbanismo → Territorio → **Tráfico** y mira el cruce en 3D: los coches paran en rojo.
+  3. Con el tráfico en marcha, haz un render.
+
+## 2026-11-18 (181) · v0.102: territorio N8, área grande y vista de mapa
+
+Rama `bloque/area-grande` sobre `bloque/manzanas` (#229). Versión 0.102.0. Formato `.archisim` versión 120.
+
+- **Qué se hizo** (`docs/TERRITORIO.md` §2.11):
+  - **Modelo**: `archisim-core::model::surroundings` (área guardada, `square_area`, `circle_area`, `clip_line_to_area`, `outside_ends`).
+  - **Traer el entorno**: `CartoOptions::square` (recuadro); guarda el área.
+  - **Planta**: borde del área y flechas de las conexiones con fuera.
+  - **Mapa**: `archisim-plan::map`.
+  - **Fichero** (versión 120) e **IFC** (`ArchiSim_Surroundings`).
+  - **App**: ventana «Mapa» (`app/map_ui`) y planta que se aleja hasta 0,2 puntos por metro.
+  - **Línea de órdenes**: `archisim area-grande` y `archisim mapa`.
+  - Pruebas en el núcleo, en traer el entorno, en la planta, en la línea de órdenes (fichero e IFC) y en la aplicación.
+- **Pendiente**: §7 de `TERRITORIO.md`. Siguiente, N9.
+- **Qué debe probar Antonio** (con la 0.102):
+  1. `archisim area-grande out/`: mira `out/area-grande-mapa.png` y abre `out/area-grande.archisim`.
+  2. Urbanismo → Territorio → **Mapa**: pincha en una esquina del mapa y mira que la planta va allí; luego «Ver toda el área».
+  3. Al traer un entorno real, pide un recuadro de radio 1 000 m y mira que las calles acaban en el borde con su flecha.
+
+## 2026-11-18 (180) · v0.101: territorio N7, manzanas, parcelas y llenado
+
+Rama `bloque/manzanas` sobre `bloque/ocultar` (#228). Versión 0.101.0. Formato `.archisim` versión 119.
+
+- **Qué se hizo** (`docs/TERRITORIO.md` §2.10):
+  - **Modelo**: `BlockZone` (casco antiguo, bloques, viviendas aisladas, comercio, equipamiento; `label`, `code`, `rgb`) y `Plot::zone`, `Plot::locked`.
+  - **Geometría** (`archisim-geom::blocks`): `city_blocks` (huecos de la unión de calles, cruces y glorietas), `block_lots` (parcelas en escuadra, una de esquina por lado, patio si cabe), `add_block_plots`, `fill_plot`/`fill_plots` (un edificio del mundo por parcela, encajado en ella), `clear_plots` (respeta las bloqueadas).
+  - **Planta**: parcelas teñidas por zona, rótulos solo si caben y «bloqueada».
+  - **Fichero** (versión 119) e **IFC** (`ArchiSim_Plot.Zone`, `Locked`).
+  - **App**: panel «Manzanas» (`app/blocks_ui`: zona, frente y fondo, parcelar una o todas, llenar, rehacer, vaciar) y grupo «Zona y llenado» en la parcela.
+  - Ejemplo `archisim manzanas out/`; pruebas en la geometría, la línea de órdenes (fichero e IFC) y la aplicación.
+- **Pendiente**: §7 de `TERRITORIO.md`. Siguiente, N8.
+- **Qué debe probar Antonio** (con la 0.101):
+  1. `archisim manzanas out/` y abre `out/manzanas.archisim`: cuatro manzanas de colores, cada una con sus edificios; la casa bloqueada del casco antiguo lo dice en sus propiedades.
+  2. En un proyecto nuevo, traza cuatro calles en cuadro; Urbanismo → Territorio → **Manzanas**, elige «Viviendas aisladas», «Parcelar una manzana» y pincha dentro; luego «Llenar las vacías».
+  3. Bloquea una parcela, cambia la zona de otra y pulsa «Rehacer»: la bloqueada no cambia.
+
 ## 2026-11-18 (179) · v0.100: territorio N6, ocultar y soltar piezas
 
 Rama `bloque/ocultar` sobre `bloque/superficies` (#227). Versión 0.100.0. Formato `.archisim` versión 118.
@@ -173,6 +250,93 @@ Rama `bloque/territorio`, pull request #220. Versión 0.93.0. Sin cambios de for
   1. Ejecuta `archisim territorio-grande out/` y ábrelo con ArchiSim: `out/territorio.archisim`. Mira el 3D, arrastra una calle y suéltala: cuenta cuánto tarda en verse el cambio. Mira también que los árboles, edificios, calles y terreno se vean igual que antes.
   2. Haz lo mismo con un proyecto tuyo con terreno y calles, o con «Traer el entorno» de Punta Umbría a 300 m.
   3. Mándame `out/territorio-medidas.txt`: son los tiempos en tu PC.
+## 2026-11-18 (172) · v0.93: la SUMO como el render (lamas, vuelos, jardineras y acabados)
+
+Rama `bloque/montar-dxf`, misma versión 0.93.0 (aún sin publicar). Sin cambios de formato.
+
+- **Por qué.** Antonio mandó el render de la nave. Las piezas inclinadas de la planta primera que salían como muros son lamas de madera que giran con el sol. Faltaban las jardineras, los acabados y la cubierta.
+- **Qué se hizo.**
+  - **Familia nueva «Panel de lamas orientable»** (`families/objetos/panel_lamas.asfam`, categoría `facade`, Objetos → Fachada):
+    - Lamas verticales entre dos travesaños, con un pivote abajo y otro arriba, sobre su eje en el centro.
+    - Parámetros: ancho, alto, ancho y grueso de lama, separación y materiales.
+    - IFC: `IfcShadingDevice` con su `IfcShadingDeviceType`, `USERDEFINED`, y `Pset_ShadingDeviceCommon` para la fase. El importador las lee de vuelta.
+    - Prueba `louvre_panels_round_trip`; el catálogo trae «Panel de lamas de madera 120».
+  - **IFC, arreglo**: las lamas de los muros cortina se escribían `.LOUVER.`, que no existe en IFC4 ni en IFC 4.3. Ahora van `USERDEFINED` con ObjectType «Lama».
+  - **`archisim montar`** sabe hacer más cosas:
+    - `COLUMN`: pilar circular.
+    - `LOUVRE`: panel de lamas con su giro.
+    - `PLANTER`: peto de hormigón blanco, tierra (forjado «Tierra vegetal de jardinera») y una plantación por área.
+    - Forjados `volado` (hormigón blanco de 35 cm) y `grava` (cubierta invertida de 50 cm).
+    - Muros por acabado: `blanco`, `madera`, `int` y `fence`, con el exterior a la izquierda de la línea.
+    - Prueba `columns_louvres_and_planters_build`.
+  - **Guiones** (`scripts/montar_dxf/`):
+    - Las lamas se leen de los rectángulos cerrados de 0,80 × 0,07 de la capa SECCION, y los pilares de sus círculos.
+    - El vuelo sale de la línea exterior de la planta de cubierta (capa PROYECCION).
+    - Las jardineras son los recintos cerrados con plantas dibujadas dentro (capa JARDINERIA).
+    - Los muros exteriores se orientan con el exterior a la izquierda.
+    - El castillete sale con su contorno real.
+    - `outlines.py` y `beds.py` son nuevos.
+  - **La SUMO**:
+    - 267 muros, 43 paneles de lamas, 57 pilares Ø20 y 8 jardineras con 143 plantas.
+    - Forjado de la primera de 2.142 m² con el vuelo; cubierta de 1.911 m², abierta sobre los 5 patios y la terraza.
+- **Comprobado.** fmt; clippy de core, geom, ifc, cli y library; pruebas de `archisim-core`, `archisim-ifc`, `archisim-library` y `montar`; la SUMO validada en IFC 4.3 e IFC4 y reimportada; vista desde la calle de día y de noche.
+  - La tierra de una jardinera rozando su peto hacía que IfcOpenShell le quitara hasta el 40 % del volumen: ahora queda a 1 cm del peto.
+  - La app solo cambia en la lista de categorías de la galería, y se ha comprobado que compila.
+- **Pendiente / supuestos.**
+  - Lamas de 3,50 m (del forjado a la cara inferior de la cubierta), con lamas de 4,5 cm cada 3 cm: es una suposición.
+  - Peto de jardinera de 60 cm en cubierta y 50 cm en las plantas.
+  - El mobiliario de la terraza del café y las placas fotovoltaicas no están.
+  - Parte de la fachada sur de la planta baja sale como muro donde el render enseña vidrio: hay que revisarla en el DXF.
+- **Qué debe probar Antonio.**
+  1. Abre `nave-sumo.archisim`. En la planta primera, elige una lama y gírala (Propiedades → giro): debe pivotar sobre su eje.
+  2. Galería de objetos → Fachada → «Panel de lamas orientable»: cambia el ancho y la separación de las lamas.
+  3. Mira el 3D desde la calle y compáralo con el render: vuelos, lamas, jardineras y palmitos en cubierta.
+  4. Abre el IFC en BIMvision: las lamas deben salir como protecciones solares.
+
+## 2026-11-17 (171) · v0.93: la nave SUMO montada desde el DXF
+
+Rama `bloque/montar-dxf`. Versión 0.93.0. Sin cambios de formato.
+
+- **Qué se hizo.**
+  - **La nave SUMO** (antiguo CEOSA, junto al Aqualon) montada desde `250819_PLANOS.dxf` con las referencias unidas (REF PB, P1, PCAST, CUBIERTA):
+    - **Plantas** sacadas de las secciones: baja ±0,00 (solera de 45 cm), primera +4,45, cubierta +8,45 y cubierta del castillete +12,35.
+    - **Muros** (302): de las dos líneas paralelas de la capa SECCION, con su espesor y sus esquinas. Se clasifican en exteriores o interiores según tengan locales a un lado o a los dos.
+    - **Carpinterías** (99): las puertas, por el arco de su hoja, con mano y sentido de apertura; las ventanas, por los vidrios dentro del hueco; y los huecos de paso sin carpintería.
+    - **Muros cortina** (62): las fachadas y mamparas de vidrio que no tienen muro.
+    - **Forjados**: la solera, el forjado de la primera, la cubierta (con los patios abiertos) y la del castillete.
+    - **Locales** (104): con el nombre de los textos del DXF.
+    - **Aparcamiento**: su cerramiento, como muro de 2 m.
+  - Nueva orden `archisim montar <descripción.txt> <proyecto.archisim> [nombre]` (`archisim-cli/src/montar.rs`): un formato de texto de una línea por elemento (LEVEL, WALL, OPEN, CURTAIN, SLAB, HOLE, ROOM). Lo que no cabe se omite y se avisa. Prueba `a_small_description_builds`.
+  - Los guiones `scripts/montar_dxf/leer_dxf.py` (aplana las referencias unidas por capas, con los arcos de bloques en espejo en coordenadas reales) y `describir.py` (empareja las líneas en muros, clasifica los huecos y escribe la descripción). Las cotas de planta y los desfases de las hojas están puestos para la nave SUMO.
+  - **IFC, arreglo**: el hueco que los muros dejan en un forjado se escribía por bandas como un contorno unido. Si los muros formaban un anillo, ese contorno se tocaba a sí mismo e IfcOpenShell quitaba de más (3 forjados de la SUMO no cuadraban). Ahora va un prisma por muro (`junctions::slab_wall_cutters`). La medición sigue saliendo de `slab_wall_voids`. El importador recorre sin límite de profundidad las cadenas de diferencias.
+- **Comprobado.** fmt; clippy de geom, ifc y cli; pruebas de `archisim-ifc`, `archisim-geom` y `archisim-cli`; demo, muestrario, IFC 4.3 e IFC4 validados; ida y vuelta idéntica; la SUMO validada en IFC 4.3 e IFC4 y reimportada. Las pruebas de la app con tarjeta gráfica no se han pasado en este servidor.
+- **Pendiente / supuestos.**
+  - Alturas de carpintería supuestas: puertas de 2,10 m (2,40 m a partir de 1,60 de ancho); ventanas de 1,20 m sobre un antepecho de 1,00; acristalamientos de más de 2 m como fijos de 2,10 sobre 0,30.
+  - Muros de una sola fábrica con guarnecido: falta poner los tipos reales de fachada.
+  - Sin pilares, escaleras ni ascensores: el DXF casi no los tiene en capa propia.
+  - Las lamas de fachada salen como muros sueltos de planta entera.
+  - El castillete es la envolvente convexa de sus muros.
+  - El VESTÍBULO de la primera tiene un contorno partido: sale con 82,80 m² en lugar de 99,17.
+- **Qué debe probar Antonio.**
+  1. Abre `nave-sumo.archisim`. Compara la planta baja y la primera con el DXF como calco (Propiedades de la planta → Calcos): los muros deben caer sobre las líneas.
+  2. Mira el 3D: patios abiertos en la cubierta, castillete, fachada acristalada curva.
+  3. Abre `nave-sumo.ifc` en otro programa (BIMvision, Solibri o Revit) y dime si algo sale mal.
+  4. Dime qué alturas de carpintería y qué tipos de muro de fachada tiene el proyecto, para afinarlos.
+
+## 2026-11-17 (170) · v0.92.1: la planta y las secciones no se quedan esperando
+
+Rama `bloque/dibujo-aparte`. Versión 0.92.1. Sin cambios de formato.
+
+- **Qué pasó.** Antonio, con la 0.92: la planta no dibuja nada (sí los contornos al pasar el ratón), las secciones y alzados se quedan en «Dibujando la sección…» para siempre y el 3D va bien. No lo he podido reproducir: con la demo, Florence Street y los proyectos de ejemplo (`every_project_draws_its_plan_and_sections`, ignorada, con `ARCHISIM_PROYECTOS`) todo se dibuja. Lo más probable es que el dibujo que se hace en otro hilo falle (un pánico) con sus proyectos o en su ordenador: ese hilo moría sin avisar y la ventana se quedaba esperando su resultado sin fin.
+- **Qué se hizo.**
+  - El trabajo aparte (`background::Pending`) recoge los fallos (`catch_unwind`, `failed`, `panic_text`) y lleva su hora de inicio.
+  - Si un dibujo falla aparte, se intenta una vez más en el hilo de la ventana, protegido; si vuelve a fallar, la vista lo dice en rojo («No se pudo dibujar la planta: …») y queda en `errores.log`, en lugar de esperar para siempre (`Picture::error`, `picture::note`, `section_failed`). Mientras se dibuja más de 3 s, dice cuánto lleva. La escena 3D que falla aparte se hace en el hilo de la ventana.
+  - Vista → «Dibujar aparte» (preferencia `dibujar_aparte`, o `ARCHISIM_SIN_HILOS=1`): apagado, todo se dibuja al momento, como antes de la 0.85.
+- **Pendiente.** Encontrar la causa con el `errores.log` de Antonio.
+- **Qué debe probar Antonio.**
+  1. Actualiza y abre el mismo proyecto. Si la planta o la sección siguen sin verse, debe salir abajo en rojo «No se pudo dibujar…» con el motivo: mándame una captura.
+  2. Prueba Vista → «Dibujar aparte» apagado: dime si así se dibujan.
+  3. Mándame el fichero `errores.log` (en Windows, `%APPDATA%\ArchiSim\errores.log`; en Mac, `~/Library/Application Support/ArchiSim/errores.log`).
 
 ## 2026-11-16 (169) · v0.92: muros y pilares, juntas a medida y más fluidez
 

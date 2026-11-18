@@ -689,6 +689,16 @@ impl ArchiSimApp {
             ui.separator();
             ui.switch(&mut self.show_reference_lines, "Líneas de referencia");
             ui.switch(&mut self.show_grid, "Rejilla");
+            if ui
+                .switch(&mut self.prefs.draw_aside, "Dibujar aparte")
+                .on_hover_text("Plantas, secciones y alzados que tardan se dibujan en segundo plano, sin parar la ventana; apagado, se dibujan al momento, como antes de la 0.85")
+                .changed()
+            {
+                self.prefs.save();
+                self.plan.clear();
+                self.section_pending = None;
+                self.section_failed = None;
+            }
             {
                 let mut print = !self.thin_lines;
                 if ui
@@ -1155,6 +1165,9 @@ impl ArchiSimApp {
             Some(super::pieces_ui::PiecePick::Hide) => return "Ocultar piezas: clic en una raya, una plaza pintada, un alcorque, una señal o un bolardo de una calle · Esc: dejarlo",
             Some(super::pieces_ui::PiecePick::Detach) => return "Soltar paso de peatones: clic en una cebra de una calle · Esc: dejarlo",
             None => {}
+        }
+        if self.blocks.picking {
+            return "Parcelar: clic dentro de una manzana sin parcelas · Esc: dejarlo";
         }
         match self.replace.picking {
             Some(None) => return "Sustituir todos: clic en una esquina de la zona · Esc: dejarlo",

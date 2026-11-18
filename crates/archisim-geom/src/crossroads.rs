@@ -717,7 +717,7 @@ fn arm_of(r: &Road, origin: Point2, s: f64, forward: bool) -> Arm {
 
 /// How near the axis the middle of a lane is for it to be a lane both ways
 /// (a single lane on the axis), metres.
-const LANE_ON_AXIS: f64 = 0.3;
+pub(crate) const LANE_ON_AXIS: f64 = 0.3;
 
 /// The arms of the roads that reach a roundabout: those whose axis goes
 /// through its circle (two arms) or ends in it or near it (one, measured
@@ -2096,7 +2096,7 @@ const STOP_LINE: f64 = 0.4;
 const YIELD_DASH: f64 = 0.8;
 const YIELD_GAP: f64 = 0.4;
 /// Half the side of a sign's post, metres.
-const POST: f64 = 0.04;
+pub(crate) const POST: f64 = 0.04;
 /// How far past an arm's end its road's own markings are left out when
 /// a node hides them, metres (where the zebras stand).
 const QUIET_REACH: f64 = 15.0;

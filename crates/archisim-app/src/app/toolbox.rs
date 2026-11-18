@@ -243,6 +243,12 @@ pub enum Action {
     /// «Sustituir todos»: a type of object or a street material for
     /// another (N4).
     Replace,
+    /// The panel «Manzanas»: blocks cut into plots and filled (N7).
+    Blocks,
+    /// The map view of the whole area (N8).
+    MapView,
+    /// The traffic for illustration in the 3D view (N9).
+    Traffic,
     /// Draw an urban surface of a kind by its outline (N5).
     Surface(archisim_core::SurfaceKind),
     /// Hide pieces of the streets one by one (N6).
@@ -717,6 +723,34 @@ const SITE: &[Tile] = &[
         "Parcela",
         "Y",
         "Lindes, superficie y retranqueos",
+    ),
+    group(
+        Glyph::Plot,
+        "Territorio",
+        "Manzanas y parcelas por zonas, vista de mapa del área y tráfico de ilustración",
+        &[
+        tile(
+            Pick::Action(Action::MapView),
+            Glyph::Plot,
+            "Mapa",
+            "",
+            "Vista de mapa: toda el área del entorno de un vistazo, con calles, edificios, zonas y las conexiones con fuera; un clic lleva la planta ahí",
+        ),
+        tile(
+            Pick::Action(Action::Traffic),
+            Glyph::Road,
+            "Tráfico",
+            "",
+            "Coches por los carriles y personas por las aceras en la vista 3D, para ilustrar: siguen los giros de cada carril y paran en los semáforos y en los stop",
+        ),
+        tile(
+            Pick::Action(Action::Blocks),
+            Glyph::Plot,
+            "Manzanas",
+            "",
+            "Parte en parcelas las manzanas que cierran las calles y las llena con edificios del lugar por zonas (casco antiguo, bloques, viviendas aisladas, comercio, equipamiento); las bloqueadas no cambian",
+        ),
+        ],
     ),
     group(
         Glyph::Road,
@@ -1614,6 +1648,9 @@ impl ArchiSimApp {
                 ),
                 Action::Render => self.render.open,
                 Action::Replace => self.replace.open,
+                Action::Blocks => self.blocks.open,
+                Action::MapView => self.map.open,
+                Action::Traffic => self.v3d.traffic_on(),
                 Action::HidePieces => self.piece_pick == Some(super::pieces_ui::PiecePick::Hide),
                 Action::DetachCrossing => {
                     self.piece_pick == Some(super::pieces_ui::PiecePick::Detach)
@@ -1754,6 +1791,21 @@ impl ArchiSimApp {
             Action::DraftingView => self.new_drafting_view(),
             Action::BringSurroundings => self.pick_carto(),
             Action::Replace => self.replace.open = !self.replace.open,
+            Action::MapView => self.map.open = !self.map.open,
+            Action::Traffic => {
+                let on = !self.v3d.traffic_on();
+                self.v3d.set_traffic(on);
+                if on {
+                    self.set_mode(super::ViewMode::ThreeD);
+                    self.say("Tráfico en la vista 3D: coches por los carriles y personas por las aceras.");
+                }
+            }
+            Action::Blocks => {
+                self.blocks.open = !self.blocks.open;
+                if !self.blocks.open {
+                    self.blocks.picking = false;
+                }
+            }
             Action::HidePieces | Action::DetachCrossing => {
                 let want = if action == Action::HidePieces {
                     super::pieces_ui::PiecePick::Hide

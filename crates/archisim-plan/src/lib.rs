@@ -43,6 +43,7 @@ pub mod framing;
 pub mod grids;
 pub mod layout;
 pub mod lettering;
+pub mod map;
 pub mod members;
 pub mod overrides;
 pub mod phases;
@@ -691,7 +692,8 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
         };
         overrides::group(&mut s, archisim_core::Category::Roads, |s| {
             archisim_geom::meter::time("planta: calles", || {
-                urban::draw_roads(s, model, level, k, &vis)
+                urban::draw_roads(s, model, level, k, &vis);
+                urban::draw_outside(s, model, level, k);
             })
         });
     }

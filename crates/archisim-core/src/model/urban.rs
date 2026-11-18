@@ -27,6 +27,70 @@ pub struct Plot {
     pub setback: f64,
     /// Cadastral reference.
     pub reference: String,
+    /// The zone it is filled by (N7): None, not zoned.
+    pub zone: Option<BlockZone>,
+    /// Locked: filling and clearing the plots leave it as it is.
+    pub locked: bool,
+}
+
+/// What a zoned plot is filled with (N7, `docs/TERRITORIO.md` §2.10).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum BlockZone {
+    /// Houses between party walls, the old town of the place.
+    OldTown,
+    /// Blocks of flats.
+    Flats,
+    /// Detached houses with a garden.
+    Houses,
+    /// Shops.
+    Shops,
+    /// Facilities: a school.
+    Civic,
+}
+
+impl BlockZone {
+    pub const ALL: [BlockZone; 5] = [
+        BlockZone::OldTown,
+        BlockZone::Flats,
+        BlockZone::Houses,
+        BlockZone::Shops,
+        BlockZone::Civic,
+    ];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            BlockZone::OldTown => "Casco antiguo",
+            BlockZone::Flats => "Bloques de viviendas",
+            BlockZone::Houses => "Viviendas aisladas",
+            BlockZone::Shops => "Comercio",
+            BlockZone::Civic => "Equipamiento",
+        }
+    }
+
+    pub fn code(self) -> &'static str {
+        match self {
+            BlockZone::OldTown => "old-town",
+            BlockZone::Flats => "flats",
+            BlockZone::Houses => "houses",
+            BlockZone::Shops => "shops",
+            BlockZone::Civic => "civic",
+        }
+    }
+
+    pub fn from_code(code: &str) -> Option<BlockZone> {
+        BlockZone::ALL.into_iter().find(|z| z.code() == code)
+    }
+
+    /// Its colour on the plan, as the zoning maps paint it.
+    pub fn rgb(self) -> [u8; 3] {
+        match self {
+            BlockZone::OldTown => [196, 140, 92],
+            BlockZone::Flats => [214, 170, 60],
+            BlockZone::Houses => [120, 178, 96],
+            BlockZone::Shops => [86, 140, 204],
+            BlockZone::Civic => [170, 110, 190],
+        }
+    }
 }
 
 /// Data needed to make a plot.
@@ -971,6 +1035,8 @@ impl Model {
                 outline: spec.outline,
                 setback: spec.setback,
                 reference: spec.reference,
+                zone: None,
+                locked: false,
             },
         );
         Ok(id)
