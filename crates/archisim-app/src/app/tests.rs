@@ -12898,3 +12898,41 @@ fn blocks_cut_into_plots_and_filled() {
     assert_eq!(h.model().masses().filter(|m| m.dress.is_some()).count(), 0);
     h.frame();
 }
+
+#[test]
+fn the_map_view_of_a_large_area() {
+    let mut h = Harness::new(Editor::new_project());
+    h.app.set_discipline(super::toolbox::Discipline::Site);
+    let level = h.app.ed.level;
+    let mat = h.model().materials().next().unwrap().id;
+    // A street across a square area of 2 × 2 km, cut at its edge.
+    let r = h.app.ed.transact("Área", |m| {
+        m.set_surroundings(Some(archisim_core::square_area(p(0.0, 0.0), 1000.0)))?;
+        m.add_road(archisim_core::NewRoad {
+            name: "Avenida".into(),
+            level,
+            axis: vec![p(-1000.0, 0.0), p(1000.0, 0.0)],
+            section: archisim_core::RoadSection::default(),
+            top_offset: 0.0,
+            profile: Vec::new(),
+            changes: Vec::new(),
+            pavement: mat,
+            kerb_material: mat,
+            sidewalk_material: mat,
+        })?;
+        Ok::<(), archisim_core::ModelError>(())
+    });
+    assert!(r.is_ok());
+    assert_eq!(h.model().outside_ends(level).len(), 2);
+    h.app.act(super::toolbox::Action::MapView);
+    assert!(h.app.map.open);
+    h.frame();
+    let (lo, hi) = h.app.map.frame().expect("the map is drawn");
+    assert!(hi.x - lo.x > 2000.0);
+    // The whole area fits in the plan.
+    let canvas = h.app.canvas;
+    h.app.view.fit_exact(canvas, lo, hi, 8.0);
+    let (a, b) = h.app.view.visible(canvas);
+    assert!(a.x <= -1000.0 && b.x >= 1000.0, "{a:?} {b:?}");
+    h.frame();
+}

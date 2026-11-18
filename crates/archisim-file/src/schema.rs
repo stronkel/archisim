@@ -2912,6 +2912,9 @@ pub(crate) struct Project {
     /// The aerial picture on the ground (version 69).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub orthophoto: Option<OrthophotoOf>,
+    /// The area of the surroundings (version 120).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub surroundings: Vec<Xy>,
     /// Use, accessibility and sprinklers for the code checks (version
     /// 12); absent: a dwelling, without either.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -3512,6 +3515,7 @@ impl ProjectFile {
                     v: o.v,
                     on_roads: o.on_roads,
                 }),
+                surroundings: p.surroundings.iter().flatten().copied().map(xy).collect(),
                 code: (p.code != core::CodeSettings::default()).then(|| Code {
                     building_use: p.code.building_use.code().into(),
                     accessibility: p.code.accessibility.code().into(),
@@ -5235,6 +5239,8 @@ impl ProjectFile {
                     })
                 }
             },
+            surroundings: (!project.surroundings.is_empty())
+                .then(|| project.surroundings.iter().copied().map(pt).collect()),
             code: match &project.code {
                 None => core::CodeSettings::default(),
                 Some(c) => core::CodeSettings {

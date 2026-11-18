@@ -98,6 +98,7 @@ impl Model {
             plot_area: _,
             room_usages: _,
             code: _,
+            surroundings: _,
             draw_phase: _,
             draw_layers: _,
             structural_site: _,

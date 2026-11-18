@@ -6,6 +6,25 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-18 (181) · v0.102: territorio N8, área grande y vista de mapa
+
+Rama `bloque/area-grande` sobre `bloque/manzanas` (#229). Versión 0.102.0. Formato `.archisim` versión 120.
+
+- **Qué se hizo** (`docs/TERRITORIO.md` §2.11):
+  - **Modelo**: `archisim-core::model::surroundings` (área guardada, `square_area`, `circle_area`, `clip_line_to_area`, `outside_ends`).
+  - **Traer el entorno**: `CartoOptions::square` (recuadro); guarda el área.
+  - **Planta**: borde del área y flechas de las conexiones con fuera.
+  - **Mapa**: `archisim-plan::map`.
+  - **Fichero** (versión 120) e **IFC** (`ArchiSim_Surroundings`).
+  - **App**: ventana «Mapa» (`app/map_ui`) y planta que se aleja hasta 0,2 puntos por metro.
+  - **Línea de órdenes**: `archisim area-grande` y `archisim mapa`.
+  - Pruebas en el núcleo, en traer el entorno, en la planta, en la línea de órdenes (fichero e IFC) y en la aplicación.
+- **Pendiente**: §7 de `TERRITORIO.md`. Siguiente, N9.
+- **Qué debe probar Antonio** (con la 0.102):
+  1. `archisim area-grande out/`: mira `out/area-grande-mapa.png` y abre `out/area-grande.archisim`.
+  2. Urbanismo → **Mapa**: pincha en una esquina del mapa y mira que la planta va allí; luego «Ver toda el área».
+  3. Al traer un entorno real, pide un recuadro de radio 1 000 m y mira que las calles acaban en el borde con su flecha.
+
 ## 2026-11-18 (180) · v0.101: territorio N7, manzanas, parcelas y llenado
 
 Rama `bloque/manzanas` sobre `bloque/ocultar` (#228). Versión 0.101.0. Formato `.archisim` versión 119.

@@ -11,6 +11,7 @@
 //! archisim --version
 //! ```
 
+mod area_grande;
 mod armado;
 mod cajas;
 mod cajas_sobre;
@@ -98,6 +99,14 @@ Uso:
       origen, con --en-el-origen). --resultado elige otro de los
       encontrados; con --enlaces, las direcciones de la descarga.
 
+  archisim area-grande [carpeta]
+      Un área del entorno de 2 × 2 km (N8): avenidas y calles en cuadrícula
+      que se cortan en el borde con su sección (conexiones con fuera) y las
+      manzanas del centro llenas: area-grande.archisim, area-grande.ifc, el
+      mapa (SVG y PNG), la planta y lo que tarda cada cosa.
+  archisim mapa <proyecto> [carpeta]
+      La vista de mapa de un proyecto (N8): el área entera, plana y en
+      color, con calles, edificios, árboles, zonas y conexiones con fuera.
   archisim manzanas [carpeta]
       Manzanas, parcelas y llenado por zonas (N7): tres calles en cada
       sentido cierran cuatro manzanas, que se parcelan por la línea de
@@ -965,6 +974,20 @@ fn main() -> ExitCode {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
             report(calles::write(&dir))
         }
+        Some("area-grande") => {
+            let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
+            report(area_grande::write(&dir))
+        }
+        Some("mapa") => match args.get(1) {
+            Some(file) => {
+                let dir = PathBuf::from(args.get(2).map(String::as_str).unwrap_or("out"));
+                report(area_grande::map_of(&PathBuf::from(file), &dir))
+            }
+            None => {
+                eprintln!("Uso: archisim mapa <proyecto> [carpeta]");
+                ExitCode::FAILURE
+            }
+        },
         Some("manzanas") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
             report(manzanas::write(&dir))

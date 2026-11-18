@@ -4,6 +4,10 @@ Lo que cambia en cada versión, en pocas líneas. ArchiSim enseña la parte de s
 
 Cada versión empieza con una línea `## <versión>` (por ejemplo `## 0.81.0`): es la que busca la publicación.
 
+## 0.102.0
+
+- **Área grande y vista de mapa (N8).** El entorno se puede traer en un recuadro de hasta 2 × 2 km. Las calles se cortan en su borde con toda su sección y quedan como conexiones con fuera, con una flecha y su nombre. Urbanismo → Mapa enseña toda el área plana y en color, con sus calles, edificios, árboles y zonas; un clic en el mapa lleva la planta a ese sitio.
+
 ## 0.101.0
 
 - **Manzanas y parcelas (N7).** Urbanismo → Manzanas: las calles que se cierran forman manzanas; un clic las parte en parcelas por la línea de fachada (con sus parcelas de esquina y su patio) y se llenan con edificios del lugar según su zona: casco antiguo, bloques, viviendas aisladas, comercio o equipamiento. «Rehacer» las vuelve a llenar; una parcela bloqueada no cambia.

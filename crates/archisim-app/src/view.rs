@@ -7,7 +7,7 @@ use archisim_core::Point2;
 use eframe::egui::{Pos2, Rect, Vec2};
 
 /// Closest and furthest zoom, in screen points per metre.
-pub const MIN_ZOOM: f64 = 1.0;
+pub const MIN_ZOOM: f64 = 0.2;
 pub const MAX_ZOOM: f64 = 20_000.0;
 
 #[derive(Debug, Clone, Copy, PartialEq)]

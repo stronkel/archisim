@@ -77,6 +77,7 @@ mod stair_layout;
 mod stairs;
 mod structure;
 mod sun;
+mod surroundings;
 mod sweeps;
 mod thermal;
 mod title_blocks;
@@ -148,6 +149,7 @@ pub use stair_layout::*;
 pub use stairs::*;
 pub use structure::*;
 pub use sun::*;
+pub use surroundings::*;
 pub use sweeps::*;
 pub use thermal::*;
 pub use title_blocks::*;
@@ -1598,6 +1600,8 @@ pub struct ModelParts {
     pub georeference: Option<crate::georef::Georeference>,
     /// The aerial picture laid on the ground (V2).
     pub orthophoto: Option<Orthophoto>,
+    /// The area of the surroundings (N8).
+    pub surroundings: Option<Vec<Point2>>,
     /// Use, accessibility and sprinklers, for the code checks.
     pub code: crate::code::CodeSettings,
     /// Drawing layers, layer "0" included.
@@ -1758,6 +1762,7 @@ pub struct Model {
     pub(crate) room_usages: Vec<String>,
     pub(crate) georeference: Option<crate::georef::Georeference>,
     pub(crate) orthophoto: Option<Orthophoto>,
+    pub(crate) surroundings: Option<Vec<Point2>>,
     pub(crate) code: crate::code::CodeSettings,
     /// The phase new elements are given (the survey is drawn as
     /// existing). Not saved.
@@ -1882,6 +1887,7 @@ impl Model {
             room_usages: Vec::new(),
             georeference: None,
             orthophoto: None,
+            surroundings: None,
             code: Default::default(),
             draw_phase: Phase::New,
             draw_layers: BTreeMap::from([(LAYER_ZERO, DrawLayer::zero())]),
@@ -4622,6 +4628,7 @@ impl Model {
             room_usages: self.room_usages.clone(),
             georeference: self.georeference.clone(),
             orthophoto: self.orthophoto.clone(),
+            surroundings: self.surroundings.clone(),
             code: self.code,
             draw_layers: self.draw_layers.values().cloned().collect(),
             drafts: self.drafts.values().cloned().collect(),
@@ -5123,6 +5130,12 @@ impl Model {
             .set_orthophoto(parts.orthophoto)
             .map_err(|error| RestoreError {
                 element: "orthophoto".into(),
+                error,
+            })?;
+        model
+            .set_surroundings(parts.surroundings)
+            .map_err(|error| RestoreError {
+                element: "surroundings".into(),
                 error,
             })?;
         model.set_code_settings(parts.code);

@@ -170,6 +170,22 @@ Hoy `archisim_geom::crossroads::junctions(model, level)` rehace todos los cruces
 - **Fichero** (formato 119: `zone` y `locked` de cada parcela) e **IFC** (`ArchiSim_Plot.Zone` y `ArchiSim_Plot.Locked`, que vuelven al importar).
 - Ejemplo: `archisim manzanas out/`: cuatro manzanas, una de cada zona y un colegio en la esquina del comercio, con una casa bloqueada en el casco antiguo.
 
+### 2.11 N8 hecho: área grande, conexiones con fuera y vista de mapa (18/11/2026, versión 0.102)
+
+- **Área del entorno**: al traer el entorno se guarda lo que se trajo, el círculo de su radio o, con la opción nueva «recuadro», un cuadrado de lado el doble del radio (hasta 2 × 2 km con radio 1 000 m). Lo que se trae queda dentro del recuadro: edificios, árboles, terreno y calles.
+- **Conexiones con fuera** (Outside Connections): las calles se cortan en el borde del área con toda su sección, en escuadra con su eje, y cada extremo cortado es una conexión con fuera. En planta, el borde del área va en trazo largo y cada conexión lleva una flecha hacia fuera con el nombre de la calle.
+- **Vista de mapa** (CSL Map View): Urbanismo → **Mapa** abre una ventana con toda el área, plana y en color:
+  - Calles y avenidas (las de 20 m o más, en amarillo) con sus nombres.
+  - Edificios del entorno, con los equipamientos en otro color, y el edificio del proyecto en rojo teja.
+  - Árboles, jardines, piscinas y las zonas de las parcelas.
+  - Las conexiones con fuera.
+  - Un recuadro rojo dice qué parte enseña la planta. Un clic (o arrastrar) en el mapa lleva la planta ahí; «Ver toda el área» la encuadra entera.
+- La planta se puede alejar ahora hasta ver 2 km en la ventana.
+- **Fichero** (formato 120: `surroundings`) e **IFC** (`ArchiSim_Surroundings.Area` en el proyecto).
+- **Línea de órdenes**:
+  - `archisim area-grande out/` hace un área de 2 × 2 km con 36 conexiones y 544 edificios. Escribe su mapa y su planta y dice cuánto tarda cada cosa (el IFC unos 3 s; el mapa y la planta, centésimas).
+  - `archisim mapa <proyecto>` saca el mapa de cualquier proyecto.
+
 ## 3. Lo demás, por tandas
 
 | Tanda | Qué | Mods de referencia | Tamaño |
@@ -347,6 +363,13 @@ Lo que se deja para después, tanda a tanda, para repasarlo junto con la cuarta 
 - Los edificios de esquina son un rectángulo a una calle: falta la casa de esquina con dos fachadas.
 - Pintar zonas con un pincel sobre varias parcelas a la vez.
 - La planta tiñe las parcelas y las rotula solo si cabe el texto; una leyenda de zonas.
+
+**De N8 (área grande)**
+- El recuadro no se puede girar ni dibujar a mano (un contorno libre o el término municipal).
+- Las calles que ya estaban en el proyecto no se recortan al cambiar el área (solo se cortan al traerlas).
+- El terreno se trae con unos 4 000 puntos: en 2 × 2 km quedan a unos 30 m; con más detalle, por teselas.
+- El mapa no se exporta desde la aplicación (sí desde `archisim mapa`) ni tiene leyenda ni capas que encender y apagar.
+- Las conexiones con fuera no dicen a dónde van (el pueblo o la carretera de destino).
 
 **De N2 (trazado)**
 - La pendiente uniforme elegida con el ratón no enseña marcas en planta entre los dos clics (solo el aviso).

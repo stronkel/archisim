@@ -492,6 +492,8 @@ pub struct ArchiSimApp {
     pub replace: replace_ui::ReplaceState,
     /// The panel «Manzanas» (N7).
     pub blocks: blocks_ui::BlocksState,
+    /// The map view (N8).
+    pub map: map_ui::MapState,
     /// The plot's tool draws an urban surface of this kind (N5).
     pub surface_draw: Option<archisim_core::SurfaceKind>,
     /// Hiding pieces of the streets or letting zebras go (N6).
@@ -981,6 +983,7 @@ impl ArchiSimApp {
             road_grade_pick: None,
             replace: Default::default(),
             blocks: Default::default(),
+            map: Default::default(),
             surface_draw: None,
             piece_pick: None,
             room_settings: Default::default(),
@@ -3039,6 +3042,7 @@ impl ArchiSimApp {
         self.library_dialog(ctx);
         self.replace_dialog(ctx);
         self.blocks_dialog(ctx);
+        self.map_dialog(ctx);
         self.mesh_import_dialog(ctx);
         self.dxf_import_dialog(ctx);
         self.params_dialog(ctx);
@@ -3440,6 +3444,7 @@ mod icons;
 mod keypad_ui;
 mod levels_ui;
 mod library_ui;
+mod map_ui;
 mod maquette_ui;
 mod marking_ui;
 mod mass_grips3d;

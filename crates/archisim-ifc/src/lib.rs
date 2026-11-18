@@ -700,6 +700,30 @@ impl<'a> Exporter<'a> {
         self.attach_set(element, guid, qto, qto_name);
     }
 
+    /// The area of the surroundings (N8), on the project: its points in
+    /// plan, «x y|x y|…», read back on import.
+    fn write_surroundings(&mut self, project: Ref) {
+        let model = self.model;
+        let Some(area) = model.surroundings() else {
+            return;
+        };
+        let text = area
+            .iter()
+            .map(|p| format!("{} {}", real(p.x), real(p.y)))
+            .collect::<Vec<_>>()
+            .join("|");
+        let prop = self.w.add(format!(
+            "IFCPROPERTYSINGLEVALUE('Area',$,IFCTEXT({}),$)",
+            string(&text)
+        ));
+        self.pset(
+            project,
+            &model.project_guid,
+            "ArchiSim_Surroundings",
+            &[prop],
+        );
+    }
+
     /// The project's parameters (see `archisim_core::UserParameter`): each
     /// element with its values in the property set of each parameter's
     /// group (a parameter of the type with its type's value), and their
@@ -2340,6 +2364,7 @@ impl<'a> Exporter<'a> {
         self.write_boxes(&storeys, &mut contained);
 
         self.write_user_parameters(project);
+        self.write_surroundings(project);
 
         for (level, elements) in &contained {
             let (storey, _) = storeys[level];

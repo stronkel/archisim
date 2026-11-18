@@ -245,6 +245,8 @@ pub enum Action {
     Replace,
     /// The panel «Manzanas»: blocks cut into plots and filled (N7).
     Blocks,
+    /// The map view of the whole area (N8).
+    MapView,
     /// Draw an urban surface of a kind by its outline (N5).
     Surface(archisim_core::SurfaceKind),
     /// Hide pieces of the streets one by one (N6).
@@ -719,6 +721,13 @@ const SITE: &[Tile] = &[
         "Parcela",
         "Y",
         "Lindes, superficie y retranqueos",
+    ),
+    tile(
+        Pick::Action(Action::MapView),
+        Glyph::Plot,
+        "Mapa",
+        "",
+        "Vista de mapa: toda el área del entorno de un vistazo, con calles, edificios, zonas y las conexiones con fuera; un clic lleva la planta ahí",
     ),
     tile(
         Pick::Action(Action::Blocks),
@@ -1624,6 +1633,7 @@ impl ArchiSimApp {
                 Action::Render => self.render.open,
                 Action::Replace => self.replace.open,
                 Action::Blocks => self.blocks.open,
+                Action::MapView => self.map.open,
                 Action::HidePieces => self.piece_pick == Some(super::pieces_ui::PiecePick::Hide),
                 Action::DetachCrossing => {
                     self.piece_pick == Some(super::pieces_ui::PiecePick::Detach)
@@ -1764,6 +1774,7 @@ impl ArchiSimApp {
             Action::DraftingView => self.new_drafting_view(),
             Action::BringSurroundings => self.pick_carto(),
             Action::Replace => self.replace.open = !self.replace.open,
+            Action::MapView => self.map.open = !self.map.open,
             Action::Blocks => {
                 self.blocks.open = !self.blocks.open;
                 if !self.blocks.open {
