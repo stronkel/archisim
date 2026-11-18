@@ -15,9 +15,13 @@ def collect(doc, blkname):
         elif t=="ARC":
             c=e.ocs().to_wcs(e.dxf.center); p,q=e.start_point,e.end_point
             add(lay,("A",c.x,c.y,e.dxf.radius,p.x,p.y,q.x,q.y))
+            add(lay,("AP",[(v.x,v.y) for v in e.flattening(0.01)]))
         elif t=="CIRCLE":
             c=e.ocs().to_wcs(e.dxf.center); add(lay,("C",c.x,c.y,e.dxf.radius))
         elif t in ("LWPOLYLINE","POLYLINE"):
+            if t=="LWPOLYLINE" and e.closed:
+                pts=[e.ocs().to_wcs((x,y,0)) for x,y,*_ in e.get_points()]
+                add(lay,("P",[(q.x,q.y) for q in pts]))
             for s in e.virtual_entities(): one(s, lay, depth)
         elif t in ("TEXT","MTEXT"):
             add(lay,("T",e.dxf.insert.x,e.dxf.insert.y,e.dxf.text if t=="TEXT" else e.plain_text()))

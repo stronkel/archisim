@@ -269,28 +269,88 @@ INDOOR=lambda r: not is_outdoor(r) and not any(k in r["name"].upper() for k in (
 def union_of(rs):
     ps=[Polygon(r["pts"]).buffer(0) for r in rs]
     return unary_union(ps) if ps else None
-spec_rooms=[]
+
+# ======================= lamas, columns, outlines, planters =======================
+sys.path.insert(0, __import__("os").path.dirname(__import__("os").path.abspath(__file__)))
+import outlines, beds
+outlines.G=beds.G=G
+from outlines import lines as dxf_lines
+from beds import beds as dxf_beds
+def louvres(blk):
+    out=[]
+    for s in G[blk].get("SECCION",[]):
+        if s[0]!="P" or len(s[1])!=4: continue
+        pts=s[1]; a=math.dist(pts[0],pts[1]); b=math.dist(pts[1],pts[2])
+        L,W=max(a,b),min(a,b)
+        if not(0.5<L<2.5 and 0.02<W<0.2): continue
+        i=0 if a>=b else 1
+        p,q=pts[i],pts[i+1]
+        cx=sum(x for x,_ in pts)/4; cy=sum(y for _,y in pts)/4
+        out.append(dict(c=(cx,cy),rot=math.atan2(q[1]-p[1],q[0]-p[0]),w=L,d=W,poly=Polygon(pts)))
+    return out
+def columns(blk):
+    return [(s[1],s[2],s[3]*2) for s in G[blk].get("SECCION",[]) if s[0]=="C" and 0.08<s[3]<0.2]
+def outer_outline(blk,lays,xmax=None,tol=0.03):
+    U=unary_union(dxf_lines(blk,lays)).buffer(tol)
+    gs=[U] if U.geom_type=="Polygon" else list(U.geoms)
+    big=max(gs,key=lambda g:Polygon(g.exterior).area)
+    P=Polygon(big.exterior).buffer(-tol)
+    if xmax is not None: P=P.intersection(box(-1e3,-1e3,xmax,1e3))
+    return P
+def clean_beds(found,density=20,maxarea=60):
+    keep=[]
+    for f,n in sorted(found,key=lambda b:-b[0].area):
+        if f.area>maxarea or n/f.area<density: continue
+        if any(f.intersection(k).area>0.5*f.area for k in keep): continue
+        keep.append(f)
+    return keep
+
+INDOOR=lambda r: not is_outdoor(r) and not any(k in r["name"].upper() for k in ("PATIO","TERRAZA"))
+OPEN_AIR=lambda r: any(k in r["name"].upper() for k in ("PATIO","TERRAZA"))
+def union_of(rs):
+    ps=[Polygon(r["pts"]).buffer(0) for r in rs]
+    return unary_union(ps) if ps else None
+def close(g,b): return g.buffer(b,join_style=2).buffer(-b+0.15,join_style=2)
+def ring(pts): return " ".join(f"{x:.3f},{y:.3f}" for x,y in pts)
+
 lines=[]
 for lv,el in LEVELS: lines.append(f"LEVEL|{lv}|{el}")
 nlev={lv:i for i,(lv,_) in enumerate(LEVELS)}
+ELEV=dict(LEVELS)
+# What each floor's exterior walls are finished with.
+FINISH={"Planta baja":"blanco","Planta primera":"blanco","Cubierta":"madera"}
 wall_count=0
+LAMAS={}
 for blk,(lv,top) in FLOORS.items():
     walls,curt=allwalls[lv]
+    # The louvre panels were read as short thin walls: they are not walls.
+    lam=louvres(blk); LAMAS[lv]=lam
+    if lam:
+        zone=unary_union([l["poly"].buffer(0.05) for l in lam])
+        walls=[w for w in walls if not zone.contains(Point(xy(w["a"],w["off"],(w["lo"]+w["hi"])/2)))]
     extend_ends(walls)
     rl=[r for r in rooms if r["level"]==lv and INDOOR(r)]
     inside=union_of(rl)
     for w in walls:
         p1=xy(w["a"],w["off"],w["lo"]); p2=xy(w["a"],w["off"],w["hi"])
-        ext=False
+        L=w["hi"]-w["lo"]
+        # Which side is outside: count samples off each face that fall
+        # outside the rooms.
+        outl=outr=0
         if inside is not None:
             for k in (0.25,0.5,0.75):
                 for sgn in (1,-1):
-                    m=xy(w["a"],w["off"]+sgn*(w["t"]/2+0.5),w["lo"]+(w["hi"]-w["lo"])*k)
-                    if not inside.contains(Point(m)): ext=True
-        else: ext=True
+                    m=xy(w["a"],w["off"]+sgn*(w["t"]/2+0.5),w["lo"]+L*k)
+                    if not inside.contains(Point(m)):
+                        if sgn>0: outl+=1
+                        else: outr+=1
+        ext = (outl+outr)>0 if inside is not None else True
+        flip = ext and outr>outl     # outside must be on the left of the line
         t=snap_t(w["t"])
         fence = lv=="Planta baja" and min(p1[0],p2[0])>31.5
-        lines.append(f"WALL|{lv}|{'-' if fence else top}|{t:.3f}|{'ext' if ext else 'int'}|{p1[0]:.4f}|{p1[1]:.4f}|{p2[0]:.4f}|{p2[1]:.4f}"+("|2.0" if fence else ""))
+        kind = "fence" if fence else (FINISH[lv] if ext else "int")
+        if flip: p1,p2=p2,p1
+        lines.append(f"WALL|{lv}|{'-' if fence else top}|{t:.3f}|{kind}|{p1[0]:.4f}|{p1[1]:.4f}|{p2[0]:.4f}|{p2[1]:.4f}"+("|2.0" if fence else ""))
         for o in w["ops"]:
             k=o["k"]; width=round(o["w"],3)
             if t<0.075: continue
@@ -306,55 +366,97 @@ for blk,(lv,top) in FLOORS.items():
                 side="ext" if sv>0 else "int"
                 at_start = hu<centre
                 hand = ("R" if at_start else "L") if sv>0 else ("L" if at_start else "R")
+            at=o["at"]
+            if flip:
+                at=L-at; side={"ext":"int","int":"ext"}[side]
             if k in("door","door2"):
                 h=2.10 if width<1.6 else 2.40
-                kind="door2" if (k=="door2" or width>1.3) else "door"
-                lines.append(f"OPEN|{wall_count}|{kind}|{width:.2f}|{h:.2f}|0.00|{o['at']:.4f}|{side}|{hand}")
+                kd="door2" if (k=="door2" or width>1.3) else "door"
+                lines.append(f"OPEN|{wall_count}|{kd}|{width:.2f}|{h:.2f}|0.00|{at:.4f}|{side}|{hand}")
             elif k=="window":
-                if width>=2.0: lines.append(f"OPEN|{wall_count}|fixed|{width:.2f}|2.10|0.30|{o['at']:.4f}|ext|R")
-                else: lines.append(f"OPEN|{wall_count}|window|{width:.2f}|1.20|1.00|{o['at']:.4f}|ext|R")
+                if width>=2.0: lines.append(f"OPEN|{wall_count}|fixed|{width:.2f}|2.10|0.30|{at:.4f}|ext|R")
+                else: lines.append(f"OPEN|{wall_count}|window|{width:.2f}|1.20|1.00|{at:.4f}|ext|R")
             else:
-                lines.append(f"OPEN|{wall_count}|void|{width:.2f}|{1.90 if fence else 2.10:.2f}|0.00|{o['at']:.4f}|ext|R")
+                lines.append(f"OPEN|{wall_count}|void|{width:.2f}|{1.90 if fence else 2.10:.2f}|0.00|{at:.4f}|ext|R")
         wall_count+=1
     for c in curt:
         p1=xy(c["a"],c["off"],c["lo"]); p2=xy(c["a"],c["off"],c["hi"])
+        if lam and any(l["poly"].buffer(0.05).contains(Point((p1[0]+p2[0])/2,(p1[1]+p2[1])/2)) for l in lam): continue
         lines.append(f"CURTAIN|{lv}|{top}|{p1[0]:.4f}|{p1[1]:.4f}|{p2[0]:.4f}|{p2[1]:.4f}")
-# slabs
-def poly_lines(level,kind,geom,minarea=4.0):
-    out=[]
-    gs=[geom] if geom.geom_type=="Polygon" else list(geom.geoms)
-    for g in gs:
-        if g.area<minarea: continue
-        g=g.simplify(0.05)
-        if kind=="solera": g=Polygon(g.exterior)
-        ext=" ".join(f"{x:.3f},{y:.3f}" for x,y in g.exterior.coords[:-1])
-        out.append(f"SLAB|{level}|{kind}|{ext}")
-        for h in g.interiors:
-            if Polygon(h).area>2: out.append("HOLE|"+" ".join(f"{x:.3f},{y:.3f}" for x,y in h.coords[:-1]))
-    return out
-def close(g,b): return g.buffer(b,join_style=2).buffer(-b+0.15,join_style=2)
+    # Round columns, from this floor to the next.
+    for x,y,d in columns(blk):
+        lines.append(f"COLUMN|{lv}|{top}|{d:.3f}|{x:.4f}|{y:.4f}")
+
+# ---- slabs: cantilevers out to the roof's edge line ----
+ROOF_SLAB=0.50   # thickness of the roof type built in montar
+roof_edge=outer_outline("250819 REF PCAST",["PROYECCION"],xmax=32.7)
 pb=[r for r in rooms if r["level"]=="Planta baja" and INDOOR(r)]
 p1all=[r for r in rooms if r["level"]=="Planta primera" and not is_outdoor(r)]
 p1in=[r for r in p1all if INDOOR(r)]
-lines+=poly_lines("Planta baja","solera",close(union_of(pb),0.4))
-lines+=poly_lines("Planta primera","forjado",close(union_of(p1all),0.4))
-lines+=poly_lines("Cubierta","cubierta",close(union_of(p1in),0.4))
-# castillete roof: footprint of its walls
+p1open=[r for r in p1all if OPEN_AIR(r)]
+old_p1=close(union_of(p1all),0.4)
+p1_holes=[Polygon(h) for g in ([old_p1] if old_p1.geom_type=="Polygon" else old_p1.geoms) for h in g.interiors if Polygon(h).area>2]
+p1_slab=roof_edge.union(old_p1)
+for h in p1_holes: p1_slab=p1_slab.difference(h)
+roof=roof_edge.union(close(union_of(p1in),0.4))
+for r in p1open: roof=roof.difference(Polygon(r["pts"]).buffer(0.01))
+# Where the stairs go on up to the castillete, the roof is open.
 cw,_=allwalls["Cubierta"]
-polys=[]
-for w in cw:
-    p1=xy(w["a"],w["off"],w["lo"]); p2=xy(w["a"],w["off"],w["hi"])
-    polys.append(LineString([p1,p2]).buffer(w["t"]/2+0.05,cap_style=2))
-cast=unary_union(polys)
-if not cast.is_empty:
-    cast=Polygon(cast.convex_hull.exterior) if cast.convex_hull.geom_type=="Polygon" else cast
-    lines+=poly_lines("Cubierta castillete","cubierta",cast)
-# rooms
+wpolys=[LineString([xy(w["a"],w["off"],w["lo"]),xy(w["a"],w["off"],w["hi"])]).buffer(w["t"]/2+0.02,cap_style=2) for w in cw]
+cast=unary_union(wpolys)
+cast_fill=unary_union([Polygon(g.exterior) for g in ([cast] if cast.geom_type=="Polygon" else cast.geoms) if Polygon(g.exterior).area>3])
+for h in p1_holes:
+    if cast_fill.contains(h.centroid): roof=roof.difference(h)
+def slab_lines(level,kind,geom,minarea=4.0,holes=True):
+    out=[]
+    gs=[geom] if geom.geom_type=="Polygon" else [g for g in geom.geoms if g.geom_type=="Polygon"]
+    for g in gs:
+        if g.area<minarea: continue
+        g=g.simplify(0.03)
+        if not holes: g=Polygon(g.exterior)
+        out.append(f"SLAB|{level}|{kind}|{ring(g.exterior.coords[:-1])}")
+        for h in g.interiors:
+            if Polygon(h).area>1: out.append("HOLE|"+ring(h.coords[:-1]))
+    return out
+lines+=slab_lines("Planta baja","solera",close(union_of(pb),0.4),holes=False)
+lines+=slab_lines("Planta primera","volado",p1_slab)
+lines+=slab_lines("Cubierta","grava",roof)
+lines+=slab_lines("Cubierta castillete","grava",cast_fill.buffer(0.15,join_style=2))
+
+# ---- louvre panels: from the floor of their storey to under the roof ----
+for lv,lam in LAMAS.items():
+    nxt=[e for n,e in LEVELS if e>ELEV[lv]]
+    h=(nxt[0]-ELEV[lv]-ROOF_SLAB) if nxt else 3.0
+    for l in lam:
+        lines.append(f"LOUVRE|{lv}|{l['c'][0]:.4f}|{l['c'][1]:.4f}|{l['rot']:.5f}|{l['w']:.3f}|{h:.2f}")
+
+# ---- planters: a white parapet round the bed, earth and plants ----
+PLANTS={"Cubierta":("Palmito;Pennisetum;Romero;Lavanda",0.60),
+        "Planta primera":("Pennisetum;Romero;Lavanda;Palmito",0.50),
+        "Planta baja":("Palmito;Pennisetum;Romero",0.50)}
+BEDS={"Cubierta":("250819 REF PCAST",["PROYECCION","SECCION"]),
+      "Planta primera":("250819 REF P1",["PROYECCION","SECCION","CARPINTERIA"]),
+      "Planta baja":("250819 REF PB",["PROYECCION","SECCION","CARPINTERIA"])}
+nbeds=0
+for lv,(blk,lays) in BEDS.items():
+    species,height=PLANTS[lv]
+    for f in clean_beds(dxf_beds(blk,lays)):
+        g=f.simplify(0.04)
+        if g.geom_type!="Polygon" or g.area<0.8: continue
+        t=0.12
+        centre=g.buffer(-t/2,join_style=2).simplify(0.03)
+        earth=g.buffer(-t-0.01,join_style=2).simplify(0.03)
+        if centre.geom_type!="Polygon" or earth.geom_type!="Polygon" or earth.area<0.3: continue
+        count=max(3,int(earth.area*2.0))
+        lines.append(f"PLANTER|{lv}|{height:.2f}|{t:.2f}|{ring(centre.exterior.coords[:-1])}|{ring(earth.exterior.coords[:-1])}|{species}|{count}")
+        nbeds+=1
+print("louvres",{k:len(v) for k,v in LAMAS.items()},"planters",nbeds,"slabs P1",round(p1_slab.area,1),"roof",round(roof.area,1),file=sys.stderr)
+
+# ---- rooms ----
 n=Counter()
 for r in sorted(rooms,key=lambda r:(nlev[r["level"]],-r["label"][1],r["label"][0])):
     if is_outdoor(r) and r["level"]!="Planta baja": continue
     n[r["level"]]+=1; num=f"{'PB' if r['level']=='Planta baja' else 'P1' if r['level']=='Planta primera' else 'PC'}.{n[r['level']]:02d}"
-    pts=" ".join(f"{x:.3f},{y:.3f}" for x,y in r["pts"])
-    lines.append(f"ROOM|{r['level']}|{num}|{r['name']}|{r['label'][0]:.3f},{r['label'][1]:.3f}|{pts}|{r['area'] or 0:.2f}|"+";".join(" ".join(f"{x:.3f},{y:.3f}" for x,y in h) for h in r["holes"]))
+    lines.append(f"ROOM|{r['level']}|{num}|{r['name']}|{r['label'][0]:.3f},{r['label'][1]:.3f}|{ring(r['pts'])}|{r['area'] or 0:.2f}|"+";".join(ring(h) for h in r["holes"]))
 open(OUT,"w").write("\n".join(lines)+"\n")
 print("spec lines",Counter(l.split("|")[0] for l in lines),file=sys.stderr)

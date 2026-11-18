@@ -6,6 +6,49 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-18 (172) · v0.93: la SUMO como el render (lamas, vuelos, jardineras y acabados)
+
+Rama `bloque/montar-dxf`, misma versión 0.93.0 (aún sin publicar). Sin cambios de formato.
+
+- **Por qué.** Antonio mandó el render de la nave. Las piezas inclinadas de la planta primera que salían como muros son lamas de madera que giran con el sol. Faltaban las jardineras, los acabados y la cubierta.
+- **Qué se hizo.**
+  - **Familia nueva «Panel de lamas orientable»** (`families/objetos/panel_lamas.asfam`, categoría `facade`, Objetos → Fachada):
+    - Lamas verticales entre dos travesaños, con un pivote abajo y otro arriba, sobre su eje en el centro.
+    - Parámetros: ancho, alto, ancho y grueso de lama, separación y materiales.
+    - IFC: `IfcShadingDevice` con su `IfcShadingDeviceType`, `USERDEFINED`, y `Pset_ShadingDeviceCommon` para la fase. El importador las lee de vuelta.
+    - Prueba `louvre_panels_round_trip`; el catálogo trae «Panel de lamas de madera 120».
+  - **IFC, arreglo**: las lamas de los muros cortina se escribían `.LOUVER.`, que no existe en IFC4 ni en IFC 4.3. Ahora van `USERDEFINED` con ObjectType «Lama».
+  - **`archisim montar`** sabe hacer más cosas:
+    - `COLUMN`: pilar circular.
+    - `LOUVRE`: panel de lamas con su giro.
+    - `PLANTER`: peto de hormigón blanco, tierra (forjado «Tierra vegetal de jardinera») y una plantación por área.
+    - Forjados `volado` (hormigón blanco de 35 cm) y `grava` (cubierta invertida de 50 cm).
+    - Muros por acabado: `blanco`, `madera`, `int` y `fence`, con el exterior a la izquierda de la línea.
+    - Prueba `columns_louvres_and_planters_build`.
+  - **Guiones** (`scripts/montar_dxf/`):
+    - Las lamas se leen de los rectángulos cerrados de 0,80 × 0,07 de la capa SECCION, y los pilares de sus círculos.
+    - El vuelo sale de la línea exterior de la planta de cubierta (capa PROYECCION).
+    - Las jardineras son los recintos cerrados con plantas dibujadas dentro (capa JARDINERIA).
+    - Los muros exteriores se orientan con el exterior a la izquierda.
+    - El castillete sale con su contorno real.
+    - `outlines.py` y `beds.py` son nuevos.
+  - **La SUMO**:
+    - 267 muros, 43 paneles de lamas, 57 pilares Ø20 y 8 jardineras con 143 plantas.
+    - Forjado de la primera de 2.142 m² con el vuelo; cubierta de 1.911 m², abierta sobre los 5 patios y la terraza.
+- **Comprobado.** fmt; clippy de core, geom, ifc, cli y library; pruebas de `archisim-core`, `archisim-ifc`, `archisim-library` y `montar`; la SUMO validada en IFC 4.3 e IFC4 y reimportada; vista desde la calle de día y de noche.
+  - La tierra de una jardinera rozando su peto hacía que IfcOpenShell le quitara hasta el 40 % del volumen: ahora queda a 1 cm del peto.
+  - La app solo cambia en la lista de categorías de la galería, y se ha comprobado que compila.
+- **Pendiente / supuestos.**
+  - Lamas de 3,50 m (del forjado a la cara inferior de la cubierta), con lamas de 4,5 cm cada 3 cm: es una suposición.
+  - Peto de jardinera de 60 cm en cubierta y 50 cm en las plantas.
+  - El mobiliario de la terraza del café y las placas fotovoltaicas no están.
+  - Parte de la fachada sur de la planta baja sale como muro donde el render enseña vidrio: hay que revisarla en el DXF.
+- **Qué debe probar Antonio.**
+  1. Abre `nave-sumo.archisim`. En la planta primera, elige una lama y gírala (Propiedades → giro): debe pivotar sobre su eje.
+  2. Galería de objetos → Fachada → «Panel de lamas orientable»: cambia el ancho y la separación de las lamas.
+  3. Mira el 3D desde la calle y compáralo con el render: vuelos, lamas, jardineras y palmitos en cubierta.
+  4. Abre el IFC en BIMvision: las lamas deben salir como protecciones solares.
+
 ## 2026-11-17 (171) · v0.93: la nave SUMO montada desde el DXF
 
 Rama `bloque/montar-dxf`. Versión 0.93.0. Sin cambios de formato.

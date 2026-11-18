@@ -11,6 +11,14 @@ Cada versión empieza con una línea `## <versión>` (por ejemplo `## 0.81.0`): 
   - Nueva orden `archisim montar <descripción.txt> <proyecto.archisim>`: levanta plantas, muros, carpinterías, muros cortina, forjados y locales desde una lista de texto. Los guiones de `scripts/montar_dxf/` escriben esa lista desde un DXF dibujado en capas.
 - **IFC: forjados atravesados por muchos muros.** Cuando los muros formaban un anillo cerrado, el hueco que dejaban en el forjado se escribía como un contorno que se tocaba a sí mismo, y otros programas le quitaban de más (hasta 1 m³). Ahora se escribe un hueco por muro y el volumen cuadra.
   - Al importar, ArchiSim lee también los forjados con cadenas largas de huecos.
+- **Panel de lamas orientable** (Objetos → Fachada): panel de lamas verticales de madera que gira sobre su eje, delante de una fachada, de ancho, alto, ancho y grueso de lama y separación a elegir. En IFC sale como protección solar (`IfcShadingDevice`) con su tipo, y vuelve igual al importarlo.
+- **La nave SUMO, segunda vuelta**, con el render del proyecto como guía:
+  - Las 43 lamas de la planta primera son paneles de lamas con el giro que tienen en el plano, no muros.
+  - 57 pilares redondos de acero blanco de Ø20 en el perímetro.
+  - El forjado de la primera y la cubierta llegan hasta la línea del vuelo, en hormigón blanco. La cubierta es plana, invertida y con grava, abierta sobre los patios.
+  - Ocho jardineras (en cubierta, en la primera y en la entrada) con peto blanco, tierra y plantación de palmitos, pennisetum, romero y lavanda.
+  - Fachadas enfoscadas en blanco y castillete revestido de madera, con su contorno real.
+- **IFC**: las lamas de los muros cortina salían con un tipo (`LOUVER`) que no existe en IFC4 ni en IFC 4.3. Ahora salen como «Lama» definida por el usuario.
 
 ## 0.92.1
 
