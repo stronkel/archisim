@@ -240,6 +240,21 @@ pub enum Action {
     DraftingView,
     /// Bring the surroundings from downloaded files.
     BringSurroundings,
+    /// «Sustituir todos»: a type of object or a street material for
+    /// another (N4).
+    Replace,
+    /// The panel «Manzanas»: blocks cut into plots and filled (N7).
+    Blocks,
+    /// The map view of the whole area (N8).
+    MapView,
+    /// The traffic for illustration in the 3D view (N9).
+    Traffic,
+    /// Draw an urban surface of a kind by its outline (N5).
+    Surface(archisim_core::SurfaceKind),
+    /// Hide pieces of the streets one by one (N6).
+    HidePieces,
+    /// Let a zebra of a street go, to move it (N6).
+    DetachCrossing,
     /// Ask for the surroundings to the free services.
     DownloadSurroundings,
     /// The sun of the project, in its panel.
@@ -710,6 +725,34 @@ const SITE: &[Tile] = &[
         "Lindes, superficie y retranqueos",
     ),
     group(
+        Glyph::Plot,
+        "Territorio",
+        "Manzanas y parcelas por zonas, vista de mapa del área y tráfico de ilustración",
+        &[
+        tile(
+            Pick::Action(Action::MapView),
+            Glyph::Plot,
+            "Mapa",
+            "",
+            "Vista de mapa: toda el área del entorno de un vistazo, con calles, edificios, zonas y las conexiones con fuera; un clic lleva la planta ahí",
+        ),
+        tile(
+            Pick::Action(Action::Traffic),
+            Glyph::Road,
+            "Tráfico",
+            "",
+            "Coches por los carriles y personas por las aceras en la vista 3D, para ilustrar: siguen los giros de cada carril y paran en los semáforos y en los stop",
+        ),
+        tile(
+            Pick::Action(Action::Blocks),
+            Glyph::Plot,
+            "Manzanas",
+            "",
+            "Parte en parcelas las manzanas que cierran las calles y las llena con edificios del lugar por zonas (casco antiguo, bloques, viviendas aisladas, comercio, equipamiento); las bloqueadas no cambian",
+        ),
+        ],
+    ),
+    group(
         Glyph::Road,
         "Calle",
         "Viales, glorietas y marcas viales",
@@ -727,6 +770,62 @@ const SITE: &[Tile] = &[
                 "Glorieta",
                 "GL",
                 "Glorieta o plaza donde se encuentran las calles: clic en el cruce; las calles se recortan en su círculo",
+            ),
+            tile(
+                Pick::Tool(Tool::Node),
+                Glyph::Roundabout,
+                "Nudo",
+                "NU",
+                "Cambia un cruce, una T o una L: tipo de nudo, retranqueo de cada calle y radio, forma y acera de cada esquina",
+            ),
+            tile(
+                Pick::Action(Action::Surface(archisim_core::SurfaceKind::Square)),
+                Glyph::Plot,
+                "Plaza",
+                "",
+                "Plaza o zona pavimentada dibujada por su contorno, con su encintado y sus juntas",
+            ),
+            tile(
+                Pick::Action(Action::Surface(archisim_core::SurfaceKind::Island)),
+                Glyph::Plot,
+                "Isleta",
+                "",
+                "Isleta o mediana elevada con su bordillo, dibujada por su contorno",
+            ),
+            tile(
+                Pick::Action(Action::Surface(archisim_core::SurfaceKind::Parking)),
+                Glyph::Plot,
+                "Aparcamiento",
+                "",
+                "Aparcamiento dibujado por su contorno, con sus plazas pintadas",
+            ),
+            tile(
+                Pick::Action(Action::Surface(archisim_core::SurfaceKind::Garden)),
+                Glyph::Plot,
+                "Jardín",
+                "",
+                "Jardín o parterre con su bordillo, dibujado por su contorno",
+            ),
+            tile(
+                Pick::Action(Action::HidePieces),
+                Glyph::Marking,
+                "Ocultar piezas",
+                "",
+                "Oculta una a una las piezas que pone la calle: una raya, una plaza pintada, un alcorque, una señal o un bolardo",
+            ),
+            tile(
+                Pick::Action(Action::DetachCrossing),
+                Glyph::Marking,
+                "Soltar paso de peatones",
+                "",
+                "Convierte la cebra de una calle en una marca vial suelta para moverla o girarla",
+            ),
+            tile(
+                Pick::Action(Action::Replace),
+                Glyph::Road,
+                "Sustituir todos",
+                "",
+                "Cambia de una vez un tipo de objeto (árbol, farola, banco…) o un material de las calles por otro, en todo el proyecto, en una zona o en un tramo de calle",
             ),
             tile(
                 Pick::Tool(Tool::Marking),
@@ -1548,6 +1647,15 @@ impl ArchiSimApp {
                     )))
                 ),
                 Action::Render => self.render.open,
+                Action::Replace => self.replace.open,
+                Action::Blocks => self.blocks.open,
+                Action::MapView => self.map.open,
+                Action::Traffic => self.v3d.traffic_on(),
+                Action::HidePieces => self.piece_pick == Some(super::pieces_ui::PiecePick::Hide),
+                Action::DetachCrossing => {
+                    self.piece_pick == Some(super::pieces_ui::PiecePick::Detach)
+                }
+                Action::Surface(k) => self.tool == Tool::Plot && self.surface_draw == Some(k),
                 Action::Styles => self.presentation.open,
                 Action::Walk => self.v3d.walk_eye.is_some(),
                 Action::Elevations
@@ -1655,7 +1763,7 @@ impl ArchiSimApp {
         }
     }
 
-    fn act(&mut self, action: Action) {
+    pub(super) fn act(&mut self, action: Action) {
         let coord_tab = |app: &mut Self, tab| {
             app.coord_window.open = true;
             app.coord_window.tab = tab;
@@ -1682,6 +1790,36 @@ impl ArchiSimApp {
             ))),
             Action::DraftingView => self.new_drafting_view(),
             Action::BringSurroundings => self.pick_carto(),
+            Action::Replace => self.replace.open = !self.replace.open,
+            Action::MapView => self.map.open = !self.map.open,
+            Action::Traffic => {
+                let on = !self.v3d.traffic_on();
+                self.v3d.set_traffic(on);
+                if on {
+                    self.set_mode(super::ViewMode::ThreeD);
+                    self.say("Tráfico en la vista 3D: coches por los carriles y personas por las aceras.");
+                }
+            }
+            Action::Blocks => {
+                self.blocks.open = !self.blocks.open;
+                if !self.blocks.open {
+                    self.blocks.picking = false;
+                }
+            }
+            Action::HidePieces | Action::DetachCrossing => {
+                let want = if action == Action::HidePieces {
+                    super::pieces_ui::PiecePick::Hide
+                } else {
+                    super::pieces_ui::PiecePick::Detach
+                };
+                let on = self.piece_pick == Some(want);
+                self.set_tool(Tool::Arrow);
+                self.piece_pick = (!on).then_some(want);
+            }
+            Action::Surface(k) => {
+                self.set_tool(Tool::Plot);
+                self.surface_draw = Some(k);
+            }
             Action::DownloadSurroundings => self.open_carto_download(),
             Action::Sun => {
                 self.presentation.sun_open = true;

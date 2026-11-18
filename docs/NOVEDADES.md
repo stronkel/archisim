@@ -4,8 +4,85 @@ Lo que cambia en cada versión, en pocas líneas. ArchiSim enseña la parte de s
 
 Cada versión empieza con una línea `## <versión>` (por ejemplo `## 0.81.0`): es la que busca la publicación.
 
+## 0.104.0
+
+- **Cuarta vuelta de fluidez del territorio.** Cambiar un nudo, el pavimento de un tramo o una pieza oculta de una calle ya no rehace en 3D todo lo que hay a lo largo de la calle, solo lo de alrededor: en un sitio de 1 km², elevar un cruce pasa de medio segundo a una décima.
+- **Tráfico más creíble.** Los coches ya no se pisan dentro de los cruces: esperan a que pase el que cruza, y con ceda el paso o stop dejan pasar a quien viene por la otra calle. Los semáforos se ven en rojo, ámbar y verde en 3D y en el render.
+- **Volver a parcelar una manzana.** Un clic en una manzana que ya tiene parcelas la parte de nuevo con la zona y las medidas elegidas, sin tocar las parcelas bloqueadas.
+- **Mapa con leyenda y para guardar.** La ventana Mapa tiene «Guardar el mapa…» (PNG o SVG) y una leyenda con las zonas que hay.
+- **Soltar un paso de peatones** deja los bordillos rebajados de la calle donde estaban.
+
+## 0.103.0
+
+- **Tráfico de ilustración (N9).** Urbanismo → Territorio → Tráfico pone coches y personas en la vista 3D. Los coches van por sus carriles, giran por donde mandan las conexiones de cada cruce y paran en los semáforos y en los stop. Las personas pasean por las aceras. El render los saca también. Es solo para ilustrar: no se guarda en el proyecto ni calcula capacidades.
+
+## 0.102.0
+
+- **Área grande y vista de mapa (N8).** El entorno se puede traer en un recuadro de hasta 2 × 2 km. Las calles se cortan en su borde con toda su sección y quedan como conexiones con fuera, con una flecha y su nombre. Urbanismo → Territorio → Mapa enseña toda el área plana y en color, con sus calles, edificios, árboles y zonas; un clic en el mapa lleva la planta a ese sitio.
+
+## 0.101.0
+
+- **Manzanas y parcelas (N7).** Urbanismo → Territorio → Manzanas: las calles que se cierran forman manzanas; un clic las parte en parcelas por la línea de fachada (con sus parcelas de esquina y su patio) y se llenan con edificios del lugar según su zona: casco antiguo, bloques, viviendas aisladas, comercio o equipamiento. «Rehacer» las vuelve a llenar; una parcela bloqueada no cambia.
+
+## 0.100.0
+
+- **Ocultar y soltar piezas de las calles (N6).** «Ocultar piezas» quita de un clic una raya, una plaza pintada, un alcorque, una señal o un bolardo que pone la calle, y siguen ocultos aunque la calle se mueva. «Soltar paso de peatones» convierte la cebra de una calle en una marca vial suelta para moverla o girarla.
+
+## 0.99.0
+
+- **Plazas, isletas, medianas, aparcamientos y jardines (N5).** Se dibujan por su contorno, pegándose a los bordillos y a las líneas de fachada, con su borde (bordillo, rigola o encintado), su altura sobre lo de debajo, las juntas del pavimento y, en los aparcamientos, las plazas pintadas en batería o en espiga, con su número.
+
+## 0.98.0
+
+- **Calles por tramos y «Sustituir todos» (N4).**
+  - **Por tramos**: un trozo de una calle con otro pavimento, bordillo, acera o tierra (grupo «Por tramos» de la calle).
+  - **Sustituir todos**: cambia de una vez un tipo de objeto (árbol, farola, banco…) o un material de las calles por otro, en todo el proyecto, en la planta, en una zona dibujada o en un tramo de calle.
+
+## 0.97.0
+
+- **Carriles y marcas de los cruces (N3).** Con la herramienta Nudo:
+  - Se ve **a dónde va cada carril** que entra al cruce.
+  - **Giros por carril** (← ↑ → ↶) en Propiedades, y **conexiones a mano** de un carril a otro pinchando en planta.
+  - **Flechas pintadas** en los carriles y líneas continuas entre ellos antes del cruce, que salen solas de los giros.
+  - **Línea de detención** retrasada por calle.
+  - **Isletas pintadas** (cebreado, relleno o borde) que van con el cruce si se mueven sus calles.
+
+## 0.96.0
+
+- **Trazado de calles, remates (N2).**
+  - **Pendiente uniforme con el ratón**: en la calle, «Elegir los dos puntos en planta» y dos clics sobre ella.
+  - **Radio y giro en la barra de opciones** al trazar por tramos (R y Giro, junto a L y ∠): Intro pone la curva.
+
+## 0.95.0
+
+- **Trazar calles sin reglas y con precisión (N2).**
+  - **Anarquía**: una calle que no se une a las que pisa ni modela el terreno, a la cota que le des (pasos elevados, rampas, maquetas). En la herramienta Calle y en cada calle.
+  - **Pendiente uniforme** entre dos puntos de una calle, con la pendiente que resulta a la vista antes de aplicarla.
+  - **Paralela** a una calle a la distancia que teclees, con su sección y su rasante.
+  - **Al trazar**, la longitud, el giro y el radio hasta el cursor, y un tramo en curva de radio y giro tecleados, tangente al anterior.
+  - **Hacer glorieta** sobre un cruce desde la herramienta Nudo.
+
+## 0.94.0
+
+- **Nudos de las calles, a mano (N1).** Herramienta **Nudo** en Urbanismo (NU): pincha un cruce, una T, una L o el final de una calle y cámbialo en Propiedades o con sus tiradores naranjas.
+  - **Tipo**, en tarjetas con dibujo: cruce normal, **cruce elevado** (meseta con rampas), **plataforma única** (sin bordillos, con bolardos), **continuo** (una calle sigue en otra y cambia de sección sin costura), **doblez** (una curva con las aceras siguiendo el giro), **fin** (fondo de saco con círculo de giro) o **sin nudo**.
+  - **El nudo entero**: plano a una cota, la **calle principal** que manda (y ceda el paso en las demás de un clic) y sin marcas viales cerca.
+  - **Cada calle que llega**: retranqueo, **ceda el paso, stop o semáforo** con su línea en la calzada y su señal, y **paso de peatones** con su bordillo rebajado.
+  - **Cada esquina**: radio, forma (arco, **chaflán** o en punta), acera y **oreja** sobre el aparcamiento.
+  - **Chaflán estándar** del lugar del proyecto en un nudo o en toda la planta.
+  - **Tiradores en planta** para el retranqueo y el radio, con la medida mientras arrastras.
+  - Solo se guarda lo cambiado; si mueves una calle el nudo conserva sus ajustes, y si la borras se pierden. Van en el fichero y en el IFC.
+  - `archisim nudos` hace un ejemplo con todo.
+
 ## 0.93.0
 
+- **Taller del territorio: fluidez.**
+  - **La vista 3D, mucho antes después de un cambio**: en un sitio de 1 km² con 90 calles, 560 edificios y 4 662 árboles, mover una calle rehacía el 3D en unos 40 s; ahora en unos 0,1 s. Los árboles no vuelven a crecer, los edificios y el terreno que no cambian se aprovechan tal cual, y el terreno se rehace solo en los cuadrados de 50 m por donde pasa la calle.
+  - **Terreno mucho más rápido**: la cota del terreno bajo un punto ya no vuelve a triangular todo el levantamiento cada vez. Trazar las calles pasa de 2 s a 0,2 s y el terreno que modelan, de 17 s a 0,2 s al mover una calle.
+  - **Cruces y calles guardados**: la planta, el 3D y el IFC comparten los cruces y cada calle mientras no cambian.
+  - **Planta más ligera**: lo que queda fuera de la vista no se calcula.
+  - **La vista 3D se rehace solo donde cambia**: mover un árbol, girar un banco o cambiar un edificio se ve en unas centésimas de segundo, y mover una calle en una décima, aunque el sitio tenga un kilómetro cuadrado. La tarjeta gráfica solo recibe los trozos nuevos.
+  - **Sitio de prueba**: `archisim territorio-grande` hace un kilómetro cuadrado de ciudad inventada y mide lo que cuesta cada cosa.
 - **Montar un proyecto desde los planos de AutoCAD.** La nave SUMO (antiguo CEOSA) se ha montado desde el DXF del proyecto básico, con sus referencias unidas: 4 plantas (baja ±0,00, primera +4,45, cubierta +8,45 y cubierta del castillete +12,35), 302 muros con su espesor real, 99 puertas, ventanas y huecos, 62 tramos acristalados como muros cortina, forjados y los 104 locales con su nombre.
   - Los muros salen de las dos líneas de corte de cada muro, y las puertas del arco de su hoja (con su mano y hacia dónde abren).
   - Nueva orden `archisim montar <descripción.txt> <proyecto.archisim>`: levanta plantas, muros, carpinterías, muros cortina, forjados y locales desde una lista de texto. Los guiones de `scripts/montar_dxf/` escriben esa lista desde un DXF dibujado en capas.

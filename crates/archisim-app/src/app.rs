@@ -113,6 +113,8 @@ pub enum Tool {
     Road,
     /// Roundabouts and squares, by their centre (U3).
     Roundabout,
+    /// The nodes of the streets: crossings, T and L, changed by hand (N1).
+    Node,
     /// A modular box (M1).
     ModularBox,
     /// Buildings of the world put by hand, as in CityRT (tanda 16).
@@ -173,6 +175,7 @@ impl Tool {
                 | Tool::Pool
                 | Tool::Road
                 | Tool::Roundabout
+                | Tool::Node
                 | Tool::ModularBox
                 | Tool::World
                 | Tool::Decal
@@ -222,6 +225,7 @@ impl Tool {
             "ps" => Some(Tool::Pool),
             "as" => Some(Tool::Elevator),
             "gl" => Some(Tool::Roundabout),
+            "nu" => Some(Tool::Node),
             "cm" => Some(Tool::ModularBox),
             "em" => Some(Tool::World),
             "pe" => Some(Tool::Decal),
@@ -381,6 +385,15 @@ pub struct ArchiSimApp {
     pub road_start_join: Option<Point2>,
     pub road_settings: urban_ui::RoadSettings,
     pub roundabout_settings: roundabout_ui::RoundaboutSettings,
+    /// The node the tool Nudo picked (N1).
+    pub node_pick: Option<archisim_core::NodeKey>,
+    /// The handle of the picked node being dragged (N1).
+    pub node_grab: Option<node_ui::NodeGrab>,
+    /// What a click of the tool Nudo does (N3): pick a node, connect lanes
+    /// or draw a painted island.
+    pub node_mode: node_ui::NodeMode,
+    /// A street's curve typed by its radius and turn (N2), while it is laid.
+    pub road_typed_arc: Option<Vec<archisim_core::Point2>>,
     /// The box tool's settings, made from the project the first time.
     pub box_settings: Option<box_ui::BoxSettings>,
     /// The box types of the library folder, read when first shown.
@@ -474,6 +487,19 @@ pub struct ArchiSimApp {
     pub dxf_import: Option<dxf_import_ui::DxfImport>,
     /// The tile «Armado»: clicks arm what they hit.
     pub rebar_pick: bool,
+    /// Picking on the plan the two ends of a uniform grade (N2): the
+    /// street and, after the first click, where it starts.
+    pub road_grade_pick: Option<(archisim_core::RoadId, Option<f64>)>,
+    /// The window «Sustituir todos» (N4).
+    pub replace: replace_ui::ReplaceState,
+    /// The panel «Manzanas» (N7).
+    pub blocks: blocks_ui::BlocksState,
+    /// The map view (N8).
+    pub map: map_ui::MapState,
+    /// The plot's tool draws an urban surface of this kind (N5).
+    pub surface_draw: Option<archisim_core::SurfaceKind>,
+    /// Hiding pieces of the streets or letting zebras go (N6).
+    pub piece_pick: Option<pieces_ui::PiecePick>,
     pub room_settings: crate::editor::RoomSettings,
     pub roof_settings: crate::editor::RoofSettings,
     pub roof_tool: SlabTool,
@@ -908,6 +934,10 @@ impl ArchiSimApp {
             road_start_join: None,
             road_settings,
             roundabout_settings: Default::default(),
+            node_pick: None,
+            node_grab: None,
+            node_mode: node_ui::NodeMode::Pick,
+            road_typed_arc: None,
             box_settings: None,
             box_catalogue: None,
             world_settings: Default::default(),
@@ -953,6 +983,12 @@ impl ArchiSimApp {
             detail_pick: None,
             dxf_import: None,
             rebar_pick: false,
+            road_grade_pick: None,
+            replace: Default::default(),
+            blocks: Default::default(),
+            map: Default::default(),
+            surface_draw: None,
+            piece_pick: None,
             room_settings: Default::default(),
             roof_settings,
             stair_settings,
@@ -1187,6 +1223,11 @@ impl ArchiSimApp {
 
     fn set_tool(&mut self, tool: Tool) {
         self.rebar_pick = false;
+        self.road_grade_pick = None;
+        self.node_mode = node_ui::NodeMode::Pick;
+        self.surface_draw = None;
+        self.piece_pick = None;
+        self.blocks.picking = false;
         if tool != Tool::Cad && self.cad.is_some() {
             // Another tool ends the command (keeping what it drew).
             self.end_command(true);
@@ -3002,6 +3043,9 @@ impl ArchiSimApp {
         self.carto_dialog(ctx);
         self.types_dialog(ctx);
         self.library_dialog(ctx);
+        self.replace_dialog(ctx);
+        self.blocks_dialog(ctx);
+        self.map_dialog(ctx);
         self.mesh_import_dialog(ctx);
         self.dxf_import_dialog(ctx);
         self.params_dialog(ctx);
@@ -3367,6 +3411,7 @@ pub(super) fn text_edit_committed(ui: &mut Ui, id: Id, shown: &str, width: f32) 
 
 mod annotation_ui;
 mod background;
+mod blocks_ui;
 mod bottom_segments;
 mod box_ui;
 mod brush_ui;
@@ -3412,6 +3457,7 @@ mod icons;
 mod keypad_ui;
 mod levels_ui;
 mod library_ui;
+mod map_ui;
 mod maquette_ui;
 mod marking_ui;
 mod mass_grips3d;
@@ -3421,6 +3467,7 @@ mod missions_ui;
 mod module_ui;
 mod mouse3d;
 mod navigator;
+mod node_ui;
 mod nudge;
 mod object_bar;
 mod object_gallery;
@@ -3429,6 +3476,7 @@ mod paint_ui;
 mod params_ui;
 mod phases_ui;
 pub(crate) mod picture;
+mod pieces_ui;
 mod placing;
 mod plan_ui;
 mod planting_ui;
@@ -3441,6 +3489,7 @@ mod railing_ui;
 mod rebar_ui;
 mod render_ui;
 mod renewables_ui;
+mod replace_ui;
 mod report_view;
 mod revit_keys;
 mod ribbon;
@@ -3461,6 +3510,7 @@ mod stair_ui;
 mod start_ui;
 mod street_types_ui;
 mod structure_ui;
+mod surface_ui;
 mod survey_ui;
 mod symbol_pick;
 mod tabs;

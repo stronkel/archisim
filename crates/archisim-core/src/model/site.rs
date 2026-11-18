@@ -12,6 +12,8 @@
 //! IFC: `IfcGeographicElement` (`TERRAIN`) with a triangulated surface;
 //! true north in the model's geometric context.
 
+use std::sync::{Arc, Mutex};
+
 use super::*;
 
 /// A survey point: where and how high (from project zero).
@@ -451,18 +453,39 @@ impl Terrain {
     /// The surface's triangles, counter-clockwise in plan, by point index;
     /// with an edge drawn by hand, only those inside it.
     pub fn triangles(&self) -> Vec<[usize; 3]> {
-        let all = delaunay(&self.points.iter().map(|p| p.at).collect::<Vec<_>>());
-        match self.outline.as_deref().filter(|o| o.len() >= 3) {
-            Some(o) => all
-                .into_iter()
-                .filter(|[a, b, c]| {
-                    let m = (self.points[*a].at + self.points[*b].at + self.points[*c].at)
-                        * (1.0 / 3.0);
-                    super::roofs::point_in_polygon(m, o)
-                })
-                .collect(),
-            None => all,
+        self.surface().triangles.clone()
+    }
+
+    /// Its surface worked out: the triangles and an index to find the one
+    /// under a point. Kept while its points and edge stay the same, so
+    /// asking for the height of the ground at thousands of points (a
+    /// street following the ground every few metres) triangulates the
+    /// survey once and not at every point.
+    pub fn surface(&self) -> Arc<Surface> {
+        let outline = self.outline.as_deref().filter(|o| o.len() >= 3);
+        let same = |k: &Surface| {
+            k.points.len() == self.points.len()
+                && k.outline.as_deref() == outline
+                && k.points == self.points
+        };
+        if let Ok(mut kept) = KEPT_SURFACES.lock() {
+            if let Some(i) = kept.iter().position(|k| same(k)) {
+                let k = kept.remove(i);
+                kept.push(k.clone());
+                return k;
+            }
         }
+        let made = Arc::new(Surface::new(
+            self.points.clone(),
+            outline.map(<[_]>::to_vec),
+        ));
+        if let Ok(mut kept) = KEPT_SURFACES.lock() {
+            if kept.len() >= KEPT {
+                kept.remove(0);
+            }
+            kept.push(made.clone());
+        }
+        made
     }
 
     /// Gives the terrain an edge drawn by hand: its points are kept, and
@@ -667,13 +690,7 @@ impl Terrain {
 
     /// Height of the surface at `p`, if it lies over it.
     pub fn height_at(&self, p: Point2) -> Option<f64> {
-        for [a, b, c] in self.triangles() {
-            let (pa, pb, pc) = (self.points[a], self.points[b], self.points[c]);
-            if let Some((u, v, w)) = barycentric(p, pa.at, pb.at, pc.at) {
-                return Some(u * pa.z + v * pb.z + w * pc.z);
-            }
-        }
-        None
+        self.surface().height_at(p)
     }
 
     /// The outline of the surface in plan (its convex hull),
@@ -993,6 +1010,114 @@ fn grade(points: &[SurveyPoint], pad: &TerrainPad, outline: Option<&[Point2]>) -
     }
     out.extend(added);
     out
+}
+
+/// The surfaces of the terrains last asked about ([`Terrain::surface`]).
+const KEPT: usize = 6;
+static KEPT_SURFACES: Mutex<Vec<Arc<Surface>>> = Mutex::new(Vec::new());
+
+/// A terrain's surface: its triangles (counter-clockwise in plan, by
+/// point index; with an edge drawn by hand, only those inside it) and,
+/// for each cell of a grid over it, the triangles that reach into it.
+#[derive(Debug)]
+pub struct Surface {
+    points: Vec<SurveyPoint>,
+    outline: Option<Vec<Point2>>,
+    pub triangles: Vec<[usize; 3]>,
+    lo: Point2,
+    cell: f64,
+    nx: usize,
+    ny: usize,
+    /// By cell, row after row: the triangles, in their order.
+    cells: Vec<Vec<u32>>,
+}
+
+impl Surface {
+    fn new(points: Vec<SurveyPoint>, outline: Option<Vec<Point2>>) -> Surface {
+        let all = delaunay(&points.iter().map(|p| p.at).collect::<Vec<_>>());
+        let triangles: Vec<[usize; 3]> = match outline.as_deref() {
+            Some(o) => all
+                .into_iter()
+                .filter(|[a, b, c]| {
+                    let m = (points[*a].at + points[*b].at + points[*c].at) * (1.0 / 3.0);
+                    super::roofs::point_in_polygon(m, o)
+                })
+                .collect(),
+            None => all,
+        };
+        let (mut lo, mut hi) = (
+            Point2::new(f64::INFINITY, f64::INFINITY),
+            Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY),
+        );
+        for p in &points {
+            lo = Point2::new(lo.x.min(p.at.x), lo.y.min(p.at.y));
+            hi = Point2::new(hi.x.max(p.at.x), hi.y.max(p.at.y));
+        }
+        // About two triangles to a cell.
+        let (w, h) = ((hi.x - lo.x).max(1e-6), (hi.y - lo.y).max(1e-6));
+        let cell = if triangles.is_empty() {
+            w.max(h)
+        } else {
+            (w * h / (triangles.len() as f64 / 2.0)).sqrt().max(1e-3)
+        };
+        let nx = ((w / cell).ceil() as usize).clamp(1, 4096);
+        let ny = ((h / cell).ceil() as usize).clamp(1, 4096);
+        let cell = (w / nx as f64).max(h / ny as f64);
+        let mut cells = vec![Vec::new(); nx * ny];
+        // A little more than each triangle's box, so that a point on an
+        // edge finds every triangle `barycentric` takes it to be in.
+        let grow = 1e-6 * (1.0 + w.max(h));
+        let at = |v: f64, n: usize| ((v / cell).floor().max(0.0) as usize).min(n - 1);
+        for (k, t) in triangles.iter().enumerate() {
+            let ps = t.map(|i| points[i].at);
+            let (x0, x1) = (
+                ps.iter().map(|p| p.x).fold(f64::INFINITY, f64::min) - grow,
+                ps.iter().map(|p| p.x).fold(f64::NEG_INFINITY, f64::max) + grow,
+            );
+            let (y0, y1) = (
+                ps.iter().map(|p| p.y).fold(f64::INFINITY, f64::min) - grow,
+                ps.iter().map(|p| p.y).fold(f64::NEG_INFINITY, f64::max) + grow,
+            );
+            for j in at(y0 - lo.y, ny)..=at(y1 - lo.y, ny) {
+                for i in at(x0 - lo.x, nx)..=at(x1 - lo.x, nx) {
+                    cells[j * nx + i].push(k as u32);
+                }
+            }
+        }
+        Surface {
+            points,
+            outline,
+            triangles,
+            lo,
+            cell,
+            nx,
+            ny,
+            cells,
+        }
+    }
+
+    /// The height of the surface over a point (none outside it): the
+    /// first of its triangles under the point, as going through them all.
+    pub fn height_at(&self, p: Point2) -> Option<f64> {
+        let (x, y) = ((p.x - self.lo.x) / self.cell, (p.y - self.lo.y) / self.cell);
+        // Just outside the grid, the last cell (a point on its edge).
+        let (i, j) = (x.floor(), y.floor());
+        if i < -1.0 || j < -1.0 || i > self.nx as f64 || j > self.ny as f64 {
+            return None;
+        }
+        let (i, j) = (
+            (i.max(0.0) as usize).min(self.nx - 1),
+            (j.max(0.0) as usize).min(self.ny - 1),
+        );
+        for &k in &self.cells[j * self.nx + i] {
+            let [a, b, c] = self.triangles[k as usize];
+            let (pa, pb, pc) = (self.points[a], self.points[b], self.points[c]);
+            if let Some((u, v, w)) = barycentric(p, pa.at, pb.at, pc.at) {
+                return Some(u * pa.z + v * pb.z + w * pc.z);
+            }
+        }
+        None
+    }
 }
 
 fn barycentric(p: Point2, a: Point2, b: Point2, c: Point2) -> Option<(f64, f64, f64)> {
@@ -1657,6 +1782,92 @@ mod tests {
             at: Point2::new(x, y),
             z,
         }
+    }
+
+    /// The height under a point found through the surface's grid is the
+    /// one found going through every triangle (the first that has it), on
+    /// scattered points, on the survey points and edges themselves and
+    /// outside; with an edge drawn by hand too; and a changed point is not
+    /// answered from the surface kept before.
+    #[test]
+    fn the_surface_finds_the_same_heights() {
+        let mut seed = 7u64;
+        let mut rnd = move || {
+            seed = seed
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            (seed >> 11) as f64 / (1u64 << 53) as f64
+        };
+        let mut points = Vec::new();
+        for _ in 0..400 {
+            let (x, y) = (rnd() * 300.0 - 150.0, rnd() * 200.0 - 100.0);
+            points.push(sp(x, y, (x / 40.0).sin() * 3.0 + y * 0.02));
+        }
+        // And a regular patch, with points on shared edges.
+        for i in 0..6 {
+            for j in 0..6 {
+                points.push(sp(160.0 + i as f64 * 5.0, j as f64 * 5.0, i as f64));
+            }
+        }
+        let mut t = Terrain {
+            id: TerrainId(1),
+            guid: GlobalId::new(),
+            level: LevelId(1),
+            points,
+            material: MaterialId(1),
+            depth: 1.0,
+            contour: 1.0,
+            lines: Vec::new(),
+            patches: Vec::new(),
+            outline: None,
+            show_heights: false,
+            slope_arrows: false,
+            show_earthworks: false,
+            pads: Vec::new(),
+            ground: None,
+        };
+        let brute = |t: &Terrain, p: Point2| {
+            let pts: Vec<Point2> = t.points.iter().map(|p| p.at).collect();
+            let all = delaunay(&pts);
+            let tris: Vec<[usize; 3]> = match t.outline.as_deref() {
+                Some(o) => all
+                    .into_iter()
+                    .filter(|[a, b, c]| {
+                        let m = (pts[*a] + pts[*b] + pts[*c]) * (1.0 / 3.0);
+                        super::super::roofs::point_in_polygon(m, o)
+                    })
+                    .collect(),
+                None => all,
+            };
+            tris.iter().find_map(|&[a, b, c]| {
+                let (pa, pb, pc) = (t.points[a], t.points[b], t.points[c]);
+                barycentric(p, pa.at, pb.at, pc.at).map(|(u, v, w)| u * pa.z + v * pb.z + w * pc.z)
+            })
+        };
+        let mut probes: Vec<Point2> = (0..1500)
+            .map(|_| Point2::new(rnd() * 400.0 - 200.0, rnd() * 260.0 - 130.0))
+            .collect();
+        probes.extend(t.points.iter().map(|p| p.at));
+        probes.extend((0..6).map(|i| Point2::new(160.0 + i as f64 * 5.0, 2.5)));
+        for outline in [
+            None,
+            Some(vec![
+                Point2::new(-100.0, -60.0),
+                Point2::new(100.0, -80.0),
+                Point2::new(120.0, 70.0),
+                Point2::new(0.0, 20.0),
+                Point2::new(-90.0, 80.0),
+            ]),
+        ] {
+            t.outline = outline;
+            for &p in &probes {
+                assert_eq!(t.height_at(p), brute(&t, p), "{p:?}");
+            }
+        }
+        let before = t.height_at(t.points[0].at);
+        t.points[0].z += 5.0;
+        let after = t.height_at(t.points[0].at);
+        assert_eq!(after, before.map(|z| z + 5.0));
     }
 
     /// A slope rising 1 m every 10 m to the north, and a bump.

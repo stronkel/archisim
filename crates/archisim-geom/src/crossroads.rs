@@ -17,9 +17,12 @@
 //! Nothing here is stored: it is worked out from the roads each time, so
 //! it follows them as they move.
 
+use std::sync::{Arc, Mutex};
+
 use archisim_core::{
-    offset_path, strip, IslandFinish, LevelId, MaterialId, Model, Point2, Road, RoadBand, RoadId,
-    Roundabout, RoundaboutId, Vec2,
+    offset_path, strip, ArmRef, ArmSign, CornerShape, GlobalId, IslandFinish, IslandPaint, LevelId,
+    MaterialId, Model, NodeEnd, NodeKey, NodeKind, NodeSettings, Point2, Road, RoadBand, RoadId,
+    Roundabout, RoundaboutId, Turns, Vec2,
 };
 
 /// A road going out of a junction.
@@ -44,6 +47,16 @@ pub struct Arm {
     pub kerb_width_right: f64,
     pub edge_left: f64,
     pub edge_right: f64,
+    /// How far its lanes for vehicles (not the parking) reach to each side
+    /// of its axis: where a stop line ends.
+    pub lanes_left: f64,
+    pub lanes_right: f64,
+    /// The middles of its lanes for vehicles (N3), as offsets to the left
+    /// of the arm's line looking out: those coming in (on its left), from
+    /// the kerb to the axis, and those going out (on its right), from the
+    /// kerb to the axis. A single lane on the axis is both.
+    pub lanes_in: Vec<f64>,
+    pub lanes_out: Vec<f64>,
     /// Where it is cut, from the junction.
     pub cut: f64,
 }
@@ -71,9 +84,88 @@ pub struct Junction {
     pub depth: f64,
     /// The roundabout or square it is (U3).
     pub ring: Option<RoundaboutId>,
-    /// What else it has: a roundabout's island and apron.
+    /// What else it has: a roundabout's island and apron, a shared
+    /// surface's bollards.
     pub parts: Vec<JunctionPart>,
+    /// Which node it is (N1; none: a roundabout's).
+    pub key: Option<NodeKey>,
+    /// What node it is (N1).
+    pub kind: NodeKind,
+    /// How far its carriageway rises over the streets' (a raised crossing
+    /// or a shared surface: to the sidewalk), with ramps [`RAMP`] long at
+    /// the ends of its arms.
+    pub lift: f64,
+    /// The ramps from its plateau down to each arm's carriageway.
+    pub ramps: Vec<Vec<Point2>>,
+    /// Flat at the height of its centre (N1).
+    pub flat: bool,
+    /// The street whose height it follows (N1; none: the nearest).
+    pub main: Option<RoadId>,
+    /// Its road markings: stop and give-way lines (N1), as thin polygons on
+    /// its arms' carriageways.
+    pub marks: Vec<Vec<Point2>>,
+    /// Its signs: where each post stands, which way it faces (towards the
+    /// traffic coming in) and what it is.
+    pub signs: Vec<(Point2, Vec2, ArmSign)>,
+    /// Stretches of its roads (road, from, to along the axis) where their
+    /// own markings are left out (a node without markings).
+    pub quiet: Vec<(RoadId, f64, f64)>,
+    /// The kerbs across the parking where its bump-outs end (N1): on its
+    /// roads, just past its arms' ends.
+    pub bump_kerbs: Vec<Vec<Point2>>,
+    /// Where each lane coming in goes (N3): worked out, or by the node's
+    /// turns or connections made by hand.
+    pub lanes: Vec<LaneConnection>,
+    /// Paint on its arms' roads, past its plate (N3): the arrows of the
+    /// lanes coming in and the lines between them, with the road under
+    /// each (painted at its height).
+    pub arm_paint: Vec<(RoadId, Vec<Point2>)>,
 }
+
+/// Which way a lane goes at a node, seen from the lane coming in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Turn {
+    Left,
+    Straight,
+    Right,
+    Back,
+}
+
+impl Turn {
+    pub fn turns(self) -> Turns {
+        match self {
+            Turn::Left => Turns::LEFT,
+            Turn::Straight => Turns::STRAIGHT,
+            Turn::Right => Turns::RIGHT,
+            Turn::Back => Turns::BACK,
+        }
+    }
+}
+
+/// A connection from a lane coming in by an arm to a lane going out by
+/// another (N3): the lanes counted from the kerb, which way it turns, and
+/// the path a car follows from the end of one to the start of the other.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LaneConnection {
+    pub from: ArmRef,
+    pub lane: usize,
+    pub to: ArmRef,
+    pub to_lane: usize,
+    pub turn: Turn,
+    /// Made by hand.
+    pub by_hand: bool,
+    pub path: Vec<Point2>,
+}
+
+/// How far behind its arm's end (past the stop line) a lane's arrow is
+/// painted, to its tip, metres.
+pub const ARROW_BACK: f64 = 4.0;
+/// How long the continuous lines between the lanes coming in are, from the
+/// stop line back, metres (M-2.2 before a junction).
+pub const LANE_LINES: f64 = 20.0;
+
+/// The length of the ramps of a raised node, metres.
+pub const RAMP: f64 = 2.0;
 
 /// A piece of a junction besides its plate, kerbs and sidewalks: its
 /// outline, what it is, its material and how far it reaches under and
@@ -92,8 +184,12 @@ impl Junction {
     /// own, or that of the nearest of the roads that meet there (so that
     /// its plate follows them when they climb, U4).
     pub fn top_under(&self, model: &Model, p: Point2) -> f64 {
-        if self.ring.is_some() {
+        if self.ring.is_some() || self.flat {
             return self.top;
+        }
+        // The main street rules: the others come to its height (N1).
+        if let Some(r) = self.main.and_then(|m| model.road(m)) {
+            return r.top_under(p);
         }
         let mut best: Option<(f64, f64)> = None;
         for a in &self.arms {
@@ -113,6 +209,39 @@ impl Junction {
         match best {
             Some((_, h)) => h,
             None => self.top,
+        }
+    }
+
+    /// The height of its carriageway at `p`, over the level: as
+    /// [`Junction::top_under`], raised by its lift on the plateau and
+    /// down its ramps at the ends of the arms (N1).
+    pub fn plate_top(&self, model: &Model, p: Point2) -> f64 {
+        self.top_under(model, p) + self.lift_at(p)
+    }
+
+    /// How much its carriageway is raised at `p`.
+    pub fn lift_at(&self, p: Point2) -> f64 {
+        if self.lift <= 0.0 {
+            return 0.0;
+        }
+        let mut f: f64 = 1.0;
+        for a in &self.arms {
+            let s = (p - a.origin).dot(a.dir);
+            let side = (p - a.origin).cross(a.dir);
+            // Within the arm's carriageway (left is negative cross).
+            let inside = -side <= a.kerb_left + 0.01 && side <= a.kerb_right + 0.01;
+            if inside && s > a.cut - RAMP - 1e-6 {
+                f = f.min(((a.cut - s) / RAMP).clamp(0.0, 1.0));
+            }
+        }
+        self.lift * f
+    }
+
+    /// Its arm as the node's settings name it.
+    pub fn arm_ref(a: &Arm) -> ArmRef {
+        ArmRef {
+            road: a.road,
+            forward: a.forward,
         }
     }
 }
@@ -205,8 +334,54 @@ fn meeting_points(roads: &[&Road]) -> Vec<(Point2, Vec<(usize, f64)>)> {
             }
         }
     };
-    for i in 0..roads.len() {
-        for j in i + 1..roads.len() {
+    // Only pairs whose boxes (their axes and their width round them)
+    // touch can meet: swept along x, so a town of hundreds of streets does
+    // not compare each with all the others.
+    let boxes: Vec<(Point2, Point2)> = roads
+        .iter()
+        .map(|r| {
+            let grow = r.widest() + 1.0;
+            let (lo, hi) = r.axis.iter().fold(
+                (
+                    Point2::new(f64::INFINITY, f64::INFINITY),
+                    Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY),
+                ),
+                |(lo, hi), p| {
+                    (
+                        Point2::new(lo.x.min(p.x), lo.y.min(p.y)),
+                        Point2::new(hi.x.max(p.x), hi.y.max(p.y)),
+                    )
+                },
+            );
+            (
+                Point2::new(lo.x - grow, lo.y - grow),
+                Point2::new(hi.x + grow, hi.y + grow),
+            )
+        })
+        .collect();
+    let mut by_x: Vec<usize> = (0..roads.len()).collect();
+    by_x.sort_by(|&a, &b| boxes[a].0.x.total_cmp(&boxes[b].0.x));
+    let mut pairs: Vec<(usize, usize)> = Vec::new();
+    for (k, &a) in by_x.iter().enumerate() {
+        for &b in &by_x[k + 1..] {
+            if boxes[b].0.x > boxes[a].1.x {
+                break;
+            }
+            if boxes[b].0.y <= boxes[a].1.y && boxes[a].0.y <= boxes[b].1.y {
+                pairs.push((a.min(b), a.max(b)));
+            }
+        }
+    }
+    // In the same order as comparing each with all, so the junctions come
+    // out the same.
+    pairs.sort_unstable();
+    for (i, j) in pairs {
+        // A street laid in anarchy crosses the others without meeting them
+        // (N2).
+        if roads[i].free || roads[j].free {
+            continue;
+        }
+        {
             let (a, b) = (roads[i], roads[j]);
             // Axes that cross.
             let mut sa = 0.0;
@@ -292,13 +467,17 @@ struct Corner {
     /// The sidewalk's outer edge along the whole corner, when it follows
     /// the kerb line (round a roundabout) instead of meeting at `outer`.
     outer_line: Option<Vec<Point2>>,
+    /// The centre of its arc (a bend's outside corner turns round it).
+    centre: Option<Point2>,
 }
 
-fn corner(a: &Arm, b: &Arm, radius: f64) -> Corner {
+/// `bump_a` and `bump_b`: how far the corner's sidewalk is brought out over
+/// `a`'s and `b`'s carriageways (a bump-out, N1).
+fn corner(a: &Arm, b: &Arm, radius: f64, shape: CornerShape, bump_a: f64, bump_b: f64) -> Corner {
     let (na, nb) = (a.dir.perp_left(), b.dir.perp_left());
     let (xa, xb) = (a.origin, b.origin);
-    let pa = xa + na * a.kerb_left;
-    let pb = xb - nb * b.kerb_right;
+    let pa = xa + na * (a.kerb_left - bump_a);
+    let pb = xb - nb * (b.kerb_right - bump_b);
     let theta = {
         let t = b.dir.y.atan2(b.dir.x) - a.dir.y.atan2(a.dir.x);
         t.rem_euclid(std::f64::consts::TAU)
@@ -311,6 +490,7 @@ fn corner(a: &Arm, b: &Arm, radius: f64) -> Corner {
             line: Vec::new(),
             outer: None,
             outer_line: None,
+            centre: None,
         };
     }
     let Some(c) = meet(pa, a.dir, pb, b.dir) else {
@@ -320,16 +500,19 @@ fn corner(a: &Arm, b: &Arm, radius: f64) -> Corner {
             line: Vec::new(),
             outer: None,
             outer_line: None,
+            centre: None,
         };
     };
-    if theta > std::f64::consts::PI {
-        // The outside of a bend: the kerbs meet in a point.
+    if theta > std::f64::consts::PI || shape == CornerShape::Sharp || radius <= 1e-6 {
+        // The outside of a bend, or a corner without rounding: the kerbs
+        // meet in a point.
         return Corner {
             t_a: (c - xa).dot(a.dir),
             t_b: (c - xb).dot(b.dir),
             line: vec![c],
             outer,
             outer_line: None,
+            centre: None,
         };
     }
     let d = radius / (theta / 2.0).tan();
@@ -347,6 +530,18 @@ fn corner(a: &Arm, b: &Arm, radius: f64) -> Corner {
         sweep += std::f64::consts::TAU;
     }
     a1 = a0 + sweep;
+    if shape == CornerShape::Chamfer {
+        // Straight across, from where the arc would start to where it
+        // would end.
+        return Corner {
+            t_a: (ta - xa).dot(a.dir),
+            t_b: (tb - xb).dot(b.dir),
+            line: vec![ta, tb],
+            outer,
+            outer_line: None,
+            centre: None,
+        };
+    }
     let line = (0..=ARC_STEPS)
         .map(|k| {
             let t = a0 + (a1 - a0) * k as f64 / ARC_STEPS as f64;
@@ -359,6 +554,7 @@ fn corner(a: &Arm, b: &Arm, radius: f64) -> Corner {
         line,
         outer,
         outer_line: None,
+        centre: Some(centre),
     }
 }
 
@@ -442,6 +638,7 @@ fn ring_corner(a: &Arm, b: &Arm, centre: Point2, ring: f64, ra: f64, rb: f64, wa
         line,
         outer: None,
         outer_line,
+        centre: Some(centre),
     }
 }
 
@@ -451,11 +648,52 @@ fn arm_of(r: &Road, origin: Point2, s: f64, forward: bool) -> Arm {
     let len = length(&r.axis);
     let (_, u) = along(&r.axis, s.clamp(0.0, len));
     let (kl, kr, wl, wr, hl, hr) = reach(r, s.clamp(0.0, len));
+    // The lanes, without the parking and the bike lanes.
+    let (ll, lr) = {
+        let offs = r.offsets_at(s.clamp(0.0, len));
+        let lanes: Vec<&(RoadBand, f64, f64)> = offs
+            .iter()
+            .filter(|o| {
+                matches!(
+                    o.0,
+                    RoadBand::Carriageway | RoadBand::BusLane | RoadBand::Tram
+                )
+            })
+            .collect();
+        if lanes.is_empty() {
+            (kl, kr)
+        } else {
+            (
+                lanes.iter().map(|o| o.2).fold(f64::MIN, f64::max).max(0.0),
+                (-lanes.iter().map(|o| o.1).fold(f64::MAX, f64::min)).max(0.0),
+            )
+        }
+    };
+    // The lanes' middles (N3), to the left of the axis looking along it.
+    let middles: Vec<f64> = r
+        .offsets_at(s.clamp(0.0, len))
+        .iter()
+        .filter(|o| matches!(o.0, RoadBand::Carriageway | RoadBand::BusLane))
+        .map(|o| (o.1 + o.2) / 2.0)
+        .collect();
+    let side = if forward { 1.0 } else { -1.0 };
+    let mut lanes_in: Vec<f64> = middles
+        .iter()
+        .map(|m| m * side)
+        .filter(|m| *m > -LANE_ON_AXIS)
+        .collect();
+    lanes_in.sort_by(|a, b| b.total_cmp(a));
+    let mut lanes_out: Vec<f64> = middles
+        .iter()
+        .map(|m| m * side)
+        .filter(|m| *m < LANE_ON_AXIS)
+        .collect();
+    lanes_out.sort_by(f64::total_cmp);
     // Looking back along the road, its left is its right.
-    let (dir, kerb_left, kerb_right, kw_l, kw_r, e_l, e_r) = if forward {
-        (u, kl, kr, wl, wr, hl, hr)
+    let (dir, kerb_left, kerb_right, kw_l, kw_r, e_l, e_r, lanes_left, lanes_right) = if forward {
+        (u, kl, kr, wl, wr, hl, hr, ll, lr)
     } else {
-        (u * -1.0, kr, kl, wr, wl, hr, hl)
+        (u * -1.0, kr, kl, wr, wl, hr, hl, lr, ll)
     };
     Arm {
         road: r.id,
@@ -469,9 +707,17 @@ fn arm_of(r: &Road, origin: Point2, s: f64, forward: bool) -> Arm {
         kerb_width_right: kw_r,
         edge_left: e_l,
         edge_right: e_r,
+        lanes_left,
+        lanes_right,
+        lanes_in,
+        lanes_out,
         cut: 0.5,
     }
 }
+
+/// How near the axis the middle of a lane is for it to be a lane both ways
+/// (a single lane on the axis), metres.
+pub(crate) const LANE_ON_AXIS: f64 = 0.3;
 
 /// The arms of the roads that reach a roundabout: those whose axis goes
 /// through its circle (two arms) or ends in it or near it (one, measured
@@ -525,19 +771,165 @@ pub const OVERPASS: f64 = 3.5;
 /// The junctions of the roads of a level: at its roundabouts and squares
 /// and wherever roads meet away from them (but where one passes over the
 /// other, `OVERPASS`).
+///
+/// They depend only on the level's roads and roundabouts, and the plan,
+/// the 3D, the IFC and the tools ask for them many times between two
+/// changes: the last few are kept with what they came from
+/// ([`shared_junctions`]) and given back while those are the same.
 pub fn junctions(model: &Model, level: LevelId) -> Vec<Junction> {
+    shared_junctions(model, level).as_ref().clone()
+}
+
+/// What some junctions were worked out from, and them.
+struct Kept {
+    roads: Vec<Road>,
+    rings: Vec<Roundabout>,
+    nodes: Vec<NodeSettings>,
+    junctions: Arc<Vec<Junction>>,
+}
+
+/// The junctions kept: one per level or so of the last models asked
+/// about (the plan of one level and the 3D of all of them).
+const KEPT: usize = 8;
+static KEPT_JUNCTIONS: Mutex<Vec<Kept>> = Mutex::new(Vec::new());
+
+/// [`junctions`] without copying them: the same ones while the level's
+/// roads and roundabouts stay the same.
+pub fn shared_junctions(model: &Model, level: LevelId) -> Arc<Vec<Junction>> {
     let mut roads: Vec<&Road> = model.roads_on_level(level).collect();
     roads.sort_by_key(|r| r.id.0);
+    let mut rings: Vec<&Roundabout> = model.roundabouts_on_level(level).collect();
+    rings.sort_by_key(|r| r.id.0);
+    let nodes: Vec<&NodeSettings> = model.nodes().filter(|n| n.key.level == level).collect();
+    let same = |k: &Kept| {
+        k.nodes.len() == nodes.len()
+            && k.nodes.iter().zip(&nodes).all(|(a, b)| a == *b)
+            && k.roads.len() == roads.len()
+            && k.rings.len() == rings.len()
+            && k.roads.iter().zip(&roads).all(|(a, b)| a == *b)
+            && k.rings.iter().zip(&rings).all(|(a, b)| a == *b)
+    };
+    if let Ok(mut kept) = KEPT_JUNCTIONS.lock() {
+        if let Some(i) = kept.iter().position(same) {
+            // The most recent last.
+            let k = kept.remove(i);
+            let out = k.junctions.clone();
+            kept.push(k);
+            return out;
+        }
+    }
+    let out = Arc::new(work_out_junctions(model, &roads, &rings));
+    if let Ok(mut kept) = KEPT_JUNCTIONS.lock() {
+        if kept.len() >= KEPT {
+            kept.remove(0);
+        }
+        kept.push(Kept {
+            roads: roads.iter().map(|r| (*r).clone()).collect(),
+            rings: rings.iter().map(|r| (*r).clone()).collect(),
+            nodes: nodes.iter().map(|n| (*n).clone()).collect(),
+            junctions: out.clone(),
+        });
+    }
+    out
+}
+
+/// The junctions of these roads and roundabouts (of one level, roads
+/// sorted by their ids).
+/// A meeting point: where, which roads at which stations, its node's key
+/// and the station along the first road (to number the same nodes).
+type Meeting = (Point2, Vec<(usize, f64)>, NodeKey, f64);
+
+fn work_out_junctions(model: &Model, roads: &[&Road], rings: &[&Roundabout]) -> Vec<Junction> {
+    let roads = roads.to_vec();
     let mut out = Vec::new();
-    let rings: Vec<&Roundabout> = model.roundabouts_on_level(level).collect();
-    for c in &rings {
+    for c in rings {
         let arms = ring_arms(&roads, c);
-        if let Some(j) = assemble(model, &roads, arms, c.centre, Some(c)) {
+        if let Some(j) = assemble(model, &roads, arms, c.centre, Some(c), None) {
             out.push(j);
         }
     }
-    for (x, met) in meeting_points(&roads) {
+    // The meeting points and their nodes' keys: the same streets meeting
+    // the same way, numbered along the first of them.
+    let mut found: Vec<Meeting> = Vec::new();
+    let Some(level) = roads.first().map(|r| r.level) else {
+        return out;
+    };
+    let points = meeting_points(&roads);
+    // The dead ends with a turning circle (N1).
+    // (Only worked out when a node of one or two streets is changed.)
+    let any_loose = model
+        .nodes()
+        .any(|n| n.key.level == level && n.key.roads.len() <= 2);
+    let (ends, joined) = if any_loose {
+        loose_ends(&roads, rings, &points)
+    } else {
+        (Vec::new(), Vec::new())
+    };
+    for (key, at, i, s) in ends {
+        let Some(n) = model.node(&key) else { continue };
+        if n.kind() != NodeKind::DeadEnd {
+            continue;
+        }
+        if let Some(mut j) = dead_end(model, &roads, roads[i], at, s, n) {
+            j.key = Some(key);
+            out.push(j);
+        }
+    }
+    // Ends together: a node only when it is changed by hand (else the
+    // streets simply go on one into the other, as drawn).
+    for (key, at, met) in joined {
+        let Some(n) = model.node(&key) else { continue };
+        if n.kind() == NodeKind::Open {
+            continue;
+        }
+        let arms = arms_at(&roads, at, &met);
+        if arms.len() < 2 {
+            continue;
+        }
+        if let Some(mut j) = assemble(model, &roads, arms, at, None, Some(n)) {
+            j.key = Some(key);
+            out.push(j);
+        }
+    }
+    for (x, met) in points {
         if rings.iter().any(|c| c.centre.distance(x) < c.radius + 1.0) {
+            continue;
+        }
+        let ends = met_ends(&roads, &met);
+        let first = ends[0].0;
+        let along = met
+            .iter()
+            .find(|&&(i, _)| roads[i].id == first)
+            .map_or(0.0, |m| m.1);
+        found.push((
+            x,
+            met,
+            NodeKey {
+                level,
+                roads: ends,
+                nth: 0,
+            },
+            along,
+        ));
+    }
+    let mut order: Vec<usize> = (0..found.len()).collect();
+    order.sort_by(|&a, &b| {
+        found[a]
+            .2
+            .roads
+            .cmp(&found[b].2.roads)
+            .then(found[a].3.total_cmp(&found[b].3))
+    });
+    for w in 1..order.len() {
+        let (p, q) = (order[w - 1], order[w]);
+        if found[p].2.roads == found[q].2.roads {
+            found[q].2.nth = found[p].2.nth + 1;
+        }
+    }
+    for (x, met, key, _) in found {
+        let settings = model.node(&key);
+        // No node by hand: the streets pass without one.
+        if settings.is_some_and(|n| n.kind() == NodeKind::Open) {
             continue;
         }
         // One passes over the other (a bridge): no crossing.
@@ -548,43 +940,388 @@ pub fn junctions(model: &Model, level: LevelId) -> Vec<Junction> {
         if hi - lo > OVERPASS {
             continue;
         }
-        let mut arms: Vec<Arm> = Vec::new();
-        for &(i, s) in &met {
-            let r = roads[i];
-            let len = length(&r.axis);
-            for forward in [true, false] {
-                let room = if forward { len - s } else { s };
-                if room <= SAME {
-                    continue;
-                }
-                arms.push(arm_of(r, x, s, forward));
-            }
-        }
+        let arms = arms_at(&roads, x, &met);
         if arms.len() < 2 || arms.iter().all(|a| a.road == arms[0].road) {
             continue;
         }
-        arms.sort_by(|a, b| a.dir.y.atan2(a.dir.x).total_cmp(&b.dir.y.atan2(b.dir.x)));
-        if let Some(j) = assemble(model, &roads, arms, x, None) {
+        if let Some(mut j) = assemble(model, &roads, arms, x, None, settings) {
+            j.key = Some(key);
             out.push(j);
         }
     }
     out
 }
 
+/// How each road reaches a meeting point, sorted (the node's key).
+fn met_ends(roads: &[&Road], met: &[(usize, f64)]) -> Vec<(RoadId, NodeEnd)> {
+    let mut ends: Vec<(RoadId, NodeEnd)> = met
+        .iter()
+        .map(|&(i, s)| {
+            let len = length(&roads[i].axis);
+            let end = if s <= SAME {
+                NodeEnd::Start
+            } else if s >= len - SAME {
+                NodeEnd::End
+            } else {
+                NodeEnd::Through
+            };
+            (roads[i].id, end)
+        })
+        .collect();
+    ends.sort();
+    ends
+}
+
+/// The ends of the roads that meet nothing (no other road, no
+/// roundabout): their node's key, where, which road and how far along it.
+/// Two such ends together (a street that goes on in line into another) are
+/// one node of both, given as the second list: its key, where, and the
+/// roads with their stations.
+type FreeEnd = (NodeKey, Point2, usize, f64);
+type Joint = (NodeKey, Point2, Vec<(usize, f64)>);
+
+fn loose_ends(
+    roads: &[&Road],
+    rings: &[&Roundabout],
+    points: &[(Point2, Vec<(usize, f64)>)],
+) -> (Vec<FreeEnd>, Vec<Joint>) {
+    let mut ends: Vec<FreeEnd> = Vec::new();
+    for (i, r) in roads.iter().enumerate() {
+        let len = length(&r.axis);
+        if r.axis.len() < 2 || len < 2.0 * SAME {
+            continue;
+        }
+        for (end, s, at) in [
+            (NodeEnd::Start, 0.0, r.axis[0]),
+            (NodeEnd::End, len, r.axis[r.axis.len() - 1]),
+        ] {
+            let met = points.iter().any(|(_, m)| {
+                m.iter().any(|&(k, st)| {
+                    k == i
+                        && match end {
+                            NodeEnd::Start => st <= SAME,
+                            _ => st >= len - SAME,
+                        }
+                })
+            });
+            let ringed = rings
+                .iter()
+                .any(|c| c.centre.distance(at) < c.radius + r.widest() + 1.0);
+            if met || ringed {
+                continue;
+            }
+            ends.push((
+                NodeKey {
+                    level: r.level,
+                    roads: vec![(r.id, end)],
+                    nth: 0,
+                },
+                at,
+                i,
+                s,
+            ));
+        }
+    }
+    // Ends together.
+    let mut joints: Vec<Joint> = Vec::new();
+    let mut taken = vec![false; ends.len()];
+    for a in 0..ends.len() {
+        if taken[a] {
+            continue;
+        }
+        let together: Vec<usize> = (a..ends.len())
+            .filter(|&b| !taken[b] && ends[b].1.distance(ends[a].1) < SAME)
+            .collect();
+        if together.len() < 2 || together.iter().all(|&b| ends[b].2 == ends[a].2) {
+            continue;
+        }
+        let mut roads_at: Vec<(RoadId, NodeEnd)> = Vec::new();
+        let mut met = Vec::new();
+        for &b in &together {
+            taken[b] = true;
+            roads_at.extend(ends[b].0.roads.iter().copied());
+            met.push((ends[b].2, ends[b].3));
+        }
+        roads_at.sort();
+        joints.push((
+            NodeKey {
+                level: ends[a].0.level,
+                roads: roads_at,
+                nth: 0,
+            },
+            ends[a].1,
+            met,
+        ));
+    }
+    let singles = ends
+        .into_iter()
+        .zip(taken)
+        .filter(|(_, t)| !t)
+        .map(|(e, _)| e)
+        .collect();
+    (singles, joints)
+}
+
+/// The arms of the roads that meet at `x` (sorted round it).
+fn arms_at(roads: &[&Road], x: Point2, met: &[(usize, f64)]) -> Vec<Arm> {
+    let mut arms: Vec<Arm> = Vec::new();
+    for &(i, s) in met {
+        let r = roads[i];
+        let len = length(&r.axis);
+        for forward in [true, false] {
+            let room = if forward { len - s } else { s };
+            if room <= SAME {
+                continue;
+            }
+            arms.push(arm_of(r, x, s, forward));
+        }
+    }
+    arms.sort_by(|a, b| a.dir.y.atan2(a.dir.x).total_cmp(&b.dir.y.atan2(b.dir.x)));
+    arms
+}
+
+/// The free ends of a level's roads and the ends together (N1): their key
+/// and where they are.
+/// Nodes and where they are.
+type Placed = Vec<(NodeKey, Point2)>;
+
+fn level_loose_ends(model: &Model, level: LevelId) -> (Placed, Placed) {
+    let mut roads: Vec<&Road> = model.roads_on_level(level).collect();
+    roads.sort_by_key(|r| r.id.0);
+    let rings: Vec<&Roundabout> = model.roundabouts_on_level(level).collect();
+    let points = meeting_points(&roads);
+    let (singles, joints) = loose_ends(&roads, &rings, &points);
+    (
+        singles.into_iter().map(|(k, p, _, _)| (k, p)).collect(),
+        joints.into_iter().map(|(k, p, _)| (k, p)).collect(),
+    )
+}
+
+/// The free ends of a level's roads (N1): their key and where they are.
+pub fn dead_ends(model: &Model, level: LevelId) -> Placed {
+    level_loose_ends(model, level).0
+}
+
+/// The ends of a level's roads that are together without making a junction
+/// (a street that goes on in line into another, N1): their key and where.
+pub fn joints(model: &Model, level: LevelId) -> Placed {
+    level_loose_ends(model, level).1
+}
+
+/// The usual radius of a dead end's turning circle (its kerb), metres.
+pub const TURNING_RADIUS: f64 = 9.0;
+
+/// A dead end with a turning circle round the end of the road's axis: the
+/// road's kerbs go round the circle as round a roundabout.
+fn dead_end(
+    model: &Model,
+    roads: &[&Road],
+    r: &Road,
+    at: Point2,
+    s: f64,
+    n: &NodeSettings,
+) -> Option<Junction> {
+    let len = length(&r.axis);
+    let forward = s < len / 2.0;
+    let arm = arm_of(r, at, s, forward);
+    let radius = n
+        .end_radius
+        .unwrap_or(TURNING_RADIUS)
+        .max(arm.kerb_left.max(arm.kerb_right) + 0.5);
+    // The circle is centred on the axis, a little back from its end so
+    // that the carriageway's end falls inside it.
+    let ring = Roundabout {
+        id: RoundaboutId(0),
+        guid: GlobalId::from_u128(0),
+        name: String::new(),
+        level: r.level,
+        centre: at,
+        radius,
+        island: 0.0,
+        apron: 0.0,
+        top_offset: r.top_at(s),
+        plaza: false,
+        island_finish: IslandFinish::Paved,
+        pavement: r.pavement,
+        kerb_material: r.kerb_material,
+        island_material: r.kerb_material,
+    };
+    let mut j = assemble(model, roads, vec![arm], at, Some(&ring), Some(n))?;
+    j.ring = None;
+    j.kind = NodeKind::DeadEnd;
+    j.flat = true;
+    j.top = r.top_at(s);
+    Some(j)
+}
+
+/// A model whose nodes made [`NodeKind::Open`] on `level` are plain
+/// crossings: to find where they are.
+fn opened(model: &Model, level: LevelId) -> Option<Model> {
+    let open: Vec<NodeKey> = model
+        .nodes()
+        .filter(|n| n.key.level == level && n.kind() == NodeKind::Open)
+        .map(|n| n.key.clone())
+        .collect();
+    if open.is_empty() {
+        return None;
+    }
+    let mut plain = model.clone();
+    for k in open {
+        if let Some(mut n) = plain.node(&k).cloned() {
+            n.kind = None;
+            let _ = plain.set_node(n);
+        }
+    }
+    Some(plain)
+}
+
+/// The junction of a node, also if it is made [`NodeKind::Open`] (then as
+/// a plain crossing, to show where it is).
+pub fn node_junction(model: &Model, key: &NodeKey) -> Option<Junction> {
+    if let Some(j) = shared_junctions(model, key.level)
+        .iter()
+        .find(|j| j.key.as_ref() == Some(key))
+    {
+        return Some(j.clone());
+    }
+    let plain = opened(model, key.level)?;
+    let found = shared_junctions(&plain, key.level)
+        .iter()
+        .find(|j| j.key.as_ref() == Some(key))
+        .cloned();
+    found
+}
+
+/// The node at `p` of a level (N1): the one whose carriageway it is on, or
+/// the nearest within `reach`; also those made [`NodeKind::Open`].
+pub fn node_at(model: &Model, level: LevelId, p: Point2, reach: f64) -> Option<Junction> {
+    let pick = |js: &[Junction]| -> Option<Junction> {
+        let inside = js
+            .iter()
+            .filter(|j| j.key.is_some())
+            .find(|j| archisim_core::point_in_polygon(p, &j.plate));
+        if let Some(j) = inside {
+            return Some(j.clone());
+        }
+        js.iter()
+            .filter(|j| j.key.is_some() && j.at.distance(p) < reach)
+            .min_by(|a, b| a.at.distance(p).total_cmp(&b.at.distance(p)))
+            .cloned()
+    };
+    pick(&shared_junctions(model, level)).or_else(|| {
+        let plain = opened(model, level)?;
+        let js = shared_junctions(&plain, level);
+        pick(&js).filter(|j| {
+            j.key
+                .as_ref()
+                .and_then(|k| model.node(k))
+                .is_some_and(|n| n.kind() == NodeKind::Open)
+        })
+    })
+}
+
+/// The node at `p` of a level (N1), also a street's free end (a dead end,
+/// which has no junction while it has no turning circle).
+pub fn node_key_at(model: &Model, level: LevelId, p: Point2, reach: f64) -> Option<NodeKey> {
+    if let Some(k) = node_at(model, level, p, reach).and_then(|j| j.key) {
+        return Some(k);
+    }
+    let (ends, joined) = level_loose_ends(model, level);
+    ends.into_iter()
+        .chain(joined)
+        .filter(|(_, q)| q.distance(p) < reach)
+        .min_by(|a, b| a.1.distance(p).total_cmp(&b.1.distance(p)))
+        .map(|(k, _)| k)
+}
+
+/// The arms of a node, also of a dead end without its turning circle:
+/// where the street goes out of it.
+pub fn node_arms(model: &Model, key: &NodeKey) -> Vec<Arm> {
+    if let Some(j) = node_junction(model, key) {
+        return j.arms;
+    }
+    let mut arms = Vec::new();
+    for &(id, end) in &key.roads {
+        let Some(r) = model.road(id) else {
+            return Vec::new();
+        };
+        let len = length(&r.axis);
+        match end {
+            NodeEnd::Start => arms.push(arm_of(r, r.axis[0], 0.0, true)),
+            NodeEnd::End => arms.push(arm_of(r, r.axis[r.axis.len() - 1], len, false)),
+            NodeEnd::Through => return Vec::new(),
+        }
+    }
+    arms.sort_by(|a, b| a.dir.y.atan2(a.dir.x).total_cmp(&b.dir.y.atan2(b.dir.x)));
+    arms
+}
+
+/// The keys of the nodes of a level (N1): what the streets make now.
+pub fn node_keys(model: &Model, level: LevelId) -> Vec<NodeKey> {
+    shared_junctions(model, level)
+        .iter()
+        .filter_map(|j| j.key.clone())
+        .collect()
+}
+
+/// The keys of every node, also those made [`NodeKind::Open`] (which have
+/// no junction): to forget only the settings of the nodes that are gone.
+pub fn all_node_keys(model: &Model) -> Vec<NodeKey> {
+    let mut keys = Vec::new();
+    for l in model.levels() {
+        keys.extend(node_keys(model, l.id));
+    }
+    // The dead ends and the ends together, while they are there.
+    for l in model.levels() {
+        let (ends, joined) = level_loose_ends(model, l.id);
+        for (k, _) in ends.into_iter().chain(joined) {
+            if !keys.contains(&k) {
+                keys.push(k);
+            }
+        }
+    }
+    // The open ones are there while their streets still meet: their key is
+    // worked out as if they were plain.
+    for l in model.levels() {
+        if let Some(plain) = opened(model, l.id) {
+            for k in node_keys(&plain, l.id) {
+                if !keys.contains(&k) {
+                    keys.push(k);
+                }
+            }
+        }
+    }
+    keys
+}
+
 /// A junction at `x` of `arms` (sorted round it), round a roundabout's
-/// circle if `ring`.
+/// circle if `ring` (or a dead end's turning circle).
 fn assemble(
     model: &Model,
     roads: &[&Road],
     mut arms: Vec<Arm>,
     x: Point2,
     ring: Option<&Roundabout>,
+    settings: Option<&NodeSettings>,
 ) -> Option<Junction> {
     if arms.is_empty() {
         return None;
     }
     let n = arms.len();
-    let owner = roads.iter().find(|r| arms.iter().any(|a| a.road == r.id))?;
+    let mut kind = settings.map_or(NodeKind::Crossing, |s| s.kind());
+    if !kind.fits(n) {
+        kind = NodeKind::Crossing;
+    }
+    let raised = matches!(kind, NodeKind::Raised | NodeKind::Shared) && ring.is_none();
+    let marks_hidden = settings.and_then(|s| s.hide_marks).unwrap_or(false);
+    // The main street, if it is one of the node's (N1); else the first.
+    let main = settings
+        .and_then(|s| s.main)
+        .filter(|m| arms.iter().any(|a| a.road == *m));
+    let owner = match main.and_then(|m| roads.iter().find(|r| r.id == m)) {
+        Some(r) => r,
+        None => roads.iter().find(|r| arms.iter().any(|a| a.road == r.id))?,
+    };
     let radius_of = |id: RoadId| {
         model
             .road(id)
@@ -605,8 +1342,31 @@ fn assemble(
         .iter()
         .map(|a| a.kerb_width_left.max(a.kerb_width_right))
         .fold(0.0, f64::max);
+    let corner_of = |a: &Arm| {
+        settings
+            .map(|s| s.corner(Junction::arm_ref(a)))
+            .unwrap_or_default()
+    };
+    // The bump-outs (N1): of each arm's left side (its corner's) and right
+    // side (the corner before's), leaving at least a lane.
+    let bump = |a: &Arm, kerb: f64| -> f64 {
+        if ring.is_some() {
+            return 0.0;
+        }
+        corner_of(a)
+            .bump
+            .unwrap_or(0.0)
+            .clamp(0.0, (kerb - LANE_KEPT).max(0.0))
+    };
+    let bump_left: Vec<f64> = arms.iter().map(|a| bump(a, a.kerb_left)).collect();
+    let bump_right: Vec<f64> = (0..n)
+        .map(|i| {
+            let prev = &arms[(i + n - 1) % n];
+            bump(prev, arms[i].kerb_right)
+        })
+        .collect();
     let make = |arms: &[Arm]| -> Vec<Corner> {
-        (0..n)
+        let mut corners: Vec<Corner> = (0..n)
             .map(|i| {
                 let (a, b) = (&arms[i], &arms[(i + 1) % n]);
                 match ring {
@@ -619,10 +1379,39 @@ fn assemble(
                         radius_of(b.road),
                         kw_ring + walk,
                     ),
-                    None => corner(a, b, radius_of(a.road).min(radius_of(b.road))),
+                    None if kind == NodeKind::Continuous => straight_corner(),
+                    None => {
+                        let c = corner_of(a);
+                        let r = c
+                            .radius
+                            .unwrap_or_else(|| radius_of(a.road).min(radius_of(b.road)));
+                        corner(
+                            a,
+                            b,
+                            r,
+                            c.shape.unwrap_or_default(),
+                            bump_left[i],
+                            bump_right[(i + 1) % n],
+                        )
+                    }
                 }
             })
-            .collect()
+            .collect();
+        // A bend: the outside corner round the inside one's centre.
+        if kind == NodeKind::Bend && n == 2 {
+            for i in 0..2 {
+                let (a, b) = (&arms[i], &arms[1 - i]);
+                let theta = (b.dir.y.atan2(b.dir.x) - a.dir.y.atan2(a.dir.x))
+                    .rem_euclid(std::f64::consts::TAU);
+                if theta <= std::f64::consts::PI {
+                    continue;
+                }
+                if let Some(c) = corners[1 - i].centre {
+                    corners[i] = bend_outside(a, b, c);
+                }
+            }
+        }
+        corners
     };
     // The corners first, which set where the arms are cut: the cut of an
     // arm reaches past both its corners and past the other roads'
@@ -631,7 +1420,7 @@ fn assemble(
     for i in 0..n {
         let prev = &corners[(i + n - 1) % n];
         let next = &corners[i];
-        let wide = if ring.is_some() {
+        let wide = if ring.is_some() || matches!(kind, NodeKind::Bend | NodeKind::Continuous) {
             0.0
         } else {
             arms.iter()
@@ -639,13 +1428,29 @@ fn assemble(
                 .map(|o| o.kerb_left.max(o.kerb_right) + o.kerb_width_left.max(o.kerb_width_right))
                 .fold(0.0, f64::max)
         };
-        arms[i].cut = next.t_a.max(prev.t_b).max(wide).max(0.5);
+        let mut cut = next.t_a.max(prev.t_b).max(wide).max(0.5);
+        if kind == NodeKind::Continuous {
+            // The stretch over which the section changes.
+            cut = cut.max(TRANSITION);
+        }
+        // Room for the ramp of a raised node past its corners.
+        if raised {
+            cut = cut.max(next.t_a.max(prev.t_b).max(0.0) + RAMP);
+        }
+        // Its setback, by hand.
+        if let Some(b) = settings.and_then(|s| s.arm(Junction::arm_ref(&arms[i])).setback) {
+            cut = cut.max(b);
+        }
+        arms[i].cut = cut;
     }
     // Again, now that the cuts are known (the kerb line runs to them).
     let corners = make(&arms);
     let mut plate = Vec::new();
     let mut kerbs = Vec::new();
     let mut sidewalks = Vec::new();
+    let mut bollards: Vec<Point2> = Vec::new();
+    let mut ramps: Vec<Vec<Point2>> = Vec::new();
+    let mut bump_kerbs: Vec<Vec<Point2>> = Vec::new();
     let kerb_height = arms
         .iter()
         .filter_map(|a| model.road(a.road))
@@ -658,18 +1463,64 @@ fn assemble(
             }
         })
         .fold(f64::MAX, f64::min);
+    // How far its carriageway rises (a raised node: to the sidewalk).
+    let lift = if raised {
+        owner.section.kerb_height.max(kerb_height)
+    } else {
+        0.0
+    };
+    let left_at = |i: usize, s: f64| {
+        let a = &arms[i];
+        a.origin + a.dir * s + a.dir.perp_left() * (a.kerb_left - bump_left[i])
+    };
+    let right_at = |i: usize, s: f64| {
+        let a = &arms[i];
+        a.origin + a.dir * s - a.dir.perp_left() * (a.kerb_right - bump_right[i])
+    };
     for i in 0..n {
-        let (a, b) = (&arms[i], &arms[(i + 1) % n]);
+        let j = (i + 1) % n;
+        let (a, b) = (&arms[i], &arms[j]);
         let (na, nb) = (a.dir.perp_left(), b.dir.perp_left());
-        let right_cut = a.origin + a.dir * a.cut - na * a.kerb_right;
-        let left_cut = a.origin + a.dir * a.cut + na * a.kerb_left;
-        plate.push(right_cut);
-        plate.push(left_cut);
+        let right_cut = right_at(i, a.cut);
+        let left_cut = left_at(i, a.cut);
+        if lift > 0.0 {
+            // The plateau ends a ramp's length back; the ramp down to the
+            // street's carriageway.
+            let (right_in, left_in) = (right_at(i, a.cut - RAMP), left_at(i, a.cut - RAMP));
+            plate.push(right_in);
+            plate.push(left_in);
+            ramps.push(vec![right_in, right_cut, left_cut, left_in]);
+        } else {
+            plate.push(right_cut);
+            plate.push(left_cut);
+        }
+        // The kerb across the parking where a bump-out ends (N1).
+        let kw_a = a.kerb_width_left;
+        if bump_left[i] > 1e-6 && kw_a > 1e-6 && kind != NodeKind::Shared {
+            let full = a.origin + a.dir * a.cut + na * a.kerb_left;
+            bump_kerbs.push(vec![
+                left_cut,
+                full,
+                full + a.dir * kw_a,
+                left_cut + a.dir * kw_a,
+            ]);
+        }
+        let kw_b = b.kerb_width_right;
+        if bump_right[j] > 1e-6 && kw_b > 1e-6 && kind != NodeKind::Shared {
+            let full = b.origin + b.dir * b.cut - nb * b.kerb_right;
+            let bumped = right_at(j, b.cut);
+            bump_kerbs.push(vec![
+                full,
+                bumped,
+                bumped + b.dir * kw_b,
+                full + b.dir * kw_b,
+            ]);
+        }
         // The kerb line of the corner, from the cut of `a` to the cut of
         // `b`.
         let mut line = vec![left_cut];
         line.extend(corners[i].line.iter().copied());
-        line.push(b.origin + b.dir * b.cut - nb * b.kerb_right);
+        line.push(right_at(j, b.cut));
         line.dedup_by(|p, q| p.distance(*q) < 1e-6);
         plate.extend(
             line.iter()
@@ -686,20 +1537,29 @@ fn assemble(
         } else {
             a.kerb_width_left.max(b.kerb_width_right)
         };
-        if kw > 1e-6 {
+        if kw > 1e-6 && kind != NodeKind::Shared {
             let k = strip(&line, -kw, 0.0);
             if k.len() >= 3 {
                 kerbs.push(k);
             }
         }
+        // A shared surface's bollards, along the kerb line.
+        if kind == NodeKind::Shared {
+            bollards.extend(bollards_along(&line));
+        }
+        // No sidewalk at this corner, by hand.
+        let walk_here = corner_of(a).sidewalk.unwrap_or(true);
+        if !walk_here {
+            continue;
+        }
         let Some(inner) = offset_path(&line, -kw) else {
             continue;
         };
         let mut side = inner;
-        match (&corners[i].outer_line, ring) {
-            (Some(outer), Some(_)) => {
-                // Round a roundabout: out to the roads' outer edges at
-                // their cuts, along the circle's offset.
+        match &corners[i].outer_line {
+            Some(outer) => {
+                // Round a roundabout or a bend: out to the roads' outer
+                // edges at their cuts, along the kerb line's offset.
                 let mut far = outer.clone();
                 far[0] = a.origin + a.dir * a.cut + na * a.edge_left;
                 let last = far.len() - 1;
@@ -707,7 +1567,7 @@ fn assemble(
                 far.reverse();
                 side.extend(far);
             }
-            _ => {
+            None => {
                 side.push(b.origin + b.dir * b.cut - nb * b.edge_right);
                 if let Some(e) = corners[i].outer {
                     side.push(e);
@@ -759,8 +1619,155 @@ fn assemble(
             }
             (c.top_offset, c.pavement, c.kerb_material)
         }
-        None => (owner.top_under(x), owner.pavement, owner.kerb_material),
+        None => (
+            owner.top_under(x),
+            if kind == NodeKind::Shared {
+                owner.sidewalk_material
+            } else {
+                owner.pavement
+            },
+            owner.kerb_material,
+        ),
     };
+    // Pieces hidden by hand on any of its streets (N6).
+    let hidden = |kind: archisim_core::PieceKind, p: Point2| roads.iter().any(|r| r.hides(kind, p));
+    for b in bollards {
+        if hidden(archisim_core::PieceKind::Bollard, b) {
+            continue;
+        }
+        parts.push(JunctionPart {
+            band: RoadBand::Kerb,
+            outline: square(b, BOLLARD),
+            material: kerb_material,
+            z0: lift,
+            z1: lift + BOLLARD_HEIGHT,
+        });
+    }
+    // The signs and their marks on the road, for the traffic coming in by
+    // each arm (N1). Traffic keeps to the right: it comes in on the arm's
+    // left.
+    let mut marks = Vec::new();
+    let mut signs = Vec::new();
+    if ring.is_none() {
+        for (i, a) in arms.iter().enumerate() {
+            let sign = settings
+                .and_then(|s| s.arm(Junction::arm_ref(a)).sign)
+                .unwrap_or_default();
+            if sign == ArmSign::None {
+                continue;
+            }
+            let na = a.dir.perp_left();
+            let wide = (a.kerb_left - bump_left[i]).min(a.lanes_left).max(0.0);
+            let s0 = a.cut
+                + MARK_GAP
+                + settings
+                    .and_then(|s| s.arm(Junction::arm_ref(a)).stop_back)
+                    .unwrap_or(0.0)
+                    .max(0.0);
+            if !marks_hidden && wide > 0.5 {
+                let (from, to) = (0.1, wide - 0.1);
+                let bar = |l0: f64, l1: f64| {
+                    let p = a.origin + a.dir * s0;
+                    let q = p + a.dir * STOP_LINE;
+                    vec![p + na * l0, q + na * l0, q + na * l1, p + na * l1]
+                };
+                match sign {
+                    ArmSign::Yield => {
+                        // As many dashes as fit, the gaps shared out.
+                        let span = to - from;
+                        let count = ((span + YIELD_GAP) / (YIELD_DASH + YIELD_GAP))
+                            .round()
+                            .max(1.0) as usize;
+                        let gap = if count > 1 {
+                            (span - count as f64 * YIELD_DASH) / (count - 1) as f64
+                        } else {
+                            0.0
+                        };
+                        for c in 0..count {
+                            let l = from + c as f64 * (YIELD_DASH + gap.max(0.1));
+                            marks.push(bar(l, (l + YIELD_DASH).min(to)));
+                        }
+                    }
+                    _ => marks.push(bar(from, to)),
+                }
+            }
+            // The post on the sidewalk to the right of the traffic.
+            let out = if a.edge_left > a.kerb_left + a.kerb_width_left + 0.6 {
+                a.kerb_left + a.kerb_width_left + 0.5
+            } else {
+                a.kerb_left + 0.3
+            };
+            let post = a.origin + a.dir * (s0 + 1.0) + na * out;
+            if hidden(archisim_core::PieceKind::Sign, post) {
+                continue;
+            }
+            signs.push((post, a.dir, sign));
+            let up = kerb_height;
+            parts.push(JunctionPart {
+                band: RoadBand::Kerb,
+                outline: square(post, POST),
+                material: kerb_material,
+                z0: up,
+                z1: up + if sign == ArmSign::Lights { 3.2 } else { 2.6 },
+            });
+            let (half_w, half_t, z0, z1) = if sign == ArmSign::Lights {
+                (0.18, 0.15, 2.3, 3.2)
+            } else {
+                (0.35, 0.02, 1.9, 2.6)
+            };
+            let c = post + a.dir * (POST + half_t);
+            parts.push(JunctionPart {
+                band: RoadBand::Kerb,
+                outline: vec![
+                    c - na * half_w - a.dir * half_t,
+                    c + na * half_w - a.dir * half_t,
+                    c + na * half_w + a.dir * half_t,
+                    c - na * half_w + a.dir * half_t,
+                ],
+                material: kerb_material,
+                z0: up + z0,
+                z1: up + z1,
+            });
+        }
+    }
+    // The stretches of its roads without their own markings.
+    let quiet = if marks_hidden {
+        arms.iter()
+            .map(|a| {
+                let reach = a.cut + QUIET_REACH;
+                if a.forward {
+                    (a.road, a.station, a.station + reach)
+                } else {
+                    (a.road, a.station - reach, a.station)
+                }
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+    // Where each lane goes (N3), its arrows and the lines between the lanes
+    // coming in, and the islands painted on it.
+    let lanes = if ring.is_none() && n >= 2 && kind != NodeKind::Open {
+        lane_connections(&arms, settings)
+    } else {
+        Vec::new()
+    };
+    let mut arm_paint = Vec::new();
+    if !marks_hidden && n >= 3 && ring.is_none() && kind != NodeKind::Open {
+        arm_paint = lane_paint(&arms, &lanes, settings);
+    }
+    if let Some(s) = settings {
+        let (o, u) = node_frame(&arms, x);
+        for i in &s.islands {
+            let poly: Vec<Point2> = i
+                .points
+                .iter()
+                .map(|q| o + u * q.x + u.perp_left() * q.y)
+                .collect();
+            marks.extend(island_paint(&poly, i.paint));
+        }
+    }
+    let flat = settings.and_then(|s| s.flat).unwrap_or(false);
     Some(Junction {
         at: x,
         owner: owner.id,
@@ -776,7 +1783,463 @@ fn assemble(
         plate,
         kerbs,
         sidewalks,
+        key: None,
+        kind,
+        lift,
+        ramps,
+        flat,
+        main,
+        marks,
+        signs,
+        quiet,
+        bump_kerbs,
+        lanes,
+        arm_paint,
     })
+}
+
+/// A node's own axes (N3): from its centre, along the arm first in the
+/// order of [`ArmRef`] (the same while its streets meet the same way).
+pub fn node_frame(arms: &[Arm], at: Point2) -> (Point2, Vec2) {
+    let first = arms
+        .iter()
+        .min_by_key(|a| Junction::arm_ref(a))
+        .map_or(Vec2::new(1.0, 0.0), |a| a.dir);
+    (at, first)
+}
+
+/// Which way a car turns from an arm it comes in by into another it goes out
+/// by: by the angle between its way in and its way out.
+pub fn turn_of(from: &Arm, to: &Arm) -> Turn {
+    if Junction::arm_ref(from) == Junction::arm_ref(to) {
+        return Turn::Back;
+    }
+    let din = from.dir * -1.0;
+    let t = din.cross(to.dir).atan2(din.dot(to.dir)).to_degrees();
+    if t.abs() <= 35.0 {
+        Turn::Straight
+    } else if t.abs() >= 165.0 {
+        Turn::Back
+    } else if t > 0.0 {
+        Turn::Left
+    } else {
+        Turn::Right
+    }
+}
+
+/// The turns each lane coming in by an arm may make, worked out: straight
+/// on from every lane, right from the kerb's and left from the axis's (all
+/// from a single lane).
+fn usual_turns(lanes: usize) -> Vec<Turns> {
+    (0..lanes)
+        .map(|i| {
+            let mut t = Turns::STRAIGHT;
+            if i == 0 {
+                t = t.with(Turns::RIGHT, true);
+            }
+            if i + 1 == lanes {
+                t = t.with(Turns::LEFT, true);
+            }
+            t
+        })
+        .collect()
+}
+
+/// The turns of the lanes coming in by an arm: changed by hand or worked
+/// out.
+pub fn arm_turns(a: &Arm, settings: Option<&NodeSettings>) -> Vec<Turns> {
+    let mut t = usual_turns(a.lanes_in.len());
+    if let Some(own) = settings.and_then(|s| s.arm(Junction::arm_ref(a)).turns) {
+        for (i, x) in own.into_iter().enumerate() {
+            if i < t.len() {
+                t[i] = x;
+            }
+        }
+    }
+    t
+}
+
+/// Where each lane coming in goes (N3). An arm with connections made by
+/// hand goes by them only; the others by their turns: the k-th lane that
+/// turns a way, counted from the side it turns to, goes to the k-th lane of
+/// each arm that way (the last if it has fewer).
+pub fn lane_connections(arms: &[Arm], settings: Option<&NodeSettings>) -> Vec<LaneConnection> {
+    let mut out = Vec::new();
+    let find = |r: ArmRef| arms.iter().find(|a| Junction::arm_ref(a) == r);
+    for a in arms {
+        let ar = Junction::arm_ref(a);
+        let links: Vec<_> = settings
+            .map(|s| s.links.iter().filter(|l| l.from == ar).copied().collect())
+            .unwrap_or_default();
+        if !links.is_empty() {
+            for l in links {
+                let Some(b) = find(l.to) else { continue };
+                let (i, j) = (l.lane as usize, l.to_lane as usize);
+                if i >= a.lanes_in.len() || j >= b.lanes_out.len() {
+                    continue;
+                }
+                out.push(LaneConnection {
+                    from: ar,
+                    lane: i,
+                    to: l.to,
+                    to_lane: j,
+                    turn: turn_of(a, b),
+                    by_hand: true,
+                    path: lane_path(a, i, b, j),
+                });
+            }
+            continue;
+        }
+        let turns = arm_turns(a, settings);
+        for b in arms {
+            if b.lanes_out.is_empty() {
+                continue;
+            }
+            let turn = turn_of(a, b);
+            // The lanes turning that way, from the side they turn to.
+            let mut with: Vec<usize> = (0..turns.len())
+                .filter(|&i| turns[i].has(turn.turns()))
+                .collect();
+            if matches!(turn, Turn::Left | Turn::Back) {
+                with.reverse();
+            }
+            let m = b.lanes_out.len();
+            for (k, &i) in with.iter().enumerate() {
+                let j = match turn {
+                    Turn::Left | Turn::Back => m - 1 - k.min(m - 1),
+                    _ => k.min(m - 1),
+                };
+                out.push(LaneConnection {
+                    from: ar,
+                    lane: i,
+                    to: Junction::arm_ref(b),
+                    to_lane: j,
+                    turn,
+                    by_hand: false,
+                    path: lane_path(a, i, b, j),
+                });
+            }
+        }
+    }
+    out
+}
+
+/// Where a lane coming in by an arm ends, and where one going out starts:
+/// its middle at the arm's end.
+pub fn lane_end(a: &Arm, offset: f64) -> Point2 {
+    a.origin + a.dir * a.cut + a.dir.perp_left() * offset
+}
+
+/// The path from a lane coming in to one going out: a curve that leaves
+/// and arrives along the lanes.
+fn lane_path(a: &Arm, i: usize, b: &Arm, j: usize) -> Vec<Point2> {
+    let p0 = lane_end(a, a.lanes_in[i]);
+    let p3 = lane_end(b, b.lanes_out[j]);
+    let k = p0.distance(p3) * 0.45;
+    let (p1, p2) = (p0 - a.dir * k, p3 - b.dir * k);
+    (0..=12)
+        .map(|n| {
+            let t = n as f64 / 12.0;
+            let u = 1.0 - t;
+            let w = [u * u * u, 3.0 * u * u * t, 3.0 * u * t * t, t * t * t];
+            Point2::new(
+                p0.x * w[0] + p1.x * w[1] + p2.x * w[2] + p3.x * w[3],
+                p0.y * w[0] + p1.y * w[1] + p2.y * w[2] + p3.y * w[3],
+            )
+        })
+        .collect()
+}
+
+/// The arrows of the lanes coming in by the arms with more than one (or
+/// with their turns or connections changed), behind the stop line, and the
+/// continuous lines between those lanes (N3).
+fn lane_paint(
+    arms: &[Arm],
+    lanes: &[LaneConnection],
+    settings: Option<&NodeSettings>,
+) -> Vec<(RoadId, Vec<Point2>)> {
+    use archisim_core::MarkingKind as K;
+    let mut out = Vec::new();
+    for a in arms {
+        let ar = Junction::arm_ref(a);
+        let own = settings
+            .is_some_and(|s| s.arm(ar).turns.is_some() || s.links.iter().any(|l| l.from == ar));
+        if a.lanes_in.len() < 2 && !own {
+            continue;
+        }
+        let back = settings
+            .and_then(|s| s.arm(ar).stop_back)
+            .unwrap_or(0.0)
+            .max(0.0);
+        let stop = a.cut + MARK_GAP + back + STOP_LINE;
+        let tip = stop + ARROW_BACK;
+        for (i, &off) in a.lanes_in.iter().enumerate() {
+            let mut t = Turns::NONE;
+            for c in lanes.iter().filter(|c| c.from == ar && c.lane == i) {
+                t = t.with(c.turn.turns(), true);
+            }
+            let kinds: Vec<K> = match (
+                t.has(Turns::LEFT),
+                t.has(Turns::STRAIGHT),
+                t.has(Turns::RIGHT),
+            ) {
+                (false, true, false) => vec![K::ArrowStraight],
+                (true, false, false) => vec![K::ArrowLeft],
+                (false, false, true) => vec![K::ArrowRight],
+                (true, true, false) => vec![K::ArrowStraightLeft],
+                (false, true, true) => vec![K::ArrowStraightRight],
+                (true, false, true) => vec![K::ArrowLeft, K::ArrowRight],
+                (true, true, true) => vec![K::ArrowStraightLeft, K::ArrowRight],
+                (false, false, false) => Vec::new(),
+            };
+            // The arrow's tail, 5 m behind its tip, pointing in.
+            let at = a.origin + a.dir * (tip + 5.0) + a.dir.perp_left() * off;
+            let path = [at, at - a.dir];
+            for k in kinds {
+                for poly in archisim_core::paint_shapes(k, &path, 0.15, 0.0, 0.0, 0.0) {
+                    out.push((a.road, poly));
+                }
+            }
+        }
+        // The lines between them, from the stop line back.
+        for w in a.lanes_in.windows(2) {
+            let mid = (w[0] + w[1]) / 2.0;
+            let p = a.origin + a.dir.perp_left() * mid;
+            let line = [p + a.dir * stop, p + a.dir * (stop + LANE_LINES)];
+            out.push((a.road, strip(&line, -0.05, 0.05)));
+        }
+    }
+    out
+}
+
+/// The paint of an island on a node (N3).
+pub fn island_paint(poly: &[Point2], paint: IslandPaint) -> Vec<Vec<Point2>> {
+    use archisim_core::MarkingKind as K;
+    if poly.len() < 3 {
+        return Vec::new();
+    }
+    match paint {
+        IslandPaint::Chevrons => {
+            archisim_core::paint_shapes(K::Chevrons, poly, 0.15, 0.5, 1.0, 0.0)
+        }
+        IslandPaint::Fill => {
+            let mut p = poly.to_vec();
+            if archisim_core::signed_area(&p) < 0.0 {
+                p.reverse();
+            }
+            vec![p]
+        }
+        IslandPaint::Outline => {
+            let mut p = poly.to_vec();
+            if archisim_core::signed_area(&p) < 0.0 {
+                p.reverse();
+            }
+            let mut closed = p.clone();
+            closed.push(p[0]);
+            closed.windows(2).map(|s| strip(s, -0.15, 0.0)).collect()
+        }
+    }
+}
+
+/// A corner with nothing: the kerbs go straight from one arm to the next.
+fn straight_corner() -> Corner {
+    Corner {
+        t_a: 0.0,
+        t_b: 0.0,
+        line: Vec::new(),
+        outer: None,
+        outer_line: None,
+        centre: None,
+    }
+}
+
+/// The outside corner of a bend from `a` to `b`: an arc round the inside
+/// corner's `centre`, from `a`'s kerb line to `b`'s, and the sidewalk
+/// following it.
+fn bend_outside(a: &Arm, b: &Arm, centre: Point2) -> Corner {
+    let (na, nb) = (a.dir.perp_left(), b.dir.perp_left());
+    let pa = a.origin + na * a.kerb_left;
+    let pb = b.origin - nb * b.kerb_right;
+    let ta = pa + a.dir * (centre - pa).dot(a.dir);
+    let tb = pb + b.dir * (centre - pb).dot(b.dir);
+    let line = arc(centre, ta, tb, false);
+    let walk = (a.edge_left - a.kerb_left).min(b.edge_right - b.kerb_right);
+    Corner {
+        t_a: (ta - a.origin).dot(a.dir),
+        t_b: (tb - b.origin).dot(b.dir),
+        outer_line: offset_path(&line, -walk),
+        line,
+        outer: None,
+        centre: Some(centre),
+    }
+}
+
+/// A square of half side `h` round `c`.
+fn square(c: Point2, h: f64) -> Vec<Point2> {
+    vec![
+        c + Vec2::new(-h, -h),
+        c + Vec2::new(h, -h),
+        c + Vec2::new(h, h),
+        c + Vec2::new(-h, h),
+    ]
+}
+
+/// The lane kept beside a bump-out, metres.
+const LANE_KEPT: f64 = 2.75;
+/// How long a continuous node's change of section is, on each arm, metres.
+pub const TRANSITION: f64 = 6.0;
+/// From the end of an arm to its stop or give-way line, metres.
+const MARK_GAP: f64 = 0.5;
+/// How wide a stop line is (M-4.1) and a give-way line's dashes are long
+/// across and apart (M-4.2), metres.
+const STOP_LINE: f64 = 0.4;
+const YIELD_DASH: f64 = 0.8;
+const YIELD_GAP: f64 = 0.4;
+/// Half the side of a sign's post, metres.
+pub(crate) const POST: f64 = 0.04;
+/// How far past an arm's end its road's own markings are left out when
+/// a node hides them, metres (where the zebras stand).
+const QUIET_REACH: f64 = 15.0;
+
+/// Half the side of a bollard, metres.
+const BOLLARD: f64 = 0.08;
+/// How high a bollard stands, metres.
+const BOLLARD_HEIGHT: f64 = 0.9;
+/// How far apart the bollards stand, metres.
+const BOLLARD_GAP: f64 = 1.5;
+
+/// Where the bollards of a shared surface stand along a corner's kerb
+/// line: every [`BOLLARD_GAP`], a little in from the line.
+fn bollards_along(line: &[Point2]) -> Vec<Point2> {
+    let len = length(line);
+    if len < 0.5 {
+        return Vec::new();
+    }
+    let n = ((len / BOLLARD_GAP).floor() as usize).max(1);
+    (0..=n)
+        .map(|k| {
+            let (p, u) = along(line, len * k as f64 / n as f64);
+            // The sidewalk is to the right of the line.
+            p - u.perp_left() * 0.3
+        })
+        .collect()
+}
+
+/// The zebra crossing of a node's arm (N1): where along its road it is,
+/// if the road has one within its first metres past the node.
+pub fn arm_crossing(model: &Model, a: &Arm) -> Option<f64> {
+    let r = model.road(a.road)?;
+    let reach = a.cut + QUIET_REACH;
+    r.section.crossings.iter().map(|c| c.at).find(|&at| {
+        let d = if a.forward {
+            at - a.station
+        } else {
+            a.station - at
+        };
+        d > 0.0 && d <= reach
+    })
+}
+
+/// Lays or takes away the zebra crossing of a node's arm (N1): a crossing
+/// of its road just past the node's end (its kerbs lowered with it).
+pub fn set_arm_crossing(
+    model: &mut Model,
+    a: &Arm,
+    on: bool,
+) -> Result<(), archisim_core::ModelError> {
+    let here = arm_crossing(model, a);
+    match (here, on) {
+        (Some(at), false) => model.edit_road(a.road, |r| {
+            r.section.crossings.retain(|c| (c.at - at).abs() > 1e-6);
+        }),
+        (None, true) => {
+            let w = archisim_core::ZEBRA_WIDTH;
+            let off = a.cut + archisim_core::ZEBRA_SETBACK + w / 2.0;
+            let at = if a.forward {
+                a.station + off
+            } else {
+                a.station - off
+            };
+            let len = model.road(a.road).map_or(0.0, |r| r.length());
+            if at < w / 2.0 || at > len - w / 2.0 {
+                return Ok(());
+            }
+            model.edit_road(a.road, |r| {
+                r.section.crossings.push(archisim_core::Crossing {
+                    at: (at * 100.0).round() / 100.0,
+                    width: w,
+                });
+            })
+        }
+        _ => Ok(()),
+    }
+}
+
+/// Where a corner's handle is and how dragging it changes its radius (N1):
+/// the point where its kerb lines meet, the way into the corner along its
+/// bisector and half the angle between its arms. None if the arms go
+/// straight on or turn back.
+pub fn corner_frame(a: &Arm, b: &Arm) -> Option<(Point2, Vec2, f64)> {
+    let theta = (b.dir.y.atan2(b.dir.x) - a.dir.y.atan2(a.dir.x)).rem_euclid(std::f64::consts::TAU);
+    if (theta - std::f64::consts::PI).abs() < STRAIGHT || theta >= std::f64::consts::PI {
+        return None;
+    }
+    let (na, nb) = (a.dir.perp_left(), b.dir.perp_left());
+    let apex = meet(
+        a.origin + na * a.kerb_left,
+        a.dir,
+        b.origin - nb * b.kerb_right,
+        b.dir,
+    )?;
+    let bis = (a.dir + b.dir).normalized()?;
+    Some((apex, bis, theta / 2.0))
+}
+
+/// The middle of a corner's arc of `radius` (its handle).
+pub fn corner_middle(apex: Point2, bis: Vec2, half: f64, radius: f64) -> Point2 {
+    apex + bis * (radius * (1.0 / half.sin() - 1.0))
+}
+
+/// The radius whose arc's middle is at `p` (dragging a corner's handle).
+pub fn corner_radius_at(apex: Point2, bis: Vec2, half: f64, p: Point2) -> f64 {
+    let d = (p - apex).dot(bis);
+    (d / (1.0 / half.sin() - 1.0)).max(0.0)
+}
+
+/// The usual size of a chamfer where the project is (N1): the radius of
+/// the corner it cuts, metres. Barcelona's Eixample, larger; elsewhere, the
+/// chamfers of the Spanish ensanches.
+pub fn standard_chamfer(model: &Model) -> f64 {
+    let Some((lat, lon)) = model.georeference().and_then(|g| g.lat_lon()) else {
+        return 5.0;
+    };
+    if (41.32..=41.47).contains(&lat) && (2.05..=2.25).contains(&lon) {
+        // Barcelona: the Eixample's chamfers.
+        return 9.0;
+    }
+    let place = archisim_core::world_places()
+        .get(model.world_place() as usize)
+        .copied()
+        .unwrap_or("");
+    if place.starts_with("Cataluña") || place.starts_with("Valencia") {
+        7.0
+    } else {
+        5.0
+    }
+}
+
+/// The stretches of a road's axis where its own markings are left out:
+/// those its junctions take and those their nodes keep quiet (N1).
+pub fn marking_gaps(junctions: &[Junction], road: RoadId) -> Vec<(f64, f64)> {
+    let mut gaps = road_gaps(junctions, road);
+    gaps.extend(
+        junctions
+            .iter()
+            .flat_map(|j| j.quiet.iter())
+            .filter(|q| q.0 == road)
+            .map(|q| (q.1, q.2)),
+    );
+    gaps
 }
 
 /// The stretches of a road's axis that its junctions take: (from, to).
@@ -834,6 +2297,30 @@ mod tests {
         let a = add(&mut m, Point2::new(-50.0, 0.0), Point2::new(50.0, 0.0));
         let b = add(&mut m, Point2::new(0.0, -50.0), Point2::new(0.0, 50.0));
         (m, level, a, b)
+    }
+
+    /// The junctions kept are given back only while the roads are the
+    /// same: moving one gives new ones, and moving it back the first ones.
+    #[test]
+    fn kept_junctions_follow_the_roads() {
+        let (mut m, level, a, _) = town();
+        let first = junctions(&m, level);
+        assert!(Arc::ptr_eq(
+            &shared_junctions(&m, level),
+            &shared_junctions(&m, level)
+        ));
+        let axis = m.road(a).unwrap().axis.clone();
+        m.edit_road(a, |r| {
+            for p in &mut r.axis {
+                p.y += 3.0;
+            }
+        })
+        .unwrap();
+        let moved = junctions(&m, level);
+        assert_ne!(first, moved);
+        assert!((moved[0].at.y - first[0].at.y - 3.0).abs() < 1e-9);
+        m.edit_road(a, |r| r.axis = axis).unwrap();
+        assert_eq!(junctions(&m, level), first);
     }
 
     #[test]
@@ -943,5 +2430,450 @@ mod tests {
         let gaps = road_gaps(&js, b);
         assert_eq!(gaps.len(), 2);
         assert!(gaps.iter().all(|g| g.1 - g.0 > 15.0));
+    }
+
+    /// The node of the crossing of `town` and its settings, changed by
+    /// `f`.
+    fn changed(m: &mut Model, level: LevelId, f: impl FnOnce(&mut NodeSettings, &Junction)) {
+        let j = junctions(m, level).remove(0);
+        let key = j.key.clone().expect("a node");
+        let mut n = m
+            .node(&key)
+            .cloned()
+            .unwrap_or_else(|| NodeSettings::new(key));
+        f(&mut n, &j);
+        m.set_node(n).unwrap();
+    }
+
+    /// A node keeps its key while its streets move, and its settings with
+    /// it; taking a street away forgets them.
+    #[test]
+    fn a_node_is_the_same_while_its_streets_meet() {
+        let (mut m, level, a, b) = town();
+        let key = junctions(&m, level)[0].key.clone().unwrap();
+        assert_eq!(key.roads.len(), 2);
+        assert!(key.roads.iter().all(|r| r.1 == NodeEnd::Through));
+        changed(&mut m, level, |n, _| n.kind = Some(NodeKind::Raised));
+        m.edit_road(a, |r| {
+            for p in &mut r.axis {
+                p.y += 2.0;
+            }
+        })
+        .unwrap();
+        let j = &junctions(&m, level)[0];
+        assert_eq!(j.key.as_ref(), Some(&key));
+        assert_eq!(j.kind, NodeKind::Raised);
+        // The crossing and the four free ends of its streets.
+        let keys = all_node_keys(&m);
+        assert_eq!(keys.len(), 5);
+        assert!(keys.contains(&key));
+        m.remove_road(b).unwrap();
+        assert!(m.node(&key).is_none());
+    }
+
+    /// A raised crossing: its carriageway at the sidewalk's height, with a
+    /// ramp down each arm; a shared surface also without kerbs and with
+    /// bollards, paved as the sidewalk.
+    #[test]
+    fn raised_and_shared_nodes() {
+        let (mut m, level, _, _) = town();
+        let plain = junctions(&m, level).remove(0);
+        changed(&mut m, level, |n, _| n.kind = Some(NodeKind::Raised));
+        let j = junctions(&m, level).remove(0);
+        assert!((j.lift - 0.15).abs() < 1e-9, "{}", j.lift);
+        assert_eq!(j.ramps.len(), 4);
+        assert_eq!(j.kerbs.len(), 4);
+        assert!((j.lift_at(j.at) - j.lift).abs() < 1e-9);
+        for a in &j.arms {
+            // Up at the plateau, down at the arm's end.
+            assert!(j.lift_at(a.origin + a.dir * (a.cut - RAMP)) > j.lift - 1e-6);
+            assert!(j.lift_at(a.origin + a.dir * (a.cut - 1e-3)) < 0.01);
+            assert!(a.cut >= plain.arms[0].cut + RAMP - 1e-6);
+        }
+        changed(&mut m, level, |n, _| n.kind = Some(NodeKind::Shared));
+        let j = junctions(&m, level).remove(0);
+        assert!(j.kerbs.is_empty());
+        assert!(!j.parts.is_empty(), "bolardos");
+        assert_eq!(j.pavement, j.sidewalk_material);
+        // No node: the streets lie one on the other.
+        changed(&mut m, level, |n, _| n.kind = Some(NodeKind::Open));
+        assert!(junctions(&m, level).is_empty());
+        let found = node_at(&m, level, Point2::new(0.5, 0.5), 15.0).unwrap();
+        assert_eq!(found.key, plain.key);
+    }
+
+    /// Each arm's setback and each corner's radius, shape and sidewalk.
+    #[test]
+    fn arms_and_corners_by_hand() {
+        let (mut m, level, _, _) = town();
+        let plain = junctions(&m, level).remove(0);
+        changed(&mut m, level, |n, j| {
+            let a = Junction::arm_ref(&j.arms[0]);
+            n.set_arm(
+                a,
+                archisim_core::ArmSettings {
+                    setback: Some(20.0),
+                    ..Default::default()
+                },
+            );
+            n.set_corner(
+                a,
+                archisim_core::CornerSettings {
+                    radius: Some(8.0),
+                    shape: Some(CornerShape::Chamfer),
+                    sidewalk: Some(false),
+                    ..Default::default()
+                },
+            );
+        });
+        let j = junctions(&m, level).remove(0);
+        assert!((j.arms[0].cut - 20.0).abs() < 1e-9);
+        assert_eq!(j.sidewalks.len(), 3);
+        // The chamfer is shorter than the arc it replaces, with its larger
+        // radius reaching further out along the next arm.
+        assert!(j.arms[1].cut > plain.arms[1].cut + 1.0);
+        // A sharp corner: no rounding, the sidewalk reaches the kerbs' corner.
+        let before = signed_area(&j.plate);
+        changed(&mut m, level, |n, j| {
+            let a = Junction::arm_ref(&j.arms[2]);
+            n.set_corner(
+                a,
+                archisim_core::CornerSettings {
+                    shape: Some(CornerShape::Sharp),
+                    ..Default::default()
+                },
+            );
+        });
+        let j = junctions(&m, level).remove(0);
+        assert!(signed_area(&j.plate) < before - 1.0);
+        // Back as worked out.
+        let key = j.key.clone().unwrap();
+        m.set_node(NodeSettings::new(key.clone())).unwrap();
+        assert!(m.node(&key).is_none());
+        assert_eq!(junctions(&m, level)[0].plate, plain.plate);
+    }
+
+    /// A road like the town's.
+    fn road(m: &mut Model, level: LevelId, a: Point2, b: Point2) -> RoadId {
+        let mat = m.materials().next().unwrap().id;
+        m.add_road(NewRoad {
+            name: "Calle".into(),
+            level,
+            axis: vec![a, b],
+            section: RoadSection::default(),
+            top_offset: 0.0,
+            profile: Vec::new(),
+            changes: Vec::new(),
+            pavement: mat,
+            kerb_material: mat,
+            sidewalk_material: mat,
+        })
+        .unwrap()
+    }
+
+    /// The node at `p` (also a dead end or ends together) changed by `f`.
+    fn changed_at(
+        m: &mut Model,
+        level: LevelId,
+        p: Point2,
+        f: impl FnOnce(&mut NodeSettings, &[Arm]),
+    ) {
+        let key = node_key_at(m, level, p, 3.0).unwrap();
+        let arms = node_arms(m, &key);
+        let mut n = m
+            .node(&key)
+            .cloned()
+            .unwrap_or_else(|| NodeSettings::new(key));
+        f(&mut n, &arms);
+        m.set_node(n).unwrap();
+    }
+
+    /// The second round of N1: dead ends with a turning circle, ends
+    /// together that go on without a seam, bends, bump-outs, signs with
+    /// their marks, the main street and a flat node, and a node without
+    /// markings.
+    #[test]
+    fn more_kinds_of_node() {
+        let (mut m, level, a, b) = town();
+        let p = Point2::new;
+        // A free end: no junction until it is a dead end.
+        let before = junctions(&m, level).len();
+        assert!(dead_ends(&m, level)
+            .iter()
+            .any(|(_, q)| q.distance(p(50.0, 0.0)) < 1e-6));
+        changed_at(&mut m, level, p(50.0, 0.0), |n, arms| {
+            assert_eq!(arms.len(), 1);
+            n.kind = Some(NodeKind::DeadEnd);
+            n.end_radius = Some(10.0);
+        });
+        let js = junctions(&m, level);
+        assert_eq!(js.len(), before + 1);
+        let end = js.iter().find(|j| j.kind == NodeKind::DeadEnd).unwrap();
+        // The turning circle reaches 10 m round the end.
+        let arm = &end.arms[0];
+        let far = end
+            .plate
+            .iter()
+            .filter(|q| (**q - arm.origin).dot(arm.dir) < 0.0)
+            .map(|q| q.distance(p(50.0, 0.0)))
+            .fold(0.0, f64::max);
+        assert!((far - 10.0).abs() < 0.2, "{far}");
+        assert!(!end.sidewalks.is_empty() && !end.kerbs.is_empty());
+        // Two streets in line, one after the other: a node only by hand.
+        let c = road(&mut m, level, p(0.0, 50.0), p(0.0, 90.0));
+        let _ = c;
+        // (The second street of the town ends where the new one starts.)
+        assert!(joints(&m, level)
+            .iter()
+            .any(|(_, q)| q.distance(p(0.0, 50.0)) < 1e-6));
+        let n0 = junctions(&m, level).len();
+        changed_at(&mut m, level, p(0.0, 50.0), |n, arms| {
+            assert_eq!(arms.len(), 2);
+            n.kind = Some(NodeKind::Continuous);
+        });
+        let js = junctions(&m, level);
+        assert_eq!(js.len(), n0 + 1);
+        let cont = js.iter().find(|j| j.kind == NodeKind::Continuous).unwrap();
+        assert!(cont.arms.iter().all(|a| (a.cut - TRANSITION).abs() < 1e-9));
+        assert_eq!(cont.kerbs.len(), 2);
+        // A bend: the outside corner round the inside one's centre.
+        let d = road(&mut m, level, p(100.0, 0.0), p(140.0, 0.0));
+        let _e = road(&mut m, level, p(140.0, 0.0), p(170.0, 30.0));
+        changed_at(&mut m, level, p(140.0, 0.0), |n, arms| {
+            n.kind = Some(NodeKind::Bend);
+            for a in arms {
+                n.set_corner(
+                    Junction::arm_ref(a),
+                    archisim_core::CornerSettings {
+                        radius: Some(10.0),
+                        ..Default::default()
+                    },
+                );
+            }
+        });
+        let bend = junctions(&m, level)
+            .into_iter()
+            .find(|j| j.kind == NodeKind::Bend)
+            .unwrap();
+        assert!(bend.arms.iter().any(|x| x.road == d));
+        assert_eq!(bend.sidewalks.len(), 2);
+        // The bend's plate has no corner point outside: all its points
+        // are within the outer radius of the curve.
+        assert!(bend.plate.len() > 10);
+        // The crossing: the second street gives way to the first, which
+        // rules its height, with bump-outs, flat and without markings.
+        changed_at(&mut m, level, p(0.0, 0.0), |n, arms| {
+            n.main = Some(a);
+            n.flat = Some(true);
+            n.hide_marks = Some(false);
+            for x in arms {
+                let r = Junction::arm_ref(x);
+                if x.road == b {
+                    n.set_arm(
+                        r,
+                        archisim_core::ArmSettings {
+                            sign: Some(archisim_core::ArmSign::Stop),
+                            ..Default::default()
+                        },
+                    );
+                }
+                n.set_corner(
+                    r,
+                    archisim_core::CornerSettings {
+                        bump: Some(2.0),
+                        ..Default::default()
+                    },
+                );
+            }
+        });
+        let cross = junctions(&m, level)
+            .into_iter()
+            .find(|j| j.arms.len() == 4)
+            .unwrap();
+        assert_eq!(cross.main, Some(a));
+        assert!(cross.flat);
+        assert_eq!(cross.signs.len(), 2);
+        assert_eq!(cross.marks.len(), 2);
+        assert_eq!(cross.bump_kerbs.len(), 8);
+        // The plate is narrower at the arms' ends by the bump-outs.
+        let x = &cross.arms[0];
+        let w = cross
+            .plate
+            .iter()
+            .filter(|q| ((**q - x.origin).dot(x.dir) - x.cut).abs() < 1e-6)
+            .map(|q| (*q - x.origin).cross(x.dir).abs())
+            .fold(0.0, f64::max);
+        assert!((w - (x.kerb_left - 2.0)).abs() < 1e-6, "{w}");
+        // A stop line of each street coming in, across its lanes only.
+        for mk in &cross.marks {
+            let across = mk.iter().map(|q| q.distance(mk[0])).fold(0.0, f64::max);
+            assert!(across < x.lanes_left + 0.5, "{across}");
+        }
+        // Without markings: the stop lines go and the roads keep quiet
+        // near it.
+        changed_at(&mut m, level, p(0.0, 0.0), |n, _| n.hide_marks = Some(true));
+        let quiet = junctions(&m, level)
+            .into_iter()
+            .find(|j| j.arms.len() == 4)
+            .unwrap();
+        assert!(quiet.marks.is_empty() && !quiet.signs.is_empty());
+        assert!(marking_gaps(std::slice::from_ref(&quiet), a).len() > road_gaps(&[quiet], a).len());
+        // A zebra on an arm, laid and taken away on its road.
+        let arm = cross.arms.iter().find(|x| x.road == b).unwrap().clone();
+        assert!(arm_crossing(&m, &arm).is_none());
+        set_arm_crossing(&mut m, &arm, true).unwrap();
+        assert!(arm_crossing(&m, &arm).is_some());
+        set_arm_crossing(&mut m, &arm, false).unwrap();
+        assert!(arm_crossing(&m, &arm).is_none());
+        // Every node's key is there to keep its settings.
+        let keys = all_node_keys(&m);
+        assert!(m.nodes().all(|n| keys.contains(&n.key)));
+        assert_eq!(m.keep_nodes(&keys), 0);
+    }
+
+    /// A corner's handle: dragging it to where an arc's middle is gives
+    /// that arc's radius back.
+    #[test]
+    fn corner_handles_give_the_radius() {
+        let (m, level, _, _) = town();
+        let j = junctions(&m, level).remove(0);
+        let (apex, bis, half) = corner_frame(&j.arms[0], &j.arms[1]).unwrap();
+        let mid = corner_middle(apex, bis, half, 6.5);
+        assert!((corner_radius_at(apex, bis, half, mid) - 6.5).abs() < 1e-9);
+        // An arc of the usual radius has its middle on the plate's edge.
+        let usual = corner_middle(apex, bis, half, 4.0);
+        let near = j
+            .plate
+            .iter()
+            .map(|q| q.distance(usual))
+            .fold(f64::MAX, f64::min);
+        assert!(near < 0.1, "{near}");
+    }
+
+    /// N3: where each lane goes, the arrows of the arms with more than one
+    /// lane coming in, turns and connections by hand, and painted islands
+    /// that follow the node.
+    #[test]
+    fn lanes_arrows_and_islands() {
+        let (mut m, level, a, b) = town();
+        let j = junctions(&m, level).remove(0);
+        // One lane each way: right, straight and left from each arm.
+        assert_eq!(j.lanes.len(), 12);
+        assert!(j.arm_paint.is_empty(), "no arrows with a single lane");
+        // The east–west street with two lanes each way.
+        m.edit_road(a, |r| {
+            r.section = RoadSection::classic(12.0, 2.2, 0.15, 2.5);
+            let mut strips = Vec::new();
+            for st in &r.section.strips {
+                if st.band == RoadBand::Carriageway {
+                    strips.push(archisim_core::strip_of(RoadBand::Carriageway, 3.0));
+                    strips.push(archisim_core::strip_of(RoadBand::Carriageway, 3.0));
+                } else {
+                    strips.push(*st);
+                }
+            }
+            r.section.strips = strips;
+        })
+        .unwrap();
+        let j = junctions(&m, level).remove(0);
+        let east = j.arms.iter().find(|x| x.road == a && x.forward).unwrap();
+        assert_eq!(east.lanes_in.len(), 2);
+        assert_eq!(east.lanes_out.len(), 2);
+        // The lane by the kerb is farther from the axis.
+        assert!(east.lanes_in[0] > east.lanes_in[1] && east.lanes_in[1] > 0.0);
+        let from_east: Vec<_> = j
+            .lanes
+            .iter()
+            .filter(|c| c.from == Junction::arm_ref(east))
+            .collect();
+        // Straight on from both lanes, right from the kerb's, left from the
+        // axis's.
+        assert_eq!(from_east.len(), 4);
+        assert!(from_east
+            .iter()
+            .any(|c| c.turn == Turn::Right && c.lane == 0 && c.to_lane == 0));
+        assert!(from_east
+            .iter()
+            .any(|c| c.turn == Turn::Left && c.lane == 1));
+        // Its arrows: two lanes on each of its two arms, and a line between.
+        let arrows = j.arm_paint.iter().filter(|(r, _)| *r == a).count();
+        assert!(arrows >= 2 * 2 * 2, "{arrows}");
+        let ar = Junction::arm_ref(east);
+        // By hand: only left from the lane by the axis; and then a single
+        // connection made by hand from the west arm.
+        changed(&mut m, level, |n, _| {
+            n.set_arm(
+                ar,
+                archisim_core::ArmSettings {
+                    turns: Some(vec![Turns(6), Turns::LEFT]),
+                    stop_back: Some(3.0),
+                    ..Default::default()
+                },
+            );
+            n.links.push(archisim_core::LaneLink {
+                from: ArmRef {
+                    road: a,
+                    forward: false,
+                },
+                lane: 0,
+                to: ArmRef {
+                    road: b,
+                    forward: true,
+                },
+                to_lane: 0,
+            });
+            n.islands.push(archisim_core::PaintedIsland {
+                points: vec![p(8.0, -8.0), p(12.0, -8.0), p(10.0, -12.0)],
+                paint: IslandPaint::Fill,
+            });
+        });
+        let j = junctions(&m, level).remove(0);
+        let from_east = j.lanes.iter().filter(|c| c.from == ar).count();
+        assert_eq!(from_east, 3, "straight from one lane, right and left");
+        let west: Vec<_> = j
+            .lanes
+            .iter()
+            .filter(|c| c.from.road == a && !c.from.forward)
+            .collect();
+        assert_eq!(west.len(), 1);
+        assert!(west[0].by_hand);
+        // The path goes from the end of one lane to the start of the other.
+        let w = j.arms.iter().find(|x| x.road == a && !x.forward).unwrap();
+        let nb = j.arms.iter().find(|x| x.road == b && x.forward).unwrap();
+        assert!(west[0].path[0].distance(lane_end(w, w.lanes_in[0])) < 1e-9);
+        assert!(
+            west[0]
+                .path
+                .last()
+                .unwrap()
+                .distance(lane_end(nb, nb.lanes_out[0]))
+                < 1e-9
+        );
+        // The island, in the node's axes.
+        let (o, u) = node_frame(&j.arms, j.at);
+        let tip = o + u * 10.0 + u.perp_left() * -12.0;
+        assert!(j
+            .marks
+            .iter()
+            .any(|poly| poly.iter().any(|q| q.distance(tip) < 1e-9)));
+        // Moving the cross street, the island goes with the node.
+        m.edit_road(b, |r| {
+            for q in &mut r.axis {
+                q.x += 5.0;
+            }
+        })
+        .unwrap();
+        let j2 = junctions(&m, level).remove(0);
+        let (o2, u2) = node_frame(&j2.arms, j2.at);
+        let tip2 = o2 + u2 * 10.0 + u2.perp_left() * -12.0;
+        assert!(tip2.distance(tip) > 4.0);
+        assert!(j2
+            .marks
+            .iter()
+            .any(|poly| poly.iter().any(|q| q.distance(tip2) < 1e-9)));
+    }
+
+    fn p(x: f64, y: f64) -> Point2 {
+        Point2::new(x, y)
     }
 }

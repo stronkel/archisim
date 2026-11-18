@@ -160,6 +160,9 @@ pub struct View3dState {
     scene_job: Option<super::background::Pending<SceneKey, (Scene, std::time::Duration)>>,
     /// How long the last scene took to build.
     scene_took: std::time::Duration,
+    /// What the last scene was made of, kept to make again only what
+    /// changes (shared with the thread that builds it).
+    builder: std::sync::Arc<std::sync::Mutex<crate::view3d::scene::SceneBuilder>>,
     /// Scenes that took less than this are built at once.
     pub at_once: std::time::Duration,
     gpu: Option<Gpu>,
@@ -233,6 +236,19 @@ pub struct View3dState {
     pub flying: bool,
     /// The cursor is over the cube of views.
     pub cube_hover: bool,
+    /// The traffic for illustration running (N9), and what it draws.
+    traffic: Option<TrafficShow>,
+    traffic_scene: Option<Scene>,
+    traffic_serial: u64,
+}
+
+/// The traffic running in the 3D view: its simulation, what it was made
+/// for (level and model's revision) and when it last moved.
+struct TrafficShow {
+    sim: archisim_geom::traffic::Traffic,
+    level: archisim_core::LevelId,
+    revision: u64,
+    last: web_time::Instant,
 }
 
 /// Full textures, except on Intel Macs: their AMD graphics drivers (on
@@ -254,10 +270,14 @@ impl Default for View3dState {
             orbit_pivot: None,
             flying: false,
             cube_hover: false,
+            traffic: None,
+            traffic_scene: None,
+            traffic_serial: 0,
             frames: false,
             scene: Scene::default(),
             scene_key: None,
             scene_job: None,
+            builder: Default::default(),
             scene_took: std::time::Duration::ZERO,
             at_once: if cfg!(test) {
                 std::time::Duration::from_secs(3600)
@@ -306,6 +326,7 @@ struct Gpu {
     /// What the filled sections of the cut objects were made for: the
     /// scene and the section box.
     fill_for: Option<(u64, [u32; 6])>,
+    traffic_uploaded: u64,
 }
 
 impl View3dState {
@@ -378,6 +399,76 @@ impl View3dState {
                 self.overlay_serial += 1;
             }
         }
+    }
+
+    /// Whether the traffic for illustration is running (N9).
+    pub fn traffic_on(&self) -> bool {
+        self.traffic.is_some()
+    }
+
+    /// How many cars the traffic has now (none: it is off).
+    #[cfg(test)]
+    pub fn traffic_cars(&self) -> Option<usize> {
+        self.traffic.as_ref().map(|t| t.sim.cars())
+    }
+
+    /// Starts or stops the traffic for illustration.
+    pub fn set_traffic(&mut self, on: bool) {
+        if !on {
+            self.traffic = None;
+            if self.traffic_scene.take().is_some() {
+                self.traffic_serial += 1;
+            }
+        } else if self.traffic.is_none() {
+            // Made at the next frame, for the level shown.
+            self.traffic = Some(TrafficShow {
+                sim: archisim_geom::traffic::Traffic::new(
+                    &archisim_core::Model::new(""),
+                    archisim_core::LevelId(0),
+                    0,
+                    0,
+                    0,
+                ),
+                level: archisim_core::LevelId(u64::MAX),
+                revision: u64::MAX,
+                last: web_time::Instant::now(),
+            });
+        }
+    }
+
+    /// Moves the traffic on to now and makes what it draws (N9). The
+    /// model's change starts it again on the streets as they are.
+    pub fn step_traffic(
+        &mut self,
+        ctx: &egui::Context,
+        model: &archisim_core::Model,
+        level: archisim_core::LevelId,
+        revision: u64,
+    ) {
+        let Some(t) = self.traffic.as_mut() else {
+            return;
+        };
+        if t.level != level || t.revision != revision {
+            let (cars, people) = archisim_geom::traffic::usual_counts(model, level);
+            t.sim = archisim_geom::traffic::Traffic::at(model, level, cars, people, 1, 2.0);
+            t.level = level;
+            t.revision = revision;
+        }
+        let dt = t.last.elapsed().as_secs_f64().min(0.2);
+        t.last = web_time::Instant::now();
+        t.sim.step(model, dt);
+        let material = model
+            .materials()
+            .find(|m| m.category != "glass")
+            .map_or(archisim_core::MaterialId(0), |m| m.id);
+        let mut solids = archisim_geom::traffic::traffic_solids(&t.sim.bodies(model), material);
+        solids.extend(archisim_geom::traffic::lamp_solids(
+            &t.sim.lamps(),
+            material,
+        ));
+        self.traffic_scene = Some(Scene::of_traffic(model, solids));
+        self.traffic_serial += 1;
+        ctx.request_repaint_after(std::time::Duration::from_millis(40));
     }
 
     /// Whether something is drawn in place of the selected element.
@@ -489,61 +580,62 @@ impl View3dState {
             ctx.request_repaint_after(std::time::Duration::from_millis(30));
             return;
         }
-        let aside = shared.filter(|m| {
-            super::picture::aside(self.scene_took, self.at_once, m) && coord.parts().is_empty()
-        });
+        // Kept and made again only where it changes, but to see an
+        // isolated clash or with linked models (made whole).
+        let keep = coord.parts().is_empty() && !coord.isolate;
+        let aside = shared
+            .clone()
+            .filter(|m| super::picture::aside(self.scene_took, self.at_once, m) && keep);
         if let Some(model) = aside {
-            let (selection, isolate, disciplines) =
-                (selection.clone(), coord.isolate, disciplines.clone());
+            let (selection, disciplines) = (selection.clone(), disciplines.clone());
             let frames = self.frames;
+            let builder = self.builder.clone();
             self.scene_job = Some(super::background::Pending::start(key, move || {
                 let started = web_time::Instant::now();
-                let shown = archisim_plan::phases::phase_model(&model, phases);
-                let build = || {
-                    Scene::build_with(
-                        shown.as_ref().unwrap_or(&model),
-                        &selection,
-                        &[],
-                        isolate,
-                        &disciplines,
-                    )
-                };
-                let scene = if frames {
-                    archisim_geom::framing::with_frames_shown(build)
-                } else {
-                    build()
-                };
+                let scene = build_kept(&builder, &model, phases, &selection, &disciplines, frames);
                 (scene, started.elapsed())
             }));
             ctx.request_repaint_after(std::time::Duration::from_millis(30));
             return;
         }
         let started = web_time::Instant::now();
-        let parts = coord.parts();
-        let linked: Vec<LinkedPart> = parts
-            .iter()
-            .map(|p| LinkedPart {
-                triangles: &p.element.mesh.triangles,
-                color: p.color,
-                alpha: p.alpha,
-                link: p.link,
-                index: p.index,
-            })
-            .collect();
-        let shown = archisim_plan::phases::phase_model(model, phases);
-        let build = || {
-            Scene::build_with(
-                shown.as_ref().unwrap_or(model),
+        self.scene = match shared.filter(|_| keep) {
+            Some(model) => build_kept(
+                &self.builder,
+                &model,
+                phases,
                 selection,
-                &linked,
-                coord.isolate,
                 disciplines,
-            )
-        };
-        self.scene = if self.frames {
-            archisim_geom::framing::with_frames_shown(build)
-        } else {
-            build()
+                self.frames,
+            ),
+            None => {
+                let parts = coord.parts();
+                let linked: Vec<LinkedPart> = parts
+                    .iter()
+                    .map(|p| LinkedPart {
+                        triangles: &p.element.mesh.triangles,
+                        color: p.color,
+                        alpha: p.alpha,
+                        link: p.link,
+                        index: p.index,
+                    })
+                    .collect();
+                let shown = archisim_plan::phases::phase_model(model, phases);
+                let build = || {
+                    Scene::build_with(
+                        shown.as_ref().unwrap_or(model),
+                        selection,
+                        &linked,
+                        coord.isolate,
+                        disciplines,
+                    )
+                };
+                if self.frames {
+                    archisim_geom::framing::with_frames_shown(build)
+                } else {
+                    build()
+                }
+            }
         };
         self.scene_took = started.elapsed();
         self.scene_job = None;
@@ -707,6 +799,7 @@ impl View3dState {
             uploaded: 0,
             overlay_uploaded: 0,
             fill_for: None,
+            traffic_uploaded: 0,
         });
         // The wireframe's edges are made with the scene, only while it is
         // shown: switching to or from it uploads the scene again.
@@ -726,6 +819,11 @@ impl View3dState {
         } else {
             0
         };
+        if gpu.traffic_uploaded != self.traffic_serial {
+            gpu.renderer
+                .set_traffic(&gpu.state.device, self.traffic_scene.as_ref());
+            gpu.traffic_uploaded = self.traffic_serial;
+        }
         if gpu.overlay_uploaded != self.overlay_serial {
             gpu.renderer
                 .set_overlay(&gpu.state.device, self.overlay.as_ref().map(|o| &o.1));
@@ -750,7 +848,7 @@ impl View3dState {
             clip,
             cut,
             self.under,
-            self.overlay_serial,
+            self.overlay_serial + (self.traffic_serial << 32),
             (
                 self.quality,
                 self.sun.map(|s| (s * 1000.0).round().as_ivec3().to_array()),
@@ -1022,6 +1120,7 @@ impl ArchiSimApp {
             &self.coord,
             &disciplines,
         );
+        v.step_traffic(&ctx, self.ed.model(), self.ed.level, self.ed.revision());
         let size = rect.size();
         let waiting = v.building() && v.scene.is_empty();
         if v.fit_requested && !waiting && size.x > 50.0 && size.y > 50.0 {
@@ -1669,4 +1768,27 @@ pub(super) fn caps_choice(ui: &mut Ui, caps: &mut CapStyle) {
             }
         }
     });
+}
+
+/// The scene of a model with the scene kept from the last one: made again
+/// only where it changed.
+fn build_kept(
+    builder: &std::sync::Mutex<crate::view3d::scene::SceneBuilder>,
+    model: &std::sync::Arc<archisim_core::Model>,
+    phases: archisim_plan::phases::PhaseView,
+    selection: &BTreeSet<Element>,
+    disciplines: &crate::view3d::scene::Disciplines,
+    frames: bool,
+) -> Scene {
+    let shown = match archisim_plan::phases::phase_model(model, phases) {
+        Some(m) => std::sync::Arc::new(m),
+        None => model.clone(),
+    };
+    let mut b = builder.lock().unwrap_or_else(|e| e.into_inner());
+    let build = || b.build_scene(shown, selection, disciplines);
+    if frames {
+        archisim_geom::framing::with_frames_shown(build)
+    } else {
+        build()
+    }
 }

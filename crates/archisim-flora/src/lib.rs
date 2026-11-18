@@ -330,7 +330,7 @@ pub fn grow(species: &Species, seed: u64, variation: f64) -> Plant {
 
 /// Plants already grown, kept so that plans and 3D views redrawn many
 /// times do not grow them again.
-type Nursery = Mutex<HashMap<u64, Arc<Plant>>>;
+type Nursery = Mutex<Kept<u64, Arc<Plant>>>;
 
 fn nursery() -> &'static Nursery {
     static N: OnceLock<Nursery> = OnceLock::new();
@@ -342,17 +342,15 @@ pub fn plant(species: &Species, seed: u64, variation: f64) -> Arc<Plant> {
     let s = species.sane();
     let variation = variation.clamp(0.0, 1.0);
     let key = s.key(seed, variation);
-    if let Some(p) = nursery().lock().ok().and_then(|n| n.get(&key).cloned()) {
+    if let Some(p) = nursery().lock().ok().and_then(|mut n| n.get(&key)) {
         return p;
     }
     let p = Arc::new(grow::grow(&s, seed, variation));
     if let Ok(mut n) = nursery().lock() {
-        // Thousands of different plants: start again rather than grow
-        // without end.
-        if n.len() > 4000 {
-            n.clear();
-        }
-        n.insert(key, p.clone());
+        // Thousands of different plants: the least recently asked for go
+        // first (all of them at once would grow a whole street of trees
+        // again at every change).
+        n.insert(key, p.clone(), 1, NURSERY_PLANTS);
     }
     p
 }
@@ -414,7 +412,71 @@ pub fn seed_of(seed: u64, index: u64) -> u64 {
     h.finish()
 }
 
-type MeshCache = Mutex<HashMap<(u64, [u8; 12], Lod), Arc<FloraMesh>>>;
+type MeshCache = Mutex<Kept<(u64, [u8; 12], Lod), Arc<FloraMesh>>>;
+
+/// How many plants are kept grown.
+const NURSERY_PLANTS: usize = if cfg!(target_arch = "wasm32") {
+    4_000
+} else {
+    40_000
+};
+/// How many corners of plant meshes are kept (each about 27 bytes).
+const MESH_CORNERS: usize = if cfg!(target_arch = "wasm32") {
+    2_000_000
+} else {
+    12_000_000
+};
+
+/// What is kept of something worked out, weighed: the least recently
+/// asked for goes first when there is too much.
+pub struct Kept<K, V> {
+    map: HashMap<K, (V, u64, usize)>,
+    total: usize,
+    stamp: u64,
+}
+
+impl<K, V> Default for Kept<K, V> {
+    fn default() -> Self {
+        Kept {
+            map: HashMap::new(),
+            total: 0,
+            stamp: 0,
+        }
+    }
+}
+
+impl<K: std::hash::Hash + Eq + Clone, V: Clone> Kept<K, V> {
+    fn get(&mut self, key: &K) -> Option<V> {
+        self.stamp += 1;
+        let stamp = self.stamp;
+        self.map.get_mut(key).map(|e| {
+            e.1 = stamp;
+            e.0.clone()
+        })
+    }
+
+    /// Keeps `value`; past `budget` the least recently asked for go until
+    /// three quarters of it are left.
+    fn insert(&mut self, key: K, value: V, weight: usize, budget: usize) {
+        self.stamp += 1;
+        if let Some(old) = self.map.insert(key, (value, self.stamp, weight)) {
+            self.total -= old.2;
+        }
+        self.total += weight;
+        if self.total > budget {
+            let mut ages: Vec<(u64, K)> = self.map.iter().map(|(k, e)| (e.1, k.clone())).collect();
+            ages.sort_unstable_by_key(|a| a.0);
+            for (_, k) in ages {
+                if self.total <= budget * 3 / 4 {
+                    break;
+                }
+                if let Some(e) = self.map.remove(&k) {
+                    self.total -= e.2;
+                }
+            }
+        }
+    }
+}
 
 fn mesh_cache() -> &'static MeshCache {
     static M: OnceLock<MeshCache> = OnceLock::new();
@@ -438,15 +500,13 @@ pub fn mesh_of(
     c[6..9].copy_from_slice(&colors.flowers);
     c[9..].copy_from_slice(&colors.fruit);
     let key = (s.key(seed, variation), c, lod);
-    if let Some(m) = mesh_cache().lock().ok().and_then(|n| n.get(&key).cloned()) {
+    if let Some(m) = mesh_cache().lock().ok().and_then(|mut n| n.get(&key)) {
         return m;
     }
     let m = Arc::new(plant(&s, seed, variation).mesh(colors, lod));
     if let Ok(mut n) = mesh_cache().lock() {
-        if n.len() > 3000 {
-            n.clear();
-        }
-        n.insert(key, m.clone());
+        let weight = m.positions.len().max(1);
+        n.insert(key, m.clone(), weight, MESH_CORNERS);
     }
     m
 }

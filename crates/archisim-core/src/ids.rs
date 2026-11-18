@@ -75,6 +75,11 @@ typed_id!(
     RoundaboutId
 );
 typed_id!(
+    /// Identifies a [`crate::UrbanSurface`] (a square, island, median, car
+    /// park or garden drawn by its outline, N5).
+    SurfaceId
+);
+typed_id!(
     /// Identifies a [`crate::Ceiling`] (a false ceiling).
     CeilingId
 );

@@ -125,6 +125,7 @@ impl ArchiSimApp {
         crate::profile::time("planta: draw_marking_preview", || {
             self.draw_marking_preview(&painter, rect)
         });
+        self.draw_node_pick(&painter, rect);
         crate::profile::time("planta: draw_pool_preview", || {
             self.draw_pool_preview(&painter, rect)
         });
@@ -232,6 +233,7 @@ impl ArchiSimApp {
             | Tool::Brush
             | Tool::Road
             | Tool::Roundabout
+            | Tool::Node
             | Tool::ModularBox
             | Tool::World
             | Tool::Decal
@@ -576,6 +578,7 @@ impl ArchiSimApp {
             | Tool::Pool
             | Tool::Road
             | Tool::Roundabout
+            | Tool::Node
             | Tool::ModularBox
             | Tool::World
             | Tool::Decal
@@ -595,6 +598,7 @@ impl ArchiSimApp {
                     Tool::Device
                     | Tool::Elevator
                     | Tool::Roundabout
+                    | Tool::Node
                     | Tool::ModularBox
                     | Tool::Decal => Vec::new(),
                     Tool::World => self.world_settings.first.into_iter().collect(),
@@ -615,6 +619,7 @@ impl ArchiSimApp {
                     | Tool::Elevator
                     | Tool::TeamZone
                     | Tool::Roundabout
+                    | Tool::Node
                     | Tool::ModularBox
                     | Tool::Decal => None,
                     Tool::World => self.world_settings.first,
@@ -801,6 +806,9 @@ impl ArchiSimApp {
         }
         if space && self.tool == Tool::ModularBox {
             self.box_turn();
+            return;
+        }
+        if enter && self.tool == Tool::Node && self.node_finish() {
             return;
         }
         if self.command_keys(&events, enter, escape, backspace, space) {
@@ -1047,6 +1055,11 @@ impl ArchiSimApp {
                         self.set_tool(Tool::Arrow);
                     }
                 }
+                Tool::Node => {
+                    if !self.node_escape() {
+                        self.set_tool(Tool::Arrow)
+                    }
+                }
                 Tool::Roundabout | Tool::ModularBox | Tool::Decal => self.set_tool(Tool::Arrow),
                 Tool::World => self.world_escape(),
                 Tool::Marking => {
@@ -1126,6 +1139,10 @@ impl ArchiSimApp {
                     self.window_start = None;
                     self.ed.selection.clear();
                     self.rebar_pick = false;
+                    self.road_grade_pick = None;
+                    self.replace.picking = None;
+                    self.piece_pick = None;
+                    self.blocks.picking = false;
                 }
             }
         }
@@ -1246,6 +1263,38 @@ impl ArchiSimApp {
             if response.clicked_by(PointerButton::Primary) {
                 if let Some(c) = self.cursor {
                     self.concept_drop_click(c.point);
+                }
+            }
+            return;
+        }
+        if self.piece_pick.is_some() && self.tool == Tool::Arrow {
+            if response.clicked_by(PointerButton::Primary) {
+                if let Some(c) = self.cursor {
+                    self.piece_click(c.point);
+                }
+            }
+            return;
+        }
+        if self.blocks.picking && self.tool == Tool::Arrow {
+            if response.clicked_by(PointerButton::Primary) {
+                if let Some(c) = self.cursor {
+                    self.blocks_click(c.point);
+                }
+            }
+            return;
+        }
+        if self.replace.picking.is_some() && self.tool == Tool::Arrow {
+            if response.clicked_by(PointerButton::Primary) {
+                if let Some(c) = self.cursor {
+                    self.replace_area_click(c.point);
+                }
+            }
+            return;
+        }
+        if self.road_grade_pick.is_some() && self.tool == Tool::Arrow {
+            if response.clicked_by(PointerButton::Primary) {
+                if let Some(c) = self.cursor {
+                    self.road_grade_click(ctx, c.point);
                 }
             }
             return;
@@ -1473,6 +1522,18 @@ impl ArchiSimApp {
                 if response.clicked_by(PointerButton::Primary) {
                     if let Some(c) = self.cursor {
                         self.roundabout_click(c.point);
+                    }
+                }
+            }
+            Tool::Node => {
+                self.node_drag(ctx, rect, response);
+                if response.double_clicked_by(PointerButton::Primary)
+                    || response.clicked_by(PointerButton::Secondary)
+                {
+                    self.node_finish();
+                } else if response.clicked_by(PointerButton::Primary) {
+                    if let Some(c) = self.cursor {
+                        self.node_click(c.point);
                     }
                 }
             }

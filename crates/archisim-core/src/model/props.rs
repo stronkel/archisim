@@ -99,6 +99,17 @@ impl Model {
             .map(str::to_string)
     }
 
+    /// Whether objects of a type are made by the generator `props:<kind>`
+    /// (without working out their parameters).
+    pub fn type_prop_is(&self, t: ObjectTypeId, kind: &str) -> bool {
+        self.object_types.get(&t).is_some_and(|ty| {
+            ty.mesh.is_none()
+                && self
+                    .family_generator(ty.family)
+                    .is_some_and(|g| g.strip_prefix("props:") == Some(kind))
+        })
+    }
+
     /// Whether objects of a type have a model made by ArchiSim (and not one
     /// brought from another program).
     pub fn type_has_prop(&self, t: ObjectTypeId) -> bool {

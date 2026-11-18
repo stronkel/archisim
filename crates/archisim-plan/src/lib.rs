@@ -43,6 +43,7 @@ pub mod framing;
 pub mod grids;
 pub mod layout;
 pub mod lettering;
+pub mod map;
 pub mod members;
 pub mod overrides;
 pub mod phases;
@@ -669,7 +670,9 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
     s.push_str("<g id=\"slabs\">\n");
     if show(archisim_core::Category::Terrain) {
         overrides::group(&mut s, archisim_core::Category::Terrain, |s| {
-            decals::draw_orthophoto(s, model, level)
+            archisim_geom::meter::time("planta: ortofoto", || {
+                decals::draw_orthophoto(s, model, level)
+            })
         });
     }
     for t in model
@@ -677,7 +680,9 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
         .filter(|_| show(archisim_core::Category::Terrain))
     {
         overrides::group(&mut s, archisim_core::Category::Terrain, |s| {
-            dim::element(s, t.id.0, |s| terrain::draw_terrain(s, model, t, k))
+            archisim_geom::meter::time("planta: terreno", || {
+                dim::element(s, t.id.0, |s| terrain::draw_terrain(s, model, t, k))
+            })
         });
     }
     if show(archisim_core::Category::Roads) {
@@ -686,7 +691,10 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
             visible(lo, hi)
         };
         overrides::group(&mut s, archisim_core::Category::Roads, |s| {
-            urban::draw_roads(s, model, level, k, &vis)
+            archisim_geom::meter::time("planta: calles", || {
+                urban::draw_roads(s, model, level, k, &vis);
+                urban::draw_outside(s, model, level, k);
+            })
         });
     }
     if show(archisim_core::Category::Pools) {
@@ -854,7 +862,9 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
             visible(lo, hi)
         };
         overrides::group(&mut s, archisim_core::Category::Masses, |s| {
-            concept::draw_masses(s, model, level, k, &vis)
+            archisim_geom::meter::time("planta: volúmenes y edificios", || {
+                concept::draw_masses(s, model, level, k, &vis)
+            })
         });
     }
     if show(archisim_core::Category::Objects) {
@@ -872,7 +882,9 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
             visible(lo, hi)
         };
         overrides::group(&mut s, archisim_core::Category::Plots, |s| {
-            urban::draw_plots(s, model, level, k, &vis)
+            archisim_geom::meter::time("planta: parcelas", || {
+                urban::draw_plots(s, model, level, k, &vis)
+            })
         });
     }
     if show(archisim_core::Category::Services) {
@@ -1023,7 +1035,9 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
         visible(lo, hi)
     };
     if show(archisim_core::Category::Objects) || show(archisim_core::Category::Vegetation) {
-        draw_objects(&mut s, model, level, options.scale, k, &poly_visible, &show);
+        archisim_geom::meter::time("planta: objetos", || {
+            draw_objects(&mut s, model, level, options.scale, k, &poly_visible, &show)
+        });
     }
     if show(archisim_core::Category::Structure) {
         overrides::group(&mut s, archisim_core::Category::Structure, |s| {
@@ -2400,7 +2414,36 @@ fn draw_objects(
     shows: &dyn Fn(archisim_core::Category) -> bool,
 ) {
     s.push_str("<g id=\"objects\">\n");
+    // How far each type may reach from its insertion point (twice its own
+    // box, and never less than 20 m: an object's own sizes may be larger),
+    // to leave out at once what is far from the view without working out
+    // its outline.
+    let mut reach: std::collections::HashMap<archisim_core::ObjectTypeId, f64> = Default::default();
     for o in model.objects_on_level(level) {
+        let r = *reach.entry(o.object_type).or_insert_with(|| {
+            model
+                .object_type_box(o.object_type)
+                .map_or(f64::INFINITY, |(lo, hi)| {
+                    let e = lo[0]
+                        .abs()
+                        .max(lo[1].abs())
+                        .max(hi[0].abs())
+                        .max(hi[1].abs());
+                    (2.0 * e).max(20.0)
+                })
+        });
+        if r.is_finite() {
+            let p = o.position;
+            let square = [
+                Point2::new(p.x - r, p.y - r),
+                Point2::new(p.x + r, p.y - r),
+                Point2::new(p.x + r, p.y + r),
+                Point2::new(p.x - r, p.y + r),
+            ];
+            if !visible(&square) {
+                continue;
+            }
+        }
         let category = object_category(model, o);
         if !shows(category) {
             continue;

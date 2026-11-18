@@ -6,6 +6,250 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-18 (184) · v0.104 en `main`: territorio N0–N9 unido
+
+Pedido de Antonio («únelos»). La cadena #220, #222–#231 y #233 (fluidez del territorio, nudos, trazado, carriles, tramos, superficies, ocultar, manzanas, área grande, tráfico y la cuarta vuelta de fluidez) se une a `main` encima de #221 (dibujo aparte, 0.92.1) y #232 (la nave SUMO desde el DXF, 0.93.0). Conflictos solo en documentación, versión y pruebas de la app: se juntan las dos partes. En `NOVEDADES.md` la 0.93.0 lleva lo del territorio y lo de la nave SUMO. Formato `.archisim` versión 120.
+
+- **Qué debe probar Antonio**: actualizar desde Ayuda → «Buscar actualizaciones…» a la 0.104.0 y abrir la nave SUMO (`archisim montar`) y `out/territorio.archisim` para ver que siguen bien.
+
+## 2026-11-18 (183) · v0.104: cuarta vuelta de fluidez del territorio y repaso de §7
+
+Rama `bloque/fluidez-4` sobre `bloque/trafico` (#231). Versión 0.104.0. Sin cambios de formato.
+
+- **Qué se hizo** (`docs/TERRITORIO.md` §4.4 y §7):
+  - **Medido** lo de N1–N9 en el sitio de 1 km² (`archisim territorio-grande` y la prueba `territory_scene`). Lo único que pasaba del presupuesto: un nudo, un tramo o una pieza oculta rehacían toda la calle y lo que hay a 30 m de ella. Ahora solo lo de alrededor (`scene_build::local_road_change`): elevar un cruce, de 512 a 95 ms; un tramo, de 430 a 170 ms. Comprobado en `a_kept_scene_is_the_whole_one`.
+  - **Tráfico**: los coches no entran en un camino que cruza otro ocupado, y con ceda el paso o stop esperan a quien llega por una calle sin señal (`Way::conflicts`, `waits_to_cross`). Las luces de los semáforos encendidas (`Traffic::lamps`, `lamp_solids`) en la vista 3D, el render y la planta de `archisim trafico`.
+  - **Manzanas**: volver a parcelar una manzana ya parcelada sin tocar las bloqueadas (`blocks::replot_block`).
+  - **Mapa**: leyenda y «Guardar el mapa…» en PNG o SVG.
+  - **Soltar una cebra**: la calle oculta sus barras y conserva los rebajes.
+  - Arreglado el fallo de la versión web de #231 (faltaba `traffic` en el render de la web).
+- **Pendiente**: lo que sigue sin tachar en §7 de `TERRITORIO.md` (tiradores en 3D, cotas mientras se traza, plazas de movilidad reducida, casas de esquina, capas del mapa, prioridad a la derecha, flechas repetidas…). Medir la vista 3D en el PC de Antonio.
+- **Qué debe probar Antonio** (con la 0.104):
+  1. Abre `out/territorio.archisim` (de `archisim territorio-grande out/`) en 3D, elige la herramienta Nudo y cambia un cruce a elevado: debe verse casi al momento.
+  2. `archisim trafico out/`, abre `out/nudos.archisim`, pon semáforos en un cruce y enciende Tráfico: mira en 3D cómo cambian de color y que los coches que giran no atraviesan a los que van rectos.
+  3. En `out/manzanas.archisim`, bloquea una parcela, abre Manzanas, elige «Viviendas aisladas» y haz clic dentro de esa manzana: se parcela de nuevo y la bloqueada sigue.
+  4. Mapa → «Guardar el mapa…» y mira la leyenda.
+
+## 2026-11-18 (182) · v0.103: territorio N9, tráfico de ilustración
+
+Rama `bloque/trafico` sobre `bloque/area-grande` (#230). Versión 0.103.0. Sin cambios de formato.
+
+- **Qué se hizo** (`docs/TERRITORIO.md` §2.12):
+  - **Geometría** (`archisim-geom::traffic`): tramos por carril entre cruces, caminos por las conexiones de carril, semáforos en dos fases, stop, distancia al de delante, personas por las aceras; repetible por semilla; cajas de colores con `SolidOwner::Traffic`.
+  - **Vista 3D**: `set_traffic`/`step_traffic`, `Scene::of_traffic` y `Renderer::set_traffic`, encima de la escena y sin rehacerla.
+  - **Render**: `Options::traffic`.
+  - **App**: ficha «Tráfico» en Urbanismo.
+  - **Línea de órdenes**: `archisim trafico` y `archisim render --trafico`.
+  - Pruebas en la geometría, la línea de órdenes y la aplicación.
+- **Pendiente**: §7 de `TERRITORIO.md`. Con esto se acaban las tandas N1–N9; sigue la cuarta vuelta de fluidez sobre todo lo de N1–N9 y el repaso de §7.
+- **Qué debe probar Antonio** (con la 0.103):
+  1. `archisim trafico out/` y mira `out/trafico.png` y `out/trafico-planta.svg`.
+  2. Abre `out/nudos.archisim`, pon un semáforo en un cruce con la herramienta Nudo, pulsa Urbanismo → Territorio → **Tráfico** y mira el cruce en 3D: los coches paran en rojo.
+  3. Con el tráfico en marcha, haz un render.
+
+## 2026-11-18 (181) · v0.102: territorio N8, área grande y vista de mapa
+
+Rama `bloque/area-grande` sobre `bloque/manzanas` (#229). Versión 0.102.0. Formato `.archisim` versión 120.
+
+- **Qué se hizo** (`docs/TERRITORIO.md` §2.11):
+  - **Modelo**: `archisim-core::model::surroundings` (área guardada, `square_area`, `circle_area`, `clip_line_to_area`, `outside_ends`).
+  - **Traer el entorno**: `CartoOptions::square` (recuadro); guarda el área.
+  - **Planta**: borde del área y flechas de las conexiones con fuera.
+  - **Mapa**: `archisim-plan::map`.
+  - **Fichero** (versión 120) e **IFC** (`ArchiSim_Surroundings`).
+  - **App**: ventana «Mapa» (`app/map_ui`) y planta que se aleja hasta 0,2 puntos por metro.
+  - **Línea de órdenes**: `archisim area-grande` y `archisim mapa`.
+  - Pruebas en el núcleo, en traer el entorno, en la planta, en la línea de órdenes (fichero e IFC) y en la aplicación.
+- **Pendiente**: §7 de `TERRITORIO.md`. Siguiente, N9.
+- **Qué debe probar Antonio** (con la 0.102):
+  1. `archisim area-grande out/`: mira `out/area-grande-mapa.png` y abre `out/area-grande.archisim`.
+  2. Urbanismo → Territorio → **Mapa**: pincha en una esquina del mapa y mira que la planta va allí; luego «Ver toda el área».
+  3. Al traer un entorno real, pide un recuadro de radio 1 000 m y mira que las calles acaban en el borde con su flecha.
+
+## 2026-11-18 (180) · v0.101: territorio N7, manzanas, parcelas y llenado
+
+Rama `bloque/manzanas` sobre `bloque/ocultar` (#228). Versión 0.101.0. Formato `.archisim` versión 119.
+
+- **Qué se hizo** (`docs/TERRITORIO.md` §2.10):
+  - **Modelo**: `BlockZone` (casco antiguo, bloques, viviendas aisladas, comercio, equipamiento; `label`, `code`, `rgb`) y `Plot::zone`, `Plot::locked`.
+  - **Geometría** (`archisim-geom::blocks`): `city_blocks` (huecos de la unión de calles, cruces y glorietas), `block_lots` (parcelas en escuadra, una de esquina por lado, patio si cabe), `add_block_plots`, `fill_plot`/`fill_plots` (un edificio del mundo por parcela, encajado en ella), `clear_plots` (respeta las bloqueadas).
+  - **Planta**: parcelas teñidas por zona, rótulos solo si caben y «bloqueada».
+  - **Fichero** (versión 119) e **IFC** (`ArchiSim_Plot.Zone`, `Locked`).
+  - **App**: panel «Manzanas» (`app/blocks_ui`: zona, frente y fondo, parcelar una o todas, llenar, rehacer, vaciar) y grupo «Zona y llenado» en la parcela.
+  - Ejemplo `archisim manzanas out/`; pruebas en la geometría, la línea de órdenes (fichero e IFC) y la aplicación.
+- **Pendiente**: §7 de `TERRITORIO.md`. Siguiente, N8.
+- **Qué debe probar Antonio** (con la 0.101):
+  1. `archisim manzanas out/` y abre `out/manzanas.archisim`: cuatro manzanas de colores, cada una con sus edificios; la casa bloqueada del casco antiguo lo dice en sus propiedades.
+  2. En un proyecto nuevo, traza cuatro calles en cuadro; Urbanismo → Territorio → **Manzanas**, elige «Viviendas aisladas», «Parcelar una manzana» y pincha dentro; luego «Llenar las vacías».
+  3. Bloquea una parcela, cambia la zona de otra y pulsa «Rehacer»: la bloqueada no cambia.
+
+## 2026-11-18 (179) · v0.100: territorio N6, ocultar y soltar piezas
+
+Rama `bloque/ocultar` sobre `bloque/superficies` (#227). Versión 0.100.0. Formato `.archisim` versión 118.
+
+- **Qué se hizo** (`docs/TERRITORIO.md` §2.9):
+  - **Modelo** (`archisim-core::model::hidden_pieces`): `Road::hidden` (`HiddenPiece` con `PieceKind` marca, alcorque, señal o bolardo, a lo largo y al lado de la calle), `place_of`, `hides`, `visible_markings`, `visible_tree_pits`, `encode_hidden`/`decode_hidden`, `middle_of`; `Model::hide_piece`, `show_pieces`, `detach_crossing` (la cebra pasa a `Marking` `Zebra`).
+  - La planta y el 3D usan `visible_markings`/`visible_tree_pits`; `crossroads::assemble` deja fuera las señales y bolardos ocultos de cualquiera de sus calles.
+  - **Fichero** (`hidden` en cada calle, versión 118) e **IFC** (`ArchiSim_Road.Hidden`).
+  - **App**: `app/pieces_ui` (`PiecePick`, `piece_at`, `piece_click`), fichas «Ocultar piezas» y «Soltar paso de peatones» (`Action::HidePieces`, `Action::DetachCrossing`), y «Mostrar las piezas ocultas» en el grupo «Por tramos» de la calle.
+  - Ejemplo en `archisim nudos out/`; pruebas en el núcleo, la línea de órdenes (fichero e IFC) y la aplicación con clics.
+- **Pendiente**: §7 de `TERRITORIO.md`. Siguiente, N7.
+- **Qué debe probar Antonio** (con la 0.100):
+  1. `archisim nudos out/` y abre `out/nudos.archisim`: a la plataforma única le falta un bolardo y al cruce del Olmo con la Mayor, la señal del sur.
+  2. Urbanismo → Calle → **Ocultar piezas**: pincha rayas de un carril y una plaza pintada; mueve la calle y mira que siguen ocultas; en la calle, **Mostrar las piezas ocultas**.
+  3. **Soltar paso de peatones** sobre una cebra y muévela con las flechas del teclado.
+
+## 2026-11-18 (178) · v0.99: territorio N5, superficies por contorno
+
+Rama `bloque/superficies` sobre `bloque/tramos` (#226). Versión 0.99.0. Formato `.archisim` versión 117.
+
+- **Qué se hizo** (`docs/TERRITORIO.md` §2.8):
+  - **Modelo** (`archisim-core::model::urban_surfaces`): `UrbanSurface` con `SurfaceKind` (plaza, isleta, mediana, aparcamiento, jardín; `usual`), `SurfaceEdge`, `Bays`, `inner`, `bay_lines`/`bay_count`, `joint_lines`, `encode`/`decode_into`; `Model::add_surface`, `edit_surface`, `copy_surface`, `remove_surface`, `surfaces_on_level`, `next_surface_name`; `SurfaceId`; en `changes`, en el fichero (`surfaces`, versión 117) y al borrar una planta.
+  - **3D** en `archisim-geom::urban_surfaces::surface_solids` (dueño `SolidOwner::Surface`, sobre `Model::surface_at`); **planta** en `archisim-plan::urban`; **IFC** proxy con `ArchiSim_UrbanSurface` e `import_surfaces`.
+  - **App**: `Element::Surface` (elegir, mover, copiar, transformar, borrar, cambiar de planta), `app/surface_ui` (`build_surface`, `surface_tool_properties`, `surface_properties`), la herramienta Parcela en modo superficie (`ArchiSimApp::surface_draw`, `Action::Surface`), forzados a bordillos, líneas de parcela y superficies en `snap::snap_filtered`; en la escena, `Class::Surface` se rehace con las calles y el terreno.
+  - Ejemplo en `archisim nudos out/`; pruebas en el núcleo, la línea de órdenes (fichero e IFC) y la aplicación con clics.
+- **Pendiente**: §7 de `TERRITORIO.md`. Siguiente, N6.
+- **Qué debe probar Antonio** (con la 0.99):
+  1. `archisim nudos out/` y abre `out/nudos.archisim`: en la manzana de la casa, un aparcamiento con sus plazas y un jardín; al lado, una plaza de adoquín; al final de la Avenida de los Carriles, una mediana. Míralo en planta a 1:100 (juntas) y en 3D.
+  2. Urbanismo → Calle → **Aparcamiento**: dibuja uno junto a una acera (se pega al bordillo); en Propiedades cambia el ángulo a 45° y mira cuántas plazas salen.
+  3. **Isleta** dibujada sobre un cruce: queda sobre la calzada con su bordillo.
+
+## 2026-11-18 (177) · v0.98: territorio N4, cambios por tramo y «Sustituir todos»
+
+Rama `bloque/tramos` sobre `bloque/carriles` (#225). Versión 0.98.0. Formato `.archisim` versión 116.
+
+- **Qué se hizo** (`docs/TERRITORIO.md` §2.7):
+  - **Modelo** (`archisim-core::model::road_skins`): `Road::skins` (`RoadSkin`: desde, hasta y materiales opcionales), `skin_at`, `skin_cuts`, `materials_at` (que usa `cut_pieces` para el material de cada pieza), `encode_skins`/`decode_skins`; `Model::set_road_skins`; `ReplaceScope` (proyecto, planta, zona, tramo de calle), `objects_in`, `replace_object_type`, `replace_road_material` (en zona o tramo crea tramos propios, `stretches_inside`).
+  - **Fichero** `skins` en cada calle (versión 116); **IFC** `ArchiSim_Road.Skins` con los materiales por nombre.
+  - **App**: grupo «Por tramos» de la calle (`urban_ui::road_skins_group`) y la ventana «Sustituir todos» (`app/replace_ui`: `ReplaceState`, `ReplaceWhat`, `ReplaceWhere`, zona con dos clics `replace_area_click`), ficha en Urbanismo → Calle (`Action::Replace`).
+  - Ejemplo en `archisim nudos out/` (Calle Real con adoquín); pruebas en el núcleo, la línea de órdenes (fichero e IFC) y la aplicación.
+- **Pendiente**: §7 de `TERRITORIO.md`. Siguiente, N5.
+- **Qué debe probar Antonio** (con la 0.98):
+  1. `archisim nudos out/` y abre `out/nudos.archisim`: en 3D, la Calle Real entre la del Olmo y la del Pino es de adoquín con bordillo de piedra.
+  2. Elige una calle → **Por tramos** → **Nuevo tramo**: cambia desde y hasta y el material de la acera; míralo en 3D.
+  3. Trae el entorno con vida de la calle (o pon unas farolas) y abre **Urbanismo → Calle → Sustituir todos**: cambia las farolas de un tipo por otro en una zona elegida con dos clics.
+
+## 2026-11-18 (176) · v0.97: territorio N3, carriles y marcas del nudo
+
+Rama `bloque/carriles` sobre `bloque/trazado-2` (#224). Versión 0.97.0. Formato `.archisim` versión 115 (más datos en el texto de cada nudo).
+
+- **Qué se hizo** (`docs/TERRITORIO.md` §2.6):
+  - **Modelo** (`archisim-core::model::nodes`): `ArmSettings::turns` (`Turns`, giros por carril desde el bordillo) y `stop_back`; `NodeSettings::links` (`LaneLink`) e `islands` (`PaintedIsland` con `IslandPaint`, en los ejes del nudo). `markings::paint_shapes` saca la pintura de una marca sin ser una marca.
+  - **Geometría** (`archisim-geom::crossroads`): `Arm::lanes_in`/`lanes_out`; `lane_connections` (`LaneConnection`, `Turn`, `turn_of`, `arm_turns`, `lane_end`), `lane_paint` (flechas y líneas entre carriles en `Junction::arm_paint`, pintadas a la cota de su calle en `solid` y en la planta), `node_frame` e `island_paint`.
+  - **App** (`app/node_ui`): `NodeMode` (elegir, conectar carriles, dibujar isleta), `node_link_click`, `node_finish` (Intro, doble clic, clic derecho), `node_escape`; grupos «Carriles» e «Isletas pintadas»; conexiones dibujadas en azul (calculadas) y naranja (a mano).
+  - Ejemplo en `archisim nudos out/` (Avenida de los Carriles); pruebas en el núcleo, la geometría, la línea de órdenes (fichero e IFC) y la aplicación con clics.
+- **Pendiente**: lo de §7 de `TERRITORIO.md`. Siguiente, N4.
+- **Qué debe probar Antonio** (con la 0.97):
+  1. `archisim nudos out/` y abre `out/nudos.archisim`. Ve al cruce de la Avenida de los Carriles con la Calle de la Isleta (al este): flechas en la avenida, un triángulo cebreado y otro relleno sobre el cruce.
+  2. Herramienta Nudo en ese cruce: líneas azules y naranjas de las conexiones; en **Carriles**, cambia los giros de un carril y mira cómo cambian las flechas.
+  3. **Conectar carriles a mano**: pincha un punto verde y luego uno blanco; repítelo para quitarla.
+  4. **Dibujar isleta pintada** en otro cruce; luego mueve una de sus calles: la isleta va con el cruce.
+
+## 2026-11-18 (175) · v0.96: territorio N2, remates
+
+Rama `bloque/trazado-2` sobre `bloque/trazado` (#223). Versión 0.96.0. Sin cambios de formato.
+
+- **Qué se hizo** (`docs/TERRITORIO.md` §2.5):
+  - **Pendiente uniforme con el ratón**: `ArchiSimApp::road_grade_pick` y `road_grade_click` (dos clics sobre la calle, con `Road::station_of`), que rellenan el formulario «Trazado» (`LayoutForm`) con las cotas actuales; aviso en la barra de opciones (`hint_text`), Esc lo deja.
+  - **Radio y giro en la barra de opciones**: `road_arc_fields` (R y Giro) y `lay_typed_arc`, que usa también «Poner la curva».
+  - Lista de lo que queda por pulir del territorio en `docs/TERRITORIO.md` §7, que irá creciendo con cada tanda.
+- **Pendiente**: N3 (carriles y marcas del nudo).
+- **Qué debe probar Antonio** (con la 0.96):
+  1. `archisim nudos out/` y abre `out/nudos.archisim`. Elige la Calle Real; en **Trazado**, pulsa **Elegir los dos puntos en planta** y pincha dos puntos de la calle: desde, hasta y las cotas se rellenan; aplica la pendiente.
+  2. Herramienta Calle por tramos: tras el primer tramo, en la barra de opciones escribe 30 en **R** y 60 en **Giro** e Intro: sale la curva.
+
+## 2026-11-17 (174) · v0.95: territorio N2, trazado sin reglas y con precisión
+
+Rama `bloque/trazado` sobre `bloque/nudos` (#222). Versión 0.95.0. Formato `.archisim` versión 114.
+
+- **Qué se hizo** (`docs/TERRITORIO.md` §2.5):
+  - **Anarquía**: `Road::free` (`Model::set_road_free`), que `crossroads::meeting_points` deja fuera de los cruces y `road_ground::Shaper` del terreno; IFC `ArchiSim_Road.Free`; en la app, `RoadSettings::anarchy` (sin forzar al eje de otras calles, sin cebras ni seguir el terreno) y el interruptor del grupo «Trazado».
+  - **Pendiente uniforme** (`Model::road_uniform_grade`) y **paralela** (`Model::parallel_road`), en el grupo «Trazado» de la calle (`road_layout_group`).
+  - **Precisión al trazar**: `arc_stretch`, `arc_through`; en la herramienta, `road_precision_group` con la lectura hasta el cursor y «Poner la curva» (`road_typed_arc`).
+  - **Hacer glorieta** desde la herramienta Nudo (`roundabout_at_node`).
+  - Ejemplo en `archisim nudos out/`; pruebas en el núcleo, la línea de órdenes (fichero e IFC) y la aplicación.
+- **Pendiente**: elegir con el ratón los dos puntos de la pendiente uniforme; giro y radio en la barra de opciones. Después, N3.
+- **Qué debe probar Antonio** (con la 0.95):
+  1. `archisim nudos out/` y abre `out/nudos.archisim`: el Carril libre pisa las calles del Olmo y del Pino sin cruces; la Calle Alta del Parque sube al 2,5 %; la Calle Estrecha acaba en una curva de 25 m.
+  2. Herramienta Calle por tramos: activa **Anarquía** y traza una calle que pise otra; no debe hacer cruce ni tocar el terreno.
+  3. Trazando, mira en Propiedades la longitud, el giro y el radio hasta el cursor; pon 30 m de radio y 45° y pulsa **Poner la curva**.
+  4. Elige una calle: en **Trazado**, pon una pendiente uniforme entre dos distancias y crea una **paralela** a 20 m.
+  5. Herramienta Nudo en un cruce de cuatro calles: **Hacer glorieta aquí**.
+
+## 2026-11-17 (173) · v0.94: territorio N1, segunda vuelta de los nudos
+
+Rama `bloque/nudos`, pull request #222 (sobre `bloque/territorio`, #220). Versión 0.94.0. Formato 113, sin cambios de estructura (los ajustes nuevos van en el texto de cada nudo).
+
+- **Qué se hizo** (`docs/TERRITORIO.md` §2.4):
+  - **Tipos nuevos**: Continuo, Doblez y Fin con círculo de giro (`NodeKind::Continuous`, `Bend`, `DeadEnd`, `fits`); los finales libres y las calles que acaban una donde empieza la otra se eligen y guardan como nudos (`crossroads::loose_ends`, `dead_ends`, `joints`, `node_key_at`, `node_arms`), pero solo hacen cruce si se cambian a mano.
+  - **Nudo entero**: plano, calle principal y sin marcas (`NodeSettings::flat`, `main`, `hide_marks`; `Junction::flat`, `main`, `quiet`, `marking_gaps`).
+  - **Por brazo**: señal con su línea (`ArmSign`, `Junction::marks`, `signs`; `Arm::lanes_left`), paso de peatones sobre la calle (`arm_crossing`, `set_arm_crossing`).
+  - **Por esquina**: oreja (`CornerSettings::bump`, `Junction::bump_kerbs`).
+  - **Chaflán estándar** por lugar (`standard_chamfer`), en un nudo o en toda la planta.
+  - **App**: tarjetas dibujadas de los tipos, tiradores en planta para retranqueo y radio (`NodeGrab`, `corner_frame`, `corner_middle`, `corner_radius_at`), con la medida al arrastrar.
+  - Planta (marcas, señales y bordillos de oreja por encima de las calles), 3D (marcas con la pintura de la calle, postes y placas) e IFC (bordillos de oreja y postes).
+  - Ejemplo `archisim nudos out/` con todo; pruebas de geometría, fichero, IFC y aplicación (con arrastre de tiradores).
+- **Pendiente**: desplazar el centro, aplanar un brazo, fondo de saco en martillo y tiradores en 3D (explicado en §2.4). Después, N2–N9 y la cuarta vuelta de fluidez.
+- **Qué debe probar Antonio** (con la 0.94):
+  1. `archisim nudos out/` y abre `out/nudos.archisim`: el cruce de la Calle Mayor con la del Olmo con orejas y ceda el paso; la T con stop; el fondo de saco de la Calle del Sauce; la doblez del Río y la Avenida Ancha que se estrecha.
+  2. Herramienta **Nudo** (NU): pincha un cruce y mira las tarjetas de tipo; arrastra el tirador naranja del extremo de una calle y el del centro de una esquina.
+  3. Pon Calle principal y pulsa «Ceda el paso en las demás calles»; activa «Paso de peatones» en una calle; prueba «Sin marcas viales».
+  4. Pincha el final libre de una calle y ponle Fin con 10 m de radio.
+  5. Pulsa «Chaflán estándar en toda la planta» y mira la planta.
+
+## 2026-11-17 (172) · v0.94: territorio N1, nudos al estilo Node Controller (primera vuelta)
+
+Rama `bloque/nudos`, sobre `bloque/territorio` (#220). Versión 0.94.0. Formato `.archisim` versión 113.
+
+- **Qué se hizo** (`docs/TERRITORIO.md` §2.3):
+  - **Identidad de los nudos** (`archisim-core::model::nodes`: `NodeKey` por planta, calles y extremo; `NodeSettings` con tipo, brazos y esquinas; `Model::set_node`, `keep_nodes`). Se reconcilian en cada cambio (`Editor::transact`) y se pierden al borrar una calle.
+  - **Cruces que leen los ajustes** (`crossroads::assemble`): radio y forma por esquina (arco, chaflán, en punta), retranqueo por brazo, acera de esquina, cruce elevado con meseta y rampas, plataforma única con bolardos, sin nudo.
+  - Planta, 3D e IFC (pset `ArchiSim_Road`, propiedad `Nodes`, leída al importar).
+  - **Herramienta Nudo** (`app/node_ui`, `Tool::Node`, tecla NU) con sus propiedades y Restablecer.
+  - Ejemplo `archisim nudos out/` y pruebas de fichero, IFC y aplicación.
+- **Pendiente** (N1, segunda vuelta): Continuo, Doblez, Fin; paso, rebaje, señales y aplanado por brazo; orejas; desplazar, plano/inclinado, calle principal, ocultar; tiradores, tarjetas dibujadas y vista previa; chaflán estándar por lugar. Luego N2–N9 y la cuarta vuelta de fluidez (planta, secciones, abrir, y todo lo nuevo).
+- **Qué debe probar Antonio** (con la 0.94):
+  1. `archisim nudos out/` y abre `out/nudos.archisim`: en planta y en 3D, un cruce de cada tipo, la T con chaflanes y la L en punta.
+  2. En Urbanismo, herramienta **Nudo** (NU): pincha otro cruce, ponlo como cruce elevado o plataforma única y mira el 3D; cambia el radio y la forma de una esquina y el retranqueo de un brazo.
+  3. Mueve una de sus calles: el nudo conserva lo cambiado. Borra una: sus ajustes desaparecen. Ctrl+Z deshace cada cambio.
+  4. Exporta el IFC y ábrelo de nuevo en ArchiSim: los nudos vuelven igual.
+
+## 2026-11-17 (171) · v0.93: territorio N0, tercera vuelta (escena que se conserva)
+
+Rama `bloque/territorio`, pull request #220. Versión 0.93.0. Sin cambios de formato ni de IFC.
+
+- **Qué se hizo** (tabla en `docs/TERRITORIO.md` §4.3):
+  - **Qué cambió entre dos versiones del modelo** (`Model::changes_since`, que nombra cada campo del modelo: si se añade uno, no compila hasta decir si es de un elemento, general o no se ve en 3D).
+  - **Escena 3D que se conserva** (`view3d::scene_build`, `SceneBuilder`): unidades por elemento, celdas de 64 m por capa, piezas grandes en celdas propias, modelos compartidos; lo que depende de lo cambiado por alcance; la selección se marca después. La aplicación la usa siempre que no se aísla una interferencia ni hay vínculos.
+  - **Tarjeta gráfica**: `Renderer::set_scene` sube solo los trozos y modelos nuevos (`Chunk::key`, `Group::key`).
+  - **Geometría**: sólidos de solo unos elementos (`model_solids_units`, `Only`, `Unit`), terreno en partes guardadas (`terrain_parts`: cuadrados de 50 m, bordes por cuadrado, paredes por hueco), tramos de calle y cruces guardados por lo que los hace, piscinas sin calcular los parámetros de cada objeto (`type_prop_is`), el medidor también en los hilos.
+  - **Prueba** `a_kept_scene_is_the_whole_one`: la escena rehecha a trozos es igual, triángulo a triángulo, a la hecha entera, tras mover calles, árboles, muros y edificios, quitar cosas y seleccionar.
+  - Resultado en la máquina de pruebas (2 núcleos): un árbol, un banco o un edificio, ~30 ms; una calle, ~120 ms (antes 40 s y luego 2 s).
+- **Pendiente**: comprobar las calles en el PC de Antonio (aquí, 120 ms con 2 núcleos); abrir el sitio por primera vez sigue costando ~30 s; exportar con miles de árboles a todo detalle.
+- **Qué debe probar Antonio** (con la 0.93):
+  1. `archisim territorio-grande out/`, abre `out/territorio.archisim` y ve a la vista 3D (la primera vez tarda).
+  2. Mueve un árbol, gira un banco, cambia la altura de un edificio y arrastra una calle: el cambio debe verse casi al instante y sin que el resto parpadee ni desaparezca.
+  3. Selecciona cosas, deshaz (Ctrl+Z) y rehaz: lo que vuelve debe verse igual que antes.
+  4. Si puedes, mándame `out/territorio-medidas.txt` y dime si arrastrar una calle se nota fluido.
+
+## 2026-11-16 (170) · v0.93: territorio N0, fluidez (primera y segunda vuelta)
+
+Rama `bloque/territorio`, pull request #220. Versión 0.93.0. Sin cambios de formato. El IFC es el mismo salvo el orden de los triángulos del terreno.
+
+- **Decisiones de Antonio** sobre `docs/TERRITORIO.md` §5: N0 primero; tráfico solo dibujado y, como plus, circulación de ilustración al final (N9); los ajustes de un nudo cuya calle se borra se pierden; 2 × 2 km basta; chaflán estándar por lugar y luego a mano.
+- **Qué se hizo** (tablas en `docs/TERRITORIO.md` §4.1 y §4.2):
+  - **Sitio de referencia** `archisim territorio-grande [carpeta] [--sin-vida]` y prueba de la escena de la aplicación `territory_scene`.
+  - **Cota del terreno guardada** (`Terrain::surface`), cruces guardados, cada calle guardada con lo que la hace.
+  - **Terreno por cuadrados de 100 m**, guardados y hechos en todos los núcleos; índice de calles por celdas.
+  - **Caché de plantas** sin vaciados enteros (antes los 4 662 árboles volvían a crecer en cada cambio).
+  - **Vista 3D**: árboles convertidos una vez y colocados; edificios vestidos, árboles cercanos y piezas de terreno, calles y marcas guardados por huella.
+  - **Planta**: objetos y piezas de calle fuera de la vista descartados antes de calcularlos.
+  - Resultado: **la escena 3D tras mover una calle pasa de 40 s a 2,2 s** en esta máquina de 2 núcleos, con los mismos triángulos.
+- **Pendiente** (N0, tercera vuelta, para bajar a menos de 50 ms): saber qué elementos cambian en cada paso; que la tarjeta gráfica conserve los trozos sin cambios; repetir el modelo de los árboles en glTF, render e IFC (hoy unos 5 GB con miles de árboles a todo detalle); piezas de calles largas en planta. Y la pequeña variación de triángulos de las plantas entre ejecuciones con todo el detalle.
+- **Qué debe probar Antonio** (con la 0.93 publicada):
+  1. Ejecuta `archisim territorio-grande out/` y ábrelo con ArchiSim: `out/territorio.archisim`. Mira el 3D, arrastra una calle y suéltala: cuenta cuánto tarda en verse el cambio. Mira también que los árboles, edificios, calles y terreno se vean igual que antes.
+  2. Haz lo mismo con un proyecto tuyo con terreno y calles, o con «Traer el entorno» de Punta Umbría a 300 m.
+  3. Mándame `out/territorio-medidas.txt`: son los tiempos en tu PC.
 ## 2026-11-18 (172) · v0.93: la SUMO como el render (lamas, vuelos, jardineras y acabados)
 
 Rama `bloque/montar-dxf`, misma versión 0.93.0 (aún sin publicar). Sin cambios de formato.
