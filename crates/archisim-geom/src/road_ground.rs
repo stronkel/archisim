@@ -345,9 +345,10 @@ impl Shaper {
         if kept.len() > 8192 {
             kept.clear();
         }
+        // The streets laid in anarchy leave the ground as it is (N2).
         let roads = model
             .roads_on_level(level)
-            .filter(|r| r.axis.len() >= 2)
+            .filter(|r| r.axis.len() >= 2 && !r.free)
             .map(|r| {
                 // Kept while the road, its level and the ground under it
                 // stay the same.

@@ -67,7 +67,7 @@ const STASHED: usize = 4;
 /// model, and its picture on screen.
 pub struct SectionCache {
     pub(super) revision: u64,
-    section: SectionId,
+    pub(super) section: SectionId,
     phase_view: archisim_plan::phases::PhaseView,
     drawing: std::sync::Arc<SectionDrawing>,
     pub(super) picture: super::picture::Picture<SectionKey>,
@@ -197,6 +197,26 @@ impl ArchiSimApp {
         }
         let want: DrawingKey = (revision, id, phase_view);
         if let Some(p) = self.section_pending.as_ref().filter(|p| p.key == want) {
+            if let Some(why) = p.failed() {
+                // Failed aside: once more here, guarded (0.92.1).
+                self.section_pending = None;
+                self.section_failed = None;
+                let model = self.shared_model();
+                let made = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    let sec = model.section(id).cloned()?;
+                    let phased = archisim_plan::phases::phase_model(&model, phase_view);
+                    Some(section_drawing(phased.as_ref().unwrap_or(&model), &sec))
+                }));
+                match made {
+                    Ok(drawing) => self.install_section(want, drawing),
+                    Err(e) => {
+                        let again = super::background::panic_text(e.as_ref());
+                        crate::crash::write(&format!("Sección aparte: {why}; al momento: {again}"));
+                        self.section_failed = Some((want, again));
+                    }
+                }
+                return;
+            }
             match p.take() {
                 Some(drawing) => {
                     self.section_pending = None;
@@ -206,6 +226,14 @@ impl ArchiSimApp {
             }
             return;
         }
+        if self
+            .section_failed
+            .as_ref()
+            .is_some_and(|(k, _)| *k == want)
+        {
+            return;
+        }
+        self.section_failed = None;
         let model = self.shared_model();
         if model.section(id).is_none() {
             return;
@@ -227,7 +255,14 @@ impl ArchiSimApp {
         let last = self.section_took.lock().map(|t| *t).unwrap_or_default();
         if !super::picture::aside(last, self.at_once, &model) {
             self.section_pending = None;
-            self.install_section(want, work());
+            match std::panic::catch_unwind(std::panic::AssertUnwindSafe(work)) {
+                Ok(drawing) => self.install_section(want, drawing),
+                Err(e) => {
+                    let why = super::background::panic_text(e.as_ref());
+                    crate::crash::write(&format!("Sección: {why}"));
+                    self.section_failed = Some((want, why));
+                }
+            }
         } else {
             self.section_pending = Some(super::background::Pending::start(want, work));
             ctx.request_repaint_after(std::time::Duration::from_millis(30));
@@ -288,11 +323,27 @@ impl ArchiSimApp {
         };
         self.refresh_section(&ctx, id);
         let Some(cache) = self.section_cache.as_ref().filter(|c| c.section == id) else {
-            // A section seen for the first time, still being worked out.
+            // A section seen for the first time, still being worked out (or
+            // that could not be).
+            let text = if let Some((_, e)) = &self.section_failed {
+                format!(
+                    "No se pudo dibujar la sección: {e}\n(queda anotado en errores.log; mándamelo)"
+                )
+            } else {
+                let secs = self
+                    .section_pending
+                    .as_ref()
+                    .map_or(0, |p| p.started.elapsed().as_secs());
+                if secs >= 3 {
+                    format!("Dibujando la sección… {secs} s")
+                } else {
+                    "Dibujando la sección…".to_string()
+                }
+            };
             painter.text(
                 rect.center(),
                 egui::Align2::CENTER_CENTER,
-                "Dibujando la sección…",
+                text,
                 egui::FontId::proportional(14.0),
                 Color32::from_gray(120),
             );
@@ -698,6 +749,7 @@ impl ArchiSimApp {
                 })
             })
             .map(|(k, t)| (k.lo, k.hi, t.clone()));
+        super::picture::note(painter, rect, "la sección", &picture);
         if let Some(c) = self.section_cache.as_mut() {
             c.picture = picture;
         }
@@ -995,7 +1047,7 @@ impl ArchiSimApp {
 /// A move in a section or elevation, while the mouse is held (E15).
 #[derive(Debug, Clone)]
 pub struct SectionDrag {
-    section: SectionId,
+    pub(super) section: SectionId,
     start: Point2,
     delta: Point2,
     elements: Vec<Element>,

@@ -16,7 +16,7 @@
 //!
 //! IFC: `IfcCurtainWall` (typed by an `IfcCurtainWallType`) made of
 //! `IfcMember` (`MULLION`: frames and caps), `IfcPlate` (`CURTAIN_PANEL`)
-//! and `IfcShadingDevice` (`LOUVER`).
+//! and `IfcShadingDevice` (user-defined, «Lama»).
 
 use super::*;
 
@@ -376,7 +376,7 @@ pub enum CurtainPieceKind {
     Panel(usize),
     /// A pressure cap outside a frame (IFC `IfcMember` `MULLION`).
     Cap,
-    /// A sun louvre (IFC `IfcShadingDevice` `LOUVER`).
+    /// A sun louvre (IFC `IfcShadingDevice`, user-defined «Lama»).
     Louvre,
 }
 

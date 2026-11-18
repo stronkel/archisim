@@ -279,7 +279,7 @@ fn dashes(path: &[Point2], a: f64, b: f64, dash: f64, gap: f64) -> Vec<Vec<Point
 }
 
 /// Where a line crosses a polygon's inside: (from, to) along `a → b`.
-fn inside_spans(poly: &[Point2], a: Point2, b: Point2) -> Vec<(f64, f64)> {
+pub(super) fn inside_spans(poly: &[Point2], a: Point2, b: Point2) -> Vec<(f64, f64)> {
     let d = b - a;
     let mut ts = Vec::new();
     for i in 0..poly.len() {
@@ -425,8 +425,48 @@ fn arrow(kind: MarkingKind) -> Vec<Vec<(f64, f64)>> {
 impl Marking {
     /// Its paint, as polygons on the plan.
     pub fn shapes(&self) -> Vec<Vec<Point2>> {
+        paint_shapes(
+            self.kind, &self.path, self.width, self.dash, self.gap, self.depth,
+        )
+    }
+}
+
+/// What [`paint_shapes`] draws from.
+struct Of<'a> {
+    kind: MarkingKind,
+    path: &'a [Point2],
+    width: f64,
+    dash: f64,
+    gap: f64,
+    depth: f64,
+}
+
+/// The paint of a marking of a kind along a path, as polygons on the plan
+/// (also for the marks of the nodes, N3, which are not markings of their
+/// own).
+pub fn paint_shapes(
+    kind: MarkingKind,
+    path: &[Point2],
+    width: f64,
+    dash: f64,
+    gap: f64,
+    depth: f64,
+) -> Vec<Vec<Point2>> {
+    let this = Of {
+        kind,
+        path,
+        width,
+        dash,
+        gap,
+        depth,
+    };
+    this.shapes()
+}
+
+impl Of<'_> {
+    fn shapes(&self) -> Vec<Vec<Point2>> {
         use MarkingKind::*;
-        let p = &self.path;
+        let p = self.path;
         if p.len() < 2 {
             return Vec::new();
         }
@@ -541,7 +581,7 @@ impl Marking {
                     .collect()
             }
             Chevrons | DisabledBay | MotoBay => {
-                let mut poly = p.clone();
+                let mut poly = p.to_vec();
                 if signed_area(&poly) < 0.0 {
                     poly.reverse();
                 }
@@ -613,7 +653,9 @@ impl Marking {
             }
         }
     }
+}
 
+impl Marking {
     /// Where its colour fills all of it (a disabled bay is painted blue
     /// inside its white outline): its outline.
     pub fn fill(&self) -> Option<Vec<Point2>> {

@@ -510,6 +510,7 @@ pub fn archisim_worker_job(
                     _ => archisim_render::Light::Day,
                 },
                 textures: p["textures"].as_bool().unwrap_or(true),
+                traffic: None,
             };
             let (part, parts) = (int("part"), int("parts").max(1));
             let rows: Vec<usize> = (0..options.height.max(1))

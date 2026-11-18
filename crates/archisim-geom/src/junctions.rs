@@ -415,6 +415,36 @@ pub fn slab_wall_voids(
         .collect()
 }
 
+/// The prisms to take away from a level slab's solid where walls go
+/// through its layers: the same as [`slab_wall_voids`], but one prism per
+/// wall piece, neither joined nor clipped to the slab's outline. Joined,
+/// the walls of a ring of rooms make one outline that touches itself at
+/// the corners, which geometry kernels do not subtract cleanly
+/// (IfcOpenShell took away a metre more than the walls in a drawn CAD
+/// plan); separate prisms that overlap, or stick out of the slab, take
+/// away the same. The volume the slab loses is that of
+/// [`slab_wall_voids`].
+pub fn slab_wall_cutters(
+    idx: &WallIndex,
+    slab: SlabId,
+    known: &HashMap<WallId, WallGeometry>,
+) -> Vec<Void> {
+    let model = idx.model;
+    let Some(s) = model.slab(slab) else {
+        return Vec::new();
+    };
+    let Some(bands) = slab_bands(model, s) else {
+        return Vec::new();
+    };
+    slab_wall_cuts_with(idx, slab, known)
+        .iter()
+        .zip(bands)
+        .filter(|(pieces, _)| !pieces.is_empty())
+        .map(|(pieces, (z0, z1))| (pieces_as_shapes(pieces), z0, z1))
+        .filter(|(shapes, _, _)| !shapes.is_empty())
+        .collect()
+}
+
 fn to_xy(poly: &[Point2]) -> Vec<[f64; 2]> {
     poly.iter().map(|p| [p.x, p.y]).collect()
 }

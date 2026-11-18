@@ -287,6 +287,8 @@ pub struct Renderer {
     /// What is being stretched, drawn over the scene (whose own copy of
     /// it is hidden): its opaque and glass triangles.
     overlay: Option<(Vec<GpuMesh>, Vec<GpuMesh>)>,
+    /// The cars and people of the traffic (N9).
+    traffic: Vec<GpuMesh>,
     /// The filled sections of the objects the section box cuts
     /// (`Scene::object_cut_fill`).
     fill: Vec<GpuMesh>,
@@ -875,6 +877,7 @@ impl Renderer {
             instance_buffer: instance_buffer(device, 1024),
             instance_room: 1024,
             overlay: None,
+            traffic: Vec::new(),
             fill: Vec::new(),
             view_formats,
             clip: None,
@@ -965,6 +968,14 @@ impl Renderer {
                 upload(device, &mut self.writes, &o.opaque, wire),
                 upload(device, &mut self.writes, &o.glass, wire),
             )
+        });
+    }
+
+    /// Uploads (or clears) the cars and people of the traffic (N9).
+    pub fn set_traffic(&mut self, device: &wgpu::Device, traffic: Option<&Scene>) {
+        let wire = self.wired;
+        self.traffic = traffic.map_or_else(Vec::new, |t| {
+            upload(device, &mut self.writes, &t.opaque, wire)
         });
     }
 
@@ -1502,6 +1513,9 @@ impl Renderer {
                     draw_mesh(&mut pass, m, same, 0..m.count, 0..1);
                 }
                 for m in self.overlay.iter().flat_map(|o| o.0.iter()) {
+                    draw_mesh(&mut pass, m, same, 0..m.count, 0..1);
+                }
+                for m in &self.traffic {
                     draw_mesh(&mut pass, m, same, 0..m.count, 0..1);
                 }
                 if self.clip.is_some() {

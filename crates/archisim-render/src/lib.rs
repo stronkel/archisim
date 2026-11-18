@@ -160,6 +160,9 @@ pub struct Options {
     pub light: Light,
     /// The materials' textures (as the 3D view's).
     pub textures: bool,
+    /// Cars and people on the streets (N9), as they are these seconds
+    /// after the traffic starts; none, empty streets.
+    pub traffic: Option<f64>,
 }
 
 impl Default for Options {
@@ -171,6 +174,7 @@ impl Default for Options {
             sky_rays: 12,
             light: Light::Day,
             textures: true,
+            traffic: None,
         }
     }
 }
@@ -290,7 +294,26 @@ impl Scene {
         let mut lamps: std::collections::BTreeMap<u64, (V3, f64, f64)> = Default::default();
         // The painted zones of the faces go over their faces as they are,
         // without the face's own paint.
-        let solids = model_solids(model);
+        let mut solids = model_solids(model);
+        // The traffic for illustration, on each level with streets.
+        if let Some(seconds) = opt.traffic {
+            let material = model
+                .materials()
+                .find(|m| m.category != "glass")
+                .map_or(archisim_core::MaterialId(0), |m| m.id);
+            for l in model.levels() {
+                if model.roads_on_level(l.id).next().is_none() {
+                    continue;
+                }
+                let (cars, people) = archisim_geom::traffic::usual_counts(model, l.id);
+                let t = archisim_geom::traffic::Traffic::at(model, l.id, cars, people, 1, seconds);
+                solids.extend(archisim_geom::traffic::traffic_solids(
+                    &t.bodies(model),
+                    material,
+                ));
+                solids.extend(archisim_geom::traffic::lamp_solids(&t.lamps(), material));
+            }
+        }
         let zones = archisim_geom::solid::face_zone_solids(model, &solids);
         let first_zone = solids.len();
         for (i, s) in solids.into_iter().chain(zones).enumerate() {
@@ -1036,6 +1059,7 @@ mod tests {
             sky_rays: 2,
             light,
             textures: true,
+            traffic: None,
         };
         let lum = |img: &Image| -> f64 {
             img.rgb.iter().map(|&v| v as f64).sum::<f64>() / img.rgb.len() as f64
@@ -1096,6 +1120,7 @@ mod tests {
             sky_rays: 0,
             light: Light::Day,
             textures,
+            traffic: None,
         };
         let a = render(&m, &view, &opt(true), &|_| {});
         let b = render(&m, &view, &opt(false), &|_| {});

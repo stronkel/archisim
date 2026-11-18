@@ -113,6 +113,7 @@ impl ArchiSimApp {
             [Element::Road(id)] => self.road_properties(ui, *id),
             [Element::Roundabout(id)] => self.roundabout_properties(ui, *id),
             [Element::Marking(id)] => self.marking_properties(ui, *id),
+            [Element::Surface(id)] => self.surface_properties(ui, *id),
             [Element::Decal(id)] => self.decal_properties(ui, *id),
             [Element::Planting(id)] => self.planting_properties(ui, *id),
             [Element::Run(id)] => self.run_properties(ui, *id),
