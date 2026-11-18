@@ -132,6 +132,78 @@ Hoy `archisim_geom::crossroads::junctions(model, level)` rehace todos los cruces
 - Un paso de Deshacer por sustitución.
 - Ejemplo: `archisim nudos out/` pone adoquín de granito en la Calle Real entre la del Olmo y la del Pino.
 
+### 2.8 N5 hecho: superficies por contorno (18/11/2026, versión 0.99)
+
+- **Fichas nuevas** en Urbanismo → Calle: **Plaza**, **Isleta**, **Aparcamiento** y **Jardín** (y **Mediana** desde las tarjetas de la herramienta). Se dibujan como una parcela: clic en cada esquina (o rectángulo) y se cierran en la primera o con Intro.
+- **Se pegan** a los bordillos de las calles, a las líneas de las parcelas (fachadas) y a otras superficies (Parking Lot Snapping).
+- **Cada clase trae lo suyo**, y todo se cambia en Propiedades:
+  - plaza con encintado de 30 cm y juntas cada metro;
+  - isleta y mediana elevadas 15 cm con su bordillo;
+  - aparcamiento con rigola y plazas de 2,50 × 5,00 m en batería, en filas a lo largo del lado más largo con calle de 6 m entre cada dos (ancho, fondo y ángulo: 90° en batería, 45° o 60° en espiga), con el número de plazas;
+  - jardín con bordillo de 10 cm.
+- **Se apoyan** en el terreno o en la calle que tengan debajo (una isleta sobre un cruce va sobre su calzada) y suben su altura.
+- **Planta**: pavimento, borde, juntas desde 1:200 y plazas pintadas. **3D**: pavimento, borde (el bordillo un poco por encima) y pintura de las plazas.
+- **IFC**: `IfcBuildingElementProxy` con su pset `ArchiSim_UrbanSurface` (superficie y número de plazas incluidos); vuelven al importar.
+- Se mueven, copian, giran, reflejan y cambian de planta como lo demás. Formato 117.
+- Ejemplo: `archisim nudos out/`: aparcamiento y jardín en la manzana de la casa, plaza de adoquín en la de al lado y una mediana al final de la Avenida de los Carriles.
+
+### 2.9 N6 hecho: ocultar y soltar piezas de la calle (18/11/2026, versión 0.100)
+
+- **Ocultar piezas** (Hide It): ficha «Ocultar piezas» en Urbanismo → Calle; cada clic oculta la pieza de calle que hay debajo: una raya de las líneas de carril, una plaza pintada del aparcamiento, una barra de cebra, un alcorque, la señal de un nudo (con su poste) o un bolardo. Se guardan por dónde están a lo largo de la calle y a su lado, así que siguen ocultas si la calle se mueve. En la calle, «Mostrar las piezas ocultas» las devuelve (y dice cuántas hay).
+- **Soltar paso de peatones** (Move It): un clic en una cebra de una calle la convierte en una marca vial suelta, elegida, que se mueve, gira o copia con las órdenes de siempre (arrastrar, flechas del teclado, Mover con distancia). El rebaje de los bordillos se queda con la calle; se quita con la cebra.
+- El mobiliario, los árboles de alineación y las marcas sueltas ya eran elementos propios: se mueven al milímetro con lo de la 0.84 (flechas, distancia tecleada, guías).
+- Se guarda en la calle (formato 118) y en el IFC (`ArchiSim_Road.Hidden`).
+- Ejemplo: `archisim nudos out/` oculta un bolardo de la plataforma única y la señal sur del cruce del Olmo.
+
+### 2.10 N7 hecho: manzanas, parcelas y llenado por zonas (18/11/2026, versión 0.101)
+
+- **Manzanas**: las calles que se cierran (con sus cruces y glorietas) dejan huecos; cada hueco de más de 80 m² es una manzana, por su línea de fachada. Las calles en anarquía no cuentan.
+- **Parcelar** (Zoning Adjuster): Urbanismo → Territorio → **Manzanas** abre el panel. Se elige la zona y, si se quiere, el frente y el fondo de parcela (si no, los habituales de la zona). Luego se pincha dentro de una manzana, o «Parcelar todas».
+  - Las parcelas van en escuadra con su fachada.
+  - Cada esquina es una parcela que da a las dos calles.
+  - Queda un patio de manzana si el fondo cabe; una manzana pequeña es una sola parcela.
+  - Se llaman «Manzana n · k».
+- **Zonas**: casco antiguo (casas entre medianeras), bloques de viviendas, viviendas aisladas (con jardín delante), comercio (tiendas) y equipamiento (colegio). En planta se tiñe cada parcela con el color de su zona. La zona se cambia parcela a parcela en sus propiedades.
+- **Llenar** (Ploppable RICO): un edificio del mundo del lugar en cada parcela vacía, con su fachada a la calle, tan ancho como el frente y tan hondo como deja la parcela. «Rehacer» quita los de las parcelas sin bloquear y las vuelve a llenar; «Vaciar» solo los quita.
+- **Bloquear** (Historical Districts): en las propiedades de la parcela, «Bloqueada»: llenar, rehacer y vaciar no la tocan. La planta lo rotula.
+- Cada parcela se puede llenar o vaciar sola desde sus propiedades. Todo es un paso de Deshacer.
+- **Fichero** (formato 119: `zone` y `locked` de cada parcela) e **IFC** (`ArchiSim_Plot.Zone` y `ArchiSim_Plot.Locked`, que vuelven al importar).
+- Ejemplo: `archisim manzanas out/`: cuatro manzanas, una de cada zona y un colegio en la esquina del comercio, con una casa bloqueada en el casco antiguo.
+
+### 2.11 N8 hecho: área grande, conexiones con fuera y vista de mapa (18/11/2026, versión 0.102)
+
+- **Área del entorno**: al traer el entorno se guarda lo que se trajo, el círculo de su radio o, con la opción nueva «recuadro», un cuadrado de lado el doble del radio (hasta 2 × 2 km con radio 1 000 m). Lo que se trae queda dentro del recuadro: edificios, árboles, terreno y calles.
+- **Conexiones con fuera** (Outside Connections): las calles se cortan en el borde del área con toda su sección, en escuadra con su eje, y cada extremo cortado es una conexión con fuera. En planta, el borde del área va en trazo largo y cada conexión lleva una flecha hacia fuera con el nombre de la calle.
+- **Vista de mapa** (CSL Map View): Urbanismo → Territorio → **Mapa** abre una ventana con toda el área, plana y en color:
+  - Calles y avenidas (las de 20 m o más, en amarillo) con sus nombres.
+  - Edificios del entorno, con los equipamientos en otro color, y el edificio del proyecto en rojo teja.
+  - Árboles, jardines, piscinas y las zonas de las parcelas.
+  - Las conexiones con fuera.
+  - Un recuadro rojo dice qué parte enseña la planta. Un clic (o arrastrar) en el mapa lleva la planta ahí; «Ver toda el área» la encuadra entera.
+- La planta se puede alejar ahora hasta ver 2 km en la ventana.
+- **Fichero** (formato 120: `surroundings`) e **IFC** (`ArchiSim_Surroundings.Area` en el proyecto).
+- **Línea de órdenes**:
+  - `archisim area-grande out/` hace un área de 2 × 2 km con 36 conexiones y 544 edificios. Escribe su mapa y su planta y dice cuánto tarda cada cosa (el IFC unos 3 s; el mapa y la planta, centésimas).
+  - `archisim mapa <proyecto>` saca el mapa de cualquier proyecto.
+
+### 2.12 N9 hecho: tráfico de ilustración (18/11/2026, versión 0.103)
+
+- **Coches por los carriles**:
+  - Por la derecha, en cada carril de cada calle.
+  - En los cruces siguen las conexiones de carril de N3 (los giros de cada carril y las conexiones a mano), por la misma curva que dibuja el nudo.
+  - Paran en rojo y en ámbar. Los semáforos de un cruce van en dos fases, una para cada dirección: 16 s en verde y 3 s en ámbar.
+  - En los stop se detienen un momento.
+  - Guardan la distancia con el de delante en su carril.
+  - Al salir por un fondo de saco o por una conexión con fuera, aparecen en otro sitio.
+- **Personas por las aceras**: van y vuelven, cada una a su paso.
+- **Vista 3D**: Urbanismo → Territorio → **Tráfico** lo pone en marcha en la vista 3D y vuelve a pulsarse para pararlo. Hay un coche cada 40 m de calle y una persona cada 25 m, en colores variados. Al cambiar las calles empieza de nuevo sobre las calles nuevas.
+- **Render**: con el tráfico en marcha, el render lo saca como está a los 20 s. En la línea de órdenes, `archisim render … --trafico`.
+- Es para ilustrar: no calcula capacidades, colas ni prioridades. Dos coches de calles distintas pueden coincidir dentro del cruce.
+- No toca el proyecto: no se guarda ni sale en el IFC.
+- **Ejemplo**: `archisim trafico out/` toma las calles de `archisim nudos`, con semáforos en su cruce principal, y escribe:
+  - la planta con los coches y las personas (`trafico-planta.svg`);
+  - una imagen del cruce (`trafico.png`).
+
 ## 3. Lo demás, por tandas
 
 | Tanda | Qué | Mods de referencia | Tamaño |
@@ -252,6 +324,24 @@ Lo que queda:
 - **Exportar a glTF, render o IFC** con miles de árboles a todo detalle sigue ocupando mucha memoria.
 - Si en el PC de Antonio las calles pasan de 50 ms: convertir el terreno más fino, por trozos de cuadrado.
 
+### 4.4 Cuarta vuelta (18/11/2026): lo de N1–N9
+
+Medido en el mismo sitio de 1 km² (`archisim territorio-grande out/`, que ahora mide también nudos, superficies, manzanas, mapa y tráfico; y la prueba `territory_scene`, que mide la vista 3D tras cada cambio):
+
+| Qué | Antes | Ahora |
+|---|---|---|
+| Vista 3D tras elevar un cruce (N1) | 512 ms (36 piezas rehechas) | **95 ms** (3) |
+| Vista 3D tras cambiar el pavimento de un tramo (N4) | 430 ms (18) | **170 ms** (6) |
+| Vista 3D tras añadir un aparcamiento (N5) | 37 ms | 30 ms |
+| Cambiar 60 nudos / cruces de nuevo (N1) | — | 0,6 ms / 6 ms |
+| Buscar las 130 manzanas / partirlas en 1 633 parcelas (N7) | — | 5 ms / 0,2 ms |
+| Mapa de todo el sitio, 1 600 px (N8) | — | 16 ms |
+| Un paso del tráfico con 400 coches y 600 personas / sus cuerpos (N9) | — | 0,15 ms / 1,6 ms |
+
+Lo que era lento: **un nudo, un tramo o una pieza oculta contaban como si cambiase la calle entera**. La vista 3D rehacía todo lo que está a 30 m de la calle, y en una avenida de 1 km eso son decenas de calles y edificios. Ahora, si la calle no ha cambiado de forma, solo se mira alrededor de lo tocado: el cruce del nudo, el tramo o la pieza (`local_road_change` en `view3d::scene_build`). La prueba `a_kept_scene_is_the_whole_one` lo comprueba con un nudo elevado, un tramo pavimentado y una marca oculta.
+
+Lo demás de N1–N9 ya cumple el presupuesto en esta máquina de 2 núcleos. Queda lo de antes: la planta del sitio entero a 1:2000 (1,5 s, casi todo los 13 692 objetos) y abrir el sitio la primera vez (~27 s).
+
 ## 5. Decisiones de Antonio (16/11/2026)
 
 1. **Orden**: N0 completo primero, después N1 y el resto en el orden de §3.
@@ -287,6 +377,43 @@ Lo que se deja para después, tanda a tanda, para repasarlo junto con la cuarta 
 - Árbol, farola o banco «por tramo» de la calle: hoy se cambian los objetos que haya (Sustituir todos en un tramo); la calle no genera su mobiliario por sí sola, lo pone «La vida de la calle».
 - La zona es un rectángulo; un contorno libre o una parcela/manzana elegida.
 - Los tramos se cambian tecleando; tiradores en planta para arrastrar sus extremos.
+
+**De N5 (superficies)**
+- Sin huecos (un alcorque o una fuente dentro de la plaza) ni contornos curvos.
+- Las plazas de aparcamiento no dejan el sitio de las de movilidad reducida ni las numeran; no siguen un lado inclinado (van paralelas al más largo).
+- La superficie no recorta el terreno: se apoya sobre él (un jardín hundido o una plaza en bajada, no).
+- Mover sus esquinas con tiradores; hoy se rehace con Editar contorno o se dibuja de nuevo.
+- Las juntas son una cuadrícula; aparejos (espiga, rombo) y despiece del encintado, no.
+
+**De N6 (ocultar y soltar)**
+~~Al soltar una cebra, los bordillos rebajados se quitan con ella; habría que dejarlos donde estaban o moverlos con la cebra.~~ **Hecho (cuarta vuelta)**: la calle oculta las barras y se queda con los rebajes donde estaban.
+- Soltar también las flechas y líneas de un nudo (hoy solo se ocultan) y las señales (pasarían a ser un objeto «señal»).
+- Ocultar por ventana (varias piezas de una vez) y ver las ocultas en gris para devolverlas una a una.
+- Ocultar en 3D y en la Maqueta (hoy, desde la planta).
+
+**De N7 (manzanas)**
+- Al mover una calle, las parcelas y los edificios que la miran no la siguen; hay que vaciar, borrar las parcelas y volver a parcelar (C5 de calles).
+- Al trazar una calle sobre edificios del mundo, no avisa ni los quita.
+~~Las manzanas no se guardan: se buscan cada vez. Parcelar una manzana ya parcelada se niega (habría que poder «volver a parcelar» quitando lo no bloqueado).~~ **Hecho en parte (cuarta vuelta)**: un clic en una manzana ya parcelada la vuelve a parcelar sin tocar las bloqueadas (`blocks::replot_block`). Siguen buscándose cada vez (5 ms en 1 km²).
+- Las parcelas son de un frente fijo; mezclar anchos (como un casco real) o leer la parcelación del Catastro y respetarla.
+- Los edificios de esquina son un rectángulo a una calle: falta la casa de esquina con dos fachadas.
+- Pintar zonas con un pincel sobre varias parcelas a la vez.
+~~La planta tiñe las parcelas y las rotula solo si cabe el texto; una leyenda de zonas.~~ **Hecho en el mapa (cuarta vuelta)**; en la planta no.
+
+**De N8 (área grande)**
+- El recuadro no se puede girar ni dibujar a mano (un contorno libre o el término municipal).
+- Las calles que ya estaban en el proyecto no se recortan al cambiar el área (solo se cortan al traerlas).
+- El terreno se trae con unos 4 000 puntos: en 2 × 2 km quedan a unos 30 m; con más detalle, por teselas.
+~~El mapa no se exporta desde la aplicación (sí desde `archisim mapa`) ni tiene leyenda ni capas que encender y apagar.~~ **Hecho en parte (cuarta vuelta)**: «Guardar el mapa…» en PNG o SVG, con leyenda. Faltan las capas.
+- Las conexiones con fuera no dicen a dónde van (el pueblo o la carretera de destino).
+
+**De N9 (tráfico)**
+~~Dos coches que entran al cruce desde calles distintas pueden pisarse dentro: no se ceden el paso (ni ceda el paso ni prioridad a la derecha), solo se respetan semáforos y stop.~~ **Hecho (cuarta vuelta)**: no entra nadie en un camino que cruza otro ocupado, y con ceda el paso o stop se espera a quien llega por una calle sin señal. La prioridad a la derecha, no.
+~~Los semáforos no se ven encenderse en 3D (el poste no cambia de color) y su ciclo es fijo.~~ **Hecho en parte (cuarta vuelta)**: rojo, ámbar y verde encendidos en cada cabeza (`Traffic::lamps`). El ciclo sigue fijo.
+- Coches y personas son cajas de colores; usar los modelos de coche y persona de la biblioteca (con sus versiones de lejos) cuando el rendimiento lo permita.
+- Las personas no cruzan por los pasos de peatones ni entran en plazas o parques.
+- Sin autobuses en su carril ni tranvía.
+- En la Maqueta no hay botón propio; se pone desde Urbanismo.
 
 **De N2 (trazado)**
 - La pendiente uniforme elegida con el ratón no enseña marcas en planta entre los dos clics (solo el aviso).

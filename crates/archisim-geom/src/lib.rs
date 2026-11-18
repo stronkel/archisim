@@ -25,6 +25,7 @@
 //! wall (or one of its layers) into the solid pieces between openings.
 
 pub mod anchors;
+pub mod blocks;
 pub mod boards;
 pub mod box_joints;
 pub mod box_services;
@@ -58,6 +59,8 @@ pub mod slice;
 pub mod solid;
 pub mod stairs;
 pub mod sweeps;
+pub mod traffic;
+pub mod urban_surfaces;
 pub mod wall_section;
 
 use archisim_core::{

@@ -1141,6 +1141,8 @@ impl ArchiSimApp {
                     self.rebar_pick = false;
                     self.road_grade_pick = None;
                     self.replace.picking = None;
+                    self.piece_pick = None;
+                    self.blocks.picking = false;
                 }
             }
         }
@@ -1261,6 +1263,22 @@ impl ArchiSimApp {
             if response.clicked_by(PointerButton::Primary) {
                 if let Some(c) = self.cursor {
                     self.concept_drop_click(c.point);
+                }
+            }
+            return;
+        }
+        if self.piece_pick.is_some() && self.tool == Tool::Arrow {
+            if response.clicked_by(PointerButton::Primary) {
+                if let Some(c) = self.cursor {
+                    self.piece_click(c.point);
+                }
+            }
+            return;
+        }
+        if self.blocks.picking && self.tool == Tool::Arrow {
+            if response.clicked_by(PointerButton::Primary) {
+                if let Some(c) = self.cursor {
+                    self.blocks_click(c.point);
                 }
             }
             return;
@@ -1852,6 +1870,7 @@ impl ArchiSimApp {
             let b = self.view.to_screen(rect, Point2::new(k.hi.x, k.lo.y));
             self.loupe_source = Some((tex.id(), Rect::from_min_max(a, b)));
         }
+        super::picture::note(painter, rect, "la planta", &picture);
         self.last_plan_ms = picture.last().as_secs_f64() * 1000.0;
         self.plan = picture;
     }

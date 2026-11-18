@@ -53,6 +53,15 @@ pub fn draw_plots(
             continue;
         }
         crate::dim::element(s, p.id.0, |s| {
+            // Its zone tinted, as the zoning maps paint it (N7).
+            if let Some(z) = p.zone {
+                let [r, g, b] = z.rgb();
+                let _ = writeln!(
+                    s,
+                    r#"<path class="plot-zone" d="{}" fill="rgb({r},{g},{b})" fill-opacity="0.22" stroke="none"/>"#,
+                    path(&p.outline)
+                );
+            }
             let _ = writeln!(
                 s,
                 r#"<path d="{}" fill="none" stroke="{INK}" stroke-width="{}" stroke-dasharray="{} {} {} {} {} {}"/>"#,
@@ -79,14 +88,90 @@ pub fn draw_plots(
             }
             let c = centre(&p.outline);
             let area = format!("{:.2}", p.area()).replace('.', ",");
+            // Only where the text fits in the plot: a block cut into narrow
+            // plots would be covered with names.
+            let (lo, hi) = p.outline.iter().fold(
+                (
+                    Point2::new(f64::MAX, f64::MAX),
+                    Point2::new(f64::MIN, f64::MIN),
+                ),
+                |(lo, hi), q| {
+                    (
+                        Point2::new(lo.x.min(q.x), lo.y.min(q.y)),
+                        Point2::new(hi.x.max(q.x), hi.y.max(q.y)),
+                    )
+                },
+            );
+            let wide = p.name.chars().count().max(area.len() + 3) as f64 * LABEL * k * 0.6;
+            if hi.x - lo.x < wide || hi.y - lo.y < 7.0 * LABEL * k {
+                return;
+            }
             label(s, c + Point2::new(0.0, 2.0 * LABEL * k), &p.name, k);
             label(s, c, &format!("{area} m²"), k);
+            let mut below = 1.0;
             if !p.reference.is_empty() {
                 label(s, c - Point2::new(0.0, 2.0 * LABEL * k), &p.reference, k);
+                below += 1.0;
+            }
+            if p.locked {
+                label(
+                    s,
+                    c - Point2::new(0.0, 2.0 * below * LABEL * k),
+                    "bloqueada",
+                    k,
+                );
             }
         });
     }
     s.push_str("</g>\n");
+}
+
+/// The edge of the area of the surroundings (N8), a long dash, and the
+/// connections of the streets with the outside: an arrow out of the area
+/// at each street cut by its edge, with the street's name.
+pub fn draw_outside(s: &mut String, model: &Model, level: LevelId, k: f64) {
+    let Some(area) = model.surroundings() else {
+        return;
+    };
+    let _ = writeln!(
+        s,
+        r#"<path class="surroundings" d="{}" fill="none" stroke="{INK}" stroke-width="{}" stroke-dasharray="{} {}" stroke-opacity="0.6"/>"#,
+        path(area),
+        num(pens().thin * k),
+        num(12.0 * k),
+        num(3.0 * k)
+    );
+    for e in model.outside_ends(level) {
+        let Some(r) = model.road(e.road) else {
+            continue;
+        };
+        let side = e.out.perp_left();
+        let w = (r.section.width() / 2.0).min(6.0 * k);
+        // An arrow out of the area, as long as the street is wide.
+        let tip = e.point + e.out * (w * 2.0 + 4.0 * k);
+        let base = e.point + e.out * (2.0 * k);
+        let arrow = [base + side * (w * 0.5), tip, base - side * (w * 0.5)];
+        let _ = writeln!(
+            s,
+            r#"<path class="outside-connection" d="M{} L{} L{} Z" fill="{INK}" fill-opacity="0.75" stroke="none"/>"#,
+            pt(arrow[0]),
+            pt(arrow[1]),
+            pt(arrow[2])
+        );
+        if !r.name.is_empty() {
+            let h = LABEL * k;
+            // Along the street, reading from left to right.
+            let dir = if e.out.x < -1e-9 { e.out * -1.0 } else { e.out };
+            let half = r.name.chars().count() as f64 * h * 0.3;
+            let at = tip + e.out * (h + half) - dir.perp_left() * (h / 2.0);
+            let _ = writeln!(
+                s,
+                r#"<path class="outside-connection" d="{}" {}/>"#,
+                text_path(&r.name, at, dir, h, Align::Centre),
+                crate::lettering::paint(h, INK)
+            );
+        }
+    }
 }
 
 /// The roads of a level.
@@ -99,6 +184,7 @@ pub fn draw_roads(
 ) {
     if model.roads_on_level(level).next().is_none()
         && model.markings_on_level(level).next().is_none()
+        && model.surfaces_on_level(level).next().is_none()
     {
         return;
     }
@@ -217,7 +303,7 @@ pub fn draw_roads(
                 );
             }
             // The tree pits of its sidewalks (U3).
-            for pit in r.tree_pits_except(&gaps) {
+            for pit in r.visible_tree_pits(&gaps) {
                 if !visible(&pit) {
                     continue;
                 }
@@ -240,7 +326,7 @@ pub fn draw_roads(
             // The road markings: lane lines, parking bays, zebra crossings
             // (not near a node that hides them, N1).
             let mark_gaps = archisim_geom::crossroads::marking_gaps(&junctions, r.id);
-            for m in r.markings_except(&mark_gaps) {
+            for m in r.visible_markings(&mark_gaps) {
                 if !visible(&m) {
                     continue;
                 }
@@ -347,6 +433,69 @@ pub fn draw_roads(
                         crate::lettering::paint(h, INK)
                     );
                 }
+            }
+        });
+    }
+    // The urban surfaces (N5): their paving, their edge, their joints
+    // (from 1:200) and their bays, over the streets.
+    for x in model.surfaces_on_level(level) {
+        if !visible(&x.outline) {
+            continue;
+        }
+        use archisim_core::SurfaceKind as K;
+        let fill = match x.kind {
+            K::Square => "#ebe5d8",
+            K::Island | K::Median => "#dcdcdc",
+            K::Parking => "#d2d2d2",
+            K::Garden => "#d3e6bb",
+        };
+        crate::dim::element(s, x.id.0, |s| {
+            let inner = x.inner();
+            let edged =
+                x.edge != archisim_core::SurfaceEdge::None && inner.len() == x.outline.len();
+            if edged {
+                // The edge: the outline with the inner one as a hole.
+                let mut back = inner.clone();
+                back.reverse();
+                let _ = writeln!(
+                    s,
+                    r##"<path d="{} {}" fill="#bdb6a8" fill-rule="evenodd" stroke="none"/>"##,
+                    path(&x.outline),
+                    path(&back)
+                );
+            }
+            let _ = writeln!(
+                s,
+                r#"<path d="{}" fill="{fill}" stroke="{INK}" stroke-width="{}"/>"#,
+                path(if edged { &inner } else { &x.outline }),
+                num(pens().thin * k)
+            );
+            if k <= 0.2 {
+                for (a, b) in x.joint_lines() {
+                    let _ = writeln!(
+                        s,
+                        r##"<path d="M{},{} L{},{}" stroke="#9c9486" stroke-width="{}" fill="none"/>"##,
+                        num(a.x),
+                        num(-a.y),
+                        num(b.x),
+                        num(-b.y),
+                        num(pens().thin * k * 0.5)
+                    );
+                }
+            }
+            let _ = writeln!(
+                s,
+                r#"<path d="{}" fill="none" stroke="{INK}" stroke-width="{}"/>"#,
+                path(&x.outline),
+                num(pens().view * k)
+            );
+            for b in x.bay_lines() {
+                let _ = writeln!(
+                    s,
+                    r#"<path d="{}" fill="white" stroke="{INK}" stroke-width="{}"/>"#,
+                    path(&b),
+                    num(pens().thin * k * 0.5)
+                );
             }
         });
     }

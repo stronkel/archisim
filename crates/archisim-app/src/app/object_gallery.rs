@@ -262,7 +262,7 @@ impl FolderObjects {
 
 /// The gallery's categories: their name and the family categories in
 /// them.
-const CATEGORIES: [(&str, &[&str]); 7] = [
+const CATEGORIES: [(&str, &[&str]); 8] = [
     ("Mobiliario", &["furniture", "kitchen"]),
     ("Sanitarios", &["sanitary"]),
     ("Entorno", &["site"]),
@@ -270,6 +270,7 @@ const CATEGORIES: [(&str, &[&str]); 7] = [
     ("Elementos naturales", &["nature"]),
     ("Gente", &["people"]),
     ("Vehículos", &["vehicle"]),
+    ("Fachada", &["facade"]),
 ];
 
 /// The gallery category of a family category.

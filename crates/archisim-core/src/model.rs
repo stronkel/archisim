@@ -40,6 +40,7 @@ mod floor_systems;
 mod flora;
 mod foundations;
 mod framing;
+mod hidden_pieces;
 mod layered_library;
 mod library;
 mod loads;
@@ -76,10 +77,12 @@ mod stair_layout;
 mod stairs;
 mod structure;
 mod sun;
+mod surroundings;
 mod sweeps;
 mod thermal;
 mod title_blocks;
 mod urban;
+mod urban_surfaces;
 mod ventilation_site;
 mod views;
 mod wall_profile;
@@ -111,6 +114,7 @@ pub use floor_systems::*;
 pub use flora::*;
 pub use foundations::*;
 pub use framing::*;
+pub use hidden_pieces::*;
 pub use layered_library::*;
 pub use library::*;
 pub use loads::*;
@@ -145,10 +149,12 @@ pub use stair_layout::*;
 pub use stairs::*;
 pub use structure::*;
 pub use sun::*;
+pub use surroundings::*;
 pub use sweeps::*;
 pub use thermal::*;
 pub use title_blocks::*;
 pub use urban::*;
+pub use urban_surfaces::*;
 pub use ventilation_site::*;
 pub use views::*;
 pub use wall_profile::*;
@@ -1553,6 +1559,8 @@ pub struct ModelParts {
     pub roads: Vec<Road>,
     /// Roundabouts and squares where streets meet (U3).
     pub roundabouts: Vec<Roundabout>,
+    /// Squares, islands, medians, car parks and gardens (N5).
+    pub surfaces: Vec<UrbanSurface>,
     /// What is changed by hand of the nodes of the streets (N1).
     pub nodes: Vec<NodeSettings>,
     /// False ceilings (M7, version 96).
@@ -1592,6 +1600,8 @@ pub struct ModelParts {
     pub georeference: Option<crate::georef::Georeference>,
     /// The aerial picture laid on the ground (V2).
     pub orthophoto: Option<Orthophoto>,
+    /// The area of the surroundings (N8).
+    pub surroundings: Option<Vec<Point2>>,
     /// Use, accessibility and sprinklers, for the code checks.
     pub code: crate::code::CodeSettings,
     /// Drawing layers, layer "0" included.
@@ -1730,6 +1740,7 @@ pub struct Model {
     plots: BTreeMap<PlotId, Plot>,
     roads: BTreeMap<RoadId, Road>,
     roundabouts: BTreeMap<RoundaboutId, Roundabout>,
+    surfaces: BTreeMap<SurfaceId, UrbanSurface>,
     /// What is changed by hand of the nodes of the streets (N1).
     nodes: Vec<NodeSettings>,
     ceilings: BTreeMap<CeilingId, Ceiling>,
@@ -1751,6 +1762,7 @@ pub struct Model {
     pub(crate) room_usages: Vec<String>,
     pub(crate) georeference: Option<crate::georef::Georeference>,
     pub(crate) orthophoto: Option<Orthophoto>,
+    pub(crate) surroundings: Option<Vec<Point2>>,
     pub(crate) code: crate::code::CodeSettings,
     /// The phase new elements are given (the survey is drawn as
     /// existing). Not saved.
@@ -1855,6 +1867,7 @@ impl Model {
             plots: BTreeMap::new(),
             roads: BTreeMap::new(),
             roundabouts: BTreeMap::new(),
+            surfaces: BTreeMap::new(),
             nodes: Vec::new(),
             ceilings: BTreeMap::new(),
             boxes: BTreeMap::new(),
@@ -1874,6 +1887,7 @@ impl Model {
             room_usages: Vec::new(),
             georeference: None,
             orthophoto: None,
+            surroundings: None,
             code: Default::default(),
             draw_phase: Phase::New,
             draw_layers: BTreeMap::from([(LAYER_ZERO, DrawLayer::zero())]),
@@ -2027,6 +2041,7 @@ impl Model {
         self.plots.retain(|_, p| p.level != id);
         self.roads.retain(|_, r| r.level != id);
         self.roundabouts.retain(|_, r| r.level != id);
+        self.surfaces.retain(|_, s| s.level != id);
         self.ceilings.retain(|_, c| c.level != id);
         self.boxes.retain(|_, b| b.level != id);
         self.markings.retain(|_, r| r.level != id);
@@ -4589,6 +4604,7 @@ impl Model {
             plots: self.plots.values().cloned().collect(),
             roads: self.roads.values().cloned().collect(),
             roundabouts: self.roundabouts.values().cloned().collect(),
+            surfaces: self.surfaces.values().cloned().collect(),
             nodes: self.nodes.clone(),
             ceilings: self.ceilings.values().cloned().collect(),
             boxes: self.boxes.values().cloned().collect(),
@@ -4612,6 +4628,7 @@ impl Model {
             room_usages: self.room_usages.clone(),
             georeference: self.georeference.clone(),
             orthophoto: self.orthophoto.clone(),
+            surroundings: self.surroundings.clone(),
             code: self.code,
             draw_layers: self.draw_layers.values().cloned().collect(),
             drafts: self.drafts.values().cloned().collect(),
@@ -5034,6 +5051,7 @@ impl Model {
             })?;
         model.restore_urban(parts.plots, parts.roads, &mut claim)?;
         model.restore_roundabouts(parts.roundabouts, &mut claim)?;
+        model.restore_surfaces(parts.surfaces, &mut claim)?;
         model
             .restore_nodes(parts.nodes)
             .map_err(|error| RestoreError {
@@ -5112,6 +5130,12 @@ impl Model {
             .set_orthophoto(parts.orthophoto)
             .map_err(|error| RestoreError {
                 element: "orthophoto".into(),
+                error,
+            })?;
+        model
+            .set_surroundings(parts.surroundings)
+            .map_err(|error| RestoreError {
+                element: "surroundings".into(),
                 error,
             })?;
         model.set_code_settings(parts.code);

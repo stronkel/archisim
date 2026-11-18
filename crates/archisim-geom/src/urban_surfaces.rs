@@ -1,0 +1,68 @@
+//! The 3D of the urban surfaces (N5): the paving inside the edge, the edge
+//! round it (a kerb standing with it, or a flush gutter or band) and the
+//! paint of a car park's bays, all sitting on what is under them (the
+//! ground or the street) and raised by the surface's height.
+
+use archisim_core::{Model, Point2, SurfaceEdge, SurfaceId};
+
+use crate::solid::{draped_prism, Solid, SolidOwner, P3};
+
+/// How deep the paving goes under its top, metres.
+pub const DEPTH: f64 = 0.2;
+
+/// The solids of an urban surface.
+pub fn surface_solids(model: &Model, id: SurfaceId) -> Vec<Solid> {
+    let Some(s) = model.surface(id) else {
+        return Vec::new();
+    };
+    let base = model.level(s.level).map_or(0.0, |l| l.elevation);
+    let ground = |q: Point2| base + model.surface_at(s.level, q);
+    let top = |q: Point2| ground(q) + s.raise;
+    let mut out = Vec::new();
+    let inner = s.inner();
+    out.push(Solid {
+        owner: SolidOwner::Surface(id),
+        material: s.material,
+        triangles: draped_prism(&inner, |q| (ground(q) - DEPTH, top(q))),
+    });
+    if s.edge != SurfaceEdge::None && s.edge_width > 0.0 && inner.len() == s.outline.len() {
+        let n = s.outline.len();
+        let mut tris: Vec<[P3; 3]> = Vec::new();
+        for i in 0..n {
+            let j = (i + 1) % n;
+            let quad = [s.outline[i], s.outline[j], inner[j], inner[i]];
+            // A kerb stands a little over the paving it holds.
+            let lip = if s.edge == SurfaceEdge::Kerb {
+                0.02
+            } else {
+                0.0
+            };
+            tris.extend(draped_prism(&quad, |q| {
+                (ground(q) - DEPTH - 0.05, top(q) + lip)
+            }));
+        }
+        out.push(Solid {
+            owner: SolidOwner::Surface(id),
+            material: s.edge_material,
+            triangles: tris,
+        });
+    }
+    let bays = s.bay_lines();
+    if !bays.is_empty() {
+        let paint = model
+            .materials()
+            .find(|m| m.category == "paint")
+            .map_or(s.edge_material, |m| m.id);
+        let tris: Vec<[P3; 3]> = bays
+            .iter()
+            .flat_map(|p| draped_prism(p, |q| (top(q), top(q) + 0.004)))
+            .collect();
+        out.push(Solid {
+            owner: SolidOwner::Surface(id),
+            material: paint,
+            triangles: tris,
+        });
+    }
+    out.retain(|x| !x.triangles.is_empty());
+    out
+}

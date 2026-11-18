@@ -4,6 +4,34 @@ Lo que cambia en cada versión, en pocas líneas. ArchiSim enseña la parte de s
 
 Cada versión empieza con una línea `## <versión>` (por ejemplo `## 0.81.0`): es la que busca la publicación.
 
+## 0.104.0
+
+- **Cuarta vuelta de fluidez del territorio.** Cambiar un nudo, el pavimento de un tramo o una pieza oculta de una calle ya no rehace en 3D todo lo que hay a lo largo de la calle, solo lo de alrededor: en un sitio de 1 km², elevar un cruce pasa de medio segundo a una décima.
+- **Tráfico más creíble.** Los coches ya no se pisan dentro de los cruces: esperan a que pase el que cruza, y con ceda el paso o stop dejan pasar a quien viene por la otra calle. Los semáforos se ven en rojo, ámbar y verde en 3D y en el render.
+- **Volver a parcelar una manzana.** Un clic en una manzana que ya tiene parcelas la parte de nuevo con la zona y las medidas elegidas, sin tocar las parcelas bloqueadas.
+- **Mapa con leyenda y para guardar.** La ventana Mapa tiene «Guardar el mapa…» (PNG o SVG) y una leyenda con las zonas que hay.
+- **Soltar un paso de peatones** deja los bordillos rebajados de la calle donde estaban.
+
+## 0.103.0
+
+- **Tráfico de ilustración (N9).** Urbanismo → Territorio → Tráfico pone coches y personas en la vista 3D. Los coches van por sus carriles, giran por donde mandan las conexiones de cada cruce y paran en los semáforos y en los stop. Las personas pasean por las aceras. El render los saca también. Es solo para ilustrar: no se guarda en el proyecto ni calcula capacidades.
+
+## 0.102.0
+
+- **Área grande y vista de mapa (N8).** El entorno se puede traer en un recuadro de hasta 2 × 2 km. Las calles se cortan en su borde con toda su sección y quedan como conexiones con fuera, con una flecha y su nombre. Urbanismo → Territorio → Mapa enseña toda el área plana y en color, con sus calles, edificios, árboles y zonas; un clic en el mapa lleva la planta a ese sitio.
+
+## 0.101.0
+
+- **Manzanas y parcelas (N7).** Urbanismo → Territorio → Manzanas: las calles que se cierran forman manzanas; un clic las parte en parcelas por la línea de fachada (con sus parcelas de esquina y su patio) y se llenan con edificios del lugar según su zona: casco antiguo, bloques, viviendas aisladas, comercio o equipamiento. «Rehacer» las vuelve a llenar; una parcela bloqueada no cambia.
+
+## 0.100.0
+
+- **Ocultar y soltar piezas de las calles (N6).** «Ocultar piezas» quita de un clic una raya, una plaza pintada, un alcorque, una señal o un bolardo que pone la calle, y siguen ocultos aunque la calle se mueva. «Soltar paso de peatones» convierte la cebra de una calle en una marca vial suelta para moverla o girarla.
+
+## 0.99.0
+
+- **Plazas, isletas, medianas, aparcamientos y jardines (N5).** Se dibujan por su contorno, pegándose a los bordillos y a las líneas de fachada, con su borde (bordillo, rigola o encintado), su altura sobre lo de debajo, las juntas del pavimento y, en los aparcamientos, las plazas pintadas en batería o en espiga, con su número.
+
 ## 0.98.0
 
 - **Calles por tramos y «Sustituir todos» (N4).**
@@ -55,6 +83,24 @@ Cada versión empieza con una línea `## <versión>` (por ejemplo `## 0.81.0`): 
   - **Planta más ligera**: lo que queda fuera de la vista no se calcula.
   - **La vista 3D se rehace solo donde cambia**: mover un árbol, girar un banco o cambiar un edificio se ve en unas centésimas de segundo, y mover una calle en una décima, aunque el sitio tenga un kilómetro cuadrado. La tarjeta gráfica solo recibe los trozos nuevos.
   - **Sitio de prueba**: `archisim territorio-grande` hace un kilómetro cuadrado de ciudad inventada y mide lo que cuesta cada cosa.
+- **Montar un proyecto desde los planos de AutoCAD.** La nave SUMO (antiguo CEOSA) se ha montado desde el DXF del proyecto básico, con sus referencias unidas: 4 plantas (baja ±0,00, primera +4,45, cubierta +8,45 y cubierta del castillete +12,35), 302 muros con su espesor real, 99 puertas, ventanas y huecos, 62 tramos acristalados como muros cortina, forjados y los 104 locales con su nombre.
+  - Los muros salen de las dos líneas de corte de cada muro, y las puertas del arco de su hoja (con su mano y hacia dónde abren).
+  - Nueva orden `archisim montar <descripción.txt> <proyecto.archisim>`: levanta plantas, muros, carpinterías, muros cortina, forjados y locales desde una lista de texto. Los guiones de `scripts/montar_dxf/` escriben esa lista desde un DXF dibujado en capas.
+- **IFC: forjados atravesados por muchos muros.** Cuando los muros formaban un anillo cerrado, el hueco que dejaban en el forjado se escribía como un contorno que se tocaba a sí mismo, y otros programas le quitaban de más (hasta 1 m³). Ahora se escribe un hueco por muro y el volumen cuadra.
+  - Al importar, ArchiSim lee también los forjados con cadenas largas de huecos.
+- **Panel de lamas orientable** (Objetos → Fachada): panel de lamas verticales de madera que gira sobre su eje, delante de una fachada, de ancho, alto, ancho y grueso de lama y separación a elegir. En IFC sale como protección solar (`IfcShadingDevice`) con su tipo, y vuelve igual al importarlo.
+- **La nave SUMO, segunda vuelta**, con el render del proyecto como guía:
+  - Las 43 lamas de la planta primera son paneles de lamas con el giro que tienen en el plano, no muros.
+  - 57 pilares redondos de acero blanco de Ø20 en el perímetro.
+  - El forjado de la primera y la cubierta llegan hasta la línea del vuelo, en hormigón blanco. La cubierta es plana, invertida y con grava, abierta sobre los patios.
+  - Ocho jardineras (en cubierta, en la primera y en la entrada) con peto blanco, tierra y plantación de palmitos, pennisetum, romero y lavanda.
+  - Fachadas enfoscadas en blanco y castillete revestido de madera, con su contorno real.
+- **IFC**: las lamas de los muros cortina salían con un tipo (`LOUVER`) que no existe en IFC4 ni en IFC 4.3. Ahora salen como «Lama» definida por el usuario.
+
+## 0.92.1
+
+- **La planta y las secciones ya no se quedan esperando.** Si un dibujo no se puede hacer, la vista lo dice en rojo con el motivo (y queda anotado en `errores.log`) en lugar de quedarse en blanco o en «Dibujando la sección…» para siempre.
+- **Vista → «Dibujar aparte».** Apagado, las plantas, secciones y alzados se dibujan al momento, como antes de la 0.85.
 
 ## 0.92.0
 

@@ -117,10 +117,12 @@ fn element_name(model: &Model, owner: SolidOwner) -> String {
         SolidOwner::Mass(_) => "Volumen",
         SolidOwner::Road(_) => "Vial",
         SolidOwner::Marking(_) => "Marca vial",
+        SolidOwner::Surface(_) => "Superficie urbana",
         SolidOwner::Decal(_) => "Pegatina",
         SolidOwner::Run(_) => "Tubería",
         SolidOwner::Device(_) => "Aparato",
         SolidOwner::Orthophoto => return "Ortofoto".into(),
+        SolidOwner::Traffic(_) => return "Tráfico".into(),
     };
     format!("{what} {}", owner.id())
 }

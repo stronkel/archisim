@@ -164,6 +164,9 @@ pub(crate) struct ProjectFile {
     /// Roundabouts and squares (version 64).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub roundabouts: Vec<RoundaboutOf>,
+    /// Squares, islands, medians, car parks and gardens (version 117).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub surfaces: Vec<SurfaceOf>,
     /// What is changed by hand of the nodes of the streets (version 113).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub nodes: Vec<NodeOf>,
@@ -1443,6 +1446,21 @@ pub(crate) struct NodeOf {
     pub node: String,
 }
 
+/// An urban surface drawn by its outline (version 117): its kind, edge,
+/// height, joints and bays in `settings` (`UrbanSurface::encode`).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct SurfaceOf {
+    pub id: u64,
+    pub guid: String,
+    pub name: String,
+    pub level: u64,
+    pub outline: Vec<Xy>,
+    pub material: u64,
+    pub edge_material: u64,
+    pub settings: String,
+}
+
 /// A roundabout or a square where streets meet (version 64).
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -1480,6 +1498,11 @@ pub(crate) struct Plot {
     pub setback: f64,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub reference: String,
+    /// Its zone's code (version 119).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub zone: String,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub locked: bool,
 }
 
 /// A pool built in the ground (version 42): its outline is the inside
@@ -1599,6 +1622,9 @@ pub(crate) struct Road {
     /// pavement, kerb, sidewalk, planting]`, the materials by id or null.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub skins: Vec<SkinOf>,
+    /// Its pieces hidden by hand (version 118): `Road::encode_hidden`.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub hidden: String,
 }
 
 /// A stretch of a road with its own materials (version 116): from, to,
@@ -2886,6 +2912,9 @@ pub(crate) struct Project {
     /// The aerial picture on the ground (version 69).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub orthophoto: Option<OrthophotoOf>,
+    /// The area of the surroundings (version 120).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub surroundings: Vec<Xy>,
     /// Use, accessibility and sprinklers for the code checks (version
     /// 12); absent: a dwelling, without either.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -3486,6 +3515,7 @@ impl ProjectFile {
                     v: o.v,
                     on_roads: o.on_roads,
                 }),
+                surroundings: p.surroundings.iter().flatten().copied().map(xy).collect(),
                 code: (p.code != core::CodeSettings::default()).then(|| Code {
                     building_use: p.code.building_use.code().into(),
                     accessibility: p.code.accessibility.code().into(),
@@ -4096,6 +4126,8 @@ impl ProjectFile {
                     outline: x.outline.iter().copied().map(xy).collect(),
                     setback: x.setback,
                     reference: x.reference.clone(),
+                    zone: x.zone.map(|z| z.code().to_string()).unwrap_or_default(),
+                    locked: x.locked,
                 })
                 .collect(),
             pools: p
@@ -4364,6 +4396,20 @@ impl ProjectFile {
                     node: n.encode(|r| r.0.to_string()),
                 })
                 .collect(),
+            surfaces: p
+                .surfaces
+                .iter()
+                .map(|x| SurfaceOf {
+                    id: x.id.0,
+                    guid: x.guid.to_string(),
+                    name: x.name.clone(),
+                    level: x.level.0,
+                    outline: x.outline.iter().copied().map(xy).collect(),
+                    material: x.material.0,
+                    edge_material: x.edge_material.0,
+                    settings: x.encode(),
+                })
+                .collect(),
             roundabouts: p
                 .roundabouts
                 .iter()
@@ -4460,6 +4506,7 @@ impl ProjectFile {
                             )
                         })
                         .collect(),
+                    hidden: r.encode_hidden(),
                 })
                 .collect(),
             runs: p
@@ -5126,6 +5173,7 @@ impl ProjectFile {
             plots: Vec::new(),
             roads: Vec::new(),
             roundabouts: Vec::new(),
+            surfaces: Vec::new(),
             nodes: Vec::new(),
             ceilings: Vec::new(),
             boxes: Vec::new(),
@@ -5191,6 +5239,8 @@ impl ProjectFile {
                     })
                 }
             },
+            surroundings: (!project.surroundings.is_empty())
+                .then(|| project.surroundings.iter().copied().map(pt).collect()),
             code: match &project.code {
                 None => core::CodeSettings::default(),
                 Some(c) => core::CodeSettings {
@@ -5740,6 +5790,8 @@ impl ProjectFile {
                 outline: x.outline.into_iter().map(pt).collect(),
                 setback: x.setback,
                 reference: x.reference,
+                zone: core::BlockZone::from_code(&x.zone),
+                locked: x.locked,
             });
         }
         for x in self.pools {
@@ -5955,6 +6007,10 @@ impl ProjectFile {
                         planting: d.map(core::MaterialId),
                     })
                     .collect(),
+                hidden: core::Road::decode_hidden(&r.hidden).ok_or_else(|| FileError::Value {
+                    element: format!("road {}", r.id),
+                    message: format!("«{}» are not hidden pieces", r.hidden),
+                })?,
             });
         }
         for x in self.decals {
@@ -6212,6 +6268,32 @@ impl ProjectFile {
                 message: format!("«{}» is not a node", n.node),
             })?;
             parts.nodes.push(settings);
+        }
+        for x in self.surfaces {
+            let element = format!("surface {} «{}»", x.id, x.name);
+            let mut surface = core::UrbanSurface {
+                id: core::SurfaceId(x.id),
+                guid: guid(&element, &x.guid)?,
+                name: x.name,
+                level: core::LevelId(x.level),
+                kind: core::SurfaceKind::Square,
+                outline: x.outline.into_iter().map(pt).collect(),
+                material: core::MaterialId(x.material),
+                edge: core::SurfaceEdge::None,
+                edge_width: 0.0,
+                edge_material: core::MaterialId(x.edge_material),
+                raise: 0.0,
+                joints: 0.0,
+                joint_angle: 0.0,
+                bays: None,
+            };
+            surface
+                .decode_into(&x.settings)
+                .ok_or_else(|| FileError::Value {
+                    element: element.clone(),
+                    message: format!("«{}» are not a surface's settings", x.settings),
+                })?;
+            parts.surfaces.push(surface);
         }
         for c in self.roundabouts {
             let element = format!("roundabout {} «{}»", c.id, c.name);
