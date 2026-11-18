@@ -107,7 +107,9 @@ Hoy `archisim_geom::crossroads::junctions(model, level)` rehace todos los cruces
 - **Hacer glorieta** sobre un nudo de tres calles o más: herramienta Nudo, «Hacer glorieta aquí»; el radio crece si las calles son anchas.
 - Ejemplo: `archisim nudos out/` lleva un carril libre que pisa las calles del Olmo y del Pino, la Calle Alta del Parque paralela a la Real subiendo al 2,5 % y la Calle Estrecha acabando en una curva de 25 m.
 
-**No hecho**: la pendiente uniforme eligiendo los dos puntos con el ratón (se teclean las distancias); el giro y el radio en la barra de opciones (están en Propiedades).
+**Hecho después** (18/11/2026, versión 0.96):
+- **Pendiente uniforme con el ratón**: botón «Elegir los dos puntos en planta» en el grupo «Trazado»; dos clics sobre la calle dan desde y hasta, con las cotas que tiene ahora; se cambian si hace falta y se aplica.
+- **Radio y giro en la barra de opciones** (R y Giro), junto a L y ∠, mientras se traza por tramos: Intro pone la curva tangente al tramo anterior.
 
 ## 3. Lo demás, por tandas
 
@@ -240,3 +242,17 @@ Lo que queda:
 ## 6. Qué probar en cada tanda
 
 Cada tanda trae su orden de ejemplo (`archisim nudos out/`, `archisim territorio-grande out/`…) y sus fotos de prueba como las de los edificios del mundo; en la bitácora se dice qué abrir y qué mirar.
+
+## 7. Para pulir al final
+
+Lo que se deja para después, tanda a tanda, para repasarlo junto con la cuarta vuelta de fluidez. Se va tachando lo que se hace.
+
+**De N1 (nudos)**
+- Desplazar el centro del nudo sin mover las calles (Shift de Node Controller).
+- Aplanar un brazo los últimos metros.
+- Fondo de saco en martillo.
+- Tiradores de los nudos en 3D y en la Maqueta.
+
+**De N2 (trazado)**
+- La pendiente uniforme elegida con el ratón no enseña marcas en planta entre los dos clics (solo el aviso).
+- Cotas de ángulo y radio dibujadas sobre la planta mientras se traza (hoy, en la barra y en Propiedades).

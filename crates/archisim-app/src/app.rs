@@ -482,6 +482,9 @@ pub struct ArchiSimApp {
     pub dxf_import: Option<dxf_import_ui::DxfImport>,
     /// The tile «Armado»: clicks arm what they hit.
     pub rebar_pick: bool,
+    /// Picking on the plan the two ends of a uniform grade (N2): the
+    /// street and, after the first click, where it starts.
+    pub road_grade_pick: Option<(archisim_core::RoadId, Option<f64>)>,
     pub room_settings: crate::editor::RoomSettings,
     pub roof_settings: crate::editor::RoofSettings,
     pub roof_tool: SlabTool,
@@ -963,6 +966,7 @@ impl ArchiSimApp {
             detail_pick: None,
             dxf_import: None,
             rebar_pick: false,
+            road_grade_pick: None,
             room_settings: Default::default(),
             roof_settings,
             stair_settings,
@@ -1197,6 +1201,7 @@ impl ArchiSimApp {
 
     fn set_tool(&mut self, tool: Tool) {
         self.rebar_pick = false;
+        self.road_grade_pick = None;
         if tool != Tool::Cad && self.cad.is_some() {
             // Another tool ends the command (keeping what it drew).
             self.end_command(true);

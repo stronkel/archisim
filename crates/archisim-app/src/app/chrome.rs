@@ -1151,6 +1151,15 @@ impl ArchiSimApp {
 
     /// What the keys and the mouse do now, as "Clic: … · Esc: …".
     pub(super) fn hint_text(&self) -> &'static str {
+        match self.road_grade_pick {
+            Some((_, None)) => {
+                return "Pendiente uniforme: clic en la calle donde empieza · Esc: dejarlo"
+            }
+            Some((_, Some(_))) => {
+                return "Pendiente uniforme: clic en la calle donde acaba · Esc: dejarlo"
+            }
+            None => {}
+        }
         if self.mode == ViewMode::Section {
             return "Rueda: zoom · Rueda pulsada o botón derecho: desplazar · Inicio: ajustar · F2: planta · F3: 3D";
         }

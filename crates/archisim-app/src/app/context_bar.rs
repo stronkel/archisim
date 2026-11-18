@@ -1953,6 +1953,7 @@ impl ArchiSimApp {
                     self.place_fields(ui);
                     self.brush_fields(ui);
                     self.length_angle_fields(ui);
+                    self.road_arc_fields(ui);
                     self.tool_step(ui);
                     return;
                 }

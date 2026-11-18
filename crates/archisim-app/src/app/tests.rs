@@ -9722,6 +9722,27 @@ fn streets_without_rules_and_with_precision() {
     h.key(Key::Escape);
     h.app.ed.selection = [Element::Road(first)].into_iter().collect();
     h.frame();
+    // The two ends of a grade picked on the plan: from 10 m to 70 m of
+    // the street, which starts at x = -60.
+    h.app.road_grade_pick = Some((first, None));
+    h.click_at(p(-50.0, 0.0));
+    assert!(matches!(h.app.road_grade_pick, Some((_, Some(_)))));
+    h.click_at(p(10.0, 0.0));
+    assert!(h.app.road_grade_pick.is_none());
+    let form = h
+        .ctx
+        .data(|d| {
+            d.get_temp::<super::urban_ui::LayoutForm>(egui::Id::unique(("road-layout", first)))
+        })
+        .unwrap();
+    assert!(
+        (form.from - 10.0).abs() < 0.5 && (form.to - 70.0).abs() < 0.5,
+        "{} {}",
+        form.from,
+        form.to
+    );
+    let top = h.model().road(first).unwrap().top_at(10.0);
+    assert!((form.z_from - top).abs() < 1e-9);
     // A crossing made a roundabout: a third street north–south, not free.
     h.app.road_settings.anarchy = false;
     let mat = h.model().materials().next().unwrap().id;

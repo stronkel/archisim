@@ -4,6 +4,12 @@ Lo que cambia en cada versión, en pocas líneas. ArchiSim enseña la parte de s
 
 Cada versión empieza con una línea `## <versión>` (por ejemplo `## 0.81.0`): es la que busca la publicación.
 
+## 0.96.0
+
+- **Trazado de calles, remates (N2).**
+  - **Pendiente uniforme con el ratón**: en la calle, «Elegir los dos puntos en planta» y dos clics sobre ella.
+  - **Radio y giro en la barra de opciones** al trazar por tramos (R y Giro, junto a L y ∠): Intro pone la curva.
+
 ## 0.95.0
 
 - **Trazar calles sin reglas y con precisión (N2).**

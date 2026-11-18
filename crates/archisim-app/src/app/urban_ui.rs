@@ -1078,7 +1078,7 @@ impl ArchiSimApp {
     fn road_precision_group(&mut self, ui: &mut Ui, s: &mut RoadSettings) {
         let leaving = self.road_leaving();
         let cursor = self.cursor.map(|c| c.point);
-        let mut lay = None;
+        let mut lay = false;
         group(ui, "tool-road-precision", "Con precisión", |ui| {
             match (leaving, cursor) {
                 (Some((a, dir)), Some(p)) => {
@@ -1098,7 +1098,7 @@ impl ArchiSimApp {
                 }
                 _ => props::note(
                     ui,
-                    "Mientras trazas, aquí salen la longitud, el giro y el radio hasta el cursor. Teclea longitud y ángulo en la barra de opciones (L y ∠), o un radio y un giro aquí.",
+                    "Mientras trazas, aquí salen la longitud, el giro y el radio hasta el cursor. Teclea longitud y ángulo (L y ∠) o radio y giro (R y Giro) en la barra de opciones, o aquí.",
                 ),
             }
             row(ui, "Radio (mm)", "De la curva tecleada", |ui, w| {
@@ -1121,24 +1121,12 @@ impl ArchiSimApp {
                 .on_hover_text("Un tramo en curva de ese radio y ese giro, tangente al anterior")
                 .clicked()
             {
-                if let Some((a, dir)) = leaving {
-                    lay = Some(archisim_core::arc_stretch(
-                        a,
-                        dir,
-                        s.radius,
-                        s.turn.to_radians(),
-                        2.0,
-                    ));
-                }
+                lay = true;
             }
         });
-        if let Some(arc) = lay {
-            if let Some(&end) = arc.last() {
-                self.road_settings = s.clone();
-                self.road_typed_arc = Some(arc);
-                self.road_click(end);
-                self.road_typed_arc = None;
-            }
+        if lay {
+            self.road_settings = s.clone();
+            self.lay_typed_arc();
         }
     }
 
@@ -1552,12 +1540,12 @@ impl ArchiSimApp {
 
 /// What is typed in the group «Trazado» of a street.
 #[derive(Clone, Copy)]
-struct LayoutForm {
-    from: f64,
-    to: f64,
-    z_from: f64,
-    z_to: f64,
-    parallel: f64,
+pub(super) struct LayoutForm {
+    pub from: f64,
+    pub to: f64,
+    pub z_from: f64,
+    pub z_to: f64,
+    pub parallel: f64,
 }
 
 impl ArchiSimApp {
@@ -1620,6 +1608,20 @@ impl ArchiSimApp {
                     ),
                 );
             }
+            let picking = self.road_grade_pick.is_some_and(|(r, _)| r == id);
+            if ui
+                .selectable_label(picking, "Elegir los dos puntos en planta")
+                .on_hover_text("Dos clics sobre la calle: donde empieza y donde acaba la pendiente; las cotas salen de las que tiene ahora")
+                .clicked()
+            {
+                self.road_grade_pick = if picking { None } else { Some((id, None)) };
+                if !picking {
+                    if self.tool != Tool::Arrow {
+                        self.tool = Tool::Arrow;
+                    }
+                    self.say("Clic en la calle donde empieza la pendiente.");
+                }
+            }
             ui.horizontal_wrapped(|ui| {
                 grade = ui.button("Aplicar la pendiente uniforme").clicked();
                 if ui
@@ -1680,6 +1682,118 @@ impl ArchiSimApp {
                 self.ed.selection = [Element::Road(p)].into_iter().collect();
             }
             self.report(res, "Calle paralela creada.");
+        }
+    }
+
+    /// A click on the plan while picking the two ends of a uniform grade:
+    /// the first gives where it starts, the second where it ends, and both
+    /// go to the street's «Trazado» with the heights the street has there.
+    pub(super) fn road_grade_click(&mut self, ctx: &egui::Context, p: Point2) {
+        let Some((id, first)) = self.road_grade_pick else {
+            return;
+        };
+        let Some(r) = self.ed.model().road(id).cloned() else {
+            self.road_grade_pick = None;
+            return;
+        };
+        let at = r.station_of(p);
+        match first {
+            None => {
+                self.road_grade_pick = Some((id, Some(at)));
+                self.say(format!(
+                    "Desde {} m. Clic donde acaba la pendiente.",
+                    comma(at, 2)
+                ));
+            }
+            Some(from) => {
+                self.road_grade_pick = None;
+                let (from, to) = if from <= at { (from, at) } else { (at, from) };
+                let key = Id::unique(("road-layout", id));
+                let parallel = ctx
+                    .data(|d| d.get_temp::<LayoutForm>(key))
+                    .map_or(20.0, |f| f.parallel);
+                ctx.data_mut(|d| {
+                    d.insert_temp(
+                        key,
+                        LayoutForm {
+                            from,
+                            to,
+                            z_from: r.top_at(from),
+                            z_to: r.top_at(to),
+                            parallel,
+                        },
+                    )
+                });
+                self.ed.selection = [Element::Road(id)].into_iter().collect();
+                self.say(format!(
+                    "De {} a {} m. Cambia las cotas si hace falta y pulsa «Aplicar la pendiente uniforme».",
+                    comma(from, 2),
+                    comma(to, 2)
+                ));
+            }
+        }
+    }
+
+    /// The radius and the turn of a typed curve in the options bar, while
+    /// drawing a street by stretches (N2): Intro on either lays the curve.
+    pub(super) fn road_arc_fields(&mut self, ui: &mut Ui) {
+        if self.tool != Tool::Road {
+            return;
+        }
+        let Some(_) = self.road_leaving() else {
+            return;
+        };
+        ui.add_space(8.0);
+        ui.label(egui::RichText::new("R").small())
+            .on_hover_text("Radio de la curva tangente al tramo anterior");
+        let typed_r = text_edit_committed(
+            ui,
+            Id::unique("bar-road-radius"),
+            &crate::units::fmt_mm(self.road_settings.radius),
+            56.0,
+        )
+        .and_then(|t| crate::units::parse_length(&t));
+        ui.label(egui::RichText::new(format!("{}  Giro", crate::units::unit().symbol())).small());
+        let typed_t = text_edit_committed(
+            ui,
+            Id::unique("bar-road-turn"),
+            &comma(self.road_settings.turn, 1),
+            44.0,
+        )
+        .and_then(|t| {
+            t.trim()
+                .trim_end_matches('°')
+                .replace(',', ".")
+                .parse::<f64>()
+                .ok()
+        });
+        ui.label(egui::RichText::new("°").small())
+            .on_hover_text("Positivo a la izquierda");
+        if typed_r.is_none() && typed_t.is_none() {
+            return;
+        }
+        ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Enter));
+        if let Some(r) = typed_r {
+            self.road_settings.radius = r.max(1.0);
+        }
+        if let Some(t) = typed_t {
+            self.road_settings.turn = t.clamp(-180.0, 180.0);
+        }
+        self.lay_typed_arc();
+    }
+
+    /// Lays a stretch in a curve of the radius and turn of the settings,
+    /// tangent to the last one.
+    pub(super) fn lay_typed_arc(&mut self) {
+        let Some((a, dir)) = self.road_leaving() else {
+            return;
+        };
+        let s = &self.road_settings;
+        let arc = archisim_core::arc_stretch(a, dir, s.radius, s.turn.to_radians(), 2.0);
+        if let Some(&end) = arc.last() {
+            self.road_typed_arc = Some(arc);
+            self.road_click(end);
+            self.road_typed_arc = None;
         }
     }
 

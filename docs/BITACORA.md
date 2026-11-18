@@ -6,6 +6,19 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-18 (175) · v0.96: territorio N2, remates
+
+Rama `bloque/trazado-2` sobre `bloque/trazado` (#223). Versión 0.96.0. Sin cambios de formato.
+
+- **Qué se hizo** (`docs/TERRITORIO.md` §2.5):
+  - **Pendiente uniforme con el ratón**: `ArchiSimApp::road_grade_pick` y `road_grade_click` (dos clics sobre la calle, con `Road::station_of`), que rellenan el formulario «Trazado» (`LayoutForm`) con las cotas actuales; aviso en la barra de opciones (`hint_text`), Esc lo deja.
+  - **Radio y giro en la barra de opciones**: `road_arc_fields` (R y Giro) y `lay_typed_arc`, que usa también «Poner la curva».
+  - Lista de lo que queda por pulir del territorio en `docs/TERRITORIO.md` §7, que irá creciendo con cada tanda.
+- **Pendiente**: N3 (carriles y marcas del nudo).
+- **Qué debe probar Antonio** (con la 0.96):
+  1. `archisim nudos out/` y abre `out/nudos.archisim`. Elige la Calle Real; en **Trazado**, pulsa **Elegir los dos puntos en planta** y pincha dos puntos de la calle: desde, hasta y las cotas se rellenan; aplica la pendiente.
+  2. Herramienta Calle por tramos: tras el primer tramo, en la barra de opciones escribe 30 en **R** y 60 en **Giro** e Intro: sale la curva.
+
 ## 2026-11-17 (174) · v0.95: territorio N2, trazado sin reglas y con precisión
 
 Rama `bloque/trazado` sobre `bloque/nudos` (#222). Versión 0.95.0. Formato `.archisim` versión 114.
