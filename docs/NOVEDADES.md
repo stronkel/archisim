@@ -4,6 +4,12 @@ Lo que cambia en cada versión, en pocas líneas. ArchiSim enseña la parte de s
 
 Cada versión empieza con una línea `## <versión>` (por ejemplo `## 0.81.0`): es la que busca la publicación.
 
+## 0.105.0
+
+- **Encajar el entorno.** El terreno, la ortofoto, los edificios del entorno, las calles, las parcelas y los árboles traídos se mueven, giran y suben en bloque, sin tocar el edificio (Urbanismo → Territorio → Encajar el entorno; se abre solo al traer el entorno). Se encajan por dos puntos, sin saber coordenadas ni ángulo: esta esquina del Catastro va sobre esta esquina de la nave, y una segunda pareja da el giro. También se pueden mover, girar o subir tecleando, y llevar un punto del terreno a la cota ±0,00. La georreferencia y el norte se corrigen solos, así que el IFC sigue bien situado.
+- **Lo que pisa el edificio.** Los edificios del entorno que caen sobre el proyecto se ocultan o se quitan con un botón, y todo el entorno se puede ocultar de una vez para trabajar en el edificio.
+- **Mover o girar el terreno** lo lleva entero: su borde, sus explanaciones y las zonas pintadas van con sus puntos.
+
 ## 0.104.0
 
 - **Cuarta vuelta de fluidez del territorio.** Cambiar un nudo, el pavimento de un tramo o una pieza oculta de una calle ya no rehace en 3D todo lo que hay a lo largo de la calle, solo lo de alrededor: en un sitio de 1 km², elevar un cruce pasa de medio segundo a una décima.

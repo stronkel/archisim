@@ -6,6 +6,14 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-18 (185) · v0.105: encajar el entorno
+
+Rama `bloque/encajar-entorno`. Pedido de Antonio a raíz de la nave SUMO: el entorno traído se solapaba con el proyecto y no había forma cómoda de moverlo sin saber las coordenadas y el ángulo. Sin cambios de formato.
+
+- **Qué se hizo** (`docs/ENTORNO.md`, «Encajar el entorno»): `archisim-app::context_fit` (`Parts`, `Fit` con `by_two_points`, `fit_context`, que mueve con `xform::transform` lo elegido, la ortofoto y el área, sube con `raise` y corrige georreferencia y norte con `follow_on_the_map`; `buildings_on_the_project`, `preview_lines`) y el panel `app/context_fit_ui` (modos Dos puntos, Mover, Girar y Cota con vista previa en naranja; tecleado; ocultar o quitar lo que pisa el proyecto; ocultar el entorno). Se abre solo al traer el entorno. Mover o girar un terreno lleva ya su borde, explanaciones, levantamiento y zonas pintadas (`xform`), y las plazas giran sus juntas.
+- **Pendiente**: tiradores para arrastrar y girar el entorno a mano alzada (hoy, dos clics con vista previa); el entorno marcado como tal en el fichero (hoy se reconoce por su clase: terreno, edificios vestidos, calles, parcelas y lo de Urbanismo).
+- **Qué debe probar Antonio**: abre la nave SUMO con su entorno, Urbanismo → Territorio → Encajar el entorno → «Dos puntos»: clic en una esquina de la nave del Catastro, clic en la misma esquina de tu nave, clic en otra esquina del Catastro y clic en la de tu nave. Mira que todo el entorno se mueve junto y la nave no; luego «Quitarlos» en «Lo que pisa el proyecto» y exporta el IFC para ver que sigue en su sitio en el visor.
+
 ## 2026-11-18 (184) · v0.104 en `main`: territorio N0–N9 unido
 
 Pedido de Antonio («únelos»). La cadena #220, #222–#231 y #233 (fluidez del territorio, nudos, trazado, carriles, tramos, superficies, ocultar, manzanas, área grande, tráfico y la cuarta vuelta de fluidez) se une a `main` encima de #221 (dibujo aparte, 0.92.1) y #232 (la nave SUMO desde el DXF, 0.93.0). Conflictos solo en documentación, versión y pruebas de la app: se juntan las dos partes. En `NOVEDADES.md` la 0.93.0 lleva lo del territorio y lo de la nave SUMO. Formato `.archisim` versión 120.

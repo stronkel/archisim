@@ -13072,3 +13072,82 @@ fn every_project_draws_its_plan_and_sections() {
     }
     assert!(bad.is_empty(), "{bad:#?}");
 }
+
+/// «Encajar el entorno»: the surroundings put on the building by two
+/// points, without moving the building, in one step of Undo; and the
+/// buildings of the surroundings over the building found and taken away.
+#[test]
+fn the_surroundings_fitted_by_two_points() {
+    let mut h = Harness::new(Editor::new_project());
+    let canvas = h.app.canvas;
+    h.app
+        .view
+        .fit_exact(canvas, p(-60.0, -60.0), p(60.0, 60.0), 0.0);
+    let level = h.app.ed.level;
+    let mat = h.model().materials().next().unwrap().id;
+    let wall_type = h.model().wall_types().next().unwrap().id;
+    let r = h.app.ed.transact("Edificio y entorno", |m| {
+        m.add_wall(archisim_core::NewWall {
+            wall_type,
+            level,
+            start: p(0.0, 0.0),
+            end: p(10.0, 0.0),
+            reference: archisim_core::ReferenceLine::Center,
+            height: 3.0,
+            base_offset: 0.0,
+            bulge: 0.0,
+            top: archisim_core::WallTop::Unconnected,
+        })?;
+        m.add_road(archisim_core::NewRoad {
+            name: "Calle".into(),
+            level,
+            axis: vec![p(-40.0, 30.0), p(40.0, 30.0)],
+            section: archisim_core::RoadSection::default(),
+            top_offset: 0.0,
+            profile: Vec::new(),
+            changes: Vec::new(),
+            pavement: mat,
+            kerb_material: mat,
+            sidewalk_material: mat,
+        })?;
+        Ok::<(), archisim_core::ModelError>(())
+    });
+    assert!(r.is_ok());
+    let wall = h.model().walls().next().unwrap().clone();
+    h.app.act(super::toolbox::Action::FitContext);
+    assert!(h.app.context_fit.open);
+    h.frame();
+    // The start of the street goes on the start of the wall, and the street
+    // turns to run along the wall's direction, upwards.
+    h.app.context_fit.mode = Some(super::context_fit_ui::FitMode::TwoPoints);
+    h.click_at(p(-40.0, 30.0));
+    h.click_at(p(0.0, 5.0));
+    h.click_at(p(40.0, 30.0));
+    h.click_at(p(0.0, 25.0));
+    assert!(!h.app.context_fit.picking());
+    let axis = h.model().roads().next().unwrap().axis.clone();
+    assert!(axis[0].distance(p(0.0, 5.0)) < 0.2, "{axis:?}");
+    assert!((axis[1].x - axis[0].x).abs() < 0.2, "{axis:?}");
+    assert_eq!(h.model().walls().next().unwrap().start, wall.start);
+    // The north turned with the surroundings.
+    assert!(h.model().true_north().abs() > 1.0);
+    h.app.ed.undo();
+    assert_eq!(h.model().roads().next().unwrap().axis[0], p(-40.0, 30.0));
+    // A building of the surroundings over the wall.
+    let r = h.app.ed.transact("Edificio del entorno", |m| {
+        m.add_env_building(archisim_core::NewEnvBuilding {
+            name: "Vecino".into(),
+            level,
+            outline: vec![p(-2.0, -3.0), p(6.0, -3.0), p(6.0, 3.0), p(-2.0, 3.0)],
+            style: archisim_core::BuildingStyle::ALL[0],
+            floors: None,
+            floor_height: None,
+            base_offset: 0.0,
+        })?;
+        Ok::<(), archisim_core::ModelError>(())
+    });
+    assert!(r.is_ok(), "{r:?}");
+    let on = crate::context_fit::buildings_on_the_project(h.model());
+    assert_eq!(on.len(), 1);
+    h.frame();
+}

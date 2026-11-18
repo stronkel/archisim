@@ -258,7 +258,11 @@ pub fn transform(
                     let new = model.copy_surface(id, outline)?;
                     out.insert(Element::Surface(new));
                 } else {
-                    model.edit_surface(id, |s| s.outline = outline)?;
+                    let turn = t.angle(0.0);
+                    model.edit_surface(id, |s| {
+                        s.outline = outline;
+                        s.joint_angle += turn;
+                    })?;
                     out.insert(*e);
                 }
             }
@@ -659,9 +663,34 @@ fn transform_phase_2(
                     model.move_dormer(r, i, t.apply(at))?;
                 }
             }
+            // The whole ground: its points, its edge, the survey under its
+            // platforms, the platforms and the areas painted on it.
             Element::Terrain(id) => model.edit_terrain(id, |x| {
                 for p in x.points.iter_mut() {
                     p.at = t.apply(p.at);
+                }
+                if let Some(g) = x.ground.as_mut() {
+                    for p in g.iter_mut() {
+                        p.at = t.apply(p.at);
+                    }
+                }
+                if let Some(o) = x.outline.as_mut() {
+                    pts(o);
+                }
+                for pad in x.pads.iter_mut() {
+                    pts(&mut pad.outline);
+                    if let Some(tilt) = pad.tilt.as_mut() {
+                        tilt.from = t.apply(tilt.from);
+                        tilt.dir += turn;
+                    }
+                }
+                for patch in x.patches.iter_mut() {
+                    for (outline, holes) in patch.regions.iter_mut() {
+                        pts(outline);
+                        for h in holes.iter_mut() {
+                            pts(h);
+                        }
+                    }
                 }
             })?,
             _ => {}

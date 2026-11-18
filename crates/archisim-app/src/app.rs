@@ -494,6 +494,8 @@ pub struct ArchiSimApp {
     pub replace: replace_ui::ReplaceState,
     /// The panel «Manzanas» (N7).
     pub blocks: blocks_ui::BlocksState,
+    /// The panel «Encajar el entorno».
+    pub context_fit: context_fit_ui::ContextFitState,
     /// The map view (N8).
     pub map: map_ui::MapState,
     /// The plot's tool draws an urban surface of this kind (N5).
@@ -986,6 +988,7 @@ impl ArchiSimApp {
             road_grade_pick: None,
             replace: Default::default(),
             blocks: Default::default(),
+            context_fit: Default::default(),
             map: Default::default(),
             surface_draw: None,
             piece_pick: None,
@@ -1228,6 +1231,7 @@ impl ArchiSimApp {
         self.surface_draw = None;
         self.piece_pick = None;
         self.blocks.picking = false;
+        self.context_fit.stop();
         if tool != Tool::Cad && self.cad.is_some() {
             // Another tool ends the command (keeping what it drew).
             self.end_command(true);
@@ -3045,6 +3049,7 @@ impl ArchiSimApp {
         self.library_dialog(ctx);
         self.replace_dialog(ctx);
         self.blocks_dialog(ctx);
+        self.context_fit_dialog(ctx);
         self.map_dialog(ctx);
         self.mesh_import_dialog(ctx);
         self.dxf_import_dialog(ctx);
@@ -3428,6 +3433,7 @@ mod climate_ui;
 mod collection_ui;
 mod concept_ui;
 mod context_bar;
+mod context_fit_ui;
 mod context_menu;
 mod coord_ui;
 mod cte_ui;
