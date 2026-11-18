@@ -9662,6 +9662,98 @@ fn nodes_with_the_tool() {
 /// and turn is tangent to the stretch before; a street gets a uniform
 /// grade and a parallel one; a node becomes a roundabout.
 #[test]
+fn lanes_and_islands_with_the_node_tool() {
+    use archisim_geom::crossroads::{self, Junction};
+    let mut h = Harness::new(Editor::new_project());
+    let canvas = h.app.canvas;
+    h.app
+        .view
+        .fit_exact(canvas, p(-60.0, -60.0), p(60.0, 60.0), 0.0);
+    h.app.set_discipline(super::toolbox::Discipline::Site);
+    for (a, b) in [(p(-50.0, 0.0), p(50.0, 0.0)), (p(0.0, -50.0), p(0.0, 50.0))] {
+        h.type_text("w");
+        h.click_at(a);
+        h.click_at(b);
+        h.key(Key::Enter);
+        h.key(Key::Escape);
+    }
+    h.app.set_tool(Tool::Node);
+    h.frame();
+    h.click_at(p(2.0, -1.0));
+    let key = h.app.node_pick.clone().expect("a node");
+    h.frame();
+    let j = crossroads::node_junction(h.model(), &key).unwrap();
+    assert_eq!(j.lanes.len(), 12);
+    // Connect by hand: the lane coming in from the east only to the north.
+    let east = j.arms.iter().find(|a| a.dir.x > 0.9).unwrap().clone();
+    let north = j.arms.iter().find(|a| a.dir.y > 0.9).unwrap().clone();
+    h.app.node_mode = super::node_ui::NodeMode::Link(None);
+    h.frame();
+    h.click_at(crossroads::lane_end(&east, east.lanes_in[0]));
+    assert!(matches!(
+        h.app.node_mode,
+        super::node_ui::NodeMode::Link(Some(_))
+    ));
+    // It had three worked out; clicking the north one takes it away.
+    h.click_at(crossroads::lane_end(&north, north.lanes_out[0]));
+    let j = crossroads::node_junction(h.model(), &key).unwrap();
+    let from_east: Vec<_> = j
+        .lanes
+        .iter()
+        .filter(|c| c.from == Junction::arm_ref(&east))
+        .collect();
+    assert_eq!(from_east.len(), 2, "two left of the three");
+    assert!(from_east.iter().all(|c| c.by_hand));
+    assert!(from_east
+        .iter()
+        .all(|c| c.to.road != north.road || c.to.forward != north.forward));
+    // Its lane gets arrows now (changed by hand).
+    assert!(j.arm_paint.iter().any(|(r, _)| *r == east.road));
+    h.key(Key::Enter);
+    assert_eq!(h.app.node_mode, super::node_ui::NodeMode::Pick);
+    // A painted island in the south-east corner.
+    h.app.node_mode =
+        super::node_ui::NodeMode::Island(Vec::new(), archisim_core::IslandPaint::Chevrons);
+    for q in [p(9.0, -9.0), p(14.0, -9.0), p(11.5, -14.0)] {
+        h.click_at(q);
+    }
+    h.key(Key::Enter);
+    let n = h.model().node(&key).unwrap();
+    assert_eq!(n.islands.len(), 1);
+    assert_eq!(n.links.len(), 2);
+    let j = crossroads::node_junction(h.model(), &key).unwrap();
+    assert!(j.marks.len() > 3, "the island's border and its hatching");
+    // The properties draw the groups Carriles and Isletas pintadas.
+    h.frame();
+    // One step of Undo takes the island away.
+    h.app.ed.undo();
+    assert!(h.model().node(&key).unwrap().islands.is_empty());
+    // The turns of a lane, from the model.
+    let mut n = h.model().node(&key).cloned().unwrap();
+    n.set_arm(
+        Junction::arm_ref(&north),
+        archisim_core::ArmSettings {
+            turns: Some(vec![archisim_core::Turns::STRAIGHT]),
+            stop_back: Some(2.0),
+            ..Default::default()
+        },
+    );
+    let r = h.app.ed.transact("Giros", |m| m.set_node(n));
+    assert!(r.is_ok());
+    let j = crossroads::node_junction(h.model(), &key).unwrap();
+    assert_eq!(
+        j.lanes
+            .iter()
+            .filter(|c| c.from == Junction::arm_ref(&north))
+            .count(),
+        1
+    );
+    // The plan draws it all.
+    h.app.set_tool(Tool::Arrow);
+    h.frame();
+}
+
+#[test]
 fn streets_without_rules_and_with_precision() {
     let mut h = Harness::new(Editor::new_project());
     let canvas = h.app.canvas;

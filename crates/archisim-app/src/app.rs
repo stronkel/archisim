@@ -389,6 +389,9 @@ pub struct ArchiSimApp {
     pub node_pick: Option<archisim_core::NodeKey>,
     /// The handle of the picked node being dragged (N1).
     pub node_grab: Option<node_ui::NodeGrab>,
+    /// What a click of the tool Nudo does (N3): pick a node, connect lanes
+    /// or draw a painted island.
+    pub node_mode: node_ui::NodeMode,
     /// A street's curve typed by its radius and turn (N2), while it is laid.
     pub road_typed_arc: Option<Vec<archisim_core::Point2>>,
     /// The box tool's settings, made from the project the first time.
@@ -921,6 +924,7 @@ impl ArchiSimApp {
             roundabout_settings: Default::default(),
             node_pick: None,
             node_grab: None,
+            node_mode: node_ui::NodeMode::Pick,
             road_typed_arc: None,
             box_settings: None,
             box_catalogue: None,
@@ -1202,6 +1206,7 @@ impl ArchiSimApp {
     fn set_tool(&mut self, tool: Tool) {
         self.rebar_pick = false;
         self.road_grade_pick = None;
+        self.node_mode = node_ui::NodeMode::Pick;
         if tool != Tool::Cad && self.cad.is_some() {
             // Another tool ends the command (keeping what it drew).
             self.end_command(true);

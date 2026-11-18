@@ -164,6 +164,7 @@ pub fn build() -> Res<Model> {
                 ArmSettings {
                     setback: Some(18.0),
                     sign: Some(ArmSign::Stop),
+                    ..Default::default()
                 },
             );
         }
@@ -235,6 +236,88 @@ pub fn build() -> Res<Model> {
         .map(|r| r.id)
         .ok_or("sin Calle Estrecha")?;
     m.edit_road(narrow, |r| r.axis.extend(arc.iter().skip(1).copied()))?;
+    // Lanes by hand (N3): an avenue of two lanes each way crossed by a
+    // street; on the avenue, the lane by the kerb only turns right and the
+    // other goes straight on or left, behind a stop line set back 3 m; from
+    // the street, a connection by hand; and two painted islands.
+    let lane = |b, w| archisim_core::strip_of(b, w);
+    use archisim_core::RoadBand as B;
+    let four = RoadSection {
+        markings: Some(paint),
+        ..RoadSection::of(vec![
+            lane(B::Sidewalk, 4.0),
+            lane(B::Kerb, 0.15),
+            lane(B::Parking, 2.2),
+            lane(B::Carriageway, 3.25),
+            lane(B::Carriageway, 3.25),
+            lane(B::Carriageway, 3.25),
+            lane(B::Carriageway, 3.25),
+            lane(B::Parking, 2.2),
+            lane(B::Kerb, 0.15),
+            lane(B::Sidewalk, 4.0),
+        ])
+    };
+    add_with(
+        &mut m,
+        "Avenida de los Carriles",
+        vec![p(260.0, 0.0), p(400.0, 0.0)],
+        &four,
+    )?;
+    add(
+        &mut m,
+        "Calle de la Isleta",
+        p(330.0, -60.0),
+        p(330.0, 60.0),
+    )?;
+    let avenue = m
+        .roads()
+        .find(|r| r.name == "Avenida de los Carriles")
+        .map(|r| r.id)
+        .ok_or("sin avenida")?;
+    change(&mut m, pb, p(330.0, 0.0), |n, arms| {
+        for a in arms.iter().filter(|a| a.road == avenue) {
+            n.set_arm(
+                Junction::arm_ref(a),
+                ArmSettings {
+                    turns: Some(vec![
+                        archisim_core::Turns::RIGHT,
+                        archisim_core::Turns(
+                            archisim_core::Turns::STRAIGHT.0 | archisim_core::Turns::LEFT.0,
+                        ),
+                    ]),
+                    stop_back: Some(3.0),
+                    ..Default::default()
+                },
+            );
+        }
+        let north = arms.iter().find(|a| a.road != avenue && a.dir.y > 0.9);
+        let east = arms.iter().find(|a| a.road == avenue && a.dir.x > 0.9);
+        if let (Some(nb), Some(e)) = (north, east) {
+            n.links.push(archisim_core::LaneLink {
+                from: Junction::arm_ref(nb),
+                lane: 0,
+                to: Junction::arm_ref(e),
+                to_lane: 1,
+            });
+        }
+        // Given on the plan, kept in the node's own axes.
+        let (o, u) = crossroads::node_frame(arms, p(330.0, 0.0));
+        let local = |q: Point2| p((q - o).dot(u), (q - o).dot(u.perp_left()));
+        n.islands.push(archisim_core::PaintedIsland {
+            points: [p(333.5, -3.0), p(338.0, -3.0), p(338.0, -7.5)]
+                .into_iter()
+                .map(local)
+                .collect(),
+            paint: archisim_core::IslandPaint::Chevrons,
+        });
+        n.islands.push(archisim_core::PaintedIsland {
+            points: [p(322.0, 3.0), p(326.0, 3.0), p(322.0, 7.0)]
+                .into_iter()
+                .map(local)
+                .collect(),
+            paint: archisim_core::IslandPaint::Fill,
+        });
+    })?;
     // A house in the block between the four crossings.
     let corners = [p(-10.0, 15.0), p(10.0, 15.0), p(10.0, 28.0), p(-10.0, 28.0)];
     for i in 0..4 {
@@ -302,6 +385,21 @@ pub fn write(dir: &Path) -> Res {
         if !j.quiet.is_empty() {
             extra.push("sin marcas".to_string());
         }
+        if !j.arm_paint.is_empty() {
+            extra.push("flechas de carril".to_string());
+        }
+        let hand = j.lanes.iter().filter(|c| c.by_hand).count();
+        match hand {
+            0 => {}
+            1 => extra.push("1 conexión a mano".to_string()),
+            _ => extra.push(format!("{hand} conexiones a mano")),
+        }
+        if let Some(n) = m.node(k).filter(|n| !n.islands.is_empty()) {
+            extra.push(match n.islands.len() {
+                1 => "1 isleta pintada".to_string(),
+                c => format!("{c} isletas pintadas"),
+            });
+        }
         println!(
             "  {}: {}{}{}",
             names.join(" y "),
@@ -359,7 +457,15 @@ mod tests {
             assert!(kinds.contains(&k), "{k:?}");
         }
         let here = m.nodes().count();
-        assert_eq!(here, 9);
+        assert_eq!(here, 10);
+        // The lanes by hand (N3): arrows, a connection and two islands.
+        let lanes = crossroads::junctions(&m, pb)
+            .into_iter()
+            .find(|j| j.lanes.iter().any(|c| c.by_hand))
+            .expect("the avenue's crossing");
+        assert!(!lanes.arm_paint.is_empty());
+        let n = m.node(lanes.key.as_ref().unwrap()).unwrap();
+        assert_eq!(n.islands.len(), 2);
         // The lane in anarchy crosses the Olmo and the Pino without
         // junctions.
         let free = m.roads().find(|r| r.free).unwrap().id;
@@ -386,6 +492,9 @@ mod tests {
         a.sort_by_key(|k| format!("{k:?}"));
         b.sort_by_key(|k| format!("{k:?}"));
         assert_eq!(a, b);
+        let islands =
+            |m: &Model| -> usize { m.nodes().map(|n| n.islands.len() + n.links.len()).sum() };
+        assert_eq!(islands(&imported), islands(&m));
         let ipb = imported.levels()[0].id;
         assert_eq!(
             crossroads::junctions(&imported, ipb).len(),

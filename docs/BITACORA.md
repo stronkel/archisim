@@ -6,6 +6,22 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-18 (176) · v0.97: territorio N3, carriles y marcas del nudo
+
+Rama `bloque/carriles` sobre `bloque/trazado-2` (#224). Versión 0.97.0. Formato `.archisim` versión 115 (más datos en el texto de cada nudo).
+
+- **Qué se hizo** (`docs/TERRITORIO.md` §2.6):
+  - **Modelo** (`archisim-core::model::nodes`): `ArmSettings::turns` (`Turns`, giros por carril desde el bordillo) y `stop_back`; `NodeSettings::links` (`LaneLink`) e `islands` (`PaintedIsland` con `IslandPaint`, en los ejes del nudo). `markings::paint_shapes` saca la pintura de una marca sin ser una marca.
+  - **Geometría** (`archisim-geom::crossroads`): `Arm::lanes_in`/`lanes_out`; `lane_connections` (`LaneConnection`, `Turn`, `turn_of`, `arm_turns`, `lane_end`), `lane_paint` (flechas y líneas entre carriles en `Junction::arm_paint`, pintadas a la cota de su calle en `solid` y en la planta), `node_frame` e `island_paint`.
+  - **App** (`app/node_ui`): `NodeMode` (elegir, conectar carriles, dibujar isleta), `node_link_click`, `node_finish` (Intro, doble clic, clic derecho), `node_escape`; grupos «Carriles» e «Isletas pintadas»; conexiones dibujadas en azul (calculadas) y naranja (a mano).
+  - Ejemplo en `archisim nudos out/` (Avenida de los Carriles); pruebas en el núcleo, la geometría, la línea de órdenes (fichero e IFC) y la aplicación con clics.
+- **Pendiente**: lo de §7 de `TERRITORIO.md`. Siguiente, N4.
+- **Qué debe probar Antonio** (con la 0.97):
+  1. `archisim nudos out/` y abre `out/nudos.archisim`. Ve al cruce de la Avenida de los Carriles con la Calle de la Isleta (al este): flechas en la avenida, un triángulo cebreado y otro relleno sobre el cruce.
+  2. Herramienta Nudo en ese cruce: líneas azules y naranjas de las conexiones; en **Carriles**, cambia los giros de un carril y mira cómo cambian las flechas.
+  3. **Conectar carriles a mano**: pincha un punto verde y luego uno blanco; repítelo para quitarla.
+  4. **Dibujar isleta pintada** en otro cruce; luego mueve una de sus calles: la isleta va con el cruce.
+
 ## 2026-11-18 (175) · v0.96: territorio N2, remates
 
 Rama `bloque/trazado-2` sobre `bloque/trazado` (#223). Versión 0.96.0. Sin cambios de formato.

@@ -808,6 +808,9 @@ impl ArchiSimApp {
             self.box_turn();
             return;
         }
+        if enter && self.tool == Tool::Node && self.node_finish() {
+            return;
+        }
         if self.command_keys(&events, enter, escape, backspace, space) {
             return;
         }
@@ -1052,9 +1055,12 @@ impl ArchiSimApp {
                         self.set_tool(Tool::Arrow);
                     }
                 }
-                Tool::Roundabout | Tool::Node | Tool::ModularBox | Tool::Decal => {
-                    self.set_tool(Tool::Arrow)
+                Tool::Node => {
+                    if !self.node_escape() {
+                        self.set_tool(Tool::Arrow)
+                    }
                 }
+                Tool::Roundabout | Tool::ModularBox | Tool::Decal => self.set_tool(Tool::Arrow),
                 Tool::World => self.world_escape(),
                 Tool::Marking => {
                     if self.marking_points.pop().is_none() {
@@ -1494,7 +1500,11 @@ impl ArchiSimApp {
             }
             Tool::Node => {
                 self.node_drag(ctx, rect, response);
-                if response.clicked_by(PointerButton::Primary) {
+                if response.double_clicked_by(PointerButton::Primary)
+                    || response.clicked_by(PointerButton::Secondary)
+                {
+                    self.node_finish();
+                } else if response.clicked_by(PointerButton::Primary) {
                     if let Some(c) = self.cursor {
                         self.node_click(c.point);
                     }

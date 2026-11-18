@@ -5283,6 +5283,7 @@ pub fn road_solids_with(
                 .chain(&j.bump_kerbs)
                 .chain(&j.sidewalks)
                 .chain(&j.marks)
+                .chain(j.arm_paint.iter().map(|(_, p)| p))
                 .chain(j.parts.iter().map(|p| &p.outline))
             {
                 h.add(poly.len() as u64);
@@ -5367,6 +5368,26 @@ pub fn road_solids_with(
                 .flat_map(|poly| {
                     draped_prism(poly, |q| {
                         let t = base + j.plate_top(model, q);
+                        (t, t + 0.004)
+                    })
+                })
+                .collect();
+            if !tris.is_empty() {
+                out.push(Solid {
+                    owner: SolidOwner::Road(id),
+                    material: m,
+                    triangles: tris,
+                });
+            }
+            // The arrows and lane lines on its arms' roads (N3), at their
+            // height.
+            let tris: Vec<[P3; 3]> = j
+                .arm_paint
+                .iter()
+                .flat_map(|(road, poly)| {
+                    let r = model.road(*road);
+                    draped_prism(poly, |q| {
+                        let t = base + r.map_or(j.top, |r| r.top_under(q));
                         (t, t + 0.004)
                     })
                 })

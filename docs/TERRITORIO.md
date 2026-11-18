@@ -111,6 +111,17 @@ Hoy `archisim_geom::crossroads::junctions(model, level)` rehace todos los cruces
 - **Pendiente uniforme con el ratón**: botón «Elegir los dos puntos en planta» en el grupo «Trazado»; dos clics sobre la calle dan desde y hasta, con las cotas que tiene ahora; se cambian si hace falta y se aplica.
 - **Radio y giro en la barra de opciones** (R y Giro), junto a L y ∠, mientras se traza por tramos: Intro pone la curva tangente al tramo anterior.
 
+### 2.6 N3 hecho: carriles y marcas del nudo (18/11/2026, versión 0.97)
+
+- **Dónde va cada carril**: el nudo sabe los carriles que entran y salen por cada calle y calcula sus conexiones: de frente desde todos, a la derecha desde el del bordillo y a la izquierda desde el del eje (todo desde un carril único). Con la herramienta Nudo se ven en planta como líneas azules con su flecha.
+- **Giros por carril** (como las flechas de TM:PE): en Propiedades, grupo «Carriles», cada carril que entra tiene sus botones ← ↑ → ↶; «Giros calculados» los devuelve.
+- **Conexiones a mano** (Intersection Marking Tool): «Conectar carriles a mano» y en planta el final de un carril que entra (punto verde) y luego el principio del carril por el que sale (punto blanco); repetirlo quita la conexión. La primera conexión a mano de una calle conserva las que tenía calculadas para que solo cambies lo que quieres. Las hechas a mano salen en naranja.
+- **Flechas pintadas** (M-5.2) en cada carril que entra, 4 m detrás de la línea de detención, en las calles con más de un carril de entrada o cambiadas a mano; y **líneas continuas** de 20 m entre esos carriles antes del nudo. Siguen la rasante de su calle.
+- **Línea de detención retrasada**: por calle, cuántos metros se retrasa (con su señal y sus flechas).
+- **Isletas pintadas**: «Dibujar isleta pintada», clic en cada esquina e Intro; cebreado (M-7.1), relleno o solo el borde. Se guardan en los ejes del nudo: si se mueven sus calles, van con él.
+- Todo se guarda en el texto del nudo (formato 115) y vuelve del IFC.
+- Ejemplo: `archisim nudos out/` añade la Avenida de los Carriles (dos carriles por sentido) con la Calle de la Isleta.
+
 ## 3. Lo demás, por tandas
 
 | Tanda | Qué | Mods de referencia | Tamaño |
@@ -252,6 +263,14 @@ Lo que se deja para después, tanda a tanda, para repasarlo junto con la cuarta 
 - Aplanar un brazo los últimos metros.
 - Fondo de saco en martillo.
 - Tiradores de los nudos en 3D y en la Maqueta.
+
+**De N3 (carriles)**
+- Cambio de sentido (↶): se conecta, pero no tiene flecha pintada (la 8.2-IC no la trae entre las urbanas).
+- Quitar la última conexión a mano de una calle la devuelve a sus giros calculados: no se puede dejar una calle «sin salida» por un carril.
+- Las flechas son de 5 m y solo una por carril; en avenidas largas la norma pide repetirlas.
+- Las conexiones se ven solo en planta y con la herramienta Nudo; no en 3D ni en la Maqueta.
+- Isletas: no se editan sus esquinas una vez dibujadas (se quitan y se dibujan otra vez).
+- Carriles bus y tranvía: el bus cuenta como carril; el tranvía, no.
 
 **De N2 (trazado)**
 - La pendiente uniforme elegida con el ratón no enseña marcas en planta entre los dos clics (solo el aviso).

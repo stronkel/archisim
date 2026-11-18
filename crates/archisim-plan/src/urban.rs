@@ -170,7 +170,7 @@ pub fn draw_roads(
                         num(pens().cut * k)
                     );
                 }
-                for m in &j.marks {
+                for m in j.marks.iter().chain(j.arm_paint.iter().map(|(_, p)| p)) {
                     let _ = writeln!(
                         over,
                         r#"<path d="{}" fill="white" stroke="{INK}" stroke-width="{}"/>"#,

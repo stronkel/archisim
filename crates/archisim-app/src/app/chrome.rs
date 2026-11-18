@@ -1220,7 +1220,12 @@ impl ArchiSimApp {
             Tool::Mass | Tool::PushPull | Tool::DivideFace | Tool::Deform | Tool::MassOffset | Tool::Tape | Tool::Paint => self.concept_hint(),
             Tool::Plot | Tool::Road => self.urban_hint(),
             Tool::Roundabout => "Clic: centro de la glorieta (en un cruce, se centra en él) · Esc: flecha",
-            Tool::Node => "Clic: el cruce, la T o la L que quieres cambiar · cámbialo en Propiedades · Esc: flecha",
+            Tool::Node => match &self.node_mode {
+                super::node_ui::NodeMode::Link(None) => "Conectar carriles: clic en el final de un carril que entra (punto verde) · Intro: terminar · Esc: dejarlo",
+                super::node_ui::NodeMode::Link(Some(_)) => "Conectar carriles: clic en el principio del carril por el que sale (punto blanco); otra vez la quita · Esc: otro carril",
+                super::node_ui::NodeMode::Island(..) => "Isleta pintada: clic en cada esquina · Intro, doble clic o clic en la primera: cerrarla · Esc: quitar la última",
+                super::node_ui::NodeMode::Pick => "Clic: el cruce, la T o la L que quieres cambiar · cámbialo en Propiedades · Esc: flecha",
+            },
             Tool::ModularBox => "Clic: centro de la caja (junto a otra, se pega a ella con su junta) · Espacio: girar · Esc: flecha",
             Tool::World => "Clic: el centro de la fachada (junto a una calle, en su borde) · Espacio: girar · Esc: flecha",
             Tool::Marking => self.marking_hint(),

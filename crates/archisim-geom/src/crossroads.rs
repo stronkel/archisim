@@ -20,9 +20,9 @@
 use std::sync::{Arc, Mutex};
 
 use archisim_core::{
-    offset_path, strip, ArmRef, ArmSign, CornerShape, GlobalId, IslandFinish, LevelId, MaterialId,
-    Model, NodeEnd, NodeKey, NodeKind, NodeSettings, Point2, Road, RoadBand, RoadId, Roundabout,
-    RoundaboutId, Vec2,
+    offset_path, strip, ArmRef, ArmSign, CornerShape, GlobalId, IslandFinish, IslandPaint, LevelId,
+    MaterialId, Model, NodeEnd, NodeKey, NodeKind, NodeSettings, Point2, Road, RoadBand, RoadId,
+    Roundabout, RoundaboutId, Turns, Vec2,
 };
 
 /// A road going out of a junction.
@@ -51,6 +51,12 @@ pub struct Arm {
     /// of its axis: where a stop line ends.
     pub lanes_left: f64,
     pub lanes_right: f64,
+    /// The middles of its lanes for vehicles (N3), as offsets to the left
+    /// of the arm's line looking out: those coming in (on its left), from
+    /// the kerb to the axis, and those going out (on its right), from the
+    /// kerb to the axis. A single lane on the axis is both.
+    pub lanes_in: Vec<f64>,
+    pub lanes_out: Vec<f64>,
     /// Where it is cut, from the junction.
     pub cut: f64,
 }
@@ -107,7 +113,56 @@ pub struct Junction {
     /// The kerbs across the parking where its bump-outs end (N1): on its
     /// roads, just past its arms' ends.
     pub bump_kerbs: Vec<Vec<Point2>>,
+    /// Where each lane coming in goes (N3): worked out, or by the node's
+    /// turns or connections made by hand.
+    pub lanes: Vec<LaneConnection>,
+    /// Paint on its arms' roads, past its plate (N3): the arrows of the
+    /// lanes coming in and the lines between them, with the road under
+    /// each (painted at its height).
+    pub arm_paint: Vec<(RoadId, Vec<Point2>)>,
 }
+
+/// Which way a lane goes at a node, seen from the lane coming in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Turn {
+    Left,
+    Straight,
+    Right,
+    Back,
+}
+
+impl Turn {
+    pub fn turns(self) -> Turns {
+        match self {
+            Turn::Left => Turns::LEFT,
+            Turn::Straight => Turns::STRAIGHT,
+            Turn::Right => Turns::RIGHT,
+            Turn::Back => Turns::BACK,
+        }
+    }
+}
+
+/// A connection from a lane coming in by an arm to a lane going out by
+/// another (N3): the lanes counted from the kerb, which way it turns, and
+/// the path a car follows from the end of one to the start of the other.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LaneConnection {
+    pub from: ArmRef,
+    pub lane: usize,
+    pub to: ArmRef,
+    pub to_lane: usize,
+    pub turn: Turn,
+    /// Made by hand.
+    pub by_hand: bool,
+    pub path: Vec<Point2>,
+}
+
+/// How far behind its arm's end (past the stop line) a lane's arrow is
+/// painted, to its tip, metres.
+pub const ARROW_BACK: f64 = 4.0;
+/// How long the continuous lines between the lanes coming in are, from the
+/// stop line back, metres (M-2.2 before a junction).
+pub const LANE_LINES: f64 = 20.0;
 
 /// The length of the ramps of a raised node, metres.
 pub const RAMP: f64 = 2.0;
@@ -614,6 +669,26 @@ fn arm_of(r: &Road, origin: Point2, s: f64, forward: bool) -> Arm {
             )
         }
     };
+    // The lanes' middles (N3), to the left of the axis looking along it.
+    let middles: Vec<f64> = r
+        .offsets_at(s.clamp(0.0, len))
+        .iter()
+        .filter(|o| matches!(o.0, RoadBand::Carriageway | RoadBand::BusLane))
+        .map(|o| (o.1 + o.2) / 2.0)
+        .collect();
+    let side = if forward { 1.0 } else { -1.0 };
+    let mut lanes_in: Vec<f64> = middles
+        .iter()
+        .map(|m| m * side)
+        .filter(|m| *m > -LANE_ON_AXIS)
+        .collect();
+    lanes_in.sort_by(|a, b| b.total_cmp(a));
+    let mut lanes_out: Vec<f64> = middles
+        .iter()
+        .map(|m| m * side)
+        .filter(|m| *m < LANE_ON_AXIS)
+        .collect();
+    lanes_out.sort_by(f64::total_cmp);
     // Looking back along the road, its left is its right.
     let (dir, kerb_left, kerb_right, kw_l, kw_r, e_l, e_r, lanes_left, lanes_right) = if forward {
         (u, kl, kr, wl, wr, hl, hr, ll, lr)
@@ -634,9 +709,15 @@ fn arm_of(r: &Road, origin: Point2, s: f64, forward: bool) -> Arm {
         edge_right: e_r,
         lanes_left,
         lanes_right,
+        lanes_in,
+        lanes_out,
         cut: 0.5,
     }
 }
+
+/// How near the axis the middle of a lane is for it to be a lane both ways
+/// (a single lane on the axis), metres.
+const LANE_ON_AXIS: f64 = 0.3;
 
 /// The arms of the roads that reach a roundabout: those whose axis goes
 /// through its circle (two arms) or ends in it or near it (one, measured
@@ -1572,7 +1653,12 @@ fn assemble(
             }
             let na = a.dir.perp_left();
             let wide = (a.kerb_left - bump_left[i]).min(a.lanes_left).max(0.0);
-            let s0 = a.cut + MARK_GAP;
+            let s0 = a.cut
+                + MARK_GAP
+                + settings
+                    .and_then(|s| s.arm(Junction::arm_ref(a)).stop_back)
+                    .unwrap_or(0.0)
+                    .max(0.0);
             if !marks_hidden && wide > 0.5 {
                 let (from, to) = (0.1, wide - 0.1);
                 let bar = |l0: f64, l1: f64| {
@@ -1651,6 +1737,28 @@ fn assemble(
     } else {
         Vec::new()
     };
+    // Where each lane goes (N3), its arrows and the lines between the lanes
+    // coming in, and the islands painted on it.
+    let lanes = if ring.is_none() && n >= 2 && kind != NodeKind::Open {
+        lane_connections(&arms, settings)
+    } else {
+        Vec::new()
+    };
+    let mut arm_paint = Vec::new();
+    if !marks_hidden && n >= 3 && ring.is_none() && kind != NodeKind::Open {
+        arm_paint = lane_paint(&arms, &lanes, settings);
+    }
+    if let Some(s) = settings {
+        let (o, u) = node_frame(&arms, x);
+        for i in &s.islands {
+            let poly: Vec<Point2> = i
+                .points
+                .iter()
+                .map(|q| o + u * q.x + u.perp_left() * q.y)
+                .collect();
+            marks.extend(island_paint(&poly, i.paint));
+        }
+    }
     let flat = settings.and_then(|s| s.flat).unwrap_or(false);
     Some(Junction {
         at: x,
@@ -1677,7 +1785,252 @@ fn assemble(
         signs,
         quiet,
         bump_kerbs,
+        lanes,
+        arm_paint,
     })
+}
+
+/// A node's own axes (N3): from its centre, along the arm first in the
+/// order of [`ArmRef`] (the same while its streets meet the same way).
+pub fn node_frame(arms: &[Arm], at: Point2) -> (Point2, Vec2) {
+    let first = arms
+        .iter()
+        .min_by_key(|a| Junction::arm_ref(a))
+        .map_or(Vec2::new(1.0, 0.0), |a| a.dir);
+    (at, first)
+}
+
+/// Which way a car turns from an arm it comes in by into another it goes out
+/// by: by the angle between its way in and its way out.
+pub fn turn_of(from: &Arm, to: &Arm) -> Turn {
+    if Junction::arm_ref(from) == Junction::arm_ref(to) {
+        return Turn::Back;
+    }
+    let din = from.dir * -1.0;
+    let t = din.cross(to.dir).atan2(din.dot(to.dir)).to_degrees();
+    if t.abs() <= 35.0 {
+        Turn::Straight
+    } else if t.abs() >= 165.0 {
+        Turn::Back
+    } else if t > 0.0 {
+        Turn::Left
+    } else {
+        Turn::Right
+    }
+}
+
+/// The turns each lane coming in by an arm may make, worked out: straight
+/// on from every lane, right from the kerb's and left from the axis's (all
+/// from a single lane).
+fn usual_turns(lanes: usize) -> Vec<Turns> {
+    (0..lanes)
+        .map(|i| {
+            let mut t = Turns::STRAIGHT;
+            if i == 0 {
+                t = t.with(Turns::RIGHT, true);
+            }
+            if i + 1 == lanes {
+                t = t.with(Turns::LEFT, true);
+            }
+            t
+        })
+        .collect()
+}
+
+/// The turns of the lanes coming in by an arm: changed by hand or worked
+/// out.
+pub fn arm_turns(a: &Arm, settings: Option<&NodeSettings>) -> Vec<Turns> {
+    let mut t = usual_turns(a.lanes_in.len());
+    if let Some(own) = settings.and_then(|s| s.arm(Junction::arm_ref(a)).turns) {
+        for (i, x) in own.into_iter().enumerate() {
+            if i < t.len() {
+                t[i] = x;
+            }
+        }
+    }
+    t
+}
+
+/// Where each lane coming in goes (N3). An arm with connections made by
+/// hand goes by them only; the others by their turns: the k-th lane that
+/// turns a way, counted from the side it turns to, goes to the k-th lane of
+/// each arm that way (the last if it has fewer).
+pub fn lane_connections(arms: &[Arm], settings: Option<&NodeSettings>) -> Vec<LaneConnection> {
+    let mut out = Vec::new();
+    let find = |r: ArmRef| arms.iter().find(|a| Junction::arm_ref(a) == r);
+    for a in arms {
+        let ar = Junction::arm_ref(a);
+        let links: Vec<_> = settings
+            .map(|s| s.links.iter().filter(|l| l.from == ar).copied().collect())
+            .unwrap_or_default();
+        if !links.is_empty() {
+            for l in links {
+                let Some(b) = find(l.to) else { continue };
+                let (i, j) = (l.lane as usize, l.to_lane as usize);
+                if i >= a.lanes_in.len() || j >= b.lanes_out.len() {
+                    continue;
+                }
+                out.push(LaneConnection {
+                    from: ar,
+                    lane: i,
+                    to: l.to,
+                    to_lane: j,
+                    turn: turn_of(a, b),
+                    by_hand: true,
+                    path: lane_path(a, i, b, j),
+                });
+            }
+            continue;
+        }
+        let turns = arm_turns(a, settings);
+        for b in arms {
+            if b.lanes_out.is_empty() {
+                continue;
+            }
+            let turn = turn_of(a, b);
+            // The lanes turning that way, from the side they turn to.
+            let mut with: Vec<usize> = (0..turns.len())
+                .filter(|&i| turns[i].has(turn.turns()))
+                .collect();
+            if matches!(turn, Turn::Left | Turn::Back) {
+                with.reverse();
+            }
+            let m = b.lanes_out.len();
+            for (k, &i) in with.iter().enumerate() {
+                let j = match turn {
+                    Turn::Left | Turn::Back => m - 1 - k.min(m - 1),
+                    _ => k.min(m - 1),
+                };
+                out.push(LaneConnection {
+                    from: ar,
+                    lane: i,
+                    to: Junction::arm_ref(b),
+                    to_lane: j,
+                    turn,
+                    by_hand: false,
+                    path: lane_path(a, i, b, j),
+                });
+            }
+        }
+    }
+    out
+}
+
+/// Where a lane coming in by an arm ends, and where one going out starts:
+/// its middle at the arm's end.
+pub fn lane_end(a: &Arm, offset: f64) -> Point2 {
+    a.origin + a.dir * a.cut + a.dir.perp_left() * offset
+}
+
+/// The path from a lane coming in to one going out: a curve that leaves
+/// and arrives along the lanes.
+fn lane_path(a: &Arm, i: usize, b: &Arm, j: usize) -> Vec<Point2> {
+    let p0 = lane_end(a, a.lanes_in[i]);
+    let p3 = lane_end(b, b.lanes_out[j]);
+    let k = p0.distance(p3) * 0.45;
+    let (p1, p2) = (p0 - a.dir * k, p3 - b.dir * k);
+    (0..=12)
+        .map(|n| {
+            let t = n as f64 / 12.0;
+            let u = 1.0 - t;
+            let w = [u * u * u, 3.0 * u * u * t, 3.0 * u * t * t, t * t * t];
+            Point2::new(
+                p0.x * w[0] + p1.x * w[1] + p2.x * w[2] + p3.x * w[3],
+                p0.y * w[0] + p1.y * w[1] + p2.y * w[2] + p3.y * w[3],
+            )
+        })
+        .collect()
+}
+
+/// The arrows of the lanes coming in by the arms with more than one (or
+/// with their turns or connections changed), behind the stop line, and the
+/// continuous lines between those lanes (N3).
+fn lane_paint(
+    arms: &[Arm],
+    lanes: &[LaneConnection],
+    settings: Option<&NodeSettings>,
+) -> Vec<(RoadId, Vec<Point2>)> {
+    use archisim_core::MarkingKind as K;
+    let mut out = Vec::new();
+    for a in arms {
+        let ar = Junction::arm_ref(a);
+        let own = settings
+            .is_some_and(|s| s.arm(ar).turns.is_some() || s.links.iter().any(|l| l.from == ar));
+        if a.lanes_in.len() < 2 && !own {
+            continue;
+        }
+        let back = settings
+            .and_then(|s| s.arm(ar).stop_back)
+            .unwrap_or(0.0)
+            .max(0.0);
+        let stop = a.cut + MARK_GAP + back + STOP_LINE;
+        let tip = stop + ARROW_BACK;
+        for (i, &off) in a.lanes_in.iter().enumerate() {
+            let mut t = Turns::NONE;
+            for c in lanes.iter().filter(|c| c.from == ar && c.lane == i) {
+                t = t.with(c.turn.turns(), true);
+            }
+            let kinds: Vec<K> = match (
+                t.has(Turns::LEFT),
+                t.has(Turns::STRAIGHT),
+                t.has(Turns::RIGHT),
+            ) {
+                (false, true, false) => vec![K::ArrowStraight],
+                (true, false, false) => vec![K::ArrowLeft],
+                (false, false, true) => vec![K::ArrowRight],
+                (true, true, false) => vec![K::ArrowStraightLeft],
+                (false, true, true) => vec![K::ArrowStraightRight],
+                (true, false, true) => vec![K::ArrowLeft, K::ArrowRight],
+                (true, true, true) => vec![K::ArrowStraightLeft, K::ArrowRight],
+                (false, false, false) => Vec::new(),
+            };
+            // The arrow's tail, 5 m behind its tip, pointing in.
+            let at = a.origin + a.dir * (tip + 5.0) + a.dir.perp_left() * off;
+            let path = [at, at - a.dir];
+            for k in kinds {
+                for poly in archisim_core::paint_shapes(k, &path, 0.15, 0.0, 0.0, 0.0) {
+                    out.push((a.road, poly));
+                }
+            }
+        }
+        // The lines between them, from the stop line back.
+        for w in a.lanes_in.windows(2) {
+            let mid = (w[0] + w[1]) / 2.0;
+            let p = a.origin + a.dir.perp_left() * mid;
+            let line = [p + a.dir * stop, p + a.dir * (stop + LANE_LINES)];
+            out.push((a.road, strip(&line, -0.05, 0.05)));
+        }
+    }
+    out
+}
+
+/// The paint of an island on a node (N3).
+pub fn island_paint(poly: &[Point2], paint: IslandPaint) -> Vec<Vec<Point2>> {
+    use archisim_core::MarkingKind as K;
+    if poly.len() < 3 {
+        return Vec::new();
+    }
+    match paint {
+        IslandPaint::Chevrons => {
+            archisim_core::paint_shapes(K::Chevrons, poly, 0.15, 0.5, 1.0, 0.0)
+        }
+        IslandPaint::Fill => {
+            let mut p = poly.to_vec();
+            if archisim_core::signed_area(&p) < 0.0 {
+                p.reverse();
+            }
+            vec![p]
+        }
+        IslandPaint::Outline => {
+            let mut p = poly.to_vec();
+            if archisim_core::signed_area(&p) < 0.0 {
+                p.reverse();
+            }
+            let mut closed = p.clone();
+            closed.push(p[0]);
+            closed.windows(2).map(|s| strip(s, -0.15, 0.0)).collect()
+        }
+    }
 }
 
 /// A corner with nothing: the kerbs go straight from one arm to the next.
@@ -2387,5 +2740,132 @@ mod tests {
             .map(|q| q.distance(usual))
             .fold(f64::MAX, f64::min);
         assert!(near < 0.1, "{near}");
+    }
+
+    /// N3: where each lane goes, the arrows of the arms with more than one
+    /// lane coming in, turns and connections by hand, and painted islands
+    /// that follow the node.
+    #[test]
+    fn lanes_arrows_and_islands() {
+        let (mut m, level, a, b) = town();
+        let j = junctions(&m, level).remove(0);
+        // One lane each way: right, straight and left from each arm.
+        assert_eq!(j.lanes.len(), 12);
+        assert!(j.arm_paint.is_empty(), "no arrows with a single lane");
+        // The east–west street with two lanes each way.
+        m.edit_road(a, |r| {
+            r.section = RoadSection::classic(12.0, 2.2, 0.15, 2.5);
+            let mut strips = Vec::new();
+            for st in &r.section.strips {
+                if st.band == RoadBand::Carriageway {
+                    strips.push(archisim_core::strip_of(RoadBand::Carriageway, 3.0));
+                    strips.push(archisim_core::strip_of(RoadBand::Carriageway, 3.0));
+                } else {
+                    strips.push(*st);
+                }
+            }
+            r.section.strips = strips;
+        })
+        .unwrap();
+        let j = junctions(&m, level).remove(0);
+        let east = j.arms.iter().find(|x| x.road == a && x.forward).unwrap();
+        assert_eq!(east.lanes_in.len(), 2);
+        assert_eq!(east.lanes_out.len(), 2);
+        // The lane by the kerb is farther from the axis.
+        assert!(east.lanes_in[0] > east.lanes_in[1] && east.lanes_in[1] > 0.0);
+        let from_east: Vec<_> = j
+            .lanes
+            .iter()
+            .filter(|c| c.from == Junction::arm_ref(east))
+            .collect();
+        // Straight on from both lanes, right from the kerb's, left from the
+        // axis's.
+        assert_eq!(from_east.len(), 4);
+        assert!(from_east
+            .iter()
+            .any(|c| c.turn == Turn::Right && c.lane == 0 && c.to_lane == 0));
+        assert!(from_east
+            .iter()
+            .any(|c| c.turn == Turn::Left && c.lane == 1));
+        // Its arrows: two lanes on each of its two arms, and a line between.
+        let arrows = j.arm_paint.iter().filter(|(r, _)| *r == a).count();
+        assert!(arrows >= 2 * 2 * 2, "{arrows}");
+        let ar = Junction::arm_ref(east);
+        // By hand: only left from the lane by the axis; and then a single
+        // connection made by hand from the west arm.
+        changed(&mut m, level, |n, _| {
+            n.set_arm(
+                ar,
+                archisim_core::ArmSettings {
+                    turns: Some(vec![Turns(6), Turns::LEFT]),
+                    stop_back: Some(3.0),
+                    ..Default::default()
+                },
+            );
+            n.links.push(archisim_core::LaneLink {
+                from: ArmRef {
+                    road: a,
+                    forward: false,
+                },
+                lane: 0,
+                to: ArmRef {
+                    road: b,
+                    forward: true,
+                },
+                to_lane: 0,
+            });
+            n.islands.push(archisim_core::PaintedIsland {
+                points: vec![p(8.0, -8.0), p(12.0, -8.0), p(10.0, -12.0)],
+                paint: IslandPaint::Fill,
+            });
+        });
+        let j = junctions(&m, level).remove(0);
+        let from_east = j.lanes.iter().filter(|c| c.from == ar).count();
+        assert_eq!(from_east, 3, "straight from one lane, right and left");
+        let west: Vec<_> = j
+            .lanes
+            .iter()
+            .filter(|c| c.from.road == a && !c.from.forward)
+            .collect();
+        assert_eq!(west.len(), 1);
+        assert!(west[0].by_hand);
+        // The path goes from the end of one lane to the start of the other.
+        let w = j.arms.iter().find(|x| x.road == a && !x.forward).unwrap();
+        let nb = j.arms.iter().find(|x| x.road == b && x.forward).unwrap();
+        assert!(west[0].path[0].distance(lane_end(w, w.lanes_in[0])) < 1e-9);
+        assert!(
+            west[0]
+                .path
+                .last()
+                .unwrap()
+                .distance(lane_end(nb, nb.lanes_out[0]))
+                < 1e-9
+        );
+        // The island, in the node's axes.
+        let (o, u) = node_frame(&j.arms, j.at);
+        let tip = o + u * 10.0 + u.perp_left() * -12.0;
+        assert!(j
+            .marks
+            .iter()
+            .any(|poly| poly.iter().any(|q| q.distance(tip) < 1e-9)));
+        // Moving the cross street, the island goes with the node.
+        m.edit_road(b, |r| {
+            for q in &mut r.axis {
+                q.x += 5.0;
+            }
+        })
+        .unwrap();
+        let j2 = junctions(&m, level).remove(0);
+        let (o2, u2) = node_frame(&j2.arms, j2.at);
+        let tip2 = o2 + u2 * 10.0 + u2.perp_left() * -12.0;
+        assert!(tip2.distance(tip) > 4.0);
+        assert!(j2
+            .marks
+            .iter()
+            .any(|poly| poly.iter().any(|q| q.distance(tip2) < 1e-9)));
+    }
+
+    fn p(x: f64, y: f64) -> Point2 {
+        Point2::new(x, y)
     }
 }

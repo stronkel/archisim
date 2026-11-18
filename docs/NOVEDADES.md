@@ -4,6 +4,15 @@ Lo que cambia en cada versión, en pocas líneas. ArchiSim enseña la parte de s
 
 Cada versión empieza con una línea `## <versión>` (por ejemplo `## 0.81.0`): es la que busca la publicación.
 
+## 0.97.0
+
+- **Carriles y marcas de los cruces (N3).** Con la herramienta Nudo:
+  - Se ve **a dónde va cada carril** que entra al cruce.
+  - **Giros por carril** (← ↑ → ↶) en Propiedades, y **conexiones a mano** de un carril a otro pinchando en planta.
+  - **Flechas pintadas** en los carriles y líneas continuas entre ellos antes del cruce, que salen solas de los giros.
+  - **Línea de detención** retrasada por calle.
+  - **Isletas pintadas** (cebreado, relleno o borde) que van con el cruce si se mueven sus calles.
+
 ## 0.96.0
 
 - **Trazado de calles, remates (N2).**
