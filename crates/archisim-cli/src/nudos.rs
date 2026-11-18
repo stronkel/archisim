@@ -164,6 +164,7 @@ pub fn build() -> Res<Model> {
                 ArmSettings {
                     setback: Some(18.0),
                     sign: Some(ArmSign::Stop),
+                    ..Default::default()
                 },
             );
         }
@@ -235,6 +236,164 @@ pub fn build() -> Res<Model> {
         .map(|r| r.id)
         .ok_or("sin Calle Estrecha")?;
     m.edit_road(narrow, |r| r.axis.extend(arc.iter().skip(1).copied()))?;
+    // Lanes by hand (N3): an avenue of two lanes each way crossed by a
+    // street; on the avenue, the lane by the kerb only turns right and the
+    // other goes straight on or left, behind a stop line set back 3 m; from
+    // the street, a connection by hand; and two painted islands.
+    let lane = |b, w| archisim_core::strip_of(b, w);
+    use archisim_core::RoadBand as B;
+    let four = RoadSection {
+        markings: Some(paint),
+        ..RoadSection::of(vec![
+            lane(B::Sidewalk, 4.0),
+            lane(B::Kerb, 0.15),
+            lane(B::Parking, 2.2),
+            lane(B::Carriageway, 3.25),
+            lane(B::Carriageway, 3.25),
+            lane(B::Carriageway, 3.25),
+            lane(B::Carriageway, 3.25),
+            lane(B::Parking, 2.2),
+            lane(B::Kerb, 0.15),
+            lane(B::Sidewalk, 4.0),
+        ])
+    };
+    add_with(
+        &mut m,
+        "Avenida de los Carriles",
+        vec![p(260.0, 0.0), p(400.0, 0.0)],
+        &four,
+    )?;
+    add(
+        &mut m,
+        "Calle de la Isleta",
+        p(330.0, -60.0),
+        p(330.0, 60.0),
+    )?;
+    let avenue = m
+        .roads()
+        .find(|r| r.name == "Avenida de los Carriles")
+        .map(|r| r.id)
+        .ok_or("sin avenida")?;
+    change(&mut m, pb, p(330.0, 0.0), |n, arms| {
+        for a in arms.iter().filter(|a| a.road == avenue) {
+            n.set_arm(
+                Junction::arm_ref(a),
+                ArmSettings {
+                    turns: Some(vec![
+                        archisim_core::Turns::RIGHT,
+                        archisim_core::Turns(
+                            archisim_core::Turns::STRAIGHT.0 | archisim_core::Turns::LEFT.0,
+                        ),
+                    ]),
+                    stop_back: Some(3.0),
+                    ..Default::default()
+                },
+            );
+        }
+        let north = arms.iter().find(|a| a.road != avenue && a.dir.y > 0.9);
+        let east = arms.iter().find(|a| a.road == avenue && a.dir.x > 0.9);
+        if let (Some(nb), Some(e)) = (north, east) {
+            n.links.push(archisim_core::LaneLink {
+                from: Junction::arm_ref(nb),
+                lane: 0,
+                to: Junction::arm_ref(e),
+                to_lane: 1,
+            });
+        }
+        // Given on the plan, kept in the node's own axes.
+        let (o, u) = crossroads::node_frame(arms, p(330.0, 0.0));
+        let local = |q: Point2| p((q - o).dot(u), (q - o).dot(u.perp_left()));
+        n.islands.push(archisim_core::PaintedIsland {
+            points: [p(333.5, -3.0), p(338.0, -3.0), p(338.0, -7.5)]
+                .into_iter()
+                .map(local)
+                .collect(),
+            paint: archisim_core::IslandPaint::Chevrons,
+        });
+        n.islands.push(archisim_core::PaintedIsland {
+            points: [p(322.0, 3.0), p(326.0, 3.0), p(322.0, 7.0)]
+                .into_iter()
+                .map(local)
+                .collect(),
+            paint: archisim_core::IslandPaint::Fill,
+        });
+    })?;
+    // A stretch of its own (N4): the Calle Real paved in setts with
+    // granite kerbs between the Olmo and the Pino.
+    let setts = m.add_material(
+        "Adoquín de granito",
+        "stone",
+        [150, 140, 130],
+        archisim_core::CutPattern::Solid,
+    );
+    let mut skin = archisim_core::RoadSkin::new(50.0, 110.0);
+    skin.pavement = Some(setts);
+    skin.kerb = Some(stone);
+    m.set_road_skins(real, vec![skin])?;
+    // Surfaces by their outline (N5): a car park and a garden in the
+    // block of the house, a square in the next one and a median at the end of
+    // the avenue.
+    let surface =
+        |m: &mut Model, kind: archisim_core::SurfaceKind, pts: &[(f64, f64)], mat| -> Res {
+            let id = m.add_surface(archisim_core::NewSurface {
+                name: m.next_surface_name(kind),
+                level: pb,
+                kind,
+                outline: pts.iter().map(|&(x, y)| p(x, y)).collect(),
+                material: mat,
+                edge_material: stone,
+            })?;
+            let _ = id;
+            Ok(())
+        };
+    use archisim_core::SurfaceKind as SK;
+    surface(
+        &mut m,
+        SK::Parking,
+        &[(14.0, 10.0), (34.0, 10.0), (34.0, 33.0), (14.0, 33.0)],
+        asphalt,
+    )?;
+    let soil = material(&m, "soil").unwrap_or(paving);
+    surface(
+        &mut m,
+        SK::Garden,
+        &[(-34.0, 10.0), (-14.0, 10.0), (-14.0, 30.0), (-34.0, 30.0)],
+        soil,
+    )?;
+    surface(
+        &mut m,
+        SK::Square,
+        &[(48.0, 10.0), (76.0, 10.0), (76.0, 33.0), (48.0, 33.0)],
+        setts,
+    )?;
+    surface(
+        &mut m,
+        SK::Median,
+        &[(368.0, -0.8), (398.0, -0.8), (398.0, 0.8), (368.0, 0.8)],
+        paving,
+    )?;
+    // Pieces hidden by hand (N6): a bollard of the shared surface and the
+    // give-way sign of the Olmo coming from the south.
+    let shared = crossroads::junctions(&m, pb)
+        .into_iter()
+        .find(|j| j.kind == NodeKind::Shared)
+        .ok_or("sin plataforma única")?;
+    if let Some(b) = shared
+        .parts
+        .iter()
+        .find(|x| x.z1 - x.z0 > 0.5 && x.z1 - x.z0 < 1.5)
+    {
+        let c = archisim_core::middle_of(&b.outline);
+        let road = shared.arms[0].road;
+        m.hide_piece(road, archisim_core::PieceKind::Bollard, c)?;
+    }
+    let olmo = crossroads::junctions(&m, pb)
+        .into_iter()
+        .find(|j| j.signs.len() == 2)
+        .ok_or("sin el cruce del Olmo")?;
+    if let Some((post, _, _)) = olmo.signs.iter().min_by(|a, b| a.0.y.total_cmp(&b.0.y)) {
+        m.hide_piece(mayor, archisim_core::PieceKind::Sign, *post)?;
+    }
     // A house in the block between the four crossings.
     let corners = [p(-10.0, 15.0), p(10.0, 15.0), p(10.0, 28.0), p(-10.0, 28.0)];
     for i in 0..4 {
@@ -302,6 +461,21 @@ pub fn write(dir: &Path) -> Res {
         if !j.quiet.is_empty() {
             extra.push("sin marcas".to_string());
         }
+        if !j.arm_paint.is_empty() {
+            extra.push("flechas de carril".to_string());
+        }
+        let hand = j.lanes.iter().filter(|c| c.by_hand).count();
+        match hand {
+            0 => {}
+            1 => extra.push("1 conexión a mano".to_string()),
+            _ => extra.push(format!("{hand} conexiones a mano")),
+        }
+        if let Some(n) = m.node(k).filter(|n| !n.islands.is_empty()) {
+            extra.push(match n.islands.len() {
+                1 => "1 isleta pintada".to_string(),
+                c => format!("{c} isletas pintadas"),
+            });
+        }
         println!(
             "  {}: {}{}{}",
             names.join(" y "),
@@ -359,7 +533,15 @@ mod tests {
             assert!(kinds.contains(&k), "{k:?}");
         }
         let here = m.nodes().count();
-        assert_eq!(here, 9);
+        assert_eq!(here, 10);
+        // The lanes by hand (N3): arrows, a connection and two islands.
+        let lanes = crossroads::junctions(&m, pb)
+            .into_iter()
+            .find(|j| j.lanes.iter().any(|c| c.by_hand))
+            .expect("the avenue's crossing");
+        assert!(!lanes.arm_paint.is_empty());
+        let n = m.node(lanes.key.as_ref().unwrap()).unwrap();
+        assert_eq!(n.islands.len(), 2);
         // The lane in anarchy crosses the Olmo and the Pino without
         // junctions.
         let free = m.roads().find(|r| r.free).unwrap().id;
@@ -386,6 +568,32 @@ mod tests {
         a.sort_by_key(|k| format!("{k:?}"));
         b.sort_by_key(|k| format!("{k:?}"));
         assert_eq!(a, b);
+        // The pieces hidden too (N6).
+        let hidden = |m: &Model| -> usize { m.roads().map(|r| r.hidden.len()).sum() };
+        assert_eq!(hidden(&m), 2);
+        assert_eq!(hidden(&back), 2);
+        assert_eq!(hidden(&imported), 2);
+        assert!(crossroads::junctions(&m, pb)
+            .iter()
+            .any(|j| j.signs.len() == 1 && !j.bump_kerbs.is_empty()));
+        // The surfaces too (N5).
+        assert_eq!(m.surfaces().count(), 4);
+        assert_eq!(
+            back.surfaces().collect::<Vec<_>>(),
+            m.surfaces().collect::<Vec<_>>()
+        );
+        assert_eq!(imported.surfaces().count(), 4);
+        let bays = |m: &Model| -> usize { m.surfaces().map(|s| s.bay_count()).sum() };
+        assert!(bays(&m) > 10);
+        assert_eq!(bays(&imported), bays(&m));
+        // The stretch with its own paving comes back too (N4).
+        let skins = |m: &Model| -> usize { m.roads().map(|r| r.skins.len()).sum() };
+        assert_eq!(skins(&m), 1);
+        assert_eq!(skins(&back), 1);
+        assert_eq!(skins(&imported), 1);
+        let islands =
+            |m: &Model| -> usize { m.nodes().map(|n| n.islands.len() + n.links.len()).sum() };
+        assert_eq!(islands(&imported), islands(&m));
         let ipb = imported.levels()[0].id;
         assert_eq!(
             crossroads::junctions(&imported, ipb).len(),

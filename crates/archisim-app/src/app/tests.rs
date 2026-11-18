@@ -9662,6 +9662,269 @@ fn nodes_with_the_tool() {
 /// and turn is tangent to the stretch before; a street gets a uniform
 /// grade and a parallel one; a node becomes a roundabout.
 #[test]
+fn hide_pieces_and_let_a_zebra_go() {
+    let mut h = Harness::new(Editor::new_project());
+    let canvas = h.app.canvas;
+    h.app
+        .view
+        .fit_exact(canvas, p(-60.0, -60.0), p(60.0, 60.0), 0.0);
+    h.app.set_discipline(super::toolbox::Discipline::Site);
+    h.type_text("w");
+    h.click_at(p(-50.0, 0.0));
+    h.click_at(p(50.0, 0.0));
+    h.key(Key::Enter);
+    h.key(Key::Escape);
+    let road = h.model().roads().next().unwrap().id;
+    // Markings and a zebra at its middle.
+    let mat = h.model().road(road).unwrap().pavement;
+    let r = h.app.ed.transact("Paso", |m| {
+        m.edit_road(road, |x| {
+            x.section.markings = Some(mat);
+            x.section.crossings.push(archisim_core::Crossing {
+                at: 50.0,
+                width: 4.0,
+            });
+        })
+    });
+    assert!(r.is_ok());
+    let before = h.model().road(road).unwrap().visible_markings(&[]);
+    // A dash of the lane line, west of the zebra.
+    let dash = before
+        .iter()
+        .map(|m| archisim_core::middle_of(m))
+        .find(|c| c.y.abs() < 0.2 && c.x < -10.0 && c.x > -25.0)
+        .expect("a dash");
+    h.app.act(super::toolbox::Action::HidePieces);
+    assert!(h.app.piece_pick.is_some());
+    h.click_at(dash);
+    let after = h.model().road(road).unwrap().visible_markings(&[]);
+    assert_eq!(after.len(), before.len() - 1);
+    // The zebra let go: a marking, selected.
+    h.app.act(super::toolbox::Action::DetachCrossing);
+    h.click_at(p(0.5, 1.0));
+    // The street keeps its lowered kerbs; the bars are the marking's now.
+    assert_eq!(h.model().road(road).unwrap().section.crossings.len(), 1);
+    assert!(h.model().road(road).unwrap().visible_markings(&[]).len() < after.len());
+    assert_eq!(h.model().markings().count(), 1);
+    assert!(matches!(
+        h.app.ed.selection.iter().next(),
+        Some(Element::Marking(_))
+    ));
+    // The street's properties show the pieces hidden.
+    h.app.ed.selection = [Element::Road(road)].into_iter().collect();
+    h.frame();
+    let r = h
+        .app
+        .ed
+        .transact("Mostrar", |m| m.show_pieces(road).map(|_| ()));
+    assert!(r.is_ok());
+    assert!(h.model().road(road).unwrap().hidden.is_empty());
+}
+
+#[test]
+fn surfaces_drawn_by_their_outline() {
+    let mut h = Harness::new(Editor::new_project());
+    let canvas = h.app.canvas;
+    h.app
+        .view
+        .fit_exact(canvas, p(-60.0, -60.0), p(60.0, 60.0), 0.0);
+    h.app.set_discipline(super::toolbox::Discipline::Site);
+    // A street east–west to snap to.
+    h.type_text("w");
+    h.click_at(p(-50.0, 0.0));
+    h.click_at(p(50.0, 0.0));
+    h.key(Key::Enter);
+    h.key(Key::Escape);
+    // A car park north of it, by its corners.
+    h.app.act(super::toolbox::Action::Surface(
+        archisim_core::SurfaceKind::Parking,
+    ));
+    assert_eq!(h.app.tool, Tool::Plot);
+    h.frame();
+    for q in [p(-20.0, 15.0), p(20.0, 15.0), p(20.0, 35.0), p(-20.0, 35.0)] {
+        h.click_at(q);
+    }
+    h.click_at(p(-20.0, 15.0));
+    let s = h.model().surfaces().next().expect("a car park").clone();
+    assert_eq!(s.kind, archisim_core::SurfaceKind::Parking);
+    assert!(s.bay_count() > 20, "{}", s.bay_count());
+    // No plot was made.
+    assert_eq!(h.model().plots().count(), 0);
+    // Its properties, and a change of edge.
+    h.app.set_tool(Tool::Arrow);
+    h.app.ed.selection = [Element::Surface(s.id)].into_iter().collect();
+    h.frame();
+    let r = h.app.ed.transact("Borde", |m| {
+        m.edit_surface(s.id, |x| x.edge = archisim_core::SurfaceEdge::Kerb)
+    });
+    assert!(r.is_ok());
+    // Copied 50 m away: the same settings.
+    let r = h.app.ed.transact("Copia", |m| {
+        crate::drag::copy(
+            m,
+            &[Element::Surface(s.id)].into_iter().collect(),
+            p(0.0, -50.0),
+        )
+        .map(|_| ())
+    });
+    assert!(r.is_ok(), "{r:?}");
+    assert_eq!(h.model().surfaces().count(), 2);
+    assert!(h
+        .model()
+        .surfaces()
+        .all(|x| x.edge == archisim_core::SurfaceEdge::Kerb && x.bays.is_some()));
+    // The 3D has it.
+    let solids = archisim_geom::urban_surfaces::surface_solids(h.model(), s.id);
+    assert!(solids.len() >= 3);
+    h.frame();
+}
+
+#[test]
+fn stretches_and_replace_all() {
+    let mut h = Harness::new(Editor::new_project());
+    let canvas = h.app.canvas;
+    h.app
+        .view
+        .fit_exact(canvas, p(-60.0, -60.0), p(60.0, 60.0), 0.0);
+    h.app.set_discipline(super::toolbox::Discipline::Site);
+    h.type_text("w");
+    h.click_at(p(-50.0, 0.0));
+    h.click_at(p(50.0, 0.0));
+    h.key(Key::Enter);
+    h.key(Key::Escape);
+    let road = h.model().roads().next().unwrap().id;
+    // A stretch of its own: the properties draw it.
+    let other = h
+        .model()
+        .materials()
+        .map(|m| m.id)
+        .find(|m| *m != h.model().road(road).unwrap().pavement)
+        .unwrap();
+    let mut k = archisim_core::RoadSkin::new(20.0, 40.0);
+    k.pavement = Some(other);
+    let r = h
+        .app
+        .ed
+        .transact("Tramo", |m| m.set_road_skins(road, vec![k]));
+    assert!(r.is_ok(), "{r:?}");
+    h.app.ed.selection = [Element::Road(road)].into_iter().collect();
+    h.frame();
+    // «Sustituir todos»: open it, pick an area on the plan.
+    h.app.act(super::toolbox::Action::Replace);
+    assert!(h.app.replace.open);
+    h.frame();
+    h.app.replace.picking = Some(None);
+    h.click_at(p(-45.0, -20.0));
+    h.click_at(p(-35.0, 20.0));
+    assert!(h.app.replace.picking.is_none());
+    let scope = h.app.replace.scope(h.app.ed.level).unwrap();
+    let pave = h.model().road(road).unwrap().pavement;
+    let r = h.app.ed.transact("Sustituir", |m| {
+        m.replace_road_material(pave, other, &scope).map(|_| ())
+    });
+    assert!(r.is_ok(), "{r:?}");
+    let rr = h.model().road(road).unwrap();
+    assert_eq!(rr.skins.len(), 2);
+    assert_eq!(rr.materials_at(10.0).0, other);
+    assert_eq!(rr.materials_at(80.0).0, pave);
+    // The window with the materials page.
+    h.app.replace.what = super::replace_ui::ReplaceWhat::Materials;
+    h.frame();
+}
+
+#[test]
+fn lanes_and_islands_with_the_node_tool() {
+    use archisim_geom::crossroads::{self, Junction};
+    let mut h = Harness::new(Editor::new_project());
+    let canvas = h.app.canvas;
+    h.app
+        .view
+        .fit_exact(canvas, p(-60.0, -60.0), p(60.0, 60.0), 0.0);
+    h.app.set_discipline(super::toolbox::Discipline::Site);
+    for (a, b) in [(p(-50.0, 0.0), p(50.0, 0.0)), (p(0.0, -50.0), p(0.0, 50.0))] {
+        h.type_text("w");
+        h.click_at(a);
+        h.click_at(b);
+        h.key(Key::Enter);
+        h.key(Key::Escape);
+    }
+    h.app.set_tool(Tool::Node);
+    h.frame();
+    h.click_at(p(2.0, -1.0));
+    let key = h.app.node_pick.clone().expect("a node");
+    h.frame();
+    let j = crossroads::node_junction(h.model(), &key).unwrap();
+    assert_eq!(j.lanes.len(), 12);
+    // Connect by hand: the lane coming in from the east only to the north.
+    let east = j.arms.iter().find(|a| a.dir.x > 0.9).unwrap().clone();
+    let north = j.arms.iter().find(|a| a.dir.y > 0.9).unwrap().clone();
+    h.app.node_mode = super::node_ui::NodeMode::Link(None);
+    h.frame();
+    h.click_at(crossroads::lane_end(&east, east.lanes_in[0]));
+    assert!(matches!(
+        h.app.node_mode,
+        super::node_ui::NodeMode::Link(Some(_))
+    ));
+    // It had three worked out; clicking the north one takes it away.
+    h.click_at(crossroads::lane_end(&north, north.lanes_out[0]));
+    let j = crossroads::node_junction(h.model(), &key).unwrap();
+    let from_east: Vec<_> = j
+        .lanes
+        .iter()
+        .filter(|c| c.from == Junction::arm_ref(&east))
+        .collect();
+    assert_eq!(from_east.len(), 2, "two left of the three");
+    assert!(from_east.iter().all(|c| c.by_hand));
+    assert!(from_east
+        .iter()
+        .all(|c| c.to.road != north.road || c.to.forward != north.forward));
+    // Its lane gets arrows now (changed by hand).
+    assert!(j.arm_paint.iter().any(|(r, _)| *r == east.road));
+    h.key(Key::Enter);
+    assert_eq!(h.app.node_mode, super::node_ui::NodeMode::Pick);
+    // A painted island in the south-east corner.
+    h.app.node_mode =
+        super::node_ui::NodeMode::Island(Vec::new(), archisim_core::IslandPaint::Chevrons);
+    for q in [p(9.0, -9.0), p(14.0, -9.0), p(11.5, -14.0)] {
+        h.click_at(q);
+    }
+    h.key(Key::Enter);
+    let n = h.model().node(&key).unwrap();
+    assert_eq!(n.islands.len(), 1);
+    assert_eq!(n.links.len(), 2);
+    let j = crossroads::node_junction(h.model(), &key).unwrap();
+    assert!(j.marks.len() > 3, "the island's border and its hatching");
+    // The properties draw the groups Carriles and Isletas pintadas.
+    h.frame();
+    // One step of Undo takes the island away.
+    h.app.ed.undo();
+    assert!(h.model().node(&key).unwrap().islands.is_empty());
+    // The turns of a lane, from the model.
+    let mut n = h.model().node(&key).cloned().unwrap();
+    n.set_arm(
+        Junction::arm_ref(&north),
+        archisim_core::ArmSettings {
+            turns: Some(vec![archisim_core::Turns::STRAIGHT]),
+            stop_back: Some(2.0),
+            ..Default::default()
+        },
+    );
+    let r = h.app.ed.transact("Giros", |m| m.set_node(n));
+    assert!(r.is_ok());
+    let j = crossroads::node_junction(h.model(), &key).unwrap();
+    assert_eq!(
+        j.lanes
+            .iter()
+            .filter(|c| c.from == Junction::arm_ref(&north))
+            .count(),
+        1
+    );
+    // The plan draws it all.
+    h.app.set_tool(Tool::Arrow);
+    h.frame();
+}
+
+#[test]
 fn streets_without_rules_and_with_precision() {
     let mut h = Harness::new(Editor::new_project());
     let canvas = h.app.canvas;
@@ -12563,4 +12826,249 @@ fn the_keypad_types_a_length() {
     assert_eq!(walls.len(), 1);
     let w = walls[0];
     assert!((w.length() - 4.0).abs() < 1e-6);
+}
+
+#[test]
+fn blocks_cut_into_plots_and_filled() {
+    let mut h = Harness::new(Editor::new_project());
+    let canvas = h.app.canvas;
+    h.app
+        .view
+        .fit_exact(canvas, p(-60.0, -60.0), p(60.0, 60.0), 0.0);
+    h.app.set_discipline(super::toolbox::Discipline::Site);
+    // Four streets closing a block 80 m across.
+    let level = h.app.ed.level;
+    let mat = h.model().materials().next().unwrap().id;
+    let r = h.app.ed.transact("Calles", |m| {
+        for (a, b) in [
+            (p(-55.0, -40.0), p(55.0, -40.0)),
+            (p(-55.0, 40.0), p(55.0, 40.0)),
+            (p(-40.0, -55.0), p(-40.0, 55.0)),
+            (p(40.0, -55.0), p(40.0, 55.0)),
+        ] {
+            m.add_road(archisim_core::NewRoad {
+                name: "Calle".into(),
+                level,
+                axis: vec![a, b],
+                section: archisim_core::RoadSection::default(),
+                top_offset: 0.0,
+                profile: Vec::new(),
+                changes: Vec::new(),
+                pavement: mat,
+                kerb_material: mat,
+                sidewalk_material: mat,
+            })?;
+        }
+        Ok::<(), archisim_core::ModelError>(())
+    });
+    assert!(r.is_ok());
+    h.app.act(super::toolbox::Action::Blocks);
+    assert!(h.app.blocks.open);
+    h.frame();
+    // Cut into houses with a garden: a click inside the block.
+    h.app.blocks.zone = archisim_core::BlockZone::Houses;
+    h.app.blocks.picking = true;
+    h.click_at(p(0.0, 0.0));
+    let plots: Vec<_> = h.model().plots().map(|x| x.id).collect();
+    assert!(plots.len() >= 8, "{} plots", plots.len());
+    assert!(h
+        .model()
+        .plots()
+        .all(|x| x.zone == Some(archisim_core::BlockZone::Houses)));
+    // The plots are selected, and a second click on the same block, with
+    // one plot locked, cuts the rest again into wider flats.
+    assert_eq!(h.app.ed.selection.len(), plots.len());
+    let locked = plots[2];
+    let kept = h.model().plot(locked).unwrap().outline.clone();
+    let r = h
+        .app
+        .ed
+        .transact("Bloquear", |m| m.edit_plot(locked, |x| x.locked = true));
+    assert!(r.is_ok());
+    h.app.blocks.zone = archisim_core::BlockZone::Flats;
+    h.app.blocks.frontage = Some(25.0);
+    h.app.blocks.picking = true;
+    h.click_at(p(0.0, 0.0));
+    let again: Vec<_> = h.model().plots().map(|x| x.id).collect();
+    assert!(again.len() < plots.len(), "{} plots", again.len());
+    assert_eq!(h.model().plot(locked).unwrap().outline, kept);
+    assert_eq!(
+        h.model()
+            .plots()
+            .filter(|x| x.zone == Some(archisim_core::BlockZone::Flats))
+            .count(),
+        again.len() - 1
+    );
+    // Undone in one step, and back to the houses.
+    h.app.ed.undo();
+    assert_eq!(h.model().plots().count(), plots.len());
+    let plots: Vec<_> = h.model().plots().map(|x| x.id).collect();
+    // A plot's properties: its zone, its lock and filling it alone.
+    h.app.blocks.picking = false;
+    h.app.ed.selection = [Element::Plot(plots[0])].into_iter().collect();
+    h.frame();
+    let r = h.app.ed.transact("Llenar", |m| {
+        archisim_geom::blocks::fill_plots(m, level, None, None).map(|_| ())
+    });
+    assert!(r.is_ok());
+    let built = h
+        .model()
+        .plots()
+        .filter(|x| archisim_geom::blocks::plot_built(h.model(), x))
+        .count();
+    assert!(built * 10 >= plots.len() * 7, "{built} of {}", plots.len());
+    // Undone in one step.
+    h.app.ed.undo();
+    assert_eq!(h.model().masses().filter(|m| m.dress.is_some()).count(), 0);
+    h.frame();
+}
+
+#[test]
+fn the_map_view_of_a_large_area() {
+    let mut h = Harness::new(Editor::new_project());
+    h.app.set_discipline(super::toolbox::Discipline::Site);
+    let level = h.app.ed.level;
+    let mat = h.model().materials().next().unwrap().id;
+    // A street across a square area of 2 × 2 km, cut at its edge.
+    let r = h.app.ed.transact("Área", |m| {
+        m.set_surroundings(Some(archisim_core::square_area(p(0.0, 0.0), 1000.0)))?;
+        m.add_road(archisim_core::NewRoad {
+            name: "Avenida".into(),
+            level,
+            axis: vec![p(-1000.0, 0.0), p(1000.0, 0.0)],
+            section: archisim_core::RoadSection::default(),
+            top_offset: 0.0,
+            profile: Vec::new(),
+            changes: Vec::new(),
+            pavement: mat,
+            kerb_material: mat,
+            sidewalk_material: mat,
+        })?;
+        Ok::<(), archisim_core::ModelError>(())
+    });
+    assert!(r.is_ok());
+    assert_eq!(h.model().outside_ends(level).len(), 2);
+    h.app.act(super::toolbox::Action::MapView);
+    assert!(h.app.map.open);
+    h.frame();
+    let (lo, hi) = h.app.map.frame().expect("the map is drawn");
+    assert!(hi.x - lo.x > 2000.0);
+    // The whole area fits in the plan.
+    let canvas = h.app.canvas;
+    h.app.view.fit_exact(canvas, lo, hi, 8.0);
+    let (a, b) = h.app.view.visible(canvas);
+    assert!(a.x <= -1000.0 && b.x >= 1000.0, "{a:?} {b:?}");
+    h.frame();
+}
+
+#[test]
+fn traffic_runs_in_the_3d_view() {
+    let mut h = Harness::new(Editor::new_project());
+    h.app.set_discipline(super::toolbox::Discipline::Site);
+    let level = h.app.ed.level;
+    let mat = h.model().materials().next().unwrap().id;
+    let r = h.app.ed.transact("Calles", |m| {
+        for (a, b) in [(p(-80.0, 0.0), p(80.0, 0.0)), (p(0.0, -80.0), p(0.0, 80.0))] {
+            m.add_road(archisim_core::NewRoad {
+                name: "Calle".into(),
+                level,
+                axis: vec![a, b],
+                section: archisim_core::RoadSection::default(),
+                top_offset: 0.0,
+                profile: Vec::new(),
+                changes: Vec::new(),
+                pavement: mat,
+                kerb_material: mat,
+                sidewalk_material: mat,
+            })?;
+        }
+        Ok::<(), archisim_core::ModelError>(())
+    });
+    assert!(r.is_ok());
+    h.app.act(super::toolbox::Action::Traffic);
+    assert!(h.app.v3d.traffic_on());
+    assert_eq!(h.app.mode, ViewMode::ThreeD);
+    h.frame();
+    h.frame();
+    assert!(h.app.v3d.traffic_cars().is_some_and(|n| n > 0));
+    // Off again: nothing drawn.
+    h.app.act(super::toolbox::Action::Traffic);
+    assert!(!h.app.v3d.traffic_on());
+    h.frame();
+}
+
+/// Every project of a folder (`ARCHISIM_PROYECTOS`): its plan and its
+/// sections come, drawn aside as on a real computer, and none fails or
+/// waits for ever (0.92.1).
+#[test]
+#[ignore]
+fn every_project_draws_its_plan_and_sections() {
+    let Ok(dir) = std::env::var("ARCHISIM_PROYECTOS") else {
+        return;
+    };
+    let mut files: Vec<std::path::PathBuf> = std::fs::read_dir(&dir)
+        .unwrap()
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| p.extension().is_some_and(|e| e == "archisim"))
+        .collect();
+    files.sort();
+    let mut bad = Vec::new();
+    for f in files {
+        let ed = Editor::open(&f).unwrap();
+        let mut h = Harness::new(ed);
+        h.app.at_once = std::time::Duration::ZERO;
+        let wait = |h: &mut Harness, what: &str| -> Option<String> {
+            let t = std::time::Instant::now();
+            loop {
+                h.frame();
+                if let Some(e) = h.app.plan.error() {
+                    return Some(format!("{what}: {e}"));
+                }
+                if let Some((_, e)) = &h.app.section_failed {
+                    return Some(format!("{what}: {e}"));
+                }
+                let busy = h.app.plan.busy()
+                    || h.app.section_pending.is_some()
+                    || h.app
+                        .section_cache
+                        .as_ref()
+                        .is_some_and(|c| c.picture.busy());
+                if !busy {
+                    return None;
+                }
+                if t.elapsed().as_secs() > 120 {
+                    return Some(format!("{what}: no llega en 2 minutos"));
+                }
+                std::thread::sleep(std::time::Duration::from_millis(20));
+            }
+        };
+        let name = f.file_name().unwrap().to_string_lossy().to_string();
+        let levels: Vec<_> = h.model().levels().iter().map(|l| l.id).collect();
+        for l in levels {
+            h.app.ed.level = l;
+            h.app.fit_requested = true;
+            for z in [1.0, 2.5, 0.4] {
+                let r = h.app.canvas;
+                h.app.view.zoom_at(r, r.center(), z);
+                if let Some(e) = wait(&mut h, &format!("{name} planta")) {
+                    bad.push(e);
+                }
+            }
+            if h.app.plan.shown().is_none() {
+                bad.push(format!("{name}: planta sin imagen"));
+            }
+        }
+        let sections: Vec<_> = h.model().sections().map(|s| s.id).collect();
+        for s in sections {
+            h.app.open_view(TabKind::Section(s));
+            if let Some(e) = wait(&mut h, &format!("{name} sección")) {
+                bad.push(e);
+            }
+            if h.app.section_cache.as_ref().is_none_or(|c| c.section != s) {
+                bad.push(format!("{name}: sección sin dibujo"));
+            }
+        }
+        println!("{name}: hecho");
+    }
+    assert!(bad.is_empty(), "{bad:#?}");
 }

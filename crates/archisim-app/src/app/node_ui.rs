@@ -7,7 +7,8 @@
 //! handles in plan.
 
 use archisim_core::{
-    ArmSign, CornerSettings, CornerShape, Model, NodeKey, NodeKind, NodeSettings, Point2,
+    ArmRef, ArmSign, CornerSettings, CornerShape, IslandPaint, LaneLink, Model, NodeKey, NodeKind,
+    NodeSettings, PaintedIsland, Point2, Turns,
 };
 use archisim_geom::crossroads::{self, Arm, Junction};
 use eframe::egui::{self, Color32, ComboBox, Id, Pos2, Rect, Sense, Shape, Stroke, Ui, Vec2};
@@ -22,6 +23,23 @@ const PICK_REACH: f64 = 15.0;
 const HANDLE_REACH: f32 = 10.0;
 /// The handles' colour.
 const HANDLE: Color32 = Color32::from_rgb(230, 120, 40);
+
+/// What a click of the tool Nudo does (N3).
+#[derive(Debug, Clone, PartialEq, Default)]
+pub enum NodeMode {
+    /// Pick a node (and drag its handles).
+    #[default]
+    Pick,
+    /// Connect lanes by hand: a lane coming in, then one going out (the
+    /// lane coming in picked, if it is).
+    Link(Option<(ArmRef, usize)>),
+    /// Draw a painted island: its corners so far, and how it is painted.
+    Island(Vec<Point2>, IslandPaint),
+}
+
+/// The colours of the lanes' connections: worked out and by hand.
+const LANE_WORKED: Color32 = Color32::from_rgb(40, 120, 220);
+const LANE_BY_HAND: Color32 = Color32::from_rgb(230, 120, 40);
 
 /// Where an arm goes, as a point of the compass.
 fn heading(a: &Arm) -> &'static str {
@@ -260,6 +278,21 @@ impl ArchiSimApp {
     /// A click with the tool Nudo: picks the node under it (or the free
     /// end of a street).
     pub(super) fn node_click(&mut self, p: Point2) {
+        match self.node_mode.clone() {
+            NodeMode::Pick => {}
+            NodeMode::Link(start) => return self.node_link_click(p, start),
+            NodeMode::Island(mut pts, paint) => {
+                let reach = self.view.to_metres(crate::touch::reach(HANDLE_REACH));
+                if pts.len() >= 3 && pts[0].distance(p) < reach {
+                    self.node_mode = NodeMode::Island(pts, paint);
+                    self.node_finish();
+                    return;
+                }
+                pts.push(p);
+                self.node_mode = NodeMode::Island(pts, paint);
+                return;
+            }
+        }
         let level = self.ed.level;
         match crossroads::node_key_at(self.ed.model(), level, p, PICK_REACH) {
             Some(k) => {
@@ -268,10 +301,154 @@ impl ArchiSimApp {
                     "{title}: cámbialo en Propiedades o con sus tiradores."
                 ));
                 self.node_pick = Some(k);
+                self.node_mode = NodeMode::Pick;
             }
             None => {
                 self.node_pick = None;
                 self.say("Aquí no se encuentran calles ni acaba ninguna.");
+            }
+        }
+    }
+
+    /// A click while connecting lanes: the end of a lane coming in picks it;
+    /// then the start of a lane going out connects them, or takes their
+    /// connection away if they had one. The first connection by hand of an
+    /// arm keeps the ones it had worked out.
+    fn node_link_click(&mut self, p: Point2, start: Option<(ArmRef, usize)>) {
+        let Some((key, Some(j), _)) = self.picked_node() else {
+            self.node_mode = NodeMode::Pick;
+            return;
+        };
+        let reach = self
+            .view
+            .to_metres(crate::touch::reach(HANDLE_REACH))
+            .max(0.8);
+        let mut best: Option<(f64, ArmRef, usize, bool)> = None;
+        for a in &j.arms {
+            let r = Junction::arm_ref(a);
+            for (lanes, coming) in [(&a.lanes_in, true), (&a.lanes_out, false)] {
+                for (i, &off) in lanes.iter().enumerate() {
+                    let d = crossroads::lane_end(a, off).distance(p);
+                    // Coming in first where a lane on the axis is both.
+                    let d = if coming { d - 1e-6 } else { d };
+                    if d < reach && best.is_none_or(|b| d < b.0) {
+                        best = Some((d, r, i, coming));
+                    }
+                }
+            }
+        }
+        let Some((_, arm, lane, coming)) = best else {
+            self.say("Pincha el final de un carril (los puntos de cada calle).");
+            return;
+        };
+        match start {
+            Some((from, from_lane)) if !coming || from == arm => {
+                if coming {
+                    // The same arm: another lane of it.
+                    self.node_mode = NodeMode::Link(Some((arm, lane)));
+                    return;
+                }
+                let mut n = self
+                    .ed
+                    .model()
+                    .node(&key)
+                    .cloned()
+                    .unwrap_or_else(|| NodeSettings::new(key.clone()));
+                if !n.links.iter().any(|l| l.from == from) {
+                    for c in j.lanes.iter().filter(|c| c.from == from) {
+                        n.links.push(LaneLink {
+                            from,
+                            lane: c.lane as u8,
+                            to: c.to,
+                            to_lane: c.to_lane as u8,
+                        });
+                    }
+                }
+                let link = LaneLink {
+                    from,
+                    lane: from_lane as u8,
+                    to: arm,
+                    to_lane: lane as u8,
+                };
+                let had = n.links.contains(&link);
+                n.links.retain(|l| *l != link);
+                if !had {
+                    n.links.push(link);
+                    n.links.sort();
+                }
+                let res = self.ed.transact("Conexión de carriles", |m| m.set_node(n));
+                self.report(
+                    res,
+                    if had {
+                        "Conexión quitada."
+                    } else {
+                        "Carriles conectados."
+                    },
+                );
+                self.node_mode = NodeMode::Link(None);
+            }
+            _ if coming => {
+                self.node_mode = NodeMode::Link(Some((arm, lane)));
+                self.say("Ahora el principio del carril por el que sale.");
+            }
+            _ => self.say("Empieza por el final de un carril que entra al nudo."),
+        }
+    }
+
+    /// Intro, doble clic o clic derecho: closes the island being drawn, or
+    /// stops connecting lanes. Whether it did something.
+    pub(super) fn node_finish(&mut self) -> bool {
+        match std::mem::take(&mut self.node_mode) {
+            NodeMode::Pick => false,
+            NodeMode::Link(_) => {
+                self.say("Conexiones de carril terminadas.");
+                true
+            }
+            NodeMode::Island(pts, paint) => {
+                let Some((key, j, arms)) = self.picked_node() else {
+                    return true;
+                };
+                if pts.len() < 3 {
+                    self.say("Una isleta necesita al menos tres esquinas.");
+                    return true;
+                }
+                let at = j.as_ref().map_or_else(|| arms[0].origin, |j| j.at);
+                let (o, u) = crossroads::node_frame(&arms, at);
+                let v = u.perp_left();
+                let points = pts
+                    .iter()
+                    .map(|q| Point2::new((*q - o).dot(u), (*q - o).dot(v)))
+                    .collect();
+                let mut n = self
+                    .ed
+                    .model()
+                    .node(&key)
+                    .cloned()
+                    .unwrap_or_else(|| NodeSettings::new(key.clone()));
+                n.islands.push(PaintedIsland { points, paint });
+                let res = self.ed.transact("Isleta pintada", |m| m.set_node(n));
+                self.report(res, "Isleta pintada.");
+                true
+            }
+        }
+    }
+
+    /// Esc with the tool Nudo: the last corner of an island, the lane picked
+    /// or the mode, before leaving the tool. Whether it did something.
+    pub(super) fn node_escape(&mut self) -> bool {
+        match &mut self.node_mode {
+            NodeMode::Pick => false,
+            NodeMode::Link(start) => {
+                if start.take().is_none() {
+                    self.node_mode = NodeMode::Pick;
+                }
+                true
+            }
+            NodeMode::Island(pts, _) => {
+                if pts.pop().is_none() {
+                    self.node_mode = NodeMode::Pick;
+                }
+                true
             }
         }
     }
@@ -333,6 +510,9 @@ impl ArchiSimApp {
     /// Dragging a handle of the picked node: its arm's setback or its
     /// corner's radius.
     pub(super) fn node_drag(&mut self, ctx: &egui::Context, rect: Rect, response: &egui::Response) {
+        if self.node_mode != NodeMode::Pick {
+            return;
+        }
         if response.drag_started_by(egui::PointerButton::Primary) {
             let origin = ctx.input(|i| i.pointer.press_origin());
             if let (Some(o), Some(key)) = (origin, self.node_pick.clone()) {
@@ -398,6 +578,73 @@ impl ArchiSimApp {
                 self.polygon(rect, &outline),
                 Stroke::new(2.5, ACCENT),
             ));
+        }
+        // Where each lane goes (N3), and the lanes' ends while connecting.
+        if let Some(j) = &j {
+            let linking = matches!(self.node_mode, NodeMode::Link(_));
+            for c in &j.lanes {
+                let col = if c.by_hand { LANE_BY_HAND } else { LANE_WORKED };
+                let line = self.polygon(rect, &c.path);
+                painter.add(Shape::line(
+                    line.clone(),
+                    Stroke::new(if linking { 2.0 } else { 1.2 }, col.gamma_multiply(0.85)),
+                ));
+                if let (Some(&tip), Some(&before)) =
+                    (line.last(), line.get(line.len().saturating_sub(2)))
+                {
+                    let d = (tip - before).normalized() * 7.0;
+                    let n = Vec2::new(-d.y, d.x) * 0.5;
+                    painter.add(Shape::convex_polygon(
+                        vec![tip, tip - d + n, tip - d - n],
+                        col,
+                        Stroke::NONE,
+                    ));
+                }
+            }
+            if let NodeMode::Link(start) = &self.node_mode {
+                for a in &j.arms {
+                    let r = Junction::arm_ref(a);
+                    for (i, &off) in a.lanes_in.iter().enumerate() {
+                        let at = self.view.to_screen(rect, crossroads::lane_end(a, off));
+                        let on = *start == Some((r, i));
+                        painter.circle(
+                            at,
+                            if on { 7.0 } else { 5.0 },
+                            if on {
+                                LANE_BY_HAND
+                            } else {
+                                Color32::from_rgb(60, 170, 90)
+                            },
+                            Stroke::new(1.5, Color32::WHITE),
+                        );
+                    }
+                    for &off in &a.lanes_out {
+                        let at = self.view.to_screen(rect, crossroads::lane_end(a, off));
+                        painter.circle(at, 5.0, Color32::WHITE, Stroke::new(2.0, LANE_WORKED));
+                    }
+                }
+            }
+        }
+        // The island being drawn.
+        if let NodeMode::Island(pts, _) = &self.node_mode {
+            let mut line = pts.clone();
+            if let Some(c) = self.cursor {
+                line.push(c.point);
+            }
+            if let Some(&f) = pts.first() {
+                line.push(f);
+            }
+            painter.add(Shape::line(
+                self.polygon(rect, &line),
+                Stroke::new(1.5, LANE_BY_HAND),
+            ));
+            for q in pts {
+                painter.circle_filled(self.view.to_screen(rect, *q), 3.5, LANE_BY_HAND);
+            }
+            return;
+        }
+        if matches!(self.node_mode, NodeMode::Link(_)) {
+            return;
         }
         // The arms' ends.
         for a in &arms {
@@ -690,6 +937,138 @@ impl ArchiSimApp {
                     n.set_corner(r, c);
                 }
             });
+        }
+        // The lanes (N3): where each goes, its stop line, and connecting
+        // them by hand.
+        let mut mode = None;
+        if let (false, true, Some(j)) = (open, count >= 2, &j) {
+            group(ui, "node-lanes", "Carriles", |ui| {
+                let hand = n.links.len();
+                props::note(
+                    ui,
+                    &format!(
+                        "{} conexiones de carril{}. Las líneas azules son las calculadas y las naranjas las hechas a mano; las flechas se pintan en las calles con más de un carril de entrada o cambiadas a mano.",
+                        j.lanes.len(),
+                        if hand > 0 { format!(", {hand} a mano") } else { String::new() }
+                    ),
+                );
+                for a in &j.arms {
+                    if a.lanes_in.is_empty() {
+                        continue;
+                    }
+                    let r = Junction::arm_ref(a);
+                    let mut s = n.arm(r);
+                    ui.label(egui::RichText::new(arm_name(model, a)).strong());
+                    if n.links.iter().any(|l| l.from == r) {
+                        props::note(ui, "Va por sus conexiones hechas a mano.");
+                    } else {
+                        let mut turns = crossroads::arm_turns(a, Some(&n));
+                        let mut changed = false;
+                        for (i, t) in turns.iter_mut().enumerate() {
+                            let name = if a.lanes_in.len() == 1 {
+                                "Carril".to_string()
+                            } else if i == 0 {
+                                "Carril 1 (bordillo)".to_string()
+                            } else {
+                                format!("Carril {}", i + 1)
+                            };
+                            row(ui, &name, "Hacia dónde puede ir", |ui, _| {
+                                ui.horizontal(|ui| {
+                                    for (k, label, arrow) in Turns::ALL {
+                                        let on = t.has(k);
+                                        if ui
+                                            .selectable_label(on, arrow)
+                                            .on_hover_text(label)
+                                            .clicked()
+                                        {
+                                            *t = t.with(k, !on);
+                                            changed = true;
+                                        }
+                                    }
+                                });
+                            });
+                        }
+                        if changed {
+                            s.turns = Some(turns);
+                        }
+                        if s.turns.is_some() && ui.small_button("Giros calculados").clicked() {
+                            s.turns = None;
+                        }
+                    }
+                    row(
+                        ui,
+                        "Detención (mm)",
+                        "Cuánto se retrasa la línea de detención desde el final del brazo",
+                        |ui, w| {
+                            if let Some(v) = length_field(
+                                ui,
+                                Id::unique(("node-stop", &key, r)),
+                                s.stop_back.unwrap_or(0.0),
+                                w - 8.0,
+                            ) {
+                                s.stop_back = (v > 0.0).then_some(v);
+                            }
+                        },
+                    );
+                    n.set_arm(r, s);
+                }
+                ui.horizontal_wrapped(|ui| {
+                    let linking = matches!(self.node_mode, NodeMode::Link(_));
+                    if ui
+                        .selectable_label(linking, "Conectar carriles a mano")
+                        .on_hover_text("En planta: el final de un carril que entra y luego el principio del carril por el que sale (otra vez, para quitarla)")
+                        .clicked()
+                    {
+                        mode = Some(if linking { NodeMode::Pick } else { NodeMode::Link(None) });
+                    }
+                    if ui
+                        .add_enabled(!n.links.is_empty(), egui::Button::new("Quitar las conexiones a mano"))
+                        .clicked()
+                    {
+                        n.links.clear();
+                    }
+                });
+            });
+            group(ui, "node-islands", "Isletas pintadas", |ui| {
+                let mut gone = None;
+                for (i, isl) in n.islands.iter_mut().enumerate() {
+                    ui.horizontal(|ui| {
+                        ui.label(format!("Isleta {}", i + 1));
+                        ComboBox::from_id_salt(("node-island", &key, i))
+                            .selected_text(isl.paint.label())
+                            .show_ui(ui, |ui| {
+                                for k in IslandPaint::ALL {
+                                    ui.selectable_value(&mut isl.paint, k, k.label());
+                                }
+                            });
+                        if ui.small_button("Quitar").clicked() {
+                            gone = Some(i);
+                        }
+                    });
+                }
+                if let Some(i) = gone {
+                    n.islands.remove(i);
+                }
+                let drawing = matches!(self.node_mode, NodeMode::Island(..));
+                if ui
+                    .selectable_label(drawing, "Dibujar isleta pintada")
+                    .on_hover_text("Clic en cada esquina; Intro, doble clic o clic en la primera para cerrarla; Esc quita la última")
+                    .clicked()
+                {
+                    mode = Some(if drawing {
+                        NodeMode::Pick
+                    } else {
+                        NodeMode::Island(Vec::new(), IslandPaint::Chevrons)
+                    });
+                }
+                props::note(
+                    ui,
+                    "Las isletas van con el nudo: si mueves sus calles, se mueven con él.",
+                );
+            });
+        }
+        if let Some(m) = mode {
+            self.node_mode = m;
         }
         let mut reset = false;
         group(ui, "node-reset", "Nudo calculado", |ui| {

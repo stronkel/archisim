@@ -80,6 +80,9 @@ pub struct Prefs {
     pub relief_3d: bool,
     /// Water moving in 3D.
     pub water_3d: bool,
+    /// Plans, sections and drawings made on another thread when they take
+    /// long (0.85); off, at once, as before.
+    pub draw_aside: bool,
     /// The ribbon folded: only the names of its panels, which open when
     /// pressed.
     pub ribbon_compact: bool,
@@ -157,6 +160,7 @@ impl Default for Prefs {
             nav: Navigation::default(),
             relief_3d: true,
             water_3d: true,
+            draw_aside: true,
             ribbon_compact: false,
             check_updates: true,
             skipped_version: None,
@@ -212,6 +216,7 @@ impl Prefs {
             },
             "relieve_3d": self.relief_3d,
             "agua_en_movimiento": self.water_3d,
+            "dibujar_aparte": self.draw_aside,
             "cinta_recogida": self.ribbon_compact,
             "buscar_actualizaciones": self.check_updates,
             "version_saltada": self.skipped_version,
@@ -301,6 +306,7 @@ impl Prefs {
             },
             relief_3d: flag("relieve_3d", d.relief_3d),
             water_3d: flag("agua_en_movimiento", d.water_3d),
+            draw_aside: flag("dibujar_aparte", d.draw_aside),
             ribbon_compact: flag("cinta_recogida", d.ribbon_compact),
             check_updates: flag("buscar_actualizaciones", d.check_updates),
             skipped_version: v["version_saltada"].as_str().map(str::to_string),
@@ -392,6 +398,7 @@ mod tests {
             },
             relief_3d: false,
             water_3d: false,
+            draw_aside: true,
             ribbon_compact: true,
             check_updates: false,
             skipped_version: Some("0.81.0".into()),

@@ -164,7 +164,7 @@ pub(super) fn material_combo(
     v
 }
 
-fn comma(v: f64, d: usize) -> String {
+pub(super) fn comma(v: f64, d: usize) -> String {
     format!("{v:.d$}").replace('.', ",")
 }
 
@@ -494,6 +494,10 @@ impl ArchiSimApp {
     }
 
     pub(super) fn build_plot(&mut self, outline: Vec<Point2>) {
+        if let Some(kind) = self.surface_draw {
+            self.build_surface(kind, outline);
+            return;
+        }
         let level = self.ed.level;
         let setback = self.plot_setback;
         let r = self.ed.transact("Crear parcela", |m| {
@@ -891,6 +895,9 @@ impl ArchiSimApp {
             Tool::Plot if self.plot_tool.is_drawing() => {
                 "Clic: siguiente esquina de la linde · Clic en la primera o Intro: cerrar · Esc: quitar la última"
             }
+            Tool::Plot if self.surface_draw.is_some() && !self.plot_tool.is_drawing() => {
+                "Superficie: clic en la primera esquina (se pega a bordillos y fachadas) · Esc: flecha"
+            }
             Tool::Plot => "Clic: primera esquina de la linde · Esc: flecha",
             Tool::Road if self.road_settings.draw == RoadDraw::Curve && self.road_points.len() == 1 => {
                 "Clic: hacia dónde tira la curva · Esc: quitarlo"
@@ -919,6 +926,10 @@ impl ArchiSimApp {
     // ---- Properties ---------------------------------------------------------
 
     pub(super) fn plot_tool_properties(&mut self, ui: &mut Ui) {
+        if let Some(kind) = self.surface_draw {
+            self.surface_tool_properties(ui, kind);
+            return;
+        }
         props::title(ui, "Herramienta Parcela · lo que vas a dibujar");
         group(ui, "tool-plot", "Parcela", |ui| {
             row(
@@ -1172,6 +1183,7 @@ impl ArchiSimApp {
                 },
             );
         });
+        self.plot_zone_group(ui, id);
         group(ui, "plot-figures", "Superficies", |ui| {
             text_row(ui, "Superficie (m²)", "", &comma(p.area(), 2));
             text_row(ui, "Perímetro (m)", "", &comma(p.perimeter(), 2));
@@ -1289,6 +1301,7 @@ impl ArchiSimApp {
         self.road_changes_group(ui, id);
         self.road_profile_group(ui, id);
         self.road_layout_group(ui, id);
+        self.road_skins_group(ui, id);
         group(ui, "road-figures", "Mediciones", |ui| {
             text_row(ui, "Longitud del eje (m)", "", &comma(r.length(), 2));
             for band in RoadBand::ALL {
@@ -1682,6 +1695,112 @@ impl ArchiSimApp {
                 self.ed.selection = [Element::Road(p)].into_iter().collect();
             }
             self.report(res, "Calle paralela creada.");
+        }
+    }
+
+    /// The stretches of a street with their own materials (N4): another
+    /// paving, kerb, sidewalk or planting soil from one distance to another.
+    fn road_skins_group(&mut self, ui: &mut Ui, id: RoadId) {
+        let Some(r) = self.ed.model().road(id).cloned() else {
+            return;
+        };
+        let len = r.length();
+        let model = self.ed.model();
+        let mut skins = r.skins.clone();
+        let mut gone = None;
+        let mut replace = false;
+        let mut show_hidden = false;
+        group(ui, "road-skins", "Por tramos", |ui| {
+            props::note(
+                ui,
+                "Un trozo de la calle con otro pavimento, bordillo, acera o tierra; lo que no cambies sigue siendo el de la calle.",
+            );
+            for (i, k) in skins.iter_mut().enumerate() {
+                ui.label(egui::RichText::new(format!("Tramo {}", i + 1)).strong());
+                for (label, v) in [("Desde (mm)", &mut k.from), ("Hasta (mm)", &mut k.to)] {
+                    row(ui, label, "A lo largo del eje", |ui, w| {
+                        if let Some(x) =
+                            length_field(ui, Id::unique(("road-skin", id, i, label)), *v, w - 8.0)
+                        {
+                            *v = x.clamp(0.0, len);
+                        }
+                    });
+                }
+                let base = [
+                    r.pavement,
+                    r.kerb_material,
+                    r.sidewalk_material,
+                    r.section.planting.unwrap_or(r.sidewalk_material),
+                ];
+                let slots = [
+                    ("Calzada", &mut k.pavement),
+                    ("Bordillo", &mut k.kerb),
+                    ("Acera", &mut k.sidewalk),
+                    ("Tierra", &mut k.planting),
+                ];
+                for (j, (label, slot)) in slots.into_iter().enumerate() {
+                    row(ui, label, "Vacío: el de la calle", |ui, w| {
+                        let mut m = slot.unwrap_or(base[j]);
+                        super::cards::material_button(
+                            ui,
+                            Id::unique(("road-skin-mat", id, i, j)),
+                            model,
+                            &mut m,
+                            w - 30.0,
+                        );
+                        if m != slot.unwrap_or(base[j]) {
+                            *slot = (m != base[j]).then_some(m);
+                        }
+                        if slot.is_some()
+                            && ui
+                                .small_button("×")
+                                .on_hover_text("El de la calle")
+                                .clicked()
+                        {
+                            *slot = None;
+                        }
+                    });
+                }
+                if ui.small_button("Quitar el tramo").clicked() {
+                    gone = Some(i);
+                }
+            }
+            if !r.hidden.is_empty() {
+                props::note(ui, &format!("{} piezas ocultas a mano.", r.hidden.len()));
+                if ui.button("Mostrar las piezas ocultas").clicked() {
+                    show_hidden = true;
+                }
+            }
+            ui.horizontal_wrapped(|ui| {
+                if ui.button("Nuevo tramo").clicked() {
+                    let mid = len / 2.0;
+                    skins.push(archisim_core::RoadSkin::new((mid - 10.0).max(0.0), (mid + 10.0).min(len)));
+                }
+                replace = ui
+                    .button("Sustituir todos…")
+                    .on_hover_text("Cambiar un tipo de objeto o un material por otro en esta calle, en una zona o en todo el proyecto")
+                    .clicked();
+            });
+        });
+        if let Some(i) = gone {
+            skins.remove(i);
+        }
+        if show_hidden {
+            let res = self
+                .ed
+                .transact("Mostrar piezas", |m| m.show_pieces(id).map(|_| ()));
+            self.report(res, "Piezas ocultas devueltas.");
+        }
+        if replace {
+            self.replace.open = true;
+            self.replace.scope = super::replace_ui::ReplaceWhere::Street;
+            self.replace.street = Some((id, 0.0, len));
+        }
+        if skins != r.skins {
+            let res = self
+                .ed
+                .transact("Tramos de la calle", |m| m.set_road_skins(id, skins));
+            self.report(res, "Tramos cambiados.");
         }
     }
 

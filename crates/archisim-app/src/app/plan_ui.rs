@@ -808,6 +808,9 @@ impl ArchiSimApp {
             self.box_turn();
             return;
         }
+        if enter && self.tool == Tool::Node && self.node_finish() {
+            return;
+        }
         if self.command_keys(&events, enter, escape, backspace, space) {
             return;
         }
@@ -1052,9 +1055,12 @@ impl ArchiSimApp {
                         self.set_tool(Tool::Arrow);
                     }
                 }
-                Tool::Roundabout | Tool::Node | Tool::ModularBox | Tool::Decal => {
-                    self.set_tool(Tool::Arrow)
+                Tool::Node => {
+                    if !self.node_escape() {
+                        self.set_tool(Tool::Arrow)
+                    }
                 }
+                Tool::Roundabout | Tool::ModularBox | Tool::Decal => self.set_tool(Tool::Arrow),
                 Tool::World => self.world_escape(),
                 Tool::Marking => {
                     if self.marking_points.pop().is_none() {
@@ -1134,6 +1140,9 @@ impl ArchiSimApp {
                     self.ed.selection.clear();
                     self.rebar_pick = false;
                     self.road_grade_pick = None;
+                    self.replace.picking = None;
+                    self.piece_pick = None;
+                    self.blocks.picking = false;
                 }
             }
         }
@@ -1254,6 +1263,30 @@ impl ArchiSimApp {
             if response.clicked_by(PointerButton::Primary) {
                 if let Some(c) = self.cursor {
                     self.concept_drop_click(c.point);
+                }
+            }
+            return;
+        }
+        if self.piece_pick.is_some() && self.tool == Tool::Arrow {
+            if response.clicked_by(PointerButton::Primary) {
+                if let Some(c) = self.cursor {
+                    self.piece_click(c.point);
+                }
+            }
+            return;
+        }
+        if self.blocks.picking && self.tool == Tool::Arrow {
+            if response.clicked_by(PointerButton::Primary) {
+                if let Some(c) = self.cursor {
+                    self.blocks_click(c.point);
+                }
+            }
+            return;
+        }
+        if self.replace.picking.is_some() && self.tool == Tool::Arrow {
+            if response.clicked_by(PointerButton::Primary) {
+                if let Some(c) = self.cursor {
+                    self.replace_area_click(c.point);
                 }
             }
             return;
@@ -1494,7 +1527,11 @@ impl ArchiSimApp {
             }
             Tool::Node => {
                 self.node_drag(ctx, rect, response);
-                if response.clicked_by(PointerButton::Primary) {
+                if response.double_clicked_by(PointerButton::Primary)
+                    || response.clicked_by(PointerButton::Secondary)
+                {
+                    self.node_finish();
+                } else if response.clicked_by(PointerButton::Primary) {
                     if let Some(c) = self.cursor {
                         self.node_click(c.point);
                     }
@@ -1833,6 +1870,7 @@ impl ArchiSimApp {
             let b = self.view.to_screen(rect, Point2::new(k.hi.x, k.lo.y));
             self.loupe_source = Some((tex.id(), Rect::from_min_max(a, b)));
         }
+        super::picture::note(painter, rect, "la planta", &picture);
         self.last_plan_ms = picture.last().as_secs_f64() * 1000.0;
         self.plan = picture;
     }

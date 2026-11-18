@@ -89,7 +89,7 @@ impl Exporter<'_> {
                     ("GrossPerimeter", "IFCQUANTITYLENGTH", p.perimeter()),
                 ],
             );
-            let props = [
+            let mut props = vec![
                 self.w.add(format!(
                     "IFCPROPERTYSINGLEVALUE('Setback',$,IFCLENGTHMEASURE({}),$)",
                     real(p.setback)
@@ -99,6 +99,19 @@ impl Exporter<'_> {
                     string(&level_guid(p.level))
                 )),
             ];
+            // Its zone and its lock (N7).
+            if let Some(z) = p.zone {
+                props.push(self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('Zone',$,IFCIDENTIFIER({}),$)",
+                    string(z.code())
+                )));
+            }
+            if p.locked {
+                props.push(
+                    self.w
+                        .add("IFCPROPERTYSINGLEVALUE('Locked',$,IFCBOOLEAN(.T.),$)"),
+                );
+            }
             self.pset(el, &p.guid, "ArchiSim_Plot", &props);
             plots.push(el);
         }
@@ -364,6 +377,26 @@ impl Exporter<'_> {
                             string(&nodes.join("~"))
                         )));
                     }
+                    // Stretches with their own materials (N4), by name.
+                    if !r.skins.is_empty() {
+                        let text = r.encode_skins(|m| {
+                            model
+                                .material(m)
+                                .map(|x| x.name.clone())
+                                .unwrap_or_default()
+                        });
+                        props.push(self.w.add(format!(
+                            "IFCPROPERTYSINGLEVALUE('Skins',$,IFCTEXT({}),$)",
+                            string(&text)
+                        )));
+                    }
+                    // Pieces hidden by hand (N6).
+                    if !r.hidden.is_empty() {
+                        props.push(self.w.add(format!(
+                            "IFCPROPERTYSINGLEVALUE('Hidden',$,IFCTEXT({}),$)",
+                            string(&r.encode_hidden())
+                        )));
+                    }
                     // Laid in anarchy (N2).
                     if r.free {
                         props.push(
@@ -517,6 +550,71 @@ impl Exporter<'_> {
                 )));
             }
             self.pset(el, &m.guid, "ArchiSim_Marking", &props);
+            on_site.push(el);
+        }
+        // Urban surfaces (N5): their paving, edge and bays as triangles,
+        // and what they are to read them back.
+        for x in model.surfaces() {
+            let base = elevation(x.level);
+            let solids = archisim_geom::urban_surfaces::surface_solids(model, x.id);
+            let tris: Vec<[[f64; 3]; 3]> =
+                solids.iter().flat_map(|s| s.triangles.clone()).collect();
+            if tris.is_empty() {
+                continue;
+            }
+            let loc = self.point3(0.0, 0.0, base);
+            let pl = self.placement(Some(site_pl), loc, None);
+            let shape = self.triangulated_shape(&tris, base);
+            let el = self.w.add(format!(
+                "IFCBUILDINGELEMENTPROXY({},$,{},$,{},{pl},{shape},$,.USERDEFINED.)",
+                string(x.guid.as_str()),
+                string(&x.name),
+                string(x.kind.label())
+            ));
+            if let Some(m) = materials.get(&x.material) {
+                self.w.add(format!(
+                    "IFCRELASSOCIATESMATERIAL({},$,$,$,({el}),{m})",
+                    string(derived_guid(&x.guid, "material").as_str())
+                ));
+            }
+            let outline: Vec<String> = x
+                .outline
+                .iter()
+                .map(|p| format!("{},{}", real(p.x), real(p.y)))
+                .collect();
+            let mut props = vec![
+                self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('Settings',$,IFCTEXT({}),$)",
+                    string(&x.encode())
+                )),
+                self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('Outline',$,IFCTEXT({}),$)",
+                    string(&outline.join(";"))
+                )),
+                self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('Level',$,IFCIDENTIFIER({}),$)",
+                    string(&level_guid(x.level))
+                )),
+                self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('Area',$,IFCAREAMEASURE({}),$)",
+                    real(x.area())
+                )),
+            ];
+            for (key, m) in [("Material", x.material), ("EdgeMaterial", x.edge_material)] {
+                if let Some(mm) = model.material(m) {
+                    props.push(self.w.add(format!(
+                        "IFCPROPERTYSINGLEVALUE('{key}',$,IFCLABEL({}),$)",
+                        string(&mm.name)
+                    )));
+                }
+            }
+            if x.bays.is_some() {
+                props.push(self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('Bays',$,IFCCOUNTMEASURE({}),$)",
+                    x.bay_count()
+                )));
+            }
+            self.pset(el, &x.guid, "ArchiSim_UrbanSurface", &props);
             on_site.push(el);
         }
         // Buildings of the surroundings (U6): a proxy with its façades

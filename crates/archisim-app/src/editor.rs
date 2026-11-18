@@ -545,6 +545,7 @@ impl Editor {
             Element::Road(id) => model.road(*id).is_some(),
             Element::Roundabout(id) => model.roundabout(*id).is_some(),
             Element::Marking(id) => model.marking(*id).is_some(),
+            Element::Surface(id) => model.surface(*id).is_some(),
             Element::Decal(id) => model.decal(*id).is_some(),
             Element::Planting(id) => model.planting(*id).is_some(),
             Element::Run(id) => model.run(*id).is_some(),
@@ -893,6 +894,7 @@ impl Editor {
                         | Element::Road(_)
                         | Element::Roundabout(_)
                         | Element::Marking(_)
+                        | Element::Surface(_)
                         | Element::Decal(_)
                         | Element::Planting(_)
                         | Element::Run(_)
@@ -1355,6 +1357,7 @@ impl Editor {
                     Element::Road(id) => m.edit_road(*id, |x| x.level = level)?,
                     Element::Roundabout(id) => m.edit_roundabout(*id, |x| x.level = level)?,
                     Element::Marking(id) => m.edit_marking(*id, |x| x.level = level)?,
+                    Element::Surface(id) => m.edit_surface(*id, |x| x.level = level)?,
                     Element::Decal(id) => m.edit_decal(*id, |x| x.level = level)?,
                     Element::Planting(id) => m.edit_planting(*id, |x| x.level = level)?,
                     Element::Run(id) => m.edit_run(*id, |x| x.level = level)?,
@@ -1686,6 +1689,7 @@ fn remove_element(m: &mut Model, e: Element) -> Result<(), archisim_core::ModelE
         Element::Road(id) => m.remove_road(id).map(drop),
         Element::Roundabout(id) => m.remove_roundabout(id).map(drop),
         Element::Marking(id) => m.remove_marking(id).map(drop),
+        Element::Surface(id) => m.remove_surface(id).map(drop),
         Element::Decal(id) => m.remove_decal(id).map(drop),
         Element::Planting(id) => m.remove_planting(id).map(drop),
         Element::Run(id) => m.remove_run(id).map(drop),
@@ -1803,6 +1807,7 @@ pub(crate) fn remove_items(m: &mut Model, items: &[Element]) -> Result<(), Model
             | Element::Road(_)
             | Element::Roundabout(_)
             | Element::Marking(_)
+            | Element::Surface(_)
             | Element::Decal(_)
             | Element::Planting(_)
             | Element::Run(_)

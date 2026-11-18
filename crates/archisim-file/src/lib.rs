@@ -51,7 +51,7 @@ use serde_json::Value;
 /// Value of the `format` field.
 pub const FORMAT: &str = "ArchiSim";
 /// File layout written by this version of ArchiSim.
-pub const CURRENT_VERSION: u32 = 114;
+pub const CURRENT_VERSION: u32 = 120;
 /// File name extension, without the dot.
 pub const EXTENSION: &str = "archisim";
 /// Length unit of every number in the file.
@@ -186,6 +186,7 @@ const TEMPLATE_DROPS: &[&str] = &[
     "plots",
     "roads",
     "roundabouts",
+    "surfaces",
     "nodes",
     "ceilings",
     "boxes",
@@ -547,7 +548,19 @@ pub fn migrate(value: Value, from: u64) -> Result<Value, FileError> {
             // older files have none.
             // 113 → 114: streets laid in anarchy (`free`, N2); nothing to
             // change, the older ones are not.
-            9..=113 => {
+            // 114 → 115: the nodes' lanes, stop lines and painted islands
+            // (N3), in the same text of each node; nothing to change.
+            // 115 → 116: the streets' stretches with their own materials
+            // (`skins`, N4); older files have none.
+            // 116 → 117: urban surfaces (`surfaces`, N5); older files have
+            // none.
+            // 117 → 118: the streets' pieces hidden by hand (`hidden`, N6);
+            // older files have none.
+            // 118 → 119: the plots' zone and lock (`zone`, `locked`, N7);
+            // older plots are not zoned nor locked.
+            // 119 → 120: the area of the surroundings (`surroundings`, N8);
+            // older files have none.
+            9..=119 => {
                 let mut v = if version == 32 {
                     legacy_dormers(value)
                 } else {
@@ -1572,17 +1585,30 @@ mod tests {
         // A plot with its setback and a road (version 19).
         {
             let mat = m.materials().next().unwrap().id;
-            m.add_plot(archisim_core::NewPlot {
-                name: "Parcela 1".into(),
-                level: levels[0],
-                outline: vec![
-                    Point2::new(-5.0, -5.0),
-                    Point2::new(45.0, -5.0),
-                    Point2::new(45.0, 20.0),
-                    Point2::new(-5.0, 20.0),
-                ],
-                setback: 3.0,
-                reference: "1234567VK4713S0001AB".into(),
+            let plot = m
+                .add_plot(archisim_core::NewPlot {
+                    name: "Parcela 1".into(),
+                    level: levels[0],
+                    outline: vec![
+                        Point2::new(-5.0, -5.0),
+                        Point2::new(45.0, -5.0),
+                        Point2::new(45.0, 20.0),
+                        Point2::new(-5.0, 20.0),
+                    ],
+                    setback: 3.0,
+                    reference: "1234567VK4713S0001AB".into(),
+                })
+                .unwrap();
+            // The area of the surroundings (version 120).
+            m.set_surroundings(Some(archisim_core::square_area(
+                Point2::new(0.0, 0.0),
+                500.0,
+            )))
+            .unwrap();
+            // Zoned and locked (version 119).
+            m.edit_plot(plot, |p| {
+                p.zone = Some(archisim_core::BlockZone::Houses);
+                p.locked = true;
             })
             .unwrap();
             m.add_road(archisim_core::NewRoad {
@@ -2117,7 +2143,7 @@ mod tests {
         let back = from_str(&text).unwrap();
         assert_eq!(back, m);
         // A version 6 file has none of them and still opens.
-        let v6 = to_string(&sample()).replacen("\"version\": 114", "\"version\": 6", 1);
+        let v6 = to_string(&sample()).replacen("\"version\": 120", "\"version\": 6", 1);
         assert_eq!(from_str(&v6).unwrap().columns().count(), 0);
     }
 
@@ -2144,7 +2170,7 @@ mod tests {
         let opened = from_str(&old).unwrap();
         assert_same_project(&opened, &m);
         // Saved again, it is a version 5 file.
-        assert!(to_string(&opened).contains("\"version\": 114"));
+        assert!(to_string(&opened).contains("\"version\": 120"));
     }
 
     /// The project as ArchiSim 0.10–0.13 wrote it (file version 2): door and
@@ -2331,7 +2357,7 @@ mod tests {
         assert_eq!(back, m);
         let plain = to_string(&sample());
         assert!(!plain.contains("wrap_"));
-        let old = from_str(&plain.replacen("\"version\": 114", "\"version\": 40", 1)).unwrap();
+        let old = from_str(&plain.replacen("\"version\": 120", "\"version\": 40", 1)).unwrap();
         for t in old.wall_types() {
             assert_eq!(t.wrap_ends, Wrap::None);
             assert_eq!(
@@ -2367,7 +2393,7 @@ mod tests {
             FacadeSystem::Brick
         );
         let plain = to_string(&sample());
-        let old = from_str(&plain.replacen("\"version\": 114", "\"version\": 48", 1)).unwrap();
+        let old = from_str(&plain.replacen("\"version\": 120", "\"version\": 48", 1)).unwrap();
         assert!(old.wall_types().all(|t| t.facade.is_none()));
     }
 
@@ -2406,7 +2432,7 @@ mod tests {
         let back = from_str(&text).unwrap();
         assert_eq!(back, m);
         let plain = to_string(&sample());
-        let old = from_str(&plain.replacen("\"version\": 114", "\"version\": 99", 1)).unwrap();
+        let old = from_str(&plain.replacen("\"version\": 120", "\"version\": 99", 1)).unwrap();
         assert!(old.walls().all(|w| w.section.is_none()));
     }
 
@@ -2544,7 +2570,7 @@ mod tests {
         assert_eq!(back, m);
         let plain = to_string(&sample());
         assert!(!plain.contains("allow_join"));
-        let old = plain.replacen("\"version\": 114", "\"version\": 39", 1);
+        let old = plain.replacen("\"version\": 120", "\"version\": 39", 1);
         assert!(from_str(&old)
             .unwrap()
             .walls()
@@ -2570,7 +2596,7 @@ mod tests {
         let start = text.find("      \"top\": {").unwrap();
         let end = start + text[start..].find("}\n").unwrap() + 2;
         let old = format!("{}{}", &text[..start], &text[end..])
-            .replacen("\"version\": 114", "\"version\": 3", 1)
+            .replacen("\"version\": 120", "\"version\": 3", 1)
             .replace("\"base_offset\": -0.1,\n", "\"base_offset\": -0.1\n");
         let opened = from_str(&old).unwrap();
         let w = opened.wall(tied.id).unwrap();
@@ -2632,7 +2658,7 @@ mod tests {
         assert!(back.opening_type(void).unwrap().is_void());
         assert_eq!(back.opening_type(void).unwrap().mark, "H-01");
         // Version 5 (ArchiSim 0.19): no holes, no voids.
-        let v5 = to_string(&sample()).replacen("\"version\": 114", "\"version\": 5", 1);
+        let v5 = to_string(&sample()).replacen("\"version\": 120", "\"version\": 5", 1);
         assert!(from_str(&v5).unwrap().slabs().all(|s| s.holes.is_empty()));
     }
 
@@ -3162,7 +3188,7 @@ mod tests {
         assert_same_project(&back, &m);
         assert_eq!(back.wall(curved).unwrap().bulge, -0.4);
         // Version 4 (ArchiSim 0.17–0.18): no bulge anywhere.
-        let v4 = to_string(&sample()).replacen("\"version\": 114", "\"version\": 4", 1);
+        let v4 = to_string(&sample()).replacen("\"version\": 120", "\"version\": 4", 1);
         let opened = from_str(&v4).unwrap();
         assert!(opened.walls().all(|w| w.bulge == 0.0));
         // A bend tighter than the wall is thick is refused on opening.
@@ -3194,7 +3220,7 @@ mod tests {
             })
             .unwrap();
         let wall = m.materials().next().unwrap().id;
-        let text = to_string(&m).replacen("\"version\": 114", "\"version\": 32", 1);
+        let text = to_string(&m).replacen("\"version\": 120", "\"version\": 32", 1);
         let mut v: Value = serde_json::from_str(&text).unwrap();
         let roofs = v["roofs"].as_array_mut().unwrap();
         let at = roofs.iter().position(|r| r["id"] == roof.0).unwrap();
@@ -3227,7 +3253,7 @@ mod tests {
     #[test]
     fn layout_is_readable() {
         let text = to_string(&sample());
-        assert!(text.starts_with("{\n  \"format\": \"ArchiSim\",\n  \"version\": 114,\n"));
+        assert!(text.starts_with("{\n  \"format\": \"ArchiSim\",\n  \"version\": 120,\n"));
         // A wall tied to a level says which, and how far from it; a free
         // wall has no `top`.
         assert!(text.contains("\"top\": {\n        \"level\": "));
@@ -3273,11 +3299,11 @@ mod tests {
             Err(FileError::NotAProject)
         ));
         assert!(matches!(
-            edited("\"version\": 114", "\"version\": 115"),
-            Err(FileError::TooNew { version: 115 })
+            edited("\"version\": 120", "\"version\": 121"),
+            Err(FileError::TooNew { version: 121 })
         ));
         assert!(matches!(
-            edited("\"version\": 114", "\"version\": 0"),
+            edited("\"version\": 120", "\"version\": 0"),
             Err(FileError::UnknownVersion(0))
         ));
         assert!(matches!(

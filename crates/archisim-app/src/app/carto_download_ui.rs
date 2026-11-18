@@ -664,6 +664,8 @@ impl ArchiSimApp {
                     {
                         o.radius = v.clamp(10.0, 2000.0);
                     }
+                    ui.switch(&mut o.square, "Recuadro")
+                        .on_hover_text("Un cuadrado de lado el doble del radio (hasta 2 × 2 km con radio 1 000 m)");
                 });
                 ui.label(
                     egui::RichText::new("Son servicios públicos y gratuitos; con radios grandes tardan unos minutos. Al terminar se abre «Traer el entorno» para elegir cómo se trae.")
