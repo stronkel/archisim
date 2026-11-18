@@ -98,6 +98,7 @@ impl Model {
             plot_area: _,
             room_usages: _,
             code: _,
+            surroundings: _,
             draw_phase: _,
             draw_layers: _,
             structural_site: _,
@@ -141,6 +142,7 @@ impl Model {
             plots,
             roads,
             roundabouts,
+            surfaces,
             nodes,
             ceilings,
             boxes,
@@ -247,6 +249,7 @@ impl Model {
             diff_map(plots, &b.plots, |k| k.0, o);
             diff_map(roads, &b.roads, |k| k.0, o);
             diff_map(roundabouts, &b.roundabouts, |k| k.0, o);
+            diff_map(surfaces, &b.surfaces, |k| k.0, o);
             // A node changed: its streets (their pieces and its own).
             let by_key = |v: &Vec<super::NodeSettings>| {
                 v.iter()

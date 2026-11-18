@@ -1,7 +1,8 @@
 //! Objects: furniture (`IfcFurniture`), sanitary ware
 //! (`IfcSanitaryTerminal`), vegetation (`IfcGeographicElement`, `VEGETATION`
 //! in IFC 4.3), vehicles (`IfcVehicle` in IFC 4.3) and people
-//! (`IfcBuildingElementProxy`) with their types, as the
+//! (`IfcBuildingElementProxy`) and louvres in front of a façade
+//! (`IfcShadingDevice`) with their types, as the
 //! family's `ifc_class` and `ifc_type` outputs say. The body is the family's boxes; the type
 //! carries the family (`ArchiSim_Family`, `ArchiSim_FamilyValues`) so that
 //! ArchiSim reads them back as the same objects.
@@ -32,6 +33,8 @@ enum Class {
     Vehicle,
     /// A lift's car alone (`IfcTransportElement`).
     Transport,
+    /// Louvres and shutters in front of a façade (`IfcShadingDevice`).
+    Shading,
 }
 
 impl Class {
@@ -45,6 +48,7 @@ impl Class {
             Class::Proxy => ("IFCBUILDINGELEMENTPROXY", "IFCBUILDINGELEMENTPROXYTYPE"),
             Class::Vehicle => ("IFCVEHICLE", "IFCVEHICLETYPE"),
             Class::Transport => ("IFCTRANSPORTELEMENT", "IFCTRANSPORTELEMENTTYPE"),
+            Class::Shading => ("IFCSHADINGDEVICE", "IFCSHADINGDEVICETYPE"),
         }
     }
 
@@ -58,6 +62,7 @@ impl Class {
             Class::Proxy => "Pset_BuildingElementProxyCommon",
             Class::Vehicle => "ArchiSim_Phase",
             Class::Transport => "Pset_TransportElementCommon",
+            Class::Shading => "Pset_ShadingDeviceCommon",
         }
     }
 }
@@ -79,6 +84,7 @@ fn ifc_kind(outputs: &archisim_core::Values, schema: crate::Schema) -> (Class, S
         "ifcvehicle" if schema == crate::Schema::Ifc4x3 => Class::Vehicle,
         "ifcvehicle" => Class::Proxy,
         "ifctransportelement" => Class::Transport,
+        "ifcshadingdevice" => Class::Shading,
         _ => Class::Furniture,
     };
     let allowed: &[&str] = match class {
@@ -110,6 +116,7 @@ fn ifc_kind(outputs: &archisim_core::Values, schema: crate::Schema) -> (Class, S
         },
         Class::Proxy => &["COMPLEX", "ELEMENT", "PARTIAL"],
         Class::Transport => &["ELEVATOR", "ESCALATOR", "MOVINGWALKWAY"],
+        Class::Shading => &["JALOUSIE", "SHUTTER", "AWNING"],
         Class::Vehicle => &[
             "VEHICLE",
             "VEHICLEWHEELED",

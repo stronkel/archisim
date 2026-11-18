@@ -514,6 +514,7 @@ impl ArchiSimApp {
         if let Some((k, tex)) = shown {
             self.paint_moved(painter, rect, tex, k.lo, k.hi);
         }
+        super::picture::note(painter, rect, "el dibujo", &picture);
         self.drafting_image = picture;
     }
 

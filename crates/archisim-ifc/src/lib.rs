@@ -700,6 +700,30 @@ impl<'a> Exporter<'a> {
         self.attach_set(element, guid, qto, qto_name);
     }
 
+    /// The area of the surroundings (N8), on the project: its points in
+    /// plan, «x y|x y|…», read back on import.
+    fn write_surroundings(&mut self, project: Ref) {
+        let model = self.model;
+        let Some(area) = model.surroundings() else {
+            return;
+        };
+        let text = area
+            .iter()
+            .map(|p| format!("{} {}", real(p.x), real(p.y)))
+            .collect::<Vec<_>>()
+            .join("|");
+        let prop = self.w.add(format!(
+            "IFCPROPERTYSINGLEVALUE('Area',$,IFCTEXT({}),$)",
+            string(&text)
+        ));
+        self.pset(
+            project,
+            &model.project_guid,
+            "ArchiSim_Surroundings",
+            &[prop],
+        );
+    }
+
     /// The project's parameters (see `archisim_core::UserParameter`): each
     /// element with its values in the property set of each parameter's
     /// group (a parameter of the type with its type's value), and their
@@ -2245,7 +2269,8 @@ impl<'a> Exporter<'a> {
                 .iter()
                 .map(|(s, z0, z1)| archisim_geom::junctions::area(s) * (z1 - z0))
                 .sum();
-            let (pl, shape) = self.slab_shape(slab, thickness, storey_pl, &voids);
+            let cutters = archisim_geom::junctions::slab_wall_cutters(&idx, slab.id, &geometries);
+            let (pl, shape) = self.slab_shape(slab, thickness, storey_pl, &cutters);
             let name = format!("{} {}", stype.name, slab.id.0);
             let sl = self.w.add(format!(
                 "IFCSLAB({},$,{},$,{},{pl},{shape},{},.{}.)",
@@ -2340,6 +2365,7 @@ impl<'a> Exporter<'a> {
         self.write_boxes(&storeys, &mut contained);
 
         self.write_user_parameters(project);
+        self.write_surroundings(project);
 
         for (level, elements) in &contained {
             let (storey, _) = storeys[level];

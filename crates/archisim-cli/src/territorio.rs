@@ -353,6 +353,113 @@ pub fn measure(dir: &Path, life: bool) -> Res {
     for (part, ms) in archisim_geom::meter::take().into_iter().take(6) {
         println!("  {:<56} {:>10.1} ms", format!("    {part}"), ms);
     }
+    // What N1–N9 added: nodes with lights and raised crossings, squares
+    // and car parks, the blocks cut into plots, the map and the traffic.
+    let mut n = m.clone();
+    let (_, ms) = timed("N1: cambiar 60 nudos (semáforos y elevados)", || {
+        let keys = archisim_geom::crossroads::all_node_keys(&n);
+        for (i, key) in keys.into_iter().take(60).enumerate() {
+            let mut s = archisim_core::NodeSettings::new(key);
+            s.kind = Some(if i % 3 == 0 {
+                archisim_core::NodeKind::Raised
+            } else {
+                archisim_core::NodeKind::Crossing
+            });
+            let _ = n.set_node(s);
+        }
+    });
+    note("N1: cambiar 60 nudos", ms);
+    let (_, ms) = timed("N1: cruces con los nudos cambiados", || {
+        archisim_geom::crossroads::junctions(&n, pb)
+    });
+    note("N1: cruces con nudos", ms);
+    let (_, ms) = timed("N1: sólidos de las calles con los nudos", || {
+        archisim_geom::solid::level_road_solids(&n, pb)
+    });
+    note("N1: sólidos de las calles con nudos", ms);
+    let paving_mat = n.materials().next().map(|x| x.id).ok_or("sin materiales")?;
+    let (made, ms) = timed("N5: 40 plazas y aparcamientos", || {
+        let mut ids = Vec::new();
+        for i in 0..40 {
+            let c = Point2::new(
+                -400.0 + (i % 8) as f64 * 100.0,
+                -380.0 + (i / 8) as f64 * 160.0,
+            );
+            let kind = if i % 2 == 0 {
+                archisim_core::SurfaceKind::Square
+            } else {
+                archisim_core::SurfaceKind::Parking
+            };
+            let outline = vec![
+                c + Vec2::new(-12.0, -8.0),
+                c + Vec2::new(12.0, -8.0),
+                c + Vec2::new(12.0, 8.0),
+                c + Vec2::new(-12.0, 8.0),
+            ];
+            if let Ok(id) = n.add_surface(archisim_core::NewSurface {
+                name: format!("S{i}"),
+                level: pb,
+                kind,
+                outline,
+                material: paving_mat,
+                edge_material: paving_mat,
+            }) {
+                ids.push(id);
+            }
+        }
+        ids
+    });
+    note("N5: añadir 40 superficies", ms);
+    let (_, ms) = timed("N5: sólidos de las superficies", || {
+        made.iter()
+            .map(|id| archisim_geom::urban_surfaces::surface_solids(&n, *id).len())
+            .sum::<usize>()
+    });
+    note("N5: sólidos de las superficies", ms);
+    let (blocks, ms) = timed("N7: buscar las manzanas", || {
+        archisim_geom::blocks::city_blocks(&n, pb)
+    });
+    note("N7: buscar las manzanas", ms);
+    println!("  {:<56} {:>10}", "  manzanas", blocks.len());
+    let (lots, ms) = timed("N7: parcelar todas las manzanas", || {
+        blocks
+            .iter()
+            .map(|b| archisim_geom::blocks::block_lots(b, 12.0, 20.0).len())
+            .sum::<usize>()
+    });
+    note("N7: parcelar todas", ms);
+    println!("  {:<56} {:>10}", "  parcelas", lots);
+    let (map, ms) = timed("N8: mapa de todo el sitio, 1600 px", || {
+        archisim_plan::map::render_map(&n, pb, 1600.0)
+    });
+    note("N8: mapa del sitio", ms);
+    println!(
+        "  {:<56} {:>10}",
+        "  tamaño del mapa (kB)",
+        map.map_or(0, |s| s.len() / 1024)
+    );
+    let (cars, people) = archisim_geom::traffic::usual_counts(&n, pb);
+    let (mut traffic, ms) = timed("N9: preparar el tráfico", || {
+        archisim_geom::traffic::Traffic::new(&n, pb, cars, people, 7)
+    });
+    note("N9: preparar el tráfico", ms);
+    println!(
+        "  {:<56} {:>10}",
+        "  coches y personas",
+        format!("{cars} y {people}")
+    );
+    let (_, ms) = timed("N9: 250 pasos de 1/25 s (10 s de tráfico)", || {
+        for _ in 0..250 {
+            traffic.step(&n, 0.04);
+        }
+    });
+    note("N9: un paso del tráfico", ms / 250.0);
+    let mat = paving_mat;
+    let (_, ms) = timed("N9: cuerpos y sólidos de un fotograma", || {
+        let bodies = traffic.bodies(&n);
+        archisim_geom::traffic::traffic_solids(&bodies, mat).len()
+    });
+    note("N9: un fotograma del tráfico", ms);
     std::fs::create_dir_all(dir)?;
     let path = dir.join(format!("territorio.{}", archisim_file::EXTENSION));
     let (saved, ms) = timed("Guardar el proyecto (.archisim)", || {

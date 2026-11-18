@@ -753,6 +753,36 @@ impl Scene {
         s
     }
 
+    /// The cars and people of the traffic for illustration (N9), drawn
+    /// as they are, over the scene.
+    pub fn of_traffic(model: &Model, solids: Vec<archisim_geom::solid::Solid>) -> Self {
+        let selection = BTreeSet::new();
+        let look = Look {
+            selection: &selection,
+            isolate: false,
+            disciplines: &Default::default(),
+            anchors: &HashMap::new(),
+            shared: false,
+            between: false,
+        };
+        let mut loose = Loose::default();
+        add_solids(model, solids, &look, &mut loose);
+        let ([opaque, glass, grass], lamps) = loose.finish();
+        let mut s = Scene {
+            lo: Vec3::splat(f32::INFINITY),
+            hi: Vec3::splat(f32::NEG_INFINITY),
+            lamps,
+            grass,
+            ..Default::default()
+        };
+        for c in opaque.iter().chain(&glass) {
+            s.lo = s.lo.min(c.lo);
+            s.hi = s.hi.max(c.hi);
+        }
+        (s.opaque, s.glass) = (opaque, glass);
+        s
+    }
+
     pub fn is_empty(&self) -> bool {
         self.opaque.is_empty() && self.glass.is_empty() && self.groups.is_empty()
     }

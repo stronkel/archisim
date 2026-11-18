@@ -173,6 +173,8 @@ impl ArchiSimApp {
                     if let Some(v) = length_field(ui, egui::Id::unique("carto-radius"), o.radius, 90.0) {
                         o.radius = v.clamp(10.0, 2000.0);
                     }
+                    ui.switch(&mut o.square, "Recuadro")
+                        .on_hover_text("Un cuadrado de lado el doble del radio en lugar de un círculo: las calles se cortan en su borde como conexiones con fuera");
                     ui.label("Altura de planta");
                     if let Some(v) = length_field(ui, egui::Id::unique("carto-floor"), o.floor_height, 70.0) {
                         o.floor_height = v.clamp(2.0, 10.0);
