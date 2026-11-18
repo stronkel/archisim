@@ -12825,3 +12825,76 @@ fn the_keypad_types_a_length() {
     let w = walls[0];
     assert!((w.length() - 4.0).abs() < 1e-6);
 }
+
+#[test]
+fn blocks_cut_into_plots_and_filled() {
+    let mut h = Harness::new(Editor::new_project());
+    let canvas = h.app.canvas;
+    h.app
+        .view
+        .fit_exact(canvas, p(-60.0, -60.0), p(60.0, 60.0), 0.0);
+    h.app.set_discipline(super::toolbox::Discipline::Site);
+    // Four streets closing a block 80 m across.
+    let level = h.app.ed.level;
+    let mat = h.model().materials().next().unwrap().id;
+    let r = h.app.ed.transact("Calles", |m| {
+        for (a, b) in [
+            (p(-55.0, -40.0), p(55.0, -40.0)),
+            (p(-55.0, 40.0), p(55.0, 40.0)),
+            (p(-40.0, -55.0), p(-40.0, 55.0)),
+            (p(40.0, -55.0), p(40.0, 55.0)),
+        ] {
+            m.add_road(archisim_core::NewRoad {
+                name: "Calle".into(),
+                level,
+                axis: vec![a, b],
+                section: archisim_core::RoadSection::default(),
+                top_offset: 0.0,
+                profile: Vec::new(),
+                changes: Vec::new(),
+                pavement: mat,
+                kerb_material: mat,
+                sidewalk_material: mat,
+            })?;
+        }
+        Ok::<(), archisim_core::ModelError>(())
+    });
+    assert!(r.is_ok());
+    h.app.act(super::toolbox::Action::Blocks);
+    assert!(h.app.blocks.open);
+    h.frame();
+    // Cut into houses with a garden: a click inside the block.
+    h.app.blocks.zone = archisim_core::BlockZone::Houses;
+    h.app.blocks.picking = true;
+    h.click_at(p(0.0, 0.0));
+    let plots: Vec<_> = h.model().plots().map(|x| x.id).collect();
+    assert!(plots.len() >= 8, "{} plots", plots.len());
+    assert!(h
+        .model()
+        .plots()
+        .all(|x| x.zone == Some(archisim_core::BlockZone::Houses)));
+    // The plots are selected, and a second click on the same block cuts
+    // nothing more.
+    assert_eq!(h.app.ed.selection.len(), plots.len());
+    h.app.blocks.picking = true;
+    h.click_at(p(0.0, 0.0));
+    assert_eq!(h.model().plots().count(), plots.len());
+    // A plot's properties: its zone, its lock and filling it alone.
+    h.app.blocks.picking = false;
+    h.app.ed.selection = [Element::Plot(plots[0])].into_iter().collect();
+    h.frame();
+    let r = h.app.ed.transact("Llenar", |m| {
+        archisim_geom::blocks::fill_plots(m, level, None, None).map(|_| ())
+    });
+    assert!(r.is_ok());
+    let built = h
+        .model()
+        .plots()
+        .filter(|x| archisim_geom::blocks::plot_built(h.model(), x))
+        .count();
+    assert!(built * 10 >= plots.len() * 7, "{built} of {}", plots.len());
+    // Undone in one step.
+    h.app.ed.undo();
+    assert_eq!(h.model().masses().filter(|m| m.dress.is_some()).count(), 0);
+    h.frame();
+}

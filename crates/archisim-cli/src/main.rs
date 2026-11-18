@@ -37,6 +37,7 @@ mod gama;
 mod grande;
 mod instalaciones;
 mod locales;
+mod manzanas;
 mod modelos;
 mod muestrario;
 mod muros_talud;
@@ -97,6 +98,13 @@ Uso:
       origen, con --en-el-origen). --resultado elige otro de los
       encontrados; con --enlaces, las direcciones de la descarga.
 
+  archisim manzanas [carpeta]
+      Manzanas, parcelas y llenado por zonas (N7): tres calles en cada
+      sentido cierran cuatro manzanas, que se parcelan por la línea de
+      fachada y se llenan con edificios del lugar (casco antiguo,
+      bloques, viviendas aisladas, comercio y un colegio); una parcela
+      bloqueada guarda su casa al vaciar y volver a llenar:
+      manzanas.archisim, manzanas.ifc, planta y axonometría.
   archisim nudos [carpeta]
       Los nudos de las calles cambiados a mano (N1): un cruce de cada tipo
       (cruce con ceda el paso y orejas, elevado y plano, plataforma única
@@ -956,6 +964,10 @@ fn main() -> ExitCode {
         Some("calles") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
             report(calles::write(&dir))
+        }
+        Some("manzanas") => {
+            let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
+            report(manzanas::write(&dir))
         }
         Some("nudos") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));

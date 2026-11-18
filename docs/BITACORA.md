@@ -6,6 +6,23 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-18 (180) · v0.101: territorio N7, manzanas, parcelas y llenado
+
+Rama `bloque/manzanas` sobre `bloque/ocultar` (#228). Versión 0.101.0. Formato `.archisim` versión 119.
+
+- **Qué se hizo** (`docs/TERRITORIO.md` §2.10):
+  - **Modelo**: `BlockZone` (casco antiguo, bloques, viviendas aisladas, comercio, equipamiento; `label`, `code`, `rgb`) y `Plot::zone`, `Plot::locked`.
+  - **Geometría** (`archisim-geom::blocks`): `city_blocks` (huecos de la unión de calles, cruces y glorietas), `block_lots` (parcelas en escuadra, una de esquina por lado, patio si cabe), `add_block_plots`, `fill_plot`/`fill_plots` (un edificio del mundo por parcela, encajado en ella), `clear_plots` (respeta las bloqueadas).
+  - **Planta**: parcelas teñidas por zona, rótulos solo si caben y «bloqueada».
+  - **Fichero** (versión 119) e **IFC** (`ArchiSim_Plot.Zone`, `Locked`).
+  - **App**: panel «Manzanas» (`app/blocks_ui`: zona, frente y fondo, parcelar una o todas, llenar, rehacer, vaciar) y grupo «Zona y llenado» en la parcela.
+  - Ejemplo `archisim manzanas out/`; pruebas en la geometría, la línea de órdenes (fichero e IFC) y la aplicación.
+- **Pendiente**: §7 de `TERRITORIO.md`. Siguiente, N8.
+- **Qué debe probar Antonio** (con la 0.101):
+  1. `archisim manzanas out/` y abre `out/manzanas.archisim`: cuatro manzanas de colores, cada una con sus edificios; la casa bloqueada del casco antiguo lo dice en sus propiedades.
+  2. En un proyecto nuevo, traza cuatro calles en cuadro; Urbanismo → **Manzanas**, elige «Viviendas aisladas», «Parcelar una manzana» y pincha dentro; luego «Llenar las vacías».
+  3. Bloquea una parcela, cambia la zona de otra y pulsa «Rehacer»: la bloqueada no cambia.
+
 ## 2026-11-18 (179) · v0.100: territorio N6, ocultar y soltar piezas
 
 Rama `bloque/ocultar` sobre `bloque/superficies` (#227). Versión 0.100.0. Formato `.archisim` versión 118.

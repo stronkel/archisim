@@ -155,6 +155,21 @@ Hoy `archisim_geom::crossroads::junctions(model, level)` rehace todos los cruces
 - Se guarda en la calle (formato 118) y en el IFC (`ArchiSim_Road.Hidden`).
 - Ejemplo: `archisim nudos out/` oculta un bolardo de la plataforma única y la señal sur del cruce del Olmo.
 
+### 2.10 N7 hecho: manzanas, parcelas y llenado por zonas (18/11/2026, versión 0.101)
+
+- **Manzanas**: las calles que se cierran (con sus cruces y glorietas) dejan huecos; cada hueco de más de 80 m² es una manzana, por su línea de fachada. Las calles en anarquía no cuentan.
+- **Parcelar** (Zoning Adjuster): Urbanismo → **Manzanas** abre el panel. Se elige la zona y, si se quiere, el frente y el fondo de parcela (si no, los habituales de la zona). Luego se pincha dentro de una manzana, o «Parcelar todas».
+  - Las parcelas van en escuadra con su fachada.
+  - Cada esquina es una parcela que da a las dos calles.
+  - Queda un patio de manzana si el fondo cabe; una manzana pequeña es una sola parcela.
+  - Se llaman «Manzana n · k».
+- **Zonas**: casco antiguo (casas entre medianeras), bloques de viviendas, viviendas aisladas (con jardín delante), comercio (tiendas) y equipamiento (colegio). En planta se tiñe cada parcela con el color de su zona. La zona se cambia parcela a parcela en sus propiedades.
+- **Llenar** (Ploppable RICO): un edificio del mundo del lugar en cada parcela vacía, con su fachada a la calle, tan ancho como el frente y tan hondo como deja la parcela. «Rehacer» quita los de las parcelas sin bloquear y las vuelve a llenar; «Vaciar» solo los quita.
+- **Bloquear** (Historical Districts): en las propiedades de la parcela, «Bloqueada»: llenar, rehacer y vaciar no la tocan. La planta lo rotula.
+- Cada parcela se puede llenar o vaciar sola desde sus propiedades. Todo es un paso de Deshacer.
+- **Fichero** (formato 119: `zone` y `locked` de cada parcela) e **IFC** (`ArchiSim_Plot.Zone` y `ArchiSim_Plot.Locked`, que vuelven al importar).
+- Ejemplo: `archisim manzanas out/`: cuatro manzanas, una de cada zona y un colegio en la esquina del comercio, con una casa bloqueada en el casco antiguo.
+
 ## 3. Lo demás, por tandas
 
 | Tanda | Qué | Mods de referencia | Tamaño |
@@ -323,6 +338,15 @@ Lo que se deja para después, tanda a tanda, para repasarlo junto con la cuarta 
 - Soltar también las flechas y líneas de un nudo (hoy solo se ocultan) y las señales (pasarían a ser un objeto «señal»).
 - Ocultar por ventana (varias piezas de una vez) y ver las ocultas en gris para devolverlas una a una.
 - Ocultar en 3D y en la Maqueta (hoy, desde la planta).
+
+**De N7 (manzanas)**
+- Al mover una calle, las parcelas y los edificios que la miran no la siguen; hay que vaciar, borrar las parcelas y volver a parcelar (C5 de calles).
+- Al trazar una calle sobre edificios del mundo, no avisa ni los quita.
+- Las manzanas no se guardan: se buscan cada vez. Parcelar una manzana ya parcelada se niega (habría que poder «volver a parcelar» quitando lo no bloqueado).
+- Las parcelas son de un frente fijo; mezclar anchos (como un casco real) o leer la parcelación del Catastro y respetarla.
+- Los edificios de esquina son un rectángulo a una calle: falta la casa de esquina con dos fachadas.
+- Pintar zonas con un pincel sobre varias parcelas a la vez.
+- La planta tiñe las parcelas y las rotula solo si cabe el texto; una leyenda de zonas.
 
 **De N2 (trazado)**
 - La pendiente uniforme elegida con el ratón no enseña marcas en planta entre los dos clics (solo el aviso).

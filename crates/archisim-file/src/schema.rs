@@ -1498,6 +1498,11 @@ pub(crate) struct Plot {
     pub setback: f64,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub reference: String,
+    /// Its zone's code (version 119).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub zone: String,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub locked: bool,
 }
 
 /// A pool built in the ground (version 42): its outline is the inside
@@ -4117,6 +4122,8 @@ impl ProjectFile {
                     outline: x.outline.iter().copied().map(xy).collect(),
                     setback: x.setback,
                     reference: x.reference.clone(),
+                    zone: x.zone.map(|z| z.code().to_string()).unwrap_or_default(),
+                    locked: x.locked,
                 })
                 .collect(),
             pools: p
@@ -5777,6 +5784,8 @@ impl ProjectFile {
                 outline: x.outline.into_iter().map(pt).collect(),
                 setback: x.setback,
                 reference: x.reference,
+                zone: core::BlockZone::from_code(&x.zone),
+                locked: x.locked,
             });
         }
         for x in self.pools {

@@ -243,6 +243,8 @@ pub enum Action {
     /// «Sustituir todos»: a type of object or a street material for
     /// another (N4).
     Replace,
+    /// The panel «Manzanas»: blocks cut into plots and filled (N7).
+    Blocks,
     /// Draw an urban surface of a kind by its outline (N5).
     Surface(archisim_core::SurfaceKind),
     /// Hide pieces of the streets one by one (N6).
@@ -717,6 +719,13 @@ const SITE: &[Tile] = &[
         "Parcela",
         "Y",
         "Lindes, superficie y retranqueos",
+    ),
+    tile(
+        Pick::Action(Action::Blocks),
+        Glyph::Plot,
+        "Manzanas",
+        "",
+        "Parte en parcelas las manzanas que cierran las calles y las llena con edificios del lugar por zonas (casco antiguo, bloques, viviendas aisladas, comercio, equipamiento); las bloqueadas no cambian",
     ),
     group(
         Glyph::Road,
@@ -1614,6 +1623,7 @@ impl ArchiSimApp {
                 ),
                 Action::Render => self.render.open,
                 Action::Replace => self.replace.open,
+                Action::Blocks => self.blocks.open,
                 Action::HidePieces => self.piece_pick == Some(super::pieces_ui::PiecePick::Hide),
                 Action::DetachCrossing => {
                     self.piece_pick == Some(super::pieces_ui::PiecePick::Detach)
@@ -1754,6 +1764,12 @@ impl ArchiSimApp {
             Action::DraftingView => self.new_drafting_view(),
             Action::BringSurroundings => self.pick_carto(),
             Action::Replace => self.replace.open = !self.replace.open,
+            Action::Blocks => {
+                self.blocks.open = !self.blocks.open;
+                if !self.blocks.open {
+                    self.blocks.picking = false;
+                }
+            }
             Action::HidePieces | Action::DetachCrossing => {
                 let want = if action == Action::HidePieces {
                     super::pieces_ui::PiecePick::Hide

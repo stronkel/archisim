@@ -4,6 +4,10 @@ Lo que cambia en cada versión, en pocas líneas. ArchiSim enseña la parte de s
 
 Cada versión empieza con una línea `## <versión>` (por ejemplo `## 0.81.0`): es la que busca la publicación.
 
+## 0.101.0
+
+- **Manzanas y parcelas (N7).** Urbanismo → Manzanas: las calles que se cierran forman manzanas; un clic las parte en parcelas por la línea de fachada (con sus parcelas de esquina y su patio) y se llenan con edificios del lugar según su zona: casco antiguo, bloques, viviendas aisladas, comercio o equipamiento. «Rehacer» las vuelve a llenar; una parcela bloqueada no cambia.
+
 ## 0.100.0
 
 - **Ocultar y soltar piezas de las calles (N6).** «Ocultar piezas» quita de un clic una raya, una plaza pintada, un alcorque, una señal o un bolardo que pone la calle, y siguen ocultos aunque la calle se mueva. «Soltar paso de peatones» convierte la cebra de una calle en una marca vial suelta para moverla o girarla.

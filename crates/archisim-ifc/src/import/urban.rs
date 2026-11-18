@@ -91,6 +91,20 @@ impl<'a> Importer<'a> {
                 reference,
             })
             .map_err(|e| explain(&e))?;
+        let zone = self
+            .property_own(id, "ArchiSim_Plot", "Zone")
+            .and_then(|v| v.as_str().map(str::to_string))
+            .and_then(|c| archisim_core::BlockZone::from_code(&c));
+        let locked = self
+            .property_own(id, "ArchiSim_Plot", "Locked")
+            .and_then(|v| v.as_bool())
+            == Some(true);
+        if zone.is_some() || locked {
+            let _ = self.model.edit_plot(pid, |p| {
+                p.zone = zone;
+                p.locked = locked;
+            });
+        }
         self.report.plots += 1;
         self.sources.push((pid.0, id));
         self.guids

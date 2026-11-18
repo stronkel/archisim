@@ -1183,6 +1183,7 @@ impl ArchiSimApp {
                 },
             );
         });
+        self.plot_zone_group(ui, id);
         group(ui, "plot-figures", "Superficies", |ui| {
             text_row(ui, "Superficie (m²)", "", &comma(p.area(), 2));
             text_row(ui, "Perímetro (m)", "", &comma(p.perimeter(), 2));

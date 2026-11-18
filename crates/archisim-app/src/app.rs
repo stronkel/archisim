@@ -490,6 +490,8 @@ pub struct ArchiSimApp {
     pub road_grade_pick: Option<(archisim_core::RoadId, Option<f64>)>,
     /// The window «Sustituir todos» (N4).
     pub replace: replace_ui::ReplaceState,
+    /// The panel «Manzanas» (N7).
+    pub blocks: blocks_ui::BlocksState,
     /// The plot's tool draws an urban surface of this kind (N5).
     pub surface_draw: Option<archisim_core::SurfaceKind>,
     /// Hiding pieces of the streets or letting zebras go (N6).
@@ -978,6 +980,7 @@ impl ArchiSimApp {
             rebar_pick: false,
             road_grade_pick: None,
             replace: Default::default(),
+            blocks: Default::default(),
             surface_draw: None,
             piece_pick: None,
             room_settings: Default::default(),
@@ -1218,6 +1221,7 @@ impl ArchiSimApp {
         self.node_mode = node_ui::NodeMode::Pick;
         self.surface_draw = None;
         self.piece_pick = None;
+        self.blocks.picking = false;
         if tool != Tool::Cad && self.cad.is_some() {
             // Another tool ends the command (keeping what it drew).
             self.end_command(true);
@@ -3034,6 +3038,7 @@ impl ArchiSimApp {
         self.types_dialog(ctx);
         self.library_dialog(ctx);
         self.replace_dialog(ctx);
+        self.blocks_dialog(ctx);
         self.mesh_import_dialog(ctx);
         self.dxf_import_dialog(ctx);
         self.params_dialog(ctx);
@@ -3389,6 +3394,7 @@ pub(super) fn text_edit_committed(ui: &mut Ui, id: Id, shown: &str, width: f32) 
 
 mod annotation_ui;
 mod background;
+mod blocks_ui;
 mod bottom_segments;
 mod box_ui;
 mod brush_ui;

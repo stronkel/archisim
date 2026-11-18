@@ -53,6 +53,15 @@ pub fn draw_plots(
             continue;
         }
         crate::dim::element(s, p.id.0, |s| {
+            // Its zone tinted, as the zoning maps paint it (N7).
+            if let Some(z) = p.zone {
+                let [r, g, b] = z.rgb();
+                let _ = writeln!(
+                    s,
+                    r#"<path class="plot-zone" d="{}" fill="rgb({r},{g},{b})" fill-opacity="0.22" stroke="none"/>"#,
+                    path(&p.outline)
+                );
+            }
             let _ = writeln!(
                 s,
                 r#"<path d="{}" fill="none" stroke="{INK}" stroke-width="{}" stroke-dasharray="{} {} {} {} {} {}"/>"#,
@@ -79,10 +88,38 @@ pub fn draw_plots(
             }
             let c = centre(&p.outline);
             let area = format!("{:.2}", p.area()).replace('.', ",");
+            // Only where the text fits in the plot: a block cut into narrow
+            // plots would be covered with names.
+            let (lo, hi) = p.outline.iter().fold(
+                (
+                    Point2::new(f64::MAX, f64::MAX),
+                    Point2::new(f64::MIN, f64::MIN),
+                ),
+                |(lo, hi), q| {
+                    (
+                        Point2::new(lo.x.min(q.x), lo.y.min(q.y)),
+                        Point2::new(hi.x.max(q.x), hi.y.max(q.y)),
+                    )
+                },
+            );
+            let wide = p.name.chars().count().max(area.len() + 3) as f64 * LABEL * k * 0.6;
+            if hi.x - lo.x < wide || hi.y - lo.y < 7.0 * LABEL * k {
+                return;
+            }
             label(s, c + Point2::new(0.0, 2.0 * LABEL * k), &p.name, k);
             label(s, c, &format!("{area} m²"), k);
+            let mut below = 1.0;
             if !p.reference.is_empty() {
                 label(s, c - Point2::new(0.0, 2.0 * LABEL * k), &p.reference, k);
+                below += 1.0;
+            }
+            if p.locked {
+                label(
+                    s,
+                    c - Point2::new(0.0, 2.0 * below * LABEL * k),
+                    "bloqueada",
+                    k,
+                );
             }
         });
     }
