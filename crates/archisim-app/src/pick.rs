@@ -840,6 +840,7 @@ pub fn of_solid(owner: archisim_geom::solid::SolidOwner) -> Element {
         // The picture on the ground has no element of its own: it goes
         // with the terrain (the 3D view gives it the real one).
         SolidOwner::Orthophoto => Element::Terrain(archisim_core::TerrainId(0)),
+        SolidOwner::Traffic(_) => Element::Terrain(archisim_core::TerrainId(0)),
     }
 }
 

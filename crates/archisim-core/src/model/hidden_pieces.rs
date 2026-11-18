@@ -162,9 +162,10 @@ impl Model {
         Ok(n)
     }
 
-    /// Lets a zebra crossing of a street go: it is taken off the street
-    /// (and its lowered kerbs with it) and becomes a road marking of its
-    /// own, where it was, that can be moved, turned or changed.
+    /// Lets a zebra crossing of a street go: its bars are hidden on the
+    /// street, which keeps its lowered kerbs where they were, and it
+    /// becomes a road marking of its own, where it was, that can be moved,
+    /// turned or changed.
     pub fn detach_crossing(&mut self, road: RoadId, at: f64) -> Result<MarkingId, ModelError> {
         let r = self
             .road(road)
@@ -178,6 +179,19 @@ impl Model {
             .min_by(|a, b| (a.at - at).abs().total_cmp(&(b.at - at).abs()))
             .filter(|c| (c.at - at).abs() < c.width.max(2.0))
             .ok_or(ModelError::InvalidShape("no hay paso de peatones ahí"))?;
+        // Its bars on the street: those of the street's markings over it.
+        let bars: Vec<Point2> = r
+            .markings_except(&[])
+            .iter()
+            .map(|m| middle_of(m))
+            .filter(|p| (r.place_of(*p).0 - c.at).abs() <= c.width / 2.0 + 0.05)
+            .filter(|p| !r.hides(PieceKind::Marking, *p))
+            .collect();
+        if bars.is_empty() {
+            return Err(ModelError::InvalidShape(
+                "ese paso de peatones ya está suelto",
+            ));
+        }
         let (q, u) = axis_point(&r.axis, c.at);
         let n = u.perp_left();
         let (left, right) = r.extent_at(c.at);
@@ -208,9 +222,18 @@ impl Model {
             depth: c.width,
             material,
         })?;
-        self.edit_road(road, |x| {
-            x.section.crossings.retain(|k| (k.at - c.at).abs() > 1e-9)
-        })?;
+        let hidden: Vec<HiddenPiece> = bars
+            .iter()
+            .map(|p| {
+                let (at, off) = r.place_of(*p);
+                HiddenPiece {
+                    kind: PieceKind::Marking,
+                    at,
+                    off,
+                }
+            })
+            .collect();
+        self.edit_road(road, |x| x.hidden.extend(hidden))?;
         Ok(id)
     }
 }
@@ -272,8 +295,19 @@ mod tests {
         );
         assert_eq!(m.show_pieces(id).unwrap(), 1);
         // The zebra.
+        let bars = |m: &Model| {
+            m.road(id)
+                .unwrap()
+                .visible_markings(&[])
+                .iter()
+                .filter(|x| (middle_of(x).x - 30.0).abs() < 2.1)
+                .count()
+        };
+        assert!(bars(&m) > 0);
         let k = m.detach_crossing(id, 30.5).unwrap();
-        assert!(m.road(id).unwrap().section.crossings.is_empty());
+        // The street keeps the crossing for its lowered kerbs; its bars go.
+        assert_eq!(m.road(id).unwrap().section.crossings.len(), 1);
+        assert_eq!(bars(&m), 0);
         let z = m.marking(k).unwrap();
         assert_eq!(z.kind, MarkingKind::Zebra);
         assert!((z.depth - 4.0).abs() < 1e-9);

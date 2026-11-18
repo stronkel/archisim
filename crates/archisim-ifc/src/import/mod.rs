@@ -823,6 +823,32 @@ impl<'a> Importer<'a> {
         None
     }
 
+    /// The area of the surroundings as ArchiSim writes it (N8).
+    fn read_surroundings(&mut self) {
+        let Some(&project) = self.file.of_kind("IFCPROJECT").first() else {
+            return;
+        };
+        let Some(text) = self
+            .property_own(project, "ArchiSim_Surroundings", "Area")
+            .and_then(|v| v.as_str().map(str::to_string))
+        else {
+            return;
+        };
+        let points: Option<Vec<archisim_core::Point2>> = text
+            .split('|')
+            .map(|p| {
+                let mut it = p.split_whitespace().map(|x| x.parse::<f64>().ok());
+                Some(archisim_core::Point2::new(it.next()??, it.next()??))
+            })
+            .collect();
+        if let Some(points) = points {
+            if self.model.set_surroundings(Some(points)).is_err() {
+                self.report
+                    .warn("El área del entorno no se puede leer.".to_string());
+            }
+        }
+    }
+
     /// The project's parameters as ArchiSim writes them (their
     /// definitions in `ArchiSim_Parameters` on the project) and the values
     /// of every imported element: a parameter of the type goes to its type,
@@ -3217,6 +3243,7 @@ impl<'a> Importer<'a> {
         self.import_services();
         self.read_reinforcements();
         self.read_parameters();
+        self.read_surroundings();
         self.read_statuses();
         self.count_unsupported();
     }

@@ -467,6 +467,8 @@ pub struct ArchiSimApp {
     loupe_source: Option<(egui::TextureId, Rect)>,
     /// The 3D picture asked to the graphics in the browser, to save.
     picture_reading: Option<crate::view3d::render::Reading>,
+    /// A section drawing that could not be worked out, and why.
+    section_failed: Option<(section_ui::DrawingKey, String)>,
     /// How long the last section drawing took to work out.
     section_took: std::sync::Arc<std::sync::Mutex<std::time::Duration>>,
     sheet_pending: Option<background::Pending<sheet_ui::SheetKey>>,
@@ -492,6 +494,8 @@ pub struct ArchiSimApp {
     pub replace: replace_ui::ReplaceState,
     /// The panel «Manzanas» (N7).
     pub blocks: blocks_ui::BlocksState,
+    /// The map view (N8).
+    pub map: map_ui::MapState,
     /// The plot's tool draws an urban surface of this kind (N5).
     pub surface_draw: Option<archisim_core::SurfaceKind>,
     /// Hiding pieces of the streets or letting zebras go (N6).
@@ -951,6 +955,7 @@ impl ArchiSimApp {
             section_stash: Vec::new(),
             section_pending: None,
             section_took: Default::default(),
+            section_failed: None,
             saving: None,
             web_kept: (0, None),
             web_unsaved: false,
@@ -981,6 +986,7 @@ impl ArchiSimApp {
             road_grade_pick: None,
             replace: Default::default(),
             blocks: Default::default(),
+            map: Default::default(),
             surface_draw: None,
             piece_pick: None,
             room_settings: Default::default(),
@@ -3039,6 +3045,7 @@ impl ArchiSimApp {
         self.library_dialog(ctx);
         self.replace_dialog(ctx);
         self.blocks_dialog(ctx);
+        self.map_dialog(ctx);
         self.mesh_import_dialog(ctx);
         self.dxf_import_dialog(ctx);
         self.params_dialog(ctx);
@@ -3144,6 +3151,16 @@ impl eframe::App for ArchiSimApp {
         }
         crate::crash::frame_start();
         crate::crash::stage("ventana");
+        // Drawing aside can be turned off (Vista → «Dibujar aparte»), and
+        // with ARCHISIM_SIN_HILOS: everything at once, as before 0.85.
+        let aside = self.prefs.draw_aside && std::env::var_os("ARCHISIM_SIN_HILOS").is_none();
+        let at_once = if aside {
+            picture::AT_ONCE
+        } else {
+            std::time::Duration::from_secs(3600)
+        };
+        self.at_once = at_once;
+        self.v3d.at_once = at_once;
         let started = web_time::Instant::now();
         if self.saving.is_some() {
             self.saving_done(false);
@@ -3440,6 +3457,7 @@ mod icons;
 mod keypad_ui;
 mod levels_ui;
 mod library_ui;
+mod map_ui;
 mod maquette_ui;
 mod marking_ui;
 mod mass_grips3d;

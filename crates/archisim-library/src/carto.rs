@@ -22,6 +22,9 @@ pub struct CartoOptions {
     pub centre: Point2,
     /// How far from the centre, metres.
     pub radius: f64,
+    /// A square of side twice the radius instead of a circle (N8): the
+    /// area of the surroundings, up to 2 × 2 km.
+    pub square: bool,
     pub buildings: bool,
     pub parcels: bool,
     pub streets: bool,
@@ -318,11 +321,32 @@ pub fn zone_of(coverage: f64, industrial_share: f64) -> Zone {
 /// The radius of the surroundings that say a building's zone.
 pub const ZONE_RADIUS: f64 = 60.0;
 
+impl CartoOptions {
+    /// Whether a point of the plan is inside what is brought.
+    pub fn contains(&self, p: Point2) -> bool {
+        if self.square {
+            (p.x - self.centre.x).abs() <= self.radius && (p.y - self.centre.y).abs() <= self.radius
+        } else {
+            p.distance(self.centre) <= self.radius
+        }
+    }
+
+    /// The outline of what is brought: its circle or its square.
+    pub fn area(&self) -> Vec<Point2> {
+        if self.square {
+            archisim_core::square_area(self.centre, self.radius)
+        } else {
+            archisim_core::circle_area(self.centre, self.radius)
+        }
+    }
+}
+
 impl Default for CartoOptions {
     fn default() -> Self {
         CartoOptions {
             centre: Point2::new(0.0, 0.0),
             radius: 150.0,
+            square: false,
             buildings: true,
             parcels: true,
             streets: true,
@@ -575,7 +599,7 @@ fn lidar_existing(
         .masses()
         .filter(|x| x.dress.is_some() || x.floor_height.is_some())
         .filter_map(|x| match &x.shape {
-            MassShape::Prism(p) if centre_of(p).distance(opts.centre) <= opts.radius => {
+            MassShape::Prism(p) if opts.contains(centre_of(p)) => {
                 Some((x.id, p.clone(), x.floor_height.unwrap_or(opts.floor_height)))
             }
             _ => None,
@@ -692,7 +716,7 @@ pub fn import_carto(
     } else {
         Vec::new()
     };
-    let inside = |p: Point2| p.distance(opts.centre) <= opts.radius;
+    let inside = |p: Point2| opts.contains(p);
 
     // Buildings: the cadastre's, or OpenStreetMap's when there is none.
     let concept = material(m, "Volumen de concepto", "concept", [222, 222, 214]);
@@ -946,7 +970,12 @@ pub fn import_carto(
                     .iter()
                     .map(|p| frame.to_plan(utm_of(&g, p[0], p[1])))
                     .collect();
-                let pieces = clip_to_circle(&line, opts.centre, opts.radius)
+                let pieces = if opts.square {
+                    archisim_core::clip_line_to_area(&line, &opts.area())
+                } else {
+                    clip_to_circle(&line, opts.centre, opts.radius)
+                };
+                let pieces = pieces
                     .into_iter()
                     .map(|p| simplify(&p, 0.5))
                     .filter(|p| p.len() >= 2 && length(p) >= 5.0);
@@ -1025,6 +1054,9 @@ pub fn import_carto(
             report.trees += 1;
         }
     }
+    // The area brought: the streets that reach its edge are its
+    // connections with the outside (N8).
+    m.set_surroundings(Some(opts.area()))?;
     if opts.street_life && opts.streets {
         report.life = crate::street_life::add_street_life(
             m,
@@ -1412,7 +1444,7 @@ fn grid_points(grid: &asc::Grid, frame: &Frame, opts: &CartoOptions) -> Vec<Surv
         for col in (0..grid.cols).step_by(step) {
             let Some(z) = grid.at(col, row) else { continue };
             let p = frame.to_plan(grid.point(col, row));
-            if p.distance(opts.centre) <= opts.radius {
+            if opts.contains(p) {
                 out.push(SurveyPoint {
                     at: p,
                     z: z - frame.h,
@@ -1978,5 +2010,53 @@ mod tests {
         let parts = clip_to_circle(&line, Point2::new(0.0, 0.0), 100.0);
         assert_eq!(parts.len(), 1);
         assert!((length(&parts[0]) - 200.0).abs() < 1e-6);
+    }
+}
+
+#[cfg(test)]
+mod area_tests {
+    use super::*;
+
+    /// A square area (N8): what is brought stays inside its square, the
+    /// project keeps the area, and the streets cut at its edge are its
+    /// connections with the outside.
+    #[test]
+    fn a_square_area_with_its_connections() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../archisim-carto/tests/fixtures");
+        let read = |f: &str| std::fs::read_to_string(dir.join(f)).unwrap();
+        let files = [
+            ("c.gml".into(), read("pueblo-catastro.gml")),
+            ("p.osm".into(), read("pueblo.osm")),
+        ];
+        for square in [false, true] {
+            let mut m = Model::new("T");
+            let level = m.add_level("Planta baja", 0.0);
+            let opts = CartoOptions {
+                styles: false,
+                street_life: false,
+                radius: 60.0,
+                square,
+                ..CartoOptions::default()
+            };
+            import_carto(&mut m, &files, &opts).unwrap();
+            let area = m.surroundings().expect("the area is kept").to_vec();
+            assert_eq!(area.len(), if square { 4 } else { 96 });
+            for r in m.roads() {
+                for p in &r.axis {
+                    assert!(
+                        archisim_core::point_in_polygon(
+                            *p,
+                            &archisim_core::grow_polygon(&area, 0.5)
+                        ),
+                        "{p:?} outside"
+                    );
+                }
+            }
+            let ends = m.outside_ends(level);
+            if m.roads().count() > 0 {
+                assert!(!ends.is_empty(), "streets cut at the edge go on outside");
+            }
+        }
     }
 }

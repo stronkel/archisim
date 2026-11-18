@@ -689,6 +689,16 @@ impl ArchiSimApp {
             ui.separator();
             ui.switch(&mut self.show_reference_lines, "Líneas de referencia");
             ui.switch(&mut self.show_grid, "Rejilla");
+            if ui
+                .switch(&mut self.prefs.draw_aside, "Dibujar aparte")
+                .on_hover_text("Plantas, secciones y alzados que tardan se dibujan en segundo plano, sin parar la ventana; apagado, se dibujan al momento, como antes de la 0.85")
+                .changed()
+            {
+                self.prefs.save();
+                self.plan.clear();
+                self.section_pending = None;
+                self.section_failed = None;
+            }
             {
                 let mut print = !self.thin_lines;
                 if ui

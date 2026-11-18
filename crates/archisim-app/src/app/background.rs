@@ -12,26 +12,60 @@ use super::ArchiSimApp;
 /// A picture being made for `key`.
 pub struct Pending<K, T = ColorImage> {
     pub key: K,
-    slot: Arc<Mutex<Option<T>>>,
+    slot: Arc<Mutex<Option<Result<T, String>>>>,
+    /// When it was started.
+    pub started: web_time::Instant,
+}
+
+/// What a panic said.
+pub fn panic_text(payload: &(dyn std::any::Any + Send)) -> String {
+    payload
+        .downcast_ref::<&str>()
+        .map(|s| s.to_string())
+        .or_else(|| payload.downcast_ref::<String>().cloned())
+        .unwrap_or_else(|| "error desconocido".to_string())
 }
 
 impl<K, T: Send + 'static> Pending<K, T> {
     /// Starts making the picture of `key` with `work`, on another thread.
+    /// If the work fails, it says so ([`Self::failed`]) instead of never
+    /// coming (0.92.1: a plan or a section left waiting for ever).
     pub fn start(key: K, work: impl FnOnce() -> T + Send + 'static) -> Self {
         let slot = Arc::new(Mutex::new(None));
         let to = slot.clone();
         crate::platform::spawn(move || {
-            let image = work();
-            if let Ok(mut s) = to.lock() {
-                *s = Some(image);
-            }
+            let done = std::panic::catch_unwind(std::panic::AssertUnwindSafe(work))
+                .map_err(|e| panic_text(e.as_ref()));
+            let mut s = to.lock().unwrap_or_else(|e| e.into_inner());
+            *s = Some(done);
         });
-        Pending { key, slot }
+        Pending {
+            key,
+            slot,
+            started: web_time::Instant::now(),
+        }
     }
 
     /// The picture, once made.
     pub fn take(&self) -> Option<T> {
-        self.slot.lock().ok().and_then(|mut s| s.take())
+        let mut s = self.slot.lock().unwrap_or_else(|e| e.into_inner());
+        match s.take() {
+            Some(Ok(t)) => Some(t),
+            Some(Err(e)) => {
+                *s = Some(Err(e));
+                None
+            }
+            None => None,
+        }
+    }
+
+    /// Why it could not be made, if it failed.
+    pub fn failed(&self) -> Option<String> {
+        let s = self.slot.lock().unwrap_or_else(|e| e.into_inner());
+        match &*s {
+            Some(Err(e)) => Some(e.clone()),
+            _ => None,
+        }
     }
 }
 

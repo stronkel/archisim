@@ -925,7 +925,7 @@ pub type CatalogueEntry = (&'static str, &'static str, &'static [(&'static str, 
 
 /// The object types of the library (v0.25, more in v0.26), in the order of
 /// the gallery.
-pub const OBJECT_CATALOGUE: [CatalogueEntry; 292] = [
+pub const OBJECT_CATALOGUE: [CatalogueEntry; 293] = [
     ("Mesa de comedor 160×90", "Mesa", &[]),
     ("Silla", "Silla", &[]),
     ("Sofá de 3 plazas", "Sofá", &[]),
@@ -1137,6 +1137,11 @@ pub const OBJECT_CATALOGUE: [CatalogueEntry; 292] = [
     ("Señal de tráfico", "Señal de tráfico", &[]),
     ("Jardinera 120", "Jardinera", &[]),
     ("Alcorque 120", "Alcorque", &[]),
+    (
+        "Panel de lamas de madera 120",
+        "Panel de lamas orientable",
+        &[],
+    ),
     // More models of each object (v0.40), their 3D made by ArchiSim.
     ("Sofá clásico de 3 plazas", "Sofá", &[]),
     (

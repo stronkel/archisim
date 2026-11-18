@@ -54,6 +54,9 @@ pub enum SolidOwner {
     Surface(archisim_core::SurfaceId),
     /// A picture stuck on a face (U8).
     Decal(archisim_core::DecalId),
+    /// A car or a person of the traffic for illustration (N9), in its
+    /// colour: not an element of the model.
+    Traffic([u8; 3]),
     /// A pipe or duct.
     Run(archisim_core::RunId),
     Device(archisim_core::DeviceId),
@@ -101,6 +104,7 @@ impl SolidOwner {
             SolidOwner::Run(x) => x.0,
             SolidOwner::Device(x) => x.0,
             SolidOwner::Orthophoto => 0,
+            SolidOwner::Traffic(_) => 0,
             SolidOwner::Ceiling(x) => x.0,
             SolidOwner::Box(x) => x.0,
         }
@@ -2673,6 +2677,9 @@ pub fn solid_vertex_colors(model: &Model, s: &Solid) -> Option<Vec<[[u8; 3]; 3]>
     }
     if s.owner == SolidOwner::Orthophoto {
         return crate::orthophoto::orthophoto_colors(model);
+    }
+    if let SolidOwner::Traffic(c) = s.owner {
+        return Some(vec![[c; 3]; s.triangles.len()]);
     }
     let SolidOwner::Object(id) = s.owner else {
         return None;
@@ -6777,6 +6784,7 @@ pub fn level_solids(model: &Model, level: LevelId) -> Vec<Solid> {
         SolidOwner::Device(d) => model.device(d).is_some_and(|d| d.level == level),
         SolidOwner::Ceiling(c) => model.ceiling(c).is_some_and(|c| c.level == level),
         SolidOwner::Box(b) => model.modular_box(b).is_some_and(|b| b.level == level),
+        SolidOwner::Traffic(_) => false,
         SolidOwner::Orthophoto => {
             model
                 .terrains()

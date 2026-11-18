@@ -122,6 +122,7 @@ fn element_name(model: &Model, owner: SolidOwner) -> String {
         SolidOwner::Run(_) => "Tubería",
         SolidOwner::Device(_) => "Aparato",
         SolidOwner::Orthophoto => return "Ortofoto".into(),
+        SolidOwner::Traffic(_) => return "Tráfico".into(),
     };
     format!("{what} {}", owner.id())
 }

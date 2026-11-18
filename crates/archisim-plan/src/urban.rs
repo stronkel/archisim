@@ -126,6 +126,54 @@ pub fn draw_plots(
     s.push_str("</g>\n");
 }
 
+/// The edge of the area of the surroundings (N8), a long dash, and the
+/// connections of the streets with the outside: an arrow out of the area
+/// at each street cut by its edge, with the street's name.
+pub fn draw_outside(s: &mut String, model: &Model, level: LevelId, k: f64) {
+    let Some(area) = model.surroundings() else {
+        return;
+    };
+    let _ = writeln!(
+        s,
+        r#"<path class="surroundings" d="{}" fill="none" stroke="{INK}" stroke-width="{}" stroke-dasharray="{} {}" stroke-opacity="0.6"/>"#,
+        path(area),
+        num(pens().thin * k),
+        num(12.0 * k),
+        num(3.0 * k)
+    );
+    for e in model.outside_ends(level) {
+        let Some(r) = model.road(e.road) else {
+            continue;
+        };
+        let side = e.out.perp_left();
+        let w = (r.section.width() / 2.0).min(6.0 * k);
+        // An arrow out of the area, as long as the street is wide.
+        let tip = e.point + e.out * (w * 2.0 + 4.0 * k);
+        let base = e.point + e.out * (2.0 * k);
+        let arrow = [base + side * (w * 0.5), tip, base - side * (w * 0.5)];
+        let _ = writeln!(
+            s,
+            r#"<path class="outside-connection" d="M{} L{} L{} Z" fill="{INK}" fill-opacity="0.75" stroke="none"/>"#,
+            pt(arrow[0]),
+            pt(arrow[1]),
+            pt(arrow[2])
+        );
+        if !r.name.is_empty() {
+            let h = LABEL * k;
+            // Along the street, reading from left to right.
+            let dir = if e.out.x < -1e-9 { e.out * -1.0 } else { e.out };
+            let half = r.name.chars().count() as f64 * h * 0.3;
+            let at = tip + e.out * (h + half) - dir.perp_left() * (h / 2.0);
+            let _ = writeln!(
+                s,
+                r#"<path class="outside-connection" d="{}" {}/>"#,
+                text_path(&r.name, at, dir, h, Align::Centre),
+                crate::lettering::paint(h, INK)
+            );
+        }
+    }
+}
+
 /// The roads of a level.
 pub fn draw_roads(
     s: &mut String,

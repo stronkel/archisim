@@ -94,23 +94,36 @@ impl ArchiSimApp {
             self.complain("Ahí no hay una manzana: busca un hueco cerrado por calles.");
             return;
         };
-        if has {
-            self.complain(
-                "Esa manzana ya tiene parcelas: bórralas antes o vacíalas y vuelve a llenarlas.",
-            );
-            return;
-        }
         let (zone, f, d) = (self.blocks.zone, self.blocks.frontage, self.blocks.depth);
         let mut ids = Vec::new();
-        let r = self.ed.transact("Parcelar manzana", |m| {
-            ids = blocks::add_block_plots(m, level, &block, number, zone, f, d)?;
+        let mut gone = 0;
+        let what = if has {
+            "Volver a parcelar manzana"
+        } else {
+            "Parcelar manzana"
+        };
+        let r = self.ed.transact(what, |m| {
+            if has {
+                // Cut again: what is not locked goes, with its buildings.
+                (ids, gone) = blocks::replot_block(m, level, &block, number, zone, f, d)?;
+            } else {
+                ids = blocks::add_block_plots(m, level, &block, number, zone, f, d)?;
+            }
             Ok::<(), archisim_core::ModelError>(())
         });
-        let done = format!(
-            "Manzana {number}: {} parcelas de {}.",
-            ids.len(),
-            zone.label().to_lowercase()
-        );
+        let done = if has {
+            format!(
+                "Manzana {number} parcelada de nuevo: {gone} parcelas quitadas y {} de {}; las bloqueadas siguen.",
+                ids.len(),
+                zone.label().to_lowercase()
+            )
+        } else {
+            format!(
+                "Manzana {number}: {} parcelas de {}.",
+                ids.len(),
+                zone.label().to_lowercase()
+            )
+        };
         self.report(r, &done);
         self.ed.selection = ids.into_iter().map(Element::Plot).collect();
     }
@@ -188,7 +201,9 @@ impl ArchiSimApp {
         ui.horizontal_wrapped(|ui| {
             if ui
                 .selectable_label(st.picking, "Parcelar una manzana")
-                .on_hover_text("Clic dentro de una manzana sin parcelas")
+                .on_hover_text(
+                    "Clic dentro de una manzana; si ya tiene parcelas, se vuelve a parcelar sin tocar las bloqueadas",
+                )
                 .clicked()
             {
                 act = Some(0);
