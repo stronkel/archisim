@@ -245,7 +245,14 @@ impl ArchiSimApp {
                 Ok(()) if lines.is_empty() => {
                     self.complain("No había nada que traer dentro del radio.")
                 }
-                Ok(()) => self.say(format!("Entorno traído: {}.", lines.join(", "))),
+                Ok(()) => {
+                    self.say(format!(
+                        "Entorno traído: {}. Si no cae en su sitio, encájalo por dos puntos en este panel.",
+                        lines.join(", ")
+                    ));
+                    // Fitted next, when it does not fall in its place.
+                    self.context_fit.open = true;
+                }
                 Err(e) => self.complain(format!("No se puede traer el entorno: {e}.")),
             }
             return;

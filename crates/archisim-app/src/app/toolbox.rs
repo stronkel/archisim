@@ -245,6 +245,8 @@ pub enum Action {
     Replace,
     /// The panel «Manzanas»: blocks cut into plots and filled (N7).
     Blocks,
+    /// The panel «Encajar el entorno»: the surroundings moved as one.
+    FitContext,
     /// The map view of the whole area (N8).
     MapView,
     /// The traffic for illustration in the 3D view (N9).
@@ -729,6 +731,13 @@ const SITE: &[Tile] = &[
         "Territorio",
         "Manzanas y parcelas por zonas, vista de mapa del área y tráfico de ilustración",
         &[
+        tile(
+            Pick::Action(Action::FitContext),
+            Glyph::Plot,
+            "Encajar el entorno",
+            "",
+            "Mueve, gira y sube en bloque todo lo traído alrededor (terreno, ortofoto, edificios, calles, parcelas y árboles) sin tocar el edificio: por dos puntos, arrastrando o tecleando; corrige la georreferencia",
+        ),
         tile(
             Pick::Action(Action::MapView),
             Glyph::Plot,
@@ -1649,6 +1658,7 @@ impl ArchiSimApp {
                 Action::Render => self.render.open,
                 Action::Replace => self.replace.open,
                 Action::Blocks => self.blocks.open,
+                Action::FitContext => self.context_fit.open,
                 Action::MapView => self.map.open,
                 Action::Traffic => self.v3d.traffic_on(),
                 Action::HidePieces => self.piece_pick == Some(super::pieces_ui::PiecePick::Hide),
@@ -1798,6 +1808,12 @@ impl ArchiSimApp {
                 if on {
                     self.set_mode(super::ViewMode::ThreeD);
                     self.say("Tráfico en la vista 3D: coches por los carriles y personas por las aceras.");
+                }
+            }
+            Action::FitContext => {
+                self.context_fit.open = !self.context_fit.open;
+                if !self.context_fit.open {
+                    self.context_fit.stop();
                 }
             }
             Action::Blocks => {

@@ -19,6 +19,7 @@ mod brush;
 mod cad;
 mod calc_aside;
 mod carpentry;
+mod context_fit;
 mod coord;
 mod crash;
 mod dim_tool;

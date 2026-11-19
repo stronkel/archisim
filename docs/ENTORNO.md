@@ -44,6 +44,20 @@ En la línea de órdenes: `archisim cartografia --lugar "Calle Ancha 12, Punta U
 - Los edificios se apoyan en el terreno. Con MDT, las calles siguen el terreno con su rasante (un punto cada 20 m, con acuerdos verticales); sin él, quedan horizontales a la cota media.
 - Donde se encuentran dos calles se hace el cruce (U1): calzada continua y bordillos redondeados en las esquinas.
 
+## Encajar el entorno (0.105)
+
+Cuando no se tienen las coordenadas exactas ni el ángulo del proyecto, el entorno se trae igual (por la dirección, o con el proyecto sin georreferenciar) y luego se encaja a mano. Urbanismo → Territorio → **Encajar el entorno** abre un panel; también se abre solo al traer el entorno.
+
+- **Qué se mueve**: terreno con su ortofoto, explanaciones y zonas pintadas; edificios del entorno; calles, glorietas, marcas y plazas; parcelas; árboles, mobiliario, coches y personas. Cada parte tiene su interruptor y su número. El edificio (muros, forjados, cubiertas, objetos de interior) no se mueve nunca.
+- **Dos puntos**: clic en un punto del entorno (la esquina de un edificio del Catastro, un bordillo), clic en el punto del proyecto que le corresponde, y otra pareja para el giro (de la segunda solo cuenta la dirección: el entorno no se estira). Mientras se elige, el entorno se ve en naranja donde quedaría.
+- **Mover** (dos clics) y **Girar** (centro, una dirección del entorno y hacia dónde debe mirar).
+- **Cota**: clic en un punto del terreno y toma la cota que se pida (0: el ±0,00 del proyecto); sube o baja todo el entorno.
+- **Tecleado**: mover en X e Y, girar alrededor del centro del edificio y subir.
+- **La situación en el mapa sigue al entorno** (activado): la georreferencia y el norte se corrigen para que el entorno siga en su sitio real y el edificio pase a estar donde se ha encajado; el IFC sale bien situado. Desactivado, solo cambia el plano.
+- **Lo que pisa el proyecto**: los edificios del entorno que caen sobre el edificio se pueden ocultar o quitar de una vez.
+- **Ocultar el entorno**: deja de verse en todas las vistas para trabajar en el edificio; se vuelve a encender en el mismo sitio.
+- Todo es un paso de Deshacer.
+
 ## Tipos de vía según OpenStreetMap
 
 | Clase en OSM | Tipo de vía |

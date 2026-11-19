@@ -153,6 +153,8 @@ impl ArchiSimApp {
         crate::profile::time("planta: draw_terrain_preview", || {
             self.draw_terrain_preview(&painter, rect)
         });
+        self.draw_context_fit_preview(&painter, rect);
+        self.draw_street_readout(&painter, rect);
         crate::profile::time("planta: draw_brush_plan", || {
             self.draw_brush_plan(&painter, rect)
         });
@@ -792,6 +794,9 @@ impl ArchiSimApp {
         if space && self.flip_stair_turn() {
             return;
         }
+        if self.road_height_keys(ctx) {
+            return;
+        }
         if self.tool == Tool::Pipe {
             let (up, down) =
                 ctx.input(|i| (i.key_pressed(Key::PageUp), i.key_pressed(Key::PageDown)));
@@ -1143,6 +1148,7 @@ impl ArchiSimApp {
                     self.replace.picking = None;
                     self.piece_pick = None;
                     self.blocks.picking = false;
+                    self.context_fit.stop();
                 }
             }
         }
@@ -1271,6 +1277,14 @@ impl ArchiSimApp {
             if response.clicked_by(PointerButton::Primary) {
                 if let Some(c) = self.cursor {
                     self.piece_click(c.point);
+                }
+            }
+            return;
+        }
+        if self.context_fit.picking() && self.tool == Tool::Arrow {
+            if response.clicked_by(PointerButton::Primary) {
+                if let Some(c) = self.cursor {
+                    self.context_fit_click(c.point);
                 }
             }
             return;

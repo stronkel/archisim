@@ -1166,6 +1166,9 @@ impl ArchiSimApp {
             Some(super::pieces_ui::PiecePick::Detach) => return "Soltar paso de peatones: clic en una cebra de una calle · Esc: dejarlo",
             None => {}
         }
+        if let Some(h) = self.context_fit.hint() {
+            return h;
+        }
         if self.blocks.picking {
             return "Parcelar: clic dentro de una manzana sin parcelas · Esc: dejarlo";
         }

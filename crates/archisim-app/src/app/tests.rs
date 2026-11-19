@@ -13072,3 +13072,157 @@ fn every_project_draws_its_plan_and_sections() {
     }
     assert!(bad.is_empty(), "{bad:#?}");
 }
+
+/// «Encajar el entorno»: the surroundings put on the building by two
+/// points, without moving the building, in one step of Undo; and the
+/// buildings of the surroundings over the building found and taken away.
+#[test]
+fn the_surroundings_fitted_by_two_points() {
+    let mut h = Harness::new(Editor::new_project());
+    let canvas = h.app.canvas;
+    h.app
+        .view
+        .fit_exact(canvas, p(-60.0, -60.0), p(60.0, 60.0), 0.0);
+    let level = h.app.ed.level;
+    let mat = h.model().materials().next().unwrap().id;
+    let wall_type = h.model().wall_types().next().unwrap().id;
+    let r = h.app.ed.transact("Edificio y entorno", |m| {
+        m.add_wall(archisim_core::NewWall {
+            wall_type,
+            level,
+            start: p(0.0, 0.0),
+            end: p(10.0, 0.0),
+            reference: archisim_core::ReferenceLine::Center,
+            height: 3.0,
+            base_offset: 0.0,
+            bulge: 0.0,
+            top: archisim_core::WallTop::Unconnected,
+        })?;
+        m.add_road(archisim_core::NewRoad {
+            name: "Calle".into(),
+            level,
+            axis: vec![p(-40.0, 30.0), p(40.0, 30.0)],
+            section: archisim_core::RoadSection::default(),
+            top_offset: 0.0,
+            profile: Vec::new(),
+            changes: Vec::new(),
+            pavement: mat,
+            kerb_material: mat,
+            sidewalk_material: mat,
+        })?;
+        Ok::<(), archisim_core::ModelError>(())
+    });
+    assert!(r.is_ok());
+    let wall = h.model().walls().next().unwrap().clone();
+    h.app.act(super::toolbox::Action::FitContext);
+    assert!(h.app.context_fit.open);
+    h.frame();
+    // The start of the street goes on the start of the wall, and the street
+    // turns to run along the wall's direction, upwards.
+    h.app.context_fit.mode = Some(super::context_fit_ui::FitMode::TwoPoints);
+    h.click_at(p(-40.0, 30.0));
+    h.click_at(p(0.0, 5.0));
+    h.click_at(p(40.0, 30.0));
+    h.click_at(p(0.0, 25.0));
+    assert!(!h.app.context_fit.picking());
+    let axis = h.model().roads().next().unwrap().axis.clone();
+    assert!(axis[0].distance(p(0.0, 5.0)) < 0.2, "{axis:?}");
+    assert!((axis[1].x - axis[0].x).abs() < 0.2, "{axis:?}");
+    assert_eq!(h.model().walls().next().unwrap().start, wall.start);
+    // The north turned with the surroundings.
+    assert!(h.model().true_north().abs() > 1.0);
+    h.app.ed.undo();
+    assert_eq!(h.model().roads().next().unwrap().axis[0], p(-40.0, 30.0));
+    // A building of the surroundings over the wall.
+    let r = h.app.ed.transact("Edificio del entorno", |m| {
+        m.add_env_building(archisim_core::NewEnvBuilding {
+            name: "Vecino".into(),
+            level,
+            outline: vec![p(-2.0, -3.0), p(6.0, -3.0), p(6.0, 3.0), p(-2.0, 3.0)],
+            style: archisim_core::BuildingStyle::ALL[0],
+            floors: None,
+            floor_height: None,
+            base_offset: 0.0,
+        })?;
+        Ok::<(), archisim_core::ModelError>(())
+    });
+    assert!(r.is_ok(), "{r:?}");
+    let on = crate::context_fit::buildings_on_the_project(h.model());
+    assert_eq!(on.len(), 1);
+    h.frame();
+}
+
+#[test]
+fn the_street_bar_lays_grids_parallels_and_upgrades() {
+    let mut h = Harness::new(Editor::new_project());
+    let canvas = h.app.canvas;
+    h.app
+        .view
+        .fit_exact(canvas, p(-20.0, -120.0), p(220.0, 220.0), 0.0);
+    h.app.set_discipline(super::toolbox::Discipline::Site);
+    h.type_text("w");
+    assert_eq!(h.app.tool, Tool::Road);
+    // The bar is drawn with the tool.
+    h.frame();
+    // A grid of 200 × 160 every 80 m: three streets one way, four the other.
+    h.app.road_settings.act = Some(super::street_bar::RoadAct::Grid);
+    h.click_at(p(0.0, 0.0));
+    h.click_at(p(200.0, 0.0));
+    h.frame();
+    h.click_at(p(50.0, 160.0));
+    assert_eq!(h.model().roads().count(), 7);
+    let level = h.app.ed.level;
+    let js = archisim_geom::crossroads::junctions(h.model(), level);
+    assert!(js.len() >= 10, "{}", js.len());
+    // One undo takes the whole grid.
+    h.app.ed.undo();
+    assert_eq!(h.model().roads().count(), 0);
+    h.app.ed.redo();
+    assert_eq!(h.model().roads().count(), 7);
+    // A parallel 30 m south of the bottom street.
+    h.app.road_settings.act = Some(super::street_bar::RoadAct::Parallel);
+    h.click_at(p(100.0, -3.0));
+    assert_eq!(
+        h.model().roads().count(),
+        8,
+        "{:?} {:?}",
+        h.app.message.as_ref().map(|m| m.text.clone()),
+        h.app.road_points
+    );
+    assert!(h
+        .model()
+        .roads()
+        .any(|r| r.axis.iter().all(|q| (q.y + 30.0).abs() < 1e-6)));
+    // «Mejorar»: another type on the street at the top, same axis.
+    let top = h
+        .model()
+        .roads()
+        .find(|r| r.axis.iter().all(|q| (q.y - 160.0).abs() < 1e-6))
+        .unwrap()
+        .id;
+    let axis = h.model().road(top).unwrap().axis.clone();
+    let other = archisim_core::street_types()
+        .into_iter()
+        .find(|t| t.section.width() > h.model().road(top).unwrap().section.width() + 1.0)
+        .unwrap();
+    h.app.road_settings.section = other.section.clone();
+    h.app.road_settings.act = Some(super::street_bar::RoadAct::Upgrade);
+    h.click_at(p(100.0, 160.0));
+    let r = h.model().road(top).unwrap();
+    assert_eq!(r.axis, axis);
+    assert!((r.section.width() - other.section.width()).abs() < 1e-9);
+    // PgUp: the next street a metre up, and it no longer follows the ground.
+    h.app.road_settings.act = None;
+    h.app.road_settings.follow_ground = true;
+    h.key(Key::PageUp);
+    assert!((h.app.road_settings.top_offset - 1.0).abs() < 1e-9);
+    assert!(!h.app.road_settings.follow_ground);
+    h.key(Key::PageDown);
+    assert!(h.app.road_settings.top_offset.abs() < 1e-9);
+    // While a stretch is drawn, its readout goes by the cursor.
+    h.click_at(p(0.0, 200.0));
+    h.move_to(p(60.0, 200.0));
+    h.frame();
+    h.app.set_tool(Tool::Arrow);
+    h.frame();
+}

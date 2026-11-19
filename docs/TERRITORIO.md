@@ -204,6 +204,21 @@ Hoy `archisim_geom::crossroads::junctions(model, level)` rehace todos los cruces
   - la planta con los coches y las personas (`trafico-planta.svg`);
   - una imagen del cruce (`trafico.png`).
 
+### 2.13 N10 hecho: la barra de calles, al estilo de Cities: Skylines 2 (18/11/2026, versión 0.106)
+
+Pedido de Antonio: trazar y editar calles de forma ágil y rápida, sin perder el minimalismo y con el control de todo a mano.
+
+- **La barra**: con la herramienta Calle, una barra pequeña flota abajo en el centro del dibujo, en planta, en 3D y en la Maqueta. Lleva todo lo de trazar sin ir a Propiedades:
+  - **El tipo de calle**: su nombre; al pulsarlo se abren las tarjetas de todos los tipos, dibujados en sección.
+  - **Cómo se traza**: Continua (la curva que sigue a la anterior), Recta, Curva y Eje (el eje entero por sus puntos).
+  - **Cuadrícula**: tres clics. Una esquina, el final del primer lado y hasta dónde llega el fondo. Pone una calle cada 80 m (se cambia en la barra) en los dos sentidos, ajustada para que los dos lados acaben en calle, con sus cruces y sus cebras. Todo en un paso de Deshacer.
+  - **Paralela**: clic en una calle, del lado donde va la nueva, a la distancia de la barra (30 m de partida).
+  - **Mejorar**: clic en una calle. Le pone el tipo y los materiales de la barra sin mover su eje, y se queda con sus pasos de peatones y orejas.
+  - **Terreno** y **Anarquía** encendidos o apagados.
+  - **La altura**: − y + o las teclas AvPág y RePág, de metro en metro. Por encima o por debajo de la planta, la calle deja de seguir el terreno: así se hacen los pasos elevados y los subterráneos.
+- **Medidas junto al cursor**: mientras se traza un tramo, en una etiqueta azul van su longitud, su rumbo desde el norte, el radio si es curvo y la pendiente si sigue el terreno (o la altura si va por encima). Con la cuadrícula se ven las calles que va a poner y cuántas son.
+- **Para el programador**: `app/street_bar` (`RoadAct`, `grid_streets`, `lay_grid`, `road_act_click`, `road_height_keys`, `street_bar`, `draw_street_readout`) y los campos `act`, `grid_spacing` y `parallel` de `RoadSettings`. Sin cambios de formato.
+
 ## 3. Lo demás, por tandas
 
 | Tanda | Qué | Mods de referencia | Tamaño |

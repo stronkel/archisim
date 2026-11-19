@@ -6,6 +6,22 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-18 (186) · v0.106: la barra de calles (N10)
+
+Rama `bloque/calles-cs2` sobre `bloque/encajar-entorno` (#234). Pedido de Antonio: una forma de trazar y editar calles como en Cities: Skylines 2, ágil, minimalista y con control de todo. Sin cambios de formato.
+
+- **Qué se hizo** (`docs/TERRITORIO.md` §2.13): `app/street_bar`, la barra flotante de la herramienta Calle en planta, 3D y Maqueta (tipo con tarjetas, modos de trazado, Cuadrícula, Paralela, Mejorar, Terreno, Anarquía y altura con RePág/AvPág) y las medidas junto al cursor (longitud, rumbo, radio y pendiente). Pruebas `a_grid_fits_its_spacing`, `three_points_give_their_radius` y `the_street_bar_lays_grids_parallels_and_upgrades`.
+- **Pendiente**: tiradores en 3D para la curva mientras se traza; arrastrar la altura de un tramo ya hecho con la rueda; el resto de §7.
+- **Qué debe probar Antonio**: Urbanismo → Calle. Mira la barra abajo. Pulsa «Cuadrícula», haz clic en una esquina, en el final del primer lado y en el fondo: deben salir las calles con sus cruces; Ctrl+Z las quita todas de una vez. Luego «Paralela» y clic al lado de una calle; luego elige otro tipo en el nombre de la barra, «Mejorar» y clic en una calle. Traza un tramo con «Continua» y mira la etiqueta azul junto al cursor; pulsa RePág dos veces y traza otro: debe ir en viaducto a +2 m.
+
+## 2026-11-18 (185) · v0.105: encajar el entorno
+
+Rama `bloque/encajar-entorno`. Pedido de Antonio a raíz de la nave SUMO: el entorno traído se solapaba con el proyecto y no había forma cómoda de moverlo sin saber las coordenadas y el ángulo. Sin cambios de formato.
+
+- **Qué se hizo** (`docs/ENTORNO.md`, «Encajar el entorno»): `archisim-app::context_fit` (`Parts`, `Fit` con `by_two_points`, `fit_context`, que mueve con `xform::transform` lo elegido, la ortofoto y el área, sube con `raise` y corrige georreferencia y norte con `follow_on_the_map`; `buildings_on_the_project`, `preview_lines`) y el panel `app/context_fit_ui` (modos Dos puntos, Mover, Girar y Cota con vista previa en naranja; tecleado; ocultar o quitar lo que pisa el proyecto; ocultar el entorno). Se abre solo al traer el entorno. Mover o girar un terreno lleva ya su borde, explanaciones, levantamiento y zonas pintadas (`xform`), y las plazas giran sus juntas.
+- **Pendiente**: tiradores para arrastrar y girar el entorno a mano alzada (hoy, dos clics con vista previa); el entorno marcado como tal en el fichero (hoy se reconoce por su clase: terreno, edificios vestidos, calles, parcelas y lo de Urbanismo).
+- **Qué debe probar Antonio**: abre la nave SUMO con su entorno, Urbanismo → Territorio → Encajar el entorno → «Dos puntos»: clic en una esquina de la nave del Catastro, clic en la misma esquina de tu nave, clic en otra esquina del Catastro y clic en la de tu nave. Mira que todo el entorno se mueve junto y la nave no; luego «Quitarlos» en «Lo que pisa el proyecto» y exporta el IFC para ver que sigue en su sitio en el visor.
+
 ## 2026-11-18 (184) · v0.104 en `main`: territorio N0–N9 unido
 
 Pedido de Antonio («únelos»). La cadena #220, #222–#231 y #233 (fluidez del territorio, nudos, trazado, carriles, tramos, superficies, ocultar, manzanas, área grande, tráfico y la cuarta vuelta de fluidez) se une a `main` encima de #221 (dibujo aparte, 0.92.1) y #232 (la nave SUMO desde el DXF, 0.93.0). Conflictos solo en documentación, versión y pruebas de la app: se juntan las dos partes. En `NOVEDADES.md` la 0.93.0 lleva lo del territorio y lo de la nave SUMO. Formato `.archisim` versión 120.
