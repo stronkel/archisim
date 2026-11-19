@@ -13151,3 +13151,78 @@ fn the_surroundings_fitted_by_two_points() {
     assert_eq!(on.len(), 1);
     h.frame();
 }
+
+#[test]
+fn the_street_bar_lays_grids_parallels_and_upgrades() {
+    let mut h = Harness::new(Editor::new_project());
+    let canvas = h.app.canvas;
+    h.app
+        .view
+        .fit_exact(canvas, p(-20.0, -120.0), p(220.0, 220.0), 0.0);
+    h.app.set_discipline(super::toolbox::Discipline::Site);
+    h.type_text("w");
+    assert_eq!(h.app.tool, Tool::Road);
+    // The bar is drawn with the tool.
+    h.frame();
+    // A grid of 200 × 160 every 80 m: three streets one way, four the other.
+    h.app.road_settings.act = Some(super::street_bar::RoadAct::Grid);
+    h.click_at(p(0.0, 0.0));
+    h.click_at(p(200.0, 0.0));
+    h.frame();
+    h.click_at(p(50.0, 160.0));
+    assert_eq!(h.model().roads().count(), 7);
+    let level = h.app.ed.level;
+    let js = archisim_geom::crossroads::junctions(h.model(), level);
+    assert!(js.len() >= 10, "{}", js.len());
+    // One undo takes the whole grid.
+    h.app.ed.undo();
+    assert_eq!(h.model().roads().count(), 0);
+    h.app.ed.redo();
+    assert_eq!(h.model().roads().count(), 7);
+    // A parallel 30 m south of the bottom street.
+    h.app.road_settings.act = Some(super::street_bar::RoadAct::Parallel);
+    h.click_at(p(100.0, -3.0));
+    assert_eq!(
+        h.model().roads().count(),
+        8,
+        "{:?} {:?}",
+        h.app.message.as_ref().map(|m| m.text.clone()),
+        h.app.road_points
+    );
+    assert!(h
+        .model()
+        .roads()
+        .any(|r| r.axis.iter().all(|q| (q.y + 30.0).abs() < 1e-6)));
+    // «Mejorar»: another type on the street at the top, same axis.
+    let top = h
+        .model()
+        .roads()
+        .find(|r| r.axis.iter().all(|q| (q.y - 160.0).abs() < 1e-6))
+        .unwrap()
+        .id;
+    let axis = h.model().road(top).unwrap().axis.clone();
+    let other = archisim_core::street_types()
+        .into_iter()
+        .find(|t| t.section.width() > h.model().road(top).unwrap().section.width() + 1.0)
+        .unwrap();
+    h.app.road_settings.section = other.section.clone();
+    h.app.road_settings.act = Some(super::street_bar::RoadAct::Upgrade);
+    h.click_at(p(100.0, 160.0));
+    let r = h.model().road(top).unwrap();
+    assert_eq!(r.axis, axis);
+    assert!((r.section.width() - other.section.width()).abs() < 1e-9);
+    // PgUp: the next street a metre up, and it no longer follows the ground.
+    h.app.road_settings.act = None;
+    h.app.road_settings.follow_ground = true;
+    h.key(Key::PageUp);
+    assert!((h.app.road_settings.top_offset - 1.0).abs() < 1e-9);
+    assert!(!h.app.road_settings.follow_ground);
+    h.key(Key::PageDown);
+    assert!(h.app.road_settings.top_offset.abs() < 1e-9);
+    // While a stretch is drawn, its readout goes by the cursor.
+    h.click_at(p(0.0, 200.0));
+    h.move_to(p(60.0, 200.0));
+    h.frame();
+    h.app.set_tool(Tool::Arrow);
+    h.frame();
+}

@@ -154,6 +154,7 @@ impl ArchiSimApp {
             self.draw_terrain_preview(&painter, rect)
         });
         self.draw_context_fit_preview(&painter, rect);
+        self.draw_street_readout(&painter, rect);
         crate::profile::time("planta: draw_brush_plan", || {
             self.draw_brush_plan(&painter, rect)
         });
@@ -791,6 +792,9 @@ impl ArchiSimApp {
             return;
         }
         if space && self.flip_stair_turn() {
+            return;
+        }
+        if self.road_height_keys(ctx) {
             return;
         }
         if self.tool == Tool::Pipe {

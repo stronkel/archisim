@@ -2650,6 +2650,15 @@ impl ArchiSimApp {
                 ViewMode::Sheet(s) => self.sheet_view(ui, s),
                 ViewMode::Drafting(d) => self.drafting_view(ui, d),
             }
+            if matches!(self.mode, ViewMode::Plan | ViewMode::ThreeD) {
+                let area = if self.mode == ViewMode::Plan {
+                    self.canvas
+                } else {
+                    self.v3d.canvas
+                };
+                let ctx = ui.ctx().clone();
+                self.street_bar(&ctx, area);
+            }
         });
     }
 
@@ -3514,6 +3523,7 @@ mod sketch_pick;
 mod sketch_ui;
 mod stair_ui;
 mod start_ui;
+mod street_bar;
 mod street_types_ui;
 mod structure_ui;
 mod surface_ui;
