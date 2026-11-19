@@ -67,6 +67,16 @@ Cuando no se tienen las coordenadas exactas ni el ángulo del proyecto, el entor
 | `living_street`, `pedestrian` | Calle de plataforma única |
 | caminos, sendas, pistas, autovías | No se traen |
 
+### Las calles como una red (0.107)
+
+OpenStreetMap corta una calle en un trozo nuevo cada vez que cambia algo (el nombre, el número de carriles, un paso de peatones). Dibuja cada calzada de una avenida por separado y cada tramo del anillo de una glorieta como un trozo más. Traer cada trozo como una calle daba un montón de piezas cortas que se pisaban y se unían donde no debían. Ahora, antes de crear las calles, ArchiSim las monta como una red (`archisim_library::osm_streets`):
+
+- **Glorietas**: los trozos marcados como glorieta (`junction=roundabout` o `circular`) que cierran un anillo se convierten en una glorieta. Su radio es el del anillo más medio carril; la isleta es ajardinada y lleva su borde montable. Las calles que llegaban a ella acaban en ella. Si una calle cruza por el medio, pasa entera de lado a lado y la glorieta la corta como a las demás.
+- **Avenidas de dos calzadas**: dos calzadas de un sentido, una al lado de la otra y en sentidos opuestos, se convierten en una sola avenida sobre la línea que las separa, con la mediana del ancho real que había entre ellas. Lo que sobra de una de ellas más allá de la otra se queda como calle de un sentido.
+- **Trozos de una misma calle**: se juntan en una sola calle cuando solo se tocan entre ellos, siguen más o menos rectos (giran menos de 55°) y tienen la misma clase, nombre y sentido. En un cruce, en una T o en un giro brusco se quedan separados, y ahí sale el cruce.
+- **Los ramales** (`*_link`) de las vías grandes no se traen; los de una glorieta, sí.
+- En las glorietas no se colocan árboles, farolas ni coches de la vida de la calle.
+
 Si la calle no cabe entre las parcelas (o los edificios) de los dos lados, se estrecha: primero a una calle de doble sentido con aparcamiento, luego de un sentido, luego sin aparcamiento y, si aún no cabe, todas sus franjas en proporción. Después se edita como cualquier vial (H6).
 
 ## Lo que queda pendiente

@@ -4,6 +4,15 @@ Lo que cambia en cada versión, en pocas líneas. ArchiSim enseña la parte de s
 
 Cada versión empieza con una línea `## <versión>` (por ejemplo `## 0.81.0`): es la que busca la publicación.
 
+## 0.107.0
+
+- **Las calles traídas de OpenStreetMap, como una red.** Antes, cada trozo de OpenStreetMap llegaba como una calle suelta, y una glorieta o una avenida con dos calzadas se rompían en piezas que se pisaban. Ahora:
+  - las glorietas llegan como glorietas, con su isleta ajardinada;
+  - la calle que cruza por el medio de una glorieta la atraviesa entera;
+  - las dos calzadas de una avenida se juntan en una sola avenida con su mediana, al ancho real;
+  - los trozos de una misma calle se unen en una sola calle hasta el siguiente cruce.
+- Sin árboles, farolas ni coches dentro de las glorietas.
+
 ## 0.106.0
 
 - **La barra de calles.** Con la herramienta Calle, una barra pequeña abajo en el dibujo (en planta, en 3D y en la Maqueta) lleva todo lo de trazar: el tipo de calle con sus tarjetas, cómo se traza (continua, recta, curva o eje), seguir el terreno, anarquía y la altura con − y + o RePág y AvPág, para pasos elevados y subterráneos.

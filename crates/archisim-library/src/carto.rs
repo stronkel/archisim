@@ -372,6 +372,8 @@ pub struct CartoReport {
     pub buildings: usize,
     pub plots: usize,
     pub roads: usize,
+    /// Roundabouts found in OpenStreetMap.
+    pub roundabouts: usize,
     pub trees: usize,
     pub terrain_points: usize,
     /// Buildings whose floors the LiDAR gave (V3).
@@ -395,6 +397,7 @@ impl CartoReport {
             (self.buildings, "edificios (volúmenes por plantas)"),
             (self.plots, "parcelas"),
             (self.roads, "calles"),
+            (self.roundabouts, "glorietas"),
             (self.trees, "árboles"),
             (self.terrain_points, "puntos de terreno"),
             (self.lidar_floors, "edificios con sus plantas del LiDAR"),
@@ -957,61 +960,112 @@ pub fn import_carto(
         let pavement = by(m, &["asphalt", "concrete"]);
         let kerb = by(m, &["stone", "concrete"]);
         let sidewalk = by(m, &["ceramic", "stone", "concrete"]);
-        for o in &read.osm {
-            for w in &o.ways {
-                let Some(class) = w.tag("highway") else {
-                    continue;
+        let island = by(m, &["vegetation", "ceramic"]);
+        // The ways that are streets, made a network (joined pieces,
+        // roundabouts, avenues of two carriageways; `osm_streets`).
+        let ways: Vec<crate::osm_streets::OsmStreet> = read
+            .osm
+            .iter()
+            .flat_map(|o| o.ways.iter())
+            .filter_map(|w| {
+                let class = w.tag("highway")?;
+                let roundabout = matches!(w.tag("junction"), Some("roundabout" | "circular"));
+                // The links of a big road are left out, but not the
+                // pieces of a roundabout.
+                let base = class.trim_end_matches("_link");
+                street_section(base, false)?;
+                if base != class && !roundabout {
+                    return None;
+                }
+                Some(crate::osm_streets::OsmStreet {
+                    points: w
+                        .points
+                        .iter()
+                        .map(|p| frame.to_plan(utm_of(&g, p[0], p[1])))
+                        .collect(),
+                    class: base.to_string(),
+                    name: w.tag("name").map(str::to_string),
+                    oneway: roundabout || matches!(w.tag("oneway"), Some("yes" | "1" | "-1")),
+                    roundabout,
+                    lanes: w.tag("lanes").and_then(|l| l.parse().ok()),
+                })
+            })
+            .collect();
+        let (streets, rings) = crate::osm_streets::network(&ways);
+        for ring in &rings {
+            if !inside(ring.centre) {
+                continue;
+            }
+            let outer = ring.radius + ring.width / 2.0;
+            let inner = ring.radius - ring.width / 2.0;
+            let (island_r, apron) = if inner > 3.5 {
+                (inner - 1.5, 1.5)
+            } else {
+                (inner.max(0.0), 0.0)
+            };
+            let name = m.next_roundabout_name();
+            m.add_roundabout(archisim_core::NewRoundabout {
+                name,
+                level,
+                centre: ring.centre,
+                radius: outer,
+                island: island_r,
+                apron,
+                top_offset: on_ground(ring.centre),
+                plaza: false,
+                island_finish: archisim_core::IslandFinish::Garden,
+                pavement,
+                kerb_material: kerb,
+                island_material: island,
+            })?;
+            report.roundabouts += 1;
+        }
+        for st in &streets {
+            let Some(section) = (match st.paired {
+                Some(gap) => avenue_section(&st.class, gap),
+                None => street_section(&st.class, st.oneway),
+            }) else {
+                continue;
+            };
+            let pieces = if opts.square {
+                archisim_core::clip_line_to_area(&st.axis, &opts.area())
+            } else {
+                clip_to_circle(&st.axis, opts.centre, opts.radius)
+            };
+            let pieces = pieces
+                .into_iter()
+                .map(|p| simplify(&p, 0.5))
+                .filter(|p| p.len() >= 2 && length(p) >= 5.0);
+            for piece in pieces {
+                // Two carriageways made one know their width; the rest is
+                // narrowed to the room between the parcels.
+                let section = match (st.paired, room_across(&piece, &fronts)) {
+                    (None, Some(room)) => fit_section(&section, room),
+                    _ => section.clone(),
                 };
-                let Some(section) = street_section(class, w.tag("oneway") == Some("yes")) else {
-                    continue;
-                };
-                let line: Vec<Point2> = w
-                    .points
-                    .iter()
-                    .map(|p| frame.to_plan(utm_of(&g, p[0], p[1])))
-                    .collect();
-                let pieces = if opts.square {
-                    archisim_core::clip_line_to_area(&line, &opts.area())
-                } else {
-                    clip_to_circle(&line, opts.centre, opts.radius)
-                };
-                let pieces = pieces
-                    .into_iter()
-                    .map(|p| simplify(&p, 0.5))
-                    .filter(|p| p.len() >= 2 && length(p) >= 5.0);
-                for whole in pieces {
-                    let section = match room_across(&whole, &fronts) {
-                        Some(room) => fit_section(&section, room),
-                        None => section.clone(),
-                    };
-                    // At the ground's mean height along it, and, with a
-                    // terrain, following it (its «rasante», U1).
-                    {
-                        let piece = whole;
-                        let spots = along(&piece, 4.0);
-                        let top = spots.iter().map(|p| on_ground(*p)).sum::<f64>()
-                            / spots.len().max(1) as f64;
-                        let id = m.add_road(NewRoad {
-                            name: w.tag("name").unwrap_or("Calle").to_string(),
-                            level,
-                            axis: piece,
-                            section,
-                            top_offset: top,
-                            profile: Vec::new(),
-
-                            changes: Vec::new(),
-                            pavement,
-                            kerb_material: kerb,
-                            sidewalk_material: sidewalk,
-                        })?;
-                        if !ground.is_empty() {
-                            if let Some(profile) = m.road_profile_from_terrain(id, 20.0) {
-                                m.edit_road(id, |r| r.profile = profile)?;
-                            }
-                        }
-                        report.roads += 1;
+                // At the ground's mean height along it, and, with a
+                // terrain, following it (its «rasante», U1).
+                let spots = along(&piece, 4.0);
+                let top =
+                    spots.iter().map(|p| on_ground(*p)).sum::<f64>() / spots.len().max(1) as f64;
+                let id = m.add_road(NewRoad {
+                    name: st.name.clone().unwrap_or_else(|| "Calle".to_string()),
+                    level,
+                    axis: piece,
+                    section,
+                    top_offset: top,
+                    profile: Vec::new(),
+                    changes: Vec::new(),
+                    pavement,
+                    kerb_material: kerb,
+                    sidewalk_material: sidewalk,
+                })?;
+                if !ground.is_empty() {
+                    if let Some(profile) = m.road_profile_from_terrain(id, 20.0) {
+                        m.edit_road(id, |r| r.profile = profile)?;
                     }
                 }
+                report.roads += 1;
             }
         }
     }
@@ -1327,6 +1381,44 @@ pub fn street_section(class: &str, one_way: bool) -> Option<RoadSection> {
         "living_street" | "pedestrian" => preset("Calle de plataforma única"),
         _ => None,
     }
+}
+
+/// The section of an avenue whose two carriageways' axes are `gap`
+/// metres apart in OpenStreetMap: its median grown or narrowed to that.
+pub fn avenue_section(class: &str, gap: f64) -> Option<RoadSection> {
+    let name = match class {
+        "primary" | "trunk" | "secondary" => "Avenida con mediana arbolada",
+        _ => "Avenida con mediana ajardinada",
+    };
+    let mut s = archisim_core::road_presets()
+        .into_iter()
+        .find(|(n, _)| *n == name)
+        .map(|(_, s)| s)?;
+    use archisim_core::RoadBand::{Carriageway, Median, Planting};
+    let mid = s.strips.iter().position(|x| x.band == Median).or_else(|| {
+        // The planting strip between the carriageways.
+        let first = s.strips.iter().position(|x| x.band == Carriageway)?;
+        let last = s.strips.iter().rposition(|x| x.band == Carriageway)?;
+        (first..last).find(|&k| s.strips[k].band == Planting)
+    })?;
+    // How far apart the middles of the two carriageways are now.
+    let mut at = 0.0;
+    let mut centres = (Vec::new(), Vec::new());
+    for (k, x) in s.strips.iter().enumerate() {
+        if x.band == Carriageway {
+            let c = at + x.width / 2.0;
+            if k < mid {
+                centres.0.push(c)
+            } else {
+                centres.1.push(c)
+            }
+        }
+        at += x.width;
+    }
+    let mean = |v: &Vec<f64>| v.iter().sum::<f64>() / v.len().max(1) as f64;
+    let now = mean(&centres.1) - mean(&centres.0);
+    s.strips[mid].width = (s.strips[mid].width + gap - now).clamp(0.5, 30.0);
+    Some(s)
 }
 
 /// The room for a street: twice the usual distance (the median along
@@ -1855,6 +1947,126 @@ mod tests {
         assert!(r.georeferenced);
         assert_eq!(m.georeference().unwrap().crs, "EPSG:25829");
         assert_eq!(r.buildings, 2);
+    }
+
+    /// A roundabout like the one in Huelva Antonio brought: its ring in
+    /// four ways, a road across its middle cut at the ring, an avenue of
+    /// two one-way carriageways from the north, each in two pieces, and a
+    /// street from the east cut where a footway meets it.
+    pub(crate) fn roundabout_osm() -> String {
+        let (lat0, lon0) = (37.262972_f64, -6.962056_f64);
+        let (my, mx) = (1.0 / 111_000.0, 1.0 / (111_000.0 * lat0.to_radians().cos()));
+        let mut nodes = Vec::new();
+        let mut node = |x: f64, y: f64| {
+            nodes.push(format!(
+                r#"<node id="{}" lat="{:.8}" lon="{:.8}"/>"#,
+                nodes.len() + 1,
+                lat0 + y * my,
+                lon0 + x * mx
+            ));
+            nodes.len()
+        };
+        let ring: Vec<usize> = (0..24)
+            .map(|k| {
+                let a = (k as f64 * 15.0).to_radians();
+                node(22.0 * a.cos(), 22.0 * a.sin())
+            })
+            .collect();
+        let mut ways = Vec::new();
+        let mut way = |refs: &[usize], tags: &str| {
+            let nd: String = refs.iter().map(|r| format!(r#"<nd ref="{r}"/>"#)).collect();
+            ways.push(format!(
+                r#"<way id="{}">{nd}{tags}</way>"#,
+                100 + ways.len()
+            ));
+        };
+        let tag = |k: &str, v: &str| format!(r#"<tag k="{k}" v="{v}"/>"#);
+        let round = format!(
+            "{}{}",
+            tag("highway", "primary"),
+            tag("junction", "roundabout")
+        );
+        for q in 0..4 {
+            let refs: Vec<usize> = (0..=6).map(|k| ring[(q * 6 + k) % 24]).collect();
+            way(&refs, &round);
+        }
+        let through = format!(
+            "{}{}",
+            tag("highway", "secondary"),
+            tag("name", "Avenida de Italia")
+        );
+        let (w0, w1) = (node(-200.0, 0.0), node(-90.0, 0.0));
+        way(&[w0, w1, ring[12]], &through);
+        way(&[ring[12], ring[0]], &through);
+        let (e0, e1) = (node(90.0, 0.0), node(200.0, 0.0));
+        way(&[ring[0], e0], &through);
+        way(&[e0, e1], &through);
+        // The avenue: down on the west carriageway, up on the east one.
+        let av = format!(
+            "{}{}{}",
+            tag("highway", "primary"),
+            tag("oneway", "yes"),
+            tag("name", "Avenida Andalucía")
+        );
+        let (a0, a1, a2) = (node(-7.0, 200.0), node(-7.0, 100.0), node(-7.0, 40.0));
+        way(&[a0, a1], &av);
+        way(&[a1, a2, ring[7]], &av);
+        let (b0, b1, b2) = (node(7.0, 40.0), node(7.0, 110.0), node(7.0, 200.0));
+        way(&[ring[5], b0, b1], &av);
+        way(&[b1, b2], &av);
+        // From the south, a residential street with a footway on it.
+        let res = format!(
+            "{}{}",
+            tag("highway", "residential"),
+            tag("name", "Calle Rábida")
+        );
+        let (s0, s1, s2) = (node(0.0, -200.0), node(0.0, -120.0), node(0.0, -60.0));
+        way(&[s0, s1], &res);
+        way(&[s1, s2, ring[18]], &res);
+        let f = node(40.0, -120.0);
+        way(&[s1, f], &tag("highway", "footway"));
+        format!(
+            r#"<osm version="0.6">{}{}</osm>"#,
+            nodes.concat(),
+            ways.concat()
+        )
+    }
+
+    #[test]
+    fn a_roundabout_crossed_by_its_road_comes_in_as_one() {
+        let mut m = crate::new_project("Prueba");
+        let opts = CartoOptions {
+            radius: 300.0,
+            ..CartoOptions::default()
+        };
+        // ARCHISIM_GLORIETA_OUT=carpeta deja el fichero para verlo.
+        if let Ok(dir) = std::env::var("ARCHISIM_GLORIETA_OUT") {
+            std::fs::create_dir_all(&dir).unwrap();
+            std::fs::write(format!("{dir}/glorieta.osm"), roundabout_osm()).unwrap();
+        }
+        let r = import_carto(&mut m, &[("glorieta.osm".into(), roundabout_osm())], &opts).unwrap();
+        assert_eq!(r.roundabouts, 1, "{r:?}");
+        let g = m.roundabouts().next().unwrap();
+        assert!((g.radius - 26.0).abs() < 1.0, "{}", g.radius);
+        // Three streets: the road through, the avenue and the street.
+        assert_eq!(
+            r.roads,
+            3,
+            "{:?}",
+            m.roads().map(|x| (&x.name, x.length())).collect::<Vec<_>>()
+        );
+        let through = m.roads().find(|x| x.name == "Avenida de Italia").unwrap();
+        assert!(through.length() > 380.0, "{}", through.length());
+        let avenue = m.roads().find(|x| x.name == "Avenida Andalucía").unwrap();
+        // One avenue on the middle line, 14 m between its carriageways.
+        assert!(avenue.axis.iter().all(|p| (p.x - g.centre.x).abs() < 1.0));
+        let median = avenue
+            .section
+            .strips
+            .iter()
+            .find(|x| x.band == archisim_core::RoadBand::Median)
+            .unwrap();
+        assert!(median.width > 2.0, "{}", median.width);
     }
 
     #[test]

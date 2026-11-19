@@ -6,6 +6,21 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-19 (187) · v0.107: las calles de OpenStreetMap como una red
+
+Rama `bloque/calles-osm`. Antonio trajo el entorno de una glorieta de Huelva cruzada por el medio (37°15'46.7"N 6°57'43.4"W) y las calles salieron rotas en trozos que se pisaban, nada que ver con lo fluido de Cities: Skylines 2. Causa: cada vía de OpenStreetMap se traía como una calle suelta. El anillo de la glorieta salía como calles curvas, y cada calzada de las avenidas de dos calzadas como una avenida entera de 30 m. Sin cambios de formato.
+
+- **Qué se hizo** (`docs/ENTORNO.md`, «Las calles como una red»):
+  - `archisim_library::osm_streets` (`network`, `OsmStreet`, `Street`, `Ring`): anillos de glorieta con un círculo ajustado (`circle_of`, `sweep`), trozos unidos (`join`) y calzadas emparejadas en avenidas (`pair`).
+  - En `carto`: `avenue_section`, que ajusta la mediana al hueco real; las glorietas, con `CartoReport::roundabouts`.
+  - En `street_life`: nada de la vida de la calle dentro de las glorietas.
+  - Pruebas `a_roundabout_with_a_road_through_and_an_avenue`, `streets_that_turn_or_branch_stay_apart`, `a_road_bent_like_an_arc_is_not_a_roundabout` y `a_roundabout_crossed_by_its_road_comes_in_as_one`. Esta última usa un fichero `.osm` inventado como el de la glorieta; `ARCHISIM_GLORIETA_OUT=carpeta` lo deja escrito.
+- **Pendiente**:
+  - no se ha probado con los datos reales de esa glorieta: desde aquí no se llega a OpenStreetMap;
+  - la calle que cruza por el medio queda cortada por la isleta (la glorieta aún no tiene paso por el centro);
+  - los ramales de enlace no se traen.
+- **Qué debe probar Antonio**: en un proyecto nuevo, Archivo → Traer el entorno en esa glorieta de Huelva. Mira que sale una glorieta con su isleta ajardinada, que la avenida de dos calzadas llega como una sola avenida con mediana y que las calles ya no se pisan. Si algo sigue roto, guarda el proyecto y mándamelo.
+
 ## 2026-11-18 (186) · v0.106: la barra de calles (N10)
 
 Rama `bloque/calles-cs2` sobre `bloque/encajar-entorno` (#234). Pedido de Antonio: una forma de trazar y editar calles como en Cities: Skylines 2, ágil, minimalista y con control de todo. Sin cambios de formato.

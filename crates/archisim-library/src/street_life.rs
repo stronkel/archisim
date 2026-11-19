@@ -216,11 +216,20 @@ pub fn add_street_life(
         .roads_on_level(level)
         .map(|x| (x.id, x.axis.clone()))
         .collect();
+    // The roundabouts and squares: nothing of the streets' life on them.
+    let circles: Vec<(Point2, f64)> = m
+        .roundabouts()
+        .filter(|x| x.level == level)
+        .map(|x| (x.centre, x.radius))
+        .collect();
     let near_other = |id: archisim_core::RoadId, p: Point2| {
-        axes.iter().filter(|(o, _)| *o != id).any(|(_, a)| {
-            a.windows(2)
-                .any(|w| distance_to_segment(p, w[0], w[1]) < CROSSING_CLEAR)
-        })
+        circles
+            .iter()
+            .any(|(c, r)| p.distance(*c) < r + CROSSING_CLEAR)
+            || axes.iter().filter(|(o, _)| *o != id).any(|(_, a)| {
+                a.windows(2)
+                    .any(|w| distance_to_segment(p, w[0], w[1]) < CROSSING_CLEAR)
+            })
     };
     // What goes where, worked out before anything is added.
     let mut spots: Vec<Spot> = Vec::new();
