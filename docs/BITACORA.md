@@ -6,6 +6,33 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-19 (188) · v0.108: calles plásticas, primera vuelta
+
+Rama `bloque/calles-plasticas`. Antonio, tras la 0.107: «no tiene nada de plasticidad, no se parece en absoluto a Cities: Skylines 2 y no sé cómo escribírtelo». Le propuse cuatro faltas y marcó las cuatro:
+- ver la calle real al trazar;
+- moldear arrastrando;
+- encuentros suaves;
+- curvas continuas.
+
+Abrí la aplicación en una pantalla virtual y la manejé con clics para ver lo que él ve: una banda azul tapaba la calle real al trazar, el 3D solo enseñaba triángulos translúcidos sin cruces, y una calle seleccionada tenía un tirador por vértice que hacía picos. Sin cambios de formato.
+
+- **Qué se hizo** (`docs/TERRITORIO.md` §2.14):
+  - la vista previa real en planta y en 3D (`road_overlay_3d`, `road_with_met`);
+  - los nudos y los tiradores de curvatura (`Grip::RoadNode`/`RoadBend`, `bend_road`, `archisim_core::shape_axis`);
+  - el trazo que se pega a los cruces y el aviso en rojo (`NODE_PULL`, `crowded`, `road_crowded`);
+  - los quiebros redondeados de OpenStreetMap (`round_bends`).
+  - Pruebas `streets_bend_and_their_nodes_move_by_dragging`, `tracing_is_pulled_to_crossings_and_warns_when_crowded`, `pulling_the_middle_bends_it_and_keeps_its_ends`, `pulling_an_end_eases_back_to_the_line` y `bends_are_rounded_but_not_crossings`.
+- **Pendiente** (segunda vuelta):
+  - tiradores en 3D;
+  - enseñar los tiradores al pasar el ratón sin seleccionar;
+  - un nudo arrastrado que se une a otra calle;
+  - juntar un cruce pegado a otro en lugar de solo avisar;
+  - transiciones de ancho.
+- **Qué debe probar Antonio**: abre un proyecto con calles (por ejemplo, el de `archisim calles out/`).
+  1. Con la herramienta Calle, traza una calle que cruce otra y mira que, antes del clic, ya se ve con sus aceras y su cruce, en planta y en la Vista 3D.
+  2. Llévala junto a un cruce: el clic se pega a su centro; si cruzas pegado a otro cruce, la etiqueta se pone roja.
+  3. Con la flecha, selecciona una calle: tira del círculo de en medio de un tramo y mira que se curva suave; luego arrastra el cuadrado de un cruce y mira que las calles que llegan se van con él.
+
 ## 2026-11-19 (187) · v0.107: las calles de OpenStreetMap como una red
 
 Rama `bloque/calles-osm`. Antonio trajo el entorno de una glorieta de Huelva cruzada por el medio (37°15'46.7"N 6°57'43.4"W) y las calles salieron rotas en trozos que se pisaban, nada que ver con lo fluido de Cities: Skylines 2. Causa: cada vía de OpenStreetMap se traía como una calle suelta. El anillo de la glorieta salía como calles curvas, y cada calzada de las avenidas de dos calzadas como una avenida entera de 30 m. Sin cambios de formato.

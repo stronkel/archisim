@@ -2062,7 +2062,7 @@ impl ArchiSimApp {
                         super::handles::turn(painter, self.view.to_screen(rect, m), c, hot);
                     }
                 }
-                Grip::WallBend { .. } => {
+                Grip::WallBend { .. } | Grip::RoadBend { .. } => {
                     let r = if hot { 6.0 } else { 4.5 };
                     let inside = if hot { ACCENT } else { Color32::WHITE };
                     painter.circle(c, r, inside, Stroke::new(1.2, Color32::BLACK));
@@ -2125,6 +2125,8 @@ impl ArchiSimApp {
             (Grip::CurtainEnd { .. }, _) => "Estirar muro cortina",
             (Grip::RailingPoint { .. }, _) => "Barandilla",
             (Grip::RoadPoint { .. }, _) => "Eje del vial",
+            (Grip::RoadNode { .. }, _) => "Mover nudo de calles",
+            (Grip::RoadBend { .. }, _) => "Curvar calle",
             (Grip::PoolCorner { .. }, _) => "Esquina de la piscina",
             (Grip::RefPlaneEnd { .. }, _) => "Plano de referencia",
             (Grip::DimPoint { .. }, _) => "Punto de cota",

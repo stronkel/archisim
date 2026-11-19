@@ -63,10 +63,24 @@ pub enum Grip {
         plane: archisim_core::RefPlaneId,
         start: bool,
     },
-    /// A point of a road's axis.
+    /// A point of a road's axis (inserting and removing them).
     RoadPoint {
         road: archisim_core::RoadId,
         index: usize,
+    },
+    /// A node of the street network on a road: one of its ends or where
+    /// another street meets it, at `mm` millimetres along it. Moving it
+    /// takes every street that meets there, each easing back to its line
+    /// by its next node (as in a city builder).
+    RoadNode {
+        road: archisim_core::RoadId,
+        mm: i64,
+    },
+    /// The handle in the middle of a road between two nodes: pulling it
+    /// bends that part, smoothly, its nodes staying.
+    RoadBend {
+        road: archisim_core::RoadId,
+        mm: i64,
     },
     /// A corner of a platform of a terrain (bloque Terreno).
     PadCorner {
@@ -350,11 +364,30 @@ pub fn hotspots(model: &Model, selection: &BTreeSet<Element>) -> Vec<Hotspot> {
             }
             Element::Road(id) => {
                 if let Some(r) = model.road(*id) {
-                    for (index, point) in r.axis.iter().enumerate() {
+                    // Its nodes, and a handle to bend each part between
+                    // them (not one per point of its axis: a curve has
+                    // dozens).
+                    let nodes = road_nodes(model, *id);
+                    for &s in &nodes {
                         v.push(Hotspot {
-                            grip: Grip::RoadPoint { road: *id, index },
-                            point: *point,
+                            grip: Grip::RoadNode {
+                                road: *id,
+                                mm: (s * 1000.0).round() as i64,
+                            },
+                            point: r.axis_at(s).0,
                         });
+                    }
+                    for w in nodes.windows(2) {
+                        if w[1] - w[0] >= BEND_MIN {
+                            let s = (w[0] + w[1]) / 2.0;
+                            v.push(Hotspot {
+                                grip: Grip::RoadBend {
+                                    road: *id,
+                                    mm: (s * 1000.0).round() as i64,
+                                },
+                                point: r.axis_at(s).0,
+                            });
+                        }
                     }
                 }
             }
@@ -559,7 +592,13 @@ pub fn moving(model: &Model, selection: &BTreeSet<Element>, grip: Grip) -> BTree
         Grip::StairPoint { stair, .. } => [Element::Stair(stair)].into_iter().collect(),
         Grip::CurtainEnd { curtain, .. } => [Element::CurtainWall(curtain)].into_iter().collect(),
         Grip::RailingPoint { railing, .. } => [Element::Railing(railing)].into_iter().collect(),
-        Grip::RoadPoint { road, .. } => [Element::Road(road)].into_iter().collect(),
+        Grip::RoadPoint { road, .. } | Grip::RoadBend { road, .. } => {
+            [Element::Road(road)].into_iter().collect()
+        }
+        Grip::RoadNode { road, mm } => node_roads(model, road, mm as f64 / 1000.0)
+            .into_iter()
+            .map(|(r, _)| Element::Road(r))
+            .collect(),
         Grip::PoolCorner { pool, .. } => [Element::Pool(pool)].into_iter().collect(),
         Grip::RefPlaneEnd { plane, .. } => [Element::RefPlane(plane)].into_iter().collect(),
         Grip::DimPoint { dimension, .. } => [Element::Dimension(dimension)].into_iter().collect(),
@@ -958,6 +997,8 @@ pub fn label(model: &Model, drag: &Drag) -> &'static str {
         Grip::CurtainEnd { .. } => "Estirar muro cortina",
         Grip::RailingPoint { .. } => "Mover punto de la barandilla",
         Grip::RoadPoint { .. } => "Mover punto del eje del vial",
+        Grip::RoadNode { .. } => "Mover nudo de calles",
+        Grip::RoadBend { .. } => "Curvar calle",
         Grip::PoolCorner { .. } => "Mover esquina de piscina",
         Grip::RefPlaneEnd { .. } => "Estirar plano de referencia",
         Grip::DimPoint { .. } => "Cambiar punto de cota",
@@ -1105,6 +1146,13 @@ pub fn apply(
                 }
             })
             .map(|_| None),
+        Grip::RoadNode { road, mm } => {
+            for (r, s) in node_roads(model, road, mm as f64 / 1000.0) {
+                bend_road(model, r, s, d)?;
+            }
+            Ok(None)
+        }
+        Grip::RoadBend { road, mm } => bend_road(model, road, mm as f64 / 1000.0, d).map(|_| None),
         Grip::PadCorner {
             terrain,
             pad,
@@ -2282,14 +2330,113 @@ pub fn ghost<G: Geo + ?Sized>(
             }
         }
     }
+    // Streets bent by a node: their crossings change round them.
+    let streets = matches!(drag.grip, Grip::RoadNode { .. } | Grip::RoadBend { .. });
+    if streets {
+        for r in after.roads() {
+            if base.road(r.id).is_none_or(|b| b.axis != r.axis) {
+                let e = Element::Road(r.id);
+                boxes.extend(outline(geo, e).and_then(|p| bounds(&p)));
+                boxes.extend(outline(&later, e).and_then(|p| bounds(&p)));
+            }
+        }
+    }
     let (mut lo, mut hi) = *boxes.first()?;
     for (a, b) in &boxes {
         lo = Point2::new(lo.x.min(a.x), lo.y.min(a.y));
         hi = Point2::new(hi.x.max(b.x), hi.y.max(b.y));
     }
     // Walls joined to what moves stretch or lose their mitre near it.
-    let margin = Point2::new(0.8, 0.8);
+    let reach = if streets { 20.0 } else { 0.8 };
+    let margin = Point2::new(reach, reach);
     Some((after, level, (lo - margin, hi + margin)))
+}
+
+/// Parts of a road shorter than this get no handle to bend them.
+pub const BEND_MIN: f64 = 6.0;
+
+/// Where the nodes of the street network are along a road: its ends and
+/// where other streets meet it (its crossings), metres from its start,
+/// in order.
+pub fn road_nodes(model: &Model, road: archisim_core::RoadId) -> Vec<f64> {
+    let Some(r) = model.road(road) else {
+        return Vec::new();
+    };
+    let len = r.length();
+    let mut s = vec![0.0, len];
+    for j in archisim_geom::crossroads::shared_junctions(model, r.level).iter() {
+        for a in &j.arms {
+            if a.road == road {
+                s.push(a.station.clamp(0.0, len));
+            }
+        }
+    }
+    s.sort_by(f64::total_cmp);
+    s.dedup_by(|a, b| (*a - *b).abs() < 1.0);
+    s
+}
+
+/// The streets at the node `s` metres along `road`: each with where the
+/// node is along it (an end of it, or a point it passes).
+pub fn node_roads(
+    model: &Model,
+    road: archisim_core::RoadId,
+    s: f64,
+) -> Vec<(archisim_core::RoadId, f64)> {
+    let Some(r) = model.road(road) else {
+        return Vec::new();
+    };
+    let at = r.axis_at(s).0;
+    let mut out = vec![(road, s)];
+    for o in model.roads_on_level(r.level) {
+        if o.id == road || o.free {
+            continue;
+        }
+        let len = o.length();
+        let st = if o.axis[0].distance(at) < 1.0 {
+            0.0
+        } else if o.axis[o.axis.len() - 1].distance(at) < 1.0 {
+            len
+        } else {
+            let st = o.station_of(at);
+            if o.axis_at(st).0.distance(at) > 1.0 {
+                continue;
+            }
+            st
+        };
+        out.push((o.id, st));
+    }
+    out
+}
+
+/// A road pulled by `d` at `s` metres along it: the part between the
+/// nodes on each side of `s` bends smoothly (`shape_axis`); an end moves
+/// whole.
+pub fn bend_road(
+    model: &mut Model,
+    road: archisim_core::RoadId,
+    s: f64,
+    d: archisim_core::Vec2,
+) -> Result<(), ModelError> {
+    let nodes = road_nodes(model, road);
+    let Some(r) = model.road(road) else {
+        return Err(ModelError::UnknownElement(road.0));
+    };
+    let len = r.length();
+    let from = nodes
+        .iter()
+        .copied()
+        .filter(|&n| n < s - 0.5)
+        .fold(if s < 0.5 { 0.0 } else { f64::NAN }, f64::max);
+    let from = if from.is_nan() { 0.0 } else { from };
+    let to = nodes
+        .iter()
+        .copied()
+        .filter(|&n| n > s + 0.5)
+        .fold(f64::INFINITY, f64::min);
+    let to = if to.is_finite() { to } else { len };
+    let axis = archisim_core::shape_axis(&r.axis, from, s, to, d, 2.0);
+    model.edit_road(road, |r| r.axis = axis)
 }
 
 /// A footing moved or turned by `map` (and `turn`, radians): it leaves
@@ -2407,7 +2554,9 @@ fn level_of(
         }
         Grip::CurtainEnd { curtain, .. } => model.curtain_wall(curtain).map(|c| c.level),
         Grip::RailingPoint { railing, .. } => model.railing(railing).map(|r| r.level),
-        Grip::RoadPoint { road, .. } => model.road(road).map(|r| r.level),
+        Grip::RoadPoint { road, .. }
+        | Grip::RoadNode { road, .. }
+        | Grip::RoadBend { road, .. } => model.road(road).map(|r| r.level),
         Grip::PoolCorner { pool, .. } => model.pool(pool).map(|p| p.level),
         Grip::RefPlaneEnd { .. } => None,
         Grip::DimPoint { dimension, .. } => model.dimension(dimension).map(|d| d.level),

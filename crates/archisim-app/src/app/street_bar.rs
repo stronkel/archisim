@@ -466,6 +466,9 @@ impl ArchiSimApp {
         } else if s.top_offset.abs() > 1e-9 {
             lines.push(format!("a {:+.1} m", s.top_offset).replace('.', ","));
         }
+        if self.road_crowded() {
+            lines.push("cruce encima de otro".into());
+        }
         self.readout(painter, rect, c, &lines.join(" · "));
     }
 
@@ -478,11 +481,13 @@ impl ArchiSimApp {
         let galley = painter.layout_no_wrap(text.to_string(), font, Color32::WHITE);
         let pos = q + egui::vec2(16.0, 14.0);
         let r = Rect::from_min_size(pos, galley.size()).expand(4.0);
-        painter.rect_filled(
-            r,
-            CornerRadius::same(5),
-            Color32::from_rgb(0x1f, 0x6f, 0xd1),
-        );
+        // Red when what would be built treads on a crossing.
+        let fill = if self.road_crowded() {
+            Color32::from_rgb(0xc6, 0x28, 0x28)
+        } else {
+            Color32::from_rgb(0x1f, 0x6f, 0xd1)
+        };
+        painter.rect_filled(r, CornerRadius::same(5), fill);
         painter.galley(pos, galley, Color32::WHITE);
     }
 }

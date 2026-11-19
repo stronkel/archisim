@@ -219,6 +219,27 @@ Pedido de Antonio: trazar y editar calles de forma ágil y rápida, sin perder e
 - **Medidas junto al cursor**: mientras se traza un tramo, en una etiqueta azul van su longitud, su rumbo desde el norte, el radio si es curvo y la pendiente si sigue el terreno (o la altura si va por encima). Con la cuadrícula se ven las calles que va a poner y cuántas son.
 - **Para el programador**: `app/street_bar` (`RoadAct`, `grid_streets`, `lay_grid`, `road_act_click`, `road_height_keys`, `street_bar`, `draw_street_readout`) y los campos `act`, `grid_spacing` y `parallel` de `RoadSettings`. Sin cambios de formato.
 
+### 2.14 Calles plásticas (19/11/2026, versión 0.108)
+
+Antonio, al probar la 0.107: «no tiene nada de plasticidad, no se parece en absoluto a Cities: Skylines 2». Le propuse cuatro faltas y marcó las cuatro. Esta es la primera vuelta de cada una.
+
+- **Ver la calle real al trazar.**
+  - En planta, mientras se traza, se dibuja la calle tal como quedará, con sus aceras y el cruce que hace con las que pisa ya formado; antes la tapaba una banda azul.
+  - En 3D, la calle se ve con sus materiales y las calles que encuentra se rehacen con sus cruces en el acto (`road_overlay_3d`, `Scene::of_solids_unmarked`, `joined`).
+- **Moldear arrastrando.** Una calle seleccionada ya no enseña un tirador por cada punto de su eje (una curva tenía docenas), sino solo sus nudos (extremos y cruces) y un tirador redondo en medio de cada tramo entre nudos.
+  - Al tirar del redondo, el tramo se curva suave sin mover sus nudos.
+  - Al mover un nudo, se lleva todas las calles que llegan a él, cada una doblándose suave hasta su nudo siguiente.
+  - En el código: `drag::Grip::RoadNode`/`RoadBend`, `road_nodes`, `node_roads`, `bend_road` y, en el núcleo, `shape_axis`, con paso suave en los dos lados para que la calle conserve su dirección en los nudos.
+- **Encuentros sin pisarse.** Al trazar, el clic se pega al centro de un cruce que ya está, a menos de 10 m o del ancho de la calle (`NODE_PULL`). Si la calle va a hacer un cruce encima de otro o de una glorieta, la etiqueta del cursor se pone roja: «cruce encima de otro» (`ghost3d::crowded`).
+- **Curvas continuas.** Las calles traídas de OpenStreetMap redondean sus quiebros con un radio según la clase de vía (40 m las principales, 12 m las de barrio), pero no donde llega otra calle (`osm_streets::round_bends`, `bend_radius`).
+
+Lo que falta para la segunda vuelta:
+- tiradores en 3D;
+- enseñar los tiradores al pasar el ratón, sin seleccionar antes;
+- que un nudo arrastrado se pegue a otra calle y se una a ella;
+- que, en vez de solo avisar, un cruce pegado a otro se junte con él;
+- cambios de ancho con transición al juntar dos tipos de calle.
+
 ## 3. Lo demás, por tandas
 
 | Tanda | Qué | Mods de referencia | Tamaño |

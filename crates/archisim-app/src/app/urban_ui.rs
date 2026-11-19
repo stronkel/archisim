@@ -488,6 +488,10 @@ fn optional_material(
     (v != value).then_some(v)
 }
 
+/// How near the middle of a crossing pulls the street being traced, metres
+/// (at least: the street's own width when wider).
+const NODE_PULL: f64 = 10.0;
+
 impl ArchiSimApp {
     // ---- Plot tool ----------------------------------------------------------
 
@@ -627,6 +631,13 @@ impl ArchiSimApp {
 
     /// A click taken to a street near it: to its free end (the street and
     /// which end) or to its axis (the street, no end).
+    /// Whether the street traced would make a crossing on top of another
+    /// one (as a city builder shows it in red): their middles closer than
+    /// the half widths of what meets there.
+    pub(super) fn road_crowded(&self) -> bool {
+        self.plan_ghost_crowded()
+    }
+
     pub(super) fn road_snap(
         &self,
         p: Point2,
@@ -636,6 +647,22 @@ impl ArchiSimApp {
         let reach = (self.road_settings.section.width() / 2.0).max(ROAD_SNAP);
         // Not the end the chain is going on from.
         let own = self.road_chain;
+        // The middle of a crossing that is there pulls first: two
+        // crossings side by side would tread on each other.
+        if !self.road_settings.anarchy {
+            let pull = (self.road_settings.section.width()).max(NODE_PULL);
+            let near = archisim_geom::crossroads::shared_junctions(model, level)
+                .iter()
+                .filter(|j| j.ring.is_none() && j.arms.len() >= 3)
+                .map(|j| (j.at.distance(p), j.at, j.arms[0].road))
+                .filter(|(d, _, _)| *d < pull)
+                .min_by(|a, b| a.0.total_cmp(&b.0));
+            if let Some((_, q, road)) = near {
+                if own.is_none_or(|(c, _)| c != road) || self.road_points.is_empty() {
+                    return (q, Some((road, None)));
+                }
+            }
+        }
         if let Some((id, at_end, q)) = archisim_core::road_end_near(model, level, p, reach) {
             if own != Some((id, at_end)) || self.road_points.is_empty() {
                 return (q, Some((id, Some(at_end))));
@@ -811,35 +838,14 @@ impl ArchiSimApp {
                         None => return,
                     }
                 };
-                self.paint_road_bands(painter, rect, &points, &s.section);
+                // The real street is drawn under (the plan's ghost, with
+                // its crossings); its bands only when there is none.
+                if !self.plan_ghost_shown() {
+                    self.paint_road_bands(painter, rect, &points, &s.section);
+                }
                 painter.add(Shape::line(self.polygon(rect, &points), ink));
-                let len: f64 = points.windows(2).map(|x| x[0].distance(x[1])).sum();
-                // The grade it would have over the ground.
-                let model = self.ed.model();
-                let z = |q: Point2| {
-                    model
-                        .terrains_on_level(self.ed.level)
-                        .find_map(|t| t.height_at(q))
-                };
-                let grade = match (z(points[0]), z(*points.last().unwrap_or(&points[0]))) {
-                    (Some(a), Some(b)) if len > 0.5 => {
-                        let g = (b - a) / len * 100.0;
-                        let over = s.follow_ground && g.abs() > s.max_grade * 100.0;
-                        format!(
-                            " · terreno {}{} %{}",
-                            if g >= 0.0 { "+" } else { "" },
-                            comma(g, 1),
-                            if over { " (se suaviza)" } else { "" }
-                        )
-                    }
-                    _ => String::new(),
-                };
-                self.draw_label(
-                    painter,
-                    rect,
-                    snapped,
-                    format!("L {} m{grade}", comma(len, 2)),
-                );
+                // Its length, turn, radius and grade go by the cursor
+                // (`street_bar::draw_street_readout`).
             }
             Tool::Road => {
                 if self.road_points.is_empty() {

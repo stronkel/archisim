@@ -1424,6 +1424,8 @@ impl ArchiSimApp {
                 &disciplines,
             )
             .then(|| self.shared_model());
+        // The street being traced, drawn in the scene this same frame.
+        self.road_overlay_3d();
         let v = &mut self.v3d;
         v.refresh_scene(
             &ctx,

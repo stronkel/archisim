@@ -753,6 +753,47 @@ impl Scene {
         s
     }
 
+    /// Solids drawn over the scene as they are, not marked: what changes
+    /// round what is being drawn (the streets a new one meets).
+    pub fn of_solids_unmarked(model: &Model, solids: Vec<archisim_geom::solid::Solid>) -> Self {
+        let selection = BTreeSet::new();
+        let look = Look {
+            selection: &selection,
+            isolate: false,
+            disciplines: &Default::default(),
+            anchors: &HashMap::new(),
+            shared: false,
+            between: false,
+        };
+        let mut loose = Loose::default();
+        add_solids(model, solids, &look, &mut loose);
+        let ([opaque, glass, grass], lamps) = loose.finish();
+        let mut s = Scene {
+            lo: Vec3::splat(f32::INFINITY),
+            hi: Vec3::splat(f32::NEG_INFINITY),
+            lamps,
+            grass,
+            ..Default::default()
+        };
+        for c in opaque.iter().chain(&glass) {
+            s.lo = s.lo.min(c.lo);
+            s.hi = s.hi.max(c.hi);
+        }
+        (s.opaque, s.glass) = (opaque, glass);
+        s
+    }
+
+    /// This scene with another's pieces added.
+    pub fn joined(mut self, other: Scene) -> Self {
+        self.lo = self.lo.min(other.lo);
+        self.hi = self.hi.max(other.hi);
+        self.opaque.extend(other.opaque);
+        self.glass.extend(other.glass);
+        self.grass.extend(other.grass);
+        self.lamps.extend(other.lamps);
+        self
+    }
+
     /// The cars and people of the traffic for illustration (N9), drawn
     /// as they are, over the scene.
     pub fn of_traffic(model: &Model, solids: Vec<archisim_geom::solid::Solid>) -> Self {

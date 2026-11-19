@@ -320,6 +320,8 @@ pub struct ArchiSimApp {
     /// What the tool would build, for the 3D view (R21).
     ghost: ghost3d::GhostCache,
     plan_ghost: ghost3d::PlanGhost,
+    /// The street being traced is drawn in the 3D scene (`road_overlay_3d`).
+    road_overlaid: bool,
     start: start_ui::StartScreen,
     /// Stretching an object by a handle in the 3D view.
     object_grip: Option<grips3d::ObjectGrip3d>,
@@ -889,6 +891,7 @@ impl ArchiSimApp {
             beam_tool: structure_ui::BeamTool::default(),
             ghost: ghost3d::GhostCache::default(),
             plan_ghost: ghost3d::PlanGhost::default(),
+            road_overlaid: false,
             // The start screen greets the program opened without a file
             // (never in the tests).
             object_grip: None,
