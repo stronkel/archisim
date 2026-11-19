@@ -872,6 +872,7 @@ pub mod flora;
 pub mod geocode;
 pub mod ground;
 pub mod imported;
+pub mod osm_streets;
 pub mod railings;
 pub mod standards;
 pub mod street_life;
