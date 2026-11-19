@@ -348,6 +348,10 @@ pub struct ArchiSimApp {
     pub(super) brush: crate::brush::BrushSettings,
     brush_stroke: Option<brush_ui::BrushStroke>,
     mass_grip_hover: Option<mass_grips3d::MassKey>,
+    /// The street handle dragged in the 3D view, and the one under the
+    /// cursor.
+    road_grip: Option<road_grips3d::RoadGrip3d>,
+    road_grip_hover: Option<crate::drag::Grip>,
     /// While something is moved in 3D: the wall faces it is pulled to,
     /// its plan points when taken, and its clear distances now (with the
     /// height they are drawn at).
@@ -674,6 +678,9 @@ pub struct ArchiSimApp {
     tab_pick: Option<(Point2, usize)>,
     /// The handle of the selection under the cursor, if any.
     hover_grip: Option<Grip>,
+    /// The street under the cursor in the plan, with nothing of it
+    /// selected: its handles show and can be taken straight away.
+    hover_road: Option<archisim_core::RoadId>,
     /// A vertex picked with a click (Supr takes it away): `vertex_ui`.
     vertex: Option<Grip>,
     /// The contour being sketched (E4), instead of the usual clicks.
@@ -907,6 +914,8 @@ impl ArchiSimApp {
             brush: Default::default(),
             brush_stroke: None,
             mass_grip_hover: None,
+            road_grip: None,
+            road_grip_hover: None,
             move_faces: Vec::new(),
             move_points: Vec::new(),
             move_axis: Point2::new(1.0, 0.0),
@@ -1084,6 +1093,7 @@ impl ArchiSimApp {
             under_cursor: Vec::new(),
             tab_pick: None,
             hover_grip: None,
+            hover_road: None,
             vertex: None,
             sketch: None,
             underlay_pick: None,
@@ -3511,6 +3521,7 @@ mod replace_ui;
 mod report_view;
 mod revit_keys;
 mod ribbon;
+mod road_grips3d;
 mod roof_ui;
 mod room_tool_ui;
 mod room_ui;

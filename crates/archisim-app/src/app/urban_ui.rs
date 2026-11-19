@@ -600,6 +600,8 @@ impl ArchiSimApp {
                 m.set_road_free(id, true)?;
                 return Ok(id);
             }
+            // Crossings it laid too near another become that one.
+            archisim_geom::road_shaping::fuse_crowded(m, id)?;
             // Zebra crossings where it meets other streets.
             for q in &joins {
                 m.crossings_at(level, *q)?;

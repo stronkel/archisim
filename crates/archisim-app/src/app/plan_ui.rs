@@ -729,10 +729,15 @@ impl ArchiSimApp {
             }
             Tool::Arrow => {
                 self.cursor = Some(Snap::at(crate::snap::round_point(raw), SnapKind::Free));
+                self.hover_road = if self.window_start.is_some() || self.drag.is_some() {
+                    self.hover_road.filter(|_| self.drag.is_some())
+                } else {
+                    self.street_under(raw, reach)
+                };
                 self.hover_grip = if self.window_start.is_some() {
                     None
                 } else {
-                    grip_at(&self.ed, &self.ed.selection, raw, reach).map(|g| g.0)
+                    self.grip_here(raw, reach).map(|g| g.0)
                 };
                 self.under_cursor = if self.window_start.is_some() {
                     Vec::new()
@@ -1707,7 +1712,7 @@ impl ArchiSimApp {
                         let at = self.view.to_model(rect, *p);
                         let reach = self.view.to_metres(crate::touch::reach(REACH));
                         !matches!(
-                            grip_at(&self.ed, &self.ed.selection, at, reach),
+                            self.grip_here(at, reach),
                             Some((g, _)) if g != Grip::Body
                         )
                     })
@@ -1719,7 +1724,15 @@ impl ArchiSimApp {
                         .input(|i| i.pointer.press_origin())
                         .map(|p| self.view.to_model(rect, p));
                     let reach = self.view.to_metres(crate::touch::reach(REACH));
-                    let grip = origin.and_then(|o| grip_at(&self.ed, &self.ed.selection, o, reach));
+                    let grip = origin.and_then(|o| self.grip_here(o, reach));
+                    // A handle of the street under the cursor selects it.
+                    if let Some((g, _)) = grip {
+                        if let Some(r) = crate::drag::road_of(g) {
+                            if !self.ed.selection.contains(&Element::Road(r)) {
+                                self.ed.selection = [Element::Road(r)].into_iter().collect();
+                            }
+                        }
+                    }
                     match grip {
                         Some((grip, from)) => {
                             // The selection is grabbed by the nearest
@@ -2007,7 +2020,7 @@ impl ArchiSimApp {
     /// squares, to stretch) and slab edges (white diamonds, to move the
     /// edge); the one under the cursor is highlighted.
     pub(super) fn draw_hotspots(&self, painter: &egui::Painter, rect: Rect) {
-        for h in hotspots(self.ed.model(), &self.ed.selection) {
+        for h in hotspots(self.ed.model(), &self.grip_elements()) {
             let c = self.view.to_screen(rect, h.point);
             let picked = self.picked_vertex() == Some(h.grip);
             let hot = picked
@@ -2061,6 +2074,19 @@ impl ArchiSimApp {
                     if let Some(m) = crate::drag::object_middle(self.ed.model(), object) {
                         super::handles::turn(painter, self.view.to_screen(rect, m), c, hot);
                     }
+                }
+                Grip::RoadWidth { road, mm, .. } => {
+                    // An arrow out from the kerb: pull it to widen.
+                    let model = self.ed.model();
+                    let dir = model.road(road).map_or(Vec2::X, |r| {
+                        let s = mm as f64 / 1000.0;
+                        let axis = r.axis_at(s).0;
+                        let out = (h.point - axis)
+                            .normalized()
+                            .unwrap_or(Point2::new(1.0, 0.0));
+                        self.view.to_screen(rect, h.point + out * 0.1) - c
+                    });
+                    super::handles::arrow(painter, c, dir, ACCENT, hot);
                 }
                 Grip::WallBend { .. } | Grip::RoadBend { .. } => {
                     let r = if hot { 6.0 } else { 4.5 };
@@ -2127,6 +2153,7 @@ impl ArchiSimApp {
             (Grip::RoadPoint { .. }, _) => "Eje del vial",
             (Grip::RoadNode { .. }, _) => "Mover nudo de calles",
             (Grip::RoadBend { .. }, _) => "Curvar calle",
+            (Grip::RoadWidth { .. }, _) => "Ensanchar tramo de calle",
             (Grip::PoolCorner { .. }, _) => "Esquina de la piscina",
             (Grip::RefPlaneEnd { .. }, _) => "Plano de referencia",
             (Grip::DimPoint { .. }, _) => "Punto de cota",
@@ -2789,4 +2816,53 @@ fn drag_variant(ctx: &egui::Context, grip: Grip) -> bool {
 
 fn grip_of(drag: &Option<DragState>) -> Grip {
     drag.as_ref().map_or(Grip::Body, |d| d.grip)
+}
+
+impl ArchiSimApp {
+    /// What has handles in the plan: the selection, and the street under
+    /// the cursor.
+    pub(super) fn grip_elements(&self) -> BTreeSet<Element> {
+        let mut s = self.ed.selection.clone();
+        if let Some(r) = self.hover_road.filter(|_| self.tool == Tool::Arrow) {
+            s.insert(Element::Road(r));
+        }
+        s
+    }
+
+    /// The handle at `at`: of the selection, or of the street under the
+    /// cursor (not its body: that is not moved without selecting it).
+    pub(super) fn grip_here(&self, at: Point2, reach: f64) -> Option<(Grip, Point2)> {
+        let own = grip_at(&self.ed, &self.ed.selection, at, reach);
+        if own.is_some_and(|(g, _)| g != Grip::Body) {
+            return own;
+        }
+        let road = self
+            .hover_road
+            .or_else(|| self.street_under(at, reach))
+            .filter(|_| self.tool == Tool::Arrow);
+        if let Some(r) = road {
+            let only: BTreeSet<Element> = [Element::Road(r)].into_iter().collect();
+            if let Some(g) = grip_at(&self.ed, &only, at, reach).filter(|(g, _)| *g != Grip::Body) {
+                return Some(g);
+            }
+        }
+        own
+    }
+
+    /// The street under the cursor that is not selected (a street
+    /// selected shows its handles anyway); the last one, while the cursor
+    /// is on one of its handles past its edge.
+    fn street_under(&self, at: Point2, reach: f64) -> Option<archisim_core::RoadId> {
+        let model = self.ed.model();
+        let free = |r: archisim_core::RoadId| !self.ed.selection.contains(&Element::Road(r));
+        if let Some(Element::Road(r)) = crate::pick::pick(&self.ed, self.ed.level, at, reach) {
+            return free(r).then_some(r);
+        }
+        let r = self.hover_road.filter(|r| free(*r))?;
+        let only: BTreeSet<Element> = [Element::Road(r)].into_iter().collect();
+        hotspots(model, &only)
+            .iter()
+            .any(|h| h.point.distance(at) <= reach * 1.5)
+            .then_some(r)
+    }
 }

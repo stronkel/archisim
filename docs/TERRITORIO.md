@@ -240,6 +240,25 @@ Lo que falta para la segunda vuelta:
 - que, en vez de solo avisar, un cruce pegado a otro se junte con él;
 - cambios de ancho con transición al juntar dos tipos de calle.
 
+### 2.15 Calles plásticas, segunda vuelta (19/11/2026, versión 0.109)
+
+Lo que quedó de la primera vuelta, hecho:
+
+- **Tiradores en la Vista 3D.** Con una calle seleccionada salen en 3D los mismos tiradores que en planta: cuadrados en los nudos, un redondo en medio de cada tramo y flechas en los bordillos. Se arrastran sobre la altura de la calzada, y la calle se ve como quedará, con sus cruces (`app/road_grips3d`).
+- **Tiradores al pasar el ratón.** En planta, con la flecha, al pasar por encima de una calle sin seleccionarla salen sus tiradores, y se puede tirar de ellos directamente; al cogerlo, la calle queda seleccionada. El cuerpo de la calle no se mueve sin seleccionarla antes (`hover_road`, `grip_here`, `street_under`).
+- **Un extremo suelto se une a otra calle.** Al soltar el extremo libre de una calle cerca de otra calle, de su extremo o de un cruce, el extremo se pega a ella y hace el cruce (T, L o uno más en el cruce).
+  - Si se suelta en el extremo de otra calle del mismo tipo que sigue en línea (menos de 35° de giro), las dos pasan a ser una sola calle continua.
+  - Se unen solo si las dos son iguales: sección y materiales, y sin rasante, cambios de sección, tramos ni piezas ocultas propias.
+  - En el código: `road_shaping::pull_end`, `is_loose_end`, `join_ends`, `NODE_REACH`, `JOIN_TURN`.
+- **Cruces que se juntan solos.** Si al trazar o al moldear una calle hace un cruce pegado a otro (se pisarían), la calle se dobla suave para pasar por el centro del otro cruce y queda un único cruce.
+  - Deja fuera los otros cruces que hacía con las mismas calles, para no cruzarlas dos veces.
+  - El aviso en rojo queda solo para lo que no se puede juntar, como un cruce dentro de una glorieta.
+  - En el código: `road_shaping::fuse_crowded`, `too_near`, `crowded`.
+- **Ensanchar un tramo por su bordillo.** Las flechas de los bordillos, una por lado en cada tramo entre nudos, ensanchan o estrechan ese tramo por su franja de fuera (la acera, por lo general), con transiciones de un cuarto del tramo, 10 m como mucho. El otro bordillo y el resto de la calle no se mueven.
+  - Se guarda como cambios de sección (U2), así que pasa al IFC y a las mediciones como cualquier cambio de sección.
+  - En el código: `Road::widened`, `road_shaping::widen_stretch`, `edge_point`, `Grip::RoadWidth`.
+- Lo que se movió: `road_nodes`, `node_roads` y `bend_road` pasaron de la app a `archisim_geom::road_shaping`.
+
 ## 3. Lo demás, por tandas
 
 | Tanda | Qué | Mods de referencia | Tamaño |

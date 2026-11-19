@@ -240,7 +240,7 @@ impl ArchiSimApp {
         v
     }
 
-    fn screen_3d(&self, rect: Rect, p: glam::DVec3) -> Option<Pos2> {
+    pub(super) fn screen_3d(&self, rect: Rect, p: glam::DVec3) -> Option<Pos2> {
         let size = glam::Vec2::new(rect.width(), rect.height());
         self.v3d
             .camera
@@ -390,7 +390,7 @@ impl ArchiSimApp {
     }
 
     /// The cursor on the horizontal plane at height `z`.
-    fn mass_on_plane(&self, rect: Rect, pos: Pos2, z: f64) -> Option<glam::DVec3> {
+    pub(super) fn mass_on_plane(&self, rect: Rect, pos: Pos2, z: f64) -> Option<glam::DVec3> {
         let local = pos - rect.min;
         let ray = self.v3d.camera.ray(
             glam::Vec2::new(local.x, local.y),

@@ -294,7 +294,7 @@ fn build_ghost(model: &Model, would: Would) -> Option<Vec<Solid>> {
         }
         Would::Box(_) => Vec::new(),
         Would::Road(spec) => {
-            let id = m.add_road_stretch(spec).ok()?;
+            let id = stretch_fused(&mut m, spec)?;
             solid::road_solids(&m, id)
         }
     })
@@ -488,7 +488,7 @@ impl ArchiSimApp {
         let model = self.ed.model();
         self.v3d.set_overlay(Some(key), || {
             let mut m = model.clone();
-            let id = m.add_road_stretch(would).ok()?;
+            let id = stretch_fused(&mut m, would)?;
             let (new, met): (Vec<Solid>, Vec<Solid>) = road_with_met(&m, id)
                 .into_iter()
                 .partition(|s| s.owner == solid::SolidOwner::Road(id));
@@ -513,39 +513,15 @@ fn crowded(m: &Model, made: &[Element]) -> bool {
             _ => None,
         })
         .collect();
-    let Some(level) = roads.first().and_then(|r| m.road(*r)).map(|r| r.level) else {
-        return false;
-    };
-    let js = archisim_geom::crossroads::junctions(m, level);
-    let half = |j: &archisim_geom::crossroads::Junction| {
-        j.arms
-            .iter()
-            .filter_map(|a| m.road(a.road))
-            .map(|r| r.section.width() / 2.0)
-            .fold(0.0, f64::max)
-    };
-    for (i, a) in js.iter().enumerate() {
-        if !a.arms.iter().any(|x| roads.contains(&x.road)) {
-            continue;
-        }
-        if a.ring.is_some() {
-            continue;
-        }
-        for (k, b) in js.iter().enumerate() {
-            if k == i {
-                continue;
-            }
-            // A roundabout: its circle; a crossing: the half widths there.
-            let room = match b.ring.and_then(|r| m.roundabout(r)) {
-                Some(r) => r.radius + half(a) * 0.9,
-                None => (half(a) + half(b)) * 0.9,
-            };
-            if a.at.distance(b.at) < room {
-                return true;
-            }
-        }
-    }
-    false
+    archisim_geom::road_shaping::crowded(m, &roads)
+}
+
+/// A stretch of street laid on a copy of the model as the tool lays it:
+/// with the crossings it makes too near another fused into that one.
+fn stretch_fused(m: &mut Model, spec: archisim_core::RoadStretch) -> Option<archisim_core::RoadId> {
+    let id = m.add_road_stretch(spec).ok()?;
+    archisim_geom::road_shaping::fuse_crowded(m, id).ok()?;
+    Some(id)
 }
 
 /// The solids of a new street and of the streets it meets, with their
@@ -604,7 +580,7 @@ fn build_plan_ghost(model: &Model, would: Would) -> Option<(Model, Vec<Element>)
         Would::Slab(spec) => vec![Element::Slab(m.add_slab(spec).ok()?)],
         Would::Object(spec) => vec![Element::Object(m.add_object(spec).ok()?)],
         Would::World(spec) => vec![Element::Mass(m.add_world_building(spec).ok()?)],
-        Would::Road(spec) => vec![Element::Road(m.add_road_stretch(spec).ok()?)],
+        Would::Road(spec) => vec![Element::Road(stretch_fused(&mut m, spec)?)],
         Would::Box(spec) => vec![Element::Box(m.add_box(spec).ok()?)],
     };
     Some((m, made))

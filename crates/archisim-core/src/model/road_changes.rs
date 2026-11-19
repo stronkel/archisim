@@ -120,6 +120,61 @@ impl Road {
             .fold(self.section.width(), f64::max)
     }
 
+    /// Its changes with the stretch from `from` to `to` along the axis
+    /// made `delta` metres wider (narrower, if negative) on its left or
+    /// its right, by its outermost strip there (a sidewalk, as a rule),
+    /// easing in and out over transitions of a quarter of the stretch, 10 m
+    /// at most; the rest of the road stays as it was. None: a stretch too
+    /// short, or a strip that would be narrower than [`MIN_WIDENED`].
+    pub fn widened(
+        &self,
+        from: f64,
+        to: f64,
+        left: bool,
+        delta: f64,
+    ) -> Option<Vec<SectionChange>> {
+        let len = self.length();
+        let (from, to) = (from.clamp(0.0, len), to.clamp(0.0, len));
+        if to - from < 2.0 {
+            return None;
+        }
+        let t = ((to - from) / 4.0).min(MAX_WIDEN_TRANSITION);
+        let mut strips = self.strips_at((from + to) / 2.0);
+        let i = if left {
+            0
+        } else {
+            strips.len().checked_sub(1)?
+        };
+        let w = strips.get(i)?.width + delta;
+        if w < MIN_WIDENED {
+            return None;
+        }
+        strips[i] = strip_of(strips[i].band, w);
+        let after = self.strips_at(to);
+        let starts = from < 0.01;
+        let ends = to > len - 0.01;
+        let mut out: Vec<SectionChange> = self
+            .changes
+            .iter()
+            .filter(|c| c.at <= from + 1e-6 || c.at > to + 1e-6)
+            .cloned()
+            .collect();
+        out.push(SectionChange {
+            at: if starts { 0.0 } else { from + t },
+            transition: if starts { 0.0 } else { t },
+            strips,
+        });
+        if !ends {
+            out.push(SectionChange {
+                at: to,
+                transition: t,
+                strips: after,
+            });
+        }
+        out.sort_by(|a, b| a.at.total_cmp(&b.at));
+        Some(out)
+    }
+
     /// The changes' text, for IFC: `at transition band width,band width;…`.
     pub fn encode_changes(&self) -> String {
         self.sorted_changes()
@@ -220,6 +275,13 @@ pub const FACADE_STEP: f64 = 1.0;
 pub const FACADE_TOLERANCE: f64 = 0.25;
 /// The narrowest sidewalk taken to the façade line.
 pub const MIN_SIDEWALK: f64 = 0.9;
+
+/// The narrowest a strip is left when a stretch is narrowed by hand
+/// ([`Road::widened`]).
+pub const MIN_WIDENED: f64 = 0.5;
+
+/// The longest transition of a stretch widened by hand.
+pub const MAX_WIDEN_TRANSITION: f64 = 10.0;
 
 impl Model {
     /// The road's changes of section that take its outer sidewalks out to the
@@ -759,6 +821,34 @@ mod tests {
         // Its text, back.
         let back = Road::decode_changes(&r.encode_changes()).unwrap();
         assert_eq!(back, r.changes);
+    }
+
+    #[test]
+    fn a_stretch_widened_by_hand_eases_in_and_out() {
+        let mut r = road(Vec::new());
+        let w0 = r.section.width();
+        // 2 m more on the left between 20 and 60 m.
+        r.changes = r.widened(20.0, 60.0, true, 2.0).unwrap();
+        assert!((r.section_at(10.0).width() - w0).abs() < 1e-9);
+        assert!((r.section_at(40.0).width() - w0 - 2.0).abs() < 1e-9);
+        assert!((r.section_at(80.0).width() - w0).abs() < 1e-9);
+        // Halfway through the first transition (20 to 30 m), 1 m more.
+        assert!((r.section_at(25.0).width() - w0 - 1.0).abs() < 1e-9);
+        // Only its left edge moves: the right stays where it was.
+        let (l0, r0) = road(Vec::new()).extent_at(40.0);
+        let (l1, r1) = r.extent_at(40.0);
+        assert!((l1 - l0 - 2.0).abs() < 1e-9 && (r1 - r0).abs() < 1e-9);
+        // Again, narrower: back to the start.
+        r.changes = r.widened(20.0, 60.0, true, -2.0).unwrap();
+        assert!((r.section_at(40.0).width() - w0).abs() < 1e-9);
+        assert_eq!(r.changes.len(), 2);
+        // Not narrower than a strip can be, nor too short a stretch.
+        assert!(r.widened(20.0, 60.0, true, -50.0).is_none());
+        assert!(r.widened(20.0, 21.0, true, 1.0).is_none());
+        // From the start of the road, no transition there.
+        let c = road(Vec::new()).widened(0.0, 50.0, false, 1.0).unwrap();
+        assert_eq!(c[0].at, 0.0);
+        assert_eq!(c[0].transition, 0.0);
     }
 
     #[test]
