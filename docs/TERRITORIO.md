@@ -219,6 +219,48 @@ Pedido de Antonio: trazar y editar calles de forma ágil y rápida, sin perder e
 - **Medidas junto al cursor**: mientras se traza un tramo, en una etiqueta azul van su longitud, su rumbo desde el norte, el radio si es curvo y la pendiente si sigue el terreno (o la altura si va por encima). Con la cuadrícula se ven las calles que va a poner y cuántas son.
 - **Para el programador**: `app/street_bar` (`RoadAct`, `grid_streets`, `lay_grid`, `road_act_click`, `road_height_keys`, `street_bar`, `draw_street_readout`) y los campos `act`, `grid_spacing` y `parallel` de `RoadSettings`. Sin cambios de formato.
 
+### 2.14 Calles plásticas (19/11/2026, versión 0.108)
+
+Antonio, al probar la 0.107: «no tiene nada de plasticidad, no se parece en absoluto a Cities: Skylines 2». Le propuse cuatro faltas y marcó las cuatro. Esta es la primera vuelta de cada una.
+
+- **Ver la calle real al trazar.**
+  - En planta, mientras se traza, se dibuja la calle tal como quedará, con sus aceras y el cruce que hace con las que pisa ya formado; antes la tapaba una banda azul.
+  - En 3D, la calle se ve con sus materiales y las calles que encuentra se rehacen con sus cruces en el acto (`road_overlay_3d`, `Scene::of_solids_unmarked`, `joined`).
+- **Moldear arrastrando.** Una calle seleccionada ya no enseña un tirador por cada punto de su eje (una curva tenía docenas), sino solo sus nudos (extremos y cruces) y un tirador redondo en medio de cada tramo entre nudos.
+  - Al tirar del redondo, el tramo se curva suave sin mover sus nudos.
+  - Al mover un nudo, se lleva todas las calles que llegan a él, cada una doblándose suave hasta su nudo siguiente.
+  - En el código: `drag::Grip::RoadNode`/`RoadBend`, `road_nodes`, `node_roads`, `bend_road` y, en el núcleo, `shape_axis`, con paso suave en los dos lados para que la calle conserve su dirección en los nudos.
+- **Encuentros sin pisarse.** Al trazar, el clic se pega al centro de un cruce que ya está, a menos de 10 m o del ancho de la calle (`NODE_PULL`). Si la calle va a hacer un cruce encima de otro o de una glorieta, la etiqueta del cursor se pone roja: «cruce encima de otro» (`ghost3d::crowded`).
+- **Curvas continuas.** Las calles traídas de OpenStreetMap redondean sus quiebros con un radio según la clase de vía (40 m las principales, 12 m las de barrio), pero no donde llega otra calle (`osm_streets::round_bends`, `bend_radius`).
+
+Lo que falta para la segunda vuelta:
+- tiradores en 3D;
+- enseñar los tiradores al pasar el ratón, sin seleccionar antes;
+- que un nudo arrastrado se pegue a otra calle y se una a ella;
+- que, en vez de solo avisar, un cruce pegado a otro se junte con él;
+- cambios de ancho con transición al juntar dos tipos de calle.
+
+### 2.15 Calles plásticas, segunda vuelta (19/11/2026, versión 0.109)
+
+Lo que quedó de la primera vuelta, hecho:
+
+- **Tiradores en la Vista 3D.** Con una calle seleccionada salen en 3D los mismos tiradores que en planta: cuadrados en los nudos, un redondo en medio de cada tramo y flechas en los bordillos. Se arrastran sobre la altura de la calzada, y la calle se ve como quedará, con sus cruces (`app/road_grips3d`).
+- **Tiradores al pasar el ratón.** En planta, con la flecha, al pasar por encima de una calle sin seleccionarla salen sus tiradores, y se puede tirar de ellos directamente; al cogerlo, la calle queda seleccionada. El cuerpo de la calle no se mueve sin seleccionarla antes (`hover_road`, `grip_here`, `street_under`).
+- **Un extremo suelto se une a otra calle.** Al soltar el extremo libre de una calle cerca de otra calle, de su extremo o de un cruce, el extremo se pega a ella y hace el cruce (T, L o uno más en el cruce).
+  - Si se suelta en el extremo de otra calle que sigue en línea (menos de 35° de giro), las dos pasan a ser una sola calle continua.
+  - Se unen solo si tienen los mismos materiales y ninguna lleva rasante, cambios de sección, tramos ni piezas ocultas propias.
+  - Soltado junto a una glorieta o una plaza, el extremo va a su bordillo, mirando a su centro, y entra en ella.
+  - Dos calles de tipos distintos también se unen, si se construyen igual (bordillo, canto y nivel): la segunda conserva su sección y entre las dos hay una transición de hasta 12 m alrededor de la junta (un cambio de sección, `JOIN_TRANSITION`).
+  - En el código: `road_shaping::pull_end`, `is_loose_end`, `join_ends`, `NODE_REACH`, `JOIN_TURN`.
+- **Cruces que se juntan solos.** Si al trazar o al moldear una calle hace un cruce pegado a otro (se pisarían), la calle se dobla suave para pasar por el centro del otro cruce y queda un único cruce.
+  - Deja fuera los otros cruces que hacía con las mismas calles, para no cruzarlas dos veces.
+  - El aviso en rojo queda solo para lo que no se puede juntar, como un cruce dentro de una glorieta.
+  - En el código: `road_shaping::fuse_crowded`, `too_near`, `crowded`.
+- **Ensanchar un tramo por su bordillo.** Las flechas de los bordillos, una por lado en cada tramo entre nudos, ensanchan o estrechan ese tramo por su franja de fuera (la acera, por lo general), con transiciones de un cuarto del tramo, 10 m como mucho. El otro bordillo y el resto de la calle no se mueven.
+  - Se guarda como cambios de sección (U2), así que pasa al IFC y a las mediciones como cualquier cambio de sección.
+  - En el código: `Road::widened`, `road_shaping::widen_stretch`, `edge_point`, `Grip::RoadWidth`.
+- Lo que se movió: `road_nodes`, `node_roads` y `bend_road` pasaron de la app a `archisim_geom::road_shaping`.
+
 ## 3. Lo demás, por tandas
 
 | Tanda | Qué | Mods de referencia | Tamaño |

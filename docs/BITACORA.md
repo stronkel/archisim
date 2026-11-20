@@ -6,6 +6,53 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-19 (189) · v0.109: calles plásticas, segunda vuelta
+
+Rama `bloque/calles-plasticas-2`, sobre la de la 0.108 (#237, todavía sin unir). Antonio pidió la segunda vuelta con lo que quedó pendiente en la primera. Sin cambios de formato: los ensanches son cambios de sección (U2).
+
+- **Qué se hizo** (`docs/TERRITORIO.md` §2.15):
+  - tiradores de las calles en la Vista 3D (`app/road_grips3d`);
+  - tiradores al pasar el ratón en planta (`hover_road`, `grip_here`);
+  - extremos sueltos que se pegan a otra calle y, en línea con otra igual, se unen en una (`archisim_geom::road_shaping`: `pull_end`, `join_ends`);
+  - cruces pegados que se juntan, al trazar y al moldear (`fuse_crowded`);
+  - ensanchar un tramo por su bordillo con transiciones (`Road::widened`, `widen_stretch`, `Grip::RoadWidth`).
+  - Pruebas `streets_meet_join_and_widen_by_their_handles`, `a_stretch_widened_by_hand_eases_in_and_out` y las cuatro de `road_shaping`; `tracing_is_pulled_to_crossings_and_warns_when_crowded` ahora comprueba que el cruce se junta en lugar de avisar.
+  - el 20/11, lo que quedaba: el extremo suelto que entra en una glorieta por su bordillo y dos calles de tipos distintos que se unen con una transición de hasta 12 m (`JOIN_TRANSITION`); pruebas `a_loose_end_is_pulled_onto_a_roundabout` y `streets_of_two_types_join_with_a_transition`. Unido a `main` con la 0.108 (#237) a petición de Antonio.
+- **Pendiente:** nada de esta tanda; lo siguiente, lo que diga Antonio al probarla.
+- **Qué debe probar Antonio**: abre un proyecto con calles (por ejemplo, el de `archisim calles out/`).
+  1. En planta, con la flecha y nada seleccionado, pasa el ratón por una calle: salen sus tiradores. Coge el redondo de un tramo y cúrvalo.
+  2. Traza una calle corta que acabe en el aire. Arrastra su extremo y suéltalo cerca de otra calle: se pega a ella y hace el cruce. Suéltalo en el extremo de otra calle que siga en línea: las dos pasan a ser una (selecciónala para verlo); si eran de tipos distintos, mira la transición en la junta. Suéltalo junto a una glorieta: entra en ella.
+  3. Traza una calle que cruce otra a pocos metros de un cruce: en lugar de quedar en rojo, se curva para pasar por ese cruce.
+  4. Selecciona una calle y tira hacia fuera de una flecha de su bordillo: ese tramo se ensancha, con transiciones suaves, y el otro bordillo no se mueve.
+  5. En la Vista 3D, selecciona una calle y repite 1 y 4 desde allí.
+
+## 2026-11-19 (188) · v0.108: calles plásticas, primera vuelta
+
+Rama `bloque/calles-plasticas`. Antonio, tras la 0.107: «no tiene nada de plasticidad, no se parece en absoluto a Cities: Skylines 2 y no sé cómo escribírtelo». Le propuse cuatro faltas y marcó las cuatro:
+- ver la calle real al trazar;
+- moldear arrastrando;
+- encuentros suaves;
+- curvas continuas.
+
+Abrí la aplicación en una pantalla virtual y la manejé con clics para ver lo que él ve: una banda azul tapaba la calle real al trazar, el 3D solo enseñaba triángulos translúcidos sin cruces, y una calle seleccionada tenía un tirador por vértice que hacía picos. Sin cambios de formato.
+
+- **Qué se hizo** (`docs/TERRITORIO.md` §2.14):
+  - la vista previa real en planta y en 3D (`road_overlay_3d`, `road_with_met`);
+  - los nudos y los tiradores de curvatura (`Grip::RoadNode`/`RoadBend`, `bend_road`, `archisim_core::shape_axis`);
+  - el trazo que se pega a los cruces y el aviso en rojo (`NODE_PULL`, `crowded`, `road_crowded`);
+  - los quiebros redondeados de OpenStreetMap (`round_bends`).
+  - Pruebas `streets_bend_and_their_nodes_move_by_dragging`, `tracing_is_pulled_to_crossings_and_warns_when_crowded`, `pulling_the_middle_bends_it_and_keeps_its_ends`, `pulling_an_end_eases_back_to_the_line` y `bends_are_rounded_but_not_crossings`.
+- **Pendiente** (segunda vuelta):
+  - tiradores en 3D;
+  - enseñar los tiradores al pasar el ratón sin seleccionar;
+  - un nudo arrastrado que se une a otra calle;
+  - juntar un cruce pegado a otro en lugar de solo avisar;
+  - transiciones de ancho.
+- **Qué debe probar Antonio**: abre un proyecto con calles (por ejemplo, el de `archisim calles out/`).
+  1. Con la herramienta Calle, traza una calle que cruce otra y mira que, antes del clic, ya se ve con sus aceras y su cruce, en planta y en la Vista 3D.
+  2. Llévala junto a un cruce: el clic se pega a su centro; si cruzas pegado a otro cruce, la etiqueta se pone roja.
+  3. Con la flecha, selecciona una calle: tira del círculo de en medio de un tramo y mira que se curva suave; luego arrastra el cuadrado de un cruce y mira que las calles que llegan se van con él.
+
 ## 2026-11-19 (187) · v0.107: las calles de OpenStreetMap como una red
 
 Rama `bloque/calles-osm`. Antonio trajo el entorno de una glorieta de Huelva cruzada por el medio (37°15'46.7"N 6°57'43.4"W) y las calles salieron rotas en trozos que se pisaban, nada que ver con lo fluido de Cities: Skylines 2. Causa: cada vía de OpenStreetMap se traía como una calle suelta. El anillo de la glorieta salía como calles curvas, y cada calzada de las avenidas de dos calzadas como una avenida entera de 30 m. Sin cambios de formato.

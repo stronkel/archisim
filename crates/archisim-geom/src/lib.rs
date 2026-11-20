@@ -51,6 +51,7 @@ pub mod parallel;
 pub mod pools;
 pub mod rebar;
 pub mod road_ground;
+pub mod road_shaping;
 pub mod roof_parts;
 pub mod room;
 pub mod sculpt;

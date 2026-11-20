@@ -184,6 +184,10 @@ impl ArchiSimApp {
 
     /// Draws what the tool would build, see-through, over the 3D view.
     pub(super) fn draw_ghost_3d(&self, painter: &egui::Painter, rect: Rect) {
+        // A street is drawn as it will be, in the scene (`road_overlay_3d`).
+        if matches!(self.would_build(), Some(Would::Road(_))) {
+            return;
+        }
         let Some(solids) = self.ghost_solids() else {
             return;
         };
@@ -290,7 +294,7 @@ fn build_ghost(model: &Model, would: Would) -> Option<Vec<Solid>> {
         }
         Would::Box(_) => Vec::new(),
         Would::Road(spec) => {
-            let id = m.add_road_stretch(spec).ok()?;
+            let id = stretch_fused(&mut m, spec)?;
             solid::road_solids(&m, id)
         }
     })
@@ -310,6 +314,8 @@ pub struct PlanGhost {
     /// What the picture was drawn for, and the picture with its region.
     raster: String,
     image: Option<(egui::TextureHandle, (Point2, Point2))>,
+    /// A crossing the new street would make treads on another one.
+    crowded: std::cell::Cell<bool>,
 }
 
 impl ArchiSimApp {
@@ -346,7 +352,9 @@ impl ArchiSimApp {
         if shown.walls().count() > GHOST_MAX_WALLS {
             return None;
         }
+        self.plan_ghost_crowded_set(false);
         let (after, made) = build_plan_ghost(&shown, would)?;
+        self.plan_ghost_crowded_set(crowded(&after, &made));
         let geo = crate::geo::Indexed::new(&after);
         let mut pts: Vec<Point2> = made
             .iter()
@@ -363,8 +371,14 @@ impl ArchiSimApp {
                 Point2::new(hi.x.max(p.x), hi.y.max(p.y)),
             )
         });
-        // Walls it joins lose or gain their mitres nearby.
-        let margin = Point2::new(0.8, 0.8);
+        // Walls it joins lose or gain their mitres nearby; a street changes
+        // the crossings it makes and the streets it meets round them.
+        let reach = if made.iter().any(|e| matches!(e, Element::Road(_))) {
+            25.0
+        } else {
+            0.8
+        };
+        let margin = Point2::new(reach, reach);
         Some((after, (lo - margin, hi + margin)))
     }
 
@@ -439,6 +453,108 @@ impl ArchiSimApp {
     }
 }
 
+impl ArchiSimApp {
+    /// Whether a crossing of the street being traced treads on another.
+    pub(super) fn plan_ghost_crowded(&self) -> bool {
+        self.plan_ghost.crowded.get() && self.plan_ghost.after.is_some()
+    }
+
+    fn plan_ghost_crowded_set(&self, on: bool) {
+        self.plan_ghost.crowded.set(on);
+    }
+
+    /// Whether the plan shows the real ghost now (the tool's own sketch
+    /// over it would hide it).
+    pub(super) fn plan_ghost_shown(&self) -> bool {
+        self.plan_ghost.after.is_some() && self.plan_ghost.image.is_some()
+    }
+
+    /// While a street is traced in 3D, the street as it will be, with its
+    /// materials, in the scene: it and the streets it meets, their
+    /// crossings made (as in a city builder, the junction forms as the
+    /// cursor goes).
+    pub(super) fn road_overlay_3d(&mut self) {
+        let would = match self.would_build() {
+            Some(Would::Road(spec)) => spec,
+            _ => {
+                if self.road_overlaid {
+                    self.v3d.set_overlay(None, || None);
+                    self.road_overlaid = false;
+                }
+                return;
+            }
+        };
+        let key = format!("calle {} {would:?}", self.ed.revision());
+        let model = self.ed.model();
+        self.v3d.set_overlay(Some(key), || {
+            let mut m = model.clone();
+            let id = stretch_fused(&mut m, would)?;
+            let (new, met): (Vec<Solid>, Vec<Solid>) = road_with_met(&m, id)
+                .into_iter()
+                .partition(|s| s.owner == solid::SolidOwner::Road(id));
+            // The new street marked (outlined), the ones it meets as they
+            // will be, with their crossings.
+            Some(
+                crate::view3d::scene::Scene::of_solids(&m, new)
+                    .joined(crate::view3d::scene::Scene::of_solids_unmarked(&m, met)),
+            )
+        });
+        self.road_overlaid = true;
+    }
+}
+
+/// Whether a crossing of what was made is on top of another crossing:
+/// their middles closer than the half widths of the streets there.
+fn crowded(m: &Model, made: &[Element]) -> bool {
+    let roads: Vec<archisim_core::RoadId> = made
+        .iter()
+        .filter_map(|e| match e {
+            Element::Road(r) => Some(*r),
+            _ => None,
+        })
+        .collect();
+    archisim_geom::road_shaping::crowded(m, &roads)
+}
+
+/// A stretch of street laid on a copy of the model as the tool lays it:
+/// with the crossings it makes too near another fused into that one.
+fn stretch_fused(m: &mut Model, spec: archisim_core::RoadStretch) -> Option<archisim_core::RoadId> {
+    let id = m.add_road_stretch(spec).ok()?;
+    archisim_geom::road_shaping::fuse_crowded(m, id).ok()?;
+    Some(id)
+}
+
+/// The solids of a new street and of the streets it meets, with their
+/// crossings, a little over the ground (over the streets as they are).
+pub(super) fn road_with_met(m: &Model, id: archisim_core::RoadId) -> Vec<Solid> {
+    let Some(level) = m.road(id).map(|r| r.level) else {
+        return Vec::new();
+    };
+    let junctions = archisim_geom::crossroads::junctions(m, level);
+    let mut roads = vec![id];
+    for j in &junctions {
+        if j.arms.iter().any(|a| a.road == id) {
+            for a in &j.arms {
+                if !roads.contains(&a.road) {
+                    roads.push(a.road);
+                }
+            }
+        }
+    }
+    let mut solids: Vec<Solid> = roads
+        .iter()
+        .flat_map(|r| solid::road_solids_with(m, *r, &junctions))
+        .collect();
+    for s in &mut solids {
+        for t in &mut s.triangles {
+            for p in t.iter_mut() {
+                p[2] += 0.03;
+            }
+        }
+    }
+    solids
+}
+
 /// Builds `would` on a copy of `model`: the copy and what it added.
 fn build_plan_ghost(model: &Model, would: Would) -> Option<(Model, Vec<Element>)> {
     let mut m = model.clone();
@@ -464,7 +580,7 @@ fn build_plan_ghost(model: &Model, would: Would) -> Option<(Model, Vec<Element>)
         Would::Slab(spec) => vec![Element::Slab(m.add_slab(spec).ok()?)],
         Would::Object(spec) => vec![Element::Object(m.add_object(spec).ok()?)],
         Would::World(spec) => vec![Element::Mass(m.add_world_building(spec).ok()?)],
-        Would::Road(spec) => vec![Element::Road(m.add_road_stretch(spec).ok()?)],
+        Would::Road(spec) => vec![Element::Road(stretch_fused(&mut m, spec)?)],
         Would::Box(spec) => vec![Element::Box(m.add_box(spec).ok()?)],
     };
     Some((m, made))

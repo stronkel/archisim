@@ -663,3 +663,163 @@ mod tests {
         assert!(m.road(p).unwrap().free);
     }
 }
+
+/// How a street bends when it is pulled (as in a city builder): its axis
+/// from station `from` to `to` moved by `delta` at station `grab`, and
+/// less and less towards `from` and `to`, where it does not move (with a
+/// smooth step, so that the street keeps its direction there and curves
+/// without a kink). With `grab` at `from` (or `to`), that end moves whole
+/// and the street eases back to its line by `to` (or `from`). The axis
+/// is sampled every `step` metres or less along the bent part.
+pub fn shape_axis(
+    axis: &[Point2],
+    from: f64,
+    grab: f64,
+    to: f64,
+    delta: Vec2,
+    step: f64,
+) -> Vec<Point2> {
+    if axis.len() < 2 {
+        return axis.to_vec();
+    }
+    let total: f64 = axis.windows(2).map(|w| w[0].distance(w[1])).sum();
+    let (from, to) = (from.clamp(0.0, total), to.clamp(0.0, total));
+    let grab = grab.clamp(from, to);
+    let smooth = |t: f64| {
+        let t = t.clamp(0.0, 1.0);
+        t * t * (3.0 - 2.0 * t)
+    };
+    let weight = |s: f64| {
+        if s <= grab {
+            if grab - from < 1e-9 {
+                1.0
+            } else {
+                smooth((s - from) / (grab - from))
+            }
+        } else if to - grab < 1e-9 {
+            1.0
+        } else {
+            smooth((to - s) / (to - grab))
+        }
+    };
+    let at = |s: f64| -> Point2 {
+        let mut left = s;
+        for w in axis.windows(2) {
+            let l = w[0].distance(w[1]);
+            if left <= l || l <= 0.0 {
+                let t = if l > 0.0 { left / l } else { 0.0 };
+                return w[0] + (w[1] - w[0]) * t.clamp(0.0, 1.0);
+            }
+            left -= l;
+        }
+        axis[axis.len() - 1]
+    };
+    let mut out: Vec<Point2> = Vec::new();
+    let push = |p: Point2, out: &mut Vec<Point2>| {
+        if out.last().is_none_or(|q: &Point2| q.distance(p) > 1e-6) {
+            out.push(p);
+        }
+    };
+    // Before the bent part, as it is.
+    let mut s = 0.0;
+    for w in axis.windows(2) {
+        if s >= from - 1e-9 {
+            break;
+        }
+        push(w[0], &mut out);
+        s += w[0].distance(w[1]);
+    }
+    // The bent part, sampled (with its own vertices too).
+    let n = ((to - from) / step.max(0.1)).ceil().max(1.0) as usize;
+    let mut stations: Vec<f64> = (0..=n)
+        .map(|k| from + (to - from) * k as f64 / n as f64)
+        .collect();
+    let mut acc = 0.0;
+    for w in axis.windows(2) {
+        acc += w[0].distance(w[1]);
+        if acc > from && acc < to {
+            stations.push(acc);
+        }
+    }
+    stations.push(grab);
+    stations.sort_by(f64::total_cmp);
+    stations.dedup_by(|a, b| (*a - *b).abs() < 1e-6);
+    for s in stations {
+        push(at(s) + delta * weight(s), &mut out);
+    }
+    // After it, as it is.
+    let mut s = 0.0;
+    for w in axis.windows(2) {
+        s += w[0].distance(w[1]);
+        if s > to + 1e-9 {
+            push(w[1], &mut out);
+        }
+    }
+    thin_line(&out, 0.01)
+}
+
+/// The points of a line that lie on the straight between their
+/// neighbours (within `tol`), left out.
+fn thin_line(line: &[Point2], tol: f64) -> Vec<Point2> {
+    if line.len() <= 2 {
+        return line.to_vec();
+    }
+    let mut out = vec![line[0]];
+    for k in 1..line.len() - 1 {
+        let a = *out.last().unwrap();
+        let b = line[k + 1];
+        let ab = b - a;
+        let l = ab.length();
+        let d = if l < 1e-12 {
+            line[k].distance(a)
+        } else {
+            ((line[k] - a).cross(ab) / l).abs()
+        };
+        if d > tol {
+            out.push(line[k]);
+        }
+    }
+    out.push(line[line.len() - 1]);
+    out
+}
+
+#[cfg(test)]
+mod shape_tests {
+    use super::*;
+
+    fn p(x: f64, y: f64) -> Point2 {
+        Point2::new(x, y)
+    }
+
+    #[test]
+    fn pulling_the_middle_bends_it_and_keeps_its_ends() {
+        let axis = vec![p(0.0, 0.0), p(100.0, 0.0)];
+        let bent = shape_axis(&axis, 0.0, 50.0, 100.0, Vec2::new(0.0, 20.0), 2.0);
+        assert_eq!(bent[0], p(0.0, 0.0));
+        assert_eq!(*bent.last().unwrap(), p(100.0, 0.0));
+        let top = bent.iter().map(|q| q.y).fold(0.0, f64::max);
+        assert!((top - 20.0).abs() < 1e-9);
+        // Smooth: no turn sharper than a few degrees between samples.
+        for w in bent.windows(3) {
+            let (u, v) = (w[1] - w[0], w[2] - w[1]);
+            let turn = (u.dot(v) / (u.length() * v.length()))
+                .clamp(-1.0, 1.0)
+                .acos();
+            assert!(turn.to_degrees() < 12.0, "{}", turn.to_degrees());
+        }
+        // Leaving its ends in their direction.
+        let first = bent[1] - bent[0];
+        assert!(first.y.abs() / first.length() < 0.05);
+    }
+
+    #[test]
+    fn pulling_an_end_eases_back_to_the_line() {
+        let axis = vec![p(0.0, 0.0), p(60.0, 0.0), p(100.0, 0.0)];
+        let moved = shape_axis(&axis, 0.0, 100.0, 100.0, Vec2::new(0.0, 10.0), 2.0);
+        assert_eq!(moved[0], p(0.0, 0.0));
+        assert!(moved.last().unwrap().distance(p(100.0, 10.0)) < 1e-9);
+        // Only the part between the stops moves.
+        let part = shape_axis(&axis, 60.0, 100.0, 100.0, Vec2::new(0.0, 10.0), 2.0);
+        assert!(part.iter().filter(|q| q.x < 60.0).all(|q| q.y == 0.0));
+    }
+}

@@ -6431,8 +6431,13 @@ fn roads_by_their_edge_edited_after_and_trees_among_trees() {
     h.drag(a0, a0 + archisim_core::Vec2::new(0.0, -5.0));
     let axis = h.model().road(r.id).unwrap().axis.clone();
     assert!((axis[0].y - (a0.y - 5.0)).abs() < 1e-6, "{axis:?}");
+    // The street eases back to its line by its other end (plasticity,
+    // 0.108): it bends, its far end where it was.
+    assert!(axis.last().unwrap().distance(r.axis[1]) < 1e-6);
+    let n = axis.len();
+    assert!(n > 2);
     // A double click on the axis adds a point; picked, Supr takes it away.
-    let mid = p(25.0, -half);
+    let mid = h.model().road(r.id).unwrap().axis_at(30.0).0;
     h.move_to(mid);
     for _ in 0..2 {
         h.button(PointerButton::Primary, true);
@@ -6440,9 +6445,9 @@ fn roads_by_their_edge_edited_after_and_trees_among_trees() {
     }
     h.time += 1.0;
     h.frame();
-    assert_eq!(h.model().road(r.id).unwrap().axis.len(), 3);
+    assert_eq!(h.model().road(r.id).unwrap().axis.len(), n + 1);
     h.key(Key::Delete);
-    assert_eq!(h.model().road(r.id).unwrap().axis.len(), 2);
+    assert_eq!(h.model().road(r.id).unwrap().axis.len(), n);
     assert!(h.model().road(r.id).is_some(), "the road stays");
     // A tree: its gallery keeps to vegetation, people and vehicles.
     h.key(Key::Escape);
@@ -13225,4 +13230,245 @@ fn the_street_bar_lays_grids_parallels_and_upgrades() {
     h.frame();
     h.app.set_tool(Tool::Arrow);
     h.frame();
+}
+
+/// Streets moulded by dragging (plasticity, 19/11/2026): a selected
+/// street shows its nodes and a handle to bend each part between them;
+/// pulling the handle curves that part smoothly, its nodes staying, and
+/// moving a node takes the streets that meet there with it.
+#[test]
+fn streets_bend_and_their_nodes_move_by_dragging() {
+    let mut h = Harness::new(Editor::new_project());
+    let canvas = h.app.canvas;
+    h.app
+        .view
+        .fit_exact(canvas, p(-80.0, -80.0), p(80.0, 80.0), 0.0);
+    let level = h.app.ed.level;
+    let mat = h.model().materials().next().unwrap().id;
+    let mut ids = Vec::new();
+    for axis in [
+        vec![p(-60.0, 0.0), p(60.0, 0.0)],
+        vec![p(0.0, -60.0), p(0.0, 60.0)],
+    ] {
+        let r = h.app.ed.transact("Calle", |m| {
+            m.add_road(archisim_core::NewRoad {
+                name: "Calle".into(),
+                level,
+                axis,
+                section: archisim_core::RoadSection::default(),
+                top_offset: 0.0,
+                profile: Vec::new(),
+                changes: Vec::new(),
+                pavement: mat,
+                kerb_material: mat,
+                sidewalk_material: mat,
+            })
+        });
+        ids.push(r.unwrap());
+    }
+    let (ew, ns) = (ids[0], ids[1]);
+    // Its nodes: both ends and the crossing; a handle in each half.
+    let nodes = crate::drag::road_nodes(h.model(), ew);
+    assert_eq!(nodes.len(), 3, "{nodes:?}");
+    h.app.ed.selection = [Element::Road(ew)].into_iter().collect();
+    h.frame();
+    // Pull the middle of its east half up 15 m: that half bends, the
+    // crossing and the far end stay where they were.
+    h.drag(p(30.0, 0.0), p(30.0, 15.0));
+    let r = h.model().road(ew).unwrap().clone();
+    let top = r.axis.iter().map(|q| q.y).fold(0.0, f64::max);
+    assert!((top - 15.0).abs() < 0.5, "{top}");
+    assert!(r.axis.iter().any(|q| q.distance(p(0.0, 0.0)) < 0.05));
+    assert!(r.axis.last().unwrap().distance(p(60.0, 0.0)) < 1e-6);
+    assert!(r
+        .axis
+        .iter()
+        .filter(|q| q.x < 0.0)
+        .all(|q| q.y.abs() < 1e-9));
+    // One undo takes it back.
+    h.app.ed.undo();
+    assert_eq!(h.model().road(ew).unwrap().axis.len(), 2);
+    // Move the crossing 10 m east: both streets go with it, each easing
+    // back to its line by its ends.
+    h.frame();
+    h.drag(p(0.0, 0.0), p(10.0, 0.0));
+    let ew_axis = h.model().road(ew).unwrap().axis.clone();
+    let ns_axis = h.model().road(ns).unwrap().axis.clone();
+    assert!(ew_axis.first().unwrap().distance(p(-60.0, 0.0)) < 1e-6);
+    assert!(ns_axis.first().unwrap().distance(p(0.0, -60.0)) < 1e-6);
+    assert!(
+        ns_axis.iter().any(|q| q.distance(p(10.0, 0.0)) < 0.05),
+        "{ns_axis:?}"
+    );
+    let js = archisim_geom::crossroads::junctions(h.model(), level);
+    assert!(
+        js.iter().any(|j| j.at.distance(p(10.0, 0.0)) < 1.0),
+        "{:?}",
+        js.iter().map(|j| j.at).collect::<Vec<_>>()
+    );
+}
+
+/// Tracing a street near a crossing (19/11/2026): the click is pulled to
+/// the crossing's middle, and a street that would cross another right
+/// beside a crossing is shown in red before the click.
+#[test]
+fn tracing_is_pulled_to_crossings_and_warns_when_crowded() {
+    let mut h = Harness::new(Editor::new_project());
+    let canvas = h.app.canvas;
+    h.app
+        .view
+        .fit_exact(canvas, p(-80.0, -80.0), p(80.0, 80.0), 0.0);
+    let level = h.app.ed.level;
+    let mat = h.model().materials().next().unwrap().id;
+    for axis in [
+        vec![p(-60.0, 0.0), p(60.0, 0.0)],
+        vec![p(0.0, -60.0), p(0.0, 60.0)],
+    ] {
+        h.app
+            .ed
+            .transact("Calle", |m| {
+                m.add_road(archisim_core::NewRoad {
+                    name: "Calle".into(),
+                    level,
+                    axis,
+                    section: archisim_core::RoadSection::default(),
+                    top_offset: 0.0,
+                    profile: Vec::new(),
+                    changes: Vec::new(),
+                    pavement: mat,
+                    kerb_material: mat,
+                    sidewalk_material: mat,
+                })
+            })
+            .unwrap();
+    }
+    h.app.set_tool(Tool::Road);
+    h.app.road_settings.draw = super::urban_ui::RoadDraw::Straight;
+    h.app.road_settings.follow_ground = false;
+    // Near the crossing, the click goes to its middle.
+    let (q, on) = h.app.road_snap(p(3.0, 4.0));
+    assert!(q.distance(p(0.0, 0.0)) < 1e-6, "{q:?}");
+    assert!(on.is_some());
+    // A street from the south-east crossing the east–west one 10 m from
+    // the crossing: it is fused into the crossing (second round), so it is
+    // not red, and laid it goes through the crossing's middle.
+    h.click_at(p(34.0, -40.0));
+    h.move_to(p(-14.0, 40.0));
+    h.frame();
+    h.frame();
+    assert!(h.app.plan_ghost_shown());
+    assert!(!h.app.road_crowded());
+    let before: Vec<_> = h.model().roads().map(|r| r.id).collect();
+    h.click_at(p(-14.0, 40.0));
+    let made = h
+        .model()
+        .roads()
+        .find(|r| !before.contains(&r.id))
+        .unwrap()
+        .clone();
+    assert!(
+        made.axis_at(made.station_of(p(0.0, 0.0)))
+            .0
+            .distance(p(0.0, 0.0))
+            < 0.5,
+        "{:?}",
+        made.axis
+    );
+    assert!(!archisim_geom::road_shaping::crowded(h.model(), &[made.id]));
+    // Well away from it: not.
+    h.key(Key::Escape);
+    h.click_at(p(40.0, -40.0));
+    h.move_to(p(40.0, 40.0));
+    h.frame();
+    h.frame();
+    assert!(!h.app.road_crowded());
+}
+
+/// Calles plásticas, second round (19/11/2026): the handles of a street
+/// show under the cursor without selecting it; a loose end dropped beside
+/// a street meets it, and dropped on the end of a street in line joins it;
+/// the arrows on the kerbs widen a stretch between its nodes.
+#[test]
+fn streets_meet_join_and_widen_by_their_handles() {
+    let mut h = Harness::new(Editor::new_project());
+    let canvas = h.app.canvas;
+    h.app
+        .view
+        .fit_exact(canvas, p(-130.0, -80.0), p(80.0, 80.0), 0.0);
+    let level = h.app.ed.level;
+    let mat = h.model().materials().next().unwrap().id;
+    let mut ids = Vec::new();
+    for axis in [
+        vec![p(-60.0, 0.0), p(60.0, 0.0)],
+        vec![p(0.0, 60.0), p(0.0, 30.0)],
+        vec![p(-120.0, 4.0), p(-85.0, 4.0)],
+    ] {
+        let r = h.app.ed.transact("Calle", |m| {
+            m.add_road(archisim_core::NewRoad {
+                name: "Calle".into(),
+                level,
+                axis,
+                section: archisim_core::RoadSection::default(),
+                top_offset: 0.0,
+                profile: Vec::new(),
+                changes: Vec::new(),
+                pavement: mat,
+                kerb_material: mat,
+                sidewalk_material: mat,
+            })
+        });
+        ids.push(r.unwrap());
+    }
+    let (ew, side, west) = (ids[0], ids[1], ids[2]);
+    h.app.set_tool(Tool::Arrow);
+    h.app.ed.selection.clear();
+    // Under the cursor, nothing selected: its handles are there.
+    h.move_to(p(0.0, 30.0));
+    h.frame();
+    assert_eq!(h.app.hover_road, Some(side));
+    assert!(matches!(
+        h.app.hover_grip,
+        Some(crate::drag::Grip::RoadNode { .. })
+    ));
+    // Its loose end dropped 4 m from the other street: it meets it.
+    h.drag(p(0.0, 30.0), p(1.0, 4.0));
+    assert!(h.app.ed.selection.contains(&Element::Road(side)));
+    let end = *h.model().road(side).unwrap().axis.last().unwrap();
+    assert!(end.y.abs() < 1e-6 && end.x.abs() < 2.0, "{end:?}");
+    assert_eq!(
+        archisim_geom::crossroads::junctions(h.model(), level).len(),
+        1
+    );
+    // The kerb of the east–west street's west stretch pulled out 3 m.
+    h.app.ed.selection = [Element::Road(ew)].into_iter().collect();
+    h.frame();
+    let arrow = crate::drag::hotspots(h.model(), &h.app.ed.selection)
+        .into_iter()
+        .find(|x| {
+            matches!(x.grip, crate::drag::Grip::RoadWidth { left: true, .. }) && x.point.x < 0.0
+        })
+        .unwrap();
+    let (l0, _) = h.model().road(ew).unwrap().extent_at(30.0);
+    h.drag(arrow.point, arrow.point + p(0.0, 3.0));
+    let r = h.model().road(ew).unwrap();
+    let (l1, _) = r.extent_at(30.0);
+    assert!((l1 - l0 - 3.0).abs() < 0.05, "{l0} {l1}");
+    // The east stretch is as it was.
+    assert!((r.extent_at(100.0).0 - l0).abs() < 1e-9);
+    h.app.ed.undo();
+    // The west street's end dropped by the east–west one's end: they go
+    // on in line, so they join into one.
+    h.app.ed.selection.clear();
+    h.frame();
+    h.drag(p(-85.0, 4.0), p(-63.0, 2.0));
+    assert!(h.model().road(ew).is_none() || h.model().road(west).is_none());
+    let joined = h
+        .model()
+        .roads()
+        .find(|r| r.axis[0].distance(p(-120.0, 4.0)) < 1e-6)
+        .unwrap();
+    assert!(joined.axis.last().unwrap().distance(p(60.0, 0.0)) < 1e-6);
+    // One undo takes it back.
+    h.app.ed.undo();
+    assert!(h.model().road(ew).is_some() && h.model().road(west).is_some());
 }

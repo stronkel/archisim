@@ -1168,6 +1168,7 @@ impl ArchiSimApp {
         // Handles of the object selected (bloque 5): its size.
         let grabbing_object = self.object_grips_3d(&ctx, &response, rect)
             | self.mass_grips_3d(&ctx, &response, rect)
+            | self.road_grips_3d(&ctx, &response, rect)
             | self.object_drag_3d(&ctx, &response, rect);
         // The camera turns about what is under the cursor when the right
         // button is pressed (§12.5); with nothing there, about the
@@ -1424,6 +1425,8 @@ impl ArchiSimApp {
                 &disciplines,
             )
             .then(|| self.shared_model());
+        // The street being traced, drawn in the scene this same frame.
+        self.road_overlay_3d();
         let v = &mut self.v3d;
         v.refresh_scene(
             &ctx,
@@ -1528,6 +1531,7 @@ impl ArchiSimApp {
         draw_section_box(&painter, rect, v);
         self.draw_object_grips_3d(&painter, rect);
         self.draw_mass_grips_3d(&painter, rect);
+        self.draw_road_grips_3d(&painter, rect);
         self.draw_drag_3d(&painter, rect);
         self.draw_clearances_3d(&painter, rect);
         self.draw_edges_3d(&painter, rect);
@@ -1546,6 +1550,8 @@ impl ArchiSimApp {
             || self.object_grip.is_some()
             || self.mass_grip_hover.is_some()
             || self.mass_grip.is_some()
+            || self.road_grip_hover.is_some()
+            || self.road_grip.is_some()
             || self.object_move.is_some();
         let dragging = response.dragged();
         self.draw_overlays(&ctx, &painter, rect);

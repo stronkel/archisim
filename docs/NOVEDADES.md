@@ -4,6 +4,23 @@ Lo que cambia en cada versión, en pocas líneas. ArchiSim enseña la parte de s
 
 Cada versión empieza con una línea `## <versión>` (por ejemplo `## 0.81.0`): es la que busca la publicación.
 
+## 0.109.0
+
+- **Tiradores de las calles en 3D.** Una calle seleccionada se moldea también en la Vista 3D: nudos, curvatura y bordillos, viendo cómo queda con sus cruces.
+- **Tiradores al pasar el ratón.** En planta salen los tiradores de la calle que hay bajo el cursor, sin seleccionarla antes.
+- **Las calles se unen solas.** El extremo suelto de una calle se pega a la calle, al extremo, al cruce o a la glorieta cerca de la que se suelta. Si sigue en línea con otra calle, las dos pasan a ser una sola; si son de tipos distintos, con una transición entre las dos secciones.
+- **Cruces que se juntan.** Un cruce que quedaría pegado a otro se junta con él: la calle se curva suave para pasar por su centro.
+- **Ensanchar un tramo.** Las flechas de los bordillos ensanchan o estrechan el tramo entre dos cruces, con transiciones suaves.
+
+## 0.108.0
+
+- **Ver la calle real mientras se traza.** En planta se ve la calle tal como quedará, con sus aceras y el cruce ya formado con las que pisa. En 3D aparece con sus materiales, y las calles que encuentra se rehacen con sus cruces en el acto.
+- **Moldear las calles arrastrando.** Al seleccionar una calle solo salen sus nudos (extremos y cruces) y un tirador redondo en medio de cada tramo.
+  - Al tirar del redondo, el tramo se curva suave.
+  - Al mover un nudo, se lleva las calles que llegan a él, que se doblan suaves hasta su nudo siguiente.
+- **Cruces que no se pisan.** Al trazar, el clic se pega al centro del cruce que hay cerca. Si la calle va a hacer un cruce encima de otro, la etiqueta se pone roja.
+- **Curvas continuas en lo traído de OpenStreetMap.** Los quiebros de las calles se redondean según la clase de vía.
+
 ## 0.107.0
 
 - **Las calles traídas de OpenStreetMap, como una red.** Antes, cada trozo de OpenStreetMap llegaba como una calle suelta, y una glorieta o una avenida con dos calzadas se rompían en piezas que se pisaban. Ahora:

@@ -87,8 +87,80 @@ pub fn network(ways: &[OsmStreet]) -> (Vec<Street>, Vec<Ring>) {
     });
     let streets = join(streets);
     let streets = pair(streets);
-    let streets = join(streets);
+    let mut streets = join(streets);
+    // Their bends rounded, as a street is laid out (not where another
+    // street reaches it: that is a crossing).
+    let ends: Vec<Point2> = streets
+        .iter()
+        .flat_map(|s| [s.axis[0], s.axis[s.axis.len() - 1]])
+        .collect();
+    for s in &mut streets {
+        s.axis = round_bends(&s.axis, bend_radius(&s.class), &ends);
+    }
     (streets, rings)
+}
+
+/// The radius the bends of a street are rounded to, by its class.
+pub fn bend_radius(class: &str) -> f64 {
+    match class {
+        "trunk" | "primary" => 40.0,
+        "secondary" => 30.0,
+        "tertiary" => 20.0,
+        "living_street" | "pedestrian" => 6.0,
+        _ => 12.0,
+    }
+}
+
+/// A line with each bend rounded by an arc of `radius` (smaller where the
+/// pieces each side are short), but not the bends at `keep` (where other
+/// streets meet it) nor the sharp ones (more than 100°: a corner).
+pub fn round_bends(line: &[Point2], radius: f64, keep: &[Point2]) -> Vec<Point2> {
+    if line.len() < 3 {
+        return line.to_vec();
+    }
+    let mut out = vec![line[0]];
+    for k in 1..line.len() - 1 {
+        let (a, b, c) = (line[k - 1], line[k], line[k + 1]);
+        let (u, v) = (b - a, c - b);
+        let (lu, lv) = (u.length(), v.length());
+        if lu < 1e-6 || lv < 1e-6 {
+            continue;
+        }
+        let (u, v) = (u * (1.0 / lu), v * (1.0 / lv));
+        let turn = u.dot(v).clamp(-1.0, 1.0).acos();
+        let kept = keep.iter().any(|q| q.distance(b) < MEET);
+        if kept || turn < 2f64.to_radians() || turn > 100f64.to_radians() {
+            out.push(b);
+            continue;
+        }
+        // Where the arc leaves each piece: no more than near half of it.
+        let mut t = radius * (turn / 2.0).tan();
+        t = t.min(lu * 0.45).min(lv * 0.45);
+        let r = t / (turn / 2.0).tan();
+        let p0 = b - u * t;
+        let p1 = b + v * t;
+        // The arc's centre, on the inside of the bend.
+        let left = u.cross(v) > 0.0;
+        let n = if left {
+            Vec2::new(-u.y, u.x)
+        } else {
+            Vec2::new(u.y, -u.x)
+        };
+        let centre = p0 + n * r;
+        let a0 = (p0.y - centre.y).atan2(p0.x - centre.x);
+        let sweep = if left { turn } else { -turn };
+        let steps = ((r * turn) / 2.0).ceil().max(2.0) as usize;
+        for i in 0..=steps {
+            let ang = a0 + sweep * i as f64 / steps as f64;
+            out.push(Point2::new(
+                centre.x + r * ang.cos(),
+                centre.y + r * ang.sin(),
+            ));
+        }
+        let _ = p1;
+    }
+    out.push(line[line.len() - 1]);
+    out
 }
 
 // ---------------------------------------------------------------------
@@ -632,6 +704,31 @@ mod tests {
             way(&[(100.0, 20.0), (50.0, 0.0)], "residential", false, false),
         ];
         assert_eq!(network(&w).0.len(), 1);
+    }
+
+    #[test]
+    fn bends_are_rounded_but_not_crossings() {
+        let line = vec![
+            Point2::new(0.0, 0.0),
+            Point2::new(100.0, 0.0),
+            Point2::new(150.0, 50.0),
+        ];
+        let round = round_bends(&line, 30.0, &[]);
+        assert!(round.len() > 5);
+        // Smooth: no turn between samples sharper than a few degrees.
+        for w in round.windows(3) {
+            let (u, v) = (w[1] - w[0], w[2] - w[1]);
+            let t = (u.dot(v) / (u.length() * v.length()))
+                .clamp(-1.0, 1.0)
+                .acos();
+            assert!(t.to_degrees() < 10.0, "{}", t.to_degrees());
+        }
+        // It stays in the corner's two pieces' reach, ends where it did.
+        assert_eq!(round[0], line[0]);
+        assert_eq!(*round.last().unwrap(), line[2]);
+        // Where another street reaches the bend, it is a crossing: kept.
+        let kept = round_bends(&line, 30.0, &[Point2::new(100.0, 0.0)]);
+        assert_eq!(kept, line);
     }
 
     #[test]
