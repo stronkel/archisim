@@ -13472,3 +13472,113 @@ fn streets_meet_join_and_widen_by_their_handles() {
     h.app.ed.undo();
     assert!(h.model().road(ew).is_some() && h.model().road(west).is_some());
 }
+
+/// Remates del territorio (20/11/2026): a street moved through the editor
+/// takes its blocks' plots and buildings with it, and says so.
+#[test]
+fn plots_follow_a_street_moved_in_the_editor() {
+    let mut h = Harness::new(Editor::new_project());
+    let level = h.app.ed.level;
+    let mat = h.model().materials().next().unwrap().id;
+    let mut mid = None;
+    for k in 0..3 {
+        let t = k as f64 * 120.0;
+        for (a, b) in [(p(-20.0, t), p(260.0, t)), (p(t, -20.0), p(t, 260.0))] {
+            let id = h
+                .app
+                .ed
+                .transact("Calle", |m| {
+                    m.add_road(archisim_core::NewRoad {
+                        name: "Calle".into(),
+                        level,
+                        axis: vec![a, b],
+                        section: archisim_core::RoadSection::default(),
+                        top_offset: 0.0,
+                        profile: Vec::new(),
+                        changes: Vec::new(),
+                        pavement: mat,
+                        kerb_material: mat,
+                        sidewalk_material: mat,
+                    })
+                })
+                .unwrap();
+            if k == 1 && a.x == t {
+                mid = Some(id);
+            }
+        }
+    }
+    h.app
+        .ed
+        .transact("Parcelar", |m| {
+            let blocks = archisim_geom::blocks::city_blocks(m, level);
+            for (k, b) in blocks.iter().take(2).enumerate() {
+                archisim_geom::blocks::add_block_plots(
+                    m,
+                    level,
+                    b,
+                    k + 1,
+                    archisim_core::BlockZone::Flats,
+                    None,
+                    None,
+                )?;
+            }
+            archisim_geom::blocks::fill_plots(m, level, None, None)
+        })
+        .unwrap();
+    h.app.ed.street_note = None;
+    let mid = mid.unwrap();
+    h.app
+        .ed
+        .transact("Mover calle", |m| {
+            m.edit_road(mid, |r| r.axis = vec![p(140.0, -20.0), p(140.0, 260.0)])
+        })
+        .unwrap();
+    let note = h.app.ed.street_note.clone().unwrap();
+    assert!(note.starts_with("2 manzanas"), "{note}");
+    let street = h.model().road(mid).unwrap().outline();
+    assert!(h
+        .model()
+        .plots()
+        .all(|p| !archisim_core::point_in_polygon(archisim_core::centroid(&p.outline), &street)));
+    // One undo takes the street and the plots back together.
+    h.app.ed.undo();
+    assert_eq!(h.model().road(mid).unwrap().axis[0], p(120.0, -20.0));
+    // Said once, in the bar.
+    h.frame();
+    assert!(h.app.ed.street_note.is_none());
+}
+
+/// Remates del territorio (20/11/2026): the corners of a plot (and of an
+/// urban surface) are dragged by their handles.
+#[test]
+fn a_plot_corner_is_dragged() {
+    let mut h = Harness::new(Editor::new_project());
+    let canvas = h.app.canvas;
+    h.app
+        .view
+        .fit_exact(canvas, p(-10.0, -10.0), p(40.0, 40.0), 0.0);
+    let level = h.app.ed.level;
+    let plot = h
+        .app
+        .ed
+        .transact("Parcela", |m| {
+            m.add_plot(archisim_core::NewPlot {
+                name: "Parcela".into(),
+                level,
+                outline: vec![p(0.0, 0.0), p(20.0, 0.0), p(20.0, 30.0), p(0.0, 30.0)],
+                setback: 0.0,
+                reference: String::new(),
+            })
+        })
+        .unwrap();
+    h.app.set_tool(Tool::Arrow);
+    h.app.ed.selection = [Element::Plot(plot)].into_iter().collect();
+    h.frame();
+    assert!(crate::drag::hotspots(h.model(), &h.app.ed.selection)
+        .iter()
+        .any(|x| matches!(x.grip, crate::drag::Grip::OutlineCorner { index: 2, .. })));
+    h.drag(p(20.0, 30.0), p(25.0, 33.0));
+    let o = &h.model().plot(plot).unwrap().outline;
+    assert!(o[2].distance(p(25.0, 33.0)) < 0.6, "{o:?}");
+    assert_eq!(o[0], p(0.0, 0.0));
+}

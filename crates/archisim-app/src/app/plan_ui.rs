@@ -2155,6 +2155,7 @@ impl ArchiSimApp {
             (Grip::RoadBend { .. }, _) => "Curvar calle",
             (Grip::RoadWidth { .. }, _) => "Ensanchar tramo de calle",
             (Grip::PoolCorner { .. }, _) => "Esquina de la piscina",
+            (Grip::OutlineCorner { .. }, _) => "Esquina",
             (Grip::RefPlaneEnd { .. }, _) => "Plano de referencia",
             (Grip::DimPoint { .. }, _) => "Punto de cota",
             (Grip::ObjectSize { side, .. }, _) => side.label(),

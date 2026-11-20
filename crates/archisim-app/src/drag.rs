@@ -96,6 +96,9 @@ pub enum Grip {
         pad: usize,
         index: usize,
     },
+    /// A corner of the outline of a plot or an urban surface (a square, a
+    /// car park, a garden).
+    OutlineCorner { element: Element, index: usize },
     /// A corner of a pool's outline (the edge of its water).
     PoolCorner {
         pool: archisim_core::PoolId,
@@ -409,6 +412,19 @@ pub fn hotspots(model: &Model, selection: &BTreeSet<Element>) -> Vec<Hotspot> {
                     }
                 }
             }
+            Element::Plot(_) | Element::Surface(_) => {
+                let outline = match e {
+                    Element::Plot(id) => model.plot(*id).map(|p| p.outline.clone()),
+                    Element::Surface(id) => model.surface(*id).map(|p| p.outline.clone()),
+                    _ => None,
+                };
+                for (index, point) in outline.unwrap_or_default().into_iter().enumerate() {
+                    v.push(Hotspot {
+                        grip: Grip::OutlineCorner { element: *e, index },
+                        point,
+                    });
+                }
+            }
             Element::Pool(id) => {
                 if let Some(p) = model.pool(*id) {
                     for (index, point) in p.outline.iter().enumerate() {
@@ -540,10 +556,8 @@ pub fn hotspots(model: &Model, selection: &BTreeSet<Element>) -> Vec<Hotspot> {
             | Element::Grid(_)
             | Element::Module(_)
             | Element::Mass(_)
-            | Element::Plot(_)
             | Element::Roundabout(_)
             | Element::Marking(_)
-            | Element::Surface(_)
             | Element::Decal(_)
             | Element::Planting(_)
             | Element::Run(_)
@@ -618,6 +632,7 @@ pub fn moving(model: &Model, selection: &BTreeSet<Element>, grip: Grip) -> BTree
             .map(|(r, _)| Element::Road(r))
             .collect(),
         Grip::PoolCorner { pool, .. } => [Element::Pool(pool)].into_iter().collect(),
+        Grip::OutlineCorner { element, .. } => [element].into_iter().collect(),
         Grip::RefPlaneEnd { plane, .. } => [Element::RefPlane(plane)].into_iter().collect(),
         Grip::DimPoint { dimension, .. } => [Element::Dimension(dimension)].into_iter().collect(),
         Grip::ObjectSize { object, .. } | Grip::ObjectTurn { object } => {
@@ -1019,6 +1034,11 @@ pub fn label(model: &Model, drag: &Drag) -> &'static str {
         Grip::RoadBend { .. } => "Curvar calle",
         Grip::RoadWidth { .. } => "Ensanchar tramo de calle",
         Grip::PoolCorner { .. } => "Mover esquina de piscina",
+        Grip::OutlineCorner {
+            element: Element::Plot(_),
+            ..
+        } => "Mover esquina de parcela",
+        Grip::OutlineCorner { .. } => "Mover esquina de superficie",
         Grip::RefPlaneEnd { .. } => "Estirar plano de referencia",
         Grip::DimPoint { .. } => "Cambiar punto de cota",
         Grip::ObjectSize { .. } => "Estirar objeto",
@@ -1207,6 +1227,23 @@ pub fn apply(
                 .edit_terrain(terrain, |t| t.set_pads(pads))
                 .map(|_| None)
         }
+        Grip::OutlineCorner { element, index } => match element {
+            Element::Plot(id) => model
+                .edit_plot(id, |x| {
+                    if let Some(p) = x.outline.get_mut(index) {
+                        *p = drag.to;
+                    }
+                })
+                .map(|_| None),
+            Element::Surface(id) => model
+                .edit_surface(id, |x| {
+                    if let Some(p) = x.outline.get_mut(index) {
+                        *p = drag.to;
+                    }
+                })
+                .map(|_| None),
+            _ => Ok(None),
+        },
         Grip::PoolCorner { pool, index } => model
             .edit_pool(pool, |x| {
                 if let Some(p) = x.outline.get_mut(index) {
@@ -2553,6 +2590,11 @@ fn level_of(
         | Grip::RoadBend { road, .. }
         | Grip::RoadWidth { road, .. } => model.road(road).map(|r| r.level),
         Grip::PoolCorner { pool, .. } => model.pool(pool).map(|p| p.level),
+        Grip::OutlineCorner { element, .. } => match element {
+            Element::Plot(id) => model.plot(id).map(|p| p.level),
+            Element::Surface(id) => model.surface(id).map(|p| p.level),
+            _ => None,
+        },
         Grip::RefPlaneEnd { .. } => None,
         Grip::DimPoint { dimension, .. } => model.dimension(dimension).map(|d| d.level),
         Grip::ObjectSize { object, .. } | Grip::ObjectTurn { object } => {

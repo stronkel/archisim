@@ -2432,6 +2432,9 @@ impl ArchiSimApp {
 
     /// Draws the whole window. Called by eframe every frame (and by tests).
     pub fn show(&mut self, ui: &mut Ui) {
+        if let Some(n) = self.ed.street_note.take() {
+            self.say(n);
+        }
         let ctx = ui.ctx().clone();
         if !self.styled {
             self.styled = true;

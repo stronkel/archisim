@@ -1,3 +1,9 @@
+## 0.110.0
+
+- **Las manzanas siguen a las calles.** Al mover, curvar o trazar una calle, las manzanas que cambian de forma se vuelven a parcelar solas con la zona que tenían, y se vuelven a edificar si lo estaban. Las parcelas bloqueadas y las dibujadas a mano no se tocan. Los edificios por los que pasa una calle nueva desaparecen. Un aviso dice qué se ha rehecho, y todo se deshace en un paso.
+- **Edificios de esquina con dos fachadas.** La parcela de esquina de una manzana se edifica entera, con fachada a las dos calles. Las casas con jardín delantero siguen como estaban.
+- **Esquinas de parcelas y superficies.** Las esquinas de una parcela, una plaza, un aparcamiento o un jardín se mueven arrastrándolas.
+
 # Novedades de ArchiSim
 
 Lo que cambia en cada versión, en pocas líneas. ArchiSim enseña la parte de su versión antes de actualizarse (Ayuda → «Buscar actualizaciones…»), y la página de cada versión en GitHub la lleva también. El detalle, día a día, está en `BITACORA.md`.

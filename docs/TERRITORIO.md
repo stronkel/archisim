@@ -439,7 +439,7 @@ Lo que se deja para después, tanda a tanda, para repasarlo junto con la cuarta 
 - Sin huecos (un alcorque o una fuente dentro de la plaza) ni contornos curvos.
 - Las plazas de aparcamiento no dejan el sitio de las de movilidad reducida ni las numeran; no siguen un lado inclinado (van paralelas al más largo).
 - La superficie no recorta el terreno: se apoya sobre él (un jardín hundido o una plaza en bajada, no).
-- Mover sus esquinas con tiradores; hoy se rehace con Editar contorno o se dibuja de nuevo.
+~~Mover sus esquinas con tiradores; hoy se rehace con Editar contorno o se dibuja de nuevo.~~ **Hecho (0.110)**: las esquinas de las superficies y de las parcelas se arrastran (`Grip::OutlineCorner`).
 - Las juntas son una cuadrícula; aparejos (espiga, rombo) y despiece del encintado, no.
 
 **De N6 (ocultar y soltar)**
@@ -449,11 +449,11 @@ Lo que se deja para después, tanda a tanda, para repasarlo junto con la cuarta 
 - Ocultar en 3D y en la Maqueta (hoy, desde la planta).
 
 **De N7 (manzanas)**
-- Al mover una calle, las parcelas y los edificios que la miran no la siguen; hay que vaciar, borrar las parcelas y volver a parcelar (C5 de calles).
-- Al trazar una calle sobre edificios del mundo, no avisa ni los quita.
+~~Al mover una calle, las parcelas y los edificios que la miran no la siguen; hay que vaciar, borrar las parcelas y volver a parcelar (C5 de calles).~~ **Hecho (0.110)**: al cambiar las calles, las manzanas que cambian de forma se vuelven a parcelar solas, con la zona que tenían, sin tocar las parcelas bloqueadas ni las dibujadas a mano, y se vuelven a edificar si lo estaban (`blocks::follow_streets`, desde `Editor::transact`; un aviso dice cuántas).
+~~Al trazar una calle sobre edificios del mundo, no avisa ni los quita.~~ **Hecho (0.110)**: los quita, en el mismo paso de Deshacer, y lo avisa.
 ~~Las manzanas no se guardan: se buscan cada vez. Parcelar una manzana ya parcelada se niega (habría que poder «volver a parcelar» quitando lo no bloqueado).~~ **Hecho en parte (cuarta vuelta)**: un clic en una manzana ya parcelada la vuelve a parcelar sin tocar las bloqueadas (`blocks::replot_block`). Siguen buscándose cada vez (5 ms en 1 km²).
 - Las parcelas son de un frente fijo; mezclar anchos (como un casco real) o leer la parcelación del Catastro y respetarla.
-- Los edificios de esquina son un rectángulo a una calle: falta la casa de esquina con dos fachadas.
+~~Los edificios de esquina son un rectángulo a una calle: falta la casa de esquina con dos fachadas.~~ **Hecho (0.110)**: la parcela de esquina se edifica entera, con fachada a las dos calles (`blocks::street_sides`, `Model::add_world_building_on`); las casas con jardín delantero siguen como estaban.
 - Pintar zonas con un pincel sobre varias parcelas a la vez.
 ~~La planta tiñe las parcelas y las rotula solo si cabe el texto; una leyenda de zonas.~~ **Hecho en el mapa (cuarta vuelta)**; en la planta no.
 

@@ -6,6 +6,22 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-20 (190) · v0.110: remates del territorio, primera tanda
+
+Rama `bloque/territorio-remates`. Antonio pidió seguir con los remates del territorio (`docs/TERRITORIO.md` §7) mientras prueba la 0.109. Sin cambios de formato.
+
+- **Qué se hizo:**
+  - Las manzanas siguen a las calles (`archisim_geom::blocks::follow_streets` con `Streets`, `Followed`, `streets_matter`; llamada desde `Editor::transact`, aviso por `Editor::street_note`). Al cambiar las calles, las manzanas que cambian de forma se vuelven a parcelar con la zona que tenían, sin tocar las parcelas bloqueadas ni las dibujadas a mano, y se vuelven a edificar si lo estaban. Los edificios del entorno sobre los que pasa ahora una calle se quitan.
+  - Edificios de esquina con dos fachadas: la parcela de esquina (dos lados a la calle, `blocks::street_sides`) se edifica entera con `Model::add_world_building_on`, salvo en la zona de casas con jardín.
+  - Tiradores en las esquinas de parcelas y superficies urbanas (`drag::Grip::OutlineCorner`).
+  - Pruebas: `plots_and_buildings_follow_a_moved_street`, `a_street_laid_over_buildings_takes_them_away`, `corner_plots_get_a_building_with_two_facades`, `plots_follow_a_street_moved_in_the_editor` y `a_plot_corner_is_dragged`. Fotos de `archisim manzanas` en 3D: la manzana de pisos cierra ya sus cuatro esquinas.
+- **Pendiente** (§7): lo demás de la lista. Por ejemplo, los tiradores de los nudos en 3D, las plazas con huecos y bordes curvos, y coches y personas con sus modelos.
+- **Qué debe probar Antonio** (`archisim manzanas out/` y abre `out/manzanas.archisim`):
+  1. Selecciona la calle norte–sur del medio y arrástrala unos metros. Las dos manzanas parceladas se vuelven a parcelar y edificar, y abajo sale el aviso «2 manzanas vueltas a parcelar…». Ctrl+Z lo deshace todo junto.
+  2. Traza una calle nueva que cruce la manzana de casco antiguo: las parcelas se rehacen a los dos lados y no queda ningún edificio sobre la calle.
+  3. Mira en 3D las esquinas de la manzana de pisos: cada una es un edificio con fachada a las dos calles.
+  4. Selecciona una parcela o una plaza y arrastra una de sus esquinas.
+
 ## 2026-11-19 (189) · v0.109: calles plásticas, segunda vuelta
 
 Rama `bloque/calles-plasticas-2`, sobre la de la 0.108 (#237, todavía sin unir). Antonio pidió la segunda vuelta con lo que quedó pendiente en la primera. Sin cambios de formato: los ensanches son cambios de sección (U2).

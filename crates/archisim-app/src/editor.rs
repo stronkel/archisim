@@ -131,6 +131,9 @@ pub struct Editor {
     /// In a shared project, what the person has reserved: edits to
     /// anything else are refused.
     pub team: Option<crate::team::Guard>,
+    /// What the last change did to the plots and buildings that follow the
+    /// streets, to say it once ([`archisim_geom::blocks::follow_streets`]).
+    pub street_note: Option<String>,
 }
 
 /// Result of an edit: `Err` carries a Spanish explanation.
@@ -163,6 +166,7 @@ impl Editor {
             level,
             selection: BTreeSet::new(),
             team: None,
+            street_note: None,
         }
     }
 
@@ -571,6 +575,7 @@ impl Editor {
         }
         let guard = &mut self.team;
         let mut refused = None;
+        let mut followed = archisim_geom::blocks::Followed::default();
         let started = std::time::Instant::now();
         let result = self
             .doc
@@ -599,6 +604,10 @@ impl Editor {
                 // An approved box type is frozen (M8): only a new revision
                 // opens it.
                 let frozen = m.catalogue().filter(|c| c.approved()).map(|c| c.label());
+                // The plots cut from the blocks and the buildings of the
+                // surroundings follow the streets.
+                let streets = archisim_geom::blocks::streets_matter(m)
+                    .then(|| archisim_geom::blocks::Streets::of(m));
                 let r = crate::profile::time("cambio: el cambio", || edit(m))?;
                 if let Some(label) = frozen.filter(|_| m.is_frozen()) {
                     let e = format!(
@@ -617,6 +626,11 @@ impl Editor {
                 }
                 if m.footings().next().is_some() {
                     m.footings_follow_hosts();
+                }
+                if let Some(before) = &streets {
+                    followed = crate::profile::time("cambio: manzanas", || {
+                        archisim_geom::blocks::follow_streets(m, before)
+                    })?;
                 }
                 if !decals.is_empty() {
                     m.decals_follow(&decals);
@@ -655,6 +669,9 @@ impl Editor {
             })
             .map_err(|e| refused.take().unwrap_or_else(|| explain(&e)))?;
         crate::profile::record("cambio: todo", started.elapsed());
+        if let Some(n) = followed.note() {
+            self.street_note = Some(n);
+        }
         crate::profile::time("cambio: después", || self.changed());
         Ok(result)
     }
