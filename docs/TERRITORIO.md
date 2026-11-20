@@ -247,8 +247,10 @@ Lo que quedó de la primera vuelta, hecho:
 - **Tiradores en la Vista 3D.** Con una calle seleccionada salen en 3D los mismos tiradores que en planta: cuadrados en los nudos, un redondo en medio de cada tramo y flechas en los bordillos. Se arrastran sobre la altura de la calzada, y la calle se ve como quedará, con sus cruces (`app/road_grips3d`).
 - **Tiradores al pasar el ratón.** En planta, con la flecha, al pasar por encima de una calle sin seleccionarla salen sus tiradores, y se puede tirar de ellos directamente; al cogerlo, la calle queda seleccionada. El cuerpo de la calle no se mueve sin seleccionarla antes (`hover_road`, `grip_here`, `street_under`).
 - **Un extremo suelto se une a otra calle.** Al soltar el extremo libre de una calle cerca de otra calle, de su extremo o de un cruce, el extremo se pega a ella y hace el cruce (T, L o uno más en el cruce).
-  - Si se suelta en el extremo de otra calle del mismo tipo que sigue en línea (menos de 35° de giro), las dos pasan a ser una sola calle continua.
-  - Se unen solo si las dos son iguales: sección y materiales, y sin rasante, cambios de sección, tramos ni piezas ocultas propias.
+  - Si se suelta en el extremo de otra calle que sigue en línea (menos de 35° de giro), las dos pasan a ser una sola calle continua.
+  - Se unen solo si tienen los mismos materiales y ninguna lleva rasante, cambios de sección, tramos ni piezas ocultas propias.
+  - Soltado junto a una glorieta o una plaza, el extremo va a su bordillo, mirando a su centro, y entra en ella.
+  - Dos calles de tipos distintos también se unen, si se construyen igual (bordillo, canto y nivel): la segunda conserva su sección y entre las dos hay una transición de hasta 12 m alrededor de la junta (un cambio de sección, `JOIN_TRANSITION`).
   - En el código: `road_shaping::pull_end`, `is_loose_end`, `join_ends`, `NODE_REACH`, `JOIN_TURN`.
 - **Cruces que se juntan solos.** Si al trazar o al moldear una calle hace un cruce pegado a otro (se pisarían), la calle se dobla suave para pasar por el centro del otro cruce y queda un único cruce.
   - Deja fuera los otros cruces que hacía con las mismas calles, para no cruzarlas dos veces.

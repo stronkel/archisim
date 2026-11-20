@@ -19,6 +19,10 @@ pub const NODE_REACH: f64 = 8.0;
 /// they turn less than this there (radians, 35°).
 pub const JOIN_TURN: f64 = 0.61;
 
+/// The longest transition between the sections of two streets of
+/// different types joined into one, metres.
+pub const JOIN_TRANSITION: f64 = 12.0;
+
 /// Where the nodes of the street network are along a road: its ends and
 /// where other streets meet it (its crossings), metres from its start,
 /// in order.
@@ -110,8 +114,8 @@ pub fn is_loose_end(model: &Model, road: RoadId, s: f64) -> bool {
 }
 
 /// Where a loose end of `road` dropped at `to` goes: onto the end of
-/// another street, the middle of a crossing or the axis of a street near
-/// it, so that it meets it; or `to` itself.
+/// another street, the middle of a crossing, the kerb of a roundabout or
+/// the axis of a street near it, so that it meets it; or `to` itself.
 pub fn pull_end(model: &Model, road: RoadId, to: Point2) -> Point2 {
     let Some(r) = model.road(road) else {
         return to;
@@ -139,6 +143,22 @@ pub fn pull_end(model: &Model, road: RoadId, to: Point2) -> Point2 {
             continue;
         }
         take(&mut best, j.at.distance(to), j.at, NODE_REACH.max(half));
+    }
+    if let Some((_, p)) = best {
+        return p;
+    }
+    // A roundabout or square: onto its kerb, looking at its middle.
+    for c in model.roundabouts_on_level(r.level) {
+        let d = to.distance(c.centre);
+        if d < c.radius + NODE_REACH.max(half) {
+            let dir = (to - c.centre).normalized().unwrap_or(Vec2::new(1.0, 0.0));
+            take(
+                &mut best,
+                (d - c.radius).abs(),
+                c.centre + dir * c.radius,
+                f64::INFINITY,
+            );
+        }
     }
     if let Some((_, p)) = best {
         return p;
@@ -219,13 +239,13 @@ pub fn join_ends(model: &mut Model, road: RoadId) -> Result<Option<RoadId>, Mode
                 } else {
                     (b.axis.clone(), b.section.clone())
                 };
-                let bare = |s: &archisim_core::RoadSection| {
-                    let mut s = s.clone();
-                    s.buildouts.clear();
-                    s.crossings.clear();
-                    s
-                };
-                if bare(&sec_a) != bare(&sec_b) {
+                // Of another type, it may be: its strips come in over a
+                // transition. Not if it is built otherwise (its kerb, its
+                // depth, a single level).
+                if (sec_a.kerb_height - sec_b.kerb_height).abs() > 1e-6
+                    || (sec_a.depth - sec_b.depth).abs() > 1e-6
+                    || sec_a.single_level != sec_b.single_level
+                {
                     continue;
                 }
                 let n = axis_a.len();
@@ -244,7 +264,21 @@ pub fn join_ends(model: &mut Model, road: RoadId) -> Result<Option<RoadId>, Mode
                 let la: f64 = axis_a.windows(2).map(|w| w[0].distance(w[1])).sum();
                 let mut axis = axis_a;
                 axis.extend(axis_b.iter().skip(1).copied());
+                let lb: f64 = axis_b.windows(2).map(|w| w[0].distance(w[1])).sum();
+                let changes = if sec_a.strips == sec_b.strips {
+                    Vec::new()
+                } else {
+                    let t = (la.min(lb) / 2.0).min(JOIN_TRANSITION);
+                    vec![archisim_core::SectionChange {
+                        at: la + t / 2.0,
+                        transition: t,
+                        strips: sec_b.strips.clone(),
+                    }]
+                };
                 let mut sec = sec_a;
+                sec.planting = sec.planting.or(sec_b.planting);
+                sec.bike = sec.bike.or(sec_b.bike);
+                sec.markings = sec.markings.or(sec_b.markings);
                 for mut x in sec_b.buildouts {
                     x.from += la;
                     x.to += la;
@@ -259,6 +293,7 @@ pub fn join_ends(model: &mut Model, road: RoadId) -> Result<Option<RoadId>, Mode
                 model.edit_road(road, |r| {
                     r.axis = axis;
                     r.section = sec;
+                    r.changes = changes;
                 })?;
                 return Ok(Some(road));
             }
@@ -475,6 +510,56 @@ mod tests {
         let c = road(&mut m, lv, vec![p(0.0, 0.0), p(0.0, -40.0)]);
         assert_eq!(join_ends(&mut m, a).unwrap(), None);
         assert!(m.road(c).is_some());
+    }
+
+    #[test]
+    fn streets_of_two_types_join_with_a_transition() {
+        let (mut m, lv) = town();
+        let a = road(&mut m, lv, vec![p(0.0, 0.0), p(60.0, 0.0)]);
+        let b = road(&mut m, lv, vec![p(60.0, 0.0), p(120.0, 0.0)]);
+        let mut wide = m.road(b).unwrap().section.clone();
+        wide.strips[0].width += 2.0;
+        m.edit_road(b, |r| r.section = wide.clone()).unwrap();
+        let w0 = m.road(a).unwrap().section.width();
+        assert_eq!(join_ends(&mut m, a).unwrap(), Some(a));
+        let r = m.road(a).unwrap();
+        assert_eq!(r.changes.len(), 1);
+        // Its own section before the joint, the other's after it, and a
+        // transition of 12 m round it.
+        assert!((r.section_at(30.0).width() - w0).abs() < 1e-9);
+        assert!((r.section_at(90.0).width() - w0 - 2.0).abs() < 1e-9);
+        assert!((r.section_at(60.0).width() - w0 - 1.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_loose_end_is_pulled_onto_a_roundabout() {
+        let (mut m, lv) = town();
+        let mat = m.materials().next().unwrap().id;
+        m.add_roundabout(archisim_core::NewRoundabout {
+            name: "Glorieta".into(),
+            level: lv,
+            centre: p(0.0, 0.0),
+            radius: 20.0,
+            island: 10.0,
+            apron: 1.5,
+            top_offset: 0.0,
+            plaza: false,
+            island_finish: archisim_core::IslandFinish::Garden,
+            pavement: mat,
+            kerb_material: mat,
+            island_material: mat,
+        })
+        .unwrap();
+        let b = road(&mut m, lv, vec![p(100.0, 0.0), p(60.0, 0.0)]);
+        // Dropped a few metres outside its kerb: onto it, facing its middle.
+        let to = pull_end(&m, b, p(25.0, 3.0));
+        assert!((to.distance(p(0.0, 0.0)) - 20.0).abs() < 1e-9, "{to:?}");
+        let len = m.road(b).unwrap().length();
+        bend_road(&mut m, b, len, to - p(60.0, 0.0)).unwrap();
+        let js = junctions(&m, lv);
+        assert!(js
+            .iter()
+            .any(|j| j.ring.is_some() && j.arms.iter().any(|x| x.road == b)));
     }
 
     #[test]

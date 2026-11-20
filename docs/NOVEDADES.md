@@ -8,7 +8,7 @@ Cada versión empieza con una línea `## <versión>` (por ejemplo `## 0.81.0`): 
 
 - **Tiradores de las calles en 3D.** Una calle seleccionada se moldea también en la Vista 3D: nudos, curvatura y bordillos, viendo cómo queda con sus cruces.
 - **Tiradores al pasar el ratón.** En planta salen los tiradores de la calle que hay bajo el cursor, sin seleccionarla antes.
-- **Las calles se unen solas.** El extremo suelto de una calle se pega a la calle, al extremo o al cruce cerca del que se suelta. Si sigue en línea con otra calle igual, las dos pasan a ser una sola.
+- **Las calles se unen solas.** El extremo suelto de una calle se pega a la calle, al extremo, al cruce o a la glorieta cerca de la que se suelta. Si sigue en línea con otra calle, las dos pasan a ser una sola; si son de tipos distintos, con una transición entre las dos secciones.
 - **Cruces que se juntan.** Un cruce que quedaría pegado a otro se junta con él: la calle se curva suave para pasar por su centro.
 - **Ensanchar un tramo.** Las flechas de los bordillos ensanchan o estrechan el tramo entre dos cruces, con transiciones suaves.
 
