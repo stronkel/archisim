@@ -375,7 +375,15 @@ impl UrbanSurface {
                         .collect();
                 }
                 for (t0, t1) in spans {
-                    out.push((p + (q - p) * t0, p + (q - p) * t1));
+                    let (a, b) = (p + (q - p) * t0, p + (q - p) * t1);
+                    // A line through a hole's corners is a tie for the
+                    // crossings, decided differently by each machine's
+                    // rounding: what still lies in a hole goes.
+                    let mid = (a + b) * 0.5;
+                    if holes.iter().any(|h| crate::point_in_polygon(mid, h)) {
+                        continue;
+                    }
+                    out.push((a, b));
                 }
             }
         };
