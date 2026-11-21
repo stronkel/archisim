@@ -3274,6 +3274,23 @@ pub fn terrain_holes(model: &Model, outline: &[Point2]) -> Vec<archisim_core::Ex
             bottom: base + c.top_offset - 0.4,
         });
     }
+    // The surfaces sunk into the ground (a sunken garden, a square going
+    // down): the ground goes down to under their paving.
+    for x in model.surfaces() {
+        if x.raise >= -0.05 || x.outline.len() < 3 {
+            continue;
+        }
+        let base = model.level(x.level).map_or(0.0, |l| l.elevation);
+        let low = x
+            .outline
+            .iter()
+            .map(|p| model.surface_at(x.level, *p))
+            .fold(f64::MAX, f64::min);
+        holes.push(archisim_core::Excavation {
+            outline: x.outline.clone(),
+            bottom: base + low + x.raise - crate::urban_surfaces::DEPTH,
+        });
+    }
     holes
         .into_iter()
         .filter(|e| {

@@ -461,7 +461,14 @@ impl View3dState {
             .materials()
             .find(|m| m.category != "glass")
             .map_or(archisim_core::MaterialId(0), |m| m.id);
-        let mut solids = archisim_geom::traffic::traffic_solids(&t.sim.bodies(model), material);
+        // The nearest to what the camera looks at, with their whole models.
+        let focus =
+            archisim_core::Point2::new(self.camera.target.x as f64, self.camera.target.y as f64);
+        let mut solids = archisim_geom::traffic::traffic_solids_near(
+            &t.sim.bodies(model),
+            material,
+            Some(focus),
+        );
         solids.extend(archisim_geom::traffic::lamp_solids(
             &t.sim.lamps(),
             material,
@@ -1169,6 +1176,7 @@ impl ArchiSimApp {
         let grabbing_object = self.object_grips_3d(&ctx, &response, rect)
             | self.mass_grips_3d(&ctx, &response, rect)
             | self.road_grips_3d(&ctx, &response, rect)
+            | self.node_grips_3d(&ctx, &response, rect)
             | self.object_drag_3d(&ctx, &response, rect);
         // The camera turns about what is under the cursor when the right
         // button is pressed (§12.5); with nothing there, about the
@@ -1349,7 +1357,18 @@ impl ArchiSimApp {
             }
         }
         let mut taken = false;
-        if !tool3d && response.clicked_by(PointerButton::Primary) {
+        // Hiding or letting go of the streets' pieces (N6): the point
+        // clicked, on what is under the cursor.
+        if !tool3d && self.piece_pick.is_some() && response.clicked_by(PointerButton::Primary) {
+            if let Some((p, _, _)) = response
+                .interact_pointer_pos()
+                .and_then(|pos| self.v3d.hit(pos - rect.min, size))
+            {
+                self.piece_click(archisim_core::Point2::new(p.x as f64, p.y as f64));
+                taken = true;
+            }
+        }
+        if !tool3d && !taken && response.clicked_by(PointerButton::Primary) {
             let add = ctx.input(|i| i.modifiers.shift || i.modifiers.command);
             if let (false, Some(pos)) = (add, response.interact_pointer_pos()) {
                 let here = model_elements(self, pos);
@@ -1532,6 +1551,7 @@ impl ArchiSimApp {
         self.draw_object_grips_3d(&painter, rect);
         self.draw_mass_grips_3d(&painter, rect);
         self.draw_road_grips_3d(&painter, rect);
+        self.draw_node_3d(&painter, rect);
         self.draw_drag_3d(&painter, rect);
         self.draw_clearances_3d(&painter, rect);
         self.draw_edges_3d(&painter, rect);

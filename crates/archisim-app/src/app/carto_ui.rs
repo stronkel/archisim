@@ -10,7 +10,8 @@ use archisim_library::carto::{import_carto, CartoOptions};
 use super::length_field;
 use super::theme::Palette;
 use super::widgets::SwitchExt as _;
-use super::ArchiSimApp;
+use super::{ArchiSimApp, Tool, ViewMode};
+use archisim_core::Point2;
 use eframe::egui;
 
 /// The files chosen and the window's choices.
@@ -123,12 +124,16 @@ impl ArchiSimApp {
     }
 
     pub(super) fn carto_dialog(&mut self, ctx: &egui::Context) {
+        if self.carto_outline_pick.is_some() {
+            return;
+        }
         let Some(mut c) = self.carto_import.take() else {
             return;
         };
         let mut open = true;
         let mut go = false;
         let mut cancel = false;
+        let mut pick_outline = false;
         let georef = self.ed.model().georeference().cloned();
         super::widgets::dialog("Traer el entorno")
             .open(&mut open)
@@ -180,6 +185,9 @@ impl ArchiSimApp {
                         o.floor_height = v.clamp(2.0, 10.0);
                     }
                 });
+                if area_controls(ui, o, "carto-files") {
+                    pick_outline = true;
+                }
                 ui.switch(&mut o.skip_own, "Sin los edificios que pisan los forjados del proyecto");
                 ui.switch(
                     &mut o.street_life,
@@ -260,6 +268,79 @@ impl ArchiSimApp {
         if open && !cancel {
             self.carto_import = Some(c);
         }
+        if pick_outline {
+            self.start_carto_outline(false);
+        }
+    }
+
+    /// Starts drawing the outline of the surroundings on the plan (N8).
+    pub(super) fn start_carto_outline(&mut self, download: bool) {
+        self.set_tool(Tool::Arrow);
+        self.mode = ViewMode::Plan;
+        self.carto_outline_pick = Some((download, Vec::new()));
+        self.say("Clic en cada esquina del contorno del entorno; clic en la primera o Intro para cerrarlo.");
+    }
+
+    /// A click on the plan while drawing the outline of the surroundings.
+    pub(super) fn carto_outline_click(&mut self, p: Point2) {
+        let Some((download, mut pts)) = self.carto_outline_pick.take() else {
+            return;
+        };
+        let reach = self.view.to_metres(crate::touch::reach(10.0));
+        if pts.len() >= 3 && pts[0].distance(p) < reach {
+            self.carto_outline_pick = Some((download, pts));
+            self.carto_outline_finish();
+            return;
+        }
+        pts.push(p);
+        self.carto_outline_pick = Some((download, pts));
+    }
+
+    /// Closes the outline of the surroundings being drawn (Intro). Whether
+    /// there was one.
+    pub(super) fn carto_outline_finish(&mut self) -> bool {
+        let Some((download, pts)) = self.carto_outline_pick.take() else {
+            return false;
+        };
+        if pts.len() < 3 {
+            self.say("El contorno necesita al menos tres esquinas.");
+            return true;
+        }
+        let centre = archisim_core::centroid(&pts);
+        let set = |o: &mut CartoOptions| {
+            o.outline = Some(pts.clone());
+            o.centre = centre;
+            o.radius = pts.iter().map(|q| q.distance(centre)).fold(10.0, f64::max);
+        };
+        if download {
+            if let Some(d) = self.carto_download.as_mut() {
+                set(&mut d.options);
+            }
+        } else if let Some(c) = self.carto_import.as_mut() {
+            set(&mut c.options);
+        }
+        self.say(format!(
+            "Contorno de {} m² para traer el entorno.",
+            super::urban_ui::comma(archisim_core::signed_area(&pts).abs(), 0)
+        ));
+        true
+    }
+
+    /// The outline being drawn, over the plan.
+    pub(super) fn draw_carto_outline(&self, painter: &egui::Painter, rect: egui::Rect) {
+        let Some((_, pts)) = &self.carto_outline_pick else {
+            return;
+        };
+        let mut line = pts.clone();
+        if let Some(c) = self.cursor {
+            line.push(c.point);
+        }
+        painter.add(egui::Shape::dashed_line(
+            &self.polygon(rect, &line),
+            egui::Stroke::new(2.0, egui::Color32::from_rgb(40, 120, 200)),
+            8.0,
+            4.0,
+        ));
     }
 }
 
@@ -303,4 +384,52 @@ fn picture_with_world_file(path: &Path) -> Result<(String, Vec<u8>, [f64; 4]), S
         |n| n.to_string_lossy().into_owned(),
     );
     Ok((name, png, bbox))
+}
+
+/// The area's turn and outline drawn by hand, and how fine the terrain is
+/// (N8), for the two windows of the surroundings. Whether the outline is
+/// to be drawn on the plan.
+pub(super) fn area_controls(ui: &mut egui::Ui, o: &mut CartoOptions, id: &str) -> bool {
+    let mut pick = false;
+    ui.horizontal_wrapped(|ui| {
+        if o.square && o.outline.is_none() {
+            ui.label("Giro del recuadro");
+            ui.add(
+                egui::DragValue::new(&mut o.turn)
+                    .range(-90.0..=90.0)
+                    .speed(0.5)
+                    .suffix(" °"),
+            );
+        }
+        match &o.outline {
+            Some(p) => {
+                ui.label(format!("Contorno a mano de {} puntos", p.len()));
+                if ui.small_button("Quitar el contorno").clicked() {
+                    o.outline = None;
+                }
+            }
+            None => {
+                pick = ui
+                    .small_button("Contorno en planta…")
+                    .on_hover_text("Dibuja en la planta el contorno de lo que se trae: clic en cada esquina, clic en la primera o Intro para cerrar")
+                    .clicked();
+            }
+        }
+    });
+    ui.horizontal(|ui| {
+        ui.label("Detalle del terreno");
+        let label = |n: usize| match n {
+            0..=6_000 => "Normal (unos 4 000 puntos)",
+            6_001..=30_000 => "Fino (unos 16 000 puntos)",
+            _ => "Muy fino (unos 64 000 puntos)",
+        };
+        egui::ComboBox::from_id_salt((id, "terrain-detail"))
+            .selected_text(label(o.terrain_points))
+            .show_ui(ui, |ui| {
+                for n in [4_000, 16_000, 64_000] {
+                    ui.selectable_value(&mut o.terrain_points, n, label(n));
+                }
+            });
+    });
+    pick
 }

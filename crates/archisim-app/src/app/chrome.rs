@@ -1163,7 +1163,7 @@ impl ArchiSimApp {
     pub(super) fn hint_text(&self) -> &'static str {
         match self.piece_pick {
             Some(super::pieces_ui::PiecePick::Hide) => return "Ocultar piezas: clic en una raya, una plaza pintada, un alcorque, una señal o un bolardo de una calle · Esc: dejarlo",
-            Some(super::pieces_ui::PiecePick::Detach) => return "Soltar paso de peatones: clic en una cebra de una calle · Esc: dejarlo",
+            Some(super::pieces_ui::PiecePick::Detach) => return "Soltar piezas: clic en una cebra, una flecha o una señal de una calle · Esc: dejarlo",
             None => {}
         }
         if let Some(h) = self.context_fit.hint() {
@@ -1172,9 +1172,22 @@ impl ArchiSimApp {
         if self.blocks.picking {
             return "Parcelar: clic dentro de una manzana sin parcelas · Esc: dejarlo";
         }
-        match self.replace.picking {
-            Some(None) => return "Sustituir todos: clic en una esquina de la zona · Esc: dejarlo",
-            Some(Some(_)) => return "Sustituir todos: clic en la esquina opuesta · Esc: dejarlo",
+        if self.blocks.brush {
+            return "Pincel de zona: arrastra sobre las parcelas · Esc: dejarlo";
+        }
+        match &self.replace.picking {
+            Some(super::replace_ui::AreaPick::Rect) => {
+                return "Sustituir todos: clic en una esquina de la zona · Esc: dejarlo"
+            }
+            Some(super::replace_ui::AreaPick::RectFrom(_)) => {
+                return "Sustituir todos: clic en la esquina opuesta · Esc: dejarlo"
+            }
+            Some(super::replace_ui::AreaPick::Free(_)) => {
+                return "Sustituir todos: clic en cada esquina · clic en la primera o Intro: cerrar · Esc: dejarlo"
+            }
+            Some(super::replace_ui::AreaPick::Plot) => {
+                return "Sustituir todos: clic dentro de una parcela o una manzana · Esc: dejarlo"
+            }
             None => {}
         }
         match self.road_grade_pick {

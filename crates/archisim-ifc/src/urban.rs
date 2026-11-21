@@ -397,6 +397,13 @@ impl Exporter<'_> {
                             string(&r.encode_hidden())
                         )));
                     }
+                    // Where it leads beyond the area (N8).
+                    if !r.toward.is_empty() {
+                        props.push(self.w.add(format!(
+                            "IFCPROPERTYSINGLEVALUE('Toward',$,IFCLABEL({}),$)",
+                            string(&r.toward)
+                        )));
+                    }
                     // Laid in anarchy (N2).
                     if r.free {
                         props.push(

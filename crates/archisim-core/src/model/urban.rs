@@ -649,6 +649,9 @@ pub struct Road {
     /// overlaps and does not shape the ground under it, at the heights
     /// given.
     pub free: bool,
+    /// Where it leads beyond the area of the surroundings (N8): a town, a
+    /// road number («A-49») or a direction; empty if not said.
+    pub toward: String,
     /// Stretches with their own materials (N4; `road_skins`).
     pub skins: Vec<RoadSkin>,
     /// Its pieces hidden by hand (N6; `hidden_pieces`).
@@ -1221,6 +1224,7 @@ impl Model {
                 kerb_material: spec.kerb_material,
                 sidewalk_material: spec.sidewalk_material,
                 free: false,
+                toward: String::new(),
                 skins: Vec::new(),
                 hidden: Vec::new(),
             },

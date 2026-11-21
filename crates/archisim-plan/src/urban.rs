@@ -158,16 +158,23 @@ pub fn draw_outside(s: &mut String, model: &Model, level: LevelId, k: f64) {
             pt(arrow[1]),
             pt(arrow[2])
         );
-        if !r.name.is_empty() {
+        // Its name and where it leads (N8).
+        let label = match (r.name.is_empty(), r.toward.is_empty()) {
+            (false, false) => format!("{} · {}", r.name, r.toward),
+            (false, true) => r.name.clone(),
+            (true, false) => r.toward.clone(),
+            (true, true) => String::new(),
+        };
+        if !label.is_empty() {
             let h = LABEL * k;
             // Along the street, reading from left to right.
             let dir = if e.out.x < -1e-9 { e.out * -1.0 } else { e.out };
-            let half = r.name.chars().count() as f64 * h * 0.3;
+            let half = label.chars().count() as f64 * h * 0.3;
             let at = tip + e.out * (h + half) - dir.perp_left() * (h / 2.0);
             let _ = writeln!(
                 s,
                 r#"<path class="outside-connection" d="{}" {}/>"#,
-                text_path(&r.name, at, dir, h, Align::Centre),
+                text_path(&label, at, dir, h, Align::Centre),
                 crate::lettering::paint(h, INK)
             );
         }
@@ -295,6 +302,28 @@ pub fn draw_roads(
                     archisim_core::Lowered::Flush => ("#e2bf8f", pens().view),
                     archisim_core::Lowered::Ramp { .. } => ("#ecdcc2", pens().view),
                 };
+                // A stretch with its own materials (N4): tinted with the
+                // material's colour, so it shows in plan.
+                let mid = (p.span.0 + p.span.1) / 2.0;
+                let tinted = r
+                    .skins
+                    .iter()
+                    .any(|x| x.from <= mid && mid <= x.to)
+                    .then(|| model.surface_color(p.material))
+                    .map(|c| {
+                        let base = u32::from_str_radix(&fill[1..], 16).unwrap_or(0xdcdcdc);
+                        let mix = |sh: u32, c: u8| {
+                            let b = ((base >> sh) & 0xff) as f64;
+                            (b * 0.45 + c as f64 * 0.55).round() as u32
+                        };
+                        format!(
+                            "#{:02x}{:02x}{:02x}",
+                            mix(16, c[0]),
+                            mix(8, c[1]),
+                            mix(0, c[2])
+                        )
+                    });
+                let fill = tinted.as_deref().unwrap_or(fill);
                 let _ = writeln!(
                     s,
                     r#"<path d="{}" fill="{fill}" stroke="{INK}" stroke-width="{}"/>"#,
@@ -464,12 +493,38 @@ pub fn draw_roads(
                     path(&back)
                 );
             }
+            // Its holes (a tree pit, a bed): out of the paving, with the
+            // edge round them.
+            let hole_edges = x.hole_edges();
+            let mut holes_d = String::new();
+            for h in &hole_edges {
+                holes_d.push(' ');
+                holes_d.push_str(&path(h));
+            }
+            if edged {
+                for (h, e) in x.holes.iter().zip(&hole_edges) {
+                    let _ = writeln!(
+                        s,
+                        r##"<path d="{} {}" fill="#bdb6a8" fill-rule="evenodd" stroke="none"/>"##,
+                        path(e),
+                        path(h)
+                    );
+                }
+            }
             let _ = writeln!(
                 s,
-                r#"<path d="{}" fill="{fill}" stroke="{INK}" stroke-width="{}"/>"#,
+                r#"<path d="{}{holes_d}" fill="{fill}" fill-rule="evenodd" stroke="{INK}" stroke-width="{}"/>"#,
                 path(if edged { &inner } else { &x.outline }),
                 num(pens().thin * k)
             );
+            for h in &x.holes {
+                let _ = writeln!(
+                    s,
+                    r#"<path d="{}" fill="none" stroke="{INK}" stroke-width="{}"/>"#,
+                    path(h),
+                    num(pens().view * k)
+                );
+            }
             if k <= 0.2 {
                 for (a, b) in x.joint_lines() {
                     let _ = writeln!(
@@ -495,6 +550,38 @@ pub fn draw_roads(
                     r#"<path d="{}" fill="white" stroke="{INK}" stroke-width="{}"/>"#,
                     path(&b),
                     num(pens().thin * k * 0.5)
+                );
+            }
+            // The bays for people with reduced mobility, and the numbers.
+            let (blue, white) = x.accessible_paint();
+            for b in &blue {
+                let _ = writeln!(
+                    s,
+                    r##"<path d="{}" fill="#2860b0" stroke="none"/>"##,
+                    path(b)
+                );
+            }
+            for w in &white {
+                let _ = writeln!(s, r#"<path d="{}" fill="white" stroke="none"/>"#, path(w));
+            }
+            for (at, along, n) in x.bay_numbers() {
+                // Read the right way up.
+                let mut read = along;
+                if read.x < -1e-9 || (read.x.abs() < 1e-9 && read.y < 0.0) {
+                    read = read * -1.0;
+                }
+                let h = 0.6;
+                let _ = writeln!(
+                    s,
+                    r#"<path d="{}" {}/>"#,
+                    text_path(
+                        &n.to_string(),
+                        at - read.perp_left() * (h / 2.0),
+                        read,
+                        h,
+                        Align::Centre
+                    ),
+                    crate::lettering::paint(h, INK)
                 );
             }
         });

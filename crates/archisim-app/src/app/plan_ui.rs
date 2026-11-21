@@ -126,6 +126,9 @@ impl ArchiSimApp {
             self.draw_marking_preview(&painter, rect)
         });
         self.draw_node_pick(&painter, rect);
+        self.draw_replace_area(&painter, rect);
+        self.draw_zone_brush(&painter, rect);
+        self.draw_carto_outline(&painter, rect);
         crate::profile::time("planta: draw_pool_preview", || {
             self.draw_pool_preview(&painter, rect)
         });
@@ -154,7 +157,9 @@ impl ArchiSimApp {
             self.draw_terrain_preview(&painter, rect)
         });
         self.draw_context_fit_preview(&painter, rect);
+        self.draw_hidden_pieces(&painter, rect);
         self.draw_street_readout(&painter, rect);
+        self.draw_grade_pick(&painter, rect);
         crate::profile::time("planta: draw_brush_plan", || {
             self.draw_brush_plan(&painter, rect)
         });
@@ -821,6 +826,12 @@ impl ArchiSimApp {
         if enter && self.tool == Tool::Node && self.node_finish() {
             return;
         }
+        if enter && self.replace_area_finish() {
+            return;
+        }
+        if enter && self.carto_outline_finish() {
+            return;
+        }
         if self.command_keys(&events, enter, escape, backspace, space) {
             return;
         }
@@ -1153,6 +1164,9 @@ impl ArchiSimApp {
                     self.replace.picking = None;
                     self.piece_pick = None;
                     self.blocks.picking = false;
+                    self.blocks.brush = false;
+                    self.blocks.stroke.clear();
+                    self.carto_outline_pick = None;
                     self.context_fit.stop();
                 }
             }
@@ -1284,6 +1298,19 @@ impl ArchiSimApp {
                     self.piece_click(c.point);
                 }
             }
+            // A window over several pieces hides them all.
+            if self.piece_pick == Some(super::pieces_ui::PiecePick::Hide) {
+                if response.drag_started_by(PointerButton::Primary) {
+                    self.window_start = ctx
+                        .input(|i| i.pointer.press_origin())
+                        .map(|o| self.view.to_model(rect, o));
+                }
+                if response.drag_stopped() {
+                    if let (Some(a), Some(c)) = (self.window_start.take(), self.cursor) {
+                        self.hide_pieces_in(a, c.point);
+                    }
+                }
+            }
             return;
         }
         if self.context_fit.picking() && self.tool == Tool::Arrow {
@@ -1291,6 +1318,27 @@ impl ArchiSimApp {
                 if let Some(c) = self.cursor {
                     self.context_fit_click(c.point);
                 }
+            }
+            return;
+        }
+        if self.carto_outline_pick.is_some() && self.tool == Tool::Arrow {
+            if response.clicked_by(PointerButton::Primary) {
+                if let Some(c) = self.cursor {
+                    self.carto_outline_click(c.point);
+                }
+            }
+            return;
+        }
+        if self.blocks.brush && self.tool == Tool::Arrow {
+            let painting = response.dragged_by(PointerButton::Primary)
+                || response.clicked_by(PointerButton::Primary);
+            if painting {
+                if let Some(c) = self.cursor {
+                    self.zone_brush_at(c.point);
+                }
+            }
+            if response.drag_stopped() || response.clicked_by(PointerButton::Primary) {
+                self.zone_brush_done();
             }
             return;
         }
@@ -2154,7 +2202,9 @@ impl ArchiSimApp {
             (Grip::RoadNode { .. }, _) => "Mover nudo de calles",
             (Grip::RoadBend { .. }, _) => "Curvar calle",
             (Grip::RoadWidth { .. }, _) => "Ensanchar tramo de calle",
+            (Grip::RoadSkinEnd { .. }, _) => "Extremo del tramo",
             (Grip::PoolCorner { .. }, _) => "Esquina de la piscina",
+            (Grip::OutlineCorner { .. }, _) => "Esquina",
             (Grip::RefPlaneEnd { .. }, _) => "Plano de referencia",
             (Grip::DimPoint { .. }, _) => "Punto de cota",
             (Grip::ObjectSize { side, .. }, _) => side.label(),

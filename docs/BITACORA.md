@@ -6,6 +6,64 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-21 (191) · v0.110: el resto de los remates del territorio
+
+Misma rama `bloque/territorio-remates` (PR #239). Antonio pidió «haz la lista que falta»: todo lo que quedaba de `docs/TERRITORIO.md` §7, en tres tandas. Antes, un arreglo de la integración continua: en Windows una junta de espiga que pasaba justo por las esquinas de un alcorque quedaba dentro por redondeo; ahora se quita lo que cae en un hueco. Formato: sigue en la versión 121 (aún no está en `main`), con lo nuevo añadido.
+
+- **Nudos (N1).** `NodeSettings::shift` (centro desplazado en los ejes del nudo: `cut` de cada brazo − desplazamiento·dirección, sin bajar de sus esquinas; `Junction::centre`), `ArmSettings::flatten` (el nudo sigue esos metros por el brazo y `Junction::top_under` baja de `top` a la cota de la calle; `Junction::flattened`), `NodeSettings::hammer` (`crossroads::hammerhead`: martillo de medio `end_radius`, bordillo y acera con `strip`). En la app, rombo del centro y esquinas de isleta como tiradores (`node_ui::Grab::Centre`, `IslandCorner`, `apply_node_grab`), y todo sobre la vista 3D (`node_grips_3d`, `draw_node_3d`, `node_grab_3d`).
+- **Carriles (N3).** `crossroads::u_turn_arrow` para ↶; quitar la última conexión deja el carril sin salida (`turns` a `Turns::NONE`); tranvía: `Arm::trams_in`/`trams_out`, `Junction::trams` con `tram_connections`.
+- **Tramos y sustituir (N4).** `LifeOptions::stretch` y `tree_type`/`lamp_type`/`bench_type`/`bin_type`; «Amueblar el tramo» en «Por tramos» (`skin_furniture`). «Sustituir todos»: `replace_ui::AreaPick` (rectángulo, contorno, parcela o manzana), `area` es un polígono, dibujado en planta.
+- **Superficies (N5).** `Bays::accessible`, `numbered`, `side`; `UrbanSurface::bays_placed` (`PlacedBay`), `bay_lines` desde ellas, `accessible_paint` (azul y blanco, `ACCESSIBLE_BAY` 3,70 m, `TRANSFER_AREA`), `bay_numbers`; pinturas vial azul y blanca al editar.
+- **Ocultar y soltar (N6).** Las flechas, líneas de detención e isletas de los nudos son piezas (`Junction::arrows` con `NodeArrow`; `arm_paint` y `marks` sin las ocultas); `Model::detach_arrow` y `detach_sign` (tipo «Stop/Ceda el paso/Semáforo (señal suelta)» de «Señal de tráfico»); la ficha pasa a «Soltar piezas»; clics de piezas en 3D.
+- **Manzanas (N7).** «Pincel de zona» (`BlocksState::brush`, `zone_brush_at`, `zone_brush_done`).
+- **Área grande (N8).** `CartoOptions::turn`, `outline`, `terrain_points` (`TERRAIN_POINTS`), `polygonal`, `reach` (las descargas la usan); `GroundIndex` para el terreno fino; contorno dibujado en planta (`carto_outline_pick`, `start_carto_outline`); `Road::toward` (archivo e IFC `ArchiSim_Road.Toward`), `Model::name_outside_ends`, `compass_of`, rotulado en planta y mapa, «Hacia» en Propiedades.
+- **Tráfico (N9).** `traffic::Vehicle` (coche, autobús, tranvía de tres módulos), tramos por vía de tranvía y caminos por `Junction::trams`, `gap_between`, `traffic_solids_near` con los modelos de `props` para los `NEAR_MODELS` más cercanos a la cámara.
+- **Trazado (N2).** `street_bar::draw_trace_dims` (arco del giro y radio con su centro) y `draw_grade_pick`.
+
+Pendiente: el término municipal como contorno (no hay fuente gratuita a mano), el mobiliario guardado en el tramo (hoy es una orden), soltar las líneas entre carriles, modelos en el render, y lo que ya estaba (despiece del encintado, prioridad a la derecha, ciclo de semáforos, capas del mapa, parcelación del Catastro, peatones en plazas).
+
+Qué debe probar Antonio (`cargo run --release -p archisim-app`, o `archisim nudos out/` y abrir `out/nudos.archisim`):
+1. En `nudos`, la Calle Alta acaba en **martillo**; el cruce Mayor–Pino tiene el **centro 3 m al este** (arrastra el rombo con la herramienta Nudo); el Olmo llega **aplanado** a la Calle Real. Cambia a la vista 3D con el nudo elegido: se ven sus conexiones y sus tiradores, y se arrastran.
+2. En un cruce, Conectar carriles a mano y quita las tres conexiones de un carril: se queda sin salida. Pon a un carril «Cambio de sentido» y mira su flecha.
+3. Una calle con «Plataforma de tranvía»: en el cruce, las vías siguen de frente (morado); con «Tráfico», pasan tranvías y, en un carril bus, autobuses.
+4. Un aparcamiento con 2 plazas de **movilidad reducida**, **numeradas**, y cambia «Siguen el lado».
+5. «Soltar piezas» sobre una flecha o una señal de un cruce; luego muévela.
+6. Manzanas → **Pincel de zona** sobre varias parcelas; luego «Rehacer».
+7. «Sustituir todos» → **Contorno** o **Parcela o manzana**. En una calle con tramos, «Amueblar el tramo» con una farola elegida.
+8. Traer el entorno con **Recuadro girado 30°** o **Contorno en planta** y «Detalle del terreno: fino»; las calles que salen dicen «hacia…».
+9. Trazar una calle que sale de otra girando: se dibuja el ángulo y, en curva, el radio. Elige una pendiente uniforme con el ratón y mira el tramo naranja entre los dos clics.
+
+## 2026-11-20 (190) · v0.110: remates del territorio, dos tandas
+
+Rama `bloque/territorio-remates`. Antonio pidió seguir con los remates del territorio (`docs/TERRITORIO.md` §7) mientras prueba la 0.109. Sin cambios de formato.
+
+- **Qué se hizo:**
+  - Las manzanas siguen a las calles (`archisim_geom::blocks::follow_streets` con `Streets`, `Followed`, `streets_matter`; llamada desde `Editor::transact`, aviso por `Editor::street_note`). Al cambiar las calles, las manzanas que cambian de forma se vuelven a parcelar con la zona que tenían, sin tocar las parcelas bloqueadas ni las dibujadas a mano, y se vuelven a edificar si lo estaban. Los edificios del entorno sobre los que pasa ahora una calle se quitan.
+  - Edificios de esquina con dos fachadas: la parcela de esquina (dos lados a la calle, `blocks::street_sides`) se edifica entera con `Model::add_world_building_on`, salvo en la zona de casas con jardín.
+  - Tiradores en las esquinas de parcelas y superficies urbanas (`drag::Grip::OutlineCorner`).
+  - Pruebas: `plots_and_buildings_follow_a_moved_street`, `a_street_laid_over_buildings_takes_them_away`, `corner_plots_get_a_building_with_two_facades`, `plots_follow_a_street_moved_in_the_editor` y `a_plot_corner_is_dragged`. Fotos de `archisim manzanas` en 3D: la manzana de pisos cierra ya sus cuatro esquinas.
+- **Segunda tanda (21/11, Antonio: «haz los remates de la lista»)** (formato 121):
+  - plazas con huecos y bordes curvos por «Editar contorno» (`SketchTarget::Surface`, `UrbanSurface::holes`/`hole_edges`) y superficies hundidas que recortan el terreno;
+  - aparejos del pavimento (`JointPattern`);
+  - tramos teñidos en planta y con tiradores (`Grip::RoadSkinEnd`);
+  - frentes mezclados en el casco y en las casas (`block_lots_mixed`, `zone_mix`);
+  - flechas repetidas (`ARROW_REPEAT`);
+  - ocultar piezas por ventana (`pieces_in`), con las ocultas en gris para devolverlas una a una (`Model::show_piece`, `Road::hidden_shapes`);
+  - tarjeta «Tráfico» en la Maqueta (`CatalogAct::Traffic`);
+  - peatones que cruzan por los pasos (`Walker::crossing`);
+  - calles ya existentes recortadas al área (`Model::clip_roads_to_surroundings`).
+  - En `archisim manzanas`, una placita con alcorque en espiga y un jardín hundido en el patio de los pisos.
+  - Pruebas: `holes_and_patterns_go_with_the_surface` (con `ARCHISIM_APAREJOS_OUT` dibuja los aparejos), `an_old_town_mixes_its_frontages`, `streets_already_there_are_cut_to_a_new_area`, `people_cross_by_the_zebra_crossings`, la ventana en `hide_pieces_and_let_a_zebra_go` y la plaza con hueco en la prueba de bocetos.
+- **Pendiente** (§7): nudos (desplazar el centro, aplanar un brazo, martillo, tiradores en 3D), carriles (cambio de sentido, «sin salida», conexiones en 3D, esquinas de isletas, tranvía), mobiliario por tramo y zona libre de Sustituir, plazas de movilidad reducida, encintado, ocultar en 3D, Catastro, pincel de zonas, recuadro girable, terreno por teselas, destinos de las conexiones, modelos de coches y personas, autobuses y tranvía, marcas de pendiente y cotas al trazar.
+- **Qué debe probar Antonio** (`archisim manzanas out/` y abre `out/manzanas.archisim`):
+  1. Selecciona la calle norte–sur del medio y arrástrala unos metros. Las dos manzanas parceladas se vuelven a parcelar y edificar, y abajo sale el aviso «2 manzanas vueltas a parcelar…». Ctrl+Z lo deshace todo junto.
+  2. Traza una calle nueva que cruce la manzana de casco antiguo: las parcelas se rehacen a los dos lados y no queda ningún edificio sobre la calle.
+  3. Mira en 3D las esquinas de la manzana de pisos: cada una es un edificio con fachada a las dos calles.
+  4. Selecciona una parcela o una plaza y arrastra una de sus esquinas.
+  5. En el patio de los pisos: la placita con su alcorque (selecciónala, «Editar contorno» enseña el hueco, y prueba los aparejos en «Juntas del pavimento») y el jardín hundido en 3D.
+  6. Selecciona una calle con un tramo (grupo «Tramos») y arrastra sus extremos; el tramo se ve teñido en planta.
+  7. Con «Ocultar piezas», arrastra una ventana sobre las marcas de un carril.
+
 ## 2026-11-19 (189) · v0.109: calles plásticas, segunda vuelta
 
 Rama `bloque/calles-plasticas-2`, sobre la de la 0.108 (#237, todavía sin unir). Antonio pidió la segunda vuelta con lo que quedó pendiente en la primera. Sin cambios de formato: los ensanches son cambios de sección (U2).

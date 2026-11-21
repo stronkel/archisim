@@ -230,6 +230,19 @@ pub fn render_map(model: &Model, level: LevelId, width_px: f64) -> Option<String
             pt(tri[1]),
             pt(tri[2])
         );
+        // Where it leads (N8).
+        if let Some(r) = model.road(e.road).filter(|r| !r.toward.is_empty()) {
+            let h = 10.0 * px;
+            let dir = if e.out.x < -1e-9 { e.out * -1.0 } else { e.out };
+            let half = r.toward.chars().count() as f64 * h * 0.3;
+            let at = tip + e.out * (h + half) - dir.perp_left() * (h / 2.0);
+            let _ = writeln!(
+                s,
+                r#"<path d="{}" {}/>"#,
+                crate::lettering::text_path(&r.toward, at, dir, h, crate::lettering::Align::Centre),
+                crate::lettering::paint(h, LINK)
+            );
+        }
     }
     if let Some(area) = model.surroundings() {
         let _ = writeln!(

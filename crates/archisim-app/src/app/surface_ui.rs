@@ -112,8 +112,22 @@ impl ArchiSimApp {
         let Some(s) = self.ed.model().surface(id).cloned() else {
             return;
         };
-        let model = self.ed.model();
         props::title(ui, &format!("{} · {}", s.name, s.kind.label()));
+        if super::sketch_ui::edit_contour_button(ui) {
+            self.start_sketch(crate::sketch::SketchTarget::Surface(id));
+            return;
+        }
+        let model = self.ed.model();
+        if !s.holes.is_empty() {
+            ui.label(
+                egui::RichText::new(format!(
+                    "{} hueco{} (alcorques, fuentes, parterres): se cambian con Editar contorno",
+                    s.holes.len(),
+                    if s.holes.len() == 1 { "" } else { "s" }
+                ))
+                .small(),
+            );
+        }
         let mut n = s.clone();
         group(ui, "surface", "Superficie", |ui| {
             row(ui, "Nombre", "", |ui, w| {
@@ -154,12 +168,12 @@ impl ArchiSimApp {
             row(
                 ui,
                 "Altura (mm)",
-                "Sobre el terreno o la calle de debajo",
+                "Sobre el terreno o la calle de debajo; negativa, hundida (hasta 6 m): el terreno se recorta",
                 |ui, w| {
                     if let Some(v) =
                         length_field(ui, Id::unique(("surface-raise", id)), n.raise, w - 8.0)
                     {
-                        n.raise = v.clamp(-1.0, 3.0);
+                        n.raise = v.clamp(-6.0, 3.0);
                     }
                 },
             );
@@ -204,6 +218,16 @@ impl ArchiSimApp {
             }
         });
         group(ui, "surface-joints", "Juntas del pavimento", |ui| {
+            row(ui, "Aparejo", "Cómo van las juntas", |ui, w| {
+                ComboBox::from_id_salt(("surface-pattern", id))
+                    .width(w - 8.0)
+                    .selected_text(n.pattern.label())
+                    .show_ui(ui, |ui| {
+                        for p in archisim_core::JointPattern::ALL {
+                            ui.selectable_value(&mut n.pattern, p, p.label());
+                        }
+                    });
+            });
             row(ui, "Cada (mm)", "0: sin juntas", |ui, w| {
                 if let Some(v) =
                     length_field(ui, Id::unique(("surface-joints", id)), n.joints, w - 8.0)
@@ -268,15 +292,66 @@ impl ArchiSimApp {
                         );
                     },
                 );
-            }
-            if n.bays.is_some() {
-                props::note(
+                row(
                     ui,
-                    &format!(
-                        "{} plazas, en filas a lo largo del lado más largo, con calle de 6 m entre cada dos.",
-                        n.bay_count()
-                    ),
+                    "Movilidad reducida",
+                    "Plazas de 3,70 m (2,20 + 1,50 de transferencia), en azul con su símbolo, las primeras de la primera fila",
+                    |ui, w| {
+                        ui.add_sized(
+                            [w - 8.0, 20.0],
+                            egui::DragValue::new(&mut b.accessible)
+                                .range(0..=200)
+                                .speed(0.1),
+                        );
+                    },
                 );
+                super::widgets::switch(ui, &mut b.numbered, "Numeradas");
+                let sides = n.outline.len();
+                row(
+                    ui,
+                    "Siguen el lado",
+                    "El lado del contorno paralelo a las filas",
+                    |ui, w| {
+                        let shown = match b.side {
+                            Some(i) => format!("Lado {}", i + 1),
+                            None => "El más largo".to_string(),
+                        };
+                        ComboBox::from_id_salt(("surface-bay-side", id))
+                            .width(w - 8.0)
+                            .selected_text(shown)
+                            .show_ui(ui, |ui| {
+                                ui.selectable_value(&mut b.side, None, "El más largo");
+                                for i in 0..sides as u32 {
+                                    ui.selectable_value(
+                                        &mut b.side,
+                                        Some(i),
+                                        format!("Lado {}", i + 1),
+                                    );
+                                }
+                            });
+                    },
+                );
+            }
+            if let Some(b) = n.bays {
+                let all = n.bays_placed();
+                let pmr = all.iter().filter(|x| x.accessible).count();
+                let mut note = format!(
+                    "{} plazas, en filas a lo largo del {}, con calle de 6 m entre cada dos.",
+                    all.len(),
+                    if b.side.is_some() {
+                        "lado elegido"
+                    } else {
+                        "lado más largo"
+                    }
+                );
+                if b.accessible > 0 {
+                    note += &format!(" {pmr} de movilidad reducida");
+                    if (pmr as u32) < b.accessible {
+                        note += " (no caben más)";
+                    }
+                    note.push('.');
+                }
+                props::note(ui, &note);
             }
         });
         group(ui, "surface-identity", "Datos de identidad", |ui| {

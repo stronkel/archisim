@@ -16,6 +16,9 @@ use archisim_core::{
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SketchTarget {
     Slab(SlabId),
+    /// An urban surface (a square, a car park, a garden): its outline and
+    /// its holes (tree pits, fountains, beds).
+    Surface(archisim_core::SurfaceId),
     Roof(RoofId),
     Terrain(TerrainId),
     /// A platform (or a ramp) of a terrain, by its index (bloque Terreno).
@@ -112,6 +115,12 @@ impl Sketch {
         let (loops, slopes, terrain) = match target {
             SketchTarget::Slab(id) => {
                 let s = model.slab(id)?;
+                let mut loops = vec![s.outline.clone()];
+                loops.extend(s.holes.iter().cloned());
+                (loops, Vec::new(), Vec::new())
+            }
+            SketchTarget::Surface(id) => {
+                let s = model.surface(id)?;
                 let mut loops = vec![s.outline.clone()];
                 loops.extend(s.holes.iter().cloned());
                 (loops, Vec::new(), Vec::new())
@@ -266,6 +275,7 @@ impl Sketch {
         matches!(
             self.target,
             SketchTarget::Slab(_)
+                | SketchTarget::Surface(_)
                 | SketchTarget::Zones(..)
                 | SketchTarget::WallFace(..)
                 | SketchTarget::WallProfile(_)
@@ -426,6 +436,21 @@ impl Sketch {
                     .map_err(SketchError::Model)?;
                 m.set_slab_holes(id, self.loops[1..].to_vec())
                     .map_err(SketchError::Model)?;
+            }
+            SketchTarget::Surface(id) => {
+                let ccw = |mut l: Vec<Point2>| {
+                    if signed_area(&l) < 0.0 {
+                        l.reverse();
+                    }
+                    l
+                };
+                let holes: Vec<Vec<Point2>> = self.loops[1..].iter().cloned().map(ccw).collect();
+                let outline = ccw(outline);
+                m.edit_surface(id, |x| {
+                    x.outline = outline;
+                    x.holes = holes;
+                })
+                .map_err(SketchError::Model)?;
             }
             SketchTarget::Roof(id) => {
                 let mut slopes = self.slopes.clone();
@@ -743,6 +768,7 @@ impl Sketch {
     pub fn element(&self) -> crate::pick::Element {
         match self.target {
             SketchTarget::Slab(id) => crate::pick::Element::Slab(id),
+            SketchTarget::Surface(id) => crate::pick::Element::Surface(id),
             SketchTarget::Roof(id) => crate::pick::Element::Roof(id),
             SketchTarget::Terrain(id) | SketchTarget::TerrainPad(id, _) => {
                 crate::pick::Element::Terrain(id)
@@ -870,6 +896,34 @@ mod tests {
         let slab = m.slab(id).unwrap();
         assert!(slab.outline.len() > 6);
         assert_eq!(slab.holes.len(), 1);
+        // A square with a tree pit, the same way (remates del territorio).
+        let level = m.levels()[0].id;
+        let mat = m.materials().next().unwrap().id;
+        let sq = m
+            .add_surface(archisim_core::NewSurface {
+                name: "Plaza".into(),
+                level,
+                kind: archisim_core::SurfaceKind::Square,
+                outline: vec![p(10.0, 0.0), p(20.0, 0.0), p(20.0, 10.0), p(10.0, 10.0)],
+                material: mat,
+                edge_material: mat,
+            })
+            .unwrap();
+        let ss = Sketch::of(&m, SketchTarget::Surface(sq)).unwrap();
+        assert!(ss.takes_holes());
+        let segs = vec![
+            line(p(10.0, 0.0), p(20.0, 0.0)),
+            line(p(20.0, 0.0), p(20.0, 10.0)),
+            line(p(20.0, 10.0), p(10.0, 10.0)),
+            line(p(10.0, 10.0), p(10.0, 0.0)),
+            line(p(14.0, 4.0), p(16.0, 4.0)),
+            line(p(16.0, 4.0), p(16.0, 6.0)),
+            line(p(16.0, 6.0), p(14.0, 6.0)),
+            line(p(14.0, 6.0), p(14.0, 4.0)),
+        ];
+        let ss = ss.with_loops(loops_from_segs(&segs).unwrap()).unwrap();
+        ss.apply(&mut m).unwrap();
+        assert_eq!(m.surface(sq).unwrap().holes.len(), 1);
         // An open line: its ends come back.
         let open = vec![
             line(p(0.0, 0.0), p(5.0, 0.0)),

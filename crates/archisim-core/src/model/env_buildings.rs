@@ -1271,12 +1271,28 @@ impl Model {
     /// where it was asked, dressed as the typology or the facility of its
     /// place.
     pub fn add_world_building(&mut self, spec: NewWorldBuilding) -> Result<MassId, ModelError> {
-        let (_, _, floors, fh) = spec.pick.usual();
-        let floors = spec.floors.unwrap_or(floors).clamp(1, MAX_ENV_FLOORS);
         if !(spec.width >= 1.0 && spec.depth >= 1.0) {
             return Err(ModelError::InvalidDress);
         }
         let outline = world_footprint(spec.front, spec.facing, spec.width, spec.depth);
+        self.add_world_building_on(spec, outline, 0)
+    }
+
+    /// A building of the world put on a footprint of its own (a corner
+    /// plot, with two façades), `front` its main side; the rest as
+    /// [`Model::add_world_building`] (where it looks and its size are not
+    /// used).
+    pub fn add_world_building_on(
+        &mut self,
+        spec: NewWorldBuilding,
+        outline: Vec<Point2>,
+        front: usize,
+    ) -> Result<MassId, ModelError> {
+        let (_, _, floors, fh) = spec.pick.usual();
+        let floors = spec.floors.unwrap_or(floors).clamp(1, MAX_ENV_FLOORS);
+        if outline.len() < 3 || front >= outline.len() {
+            return Err(ModelError::InvalidDress);
+        }
         let id = self.add_env_building(NewEnvBuilding {
             name: spec.pick.name(),
             level: spec.level,
@@ -1303,7 +1319,7 @@ impl Model {
             } else {
                 0
             },
-            front: Some(0),
+            front: Some(front as u8),
             roof: None,
             pitch: None,
             shop: None,

@@ -110,6 +110,39 @@ pub fn build() -> Res<Model> {
             top: WallTop::Unconnected,
         })?;
     }
+    // In the same courtyard, a small square with a tree pit and its paving
+    // in herringbone, and a sunken garden (remates del territorio).
+    let r = |a: (f64, f64), b: (f64, f64)| {
+        vec![
+            Point2::new(a.0, a.1),
+            Point2::new(b.0, a.1),
+            Point2::new(b.0, b.1),
+            Point2::new(a.0, b.1),
+        ]
+    };
+    let stone_paving = paving;
+    let square = m.add_surface(archisim_core::NewSurface {
+        name: "Placita".into(),
+        level: pb,
+        kind: archisim_core::SurfaceKind::Square,
+        outline: r((132.0, 58.0), (168.0, 70.0)),
+        material: stone_paving,
+        edge_material: stone,
+    })?;
+    m.edit_surface(square, |x| {
+        x.holes = vec![r((148.0, 62.0), (152.0, 66.0))];
+        x.pattern = archisim_core::JointPattern::Herringbone;
+        x.joints = 0.4;
+    })?;
+    let garden = m.add_surface(archisim_core::NewSurface {
+        name: "Jardín hundido".into(),
+        level: pb,
+        kind: archisim_core::SurfaceKind::Garden,
+        outline: r((132.0, 30.0), (138.0, 42.0)),
+        material: stone_paving,
+        edge_material: stone,
+    })?;
+    m.edit_surface(garden, |x| x.raise = -1.0)?;
     Ok(m)
 }
 

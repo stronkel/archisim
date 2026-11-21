@@ -109,6 +109,27 @@ impl Road {
         out
     }
 
+    /// Its own markings and tree pits that are hidden by hand (to show
+    /// them faintly and give them back one by one).
+    pub fn hidden_shapes(&self, gaps: &[(f64, f64)]) -> Vec<(PieceKind, Vec<Point2>)> {
+        if self.hidden.is_empty() {
+            return Vec::new();
+        }
+        let mut out: Vec<(PieceKind, Vec<Point2>)> = self
+            .markings_except(gaps)
+            .into_iter()
+            .filter(|m| self.hides(PieceKind::Marking, middle_of(m)))
+            .map(|m| (PieceKind::Marking, m))
+            .collect();
+        out.extend(
+            self.tree_pits_except(gaps)
+                .into_iter()
+                .filter(|m| self.hides(PieceKind::TreePit, middle_of(m)))
+                .map(|m| (PieceKind::TreePit, m)),
+        );
+        out
+    }
+
     /// Its hidden pieces as text (for the IFC): `kind at off|…`.
     pub fn encode_hidden(&self) -> String {
         self.hidden
@@ -149,6 +170,28 @@ impl Model {
         }
         let (at, off) = r.place_of(p);
         self.edit_road(road, |r| r.hidden.push(HiddenPiece { kind, at, off }))
+    }
+
+    /// Shows again the piece of a street hidden by hand nearest `p` (within
+    /// reach of where it was). Whether there was one.
+    pub fn show_piece(&mut self, road: RoadId, p: Point2) -> Result<bool, ModelError> {
+        let r = self.road(road).ok_or(ModelError::UnknownElement(road.0))?;
+        let (at, off) = r.place_of(p);
+        let near = r
+            .hidden
+            .iter()
+            .enumerate()
+            .map(|(i, h)| (i, (h.at - at).hypot(h.off - off)))
+            .filter(|(_, d)| *d < HIDE_REACH)
+            .min_by(|a, b| a.1.total_cmp(&b.1))
+            .map(|(i, _)| i);
+        let Some(i) = near else {
+            return Ok(false);
+        };
+        self.edit_road(road, |r| {
+            r.hidden.remove(i);
+        })?;
+        Ok(true)
     }
 
     /// Shows again every piece of a street hidden by hand. How many.
@@ -234,6 +277,110 @@ impl Model {
             })
             .collect();
         self.edit_road(road, |x| x.hidden.extend(hidden))?;
+        Ok(id)
+    }
+}
+
+impl Model {
+    /// Lets an arrow of a node go (N6): its pieces are hidden on its street
+    /// and it becomes a road marking of its own, `kind` along `path` (from
+    /// its tail towards the node), that can be moved, turned or changed.
+    pub fn detach_arrow(
+        &mut self,
+        road: RoadId,
+        kind: MarkingKind,
+        path: [Point2; 2],
+        pieces: &[Point2],
+    ) -> Result<MarkingId, ModelError> {
+        let r = self
+            .road(road)
+            .cloned()
+            .ok_or(ModelError::UnknownElement(road.0))?;
+        if pieces.iter().any(|p| r.hides(PieceKind::Marking, *p)) {
+            return Err(ModelError::InvalidShape("esa flecha ya está suelta"));
+        }
+        let material = r
+            .section
+            .markings
+            .unwrap_or_else(|| self.marking_material([245, 245, 240]));
+        let id = self.add_marking(NewMarking {
+            level: r.level,
+            kind,
+            path: path.to_vec(),
+            width: 0.15,
+            dash: 0.0,
+            gap: 0.0,
+            depth: 0.0,
+            material,
+        })?;
+        let hidden: Vec<HiddenPiece> = pieces
+            .iter()
+            .map(|p| {
+                let (at, off) = r.place_of(*p);
+                HiddenPiece {
+                    kind: PieceKind::Marking,
+                    at,
+                    off,
+                }
+            })
+            .collect();
+        self.edit_road(road, |x| x.hidden.extend(hidden))?;
+        Ok(id)
+    }
+
+    /// Lets a node's sign go (N6): it is hidden on its street and becomes a
+    /// «Señal de tráfico» standing where it was, facing `dir` (towards the
+    /// traffic it is for), `up` over the level.
+    pub fn detach_sign(
+        &mut self,
+        road: RoadId,
+        post: Point2,
+        dir: crate::Vec2,
+        sign: ArmSign,
+        up: f64,
+    ) -> Result<ObjectId, ModelError> {
+        let r = self
+            .road(road)
+            .cloned()
+            .ok_or(ModelError::UnknownElement(road.0))?;
+        if r.hides(PieceKind::Sign, post) {
+            return Err(ModelError::InvalidShape("esa señal ya está suelta"));
+        }
+        let (name, model3d) = match sign {
+            ArmSign::Yield => ("Ceda el paso (señal suelta)", "Triangular"),
+            ArmSign::Stop => ("Stop (señal suelta)", "Circular"),
+            ArmSign::Lights => ("Semáforo (señal suelta)", "Rectangular"),
+            ArmSign::None => return Err(ModelError::InvalidShape("ahí no hay señal")),
+        };
+        let found = self.object_types().find(|t| t.name == name).map(|t| t.id);
+        let t = match found {
+            Some(t) => t,
+            None => {
+                let f = self.system_family("Señal de tráfico")?;
+                let mut v = self.family_defaults(f, ParamScope::Type)?;
+                v.insert("model3d".into(), Value::Text(model3d.into()));
+                if sign == ArmSign::Lights {
+                    v.insert("height".into(), Value::Number(3.2));
+                    v.insert("plate".into(), Value::Number(0.36));
+                }
+                self.add_object_type(name, f, v)?
+            }
+        };
+        let id = self.add_object(NewObject {
+            level: r.level,
+            object_type: t,
+            position: post,
+            rotation: (-dir.x).atan2(dir.y),
+            base_offset: up,
+        })?;
+        let (at, off) = r.place_of(post);
+        self.edit_road(road, |x| {
+            x.hidden.push(HiddenPiece {
+                kind: PieceKind::Sign,
+                at,
+                off,
+            })
+        })?;
         Ok(id)
     }
 }

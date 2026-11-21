@@ -395,6 +395,12 @@ pub struct ArchiSimApp {
     pub node_pick: Option<archisim_core::NodeKey>,
     /// The handle of the picked node being dragged (N1).
     pub node_grab: Option<node_ui::NodeGrab>,
+    /// A node's handle taken in 3D: the height of the plane it moves on and
+    /// where it is now.
+    node_grab_3d: Option<(f64, Point2)>,
+    /// The types of a street's stretches' own furniture (N4): tree, lamp,
+    /// bench and bin (none: the usual ones).
+    skin_furniture: [Option<archisim_core::ObjectTypeId>; 4],
     /// What a click of the tool Nudo does (N3): pick a node, connect lanes
     /// or draw a painted island.
     pub node_mode: node_ui::NodeMode,
@@ -623,6 +629,9 @@ pub struct ArchiSimApp {
     /// Cartography being brought around the project (H7; its window is open).
     pub carto_import: Option<carto_ui::CartoImport>,
     pub carto_download: Option<carto_download_ui::CartoDownload>,
+    /// The outline of the surroundings being drawn on the plan (N8): for
+    /// the download (true) or the files (false), and its corners so far.
+    pub carto_outline_pick: Option<(bool, Vec<Point2>)>,
     /// The whole object library, for the gallery's pictures of the types
     /// the project does not have yet (made the first time it is needed).
     pub object_library: Option<archisim_core::Model>,
@@ -950,6 +959,8 @@ impl ArchiSimApp {
             roundabout_settings: Default::default(),
             node_pick: None,
             node_grab: None,
+            node_grab_3d: None,
+            skin_furniture: [None; 4],
             node_mode: node_ui::NodeMode::Pick,
             road_typed_arc: None,
             box_settings: None,
@@ -1067,6 +1078,7 @@ impl ArchiSimApp {
             survey_import: None,
             carto_import: None,
             carto_download: None,
+            carto_outline_pick: None,
             object_library: None,
             collection: None,
             collection_libraries: Vec::new(),
@@ -2432,6 +2444,9 @@ impl ArchiSimApp {
 
     /// Draws the whole window. Called by eframe every frame (and by tests).
     pub fn show(&mut self, ui: &mut Ui) {
+        if let Some(n) = self.ed.street_note.take() {
+            self.say(n);
+        }
         let ctx = ui.ctx().clone();
         if !self.styled {
             self.styled = true;

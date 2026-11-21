@@ -9724,6 +9724,176 @@ fn hide_pieces_and_let_a_zebra_go() {
         .transact("Mostrar", |m| m.show_pieces(road).map(|_| ()));
     assert!(r.is_ok());
     assert!(h.model().road(road).unwrap().hidden.is_empty());
+    // A window over the dashes west of the zebra hides them all at once.
+    h.app.ed.selection.clear();
+    h.app.act(super::toolbox::Action::HidePieces);
+    let shown = h.model().road(road).unwrap().visible_markings(&[]).len();
+    h.drag(p(-30.0, -0.6), p(-8.0, 0.6));
+    let hidden = h.model().road(road).unwrap().hidden.len();
+    assert!(hidden >= 2, "{hidden}");
+    assert_eq!(
+        h.model().road(road).unwrap().visible_markings(&[]).len(),
+        shown - hidden
+    );
+    // One of them, clicked again (faint), comes back.
+    let gone = h.model().road(road).unwrap().hidden_shapes(&[]);
+    let back = archisim_core::middle_of(&gone[0].1);
+    h.click_at(back);
+    assert_eq!(h.model().road(road).unwrap().hidden.len(), hidden - 1);
+    h.app.ed.undo();
+    h.app.ed.undo();
+    assert!(h.model().road(road).unwrap().hidden.is_empty());
+}
+
+/// The remates of N4 to N7: a node's arrow and sign let go, a zone for
+/// «Sustituir todos» drawn freely or taken from a plot, and the zone painted
+/// over several plots with a brush.
+#[test]
+fn arrows_signs_free_zones_and_the_zone_brush() {
+    use archisim_geom::crossroads::{self, Junction};
+    let mut h = Harness::new(Editor::new_project());
+    let canvas = h.app.canvas;
+    h.app
+        .view
+        .fit_exact(canvas, p(-60.0, -60.0), p(60.0, 60.0), 0.0);
+    h.app.set_discipline(super::toolbox::Discipline::Site);
+    for (a, b) in [(p(-50.0, 0.0), p(50.0, 0.0)), (p(0.0, -50.0), p(0.0, 50.0))] {
+        h.type_text("w");
+        h.click_at(a);
+        h.click_at(b);
+        h.key(Key::Enter);
+        h.key(Key::Escape);
+    }
+    let level = h.app.ed.level;
+    // The east arm: a stop and its lane only straight on (an arrow).
+    let j = crossroads::junctions(h.model(), level).remove(0);
+    let key = j.key.clone().unwrap();
+    let east = j.arms.iter().find(|a| a.dir.x > 0.9).unwrap();
+    let mut n = archisim_core::NodeSettings::new(key.clone());
+    n.set_arm(
+        Junction::arm_ref(east),
+        archisim_core::ArmSettings {
+            sign: Some(archisim_core::ArmSign::Stop),
+            turns: Some(vec![archisim_core::Turns::STRAIGHT]),
+            ..Default::default()
+        },
+    );
+    assert!(h.app.ed.transact("Nudo", |m| m.set_node(n)).is_ok());
+    let j = crossroads::node_junction(h.model(), &key).unwrap();
+    assert!(!j.arrows.is_empty() && !j.signs.is_empty());
+    let arrow = j.arrows[0].clone();
+    let post = j.signs[0].0;
+    // Let the arrow go: a marking of its own; the node paints it no more.
+    h.app.act(super::toolbox::Action::DetachCrossing);
+    let mid = arrow.path[0] + (arrow.path[1] - arrow.path[0]) * 2.5;
+    h.click_at(mid);
+    assert_eq!(h.model().markings().count(), 1);
+    let j2 = crossroads::node_junction(h.model(), &key).unwrap();
+    assert!(j2.arrows.len() < j.arrows.len());
+    // And the sign: an object «Señal de tráfico» where it was.
+    h.app.act(super::toolbox::Action::DetachCrossing);
+    h.click_at(post);
+    let o = h
+        .model()
+        .objects()
+        .find(|o| o.position.distance(post) < 1e-6)
+        .expect("the sign, as an object");
+    let t = h.model().object_type(o.object_type).unwrap();
+    assert!(t.name.starts_with("Stop"), "{}", t.name);
+    let j3 = crossroads::node_junction(h.model(), &key).unwrap();
+    assert!(j3.signs.is_empty());
+    // Two plots east of the crossing.
+    let plots: Vec<_> = (0..2)
+        .map(|i| {
+            let x0 = 12.0 + i as f64 * 12.0;
+            let mut id = None;
+            let r = h.app.ed.transact("Parcela", |m| {
+                id = Some(m.add_plot(archisim_core::NewPlot {
+                    name: format!("P{i}"),
+                    level,
+                    outline: vec![
+                        p(x0, 10.0),
+                        p(x0 + 10.0, 10.0),
+                        p(x0 + 10.0, 30.0),
+                        p(x0, 30.0),
+                    ],
+                    setback: 0.0,
+                    reference: String::new(),
+                })?);
+                Ok::<(), archisim_core::ModelError>(())
+            });
+            assert!(r.is_ok());
+            id.unwrap()
+        })
+        .collect();
+    // «Sustituir todos» in a free outline, and in a plot.
+    h.app.act(super::toolbox::Action::Replace);
+    h.frame();
+    h.app.replace.picking = Some(super::replace_ui::AreaPick::Free(Vec::new()));
+    for q in [p(-30.0, -5.0), p(-20.0, -5.0), p(-25.0, 5.0)] {
+        h.click_at(q);
+    }
+    h.key(Key::Enter);
+    assert!(h.app.replace.picking.is_none());
+    assert_eq!(h.app.replace.area.as_ref().map(|a| a.len()), Some(3));
+    h.app.replace.picking = Some(super::replace_ui::AreaPick::Plot);
+    h.click_at(p(17.0, 20.0));
+    let a = h.app.replace.area.clone().unwrap();
+    assert!((archisim_core::signed_area(&a).abs() - 200.0).abs() < 1e-6);
+    h.frame();
+    h.app.replace.open = false;
+    // The zone brush over both plots.
+    h.app.blocks.zone = archisim_core::BlockZone::OldTown;
+    h.app.blocks.brush = true;
+    h.app.blocks.brush_radius = 4.0;
+    h.drag(p(17.0, 20.0), p(29.0, 20.0));
+    for id in &plots {
+        assert_eq!(
+            h.model().plot(*id).unwrap().zone,
+            Some(archisim_core::BlockZone::OldTown)
+        );
+    }
+    h.key(Key::Escape);
+    assert!(!h.app.blocks.brush);
+    // The 3D view: a click with «Ocultar piezas» hides what is under it.
+    h.frame();
+}
+
+/// The remates of N8 and N2: the outline of the surroundings drawn on the
+/// plan, and the angle drawn while a street goes on from another.
+#[test]
+fn surroundings_outline_and_trace_dims() {
+    let mut h = Harness::new(Editor::new_project());
+    let canvas = h.app.canvas;
+    h.app
+        .view
+        .fit_exact(canvas, p(-60.0, -60.0), p(60.0, 60.0), 0.0);
+    h.app.set_discipline(super::toolbox::Discipline::Site);
+    h.app.carto_download = Some(super::carto_download_ui::CartoDownload::default());
+    h.frame();
+    h.app.start_carto_outline(true);
+    for q in [p(-40.0, -40.0), p(40.0, -40.0), p(40.0, 40.0)] {
+        h.click_at(q);
+    }
+    h.move_to(p(-40.0, 40.0));
+    h.frame();
+    h.click_at(p(-40.0, 40.0));
+    h.click_at(p(-40.0, -40.0));
+    assert!(h.app.carto_outline_pick.is_none());
+    let o = &h.app.carto_download.as_ref().unwrap().options;
+    assert_eq!(o.outline.as_ref().map(|x| x.len()), Some(4));
+    assert!(o.contains(p(30.0, 30.0)) && !o.contains(p(50.0, 0.0)));
+    assert!(o.reach() > 50.0);
+    h.app.carto_download = None;
+    // A street, and another going on from its end, turning: the angle is
+    // drawn while it is traced.
+    h.type_text("w");
+    h.click_at(p(-50.0, 0.0));
+    h.click_at(p(0.0, 0.0));
+    h.move_to(p(30.0, 30.0));
+    h.frame();
+    h.key(Key::Enter);
+    h.key(Key::Escape);
 }
 
 #[test]
@@ -9818,7 +9988,7 @@ fn stretches_and_replace_all() {
     h.app.act(super::toolbox::Action::Replace);
     assert!(h.app.replace.open);
     h.frame();
-    h.app.replace.picking = Some(None);
+    h.app.replace.picking = Some(super::replace_ui::AreaPick::Rect);
     h.click_at(p(-45.0, -20.0));
     h.click_at(p(-35.0, 20.0));
     assert!(h.app.replace.picking.is_none());
@@ -9929,6 +10099,104 @@ fn lanes_and_islands_with_the_node_tool() {
     h.frame();
 }
 
+/// The remates of the tool Nudo: a lane left without a way out when its
+/// last connection is taken away, the centre dragged without moving the
+/// streets, an island's corner dragged, an arm flattened and a dead end in
+/// hammerhead from the properties.
+#[test]
+fn node_centre_no_exit_and_island_corners() {
+    use archisim_geom::crossroads::{self, Junction};
+    let mut h = Harness::new(Editor::new_project());
+    let canvas = h.app.canvas;
+    h.app
+        .view
+        .fit_exact(canvas, p(-60.0, -60.0), p(60.0, 60.0), 0.0);
+    h.app.set_discipline(super::toolbox::Discipline::Site);
+    for (a, b) in [(p(-50.0, 0.0), p(50.0, 0.0)), (p(0.0, -50.0), p(0.0, 50.0))] {
+        h.type_text("w");
+        h.click_at(a);
+        h.click_at(b);
+        h.key(Key::Enter);
+        h.key(Key::Escape);
+    }
+    h.app.set_tool(Tool::Node);
+    h.frame();
+    h.click_at(p(2.0, -1.0));
+    let key = h.app.node_pick.clone().expect("a node");
+    h.frame();
+    let j = crossroads::node_junction(h.model(), &key).unwrap();
+    let east = j.arms.iter().find(|a| a.dir.x > 0.9).unwrap().clone();
+    let er = Junction::arm_ref(&east);
+    let outs: Vec<_> = j
+        .lanes
+        .iter()
+        .filter(|c| c.from == er)
+        .map(|c| {
+            let b = j
+                .arms
+                .iter()
+                .find(|a| Junction::arm_ref(a) == c.to)
+                .unwrap();
+            crossroads::lane_end(b, b.lanes_out[c.to_lane])
+        })
+        .collect();
+    assert_eq!(outs.len(), 3);
+    // Take each of its three connections away.
+    for q in outs {
+        h.app.node_mode = super::node_ui::NodeMode::Link(None);
+        h.click_at(crossroads::lane_end(&east, east.lanes_in[0]));
+        h.click_at(q);
+    }
+    let j = crossroads::node_junction(h.model(), &key).unwrap();
+    assert!(
+        j.lanes.iter().all(|c| c.from != er),
+        "no way out by the east lane"
+    );
+    h.app.node_mode = super::node_ui::NodeMode::Pick;
+    // Its centre dragged 3 m south: the streets stay, the north arm ends
+    // later.
+    let north_cut = j.arms.iter().find(|a| a.dir.y > 0.9).unwrap().cut;
+    h.frame();
+    h.drag(j.centre, j.centre + archisim_core::Vec2::new(0.0, -3.0));
+    let j = crossroads::node_junction(h.model(), &key).unwrap();
+    assert!((j.centre.y + 3.0).abs() < 0.1, "{:?}", j.centre);
+    let cut = j.arms.iter().find(|a| a.dir.y > 0.9).unwrap().cut;
+    assert!(cut > north_cut + 2.5, "{cut} {north_cut}");
+    assert!(h.model().roads().all(|r| r.axis.len() == 2));
+    // An island, and one of its corners dragged.
+    h.app.node_mode =
+        super::node_ui::NodeMode::Island(Vec::new(), archisim_core::IslandPaint::Fill);
+    for q in [p(9.0, -9.0), p(14.0, -9.0), p(11.5, -14.0)] {
+        h.click_at(q);
+    }
+    h.key(Key::Enter);
+    h.frame();
+    h.drag(p(14.0, -9.0), p(16.0, -8.0));
+    let (o, u) = crossroads::node_frame(&j.arms, j.at);
+    let n = h.model().node(&key).unwrap().clone();
+    let moved = n.islands[0]
+        .points
+        .iter()
+        .map(|q| o + u * q.x + u.perp_left() * q.y)
+        .any(|q| q.distance(p(16.0, -8.0)) < 0.3);
+    assert!(moved, "{:?}", n.islands[0].points);
+    // The properties draw the new rows; then a flattened arm.
+    h.frame();
+    let mut n = n;
+    let mut s = n.arm(er);
+    s.flatten = Some(6.0);
+    n.set_arm(er, s);
+    assert!(h.app.ed.transact("Aplanar", |m| m.set_node(n)).is_ok());
+    let j2 = crossroads::node_junction(h.model(), &key).unwrap();
+    assert!(j2.flattened.iter().any(|f| (*f - 6.0).abs() < 1e-9));
+    // The 3D view draws the node with its handles and lanes.
+    h.app.mode = ViewMode::ThreeD;
+    h.frame();
+    h.app.mode = ViewMode::Plan;
+    h.app.set_tool(Tool::Arrow);
+    h.frame();
+}
+
 #[test]
 fn streets_without_rules_and_with_precision() {
     let mut h = Harness::new(Editor::new_project());
@@ -9995,6 +10263,9 @@ fn streets_without_rules_and_with_precision() {
     h.app.road_grade_pick = Some((first, None));
     h.click_at(p(-50.0, 0.0));
     assert!(matches!(h.app.road_grade_pick, Some((_, Some(_)))));
+    // Between the two clicks, the stretch is drawn on the plan (N2).
+    h.move_to(p(0.0, 0.0));
+    h.frame();
     h.click_at(p(10.0, 0.0));
     assert!(h.app.road_grade_pick.is_none());
     let form = h
@@ -13471,4 +13742,114 @@ fn streets_meet_join_and_widen_by_their_handles() {
     // One undo takes it back.
     h.app.ed.undo();
     assert!(h.model().road(ew).is_some() && h.model().road(west).is_some());
+}
+
+/// Remates del territorio (20/11/2026): a street moved through the editor
+/// takes its blocks' plots and buildings with it, and says so.
+#[test]
+fn plots_follow_a_street_moved_in_the_editor() {
+    let mut h = Harness::new(Editor::new_project());
+    let level = h.app.ed.level;
+    let mat = h.model().materials().next().unwrap().id;
+    let mut mid = None;
+    for k in 0..3 {
+        let t = k as f64 * 120.0;
+        for (a, b) in [(p(-20.0, t), p(260.0, t)), (p(t, -20.0), p(t, 260.0))] {
+            let id = h
+                .app
+                .ed
+                .transact("Calle", |m| {
+                    m.add_road(archisim_core::NewRoad {
+                        name: "Calle".into(),
+                        level,
+                        axis: vec![a, b],
+                        section: archisim_core::RoadSection::default(),
+                        top_offset: 0.0,
+                        profile: Vec::new(),
+                        changes: Vec::new(),
+                        pavement: mat,
+                        kerb_material: mat,
+                        sidewalk_material: mat,
+                    })
+                })
+                .unwrap();
+            if k == 1 && a.x == t {
+                mid = Some(id);
+            }
+        }
+    }
+    h.app
+        .ed
+        .transact("Parcelar", |m| {
+            let blocks = archisim_geom::blocks::city_blocks(m, level);
+            for (k, b) in blocks.iter().take(2).enumerate() {
+                archisim_geom::blocks::add_block_plots(
+                    m,
+                    level,
+                    b,
+                    k + 1,
+                    archisim_core::BlockZone::Flats,
+                    None,
+                    None,
+                )?;
+            }
+            archisim_geom::blocks::fill_plots(m, level, None, None)
+        })
+        .unwrap();
+    h.app.ed.street_note = None;
+    let mid = mid.unwrap();
+    h.app
+        .ed
+        .transact("Mover calle", |m| {
+            m.edit_road(mid, |r| r.axis = vec![p(140.0, -20.0), p(140.0, 260.0)])
+        })
+        .unwrap();
+    let note = h.app.ed.street_note.clone().unwrap();
+    assert!(note.starts_with("2 manzanas"), "{note}");
+    let street = h.model().road(mid).unwrap().outline();
+    assert!(h
+        .model()
+        .plots()
+        .all(|p| !archisim_core::point_in_polygon(archisim_core::centroid(&p.outline), &street)));
+    // One undo takes the street and the plots back together.
+    h.app.ed.undo();
+    assert_eq!(h.model().road(mid).unwrap().axis[0], p(120.0, -20.0));
+    // Said once, in the bar.
+    h.frame();
+    assert!(h.app.ed.street_note.is_none());
+}
+
+/// Remates del territorio (20/11/2026): the corners of a plot (and of an
+/// urban surface) are dragged by their handles.
+#[test]
+fn a_plot_corner_is_dragged() {
+    let mut h = Harness::new(Editor::new_project());
+    let canvas = h.app.canvas;
+    h.app
+        .view
+        .fit_exact(canvas, p(-10.0, -10.0), p(40.0, 40.0), 0.0);
+    let level = h.app.ed.level;
+    let plot = h
+        .app
+        .ed
+        .transact("Parcela", |m| {
+            m.add_plot(archisim_core::NewPlot {
+                name: "Parcela".into(),
+                level,
+                outline: vec![p(0.0, 0.0), p(20.0, 0.0), p(20.0, 30.0), p(0.0, 30.0)],
+                setback: 0.0,
+                reference: String::new(),
+            })
+        })
+        .unwrap();
+    h.app.set_tool(Tool::Arrow);
+    h.app.ed.selection = [Element::Plot(plot)].into_iter().collect();
+    h.frame();
+    assert!(crate::drag::hotspots(h.model(), &h.app.ed.selection)
+        .iter()
+        .any(|x| matches!(x.grip, crate::drag::Grip::OutlineCorner { index: 2, .. })));
+    h.drag(p(20.0, 30.0), p(25.0, 33.0));
+    let o = &h.model().plot(plot).unwrap().outline;
+    assert!(o[2].distance(p(25.0, 33.0)) < 0.6, "{o:?}");
+    assert_eq!(o[0], p(0.0, 0.0));
 }
