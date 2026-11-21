@@ -9724,6 +9724,25 @@ fn hide_pieces_and_let_a_zebra_go() {
         .transact("Mostrar", |m| m.show_pieces(road).map(|_| ()));
     assert!(r.is_ok());
     assert!(h.model().road(road).unwrap().hidden.is_empty());
+    // A window over the dashes west of the zebra hides them all at once.
+    h.app.ed.selection.clear();
+    h.app.act(super::toolbox::Action::HidePieces);
+    let shown = h.model().road(road).unwrap().visible_markings(&[]).len();
+    h.drag(p(-30.0, -0.6), p(-8.0, 0.6));
+    let hidden = h.model().road(road).unwrap().hidden.len();
+    assert!(hidden >= 2, "{hidden}");
+    assert_eq!(
+        h.model().road(road).unwrap().visible_markings(&[]).len(),
+        shown - hidden
+    );
+    // One of them, clicked again (faint), comes back.
+    let gone = h.model().road(road).unwrap().hidden_shapes(&[]);
+    let back = archisim_core::middle_of(&gone[0].1);
+    h.click_at(back);
+    assert_eq!(h.model().road(road).unwrap().hidden.len(), hidden - 1);
+    h.app.ed.undo();
+    h.app.ed.undo();
+    assert!(h.model().road(road).unwrap().hidden.is_empty());
 }
 
 #[test]

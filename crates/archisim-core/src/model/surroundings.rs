@@ -117,6 +117,70 @@ pub struct OutsideEnd {
 
 impl Model {
     /// The area of the surroundings, if one was brought.
+    /// The streets cut to the area of the surroundings (N8), when it
+    /// changes: what is out of it goes; a street that leaves it and comes
+    /// back in is kept in pieces. Streets with stretches, changes of
+    /// section, a profile or hidden pieces of their own, or drawn freely,
+    /// are left as they are. Returns how many were cut or taken away.
+    pub fn clip_roads_to_surroundings(&mut self) -> Result<usize, ModelError> {
+        let Some(area) = self.surroundings.clone() else {
+            return Ok(0);
+        };
+        let roads: Vec<crate::Road> = self
+            .roads()
+            .filter(|r| {
+                !r.free
+                    && r.changes.is_empty()
+                    && r.profile.is_empty()
+                    && r.skins.is_empty()
+                    && r.hidden.is_empty()
+            })
+            .cloned()
+            .collect();
+        let mut n = 0;
+        for r in roads {
+            let parts: Vec<Vec<Point2>> = clip_line_to_area(&r.axis, &area)
+                .into_iter()
+                .filter(|p| p.windows(2).map(|w| w[0].distance(w[1])).sum::<f64>() > 1.0)
+                .collect();
+            if parts.len() == 1
+                && parts[0].len() == r.axis.len()
+                && parts[0]
+                    .iter()
+                    .zip(&r.axis)
+                    .all(|(a, b)| a.distance(*b) < 1e-6)
+            {
+                continue;
+            }
+            n += 1;
+            let mut parts = parts.into_iter();
+            match parts.next() {
+                None => {
+                    self.remove_road(r.id)?;
+                }
+                Some(first) => {
+                    self.edit_road(r.id, |x| x.axis = first)?;
+                    for axis in parts {
+                        let id = self.add_road(crate::NewRoad {
+                            name: r.name.clone(),
+                            level: r.level,
+                            axis,
+                            section: r.section.clone(),
+                            top_offset: r.top_offset,
+                            profile: Vec::new(),
+                            changes: Vec::new(),
+                            pavement: r.pavement,
+                            kerb_material: r.kerb_material,
+                            sidewalk_material: r.sidewalk_material,
+                        })?;
+                        let _ = id;
+                    }
+                }
+            }
+        }
+        Ok(n)
+    }
+
     pub fn surroundings(&self) -> Option<&[Point2]> {
         self.surroundings.as_deref()
     }
@@ -204,6 +268,48 @@ fn distance_to_segment(p: Point2, a: Point2, b: Point2) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn streets_already_there_are_cut_to_a_new_area() {
+        let mut m = Model::new("Área");
+        let level = m.add_level("Planta baja", 0.0);
+        let mat = m.add_material("Asfalto", "asphalt", [70, 70, 70], crate::CutPattern::Solid);
+        let road = |m: &mut Model, axis: Vec<Point2>| {
+            m.add_road(crate::NewRoad {
+                name: "Calle".into(),
+                level,
+                axis,
+                section: crate::RoadSection::default(),
+                top_offset: 0.0,
+                profile: Vec::new(),
+                changes: Vec::new(),
+                pavement: mat,
+                kerb_material: mat,
+                sidewalk_material: mat,
+            })
+            .unwrap()
+        };
+        let across = road(
+            &mut m,
+            vec![Point2::new(-300.0, 0.0), Point2::new(300.0, 0.0)],
+        );
+        let out = road(
+            &mut m,
+            vec![Point2::new(400.0, 400.0), Point2::new(500.0, 400.0)],
+        );
+        let inside = road(
+            &mut m,
+            vec![Point2::new(-10.0, 10.0), Point2::new(10.0, 10.0)],
+        );
+        m.set_surroundings(Some(square_area(Point2::new(0.0, 0.0), 100.0)))
+            .unwrap();
+        assert_eq!(m.clip_roads_to_surroundings().unwrap(), 2);
+        let a = m.road(across).unwrap();
+        assert!((a.axis[0].x + 100.0).abs() < 1e-6 && (a.axis[1].x - 100.0).abs() < 1e-6);
+        assert!(m.road(out).is_none());
+        assert_eq!(m.road(inside).unwrap().axis.len(), 2);
+        assert_eq!(m.clip_roads_to_surroundings().unwrap(), 0);
+    }
 
     #[test]
     fn lines_are_cut_at_the_area() {

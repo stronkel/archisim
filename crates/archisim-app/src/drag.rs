@@ -90,6 +90,13 @@ pub enum Grip {
         mm: i64,
         left: bool,
     },
+    /// An end of a stretch of a street with its own materials (N4): its
+    /// start (`end` false) or its end, slid along the street.
+    RoadSkinEnd {
+        road: archisim_core::RoadId,
+        index: usize,
+        end: bool,
+    },
     /// A corner of a platform of a terrain (bloque Terreno).
     PadCorner {
         terrain: archisim_core::TerrainId,
@@ -410,6 +417,18 @@ pub fn hotspots(model: &Model, selection: &BTreeSet<Element>) -> Vec<Hotspot> {
                             }
                         }
                     }
+                    for (index, k) in r.skins.iter().enumerate() {
+                        for (end, at) in [(false, k.from), (true, k.to)] {
+                            v.push(Hotspot {
+                                grip: Grip::RoadSkinEnd {
+                                    road: *id,
+                                    index,
+                                    end,
+                                },
+                                point: archisim_geom::road_shaping::edge_point(r, at, false),
+                            });
+                        }
+                    }
                 }
             }
             Element::Plot(_) | Element::Surface(_) => {
@@ -626,7 +645,8 @@ pub fn moving(model: &Model, selection: &BTreeSet<Element>, grip: Grip) -> BTree
         Grip::RailingPoint { railing, .. } => [Element::Railing(railing)].into_iter().collect(),
         Grip::RoadPoint { road, .. }
         | Grip::RoadBend { road, .. }
-        | Grip::RoadWidth { road, .. } => [Element::Road(road)].into_iter().collect(),
+        | Grip::RoadWidth { road, .. }
+        | Grip::RoadSkinEnd { road, .. } => [Element::Road(road)].into_iter().collect(),
         Grip::RoadNode { road, mm } => node_roads(model, road, mm as f64 / 1000.0)
             .into_iter()
             .map(|(r, _)| Element::Road(r))
@@ -1033,6 +1053,7 @@ pub fn label(model: &Model, drag: &Drag) -> &'static str {
         Grip::RoadNode { .. } => "Mover nudo de calles",
         Grip::RoadBend { .. } => "Curvar calle",
         Grip::RoadWidth { .. } => "Ensanchar tramo de calle",
+        Grip::RoadSkinEnd { .. } => "Mover extremo de tramo",
         Grip::PoolCorner { .. } => "Mover esquina de piscina",
         Grip::OutlineCorner {
             element: Element::Plot(_),
@@ -1190,6 +1211,21 @@ pub fn apply(
             bend_road(model, road, mm as f64 / 1000.0, d)?;
             archisim_geom::road_shaping::fuse_crowded(model, road)?;
             Ok(None)
+        }
+        Grip::RoadSkinEnd { road, index, end } => {
+            let Some(r) = model.road(road) else {
+                return Err(ModelError::UnknownElement(road.0));
+            };
+            let at = r.station_of(drag.to).clamp(0.0, r.length());
+            let mut skins = r.skins.clone();
+            if let Some(k) = skins.get_mut(index) {
+                if end {
+                    k.to = at.max(k.from + 1.0);
+                } else {
+                    k.from = at.min(k.to - 1.0).max(0.0);
+                }
+            }
+            model.set_road_skins(road, skins).map(|_| None)
         }
         Grip::RoadWidth { road, mm, left } => {
             let s = mm as f64 / 1000.0;
@@ -2397,7 +2433,10 @@ pub fn ghost<G: Geo + ?Sized>(
     // Streets bent by a node: their crossings change round them.
     let streets = matches!(
         drag.grip,
-        Grip::RoadNode { .. } | Grip::RoadBend { .. } | Grip::RoadWidth { .. }
+        Grip::RoadNode { .. }
+            | Grip::RoadBend { .. }
+            | Grip::RoadWidth { .. }
+            | Grip::RoadSkinEnd { .. }
     );
     if streets {
         for r in after.roads() {
@@ -2463,6 +2502,7 @@ pub fn road_of(g: Grip) -> Option<archisim_core::RoadId> {
         Grip::RoadNode { road, .. }
         | Grip::RoadBend { road, .. }
         | Grip::RoadWidth { road, .. }
+        | Grip::RoadSkinEnd { road, .. }
         | Grip::RoadPoint { road, .. } => Some(road),
         _ => None,
     }
@@ -2588,7 +2628,8 @@ fn level_of(
         Grip::RoadPoint { road, .. }
         | Grip::RoadNode { road, .. }
         | Grip::RoadBend { road, .. }
-        | Grip::RoadWidth { road, .. } => model.road(road).map(|r| r.level),
+        | Grip::RoadWidth { road, .. }
+        | Grip::RoadSkinEnd { road, .. } => model.road(road).map(|r| r.level),
         Grip::PoolCorner { pool, .. } => model.pool(pool).map(|p| p.level),
         Grip::OutlineCorner { element, .. } => match element {
             Element::Plot(id) => model.plot(id).map(|p| p.level),

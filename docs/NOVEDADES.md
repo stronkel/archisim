@@ -3,6 +3,15 @@
 - **Las manzanas siguen a las calles.** Al mover, curvar o trazar una calle, las manzanas que cambian de forma se vuelven a parcelar solas con la zona que tenían, y se vuelven a edificar si lo estaban. Las parcelas bloqueadas y las dibujadas a mano no se tocan. Los edificios por los que pasa una calle nueva desaparecen. Un aviso dice qué se ha rehecho, y todo se deshace en un paso.
 - **Edificios de esquina con dos fachadas.** La parcela de esquina de una manzana se edifica entera, con fachada a las dos calles. Las casas con jardín delantero siguen como estaban.
 - **Esquinas de parcelas y superficies.** Las esquinas de una parcela, una plaza, un aparcamiento o un jardín se mueven arrastrándolas.
+- **Plazas con huecos y jardines hundidos.** «Editar contorno» en una plaza, un aparcamiento o un jardín permite dibujarle huecos con su encintado (un alcorque, una fuente, un parterre) y bordes curvos. Con altura negativa la superficie queda hundida y recorta el terreno.
+- **Aparejos del pavimento:** cuadrícula, espiga, rombo o a matajunta.
+- **Tramos de calle a la vista.** En planta, los tramos con materiales propios se tiñen con su color, y sus extremos se arrastran con tiradores.
+- **Parcelas como un casco real.** En el casco antiguo y en las casas, los frentes de las parcelas varían.
+- **Flechas repetidas** en los accesos largos a un cruce.
+- **Ocultar piezas por ventana.** Con «Ocultar piezas», arrastrar una ventana oculta todas las que caen dentro. Las ocultas se ven en gris y un clic en una la devuelve.
+- **Tráfico en la Maqueta:** tarjeta propia en «Edificios y calles».
+- **Peatones que cruzan.** En el tráfico de ilustración, la gente cruza por los pasos de peatones.
+- **El área recorta las calles.** Al traer el entorno, también se recortan al área las calles que ya estaban en el proyecto.
 
 # Novedades de ArchiSim
 

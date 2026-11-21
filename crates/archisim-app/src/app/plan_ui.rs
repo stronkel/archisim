@@ -154,6 +154,7 @@ impl ArchiSimApp {
             self.draw_terrain_preview(&painter, rect)
         });
         self.draw_context_fit_preview(&painter, rect);
+        self.draw_hidden_pieces(&painter, rect);
         self.draw_street_readout(&painter, rect);
         crate::profile::time("planta: draw_brush_plan", || {
             self.draw_brush_plan(&painter, rect)
@@ -1284,6 +1285,19 @@ impl ArchiSimApp {
                     self.piece_click(c.point);
                 }
             }
+            // A window over several pieces hides them all.
+            if self.piece_pick == Some(super::pieces_ui::PiecePick::Hide) {
+                if response.drag_started_by(PointerButton::Primary) {
+                    self.window_start = ctx
+                        .input(|i| i.pointer.press_origin())
+                        .map(|o| self.view.to_model(rect, o));
+                }
+                if response.drag_stopped() {
+                    if let (Some(a), Some(c)) = (self.window_start.take(), self.cursor) {
+                        self.hide_pieces_in(a, c.point);
+                    }
+                }
+            }
             return;
         }
         if self.context_fit.picking() && self.tool == Tool::Arrow {
@@ -2154,6 +2168,7 @@ impl ArchiSimApp {
             (Grip::RoadNode { .. }, _) => "Mover nudo de calles",
             (Grip::RoadBend { .. }, _) => "Curvar calle",
             (Grip::RoadWidth { .. }, _) => "Ensanchar tramo de calle",
+            (Grip::RoadSkinEnd { .. }, _) => "Extremo del tramo",
             (Grip::PoolCorner { .. }, _) => "Esquina de la piscina",
             (Grip::OutlineCorner { .. }, _) => "Esquina",
             (Grip::RefPlaneEnd { .. }, _) => "Plano de referencia",

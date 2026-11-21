@@ -112,8 +112,22 @@ impl ArchiSimApp {
         let Some(s) = self.ed.model().surface(id).cloned() else {
             return;
         };
-        let model = self.ed.model();
         props::title(ui, &format!("{} · {}", s.name, s.kind.label()));
+        if super::sketch_ui::edit_contour_button(ui) {
+            self.start_sketch(crate::sketch::SketchTarget::Surface(id));
+            return;
+        }
+        let model = self.ed.model();
+        if !s.holes.is_empty() {
+            ui.label(
+                egui::RichText::new(format!(
+                    "{} hueco{} (alcorques, fuentes, parterres): se cambian con Editar contorno",
+                    s.holes.len(),
+                    if s.holes.len() == 1 { "" } else { "s" }
+                ))
+                .small(),
+            );
+        }
         let mut n = s.clone();
         group(ui, "surface", "Superficie", |ui| {
             row(ui, "Nombre", "", |ui, w| {
@@ -154,12 +168,12 @@ impl ArchiSimApp {
             row(
                 ui,
                 "Altura (mm)",
-                "Sobre el terreno o la calle de debajo",
+                "Sobre el terreno o la calle de debajo; negativa, hundida (hasta 6 m): el terreno se recorta",
                 |ui, w| {
                     if let Some(v) =
                         length_field(ui, Id::unique(("surface-raise", id)), n.raise, w - 8.0)
                     {
-                        n.raise = v.clamp(-1.0, 3.0);
+                        n.raise = v.clamp(-6.0, 3.0);
                     }
                 },
             );
@@ -204,6 +218,16 @@ impl ArchiSimApp {
             }
         });
         group(ui, "surface-joints", "Juntas del pavimento", |ui| {
+            row(ui, "Aparejo", "Cómo van las juntas", |ui, w| {
+                ComboBox::from_id_salt(("surface-pattern", id))
+                    .width(w - 8.0)
+                    .selected_text(n.pattern.label())
+                    .show_ui(ui, |ui| {
+                        for p in archisim_core::JointPattern::ALL {
+                            ui.selectable_value(&mut n.pattern, p, p.label());
+                        }
+                    });
+            });
             row(ui, "Cada (mm)", "0: sin juntas", |ui, w| {
                 if let Some(v) =
                     length_field(ui, Id::unique(("surface-joints", id)), n.joints, w - 8.0)

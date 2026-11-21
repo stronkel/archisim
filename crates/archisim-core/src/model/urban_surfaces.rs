@@ -68,6 +68,56 @@ impl SurfaceKind {
     }
 }
 
+/// Joint lines, as segments.
+type Joints = Vec<(Point2, Point2)>;
+
+/// How the paving joints of an urban surface run.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Hash)]
+pub enum JointPattern {
+    /// Square to each other: a grid.
+    #[default]
+    Grid,
+    /// Pieces twice as long as wide, at 45° and turned each row: a
+    /// herringbone.
+    Herringbone,
+    /// Two sets of joints at 60°: diamonds.
+    Diamond,
+    /// Rows of the joint's spacing, each piece twice as long, a half piece
+    /// along from the last row: a running bond.
+    Bond,
+}
+
+impl JointPattern {
+    pub const ALL: [JointPattern; 4] = [
+        JointPattern::Grid,
+        JointPattern::Herringbone,
+        JointPattern::Diamond,
+        JointPattern::Bond,
+    ];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            JointPattern::Grid => "Cuadrícula",
+            JointPattern::Herringbone => "Espiga",
+            JointPattern::Diamond => "Rombo",
+            JointPattern::Bond => "A matajunta",
+        }
+    }
+
+    fn code(self) -> &'static str {
+        match self {
+            JointPattern::Grid => "grid",
+            JointPattern::Herringbone => "herringbone",
+            JointPattern::Diamond => "diamond",
+            JointPattern::Bond => "bond",
+        }
+    }
+
+    fn from_code(s: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|p| p.code() == s)
+    }
+}
+
 /// The edge round an urban surface.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Hash)]
 pub enum SurfaceEdge {
@@ -154,6 +204,11 @@ pub struct UrbanSurface {
     pub joint_angle: f64,
     /// A car park's bays.
     pub bays: Option<Bays>,
+    /// Holes in it (a tree pit, a fountain, a bed), counter-clockwise:
+    /// not paved, with its edge round them too.
+    pub holes: Vec<Vec<Point2>>,
+    /// How its joints run.
+    pub pattern: JointPattern,
 }
 
 /// Data needed to make an urban surface.
@@ -285,12 +340,48 @@ impl UrbanSurface {
         if inner.len() < 3 {
             return Vec::new();
         }
+        let holes = self.hole_edges();
         let mut out = Vec::new();
-        for turn in [
-            self.joint_angle,
-            self.joint_angle + std::f64::consts::FRAC_PI_2,
-        ] {
-            let u = Vec2::new(turn.cos(), turn.sin());
+        // A segment, clipped to the paving (inside the edge, out of the
+        // holes).
+        let mut put = |p: Point2, q: Point2, out: &mut Vec<(Point2, Point2)>| {
+            for (t0, t1) in super::markings::inside_spans(&inner, p, q) {
+                let mut spans = vec![(t0, t1)];
+                for h in &holes {
+                    let cut = super::markings::inside_spans(h, p, q);
+                    spans = spans
+                        .into_iter()
+                        .flat_map(|(a, b)| {
+                            let mut left = vec![(a, b)];
+                            for &(c, d) in &cut {
+                                left = left
+                                    .into_iter()
+                                    .flat_map(|(x, y)| {
+                                        let mut v = Vec::new();
+                                        if c > x {
+                                            v.push((x, y.min(c)));
+                                        }
+                                        if d < y {
+                                            v.push((x.max(d), y));
+                                        }
+                                        v.into_iter()
+                                            .filter(|(x, y)| y - x > 1e-9)
+                                            .collect::<Vec<_>>()
+                                    })
+                                    .collect();
+                            }
+                            left
+                        })
+                        .collect();
+                }
+                for (t0, t1) in spans {
+                    out.push((p + (q - p) * t0, p + (q - p) * t1));
+                }
+            }
+        };
+        let j = self.joints;
+        // The paving's extent across and along a direction.
+        let extent = |u: Vec2| {
             let n = u.perp_left();
             let (mut lo, mut hi, mut a0, mut a1) = (f64::MAX, f64::MIN, f64::MAX, f64::MIN);
             for q in &inner {
@@ -300,20 +391,138 @@ impl UrbanSurface {
                 a0 = a0.min(v.dot(u));
                 a1 = a1.max(v.dot(u));
             }
-            let first = (lo / self.joints).ceil() * self.joints;
-            let mut c = first;
+            (n, lo, hi, a0, a1)
+        };
+        let o = Point2::new(0.0, 0.0);
+        let lines = |turn: f64,
+                     step: f64,
+                     out: &mut Vec<(Point2, Point2)>,
+                     put: &mut dyn FnMut(Point2, Point2, &mut Joints)| {
+            let u = Vec2::new(turn.cos(), turn.sin());
+            let (n, lo, hi, a0, a1) = extent(u);
+            let mut c = (lo / step).ceil() * step;
             let mut count = 0;
             while c < hi && count < 2000 {
-                let p = Point2::new(0.0, 0.0) + n * c + u * (a0 - 1.0);
-                let q = Point2::new(0.0, 0.0) + n * c + u * (a1 + 1.0);
-                for (t0, t1) in super::markings::inside_spans(&inner, p, q) {
-                    out.push((p + (q - p) * t0, p + (q - p) * t1));
-                }
-                c += self.joints;
+                put(o + n * c + u * (a0 - 1.0), o + n * c + u * (a1 + 1.0), out);
+                c += step;
                 count += 1;
+            }
+        };
+        match self.pattern {
+            JointPattern::Grid => {
+                lines(self.joint_angle, j, &mut out, &mut put);
+                lines(
+                    self.joint_angle + std::f64::consts::FRAC_PI_2,
+                    j,
+                    &mut out,
+                    &mut put,
+                );
+            }
+            JointPattern::Diamond => {
+                let half = std::f64::consts::PI / 6.0;
+                lines(self.joint_angle + half, j, &mut out, &mut put);
+                lines(self.joint_angle - half, j, &mut out, &mut put);
+            }
+            JointPattern::Bond => {
+                // Rows along the angle; across them, a joint every two
+                // spacings, half a piece along from the last row.
+                let u = Vec2::new(self.joint_angle.cos(), self.joint_angle.sin());
+                let (n, lo, hi, a0, a1) = extent(u);
+                let mut row = (lo / j).floor() as i64;
+                while (row as f64) * j < hi && out.len() < 20_000 {
+                    let c = row as f64 * j;
+                    put(
+                        o + n * c + u * (a0 - 1.0),
+                        o + n * c + u * (a1 + 1.0),
+                        &mut out,
+                    );
+                    let shift = if row.rem_euclid(2) == 0 { 0.0 } else { j };
+                    let mut a = ((a0 - shift) / (2.0 * j)).floor() * 2.0 * j + shift;
+                    while a < a1 {
+                        put(o + n * c + u * a, o + n * (c + j) + u * a, &mut out);
+                        a += 2.0 * j;
+                    }
+                    row += 1;
+                }
+            }
+            JointPattern::Herringbone => {
+                // Pieces j × 2j: down a diagonal, one lying and one standing
+                // at each step of (j, j); the next diagonal (2j, −2j) on.
+                let turn = self.joint_angle + std::f64::consts::FRAC_PI_4;
+                let (u, v) = (
+                    Vec2::new(turn.cos(), turn.sin()),
+                    Vec2::new(-turn.sin(), turn.cos()),
+                );
+                let at = |x: f64, y: f64| o + u * (x * j) + v * (y * j);
+                let to_local = |p: Point2| {
+                    (
+                        Vec2::new(p.x, p.y).dot(u) / j,
+                        Vec2::new(p.x, p.y).dot(v) / j,
+                    )
+                };
+                let (mut x0, mut x1, mut y0, mut y1) = (f64::MAX, f64::MIN, f64::MAX, f64::MIN);
+                for q in &inner {
+                    let (x, y) = to_local(*q);
+                    x0 = x0.min(x);
+                    x1 = x1.max(x);
+                    y0 = y0.min(y);
+                    y1 = y1.max(y);
+                }
+                // A piece at (x, y) of w × h, if it is near the paving.
+                let piece = |x: f64, y: f64, w: f64, h: f64, out: &mut Vec<(Point2, Point2)>| {
+                    if x + w < x0 || x > x1 || y + h < y0 || y > y1 {
+                        return;
+                    }
+                    let c = [at(x, y), at(x + w, y), at(x + w, y + h), at(x, y + h)];
+                    for k in 0..4 {
+                        put(c[k], c[(k + 1) % 4], out);
+                    }
+                };
+                // Diagonal columns c (shifted (2, −2)) and steps n along them.
+                let span = ((x1 - x0) + (y1 - y0)).ceil() as i64 + 4;
+                let first = ((x0 - y1) / 4.0).floor() as i64 - 1;
+                let last = ((x1 - y0) / 4.0).ceil() as i64 + 1;
+                for c in first..=last {
+                    let (cx, cy) = (2.0 * c as f64, -2.0 * c as f64);
+                    // n where the column's diagonal crosses the box.
+                    let n0 = ((y0 - cy).min(x0 - cx) - 3.0).floor() as i64;
+                    for n in n0..n0 + span {
+                        let (x, y) = (cx + n as f64, cy + n as f64);
+                        if x > x1 + 1.0 && y > y1 + 1.0 {
+                            break;
+                        }
+                        piece(x, y, 2.0, 1.0, &mut out);
+                        piece(x, y + 1.0, 1.0, 2.0, &mut out);
+                        if out.len() > 40_000 {
+                            return out;
+                        }
+                    }
+                }
             }
         }
         out
+    }
+
+    /// The edges of its holes: each grown by the edge round the surface
+    /// (the kerb round a tree pit is the surface's own).
+    pub fn hole_edges(&self) -> Vec<Vec<Point2>> {
+        let w = if self.edge == SurfaceEdge::None {
+            0.0
+        } else {
+            self.edge_width
+        };
+        self.holes
+            .iter()
+            .map(|h| {
+                if w > 0.0 {
+                    let g = crate::grow_polygon(h, w);
+                    if g.len() == h.len() {
+                        return g;
+                    }
+                }
+                h.clone()
+            })
+            .collect()
     }
 
     /// Its settings as a text, for the IFC: `kind edge edge_width raise
@@ -331,6 +540,13 @@ impl UrbanSurface {
         if let Some(b) = self.bays {
             s += &format!(" {} {} {}", b.width, b.depth, b.angle);
         }
+        if self.pattern != JointPattern::Grid {
+            s += &format!(" P {}", self.pattern.code());
+        }
+        for h in &self.holes {
+            let pts: Vec<String> = h.iter().map(|p| format!("{},{}", p.x, p.y)).collect();
+            s += &format!(" H {}", pts.join(";"));
+        }
         s
     }
 
@@ -346,7 +562,13 @@ impl UrbanSurface {
         self.raise = f[3].parse().ok()?;
         self.joints = f[4].parse().ok()?;
         self.joint_angle = f[5].parse().ok()?;
-        self.bays = if f.len() >= 9 {
+        // What follows the six settings: the bays (three numbers), then
+        // the pattern (`P code`) and the holes (`H x,y;x,y;…`).
+        let tail = f[6..]
+            .iter()
+            .position(|t| *t == "P" || *t == "H")
+            .map_or(f.len(), |i| i + 6);
+        self.bays = if tail >= 9 {
             Some(Bays {
                 width: f[6].parse().ok()?,
                 depth: f[7].parse().ok()?,
@@ -355,6 +577,26 @@ impl UrbanSurface {
         } else {
             None
         };
+        self.pattern = JointPattern::Grid;
+        self.holes.clear();
+        let mut i = tail;
+        while i + 1 < f.len() {
+            match f[i] {
+                "P" => self.pattern = JointPattern::from_code(f[i + 1])?,
+                "H" => {
+                    let mut h = Vec::new();
+                    for xy in f[i + 1].split(';') {
+                        let (x, y) = xy.split_once(',')?;
+                        h.push(Point2::new(x.parse().ok()?, y.parse().ok()?));
+                    }
+                    if h.len() >= 3 {
+                        self.holes.push(h);
+                    }
+                }
+                _ => return None,
+            }
+            i += 2;
+        }
         Some(())
     }
 
@@ -369,8 +611,19 @@ impl UrbanSurface {
         if nums.iter().any(|x| !x.is_finite()) {
             return Err(ModelError::NotFinite("superficie"));
         }
-        if self.edge_width < 0.0 || self.joints < 0.0 || self.raise < -1.0 {
+        if self.edge_width < 0.0 || self.joints < 0.0 || self.raise < -6.0 {
             return Err(ModelError::NonPositive("superficie"));
+        }
+        for h in &self.holes {
+            if h.len() < 3 || crate::signed_area(h).abs() < 0.01 {
+                return Err(ModelError::InvalidShape("hueco de la superficie"));
+            }
+            for q in h {
+                finite_point(*q, "superficie")?;
+            }
+            if !h.iter().all(|q| crate::point_in_polygon(*q, &self.outline)) {
+                return Err(ModelError::InvalidShape("hueco fuera de la superficie"));
+            }
         }
         if let Some(b) = self.bays {
             if !(b.width > 0.5 && b.depth > 1.0 && (0.0..=90.0).contains(&b.angle)) {
@@ -417,6 +670,8 @@ impl Model {
             joints,
             joint_angle: 0.0,
             bays,
+            holes: Vec::new(),
+            pattern: JointPattern::Grid,
         };
         self.validate_surface(&s)?;
         let id = SurfaceId(self.take_id());
@@ -537,6 +792,89 @@ mod tests {
 
     /// A car park of 40 × 17 m: two rows of bays in battery, back to back
     /// over an aisle; its settings come back from their text.
+    #[test]
+    fn holes_and_patterns_go_with_the_surface() {
+        let mut m = Model::new("Plaza");
+        let level = m.add_level("Planta baja", 0.0);
+        let mat = m.add_material(
+            "Adoquín",
+            "stone",
+            [180, 170, 150],
+            crate::CutPattern::Solid,
+        );
+        let id = m
+            .add_surface(NewSurface {
+                name: "Plaza".into(),
+                level,
+                kind: SurfaceKind::Square,
+                outline: vec![
+                    Point2::new(0.0, 0.0),
+                    Point2::new(20.0, 0.0),
+                    Point2::new(20.0, 20.0),
+                    Point2::new(0.0, 20.0),
+                ],
+                material: mat,
+                edge_material: mat,
+            })
+            .unwrap();
+        let pit = vec![
+            Point2::new(8.0, 8.0),
+            Point2::new(12.0, 8.0),
+            Point2::new(12.0, 12.0),
+            Point2::new(8.0, 12.0),
+        ];
+        m.edit_surface(id, |s| {
+            s.holes = vec![pit.clone()];
+            s.pattern = JointPattern::Herringbone;
+            s.joints = 0.5;
+        })
+        .unwrap();
+        let s = m.surface(id).unwrap().clone();
+        // No joint inside the hole.
+        let lines = s.joint_lines();
+        assert!(!lines.is_empty());
+        for (a, b) in &lines {
+            let mid = (*a + *b) * 0.5;
+            assert!(!crate::point_in_polygon(mid, &pit), "{mid:?}");
+        }
+        // Read back from its text.
+        let mut back = s.clone();
+        back.holes.clear();
+        back.pattern = JointPattern::Grid;
+        back.decode_into(&s.encode()).unwrap();
+        assert_eq!(back.holes, s.holes);
+        assert_eq!(back.pattern, JointPattern::Herringbone);
+        // Every pattern draws joints (with ARCHISIM_APAREJOS_OUT=folder,
+        // a drawing of each).
+        for p in JointPattern::ALL {
+            let mut x = s.clone();
+            x.pattern = p;
+            let lines = x.joint_lines();
+            assert!(!lines.is_empty(), "{p:?}");
+            if let Ok(dir) = std::env::var("ARCHISIM_APAREJOS_OUT") {
+                let mut svg = String::from(
+                    r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="-1 -21 22 22" width="660" height="660"><rect x="-1" y="-21" width="22" height="22" fill="white"/>"#,
+                );
+                for (a, b) in lines {
+                    svg += &format!(
+                        r#"<line x1="{}" y1="{}" x2="{}" y2="{}" stroke="black" stroke-width="0.04"/>"#,
+                        a.x, -a.y, b.x, -b.y
+                    );
+                }
+                svg += "</svg>";
+                std::fs::write(format!("{dir}/{}.svg", p.code()), svg).unwrap();
+            }
+        }
+        // A hole out of the surface is refused.
+        assert!(m
+            .edit_surface(id, |s| s.holes = vec![vec![
+                Point2::new(30.0, 0.0),
+                Point2::new(31.0, 0.0),
+                Point2::new(31.0, 1.0)
+            ]])
+            .is_err());
+    }
+
     #[test]
     fn a_car_park_has_its_bays() {
         let (mut m, lv, mat) = place();

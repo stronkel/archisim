@@ -109,6 +109,27 @@ impl Road {
         out
     }
 
+    /// Its own markings and tree pits that are hidden by hand (to show
+    /// them faintly and give them back one by one).
+    pub fn hidden_shapes(&self, gaps: &[(f64, f64)]) -> Vec<(PieceKind, Vec<Point2>)> {
+        if self.hidden.is_empty() {
+            return Vec::new();
+        }
+        let mut out: Vec<(PieceKind, Vec<Point2>)> = self
+            .markings_except(gaps)
+            .into_iter()
+            .filter(|m| self.hides(PieceKind::Marking, middle_of(m)))
+            .map(|m| (PieceKind::Marking, m))
+            .collect();
+        out.extend(
+            self.tree_pits_except(gaps)
+                .into_iter()
+                .filter(|m| self.hides(PieceKind::TreePit, middle_of(m)))
+                .map(|m| (PieceKind::TreePit, m)),
+        );
+        out
+    }
+
     /// Its hidden pieces as text (for the IFC): `kind at off|…`.
     pub fn encode_hidden(&self) -> String {
         self.hidden
@@ -149,6 +170,28 @@ impl Model {
         }
         let (at, off) = r.place_of(p);
         self.edit_road(road, |r| r.hidden.push(HiddenPiece { kind, at, off }))
+    }
+
+    /// Shows again the piece of a street hidden by hand nearest `p` (within
+    /// reach of where it was). Whether there was one.
+    pub fn show_piece(&mut self, road: RoadId, p: Point2) -> Result<bool, ModelError> {
+        let r = self.road(road).ok_or(ModelError::UnknownElement(road.0))?;
+        let (at, off) = r.place_of(p);
+        let near = r
+            .hidden
+            .iter()
+            .enumerate()
+            .map(|(i, h)| (i, (h.at - at).hypot(h.off - off)))
+            .filter(|(_, d)| *d < HIDE_REACH)
+            .min_by(|a, b| a.1.total_cmp(&b.1))
+            .map(|(i, _)| i);
+        let Some(i) = near else {
+            return Ok(false);
+        };
+        self.edit_road(road, |r| {
+            r.hidden.remove(i);
+        })?;
+        Ok(true)
     }
 
     /// Shows again every piece of a street hidden by hand. How many.

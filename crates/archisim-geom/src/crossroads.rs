@@ -160,6 +160,8 @@ pub struct LaneConnection {
 /// How far behind its arm's end (past the stop line) a lane's arrow is
 /// painted, to its tip, metres.
 pub const ARROW_BACK: f64 = 4.0;
+/// How far apart a lane's arrows are painted on a long approach, metres.
+pub const ARROW_REPEAT: f64 = 30.0;
 /// How long the continuous lines between the lanes coming in are, from the
 /// stop line back, metres (M-2.2 before a junction).
 pub const LANE_LINES: f64 = 20.0;
@@ -1754,7 +1756,21 @@ fn assemble(
     };
     let mut arm_paint = Vec::new();
     if !marks_hidden && n >= 3 && ring.is_none() && kind != NodeKind::Open {
-        arm_paint = lane_paint(&arms, &lanes, settings);
+        // How far each arm's street goes on from here: its arrows are
+        // painted again along it if there is room.
+        let room: Vec<f64> = arms
+            .iter()
+            .map(|a| {
+                model.road(a.road).map_or(0.0, |r| {
+                    if a.forward {
+                        r.length() - a.station
+                    } else {
+                        a.station
+                    }
+                })
+            })
+            .collect();
+        arm_paint = lane_paint(&arms, &lanes, settings, &room);
     }
     if let Some(s) = settings {
         let (o, u) = node_frame(&arms, x);
@@ -1957,10 +1973,11 @@ fn lane_paint(
     arms: &[Arm],
     lanes: &[LaneConnection],
     settings: Option<&NodeSettings>,
+    room: &[f64],
 ) -> Vec<(RoadId, Vec<Point2>)> {
     use archisim_core::MarkingKind as K;
     let mut out = Vec::new();
-    for a in arms {
+    for (ai, a) in arms.iter().enumerate() {
         let ar = Junction::arm_ref(a);
         let own = settings
             .is_some_and(|s| s.arm(ar).turns.is_some() || s.links.iter().any(|l| l.from == ar));
@@ -1992,13 +2009,24 @@ fn lane_paint(
                 (true, true, true) => vec![K::ArrowStraightLeft, K::ArrowRight],
                 (false, false, false) => Vec::new(),
             };
-            // The arrow's tail, 5 m behind its tip, pointing in.
-            let at = a.origin + a.dir * (tip + 5.0) + a.dir.perp_left() * off;
-            let path = [at, at - a.dir];
-            for k in kinds {
-                for poly in archisim_core::paint_shapes(k, &path, 0.15, 0.0, 0.0, 0.0) {
-                    out.push((a.road, poly));
+            // The arrow's tail, 5 m behind its tip, pointing in; again
+            // ARROW_REPEAT metres back on a long approach (the 8.2-IC asks
+            // for it repeated), if the street goes on well past it.
+            let space = room.get(ai).copied().unwrap_or(0.0) - a.cut;
+            let mut repeats = 0;
+            while repeats < 2 {
+                let back = tip + ARROW_REPEAT * repeats as f64;
+                if repeats > 0 && back + 5.0 + 2.0 * ARROW_REPEAT > space {
+                    break;
                 }
+                let at = a.origin + a.dir * (back + 5.0) + a.dir.perp_left() * off;
+                let path = [at, at - a.dir];
+                for &k in &kinds {
+                    for poly in archisim_core::paint_shapes(k, &path, 0.15, 0.0, 0.0, 0.0) {
+                        out.push((a.road, poly));
+                    }
+                }
+                repeats += 1;
             }
         }
         // The lines between them, from the stop line back.

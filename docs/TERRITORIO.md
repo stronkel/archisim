@@ -424,42 +424,42 @@ Lo que se deja para después, tanda a tanda, para repasarlo junto con la cuarta 
 **De N3 (carriles)**
 - Cambio de sentido (↶): se conecta, pero no tiene flecha pintada (la 8.2-IC no la trae entre las urbanas).
 - Quitar la última conexión a mano de una calle la devuelve a sus giros calculados: no se puede dejar una calle «sin salida» por un carril.
-- Las flechas son de 5 m y solo una por carril; en avenidas largas la norma pide repetirlas.
+- ~~Las flechas son de 5 m y solo una por carril; en avenidas largas la norma pide repetirlas.~~ **Hecho (0.110)**: si la calle sigue más de unos 70 m, la flecha se repite 30 m más atrás (`ARROW_REPEAT`).
 - Las conexiones se ven solo en planta y con la herramienta Nudo; no en 3D ni en la Maqueta.
 - Isletas: no se editan sus esquinas una vez dibujadas (se quitan y se dibujan otra vez).
 - Carriles bus y tranvía: el bus cuenta como carril; el tranvía, no.
 
 **De N4 (tramos y sustituir)**
-- En planta los tramos no se distinguen: la planta dibuja las franjas, no su material (salvo con presentación). Pintarlos con su color o una trama.
+- ~~En planta los tramos no se distinguen: la planta dibuja las franjas, no su material (salvo con presentación). Pintarlos con su color o una trama.~~ **Hecho (0.110)**: las franjas de un tramo con materiales propios se tiñen con el color de su material.
 - Árbol, farola o banco «por tramo» de la calle: hoy se cambian los objetos que haya (Sustituir todos en un tramo); la calle no genera su mobiliario por sí sola, lo pone «La vida de la calle».
 - La zona es un rectángulo; un contorno libre o una parcela/manzana elegida.
-- Los tramos se cambian tecleando; tiradores en planta para arrastrar sus extremos.
+- ~~Los tramos se cambian tecleando; tiradores en planta para arrastrar sus extremos.~~ **Hecho (0.110)**: tiradores en el bordillo derecho, al principio y al final de cada tramo (`Grip::RoadSkinEnd`).
 
 **De N5 (superficies)**
-- Sin huecos (un alcorque o una fuente dentro de la plaza) ni contornos curvos.
+- ~~Sin huecos (un alcorque o una fuente dentro de la plaza) ni contornos curvos.~~ **Hecho (0.110)**: «Editar contorno» en la superficie (`SketchTarget::Surface`): contorno con arcos y huecos con su encintado (`UrbanSurface::holes`, `hole_edges`; formato 121).
 - Las plazas de aparcamiento no dejan el sitio de las de movilidad reducida ni las numeran; no siguen un lado inclinado (van paralelas al más largo).
-- La superficie no recorta el terreno: se apoya sobre él (un jardín hundido o una plaza en bajada, no).
+- ~~La superficie no recorta el terreno: se apoya sobre él (un jardín hundido o una plaza en bajada, no).~~ **Hecho (0.110)**: con altura negativa (hasta −6 m) queda hundida y recorta el terreno (`solid::terrain_holes`).
 ~~Mover sus esquinas con tiradores; hoy se rehace con Editar contorno o se dibuja de nuevo.~~ **Hecho (0.110)**: las esquinas de las superficies y de las parcelas se arrastran (`Grip::OutlineCorner`).
-- Las juntas son una cuadrícula; aparejos (espiga, rombo) y despiece del encintado, no.
+- ~~Las juntas son una cuadrícula; aparejos (espiga, rombo) y despiece del encintado, no.~~ **Hecho en parte (0.110)**: aparejos de cuadrícula, espiga, rombo y a matajunta (`JointPattern`). Falta el despiece del encintado.
 
 **De N6 (ocultar y soltar)**
 ~~Al soltar una cebra, los bordillos rebajados se quitan con ella; habría que dejarlos donde estaban o moverlos con la cebra.~~ **Hecho (cuarta vuelta)**: la calle oculta las barras y se queda con los rebajes donde estaban.
 - Soltar también las flechas y líneas de un nudo (hoy solo se ocultan) y las señales (pasarían a ser un objeto «señal»).
-- Ocultar por ventana (varias piezas de una vez) y ver las ocultas en gris para devolverlas una a una.
+- ~~Ocultar por ventana (varias piezas de una vez) y ver las ocultas en gris para devolverlas una a una.~~ **Hecho (0.110)**: con «Ocultar piezas», una ventana oculta todas las que caen dentro y las ocultas se ven en gris; un clic en una la devuelve (`pieces_ui::pieces_in`, `hidden_piece_at`, `Model::show_piece`, `Road::hidden_shapes`).
 - Ocultar en 3D y en la Maqueta (hoy, desde la planta).
 
 **De N7 (manzanas)**
 ~~Al mover una calle, las parcelas y los edificios que la miran no la siguen; hay que vaciar, borrar las parcelas y volver a parcelar (C5 de calles).~~ **Hecho (0.110)**: al cambiar las calles, las manzanas que cambian de forma se vuelven a parcelar solas, con la zona que tenían, sin tocar las parcelas bloqueadas ni las dibujadas a mano, y se vuelven a edificar si lo estaban (`blocks::follow_streets`, desde `Editor::transact`; un aviso dice cuántas).
 ~~Al trazar una calle sobre edificios del mundo, no avisa ni los quita.~~ **Hecho (0.110)**: los quita, en el mismo paso de Deshacer, y lo avisa.
 ~~Las manzanas no se guardan: se buscan cada vez. Parcelar una manzana ya parcelada se niega (habría que poder «volver a parcelar» quitando lo no bloqueado).~~ **Hecho en parte (cuarta vuelta)**: un clic en una manzana ya parcelada la vuelve a parcelar sin tocar las bloqueadas (`blocks::replot_block`). Siguen buscándose cada vez (5 ms en 1 km²).
-- Las parcelas son de un frente fijo; mezclar anchos (como un casco real) o leer la parcelación del Catastro y respetarla.
+- ~~Las parcelas son de un frente fijo; mezclar anchos (como un casco real)~~ **Hecho (0.110)**: el casco antiguo mezcla frentes de la mitad a una vez y media y las casas, de ±25 % (`block_lots_mixed`, `zone_mix`). Falta leer la parcelación del Catastro y respetarla.
 ~~Los edificios de esquina son un rectángulo a una calle: falta la casa de esquina con dos fachadas.~~ **Hecho (0.110)**: la parcela de esquina se edifica entera, con fachada a las dos calles (`blocks::street_sides`, `Model::add_world_building_on`); las casas con jardín delantero siguen como estaban.
 - Pintar zonas con un pincel sobre varias parcelas a la vez.
 ~~La planta tiñe las parcelas y las rotula solo si cabe el texto; una leyenda de zonas.~~ **Hecho en el mapa (cuarta vuelta)**; en la planta no.
 
 **De N8 (área grande)**
 - El recuadro no se puede girar ni dibujar a mano (un contorno libre o el término municipal).
-- Las calles que ya estaban en el proyecto no se recortan al cambiar el área (solo se cortan al traerlas).
+- ~~Las calles que ya estaban en el proyecto no se recortan al cambiar el área (solo se cortan al traerlas).~~ **Hecho (0.110)**: al traer el entorno se recortan también las que ya estaban, salvo las que tienen tramos, cambios de sección, rasante o piezas ocultas propias (`Model::clip_roads_to_surroundings`).
 - El terreno se trae con unos 4 000 puntos: en 2 × 2 km quedan a unos 30 m; con más detalle, por teselas.
 ~~El mapa no se exporta desde la aplicación (sí desde `archisim mapa`) ni tiene leyenda ni capas que encender y apagar.~~ **Hecho en parte (cuarta vuelta)**: «Guardar el mapa…» en PNG o SVG, con leyenda. Faltan las capas.
 - Las conexiones con fuera no dicen a dónde van (el pueblo o la carretera de destino).
@@ -468,9 +468,9 @@ Lo que se deja para después, tanda a tanda, para repasarlo junto con la cuarta 
 ~~Dos coches que entran al cruce desde calles distintas pueden pisarse dentro: no se ceden el paso (ni ceda el paso ni prioridad a la derecha), solo se respetan semáforos y stop.~~ **Hecho (cuarta vuelta)**: no entra nadie en un camino que cruza otro ocupado, y con ceda el paso o stop se espera a quien llega por una calle sin señal. La prioridad a la derecha, no.
 ~~Los semáforos no se ven encenderse en 3D (el poste no cambia de color) y su ciclo es fijo.~~ **Hecho en parte (cuarta vuelta)**: rojo, ámbar y verde encendidos en cada cabeza (`Traffic::lamps`). El ciclo sigue fijo.
 - Coches y personas son cajas de colores; usar los modelos de coche y persona de la biblioteca (con sus versiones de lejos) cuando el rendimiento lo permita.
-- Las personas no cruzan por los pasos de peatones ni entran en plazas o parques.
+- ~~Las personas no cruzan por los pasos de peatones~~ **Hecho (0.110)**: en cada paso de peatones, una de cada dos cruza a la otra acera. Falta que entren en plazas o parques.
 - Sin autobuses en su carril ni tranvía.
-- En la Maqueta no hay botón propio; se pone desde Urbanismo.
+- ~~En la Maqueta no hay botón propio; se pone desde Urbanismo.~~ **Hecho (0.110)**: tarjeta «Tráfico» en «Edificios y calles» (`CatalogAct::Traffic`).
 
 **De N2 (trazado)**
 - La pendiente uniforme elegida con el ratón no enseña marcas en planta entre los dos clics (solo el aviso).

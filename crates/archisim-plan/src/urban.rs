@@ -295,6 +295,28 @@ pub fn draw_roads(
                     archisim_core::Lowered::Flush => ("#e2bf8f", pens().view),
                     archisim_core::Lowered::Ramp { .. } => ("#ecdcc2", pens().view),
                 };
+                // A stretch with its own materials (N4): tinted with the
+                // material's colour, so it shows in plan.
+                let mid = (p.span.0 + p.span.1) / 2.0;
+                let tinted = r
+                    .skins
+                    .iter()
+                    .any(|x| x.from <= mid && mid <= x.to)
+                    .then(|| model.surface_color(p.material))
+                    .map(|c| {
+                        let base = u32::from_str_radix(&fill[1..], 16).unwrap_or(0xdcdcdc);
+                        let mix = |sh: u32, c: u8| {
+                            let b = ((base >> sh) & 0xff) as f64;
+                            (b * 0.45 + c as f64 * 0.55).round() as u32
+                        };
+                        format!(
+                            "#{:02x}{:02x}{:02x}",
+                            mix(16, c[0]),
+                            mix(8, c[1]),
+                            mix(0, c[2])
+                        )
+                    });
+                let fill = tinted.as_deref().unwrap_or(fill);
                 let _ = writeln!(
                     s,
                     r#"<path d="{}" fill="{fill}" stroke="{INK}" stroke-width="{}"/>"#,
@@ -464,12 +486,38 @@ pub fn draw_roads(
                     path(&back)
                 );
             }
+            // Its holes (a tree pit, a bed): out of the paving, with the
+            // edge round them.
+            let hole_edges = x.hole_edges();
+            let mut holes_d = String::new();
+            for h in &hole_edges {
+                holes_d.push(' ');
+                holes_d.push_str(&path(h));
+            }
+            if edged {
+                for (h, e) in x.holes.iter().zip(&hole_edges) {
+                    let _ = writeln!(
+                        s,
+                        r##"<path d="{} {}" fill="#bdb6a8" fill-rule="evenodd" stroke="none"/>"##,
+                        path(e),
+                        path(h)
+                    );
+                }
+            }
             let _ = writeln!(
                 s,
-                r#"<path d="{}" fill="{fill}" stroke="{INK}" stroke-width="{}"/>"#,
+                r#"<path d="{}{holes_d}" fill="{fill}" fill-rule="evenodd" stroke="{INK}" stroke-width="{}"/>"#,
                 path(if edged { &inner } else { &x.outline }),
                 num(pens().thin * k)
             );
+            for h in &x.holes {
+                let _ = writeln!(
+                    s,
+                    r#"<path d="{}" fill="none" stroke="{INK}" stroke-width="{}"/>"#,
+                    path(h),
+                    num(pens().view * k)
+                );
+            }
             if k <= 0.2 {
                 for (a, b) in x.joint_lines() {
                     let _ = writeln!(

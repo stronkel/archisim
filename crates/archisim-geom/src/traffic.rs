@@ -122,6 +122,11 @@ struct Walker {
     forward: bool,
     speed: f64,
     colour: [u8; 3],
+    /// Crossing the street by a zebra crossing: from and to which offset,
+    /// and how far across (0 to 1).
+    crossing: Option<(f64, f64, f64)>,
+    /// Its own die, for whether it crosses.
+    dice: u64,
 }
 
 /// What a junction's arms say to the cars coming in.
@@ -492,6 +497,8 @@ impl Traffic {
                     forward: t.unit() < 0.5,
                     speed: WALK_SPEED * (0.8 + 0.4 * t.unit()),
                     colour: CLOTHES[(t.unit() * CLOTHES.len() as f64) as usize % CLOTHES.len()],
+                    crossing: None,
+                    dice: (t.unit() * u64::MAX as f64) as u64 | 1,
                 };
                 t.people.push(walker);
             }
@@ -776,12 +783,51 @@ impl Traffic {
                 continue;
             };
             let len = r.length();
+            // Crossing: across at walking speed, then on along the other
+            // sidewalk.
+            if let Some((from, to, done)) = p.crossing {
+                let width = (to - from).abs().max(1.0);
+                let done = done + p.speed * dt / width;
+                if done >= 1.0 {
+                    p.offset = to;
+                    p.crossing = None;
+                } else {
+                    p.offset = from + (to - from) * done;
+                    p.crossing = Some((from, to, done));
+                }
+                continue;
+            }
             let d = if p.forward {
                 p.speed * dt
             } else {
                 -p.speed * dt
             };
+            let before = p.s;
             p.s += d;
+            // At a zebra crossing, every other one crosses (N9).
+            let (lo, hi) = if before < p.s {
+                (before, p.s)
+            } else {
+                (p.s, before)
+            };
+            if let Some(c) = r.section.crossings.iter().find(|c| c.at > lo && c.at <= hi) {
+                p.dice ^= p.dice << 13;
+                p.dice ^= p.dice >> 7;
+                p.dice ^= p.dice << 17;
+                if p.dice % 2 == 0 {
+                    let other = r
+                        .offsets_at(c.at)
+                        .into_iter()
+                        .filter(|o| o.0 == RoadBand::Sidewalk)
+                        .map(|o| (o.1 + o.2) / 2.0)
+                        .find(|o| o.signum() != p.offset.signum());
+                    if let Some(to) = other {
+                        p.s = c.at;
+                        p.crossing = Some((p.offset, to, 0.0));
+                        continue;
+                    }
+                }
+            }
             if p.s > len - 0.5 {
                 p.s = len - 0.5;
                 p.forward = false;
@@ -840,7 +886,13 @@ impl Traffic {
                 at: [
                     at.x,
                     at.y,
-                    self.elevation + r.top_at(p.s) + r.section.kerb_height,
+                    self.elevation
+                        + r.top_at(p.s)
+                        + if p.crossing.is_some() {
+                            0.0
+                        } else {
+                            r.section.kerb_height
+                        },
                 ],
                 dir,
                 colour: p.colour,
@@ -973,6 +1025,40 @@ mod tests {
             .unwrap();
         }
         (m, level)
+    }
+
+    #[test]
+    fn people_cross_by_the_zebra_crossings() {
+        let (mut m, level) = town();
+        let ids: Vec<RoadId> = m.roads().map(|r| r.id).collect();
+        for id in ids {
+            m.edit_road(id, |r| {
+                r.section.crossings = (1..20)
+                    .map(|k| archisim_core::Crossing {
+                        at: k as f64 * 10.0,
+                        width: 4.0,
+                    })
+                    .collect()
+            })
+            .unwrap();
+        }
+        let mut t = Traffic::new(&m, level, 0, 30, 3);
+        let kerb = RoadSection::default().kerb_height;
+        let mut crossed = 0;
+        let mut sides = std::collections::HashSet::new();
+        for _ in 0..600 {
+            t.step(&m, 0.2);
+            for b in t.bodies(&m).iter().filter(|b| b.person) {
+                if b.at[2] < kerb - 1e-6 {
+                    crossed += 1;
+                }
+            }
+            for p in &t.people {
+                sides.insert((p.road, p.offset > 0.0));
+            }
+        }
+        assert!(crossed > 0, "someone crosses the street");
+        assert!(sides.len() >= 3, "and walks on the other side: {sides:?}");
     }
 
     #[test]

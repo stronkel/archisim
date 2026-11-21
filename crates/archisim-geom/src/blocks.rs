@@ -81,6 +81,28 @@ pub struct Lot {
 /// mitred, so the lots meet without overlapping; a block too small for a
 /// courtyard is one lot.
 pub fn block_lots(block: &[Point2], frontage: f64, depth: f64) -> Vec<Lot> {
+    block_lots_mixed(block, frontage, depth, 0.0, 0)
+}
+
+/// How much the frontages of a zone's plots vary (0: all alike; 0,5: from
+/// half to one and a half times the frontage), as a real old town.
+pub fn zone_mix(zone: BlockZone) -> f64 {
+    match zone {
+        BlockZone::OldTown => 0.5,
+        BlockZone::Houses => 0.25,
+        _ => 0.0,
+    }
+}
+
+/// [`block_lots`] with frontages that vary by `mix` (see [`zone_mix`]),
+/// the same each time for the same `seed`.
+pub fn block_lots_mixed(
+    block: &[Point2],
+    frontage: f64,
+    depth: f64,
+    mix: f64,
+    seed: u64,
+) -> Vec<Lot> {
     let n = block.len();
     if n < 3 {
         return Vec::new();
@@ -153,6 +175,29 @@ pub fn block_lots(block: &[Point2], frontage: f64, depth: f64) -> Vec<Lot> {
         let rest = ((te - first) / f).round() as usize;
         let mut cuts = vec![0.0, first];
         if rest == 0 {
+            *cuts.last_mut().unwrap() = te;
+        } else if mix > 0.0 {
+            // Frontages of their own, between 1 − mix and 1 + mix times the
+            // frontage, fitted to the side.
+            let mut h = seed ^ (i as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15);
+            let mut widths: Vec<f64> = (0..rest)
+                .map(|_| {
+                    h ^= h << 13;
+                    h ^= h >> 7;
+                    h ^= h << 17;
+                    let r = (h % 10_000) as f64 / 10_000.0;
+                    1.0 + mix * (2.0 * r - 1.0)
+                })
+                .collect();
+            let total: f64 = widths.iter().sum();
+            for w in &mut widths {
+                *w *= (te - first) / total;
+            }
+            let mut t = first;
+            for w in widths {
+                t += w;
+                cuts.push(t);
+            }
             *cuts.last_mut().unwrap() = te;
         } else {
             for k in 1..=rest {
@@ -256,7 +301,8 @@ pub fn add_block_plots(
     let f = frontage.unwrap_or_else(|| zone_frontage(model, zone));
     let d = depth.unwrap_or_else(|| zone_depth(model, zone));
     let mut out = Vec::new();
-    for (k, lot) in block_lots(block, f, d).into_iter().enumerate() {
+    let lots = block_lots_mixed(block, f, d, zone_mix(zone), number as u64 + 1);
+    for (k, lot) in lots.into_iter().enumerate() {
         let id = model.add_plot(NewPlot {
             name: format!("Manzana {number} · {}", k + 1),
             level,
@@ -298,7 +344,7 @@ pub fn replot_block(
     // The names of the locked plots stay; the new ones go on after them.
     let mut k = locked.len();
     let mut out = Vec::new();
-    for lot in block_lots(block, f, d) {
+    for lot in block_lots_mixed(block, f, d, zone_mix(zone), number as u64 + 1) {
         let c = centroid(&lot.outline);
         let on_locked = locked.iter().any(|p| {
             archisim_core::point_in_polygon(c, &p.outline)
@@ -1053,6 +1099,29 @@ mod tests {
                 assert!(!archisim_core::point_in_polygon(centroid(o), &street));
             }
         }
+    }
+
+    #[test]
+    fn an_old_town_mixes_its_frontages() {
+        let (m, level) = town();
+        let block = city_blocks(&m, level).remove(0);
+        let widths = |mix: f64| -> Vec<f64> {
+            block_lots_mixed(&block, 8.0, 18.0, mix, 7)
+                .iter()
+                .map(|l| l.front.0.distance(l.front.1))
+                .collect()
+        };
+        let even = widths(0.0);
+        let mixed = widths(0.5);
+        let spread = |w: &[f64]| {
+            w.iter().cloned().fold(f64::MIN, f64::max) - w.iter().cloned().fold(f64::MAX, f64::min)
+        };
+        assert!(spread(&mixed) > spread(&even) + 2.0, "{mixed:?}");
+        // The same each time, and the sides still filled.
+        assert_eq!(mixed, widths(0.5));
+        let total = |w: &[f64]| w.iter().sum::<f64>();
+        assert!((total(&mixed) - total(&even)).abs() < 1e-6);
+        assert!(mixed.iter().all(|w| *w > 3.0));
     }
 
     #[test]

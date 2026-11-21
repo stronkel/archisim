@@ -1111,6 +1111,16 @@ pub fn import_carto(
     // The area brought: the streets that reach its edge are its
     // connections with the outside (N8).
     m.set_surroundings(Some(opts.area()))?;
+    // And the streets already there, cut to it.
+    let clipped = m.clip_roads_to_surroundings()?;
+    if clipped > 0 {
+        report.notes.push(format!(
+            "{clipped} calle{} que ya estaba{} en el proyecto, recortada{} al área",
+            if clipped == 1 { "" } else { "s" },
+            if clipped == 1 { "" } else { "n" },
+            if clipped == 1 { "" } else { "s" },
+        ));
+    }
     if opts.street_life && opts.streets {
         report.life = crate::street_life::add_street_life(
             m,

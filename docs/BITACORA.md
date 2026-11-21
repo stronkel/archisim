@@ -6,7 +6,7 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
-## 2026-11-20 (190) · v0.110: remates del territorio, primera tanda
+## 2026-11-20 (190) · v0.110: remates del territorio, dos tandas
 
 Rama `bloque/territorio-remates`. Antonio pidió seguir con los remates del territorio (`docs/TERRITORIO.md` §7) mientras prueba la 0.109. Sin cambios de formato.
 
@@ -15,12 +15,27 @@ Rama `bloque/territorio-remates`. Antonio pidió seguir con los remates del terr
   - Edificios de esquina con dos fachadas: la parcela de esquina (dos lados a la calle, `blocks::street_sides`) se edifica entera con `Model::add_world_building_on`, salvo en la zona de casas con jardín.
   - Tiradores en las esquinas de parcelas y superficies urbanas (`drag::Grip::OutlineCorner`).
   - Pruebas: `plots_and_buildings_follow_a_moved_street`, `a_street_laid_over_buildings_takes_them_away`, `corner_plots_get_a_building_with_two_facades`, `plots_follow_a_street_moved_in_the_editor` y `a_plot_corner_is_dragged`. Fotos de `archisim manzanas` en 3D: la manzana de pisos cierra ya sus cuatro esquinas.
-- **Pendiente** (§7): lo demás de la lista. Por ejemplo, los tiradores de los nudos en 3D, las plazas con huecos y bordes curvos, y coches y personas con sus modelos.
+- **Segunda tanda (21/11, Antonio: «haz los remates de la lista»)** (formato 121):
+  - plazas con huecos y bordes curvos por «Editar contorno» (`SketchTarget::Surface`, `UrbanSurface::holes`/`hole_edges`) y superficies hundidas que recortan el terreno;
+  - aparejos del pavimento (`JointPattern`);
+  - tramos teñidos en planta y con tiradores (`Grip::RoadSkinEnd`);
+  - frentes mezclados en el casco y en las casas (`block_lots_mixed`, `zone_mix`);
+  - flechas repetidas (`ARROW_REPEAT`);
+  - ocultar piezas por ventana (`pieces_in`), con las ocultas en gris para devolverlas una a una (`Model::show_piece`, `Road::hidden_shapes`);
+  - tarjeta «Tráfico» en la Maqueta (`CatalogAct::Traffic`);
+  - peatones que cruzan por los pasos (`Walker::crossing`);
+  - calles ya existentes recortadas al área (`Model::clip_roads_to_surroundings`).
+  - En `archisim manzanas`, una placita con alcorque en espiga y un jardín hundido en el patio de los pisos.
+  - Pruebas: `holes_and_patterns_go_with_the_surface` (con `ARCHISIM_APAREJOS_OUT` dibuja los aparejos), `an_old_town_mixes_its_frontages`, `streets_already_there_are_cut_to_a_new_area`, `people_cross_by_the_zebra_crossings`, la ventana en `hide_pieces_and_let_a_zebra_go` y la plaza con hueco en la prueba de bocetos.
+- **Pendiente** (§7): nudos (desplazar el centro, aplanar un brazo, martillo, tiradores en 3D), carriles (cambio de sentido, «sin salida», conexiones en 3D, esquinas de isletas, tranvía), mobiliario por tramo y zona libre de Sustituir, plazas de movilidad reducida, encintado, ocultar en 3D, Catastro, pincel de zonas, recuadro girable, terreno por teselas, destinos de las conexiones, modelos de coches y personas, autobuses y tranvía, marcas de pendiente y cotas al trazar.
 - **Qué debe probar Antonio** (`archisim manzanas out/` y abre `out/manzanas.archisim`):
   1. Selecciona la calle norte–sur del medio y arrástrala unos metros. Las dos manzanas parceladas se vuelven a parcelar y edificar, y abajo sale el aviso «2 manzanas vueltas a parcelar…». Ctrl+Z lo deshace todo junto.
   2. Traza una calle nueva que cruce la manzana de casco antiguo: las parcelas se rehacen a los dos lados y no queda ningún edificio sobre la calle.
   3. Mira en 3D las esquinas de la manzana de pisos: cada una es un edificio con fachada a las dos calles.
   4. Selecciona una parcela o una plaza y arrastra una de sus esquinas.
+  5. En el patio de los pisos: la placita con su alcorque (selecciónala, «Editar contorno» enseña el hueco, y prueba los aparejos en «Juntas del pavimento») y el jardín hundido en 3D.
+  6. Selecciona una calle con un tramo (grupo «Tramos») y arrastra sus extremos; el tramo se ve teñido en planta.
+  7. Con «Ocultar piezas», arrastra una ventana sobre las marcas de un carril.
 
 ## 2026-11-19 (189) · v0.109: calles plásticas, segunda vuelta
 

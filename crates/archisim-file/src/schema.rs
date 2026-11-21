@@ -6286,6 +6286,8 @@ impl ProjectFile {
                 joints: 0.0,
                 joint_angle: 0.0,
                 bays: None,
+                holes: Vec::new(),
+                pattern: core::JointPattern::Grid,
             };
             surface
                 .decode_into(&x.settings)

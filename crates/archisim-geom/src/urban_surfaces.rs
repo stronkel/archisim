@@ -20,10 +20,16 @@ pub fn surface_solids(model: &Model, id: SurfaceId) -> Vec<Solid> {
     let top = |q: Point2| ground(q) + s.raise;
     let mut out = Vec::new();
     let inner = s.inner();
+    let hole_edges = s.hole_edges();
+    let paved = if hole_edges.is_empty() {
+        inner.clone()
+    } else {
+        crate::solid::with_holes(&inner, &hole_edges)
+    };
     out.push(Solid {
         owner: SolidOwner::Surface(id),
         material: s.material,
-        triangles: draped_prism(&inner, |q| (ground(q) - DEPTH, top(q))),
+        triangles: draped_prism(&paved, |q| (ground(q) - DEPTH, top(q))),
     });
     if s.edge != SurfaceEdge::None && s.edge_width > 0.0 && inner.len() == s.outline.len() {
         let n = s.outline.len();
@@ -40,6 +46,27 @@ pub fn surface_solids(model: &Model, id: SurfaceId) -> Vec<Solid> {
             tris.extend(draped_prism(&quad, |q| {
                 (ground(q) - DEPTH - 0.05, top(q) + lip)
             }));
+        }
+        // And round its holes.
+        for (h, e) in s.holes.iter().zip(&hole_edges) {
+            if h.len() != e.len() {
+                continue;
+            }
+            let h = crate::ensure_ccw(h.clone());
+            let e = crate::ensure_ccw(e.clone());
+            let m = h.len();
+            for i in 0..m {
+                let j = (i + 1) % m;
+                let quad = [e[i], e[j], h[j], h[i]];
+                let lip = if s.edge == SurfaceEdge::Kerb {
+                    0.02
+                } else {
+                    0.0
+                };
+                tris.extend(draped_prism(&quad, |q| {
+                    (ground(q) - DEPTH - 0.05, top(q) + lip)
+                }));
+            }
         }
         out.push(Solid {
             owner: SolidOwner::Surface(id),
