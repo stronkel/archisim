@@ -395,6 +395,9 @@ pub struct ArchiSimApp {
     pub node_pick: Option<archisim_core::NodeKey>,
     /// The handle of the picked node being dragged (N1).
     pub node_grab: Option<node_ui::NodeGrab>,
+    /// A node's handle taken in 3D: the height of the plane it moves on and
+    /// where it is now.
+    node_grab_3d: Option<(f64, Point2)>,
     /// What a click of the tool Nudo does (N3): pick a node, connect lanes
     /// or draw a painted island.
     pub node_mode: node_ui::NodeMode,
@@ -950,6 +953,7 @@ impl ArchiSimApp {
             roundabout_settings: Default::default(),
             node_pick: None,
             node_grab: None,
+            node_grab_3d: None,
             node_mode: node_ui::NodeMode::Pick,
             road_typed_arc: None,
             box_settings: None,

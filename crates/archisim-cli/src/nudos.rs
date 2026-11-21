@@ -189,6 +189,27 @@ pub fn build() -> Res<Model> {
         n.kind = Some(NodeKind::DeadEnd);
         n.end_radius = Some(10.0);
     })?;
+    // The Calle Alta ends in a hammerhead; the crossing of the Mayor and
+    // the Pino has its centre 3 m east, and the Olmo flattened 6 m before
+    // the Calle Real (remates of N1).
+    change(&mut m, pb, p(160.0, 100.0), |n, _| {
+        n.kind = Some(NodeKind::DeadEnd);
+        n.hammer = Some(true);
+        n.end_radius = Some(9.0);
+    })?;
+    change(&mut m, pb, p(40.0, 0.0), |n, arms| {
+        let (_, u) = crossroads::node_frame(arms, p(40.0, 0.0));
+        let d = archisim_core::Vec2::new(3.0, 0.0);
+        n.shift = Some(p(d.dot(u), d.dot(u.perp_left())));
+    })?;
+    change(&mut m, pb, p(-40.0, 60.0), |n, arms| {
+        if let Some(a) = arms.iter().find(|a| a.dir.y < -0.9) {
+            let r = Junction::arm_ref(a);
+            let mut s = n.arm(r);
+            s.flatten = Some(6.0);
+            n.set_arm(r, s);
+        }
+    })?;
     change(&mut m, pb, p(160.0, -40.0), |n, arms| {
         n.kind = Some(NodeKind::Bend);
         for a in arms {
@@ -533,7 +554,7 @@ mod tests {
             assert!(kinds.contains(&k), "{k:?}");
         }
         let here = m.nodes().count();
-        assert_eq!(here, 10);
+        assert_eq!(here, 11);
         // The lanes by hand (N3): arrows, a connection and two islands.
         let lanes = crossroads::junctions(&m, pb)
             .into_iter()

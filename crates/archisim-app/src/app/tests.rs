@@ -9948,6 +9948,104 @@ fn lanes_and_islands_with_the_node_tool() {
     h.frame();
 }
 
+/// The remates of the tool Nudo: a lane left without a way out when its
+/// last connection is taken away, the centre dragged without moving the
+/// streets, an island's corner dragged, an arm flattened and a dead end in
+/// hammerhead from the properties.
+#[test]
+fn node_centre_no_exit_and_island_corners() {
+    use archisim_geom::crossroads::{self, Junction};
+    let mut h = Harness::new(Editor::new_project());
+    let canvas = h.app.canvas;
+    h.app
+        .view
+        .fit_exact(canvas, p(-60.0, -60.0), p(60.0, 60.0), 0.0);
+    h.app.set_discipline(super::toolbox::Discipline::Site);
+    for (a, b) in [(p(-50.0, 0.0), p(50.0, 0.0)), (p(0.0, -50.0), p(0.0, 50.0))] {
+        h.type_text("w");
+        h.click_at(a);
+        h.click_at(b);
+        h.key(Key::Enter);
+        h.key(Key::Escape);
+    }
+    h.app.set_tool(Tool::Node);
+    h.frame();
+    h.click_at(p(2.0, -1.0));
+    let key = h.app.node_pick.clone().expect("a node");
+    h.frame();
+    let j = crossroads::node_junction(h.model(), &key).unwrap();
+    let east = j.arms.iter().find(|a| a.dir.x > 0.9).unwrap().clone();
+    let er = Junction::arm_ref(&east);
+    let outs: Vec<_> = j
+        .lanes
+        .iter()
+        .filter(|c| c.from == er)
+        .map(|c| {
+            let b = j
+                .arms
+                .iter()
+                .find(|a| Junction::arm_ref(a) == c.to)
+                .unwrap();
+            crossroads::lane_end(b, b.lanes_out[c.to_lane])
+        })
+        .collect();
+    assert_eq!(outs.len(), 3);
+    // Take each of its three connections away.
+    for q in outs {
+        h.app.node_mode = super::node_ui::NodeMode::Link(None);
+        h.click_at(crossroads::lane_end(&east, east.lanes_in[0]));
+        h.click_at(q);
+    }
+    let j = crossroads::node_junction(h.model(), &key).unwrap();
+    assert!(
+        j.lanes.iter().all(|c| c.from != er),
+        "no way out by the east lane"
+    );
+    h.app.node_mode = super::node_ui::NodeMode::Pick;
+    // Its centre dragged 3 m south: the streets stay, the north arm ends
+    // later.
+    let north_cut = j.arms.iter().find(|a| a.dir.y > 0.9).unwrap().cut;
+    h.frame();
+    h.drag(j.centre, j.centre + archisim_core::Vec2::new(0.0, -3.0));
+    let j = crossroads::node_junction(h.model(), &key).unwrap();
+    assert!((j.centre.y + 3.0).abs() < 0.1, "{:?}", j.centre);
+    let cut = j.arms.iter().find(|a| a.dir.y > 0.9).unwrap().cut;
+    assert!(cut > north_cut + 2.5, "{cut} {north_cut}");
+    assert!(h.model().roads().all(|r| r.axis.len() == 2));
+    // An island, and one of its corners dragged.
+    h.app.node_mode =
+        super::node_ui::NodeMode::Island(Vec::new(), archisim_core::IslandPaint::Fill);
+    for q in [p(9.0, -9.0), p(14.0, -9.0), p(11.5, -14.0)] {
+        h.click_at(q);
+    }
+    h.key(Key::Enter);
+    h.frame();
+    h.drag(p(14.0, -9.0), p(16.0, -8.0));
+    let (o, u) = crossroads::node_frame(&j.arms, j.at);
+    let n = h.model().node(&key).unwrap().clone();
+    let moved = n.islands[0]
+        .points
+        .iter()
+        .map(|q| o + u * q.x + u.perp_left() * q.y)
+        .any(|q| q.distance(p(16.0, -8.0)) < 0.3);
+    assert!(moved, "{:?}", n.islands[0].points);
+    // The properties draw the new rows; then a flattened arm.
+    h.frame();
+    let mut n = n;
+    let mut s = n.arm(er);
+    s.flatten = Some(6.0);
+    n.set_arm(er, s);
+    assert!(h.app.ed.transact("Aplanar", |m| m.set_node(n)).is_ok());
+    let j2 = crossroads::node_junction(h.model(), &key).unwrap();
+    assert!(j2.flattened.iter().any(|f| (*f - 6.0).abs() < 1e-9));
+    // The 3D view draws the node with its handles and lanes.
+    h.app.mode = ViewMode::ThreeD;
+    h.frame();
+    h.app.mode = ViewMode::Plan;
+    h.app.set_tool(Tool::Arrow);
+    h.frame();
+}
+
 #[test]
 fn streets_without_rules_and_with_precision() {
     let mut h = Harness::new(Editor::new_project());
