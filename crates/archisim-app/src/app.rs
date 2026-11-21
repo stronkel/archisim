@@ -629,6 +629,9 @@ pub struct ArchiSimApp {
     /// Cartography being brought around the project (H7; its window is open).
     pub carto_import: Option<carto_ui::CartoImport>,
     pub carto_download: Option<carto_download_ui::CartoDownload>,
+    /// The outline of the surroundings being drawn on the plan (N8): for
+    /// the download (true) or the files (false), and its corners so far.
+    pub carto_outline_pick: Option<(bool, Vec<Point2>)>,
     /// The whole object library, for the gallery's pictures of the types
     /// the project does not have yet (made the first time it is needed).
     pub object_library: Option<archisim_core::Model>,
@@ -1075,6 +1078,7 @@ impl ArchiSimApp {
             survey_import: None,
             carto_import: None,
             carto_download: None,
+            carto_outline_pick: None,
             object_library: None,
             collection: None,
             collection_libraries: Vec::new(),

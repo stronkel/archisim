@@ -461,7 +461,14 @@ impl View3dState {
             .materials()
             .find(|m| m.category != "glass")
             .map_or(archisim_core::MaterialId(0), |m| m.id);
-        let mut solids = archisim_geom::traffic::traffic_solids(&t.sim.bodies(model), material);
+        // The nearest to what the camera looks at, with their whole models.
+        let focus =
+            archisim_core::Point2::new(self.camera.target.x as f64, self.camera.target.y as f64);
+        let mut solids = archisim_geom::traffic::traffic_solids_near(
+            &t.sim.bodies(model),
+            material,
+            Some(focus),
+        );
         solids.extend(archisim_geom::traffic::lamp_solids(
             &t.sim.lamps(),
             material,

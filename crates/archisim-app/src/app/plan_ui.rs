@@ -128,6 +128,7 @@ impl ArchiSimApp {
         self.draw_node_pick(&painter, rect);
         self.draw_replace_area(&painter, rect);
         self.draw_zone_brush(&painter, rect);
+        self.draw_carto_outline(&painter, rect);
         crate::profile::time("planta: draw_pool_preview", || {
             self.draw_pool_preview(&painter, rect)
         });
@@ -158,6 +159,7 @@ impl ArchiSimApp {
         self.draw_context_fit_preview(&painter, rect);
         self.draw_hidden_pieces(&painter, rect);
         self.draw_street_readout(&painter, rect);
+        self.draw_grade_pick(&painter, rect);
         crate::profile::time("planta: draw_brush_plan", || {
             self.draw_brush_plan(&painter, rect)
         });
@@ -827,6 +829,9 @@ impl ArchiSimApp {
         if enter && self.replace_area_finish() {
             return;
         }
+        if enter && self.carto_outline_finish() {
+            return;
+        }
         if self.command_keys(&events, enter, escape, backspace, space) {
             return;
         }
@@ -1161,6 +1166,7 @@ impl ArchiSimApp {
                     self.blocks.picking = false;
                     self.blocks.brush = false;
                     self.blocks.stroke.clear();
+                    self.carto_outline_pick = None;
                     self.context_fit.stop();
                 }
             }
@@ -1311,6 +1317,14 @@ impl ArchiSimApp {
             if response.clicked_by(PointerButton::Primary) {
                 if let Some(c) = self.cursor {
                     self.context_fit_click(c.point);
+                }
+            }
+            return;
+        }
+        if self.carto_outline_pick.is_some() && self.tool == Tool::Arrow {
+            if response.clicked_by(PointerButton::Primary) {
+                if let Some(c) = self.cursor {
+                    self.carto_outline_click(c.point);
                 }
             }
             return;

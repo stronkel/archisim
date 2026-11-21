@@ -255,6 +255,58 @@ impl Model {
     }
 }
 
+impl Model {
+    /// Which way `out` (a direction in plan) points, by the true north:
+    /// «el norte», «el noreste»…
+    pub fn compass_of(&self, out: Vec2) -> &'static str {
+        const NAMES: [&str; 8] = [
+            "el norte",
+            "el noreste",
+            "el este",
+            "el sureste",
+            "el sur",
+            "el suroeste",
+            "el oeste",
+            "el noroeste",
+        ];
+        let bearing = (out.x.atan2(out.y) - self.true_north).rem_euclid(std::f64::consts::TAU);
+        let k = ((bearing / (std::f64::consts::TAU / 8.0)).round() as usize) % 8;
+        NAMES[k]
+    }
+
+    /// Says where each connection with the outside of a level leads (N8)
+    /// for the streets that do not say it yet: what `named` gives for its
+    /// end (a town, a road number), else the way it goes («hacia el
+    /// norte»). Returns how many streets got it.
+    pub fn name_outside_ends(
+        &mut self,
+        level: LevelId,
+        named: impl Fn(Point2) -> Option<String>,
+    ) -> Result<usize, ModelError> {
+        let mut by_road: Vec<(RoadId, Vec<String>)> = Vec::new();
+        for e in self.outside_ends(level) {
+            if self.road(e.road).is_none_or(|r| !r.toward.is_empty()) {
+                continue;
+            }
+            let text =
+                named(e.point).unwrap_or_else(|| format!("hacia {}", self.compass_of(e.out)));
+            match by_road.iter_mut().find(|(r, _)| *r == e.road) {
+                Some((_, v)) => {
+                    if !v.contains(&text) {
+                        v.push(text)
+                    }
+                }
+                None => by_road.push((e.road, vec![text])),
+            }
+        }
+        let n = by_road.len();
+        for (r, texts) in by_road {
+            self.edit_road(r, |x| x.toward = texts.join(" / "))?;
+        }
+        Ok(n)
+    }
+}
+
 fn distance_to_segment(p: Point2, a: Point2, b: Point2) -> f64 {
     let d = b - a;
     let len2 = d.dot(d);
@@ -378,5 +430,17 @@ mod tests {
         assert!(!ends.iter().any(|e| e.road == inside));
         let east = ends.iter().find(|e| e.at_end).unwrap();
         assert!(east.out.x > 0.99);
+        // Where they lead: the east one says it, the west one its way.
+        let n = m
+            .name_outside_ends(level, |p| (p.x > 0.0).then(|| "hacia Huelva".to_string()))
+            .unwrap();
+        assert_eq!(n, 1);
+        assert_eq!(
+            m.road(through).unwrap().toward,
+            "hacia el oeste / hacia Huelva"
+        );
+        assert_eq!(m.compass_of(Vec2::new(0.0, 1.0)), "el norte");
+        m.set_true_north(std::f64::consts::FRAC_PI_2).unwrap();
+        assert_eq!(m.compass_of(Vec2::new(1.0, 0.0)), "el norte");
     }
 }

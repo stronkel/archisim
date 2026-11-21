@@ -158,16 +158,23 @@ pub fn draw_outside(s: &mut String, model: &Model, level: LevelId, k: f64) {
             pt(arrow[1]),
             pt(arrow[2])
         );
-        if !r.name.is_empty() {
+        // Its name and where it leads (N8).
+        let label = match (r.name.is_empty(), r.toward.is_empty()) {
+            (false, false) => format!("{} · {}", r.name, r.toward),
+            (false, true) => r.name.clone(),
+            (true, false) => r.toward.clone(),
+            (true, true) => String::new(),
+        };
+        if !label.is_empty() {
             let h = LABEL * k;
             // Along the street, reading from left to right.
             let dir = if e.out.x < -1e-9 { e.out * -1.0 } else { e.out };
-            let half = r.name.chars().count() as f64 * h * 0.3;
+            let half = label.chars().count() as f64 * h * 0.3;
             let at = tip + e.out * (h + half) - dir.perp_left() * (h / 2.0);
             let _ = writeln!(
                 s,
                 r#"<path class="outside-connection" d="{}" {}/>"#,
-                text_path(&r.name, at, dir, h, Align::Centre),
+                text_path(&label, at, dir, h, Align::Centre),
                 crate::lettering::paint(h, INK)
             );
         }

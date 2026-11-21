@@ -1259,6 +1259,26 @@ impl ArchiSimApp {
                     self.report(res, "Nombre cambiado.");
                 }
             });
+            if self.ed.model().surroundings().is_some() || !r.toward.is_empty() {
+                row(
+                    ui,
+                    "Hacia",
+                    "A dónde lleva fuera del área (un pueblo, una carretera)",
+                    |ui, w| {
+                        if let Some(t) = text_edit_committed(
+                            ui,
+                            Id::unique(("road-toward", id)),
+                            &r.toward,
+                            w - 8.0,
+                        ) {
+                            let res = self.ed.transact("Destino del vial", |m| {
+                                m.edit_road(id, |x| x.toward = t.trim().to_string())
+                            });
+                            self.report(res, "Destino cambiado.");
+                        }
+                    },
+                );
+            }
             self.level_row(
                 ui,
                 ("road-level", id),

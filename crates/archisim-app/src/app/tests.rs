@@ -9859,6 +9859,43 @@ fn arrows_signs_free_zones_and_the_zone_brush() {
     h.frame();
 }
 
+/// The remates of N8 and N2: the outline of the surroundings drawn on the
+/// plan, and the angle drawn while a street goes on from another.
+#[test]
+fn surroundings_outline_and_trace_dims() {
+    let mut h = Harness::new(Editor::new_project());
+    let canvas = h.app.canvas;
+    h.app
+        .view
+        .fit_exact(canvas, p(-60.0, -60.0), p(60.0, 60.0), 0.0);
+    h.app.set_discipline(super::toolbox::Discipline::Site);
+    h.app.carto_download = Some(super::carto_download_ui::CartoDownload::default());
+    h.frame();
+    h.app.start_carto_outline(true);
+    for q in [p(-40.0, -40.0), p(40.0, -40.0), p(40.0, 40.0)] {
+        h.click_at(q);
+    }
+    h.move_to(p(-40.0, 40.0));
+    h.frame();
+    h.click_at(p(-40.0, 40.0));
+    h.click_at(p(-40.0, -40.0));
+    assert!(h.app.carto_outline_pick.is_none());
+    let o = &h.app.carto_download.as_ref().unwrap().options;
+    assert_eq!(o.outline.as_ref().map(|x| x.len()), Some(4));
+    assert!(o.contains(p(30.0, 30.0)) && !o.contains(p(50.0, 0.0)));
+    assert!(o.reach() > 50.0);
+    h.app.carto_download = None;
+    // A street, and another going on from its end, turning: the angle is
+    // drawn while it is traced.
+    h.type_text("w");
+    h.click_at(p(-50.0, 0.0));
+    h.click_at(p(0.0, 0.0));
+    h.move_to(p(30.0, 30.0));
+    h.frame();
+    h.key(Key::Enter);
+    h.key(Key::Escape);
+}
+
 #[test]
 fn surfaces_drawn_by_their_outline() {
     let mut h = Harness::new(Editor::new_project());
@@ -10226,6 +10263,9 @@ fn streets_without_rules_and_with_precision() {
     h.app.road_grade_pick = Some((first, None));
     h.click_at(p(-50.0, 0.0));
     assert!(matches!(h.app.road_grade_pick, Some((_, Some(_)))));
+    // Between the two clicks, the stretch is drawn on the plan (N2).
+    h.move_to(p(0.0, 0.0));
+    h.frame();
     h.click_at(p(10.0, 0.0));
     assert!(h.app.road_grade_pick.is_none());
     let form = h

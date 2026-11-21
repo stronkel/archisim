@@ -579,11 +579,16 @@ impl ArchiSimApp {
 
     pub(super) fn carto_download_dialog(&mut self, ctx: &egui::Context) {
         self.finish_carto_download();
+        // Out of the way while its outline is drawn on the plan.
+        if self.carto_outline_pick.is_some() {
+            return;
+        }
         let Some(mut d) = self.carto_download.take() else {
             return;
         };
         let mut open = true;
         let mut start = false;
+        let mut pick_outline = false;
         let georef = self.ed.model().georeference().cloned();
         d.finish_search();
         let centre = d.centre_lat_lon(self.ed.model());
@@ -667,6 +672,9 @@ impl ArchiSimApp {
                     ui.switch(&mut o.square, "Recuadro")
                         .on_hover_text("Un cuadrado de lado el doble del radio (hasta 2 × 2 km con radio 1 000 m)");
                 });
+                if super::carto_ui::area_controls(ui, o, "carto-download") {
+                    pick_outline = true;
+                }
                 ui.label(
                     egui::RichText::new("Son servicios públicos y gratuitos; con radios grandes tardan unos minutos. Al terminar se abre «Traer el entorno» para elegir cómo se trae.")
                         .color(p.muted),
@@ -699,6 +707,9 @@ impl ArchiSimApp {
                 }
             });
         self.carto_download = open.then_some(d);
+        if pick_outline {
+            self.start_carto_outline(true);
+        }
         if !open {
             // Closing the window stops the download.
             if let Some(job) = running {

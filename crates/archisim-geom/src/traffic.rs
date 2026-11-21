@@ -28,6 +28,40 @@ pub const AMBER: f64 = 3.0;
 pub const STOP_WAIT: f64 = 1.5;
 /// A car: its length, width and height.
 pub const CAR: (f64, f64, f64) = (4.2, 1.8, 1.45);
+/// A bus: its length, width and height.
+pub const BUS: (f64, f64, f64) = (12.0, 2.55, 3.1);
+/// A tram: each of its three sections, and how far apart they go.
+pub const TRAM: (f64, f64, f64) = (9.0, 2.4, 3.3);
+pub const TRAM_SECTION: f64 = 9.6;
+/// How fast a tram goes, metres a second (about 25 km/h).
+pub const TRAM_SPEED: f64 = 7.0;
+/// One bus for every so many metres of bus lane, and one tram for every so
+/// many of track.
+pub const BUS_EVERY: f64 = 160.0;
+pub const TRAM_EVERY: f64 = 320.0;
+/// How many cars and people are drawn with their whole model (those
+/// nearest the camera); the others, as boxes.
+pub const NEAR_MODELS: usize = 60;
+
+/// What goes on a stretch.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum Vehicle {
+    #[default]
+    Car,
+    Bus,
+    Tram,
+}
+
+impl Vehicle {
+    /// Its length, metres (a tram's, of its three sections).
+    pub fn length(self) -> f64 {
+        match self {
+            Vehicle::Car => CAR.0,
+            Vehicle::Bus => BUS.0,
+            Vehicle::Tram => 2.0 * TRAM_SECTION + TRAM.0,
+        }
+    }
+}
 
 /// The cars' colours.
 const CAR_COLOURS: [[u8; 3]; 8] = [
@@ -63,6 +97,8 @@ struct Stretch {
     offset: f64,
     /// The junction and arm it runs into, and the lane there.
     into: Option<(usize, ArmRef, usize)>,
+    /// What goes on it: cars (on a bus lane, buses) or trams.
+    kind: Vehicle,
 }
 
 impl Stretch {
@@ -112,6 +148,7 @@ struct Car {
     at: f64,
     colour: [u8; 3],
     waited: f64,
+    kind: Vehicle,
 }
 
 #[derive(Debug, Clone)]
@@ -145,10 +182,13 @@ struct Rule {
 /// on and of its arm back (if it has them).
 type Meet = (usize, Option<f64>, Option<f64>);
 
-/// A body to draw: a car or a person, where it is and where it looks.
+/// A body to draw: a car, a bus, a section of a tram or a person, where it
+/// is and where it looks.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Body {
     pub person: bool,
+    /// What vehicle, if it is one.
+    pub vehicle: Vehicle,
     pub at: P3,
     pub dir: Vec2,
     pub colour: [u8; 3],
@@ -174,8 +214,10 @@ pub struct Traffic {
     elevation: f64,
     stretches: Vec<Stretch>,
     ways: Vec<Way>,
-    /// The ways out of each lane coming into a junction.
+    /// The ways out of each lane coming into a junction, and of each tram
+    /// track.
     choices: HashMap<(usize, ArmRef, usize), Vec<usize>>,
+    tram_choices: HashMap<(usize, ArmRef, usize), Vec<usize>>,
     rules: Vec<Rule>,
     cars: Vec<Car>,
     people: Vec<Walker>,
@@ -185,28 +227,59 @@ pub struct Traffic {
 
 /// The lanes' middles of a road at a station: those one goes along it
 /// (forward, kerb first) and those one goes back (kerb first).
-fn lanes(model: &Model, road: RoadId, s: f64) -> (Vec<f64>, Vec<f64>) {
+type Lanes = Vec<(f64, Vehicle)>;
+
+fn lanes(model: &Model, road: RoadId, s: f64) -> (Lanes, Lanes) {
     let Some(r) = model.road(road) else {
         return (Vec::new(), Vec::new());
     };
-    let middles: Vec<f64> = r
+    let middles: Vec<(f64, Vehicle)> = r
         .offsets_at(s)
         .iter()
-        .filter(|o| matches!(o.0, RoadBand::Carriageway | RoadBand::BusLane))
-        .map(|o| (o.1 + o.2) / 2.0)
+        .filter_map(|o| match o.0 {
+            RoadBand::Carriageway => Some(((o.1 + o.2) / 2.0, Vehicle::Car)),
+            RoadBand::BusLane => Some(((o.1 + o.2) / 2.0, Vehicle::Bus)),
+            _ => None,
+        })
         .collect();
-    let mut forward: Vec<f64> = middles
+    split_ways(middles)
+}
+
+/// The tram tracks of a road at a station, the same way as [`lanes`] (a
+/// track per 3 m of strip, two at most, as `Road::rail_lines`).
+fn tracks(model: &Model, road: RoadId, s: f64) -> (Lanes, Lanes) {
+    let Some(r) = model.road(road) else {
+        return (Vec::new(), Vec::new());
+    };
+    let mut out = Vec::new();
+    for o in r.offsets_at(s) {
+        if o.0 != RoadBand::Tram {
+            continue;
+        }
+        let w = o.2 - o.1;
+        let n = ((w / 3.0).floor() as usize).clamp(1, 2);
+        for i in 0..n {
+            out.push((o.1 + w * (i as f64 + 0.5) / n as f64, Vehicle::Tram));
+        }
+    }
+    split_ways(out)
+}
+
+/// Those one goes along the road (forward, kerb first) and those one goes
+/// back (kerb first).
+fn split_ways(middles: Vec<(f64, Vehicle)>) -> (Lanes, Lanes) {
+    let mut forward: Lanes = middles
         .iter()
         .copied()
-        .filter(|m| *m < LANE_ON_AXIS)
+        .filter(|m| m.0 < LANE_ON_AXIS)
         .collect();
-    forward.sort_by(f64::total_cmp);
-    let mut back: Vec<f64> = middles
+    forward.sort_by(|a, b| a.0.total_cmp(&b.0));
+    let mut back: Lanes = middles
         .iter()
         .copied()
-        .filter(|m| *m > -LANE_ON_AXIS)
+        .filter(|m| m.0 > -LANE_ON_AXIS)
         .collect();
-    back.sort_by(|a, b| b.total_cmp(a));
+    back.sort_by(|a, b| b.0.total_cmp(&a.0));
     (forward, back)
 }
 
@@ -288,8 +361,10 @@ impl Traffic {
             rules.push(rule);
         }
         let mut stretches = Vec::new();
-        // Where a lane starts out of a junction: its stretch.
+        // Where a lane (or a tram track) starts out of a junction: its
+        // stretch.
         let mut starts: HashMap<(usize, ArmRef, usize), usize> = HashMap::new();
+        let mut tram_starts: HashMap<(usize, ArmRef, usize), usize> = HashMap::new();
         for r in model.roads_on_level(level) {
             let len = r.length();
             if len < 1.0 {
@@ -308,10 +383,15 @@ impl Traffic {
             if list.last().is_none_or(|x| x.station < len - 1.0) {
                 points.push((len, None));
             }
-            for w in points.windows(2) {
+            for (w, tram) in points.windows(2).flat_map(|w| [(w, false), (w, true)]) {
                 let ((sa, a), (sb, b)) = (w[0], w[1]);
                 let mid = (sa + sb) / 2.0;
-                let (on, back) = lanes(model, r.id, mid);
+                let (on, back) = if tram {
+                    tracks(model, r.id, mid)
+                } else {
+                    lanes(model, r.id, mid)
+                };
+                let starts = if tram { &mut tram_starts } else { &mut starts };
                 // Along the road: out of `a` (its arm on, or the free end),
                 // into `b` (its arm back, or the free end).
                 let out_a = match a {
@@ -323,12 +403,13 @@ impl Traffic {
                     Some((_, _, back_cut)) => back_cut,
                 };
                 if let (Some(ca), Some(cb)) = (out_a, into_b) {
-                    for (k, &offset) in on.iter().enumerate() {
+                    for (k, &(offset, kind)) in on.iter().enumerate() {
                         let st = Stretch {
                             road: r.id,
                             s0: sa + ca,
                             s1: sb - cb,
                             offset,
+                            kind,
                             into: b.map(|(ji, _, _)| {
                                 (
                                     ji,
@@ -369,12 +450,13 @@ impl Traffic {
                     Some((_, on_cut, _)) => on_cut,
                 };
                 if let (Some(cb), Some(ca)) = (out_b, into_a) {
-                    for (k, &offset) in back.iter().enumerate() {
+                    for (k, &(offset, kind)) in back.iter().enumerate() {
                         let st = Stretch {
                             road: r.id,
                             s0: sb - cb,
                             s1: sa + ca,
                             offset,
+                            kind,
                             into: a.map(|(ji, _, _)| {
                                 (
                                     ji,
@@ -407,11 +489,18 @@ impl Traffic {
                 }
             }
         }
-        // The ways through the junctions.
+        // The ways through the junctions: by the lanes, and by the tram
+        // tracks.
         let mut ways = Vec::new();
         let mut choices: HashMap<(usize, ArmRef, usize), Vec<usize>> = HashMap::new();
+        let mut tram_choices: HashMap<(usize, ArmRef, usize), Vec<usize>> = HashMap::new();
         for (ji, j) in junctions.iter().enumerate() {
-            for c in &j.lanes {
+            for (c, tram) in j
+                .lanes
+                .iter()
+                .map(|c| (c, false))
+                .chain(j.trams.iter().map(|c| (c, true)))
+            {
                 if c.path.len() < 2 {
                     continue;
                 }
@@ -419,8 +508,12 @@ impl Traffic {
                 for w in c.path.windows(2) {
                     along.push(along.last().unwrap() + w[0].distance(w[1]));
                 }
-                choices
-                    .entry((ji, c.from, c.lane))
+                let (map, from) = if tram {
+                    (&mut tram_choices, &tram_starts)
+                } else {
+                    (&mut choices, &starts)
+                };
+                map.entry((ji, c.from, c.lane))
                     .or_default()
                     .push(ways.len());
                 ways.push(Way {
@@ -429,7 +522,7 @@ impl Traffic {
                     conflicts: Vec::new(),
                     path: c.path.clone(),
                     along,
-                    then: starts.get(&(ji, c.to, c.to_lane)).copied(),
+                    then: from.get(&(ji, c.to, c.to_lane)).copied(),
                 });
             }
         }
@@ -456,6 +549,7 @@ impl Traffic {
             stretches,
             ways,
             choices,
+            tram_choices,
             rules,
             cars: Vec::new(),
             people: Vec::new(),
@@ -463,8 +557,25 @@ impl Traffic {
             rng: seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1,
         };
         for _ in 0..cars {
-            if let Some(c) = t.spawn() {
+            if let Some(c) = t.spawn(Vehicle::Car) {
                 t.cars.push(c);
+            }
+        }
+        // The buses on their lanes and the trams on their tracks.
+        for (kind, every) in [(Vehicle::Bus, BUS_EVERY), (Vehicle::Tram, TRAM_EVERY)] {
+            let len: f64 = t
+                .stretches
+                .iter()
+                .filter(|s| s.kind == kind)
+                .map(Stretch::length)
+                .sum();
+            if len > 1.0 {
+                let n = ((len / every).round() as usize).max(1);
+                for _ in 0..n {
+                    if let Some(c) = t.spawn(kind) {
+                        t.cars.push(c);
+                    }
+                }
             }
         }
         // People on the sidewalks.
@@ -533,9 +644,12 @@ impl Traffic {
         (x.wrapping_mul(0x2545_F491_4F6C_DD1D) >> 11) as f64 / (1u64 << 53) as f64
     }
 
-    /// A car somewhere free on a stretch, or none if there is no room.
-    fn spawn(&mut self) -> Option<Car> {
-        let total: f64 = self.stretches.iter().map(Stretch::length).sum();
+    /// A vehicle of `kind` somewhere free on a stretch of its own (a car
+    /// on a lane for cars, a bus on a bus lane, a tram on its track), or
+    /// none if there is no room.
+    fn spawn(&mut self, kind: Vehicle) -> Option<Car> {
+        let length = |s: &Stretch| if s.kind == kind { s.length() } else { 0.0 };
+        let total: f64 = self.stretches.iter().map(length).sum();
         if total <= 0.0 {
             return None;
         }
@@ -545,23 +659,33 @@ impl Traffic {
                 .stretches
                 .iter()
                 .position(|s| {
-                    pick -= s.length();
-                    pick <= 0.0
+                    pick -= length(s);
+                    pick <= 0.0 && s.kind == kind
                 })
                 .unwrap_or(0);
+            if self.stretches[k].kind != kind {
+                continue;
+            }
             let at = self.unit() * self.stretches[k].length();
             let free = self
                 .cars
                 .iter()
-                .all(|c| c.on != On::Stretch(k) || (c.at - at).abs() >= CAR_GAP);
+                .all(|c| c.on != On::Stretch(k) || (c.at - at).abs() >= gap_between(c.kind, kind));
             if free {
-                let colour = CAR_COLOURS
-                    [(self.unit() * CAR_COLOURS.len() as f64) as usize % CAR_COLOURS.len()];
+                let colour = match kind {
+                    Vehicle::Car => {
+                        CAR_COLOURS
+                            [(self.unit() * CAR_COLOURS.len() as f64) as usize % CAR_COLOURS.len()]
+                    }
+                    Vehicle::Bus => [200, 40, 40],
+                    Vehicle::Tram => [236, 236, 230],
+                };
                 return Some(Car {
                     on: On::Stretch(k),
                     at,
                     colour,
                     waited: 0.0,
+                    kind,
                 });
             }
         }
@@ -687,9 +811,14 @@ impl Traffic {
                 .iter()
                 .enumerate()
                 .filter(|(j, c)| *j != i && c.on == car.on && c.at > car.at)
-                .map(|(_, c)| c.at)
+                .map(|(_, c)| c.at - gap_between(c.kind, car.kind))
                 .fold(f64::INFINITY, f64::min);
-            let mut at = (car.at + CAR_SPEED * dt).min(front - CAR_GAP).max(car.at);
+            let speed = if car.kind == Vehicle::Tram {
+                TRAM_SPEED
+            } else {
+                CAR_SPEED
+            };
+            let mut at = (car.at + speed * dt).min(front).max(car.at);
             let mut on = car.on;
             let mut waited = car.waited;
             if at >= len {
@@ -706,12 +835,14 @@ impl Traffic {
                                 at = len;
                                 waited += dt;
                             } else {
-                                let ways = self
-                                    .choices
+                                let map = if car.kind == Vehicle::Tram {
+                                    &self.tram_choices
+                                } else {
+                                    &self.choices
+                                };
+                                let ways = map
                                     .get(&(ji, arm, lane))
-                                    .or_else(|| {
-                                        (0..4).find_map(|l| self.choices.get(&(ji, arm, l)))
-                                    })
+                                    .or_else(|| (0..4).find_map(|l| map.get(&(ji, arm, l))))
                                     .cloned()
                                     .unwrap_or_default();
                                 if ways.is_empty() {
@@ -772,8 +903,8 @@ impl Traffic {
         // The cars gone out at a free end come back somewhere else.
         gone.sort_unstable();
         for i in gone.into_iter().rev() {
-            self.cars.swap_remove(i);
-            if let Some(c) = self.spawn() {
+            let kind = self.cars.swap_remove(i).kind;
+            if let Some(c) = self.spawn(kind) {
                 self.cars.push(c);
             }
         }
@@ -838,10 +969,55 @@ impl Traffic {
         }
     }
 
-    /// The cars and people as they are now.
+    /// Where a vehicle is `at` along its path: the point, its direction
+    /// and the height of its road.
+    fn place(&self, model: &Model, on: On, at: f64) -> Option<(Point2, Vec2, f64)> {
+        Some(match on {
+            On::Stretch(k) => {
+                let s = &self.stretches[k];
+                let r = model.road(s.road)?;
+                let st = s.station(at.max(0.0));
+                let (q, u) = r.axis_at(st);
+                let dir = if s.s1 >= s.s0 { u } else { u * -1.0 };
+                (q + u.perp_left() * s.offset, dir, r.top_at(st))
+            }
+            On::Way(k) => {
+                let w = &self.ways[k];
+                let at = at.max(0.0);
+                let i = w
+                    .along
+                    .windows(2)
+                    .position(|x| at <= x[1])
+                    .unwrap_or(w.along.len().saturating_sub(2));
+                let (a, b) = (w.path[i], w.path[i + 1]);
+                let seg = (w.along[i + 1] - w.along[i]).max(1e-9);
+                let t = ((at - w.along[i]) / seg).clamp(0.0, 1.0);
+                let dir = (b - a).normalized().unwrap_or(Vec2::new(1.0, 0.0));
+                (a + (b - a) * t, dir, self.rules[w.junction].top)
+            }
+        })
+    }
+
+    /// The cars and people as they are now (a tram, as its three
+    /// sections).
     pub fn bodies(&self, model: &Model) -> Vec<Body> {
         let mut out = Vec::new();
-        for c in &self.cars {
+        for c in self.cars.iter().filter(|c| c.kind == Vehicle::Tram) {
+            for k in 0..3 {
+                let Some((p, dir, z)) = self.place(model, c.on, c.at - k as f64 * TRAM_SECTION)
+                else {
+                    continue;
+                };
+                out.push(Body {
+                    person: false,
+                    vehicle: Vehicle::Tram,
+                    at: [p.x, p.y, self.elevation + z],
+                    dir,
+                    colour: c.colour,
+                });
+            }
+        }
+        for c in self.cars.iter().filter(|c| c.kind != Vehicle::Tram) {
             let (p, dir, z) = match c.on {
                 On::Stretch(k) => {
                     let s = &self.stretches[k];
@@ -869,6 +1045,7 @@ impl Traffic {
             };
             out.push(Body {
                 person: false,
+                vehicle: c.kind,
                 at: [p.x, p.y, self.elevation + z],
                 dir,
                 colour: c.colour,
@@ -883,6 +1060,7 @@ impl Traffic {
             let at = q + u.perp_left() * p.offset;
             out.push(Body {
                 person: true,
+                vehicle: Vehicle::Car,
                 at: [
                     at.x,
                     at.y,
@@ -900,6 +1078,12 @@ impl Traffic {
         }
         out
     }
+}
+
+/// The distance a vehicle of `behind` keeps to one of `front`, from middle
+/// to middle ([`CAR_GAP`] between two cars).
+fn gap_between(front: Vehicle, behind: Vehicle) -> f64 {
+    (front.length() + behind.length()) / 2.0 + (CAR_GAP - CAR.0)
 }
 
 /// How many cars and people for the streets of a level: one car every
@@ -963,10 +1147,39 @@ fn segments_cross(p: Point2, q: Point2, r: Point2, s: Point2) -> bool {
 /// cabin, a person's clothes and head. Their material is `material`; their
 /// colour comes with them (`SolidOwner::Traffic`).
 pub fn traffic_solids(bodies: &[Body], material: MaterialId) -> Vec<Solid> {
+    traffic_solids_near(bodies, material, None)
+}
+
+/// As [`traffic_solids`], with the [`NEAR_MODELS`] cars and people nearest
+/// `focus` (the camera's target) drawn with their whole models of the
+/// library (`archisim_props`: «Turismo» and «Persona»), the others as boxes.
+pub fn traffic_solids_near(
+    bodies: &[Body],
+    material: MaterialId,
+    focus: Option<Point2>,
+) -> Vec<Solid> {
+    let mut near: Vec<usize> = Vec::new();
+    if let Some(f) = focus {
+        let mut order: Vec<(f64, usize)> = bodies
+            .iter()
+            .enumerate()
+            .filter(|(_, b)| b.person || b.vehicle == Vehicle::Car)
+            .map(|(i, b)| (Point2::new(b.at[0], b.at[1]).distance(f), i))
+            .collect();
+        order.sort_by(|a, b| a.0.total_cmp(&b.0));
+        near = order
+            .into_iter()
+            .take(NEAR_MODELS)
+            .map(|(_, i)| i)
+            .collect();
+    }
     let mut out = Vec::new();
-    for b in bodies {
+    for (i, b) in bodies.iter().enumerate() {
         let c = Point2::new(b.at[0], b.at[1]);
         let z = b.at[2];
+        if near.contains(&i) && model_solids(b, material, &mut out) {
+            continue;
+        }
         let mut add = |poly: Vec<Point2>, z0: f64, z1: f64, colour: [u8; 3]| {
             out.push(Solid {
                 owner: SolidOwner::Traffic(colour),
@@ -974,6 +1187,30 @@ pub fn traffic_solids(bodies: &[Body], material: MaterialId) -> Vec<Solid> {
                 triangles: prism(&poly, z0, z1),
             });
         };
+        if b.vehicle == Vehicle::Bus && !b.person {
+            let (l, w, h) = BUS;
+            add(rect(c, b.dir, l, w), z + 0.3, z + 1.2, b.colour);
+            add(
+                rect(c, b.dir, l * 0.98, w * 0.98),
+                z + 1.2,
+                z + 2.6,
+                [44, 52, 62],
+            );
+            add(rect(c, b.dir, l, w), z + 2.6, z + h, [236, 236, 232]);
+            continue;
+        }
+        if b.vehicle == Vehicle::Tram && !b.person {
+            let (l, w, h) = TRAM;
+            add(rect(c, b.dir, l, w), z + 0.35, z + 1.1, [60, 64, 70]);
+            add(
+                rect(c, b.dir, l * 0.99, w * 0.98),
+                z + 1.1,
+                z + 2.5,
+                [52, 70, 86],
+            );
+            add(rect(c, b.dir, l, w), z + 2.5, z + h, b.colour);
+            continue;
+        }
         if b.person {
             add(rect(c, b.dir, 0.3, 0.45), z, z + 1.45, b.colour);
             add(rect(c, b.dir, 0.22, 0.2), z + 1.45, z + 1.72, SKIN);
@@ -990,6 +1227,63 @@ pub fn traffic_solids(bodies: &[Body], material: MaterialId) -> Vec<Solid> {
         }
     }
     out
+}
+
+/// A car's or a person's whole model in its place, its pieces in their
+/// colours. Whether it could be made.
+fn model_solids(b: &Body, material: MaterialId, out: &mut Vec<Solid>) -> bool {
+    let mut p = archisim_core::props::Params::default();
+    let kind = if b.person {
+        // The walking figure.
+        p.set("style", 3.0);
+        "person"
+    } else {
+        p.set("length", CAR.0);
+        p.set("width", CAR.1);
+        p.set("height", CAR.2);
+        p.set("style", 1.0 + (b.colour[0] % 3) as f64);
+        "car"
+    };
+    let Some(mesh) = archisim_core::props::mesh_of(kind, &p) else {
+        return false;
+    };
+    // The car's origin is the middle of its rear; the person's, its feet.
+    let back = if b.person { 0.0 } else { CAR.0 / 2.0 };
+    let c = Point2::new(b.at[0], b.at[1]) - b.dir * back;
+    // Its +y along `dir`, its +x to the right.
+    let (fy, fx) = (b.dir, b.dir.perp_left() * -1.0);
+    let place = |v: [f32; 3]| -> P3 {
+        let q = c + fx * v[0] as f64 + fy * v[1] as f64;
+        [q.x, q.y, b.at[2] + v[2] as f64]
+    };
+    for (role, tris) in &mesh.parts {
+        let colour = match (b.person, *role) {
+            (false, "body") => b.colour,
+            (false, "glass") => [40, 52, 64],
+            (false, "light") | (false, "lights") => [240, 236, 210],
+            (false, "rear") => [176, 36, 32],
+            (false, _) => [36, 36, 38],
+            (true, "mat") => b.colour,
+            (true, "skin") => SKIN,
+            (true, "hair") => [72, 50, 36],
+            (true, _) => [56, 58, 66],
+        };
+        out.push(Solid {
+            owner: SolidOwner::Traffic(colour),
+            material,
+            triangles: tris
+                .iter()
+                .map(|t| {
+                    [
+                        place(mesh.positions[t[0] as usize]),
+                        place(mesh.positions[t[1] as usize]),
+                        place(mesh.positions[t[2] as usize]),
+                    ]
+                })
+                .collect(),
+        });
+    }
+    true
 }
 
 #[cfg(test)]
@@ -1059,6 +1353,87 @@ mod tests {
         }
         assert!(crossed > 0, "someone crosses the street");
         assert!(sides.len() >= 3, "and walks on the other side: {sides:?}");
+    }
+
+    /// Buses go on their lanes and trams on their tracks, straight across
+    /// the crossing; the nearest cars and people are drawn with their
+    /// models.
+    #[test]
+    fn buses_trams_and_models() {
+        let (mut m, level) = town();
+        let ids: Vec<RoadId> = m.roads().map(|r| r.id).collect();
+        // The east–west street with a bus lane each way and a tram strip.
+        m.edit_road(ids[0], |r| {
+            use archisim_core::RoadStrip;
+            let n = r.section.strips.len();
+            let mid = r
+                .section
+                .strips
+                .iter()
+                .position(|x| x.band == RoadBand::Carriageway)
+                .unwrap_or(n / 2);
+            r.section.strips.insert(
+                mid,
+                RoadStrip {
+                    band: RoadBand::BusLane,
+                    width: 3.2,
+                },
+            );
+            let last = r
+                .section
+                .strips
+                .iter()
+                .rposition(|x| x.band == RoadBand::Carriageway)
+                .unwrap();
+            r.section.strips.insert(
+                last + 1,
+                RoadStrip {
+                    band: RoadBand::BusLane,
+                    width: 3.2,
+                },
+            );
+            let centre = r.section.strips.len() / 2;
+            r.section.strips.insert(
+                centre,
+                RoadStrip {
+                    band: RoadBand::Tram,
+                    width: 6.5,
+                },
+            );
+        })
+        .unwrap();
+        let mut t = Traffic::new(&m, level, 10, 4, 5);
+        assert!(t.stretches.iter().any(|s| s.kind == Vehicle::Bus));
+        assert!(t.stretches.iter().any(|s| s.kind == Vehicle::Tram));
+        assert!(t.cars.iter().any(|c| c.kind == Vehicle::Bus));
+        let trams = t.cars.iter().filter(|c| c.kind == Vehicle::Tram).count();
+        assert!(trams >= 1);
+        for _ in 0..300 {
+            t.step(&m, 0.2);
+        }
+        // Still there, and each on a stretch or way of its own kind.
+        assert_eq!(
+            t.cars.iter().filter(|c| c.kind == Vehicle::Tram).count(),
+            trams
+        );
+        for c in t.cars.iter().filter(|c| c.kind == Vehicle::Tram) {
+            if let On::Stretch(k) = c.on {
+                assert_eq!(t.stretches[k].kind, Vehicle::Tram);
+            }
+        }
+        let bodies = t.bodies(&m);
+        assert_eq!(
+            bodies.iter().filter(|b| b.vehicle == Vehicle::Tram).count(),
+            3 * trams
+        );
+        let mat = MaterialId(0);
+        let boxes = traffic_solids(&bodies, mat);
+        let models = traffic_solids_near(&bodies, mat, Some(Point2::new(0.0, 0.0)));
+        let tris = |v: &[Solid]| v.iter().map(|s| s.triangles.len()).sum::<usize>();
+        assert!(
+            tris(&models) > 2 * tris(&boxes),
+            "the models have more faces"
+        );
     }
 
     #[test]

@@ -132,6 +132,19 @@ fn radius_through(a: Point2, b: Point2, c: Point2) -> Option<f64> {
     (area2 > 1e-6).then(|| ab * bc * ca / (2.0 * area2))
 }
 
+/// The centre of the circle through three points.
+fn centre_through(a: Point2, b: Point2, c: Point2) -> Option<Point2> {
+    let d = 2.0 * (b - a).cross(c - a);
+    if d.abs() < 1e-9 {
+        return None;
+    }
+    let (ba, ca) = (b - a, c - a);
+    let (lb, lc) = (ba.dot(ba), ca.dot(ca));
+    let x = (ca.y * lb - ba.y * lc) / d;
+    let y = (ba.x * lc - ca.x * lb) / d;
+    Some(a + Vec2::new(x, y))
+}
+
 impl ArchiSimApp {
     /// A click of the street tool while it does something else than draw.
     /// True if it took the click.
@@ -470,6 +483,132 @@ impl ArchiSimApp {
             lines.push("cruce encima de otro".into());
         }
         self.readout(painter, rect, c, &lines.join(" · "));
+        self.draw_trace_dims(painter, rect, &pts);
+    }
+
+    /// The angle it turns from the street it goes on from, and the radius
+    /// of a curve, drawn on the plan as they are traced (N2).
+    fn draw_trace_dims(&self, painter: &egui::Painter, rect: Rect, pts: &[Point2]) {
+        if pts.len() < 2 {
+            return;
+        }
+        let ink = Color32::from_rgb(0x1f, 0x6f, 0xd1);
+        let stroke = Stroke::new(1.2, ink);
+        let a = pts[0];
+        let first = pts[1] - a;
+        let Some(out) = first.normalized() else {
+            return;
+        };
+        // The way the street it goes on from was going (straight on from
+        // its end).
+        let before = self
+            .road_chain
+            .and_then(|(id, end)| archisim_core::road_end_direction(self.ed.model(), id, end))
+            .filter(|_| self.road_points.len() <= 1);
+        if let Some(back) = before.and_then(|d| d.normalized()) {
+            let turn = back.cross(out).atan2(back.dot(out));
+            if turn.abs() > 1.0_f64.to_radians() {
+                // An arc of 6 m from the way it came to the way it goes.
+                let r = 6.0;
+                let start = back.y.atan2(back.x);
+                let arc: Vec<Point2> = (0..=16)
+                    .map(|k| {
+                        let t = start + turn * k as f64 / 16.0;
+                        a + Vec2::new(t.cos(), t.sin()) * r
+                    })
+                    .collect();
+                painter.add(Shape::line(self.polygon(rect, &arc), stroke));
+                let dashed = [a, a + back * (r + 2.0)];
+                painter.add(Shape::dashed_line(
+                    &self.polygon(rect, &dashed),
+                    stroke,
+                    4.0,
+                    3.0,
+                ));
+                let mid = start + turn / 2.0;
+                let at = a + Vec2::new(mid.cos(), mid.sin()) * (r + 2.5);
+                self.readout(
+                    painter,
+                    rect,
+                    at,
+                    &format!("{:.0}°", turn.abs().to_degrees()),
+                );
+            }
+        }
+        // A curve: its centre and radius.
+        if pts.len() >= 3 {
+            let (p, q, z) = (a, pts[pts.len() / 2], *pts.last().unwrap_or(&a));
+            if let (Some(c), Some(r)) = (centre_through(p, q, z), radius_through(p, q, z)) {
+                if r < 2000.0 {
+                    let line = [c, q];
+                    painter.add(Shape::dashed_line(
+                        &self.polygon(rect, &line),
+                        stroke,
+                        4.0,
+                        3.0,
+                    ));
+                    if let Some(at) = self.polygon(rect, &[c]).first() {
+                        painter.circle_stroke(*at, 3.0, stroke);
+                    }
+                    self.readout(
+                        painter,
+                        rect,
+                        c + (q - c) * 0.5,
+                        &format!("R {}", crate::units::fmt_len(r)),
+                    );
+                }
+            }
+        }
+    }
+
+    /// While picking the two ends of a uniform grade (N2): the stretch from
+    /// the first click to the cursor along the street, with its ends and
+    /// the grade it would have.
+    pub(super) fn draw_grade_pick(&self, painter: &egui::Painter, rect: Rect) {
+        let Some((id, Some(from))) = self.road_grade_pick else {
+            return;
+        };
+        let (Some(r), Some(c)) = (self.ed.model().road(id), self.cursor.map(|c| c.point)) else {
+            return;
+        };
+        let to = r.station_of(c);
+        let (lo, hi) = (from.min(to), from.max(to));
+        let n = (((hi - lo) / 2.0).ceil() as usize).clamp(1, 400);
+        let line: Vec<Point2> = (0..=n)
+            .map(|k| r.axis_at(lo + (hi - lo) * k as f64 / n as f64).0)
+            .collect();
+        let ink = Color32::from_rgb(230, 120, 40);
+        painter.add(Shape::line(
+            self.polygon(rect, &line),
+            Stroke::new(4.0, ink.gamma_multiply(0.8)),
+        ));
+        // Ticks across the street every 10 m.
+        let w = r.section.width() / 2.0;
+        let mut s = lo;
+        while s <= hi + 1e-9 {
+            let (q, u) = r.axis_at(s);
+            let tick = [q - u.perp_left() * w, q + u.perp_left() * w];
+            painter.add(Shape::line(
+                self.polygon(rect, &tick),
+                Stroke::new(1.5, ink),
+            ));
+            s += 10.0;
+        }
+        for st in [from, to] {
+            let (q, u) = r.axis_at(st);
+            let end = [q - u.perp_left() * (w + 1.0), q + u.perp_left() * (w + 1.0)];
+            painter.add(Shape::line(self.polygon(rect, &end), Stroke::new(2.5, ink)));
+        }
+        let len = hi - lo;
+        if len > 0.5 {
+            let g = (r.top_at(to) - r.top_at(from)) / (to - from) * 100.0;
+            self.readout(
+                painter,
+                rect,
+                c,
+                &format!("{} · ahora {:+.1} %", crate::units::fmt_len(len), g).replace('.', ","),
+            );
+        }
     }
 
     /// A small label beside the cursor.
