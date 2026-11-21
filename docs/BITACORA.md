@@ -6,6 +6,33 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-21 (191) · v0.110: el resto de los remates del territorio
+
+Misma rama `bloque/territorio-remates` (PR #239). Antonio pidió «haz la lista que falta»: todo lo que quedaba de `docs/TERRITORIO.md` §7, en tres tandas. Antes, un arreglo de la integración continua: en Windows una junta de espiga que pasaba justo por las esquinas de un alcorque quedaba dentro por redondeo; ahora se quita lo que cae en un hueco. Formato: sigue en la versión 121 (aún no está en `main`), con lo nuevo añadido.
+
+- **Nudos (N1).** `NodeSettings::shift` (centro desplazado en los ejes del nudo: `cut` de cada brazo − desplazamiento·dirección, sin bajar de sus esquinas; `Junction::centre`), `ArmSettings::flatten` (el nudo sigue esos metros por el brazo y `Junction::top_under` baja de `top` a la cota de la calle; `Junction::flattened`), `NodeSettings::hammer` (`crossroads::hammerhead`: martillo de medio `end_radius`, bordillo y acera con `strip`). En la app, rombo del centro y esquinas de isleta como tiradores (`node_ui::Grab::Centre`, `IslandCorner`, `apply_node_grab`), y todo sobre la vista 3D (`node_grips_3d`, `draw_node_3d`, `node_grab_3d`).
+- **Carriles (N3).** `crossroads::u_turn_arrow` para ↶; quitar la última conexión deja el carril sin salida (`turns` a `Turns::NONE`); tranvía: `Arm::trams_in`/`trams_out`, `Junction::trams` con `tram_connections`.
+- **Tramos y sustituir (N4).** `LifeOptions::stretch` y `tree_type`/`lamp_type`/`bench_type`/`bin_type`; «Amueblar el tramo» en «Por tramos» (`skin_furniture`). «Sustituir todos»: `replace_ui::AreaPick` (rectángulo, contorno, parcela o manzana), `area` es un polígono, dibujado en planta.
+- **Superficies (N5).** `Bays::accessible`, `numbered`, `side`; `UrbanSurface::bays_placed` (`PlacedBay`), `bay_lines` desde ellas, `accessible_paint` (azul y blanco, `ACCESSIBLE_BAY` 3,70 m, `TRANSFER_AREA`), `bay_numbers`; pinturas vial azul y blanca al editar.
+- **Ocultar y soltar (N6).** Las flechas, líneas de detención e isletas de los nudos son piezas (`Junction::arrows` con `NodeArrow`; `arm_paint` y `marks` sin las ocultas); `Model::detach_arrow` y `detach_sign` (tipo «Stop/Ceda el paso/Semáforo (señal suelta)» de «Señal de tráfico»); la ficha pasa a «Soltar piezas»; clics de piezas en 3D.
+- **Manzanas (N7).** «Pincel de zona» (`BlocksState::brush`, `zone_brush_at`, `zone_brush_done`).
+- **Área grande (N8).** `CartoOptions::turn`, `outline`, `terrain_points` (`TERRAIN_POINTS`), `polygonal`, `reach` (las descargas la usan); `GroundIndex` para el terreno fino; contorno dibujado en planta (`carto_outline_pick`, `start_carto_outline`); `Road::toward` (archivo e IFC `ArchiSim_Road.Toward`), `Model::name_outside_ends`, `compass_of`, rotulado en planta y mapa, «Hacia» en Propiedades.
+- **Tráfico (N9).** `traffic::Vehicle` (coche, autobús, tranvía de tres módulos), tramos por vía de tranvía y caminos por `Junction::trams`, `gap_between`, `traffic_solids_near` con los modelos de `props` para los `NEAR_MODELS` más cercanos a la cámara.
+- **Trazado (N2).** `street_bar::draw_trace_dims` (arco del giro y radio con su centro) y `draw_grade_pick`.
+
+Pendiente: el término municipal como contorno (no hay fuente gratuita a mano), el mobiliario guardado en el tramo (hoy es una orden), soltar las líneas entre carriles, modelos en el render, y lo que ya estaba (despiece del encintado, prioridad a la derecha, ciclo de semáforos, capas del mapa, parcelación del Catastro, peatones en plazas).
+
+Qué debe probar Antonio (`cargo run --release -p archisim-app`, o `archisim nudos out/` y abrir `out/nudos.archisim`):
+1. En `nudos`, la Calle Alta acaba en **martillo**; el cruce Mayor–Pino tiene el **centro 3 m al este** (arrastra el rombo con la herramienta Nudo); el Olmo llega **aplanado** a la Calle Real. Cambia a la vista 3D con el nudo elegido: se ven sus conexiones y sus tiradores, y se arrastran.
+2. En un cruce, Conectar carriles a mano y quita las tres conexiones de un carril: se queda sin salida. Pon a un carril «Cambio de sentido» y mira su flecha.
+3. Una calle con «Plataforma de tranvía»: en el cruce, las vías siguen de frente (morado); con «Tráfico», pasan tranvías y, en un carril bus, autobuses.
+4. Un aparcamiento con 2 plazas de **movilidad reducida**, **numeradas**, y cambia «Siguen el lado».
+5. «Soltar piezas» sobre una flecha o una señal de un cruce; luego muévela.
+6. Manzanas → **Pincel de zona** sobre varias parcelas; luego «Rehacer».
+7. «Sustituir todos» → **Contorno** o **Parcela o manzana**. En una calle con tramos, «Amueblar el tramo» con una farola elegida.
+8. Traer el entorno con **Recuadro girado 30°** o **Contorno en planta** y «Detalle del terreno: fino»; las calles que salen dicen «hacia…».
+9. Trazar una calle que sale de otra girando: se dibuja el ángulo y, en curva, el radio. Elige una pendiente uniforme con el ratón y mira el tramo naranja entre los dos clics.
+
 ## 2026-11-20 (190) · v0.110: remates del territorio, dos tandas
 
 Rama `bloque/territorio-remates`. Antonio pidió seguir con los remates del territorio (`docs/TERRITORIO.md` §7) mientras prueba la 0.109. Sin cambios de formato.
