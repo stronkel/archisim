@@ -398,6 +398,9 @@ pub struct ArchiSimApp {
     /// A node's handle taken in 3D: the height of the plane it moves on and
     /// where it is now.
     node_grab_3d: Option<(f64, Point2)>,
+    /// The types of a street's stretches' own furniture (N4): tree, lamp,
+    /// bench and bin (none: the usual ones).
+    skin_furniture: [Option<archisim_core::ObjectTypeId>; 4],
     /// What a click of the tool Nudo does (N3): pick a node, connect lanes
     /// or draw a painted island.
     pub node_mode: node_ui::NodeMode,
@@ -954,6 +957,7 @@ impl ArchiSimApp {
             node_pick: None,
             node_grab: None,
             node_grab_3d: None,
+            skin_furniture: [None; 4],
             node_mode: node_ui::NodeMode::Pick,
             road_typed_arc: None,
             box_settings: None,

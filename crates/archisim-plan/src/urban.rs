@@ -545,6 +545,38 @@ pub fn draw_roads(
                     num(pens().thin * k * 0.5)
                 );
             }
+            // The bays for people with reduced mobility, and the numbers.
+            let (blue, white) = x.accessible_paint();
+            for b in &blue {
+                let _ = writeln!(
+                    s,
+                    r##"<path d="{}" fill="#2860b0" stroke="none"/>"##,
+                    path(b)
+                );
+            }
+            for w in &white {
+                let _ = writeln!(s, r#"<path d="{}" fill="white" stroke="none"/>"#, path(w));
+            }
+            for (at, along, n) in x.bay_numbers() {
+                // Read the right way up.
+                let mut read = along;
+                if read.x < -1e-9 || (read.x.abs() < 1e-9 && read.y < 0.0) {
+                    read = read * -1.0;
+                }
+                let h = 0.6;
+                let _ = writeln!(
+                    s,
+                    r#"<path d="{}" {}/>"#,
+                    text_path(
+                        &n.to_string(),
+                        at - read.perp_left() * (h / 2.0),
+                        read,
+                        h,
+                        Align::Centre
+                    ),
+                    crate::lettering::paint(h, INK)
+                );
+            }
         });
     }
     // The road markings at will (U4), over the roads.

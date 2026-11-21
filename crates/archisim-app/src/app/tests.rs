@@ -9745,6 +9745,120 @@ fn hide_pieces_and_let_a_zebra_go() {
     assert!(h.model().road(road).unwrap().hidden.is_empty());
 }
 
+/// The remates of N4 to N7: a node's arrow and sign let go, a zone for
+/// «Sustituir todos» drawn freely or taken from a plot, and the zone painted
+/// over several plots with a brush.
+#[test]
+fn arrows_signs_free_zones_and_the_zone_brush() {
+    use archisim_geom::crossroads::{self, Junction};
+    let mut h = Harness::new(Editor::new_project());
+    let canvas = h.app.canvas;
+    h.app
+        .view
+        .fit_exact(canvas, p(-60.0, -60.0), p(60.0, 60.0), 0.0);
+    h.app.set_discipline(super::toolbox::Discipline::Site);
+    for (a, b) in [(p(-50.0, 0.0), p(50.0, 0.0)), (p(0.0, -50.0), p(0.0, 50.0))] {
+        h.type_text("w");
+        h.click_at(a);
+        h.click_at(b);
+        h.key(Key::Enter);
+        h.key(Key::Escape);
+    }
+    let level = h.app.ed.level;
+    // The east arm: a stop and its lane only straight on (an arrow).
+    let j = crossroads::junctions(h.model(), level).remove(0);
+    let key = j.key.clone().unwrap();
+    let east = j.arms.iter().find(|a| a.dir.x > 0.9).unwrap();
+    let mut n = archisim_core::NodeSettings::new(key.clone());
+    n.set_arm(
+        Junction::arm_ref(east),
+        archisim_core::ArmSettings {
+            sign: Some(archisim_core::ArmSign::Stop),
+            turns: Some(vec![archisim_core::Turns::STRAIGHT]),
+            ..Default::default()
+        },
+    );
+    assert!(h.app.ed.transact("Nudo", |m| m.set_node(n)).is_ok());
+    let j = crossroads::node_junction(h.model(), &key).unwrap();
+    assert!(!j.arrows.is_empty() && !j.signs.is_empty());
+    let arrow = j.arrows[0].clone();
+    let post = j.signs[0].0;
+    // Let the arrow go: a marking of its own; the node paints it no more.
+    h.app.act(super::toolbox::Action::DetachCrossing);
+    let mid = arrow.path[0] + (arrow.path[1] - arrow.path[0]) * 2.5;
+    h.click_at(mid);
+    assert_eq!(h.model().markings().count(), 1);
+    let j2 = crossroads::node_junction(h.model(), &key).unwrap();
+    assert!(j2.arrows.len() < j.arrows.len());
+    // And the sign: an object «Señal de tráfico» where it was.
+    h.app.act(super::toolbox::Action::DetachCrossing);
+    h.click_at(post);
+    let o = h
+        .model()
+        .objects()
+        .find(|o| o.position.distance(post) < 1e-6)
+        .expect("the sign, as an object");
+    let t = h.model().object_type(o.object_type).unwrap();
+    assert!(t.name.starts_with("Stop"), "{}", t.name);
+    let j3 = crossroads::node_junction(h.model(), &key).unwrap();
+    assert!(j3.signs.is_empty());
+    // Two plots east of the crossing.
+    let plots: Vec<_> = (0..2)
+        .map(|i| {
+            let x0 = 12.0 + i as f64 * 12.0;
+            let mut id = None;
+            let r = h.app.ed.transact("Parcela", |m| {
+                id = Some(m.add_plot(archisim_core::NewPlot {
+                    name: format!("P{i}"),
+                    level,
+                    outline: vec![
+                        p(x0, 10.0),
+                        p(x0 + 10.0, 10.0),
+                        p(x0 + 10.0, 30.0),
+                        p(x0, 30.0),
+                    ],
+                    setback: 0.0,
+                    reference: String::new(),
+                })?);
+                Ok::<(), archisim_core::ModelError>(())
+            });
+            assert!(r.is_ok());
+            id.unwrap()
+        })
+        .collect();
+    // «Sustituir todos» in a free outline, and in a plot.
+    h.app.act(super::toolbox::Action::Replace);
+    h.frame();
+    h.app.replace.picking = Some(super::replace_ui::AreaPick::Free(Vec::new()));
+    for q in [p(-30.0, -5.0), p(-20.0, -5.0), p(-25.0, 5.0)] {
+        h.click_at(q);
+    }
+    h.key(Key::Enter);
+    assert!(h.app.replace.picking.is_none());
+    assert_eq!(h.app.replace.area.as_ref().map(|a| a.len()), Some(3));
+    h.app.replace.picking = Some(super::replace_ui::AreaPick::Plot);
+    h.click_at(p(17.0, 20.0));
+    let a = h.app.replace.area.clone().unwrap();
+    assert!((archisim_core::signed_area(&a).abs() - 200.0).abs() < 1e-6);
+    h.frame();
+    h.app.replace.open = false;
+    // The zone brush over both plots.
+    h.app.blocks.zone = archisim_core::BlockZone::OldTown;
+    h.app.blocks.brush = true;
+    h.app.blocks.brush_radius = 4.0;
+    h.drag(p(17.0, 20.0), p(29.0, 20.0));
+    for id in &plots {
+        assert_eq!(
+            h.model().plot(*id).unwrap().zone,
+            Some(archisim_core::BlockZone::OldTown)
+        );
+    }
+    h.key(Key::Escape);
+    assert!(!h.app.blocks.brush);
+    // The 3D view: a click with «Ocultar piezas» hides what is under it.
+    h.frame();
+}
+
 #[test]
 fn surfaces_drawn_by_their_outline() {
     let mut h = Harness::new(Editor::new_project());
@@ -9837,7 +9951,7 @@ fn stretches_and_replace_all() {
     h.app.act(super::toolbox::Action::Replace);
     assert!(h.app.replace.open);
     h.frame();
-    h.app.replace.picking = Some(None);
+    h.app.replace.picking = Some(super::replace_ui::AreaPick::Rect);
     h.click_at(p(-45.0, -20.0));
     h.click_at(p(-35.0, 20.0));
     assert!(h.app.replace.picking.is_none());

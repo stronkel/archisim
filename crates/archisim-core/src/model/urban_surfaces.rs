@@ -170,6 +170,15 @@ pub struct Bays {
     pub depth: f64,
     /// Degrees.
     pub angle: f64,
+    /// How many are for people with reduced mobility, first in the first
+    /// row: [`ACCESSIBLE_BAY`] wide (the bay and its transfer area), painted
+    /// blue with the symbol.
+    pub accessible: u32,
+    /// Numbered, one after another, row by row.
+    pub numbered: bool,
+    /// The side of the outline the rows follow (its first corner's index;
+    /// none: the longest).
+    pub side: Option<u32>,
 }
 
 impl Default for Bays {
@@ -178,8 +187,27 @@ impl Default for Bays {
             width: 2.5,
             depth: 5.0,
             angle: 90.0,
+            accessible: 0,
+            numbered: false,
+            side: None,
         }
     }
+}
+
+/// The width of a bay for people with reduced mobility with its transfer
+/// area beside it, metres (2,20 + 1,50, Orden TMA/851/2021, art. 35).
+pub const ACCESSIBLE_BAY: f64 = 3.7;
+/// The width of its transfer area, metres.
+pub const TRANSFER_AREA: f64 = 1.5;
+
+/// A parking bay laid out: its four corners (front left, front right,
+/// back right, back left, seen from the aisle), whether it is for people
+/// with reduced mobility, and its number from 1.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PlacedBay {
+    pub corners: [Point2; 4],
+    pub accessible: bool,
+    pub number: u32,
 }
 
 /// An urban surface.
@@ -238,6 +266,18 @@ impl UrbanSurface {
         crate::signed_area(&self.outline).abs()
     }
 
+    /// The side its bays follow: the one chosen, else the longest.
+    pub fn bay_side(&self) -> (Point2, Point2) {
+        let n = self.outline.len();
+        match self.bays.and_then(|b| b.side) {
+            Some(i) if (i as usize) < n => {
+                let i = i as usize;
+                (self.outline[i], self.outline[(i + 1) % n])
+            }
+            _ => self.longest_side(),
+        }
+    }
+
     /// Its longest side: its two ends.
     pub fn longest_side(&self) -> (Point2, Point2) {
         let n = self.outline.len();
@@ -247,10 +287,10 @@ impl UrbanSurface {
             .unwrap_or((Point2::new(0.0, 0.0), Point2::new(1.0, 0.0)))
     }
 
-    /// The lines of its parking bays, as thin polygons: rows along its
-    /// longest side, one after another inwards as they fit, each bay
-    /// marked by its sides (and the back of the row).
-    pub fn bay_lines(&self) -> Vec<Vec<Point2>> {
+    /// Its parking bays: rows along the side chosen (else its longest),
+    /// one after another inwards as they fit; those for people with
+    /// reduced mobility first in the first row.
+    pub fn bays_placed(&self) -> Vec<PlacedBay> {
         let Some(b) = self.bays else {
             return Vec::new();
         };
@@ -258,7 +298,7 @@ impl UrbanSurface {
         if inner.len() < 3 || b.width <= 0.5 || b.depth <= 1.0 {
             return Vec::new();
         }
-        let (a, z) = self.longest_side();
+        let (a, z) = self.bay_side();
         let Some(u) = (z - a).normalized() else {
             return Vec::new();
         };
@@ -268,7 +308,7 @@ impl UrbanSurface {
         // A bay's side, from the row's front to its back.
         let side = u * t.cos() + n * t.sin();
         let across = b.depth * t.sin();
-        let step = b.width / t.sin().max(0.2);
+        let step_of = |w: f64| w / t.sin().max(0.2);
         // How far the surface reaches inwards and along.
         let (mut lo, mut hi, mut near, mut reach) = (f64::MAX, f64::MIN, f64::MAX, 0.0_f64);
         for q in &inner {
@@ -296,38 +336,141 @@ impl UrbanSurface {
             y += across;
         }
         let mut out = Vec::new();
+        let mut left_accessible = b.accessible;
         for (back, up) in rows {
             // From the back of the row to its front.
             let dir = if up { side } else { side * -1.0 };
             let base = a + n * back;
+            let probe_n = n * if up { 0.05 } else { -0.05 };
             let mut s = lo + 0.3;
-            let mut last: Option<Point2> = None;
             while s <= hi + 1e-6 {
-                let p = base + u * s;
-                let q = p + dir * b.depth;
-                let probe = p + n * if up { 0.05 } else { -0.05 };
-                if inside(probe) && inside(q) {
-                    out.push(strip(&[p, q], -BAY_LINE / 2.0, BAY_LINE / 2.0));
-                    if let Some(l) = last {
-                        // The back of the bay.
-                        out.push(strip(&[l, p], -BAY_LINE / 2.0, BAY_LINE / 2.0));
+                let accessible = left_accessible > 0;
+                let w = if accessible { ACCESSIBLE_BAY } else { b.width };
+                let (p0, p1) = (base + u * s, base + u * (s + step_of(w)));
+                let (q0, q1) = (p0 + dir * b.depth, p1 + dir * b.depth);
+                if [p0, p1].iter().all(|p| inside(*p + probe_n)) && inside(q0) && inside(q1) {
+                    if accessible {
+                        left_accessible -= 1;
                     }
-                    last = Some(p);
+                    out.push(PlacedBay {
+                        // Seen from the aisle: the front is at q.
+                        corners: [q0, q1, p1, p0],
+                        accessible,
+                        number: out.len() as u32 + 1,
+                    });
+                    s += step_of(w);
                 } else {
-                    last = None;
+                    s += step_of(b.width) * 0.25;
                 }
-                s += step;
             }
+        }
+        out
+    }
+
+    /// The lines of its parking bays, as thin polygons: each bay marked by
+    /// its sides and its back (a side shared by two bays, once).
+    pub fn bay_lines(&self) -> Vec<Vec<Point2>> {
+        let line = |a: Point2, b: Point2| strip(&[a, b], -BAY_LINE / 2.0, BAY_LINE / 2.0);
+        let mut out: Vec<Vec<Point2>> = Vec::new();
+        let mut sides: Vec<(Point2, Point2)> = Vec::new();
+        for bay in self.bays_placed() {
+            let [q0, q1, p1, p0] = bay.corners;
+            for (a, b) in [(p0, q0), (p1, q1)] {
+                if !sides
+                    .iter()
+                    .any(|(x, y)| x.distance(a) < 1e-6 && y.distance(b) < 1e-6)
+                {
+                    sides.push((a, b));
+                    out.push(line(a, b));
+                }
+            }
+            out.push(line(p0, p1));
         }
         out.retain(|p| p.len() >= 3);
         out
     }
 
+    /// The paint of its bays for people with reduced mobility: the blue
+    /// ground of each and the white of its symbol and of the stripes of
+    /// its transfer area.
+    pub fn accessible_paint(&self) -> (Vec<Vec<Point2>>, Vec<Vec<Point2>>) {
+        let (mut blue, mut white) = (Vec::new(), Vec::new());
+        for bay in self.bays_placed().into_iter().filter(|b| b.accessible) {
+            let [q0, q1, _, p0] = bay.corners;
+            let Some(along) = (q1 - q0).normalized() else {
+                continue;
+            };
+            let Some(into) = (p0 - q0).normalized() else {
+                continue;
+            };
+            let wide = q0.distance(q1);
+            let deep = q0.distance(p0);
+            let car = (wide - TRANSFER_AREA).max(1.0);
+            // The bay itself in blue, the transfer area with white stripes.
+            let at = |x: f64, y: f64| q0 + along * x + into * y;
+            blue.push(vec![
+                at(0.0, 0.0),
+                at(car, 0.0),
+                at(car, deep),
+                at(0.0, deep),
+            ]);
+            let mut y = 0.3;
+            while y + 0.3 < deep {
+                let (a, b) = (at(car + 0.15, y), at(wide - 0.15, y + 0.6));
+                white.push(strip(&[a, b], -0.1, 0.1));
+                y += 0.8;
+            }
+            // The symbol (ISO 7001), 1,2 m high, in the middle of the bay.
+            let c = at(car / 2.0, deep * 0.55);
+            let ax = |x: f64, y: f64| c + along * x - into * y;
+            let mut head = Vec::new();
+            for k in 0..12 {
+                let t = std::f64::consts::TAU * k as f64 / 12.0;
+                head.push(ax(0.05 + 0.1 * t.cos(), 0.5 + 0.1 * t.sin()));
+            }
+            white.push(head);
+            // Back and seat, and the leg.
+            white.push(strip(
+                &[ax(0.0, 0.35), ax(0.0, 0.0), ax(0.3, 0.0)],
+                -0.04,
+                0.04,
+            ));
+            white.push(strip(&[ax(0.3, 0.0), ax(0.42, -0.3)], -0.04, 0.04));
+            // The wheel: an open ring round the seat.
+            let wheel: Vec<Point2> = (0..=12)
+                .map(|k| {
+                    let t = -0.4 + 4.6 * k as f64 / 12.0;
+                    ax(0.05 + 0.32 * t.cos(), -0.05 + 0.32 * t.sin())
+                })
+                .collect();
+            white.push(strip(&wheel, -0.035, 0.035));
+        }
+        blue.retain(|p| p.len() >= 3);
+        white.retain(|p| p.len() >= 3);
+        (blue, white)
+    }
+
+    /// Where each bay's number goes (the middle of its front) and which way
+    /// it reads (along the row), if they are numbered.
+    pub fn bay_numbers(&self) -> Vec<(Point2, crate::Vec2, u32)> {
+        if !self.bays.is_some_and(|b| b.numbered) {
+            return Vec::new();
+        }
+        self.bays_placed()
+            .into_iter()
+            .filter_map(|b| {
+                let [q0, q1, p1, p0] = b.corners;
+                let along = (q1 - q0).normalized()?;
+                let front = (q0 + q1) * 0.5;
+                let back = (p0 + p1) * 0.5;
+                Some((front + (back - front) * 0.2, along, b.number))
+            })
+            .collect()
+    }
+
     /// How many bays it has.
     pub fn bay_count(&self) -> usize {
-        // Each bay has its back line (the first of a row has none).
-        let lines = self.bay_lines();
-        lines.len() / 2
+        self.bays_placed().len()
     }
 
     /// The lines of its paving joints inside its inner outline, as
@@ -547,6 +690,15 @@ impl UrbanSurface {
         );
         if let Some(b) = self.bays {
             s += &format!(" {} {} {}", b.width, b.depth, b.angle);
+            if b.accessible > 0 {
+                s += &format!(" A {}", b.accessible);
+            }
+            if b.numbered {
+                s += " N 1";
+            }
+            if let Some(i) = b.side {
+                s += &format!(" S {i}");
+            }
         }
         if self.pattern != JointPattern::Grid {
             s += &format!(" P {}", self.pattern.code());
@@ -574,13 +726,14 @@ impl UrbanSurface {
         // the pattern (`P code`) and the holes (`H x,y;x,y;…`).
         let tail = f[6..]
             .iter()
-            .position(|t| *t == "P" || *t == "H")
+            .position(|t| matches!(*t, "P" | "H" | "A" | "N" | "S"))
             .map_or(f.len(), |i| i + 6);
         self.bays = if tail >= 9 {
             Some(Bays {
                 width: f[6].parse().ok()?,
                 depth: f[7].parse().ok()?,
                 angle: f[8].parse().ok()?,
+                ..Bays::default()
             })
         } else {
             None
@@ -591,6 +744,21 @@ impl UrbanSurface {
         while i + 1 < f.len() {
             match f[i] {
                 "P" => self.pattern = JointPattern::from_code(f[i + 1])?,
+                "A" => {
+                    if let Some(b) = self.bays.as_mut() {
+                        b.accessible = f[i + 1].parse().ok()?;
+                    }
+                }
+                "N" => {
+                    if let Some(b) = self.bays.as_mut() {
+                        b.numbered = f[i + 1] == "1";
+                    }
+                }
+                "S" => {
+                    if let Some(b) = self.bays.as_mut() {
+                        b.side = Some(f[i + 1].parse().ok()?);
+                    }
+                }
                 "H" => {
                     let mut h = Vec::new();
                     for xy in f[i + 1].split(';') {
@@ -732,6 +900,11 @@ impl Model {
             s.outline.reverse();
         }
         self.validate_surface(&s)?;
+        // The paints of the bays for people with reduced mobility.
+        if s.bays.is_some_and(|b| b.accessible > 0) {
+            self.marking_material([245, 245, 240]);
+            self.marking_material([40, 96, 176]);
+        }
         self.surfaces.insert(id, s);
         Ok(())
     }
@@ -906,6 +1079,37 @@ mod tests {
         back.bays = None;
         back.decode_into(&s.encode()).unwrap();
         assert_eq!(back, s);
+        // Two for people with reduced mobility, numbered, along the short
+        // side: wider, blue with their symbol, and they read back.
+        m.edit_surface(id, |x| {
+            let b = x.bays.as_mut().unwrap();
+            b.accessible = 2;
+            b.numbered = true;
+            b.side = Some(1);
+        })
+        .unwrap();
+        let s2 = m.surface(id).unwrap().clone();
+        let placed = s2.bays_placed();
+        let pmr: Vec<_> = placed.iter().filter(|b| b.accessible).collect();
+        assert_eq!(pmr.len(), 2);
+        let w = pmr[0].corners[0].distance(pmr[0].corners[1]);
+        assert!((w - ACCESSIBLE_BAY).abs() < 1e-6, "{w}");
+        // The rows go along the short side now (17 m).
+        let along = (pmr[0].corners[1] - pmr[0].corners[0])
+            .normalized()
+            .unwrap();
+        assert!(along.x.abs() < 1e-6, "{along:?}");
+        let (blue, white) = s2.accessible_paint();
+        assert_eq!(blue.len(), 2);
+        assert!(white.len() > 6);
+        let nums = s2.bay_numbers();
+        assert_eq!(nums.len(), placed.len());
+        assert_eq!(nums.last().unwrap().2 as usize, placed.len());
+        assert!(m.materials().any(|x| x.name == "Pintura vial azul"));
+        let mut back = s2.clone();
+        back.bays = None;
+        back.decode_into(&s2.encode()).unwrap();
+        assert_eq!(back, s2);
         // A square has its joints; drawn clockwise, it is turned round.
         let sq = m
             .add_surface(NewSurface {

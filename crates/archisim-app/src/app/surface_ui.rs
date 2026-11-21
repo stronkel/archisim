@@ -292,15 +292,66 @@ impl ArchiSimApp {
                         );
                     },
                 );
-            }
-            if n.bays.is_some() {
-                props::note(
+                row(
                     ui,
-                    &format!(
-                        "{} plazas, en filas a lo largo del lado más largo, con calle de 6 m entre cada dos.",
-                        n.bay_count()
-                    ),
+                    "Movilidad reducida",
+                    "Plazas de 3,70 m (2,20 + 1,50 de transferencia), en azul con su símbolo, las primeras de la primera fila",
+                    |ui, w| {
+                        ui.add_sized(
+                            [w - 8.0, 20.0],
+                            egui::DragValue::new(&mut b.accessible)
+                                .range(0..=200)
+                                .speed(0.1),
+                        );
+                    },
                 );
+                super::widgets::switch(ui, &mut b.numbered, "Numeradas");
+                let sides = n.outline.len();
+                row(
+                    ui,
+                    "Siguen el lado",
+                    "El lado del contorno paralelo a las filas",
+                    |ui, w| {
+                        let shown = match b.side {
+                            Some(i) => format!("Lado {}", i + 1),
+                            None => "El más largo".to_string(),
+                        };
+                        ComboBox::from_id_salt(("surface-bay-side", id))
+                            .width(w - 8.0)
+                            .selected_text(shown)
+                            .show_ui(ui, |ui| {
+                                ui.selectable_value(&mut b.side, None, "El más largo");
+                                for i in 0..sides as u32 {
+                                    ui.selectable_value(
+                                        &mut b.side,
+                                        Some(i),
+                                        format!("Lado {}", i + 1),
+                                    );
+                                }
+                            });
+                    },
+                );
+            }
+            if let Some(b) = n.bays {
+                let all = n.bays_placed();
+                let pmr = all.iter().filter(|x| x.accessible).count();
+                let mut note = format!(
+                    "{} plazas, en filas a lo largo del {}, con calle de 6 m entre cada dos.",
+                    all.len(),
+                    if b.side.is_some() {
+                        "lado elegido"
+                    } else {
+                        "lado más largo"
+                    }
+                );
+                if b.accessible > 0 {
+                    note += &format!(" {pmr} de movilidad reducida");
+                    if (pmr as u32) < b.accessible {
+                        note += " (no caben más)";
+                    }
+                    note.push('.');
+                }
+                props::note(ui, &note);
             }
         });
         group(ui, "surface-identity", "Datos de identidad", |ui| {

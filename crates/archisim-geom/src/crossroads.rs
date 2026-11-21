@@ -128,12 +128,27 @@ pub struct Junction {
     /// lanes coming in and the lines between them, with the road under
     /// each (painted at its height).
     pub arm_paint: Vec<(RoadId, Vec<Point2>)>,
+    /// The arrows among `arm_paint` (N6): each one's street, kind, where its
+    /// tail is and which way it points, and the middles of its pieces (to
+    /// let it go as a marking of its own).
+    pub arrows: Vec<NodeArrow>,
     /// How many of the last metres of each arm (as `arms`) are its plate
     /// coming down from the node's height to the street's (N1, an arm
     /// flattened); 0 for the others.
     pub flattened: Vec<f64>,
     /// Where its centre is drawn and taken (N1: moved by hand, else `at`).
     pub centre: Point2,
+}
+
+/// An arrow painted on an arm of a node (N3, N6).
+#[derive(Debug, Clone, PartialEq)]
+pub struct NodeArrow {
+    pub road: RoadId,
+    pub kind: archisim_core::MarkingKind,
+    /// The path it is painted along: from its tail towards the node.
+    pub path: [Point2; 2],
+    /// The middles of its pieces in `arm_paint`.
+    pub pieces: Vec<Point2>,
 }
 
 /// Which way a lane goes at a node, seen from the lane coming in.
@@ -1908,6 +1923,7 @@ fn assemble(
         Vec::new()
     };
     let mut arm_paint = Vec::new();
+    let mut arrows = Vec::new();
     if !marks_hidden && n >= 3 && ring.is_none() && kind != NodeKind::Open {
         // How far each arm's street goes on from here: its arrows are
         // painted again along it if there is room.
@@ -1923,7 +1939,19 @@ fn assemble(
                 })
             })
             .collect();
-        arm_paint = lane_paint(&arms, &lanes, settings, &room);
+        (arm_paint, arrows) = lane_paint(&arms, &lanes, settings, &room);
+        // Without what is hidden by hand on its streets (N6).
+        arm_paint.retain(|(_, p)| {
+            !hidden(
+                archisim_core::PieceKind::Marking,
+                archisim_core::middle_of(p),
+            )
+        });
+        arrows.retain(|a| {
+            !a.pieces
+                .iter()
+                .any(|q| hidden(archisim_core::PieceKind::Marking, *q))
+        });
     }
     if let Some(s) = settings {
         let (o, u) = node_frame(&arms, x);
@@ -1936,6 +1964,12 @@ fn assemble(
             marks.extend(island_paint(&poly, i.paint));
         }
     }
+    marks.retain(|p| {
+        !hidden(
+            archisim_core::PieceKind::Marking,
+            archisim_core::middle_of(p),
+        )
+    });
     let flat = settings.and_then(|s| s.flat).unwrap_or(false);
     let trams = if ring.is_none() && n >= 2 && kind != NodeKind::Open {
         tram_connections(&arms)
@@ -1970,6 +2004,7 @@ fn assemble(
         trams,
         lanes,
         arm_paint,
+        arrows,
         flattened,
         centre: x + shift.unwrap_or_default(),
     })
@@ -2182,9 +2217,10 @@ fn lane_paint(
     lanes: &[LaneConnection],
     settings: Option<&NodeSettings>,
     room: &[f64],
-) -> Vec<(RoadId, Vec<Point2>)> {
+) -> (Vec<(RoadId, Vec<Point2>)>, Vec<NodeArrow>) {
     use archisim_core::MarkingKind as K;
     let mut out = Vec::new();
+    let mut arrows = Vec::new();
     for (ai, a) in arms.iter().enumerate() {
         let ar = Junction::arm_ref(a);
         let own = settings
@@ -2230,7 +2266,14 @@ fn lane_paint(
                 let at = a.origin + a.dir * (back + 5.0) + a.dir.perp_left() * off;
                 let path = [at, at - a.dir];
                 for &k in &kinds {
-                    for poly in archisim_core::paint_shapes(k, &path, 0.15, 0.0, 0.0, 0.0) {
+                    let polys = archisim_core::paint_shapes(k, &path, 0.15, 0.0, 0.0, 0.0);
+                    arrows.push(NodeArrow {
+                        road: a.road,
+                        kind: k,
+                        path,
+                        pieces: polys.iter().map(|p| archisim_core::middle_of(p)).collect(),
+                    });
+                    for poly in polys {
                         out.push((a.road, poly));
                     }
                 }
@@ -2250,7 +2293,7 @@ fn lane_paint(
             out.push((a.road, strip(&line, -0.05, 0.05)));
         }
     }
-    out
+    (out, arrows)
 }
 
 /// The arrow of a lane that may turn back (↶): its tail at `at`, going

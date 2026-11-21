@@ -825,9 +825,9 @@ const SITE: &[Tile] = &[
             tile(
                 Pick::Action(Action::DetachCrossing),
                 Glyph::Marking,
-                "Soltar paso de peatones",
+                "Soltar piezas",
                 "",
-                "Convierte la cebra de una calle en una marca vial suelta para moverla o girarla",
+                "Convierte una cebra o una flecha de una calle en una marca vial suelta, y una señal de un nudo en un objeto «Señal de tráfico», para moverlas o girarlas",
             ),
             tile(
                 Pick::Action(Action::Replace),

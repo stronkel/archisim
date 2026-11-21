@@ -31,6 +31,20 @@ pub enum ReplaceWhere {
     Street,
 }
 
+/// How the area is being picked on the plan.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub enum AreaPick {
+    /// Two opposite corners of a rectangle (the first, once clicked).
+    #[default]
+    Rect,
+    RectFrom(Point2),
+    /// A free outline: its corners so far (a click on the first closes it).
+    Free(Vec<Point2>),
+    /// A click on a plot takes its outline; outside the plots, the city
+    /// block round the click.
+    Plot,
+}
+
 /// The window «Sustituir todos».
 #[derive(Debug, Clone, Default)]
 pub struct ReplaceState {
@@ -41,10 +55,10 @@ pub struct ReplaceState {
     pub to_type: Option<ObjectTypeId>,
     pub from_material: Option<MaterialId>,
     pub to_material: Option<MaterialId>,
-    /// The area's two corners, once picked.
-    pub area: Option<(Point2, Point2)>,
-    /// Picking the area on the plan: its first corner, once clicked.
-    pub picking: Option<Option<Point2>>,
+    /// The area's outline, once picked.
+    pub area: Option<Vec<Point2>>,
+    /// Picking the area on the plan, and how.
+    pub picking: Option<AreaPick>,
     /// The stretch of the street: its street, from and to.
     pub street: Option<(RoadId, f64, f64)>,
 }
@@ -55,18 +69,10 @@ impl ReplaceState {
         Some(match self.scope {
             ReplaceWhere::Project => ReplaceScope::All,
             ReplaceWhere::Level => ReplaceScope::Level(level),
-            ReplaceWhere::Area => {
-                let (a, b) = self.area?;
-                ReplaceScope::Area {
-                    level,
-                    outline: vec![
-                        Point2::new(a.x.min(b.x), a.y.min(b.y)),
-                        Point2::new(a.x.max(b.x), a.y.min(b.y)),
-                        Point2::new(a.x.max(b.x), a.y.max(b.y)),
-                        Point2::new(a.x.min(b.x), a.y.max(b.y)),
-                    ],
-                }
-            }
+            ReplaceWhere::Area => ReplaceScope::Area {
+                level,
+                outline: self.area.clone()?,
+            },
             ReplaceWhere::Street => {
                 let (road, from, to) = self.street?;
                 ReplaceScope::Road { road, from, to }
@@ -90,24 +96,119 @@ impl ArchiSimApp {
         }
     }
 
-    /// A click on the plan while picking the area: its two corners.
+    /// A click on the plan while picking the area.
     pub(super) fn replace_area_click(&mut self, p: Point2) {
-        match self.replace.picking {
-            Some(None) => {
-                self.replace.picking = Some(Some(p));
+        match self.replace.picking.take() {
+            Some(AreaPick::Rect) => {
+                self.replace.picking = Some(AreaPick::RectFrom(p));
                 self.say("Ahora la esquina opuesta de la zona.");
             }
-            Some(Some(a)) => {
-                self.replace.picking = None;
-                self.replace.area = Some((a, p));
-                self.replace.scope = ReplaceWhere::Area;
-                self.say(format!(
-                    "Zona de {} × {} m.",
-                    super::urban_ui::comma((p.x - a.x).abs(), 1),
-                    super::urban_ui::comma((p.y - a.y).abs(), 1)
-                ));
+            Some(AreaPick::RectFrom(a)) => {
+                self.set_replace_area(vec![
+                    Point2::new(a.x.min(p.x), a.y.min(p.y)),
+                    Point2::new(a.x.max(p.x), a.y.min(p.y)),
+                    Point2::new(a.x.max(p.x), a.y.max(p.y)),
+                    Point2::new(a.x.min(p.x), a.y.max(p.y)),
+                ]);
+            }
+            Some(AreaPick::Free(mut pts)) => {
+                let reach = self.view.to_metres(crate::touch::reach(10.0));
+                if pts.len() >= 3 && pts[0].distance(p) < reach {
+                    self.set_replace_area(pts);
+                } else {
+                    pts.push(p);
+                    self.say(format!(
+                        "{} puntos · clic en el primero para cerrar la zona.",
+                        pts.len()
+                    ));
+                    self.replace.picking = Some(AreaPick::Free(pts));
+                }
+            }
+            Some(AreaPick::Plot) => {
+                let model = self.ed.model();
+                let level = self.ed.level;
+                let plot = model
+                    .plots()
+                    .filter(|x| x.level == level)
+                    .find(|x| archisim_core::point_in_polygon(p, &x.outline))
+                    .map(|x| (x.outline.clone(), x.name.clone()));
+                let found = plot.or_else(|| {
+                    archisim_geom::blocks::city_blocks(model, level)
+                        .into_iter()
+                        .find(|b| archisim_core::point_in_polygon(p, b))
+                        .map(|b| (b, "la manzana".to_string()))
+                });
+                match found {
+                    Some((outline, name)) => {
+                        self.set_replace_area(outline);
+                        self.say(format!("Zona: {name}."));
+                    }
+                    None => {
+                        self.replace.picking = Some(AreaPick::Plot);
+                        self.say("Ahí no hay parcela ni manzana: clic dentro de una.");
+                    }
+                }
             }
             None => {}
+        }
+    }
+
+    /// Closes the free outline being drawn (Intro). Whether there was one.
+    pub(super) fn replace_area_finish(&mut self) -> bool {
+        match self.replace.picking.take() {
+            Some(AreaPick::Free(pts)) if pts.len() >= 3 => {
+                self.set_replace_area(pts);
+                true
+            }
+            other => {
+                self.replace.picking = other;
+                false
+            }
+        }
+    }
+
+    fn set_replace_area(&mut self, outline: Vec<Point2>) {
+        let area = archisim_core::signed_area(&outline).abs();
+        self.replace.picking = None;
+        self.replace.area = Some(outline);
+        self.replace.scope = ReplaceWhere::Area;
+        self.say(format!("Zona de {} m².", super::urban_ui::comma(area, 0)));
+    }
+
+    /// The area picked (and the one being picked), over the plan.
+    pub(super) fn draw_replace_area(&self, painter: &egui::Painter, rect: egui::Rect) {
+        if !self.replace.open {
+            return;
+        }
+        let ink = egui::Color32::from_rgb(200, 60, 140);
+        let ring = |pts: &[Point2], closed: bool| {
+            let mut line: Vec<Point2> = pts.to_vec();
+            if closed {
+                if let Some(&f) = pts.first() {
+                    line.push(f);
+                }
+            }
+            painter.add(egui::Shape::dashed_line(
+                &self.polygon(rect, &line),
+                egui::Stroke::new(2.0, ink),
+                8.0,
+                4.0,
+            ));
+        };
+        if let Some(a) = &self.replace.area {
+            ring(a, true);
+        }
+        let cursor = self.cursor.map(|c| c.point);
+        match (&self.replace.picking, cursor) {
+            (Some(AreaPick::RectFrom(a)), Some(c)) => {
+                ring(&[*a, Point2::new(c.x, a.y), c, Point2::new(a.x, c.y)], true)
+            }
+            (Some(AreaPick::Free(pts)), c) => {
+                let mut line = pts.clone();
+                line.extend(c);
+                ring(&line, false);
+            }
+            _ => {}
         }
     }
 
@@ -137,23 +238,42 @@ impl ArchiSimApp {
                 st.street = Some((r.id, 0.0, r.length()));
             }
         }
-        let mut pick_area = false;
+        let mut pick_area: Option<AreaPick> = None;
         egui::Grid::new("replace-where").show(ui, |ui| {
             ui.label("Dónde");
             ui.vertical(|ui| {
                 ui.radio_value(&mut st.scope, ReplaceWhere::Project, "En todo el proyecto");
                 ui.radio_value(&mut st.scope, ReplaceWhere::Level, "En esta planta");
-                ui.horizontal(|ui| {
-                    ui.add_enabled(
-                        st.area.is_some(),
-                        egui::RadioButton::new(st.scope == ReplaceWhere::Area, "En la zona"),
-                    )
-                    .clicked()
-                    .then(|| st.scope = ReplaceWhere::Area);
-                    pick_area = ui
-                        .small_button("Elegir en planta")
-                        .on_hover_text("Dos clics: dos esquinas opuestas de un rectángulo")
-                        .clicked();
+                ui.add_enabled(
+                    st.area.is_some(),
+                    egui::RadioButton::new(st.scope == ReplaceWhere::Area, "En la zona"),
+                )
+                .clicked()
+                .then(|| st.scope = ReplaceWhere::Area);
+                ui.horizontal_wrapped(|ui| {
+                    if ui
+                        .small_button("Rectángulo")
+                        .on_hover_text("Dos clics: dos esquinas opuestas")
+                        .clicked()
+                    {
+                        pick_area = Some(AreaPick::Rect);
+                    }
+                    if ui
+                        .small_button("Contorno")
+                        .on_hover_text(
+                            "Clic en cada esquina; clic en la primera o Intro para cerrar",
+                        )
+                        .clicked()
+                    {
+                        pick_area = Some(AreaPick::Free(Vec::new()));
+                    }
+                    if ui
+                        .small_button("Parcela o manzana")
+                        .on_hover_text("Clic dentro de una parcela, o de una manzana entre calles")
+                        .clicked()
+                    {
+                        pick_area = Some(AreaPick::Plot);
+                    }
                 });
                 ui.add_enabled(
                     st.street.is_some(),
@@ -302,11 +422,14 @@ impl ArchiSimApp {
                 }
             }
         }
-        if pick_area {
-            self.replace.picking = Some(None);
+        if let Some(how) = pick_area {
             self.set_tool(Tool::Arrow);
-            self.replace.picking = Some(None);
-            self.say("Clic en una esquina de la zona.");
+            self.say(match how {
+                AreaPick::Plot => "Clic dentro de una parcela o de una manzana.",
+                AreaPick::Free(_) => "Clic en cada esquina de la zona.",
+                _ => "Clic en una esquina de la zona.",
+            });
+            self.replace.picking = Some(how);
         }
         if let Some((scope, types, mats)) = go {
             let mut n = 0;

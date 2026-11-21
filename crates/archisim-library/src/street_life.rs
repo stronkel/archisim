@@ -24,6 +24,14 @@ pub struct LifeOptions {
     pub gardens: bool,
     /// Only round this point of the plan, this far (none: everywhere).
     pub around: Option<(Point2, f64)>,
+    /// Only along a stretch of a street (from, to along its axis), as its
+    /// own furniture (N4, «por tramo»): no gardens then.
+    pub stretch: Option<(archisim_core::RoadId, f64, f64)>,
+    /// The types to put instead of the usual ones (none: the usual).
+    pub tree_type: Option<ObjectTypeId>,
+    pub lamp_type: Option<ObjectTypeId>,
+    pub bench_type: Option<ObjectTypeId>,
+    pub bin_type: Option<ObjectTypeId>,
 }
 
 impl Default for LifeOptions {
@@ -35,6 +43,11 @@ impl Default for LifeOptions {
             people: true,
             gardens: true,
             around: None,
+            stretch: None,
+            tree_type: None,
+            lamp_type: None,
+            bench_type: None,
+            bin_type: None,
         }
     }
 }
@@ -239,11 +252,18 @@ pub fn add_street_life(
         if len < 2.0 * CROSSING_CLEAR {
             continue;
         }
+        // Only the stretch asked for, if one.
+        let (lo, hi) = match opts.stretch {
+            Some((id, a, b)) if id == road.id => (a.min(b), a.max(b)),
+            Some(_) => continue,
+            None => (f64::MIN, f64::MAX),
+        };
+        let on_stretch = |t: f64| t >= lo - 1e-9 && t <= hi + 1e-9;
         // The tree pits, a tree in each.
         let pits = road.tree_pit_stations();
         if opts.trees {
             for &t in &pits {
-                if t < CROSSING_CLEAR * 0.6 || t > len - CROSSING_CLEAR * 0.6 {
+                if t < CROSSING_CLEAR * 0.6 || t > len - CROSSING_CLEAR * 0.6 || !on_stretch(t) {
                     continue;
                 }
                 let (p, u) = road.axis_at(t);
@@ -261,7 +281,7 @@ pub fn add_street_life(
         while s <= len - CROSSING_CLEAR {
             let (p, u) = road.axis_at(s);
             let n = u.perp_left();
-            let free = !near_other(road.id, p) && within(p);
+            let free = !near_other(road.id, p) && within(p) && on_stretch(s);
             for (band, a, b) in road.offsets_at(s) {
                 if !free {
                     continue;
@@ -312,7 +332,7 @@ pub fn add_street_life(
     }
     // The front gardens of the houses.
     let mut lawns = Vec::new();
-    if opts.gardens {
+    if opts.gardens && opts.stretch.is_none() {
         let (g, l) = garden_spots(m, level, &within);
         spots.extend(g);
         lawns = l;
@@ -329,84 +349,97 @@ pub fn add_street_life(
         if taken.iter().any(|q| q.distance(p) < clear) {
             continue;
         }
-        let t = match kind {
-            Kind::Tree => {
-                let name = STREET_TREES[(chance(p, 1) * STREET_TREES.len() as f64) as usize % 3];
-                match street_tree(m, name)? {
-                    Some(t) => t,
-                    None => continue,
+        let own = match kind {
+            Kind::Tree => opts.tree_type,
+            Kind::Lamp => opts.lamp_type,
+            Kind::Bench => opts.bench_type,
+            Kind::Bin => opts.bin_type,
+            _ => None,
+        }
+        .filter(|t| m.object_type(*t).is_some());
+        let t = if let Some(t) = own {
+            t
+        } else {
+            match kind {
+                Kind::Tree => {
+                    let name =
+                        STREET_TREES[(chance(p, 1) * STREET_TREES.len() as f64) as usize % 3];
+                    match street_tree(m, name)? {
+                        Some(t) => t,
+                        None => continue,
+                    }
                 }
-            }
-            Kind::Lamp => type_named(m, "Farola de calle", "Farola", &[])?,
-            Kind::Bench => type_named(m, "Banco de calle", "Banco", &[])?,
-            Kind::Bin => type_named(m, "Papelera de calle", "Papelera", &[])?,
-            Kind::Car => {
-                let (name, mat, rgb, model) =
-                    CARS[(chance(p, 2) * CARS.len() as f64) as usize % CARS.len()];
-                type_named(
+                Kind::Lamp => type_named(m, "Farola de calle", "Farola", &[])?,
+                Kind::Bench => type_named(m, "Banco de calle", "Banco", &[])?,
+                Kind::Bin => type_named(m, "Papelera de calle", "Papelera", &[])?,
+                Kind::Car => {
+                    let (name, mat, rgb, model) =
+                        CARS[(chance(p, 2) * CARS.len() as f64) as usize % CARS.len()];
+                    type_named(
+                        m,
+                        name,
+                        "Turismo",
+                        &[
+                            ("body_mat", Val::M(mat, "other", rgb)),
+                            ("model3d", Val::T(model)),
+                        ],
+                    )?
+                }
+                Kind::Person => {
+                    let (name, model, shirt, trousers) =
+                        PEOPLE[(chance(p, 4) * PEOPLE.len() as f64) as usize % PEOPLE.len()];
+                    type_named(
+                        m,
+                        name,
+                        "Persona",
+                        &[
+                            ("model3d", Val::T(model)),
+                            ("mat", Val::M("Ropa de calle", "other", shirt)),
+                            ("mat2", Val::M("Pantalón de calle", "other", trousers)),
+                            ("skin", Val::M("Piel", "other", [214, 168, 132])),
+                            ("hair", Val::M("Pelo castaño", "other", [72, 50, 36])),
+                        ],
+                    )?
+                }
+                Kind::Hedge => type_named(
                     m,
-                    name,
-                    "Turismo",
+                    "Seto de jardín 2 m",
+                    "Seto",
                     &[
-                        ("body_mat", Val::M(mat, "other", rgb)),
-                        ("model3d", Val::T(model)),
+                        ("width", Val::N(2.0)),
+                        ("depth", Val::N(0.5)),
+                        ("height", Val::N(0.9)),
+                        (
+                            "leaves",
+                            Val::M("Follaje de seto", "vegetation", [74, 124, 62]),
+                        ),
                     ],
-                )?
-            }
-            Kind::Person => {
-                let (name, model, shirt, trousers) =
-                    PEOPLE[(chance(p, 4) * PEOPLE.len() as f64) as usize % PEOPLE.len()];
-                type_named(
+                )?,
+                Kind::Shrub => type_named(
                     m,
-                    name,
-                    "Persona",
+                    "Arbusto de jardín",
+                    "Arbusto",
                     &[
-                        ("model3d", Val::T(model)),
-                        ("mat", Val::M("Ropa de calle", "other", shirt)),
-                        ("mat2", Val::M("Pantalón de calle", "other", trousers)),
-                        ("skin", Val::M("Piel", "other", [214, 168, 132])),
-                        ("hair", Val::M("Pelo castaño", "other", [72, 50, 36])),
+                        ("width", Val::N(1.1)),
+                        ("height", Val::N(0.9)),
+                        (
+                            "leaves",
+                            Val::M("Follaje de arbusto", "vegetation", [92, 140, 70]),
+                        ),
                     ],
-                )?
+                )?,
+                Kind::WasteBin => type_named(
+                    m,
+                    "Cubo de basura",
+                    "Contenedor de residuos",
+                    &[
+                        ("width", Val::N(0.6)),
+                        ("depth", Val::N(0.7)),
+                        ("height", Val::N(1.05)),
+                        ("mat", Val::M("Plástico verde", "other", [62, 112, 70])),
+                    ],
+                )?,
             }
-            Kind::Hedge => type_named(
-                m,
-                "Seto de jardín 2 m",
-                "Seto",
-                &[
-                    ("width", Val::N(2.0)),
-                    ("depth", Val::N(0.5)),
-                    ("height", Val::N(0.9)),
-                    (
-                        "leaves",
-                        Val::M("Follaje de seto", "vegetation", [74, 124, 62]),
-                    ),
-                ],
-            )?,
-            Kind::Shrub => type_named(
-                m,
-                "Arbusto de jardín",
-                "Arbusto",
-                &[
-                    ("width", Val::N(1.1)),
-                    ("height", Val::N(0.9)),
-                    (
-                        "leaves",
-                        Val::M("Follaje de arbusto", "vegetation", [92, 140, 70]),
-                    ),
-                ],
-            )?,
-            Kind::WasteBin => type_named(
-                m,
-                "Cubo de basura",
-                "Contenedor de residuos",
-                &[
-                    ("width", Val::N(0.6)),
-                    ("depth", Val::N(0.7)),
-                    ("height", Val::N(1.05)),
-                    ("mat", Val::M("Plástico verde", "other", [62, 112, 70])),
-                ],
-            )?,
         };
         let base_offset = m.surface_at(level, p);
         m.add_object(NewObject {
@@ -647,6 +680,58 @@ mod tests {
         assert_eq!(m.objects().count(), before + r.total());
         let (_, again, _) = make();
         assert_eq!(r, again);
+    }
+
+    /// A stretch of a street furnished by itself (N4): only along it, with
+    /// the lamp chosen.
+    #[test]
+    fn a_stretch_gets_its_own_furniture() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../archisim-carto/tests/fixtures");
+        let read = |f: &str| std::fs::read_to_string(dir.join(f)).unwrap();
+        let files = vec![
+            ("c.gml".to_string(), read("pueblo-catastro.gml")),
+            ("o.osm".to_string(), read("pueblo.osm")),
+        ];
+        let mut m = Model::new("T");
+        let l = m.add_level("Planta baja", 0.0);
+        import_carto(
+            &mut m,
+            &files,
+            &CartoOptions {
+                street_life: false,
+                ..CartoOptions::default()
+            },
+        )
+        .unwrap();
+        let road = m
+            .roads()
+            .max_by(|a, b| a.length().total_cmp(&b.length()))
+            .unwrap()
+            .clone();
+        let lamp = type_named(&mut m, "Farola de tramo", "Farola", &[]).unwrap();
+        let (from, to) = (road.length() * 0.2, road.length() * 0.8);
+        let before: Vec<archisim_core::ObjectId> = m.objects().map(|o| o.id).collect();
+        let r = add_street_life(
+            &mut m,
+            l,
+            &LifeOptions {
+                cars: false,
+                people: false,
+                stretch: Some((road.id, from, to)),
+                lamp_type: Some(lamp),
+                ..LifeOptions::default()
+            },
+        )
+        .unwrap();
+        assert!(r.furniture > 0, "{r:?}");
+        assert_eq!(r.cars + r.people + r.garden_pieces, 0);
+        let new: Vec<_> = m.objects().filter(|o| !before.contains(&o.id)).collect();
+        assert!(new.iter().any(|o| o.object_type == lamp));
+        for o in &new {
+            let s = road.station_of(o.position);
+            assert!(s >= from - 1.0 && s <= to + 1.0, "{s}");
+        }
     }
 
     #[test]

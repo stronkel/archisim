@@ -1350,7 +1350,18 @@ impl ArchiSimApp {
             }
         }
         let mut taken = false;
-        if !tool3d && response.clicked_by(PointerButton::Primary) {
+        // Hiding or letting go of the streets' pieces (N6): the point
+        // clicked, on what is under the cursor.
+        if !tool3d && self.piece_pick.is_some() && response.clicked_by(PointerButton::Primary) {
+            if let Some((p, _, _)) = response
+                .interact_pointer_pos()
+                .and_then(|pos| self.v3d.hit(pos - rect.min, size))
+            {
+                self.piece_click(archisim_core::Point2::new(p.x as f64, p.y as f64));
+                taken = true;
+            }
+        }
+        if !tool3d && !taken && response.clicked_by(PointerButton::Primary) {
             let add = ctx.input(|i| i.modifiers.shift || i.modifiers.command);
             if let (false, Some(pos)) = (add, response.interact_pointer_pos()) {
                 let here = model_elements(self, pos);

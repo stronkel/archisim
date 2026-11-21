@@ -1729,6 +1729,28 @@ impl ArchiSimApp {
         let mut gone = None;
         let mut replace = false;
         let mut show_hidden = false;
+        let mut furnish: Option<(f64, f64)> = None;
+        // The types offered for a stretch's own furniture: the trees, and
+        // the street furniture of the project.
+        let fam_of = |t: &archisim_core::ObjectType| {
+            model
+                .family(t.family)
+                .map(|f| (f.def().name.clone(), f.def().category.clone()))
+        };
+        let mut trees: Vec<(archisim_core::ObjectTypeId, String)> = Vec::new();
+        let mut street: Vec<(archisim_core::ObjectTypeId, String)> = Vec::new();
+        for t in model.object_types() {
+            match fam_of(t) {
+                Some((f, _)) if f == archisim_core::VEGETATION_FAMILY => {
+                    trees.push((t.id, t.name.clone()))
+                }
+                Some((_, c)) if c == "street" => street.push((t.id, t.name.clone())),
+                _ => {}
+            }
+        }
+        trees.sort_by(|a, b| a.1.cmp(&b.1));
+        street.sort_by(|a, b| a.1.cmp(&b.1));
+        let mut chosen = self.skin_furniture;
         group(ui, "road-skins", "Por tramos", |ui| {
             props::note(
                 ui,
@@ -1780,8 +1802,47 @@ impl ArchiSimApp {
                         }
                     });
                 }
-                if ui.small_button("Quitar el tramo").clicked() {
-                    gone = Some(i);
+                ui.horizontal_wrapped(|ui| {
+                    if ui.small_button("Quitar el tramo").clicked() {
+                        gone = Some(i);
+                    }
+                    if ui
+                        .small_button("Amueblar el tramo")
+                        .on_hover_text("Pone en este tramo los árboles, farolas, bancos y papeleras elegidos abajo, como «La vida de la calle»")
+                        .clicked()
+                    {
+                        furnish = Some((k.from, k.to));
+                    }
+                });
+            }
+            if !skins.is_empty() {
+                ui.label(egui::RichText::new("Mobiliario de los tramos").strong());
+                let labels = [
+                    ("Árbol", &trees),
+                    ("Farola", &street),
+                    ("Banco", &street),
+                    ("Papelera", &street),
+                ];
+                for (j, (label, list)) in labels.into_iter().enumerate() {
+                    row(
+                        ui,
+                        label,
+                        "Vacío: el de «La vida de la calle»",
+                        |ui, w| {
+                            let shown = chosen[j]
+                                .and_then(|t| list.iter().find(|x| x.0 == t))
+                                .map_or("El habitual".to_string(), |x| x.1.clone());
+                            ComboBox::from_id_salt(("skin-furniture", id, j))
+                                .width(w - 8.0)
+                                .selected_text(shown)
+                                .show_ui(ui, |ui| {
+                                    ui.selectable_value(&mut chosen[j], None, "El habitual");
+                                    for (t, name) in list.iter() {
+                                        ui.selectable_value(&mut chosen[j], Some(*t), name);
+                                    }
+                                });
+                        },
+                    );
                 }
             }
             if !r.hidden.is_empty() {
@@ -1801,8 +1862,39 @@ impl ArchiSimApp {
                     .clicked();
             });
         });
+        self.skin_furniture = chosen;
         if let Some(i) = gone {
             skins.remove(i);
+        }
+        if let Some((from, to)) = furnish {
+            let level = r.level;
+            let [tree_type, lamp_type, bench_type, bin_type] = chosen;
+            let mut done = archisim_library::street_life::LifeReport::default();
+            let res = self.ed.transact("Amueblar el tramo", |m| {
+                done = archisim_library::street_life::add_street_life(
+                    m,
+                    level,
+                    &archisim_library::street_life::LifeOptions {
+                        cars: false,
+                        people: false,
+                        gardens: false,
+                        stretch: Some((id, from, to)),
+                        tree_type,
+                        lamp_type,
+                        bench_type,
+                        bin_type,
+                        ..Default::default()
+                    },
+                )?;
+                Ok::<(), archisim_core::ModelError>(())
+            });
+            self.report(
+                res,
+                &format!(
+                    "Tramo amueblado: {} árboles y {} farolas, bancos y papeleras.",
+                    done.trees, done.furniture
+                ),
+            );
         }
         if show_hidden {
             let res = self

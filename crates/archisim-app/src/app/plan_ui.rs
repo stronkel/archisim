@@ -126,6 +126,8 @@ impl ArchiSimApp {
             self.draw_marking_preview(&painter, rect)
         });
         self.draw_node_pick(&painter, rect);
+        self.draw_replace_area(&painter, rect);
+        self.draw_zone_brush(&painter, rect);
         crate::profile::time("planta: draw_pool_preview", || {
             self.draw_pool_preview(&painter, rect)
         });
@@ -822,6 +824,9 @@ impl ArchiSimApp {
         if enter && self.tool == Tool::Node && self.node_finish() {
             return;
         }
+        if enter && self.replace_area_finish() {
+            return;
+        }
         if self.command_keys(&events, enter, escape, backspace, space) {
             return;
         }
@@ -1154,6 +1159,8 @@ impl ArchiSimApp {
                     self.replace.picking = None;
                     self.piece_pick = None;
                     self.blocks.picking = false;
+                    self.blocks.brush = false;
+                    self.blocks.stroke.clear();
                     self.context_fit.stop();
                 }
             }
@@ -1305,6 +1312,19 @@ impl ArchiSimApp {
                 if let Some(c) = self.cursor {
                     self.context_fit_click(c.point);
                 }
+            }
+            return;
+        }
+        if self.blocks.brush && self.tool == Tool::Arrow {
+            let painting = response.dragged_by(PointerButton::Primary)
+                || response.clicked_by(PointerButton::Primary);
+            if painting {
+                if let Some(c) = self.cursor {
+                    self.zone_brush_at(c.point);
+                }
+            }
+            if response.drag_stopped() || response.clicked_by(PointerButton::Primary) {
+                self.zone_brush_done();
             }
             return;
         }

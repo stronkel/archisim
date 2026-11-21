@@ -90,6 +90,33 @@ pub fn surface_solids(model: &Model, id: SurfaceId) -> Vec<Solid> {
             triangles: tris,
         });
     }
+    // The bays for people with reduced mobility: blue, with the white of
+    // their symbol and transfer area over it.
+    let (blue, white) = s.accessible_paint();
+    if !blue.is_empty() {
+        let find = |rgb: [u8; 3]| {
+            model
+                .materials()
+                .find(|m| m.category == "paint" && m.cut_color == rgb)
+                .map(|m| m.id)
+        };
+        let paint_white = model
+            .materials()
+            .find(|m| m.category == "paint")
+            .map_or(s.edge_material, |m| m.id);
+        let paint_blue = find([40, 96, 176]).unwrap_or(paint_white);
+        for (polys, mat, lift) in [(blue, paint_blue, 0.003), (white, paint_white, 0.005)] {
+            let tris: Vec<[P3; 3]> = polys
+                .iter()
+                .flat_map(|p| draped_prism(p, |q| (top(q), top(q) + lift)))
+                .collect();
+            out.push(Solid {
+                owner: SolidOwner::Surface(id),
+                material: mat,
+                triangles: tris,
+            });
+        }
+    }
     out.retain(|x| !x.triangles.is_empty());
     out
 }

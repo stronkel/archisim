@@ -22,6 +22,11 @@ pub struct BlocksState {
     pub depth: Option<f64>,
     /// Picking a block on the plan to cut it into plots.
     pub picking: bool,
+    /// Painting the zone over the plots with a brush (N7): its radius,
+    /// metres, and the plots painted in the stroke so far.
+    pub brush: bool,
+    pub brush_radius: f64,
+    pub stroke: Vec<archisim_core::PlotId>,
 }
 
 impl Default for BlocksState {
@@ -32,6 +37,9 @@ impl Default for BlocksState {
             frontage: None,
             depth: None,
             picking: false,
+            brush: false,
+            brush_radius: 8.0,
+            stroke: Vec::new(),
         }
     }
 }
@@ -187,6 +195,25 @@ impl ArchiSimApp {
             st.frontage = None;
             st.depth = None;
         }
+        let mut brush_on = false;
+        ui.horizontal_wrapped(|ui| {
+            if ui
+                .selectable_label(st.brush, "Pincel de zona")
+                .on_hover_text(
+                    "Arrastra sobre las parcelas: toman la zona elegida (las bloqueadas no)",
+                )
+                .clicked()
+            {
+                brush_on = true;
+            }
+            ui.label("Radio");
+            ui.add(
+                egui::DragValue::new(&mut st.brush_radius)
+                    .range(1.0..=100.0)
+                    .speed(0.5)
+                    .suffix(" m"),
+            );
+        });
         let plots: Vec<_> = model.plots_on_level(level).collect();
         let zoned = plots.iter().filter(|p| p.zone.is_some()).count();
         let locked = plots.iter().filter(|p| p.locked).count();
@@ -241,6 +268,15 @@ impl ArchiSimApp {
                 act = Some(4);
             }
         });
+        if brush_on {
+            let on = !self.blocks.brush;
+            self.set_tool(Tool::Arrow);
+            self.blocks.picking = false;
+            self.blocks.brush = on;
+            if on {
+                self.say("Arrastra el pincel sobre las parcelas.");
+            }
+        }
         match act {
             Some(0) => {
                 let on = !self.blocks.picking;
@@ -361,5 +397,82 @@ impl ArchiSimApp {
                 });
             });
         });
+    }
+
+    /// The plots under the brush at `p` (N7): taken into the stroke.
+    pub(super) fn zone_brush_at(&mut self, p: Point2) {
+        let level = self.ed.level;
+        let r = self.blocks.brush_radius;
+        let under: Vec<archisim_core::PlotId> = self
+            .ed
+            .model()
+            .plots_on_level(level)
+            .filter(|x| !x.locked)
+            .filter(|x| {
+                archisim_core::point_in_polygon(p, &x.outline)
+                    || x.outline.iter().any(|q| q.distance(p) <= r)
+                    || archisim_core::centroid(&x.outline).distance(p) <= r
+            })
+            .map(|x| x.id)
+            .collect();
+        for id in under {
+            if !self.blocks.stroke.contains(&id) {
+                self.blocks.stroke.push(id);
+            }
+        }
+    }
+
+    /// The stroke ends: its plots take the zone, in one step.
+    pub(super) fn zone_brush_done(&mut self) {
+        let ids = std::mem::take(&mut self.blocks.stroke);
+        if ids.is_empty() {
+            return;
+        }
+        let zone = self.blocks.zone;
+        let n = ids.len();
+        let r = self.ed.transact("Pincel de zona", |m| {
+            for id in &ids {
+                m.edit_plot(*id, |x| x.zone = Some(zone))?;
+            }
+            Ok::<(), archisim_core::ModelError>(())
+        });
+        self.report(
+            r,
+            &format!(
+                "{n} parcela{} con zona {}. «Rehacer» cambia sus edificios.",
+                if n == 1 { "" } else { "s" },
+                zone.label().to_lowercase()
+            ),
+        );
+    }
+
+    /// The brush and the plots of its stroke, over the plan.
+    pub(super) fn draw_zone_brush(&self, painter: &egui::Painter, rect: egui::Rect) {
+        if !self.blocks.brush {
+            return;
+        }
+        let rgb = self.blocks.zone.rgb();
+        let ink = egui::Color32::from_rgb(rgb[0], rgb[1], rgb[2]);
+        let model = self.ed.model();
+        for id in &self.blocks.stroke {
+            if let Some(x) = model.plot(*id) {
+                let pts: Vec<egui::Pos2> = x
+                    .outline
+                    .iter()
+                    .map(|q| self.view.to_screen(rect, *q))
+                    .collect();
+                painter.add(egui::Shape::convex_polygon(
+                    pts.clone(),
+                    ink.gamma_multiply(0.35),
+                    egui::Stroke::NONE,
+                ));
+                painter.add(egui::Shape::closed_line(pts, egui::Stroke::new(1.5, ink)));
+            }
+        }
+        if let Some(c) = self.cursor {
+            let at = self.view.to_screen(rect, c.point);
+            let r = (self.blocks.brush_radius * self.view.zoom) as f32;
+            painter.circle_stroke(at, r, egui::Stroke::new(1.5, ink));
+        }
     }
 }

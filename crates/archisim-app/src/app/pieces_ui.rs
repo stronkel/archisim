@@ -104,6 +104,25 @@ fn each_piece(
             .map(|r| r.id)
     };
     for j in &junctions {
+        // Its arrows and lines on its arms, and its stop lines and islands.
+        for (road, poly) in &j.arm_paint {
+            let c = middle_of(poly);
+            let d = match p {
+                Some(p) if archisim_core::point_in_polygon(p, poly) => 0.0,
+                _ => dist(c),
+            };
+            consider(d, *road, PieceKind::Marking, c);
+        }
+        for poly in &j.marks {
+            let c = middle_of(poly);
+            if let Some(r) = nearest(j, c) {
+                let d = match p {
+                    Some(p) if archisim_core::point_in_polygon(p, poly) => 0.0,
+                    _ => dist(c),
+                };
+                consider(d, r, PieceKind::Marking, c);
+            }
+        }
         for (post, _, _) in &j.signs {
             if let Some(r) = nearest(j, *post) {
                 consider(dist(*post), r, PieceKind::Sign, *post);
@@ -189,6 +208,9 @@ impl ArchiSimApp {
     /// A click while hiding pieces or letting zebras go.
     pub(super) fn piece_click(&mut self, p: Point2) {
         let level = self.ed.level;
+        if self.piece_pick == Some(PiecePick::Detach) && self.detach_node_piece(p) {
+            return;
+        }
         match self.piece_pick {
             Some(PiecePick::Hide) if self.hidden_piece_at(p).is_some() => {
                 // A piece hidden before, shown faintly: it comes back.
@@ -240,10 +262,80 @@ impl ArchiSimApp {
                             "Paso de peatones suelto: ya es una marca vial, elegida para moverla (arrastrar, flechas o Mover).",
                         );
                     }
-                    None => self.say("Aquí no hay un paso de peatones de una calle."),
+                    None => self.say(
+                        "Aquí no hay un paso de peatones, una flecha ni una señal de una calle.",
+                    ),
                 }
             }
             None => {}
         }
+    }
+
+    /// Lets the arrow or the sign of a node under `p` go (N6): the arrow
+    /// becomes a road marking, the sign a «Señal de tráfico». Whether there
+    /// was one.
+    fn detach_node_piece(&mut self, p: Point2) -> bool {
+        let model = self.ed.model();
+        let level = self.ed.level;
+        let junctions = crossroads::junctions(model, level);
+        let arrow = junctions.iter().flat_map(|j| j.arrows.iter()).find(|a| {
+            let tail = a.path[0];
+            let tip = a.path[0] + (a.path[1] - a.path[0]) * 5.0;
+            let d = tip - tail;
+            let t = ((p - tail).dot(d) / d.dot(d).max(1e-9)).clamp(0.0, 1.0);
+            p.distance(tail + d * t) < 0.8
+        });
+        if let Some(a) = arrow.cloned() {
+            let mut made = None;
+            let res = self.ed.transact("Soltar flecha", |m| {
+                made = Some(m.detach_arrow(a.road, a.kind, a.path, &a.pieces)?);
+                Ok::<(), archisim_core::ModelError>(())
+            });
+            if let (Ok(()), Some(k)) = (&res, made) {
+                self.ed.selection = [Element::Marking(k)].into_iter().collect();
+                self.piece_pick = None;
+            }
+            self.report(
+                res,
+                "Flecha suelta: ya es una marca vial, elegida para moverla o cambiarla.",
+            );
+            return true;
+        }
+        let sign = junctions.iter().find_map(|j| {
+            j.signs
+                .iter()
+                .find(|(post, _, _)| post.distance(p) < 1.0)
+                .map(|(post, dir, kind)| {
+                    let road = j
+                        .arms
+                        .iter()
+                        .filter_map(|a| model.road(a.road))
+                        .min_by(|a, b| {
+                            let d = |r: &archisim_core::Road| {
+                                r.axis_at(r.station_of(*post)).0.distance(*post)
+                            };
+                            d(a).total_cmp(&d(b))
+                        })
+                        .map(|r| r.id);
+                    (road, *post, *dir, *kind, j.top + j.kerb_height)
+                })
+        });
+        if let Some((Some(road), post, dir, kind, up)) = sign {
+            let mut made = None;
+            let res = self.ed.transact("Soltar señal", |m| {
+                made = Some(m.detach_sign(road, post, dir, kind, up)?);
+                Ok::<(), archisim_core::ModelError>(())
+            });
+            if let (Ok(()), Some(o)) = (&res, made) {
+                self.ed.selection = [Element::Object(o)].into_iter().collect();
+                self.piece_pick = None;
+            }
+            self.report(
+                res,
+                "Señal suelta: ya es un objeto «Señal de tráfico», elegido para moverla.",
+            );
+            return true;
+        }
+        false
     }
 }
