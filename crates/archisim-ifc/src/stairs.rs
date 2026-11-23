@@ -33,8 +33,15 @@ impl Exporter<'_> {
             let pl = self.placement(Some(storey_pl), self.origin, None);
             let name = format!("Escalera {}", stair.id.0);
             let shape = stair_shape(stair, &l);
+            // A user-defined shape must say what it is (IFC rule
+            // CorrectPredefinedType): its flights and turns.
+            let object_type = if shape == "USERDEFINED" {
+                string(&format!("Escalera de {} tramos", l.flights.len().max(1)))
+            } else {
+                "$".to_string()
+            };
             let st = self.w.add(format!(
-                "IFCSTAIR({},$,{},$,$,{pl},$,{},.{shape}.)",
+                "IFCSTAIR({},$,{},$,{object_type},{pl},$,{},.{shape}.)",
                 string(stair.guid.as_str()),
                 string(&name),
                 string(&stair.id.0.to_string()),
