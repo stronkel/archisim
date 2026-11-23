@@ -1549,6 +1549,9 @@ impl ArchiSimApp {
             [Element::Roof(id)] => {
                 Some((crate::sketch::SketchTarget::Roof(*id), "Editar contorno"))
             }
+            [Element::Surface(id)] => {
+                Some((crate::sketch::SketchTarget::Surface(*id), "Editar contorno"))
+            }
             [Element::Terrain(id)] => {
                 Some((crate::sketch::SketchTarget::Terrain(*id), "Editar contorno"))
             }

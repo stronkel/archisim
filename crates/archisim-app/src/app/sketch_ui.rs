@@ -604,6 +604,7 @@ impl ArchiSimApp {
         let st = self.sketch.as_ref()?;
         let what = match st.sketch.target {
             SketchTarget::Slab(_) => "contorno del forjado",
+            SketchTarget::Surface(_) => "contorno y huecos de la superficie",
             SketchTarget::Roof(_) => "contorno de la cubierta",
             SketchTarget::Terrain(_) => "contorno del terreno",
             SketchTarget::TerrainPad(..) => "contorno de la plataforma",

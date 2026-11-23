@@ -261,6 +261,8 @@ pub enum CatalogAct {
     Form(crate::editor::MassMode),
     /// A building of the world, put with a click (tanda 16).
     World(archisim_core::WorldPick),
+    /// The illustration traffic on and off (N9).
+    Traffic,
 }
 
 /// One card of the catalog.
@@ -800,7 +802,10 @@ impl ArchiSimApp {
                 } else {
                     self.ed.model().world_place()
                 };
-                let mut v = vec![card(CatalogAct::Road, "Calle", Glyph::Road)];
+                let mut v = vec![
+                    card(CatalogAct::Road, "Calle", Glyph::Road),
+                    card(CatalogAct::Traffic, "Tráfico", Glyph::Road),
+                ];
                 for (g, list) in super::world_ui::gallery(place) {
                     for pick in list {
                         let mut c = card(CatalogAct::World(pick), pick.label(), Glyph::EnvBuilding);
@@ -942,6 +947,7 @@ impl ArchiSimApp {
             }
             CatalogAct::Planting => self.tool == Tool::Planting,
             CatalogAct::Road => self.tool == Tool::Road,
+            CatalogAct::Traffic => self.v3d.traffic_on(),
             CatalogAct::World(pick) => self.tool == Tool::World && self.world_settings.pick == pick,
             CatalogAct::Pool => self.tool == Tool::Pool,
             CatalogAct::Terrain => self.tool == Tool::Terrain,
@@ -1039,6 +1045,7 @@ impl ArchiSimApp {
             CatalogAct::Collected(name) => self.take_collected(name),
             CatalogAct::Planting => self.pick(Pick::Tool(Tool::Planting)),
             CatalogAct::Road => self.pick(Pick::Tool(Tool::Road)),
+            CatalogAct::Traffic => self.pick(Pick::Action(super::toolbox::Action::Traffic)),
             CatalogAct::World(pick) => {
                 self.world_settings.take(pick);
                 self.world_settings.placed = true;

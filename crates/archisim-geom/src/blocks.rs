@@ -81,6 +81,28 @@ pub struct Lot {
 /// mitred, so the lots meet without overlapping; a block too small for a
 /// courtyard is one lot.
 pub fn block_lots(block: &[Point2], frontage: f64, depth: f64) -> Vec<Lot> {
+    block_lots_mixed(block, frontage, depth, 0.0, 0)
+}
+
+/// How much the frontages of a zone's plots vary (0: all alike; 0,5: from
+/// half to one and a half times the frontage), as a real old town.
+pub fn zone_mix(zone: BlockZone) -> f64 {
+    match zone {
+        BlockZone::OldTown => 0.5,
+        BlockZone::Houses => 0.25,
+        _ => 0.0,
+    }
+}
+
+/// [`block_lots`] with frontages that vary by `mix` (see [`zone_mix`]),
+/// the same each time for the same `seed`.
+pub fn block_lots_mixed(
+    block: &[Point2],
+    frontage: f64,
+    depth: f64,
+    mix: f64,
+    seed: u64,
+) -> Vec<Lot> {
     let n = block.len();
     if n < 3 {
         return Vec::new();
@@ -153,6 +175,29 @@ pub fn block_lots(block: &[Point2], frontage: f64, depth: f64) -> Vec<Lot> {
         let rest = ((te - first) / f).round() as usize;
         let mut cuts = vec![0.0, first];
         if rest == 0 {
+            *cuts.last_mut().unwrap() = te;
+        } else if mix > 0.0 {
+            // Frontages of their own, between 1 − mix and 1 + mix times the
+            // frontage, fitted to the side.
+            let mut h = seed ^ (i as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15);
+            let mut widths: Vec<f64> = (0..rest)
+                .map(|_| {
+                    h ^= h << 13;
+                    h ^= h >> 7;
+                    h ^= h << 17;
+                    let r = (h % 10_000) as f64 / 10_000.0;
+                    1.0 + mix * (2.0 * r - 1.0)
+                })
+                .collect();
+            let total: f64 = widths.iter().sum();
+            for w in &mut widths {
+                *w *= (te - first) / total;
+            }
+            let mut t = first;
+            for w in widths {
+                t += w;
+                cuts.push(t);
+            }
             *cuts.last_mut().unwrap() = te;
         } else {
             for k in 1..=rest {
@@ -256,7 +301,8 @@ pub fn add_block_plots(
     let f = frontage.unwrap_or_else(|| zone_frontage(model, zone));
     let d = depth.unwrap_or_else(|| zone_depth(model, zone));
     let mut out = Vec::new();
-    for (k, lot) in block_lots(block, f, d).into_iter().enumerate() {
+    let lots = block_lots_mixed(block, f, d, zone_mix(zone), number as u64 + 1);
+    for (k, lot) in lots.into_iter().enumerate() {
         let id = model.add_plot(NewPlot {
             name: format!("Manzana {number} · {}", k + 1),
             level,
@@ -298,7 +344,7 @@ pub fn replot_block(
     // The names of the locked plots stay; the new ones go on after them.
     let mut k = locked.len();
     let mut out = Vec::new();
-    for lot in block_lots(block, f, d) {
+    for lot in block_lots_mixed(block, f, d, zone_mix(zone), number as u64 + 1) {
         let c = centroid(&lot.outline);
         let on_locked = locked.iter().any(|p| {
             archisim_core::point_in_polygon(c, &p.outline)
@@ -321,8 +367,340 @@ pub fn replot_block(
     Ok((out, gone.len()))
 }
 
+/// The streets of a model as they were before a change, to see what the
+/// change did to its blocks ([`follow_streets`]).
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct Streets {
+    roads: Vec<archisim_core::Road>,
+    rings: Vec<archisim_core::Roundabout>,
+}
+
+impl Streets {
+    pub fn of(model: &Model) -> Self {
+        Streets {
+            roads: model.roads().cloned().collect(),
+            rings: model.roundabouts().cloned().collect(),
+        }
+    }
+}
+
+/// Whether there is anything that follows the streets: plots cut from the
+/// blocks (with a zone) or buildings of the surroundings.
+pub fn streets_matter(model: &Model) -> bool {
+    model.plots().any(|p| p.zone.is_some()) || model.masses().any(|m| m.dress.is_some())
+}
+
+/// What following the streets did.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Followed {
+    /// Blocks cut again, and the plots that are in them now.
+    pub blocks: usize,
+    pub plots: usize,
+    /// Buildings put again on the new plots.
+    pub built: usize,
+    /// Buildings of the surroundings taken away because a street now runs
+    /// where they were.
+    pub on_streets: usize,
+}
+
+impl Followed {
+    pub fn is_empty(&self) -> bool {
+        self.blocks == 0 && self.on_streets == 0
+    }
+
+    /// What it did, said in a line.
+    pub fn note(&self) -> Option<String> {
+        let mut parts = Vec::new();
+        if self.blocks > 0 {
+            let mut t = format!(
+                "{} {} vuelta{} a parcelar ({} parcela{}",
+                self.blocks,
+                if self.blocks == 1 {
+                    "manzana"
+                } else {
+                    "manzanas"
+                },
+                if self.blocks == 1 { "" } else { "s" },
+                self.plots,
+                if self.plots == 1 { "" } else { "s" },
+            );
+            if self.built > 0 {
+                t.push_str(&format!(
+                    ", {} edificio{}",
+                    self.built,
+                    if self.built == 1 { "" } else { "s" }
+                ));
+            }
+            t.push(')');
+            parts.push(t);
+        }
+        if self.on_streets > 0 {
+            parts.push(format!(
+                "{} edificio{} quitado{} de donde ahora pasa la calle",
+                self.on_streets,
+                if self.on_streets == 1 { "" } else { "s" },
+                if self.on_streets == 1 { "" } else { "s" },
+            ));
+        }
+        (!parts.is_empty()).then(|| {
+            let mut t = parts.join("; ");
+            t.push('.');
+            let mut c = t.chars();
+            c.next().map_or(t.clone(), |f| {
+                f.to_uppercase().collect::<String>() + c.as_str()
+            })
+        })
+    }
+}
+
+/// The model with its streets as they were.
+fn with_streets(model: &Model, before: &Streets) -> Result<Model, ModelError> {
+    let mut old = model.clone();
+    let now: Vec<archisim_core::RoadId> = old.roads().map(|r| r.id).collect();
+    for id in now {
+        match before.roads.iter().find(|r| r.id == id) {
+            Some(b) => old.edit_road(id, |r| *r = b.clone())?,
+            None => {
+                old.remove_road(id)?;
+            }
+        }
+    }
+    for b in before.roads.iter().filter(|b| model.road(b.id).is_none()) {
+        let id = old.add_road(archisim_core::NewRoad {
+            name: b.name.clone(),
+            level: b.level,
+            axis: b.axis.clone(),
+            section: b.section.clone(),
+            top_offset: b.top_offset,
+            profile: b.profile.clone(),
+            changes: b.changes.clone(),
+            pavement: b.pavement,
+            kerb_material: b.kerb_material,
+            sidewalk_material: b.sidewalk_material,
+        })?;
+        old.edit_road(id, |r| {
+            let (id, guid) = (r.id, r.guid.clone());
+            *r = b.clone();
+            r.id = id;
+            r.guid = guid;
+        })?;
+    }
+    let now: Vec<archisim_core::RoundaboutId> = old.roundabouts().map(|r| r.id).collect();
+    for id in now {
+        match before.rings.iter().find(|r| r.id == id) {
+            Some(b) => old.edit_roundabout(id, |r| *r = b.clone())?,
+            None => {
+                old.remove_roundabout(id)?;
+            }
+        }
+    }
+    for b in before
+        .rings
+        .iter()
+        .filter(|b| model.roundabout(b.id).is_none())
+    {
+        let id = old.add_roundabout(archisim_core::NewRoundabout {
+            name: b.name.clone(),
+            level: b.level,
+            centre: b.centre,
+            radius: b.radius,
+            island: b.island,
+            apron: b.apron,
+            top_offset: b.top_offset,
+            plaza: b.plaza,
+            island_finish: b.island_finish,
+            pavement: b.pavement,
+            kerb_material: b.kerb_material,
+            island_material: b.island_material,
+        })?;
+        old.edit_roundabout(id, |r| {
+            let (id, guid) = (r.id, r.guid.clone());
+            *r = b.clone();
+            r.id = id;
+            r.guid = guid;
+        })?;
+    }
+    Ok(old)
+}
+
+/// Whether two blocks are the same (the same corners, a centimetre's
+/// tolerance).
+fn same_block(a: &[Point2], b: &[Point2]) -> bool {
+    a.len() == b.len() && a.iter().all(|p| b.iter().any(|q| p.distance(*q) < 0.01))
+}
+
+/// Whether two blocks overlap: a corner or the middle of one inside the
+/// other.
+fn overlap(a: &[Point2], b: &[Point2]) -> bool {
+    let inside = |p: Point2, o: &[Point2]| archisim_core::point_in_polygon(p, o);
+    inside(centroid(a), b)
+        || inside(centroid(b), a)
+        || a.iter().any(|p| inside(*p, b))
+        || b.iter().any(|p| inside(*p, a))
+}
+
+/// After a change of the streets (`before`, how they were): the blocks
+/// that changed shape are cut again into plots of the zone they had,
+/// keeping the locked plots, and built again if they were built; and the
+/// buildings of the surroundings a street now runs over go. Plots drawn by
+/// hand (with no zone) are left as they are.
+pub fn follow_streets(model: &mut Model, before: &Streets) -> Result<Followed, ModelError> {
+    let now = Streets::of(model);
+    if now == *before {
+        return Ok(Followed::default());
+    }
+    let mut levels: Vec<LevelId> = Vec::new();
+    {
+        let mut note = |l: LevelId| {
+            if !levels.contains(&l) {
+                levels.push(l);
+            }
+        };
+        for r in &now.roads {
+            if before.roads.iter().find(|b| b.id == r.id) != Some(r) {
+                note(r.level);
+            }
+        }
+        for b in &before.roads {
+            if now.roads.iter().find(|r| r.id == b.id) != Some(b) {
+                note(b.level);
+            }
+        }
+        for r in &now.rings {
+            if before.rings.iter().find(|b| b.id == r.id) != Some(r) {
+                note(r.level);
+            }
+        }
+        for b in &before.rings {
+            if now.rings.iter().find(|r| r.id == b.id) != Some(b) {
+                note(b.level);
+            }
+        }
+    }
+    let old = with_streets(model, before)?;
+    let mut done = Followed::default();
+    for level in levels {
+        let old_blocks = city_blocks(&old, level);
+        let new_blocks = city_blocks(model, level);
+        let gone: Vec<&Vec<Point2>> = old_blocks
+            .iter()
+            .filter(|o| !new_blocks.iter().any(|n| same_block(o, n)))
+            .collect();
+        let mut redo: Vec<(usize, BlockZone, bool)> = Vec::new();
+        for ob in gone {
+            let loose: Vec<archisim_core::Plot> = model
+                .plots_on_level(level)
+                .filter(|p| {
+                    p.zone.is_some()
+                        && !p.locked
+                        && archisim_core::point_in_polygon(centroid(&p.outline), ob)
+                })
+                .cloned()
+                .collect();
+            if loose.is_empty() {
+                continue;
+            }
+            // The zone most of them had.
+            let mut zones: Vec<(BlockZone, usize)> = Vec::new();
+            for p in &loose {
+                let z = p.zone.unwrap_or(BlockZone::Houses);
+                match zones.iter_mut().find(|(x, _)| *x == z) {
+                    Some(e) => e.1 += 1,
+                    None => zones.push((z, 1)),
+                }
+            }
+            let zone = zones
+                .iter()
+                .max_by_key(|(_, n)| *n)
+                .map(|(z, _)| *z)
+                .unwrap();
+            let built = loose.iter().any(|p| plot_built(model, p));
+            let ids: Vec<archisim_core::PlotId> = loose.iter().map(|p| p.id).collect();
+            clear_plots(model, level, Some(&ids))?;
+            for id in ids {
+                model.remove_plot(id)?;
+            }
+            for (k, nb) in new_blocks.iter().enumerate() {
+                let new = !old_blocks.iter().any(|o| same_block(o, nb));
+                if new && overlap(ob, nb) && !redo.iter().any(|(i, _, _)| *i == k) {
+                    redo.push((k, zone, built));
+                }
+            }
+        }
+        for (k, zone, built) in redo {
+            let (ids, _) = replot_block(model, level, &new_blocks[k], k + 1, zone, None, None)?;
+            done.blocks += 1;
+            done.plots += ids.len();
+            if built {
+                done.built += fill_plots(model, level, Some(&ids), None)?;
+            }
+        }
+        // The buildings a street now runs over.
+        let streets: Vec<Vec<Point2>> = now
+            .roads
+            .iter()
+            .filter(|r| r.level == level && !r.free)
+            .filter(|r| before.roads.iter().find(|b| b.id == r.id) != Some(*r))
+            .map(|r| r.outline())
+            .chain(
+                now.rings
+                    .iter()
+                    .filter(|r| r.level == level)
+                    .filter(|r| before.rings.iter().find(|b| b.id == r.id) != Some(*r))
+                    .map(|r| r.outline()),
+            )
+            .collect();
+        let under: Vec<archisim_core::MassId> = model
+            .masses_on_level(level)
+            .filter(|m| m.dress.is_some())
+            .filter(|m| match &m.shape {
+                archisim_core::MassShape::Prism(o) => {
+                    let c = centroid(o);
+                    streets
+                        .iter()
+                        .any(|s| archisim_core::point_in_polygon(c, s))
+                }
+                _ => false,
+            })
+            .map(|m| m.id)
+            .collect();
+        for id in under {
+            model.remove_mass(id)?;
+            done.on_streets += 1;
+        }
+    }
+    Ok(done)
+}
+
 /// The front of a plot on its block's façade line: of its sides, the one
 /// that has a street just outside it (else its longest).
+/// The sides of a plot (by the index of their first corner) that have a
+/// street just outside them.
+pub fn street_sides(model: &Model, plot: &archisim_core::Plot) -> Vec<usize> {
+    let o = &plot.outline;
+    let n = o.len();
+    if n < 3 {
+        return Vec::new();
+    }
+    let streets: Vec<Vec<Point2>> = model
+        .roads_on_level(plot.level)
+        .map(|r| r.outline())
+        .collect();
+    (0..n)
+        .filter(|&i| {
+            let (a, b) = (o[i], o[(i + 1) % n]);
+            let m = (a + b) * 0.5;
+            let Some(u) = (b - a).normalized() else {
+                return false;
+            };
+            a.distance(b) > 1.0
+                && streets
+                    .iter()
+                    .any(|s| archisim_core::point_in_polygon(m + Vec2::new(u.y, -u.x) * 1.5, s))
+        })
+        .collect()
+}
+
 pub fn plot_front(model: &Model, plot: &archisim_core::Plot) -> Option<(Point2, Point2)> {
     let o = &plot.outline;
     let n = o.len();
@@ -390,6 +768,41 @@ pub fn fill_plot(
     let Some(zone) = zone.or(p.zone) else {
         return Ok(None);
     };
+    // A corner plot, away from the houses with their front garden: the
+    // building takes the whole plot, with a façade to each street.
+    let fronts = street_sides(model, &p);
+    if fronts.len() >= 2 && zone != BlockZone::Houses {
+        let outline = grow_polygon(&p.outline, -0.05);
+        let n = outline.len();
+        if n == p.outline.len() && signed_area(&outline) > 20.0 {
+            let main = fronts
+                .iter()
+                .copied()
+                .max_by(|x, y| {
+                    let l = |i: usize| outline[i].distance(outline[(i + 1) % n]);
+                    l(*x).total_cmp(&l(*y))
+                })
+                .unwrap_or(0);
+            let (a, b) = (outline[main], outline[(main + 1) % n]);
+            let facing = (b - a)
+                .normalized()
+                .map_or(Vec2::new(0.0, -1.0), |u| Vec2::new(u.y, -u.x));
+            let id = model.add_world_building_on(
+                NewWorldBuilding {
+                    level: p.level,
+                    front: (a + b) * 0.5,
+                    facing,
+                    width: a.distance(b).max(1.0),
+                    depth: 1.0,
+                    floors: None,
+                    pick: zone_pick(model, zone),
+                },
+                outline,
+                main,
+            )?;
+            return Ok(Some(id));
+        }
+    }
     let Some((a, b)) = plot_front(model, &p) else {
         return Ok(None);
     };
@@ -589,6 +1002,157 @@ mod tests {
         // Another zone: blocks of flats on the free plots.
         let again = fill_plots(&mut m, level, Some(&ids), Some(BlockZone::Flats)).unwrap();
         assert!(again > 0);
+    }
+
+    #[test]
+    fn plots_and_buildings_follow_a_moved_street() {
+        let (mut m, level) = town();
+        let blocks = city_blocks(&m, level);
+        let mut ids = Vec::new();
+        for (k, b) in blocks.iter().take(2).enumerate() {
+            ids.extend(
+                add_block_plots(&mut m, level, b, k + 1, BlockZone::Houses, None, None).unwrap(),
+            );
+        }
+        fill_plots(&mut m, level, None, None).unwrap();
+        // A plot drawn by hand (no zone) and a locked one stay as they are.
+        let locked = ids[2];
+        m.edit_plot(locked, |p| p.locked = true).unwrap();
+        let kept = m.plot(locked).unwrap().outline.clone();
+        let before = Streets::of(&m);
+        // The middle north–south street, 20 m east.
+        let mid = m
+            .roads()
+            .find(|r| r.axis[0] == Point2::new(120.0, -20.0))
+            .unwrap()
+            .id;
+        m.edit_road(mid, |r| {
+            r.axis = vec![Point2::new(140.0, -20.0), Point2::new(140.0, 260.0)]
+        })
+        .unwrap();
+        let done = follow_streets(&mut m, &before).unwrap();
+        assert_eq!(done.blocks, 2, "{done:?}");
+        assert!(done.plots > 0 && done.built > 0, "{done:?}");
+        // No plot and no building on the street.
+        let street = m.road(mid).unwrap().outline();
+        for p in m.plots() {
+            assert!(!archisim_core::point_in_polygon(
+                centroid(&p.outline),
+                &street
+            ));
+        }
+        for x in m.masses() {
+            if let archisim_core::MassShape::Prism(o) = &x.shape {
+                assert!(!archisim_core::point_in_polygon(centroid(o), &street));
+            }
+        }
+        assert_eq!(m.plot(locked).unwrap().outline, kept);
+        // Every zoned plot is inside one of the new blocks.
+        let now = city_blocks(&m, level);
+        for p in m.plots().filter(|p| p.zone.is_some()) {
+            assert!(now
+                .iter()
+                .any(|b| archisim_core::point_in_polygon(centroid(&p.outline), b)));
+        }
+        assert!(done.note().unwrap().starts_with("2 manzanas"));
+        // Nothing changed: nothing to do.
+        let again = Streets::of(&m);
+        assert!(follow_streets(&mut m, &again).unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_street_laid_over_buildings_takes_them_away() {
+        let (mut m, level) = town();
+        let block = city_blocks(&m, level).remove(0);
+        let ids = add_block_plots(&mut m, level, &block, 1, BlockZone::Houses, None, None).unwrap();
+        fill_plots(&mut m, level, None, None).unwrap();
+        // Plots drawn by hand (no zone): they are not cut again, but the
+        // buildings under the new street go.
+        for id in ids {
+            m.edit_plot(id, |p| p.zone = None).unwrap();
+        }
+        let built = m.masses().count();
+        let before = Streets::of(&m);
+        let mat = m.materials().next().unwrap().id;
+        let r = m
+            .add_road(NewRoad {
+                name: "Nueva".into(),
+                level,
+                axis: vec![Point2::new(60.0, -20.0), Point2::new(60.0, 140.0)],
+                section: RoadSection::default(),
+                top_offset: 0.0,
+                profile: Vec::new(),
+                changes: Vec::new(),
+                pavement: mat,
+                kerb_material: mat,
+                sidewalk_material: mat,
+            })
+            .unwrap();
+        let done = follow_streets(&mut m, &before).unwrap();
+        assert!(done.on_streets > 0, "{done:?}");
+        assert_eq!(done.blocks, 0, "{done:?}");
+        assert_eq!(m.masses().count(), built - done.on_streets);
+        assert!(done.note().unwrap().contains("quitado"));
+        let street = m.road(r).unwrap().outline();
+        for x in m.masses() {
+            if let archisim_core::MassShape::Prism(o) = &x.shape {
+                assert!(!archisim_core::point_in_polygon(centroid(o), &street));
+            }
+        }
+    }
+
+    #[test]
+    fn an_old_town_mixes_its_frontages() {
+        let (m, level) = town();
+        let block = city_blocks(&m, level).remove(0);
+        let widths = |mix: f64| -> Vec<f64> {
+            block_lots_mixed(&block, 8.0, 18.0, mix, 7)
+                .iter()
+                .map(|l| l.front.0.distance(l.front.1))
+                .collect()
+        };
+        let even = widths(0.0);
+        let mixed = widths(0.5);
+        let spread = |w: &[f64]| {
+            w.iter().cloned().fold(f64::MIN, f64::max) - w.iter().cloned().fold(f64::MAX, f64::min)
+        };
+        assert!(spread(&mixed) > spread(&even) + 2.0, "{mixed:?}");
+        // The same each time, and the sides still filled.
+        assert_eq!(mixed, widths(0.5));
+        let total = |w: &[f64]| w.iter().sum::<f64>();
+        assert!((total(&mixed) - total(&even)).abs() < 1e-6);
+        assert!(mixed.iter().all(|w| *w > 3.0));
+    }
+
+    #[test]
+    fn corner_plots_get_a_building_with_two_facades() {
+        let (mut m, level) = town();
+        let block = city_blocks(&m, level).remove(0);
+        let ids = add_block_plots(&mut m, level, &block, 1, BlockZone::Flats, None, None).unwrap();
+        let corners: Vec<_> = ids
+            .iter()
+            .filter(|id| street_sides(&m, m.plot(**id).unwrap()).len() >= 2)
+            .copied()
+            .collect();
+        assert_eq!(corners.len(), 4, "a corner plot at each corner");
+        fill_plots(&mut m, level, Some(&corners), None).unwrap();
+        let built: Vec<_> = m.masses().map(|x| x.id).collect();
+        assert_eq!(built.len(), 4);
+        for id in built {
+            let fronts = m.street_sides(id).iter().filter(|s| **s).count();
+            assert!(fronts >= 2, "a façade to each street ({fronts})");
+            // It fills its plot.
+            let x = m.mass(id).unwrap();
+            let archisim_core::MassShape::Prism(o) = &x.shape else {
+                panic!()
+            };
+            let plot = corners
+                .iter()
+                .map(|p| m.plot(*p).unwrap())
+                .find(|p| archisim_core::point_in_polygon(centroid(o), &p.outline))
+                .unwrap();
+            assert!(signed_area(o) > signed_area(&plot.outline) * 0.97);
+        }
     }
 
     #[test]

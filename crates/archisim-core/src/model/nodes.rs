@@ -237,6 +237,10 @@ pub struct ArmSettings {
     pub turns: Option<Vec<Turns>>,
     /// How far behind the end of the arm its stop line stands, metres (N3).
     pub stop_back: Option<f64>,
+    /// Its last metres flat (N1, «aplanar el brazo»): the node's plate goes
+    /// on this far along the arm, coming from the node's height to the
+    /// street's, metres.
+    pub flatten: Option<f64>,
 }
 
 /// Where a lane may go at a node (N3): a set of left, straight on, right
@@ -381,6 +385,13 @@ pub struct NodeSettings {
     pub links: Vec<LaneLink>,
     /// The islands painted on it (N3).
     pub islands: Vec<PaintedIsland>,
+    /// Its centre moved without moving the streets (N1, Shift in Node
+    /// Controller), in the node's own axes: the arms it moves towards end
+    /// sooner, the others later.
+    pub shift: Option<Point2>,
+    /// A dead end as a hammerhead (N1): a stretch across the end to turn in
+    /// three moves, instead of the turning circle.
+    pub hammer: Option<bool>,
 }
 
 impl NodeSettings {
@@ -397,6 +408,8 @@ impl NodeSettings {
             end_radius: None,
             links: Vec::new(),
             islands: Vec::new(),
+            shift: None,
+            hammer: None,
         }
     }
 
@@ -408,6 +421,7 @@ impl NodeSettings {
                     && a.sign.is_none_or(|s| s == ArmSign::None)
                     && a.turns.is_none()
                     && a.stop_back.is_none_or(|b| b <= 0.0)
+                    && a.flatten.is_none_or(|f| f <= 0.0)
             })
             && self.corners.iter().all(|(_, c)| {
                 c.radius.is_none()
@@ -421,6 +435,8 @@ impl NodeSettings {
             && self.end_radius.is_none()
             && self.links.is_empty()
             && self.islands.is_empty()
+            && self.shift.is_none_or(|v| v.x.hypot(v.y) < 1e-6)
+            && self.hammer.is_none_or(|h| !h)
     }
 
     pub fn kind(&self) -> NodeKind {
@@ -487,7 +503,7 @@ impl NodeSettings {
                     })
                     .unwrap_or_default();
                 format!(
-                    "{}={}/{}/{}/{}",
+                    "{}={}/{}/{}/{}/{}",
                     arm(a),
                     opt(s.setback),
                     s.sign.map(|k| k.code()).unwrap_or_default(),
@@ -497,7 +513,8 @@ impl NodeSettings {
                     } else {
                         String::new()
                     },
-                    opt(s.stop_back)
+                    opt(s.stop_back),
+                    opt(s.flatten)
                 )
             })
             .collect();
@@ -542,7 +559,7 @@ impl NodeSettings {
             })
             .collect();
         format!(
-            "{};{};{};{};{};{};{};{};{};{};{}",
+            "{};{};{};{};{};{};{};{};{};{};{};{};{}",
             self.key.nth,
             self.kind.map(|k| k.code()).unwrap_or_default(),
             roads.join(","),
@@ -553,7 +570,11 @@ impl NodeSettings {
             flag(self.hide_marks),
             opt(self.end_radius),
             links.join("|"),
-            islands.join("|")
+            islands.join("|"),
+            self.shift
+                .map(|v| format!("{},{}", v.x, v.y))
+                .unwrap_or_default(),
+            flag(self.hammer)
         )
     }
 
@@ -609,6 +630,7 @@ impl NodeSettings {
                 }
             };
             let stop_back = num(p.next())?;
+            let flatten = num(p.next())?;
             arms.push((
                 arm(r)?,
                 ArmSettings {
@@ -616,6 +638,7 @@ impl NodeSettings {
                     sign,
                     turns,
                     stop_back,
+                    flatten,
                 },
             ));
         }
@@ -687,6 +710,14 @@ impl NodeSettings {
                 paint: IslandPaint::of_code(k)?,
             });
         }
+        let shift = match f.next().unwrap_or("") {
+            "" => None,
+            v => {
+                let (x, y) = v.split_once(',')?;
+                Some(Point2::new(x.parse().ok()?, y.parse().ok()?))
+            }
+        };
+        let hammer = flag(f.next());
         Some(NodeSettings {
             key: NodeKey { level, roads, nth },
             kind,
@@ -698,6 +729,8 @@ impl NodeSettings {
             end_radius,
             links,
             islands,
+            shift,
+            hammer,
         })
     }
 }
@@ -741,6 +774,21 @@ impl Model {
                 if v < 0.0 {
                     return Err(ModelError::NonPositive("línea de detención"));
                 }
+            }
+        }
+        for (_, a) in &s.arms {
+            if let Some(v) = a.flatten {
+                if !v.is_finite() {
+                    return Err(ModelError::NotFinite("brazo aplanado"));
+                }
+                if v < 0.0 {
+                    return Err(ModelError::NonPositive("brazo aplanado"));
+                }
+            }
+        }
+        if let Some(v) = s.shift {
+            if !v.x.is_finite() || !v.y.is_finite() {
+                return Err(ModelError::NotFinite("centro del nudo"));
             }
         }
         for l in &s.links {
@@ -854,6 +902,7 @@ mod tests {
                 sign: Some(ArmSign::Stop),
                 turns: Some(vec![Turns(6), Turns(3)]),
                 stop_back: Some(2.0),
+                flatten: Some(6.0),
             },
         );
         s.set_corner(
@@ -869,6 +918,8 @@ mod tests {
         s.main = Some(RoadId(5));
         s.hide_marks = Some(true);
         s.end_radius = Some(9.0);
+        s.shift = Some(Point2::new(1.5, -0.75));
+        s.hammer = Some(true);
         s.links.push(LaneLink {
             from: a,
             lane: 1,

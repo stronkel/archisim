@@ -185,7 +185,7 @@ pub fn overpass_query(s: f64, w: f64, n: f64, e: f64, buildings: bool) -> String
 
 /// The addresses to fetch for what `opts` asks, round its centre.
 pub fn plan(m: &Model, opts: &CartoOptions) -> Result<Vec<Request>, String> {
-    let (b, code) = map_bbox(m, opts.centre, opts.radius).ok_or_else(|| {
+    let (b, code) = map_bbox(m, opts.centre, opts.reach()).ok_or_else(|| {
         "el proyecto no está georreferenciado en UTM: pon su emplazamiento en las propiedades del proyecto («Emplazamiento (georreferencia)»)".to_string()
     })?;
     let g = m.georeference().expect("map_bbox checked it");

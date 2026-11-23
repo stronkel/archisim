@@ -117,6 +117,70 @@ pub struct OutsideEnd {
 
 impl Model {
     /// The area of the surroundings, if one was brought.
+    /// The streets cut to the area of the surroundings (N8), when it
+    /// changes: what is out of it goes; a street that leaves it and comes
+    /// back in is kept in pieces. Streets with stretches, changes of
+    /// section, a profile or hidden pieces of their own, or drawn freely,
+    /// are left as they are. Returns how many were cut or taken away.
+    pub fn clip_roads_to_surroundings(&mut self) -> Result<usize, ModelError> {
+        let Some(area) = self.surroundings.clone() else {
+            return Ok(0);
+        };
+        let roads: Vec<crate::Road> = self
+            .roads()
+            .filter(|r| {
+                !r.free
+                    && r.changes.is_empty()
+                    && r.profile.is_empty()
+                    && r.skins.is_empty()
+                    && r.hidden.is_empty()
+            })
+            .cloned()
+            .collect();
+        let mut n = 0;
+        for r in roads {
+            let parts: Vec<Vec<Point2>> = clip_line_to_area(&r.axis, &area)
+                .into_iter()
+                .filter(|p| p.windows(2).map(|w| w[0].distance(w[1])).sum::<f64>() > 1.0)
+                .collect();
+            if parts.len() == 1
+                && parts[0].len() == r.axis.len()
+                && parts[0]
+                    .iter()
+                    .zip(&r.axis)
+                    .all(|(a, b)| a.distance(*b) < 1e-6)
+            {
+                continue;
+            }
+            n += 1;
+            let mut parts = parts.into_iter();
+            match parts.next() {
+                None => {
+                    self.remove_road(r.id)?;
+                }
+                Some(first) => {
+                    self.edit_road(r.id, |x| x.axis = first)?;
+                    for axis in parts {
+                        let id = self.add_road(crate::NewRoad {
+                            name: r.name.clone(),
+                            level: r.level,
+                            axis,
+                            section: r.section.clone(),
+                            top_offset: r.top_offset,
+                            profile: Vec::new(),
+                            changes: Vec::new(),
+                            pavement: r.pavement,
+                            kerb_material: r.kerb_material,
+                            sidewalk_material: r.sidewalk_material,
+                        })?;
+                        let _ = id;
+                    }
+                }
+            }
+        }
+        Ok(n)
+    }
+
     pub fn surroundings(&self) -> Option<&[Point2]> {
         self.surroundings.as_deref()
     }
@@ -191,6 +255,58 @@ impl Model {
     }
 }
 
+impl Model {
+    /// Which way `out` (a direction in plan) points, by the true north:
+    /// «el norte», «el noreste»…
+    pub fn compass_of(&self, out: Vec2) -> &'static str {
+        const NAMES: [&str; 8] = [
+            "el norte",
+            "el noreste",
+            "el este",
+            "el sureste",
+            "el sur",
+            "el suroeste",
+            "el oeste",
+            "el noroeste",
+        ];
+        let bearing = (out.x.atan2(out.y) - self.true_north).rem_euclid(std::f64::consts::TAU);
+        let k = ((bearing / (std::f64::consts::TAU / 8.0)).round() as usize) % 8;
+        NAMES[k]
+    }
+
+    /// Says where each connection with the outside of a level leads (N8)
+    /// for the streets that do not say it yet: what `named` gives for its
+    /// end (a town, a road number), else the way it goes («hacia el
+    /// norte»). Returns how many streets got it.
+    pub fn name_outside_ends(
+        &mut self,
+        level: LevelId,
+        named: impl Fn(Point2) -> Option<String>,
+    ) -> Result<usize, ModelError> {
+        let mut by_road: Vec<(RoadId, Vec<String>)> = Vec::new();
+        for e in self.outside_ends(level) {
+            if self.road(e.road).is_none_or(|r| !r.toward.is_empty()) {
+                continue;
+            }
+            let text =
+                named(e.point).unwrap_or_else(|| format!("hacia {}", self.compass_of(e.out)));
+            match by_road.iter_mut().find(|(r, _)| *r == e.road) {
+                Some((_, v)) => {
+                    if !v.contains(&text) {
+                        v.push(text)
+                    }
+                }
+                None => by_road.push((e.road, vec![text])),
+            }
+        }
+        let n = by_road.len();
+        for (r, texts) in by_road {
+            self.edit_road(r, |x| x.toward = texts.join(" / "))?;
+        }
+        Ok(n)
+    }
+}
+
 fn distance_to_segment(p: Point2, a: Point2, b: Point2) -> f64 {
     let d = b - a;
     let len2 = d.dot(d);
@@ -204,6 +320,48 @@ fn distance_to_segment(p: Point2, a: Point2, b: Point2) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn streets_already_there_are_cut_to_a_new_area() {
+        let mut m = Model::new("Área");
+        let level = m.add_level("Planta baja", 0.0);
+        let mat = m.add_material("Asfalto", "asphalt", [70, 70, 70], crate::CutPattern::Solid);
+        let road = |m: &mut Model, axis: Vec<Point2>| {
+            m.add_road(crate::NewRoad {
+                name: "Calle".into(),
+                level,
+                axis,
+                section: crate::RoadSection::default(),
+                top_offset: 0.0,
+                profile: Vec::new(),
+                changes: Vec::new(),
+                pavement: mat,
+                kerb_material: mat,
+                sidewalk_material: mat,
+            })
+            .unwrap()
+        };
+        let across = road(
+            &mut m,
+            vec![Point2::new(-300.0, 0.0), Point2::new(300.0, 0.0)],
+        );
+        let out = road(
+            &mut m,
+            vec![Point2::new(400.0, 400.0), Point2::new(500.0, 400.0)],
+        );
+        let inside = road(
+            &mut m,
+            vec![Point2::new(-10.0, 10.0), Point2::new(10.0, 10.0)],
+        );
+        m.set_surroundings(Some(square_area(Point2::new(0.0, 0.0), 100.0)))
+            .unwrap();
+        assert_eq!(m.clip_roads_to_surroundings().unwrap(), 2);
+        let a = m.road(across).unwrap();
+        assert!((a.axis[0].x + 100.0).abs() < 1e-6 && (a.axis[1].x - 100.0).abs() < 1e-6);
+        assert!(m.road(out).is_none());
+        assert_eq!(m.road(inside).unwrap().axis.len(), 2);
+        assert_eq!(m.clip_roads_to_surroundings().unwrap(), 0);
+    }
 
     #[test]
     fn lines_are_cut_at_the_area() {
@@ -272,5 +430,17 @@ mod tests {
         assert!(!ends.iter().any(|e| e.road == inside));
         let east = ends.iter().find(|e| e.at_end).unwrap();
         assert!(east.out.x > 0.99);
+        // Where they lead: the east one says it, the west one its way.
+        let n = m
+            .name_outside_ends(level, |p| (p.x > 0.0).then(|| "hacia Huelva".to_string()))
+            .unwrap();
+        assert_eq!(n, 1);
+        assert_eq!(
+            m.road(through).unwrap().toward,
+            "hacia el oeste / hacia Huelva"
+        );
+        assert_eq!(m.compass_of(Vec2::new(0.0, 1.0)), "el norte");
+        m.set_true_north(std::f64::consts::FRAC_PI_2).unwrap();
+        assert_eq!(m.compass_of(Vec2::new(1.0, 0.0)), "el norte");
     }
 }

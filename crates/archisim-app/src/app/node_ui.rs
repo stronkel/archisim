@@ -37,6 +37,8 @@ pub enum NodeMode {
     Island(Vec<Point2>, IslandPaint),
 }
 
+/// The tram tracks' connections, drawn over the plan.
+const TRAM_TRACK: Color32 = Color32::from_rgb(150, 70, 170);
 /// The colours of the lanes' connections: worked out and by hand.
 const LANE_WORKED: Color32 = Color32::from_rgb(40, 120, 220);
 const LANE_BY_HAND: Color32 = Color32::from_rgb(230, 120, 40);
@@ -249,6 +251,16 @@ enum Grab {
         bis: archisim_core::Vec2,
         half: f64,
     },
+    /// Its centre (N1): moves the node without moving its streets. The
+    /// node's axes: origin and first direction.
+    Centre { o: Point2, u: archisim_core::Vec2 },
+    /// A corner of an island painted on it (N3), in the node's axes.
+    IslandCorner {
+        island: usize,
+        index: usize,
+        o: Point2,
+        u: archisim_core::Vec2,
+    },
 }
 
 impl Grab {
@@ -259,6 +271,18 @@ impl Grab {
             Grab::Radius {
                 apex, bis, half, ..
             } => crossroads::corner_radius_at(*apex, *bis, *half, p),
+            Grab::Centre { o, .. } | Grab::IslandCorner { o, .. } => p.distance(*o),
+        }
+    }
+
+    /// `p` in the node's own axes (for the centre and the islands).
+    fn local(&self, p: Point2) -> Option<Point2> {
+        match self {
+            Grab::Centre { o, u } | Grab::IslandCorner { o, u, .. } => {
+                let d = p - *o;
+                Some(Point2::new(d.dot(*u), d.dot(u.perp_left())))
+            }
+            _ => None,
         }
     }
 }
@@ -375,6 +399,26 @@ impl ArchiSimApp {
                 if !had {
                     n.links.push(link);
                     n.links.sort();
+                    // Connected again: its own turns no longer rule.
+                    let mut s = n.arm(from);
+                    if s.turns
+                        .as_ref()
+                        .is_some_and(|t| t.iter().all(|x| x.is_empty()))
+                    {
+                        s.turns = None;
+                        n.set_arm(from, s);
+                    }
+                } else if !n.links.iter().any(|l| l.from == from) {
+                    // Its last connection taken away: the street stays
+                    // without a way out by it, not back to its usual turns.
+                    let lanes = j
+                        .arms
+                        .iter()
+                        .find(|a| Junction::arm_ref(a) == from)
+                        .map_or(0, |a| a.lanes_in.len());
+                    let mut s = n.arm(from);
+                    s.turns = Some(vec![archisim_core::Turns::NONE; lanes]);
+                    n.set_arm(from, s);
                 }
                 let res = self.ed.transact("Conexión de carriles", |m| m.set_node(n));
                 self.report(
@@ -471,9 +515,11 @@ impl ArchiSimApp {
 
     /// The handles of the picked node: where each is and what it changes.
     fn node_handles(&self) -> Vec<(Point2, Grab)> {
-        let Some((key, _, arms)) = self.picked_node() else {
+        let Some((key, j, arms)) = self.picked_node() else {
             return Vec::new();
         };
+        let j_at = j.as_ref().map_or(arms[0].origin, |j| j.at);
+        let j_centre = j.as_ref().map(|j| j.centre);
         let model = self.ed.model();
         let n = model.node(&key);
         let mut out: Vec<(Point2, Grab)> = arms
@@ -481,6 +527,26 @@ impl ArchiSimApp {
             .map(|a| (a.origin + a.dir * a.cut, Grab::Setback(a.clone())))
             .collect();
         let count = arms.len();
+        if count >= 2 {
+            let (o, u) = crossroads::node_frame(&arms, j_at);
+            let centre = j_centre.unwrap_or(o);
+            out.push((centre, Grab::Centre { o, u }));
+            if let Some(n) = n {
+                for (island, i) in n.islands.iter().enumerate() {
+                    for (index, q) in i.points.iter().enumerate() {
+                        out.push((
+                            o + u * q.x + u.perp_left() * q.y,
+                            Grab::IslandCorner {
+                                island,
+                                index,
+                                o,
+                                u,
+                            },
+                        ));
+                    }
+                }
+            }
+        }
         if count >= 2 && n.is_none_or(|n| n.kind() != NodeKind::Continuous) {
             for i in 0..count {
                 let (a, b) = (&arms[i], &arms[(i + 1) % count]);
@@ -533,6 +599,13 @@ impl ArchiSimApp {
             let (Some(g), Some(c)) = (self.node_grab.take(), at) else {
                 return;
             };
+            self.apply_node_grab(g, c);
+        }
+    }
+
+    /// Lets go of a node's handle at `c`.
+    fn apply_node_grab(&mut self, g: NodeGrab, c: Point2) {
+        {
             let v = (g.what.value_at(c) * 100.0).round() / 100.0;
             let mut n = self
                 .ed
@@ -553,6 +626,24 @@ impl ArchiSimApp {
                     s.radius = Some(v);
                     n.set_corner(*from, s);
                     format!("Radio de la esquina: {} m.", fmt_m(v))
+                }
+                Grab::Centre { .. } => {
+                    let l = g.what.local(c).unwrap_or_default();
+                    let l =
+                        Point2::new((l.x * 100.0).round() / 100.0, (l.y * 100.0).round() / 100.0);
+                    n.shift = (l.x.hypot(l.y) > 0.05).then_some(l);
+                    format!("Centro del nudo desplazado {} m.", fmt_m(l.x.hypot(l.y)))
+                }
+                Grab::IslandCorner { island, index, .. } => {
+                    let l = g.what.local(c).unwrap_or_default();
+                    if let Some(q) = n
+                        .islands
+                        .get_mut(*island)
+                        .and_then(|i| i.points.get_mut(*index))
+                    {
+                        *q = l;
+                    }
+                    "Esquina de la isleta movida.".to_string()
                 }
             };
             let res = self.ed.transact("Nudo", |m| m.set_node(n.clone()));
@@ -600,6 +691,15 @@ impl ArchiSimApp {
                         Stroke::NONE,
                     ));
                 }
+            }
+            // The tram tracks, which go on by themselves.
+            for c in &j.trams {
+                painter.add(Shape::dashed_line(
+                    &self.polygon(rect, &c.path),
+                    Stroke::new(1.6, TRAM_TRACK),
+                    5.0,
+                    3.0,
+                ));
             }
             if let NodeMode::Link(start) = &self.node_mode {
                 for a in &j.arms {
@@ -656,9 +756,35 @@ impl ArchiSimApp {
                 Stroke::new(1.5, HANDLE),
             ));
         }
-        for (p, _) in self.node_handles() {
+        for (p, g) in self.node_handles() {
             let at = self.view.to_screen(rect, p);
-            painter.circle(at, 5.0, Color32::WHITE, Stroke::new(2.0, HANDLE));
+            match g {
+                Grab::Centre { .. } => {
+                    let d = 6.5;
+                    painter.add(Shape::convex_polygon(
+                        vec![
+                            at + Vec2::new(0.0, -d),
+                            at + Vec2::new(d, 0.0),
+                            at + Vec2::new(0.0, d),
+                            at + Vec2::new(-d, 0.0),
+                        ],
+                        Color32::WHITE,
+                        Stroke::new(2.0, HANDLE),
+                    ));
+                }
+                Grab::IslandCorner { .. } => {
+                    painter.rect(
+                        egui::Rect::from_center_size(at, egui::vec2(8.0, 8.0)),
+                        1.0,
+                        Color32::WHITE,
+                        Stroke::new(2.0, LANE_BY_HAND),
+                        egui::StrokeKind::Middle,
+                    );
+                }
+                _ => {
+                    painter.circle(at, 5.0, Color32::WHITE, Stroke::new(2.0, HANDLE));
+                }
+            }
         }
         // Where the dragged handle would go, and its value.
         let at = painter
@@ -686,6 +812,8 @@ impl ArchiSimApp {
                     crossroads::corner_middle(*apex, *bis, *half, v),
                     format!("Radio {} m", fmt_m(v)),
                 ),
+                Grab::Centre { .. } => (c, format!("Centro a {} m", fmt_m(v))),
+                Grab::IslandCorner { .. } => (c, "Esquina de la isleta".to_string()),
             };
             let at = self.view.to_screen(rect, p);
             painter.circle_filled(at, 5.0, ACCENT);
@@ -743,8 +871,19 @@ impl ArchiSimApp {
             }
         });
         if n.kind() == NodeKind::DeadEnd {
-            group(ui, "node-end", "Círculo de giro", |ui| {
-                row(ui, "Radio (mm)", "El del bordillo del círculo", |ui, w| {
+            group(ui, "node-end", "Fin de la calle", |ui| {
+                let mut hammer = n.hammer.unwrap_or(false);
+                ui.switch(&mut hammer, "En martillo (giro en tres maniobras)");
+                n.hammer = hammer.then_some(true);
+                let (label, hint) = if hammer {
+                    (
+                        "Medio martillo (mm)",
+                        "Cuánto sale el martillo a cada lado del eje",
+                    )
+                } else {
+                    ("Radio (mm)", "El del bordillo del círculo")
+                };
+                row(ui, label, hint, |ui, w| {
                     if let Some(v) = length_field(
                         ui,
                         Id::unique(("node-end-radius", &key)),
@@ -808,6 +947,24 @@ impl ArchiSimApp {
                 let mut quiet = n.hide_marks.unwrap_or(false);
                 ui.switch(&mut quiet, "Sin marcas viales cerca del nudo");
                 n.hide_marks = quiet.then_some(true);
+                match n.shift {
+                    Some(v) if v.x.hypot(v.y) > 1e-6 => {
+                        props::note(
+                            ui,
+                            &format!(
+                                "Centro desplazado {} m (sin mover las calles).",
+                                fmt_m(v.x.hypot(v.y))
+                            ),
+                        );
+                        if ui.button("Volver a centrar").clicked() {
+                            n.shift = None;
+                        }
+                    }
+                    _ => props::note(
+                        ui,
+                        "Arrastra el rombo del centro: mueve el nudo sin mover las calles.",
+                    ),
+                }
                 if count >= 3
                     && ui
                         .button("Hacer glorieta aquí")
@@ -833,6 +990,21 @@ impl ArchiSimApp {
                             s.setback = Some(v.max(0.0));
                         }
                     });
+                    row(
+                        ui,
+                        "Aplanar (mm)",
+                        "Los últimos metros del brazo, que bajan desde la cota del nudo hasta la de la calle",
+                        |ui, w| {
+                            if let Some(v) = length_field(
+                                ui,
+                                Id::unique(("node-flatten", &key, r)),
+                                s.flatten.unwrap_or(0.0),
+                                w - 8.0,
+                            ) {
+                                s.flatten = (v > 0.0).then_some(v);
+                            }
+                        },
+                    );
                     if count >= 2 {
                         row(
                             ui,
@@ -1182,4 +1354,166 @@ fn fmt_m(v: f64) -> String {
 #[cfg(test)]
 pub(super) fn first_node(m: &Model, level: archisim_core::LevelId) -> Option<NodeKey> {
     crossroads::node_keys(m, level).into_iter().next()
+}
+
+/// How near the cursor takes a node's handle in 3D, in pixels.
+const REACH_3D: f32 = 12.0;
+
+impl ArchiSimApp {
+    /// The height of a point on the picked node, over the level's zero.
+    fn node_z(&self, j: Option<&Junction>, p: Point2) -> f64 {
+        let model = self.ed.model();
+        let base = model.level(self.ed.level).map_or(0.0, |l| l.elevation);
+        base + j.map_or(0.0, |j| j.plate_top(model, p)) + 0.06
+    }
+
+    /// The picked node's handles in 3D (with the tool Nudo), on its plate.
+    fn node_handles_3d(&self) -> Vec<(Grab, glam::DVec3)> {
+        if self.tool != Tool::Node || self.node_mode != NodeMode::Pick {
+            return Vec::new();
+        }
+        let Some((_, j, _)) = self.picked_node() else {
+            return Vec::new();
+        };
+        self.node_handles()
+            .into_iter()
+            .map(|(p, g)| (g, glam::DVec3::new(p.x, p.y, self.node_z(j.as_ref(), p))))
+            .collect()
+    }
+
+    /// Takes, drags and lets go of the picked node's handles in the 3D view
+    /// and the Maqueta (N1). Whether one is taken (the camera stays still).
+    pub(super) fn node_grips_3d(
+        &mut self,
+        ctx: &egui::Context,
+        response: &egui::Response,
+        rect: Rect,
+    ) -> bool {
+        if response.drag_started_by(egui::PointerButton::Primary) {
+            let press = ctx.input(|i| i.pointer.press_origin());
+            let key = self.node_pick.clone();
+            let near = press.and_then(|pos| {
+                self.node_handles_3d()
+                    .into_iter()
+                    .filter_map(|(g, at)| Some((g, at, self.screen_3d(rect, at)?.distance(pos))))
+                    .filter(|x| x.2 <= crate::touch::reach(REACH_3D))
+                    .min_by(|a, b| a.2.total_cmp(&b.2))
+            });
+            if let (Some((what, at, _)), Some(key)) = (near, key) {
+                self.node_grab = Some(NodeGrab { key, what });
+                self.node_grab_3d = Some((at.z, Point2::new(at.x, at.y)));
+            }
+        }
+        let Some((z, mut to)) = self.node_grab_3d else {
+            return false;
+        };
+        if response.dragged_by(egui::PointerButton::Primary) {
+            if let Some(p) = response
+                .interact_pointer_pos()
+                .and_then(|pos| self.mass_on_plane(rect, pos, z))
+            {
+                to = Point2::new(p.x, p.y);
+            }
+            self.node_grab_3d = Some((z, to));
+            ctx.request_repaint();
+        }
+        if response.drag_stopped() {
+            self.node_grab_3d = None;
+            if let Some(g) = self.node_grab.take() {
+                self.apply_node_grab(g, to);
+            }
+        }
+        true
+    }
+
+    /// The picked node over the 3D picture, with the tool Nudo: where each
+    /// lane and tram track goes, and its handles.
+    pub(super) fn draw_node_3d(&self, painter: &egui::Painter, rect: Rect) {
+        if self.tool != Tool::Node {
+            return;
+        }
+        let Some((_, j, _)) = self.picked_node() else {
+            return;
+        };
+        let line_3d = |path: &[Point2]| -> Vec<Pos2> {
+            path.iter()
+                .filter_map(|p| {
+                    self.screen_3d(
+                        rect,
+                        glam::DVec3::new(p.x, p.y, self.node_z(j.as_ref(), *p)),
+                    )
+                })
+                .collect()
+        };
+        if let Some(j) = &j {
+            let mut outline = j.plate.clone();
+            if let Some(f) = outline.first().copied() {
+                outline.push(f);
+            }
+            painter.add(Shape::line(line_3d(&outline), Stroke::new(2.0, ACCENT)));
+            for c in &j.lanes {
+                let col = if c.by_hand { LANE_BY_HAND } else { LANE_WORKED };
+                let line = line_3d(&c.path);
+                if line.len() < 2 {
+                    continue;
+                }
+                painter.add(Shape::line(line.clone(), Stroke::new(1.6, col)));
+                let (tip, before) = (line[line.len() - 1], line[line.len() - 2]);
+                let d = (tip - before).normalized() * 7.0;
+                let n = Vec2::new(-d.y, d.x) * 0.5;
+                painter.add(Shape::convex_polygon(
+                    vec![tip, tip - d + n, tip - d - n],
+                    col,
+                    Stroke::NONE,
+                ));
+            }
+            for c in &j.trams {
+                painter.add(Shape::dashed_line(
+                    &line_3d(&c.path),
+                    Stroke::new(1.6, TRAM_TRACK),
+                    5.0,
+                    3.0,
+                ));
+            }
+        }
+        let dragging = self.node_grab.as_ref().map(|g| &g.what);
+        for (g, at) in self.node_handles_3d() {
+            let Some(c) = self.screen_3d(rect, at) else {
+                continue;
+            };
+            let hot = dragging == Some(&g);
+            let fill = if hot { HANDLE } else { Color32::WHITE };
+            match g {
+                Grab::Centre { .. } => {
+                    let d = 6.5;
+                    painter.add(Shape::convex_polygon(
+                        vec![
+                            c + Vec2::new(0.0, -d),
+                            c + Vec2::new(d, 0.0),
+                            c + Vec2::new(0.0, d),
+                            c + Vec2::new(-d, 0.0),
+                        ],
+                        fill,
+                        Stroke::new(2.0, HANDLE),
+                    ));
+                }
+                _ => {
+                    painter.circle(c, 5.0, fill, Stroke::new(2.0, HANDLE));
+                }
+            }
+        }
+        if let (Some(g), Some((z, to))) = (&self.node_grab, self.node_grab_3d) {
+            if let Some(c) = self.screen_3d(rect, glam::DVec3::new(to.x, to.y, z)) {
+                painter.circle_filled(c, 5.0, ACCENT);
+                let v = g.what.value_at(to);
+                let text = match &g.what {
+                    Grab::Setback(_) => format!("Retranqueo {} m", fmt_m(v)),
+                    Grab::Radius { .. } => format!("Radio {} m", fmt_m(v)),
+                    Grab::Centre { .. } => format!("Centro a {} m", fmt_m(v)),
+                    Grab::IslandCorner { .. } => "Esquina de la isleta".to_string(),
+                };
+                super::handles::tag(painter, c, text, ACCENT);
+            }
+        }
+    }
 }

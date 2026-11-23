@@ -1618,6 +1618,9 @@ pub(crate) struct Road {
     /// Laid in anarchy (version 114): no crossings, no ground shaped.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub free: bool,
+    /// Where it leads beyond the area of the surroundings (version 121).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub toward: String,
     /// Stretches with their own materials (version 116): `[from, to,
     /// pavement, kerb, sidewalk, planting]`, the materials by id or null.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -4491,6 +4494,7 @@ impl ProjectFile {
                     kerb_material: r.kerb_material.0,
                     sidewalk_material: r.sidewalk_material.0,
                     free: r.free,
+                    toward: r.toward.clone(),
                     skins: r
                         .skins
                         .iter()
@@ -5995,6 +5999,7 @@ impl ProjectFile {
                 kerb_material: core::MaterialId(r.kerb_material),
                 sidewalk_material: core::MaterialId(r.sidewalk_material),
                 free: r.free,
+                toward: r.toward,
                 skins: r
                     .skins
                     .iter()
@@ -6286,6 +6291,8 @@ impl ProjectFile {
                 joints: 0.0,
                 joint_angle: 0.0,
                 bays: None,
+                holes: Vec::new(),
+                pattern: core::JointPattern::Grid,
             };
             surface
                 .decode_into(&x.settings)

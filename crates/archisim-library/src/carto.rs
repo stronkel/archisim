@@ -58,7 +58,18 @@ pub struct CartoOptions {
     /// georeferenced: its georeference has just been given by a search
     /// ([`crate::geocode`]), with no height.
     pub level_to_ground: bool,
+    /// The square turned, degrees counter-clockwise (N8).
+    pub turn: f64,
+    /// An outline drawn by hand instead of the circle or the square (N8):
+    /// what is inside it is brought.
+    pub outline: Option<Vec<Point2>>,
+    /// About how many points of the terrain are brought (N8): 4 000 is
+    /// quick; more, finer.
+    pub terrain_points: usize,
 }
+
+/// The usual number of points of the terrain brought.
+pub const TERRAIN_POINTS: usize = 4_000;
 
 /// The kind of place a building stands in, for its style.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -324,20 +335,52 @@ pub const ZONE_RADIUS: f64 = 60.0;
 impl CartoOptions {
     /// Whether a point of the plan is inside what is brought.
     pub fn contains(&self, p: Point2) -> bool {
+        if let Some(o) = self.outline.as_ref().filter(|o| o.len() >= 3) {
+            return archisim_core::point_in_polygon(p, o);
+        }
         if self.square {
-            (p.x - self.centre.x).abs() <= self.radius && (p.y - self.centre.y).abs() <= self.radius
+            // In the square's own axes.
+            let (c, s) = (self.turn.to_radians().cos(), self.turn.to_radians().sin());
+            let d = p - self.centre;
+            let (x, y) = (d.x * c + d.y * s, -d.x * s + d.y * c);
+            x.abs() <= self.radius && y.abs() <= self.radius
         } else {
             p.distance(self.centre) <= self.radius
         }
     }
 
-    /// The outline of what is brought: its circle or its square.
+    /// The outline of what is brought: its outline drawn by hand, its
+    /// circle or its square (turned).
     pub fn area(&self) -> Vec<Point2> {
+        if let Some(o) = self.outline.as_ref().filter(|o| o.len() >= 3) {
+            return o.clone();
+        }
         if self.square {
+            let (c, s) = (self.turn.to_radians().cos(), self.turn.to_radians().sin());
             archisim_core::square_area(self.centre, self.radius)
+                .into_iter()
+                .map(|q| {
+                    let d = q - self.centre;
+                    self.centre + Point2::new(d.x * c - d.y * s, d.x * s + d.y * c)
+                })
+                .collect()
         } else {
             archisim_core::circle_area(self.centre, self.radius)
         }
+    }
+
+    /// Whether what is brought is a polygon (a square or an outline), not a
+    /// circle.
+    pub fn polygonal(&self) -> bool {
+        self.square || self.outline.as_ref().is_some_and(|o| o.len() >= 3)
+    }
+
+    /// How far from its centre it reaches: what the downloads must cover.
+    pub fn reach(&self) -> f64 {
+        self.area()
+            .iter()
+            .map(|q| q.distance(self.centre))
+            .fold(0.0, f64::max)
     }
 }
 
@@ -362,6 +405,9 @@ impl Default for CartoOptions {
             world: true,
             place: None,
             level_to_ground: false,
+            turn: 0.0,
+            outline: None,
+            terrain_points: TERRAIN_POINTS,
         }
     }
 }
@@ -712,7 +758,8 @@ pub fn import_carto(
             })?;
         }
     }
-    let on_ground = |p: Point2| nearest_z(&ground, p).map_or(0.0, |z| z - level_z);
+    let index = GroundIndex::new(&ground);
+    let on_ground = |p: Point2| index.z_at(&ground, p).map_or(0.0, |z| z - level_z);
 
     let own: Vec<Vec<Point2>> = if opts.skip_own {
         m.slabs().map(|s| s.outline.clone()).collect()
@@ -1027,7 +1074,7 @@ pub fn import_carto(
             }) else {
                 continue;
             };
-            let pieces = if opts.square {
+            let pieces = if opts.polygonal() {
                 archisim_core::clip_line_to_area(&st.axis, &opts.area())
             } else {
                 clip_to_circle(&st.axis, opts.centre, opts.radius)
@@ -1111,12 +1158,60 @@ pub fn import_carto(
     // The area brought: the streets that reach its edge are its
     // connections with the outside (N8).
     m.set_surroundings(Some(opts.area()))?;
+    // And the streets already there, cut to it.
+    let clipped = m.clip_roads_to_surroundings()?;
+    if clipped > 0 {
+        report.notes.push(format!(
+            "{clipped} calle{} que ya estaba{} en el proyecto, recortada{} al área",
+            if clipped == 1 { "" } else { "s" },
+            if clipped == 1 { "" } else { "n" },
+            if clipped == 1 { "" } else { "s" },
+        ));
+    }
+    // Where each connection with the outside leads (N8): the destination
+    // or road number of the way of OpenStreetMap there, else its direction.
+    if opts.streets {
+        let signed: Vec<(Vec<Point2>, String)> = read
+            .osm
+            .iter()
+            .flat_map(|o| o.ways.iter())
+            .filter(|w| w.tag("highway").is_some())
+            .filter_map(|w| {
+                let t = w.tag("destination").or_else(|| w.tag("ref"))?;
+                let pts = w
+                    .points
+                    .iter()
+                    .map(|p| frame.to_plan(utm_of(&g, p[0], p[1])))
+                    .collect();
+                Some((pts, t.replace(';', ", ")))
+            })
+            .collect();
+        let named = |p: Point2| {
+            signed
+                .iter()
+                .map(|(line, t)| {
+                    let d = line
+                        .windows(2)
+                        .map(|w| {
+                            let d = w[1] - w[0];
+                            let t = ((p - w[0]).dot(d) / d.dot(d).max(1e-9)).clamp(0.0, 1.0);
+                            p.distance(w[0] + d * t)
+                        })
+                        .fold(f64::MAX, f64::min);
+                    (d, t)
+                })
+                .filter(|(d, _)| *d < 15.0)
+                .min_by(|a, b| a.0.total_cmp(&b.0))
+                .map(|(_, t)| format!("hacia {t}"))
+        };
+        m.name_outside_ends(level, named)?;
+    }
     if opts.street_life && opts.streets {
         report.life = crate::street_life::add_street_life(
             m,
             level,
             &crate::street_life::LifeOptions {
-                around: Some((opts.centre, opts.radius + 20.0)),
+                around: Some((opts.centre, opts.reach() + 20.0)),
                 ..Default::default()
             },
         )?;
@@ -1528,9 +1623,10 @@ fn species_of(leaf: Option<&str>, genus: Option<&str>) -> &'static str {
 /// Grid points within the radius, thinned so there are no more than about
 /// 4 000, in plan with their height above the georeference's ±0,00.
 fn grid_points(grid: &asc::Grid, frame: &Frame, opts: &CartoOptions) -> Vec<SurveyPoint> {
-    // The cells inside the circle's box.
-    let cells_across = (2.0 * opts.radius / grid.cell).ceil().max(1.0);
-    let step = ((cells_across * cells_across / 4000.0).sqrt().ceil() as usize).max(1);
+    // The cells inside the area's box.
+    let cells_across = (2.0 * opts.reach() / grid.cell).ceil().max(1.0);
+    let wanted = opts.terrain_points.max(100) as f64;
+    let step = ((cells_across * cells_across / wanted).sqrt().ceil() as usize).max(1);
     let mut out = Vec::new();
     for row in (0..grid.rows).step_by(step) {
         for col in (0..grid.cols).step_by(step) {
@@ -1545,6 +1641,66 @@ fn grid_points(grid: &asc::Grid, frame: &Frame, opts: &CartoOptions) -> Vec<Surv
         }
     }
     out
+}
+
+/// The terrain's points by cells, to find the nearest ones of a point
+/// without looking at them all (a fine terrain brings tens of thousands).
+struct GroundIndex {
+    cell: f64,
+    cells: std::collections::HashMap<(i64, i64), Vec<usize>>,
+}
+
+impl GroundIndex {
+    fn new(points: &[SurveyPoint]) -> Self {
+        let (mut lo, mut hi) = (
+            Point2::new(f64::MAX, f64::MAX),
+            Point2::new(f64::MIN, f64::MIN),
+        );
+        for s in points {
+            lo = Point2::new(lo.x.min(s.at.x), lo.y.min(s.at.y));
+            hi = Point2::new(hi.x.max(s.at.x), hi.y.max(s.at.y));
+        }
+        let area = ((hi.x - lo.x) * (hi.y - lo.y)).max(1.0);
+        // About four points a cell.
+        let cell = (area / points.len().max(1) as f64 * 4.0).sqrt().max(1.0);
+        let mut cells: std::collections::HashMap<(i64, i64), Vec<usize>> = Default::default();
+        for (i, s) in points.iter().enumerate() {
+            cells
+                .entry((
+                    (s.at.x / cell).floor() as i64,
+                    (s.at.y / cell).floor() as i64,
+                ))
+                .or_default()
+                .push(i);
+        }
+        GroundIndex { cell, cells }
+    }
+
+    /// As [`nearest_z`], from the points of the cells round `p`.
+    fn z_at(&self, points: &[SurveyPoint], p: Point2) -> Option<f64> {
+        if points.len() < 64 {
+            return nearest_z(points, p);
+        }
+        let (cx, cy) = (
+            (p.x / self.cell).floor() as i64,
+            (p.y / self.cell).floor() as i64,
+        );
+        let mut near: Vec<SurveyPoint> = Vec::new();
+        for ring in 1..=8i64 {
+            near.clear();
+            for x in cx - ring..=cx + ring {
+                for y in cy - ring..=cy + ring {
+                    if let Some(v) = self.cells.get(&(x, y)) {
+                        near.extend(v.iter().map(|&i| points[i]));
+                    }
+                }
+            }
+            if near.len() >= 4 {
+                return nearest_z(&near, p);
+            }
+        }
+        nearest_z(points, p)
+    }
 }
 
 fn nearest_z(points: &[SurveyPoint], p: Point2) -> Option<f64> {
@@ -1785,6 +1941,32 @@ mod tests {
     }
 
     use super::*;
+
+    /// The area of the surroundings turned, or drawn by hand (N8).
+    #[test]
+    fn a_turned_square_and_an_outline() {
+        let mut o = CartoOptions {
+            radius: 100.0,
+            square: true,
+            turn: 45.0,
+            ..CartoOptions::default()
+        };
+        // A corner of the plain square is out of the turned one; a point
+        // 130 m east (past its side, within its corner) is in.
+        assert!(!o.contains(Point2::new(95.0, 95.0)));
+        assert!(o.contains(Point2::new(130.0, 0.0)));
+        assert!((o.reach() - 100.0 * 2f64.sqrt()).abs() < 1e-6);
+        assert!((signed_area(&o.area()).abs() - 40_000.0).abs() < 1e-6);
+        o.outline = Some(vec![
+            Point2::new(0.0, 0.0),
+            Point2::new(300.0, 0.0),
+            Point2::new(0.0, 200.0),
+        ]);
+        assert!(o.polygonal());
+        assert!(o.contains(Point2::new(50.0, 50.0)));
+        assert!(!o.contains(Point2::new(250.0, 150.0)));
+        assert_eq!(o.area().len(), 3);
+    }
 
     const GML: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
 <gml:FeatureCollection xmlns:gml="http://www.opengis.net/gml/3.2" xmlns:bu-ext2d="http://inspire.jrc.ec.europa.eu/schemas/bu-ext2d/2.0" xmlns:bu-core2d="http://inspire.jrc.ec.europa.eu/schemas/bu-core2d/2.0">

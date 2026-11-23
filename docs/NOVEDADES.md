@@ -4,6 +4,32 @@ Lo que cambia en cada versión, en pocas líneas. ArchiSim enseña la parte de s
 
 Cada versión empieza con una línea `## <versión>` (por ejemplo `## 0.81.0`): es la que busca la publicación.
 
+
+## 0.110.0
+
+- **Las manzanas siguen a las calles.** Al mover, curvar o trazar una calle, las manzanas que cambian de forma se vuelven a parcelar solas con la zona que tenían, y se vuelven a edificar si lo estaban. Las parcelas bloqueadas y las dibujadas a mano no se tocan. Los edificios por los que pasa una calle nueva desaparecen. Un aviso dice qué se ha rehecho, y todo se deshace en un paso.
+- **Edificios de esquina con dos fachadas.** La parcela de esquina de una manzana se edifica entera, con fachada a las dos calles. Las casas con jardín delantero siguen como estaban.
+- **Esquinas de parcelas y superficies.** Las esquinas de una parcela, una plaza, un aparcamiento o un jardín se mueven arrastrándolas.
+- **Plazas con huecos y jardines hundidos.** «Editar contorno» en una plaza, un aparcamiento o un jardín permite dibujarle huecos con su encintado (un alcorque, una fuente, un parterre) y bordes curvos. Con altura negativa la superficie queda hundida y recorta el terreno.
+- **Aparejos del pavimento:** cuadrícula, espiga, rombo o a matajunta.
+- **Tramos de calle a la vista.** En planta, los tramos con materiales propios se tiñen con su color, y sus extremos se arrastran con tiradores.
+- **Parcelas como un casco real.** En el casco antiguo y en las casas, los frentes de las parcelas varían.
+- **Flechas repetidas** en los accesos largos a un cruce.
+- **Ocultar piezas por ventana.** Con «Ocultar piezas», arrastrar una ventana oculta todas las que caen dentro. Las ocultas se ven en gris y un clic en una la devuelve.
+- **Tráfico en la Maqueta:** tarjeta propia en «Edificios y calles».
+- **Peatones que cruzan.** En el tráfico de ilustración, la gente cruza por los pasos de peatones.
+- **El área recorta las calles.** Al traer el entorno, también se recortan al área las calles que ya estaban en el proyecto.
+- **Nudos a medida.** El centro de un cruce se mueve sin mover las calles; un brazo puede aplanarse los últimos metros; el fin de una calle puede ser un martillo en lugar de un círculo de giro. Los tiradores del nudo se usan también en la vista 3D y en la Maqueta, con sus conexiones de carril a la vista.
+- **Carriles.** Flecha de cambio de sentido; un carril puede quedarse sin salida; las esquinas de las isletas pintadas se arrastran; las vías del tranvía siguen de frente por el cruce.
+- **Mobiliario por tramo.** «Amueblar el tramo» pone en un tramo de calle los árboles, farolas, bancos y papeleras que elijas.
+- **Sustituir todos en cualquier zona:** un rectángulo, un contorno a mano o una parcela o manzana con un clic.
+- **Aparcamientos accesibles.** Plazas de movilidad reducida de 3,70 m en azul con su símbolo, plazas numeradas y filas que siguen el lado que elijas.
+- **Soltar flechas y señales.** «Soltar piezas» convierte una flecha de un cruce en una marca vial y una señal en un objeto «Señal de tráfico», para moverlas. Ocultar y soltar piezas funciona también desde la vista 3D.
+- **Pincel de zonas** para dar la misma zona a muchas parcelas de una pasada.
+- **Entorno a tu medida.** El recuadro se gira y el contorno se puede dibujar a mano; el terreno se trae con más detalle si se pide; las calles que salen del área dicen a dónde van.
+- **Tráfico más vivo.** Autobuses en sus carriles, tranvías por sus vías, y los coches y personas cercanos con su modelo de la biblioteca.
+- **Trazar con cotas.** Al trazar, el ángulo que gira la calle y el radio de la curva se dibujan en la planta; al elegir una pendiente uniforme se ve el tramo entre los dos clics.
+
 ## 0.109.0
 
 - **Tiradores de las calles en 3D.** Una calle seleccionada se moldea también en la Vista 3D: nudos, curvatura y bordillos, viendo cómo queda con sus cruces.
