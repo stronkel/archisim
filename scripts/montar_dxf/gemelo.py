@@ -388,6 +388,81 @@ def window_heights(lv, w, width, north):
         return (1.15, 2.20) if width >= 2.5 else (0.85, 2.50)
     return 0.65, 2.70                                    # front: 0,65 → 3,35
 
+
+# ---- curtain walls up to the slab above, their underside ----
+TOPOFF = {"Planta baja": ("Planta primera", -0.60), "Planta primera": ("Cubierta", -0.545),
+          "Cubierta": ("Cubierta castillete", -0.35)}
+def curtain(lv, p1, p2, typ, bays="", doors=""):
+    top, off = TOPOFF[lv]
+    lines.append(f"CURTAIN|{lv}|{top}|{p1[0]:.4f}|{p1[1]:.4f}|{p2[0]:.4f}|{p2[1]:.4f}|{typ}|0.00|3.0|{bays}|{doors}|{off:.3f}")
+
+# ---- automatic sliding doors: their leaves, thin closed rectangles ----
+def auto_doors(blk, walls):
+    leaves = []
+    for s in G[blk].get("CARPINTERIA", []):
+        if s[0] != "P" or len(s[1]) not in (4, 5): continue
+        pts = s[1][:4]; a_ = math.dist(pts[0], pts[1]); b_ = math.dist(pts[1], pts[2])
+        L, W = max(a_, b_), min(a_, b_)
+        if not (0.5 < L < 1.7 and W < 0.035): continue
+        i = 0 if a_ >= b_ else 1
+        p, q = pts[i], pts[i + 1]
+        ang = math.atan2(q[1] - p[1], q[0] - p[0]) % math.pi
+        if ang >= 3 * math.pi / 4: ang -= math.pi
+        cx = sum(x for x, _ in pts) / 4; cy = sum(y for _, y in pts) / 4
+        u, v = to_local(ang, 0, cx, cy)
+        leaves.append((ang, v, u - L / 2, u + L / 2))
+    leaves.sort()
+    groups = []
+    for lf in leaves:
+        for g in groups:
+            a0, v0, lo, hi, n = g
+            if abs(lf[0] - a0) < 0.03 and abs(lf[1] - v0) < 0.12 and lf[2] < hi + 1.3 and lf[3] > lo - 1.3:
+                g[2] = min(lo, lf[2]); g[3] = max(hi, lf[3]); g[4] += 1; break
+        else: groups.append([lf[0], lf[1], lf[2], lf[3], 1])
+    body = unary_union([LineString(seg(w)).buffer(w["t"] / 2, cap_style=2) for w in walls])
+    out = []
+    for a0, v0, lo, hi, n in groups:
+        if n < 2 or not CLIP.contains(Point(xy(a0, v0, (lo + hi) / 2))): continue
+        # the gap it sits in: out to the walls on either side (up to 3 m)
+        def reach(t0, step):
+            t = t0
+            for _ in range(24):            # side lights: 1,2 m at most
+                if body.contains(Point(xy(a0, v0, t + step))): return t
+                t += step
+            return t
+        g0 = reach(lo, -0.05); g1 = reach(hi, 0.05)
+        out.append(dict(a=a0, off=v0, lo=g0, hi=g1, dlo=lo, dhi=hi))
+    return out
+
+# ---- what stands just inside an edge: a wall's inner face ----
+def inner_face(blk, p, q, inward):
+    """The thickness of a wall whose outside is the edge p–q, read as a line
+    of SECCIÓN parallel to it inside, covering most of it; None if none."""
+    ang = math.atan2(q[1] - p[1], q[0] - p[0])
+    ux, uy = math.cos(ang), math.sin(ang); L = math.dist(p, q)
+    best = {}
+    for s in G[blk].get("SECCION", []):
+        if s[0] != "L": continue
+        dx, dy = s[3] - s[1], s[4] - s[2]; l = math.hypot(dx, dy)
+        if l < 0.3 or abs(ux * dy - uy * dx) / l > 0.05: continue
+        d = (s[1] - p[0]) * inward[0] + (s[2] - p[1]) * inward[1]
+        if not (0.12 < d < 0.65): continue
+        t1 = (s[1] - p[0]) * ux + (s[2] - p[1]) * uy; t2 = (s[3] - p[0]) * ux + (s[4] - p[1]) * uy
+        cover = min(max(t1, t2), L) - max(min(t1, t2), 0)
+        if cover > 0: best[round(d, 2)] = best.get(round(d, 2), 0) + cover
+    if not best: return None
+    d, c = max(best.items(), key=lambda kv: kv[1])
+    return d if c > 0.6 * L else None
+def glass_on(blk, p, q):
+    """Whether the carpentry draws glazing along the edge p–q."""
+    edge = LineString([p, q])
+    cov = 0.0
+    for s in G[blk].get("CARPINTERIA", []):
+        if s[0] != "L": continue
+        l = LineString([(s[1], s[2]), (s[3], s[4])])
+        if l.length > 0.3 and edge.buffer(0.25).contains(l): cov += l.length
+    return cov > 0.5 * edge.length
+
 wall_count = 0
 ext_walls = {}
 parapets = []   # the roof's parapets: over the first floor's outside walls
@@ -448,6 +523,19 @@ for blk, (lv, top) in FLOORS.items():
     walls = joined
     extend_ends(walls)
     fpp = prepared.prep(fp)
+    autos = auto_doors(blk, walls) if lv != "Cubierta" else []
+    auto_zone = unary_union([LineString([xy(d["a"], d["off"], d["lo"]), xy(d["a"], d["off"], d["hi"])]).buffer(0.4, cap_style=2) for d in autos]) if autos else None
+    for d in autos:
+        p1 = xy(d["a"], d["off"], d["lo"]); p2 = xy(d["a"], d["off"], d["hi"])
+        left = round(d["dlo"] - d["lo"], 3); dw = round(d["dhi"] - d["dlo"], 3)
+        bays = (f"{left:.3f};{dw:.3f}" if left > 0.1 else f"{dw:.3f}")
+        bay = 1 if left > 0.1 else 0
+        curtain(lv, p1, p2, "acceso", bays, f"{bay}:{dw:.2f}:2.40:R:ext:corredera")
+        print("  automatic door", lv, round(dw, 2), "in a gap of", round(d["hi"] - d["lo"], 2), [round(v, 1) for v in p1 + p2], file=sys.stderr)
+    if auto_zone is not None:
+        for w in walls:
+            w["ops"] = [o for o in w["ops"] if not auto_zone.contains(Point(xy(w["a"], w["off"], w["lo"] + o["at"])))]
+        curt = [c for c in curt if not auto_zone.intersects(LineString([xy(c["a"], c["off"], c["lo"]), xy(c["a"], c["off"], c["hi"])]))]
     for w in walls:
         p1, p2 = seg(w); L = w["hi"] - w["lo"]
         outl = outr = 0
@@ -528,13 +616,13 @@ for blk, (lv, top) in FLOORS.items():
                     door_spec.append(f"{len(bays)}:{dw:.2f}:2.40:R:ext")
                     bays.append(dw); at = u + dw
                 bays = [b for b in bays if b >= 0.1]
-                lines.append(f"CURTAIN|{lv}|-|{p1[0]:.4f}|{p1[1]:.4f}|{p2[0]:.4f}|{p2[1]:.4f}|acceso|0.00|3.45|{';'.join(f'{b:.3f}' for b in bays)}|{','.join(door_spec)}")
+                curtain(lv, p1, p2, "acceso", ";".join(f"{b:.3f}" for b in bays), ",".join(door_spec))
             else:
-                lines.append(f"CURTAIN|{lv}|-|{p1[0]:.4f}|{p1[1]:.4f}|{p2[0]:.4f}|{p2[1]:.4f}|{'curva' if on_curve else 'escaparate'}|0.00|3.45")
+                curtain(lv, p1, p2, "curva" if on_curve else "escaparate")
         elif lv == "Planta primera":
-            lines.append(f"CURTAIN|{lv}|-|{p1[0]:.4f}|{p1[1]:.4f}|{p2[0]:.4f}|{p2[1]:.4f}|p1|0.00|2.80")
+            curtain(lv, p1, p2, "p1")
         else:
-            lines.append(f"CURTAIN|{lv}|{top}|{p1[0]:.4f}|{p1[1]:.4f}|{p2[0]:.4f}|{p2[1]:.4f}|cast|0.00|3.0")
+            curtain(lv, p1, p2, "cast")
     # What is left of the storey's edge with no wall nor glazing on it is
     # glass too (the shop fronts drawn as a single line).
     if lv != "Cubierta":
@@ -555,25 +643,37 @@ for blk, (lv, top) in FLOORS.items():
                     mx, my = (x1 + x2) / 2, (y1 + y2) / 2
                     if any(p.distance(Point(mx + nx * 0.6, my + ny * 0.6)) < 0.3 for p in patios): patio = True
                     rear = nx > 0.7 or ny > 0.7          # east (parking) and north: built
-                    if rear and not patio:
-                        # a 30 cm wall just inside the edge, its outside on its left,
+                    if auto_zone is not None and auto_zone.buffer(0.2).contains(piece): continue
+                    if auto_zone is not None:
+                        rest = piece.difference(auto_zone.buffer(0.2))
+                        if rest.is_empty: continue
+                        piece = max(getattr(rest, "geoms", [rest]), key=lambda g: g.length)
+                        if piece.length < 0.9: continue
+                        (x1, y1), (x2, y2) = piece.coords[0], piece.coords[-1]
+                    inward = (-nx, -ny)
+                    t_in = None if patio else inner_face(blk, (x1, y1), (x2, y2), inward)
+                    glazed = glass_on(blk, (x1, y1), (x2, y2))
+                    as_wall = t_in is not None and not glazed or (rear and not patio and not glazed)
+                    if as_wall:
+                        t_w = min(max(round(t_in, 2), 0.20), 0.50) if t_in is not None else 0.30
+                        # a wall just inside the edge, its outside on its left,
                         # clear of the walls already there
-                        ox, oy = -nx * 0.15, -ny * 0.15
+                        ox, oy = -nx * t_w / 2, -ny * t_w / 2
                         body = unary_union([LineString(seg(w)).buffer(w["t"] / 2 + 0.16, cap_style=2) for w in walls])
                         cl = LineString([(x1 + ox, y1 + oy), (x2 + ox, y2 + oy)]).difference(body)
                         cl = max(getattr(cl, "geoms", [cl]), key=lambda g: g.length)
                         if cl.is_empty or cl.length < 0.9: continue
                         p1, p2 = cl.coords[0], cl.coords[-1]
                         if (p2[0] - p1[0]) * ny - (p2[1] - p1[1]) * nx > 0: p1, p2 = p2, p1
-                        kind = wall_kind(lv, 0.30, True)
+                        kind = wall_kind(lv, t_w, True)
                         under = f"{-ROOF_SLAB:.3f}" if lv == "Planta primera" else ""
-                        lines.append(f"WALL|{lv}|{top}|0.300|{kind}|{p1[0]:.4f}|{p1[1]:.4f}|{p2[0]:.4f}|{p2[1]:.4f}|3.0|{under}|libre")
-                        if lv == "Planta primera": parapets.append((p1, p2, 0.30, kind))
+                        lines.append(f"WALL|{lv}|{top}|{t_w:.3f}|{kind}|{p1[0]:.4f}|{p1[1]:.4f}|{p2[0]:.4f}|{p2[1]:.4f}|3.0|{under}|libre")
+                        if lv == "Planta primera": parapets.append((p1, p2, t_w, kind))
                         wall_count += 1
                     elif lv == "Planta baja":
-                        lines.append(f"CURTAIN|{lv}|-|{x1:.4f}|{y1:.4f}|{x2:.4f}|{y2:.4f}|escaparate|0.00|3.45")
+                        curtain(lv, (x1, y1), (x2, y2), "escaparate")
                     else:
-                        lines.append(f"CURTAIN|{lv}|-|{x1:.4f}|{y1:.4f}|{x2:.4f}|{y2:.4f}|p1|0.00|2.80")
+                        curtain(lv, (x1, y1), (x2, y2), "p1")
     all_curtains[lv] = curt
     for x, y, d in columns(blk):
         lines.append(f"COLUMN|{lv}|{top}|{d:.3f}|{x:.4f}|{y:.4f}")
@@ -645,6 +745,8 @@ def slab_lines(level, kind, geom, minarea=4.0, holes=(), top=None, walls_below=(
         if keep is not None: h = h.difference(keep)
         geom = geom.difference(h)
     if walls_below: geom = whole(geom, walls_below)
+    # no thread-thin bridges between a hole and the edge: they open up
+    geom = geom.buffer(-0.04, join_style=2).buffer(0.04, join_style=2)
     for g in polys_of(geom):
         if g.area < minarea: continue
         g = g.simplify(0.02)
@@ -725,13 +827,12 @@ print("solar panels", len(pv), "in", nrows, "rows", file=sys.stderr)
 OBJ = {"Inodoro": "Inodoro", "BATER MINUSVALIDO": "Inodoro", "LAVABO": "Lavabo 60", "PUPITRE": "Escritorio metálico 120",
        "BUTACA": "Sillón", "SOFA1P": "Sillón", "SOFA3P-PERS": "Sofá de 3 plazas", "H3-flat-1": "Mesa de centro",
        "Coche": "Turismo", "COLUMNA-LUMINARIA-DOBLE": "Farola 4,5 m", "COLUMNA-LUMINARIA-SIMPLE": "Farola 4,5 m",
-       "BANCO_HORMIGON": "Banco con respaldo", "PAPELERA": "Papelera", "HORQUILLA_BICI": "Aparcabicis 5 plazas",
-       "ISLA ALUMNOS": "Mesa de patas metálicas 140×80", "MESA": "Mesa de patas metálicas 140×80"}
+       "BANCO_HORMIGON": "Banco con respaldo", "PAPELERA": "Papelera", "HORQUILLA_BICI": "Aparcabicis 5 plazas"}
 nobj = 0
 seen = set()
 for blk, lv in (("PB", "Planta baja"), ("P1", "Planta primera")):
     for b in G[blk].get("BLOQUES", []):
-        name = next((v for k, v in OBJ.items() if b[1] == k or (k in ("ISLA ALUMNOS", "MESA") and b[1].startswith(k))), None)
+        name = OBJ.get(b[1])
         if not name: continue
         cx, cy = b[6], b[7]
         outside = not (15 < cx < 74.5 and 0 < cy < 50)
@@ -740,6 +841,153 @@ for blk, lv in (("PB", "Planta baja"), ("P1", "Planta primera")):
         if key in seen: continue
         seen.add(key)
         lines.append(f"OBJECT|{lv}|{name}|{cx:.3f}|{cy:.3f}|{b[5]:.4f}"); nobj += 1
+
+
+# ---- furniture with its own measures: the equipment blocks of the
+# workshops, the shop's shelving and tills, the offices' desks ----
+BODY_PB = unary_union([LineString(seg(w)).buffer(w["t"] / 2, cap_style=2) for w in allwalls["Planta baja"][0]])
+BODY_P1 = unary_union([LineString(seg(w)).buffer(w["t"] / 2, cap_style=2) for w in allwalls["Planta primera"][0]])
+FAM = {  # family: (min width, max width, min depth, max depth)
+    "Columna de cocina": (0.30, 1.20, 0.45, 0.70), "Frigorífico": (0.40, 1.20, 0.50, 0.90),
+    "Mostrador de tienda": (1.00, 5.00, 0.50, 0.90), "Estantería": (0.30, 3.00, 0.20, 0.60),
+    "Mesa": (0.40, 6.00, 0.40, 3.00), "Módulo bajo de cocina": (0.15, 1.20, 0.45, 0.70),
+    "Mueble TV": (0.80, 4.00, 0.30, 0.60), "Estantería de tienda": (0.60, 4.00, 0.30, 0.60),
+    "Escritorio": (0.80, 3.00, 0.50, 1.00), "Mesa de reuniones": (1.20, 6.00, 0.80, 1.60),
+    "Silla de oficina": (0.45, 0.80, 0.45, 0.80), "Armario de oficina": (0.80, 4.00, 0.35, 0.60),
+}
+nfurn = 0
+def place(lv, fam, label, cx, cy, ang, L, W, h, body, extra=""):
+    """A family's piece over the box (cx, cy, L along ang, W across): its
+    back to the nearer wall, split in as many as its widest allows."""
+    global nfurn
+    lo_w, hi_w, lo_d, hi_d = FAM[fam]
+    if W > hi_d and L <= hi_d: ang += math.pi / 2; L, W = W, L
+    d = min(max(W, lo_d), hi_d)
+    n = max(1, math.ceil(L / hi_w - 1e-6)); w = min(max(L / n, lo_w), hi_w)
+    ux, uy = math.cos(ang), math.sin(ang); nx, ny = -uy, ux
+    # the back on the side nearer a wall
+    front = Point(cx + nx * W, cy + ny * W); back = Point(cx - nx * W, cy - ny * W)
+    if body is not None and front.distance(body) < back.distance(body): nx, ny, ang = -nx, -ny, ang + math.pi
+    rot = ang
+    tname = f"{label} {round(w*100)}×{round(d*100)}" + (f"×{round(h*100)}" if h else "")
+    vals = f"width={w:.3f};depth={d:.3f}" + (f";height={h:.3f}" if h else "") + (";" + extra if extra else "")
+    ux, uy = math.cos(rot), math.sin(rot)
+    for i in range(n):
+        t = (i + 0.5) * L / n - L / 2
+        px = cx + ux * t - nx * W / 2; py = cy + uy * t - ny * W / 2
+        lines.append(f"OBJFAM|{lv}|{fam}|{tname}|{px:.3f}|{py:.3f}|{rot:.4f}|{vals}"); nfurn += 1
+EQUIP = [  # keyword in the block's name → family, label, height
+    ("HORNO", "Columna de cocina", "Horno de obrador", 1.80),
+    ("ARMARIO", "Frigorífico", "Armario frigorífico de obrador", 2.00),
+    ("CONGELADOR", "Frigorífico", "Armario congelador de obrador", 2.00),
+    ("ABATIDOR", "Frigorífico", "Abatidor de temperatura", 1.85),
+    ("CAMARA", "Frigorífico", "Cámara de fermentación", 2.00),
+    ("FERMENTADOR", "Frigorífico", "Armario fermentador", 2.00),
+    ("VITRINA", "Mostrador de tienda", "Vitrina refrigerada", 1.10),
+    ("ESTANTERIA", "Estantería", "Estantería de acero inoxidable", 1.80),
+    ("CARRO", "Estantería", "Carro bandejero", 1.80),
+    ("PANTALLA", "Mueble TV", "Pantalla con pizarra", 0.80),
+    ("ISLA ALUMNOS", "Mesa", "Isla de trabajo de alumnos", 0.85),
+    ("MESA", "Mesa", "Mesa de trabajo de acero inoxidable", 0.90),
+    ("FREGADERO", "Módulo bajo de cocina", "Fregadero de obrador", 0.90),
+    ("PLONGE", "Módulo bajo de cocina", "Plonge de lavado", 0.90),
+    ("LAVAMANOS", "Módulo bajo de cocina", "Lavamanos de rodilla", 0.90),
+    ("ZONA COCCION", "Módulo bajo de cocina", "Bloque de cocción", 0.90),
+    ("SALAMANDRA", "Módulo bajo de cocina", "Salamandra sobre bancada", 0.90),
+    ("TEMPERAD", "Módulo bajo de cocina", "Temperadora", 0.90),
+    ("AMASADORA", "Módulo bajo de cocina", "Amasadora", 0.90),
+    ("LAMINADORA", "Módulo bajo de cocina", "Laminadora", 0.90),
+    ("DIVISORA", "Módulo bajo de cocina", "Divisora-boleadora", 0.90),
+    ("MANTECADORA", "Módulo bajo de cocina", "Mantecadora", 0.90),
+    ("BATIDORA", "Módulo bajo de cocina", "Batidora planetaria", 0.90),
+    ("BASCULA", "Módulo bajo de cocina", "Báscula de plataforma", 0.90),
+]
+for b in G["PB"].get("BLOQUES", []):
+    if b[2] != "MOBILIARIO" or not CLIP.contains(Point(b[6], b[7])): continue
+    hit = next((e for e in EQUIP if e[0] in b[1].upper()), None)
+    if not hit or b[8] < 0.2 or b[9] < 0.2: continue
+    _, fam, label, h = hit
+    extra = "chairs=0" if fam == "Mesa" else ""
+    place("Planta baja", fam, label, b[6], b[7], b[5], b[8], b[9], h, BODY_PB, extra)
+
+def rectangles(blk, lays, region, loose=False):
+    ls = [LineString([(s[1], s[2]), (s[3], s[4])]) for l in lays for s in G[blk].get(l, [])
+          if s[0] == "L" and (s[1], s[2]) != (s[3], s[4]) and region.contains(Point(s[1], s[2]))]
+    out = []
+    for p in polygonize(unary_union(ls)):
+        r = p.minimum_rotated_rectangle
+        if r.geom_type != "Polygon" or p.area < 0.15 or p.area < (0.55 if loose else 0.95) * r.area: continue
+        c = list(r.exterior.coords); a_, b_ = math.dist(c[0], c[1]), math.dist(c[1], c[2])
+        i = 0 if a_ >= b_ else 1
+        ang = math.atan2(c[i + 1][1] - c[i][1], c[i + 1][0] - c[i][0])
+        out.append(dict(p=p, c=(r.centroid.x, r.centroid.y), L=max(a_, b_), W=min(a_, b_), a=ang, full=p.area / r.area))
+    keep = []
+    for r in sorted(out, key=lambda r: -r["p"].area):
+        if any(k["p"].buffer(0.02).contains(r["p"]) for k in keep): continue
+        keep.append(r)
+    return keep
+
+# The shop: its gondolas (two shelves back to back), its wall shelving
+# and its tills by the «CINTA» labels.
+shop = max((P for P in polys_of(allwalls["Planta baja"][2])), key=lambda g: g.area)
+tills = [(s[1], s[2]) for s in G["PB"].get("MOBILIARIO", []) if s[0] == "T" and "CINTA" in str(s[3]) and CLIP.contains(Point(s[1], s[2]))]
+equip_area = unary_union([Point(b[6], b[7]).buffer(max(b[8], b[9])) for b in G["PB"].get("BLOQUES", []) if b[2] == "MOBILIARIO"])
+for r in rectangles("PB", ["MOBILIARIO"], box(18, 3, 74, 48)):
+    cx, cy = r["c"]
+    if equip_area.contains(Point(cx, cy)): continue
+    if any(math.dist((cx, cy), t) < 2.0 for t in tills) and 2.0 < r["L"] < 6.0 and r["W"] < 1.0:
+        place("Planta baja", "Mostrador de tienda", "Caja de supermercado", cx, cy, r["a"], r["L"], r["W"], 0.90, BODY_PB); continue
+    if 0.75 < r["W"] < 1.2 and 0.9 < r["L"] < 4.0:
+        # a gondola: one shelf each way
+        ux, uy = math.cos(r["a"]), math.sin(r["a"]); nx, ny = -uy, ux
+        for sgn in (1, -1):
+            px, py = cx + sgn * nx * r["W"] / 4, cy + sgn * ny * r["W"] / 4
+            place("Planta baja", "Estantería de tienda", "Góndola de supermercado", px, py, r["a"] + (0 if sgn > 0 else math.pi), r["L"], r["W"] / 2, 1.80, None)
+    elif 0.3 < r["W"] <= 0.75 and 0.9 < r["L"] < 4.0:
+        place("Planta baja", "Estantería de tienda", "Estantería mural de tienda", cx, cy, r["a"], r["L"], r["W"], 2.00, BODY_PB)
+
+# The tills: a counter by each cashier's chair.
+for b in G["PB"].get("BLOQUES", []):
+    if b[1] != "A$C30133DD3" or not (18 < b[6] < 45 and 22 < b[7] < 42): continue
+    r = b[5]; nx, ny = -math.sin(r), math.cos(r)
+    place("Planta baja", "Mostrador de tienda", "Caja de supermercado", b[6] + 0.7 - nx * 0.6, b[7] - ny * 0.6, 0.0, 4.6, 0.6, 0.90, None)
+
+# The offices: desks (L ones along their long arm), cabinets and chairs
+# drawn in MOBILIARIO and MOB OFICINA.
+for r in rectangles("P1", ["MOBILIARIO", "MOB OFICINA"], box(15, 0, 74.5, 50), loose=True):
+    cx, cy = r["c"]; L, W, full = r["L"], r["W"], r["full"]
+    if full < 0.95:
+        if 1.2 <= L <= 2.4 and 0.9 <= W <= 2.0:
+            # an L desk: its long arm, 80 cm deep, on the side the top fills most
+            ux, uy = math.cos(r["a"]), math.sin(r["a"]); nx, ny = -uy, ux
+            sides = [(sgn, r["p"].intersection(Point(cx + sgn * nx * (W / 2 - 0.4), cy + sgn * ny * (W / 2 - 0.4)).buffer(0.3)).area) for sgn in (1, -1)]
+            sgn = max(sides, key=lambda t: t[1])[0]
+            place("Planta primera", "Escritorio", "Mesa de despacho", cx + sgn * nx * (W / 2 - 0.4), cy + sgn * ny * (W / 2 - 0.4), r["a"], L, 0.8, 0.74, BODY_P1)
+        continue
+    if 1.1 <= L <= 3.0 and 0.6 <= W <= 1.05:
+        place("Planta primera", "Escritorio", "Mesa de oficina", cx, cy, r["a"], L, W, 0.74, BODY_P1)
+    elif 1.6 <= L <= 6.0 and 1.05 < W <= 1.6:
+        place("Planta primera", "Mesa de reuniones", "Mesa de reuniones", cx, cy, r["a"], L, W, 0.74, None)
+    elif 0.9 <= L <= 4.0 and 0.3 <= W < 0.6:
+        place("Planta primera", "Armario de oficina", "Armario bajo de oficina", cx, cy, r["a"], L, W, 0.80, BODY_P1)
+    elif 0.4 <= W and L <= 0.6:
+        lines.append(f"OBJECT|Planta primera|Silla tapizada|{cx:.3f}|{cy:.3f}|{r['a']:.4f}"); nfurn += 1
+print("furniture", nfurn, file=sys.stderr)
+
+# ---- the parking: the plot round the building, in asphalt ----
+SLAB["aparcamiento"] = None
+lines.append("SLABTYPE|aparcamiento|Pavimento de aglomerado asfáltico|floor|Aglomerado asfáltico/asphalt/62,62,64/0.06/acabado;Zahorra artificial/gravel/170,160,140/0.25/soporte")
+plot_ls = [l for l in dxf_lines("PB", ["PARCELA"])]
+plot_ps = sorted(polygonize(unary_union(plot_ls)), key=lambda p: -p.area)
+if plot_ps:
+    yard = plot_ps[0].difference(fpPB.buffer(0.02, join_style=2))
+    for g in polys_of(yard):
+        if g.area < 20: continue
+        g = g.simplify(0.05)
+        lines.append(f"SLAB|Planta baja|aparcamiento|{ring(g.exterior.coords[:-1])}")
+        for h in g.interiors:
+            if Polygon(h).area > 0.6: lines.append("HOLE|" + ring(h.coords[:-1]))
+    print("plot", round(plot_ps[0].area, 1), [round(v, 1) for v in plot_ps[0].bounds], "yard", round(yard.area, 1), file=sys.stderr)
 
 # ---- rooms: the spaces the walls close, named by what is in them ----
 def name_room(lv, P, blk):

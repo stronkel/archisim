@@ -17,12 +17,13 @@
 //! PLANTER|level|height|thickness|centre line x,y …|earth x,y …|species;species…|plants
 //! WALLTYPE|key|name|ext or int|layer;layer…      (a layer: material/category/r,g,b/thickness/function)
 //! SLABTYPE|key|name|floor, roof or ceiling|layer;layer…
-//! CURTAINTYPE|key|name|bay|row or 0|frame width|frame depth|glass thickness
-//! CURTAIN|level|top level or -|x1|y1|x2|y2|type key|base offset|height|bays;…|bay:width:height:L/R:ext/int,…
+//! CURTAINTYPE|key|name|bay|transom height or 0|frame width|frame depth|glass thickness
+//! CURTAIN|level|top level or -|x1|y1|x2|y2|type key|base offset|height|bays;…|bay:width:height:L/R:ext/int[:corredera],…|top offset
 //! STAIR|level|top level or -|height|base offset|width|going|x,y x,y …  (its walking line)
 //! LIFT|level|top level|x|y|turn|shaft width|shaft depth|car width|car depth|door width|load kg
 //! PV|level|x|y|turn|width|depth|height     (a row of solar panels)
 //! OBJECT|level|library name|x|y|turn
+//! OBJFAM|level|family|type name|x|y|turn|name=value;name=value…   (a type of a system family)
 //! CEILING|level|type key or -|height|x,y x,y …
 //! ```
 //!
@@ -456,15 +457,15 @@ pub fn build(name: &str, text: &str) -> R<(Model, Report)> {
             }
             "CURTAIN" => {
                 let base = level(&levels, f[1])?;
+                let field = |i: usize| f.get(i).map(|s| s.trim()).filter(|s| !s.is_empty());
                 let top = if f[2] == "-" {
                     WallTop::Unconnected
                 } else {
                     WallTop::Level {
                         level: level(&levels, f[2])?,
-                        offset: 0.0,
+                        offset: field(12).map(num).transpose()?.unwrap_or(0.0),
                     }
                 };
-                let field = |i: usize| f.get(i).map(|s| s.trim()).filter(|s| !s.is_empty());
                 // The type: the template's, or a design of the description
                 // with this wall's own bays.
                 let curtain_type = match field(7) {
@@ -516,15 +517,21 @@ pub fn build(name: &str, text: &str) -> R<(Model, Report)> {
                             .filter(|d| !d.trim().is_empty())
                         {
                             let p: Vec<&str> = d.split(':').collect();
-                            if p.len() != 5 {
+                            if p.len() != 5 && p.len() != 6 {
                                 report
                                     .skipped
                                     .push(format!("línea {}: puerta «{d}»", n + 1));
                                 continue;
                             }
                             let (bay, w, h) = (num(p[0])? as usize, num(p[1])?, num(p[2])?);
+                            let sliding = p.get(5).is_some_and(|k| *k == "corredera");
                             let key = (
-                                "curtain-door".to_string(),
+                                if sliding {
+                                    "curtain-slide"
+                                } else {
+                                    "curtain-door"
+                                }
+                                .to_string(),
                                 (w * 100.0).round() as i64,
                                 (h * 100.0).round() as i64,
                             );
@@ -541,8 +548,17 @@ pub fn build(name: &str, text: &str) -> R<(Model, Report)> {
                                         [236, 236, 232],
                                     );
                                     let t = m.add_opening_type(NewOpeningType {
-                                        name: format!("Puerta de vidrio {}×{}", key.1, key.2),
-                                        kind: OpeningKind::Door(if w > 1.3 {
+                                        name: if sliding {
+                                            format!(
+                                                "Puerta automática corredera {}×{}",
+                                                key.1, key.2
+                                            )
+                                        } else {
+                                            format!("Puerta de vidrio {}×{}", key.1, key.2)
+                                        },
+                                        kind: OpeningKind::Door(if sliding {
+                                            D::Sliding
+                                        } else if w > 1.3 {
                                             D::DoubleSwing
                                         } else {
                                             D::SingleSwing
@@ -609,13 +625,12 @@ pub fn build(name: &str, text: &str) -> R<(Model, Report)> {
                     depth: num(f[6])?,
                     material: frame_mat,
                 };
-                let mut design = archisim_core::CurtainDesign::simple(
-                    bay,
-                    if row > 0.0 { row } else { 50.0 },
-                    frame,
-                    num(f[7])?,
-                    glass,
-                );
+                let mut design =
+                    archisim_core::CurtainDesign::simple(bay, 50.0, frame, num(f[7])?, glass);
+                // A row: one transom at that height (over the doors).
+                if row > 0.0 {
+                    design.rows.fixed = vec![row];
+                }
                 design.panels[0].name = "Vidrio laminar".into();
                 curtain_designs.insert(f[1].to_string(), (f[2].to_string(), design));
             }
@@ -728,6 +743,69 @@ pub fn build(name: &str, text: &str) -> R<(Model, Report)> {
                     object_type,
                     position: Point2::new(num(f[3])?, num(f[4])?),
                     rotation: num(f[5])?,
+                    base_offset: 0.0,
+                });
+                match made {
+                    Ok(_) => report.objects += 1,
+                    Err(e) => report
+                        .skipped
+                        .push(format!("línea {}: objeto: {e:?}", n + 1)),
+                }
+            }
+            "OBJFAM" => {
+                // A type of a system family with its own measures: made once
+                // by its name, numbers as lengths, the rest as choices.
+                let object_type = match objects.get(f[3]) {
+                    Some(id) => *id,
+                    None => {
+                        let family = match m.system_family(f[2]) {
+                            Ok(id) => id,
+                            Err(e) => {
+                                report.skipped.push(format!(
+                                    "línea {}: familia «{}»: {e:?}",
+                                    n + 1,
+                                    f[2]
+                                ));
+                                continue;
+                            }
+                        };
+                        let mut values = m.family_defaults(family, ParamScope::Type)?;
+                        for kv in f
+                            .get(7)
+                            .unwrap_or(&"")
+                            .split(';')
+                            .filter(|s| !s.trim().is_empty())
+                        {
+                            let Some((k, v)) = kv.split_once('=') else {
+                                continue;
+                            };
+                            let value = match v.trim().parse::<f64>() {
+                                Ok(x) => Value::Number(x),
+                                Err(_) => Value::Text(v.trim().to_string()),
+                            };
+                            values.insert(k.trim().to_string(), value);
+                        }
+                        match m.add_object_type(f[3], family, values) {
+                            Ok(id) => {
+                                objects.insert(f[3].to_string(), id);
+                                id
+                            }
+                            Err(e) => {
+                                report.skipped.push(format!(
+                                    "línea {}: tipo «{}»: {e:?}",
+                                    n + 1,
+                                    f[3]
+                                ));
+                                continue;
+                            }
+                        }
+                    }
+                };
+                let made = m.add_object(NewObject {
+                    level: level(&levels, f[1])?,
+                    object_type,
+                    position: Point2::new(num(f[4])?, num(f[5])?),
+                    rotation: num(f[6])?,
                     base_offset: 0.0,
                 });
                 match made {
@@ -1075,7 +1153,8 @@ SLABTYPE|planta|Forjado 60|floor|Loseta/ceramic/214,210,200/0.25/acabado;Losa/co
 SLABTYPE|techo|Falso techo|ceiling|Placa/plaster/238,238,234/0.015/acabado\n\
 CURTAINTYPE|acceso|Acceso acristalado|2.40|2.45|0.06|0.15|0.024\n\
 WALL|Planta baja|Planta primera|0.300|fach30|0|0|12|0|3.0|0.2|libre\n\
-CURTAIN|Planta baja|-|0|8|10|8|acceso|0.00|3.45|2.0;2.2|1:2.20:2.40:R:ext\n\
+CURTAIN|Planta baja|Planta primera|0|8|10|8|acceso|0.00|3.0|2.0;2.2|1:2.20:2.40:R:ext:corredera|-0.60\n\
+OBJFAM|Planta baja|Estantería de tienda|Góndola 120×42|5|5|0|width=1.2;depth=0.42;height=1.8\n\
 SLAB|Planta primera|planta|0,0 12,0 12,8 0,8\n\
 HOLE|2,2 4.5,2 4.5,6 2,6\n\
 STAIR|Planta baja|Planta primera|4.55|0|1.20|0.30|2.6,2.6 2.6,6.4\n\
@@ -1087,7 +1166,7 @@ CEILING|Planta baja|techo|3.35|5,1 11,1 11,7 5,7\n";
         assert!(r.skipped.is_empty(), "{:?}", r.skipped);
         assert_eq!(
             (r.stairs, r.lifts, r.solar, r.objects, r.ceilings),
-            (1, 1, 1, 1, 1)
+            (1, 1, 1, 2, 1)
         );
         // The wall is of the type described, with a parapet over its level
         // and its ends free.
@@ -1106,7 +1185,16 @@ CEILING|Planta baja|techo|3.35|5,1 11,1 11,7 5,7\n";
             m.curtain_type(c.curtain_type).unwrap().design.columns.fixed,
             vec![2.0, 2.2]
         );
-        assert!((c.height - 3.45).abs() < 1e-9);
+        // up to the slab's underside, its door an automatic sliding one
+        assert!(
+            matches!(c.top, archisim_core::WallTop::Level { offset, .. } if (offset + 0.60).abs() < 1e-9)
+        );
+        let door = m.opening_type(c.doors[0].opening_type).unwrap();
+        assert!(
+            door.name.starts_with("Puerta automática corredera"),
+            "{}",
+            door.name
+        );
         // The slab has its hole and the lift's; the ceiling is at its height.
         assert_eq!(m.slabs().next().unwrap().holes.len(), 2);
         assert!((m.ceilings().next().unwrap().height - 3.35).abs() < 1e-9);

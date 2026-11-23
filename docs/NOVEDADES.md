@@ -15,7 +15,15 @@ Cada versión empieza con una línea `## <versión>` (por ejemplo `## 0.81.0`): 
   - **Escaleras y ascensores**: la escalera principal en U (baja–primera–cubierta), la de tres tramos del oeste, las dos rectas con meseta y los dos ascensores de 450 kg.
   - **Lamas** a la altura libre de la primera (3,40 m), **petos** de cubierta a +9,64, **164 placas solares** en 13 filas, jardineras con su plantación, sanitarios, mobiliario de oficina y del vestíbulo, coches, farolas y bancos del aparcamiento.
   - **133 locales** cerrados por los muros, con nombre según lo que tienen dentro (aseos, escaleras, ascensores, obrador, aula taller, aulas de formación, almacenes, despachos…), y los patios de la primera.
-- **`archisim montar`** sabe ahora de tipos de muro y de forjado con sus capas, muros cortina con sus módulos y puertas, escaleras, ascensores, placas solares, objetos de la biblioteca, falsos techos, petos sobre el nivel y muros con los extremos libres.
+- **Segunda vuelta con lo que vio Antonio**:
+  - Los muros cortina suben hasta la cara inferior del forjado de encima: ya no queda aire entre la cristalera y el forjado.
+  - Puertas automáticas correderas de vidrio en los accesos a la tienda, desde la calle y desde el aparcamiento, leídas de sus hojas en el plano.
+  - Donde la fachada tiene un muro dibujado, sale muro con su grueso, no cristalera.
+  - El aparcamiento tiene su pavimento de aglomerado en toda la parcela.
+  - La cubierta ya sale entera.
+  - Mobiliario con sus medidas del plano: góndolas y cajas del supermercado; islas, mesas, hornos, armarios, cámara de fermentación, vitrina, estanterías, fregaderos y pantalla del aula de pastelería, cada uno donde está su recuadro; mesas de despacho, mesas de oficina, armarios y sillas en las oficinas.
+- **Losas y forjados**: el relleno de un contorno con muchos huecos ya no deja zonas sin cubrir.
+- **`archisim montar`** sabe ahora de tipos de muro y de forjado con sus capas, muros cortina con sus módulos y puertas, escaleras, ascensores, placas solares, objetos de la biblioteca y tipos de familia con sus medidas (OBJFAM), falsos techos, muros cortina hasta el forjado con puertas correderas, petos sobre el nivel y muros con los extremos libres.
 - **IFC**: una escalera de forma libre lleva su descripción (la regla de IFC lo exige) y el comprobador acepta forjados atravesados por muchos muros.
 
 ## 0.110.0
