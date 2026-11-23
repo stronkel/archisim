@@ -572,4 +572,13 @@ if __name__ == "__main__":
     if len(sys.argv) != 2:
         print(__doc__)
         sys.exit(2)
-    sys.exit(main(sys.argv[1]))
+    # A slab crossed by many walls is one long chain of differences, and the
+    # EXPRESS rules walk it by recursion: room for it, on a big stack.
+    import threading
+    sys.setrecursionlimit(200000)
+    threading.stack_size(512 * 1024 * 1024)
+    result = []
+    t = threading.Thread(target=lambda: result.append(main(sys.argv[1])))
+    t.start()
+    t.join()
+    sys.exit(result[0] if result else 1)

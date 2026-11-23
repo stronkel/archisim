@@ -5,6 +5,27 @@ Lo que cambia en cada versión, en pocas líneas. ArchiSim enseña la parte de s
 Cada versión empieza con una línea `## <versión>` (por ejemplo `## 0.81.0`): es la que busca la publicación.
 
 
+## 0.111.0
+
+- **La nave SUMO, rehecha como gemelo digital** desde las láminas por plantas del proyecto (planta baja, primera y cubierta, sección transversal y alzados delantero desplegado y trasero):
+  - **Cotas de la sección**: suelos terminados a ±0,00, +4,55 y +8,50 (terraza de cubierta), castillete hasta +12,03; falsos techos a 3,35 m en la baja y a 2,80 m en la primera, como acota la sección.
+  - **Muros con su composición**: fachada enfoscada con ladrillo, lana mineral y trasdosado de placa; tabiques de placa de yeso con perfilería; castillete revestido de madera. Cada grueso del plano con su tipo.
+  - **Forjados con sus capas**: solera con gres (60 cm), forjado de la primera con suelo técnico (60 cm), cubierta invertida con grava (54,5 cm) apoyada sobre los muros de la primera, losa volada de hormigón blanco.
+  - **Fachadas acristaladas** en módulos de aluminio (2,40 m en lo recto, 3,60 m en la curva, 1,50 m en la primera); en planta baja la cristalera llega hasta +3,45 y las puertas de los accesos van dentro del muro cortina, de 2,40 de alto. Lo que el plano dibuja como una sola línea en la fachada de la tienda también es vidrio.
+  - **Escaleras y ascensores**: la escalera principal en U (baja–primera–cubierta), la de tres tramos del oeste, las dos rectas con meseta y los dos ascensores de 450 kg.
+  - **Lamas** a la altura libre de la primera (3,40 m), **petos** de cubierta a +9,64, **164 placas solares** en 13 filas, jardineras con su plantación, sanitarios, mobiliario de oficina y del vestíbulo, coches, farolas y bancos del aparcamiento.
+  - **133 locales** cerrados por los muros, con nombre según lo que tienen dentro (aseos, escaleras, ascensores, obrador, aula taller, aulas de formación, almacenes, despachos…), y los patios de la primera.
+- **Segunda vuelta con lo que vio Antonio**:
+  - Los muros cortina suben hasta la cara inferior del forjado de encima: ya no queda aire entre la cristalera y el forjado.
+  - Puertas automáticas correderas de vidrio en los accesos a la tienda, desde la calle y desde el aparcamiento, leídas de sus hojas en el plano.
+  - Donde la fachada tiene un muro dibujado, sale muro con su grueso, no cristalera.
+  - El aparcamiento tiene su pavimento de aglomerado en toda la parcela.
+  - La cubierta ya sale entera.
+  - Mobiliario con sus medidas del plano: góndolas y cajas del supermercado; islas, mesas, hornos, armarios, cámara de fermentación, vitrina, estanterías, fregaderos y pantalla del aula de pastelería, cada uno donde está su recuadro; mesas de despacho, mesas de oficina, armarios y sillas en las oficinas.
+- **Losas y forjados**: el relleno de un contorno con muchos huecos ya no deja zonas sin cubrir.
+- **`archisim montar`** sabe ahora de tipos de muro y de forjado con sus capas, muros cortina con sus módulos y puertas, escaleras, ascensores, placas solares, objetos de la biblioteca y tipos de familia con sus medidas (OBJFAM), falsos techos, muros cortina hasta el forjado con puertas correderas, petos sobre el nivel y muros con los extremos libres.
+- **IFC**: una escalera de forma libre lleva su descripción (la regla de IFC lo exige) y el comprobador acepta forjados atravesados por muchos muros.
+
 ## 0.110.0
 
 - **Las manzanas siguen a las calles.** Al mover, curvar o trazar una calle, las manzanas que cambian de forma se vuelven a parcelar solas con la zona que tenían, y se vuelven a edificar si lo estaban. Las parcelas bloqueadas y las dibujadas a mano no se tocan. Los edificios por los que pasa una calle nueva desaparecen. Un aviso dice qué se ha rehecho, y todo se deshace en un paso.

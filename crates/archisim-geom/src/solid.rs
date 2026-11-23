@@ -186,7 +186,31 @@ pub fn triangulate(poly: &[Point2]) -> Vec<[usize; 3]> {
             }
         }
         if !clipped {
-            break;
+            // Stuck (points touching a corner's sides, long bridges): clip
+            // the convex corner whose triangle has the fewest corners
+            // strictly inside it, rather than leave the rest open.
+            let strictly = |p: Point2, a: Point2, b: Point2, c: Point2| {
+                area2(a, b, p) > 1e-9 && area2(b, c, p) > 1e-9 && area2(c, a, p) > 1e-9
+            };
+            let best = (0..m)
+                .filter_map(|i| {
+                    let (ia, ib, ic) = (idx[(i + m - 1) % m], idx[i], idx[(i + 1) % m]);
+                    let (a, b, c) = (poly[ia], poly[ib], poly[ic]);
+                    (area2(a, b, c) > 1e-14).then(|| {
+                        let inside = idx
+                            .iter()
+                            .filter(|&&j| {
+                                j != ia && j != ib && j != ic && strictly(poly[j], a, b, c)
+                            })
+                            .count();
+                        (inside, i)
+                    })
+                })
+                .min();
+            let Some((_, i)) = best else { break };
+            let (ia, ib, ic) = (idx[(i + m - 1) % m], idx[i], idx[(i + 1) % m]);
+            out.push([ia, ib, ic]);
+            idx.remove(i);
         }
     }
     if idx.len() == 3 {
