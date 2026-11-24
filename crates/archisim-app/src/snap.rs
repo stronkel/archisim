@@ -55,7 +55,28 @@ pub enum SnapKind {
     Free,
 }
 
+/// How far, in reaches, a taken point is kept while the cursor moves away.
+pub const HOLD: f64 = 1.5;
+
 impl SnapKind {
+    /// Whether it is a point of its own (an end, a corner…), which is kept
+    /// once taken, and not a place along something.
+    pub fn is_point(self) -> bool {
+        matches!(
+            self,
+            SnapKind::Origin
+                | SnapKind::Endpoint
+                | SnapKind::Corner
+                | SnapKind::Midpoint
+                | SnapKind::Centre
+                | SnapKind::Quadrant
+                | SnapKind::Node
+                | SnapKind::Intersection
+                | SnapKind::Perpendicular
+                | SnapKind::Tangent
+        )
+    }
+
     pub fn label(self) -> &'static str {
         match self {
             SnapKind::Origin => "Punto 0 del proyecto",
@@ -68,7 +89,7 @@ impl SnapKind {
             SnapKind::Intersection => "Intersección",
             SnapKind::Perpendicular => "Perpendicular",
             SnapKind::Tangent => "Tangente",
-            SnapKind::OnEdge => "Sobre arista",
+            SnapKind::OnEdge => "Sobre la cara",
             SnapKind::Constrained => "Ángulo forzado",
             SnapKind::Tracked => "Alineado",
             SnapKind::Aligned => "Alineado con un punto",
@@ -1104,4 +1125,26 @@ mod align_tests {
         assert_eq!(s.point, p(3.0, 5.0));
         assert_eq!(guides.len(), 2);
     }
+}
+
+/// The point to take now, given the one taken before: a point once taken
+/// stays while the cursor is within [`HOLD`] reaches of it, so a tremble
+/// of the hand does not make it jump to the next corner or to the face;
+/// another point takes over only when the cursor is clearly nearer to it
+/// (less than half as far).
+pub fn hold(before: Option<Snap>, now: Snap, cursor: Point2, reach: f64) -> Snap {
+    let Some(b) = before.filter(|b| b.kind.is_point()) else {
+        return now;
+    };
+    let away = cursor.distance(b.point);
+    if away > reach * HOLD {
+        return now;
+    }
+    if now.kind.is_point()
+        && !now.point.approx_eq(b.point)
+        && cursor.distance(now.point) < 0.5 * away
+    {
+        return now;
+    }
+    b
 }

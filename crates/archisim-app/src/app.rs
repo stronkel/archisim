@@ -39,8 +39,12 @@ const GRID_MAJOR: Color32 = Color32::from_rgb(214, 218, 226);
 const REF_LINE: Color32 = Color32::from_rgb(192, 57, 43);
 /// Tracking lines and temporary dimensions (Revit's blue).
 const TRACK_LINE: Color32 = Color32::from_rgb(30, 110, 230);
-/// Snapping and picking reach, in screen points.
+/// Picking reach, in screen points.
 const REACH: f32 = 10.0;
+/// Snapping reach of the drawing tools, in screen points: a point is taken
+/// from this far, and kept until the cursor is
+/// [`crate::snap::HOLD`] times as far.
+const SNAP_REACH: f32 = 18.0;
 /// How close to a 45° line the cursor must be for the wall to lock onto it,
 /// in screen points (horizontal and vertical lock by angle, see
 /// [`crate::snap::ORTHO_LOCK`]).
@@ -675,6 +679,9 @@ pub struct ArchiSimApp {
     pub message: Option<Message>,
     /// Snapped point under the cursor, in model metres.
     cursor: Option<Snap>,
+    /// The point last taken, with the revision, level and tool it was
+    /// taken in: kept while the cursor stays near it (`snap::hold`).
+    held_snap: std::cell::Cell<Option<(u64, archisim_core::LevelId, Tool, Snap)>>,
     /// Where the cursor is in the 3D view, while a tool works there.
     cursor3d: Option<tools3d::Cursor3d>,
     /// Pintar takes the paint off instead (Quitar pintura).
@@ -1099,6 +1106,7 @@ impl ArchiSimApp {
             show_reference_lines: false,
             message: None,
             cursor: None,
+            held_snap: std::cell::Cell::new(None),
             cursor3d: None,
             paint_erase: false,
             hover: None,

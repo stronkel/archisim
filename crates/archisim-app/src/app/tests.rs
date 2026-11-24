@@ -848,7 +848,8 @@ fn moves_copies_and_stretches_with_the_mouse() {
     h.app.ed.selection = [Element::Slab(slab)].into_iter().collect();
     h.frame();
     h.set_modifiers(Modifiers::SHIFT);
-    press_and_move(&mut h, p(6.0, 0.0), p(6.0, -0.3));
+    // Clear of the south wall's points, which are taken from 18 points.
+    press_and_move(&mut h, p(6.0, 0.0), p(6.0, -0.8));
     assert!(matches!(
         h.app.drag.as_ref().map(|d| d.grip),
         Some(Grip::SlabEdge { .. })
@@ -4693,6 +4694,12 @@ fn plots_and_roads_are_drawn() {
     // A mass on the plot: its figures use the plot's area; one that
     // reaches the boundary leaves the setback.
     h.key(Key::Escape);
+    // Closer, so the mass's corners, 1 m off the plot's edges, are not
+    // taken onto them.
+    let canvas = h.app.canvas;
+    h.app
+        .view
+        .fit_exact(canvas, p(0.0, 0.0), p(22.0, 12.0), 0.0);
     h.app.pick(Pick::Concept(ConceptPick::Mass));
     for c in [
         p(1.0, 1.0),
@@ -13852,4 +13859,94 @@ fn a_plot_corner_is_dragged() {
     let o = &h.model().plot(plot).unwrap().outline;
     assert!(o[2].distance(p(25.0, 33.0)) < 0.6, "{o:?}");
     assert_eq!(o[0], p(0.0, 0.0));
+}
+
+/// The point under the cursor in screen points from `p`, along `dir`.
+fn off_by(h: &Harness, p: Point2, px: f64, dir: (f64, f64)) -> Point2 {
+    let m = h.app.view.to_metres(px as f32);
+    let l = (dir.0 * dir.0 + dir.1 * dir.1).sqrt();
+    p + Point2::new(dir.0 / l * m, dir.1 / l * m)
+}
+
+/// W2a: a corner is taken from 15 points away, and a tremble of 3 points
+/// does not make the taken point jump.
+#[test]
+fn points_are_taken_from_afar_and_kept() {
+    let mut h = Harness::new(Editor::new_project());
+    h.type_text("m");
+    assert_eq!(h.app.tool, Tool::Wall);
+    h.click_at(p(0.0, 0.0));
+    h.click_at(p(5.0, 0.0));
+    h.key(Key::Escape);
+    assert!(!h.app.wall_tool.is_drawing());
+    let ends: Vec<Point2> = h.model().walls().flat_map(|w| [w.start, w.end]).collect();
+    let end = ends
+        .into_iter()
+        .find(|e| e.distance(p(5.0, 0.0)) < 0.5)
+        .unwrap();
+    // 15 points up and to the right of the end: taken.
+    h.move_to(off_by(&h, end, 15.0, (1.0, 1.0)));
+    let taken = h.app.cursor.unwrap();
+    assert!(taken.kind.is_point(), "{:?}", taken.kind);
+    assert!(taken.point.distance(end) < 0.4, "{taken:?}");
+    // The label says what it is.
+    assert!(h.app.snap_caption(taken).is_some());
+    // Trembling 3 points either way: the same point.
+    let here = off_by(&h, end, 15.0, (1.0, 1.0));
+    for d in [
+        (1.0, 0.0),
+        (0.0, 1.0),
+        (-1.0, 0.0),
+        (0.0, -1.0),
+        (-1.0, -1.0),
+    ] {
+        h.move_to(off_by(&h, here, 3.0, d));
+        let now = h.app.cursor.unwrap();
+        assert!(
+            now.point.approx_eq(taken.point),
+            "{d:?}: {now:?} after {taken:?}"
+        );
+    }
+    // Far away it is let go.
+    h.move_to(off_by(&h, end, 80.0, (1.0, 1.0)));
+    assert!(!h.app.cursor.unwrap().point.approx_eq(taken.point));
+}
+
+/// W2a: walls chain by default, typed lengths go in while the mouse moves,
+/// and the chain closes back by its first point.
+#[test]
+fn chained_walls_close_by_their_first_point() {
+    let mut h = Harness::new(Editor::new_project());
+    h.type_text("m");
+    h.click_at(p(0.0, 0.0));
+    // A typed length, with no field to click: the wall goes towards the
+    // cursor.
+    h.move_to(p(3.0, 0.02));
+    h.type_text("6000");
+    h.key(Key::Enter);
+    h.click_at(p(6.0, 4.0));
+    h.click_at(p(0.0, 4.0));
+    assert_eq!(h.model().walls().count(), 3);
+    assert!(h.app.wall_tool.is_drawing());
+    let first = h
+        .model()
+        .walls()
+        .map(|w| w.start)
+        .find(|s| s.distance(p(0.0, 0.0)) < 1e-6);
+    assert!(first.is_some());
+    let lengths: Vec<f64> = h.model().walls().map(|w| w.start.distance(w.end)).collect();
+    assert!(
+        lengths.iter().any(|l| (l - 6.0).abs() < 1e-6),
+        "{lengths:?}"
+    );
+    // Back near the first point (15 points off): it says so and closes.
+    let near = off_by(&h, p(0.0, 0.0), 15.0, (-1.0, 1.0));
+    h.move_to(near);
+    let c = h.app.cursor.unwrap();
+    assert!(c.point.approx_eq(p(0.0, 0.0)), "{c:?}");
+    assert_eq!(h.app.snap_caption(c).as_deref(), Some("Cerrar"));
+    h.click_at(near);
+    assert_eq!(h.model().walls().count(), 4);
+    assert!(!h.app.wall_tool.is_drawing(), "closing ends the chain");
+    assert!(h.model().walls().any(|w| w.end.approx_eq(p(0.0, 0.0))));
 }
