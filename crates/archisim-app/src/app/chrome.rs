@@ -890,6 +890,9 @@ impl ArchiSimApp {
                 ViewMode::Plan | ViewMode::Section => {
                     self.scale_and_zoom(ui);
                     self.thin_lines_chip(ui);
+                    if self.mode == ViewMode::Plan && self.view_style.presentation.is_some() {
+                        self.presented_chip(ui);
+                    }
                 }
                 ViewMode::Sheet(id) => {
                     let paper = self
@@ -1111,6 +1114,21 @@ impl ArchiSimApp {
         })
         .response
         .on_hover_text("El dedo, el tamaño táctil y el teclado numérico");
+    }
+
+    /// «Presentada» (W3): the plan in its presentation style; off, its
+    /// technical drawing (F7).
+    fn presented_chip(&mut self, ui: &mut Ui) {
+        let mut presented = !self.technical_look;
+        chip(
+            ui,
+            &mut presented,
+            "Presentada",
+            "La planta con su estilo de presentación, como en una lámina; apagado, el dibujo técnico con sus capas y colores (F7)",
+        );
+        if presented == self.technical_look {
+            self.toggle_technical_look();
+        }
     }
 
     fn thin_lines_chip(&mut self, ui: &mut Ui) {

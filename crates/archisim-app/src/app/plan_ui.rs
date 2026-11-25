@@ -1980,7 +1980,7 @@ impl ArchiSimApp {
             reference_level: self.reference_level(),
             thin_lines: self.thin_lines,
             phase_view: self.phase_view,
-            style: self.view_style.clone(),
+            style: self.screen_style(),
             ceiling: self.active_ceiling(),
             ..archisim_plan::PlanOptions::default()
         }
@@ -2005,7 +2005,7 @@ impl ArchiSimApp {
             reference_level: self.reference_level(),
             thin_lines: self.thin_lines,
             phase_view: self.phase_view,
-            style: self.view_style.clone(),
+            style: self.screen_style(),
             ceiling: self.active_ceiling(),
         };
         let moving = self.view_moving(ctx);

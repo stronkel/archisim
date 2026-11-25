@@ -661,6 +661,8 @@ pub fn add_library(m: &mut Model) -> Result<Library, ModelError> {
     // The plans of a new project without the installations, which have a
     // template each.
     standards::set_architecture_plans(m);
+    // And drawn as a presentation plan from the start (W3).
+    standards::set_working_look(m);
     Ok(Library {
         curtain,
         void,

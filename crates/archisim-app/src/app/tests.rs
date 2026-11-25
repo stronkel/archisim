@@ -14260,3 +14260,26 @@ fn fitting_the_surroundings_snaps_its_points() {
     assert!(c.point.approx_eq(p(15.0, 5.0)), "{c:?}");
     assert!(h.app.snap_caption(c).is_some());
 }
+
+/// W3: a new project's plan is drawn presented from the start (the
+/// «Lápiz» style of the «Arquitectura» template), and F7 shows its
+/// technical drawing for the session without touching the view.
+#[test]
+fn a_new_plan_is_presented_and_f7_shows_it_technical() {
+    let mut h = Harness::new(Editor::new_project());
+    h.frame();
+    let id = h.app.view_style.presentation.expect("a presentation style");
+    let name = h
+        .model()
+        .presentation_style(id)
+        .map(|s| s.name.clone())
+        .unwrap_or_default();
+    assert_eq!(name, archisim_library::standards::WORKING_LOOK);
+    assert!(h.app.screen_style().presentation.is_some());
+    h.key(Key::F7);
+    assert!(h.app.technical_look);
+    assert!(h.app.screen_style().presentation.is_none());
+    assert_eq!(h.app.view_style.presentation, Some(id));
+    h.key(Key::F7);
+    assert!(h.app.screen_style().presentation.is_some());
+}
