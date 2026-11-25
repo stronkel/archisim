@@ -2579,6 +2579,54 @@ fn draw_opening(s: &mut String, model: &Model, o: &OpeningGeometry, scale: f64, 
         // Zoomed far out: the gap in the wall says enough.
         return;
     }
+    if let Some((marks, world)) = opening_marks(model, o, scale) {
+        draw_marks(s, model, marks, &world, k);
+    }
+}
+
+/// The points of a door's or window's plan symbol at a scale, in plan:
+/// line ends, outline corners and points along its arcs (the swing of its
+/// leaves). Picking takes the door by them, not only by its hole.
+pub fn opening_symbol_points(model: &Model, o: &OpeningGeometry, scale: f64) -> Vec<Point2> {
+    let Some((marks, world)) = opening_marks(model, o, scale) else {
+        return Vec::new();
+    };
+    let mut v = Vec::new();
+    for mark in marks {
+        match mark {
+            Mark::Line { from, to, .. } => v.extend([world(from), world(to)]),
+            Mark::Polygon { points, .. } => v.extend(points.into_iter().map(&world)),
+            Mark::Arc {
+                center, from, to, ..
+            } => {
+                let r = (from[0] - center[0]).hypot(from[1] - center[1]);
+                let a0 = (from[1] - center[1]).atan2(from[0] - center[0]);
+                let a1 = (to[1] - center[1]).atan2(to[0] - center[0]);
+                let mut d = a1 - a0;
+                while d > std::f64::consts::PI {
+                    d -= std::f64::consts::TAU;
+                }
+                while d < -std::f64::consts::PI {
+                    d += std::f64::consts::TAU;
+                }
+                for i in 0..=8 {
+                    let a = a0 + d * f64::from(i) / 8.0;
+                    v.push(world([center[0] + r * a.cos(), center[1] + r * a.sin()]));
+                }
+            }
+        }
+    }
+    v
+}
+
+/// A door's or window's plan marks and the map from the family's axes to
+/// the plan.
+#[allow(clippy::type_complexity)]
+fn opening_marks<'a>(
+    model: &Model,
+    o: &'a OpeningGeometry,
+    scale: f64,
+) -> Option<(Vec<Mark>, impl Fn([f64; 2]) -> Point2 + 'a)> {
     let mid = (o.t0 + o.t1) / 2.0;
     let y_mid = (o.frame_exterior + o.frame_interior) / 2.0;
     // The normal `n` points to the exterior. Seen from the exterior, the
@@ -2589,18 +2637,18 @@ fn draw_opening(s: &mut String, model: &Model, o: &OpeningGeometry, scale: f64, 
         WallSide::Interior => (1.0, -1.0),
     };
     let family_y = |offset: f64| sy * (offset - y_mid);
-    let Ok(marks) = model.opening_plan_symbol(
-        o.opening,
-        scale,
-        family_y(o.exterior_offset),
-        family_y(o.interior_offset),
-    ) else {
-        // A family that fails to draw (it should not: its values were
-        // checked) leaves the opening empty rather than the plan.
-        return;
-    };
-    let world = |p: [f64; 2]| o.point(mid + sx * p[0], y_mid + sy * p[1]);
-    draw_marks(s, model, marks, &world, k);
+    // A family that fails to draw (it should not: its values were checked)
+    // leaves the opening empty rather than the plan.
+    let marks = model
+        .opening_plan_symbol(
+            o.opening,
+            scale,
+            family_y(o.exterior_offset),
+            family_y(o.interior_offset),
+        )
+        .ok()?;
+    let world = move |p: [f64; 2]| o.point(mid + sx * p[0], y_mid + sy * p[1]);
+    Some((marks, world))
 }
 
 /// The marks of a family's plan symbol, through `world` (family axes to

@@ -264,6 +264,7 @@ mod tests {
             base_offset: 0.0,
             top: crate::editor::TopChoice::Unconnected,
             top_offset: 0.0,
+            flipped: false,
         };
         ed.add_wall(&ws, Point2::new(0.0, 0.0), Point2::new(6.0, 0.0))
             .unwrap();

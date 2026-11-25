@@ -16,7 +16,7 @@ pub fn arrow(painter: &Painter, at: Pos2, dir: Vec2, fill: Color32, hot: bool) {
         Vec2::X
     };
     let n = Vec2::new(-d.y, d.x);
-    let k = if hot { 1.25 } else { 1.0 };
+    let k = if hot { 1.5 } else { 1.25 };
     let (shaft, head, back, tip, neck) = (3.0 * k, 7.5 * k, -3.0 * k, 15.0 * k, 7.0 * k);
     let p = |a: f32, b: f32| at + d * a + n * b;
     let pts = vec![
@@ -73,7 +73,7 @@ pub fn turn(painter: &Painter, centre: Pos2, at: Pos2, hot: bool) {
             );
         }
     }
-    let k = if hot { 7.0 } else { 5.5 };
+    let k = if hot { 8.0 } else { 6.5 };
     painter.circle(at, k, TURN, Stroke::new(2.0, Color32::WHITE));
 }
 

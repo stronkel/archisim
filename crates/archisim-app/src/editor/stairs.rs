@@ -199,23 +199,20 @@ impl Editor {
         path: Vec<Point2>,
         design: StairDesign,
     ) -> EditResult<StairId> {
-        let level = self.level;
-        let top = s.top_on(self.model(), level);
-        self.transact("Crear escalera", |m| {
-            m.add_stair(NewStair {
-                level,
-                path,
-                width: s.width,
-                going: s.going,
-                base_offset: 0.0,
-                top,
-                height: s.height,
-                waist: s.waist,
-                material: s.material,
-                usage: s.usage,
-                design,
-            })
-        })
+        let spec = stair_spec(self.model(), self.level, s, path, design);
+        self.transact("Crear escalera", |m| m.add_stair(spec))
+    }
+
+    /// The ready-made stair a click at `foot` would start, going `dir`
+    /// (for its preview), if it fits.
+    pub fn preset_stair_spec(
+        &self,
+        s: &StairSettings,
+        foot: Point2,
+        dir: Vec2,
+    ) -> Option<NewStair> {
+        let (path, design) = s.preset_on(self.model(), self.level, foot, dir)?;
+        Some(stair_spec(self.model(), self.level, s, path, design))
     }
 
     pub fn edit_stair(
@@ -225,6 +222,29 @@ impl Editor {
         edit: impl FnOnce(&mut Stair),
     ) -> EditResult {
         self.transact(label, |m| m.edit_stair(id, edit))
+    }
+}
+
+/// The new stair of the stair tool's settings along `path`.
+fn stair_spec(
+    model: &Model,
+    level: LevelId,
+    s: &StairSettings,
+    path: Vec<Point2>,
+    design: StairDesign,
+) -> NewStair {
+    NewStair {
+        level,
+        path,
+        width: s.width,
+        going: s.going,
+        base_offset: 0.0,
+        top: s.top_on(model, level),
+        height: s.height,
+        waist: s.waist,
+        material: s.material,
+        usage: s.usage,
+        design,
     }
 }
 

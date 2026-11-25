@@ -38,6 +38,9 @@ enum Would {
     Road(archisim_core::RoadStretch),
     /// A modular box (M1): its outline and mark in plan, nothing in 3D.
     Box(archisim_core::NewBox),
+    Elevator(archisim_core::NewElevator),
+    Device(archisim_core::NewDevice),
+    Stair(archisim_core::NewStair),
 }
 
 impl ArchiSimApp {
@@ -58,16 +61,19 @@ impl ArchiSimApp {
                 Would::Walls(
                     pieces
                         .iter()
-                        .map(|w| NewWall {
-                            wall_type: s.wall_type,
-                            level,
-                            start: w.start,
-                            end: w.end,
-                            reference: s.reference,
-                            height: s.height,
-                            base_offset: s.base_offset,
-                            bulge: w.bulge,
-                            top,
+                        .map(|w| {
+                            let (start, end, bulge) = s.oriented(w);
+                            NewWall {
+                                wall_type: s.wall_type,
+                                level,
+                                start,
+                                end,
+                                reference: s.reference,
+                                height: s.height,
+                                base_offset: s.base_offset,
+                                bulge,
+                                top,
+                            }
                         })
                         .collect(),
                 )
@@ -134,6 +140,20 @@ impl ArchiSimApp {
                 })
             }
             Tool::World => Would::World(self.world_would(c.point)?),
+            Tool::Elevator => Would::Elevator(self.elevator_spec(c.point)),
+            Tool::Device => Would::Device(self.device_spec(c.point)),
+            // A ready-made stair before its first click: at the cursor,
+            // going right (after it, `draw_stair_preview` shows it).
+            Tool::Stair
+                if self.stair_settings.preset != archisim_core::StairPreset::Free
+                    && self.stair_tool.points.is_empty() =>
+            {
+                Would::Stair(self.ed.preset_stair_spec(
+                    &self.stair_settings,
+                    c.point,
+                    archisim_core::Vec2::new(1.0, 0.0),
+                )?)
+            }
             Tool::ModularBox => Would::Box(super::box_ui::box_at(
                 model,
                 level,
@@ -293,6 +313,18 @@ fn build_ghost(model: &Model, would: Would) -> Option<Vec<Solid>> {
             solid::mass_solids(&m, id)
         }
         Would::Box(_) => Vec::new(),
+        Would::Elevator(spec) => {
+            let id = m.add_elevator(spec).ok()?;
+            archisim_geom::elevators::elevator_solids(&m, id)
+        }
+        Would::Device(spec) => {
+            let id = m.add_device(spec).ok()?;
+            solid::device_solids(&m, id)
+        }
+        Would::Stair(spec) => {
+            let id = m.add_stair(spec).ok()?;
+            archisim_geom::stairs::stair_solids(&m, id)
+        }
         Would::Road(spec) => {
             let id = stretch_fused(&mut m, spec)?;
             solid::road_solids(&m, id)
@@ -316,6 +348,9 @@ pub struct PlanGhost {
     image: Option<(egui::TextureHandle, (Point2, Point2))>,
     /// A crossing the new street would make treads on another one.
     crowded: std::cell::Cell<bool>,
+    /// The outlines of what a click would place, tinted over the picture
+    /// so it reads as not there yet.
+    made: std::cell::RefCell<Vec<Vec<Point2>>>,
 }
 
 impl ArchiSimApp {
@@ -331,6 +366,7 @@ impl ArchiSimApp {
     /// Builds the copy of the model the ghost draws, and its region.
     fn plan_ghost_build(&self) -> Option<(Model, (Point2, Point2))> {
         let shown = self.ed.shown();
+        self.plan_ghost.made.borrow_mut().clear();
         if let Some(d) = &self.drag {
             let (to, variant, _) = self.drag_preview.as_ref()?;
             let drag = crate::drag::Drag {
@@ -356,6 +392,12 @@ impl ArchiSimApp {
         let (after, made) = build_plan_ghost(&shown, would)?;
         self.plan_ghost_crowded_set(crowded(&after, &made));
         let geo = crate::geo::Indexed::new(&after);
+        let outlines: Vec<Vec<Point2>> = made
+            .iter()
+            .filter(|e| !matches!(e, Element::Road(_)))
+            .filter_map(|e| crate::pick::outline(&geo, *e))
+            .collect();
+        *self.plan_ghost.made.borrow_mut() = outlines;
         let mut pts: Vec<Point2> = made
             .iter()
             .filter_map(|e| crate::pick::outline(&geo, *e))
@@ -449,6 +491,31 @@ impl ArchiSimApp {
                 Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)),
                 Color32::WHITE,
             );
+            // What is not there yet: a see-through tint over it.
+            let tint = Color32::from_rgba_unmultiplied(30, 110, 230, 34);
+            let edge = egui::Stroke::new(1.2, Color32::from_rgba_unmultiplied(30, 110, 230, 170));
+            for o in self.plan_ghost.made.borrow().iter() {
+                let pts: Vec<Pos2> = o.iter().map(|p| self.view.to_screen(rect, *p)).collect();
+                if pts.len() >= 3 {
+                    // egui fills only convex outlines well: the others,
+                    // their edge alone.
+                    let n = pts.len();
+                    let turns: Vec<f32> = (0..n)
+                        .map(|i| {
+                            let (a, b, c) = (pts[i], pts[(i + 1) % n], pts[(i + 2) % n]);
+                            (b - a).x * (c - b).y - (b - a).y * (c - b).x
+                        })
+                        .filter(|t| t.abs() > 1e-3)
+                        .collect();
+                    let convex = turns.iter().all(|t| *t > 0.0) || turns.iter().all(|t| *t < 0.0);
+                    painter.add(egui::Shape::Path(egui::epaint::PathShape {
+                        points: pts,
+                        closed: true,
+                        fill: if convex { tint } else { Color32::TRANSPARENT },
+                        stroke: edge.into(),
+                    }));
+                }
+            }
         }
     }
 }
@@ -582,6 +649,9 @@ fn build_plan_ghost(model: &Model, would: Would) -> Option<(Model, Vec<Element>)
         Would::World(spec) => vec![Element::Mass(m.add_world_building(spec).ok()?)],
         Would::Road(spec) => vec![Element::Road(stretch_fused(&mut m, spec)?)],
         Would::Box(spec) => vec![Element::Box(m.add_box(spec).ok()?)],
+        Would::Elevator(spec) => vec![Element::Elevator(m.add_elevator(spec).ok()?)],
+        Would::Device(spec) => vec![Element::Device(m.add_device(spec).ok()?)],
+        Would::Stair(spec) => vec![Element::Stair(m.add_stair(spec).ok()?)],
     };
     Some((m, made))
 }

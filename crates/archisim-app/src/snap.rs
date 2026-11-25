@@ -362,6 +362,17 @@ pub fn snap_filtered<G: Geo + ?Sized>(
             outline_snaps(&p.outline, &mut points, &mut edges);
         }
     }
+    // The volumes of Concept and the buildings of the surroundings: their
+    // footprint, to draw against them and to fit what was brought.
+    for m in model.masses_on_level(level) {
+        if skip.contains(&Element::Mass(m.id)) {
+            continue;
+        }
+        let outline = m.outline();
+        if outline.len() >= 3 && near(&outline) {
+            outline_snaps(&outline, &mut points, &mut edges);
+        }
+    }
     for x in model.surfaces_on_level(level) {
         if !skip.contains(&Element::Surface(x.id)) && near(&x.outline) {
             outline_snaps(&x.outline, &mut points, &mut edges);

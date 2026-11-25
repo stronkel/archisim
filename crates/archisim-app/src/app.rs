@@ -45,6 +45,10 @@ const REACH: f32 = 10.0;
 /// from this far, and kept until the cursor is
 /// [`crate::snap::HOLD`] times as far.
 const SNAP_REACH: f32 = 18.0;
+/// Reach of the handles of the selection (wall ends, jambs of doors and
+/// windows, object arrows), in screen points: more than picking, so they
+/// are easy to take.
+const GRIP_REACH: f32 = 16.0;
 /// How close to a 45° line the cursor must be for the wall to lock onto it,
 /// in screen points (horizontal and vertical lock by angle, see
 /// [`crate::snap::ORTHO_LOCK`]).
@@ -2195,6 +2199,17 @@ impl ArchiSimApp {
     }
 
     /// Builds the walls asked for by the wall tool.
+    /// Space with the wall tool (Revit's): the walls being drawn, and the
+    /// next ones, get their exterior face on the other side of the line.
+    pub(crate) fn flip_wall_tool(&mut self) {
+        self.wall_settings.flipped = !self.wall_settings.flipped;
+        self.say(if self.wall_settings.flipped {
+            "Cara exterior a la derecha de la línea (Espacio para volver)."
+        } else {
+            "Cara exterior a la izquierda de la línea (Espacio para cambiarla)."
+        });
+    }
+
     fn build_walls(&mut self, pieces: Vec<Piece>) {
         let mark = self.ed.undo_mark();
         match self.ed.add_walls(&self.wall_settings, &pieces) {
@@ -3330,6 +3345,7 @@ pub fn default_wall_settings(model: &Model) -> WallSettings {
         // project has no level above.
         top: crate::editor::TopChoice::NextLevel,
         top_offset: 0.0,
+        flipped: false,
     }
 }
 

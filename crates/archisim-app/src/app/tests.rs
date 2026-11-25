@@ -14135,3 +14135,128 @@ fn ten_minute_house() {
     const LAST: usize = 90;
     assert!(t.total() <= LAST, "{} acciones, antes {LAST}", t.total());
 }
+
+/// W2b: Space while drawing walls puts their exterior face on the other
+/// side of the line clicked (the walls go the other way round), for the
+/// wall being drawn and the next ones, until Space again.
+#[test]
+fn space_flips_the_walls_being_drawn() {
+    let mut h = Harness::new(Editor::new_project());
+    h.type_text("m");
+    assert_eq!(h.app.tool, Tool::Wall);
+    h.click_at(p(0.0, 0.0));
+    h.move_to(p(3.0, 0.0));
+    h.key(Key::Space);
+    assert!(h.app.wall_settings.flipped);
+    h.click_at(p(5.0, 0.0));
+    h.click_at(p(5.0, 4.0));
+    h.key(Key::Escape);
+    let walls: Vec<_> = h.model().walls().cloned().collect();
+    assert_eq!(walls.len(), 2);
+    // Drawn from (0, 0) to (5, 0), the wall runs back: its exterior face
+    // (on the left of start → end) is now on the right of the line drawn.
+    let first = walls
+        .iter()
+        .find(|w| {
+            w.start.approx_eq(p(5.0, 0.0)) || w.end.approx_eq(p(5.0, 0.0)) && w.start.y.abs() < 1e-9
+        })
+        .unwrap();
+    assert!(first.start.approx_eq(p(5.0, 0.0)), "{first:?}");
+    assert!(first.end.approx_eq(p(0.0, 0.0)), "{first:?}");
+    // Space again: the next walls as usual.
+    h.key(Key::Space);
+    assert!(!h.app.wall_settings.flipped);
+    h.click_at(p(0.0, 6.0));
+    h.click_at(p(4.0, 6.0));
+    h.key(Key::Escape);
+    assert!(h
+        .model()
+        .walls()
+        .any(|w| w.start.approx_eq(p(0.0, 6.0)) && w.end.approx_eq(p(4.0, 6.0))));
+}
+
+/// W2b: the handles of the selection are taken from farther than an
+/// element is picked (16 points against 10).
+#[test]
+fn handles_are_taken_from_farther() {
+    let mut h = Harness::new(Editor::new_project());
+    h.type_text("m");
+    h.click_at(p(0.0, 0.0));
+    h.click_at(p(5.0, 0.0));
+    h.key(Key::Escape);
+    h.key(Key::Escape);
+    let wall = h.model().walls().next().unwrap().clone();
+    h.app.ed.selection = [Element::Wall(wall.id)].into_iter().collect();
+    h.frame();
+    // 13 points away from the end: past the picking reach, within the
+    // handles'.
+    h.move_to(off_by(&h, wall.end, 13.0, (1.0, 0.0)));
+    assert!(h.app.hover_grip.is_some(), "no handle at 13 points");
+    h.move_to(off_by(&h, wall.end, 40.0, (1.0, 0.0)));
+    assert!(h.app.hover_grip.is_none());
+}
+
+/// W2b: a lift, a device and a ready-made stair are seen at the cursor
+/// before the click, in plan and in 3D.
+#[test]
+fn what_is_placed_is_seen_before_the_click() {
+    let mut h = Harness::new(Editor::new_project());
+    let canvas = h.app.canvas;
+    h.app
+        .view
+        .fit_exact(canvas, p(-2.0, -2.0), p(12.0, 10.0), 0.0);
+    h.app.pick(super::toolbox::Pick::Tool(Tool::Elevator));
+    h.move_to(p(4.0, 4.0));
+    h.frame();
+    assert!(super::ghost3d::ghost_triangles(&h.app) > 0, "no lift in 3D");
+    let (lo, hi) = super::ghost3d::plan_ghost_region(&h.app).expect("the lift's ghost");
+    assert!(lo.x < 4.0 && hi.x > 4.0 && lo.y < 4.0 && hi.y > 4.0);
+    assert!(super::ghost3d::plan_ghost_drawn(&h.app));
+    // Nothing placed yet.
+    assert_eq!(h.model().elevators().count(), 0);
+    h.key(Key::Escape);
+    h.app.pick(super::toolbox::Pick::Tool(Tool::Stair));
+    h.app.stair_settings.preset = archisim_core::StairPreset::Straight;
+    h.move_to(p(2.0, 2.0));
+    h.frame();
+    assert!(
+        super::ghost3d::ghost_triangles(&h.app) > 0,
+        "no stair in 3D"
+    );
+    assert!(super::ghost3d::plan_ghost_region(&h.app).is_some());
+    assert_eq!(h.model().stairs().count(), 0);
+}
+
+/// W2b: fitting the surroundings, the points are snapped like a drawing
+/// tool's: a corner of a building of the surroundings is taken from a few
+/// points away.
+#[test]
+fn fitting_the_surroundings_snaps_its_points() {
+    let mut h = Harness::new(Editor::new_project());
+    let canvas = h.app.canvas;
+    h.app
+        .view
+        .fit_exact(canvas, p(-10.0, -10.0), p(30.0, 30.0), 0.0);
+    let level = h.app.ed.level;
+    let r = h.app.ed.transact("Edificio del entorno", |m| {
+        m.add_env_building(archisim_core::NewEnvBuilding {
+            name: "Vecino".into(),
+            level,
+            outline: vec![p(5.0, 5.0), p(15.0, 5.0), p(15.0, 12.0), p(5.0, 12.0)],
+            style: archisim_core::BuildingStyle::ALL[0],
+            floors: None,
+            floor_height: None,
+            base_offset: 0.0,
+        })?;
+        Ok::<(), archisim_core::ModelError>(())
+    });
+    assert!(r.is_ok(), "{r:?}");
+    h.app.act(super::toolbox::Action::FitContext);
+    h.app.context_fit.mode = Some(super::context_fit_ui::FitMode::Turn);
+    h.frame();
+    h.move_to(off_by(&h, p(15.0, 5.0), 8.0, (1.0, -1.0)));
+    let c = h.app.cursor.unwrap();
+    assert!(c.kind.is_point(), "{c:?}");
+    assert!(c.point.approx_eq(p(15.0, 5.0)), "{c:?}");
+    assert!(h.app.snap_caption(c).is_some());
+}
