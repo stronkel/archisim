@@ -2390,14 +2390,16 @@ impl ArchiSimApp {
             return;
         }
         for w in &pieces {
+            // As it will be built: the other way round after Space.
+            let (start, end, bulge) = self.wall_settings.oriented(w);
             let probe = archisim_core::Wall {
                 id: archisim_core::WallId(0),
                 guid: archisim_core::GlobalId::new(),
                 wall_type: wtype.id,
                 level: self.ed.level,
-                start: w.start,
-                end: w.end,
-                bulge: w.bulge,
+                start,
+                end,
+                bulge,
                 reference: self.wall_settings.reference,
                 height: self.wall_settings.height,
                 base_offset: self.wall_settings.base_offset,
