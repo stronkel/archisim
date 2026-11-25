@@ -353,7 +353,7 @@ impl ArchiSimApp {
 
     /// The snapped point near `raw`, with the snaps of the bottom bar.
     fn snap_at(&self, raw: Point2, reach: f64, extra: &[Point2], skip: &BTreeSet<Element>) -> Snap {
-        snap_filtered(
+        let now = snap_filtered(
             &self.ed,
             self.ed.level,
             raw,
@@ -362,7 +362,33 @@ impl ArchiSimApp {
             skip,
             self.snap_filter,
             &self.other_walls,
-        )
+        );
+        // The point taken before stays while the cursor is near it, in the
+        // same model, level and tool.
+        let key = (self.ed.revision(), self.ed.level, self.tool);
+        // … and only if it is still on offer (not switched off in the
+        // bottom bar, not part of what is being dragged).
+        let before = self
+            .held_snap
+            .get()
+            .filter(|(r, l, t, _)| (*r, *l, *t) == key)
+            .map(|h| h.3)
+            .filter(|b| {
+                let again = snap_filtered(
+                    &self.ed,
+                    self.ed.level,
+                    b.point,
+                    reach * 0.02,
+                    extra,
+                    skip,
+                    self.snap_filter,
+                    &self.other_walls,
+                );
+                again.kind.is_point() && again.point.approx_eq(b.point)
+            });
+        let s = crate::snap::hold(before, now, raw, reach);
+        self.held_snap.set(Some((key.0, key.1, key.2, s)));
+        s
     }
 
     /// Polar tracking from `from`, if it is on.
@@ -392,7 +418,9 @@ impl ArchiSimApp {
         };
         self.space_held = ctx.input(|i| i.key_down(Key::Space));
         let raw = self.view.to_model(rect, pos);
-        let reach = self.view.to_metres(crate::touch::reach(REACH));
+        let reach = self.view.to_metres(crate::touch::reach(SNAP_REACH));
+        // Picking with the arrow keeps its own, narrower reach.
+        let pick_reach = self.view.to_metres(crate::touch::reach(REACH));
         if self.underlay_pick.is_some() {
             self.underlay_cursor(ctx, raw, reach);
             return;
@@ -401,8 +429,16 @@ impl ArchiSimApp {
         match self.tool {
             Tool::Cad => self.cad_cursor(ctx, raw, reach),
             Tool::Wall => {
-                let mut s = self.snap_at(raw, reach, &self.wall_tool.chain(), &BTreeSet::new());
-                if let Some(a) = self.wall_tool.tracking_from() {
+                let chain = self.wall_tool.chain();
+                let mut s = self.snap_at(raw, reach, &chain, &BTreeSet::new());
+                // Back by the first point of a chain of walls: it closes.
+                if let Some(first) = self.wall_closing_point(raw, reach) {
+                    s = Snap::at(first, SnapKind::Endpoint);
+                    self.held_snap
+                        .set(Some((self.ed.revision(), self.ed.level, self.tool, s)));
+                }
+                let closing = self.wall_closing_point(raw, reach).is_some();
+                if let (false, Some(a)) = (closing, self.wall_tool.tracking_from()) {
                     if ctx.input(|i| i.modifiers.shift) {
                         s = constrain(a, s);
                     } else {
@@ -668,6 +704,15 @@ impl ArchiSimApp {
                 let Some(d) = &self.drag else {
                     return;
                 };
+                // The point it was grabbed by is not kept: it cannot be
+                // dropped where it is.
+                if self
+                    .held_snap
+                    .get()
+                    .is_some_and(|h| h.3.point.approx_eq(d.from))
+                {
+                    self.held_snap.set(None);
+                }
                 let mut s = self.snap_at(raw, reach, &[], &d.skip);
                 if ctx.input(|i| i.modifiers.shift) {
                     s = constrain(d.from, s);
@@ -737,12 +782,12 @@ impl ArchiSimApp {
                 self.hover_road = if self.window_start.is_some() || self.drag.is_some() {
                     self.hover_road.filter(|_| self.drag.is_some())
                 } else {
-                    self.street_under(raw, reach)
+                    self.street_under(raw, pick_reach)
                 };
                 self.hover_grip = if self.window_start.is_some() {
                     None
                 } else {
-                    self.grip_here(raw, reach).map(|g| g.0)
+                    self.grip_here(raw, pick_reach).map(|g| g.0)
                 };
                 self.under_cursor = if self.window_start.is_some() {
                     Vec::new()
@@ -751,7 +796,7 @@ impl ArchiSimApp {
                         let style = self.view_style.effective();
                         let model = self.ed.model();
                         let ceiling_plan = self.active_ceiling();
-                        crate::pick::pick_all(&self.ed, self.ed.level, raw, reach)
+                        crate::pick::pick_all(&self.ed, self.ed.level, raw, pick_reach)
                             .into_iter()
                             .filter(|e| crate::pick::in_view(*e, ceiling_plan))
                             .filter(|e| !self.ed.hidden().contains(e))
@@ -763,7 +808,7 @@ impl ArchiSimApp {
                 // stays where Tab was pressed.
                 let n = self.under_cursor.len();
                 let i = match self.tab_pick {
-                    Some((at, i)) if n > 1 && at.distance(raw) <= reach => i % n,
+                    Some((at, i)) if n > 1 && at.distance(raw) <= pick_reach => i % n,
                     _ => {
                         self.tab_pick = None;
                         0
@@ -2852,6 +2897,61 @@ impl ArchiSimApp {
         let ink = Stroke::new(1.0, Color32::from_gray(40));
         painter.line_segment([p - Vec2::new(12.0, 0.0), p + Vec2::new(12.0, 0.0)], ink);
         painter.line_segment([p - Vec2::new(0.0, 12.0), p + Vec2::new(0.0, 12.0)], ink);
+        // What is about to be taken, by the cursor (over it, clear of the
+        // sizes, which go under it).
+        if let Some(text) = self.snap_caption(c) {
+            let galley = painter.layout_no_wrap(text, FontId::proportional(11.5), stroke.color);
+            let mut at = p + Vec2::new(14.0, -14.0 - galley.size().y);
+            if at.x + galley.size().x + 6.0 > rect.right() {
+                at.x = p.x - 14.0 - galley.size().x;
+            }
+            if at.y < rect.top() + 4.0 {
+                at.y = p.y + 14.0;
+            }
+            let bg = Rect::from_min_size(at, galley.size()).expand2(Vec2::new(4.0, 2.0));
+            painter.rect_filled(
+                bg,
+                CornerRadius::same(3),
+                Color32::from_rgba_unmultiplied(255, 255, 255, 225),
+            );
+            painter.galley(at, galley, stroke.color);
+        }
+    }
+
+    /// The first point of the chain of walls being drawn, if the cursor is
+    /// back by it with at least two walls drawn: a click there closes it.
+    pub(super) fn wall_closing_point(&self, raw: Point2, reach: f64) -> Option<Point2> {
+        let chain = self.wall_tool.chain();
+        let first = *chain.first()?;
+        (self.tool == Tool::Wall
+            && chain.len() >= 3
+            && raw.distance(first) <= reach * crate::snap::HOLD)
+            .then_some(first)
+    }
+
+    /// The words by the cursor for the point about to be taken: what it is
+    /// and, drawing walls, what the wall will do there.
+    pub(super) fn snap_caption(&self, c: Snap) -> Option<String> {
+        let kind = c.kind;
+        if !(kind.is_point() || kind == SnapKind::OnEdge) {
+            return None;
+        }
+        if self.tool != Tool::Wall {
+            return Some(kind.label().to_string());
+        }
+        let chain = self.wall_tool.chain();
+        if chain.len() >= 3 && chain[0].approx_eq(c.point) {
+            return Some("Cerrar".to_string());
+        }
+        let model = self.ed.model();
+        let wall_end = model
+            .walls_on_level(self.ed.level)
+            .any(|w| w.start.approx_eq(c.point) || w.end.approx_eq(c.point));
+        Some(match kind {
+            SnapKind::Endpoint if wall_end => "Extremo · continúa el muro".to_string(),
+            SnapKind::OnEdge | SnapKind::Midpoint => format!("{} · encuentro en T", kind.label()),
+            _ => kind.label().to_string(),
+        })
     }
 }
 

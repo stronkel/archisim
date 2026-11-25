@@ -6,6 +6,32 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-25 (194) · v0.113: W0, la prueba de los 10 minutos
+
+Rama `bloque/w0-diez-minutos`, sobre `bloque/w2a-punteria` (PR #241, sin unir). Sin cambios de formato ni de IFC.
+
+- **Hecho**: la prueba `ten_minute_house` (`app/tests.rs`) dibuja con clics y teclas simulados la vivienda de `docs/WORKFEEL.md` §4 (10 × 9 m: fachadas en cadena cerrada, tres tabiques, una puerta de entrada, tres de paso, cuatro ventanas, el forjado, cuatro locales con nombre) y saca la lámina A3 de presentación en PDF. Cuenta clics en el dibujo, teclas y clics en paneles por paso, escribe `diez-minutos.txt` (y el PDF) en `ARCHISIM_TEST_OUT` y falla si el total pasa del último apuntado (`LAST`, hoy 90).
+- **Lo que dicen los números (v0.113)**: Fachadas 5 clics + 1 tecla; Tabiques 6 + 4 teclas + 2 en paneles (elegir el tipo); Puertas y ventanas 8 + 2; Forjado 5 + 2; Locales 4 clics + 42 teclas + 4 en paneles; Lámina A3 en PDF 1 tecla + 4 en paneles. **Total 90**. Lo que más cuesta es nombrar los locales (casi la mitad de las teclas) y el forjado, que repite el contorno que los muros ya cerraron: es justo lo que ataca W2 («¿Hacer estancia?» al cerrar el recinto, con un nombre propuesto por su tamaño). En la lámina, las puertas de paso abren hacia el salón y el título del cuadro de superficies roza el texto «Planta baja».
+- **Pendiente**: la parte de Antonio (§4: la misma vivienda a mano, con tiempo y atascos, y en ArchiCAD como referencia); después, W2.
+- **Qué debe probar Antonio**: la prueba de §4 a mano en esta versión, cronometrada, apuntando cada duda o cosa hecha dos veces. Con eso y estos números se decide W2.
+
+## 2026-11-24 (193) · v0.112: W2a, puntería y muros sencillos
+
+Rama `bloque/w2a-punteria`, desde `main` (0.110; el PR #240 de la SUMO, con la 0.111, sigue sin unir). Primer bloque de `docs/WORKFEEL.md`, que se sube al repositorio en esta rama. Sin cambios de formato ni de IFC.
+
+- **Hecho**:
+  - Alcance del forzado de las herramientas de dibujo a 18 px (`SNAP_REACH`; el de pinchar elementos sigue en 10 px).
+  - Histéresis: `snap::hold` guarda el punto cogido mientras el cursor está a menos de 1,5 alcances; otro punto solo lo sustituye si el cursor queda a menos de la mitad de distancia de él. Se olvida al cambiar el modelo, la planta o la herramienta.
+  - Rótulo junto al cursor (`snap_caption`): el nombre del punto, y con el Muro «Extremo · continúa el muro», «Sobre la cara · encuentro en T» o «Cerrar». «Sobre arista» pasa a «Sobre la cara».
+  - Cierre de la cadena de muros desde 1,5 alcances del primer punto, con dos muros dibujados, por encima del rastreo.
+  - La cadena por defecto, doble clic o Esc para terminar y la longitud tecleada ya estaban; quedan cubiertos por las pruebas `points_are_taken_from_afar_and_kept` y `chained_walls_close_by_their_first_point`.
+- **Pendiente**: W0 (la prueba de los 10 minutos) y W2 según `docs/WORKFEEL.md` §3. El rótulo no sale aún en las vistas de dibujo ni en 3D.
+- **Qué debe probar Antonio**: herramienta Muro en una planta vacía.
+  1. Dibuja tres muros seguidos y acerca el cursor al primer punto sin acertar: debe poner «Cerrar»; un clic cierra el recinto y termina la cadena.
+  2. Acerca el cursor a la esquina de un muro desde un poco lejos: debe cogerla y decir «Esquina» o «Extremo»; mueve un poco la mano y el punto no debe saltar.
+  3. Con un muro empezado, teclea 4500 sin pinchar en nada y pulsa Intro: un muro de 4,50 m hacia donde apunta el ratón.
+  4. Pasa el cursor por la cara de un muro: «Sobre la cara · encuentro en T».
+
 ## 2026-11-21 (191) · v0.110: el resto de los remates del territorio
 
 Misma rama `bloque/territorio-remates` (PR #239). Antonio pidió «haz la lista que falta»: todo lo que quedaba de `docs/TERRITORIO.md` §7, en tres tandas. Antes, un arreglo de la integración continua: en Windows una junta de espiga que pasaba justo por las esquinas de un alcorque quedaba dentro por redondeo; ahora se quita lo que cae en un hueco. Formato: sigue en la versión 121 (aún no está en `main`), con lo nuevo añadido.

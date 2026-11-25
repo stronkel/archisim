@@ -4,6 +4,17 @@ Lo que cambia en cada versión, en pocas líneas. ArchiSim enseña la parte de s
 
 Cada versión empieza con una línea `## <versión>` (por ejemplo `## 0.81.0`): es la que busca la publicación.
 
+## 0.113.0
+
+- **La prueba de los 10 minutos** (bloque W0, `docs/WORKFEEL.md` §4) ya es una prueba automática: una vivienda de 90 m² con salón-cocina, dos dormitorios y baño, una puerta de entrada, tres de paso y cuatro ventanas, el forjado, los cuatro locales con nombre y una lámina A3 de presentación en PDF, dibujada con clics y teclas como lo haría una persona. Cuenta lo que cuesta cada paso (hoy, 90 acciones: 28 clics en el dibujo, 52 teclas y 10 clics en paneles) y avisa si una versión necesita más que la anterior.
+
+## 0.112.0
+
+- **Puntería al dibujar** (bloque W2a, `docs/WORKFEEL.md`):
+  - Los puntos (extremos, esquinas, puntos medios, intersecciones…) se cogen desde unos 18 píxeles, casi el doble que antes.
+  - El punto cogido se queda aunque la mano tiemble: solo se suelta al alejarse una vez y media esa distancia, o al acercarse claramente a otro.
+  - Junto al cursor aparece lo que vas a coger: Extremo, Esquina, Punto medio, Sobre la cara, Intersección, Perpendicular… Con el muro, además, «continúa el muro», «encuentro en T» o «Cerrar».
+  - La cadena de muros se cierra al volver cerca del primer punto, sin tener que acertar en él.
 
 ## 0.110.0
 
