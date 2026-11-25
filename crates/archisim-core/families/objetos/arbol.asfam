@@ -1,9 +1,11 @@
 family "Árbol"
   category site
   host none
-  version 5
+  version 6
   description "Árbol de copa redondeada con su tronco; el punto de inserción es el centro del tronco"
   folder "Vegetación"
+
+include "muebles"
 
 type_params
   section "Dimensiones"
@@ -16,14 +18,14 @@ type_params
     bark   material = "Corteza" label "Tronco"
   section "Presentación"
     plan_drawing choice("presentación", "según el estilo", "técnico") = "presentación" label "Dibujo en planta"
-    shape choice("lóbulos", "círculo", "acuarela", "ramas", "follaje", "palmera", "conífera") = "lóbulos" label "Copa en presentación"
+    shape choice("hojas", "lóbulos", "círculo", "acuarela", "ramas", "follaje", "palmera", "conífera") = "hojas" label "Copa en presentación"
     look choice("transparente", "rellena", "contorno") = "transparente" label "Relleno de la copa"
     opacity number = 0.55 range 0.10..1.00 label "Opacidad de la copa"
 
 instance_params
   section "Dibujo"
     drawing choice("del tipo", "presentación", "según el estilo", "técnico") = "del tipo" label "Dibujo en planta"
-    shape_own choice("del tipo", "lóbulos", "círculo", "acuarela", "ramas", "follaje", "palmera", "conífera") = "del tipo" label "Copa"
+    shape_own choice("del tipo", "hojas", "lóbulos", "círculo", "acuarela", "ramas", "follaje", "palmera", "conífera") = "del tipo" label "Copa"
     look_own choice("del tipo", "transparente", "rellena", "contorno") = "del tipo" label "Relleno"
     opacity_own number = 0.00 range 0.00..1.00 label "Opacidad (0: la del tipo)"
     color_own bool = false label "Color propio"
@@ -72,6 +74,25 @@ plan presentation
   let c = if color_own then leaves_own else leaves
   let outline = fill == "contorno"
   let turn = 6.283185307 * rand(seed * 101)
+  if form == "hojas"
+    # As the trees of Synaps: a crown with a lobed edge, clumps of leaves
+    # inside it and small strokes of leaves, pale, with fine lines.
+    cloud center (0, 0) radius r lobes 15 jitter 0.12 pen view tint c opacity op
+    repeat i in 0..4
+      let a = turn + 6.283185307 * (i + 0.3 * rand(seed * 59 + i)) / 4
+      let d = r * (0.3 + 0.12 * rand(seed * 61 + i))
+      cloud center (d * cos(a), d * sin(a)) radius r * (0.4 + 0.1 * rand(seed * 67 + i)) lobes 9 jitter 0.16 pen thin
+    cloud center (r * 0.05, -r * 0.05) radius r * 0.3 lobes 7 jitter 0.18 pen thin
+    let n = min(160, max(20, round(r * r * 14)))
+    repeat i in 0..n
+      let a = 6.283185307 * rand(seed * 71 + i)
+      let d = r * 0.88 * sqrt(rand(seed * 73 + i))
+      let t = 6.283185307 * rand(seed * 79 + i)
+      let l = r * 0.045 + 0.04
+      let x = d * cos(a)
+      let y = d * sin(a)
+      line (x, y) to (x + l * cos(t), y + l * sin(t)) pen thin
+      line (x, y) to (x + l * cos(t + 0.9), y + l * sin(t + 0.9)) pen thin
   if form == "lóbulos"
     if outline
       cloud center (0, 0) radius r lobes 11 jitter 0.14 pen view
@@ -144,7 +165,8 @@ plan presentation
         cloud center (0, 0) radius rr lobes 18 - i * 4 jitter 0.12 pen thin
       else
         cloud center (0, 0) radius rr lobes 18 - i * 4 jitter 0.12 pen thin tint c opacity op * 0.6
-  cloud center (0, 0) radius max(trunk / 2, r * 0.06) lobes 6 jitter 0 pen thin tint bark
+  if form != "hojas"
+    cloud center (0, 0) radius max(trunk / 2, r * 0.06) lobes 6 jitter 0 pen thin tint bark
 
 outputs
   ifc_class = "IfcGeographicElement"

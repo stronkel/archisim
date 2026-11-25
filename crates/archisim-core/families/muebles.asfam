@@ -43,3 +43,11 @@ component leaf(cx, cy, l, w, a)
   let uy = sin(a)
   polygon (cx, cy) (cx + 0.3 * l * ux + 0.8 * w * px, cy + 0.3 * l * uy + 0.8 * w * py) (cx + 0.65 * l * ux + w * px, cy + 0.65 * l * uy + w * py) (cx + l * ux, cy + l * uy) (cx + 0.65 * l * ux - w * px, cy + 0.65 * l * uy - w * py) (cx + 0.3 * l * ux - 0.8 * w * px, cy + 0.3 * l * uy - 0.8 * w * py) pen thin filled
   line (cx + 0.15 * l * ux, cy + 0.15 * l * uy) to (cx + 0.85 * l * ux, cy + 0.85 * l * uy) pen thin
+
+# Una almohada o un cojín mullido, de centro (cx, cy) y semilados «a» y
+# «b»: lados que se abomban y esquinas que se recogen, con sus pliegues.
+component pillow(cx, cy, a, b)
+  polygon (cx + 1.0256 * a, cy + 0.3875 * b) (cx + 0.993 * a, cy + 0.6016 * b) (cx + 0.9377 * a, cy + 0.7208 * b) (cx + 0.8726 * a, cy + 0.8031 * b) (cx + 0.8031 * a, cy + 0.8726 * b) (cx + 0.7208 * a, cy + 0.9377 * b) (cx + 0.6016 * a, cy + 0.993 * b) (cx + 0.3875 * a, cy + 1.0256 * b) (cx + -0.3875 * a, cy + 1.0256 * b) (cx + -0.6016 * a, cy + 0.993 * b) (cx + -0.7208 * a, cy + 0.9377 * b) (cx + -0.8031 * a, cy + 0.8726 * b) (cx + -0.8726 * a, cy + 0.8031 * b) (cx + -0.9377 * a, cy + 0.7208 * b) (cx + -0.993 * a, cy + 0.6016 * b) (cx + -1.0256 * a, cy + 0.3875 * b) (cx + -1.0256 * a, cy + -0.3875 * b) (cx + -0.993 * a, cy + -0.6016 * b) (cx + -0.9377 * a, cy + -0.7208 * b) (cx + -0.8726 * a, cy + -0.8031 * b) (cx + -0.8031 * a, cy + -0.8726 * b) (cx + -0.7208 * a, cy + -0.9377 * b) (cx + -0.6016 * a, cy + -0.993 * b) (cx + -0.3875 * a, cy + -1.0256 * b) (cx + 0.3875 * a, cy + -1.0256 * b) (cx + 0.6016 * a, cy + -0.993 * b) (cx + 0.7208 * a, cy + -0.9377 * b) (cx + 0.8031 * a, cy + -0.8726 * b) (cx + 0.8726 * a, cy + -0.8031 * b) (cx + 0.9377 * a, cy + -0.7208 * b) (cx + 0.993 * a, cy + -0.6016 * b) (cx + 1.0256 * a, cy + -0.3875 * b) pen thin filled
+  arc center (cx - a * 0.55, cy - b * 0.1) from (cx - a * 0.85, cy - b * 0.55) to (cx - a * 0.6, cy + b * 0.35) pen thin
+  arc center (cx + a * 0.5, cy + b * 0.2) from (cx + a * 0.85, cy + b * 0.55) to (cx + a * 0.62, cy - b * 0.3) pen thin
+  line (cx - a * 0.15, cy + b * 0.45) to (cx + a * 0.2, cy + b * 0.3) pen thin

@@ -2124,17 +2124,12 @@ const MODELS: &[(&str, &str)] = &[
 /// how the canopy is drawn in presentation plans, where it is not the
 /// family's own.
 const SPECIES: &[(&str, &str, &str, &str)] = &[
-    ("Árbol grande 12 m", "Vegetación", "ramas", "transparente"),
+    ("Árbol grande 12 m", "Vegetación", "hojas", "transparente"),
     ("Palmera", "Copa clara", "palmera", "transparente"),
-    (
-        "Árbol en flor 5 m",
-        "Copa en flor",
-        "acuarela",
-        "transparente",
-    ),
-    ("Árbol otoñal 8 m", "Copa otoñal", "follaje", "transparente"),
+    ("Árbol en flor 5 m", "Copa en flor", "hojas", "transparente"),
+    ("Árbol otoñal 8 m", "Copa otoñal", "hojas", "transparente"),
     ("Pino 10 m", "Copa oscura", "conífera", "rellena"),
-    ("Olivo 5 m", "Copa olivo", "follaje", "transparente"),
+    ("Olivo 5 m", "Copa olivo", "hojas", "transparente"),
     ("Ciprés 8 m", "Copa oscura", "círculo", "rellena"),
 ];
 
