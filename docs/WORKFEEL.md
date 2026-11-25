@@ -80,6 +80,43 @@ Apunta: tiempo total, y **cada momento en que dudaste, buscaste algo o hiciste a
 
 Lo que más pesa: nombrar los locales y volver a dibujar el contorno para el forjado. Los dos los quita W2 («¿Hacer estancia?» con nombre propuesto). La prueba falla si una versión necesita más acciones que la última apuntada (`LAST`); cuando un bloque las reduzca, se baja `LAST`.
 
+## 6. Lista de Antonio del 25/11/2026
+
+Apuntado tal como lo contó, agrupado en bloques. Ninguno empezado.
+
+### W2b — Dibujar y tocar sin fricción (junto a W2)
+
+1. **Espacio invierte el muro**: mientras dibujas un muro, y con un muro seleccionado, Espacio cambia de lado la cara exterior y la interior.
+2. **Seleccionar una puerta por su hoja**: un clic en la hoja o en el arco de apertura elige la puerta; hoy hay que pinchar dentro del hueco y a veces se elige también el muro. La puerta o ventana manda sobre su muro cuando el clic cae en su símbolo.
+3. **Pinzamientos más grandes y fluidos** en puertas, ventanas y objetos: alargar y estirar tiene que sentirse inmediato, con tiradores fáciles de alcanzar.
+4. **Ver antes de colocar**: ascensores, objetos, escaleras y todo lo que se coloca se ve en transparencia bajo el cursor antes del clic, para encajarlo en su sitio, no a prueba y error.
+
+### W3 ampliado — Bonito por defecto
+
+5. **Planta de trabajo con el aspecto de Synaps**: es lo que Antonio busca desde el principio, dibujar directamente planos así. Hoy la visualización por defecto es fea.
+6. **Remates**: al terminar un muro se ven todas sus capas; los finales de muros, forjados y fachadas (envolver extremos, cantos de forjado, encuentros con la fachada) tienen que salir rematados sin hacer nada.
+7. **Símbolos 2D propios de los objetos en planta y alzado**: muchos objetos se dibujan con su malla, tan simples que no se distinguen o con miles de puntos en alzado y sección. Cada objeto necesita un dibujo 2D bonito que se superponga al 3D, como los de Synaps.
+8. **Texturas menos robóticas**, con el aspecto amable de Synaps.
+
+### W6 — Identidad y arranque
+
+9. **Logo nuevo**, atractivo y con la filosofía actual del programa.
+10. **Pantalla de inicio de verdad**: una ventana propia al pinchar el icono de ArchiSim, no un recuadro encima del programa abierto. Con proyectos, plantillas, modelado de familias, tutoriales por elemento, preguntas frecuentes, novedades o blog, y suscripción. Los avisos de actualización salen hoy por detrás: tienen que verse delante.
+11. **Menús con más vida**, en el espíritu de docs.synaps.app: cada herramienta con su explicación corta, su resultado esperado y un vídeo o animación breve.
+
+### W7 — Maqueta, luz y ciudad
+
+12. **Cámara libre en la Maqueta** (hoy es tan restringida que no deja girar lo que se quiere) y **luz de tarde y de noche también fuera de la Maqueta**.
+13. **Tráfico fluido**: la simulación va a muy pocas imágenes por segundo y parece que el ordenador va a explotar.
+14. **Coches y peatones nuevos**: siguen siendo los primeros, y son feos.
+
+### W8 — Empezar un proyecto
+
+15. **Generar plantas a partir de un programa** (estancias, superficies, adyacencias, solar), como el generador de Synaps: varias opciones de geometría editable, no imágenes, para revisar y seguir dibujando. Antes estaba fuera de este documento (§2); ahora lo pide Antonio.
+16. Referencias de arranque que mandó en Instagram (posts DfhhY5HnO1D y DfXVgYnCeXl): no se pudieron abrir desde aquí; falta que las describa o las mande como imagen.
+
+**Orden propuesto** (pendiente de Antonio): W2b (1–4, son pequeñas y se notan a diario) → W3 ampliado (5–8) → W6 (9–11) → W7 (12–14) → W8 (15).
+
 ## 5. Para el programador
 
 - No hay vistas simultáneas: `ViewMode` es una sola vista por pestaña (`app/tabs.rs`). W1 necesita que la planta (`plan_image`, `plan_ui`) y el 3D (`view3d`) se pinten en dos rectángulos del mismo marco, con la selección compartida que ya tiene el editor.
