@@ -1,9 +1,11 @@
 family "Taburete"
   category furniture
   host none
-  version 2
+  version 3
   description "Taburete alto de cocina: de madera, tapizado con respaldo o de enea"
   folder "Taburetes"
+
+include "muebles"
 
 type_params
   section "Dimensiones"
@@ -22,13 +24,11 @@ body
 
 plan 1:50
   if model3d == "Mediterráneo" or model3d == "Japandi"
-    polygon (-width * 0.41, width * 0.09) (width * 0.41, width * 0.09) (width * 0.41, width * 0.91) (-width * 0.41, width * 0.91) pen view
+    use soft_box(-width * 0.41, width * 0.09, width * 0.41, width * 0.91, width * 0.08)
+    use soft_pad(-width * 0.33, width * 0.17, width * 0.33, width * 0.83, width * 0.06)
   else
-    let r = width / 2
-    repeat i in 0..16
-      let t0 = 6.283185307 * i / 16
-      let t1 = 6.283185307 * (i + 1) / 16
-      line (r * cos(t0), r + r * sin(t0)) to (r * cos(t1), r + r * sin(t1)) pen view
+    use soft_oval(0, width / 2, width / 2, width / 2)
+    use soft_oval_thin(0, width / 2, width * 0.36, width * 0.36)
 
 outputs
   generator = "props:fine_stool"

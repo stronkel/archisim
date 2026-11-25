@@ -1,9 +1,11 @@
 family "Estantería de tienda"
   category furniture
   host none
-  version 1
+  version 2
   description "Estantería de pared con género como la hace cada colección"
   folder "Comercio"
+
+include "muebles"
 
 type_params
   section "Dimensiones"
@@ -34,7 +36,11 @@ body
   box (-width / 2, 0, 0) to (width / 2, depth, height) material frame
 
 plan 1:50
-  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+  use soft_box(-width / 2, 0, width / 2, depth, 0.01)
+  let n = max(2, floor(width / 0.12))
+  repeat i in 0..n
+    let x = -width / 2 + (i + 0.5) * width / n
+    use soft_pad(x - width / n * 0.4, 0.04, x + width / n * 0.4, depth * (0.55 + 0.35 * rand(i * 5 + 1)), 0.01)
 
 outputs
   generator = "props:fine_shop_shelving"

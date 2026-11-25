@@ -1,9 +1,11 @@
 family "Armario de oficina"
   category furniture
   host none
-  version 1
+  version 2
   description "Armario bajo de oficina con puertas y, encima, baldas con archivadores, como lo hace cada colección"
   folder "Oficina"
+
+include "muebles"
 
 type_params
   section "Dimensiones"
@@ -25,7 +27,11 @@ body
   box (-width / 2, 0, 0) to (width / 2, depth, height) material frame
 
 plan 1:50
-  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+  use soft_box(-width / 2, 0, width / 2, depth, 0.02)
+  line (-width / 2, depth - 0.025) to (width / 2, depth - 0.025) pen thin
+  let n = max(1, round(width / 0.8))
+  repeat i in 1..n
+    line (-width / 2 + i * width / n, 0) to (-width / 2 + i * width / n, depth) pen thin
 
 outputs
   generator = "props:fine_office_storage"

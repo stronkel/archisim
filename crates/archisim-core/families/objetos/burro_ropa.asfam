@@ -1,9 +1,11 @@
 family "Burro de ropa"
   category furniture
   host none
-  version 1
+  version 2
   description "Burro con perchas y prendas como lo hace cada colección"
   folder "Comercio"
+
+include "muebles"
 
 type_params
   section "Dimensiones"
@@ -32,8 +34,13 @@ body
   box (-width / 2, 0, 0) to (width / 2, depth, height) material cloth
 
 plan 1:50
-  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view dashed
   line (-width / 2, depth / 2) to (width / 2, depth / 2) pen view
+  use soft_oval_thin(-width / 2, depth / 2, 0.03, depth / 2)
+  use soft_oval_thin(width / 2, depth / 2, 0.03, depth / 2)
+  let n = max(3, floor(width / 0.06))
+  repeat i in 0..n
+    let x = -width / 2 + 0.06 + (i + 0.5) * (width - 0.12) / n
+    line (x - 0.015, depth * 0.12) to (x + 0.015, depth * 0.88) pen thin
 
 outputs
   generator = "props:fine_clothes_rail"

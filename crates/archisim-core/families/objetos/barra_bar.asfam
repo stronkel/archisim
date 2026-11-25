@@ -1,9 +1,11 @@
 family "Barra de bar"
   category furniture
   host none
-  version 1
+  version 2
   description "Barra de bar como la hace cada colección: el frente hacia los clientes, encimera volada, reposapiés y, detrás, el lado de servicio con armarios y bandeja de acero"
   folder "Hostelería"
+
+include "muebles"
 
 type_params
   section "Dimensiones"
@@ -28,8 +30,9 @@ body
   box (-width / 2, 0, 0) to (width / 2, depth, height) material top
 
 plan 1:50
-  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
-  line (-width / 2, depth - 0.25) to (width / 2, depth - 0.25) pen thin
+  use soft_box(-width / 2, 0, width / 2, depth, 0.05)
+  use soft_pad(-width / 2 + 0.02, depth - 0.25, width / 2 - 0.02, depth - 0.02, 0.04)
+  line (-width / 2 + 0.05, 0.05) to (width / 2 - 0.05, 0.05) pen thin dashed
 
 outputs
   generator = "props:fine_bar_counter"

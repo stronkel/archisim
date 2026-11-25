@@ -1,9 +1,11 @@
 family "Banco"
   category street
   host none
-  version 4
+  version 5
   description "Banco de calle como lo hace cada colección; el punto de inserción es el centro de la trasera"
   folder "Mobiliario urbano"
+
+include "muebles"
 
 type_params
   section "Dimensiones"
@@ -37,9 +39,12 @@ body
   box (-width / 2, 0, 0) to (width / 2, depth, seat) material frame
 
 plan 1:50
-  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+  use soft_box(-width / 2, 0, width / 2, depth, 0.03)
+  let n = max(3, floor(depth / 0.08))
+  repeat i in 1..n
+    line (-width / 2 + 0.03, i * depth / n) to (width / 2 - 0.03, i * depth / n) pen thin
   if back
-    line (-width / 2, 0.12) to (width / 2, 0.12) pen thin
+    use soft_pad(-width / 2, 0, width / 2, 0.1, 0.02)
 
 outputs
   generator = "props:bench"

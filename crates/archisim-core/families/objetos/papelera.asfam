@@ -1,9 +1,11 @@
 family "Papelera"
   category street
   host none
-  version 3
+  version 4
   description "Papelera como la hace cada colección; el punto de inserción es su centro"
   folder "Mobiliario urbano"
+
+include "muebles"
 
 type_params
   section "Dimensiones"
@@ -32,15 +34,8 @@ body
   box (-width / 2, -width / 2, 0) to (width / 2, width / 2, height) material mat
 
 plan 1:50
-  let r = width / 2
-  repeat i in 0..16
-    let t0 = 6.283185307 * i / 16
-    let t1 = 6.283185307 * (i + 1) / 16
-    line (r * cos(t0), r * sin(t0)) to (r * cos(t1), r * sin(t1)) pen view
-
-plan presentation
-  cloud center (0, 0) radius width / 2 lobes 16 jitter 0 pen thin tint mat
-  cloud center (0, 0) radius width * 0.36 lobes 16 jitter 0 pen thin filled
+  use soft_oval(0, 0, width / 2, width / 2)
+  use soft_oval_thin(0, 0, width / 2 - 0.03, width / 2 - 0.03)
 
 outputs
   generator = "props:litter_bin"
