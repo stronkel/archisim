@@ -360,6 +360,7 @@ pub fn working_look() -> archisim_core::PresentationStyle {
     ];
     s.poche = Some([74, 74, 74]);
     s.line_scale = 0.85;
+    s.washes = true;
     s
 }
 

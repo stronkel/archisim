@@ -627,6 +627,11 @@ pub struct PresentationStyle {
     /// greys (version 74).
     pub accent: Option<crate::Rgb>,
     pub accent_on: BTreeSet<Category>,
+    /// The colours as pale washes (W3, version 122): what has a colour of
+    /// its own (leaves, a material, a coloured room) goes to the light end
+    /// of the palette, as a pencil drawing, and only the greys keep their
+    /// tone by lightness. «Lápiz»: trees and plants white with their lines.
+    pub washes: bool,
 }
 
 /// A presentation style's own pens: one set for fine scales and one for
@@ -650,6 +655,7 @@ impl PresentationStyle {
             pens: None,
             accent: None,
             accent_on: BTreeSet::new(),
+            washes: false,
         }
     }
 
@@ -708,7 +714,19 @@ impl PresentationStyle {
         // The palette sorted by lightness, spread over 0..1.
         let mut tones = p.clone();
         tones.sort_by(|a, b| lum(*a).total_cmp(&lum(*b)));
-        let t = lum(c) * (tones.len() - 1) as f64;
+        let mut l = lum(c);
+        if self.washes {
+            let (hi, lo) = (
+                c.iter().copied().max().unwrap_or(0) as f64,
+                c.iter().copied().min().unwrap_or(0) as f64,
+            );
+            let saturation = if hi > 0.0 { (hi - lo) / hi } else { 0.0 };
+            if saturation > 0.18 {
+                // A wash: between the two lightest tones.
+                l = 0.84 + 0.16 * l;
+            }
+        }
+        let t = l * (tones.len() - 1) as f64;
         let i = (t.floor() as usize).min(tones.len() - 2);
         let f = t - i as f64;
         let (a, b) = (tones[i], tones[i + 1]);
@@ -884,6 +902,32 @@ pub fn parse_presentation_styles(text: &str) -> Result<Vec<PresentationStyle>, S
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn washes_turn_colours_pale_and_keep_the_greys() {
+        let mut p = PresentationStyle::new("Lápiz");
+        p.palette = vec![
+            [84, 84, 84],
+            [138, 138, 138],
+            [236, 236, 236],
+            [255, 255, 255],
+        ];
+        let green = [60, 110, 50];
+        let grey = [101, 101, 101];
+        let dark_green = p.tone(green);
+        p.washes = true;
+        let pale = p.tone(green);
+        assert!(pale[0] > 220, "{pale:?}");
+        assert!(dark_green[0] < 200, "{dark_green:?}");
+        assert_eq!(
+            p.tone(grey),
+            PresentationStyle {
+                washes: false,
+                ..p.clone()
+            }
+            .tone(grey)
+        );
+    }
     use super::*;
 
     #[test]

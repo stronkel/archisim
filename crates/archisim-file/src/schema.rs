@@ -1861,6 +1861,9 @@ pub(crate) struct PresentationStyleOf {
     pub accent: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub accent_on: Vec<String>,
+    /// The colours as pale washes (version 122).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub washes: bool,
 }
 
 impl PresentationStyleOf {
@@ -1882,6 +1885,7 @@ impl PresentationStyleOf {
             }),
             accent: s.accent.map(hex),
             accent_on: s.accent_on.iter().map(|c| c.code().to_string()).collect(),
+            washes: s.washes,
         }
     }
 
@@ -1910,6 +1914,7 @@ impl PresentationStyleOf {
                 .iter()
                 .filter_map(|c| core::Category::from_code(c))
                 .collect(),
+            washes: self.washes,
         })
     }
 }
