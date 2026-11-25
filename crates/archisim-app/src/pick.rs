@@ -107,6 +107,35 @@ pub fn nearest_on_segment(a: Point2, b: Point2, p: Point2) -> Point2 {
     a + d * t
 }
 
+/// The smallest convex outline round some points (counter-clockwise).
+pub fn convex_hull(mut pts: Vec<Point2>) -> Vec<Point2> {
+    pts.sort_by(|a, b| a.x.total_cmp(&b.x).then(a.y.total_cmp(&b.y)));
+    pts.dedup_by(|a, b| a.distance(*b) < 1e-9);
+    if pts.len() < 3 {
+        return pts;
+    }
+    let cross = |o: Point2, a: Point2, b: Point2| (a - o).cross(b - o);
+    let mut hull: Vec<Point2> = Vec::with_capacity(pts.len() * 2);
+    for pass in 0..2 {
+        let start = hull.len();
+        let iter: Box<dyn Iterator<Item = &Point2>> = if pass == 0 {
+            Box::new(pts.iter())
+        } else {
+            Box::new(pts.iter().rev())
+        };
+        for &p in iter {
+            while hull.len() >= start + 2
+                && cross(hull[hull.len() - 2], hull[hull.len() - 1], p) <= 0.0
+            {
+                hull.pop();
+            }
+            hull.push(p);
+        }
+        hull.pop();
+    }
+    hull
+}
+
 /// Distance from `p` to the outline of a closed polygon.
 pub fn distance_to_outline(poly: &[Point2], p: Point2) -> f64 {
     let n = poly.len();
@@ -762,6 +791,27 @@ pub fn pick_all<G: Geo + ?Sized>(
                 let d = distance_to_outline(&b.outline(), p);
                 return (d <= tolerance).then_some((rank(&e), d, e));
             }
+            if let Element::Opening(id) = e {
+                // By its hole, and also by its leaves and their swing:
+                // what is drawn of it in front of the wall.
+                let g = opening_geometry(model, id)?;
+                let hole = g.footprint();
+                if contains(&hole, p) {
+                    return Some((rank(&e), 0.0, e));
+                }
+                let d = distance_to_outline(&hole, p);
+                if d <= tolerance {
+                    return Some((rank(&e), d, e));
+                }
+                if d > g.width() * 1.2 + tolerance {
+                    return None;
+                }
+                let mut pts = archisim_plan::opening_symbol_points(model, &g, 50.0);
+                pts.extend(hole);
+                let reach = convex_hull(pts);
+                return (contains(&reach, p) || distance_to_outline(&reach, p) <= tolerance)
+                    .then_some((rank(&e), d, e));
+            }
             let poly = outline(geo, e)?;
             // A hole of a slab is not the slab.
             let inside = match e {
@@ -1065,6 +1115,44 @@ pub(crate) mod tests {
         })
         .unwrap();
         (m, lvl, lib)
+    }
+
+    /// W2b: a door is taken by its leaf and its swing, in front of the
+    /// wall, not only from inside its hole; past its swing, the floor.
+    #[test]
+    fn a_door_is_taken_by_its_leaf() {
+        let (m, lvl, _) = room();
+        let door = m.openings().next().unwrap().id;
+        let slab = m.slabs().next().unwrap().id;
+        // Into the room, where the leaf swings.
+        assert_eq!(
+            pick(&m, lvl, Point2::new(3.0, 0.6), 0.01),
+            Some(Element::Opening(door))
+        );
+        // Past the swing: the slab.
+        assert_eq!(
+            pick(&m, lvl, Point2::new(3.0, 1.8), 0.01),
+            Some(Element::Slab(slab))
+        );
+        // Outside, where it does not open: not the door.
+        assert_ne!(
+            pick(&m, lvl, Point2::new(3.0, -0.6), 0.01),
+            Some(Element::Opening(door))
+        );
+    }
+
+    #[test]
+    fn convex_hull_of_points() {
+        let h = convex_hull(vec![
+            Point2::new(0.0, 0.0),
+            Point2::new(1.0, 0.0),
+            Point2::new(0.5, 0.2),
+            Point2::new(1.0, 1.0),
+            Point2::new(0.0, 1.0),
+            Point2::new(0.5, 0.5),
+        ]);
+        assert_eq!(h.len(), 4);
+        assert!(contains(&h, Point2::new(0.5, 0.9)));
     }
 
     #[test]

@@ -470,7 +470,9 @@ impl ArchiSimApp {
 
     // ---- Devices ------------------------------------------------------------
 
-    pub(super) fn device_click(&mut self, p: Point2) {
+    /// The device a click at `p` places (also its preview under the
+    /// cursor).
+    pub(super) fn device_spec(&self, p: Point2) -> NewDevice {
         let s = self.service_settings;
         let (w, d, h, _) = s.device.defaults();
         // The urban ones stand on the street or go down from it (U5).
@@ -479,7 +481,7 @@ impl ArchiSimApp {
         } else {
             s.device_elevation
         };
-        let spec = NewDevice {
+        NewDevice {
             level: self.ed.level,
             kind: s.device,
             name: s.device.name().to_string(),
@@ -489,7 +491,12 @@ impl ArchiSimApp {
             width: w,
             depth: d,
             height: h,
-        };
+        }
+    }
+
+    pub(super) fn device_click(&mut self, p: Point2) {
+        let s = self.service_settings;
+        let spec = self.device_spec(p);
         match self.ed.transact("Colocar aparato", |m| m.add_device(spec)) {
             Ok(id) => {
                 self.ed.selection = [Element::Device(id)].into_iter().collect();

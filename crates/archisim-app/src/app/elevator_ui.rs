@@ -50,7 +50,9 @@ impl ArchiSimApp {
         levels.last().map_or(self.ed.level, |l| l.id)
     }
 
-    pub(super) fn elevator_click(&mut self, p: Point2) {
+    /// The lift a click at `p` places (also its preview under the
+    /// cursor).
+    pub(super) fn elevator_spec(&self, p: Point2) -> NewElevator {
         let s = self.elevator_settings;
         let level = self.ed.level;
         let top = s.top.unwrap_or_else(|| self.default_top());
@@ -61,6 +63,11 @@ impl ArchiSimApp {
         spec.overrun = s.overrun;
         spec.rotation = s.rotation;
         spec.cut_slabs = s.cut_slabs;
+        spec
+    }
+
+    pub(super) fn elevator_click(&mut self, p: Point2) {
+        let spec = self.elevator_spec(p);
         match self
             .ed
             .transact("Colocar ascensor", |m| m.add_elevator(spec))

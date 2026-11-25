@@ -4,6 +4,14 @@ Lo que cambia en cada versión, en pocas líneas. ArchiSim enseña la parte de s
 
 Cada versión empieza con una línea `## <versión>` (por ejemplo `## 0.81.0`): es la que busca la publicación.
 
+## 0.114.0
+
+- **Espacio invierte el muro** mientras lo dibujas: la cara exterior pasa al otro lado de la línea, para ese muro y los siguientes, hasta pulsar Espacio otra vez.
+- **Las puertas se eligen por su hoja**: un clic en la hoja o en el arco de apertura elige la puerta, sin coger el muro ni el local.
+- **Tiradores más grandes** en muros, puertas, ventanas y objetos, que se cogen desde más lejos.
+- **Ver antes de colocar**: el ascensor, los aparatos y las escaleras se ven bajo el cursor antes del clic, en planta y en 3D; en planta, lo que vas a poner lleva un velo azul transparente.
+- **Encajar el entorno con precisión**: al moverlo o girarlo, los clics se pegan a las esquinas y bordes de los edificios, calles y parcelas, y junto al cursor sale el ángulo.
+
 ## 0.113.0
 
 - **La prueba de los 10 minutos** (bloque W0, `docs/WORKFEEL.md` §4) ya es una prueba automática: una vivienda de 90 m² con salón-cocina, dos dormitorios y baño, una puerta de entrada, tres de paso y cuatro ventanas, el forjado, los cuatro locales con nombre y una lámina A3 de presentación en PDF, dibujada con clics y teclas como lo haría una persona. Cuenta lo que cuesta cada paso (hoy, 90 acciones: 28 clics en el dibujo, 52 teclas y 10 clics en paneles) y avisa si una versión necesita más que la anterior.

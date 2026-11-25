@@ -63,6 +63,10 @@ pub struct WallSettings {
     pub top: TopChoice,
     /// Offset from the top level (negative: below it).
     pub top_offset: f64,
+    /// Space while drawing (Revit's): the walls go the other way round, so
+    /// their exterior face is on the other side of the line drawn. The
+    /// line clicked stays the wall's reference line.
+    pub flipped: bool,
 }
 
 /// The top constraint of the wall tool: a level relative to the one being
@@ -79,6 +83,16 @@ pub enum TopChoice {
 }
 
 impl WallSettings {
+    /// Start, end and bulge of a drawn piece as the wall gets them: the
+    /// other way round when the tool is flipped.
+    pub fn oriented(&self, w: &crate::wall_tool::Piece) -> (Point2, Point2, f64) {
+        if self.flipped {
+            (w.end, w.start, -w.bulge)
+        } else {
+            (w.start, w.end, w.bulge)
+        }
+    }
+
     /// The constraint a new wall on `level` gets.
     pub fn top_on(&self, model: &Model, level: LevelId) -> WallTop {
         let target = match self.top {
@@ -730,15 +744,16 @@ impl Editor {
             pieces
                 .iter()
                 .map(|w| {
+                    let (start, end, bulge) = s.oriented(w);
                     m.add_wall(NewWall {
                         wall_type: s.wall_type,
                         level,
-                        start: w.start,
-                        end: w.end,
+                        start,
+                        end,
                         reference: s.reference,
                         height: s.height,
                         base_offset: s.base_offset,
-                        bulge: w.bulge,
+                        bulge,
                         top,
                     })
                 })
@@ -1881,6 +1896,7 @@ mod tests {
             base_offset: 0.0,
             top: TopChoice::NextLevel,
             top_offset: 0.0,
+            flipped: false,
         }
     }
 

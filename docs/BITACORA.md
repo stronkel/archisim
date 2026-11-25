@@ -6,6 +6,26 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-25 (195) · v0.114: W2b, dibujar y tocar sin fricción
+
+Rama `bloque/w2b-sin-friccion`, sobre `bloque/w0-diez-minutos` (PR #242, sin unir). Primer bloque de la lista de Antonio del 25/11 (`docs/WORKFEEL.md` §6, puntos 1–4 y el forzado de 16 bis). Sin cambios de formato ni de IFC.
+
+- **Hecho**:
+  - **Espacio invierte el muro al dibujarlo** (`WallSettings::flipped`, `oriented`; `flip_wall_tool`): el muro en curso y los siguientes van al revés, con la cara exterior al otro lado de la línea pinchada, que sigue siendo su línea de referencia. Con la flecha, Espacio ya invertía los muros seleccionados.
+  - **La puerta se coge por su hoja**: `pick_all` toma una puerta o ventana también dentro de la envolvente de su símbolo de planta (hoja y arco de apertura, `archisim_plan::opening_symbol_points`, `pick::convex_hull`), con prioridad sobre el muro, el local y el forjado. Solo se calcula cerca del hueco.
+  - **Tiradores más grandes**: se cogen desde 16 px (`GRIP_REACH`; elegir sigue en 10 px), cuadrados de 9 px (12 px bajo el cursor), rombos y círculos de 6 px, flechas y anillos de los objetos un 25 % más grandes.
+  - **Ver antes de colocar**: el ascensor, los aparatos y las escaleras hechas (antes del primer clic) se ven bajo el cursor en planta y en 3D (`Would::Elevator`, `Device`, `Stair`; `elevator_spec`, `device_spec`, `preset_stair_spec`). En planta, lo que aún no está lleva encima un velo azul transparente con su borde (`PlanGhost::made`), para todo lo que se coloca o dibuja.
+  - **Encajar el entorno con forzados**: los clics de Mover, Girar y Dos puntos cogen esquinas, bordes y puntos medios del proyecto y del entorno, con rastreo desde el último punto y su rótulo; los volúmenes y edificios del entorno ya son puntos de forzado para todas las herramientas (`snap_filtered`). Junto al cursor sale el ángulo que gira o lo que se mueve.
+  - Empujar, Desfasar y Deformar no se pegan a los contornos de los volúmenes (miden desde su propia cara), y un extremo de una cota temporal sigue ganando a un tirador que no esté justo debajo (a 10 px).
+  - Pruebas: `space_flips_the_walls_being_drawn`, `handles_are_taken_from_farther`, `what_is_placed_is_seen_before_the_click`, `fitting_the_surroundings_snaps_its_points`, `pick::a_door_is_taken_by_its_leaf`.
+- **Pendiente**: el dial de Synaps y «este borde recto» para girar el entorno (W8); W3 ampliado y W10.
+- **Qué debe probar Antonio**:
+  1. Muro: pincha el primer punto, pulsa Espacio y sigue dibujando: las capas exteriores deben pasar al otro lado de la línea; Espacio otra vez las devuelve.
+  2. Una puerta en una planta: pincha en su hoja o en su arco, dentro de la habitación: se elige la puerta, no el muro ni el local.
+  3. Elige un muro o una puerta: los cuadraditos son más grandes y se cogen sin afinar tanto.
+  4. Ascensor, Aparato y Escalera recta: antes de hacer clic se ve dónde va a quedar, con un velo azul.
+  5. Archivo → Traer el entorno, y luego Encajar → Girar: los tres clics se pegan a las esquinas y bordes de los edificios y calles, y junto al cursor sale el ángulo.
+
 ## 2026-11-25 (194) · v0.113: W0, la prueba de los 10 minutos
 
 Rama `bloque/w0-diez-minutos`, sobre `bloque/w2a-punteria` (PR #241, sin unir). Sin cambios de formato ni de IFC.

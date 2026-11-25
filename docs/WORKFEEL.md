@@ -82,7 +82,7 @@ Lo que más pesa: nombrar los locales y volver a dibujar el contorno para el for
 
 ## 6. Lista de Antonio del 25/11/2026
 
-Apuntado tal como lo contó, agrupado en bloques. Ninguno empezado.
+Apuntado tal como lo contó, agrupado en bloques. W2b hecho en `bloque/w2b-sin-friccion` (v0.114), con el forzado de 16 bis; los demás, sin empezar.
 
 ### W2b — Dibujar y tocar sin fricción (junto a W2)
 

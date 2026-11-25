@@ -649,7 +649,19 @@ impl ArchiSimApp {
                     Tool::TeamZone => self.team_ui.zone_start.into_iter().collect(),
                     _ => self.concept_points(),
                 };
-                let mut s = self.snap_at(raw, reach, &points, &BTreeSet::new());
+                // Pushing, offsetting or deforming a volume measures from
+                // its own face: the volumes' outlines are not taken then.
+                let skip: BTreeSet<Element> =
+                    if matches!(self.tool, Tool::PushPull | Tool::Deform | Tool::MassOffset) {
+                        self.ed
+                            .model()
+                            .masses_on_level(self.ed.level)
+                            .map(|m| Element::Mass(m.id))
+                            .collect()
+                    } else {
+                        BTreeSet::new()
+                    };
+                let mut s = self.snap_at(raw, reach, &points, &skip);
                 let anchor = match self.tool {
                     Tool::Beam => self.beam_tool.anchor,
                     Tool::Grid | Tool::RefPlane | Tool::Footing => self.foundation_anchor(),
@@ -777,6 +789,24 @@ impl ArchiSimApp {
                     self.drag_preview = Some((to, variant, ghost));
                 }
             }
+            // Fitting the surroundings: its points are taken like those of
+            // a drawing tool (corners, edges, middles of the surroundings
+            // and of the project), with tracking from the last one.
+            Tool::Arrow if self.context_fit.picking() => {
+                let picks = self.context_fit.picks.clone();
+                let mut s = self.snap_at(raw, reach, &picks, &BTreeSet::new());
+                if let Some(a) = picks.last().copied() {
+                    if ctx.input(|i| i.modifiers.shift) {
+                        s = constrain(a, s);
+                    } else {
+                        s = self.track_at(a, s);
+                    }
+                }
+                self.cursor = Some(s);
+                self.hover = None;
+                self.hover_grip = None;
+                self.under_cursor.clear();
+            }
             Tool::Arrow => {
                 self.cursor = Some(Snap::at(crate::snap::round_point(raw), SnapKind::Free));
                 self.hover_road = if self.window_start.is_some() || self.drag.is_some() {
@@ -787,7 +817,8 @@ impl ArchiSimApp {
                 self.hover_grip = if self.window_start.is_some() {
                     None
                 } else {
-                    self.grip_here(raw, pick_reach).map(|g| g.0)
+                    let grip_reach = self.view.to_metres(crate::touch::reach(GRIP_REACH));
+                    self.grip_here(raw, grip_reach).map(|g| g.0)
                 };
                 self.under_cursor = if self.window_start.is_some() {
                     Vec::new()
@@ -859,6 +890,10 @@ impl ArchiSimApp {
                 self.run_change_level(up);
                 return;
             }
+        }
+        if space && self.tool == Tool::Wall {
+            self.flip_wall_tool();
+            return;
         }
         if space && self.tool == Tool::World {
             self.world_turn();
@@ -1803,6 +1838,8 @@ impl ArchiSimApp {
                     .flatten()
                     .filter(|p| {
                         let at = self.view.to_model(rect, *p);
+                        // Only a handle right under the press: a little
+                        // farther, the witness end is meant.
                         let reach = self.view.to_metres(crate::touch::reach(REACH));
                         !matches!(
                             self.grip_here(at, reach),
@@ -1816,7 +1853,7 @@ impl ArchiSimApp {
                     let origin = ctx
                         .input(|i| i.pointer.press_origin())
                         .map(|p| self.view.to_model(rect, p));
-                    let reach = self.view.to_metres(crate::touch::reach(REACH));
+                    let reach = self.view.to_metres(crate::touch::reach(GRIP_REACH));
                     let grip = origin.and_then(|o| self.grip_here(o, reach));
                     // A handle of the street under the cursor selects it.
                     if let Some((g, _)) = grip {
@@ -2125,7 +2162,7 @@ impl ArchiSimApp {
             let fill = if hot { ACCENT } else { Color32::BLACK };
             match h.grip {
                 Grip::SlabEdge { .. } => {
-                    let r = if hot { 6.0 } else { 4.5 };
+                    let r = if hot { 7.5 } else { 6.0 };
                     let pts = vec![
                         c + Vec2::new(0.0, -r),
                         c + Vec2::new(r, 0.0),
@@ -2182,12 +2219,12 @@ impl ArchiSimApp {
                     super::handles::arrow(painter, c, dir, ACCENT, hot);
                 }
                 Grip::WallBend { .. } | Grip::RoadBend { .. } => {
-                    let r = if hot { 6.0 } else { 4.5 };
+                    let r = if hot { 7.5 } else { 6.0 };
                     let inside = if hot { ACCENT } else { Color32::WHITE };
                     painter.circle(c, r, inside, Stroke::new(1.2, Color32::BLACK));
                 }
                 _ => {
-                    let size = Vec2::splat(if hot { 9.0 } else { 7.0 });
+                    let size = Vec2::splat(if hot { 12.0 } else { 9.0 });
                     painter.rect_filled(Rect::from_center_size(c, size), CornerRadius::ZERO, fill);
                     painter.rect_stroke(
                         Rect::from_center_size(c, size),

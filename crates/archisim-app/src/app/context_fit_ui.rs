@@ -449,6 +449,20 @@ impl ArchiSimApp {
         if !fit.moves() {
             return;
         }
+        // What it turns, or how far it goes, next to the cursor.
+        let label = if fit.angle.abs() > 1e-9 {
+            format!("{:.1}°", fit.angle.to_degrees()).replace('.', ",")
+        } else {
+            crate::units::fmt_len(st.picks.last().map_or(0.0, |a| a.distance(c)))
+        };
+        if let Some(at) = self.polygon(rect, &[c]).first() {
+            let font = egui::FontId::proportional(13.0);
+            let galley = painter.layout_no_wrap(label, font, egui::Color32::WHITE);
+            let pos = *at + egui::vec2(14.0, 14.0);
+            let r = egui::Rect::from_min_size(pos, galley.size()).expand(4.0);
+            painter.rect_filled(r, 4.0, accent);
+            painter.galley(pos, galley, egui::Color32::WHITE);
+        }
         let model = self.ed.model();
         let lines = context_fit::preview_lines(model, self.ed.level, st.parts);
         // Not too many lines: the first ones are enough to see where it goes.
