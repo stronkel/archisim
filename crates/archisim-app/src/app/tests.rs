@@ -13950,3 +13950,188 @@ fn chained_walls_close_by_their_first_point() {
     assert!(!h.app.wall_tool.is_drawing(), "closing ends the chain");
     assert!(h.model().walls().any(|w| w.end.approx_eq(p(0.0, 0.0))));
 }
+
+/// W0, «la prueba de los 10 minutos» (`docs/WORKFEEL.md` §4): a house of
+/// 90 m² (living room with kitchen, two bedrooms, a bathroom) drawn the way
+/// a person would, with its doors and windows, its slab and named rooms,
+/// and an A3 presentation sheet in PDF. It counts what it takes: clicks on
+/// the drawing, keys, and clicks on panels and menus. The counts go to
+/// `diez-minutos.txt` in `ARCHISIM_TEST_OUT`, and the test fails if a
+/// version needs more than the last one written down here.
+#[test]
+fn ten_minute_house() {
+    #[derive(Default)]
+    struct Tally {
+        drawing: usize,
+        keys: usize,
+        panels: usize,
+        steps: Vec<(String, usize, usize, usize)>,
+    }
+    impl Tally {
+        fn click(&mut self, h: &mut Harness, at: Point2) {
+            h.click_at(at);
+            self.drawing += 1;
+        }
+        fn key(&mut self, h: &mut Harness, k: Key) {
+            h.key(k);
+            self.keys += 1;
+        }
+        fn type_text(&mut self, h: &mut Harness, t: &str) {
+            h.type_text(t);
+            self.keys += t.chars().count();
+        }
+        /// A step done by panels and menus: `n` clicks there.
+        fn panel(&mut self, n: usize) {
+            self.panels += n;
+        }
+        fn step(&mut self, name: &str) {
+            let before = self
+                .steps
+                .iter()
+                .fold((0, 0, 0), |a, s| (a.0 + s.1, a.1 + s.2, a.2 + s.3));
+            self.steps.push((
+                name.to_string(),
+                self.drawing - before.0,
+                self.keys - before.1,
+                self.panels - before.2,
+            ));
+        }
+        fn total(&self) -> usize {
+            self.drawing + self.keys + self.panels
+        }
+    }
+    let mut h = Harness::new(Editor::new_project());
+    let mut t = Tally::default();
+
+    // 1. Façades: a chain of four walls closed back on its first point.
+    t.type_text(&mut h, "m");
+    assert_eq!(h.app.tool, Tool::Wall);
+    for c in [p(0.0, 0.0), p(0.0, 9.0), p(10.0, 9.0), p(10.0, 0.0)] {
+        t.click(&mut h, c);
+    }
+    t.click(&mut h, p(0.05, 0.08));
+    assert!(!h.app.wall_tool.is_drawing(), "the outline closes");
+    t.step("Fachadas");
+
+    // 2. Partitions: the partition type from the tool's type list, then a
+    // wall across and two in the east part, from face to face.
+    let partition = h
+        .model()
+        .wall_types()
+        .find(|t| t.name.starts_with("Tabique"))
+        .unwrap()
+        .id;
+    h.app.wall_settings.wall_type = partition;
+    h.app.wall_settings.reference = ReferenceLine::Center;
+    t.panel(2);
+    t.click(&mut h, p(6.0, 0.29));
+    t.click(&mut h, p(6.0, 8.71));
+    t.key(&mut h, Key::Escape);
+    for y in [3.6, 5.4] {
+        t.click(&mut h, p(6.06, y));
+        t.click(&mut h, p(9.72, y));
+        t.key(&mut h, Key::Escape);
+    }
+    t.key(&mut h, Key::Escape);
+    assert_eq!(h.model().walls().count(), 7, "{:?}", h.app.message);
+    t.step("Tabiques");
+
+    // 3. The entrance door, three inner doors and four windows.
+    t.type_text(&mut h, "p");
+    assert_eq!(h.app.tool, Tool::Door);
+    t.click(&mut h, p(3.0, 0.4));
+    for y in [1.8, 4.5, 7.2] {
+        t.click(&mut h, p(5.85, y));
+    }
+    t.type_text(&mut h, "v");
+    assert_eq!(h.app.tool, Tool::Window);
+    for c in [p(3.0, 8.6), p(8.0, 8.6), p(8.0, 0.4), p(0.4, 4.5)] {
+        t.click(&mut h, c);
+    }
+    let m = h.model();
+    let (doors, windows): (Vec<_>, Vec<_>) = m
+        .openings()
+        .partition(|o| m.opening_type(o.opening_type).unwrap().is_door());
+    assert_eq!((doors.len(), windows.len()), (4, 4), "{:?}", h.app.message);
+    t.step("Puertas y ventanas");
+
+    // 4. The slab, by the four outer corners.
+    t.key(&mut h, Key::Escape);
+    t.type_text(&mut h, "f");
+    assert_eq!(h.app.tool, Tool::Slab);
+    for c in [p(0.0, 0.0), p(0.0, 9.0), p(10.0, 9.0), p(10.0, 0.0)] {
+        t.click(&mut h, c + Point2::new(0.03, -0.02));
+    }
+    t.click(&mut h, p(0.02, 0.01));
+    let area: f64 = h.model().slabs().map(|s| s.area()).sum();
+    assert!((area - 90.0).abs() < 1e-6, "{area}");
+    t.step("Forjado");
+
+    // 5. The rooms: a click inside each, its name typed in the tool's
+    // Name field before.
+    t.key(&mut h, Key::Escape);
+    t.type_text(&mut h, "z");
+    assert_eq!(h.app.tool, Tool::Zone);
+    let rooms = [
+        ("Salón-cocina", p(3.0, 4.5)),
+        ("Dormitorio 1", p(8.0, 7.2)),
+        ("Baño", p(8.0, 4.5)),
+        ("Dormitorio 2", p(8.0, 1.8)),
+    ];
+    for (name, at) in rooms {
+        h.app.room_settings.name = name.to_string();
+        t.panel(1);
+        t.keys += name.chars().count();
+        t.click(&mut h, at);
+    }
+    let m = h.model();
+    let named: Vec<(String, f64)> = m.rooms().map(|r| (r.name.clone(), r.area())).collect();
+    assert_eq!(named.len(), 4, "{named:?} {:?}", h.app.message);
+    for (name, _) in rooms {
+        assert!(named.iter().any(|(n, _)| n == name), "{name}: {named:?}");
+    }
+    let useful: f64 = named.iter().map(|(_, a)| a).sum();
+    assert!(useful > 75.0 && useful < 90.0, "{named:?}");
+    t.step("Locales");
+
+    // 6. An A3 presentation sheet (Entregar → Plano de presentación) and
+    // its PDF (Archivo → Exportar planos).
+    t.key(&mut h, Key::Escape);
+    h.app.new_presentation_sheet();
+    t.panel(2);
+    h.frame();
+    let sheet = h.model().sheets().last().unwrap().id;
+    let dir = match std::env::var_os("ARCHISIM_TEST_OUT") {
+        Some(d) => PathBuf::from(d),
+        None => std::env::temp_dir().join(format!("archisim-w0-{}", std::process::id())),
+    };
+    std::fs::create_dir_all(&dir).unwrap();
+    let pdf = dir.join("diez-minutos.pdf");
+    h.app.ed.export_sheets(&pdf, &[sheet]).unwrap();
+    t.panel(2);
+    assert!(std::fs::read(&pdf).unwrap().starts_with(b"%PDF"));
+    t.step("Lámina A3 en PDF");
+
+    // The count, step by step.
+    let mut report = String::from("Prueba de los 10 minutos (W0): vivienda de 90 m²\n\n");
+    report += "Paso                    Clics en el dibujo  Teclas  Clics en paneles\n";
+    for (name, d, k, p) in &t.steps {
+        report += &format!("{name:<24}{d:>18}{k:>8}{p:>18}\n");
+    }
+    report += &format!(
+        "{:<24}{:>18}{:>8}{:>18}\nTodo: {} acciones\n",
+        "Total",
+        t.drawing,
+        t.keys,
+        t.panels,
+        t.total()
+    );
+    std::fs::write(dir.join("diez-minutos.txt"), &report).unwrap();
+    eprintln!("{report}");
+    if std::env::var_os("ARCHISIM_TEST_OUT").is_none() {
+        std::fs::remove_dir_all(&dir).ok();
+    }
+    // Never more than the last version needed.
+    const LAST: usize = 90;
+    assert!(t.total() <= LAST, "{} acciones, antes {LAST}", t.total());
+}

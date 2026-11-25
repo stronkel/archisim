@@ -6,6 +6,15 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-25 (194) · v0.113: W0, la prueba de los 10 minutos
+
+Rama `bloque/w0-diez-minutos`, sobre `bloque/w2a-punteria` (PR #241, sin unir). Sin cambios de formato ni de IFC.
+
+- **Hecho**: la prueba `ten_minute_house` (`app/tests.rs`) dibuja con clics y teclas simulados la vivienda de `docs/WORKFEEL.md` §4 (10 × 9 m: fachadas en cadena cerrada, tres tabiques, una puerta de entrada, tres de paso, cuatro ventanas, el forjado, cuatro locales con nombre) y saca la lámina A3 de presentación en PDF. Cuenta clics en el dibujo, teclas y clics en paneles por paso, escribe `diez-minutos.txt` (y el PDF) en `ARCHISIM_TEST_OUT` y falla si el total pasa del último apuntado (`LAST`, hoy 90).
+- **Lo que dicen los números (v0.113)**: Fachadas 5 clics + 1 tecla; Tabiques 6 + 4 teclas + 2 en paneles (elegir el tipo); Puertas y ventanas 8 + 2; Forjado 5 + 2; Locales 4 clics + 42 teclas + 4 en paneles; Lámina A3 en PDF 1 tecla + 4 en paneles. **Total 90**. Lo que más cuesta es nombrar los locales (casi la mitad de las teclas) y el forjado, que repite el contorno que los muros ya cerraron: es justo lo que ataca W2 («¿Hacer estancia?» al cerrar el recinto, con un nombre propuesto por su tamaño). En la lámina, las puertas de paso abren hacia el salón y el título del cuadro de superficies roza el texto «Planta baja».
+- **Pendiente**: la parte de Antonio (§4: la misma vivienda a mano, con tiempo y atascos, y en ArchiCAD como referencia); después, W2.
+- **Qué debe probar Antonio**: la prueba de §4 a mano en esta versión, cronometrada, apuntando cada duda o cosa hecha dos veces. Con eso y estos números se decide W2.
+
 ## 2026-11-24 (193) · v0.112: W2a, puntería y muros sencillos
 
 Rama `bloque/w2a-punteria`, desde `main` (0.110; el PR #240 de la SUMO, con la 0.111, sigue sin unir). Primer bloque de `docs/WORKFEEL.md`, que se sube al repositorio en esta rama. Sin cambios de formato ni de IFC.

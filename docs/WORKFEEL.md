@@ -28,7 +28,7 @@ Mismo modo de trabajo que los bloques C, E y U (§9 de la hoja de ruta): se marc
 | # | Bloque | Qué notará Antonio | Tamaño | Estado |
 |---|---|---|---|---|
 | W2a | **Puntería y muros sencillos** (§3 bis) | Forzado más generoso que no salta, rótulo de lo que se coge, cadena que se cierra | S | Hecho en `bloque/w2a-punteria` (v0.112) |
-| W0 | **Prueba de los 10 minutos** | Una prueba fija en cada versión: vivienda de 90 m² (salón-cocina, dos dormitorios, baño) y una lámina A3 de presentación. Se cuentan clics, tiempo y atascos; la misma prueba en ArchiCAD como referencia. También como prueba automática (clics simulados, como `drawn_project`), que cuenta las órdenes | S | |
+| W0 | **Prueba de los 10 minutos** | Una prueba fija en cada versión: vivienda de 90 m² (salón-cocina, dos dormitorios, baño) y una lámina A3 de presentación. Se cuentan clics, tiempo y atascos; la misma prueba en ArchiCAD como referencia. También como prueba automática (clics simulados, como `drawn_project`), que cuenta las órdenes | S | Prueba automática hecha en `bloque/w0-diez-minutos` (v0.113): 90 acciones; falta la de Antonio a mano |
 | W1 | **Lienzo partido** | Botón en la barra inferior (y teclas) para ver planta + 3D, planta + sección o cuatro vistas; las vistas siguen a la misma selección (lo elegido se ilumina en todas), el 3D se centra en lo que estás dibujando y lo dibujado aparece al momento en las otras | M | |
 | W2 | **Dibujar sin elegir herramienta** | Al cerrar un recinto con la herramienta Muro, una burbuja «¿Hacer estancia?» crea forjado y local en un solo Deshacer (o siempre, si se activa). Doble clic en un muro coloca la puerta o ventana de la última vez. Arrastrar desde el extremo de un muro seleccionado sigue el muro; desde su centro, tira un tabique en escuadra. La paleta de la Maqueta (girar, duplicar, cuentagotas, borrar) también en Técnica | M | |
 | W3 | **Bonito por defecto** | Proyecto nuevo con un estilo de presentación ya puesto en la planta de trabajo (conmutable Técnico ↔ Presentación con una tecla). «Entregar → Lámina de presentación» abre una vista previa en vivo: estilos en miniatura, papel, escala y vistas; título, escala gráfica, norte y cuadro de superficies colocados solos; un clic y está el PDF | M | |
@@ -63,6 +63,22 @@ Sin cambiar nada del programa, Antonio:
 4. Saca una lámina A3 «para enseñar a un cliente», con planta amueblada y una vista 3D, en PDF.
 
 Apunta: tiempo total, y **cada momento en que dudaste, buscaste algo o hiciste algo dos veces**, con la herramienta en la que estabas. Esa lista decide el contenido fino de W2 y W3.
+
+### Resultado de la prueba automática (v0.113)
+
+`ten_minute_house` (`app/tests.rs`), con `ARCHISIM_TEST_OUT` escribe `diez-minutos.txt` y `diez-minutos.pdf`:
+
+| Paso | Clics en el dibujo | Teclas | Clics en paneles |
+|---|---:|---:|---:|
+| Fachadas | 5 | 1 | 0 |
+| Tabiques | 6 | 4 | 2 |
+| Puertas y ventanas | 8 | 2 | 0 |
+| Forjado | 5 | 2 | 0 |
+| Locales | 4 | 42 | 4 |
+| Lámina A3 en PDF | 0 | 1 | 4 |
+| **Total (90)** | **28** | **52** | **10** |
+
+Lo que más pesa: nombrar los locales y volver a dibujar el contorno para el forjado. Los dos los quita W2 («¿Hacer estancia?» con nombre propuesto). La prueba falla si una versión necesita más acciones que la última apuntada (`LAST`); cuando un bloque las reduzca, se baja `LAST`.
 
 ## 5. Para el programador
 
