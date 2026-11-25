@@ -128,11 +128,25 @@ Apuntado tal como lo contó, agrupado en bloques. Ninguno empezado.
   - **Lo que ya tiene ArchiSim:** las 28 texturas de la T1, dibujadas pieza a pieza con trazo a mano, y los sombreados 2D con escala, giro, fondo y opacidad. Falta que los materiales de muros, suelos y cortes lleven su trama con esos mismos controles en cada superficie, que haya muchas más y con este carácter, y el selector en tarjetas.
 - **Otras referencias que da Antonio:** rayon.design (planta 2D precisa y bonita, plantillas de estancias y de distribuciones) y 1to10.tools (detalles constructivos 1:10 cuyas capas «saben de qué están hechas»: biblioteca de componentes con fabricante, U, Rw, masa y CO₂ por capa, calco de imagen y calculadora de escaleras).
 
+- **Detalle 1:10 de 1to10.tools** (captura del 25/11, «Quatre Cheminées»): la sección constructiva lleva junto al dibujo una leyenda numerada por elemento, con el nombre de cada capa (material y función) y su medida («Steel framing: Stud 50 × 50 (0.6 mm) · 600 mm c/c»). Los números salen en el dibujo con su línea de referencia y su punto. Las cotas van en milímetros, con «out → in» para leer la composición de fuera a dentro y los rótulos «Interior» y «Exterior» en grande. En ArchiSim, esa leyenda saldría sola de las capas de los tipos de muro y forjado y del entramado.
+
+### W10 — Paletas cómodas, como Synaps y 1to10
+
+19. **Cambiar el aspecto de los paneles** al de las capturas del 25/11 (pedido por Antonio). Ya están las islas de la UI4, los paneles laterales y las tarjetas; falta el acabado:
+   - **Paneles flotantes** de esquinas muy redondeadas, sombra suave y mucho aire sobre el dibujo, que se pliegan con una flecha (‹). El dibujo ocupa toda la ventana, sobre una cuadrícula muy tenue.
+   - **Pestañas de texto** arriba de cada panel (Sólido · Textura · Trama; Propiedades · Capas · Biblioteca), sin iconos ni marcos.
+   - **Cada valor numérico con su deslizador y su casilla** al lado (100 %, 2,11 px, 259°), y unidades escritas.
+   - **Grupos plegables con título** (Colocación, Geometría, Aspecto) y valores «Varios» cuando hay más de un elemento elegido.
+   - **Galerías en tarjetas grandes con buscador** arriba y nombre debajo: tramas, objetos, tipos.
+   - **Barra de herramientas vertical estrecha** de iconos finos agrupados con separadores, y una **mini barra flotante** al otro lado para medir y comentar.
+   - **Barra superior mínima**: escala grande («1:10»), nombre de la vista, Exportar e idioma; nada más.
+   - **Tipografía** sobria y pequeña en gris, con los títulos en mayúsculas espaciadas («CASOS DE ESTUDIO»).
+
 ### W9 — Varios proyectos a la vez
 
 18. **Tener abiertos varios proyectos** en la misma ventana (una pestaña o ventana por proyecto) y **copiar en uno y pegar en otro**: muros, puertas, objetos, locales, dibujo 2D… Lo pegado trae sus tipos y materiales; si el otro proyecto ya tiene uno con el mismo `GlobalId` o el mismo nombre, se usa el suyo, y si no, se añade. Los elementos pegados reciben `GlobalId` nuevos, como cualquier copia.
 
-**Orden propuesto** (pendiente de Antonio): W2b (1–4, son pequeñas y se notan a diario) → W3 ampliado (5–8, con las referencias) → W9 (18) → W6 (9–11) → W7 (12–14) → W8 (15–17).
+**Orden propuesto** (pendiente de Antonio): W2b (1–4, son pequeñas y se notan a diario) → W3 ampliado (5–8, con las referencias) → W10 (19) → W9 (18) → W6 (9–11) → W7 (12–14) → W8 (15–17).
 
 ## 5. Para el programador
 
