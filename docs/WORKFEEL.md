@@ -113,11 +113,23 @@ Apuntado tal como lo contó, agrupado en bloques. Ninguno empezado.
 ### W8 — Empezar un proyecto
 
 15. **Generar plantas a partir de un programa** (estancias, superficies, adyacencias, solar), como el generador de Synaps: varias opciones de geometría editable, no imágenes, para revisar y seguir dibujando. Antes estaba fuera de este documento (§2); ahora lo pide Antonio.
-16. Referencias de arranque que mandó en Instagram (posts DfhhY5HnO1D y DfXVgYnCeXl): no se pudieron abrir desde aquí; falta que las describa o las mande como imagen.
+16. **El solar en tres pasos** (capturas de Synaps que mandó Antonio el 25/11): escribir una dirección, elegir la parcela con un clic sobre el mapa de parcelas y girarla con un dial hasta que su lado más largo quede recto; «Crear solar» deja el entorno ya puesto. ArchiSim ya busca la dirección y trae Catastro, OSM, terreno y ortofoto (Archivo → Traer el entorno); falta elegir la parcela con un clic en un mapa y el giro de la vista con el dial.
+17. **Los cuatro alzados con un clic**: se elige el edificio y salen sus cuatro alzados de la planta, con árboles, cotas de nivel y un dibujo gris suave, y siguen siendo editables (colores, rellenos). Encima, herramientas de imagen sobre el alzado: otros ángulos, quitar el fondo, ampliar y retocar con una frase. Lo de la imagen por IA queda para más adelante; los cuatro alzados bonitos con un clic, no.
 
-**Orden propuesto** (pendiente de Antonio): W2b (1–4, son pequeñas y se notan a diario) → W3 ampliado (5–8) → W6 (9–11) → W7 (12–14) → W8 (15).
+### Referencias de las capturas (25/11)
+
+- **Planta** (para 5): muros macizos en gris oscuro, mobiliario en gris claro con contorno fino, pavimento de cocina y baños con trama de baldosa suave, nombre y superficie de cada local, ejes con burbujas y cotas en gris. Pocas tintas, nada de color salvo lo que se elige.
+- **Biblioteca de objetos** (para 7): un cajón con casi mil piezas en 2D por estancias (dormitorio, comedor, exterior, actividades…), tarjetas grandes con el dibujo en planta y su nombre; «una biblioteca, no un buscador». Cada pieza a su tamaño real, con una ficha de producto acotada (piano de cola: medidas, radios, colores de relleno y trazo). Incluye conjuntos ya montados: «Comedor 001…014», mesa con sus sillas como una sola pieza. Vegetación dibujada con mucho carácter (arbustos, plantas de interior, árbol en alzado).
+
+### W9 — Varios proyectos a la vez
+
+18. **Tener abiertos varios proyectos** en la misma ventana (una pestaña o ventana por proyecto) y **copiar en uno y pegar en otro**: muros, puertas, objetos, locales, dibujo 2D… Lo pegado trae sus tipos y materiales; si el otro proyecto ya tiene uno con el mismo `GlobalId` o el mismo nombre, se usa el suyo, y si no, se añade. Los elementos pegados reciben `GlobalId` nuevos, como cualquier copia.
+
+**Orden propuesto** (pendiente de Antonio): W2b (1–4, son pequeñas y se notan a diario) → W3 ampliado (5–8, con las referencias) → W9 (18) → W6 (9–11) → W7 (12–14) → W8 (15–17).
 
 ## 5. Para el programador
+
+- W9: hoy la app tiene un solo `Editor` (`ArchiSimApp::ed`, `app.rs`) y el portapapeles (`context_menu::Clipboard`) guarda ids de elementos, así que solo vale dentro del mismo modelo. Para pegar en otro proyecto, el portapapeles tiene que llevar los elementos con sus tipos y materiales (un modelo pequeño), y pegar puede reutilizar lo que ya hace `modules::instantiate` al aplanar un módulo (copia elementos de otro modelo, con `GlobalId` por copia). Varios proyectos abiertos: una lista de editores con el suyo activo, cada uno con sus pestañas.
 
 - No hay vistas simultáneas: `ViewMode` es una sola vista por pestaña (`app/tabs.rs`). W1 necesita que la planta (`plan_image`, `plan_ui`) y el 3D (`view3d`) se pinten en dos rectángulos del mismo marco, con la selección compartida que ya tiene el editor.
 - Habitación ya existe como método (Maqueta y barra contextual de Muro); W2 reutiliza su transacción y la detección de recintos (`archisim_geom` varita mágica) al cerrar una cadena de muros. Pendiente de MQ1: la Habitación en un solo Deshacer.
