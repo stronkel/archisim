@@ -130,7 +130,6 @@ Apuntado tal como lo contó, agrupado en bloques. Ninguno empezado.
 ## 5. Para el programador
 
 - W9: hoy la app tiene un solo `Editor` (`ArchiSimApp::ed`, `app.rs`) y el portapapeles (`context_menu::Clipboard`) guarda ids de elementos, así que solo vale dentro del mismo modelo. Para pegar en otro proyecto, el portapapeles tiene que llevar los elementos con sus tipos y materiales (un modelo pequeño), y pegar puede reutilizar lo que ya hace `modules::instantiate` al aplanar un módulo (copia elementos de otro modelo, con `GlobalId` por copia). Varios proyectos abiertos: una lista de editores con el suyo activo, cada uno con sus pestañas.
-
 - No hay vistas simultáneas: `ViewMode` es una sola vista por pestaña (`app/tabs.rs`). W1 necesita que la planta (`plan_image`, `plan_ui`) y el 3D (`view3d`) se pinten en dos rectángulos del mismo marco, con la selección compartida que ya tiene el editor.
 - Habitación ya existe como método (Maqueta y barra contextual de Muro); W2 reutiliza su transacción y la detección de recintos (`archisim_geom` varita mágica) al cerrar una cadena de muros. Pendiente de MQ1: la Habitación en un solo Deshacer.
 - `new_presentation_sheet` (`app/sheet_ui.rs`) ya elige estilo y monta la lámina con `archisim_plan::layout::add_presentation_sheet`: W3 le pone delante un diálogo con vista previa.
