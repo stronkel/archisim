@@ -447,10 +447,10 @@ mod tests {
         // Aside: it fails there, then once more here, and says so.
         let mut pic = Picture::<K>::new("prueba");
         pic.update(&ctx, &view, false, Duration::ZERO, failing);
-        for _ in 0..200 {
-            if pic.error().is_some() {
-                break;
-            }
+        // Up to 20 s: a busy machine (the Windows runner, with the other
+        // tests going) can take more than a second to start the thread.
+        let until = web_time::Instant::now() + Duration::from_secs(20);
+        while pic.error().is_none() && web_time::Instant::now() < until {
             std::thread::sleep(Duration::from_millis(5));
             pic.update(&ctx, &view, false, Duration::ZERO, failing);
         }
