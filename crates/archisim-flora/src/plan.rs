@@ -47,6 +47,9 @@ pub enum PlanStyle {
     Sprigs,
     /// The branches inside a leafy edge.
     BranchesEdge,
+    /// Drawn as in the plans of Synaps (W3): a lobed edge, the masses of
+    /// leaves inside it and small strokes of leaves.
+    Drawn,
     /// AD5's drawing: overlapping crowns in washes, with rings of dashes.
     Ad5Circles,
     /// AD5's drawing: clusters of leaves over a light wash.
@@ -75,6 +78,7 @@ names!(PlanStyle {
     Silhouette => "silueta",
     Sprigs => "ramitos",
     BranchesEdge => "ramas y borde",
+    Drawn => "dibujada",
     Ad5Circles => "dibujo: círculos",
     Ad5Clusters => "dibujo: racimos",
     Ad5Star => "dibujo: estrella",
@@ -390,6 +394,36 @@ impl Plant {
     /// [`crate::side`] so that its `x` is across the view and its `y` up,
     /// as seen from the side: the same styles, with the trunks standing up
     /// from the ground instead of their ring at the foot.
+    /// The crown's edge in rounded lobes, as a cloud.
+    fn cloud_edge(&self, raw: &[f64], perimeter_mm: f64, rng: &mut Rng) -> Vec<P2> {
+        let n = raw.len();
+        let base = smooth_ring(raw, 8);
+        let lobes = ((perimeter_mm / 9.0).round() as usize).clamp(7, 22);
+        let mut cuts: Vec<f64> = (0..lobes)
+            .map(|i| (i as f64 + rng.signed() * 0.3) / lobes as f64 * TAU)
+            .collect();
+        cuts.sort_by(f64::total_cmp);
+        let mut pts = Vec::new();
+        for i in 0..lobes {
+            let a0 = cuts[i];
+            let a1 = if i + 1 < lobes {
+                cuts[i + 1]
+            } else {
+                cuts[0] + TAU
+            };
+            let steps = 10;
+            let swell = rng.range(0.05, 0.1);
+            for j in 0..steps {
+                let u = j as f64 / steps as f64;
+                let a = a0 + (a1 - a0) * u;
+                let k = ((a.rem_euclid(TAU) / TAU * n as f64).round() as usize) % n;
+                let r = base[k] * (1.0 - swell + swell * (PI * u).sin().powf(0.6));
+                pts.push([self.center[0] + r * a.cos(), self.center[1] + r * a.sin()]);
+            }
+        }
+        pts
+    }
+
     pub(crate) fn draw(&self, o: &PlanOptions, side: bool) -> Vec<Shape> {
         let w = (self.radius * 2.0).max(self.species.width * 0.3).max(1e-3);
         let crown_mm = o.crown_mm.max(0.1);
@@ -411,6 +445,8 @@ impl Plant {
             )
         {
             style = PlanStyle::Outline;
+        } else if crown_mm < 10.0 && style == PlanStyle::Drawn {
+            style = PlanStyle::Cloud;
         }
         if side {
             // AD5's drawings are drawings in plan: from the side, the
@@ -532,32 +568,18 @@ impl Plant {
                 self.branch_gaps(&mut lines, crown_mm, mpm);
             }
             PlanStyle::Cloud => {
-                let base = smooth_ring(&raw, 8);
-                let lobes = ((perimeter_mm / 9.0).round() as usize).clamp(7, 22);
-                let mut cuts: Vec<f64> = (0..lobes)
-                    .map(|i| (i as f64 + rng.signed() * 0.3) / lobes as f64 * TAU)
-                    .collect();
-                cuts.sort_by(f64::total_cmp);
-                let mut pts = Vec::new();
-                for i in 0..lobes {
-                    let a0 = cuts[i];
-                    let a1 = if i + 1 < lobes {
-                        cuts[i + 1]
-                    } else {
-                        cuts[0] + TAU
-                    };
-                    let steps = 10;
-                    let swell = rng.range(0.05, 0.1);
-                    for j in 0..steps {
-                        let u = j as f64 / steps as f64;
-                        let a = a0 + (a1 - a0) * u;
-                        let k = ((a.rem_euclid(TAU) / TAU * n as f64).round() as usize) % n;
-                        let r = base[k] * (1.0 - swell + swell * (PI * u).sin().powf(0.6));
-                        pts.push([self.center[0] + r * a.cos(), self.center[1] + r * a.sin()]);
-                    }
-                }
+                let pts = self.cloud_edge(&raw, perimeter_mm, &mut rng);
                 fills = vec![pts.clone()];
                 lines.push(line(pts, true, Stroke::Outline));
+            }
+            PlanStyle::Drawn => {
+                let pts = self.cloud_edge(&raw, perimeter_mm, &mut rng);
+                fills = vec![pts.clone()];
+                lines.push(line(pts, true, Stroke::Outline));
+                for l in self.foliage_loops(mpm) {
+                    lines.push(line(l, true, Stroke::Thin));
+                }
+                self.leaf_marks(&mut lines, mpm, 0.35, &mut rng);
             }
             PlanStyle::Sketch => {
                 for pass in 0..2 {
