@@ -1,9 +1,11 @@
 family "Mesa de reuniones"
   category furniture
   host none
-  version 1
+  version 2
   description "Mesa de reuniones con caja de conexiones como la hace cada colección"
   folder "Oficina"
+
+include "muebles"
 
 type_params
   section "Dimensiones"
@@ -23,7 +25,8 @@ body
   box (-width / 2, 0, 0) to (width / 2, depth, height) material top
 
 plan 1:50
-  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+  use soft_box(-width / 2, 0, width / 2, depth, min(0.2, depth / 3))
+  line (-width / 2 + 0.3, depth / 2) to (width / 2 - 0.3, depth / 2) pen thin dashed
 
 outputs
   generator = "props:fine_meeting_table"

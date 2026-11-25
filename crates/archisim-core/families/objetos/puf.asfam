@@ -1,9 +1,11 @@
 family "Puf"
   category furniture
   host none
-  version 2
+  version 3
   description "Puf redondo, de punto o cubo"
   folder "Sofás y sillones"
+
+include "muebles"
 
 type_params
   section "Dimensiones"
@@ -23,13 +25,11 @@ body
 
 plan 1:50
   if model3d == "Contemporáneo" or model3d == "Japandi"
-    polygon (-width / 2, 0) (width / 2, 0) (width / 2, width) (-width / 2, width) pen view
+    use soft_box(-width / 2, 0, width / 2, width, width * 0.2)
+    use soft_pad(-width / 2 + 0.04, 0.04, width / 2 - 0.04, width - 0.04, width * 0.16)
   else
-    let r = width / 2
-    repeat i in 0..16
-      let t0 = 6.283185307 * i / 16
-      let t1 = 6.283185307 * (i + 1) / 16
-      line (r * cos(t0), r + r * sin(t0)) to (r * cos(t1), r + r * sin(t1)) pen view
+    use soft_oval(0, width / 2, width / 2, width / 2)
+    use soft_oval_thin(0, width / 2, width * 0.12, width * 0.12)
 
 outputs
   generator = "props:fine_pouf"

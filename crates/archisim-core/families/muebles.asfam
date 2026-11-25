@@ -23,3 +23,23 @@ component soft_oval(cx, cy, a, b)
 
 component soft_oval_thin(cx, cy, a, b)
   polygon (cx + 1.0 * a, cy + 0.0 * b) (cx + 0.9659 * a, cy + 0.2588 * b) (cx + 0.866 * a, cy + 0.5 * b) (cx + 0.7071 * a, cy + 0.7071 * b) (cx + 0.5 * a, cy + 0.866 * b) (cx + 0.2588 * a, cy + 0.9659 * b) (cx + 0.0 * a, cy + 1.0 * b) (cx + -0.2588 * a, cy + 0.9659 * b) (cx + -0.5 * a, cy + 0.866 * b) (cx + -0.7071 * a, cy + 0.7071 * b) (cx + -0.866 * a, cy + 0.5 * b) (cx + -0.9659 * a, cy + 0.2588 * b) (cx + -1.0 * a, cy + 0.0 * b) (cx + -0.9659 * a, cy + -0.2588 * b) (cx + -0.866 * a, cy + -0.5 * b) (cx + -0.7071 * a, cy + -0.7071 * b) (cx + -0.5 * a, cy + -0.866 * b) (cx + -0.2588 * a, cy + -0.9659 * b) (cx + -0.0 * a, cy + -1.0 * b) (cx + 0.2588 * a, cy + -0.9659 * b) (cx + 0.5 * a, cy + -0.866 * b) (cx + 0.7071 * a, cy + -0.7071 * b) (cx + 0.866 * a, cy + -0.5 * b) (cx + 0.9659 * a, cy + -0.2588 * b) pen thin filled
+
+# Una silla junto a una mesa, en x, desde el canto y0 del tablero: hacia
+# delante (dir 1) o hacia atrás (dir -1), metida un poco bajo él.
+component table_chair(x, y0, dir)
+  let ya = if dir > 0 then y0 - 0.1 else y0 - 0.34
+  let yb = if dir > 0 then y0 + 0.34 else y0 + 0.1
+  use soft_box(x - 0.2, ya, x + 0.2, yb, 0.06)
+  let r0 = if dir > 0 then yb - 0.06 else ya
+  let r1 = if dir > 0 then yb else ya + 0.06
+  use soft_pad(x - 0.21, r0, x + 0.21, r1, 0.03)
+
+# Una hoja de planta vista desde arriba: desde (cx, cy), larga «l» y de
+# ancho «w», con el ángulo «a»; rellena de blanco, con su nervio.
+component leaf(cx, cy, l, w, a)
+  let px = -sin(a)
+  let py = cos(a)
+  let ux = cos(a)
+  let uy = sin(a)
+  polygon (cx, cy) (cx + 0.3 * l * ux + 0.8 * w * px, cy + 0.3 * l * uy + 0.8 * w * py) (cx + 0.65 * l * ux + w * px, cy + 0.65 * l * uy + w * py) (cx + l * ux, cy + l * uy) (cx + 0.65 * l * ux - w * px, cy + 0.65 * l * uy - w * py) (cx + 0.3 * l * ux - 0.8 * w * px, cy + 0.3 * l * uy - 0.8 * w * py) pen thin filled
+  line (cx + 0.15 * l * ux, cy + 0.15 * l * uy) to (cx + 0.85 * l * ux, cy + 0.85 * l * uy) pen thin

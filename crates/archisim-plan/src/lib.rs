@@ -4111,7 +4111,7 @@ mod symbol_sheet_tests {
                 m.family(t.family).is_some_and(|f| {
                     matches!(
                         f.def().category.as_str(),
-                        "furniture" | "sanitary" | "kitchen"
+                        "furniture" | "sanitary" | "kitchen" | "street"
                     ) && (only.is_empty() || only.contains(&f.def().name))
                 })
             })

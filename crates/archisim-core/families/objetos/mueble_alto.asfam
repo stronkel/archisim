@@ -1,9 +1,11 @@
 family "Mueble alto de cocina"
   category kitchen
   host none
-  version 7
+  version 8
   description "Muebles altos o baldas abiertas sobre la encimera, como los hace cada colección"
   folder "Cocina"
+
+include "muebles"
 
 type_params
   section "Dimensiones"

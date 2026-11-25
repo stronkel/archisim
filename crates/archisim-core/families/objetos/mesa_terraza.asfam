@@ -1,9 +1,11 @@
 family "Mesa de terraza"
   category street
   host none
-  version 1
+  version 2
   description "Mesa de jardín o terraza como la hace cada colección, con sus sillas alrededor"
   folder "Jardín y terraza"
+
+include "muebles"
 
 type_params
   section "Dimensiones"
@@ -34,8 +36,15 @@ body
   box (-width / 2, 0, 0) to (width / 2, depth, height) material frame
 
 plan 1:50
-  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
-  polygon (-width / 2 - 0.5, -0.55) (width / 2 + 0.5, -0.55) (width / 2 + 0.5, depth + 0.55) (-width / 2 - 0.5, depth + 0.55) pen thin dashed
+  let front = ceil(chairs / 2)
+  let back = chairs - front
+  repeat i in 0..front
+    use table_chair(-width / 2 + (i + 0.5) * width / front, depth + 0.02, 1)
+  repeat i in 0..back
+    use table_chair(-width / 2 + (i + 0.5) * width / back, -0.02, -1)
+  use soft_box(-width / 2, 0, width / 2, depth, 0.03)
+  repeat i in 1..6
+    line (-width / 2 + i * width / 6, 0.03) to (-width / 2 + i * width / 6, depth - 0.03) pen thin
 
 outputs
   generator = "props:garden_table"
