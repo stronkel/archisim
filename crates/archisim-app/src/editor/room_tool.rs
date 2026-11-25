@@ -216,6 +216,7 @@ impl Editor {
                 .ok_or(archisim_core::ModelError::UnknownRoom(id))?;
             r.usage = usage;
             r.height = height;
+            let r = crate::editor::with_auto_floor(None, r);
             m.set_room(r)?;
             Ok(id)
         })

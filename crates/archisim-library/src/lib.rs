@@ -663,6 +663,17 @@ pub fn add_library(m: &mut Model) -> Result<Library, ModelError> {
     standards::set_architecture_plans(m);
     // And drawn as a presentation plan from the start (W3).
     standards::set_working_look(m);
+    // Free ends finished (W3, «remates»): the outer layers of the
+    // starter wall types wrap round the end of a wall, as a finished wall
+    // ends, instead of showing every layer.
+    let layered: Vec<(archisim_core::WallTypeId, archisim_core::Wrap)> = m
+        .wall_types()
+        .filter(|t| t.layers.len() >= 2 && t.wrap_ends == archisim_core::Wrap::None)
+        .map(|t| (t.id, t.wrap_inserts))
+        .collect();
+    for (id, inserts) in layered {
+        m.set_wall_type_wrap(id, archisim_core::Wrap::Both, inserts)?;
+    }
     Ok(Library {
         curtain,
         void,
@@ -3104,5 +3115,87 @@ mod tests {
         assert!((facade.thickness() - 0.265).abs() < 1e-12);
         assert_eq!(facade.function, WallFunction::Exterior);
         assert_eq!(m.curtain_types().count(), 5);
+    }
+}
+
+/// The floor a room is drawn with in a presentation plan by its name or
+/// use (W3, «bonito por defecto»): tiles in kitchens and bathrooms,
+/// boards in the rooms to live in, slabs outside, concrete in garages
+/// and stores. `None` for anything else.
+pub fn floor_fill_for(name: &str, usage: &str) -> Option<archisim_core::FloorFill> {
+    use archisim_core::HatchPattern as H;
+    let text = format!("{name} {usage}").to_lowercase();
+    let has = |words: &[&str]| words.iter().any(|w| text.contains(w));
+    let living = [
+        "dormitorio",
+        "estar",
+        "salón",
+        "salon",
+        "comedor",
+        "estudio",
+        "despacho",
+        "oficina",
+        "pasillo",
+        "distribuidor",
+        "vestíbulo",
+        "vestibulo",
+        "recibidor",
+        "hall",
+        "habitación",
+        "habitacion",
+    ];
+    // A living room with its kitchen («Salón-cocina») is floored as the
+    // living room.
+    let (pattern, color) = if has(&living) {
+        (H::WoodBoards, [116, 116, 116])
+    } else if has(&[
+        "cocina",
+        "baño",
+        "bano",
+        "aseo",
+        "lavadero",
+        "vestuario",
+        "ducha",
+    ]) {
+        (H::Tiles, [112, 112, 112])
+    } else if has(&["terraza", "porche", "patio", "balc"]) {
+        (H::Slabs, [112, 112, 112])
+    } else if has(&[
+        "garaje",
+        "aparcamiento",
+        "trastero",
+        "almac",
+        "taller",
+        "instalac",
+        "cuarto de",
+    ]) {
+        (H::ConcreteBare, [120, 120, 120])
+    } else {
+        return None;
+    };
+    Some(archisim_core::FloorFill {
+        pattern,
+        color,
+        background: None,
+        scale: 1.0,
+        angle: 0.0,
+    })
+}
+
+#[cfg(test)]
+mod floor_tests {
+    use super::*;
+
+    #[test]
+    fn floors_by_the_name_of_the_room() {
+        use archisim_core::HatchPattern as H;
+        let p = |n: &str| floor_fill_for(n, "").map(|f| f.pattern);
+        assert_eq!(p("Baño"), Some(H::Tiles));
+        assert_eq!(p("Cocina"), Some(H::Tiles));
+        assert_eq!(p("Salón-cocina"), Some(H::WoodBoards));
+        assert_eq!(p("Dormitorio 2"), Some(H::WoodBoards));
+        assert_eq!(p("Terraza"), Some(H::Slabs));
+        assert_eq!(p("Garaje"), Some(H::ConcreteBare));
+        assert_eq!(p("Local"), None);
     }
 }

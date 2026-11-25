@@ -14106,6 +14106,15 @@ fn ten_minute_house() {
         None => std::env::temp_dir().join(format!("archisim-w0-{}", std::process::id())),
     };
     std::fs::create_dir_all(&dir).unwrap();
+    // The working plan as it is seen on screen (W3: presented by default).
+    let mut options = archisim_plan::PlanOptions {
+        scale: 50.0,
+        style: h.app.screen_style(),
+        ..Default::default()
+    };
+    options.style.template = None;
+    let svg = archisim_plan::render_plan(h.model(), h.app.ed.level, &options);
+    std::fs::write(dir.join("diez-minutos-planta.svg"), svg).unwrap();
     let pdf = dir.join("diez-minutos.pdf");
     h.app.ed.export_sheets(&pdf, &[sheet]).unwrap();
     t.panel(2);

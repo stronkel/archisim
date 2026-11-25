@@ -2211,7 +2211,9 @@ impl ArchiSimApp {
         self.say(match (self.technical_look, presented) {
             (true, _) => "Planta técnica (F7 para verla presentada).",
             (false, true) => "Planta presentada (F7 para verla técnica).",
-            (false, false) => "Esta vista no tiene estilo de presentación: elígelo en Representación.",
+            (false, false) => {
+                "Esta vista no tiene estilo de presentación: elígelo en Representación."
+            }
         });
     }
 
