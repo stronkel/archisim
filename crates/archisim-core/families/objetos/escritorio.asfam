@@ -1,9 +1,11 @@
 family "Escritorio"
   category furniture
   host none
-  version 2
+  version 3
   description "Escritorio como lo hace cada colección, con o sin cajonera"
   folder "Despacho"
+
+include "muebles"
 
 type_params
   section "Dimensiones"
@@ -27,10 +29,14 @@ body
   box (-width / 2, 0, height - 0.03) to (width / 2, depth, height) material top
 
 plan 1:50
-  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+  use soft_box(-width / 2, 0, width / 2, depth, 0.02)
+  if pedestal == "A la izquierda"
+    use soft_pad(-width / 2 + 0.02, 0.04, -width / 2 + 0.42, depth - 0.04, 0.01)
+  if pedestal == "A la derecha"
+    use soft_pad(width / 2 - 0.42, 0.04, width / 2 - 0.02, depth - 0.04, 0.01)
 
 plan 1:100
-  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+  use soft_box(-width / 2, 0, width / 2, depth, 0.02)
 
 outputs
   generator = "props:desk"

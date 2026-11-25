@@ -2419,7 +2419,23 @@ fn draw_objects(
     // to leave out at once what is far from the view without working out
     // its outline.
     let mut reach: std::collections::HashMap<archisim_core::ObjectTypeId, f64> = Default::default();
-    for o in model.objects_on_level(level) {
+    // Low things first (rugs, mats), so the furniture on them is drawn
+    // over them, its white fill hiding them (W3).
+    let mut objects: Vec<&archisim_core::Object> = model.objects_on_level(level).collect();
+    let mut tops: std::collections::HashMap<archisim_core::ObjectTypeId, f64> = Default::default();
+    let mut top = |o: &archisim_core::Object| {
+        o.base_offset
+            + *tops.entry(o.object_type).or_insert_with(|| {
+                model
+                    .object_type_box_3d(o.object_type)
+                    .map_or(1.0, |(_, hi)| hi[2])
+            })
+    };
+    let mut keyed: Vec<(f64, &archisim_core::Object)> =
+        objects.drain(..).map(|o| (top(o), o)).collect();
+    keyed.sort_by(|a, b| a.0.total_cmp(&b.0));
+    objects = keyed.into_iter().map(|(_, o)| o).collect();
+    for o in objects {
         let r = *reach.entry(o.object_type).or_insert_with(|| {
             model
                 .object_type_box(o.object_type)
@@ -4069,5 +4085,75 @@ mod thin_tests {
             super::hairlines(svg, 0.005),
             r#"<path stroke-width="0.005"/><path d="M0 0" stroke-width="0.005" fill="none"/>"#
         );
+    }
+}
+
+#[cfg(test)]
+mod symbol_sheet_tests {
+    use super::*;
+    use archisim_core::NewObject;
+
+    /// The plan symbols of the starter furniture, one of each, in a grid
+    /// (W3, «símbolos»). With `ARCHISIM_SIMBOLOS_OUT`, writes the sheet
+    /// in the working look and in the technical one.
+    #[test]
+    fn a_sheet_of_furniture_symbols() {
+        let mut m = archisim_library::new_project("Símbolos");
+        let level = m.levels()[0].id;
+        // `ARCHISIM_SIMBOLOS_FAMILIAS`: only these families (by name,
+        // separated by commas).
+        let only: Vec<String> = std::env::var("ARCHISIM_SIMBOLOS_FAMILIAS")
+            .map(|v| v.split(',').map(|s| s.trim().to_string()).collect())
+            .unwrap_or_default();
+        let mut types: Vec<_> = m
+            .object_types()
+            .filter(|t| {
+                m.family(t.family).is_some_and(|f| {
+                    matches!(
+                        f.def().category.as_str(),
+                        "furniture" | "sanitary" | "kitchen"
+                    ) && (only.is_empty() || only.contains(&f.def().name))
+                })
+            })
+            .map(|t| (t.name.clone(), t.id))
+            .collect();
+        types.sort();
+        assert!(!types.is_empty());
+        let cols = 6;
+        for (i, (_, t)) in types.iter().enumerate() {
+            let (c, r) = ((i % cols) as f64, (i / cols) as f64);
+            m.add_object(NewObject {
+                level,
+                object_type: *t,
+                position: Point2::new(c * 4.0, -r * 4.0),
+                rotation: 0.0,
+                base_offset: 0.0,
+            })
+            .unwrap();
+        }
+        let Some(dir) = std::env::var_os("ARCHISIM_SIMBOLOS_OUT") else {
+            return;
+        };
+        let dir = std::path::PathBuf::from(dir);
+        let template = m
+            .view_templates()
+            .find(|t| t.name == "Arquitectura")
+            .unwrap()
+            .clone();
+        for (name, style) in [
+            ("lapiz", template.style.clone()),
+            ("tecnico", Default::default()),
+        ] {
+            let mut o = PlanOptions {
+                scale: 50.0,
+                style,
+                ..Default::default()
+            };
+            o.style.template = None;
+            let svg = render_plan(&m, level, &o);
+            std::fs::write(dir.join(format!("simbolos-{name}.svg")), svg).unwrap();
+        }
+        let names: Vec<String> = types.iter().map(|(n, _)| n.clone()).collect();
+        std::fs::write(dir.join("simbolos.txt"), names.join("\n")).unwrap();
     }
 }

@@ -82,7 +82,10 @@ impl PartialEq for Family {
 }
 
 /// Shared pieces of the system families, by the name used in `include`.
-pub const SHARED_PIECES: [(&str, &str); 1] = [("piezas", include_str!("../families/piezas.asfam"))];
+pub const SHARED_PIECES: [(&str, &str); 2] = [
+    ("piezas", include_str!("../families/piezas.asfam")),
+    ("muebles", include_str!("../families/muebles.asfam")),
+];
 
 /// Recipes of the system families, as written (with their `include`s).
 const SYSTEM_SOURCES: [&str; 12] = [

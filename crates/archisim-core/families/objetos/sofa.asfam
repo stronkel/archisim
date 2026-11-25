@@ -1,9 +1,11 @@
 family "Sofá"
   category furniture
   host none
-  version 5
+  version 6
   description "Sofá recto con brazos y respaldo"
   folder "Sofás y sillones"
+
+include "muebles"
 
 type_params
   section "Dimensiones"
@@ -36,13 +38,15 @@ body
   box (-width / 2 + 0.2, 0.2, 0) to (width / 2 - 0.2, depth, seat) material mat
 
 plan 1:50
-  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
-  line (-width / 2 + 0.2, 0.2) to (width / 2 - 0.2, 0.2) pen thin
-  line (-width / 2 + 0.2, 0.2) to (-width / 2 + 0.2, depth) pen thin
-  line (width / 2 - 0.2, 0.2) to (width / 2 - 0.2, depth) pen thin
-  let pw = (width - 0.4) / places
-  repeat i in 1..places
-    line (-width / 2 + 0.2 + i * pw, 0.2) to (-width / 2 + 0.2 + i * pw, depth) pen thin
+  let arm = min(0.2, width / 6)
+  use soft_box(-width / 2, 0, width / 2, depth, 0.08)
+  use soft_pad(-width / 2 + 0.02, 0.02, -width / 2 + arm - 0.01, depth - 0.02, 0.06)
+  use soft_pad(width / 2 - arm + 0.01, 0.02, width / 2 - 0.02, depth - 0.02, 0.06)
+  let pw = (width - 2 * arm) / places
+  repeat i in 0..places
+    let a = -width / 2 + arm + i * pw
+    use soft_pad(a + 0.01, 0.03, a + pw - 0.01, 0.21, 0.05)
+    use soft_pad(a + 0.01, 0.22, a + pw - 0.01, depth - 0.04, 0.06)
 
 outputs
   # Placed against another of its kind, in line: one, as wide as both.

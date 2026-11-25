@@ -1,9 +1,11 @@
 family "Cama infantil"
   category furniture
   host none
-  version 2
+  version 3
   description "Cama infantil como la hace cada colección: la cama de la colección más baja, con barrera, ropa de cama y un muñeco"
   folder "Camas"
+
+include "muebles"
 
 type_params
   section "Dimensiones"
@@ -31,9 +33,12 @@ body
   box (-width / 2, 0, 0) to (width / 2, depth + 0.12, 0.45) material linen
 
 plan 1:50
-  polygon (-width / 2 - 0.05, 0) (width / 2 + 0.12, 0) (width / 2 + 0.12, depth + 0.12) (-width / 2 - 0.05, depth + 0.12) pen view
-  polygon (-width / 2 + 0.1, 0.15) (width / 2 - 0.1, 0.15) (width / 2 - 0.1, 0.45) (-width / 2 + 0.1, 0.45) pen thin
-  line (-width / 2, 0.65) to (width / 2, 0.65) pen thin
+  use soft_box(-width / 2 - 0.05, 0, width / 2 + 0.12, 0.08, 0.02)
+  use soft_box(-width / 2 - 0.05, 0.08, width / 2 + 0.12, depth + 0.12, 0.05)
+  use soft_pad(-width / 2 + 0.1, 0.16, width / 2 - 0.1, 0.44, 0.08)
+  use soft_pad(-width / 2 - 0.02, 0.62, width / 2 + 0.02, depth + 0.08, 0.04)
+  line (-width / 2 - 0.02, 0.74) to (width / 2 + 0.02, 0.74) pen thin
+  line (-width / 2 + 0.1, 0.74) to (-width / 2 + 0.4, 1.0) pen thin
 
 outputs
   generator = "props:kids_bed"

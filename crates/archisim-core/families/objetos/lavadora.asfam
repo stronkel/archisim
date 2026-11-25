@@ -1,9 +1,11 @@
 family "Lavadora"
   category kitchen
   host none
-  version 1
+  version 2
   description "Lavadora o lavavajillas bajo encimera"
   folder "Electrodomésticos"
+
+include "muebles"
 
 type_params
   section "Dimensiones"
@@ -22,13 +24,10 @@ body
   box (-width / 2, 0, 0) to (width / 2, depth, height) material mat
 
 plan 1:50
-  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
-  let r = min(width, depth) / 2 - 0.08
-  let c = depth / 2
-  arc center (0, c) from (r, c) to (0, c + r) pen thin
-  arc center (0, c) from (0, c + r) to (-r, c) pen thin
-  arc center (0, c) from (-r, c) to (0, c - r) pen thin
-  arc center (0, c) from (0, c - r) to (r, c) pen thin
+  use soft_box(-width / 2, 0, width / 2, depth, 0.03)
+  line (-width / 2 + 0.01, depth - 0.1) to (width / 2 - 0.01, depth - 0.1) pen thin
+  let r = min(width, depth) / 2 - 0.1
+  use soft_oval_thin(0, (depth - 0.1) / 2, r, r)
 
 outputs
   generator = "props:washer"

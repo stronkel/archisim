@@ -347,18 +347,19 @@ pub fn set_architecture_plans(m: &mut Model) {
 pub const WORKING_LOOK: &str = "Lápiz";
 
 /// The «Lápiz» style: white paper, every line a mid grey, light fills,
-/// cut walls and columns solid in dark grey and fine lines.
+/// cut walls and columns solid in dark grey and fine lines (85 % of
+/// the pens: fine, but still dark enough on paper).
 pub fn working_look() -> archisim_core::PresentationStyle {
     let mut s = archisim_core::PresentationStyle::new(WORKING_LOOK);
     s.background = [255, 255, 255];
     s.palette = vec![
-        [96, 96, 96],
-        [208, 208, 208],
-        [244, 244, 244],
+        [84, 84, 84],
+        [138, 138, 138],
+        [236, 236, 236],
         [255, 255, 255],
     ];
     s.poche = Some([74, 74, 74]);
-    s.line_scale = 0.6;
+    s.line_scale = 0.85;
     s
 }
 

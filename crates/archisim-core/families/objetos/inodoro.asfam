@@ -1,9 +1,11 @@
 family "Inodoro"
   category sanitary
   host none
-  version 2
+  version 3
   description "Inodoro como lo hace cada colección: suspendido, de pie, adosado o con cisterna alta"
   folder "Inodoros y bidés"
+
+include "muebles"
 
 type_params
   section "Dimensiones"
@@ -30,14 +32,11 @@ body
   box (-width / 2 + 0.06, 0, 0) to (width / 2 - 0.06, 0.18, 0.40) material mat
 
 plan 1:50
-  polygon (-width / 2, 0) (width / 2, 0) (width / 2, 0.18) (-width / 2, 0.18) pen view
-  let a = width / 2 - 0.02
+  use soft_box(-width / 2, 0, width / 2, 0.2, 0.04)
+  let a = width / 2 - 0.01
   let b = (depth - 0.18) / 2
-  let c = 0.18 + b
-  repeat i in 0..24
-    let t0 = 6.283185307 * i / 24
-    let t1 = 6.283185307 * (i + 1) / 24
-    line (a * cos(t0), c + b * sin(t0)) to (a * cos(t1), c + b * sin(t1)) pen view
+  use soft_oval(0, 0.18 + b, a, b)
+  use soft_oval_thin(0, 0.2 + b, a - 0.05, b - 0.07)
 
 outputs
   generator = "props:wc"

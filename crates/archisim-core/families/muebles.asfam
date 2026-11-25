@@ -1,0 +1,25 @@
+# Piezas comunes del dibujo de planta de los muebles de ArchiSim.
+#
+# Ejes de las familias de objetos (metros): x a lo ancho, desde el centro;
+# y hacia delante, desde la espalda del mueble.
+
+# ---- Dibujo de planta de los muebles (W3, «símbolos», al estilo de las
+# plantas de Synaps): rectángulos de esquinas redondeadas, rellenos de
+# blanco para que tapen el pavimento. «r» es el radio de las esquinas
+# (como mucho la mitad del lado menor).
+
+# El contorno de un mueble, con la pluma de proyección.
+component soft_box(xa, ya, xb, yb, r)
+  polygon (xa + r - 1.0 * r, ya + r) (xa + r - 0.9239 * r, ya + r - 0.3827 * r) (xa + r - 0.7071 * r, ya + r - 0.7071 * r) (xa + r - 0.3827 * r, ya + r - 0.9239 * r) (xa + r, ya + r - 1.0 * r) (xb - r, ya + r - 1.0 * r) (xb - r + 0.3827 * r, ya + r - 0.9239 * r) (xb - r + 0.7071 * r, ya + r - 0.7071 * r) (xb - r + 0.9239 * r, ya + r - 0.3827 * r) (xb - r + 1.0 * r, ya + r) (xb - r + 1.0 * r, yb - r) (xb - r + 0.9239 * r, yb - r + 0.3827 * r) (xb - r + 0.7071 * r, yb - r + 0.7071 * r) (xb - r + 0.3827 * r, yb - r + 0.9239 * r) (xb - r, yb - r + 1.0 * r) (xa + r, yb - r + 1.0 * r) (xa + r - 0.3827 * r, yb - r + 0.9239 * r) (xa + r - 0.7071 * r, yb - r + 0.7071 * r) (xa + r - 0.9239 * r, yb - r + 0.3827 * r) (xa + r - 1.0 * r, yb - r) pen view filled
+
+# Una pieza dentro de él (cojín, almohada, colchón, tapa), más fina.
+component soft_pad(xa, ya, xb, yb, r)
+  polygon (xa + r - 1.0 * r, ya + r) (xa + r - 0.9239 * r, ya + r - 0.3827 * r) (xa + r - 0.7071 * r, ya + r - 0.7071 * r) (xa + r - 0.3827 * r, ya + r - 0.9239 * r) (xa + r, ya + r - 1.0 * r) (xb - r, ya + r - 1.0 * r) (xb - r + 0.3827 * r, ya + r - 0.9239 * r) (xb - r + 0.7071 * r, ya + r - 0.7071 * r) (xb - r + 0.9239 * r, ya + r - 0.3827 * r) (xb - r + 1.0 * r, ya + r) (xb - r + 1.0 * r, yb - r) (xb - r + 0.9239 * r, yb - r + 0.3827 * r) (xb - r + 0.7071 * r, yb - r + 0.7071 * r) (xb - r + 0.3827 * r, yb - r + 0.9239 * r) (xb - r, yb - r + 1.0 * r) (xa + r, yb - r + 1.0 * r) (xa + r - 0.3827 * r, yb - r + 0.9239 * r) (xa + r - 0.7071 * r, yb - r + 0.7071 * r) (xa + r - 0.9239 * r, yb - r + 0.3827 * r) (xa + r - 1.0 * r, yb - r) pen thin filled
+
+# Un óvalo (o un círculo, con a = b) de semiejes «a» y «b»: tazas,
+# lavabos, mesas redondas.
+component soft_oval(cx, cy, a, b)
+  polygon (cx + 1.0 * a, cy + 0.0 * b) (cx + 0.9659 * a, cy + 0.2588 * b) (cx + 0.866 * a, cy + 0.5 * b) (cx + 0.7071 * a, cy + 0.7071 * b) (cx + 0.5 * a, cy + 0.866 * b) (cx + 0.2588 * a, cy + 0.9659 * b) (cx + 0.0 * a, cy + 1.0 * b) (cx + -0.2588 * a, cy + 0.9659 * b) (cx + -0.5 * a, cy + 0.866 * b) (cx + -0.7071 * a, cy + 0.7071 * b) (cx + -0.866 * a, cy + 0.5 * b) (cx + -0.9659 * a, cy + 0.2588 * b) (cx + -1.0 * a, cy + 0.0 * b) (cx + -0.9659 * a, cy + -0.2588 * b) (cx + -0.866 * a, cy + -0.5 * b) (cx + -0.7071 * a, cy + -0.7071 * b) (cx + -0.5 * a, cy + -0.866 * b) (cx + -0.2588 * a, cy + -0.9659 * b) (cx + -0.0 * a, cy + -1.0 * b) (cx + 0.2588 * a, cy + -0.9659 * b) (cx + 0.5 * a, cy + -0.866 * b) (cx + 0.7071 * a, cy + -0.7071 * b) (cx + 0.866 * a, cy + -0.5 * b) (cx + 0.9659 * a, cy + -0.2588 * b) pen view filled
+
+component soft_oval_thin(cx, cy, a, b)
+  polygon (cx + 1.0 * a, cy + 0.0 * b) (cx + 0.9659 * a, cy + 0.2588 * b) (cx + 0.866 * a, cy + 0.5 * b) (cx + 0.7071 * a, cy + 0.7071 * b) (cx + 0.5 * a, cy + 0.866 * b) (cx + 0.2588 * a, cy + 0.9659 * b) (cx + 0.0 * a, cy + 1.0 * b) (cx + -0.2588 * a, cy + 0.9659 * b) (cx + -0.5 * a, cy + 0.866 * b) (cx + -0.7071 * a, cy + 0.7071 * b) (cx + -0.866 * a, cy + 0.5 * b) (cx + -0.9659 * a, cy + 0.2588 * b) (cx + -1.0 * a, cy + 0.0 * b) (cx + -0.9659 * a, cy + -0.2588 * b) (cx + -0.866 * a, cy + -0.5 * b) (cx + -0.7071 * a, cy + -0.7071 * b) (cx + -0.5 * a, cy + -0.866 * b) (cx + -0.2588 * a, cy + -0.9659 * b) (cx + -0.0 * a, cy + -1.0 * b) (cx + 0.2588 * a, cy + -0.9659 * b) (cx + 0.5 * a, cy + -0.866 * b) (cx + 0.7071 * a, cy + -0.7071 * b) (cx + 0.866 * a, cy + -0.5 * b) (cx + 0.9659 * a, cy + -0.2588 * b) pen thin filled

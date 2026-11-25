@@ -1,9 +1,11 @@
 family "Lavabo"
   category sanitary
   host none
-  version 2
+  version 3
   description "Lavabo como lo hace cada colección: mueble suspendido, de obra, balda, tablón, pedestal, bastidor o tocador, con su grifo"
   folder "Lavabos"
+
+include "muebles"
 
 type_params
   section "Dimensiones"
@@ -29,14 +31,12 @@ body
   box (-width / 2, 0, height - 0.15) to (width / 2, depth, height) material mat
 
 plan 1:50
-  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+  use soft_box(-width / 2, 0, width / 2, depth, 0.04)
   let a = min(width / 2 - 0.06, 0.24)
-  let b = depth / 2 - 0.06
-  let c = depth / 2 + 0.02
-  repeat i in 0..24
-    let t0 = 6.283185307 * i / 24
-    let t1 = 6.283185307 * (i + 1) / 24
-    line (a * cos(t0), c + b * sin(t0)) to (a * cos(t1), c + b * sin(t1)) pen thin
+  let b = depth / 2 - 0.07
+  use soft_oval_thin(0, depth / 2 + 0.03, a, b)
+  use soft_oval_thin(0, 0.05, 0.015, 0.015)
+  line (0, 0.065) to (0, 0.14) pen thin
 
 outputs
   generator = "props:washbasin"

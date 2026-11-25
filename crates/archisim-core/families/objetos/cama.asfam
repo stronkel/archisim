@@ -1,9 +1,11 @@
 family "Cama"
   category furniture
   host none
-  version 3
+  version 4
   description "Cama como la hace cada colección: cabecero, estructura, colchón, edredón con la sábana vuelta, almohadas, manta a los pies y cojines"
   folder "Camas"
+
+include "muebles"
 
 type_params
   section "Dimensiones"
@@ -39,15 +41,16 @@ body
   box (-width / 2, 0.08, 0) to (width / 2, depth, height) material linen
 
 plan 1:50
-  polygon (-width / 2 - 0.06, 0) (width / 2 + 0.06, 0) (width / 2 + 0.06, depth) (-width / 2 - 0.06, depth) pen view
-  line (-width / 2 - 0.06, 0.1) to (width / 2 + 0.06, 0.1) pen thin
+  use soft_box(-width / 2 - 0.06, 0, width / 2 + 0.06, 0.08, 0.02)
+  use soft_box(-width / 2 - 0.03, 0.08, width / 2 + 0.03, depth, 0.05)
   let pillows = if width >= 1.2 then 2 else 1
-  let pw = (width - 0.1 * (pillows + 1)) / pillows
+  let pw = (width - 0.12 - 0.06 * (pillows - 1)) / pillows
   repeat i in 0..pillows
-    let a = -width / 2 + 0.1 + i * (pw + 0.1)
-    polygon (a, 0.16) (a + pw, 0.16) (a + pw, 0.46) (a, 0.46) pen thin
-  line (-width / 2, 0.65) to (width / 2, 0.65) pen thin
-  line (-width / 2, 0.65) to (-width / 2 + 0.35, 1.0) pen thin
+    let a = -width / 2 + 0.06 + i * (pw + 0.06)
+    use soft_pad(a, 0.15, a + pw, 0.45, 0.08)
+  use soft_pad(-width / 2 - 0.02, 0.62, width / 2 + 0.02, depth - 0.02, 0.04)
+  line (-width / 2 - 0.02, 0.74) to (width / 2 + 0.02, 0.74) pen thin
+  line (-width / 2 + 0.1, 0.74) to (-width / 2 + 0.42, 1.02) pen thin
 
 outputs
   generator = "props:bed"

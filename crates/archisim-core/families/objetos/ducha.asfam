@@ -1,9 +1,11 @@
 family "Plato de ducha"
   category sanitary
   host none
-  version 2
+  version 3
   description "Ducha como la hace cada colección: plato, mampara o cortina, rociador y grifería"
   folder "Duchas y bañeras"
+
+include "muebles"
 
 type_params
   section "Dimensiones"
@@ -29,13 +31,11 @@ body
   box (-width / 2, 0, 0) to (width / 2, depth, height) material mat
 
 plan 1:50
-  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
-  line (-width / 2, 0) to (width / 2, depth) pen thin
-  line (width / 2, 0) to (-width / 2, depth) pen thin
-  arc center (0, depth / 2) from (0.04, depth / 2) to (0, depth / 2 + 0.04) pen thin
-  arc center (0, depth / 2) from (0, depth / 2 + 0.04) to (-0.04, depth / 2) pen thin
-  arc center (0, depth / 2) from (-0.04, depth / 2) to (0, depth / 2 - 0.04) pen thin
-  arc center (0, depth / 2) from (0, depth / 2 - 0.04) to (0.04, depth / 2) pen thin
+  use soft_box(-width / 2, 0, width / 2, depth, 0.03)
+  use soft_pad(-width / 2 + 0.04, 0.04, width / 2 - 0.04, depth - 0.04, 0.02)
+  repeat i in 1..6
+    line (-width / 2 + 0.04 + i * (width - 0.08) / 6, 0.06) to (-width / 2 + 0.04 + i * (width - 0.08) / 6, depth - 0.06) pen thin
+  use soft_oval(0, depth / 2, 0.05, 0.05)
 
 outputs
   generator = "props:shower"
