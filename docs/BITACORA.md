@@ -6,6 +6,23 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-25 (196) · v0.115: W3 ampliado, primera tanda: la planta bonita por defecto
+
+Rama `bloque/w3-bonito`, sobre `bloque/w2b-sin-friccion` (PR #243, sin unir). Puntos 5, 6 y parte del 8 de `docs/WORKFEEL.md` §6. Sin cambios de formato ni de IFC (los proyectos nuevos traen un estilo y una plantilla distintos; los existentes no cambian).
+
+- **Hecho**:
+  - **Estilo «Lápiz»** (`archisim_library::standards::working_look`, `WORKING_LOOK`), al estilo de las plantas de Synaps: papel blanco, líneas gris medio a 0,6 del grosor, rellenos muy claros y muros y pilares cortados macizos en gris oscuro. `set_working_look` lo pone en la plantilla «Arquitectura» de los proyectos nuevos, así que la planta de trabajo sale ya presentada.
+  - **F7 y el botón «Presentada»** de la barra inferior cambian, solo en esta sesión, entre la planta presentada y la técnica (`ArchiSimApp::technical_look`, `screen_style`, `toggle_technical_look`); la vista y su plantilla no cambian.
+  - **Remates de los extremos de muro**: los tipos de muro de varias capas de la plantilla envuelven sus capas exteriores alrededor de los extremos libres (`Wrap::Both` en `add_library`), en lugar de enseñar todas las capas.
+  - **Pavimento por el nombre del local** (`archisim_library::floor_fill_for`, `editor::with_auto_floor`): al crear un local o cambiar su nombre o su uso, toma tarima en dormitorios, estar, comedor, pasillos y despachos; baldosa en cocinas, baños y aseos; losas en terrazas; hormigón en garajes y trasteros. Uno elegido a mano se respeta. Se ve en las plantas presentadas.
+  - La prueba de los 10 minutos escribe también la planta tal como se ve (`diez-minutos-planta.svg`). Pruebas: `a_new_plan_is_presented_and_f7_shows_it_technical`, `floors_by_the_name_of_the_room`.
+- **Pendiente**: de W3 ampliado, los símbolos 2D propios de los objetos en planta y alzado (punto 7, el más grande: necesita un dibujo por pieza, como la biblioteca de Synaps), las tramas con carácter y el selector en tarjetas con escala, giro, trazo y opacidad (resto del 8), y los cantos de forjado. Después, W10.
+- **Qué debe probar Antonio**:
+  1. Archivo → Nuevo: dibuja unos muros. La planta debe verse con los muros macizos en gris oscuro y líneas finas grises, sin tener que elegir nada.
+  2. F7 (o el botón «Presentada» abajo): cambia a la planta técnica con sus capas; F7 otra vez, vuelve.
+  3. Termina un muro de fachada suelto y mira el extremo en la planta técnica a 1:20: el enlucido y el revestimiento deben doblar la esquina y cerrar el muro.
+  4. Haz locales y llámalos «Dormitorio», «Baño», «Terraza»: cada uno con su suelo (tarima, baldosa, losas).
+
 ## 2026-11-25 (195) · v0.114: W2b, dibujar y tocar sin fricción
 
 Rama `bloque/w2b-sin-friccion`, sobre `bloque/w0-diez-minutos` (PR #242, sin unir). Primer bloque de la lista de Antonio del 25/11 (`docs/WORKFEEL.md` §6, puntos 1–4 y el forzado de 16 bis). Sin cambios de formato ni de IFC.

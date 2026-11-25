@@ -82,7 +82,7 @@ Lo que más pesa: nombrar los locales y volver a dibujar el contorno para el for
 
 ## 6. Lista de Antonio del 25/11/2026
 
-Apuntado tal como lo contó, agrupado en bloques. W2b hecho en `bloque/w2b-sin-friccion` (v0.114), con el forzado de 16 bis; los demás, sin empezar.
+Apuntado tal como lo contó, agrupado en bloques. W2b hecho en `bloque/w2b-sin-friccion` (v0.114), con el forzado de 16 bis. W3 ampliado, primera tanda en `bloque/w3-bonito` (v0.115): estilo «Lápiz» por defecto con F7 para la técnica, remates de extremos de muro y pavimento por el nombre del local; quedan el 7, el resto del 8 y los cantos de forjado. Los demás, sin empezar.
 
 ### W2b — Dibujar y tocar sin fricción (junto a W2)
 

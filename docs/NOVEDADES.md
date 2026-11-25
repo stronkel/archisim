@@ -4,6 +4,12 @@ Lo que cambia en cada versión, en pocas líneas. ArchiSim enseña la parte de s
 
 Cada versión empieza con una línea `## <versión>` (por ejemplo `## 0.81.0`): es la que busca la publicación.
 
+## 0.115.0
+
+- **La planta, bonita desde el principio**: un proyecto nuevo dibuja su planta con el estilo «Lápiz», con muros macizos en gris oscuro, líneas grises finas y rellenos muy claros, como una planta de presentación. **F7** o el botón «Presentada» de la barra inferior enseñan la planta técnica y vuelven.
+- **Muros rematados**: los tipos de muro de la plantilla doblan sus revestimientos alrededor de los extremos libres, en lugar de enseñar todas las capas al final del muro.
+- **Suelo según el local**: al nombrar un local, su pavimento sale solo en las plantas presentadas: tarima en dormitorios y estancias, baldosa en cocinas y baños, losas en terrazas, hormigón en garajes y trasteros. Si eliges otro a mano, se respeta.
+
 ## 0.114.0
 
 - **Espacio invierte el muro** mientras lo dibujas: la cara exterior pasa al otro lado de la línea, para ese muro y los siguientes, hasta pulsar Espacio otra vez.

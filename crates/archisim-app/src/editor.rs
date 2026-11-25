@@ -1866,6 +1866,32 @@ pub(crate) fn remove_items(m: &mut Model, items: &[Element]) -> Result<(), Model
     Ok(())
 }
 
+/// A room's floor as presented, chosen by its name or use (W3): a new
+/// room gets the one of its name; renamed, it gets the one of its new
+/// name while it kept the one chosen for the old name (or none). A floor
+/// chosen by hand stays.
+pub fn with_auto_floor(
+    old: Option<&archisim_core::Room>,
+    mut room: archisim_core::Room,
+) -> archisim_core::Room {
+    let auto = |r: &archisim_core::Room| archisim_library::floor_fill_for(&r.name, &r.usage);
+    match old {
+        None => {
+            if room.floor_fill.is_none() {
+                room.floor_fill = auto(&room);
+            }
+        }
+        Some(o) => {
+            let renamed = o.name != room.name || o.usage != room.usage;
+            let automatic = room.floor_fill.is_none() || room.floor_fill == auto(o);
+            if renamed && automatic {
+                room.floor_fill = auto(&room);
+            }
+        }
+    }
+    room
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2057,30 +2083,4 @@ mod tests {
         ed.undo();
         assert!((ed.model().dimension(total).unwrap().values()[0] - 6.0).abs() < 1e-9);
     }
-}
-
-/// A room's floor as presented, chosen by its name or use (W3): a new
-/// room gets the one of its name; renamed, it gets the one of its new
-/// name while it kept the one chosen for the old name (or none). A floor
-/// chosen by hand stays.
-pub fn with_auto_floor(
-    old: Option<&archisim_core::Room>,
-    mut room: archisim_core::Room,
-) -> archisim_core::Room {
-    let auto = |r: &archisim_core::Room| archisim_library::floor_fill_for(&r.name, &r.usage);
-    match old {
-        None => {
-            if room.floor_fill.is_none() {
-                room.floor_fill = auto(&room);
-            }
-        }
-        Some(o) => {
-            let renamed = o.name != room.name || o.usage != room.usage;
-            let automatic = room.floor_fill.is_none() || room.floor_fill == auto(o);
-            if renamed && automatic {
-                room.floor_fill = auto(&room);
-            }
-        }
-    }
-    room
 }
