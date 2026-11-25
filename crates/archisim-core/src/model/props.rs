@@ -263,6 +263,36 @@ impl Model {
     /// `archisim_props::PropMesh::soft`): soft shading, outlined only
     /// where they end. A material also on a hard piece of the same model
     /// is drawn as before.
+    /// The materials of an object's upholstery (W3): its soft parts and
+    /// its cushions, seats, pillows and throws. In
+    /// elevations and sections they are drawn by their outline and their
+    /// sharp folds only, not by every edge of their rounded faces.
+    pub fn object_upholstery_materials(&self, id: ObjectId) -> Vec<MaterialId> {
+        let Some(o) = self.objects.get(&id) else {
+            return Vec::new();
+        };
+        let Some((mesh, roles)) = self.prop_roles(o.object_type) else {
+            return Vec::new();
+        };
+        let padded = |r: &str| {
+            mesh.soft.contains(&r)
+                || matches!(
+                    r,
+                    "cushion" | "cushions" | "pillow" | "pillows" | "throw" | "spread" | "seat"
+                )
+        };
+        // Boxy parts in the same fabric keep their corners anyway: a fold
+        // of 60° or more is still drawn.
+        let mut out: Vec<MaterialId> = roles
+            .iter()
+            .filter(|(r, _)| padded(r))
+            .map(|(_, m)| *m)
+            .collect();
+        out.sort();
+        out.dedup();
+        out
+    }
+
     pub fn object_soft_materials(&self, id: ObjectId) -> Vec<MaterialId> {
         let Some(o) = self.objects.get(&id) else {
             return Vec::new();

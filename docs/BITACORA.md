@@ -15,6 +15,7 @@ Rama `bloque/w3-bonito`, sobre `bloque/w2b-sin-friccion` (PR #243, sin unir). Pu
   - **F7 y el botón «Presentada»** de la barra inferior cambian, solo en esta sesión, entre la planta presentada y la técnica (`ArchiSimApp::technical_look`, `screen_style`, `toggle_technical_look`); la vista y su plantilla no cambian.
   - **Remates de los extremos de muro**: los tipos de muro de varias capas de la plantilla envuelven sus capas exteriores alrededor de los extremos libres (`Wrap::Both` en `add_library`), en lugar de enseñar todas las capas.
   - **Pavimento por el nombre del local** (`archisim_library::floor_fill_for`, `editor::with_auto_floor`): al crear un local o cambiar su nombre o su uso, toma tarima en dormitorios, estar, comedor, pasillos y despachos; baldosa en cocinas, baños y aseos; losas en terrazas; hormigón en garajes y trasteros. Uno elegido a mano se respeta. Se ve en las plantas presentadas.
+  - **Sofás y butacas limpios en alzado y sección** (aviso de Antonio: «salen con decenas de líneas»): las partes acolchadas (cojines, asientos, almohadas, mantas y las partes blandas de los modelos del taller; `Model::object_upholstery_materials`) solo dibujan su contorno y los pliegues de más de 60° (`SOFT_CREASE_COS`), no las facetas de sus caras redondeadas. Prueba `sofas_are_drawn_with_few_lines` (con `ARCHISIM_SOFAS_OUT`, el alzado de doce sofás y butacas).
   - La prueba de los 10 minutos escribe también la planta tal como se ve (`diez-minutos-planta.svg`). Pruebas: `a_new_plan_is_presented_and_f7_shows_it_technical`, `floors_by_the_name_of_the_room`.
 - **Pendiente**: de W3 ampliado, los símbolos 2D propios de los objetos en planta y alzado (punto 7, el más grande: necesita un dibujo por pieza, como la biblioteca de Synaps), las tramas con carácter y el selector en tarjetas con escala, giro, trazo y opacidad (resto del 8), y los cantos de forjado. Después, W10.
 - **Qué debe probar Antonio**:
@@ -22,6 +23,7 @@ Rama `bloque/w3-bonito`, sobre `bloque/w2b-sin-friccion` (PR #243, sin unir). Pu
   2. F7 (o el botón «Presentada» abajo): cambia a la planta técnica con sus capas; F7 otra vez, vuelve.
   3. Termina un muro de fachada suelto y mira el extremo en la planta técnica a 1:20: el enlucido y el revestimiento deben doblar la esquina y cerrar el muro.
   4. Haz locales y llámalos «Dormitorio», «Baño», «Terraza»: cada uno con su suelo (tarima, baldosa, losas).
+  5. Un alzado o sección con sofás y butacas: deben verse por su contorno y sus cojines, sin el rayado de decenas de líneas.
 
 ## 2026-11-25 (195) · v0.114: W2b, dibujar y tocar sin fricción
 

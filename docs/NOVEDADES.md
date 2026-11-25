@@ -8,6 +8,7 @@ Cada versión empieza con una línea `## <versión>` (por ejemplo `## 0.81.0`): 
 
 - **La planta, bonita desde el principio**: un proyecto nuevo dibuja su planta con el estilo «Lápiz», con muros macizos en gris oscuro, líneas grises finas y rellenos muy claros, como una planta de presentación. **F7** o el botón «Presentada» de la barra inferior enseñan la planta técnica y vuelven.
 - **Muros rematados**: los tipos de muro de la plantilla doblan sus revestimientos alrededor de los extremos libres, en lugar de enseñar todas las capas al final del muro.
+- **Sofás y butacas limpios en alzados y secciones**: los cojines y las partes acolchadas se dibujan por su contorno y sus pliegues marcados, sin las decenas de líneas de sus caras redondeadas.
 - **Suelo según el local**: al nombrar un local, su pavimento sale solo en las plantas presentadas: tarima en dormitorios y estancias, baldosa en cocinas y baños, losas en terrazas, hormigón en garajes y trasteros. Si eliges otro a mano, se respeta.
 
 ## 0.114.0

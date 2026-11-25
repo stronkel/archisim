@@ -138,6 +138,7 @@ const MAX_EDGE: f64 = 0.6;
 const EDGE_LEAD: f64 = 0.03;
 /// Edges between faces turning more than this are drawn.
 const CREASE_COS: f64 = 0.966; // 15°
+const SOFT_CREASE_COS: f64 = 0.5; // 60°, upholstery (W3)
 
 fn sub(a: P3, b: P3) -> P3 {
     [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
@@ -645,6 +646,7 @@ pub fn section_drawing(model: &Model, sec: &SectionLine) -> SectionDrawing {
         archisim_core::ObjectId,
         (Vec<(MaterialId, Vec<[Point2; 3]>)>, f64, usize),
     > = HashMap::new();
+    let mut upholstery: HashMap<archisim_core::ObjectId, Vec<MaterialId>> = HashMap::new();
     for solid in all {
         if matches!(solid.owner, SolidOwner::Object(o) if plants.contains(&o) || customs.contains(&o))
         {
@@ -703,7 +705,16 @@ pub fn section_drawing(model: &Model, sec: &SectionLine) -> SectionDrawing {
                 edge_faces.entry(k).or_default().push(i);
             }
         }
-        let crease = CREASE_COS;
+        // Upholstery (cushions, soft parts of sofas and beds, W3): only its
+        // outline and its sharp folds, not the facets of its rounded faces.
+        let padded = match solid.owner {
+            SolidOwner::Object(o) => upholstery
+                .entry(o)
+                .or_insert_with(|| model.object_upholstery_materials(o))
+                .contains(&solid.material),
+            _ => false,
+        };
+        let crease = if padded { SOFT_CREASE_COS } else { CREASE_COS };
         // A corner, or the outline of a rounded body (a crown, a car, a
         // person): the face on its other side looks away from the viewer.
         let is_corner = |a: P3, b: P3, me: usize| {
@@ -2932,5 +2943,64 @@ mod tests {
         let labels = |svg: &str| svg.matches(r#"fill-opacity="0.85""#).count();
         assert_eq!(labels(&fifty), 1);
         assert_eq!(labels(&hundred), 0);
+    }
+}
+
+#[cfg(test)]
+mod upholstery_tests {
+    use super::*;
+    use archisim_core::{NewObject, NewSection, SectionKind};
+
+    /// W3: sofas and armchairs in an elevation are drawn by their outline
+    /// and their sharp folds, not by the facets of their cushions. With
+    /// `ARCHISIM_SOFAS_OUT`, writes the elevation.
+    #[test]
+    fn sofas_are_drawn_with_few_lines() {
+        let mut m = archisim_library::new_project("Sofás");
+        let level = m.levels()[0].id;
+        let sofas: Vec<_> = m
+            .object_types()
+            .filter(|t| {
+                let n = t.name.to_lowercase();
+                n.contains("sofá") || n.contains("butaca") || n.contains("sillón")
+            })
+            .map(|t| t.id)
+            .take(12)
+            .collect();
+        assert!(!sofas.is_empty());
+        for (i, t) in sofas.iter().enumerate() {
+            m.add_object(NewObject {
+                level,
+                object_type: *t,
+                position: Point2::new(i as f64 * 3.0, 0.0),
+                rotation: std::f64::consts::PI,
+                base_offset: 0.0,
+            })
+            .unwrap();
+        }
+        let id = m
+            .add_section(NewSection {
+                name: "A".into(),
+                kind: SectionKind::Elevation,
+                start: Point2::new(-2.0, -4.0),
+                end: Point2::new(sofas.len() as f64 * 3.0 + 1.0, -4.0),
+                depth: 10.0,
+            })
+            .unwrap();
+        // Their cushions are known as such.
+        assert!(m
+            .objects()
+            .any(|o| !m.object_upholstery_materials(o.id).is_empty()));
+        let sec = m.section(id).unwrap().clone();
+        let d = section_drawing(&m, &sec);
+        let options = PlanOptions {
+            scale: 50.0,
+            ..Default::default()
+        };
+        let svg = render_section(&m, &d, &options);
+        if let Some(dir) = std::env::var_os("ARCHISIM_SOFAS_OUT") {
+            std::fs::write(std::path::Path::new(&dir).join("sofas.svg"), &svg).unwrap();
+        }
+        assert!(svg.contains("<path"));
     }
 }
