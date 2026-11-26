@@ -200,6 +200,8 @@ pub(super) enum Action {
     /// How a material is laid in boards (M18).
     BoardLayout(MaterialId, Option<archisim_core::BoardLayout>),
     MaterialPriority(MaterialId, Option<u16>),
+    /// The texture of a material in the cuts «con tramas» (W3).
+    MaterialTexture(MaterialId, Option<archisim_core::HatchPattern>),
     DuplicateWall(WallTypeId),
     RemoveWall(WallTypeId),
     EditWall(WallTypeId, String, WallFunction, Vec<Layer>),
@@ -1486,6 +1488,36 @@ impl ArchiSimApp {
             }
             props::row(
                 ui,
+                "Trama en las secciones",
+                "Cómo se ve este material cortado en las vistas con el estilo «Lápiz con tramas» (o cualquier estilo con «Tramas en los cortes»): ladrillo en hiladas, lana, hormigón, tierra… Sin ella, su color y su rayado de siempre.",
+                |ui, w| {
+                    ui.horizontal(|ui| {
+                        let mut on = mat.texture.is_some();
+                        if ui.checkbox(&mut on, "").changed() {
+                            let t = on.then(|| {
+                                archisim_library::material_texture(&mat.name, &mat.category)
+                                    .unwrap_or(archisim_core::HatchPattern::Plaster)
+                            });
+                            actions.push(Action::MaterialTexture(id, t));
+                        }
+                        if let Some(t) = mat.texture {
+                            let p = super::hatch_ui::pattern_picker(
+                                ui,
+                                &format!("mat-texture-{}", id.0),
+                                w - 36.0,
+                                t,
+                                [90, 90, 90],
+                                Some(mat.cut_color),
+                            );
+                            if p != t {
+                                actions.push(Action::MaterialTexture(id, Some(p)));
+                            }
+                        }
+                    });
+                },
+            );
+            props::row(
+                ui,
                 "Prioridad de intersección",
                 "De 0 a 999: en las uniones en T, una capa atraviesa las del otro muro de menor prioridad; entre muro y forjado, se queda el sitio la de más prioridad (a igualdad, el forjado). Vacío: según la función de cada capa (estructura 900, soporte 700, aislante 500, lámina o cámara 300, acabado 100).",
                 |ui, w| {
@@ -2216,6 +2248,10 @@ impl ArchiSimApp {
             Action::Appearance(id, a) => {
                 let r = self.ed.set_appearance(id, a);
                 self.report(r, "Aspecto en 3D cambiado.");
+            }
+            Action::MaterialTexture(id, t) => {
+                let r = self.ed.set_material_texture(id, t);
+                self.report(r, "Trama de las secciones cambiada.");
             }
             Action::MaterialPriority(id, p) => {
                 let r = self.ed.set_material_priority(id, p);

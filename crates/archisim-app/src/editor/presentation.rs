@@ -14,12 +14,14 @@ impl Editor {
     ) -> EditResult<PresentationStyleId> {
         style.name = self.free_style_name(&style.name);
         self.transact("Nuevo estilo de presentación", |m| {
+            textures_for(m, &style);
             m.add_presentation_style(style)
         })
     }
 
     pub fn set_presentation_style(&mut self, style: PresentationStyle) -> EditResult {
         self.transact("Cambiar estilo de presentación", |m| {
+            textures_for(m, &style);
             m.set_presentation_style(style)
         })
     }
@@ -42,6 +44,9 @@ impl Editor {
         }
         let n = missing.len();
         self.transact("Cargar estilos de presentación", |m| {
+            for s in &missing {
+                textures_for(m, s);
+            }
             for s in missing {
                 m.add_presentation_style(s)?;
             }
@@ -102,6 +107,14 @@ impl Editor {
 
     pub fn remove_camera(&mut self, id: archisim_core::CameraId) -> EditResult {
         self.transact("Borrar cámara", |m| m.remove_camera(id).map(|_| ()))
+    }
+}
+
+/// A style with textures in its cuts gives the project's materials theirs,
+/// if none has one yet (a project made before them).
+fn textures_for(m: &mut archisim_core::Model, style: &PresentationStyle) {
+    if style.cut_textures && m.materials().all(|x| x.texture.is_none()) {
+        archisim_library::add_material_textures(m);
     }
 }
 

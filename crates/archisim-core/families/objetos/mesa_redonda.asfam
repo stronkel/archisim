@@ -1,0 +1,49 @@
+family "Mesa redonda"
+  category furniture
+  host none
+  version 1
+  description "Mesa de comedor redonda sobre su pie, como la hace cada colección, con sus sillas en corro"
+  folder "Mesas"
+
+include "muebles"
+
+# Ejes de los objetos: origen en el borde de atrás de la mesa, x hacia la
+# derecha, y hacia delante, z hacia arriba desde el suelo; el centro de la
+# mesa está en (0, diámetro / 2).
+
+type_params
+  section "Dimensiones"
+    width  length = 1.20 range 0.80..2.00 label "Diámetro"
+    height length = 0.75 range 0.40..1.20 label "Altura"
+  section "Sillas"
+    chairs integer = 4 range 0..10 label "Sillas alrededor"
+  section "Materiales"
+    top      material = "Roble claro" label "Tablero"
+    frame    material = "Roble claro" label "Pie y estructura"
+    metal    material = "Metal negro" label "Metal"
+    stone    material = "Mármol" label "Piedra"
+    ceramic  material = "Cerámica esmaltada" label "Cerámica"
+    dark     material = "Negro mate" label "Detalles oscuros"
+    mat      material = "Lino arena" label "Asientos de las sillas"
+    weave    material = "Enea" label "Enea de las sillas"
+  section "Modelo 3D"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Nórdico cálido" label "Modelo 3D"
+
+let r = width / 2
+
+require chairs * 0.5 <= 6.2832 * (r + 0.3) else "No caben tantas sillas alrededor de la mesa"
+
+body
+  box (-r, 0, height - 0.04) to (r, width, height) material top
+  box (-0.06, r - 0.06, 0) to (0.06, r + 0.06, height - 0.04) material frame
+
+plan 1:50
+  repeat i in 0..chairs
+    use ring_chair(0, r, r, -1.5708 + 6.2832 * i / max(chairs, 1))
+  use soft_oval(0, r, r, r)
+  use soft_oval_thin(0, r, r * 0.92, r * 0.92)
+
+outputs
+  generator = "props:fine_round_table"
+  ifc_class = "IfcFurniture"
+  ifc_type = "TABLE"

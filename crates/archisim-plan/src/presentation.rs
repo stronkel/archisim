@@ -27,6 +27,7 @@ pub fn pens(model: &Model, look: Option<&PresentationStyle>, scale: f64) -> arch
 pub(crate) fn begin(p: Option<&PresentationStyle>) -> Guard {
     crate::POCHE.with(|c| c.set(p.and_then(|p| p.poche)));
     crate::PRESENTING.with(|c| c.set(p.is_some()));
+    crate::TEXTURED.with(|c| c.set(p.is_some_and(|p| p.cut_textures)));
     Guard
 }
 
@@ -36,6 +37,7 @@ impl Drop for Guard {
     fn drop(&mut self) {
         crate::POCHE.with(|c| c.set(None));
         crate::PRESENTING.with(|c| c.set(false));
+        crate::TEXTURED.with(|c| c.set(false));
     }
 }
 

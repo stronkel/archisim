@@ -51,3 +51,17 @@ component pillow(cx, cy, a, b)
   arc center (cx - a * 0.55, cy - b * 0.1) from (cx - a * 0.85, cy - b * 0.55) to (cx - a * 0.6, cy + b * 0.35) pen thin
   arc center (cx + a * 0.5, cy + b * 0.2) from (cx + a * 0.85, cy + b * 0.55) to (cx + a * 0.62, cy - b * 0.3) pen thin
   line (cx - a * 0.15, cy + b * 0.45) to (cx + a * 0.2, cy + b * 0.3) pen thin
+
+# Una silla alrededor de una mesa redonda de centro (cx, cy) y radio «r»,
+# en el ángulo «a», metida un poco bajo el tablero, con su respaldo.
+component ring_chair(cx, cy, r, a)
+  let ux = cos(a)
+  let uy = sin(a)
+  let px = -sin(a)
+  let py = cos(a)
+  let d0 = r - 0.1
+  let d1 = r + 0.34
+  let h = 0.2
+  let c = 0.05
+  polygon (cx + d0 * ux + (h - c) * px, cy + d0 * uy + (h - c) * py) (cx + (d0 + c) * ux + h * px, cy + (d0 + c) * uy + h * py) (cx + (d1 - c) * ux + h * px, cy + (d1 - c) * uy + h * py) (cx + d1 * ux + (h - c) * px, cy + d1 * uy + (h - c) * py) (cx + d1 * ux - (h - c) * px, cy + d1 * uy - (h - c) * py) (cx + (d1 - c) * ux - h * px, cy + (d1 - c) * uy - h * py) (cx + (d0 + c) * ux - h * px, cy + (d0 + c) * uy - h * py) (cx + d0 * ux - (h - c) * px, cy + d0 * uy - (h - c) * py) pen view filled
+  polygon (cx + (d1 - 0.06) * ux + 0.21 * px, cy + (d1 - 0.06) * uy + 0.21 * py) (cx + d1 * ux + 0.21 * px, cy + d1 * uy + 0.21 * py) (cx + d1 * ux - 0.21 * px, cy + d1 * uy - 0.21 * py) (cx + (d1 - 0.06) * ux - 0.21 * px, cy + (d1 - 0.06) * uy - 0.21 * py) pen thin filled

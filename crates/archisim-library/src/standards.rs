@@ -364,6 +364,21 @@ pub fn working_look() -> archisim_core::PresentationStyle {
     s
 }
 
+/// The name of the «Lápiz» style with the textures of the materials in
+/// the cuts (W3): brick in its courses, wool, concrete, earth with its
+/// stones, as the sections of Synaps.
+pub const TEXTURED_LOOK: &str = "Lápiz con tramas";
+
+/// «Lápiz con tramas»: as «Lápiz», but the cuts are not one dark grey:
+/// each layer with its material's texture over a pale wash.
+pub fn textured_look() -> archisim_core::PresentationStyle {
+    let mut s = working_look();
+    s.name = TEXTURED_LOOK.into();
+    s.poche = None;
+    s.cut_textures = true;
+    s
+}
+
 /// A new project's plans drawn «bonito por defecto» (W3): the «Lápiz»
 /// style, added if missing, on the «Arquitectura» template they follow.
 pub fn set_working_look(m: &mut Model) {
@@ -378,6 +393,10 @@ pub fn set_working_look(m: &mut Model) {
             Err(_) => return,
         },
     };
+    // Beside it, the same with the textures in the cuts, for sections.
+    if !m.presentation_styles().any(|s| s.name == TEXTURED_LOOK) {
+        let _ = m.add_presentation_style(textured_look());
+    }
     let Some(mut t) = m
         .view_templates()
         .find(|t| t.name == "Arquitectura")

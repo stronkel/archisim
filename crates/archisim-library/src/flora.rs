@@ -79,7 +79,7 @@ pub const FLORA_CATALOGUE: &[FloraEntry] = &[
             "droop" = N(-0.2),
             "density" = N(0.8),
             "clump" = N(0.8),
-            "style" = T("radial"),
+            "style" = T("dibujada"),
         ]
     ),
     sp!(
@@ -103,7 +103,7 @@ pub const FLORA_CATALOGUE: &[FloraEntry] = &[
             "angle" = N(45.0),
             "density" = N(0.55),
             "clump" = N(0.7),
-            "style" = T("radial"),
+            "style" = T("dibujada"),
         ]
     ),
     sp!(
@@ -443,7 +443,7 @@ pub const FLORA_CATALOGUE: &[FloraEntry] = &[
             "droop" = N(-0.3),
             "density" = N(0.95),
             "clump" = N(0.5),
-            "style" = T("dentado"),
+            "style" = T("dibujada"),
         ]
     ),
     sp!(
@@ -466,7 +466,7 @@ pub const FLORA_CATALOGUE: &[FloraEntry] = &[
             "angle" = N(60.0),
             "density" = N(0.9),
             "clump" = N(0.55),
-            "style" = T("radial"),
+            "style" = T("dibujada"),
         ]
     ),
     sp!(
@@ -490,7 +490,7 @@ pub const FLORA_CATALOGUE: &[FloraEntry] = &[
             "droop" = N(0.2),
             "density" = N(0.9),
             "clump" = N(0.7),
-            "style" = T("radial"),
+            "style" = T("dibujada"),
         ]
     ),
     sp!(
@@ -514,7 +514,7 @@ pub const FLORA_CATALOGUE: &[FloraEntry] = &[
             "droop" = N(-0.1),
             "density" = N(0.7),
             "clump" = N(0.8),
-            "style" = T("radial"),
+            "style" = T("dibujada"),
         ]
     ),
     sp!(
@@ -538,7 +538,7 @@ pub const FLORA_CATALOGUE: &[FloraEntry] = &[
             "droop" = N(-0.2),
             "density" = N(0.5),
             "clump" = N(0.6),
-            "style" = T("radial"),
+            "style" = T("dibujada"),
         ]
     ),
     sp!(
@@ -564,7 +564,7 @@ pub const FLORA_CATALOGUE: &[FloraEntry] = &[
             "angle" = N(60.0),
             "density" = N(0.8),
             "clump" = N(0.45),
-            "style" = T("follaje"),
+            "style" = T("dibujada"),
         ]
     ),
     // --- Palms ------------------------------------------------------
@@ -1151,7 +1151,7 @@ pub const FLORA_CATALOGUE: &[FloraEntry] = &[
             "density" = N(0.85),
             "clump" = N(0.14),
             "bloom" = N(0.35),
-            "style" = T("hojas"),
+            "style" = T("dibujada"),
         ]
     ),
     sp!(
@@ -1176,7 +1176,7 @@ pub const FLORA_CATALOGUE: &[FloraEntry] = &[
             "density" = N(0.95),
             "clump" = N(0.3),
             "fruit" = N(0.1),
-            "style" = T("nube"),
+            "style" = T("dibujada"),
         ]
     ),
     sp!(
@@ -1250,7 +1250,7 @@ pub const FLORA_CATALOGUE: &[FloraEntry] = &[
             "density" = N(0.8),
             "clump" = N(0.35),
             "bloom" = N(0.45),
-            "style" = T("hojas"),
+            "style" = T("dibujada"),
         ]
     ),
     sp!(
@@ -1274,7 +1274,7 @@ pub const FLORA_CATALOGUE: &[FloraEntry] = &[
             "density" = N(0.9),
             "clump" = N(0.22),
             "bloom" = N(0.2),
-            "style" = T("nube"),
+            "style" = T("dibujada"),
         ]
     ),
     sp!(
@@ -1298,7 +1298,7 @@ pub const FLORA_CATALOGUE: &[FloraEntry] = &[
             "gnarl" = N(0.5),
             "density" = N(0.9),
             "clump" = N(0.22),
-            "style" = T("dentado"),
+            "style" = T("dibujada"),
         ]
     ),
     sp!(
@@ -1321,7 +1321,7 @@ pub const FLORA_CATALOGUE: &[FloraEntry] = &[
             "angle" = N(35.0),
             "density" = N(1.0),
             "clump" = N(0.35),
-            "style" = T("nube"),
+            "style" = T("dibujada"),
         ]
     ),
     sp!(
@@ -1344,7 +1344,7 @@ pub const FLORA_CATALOGUE: &[FloraEntry] = &[
             "angle" = N(40.0),
             "density" = N(1.0),
             "clump" = N(0.15),
-            "style" = T("nube"),
+            "style" = T("dibujada"),
         ]
     ),
     sp!(
@@ -1394,7 +1394,7 @@ pub const FLORA_CATALOGUE: &[FloraEntry] = &[
             "density" = N(0.6),
             "clump" = N(0.35),
             "bloom" = N(0.35),
-            "style" = T("hojas"),
+            "style" = T("dibujada"),
         ]
     ),
     sp!(

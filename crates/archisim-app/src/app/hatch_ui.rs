@@ -20,18 +20,21 @@ pub fn paint_swatch(ui: &Ui, rect: Rect, pattern: HatchPattern, ink: Rgb, paper:
     // setts, decking…), a little more for the lawn's bands.
     let side = match pattern {
         HatchPattern::LawnStripes => 4.5,
-        HatchPattern::Setts | HatchPattern::RockyPath => 2.4,
+        HatchPattern::Setts | HatchPattern::RockyPath | HatchPattern::Sand => 2.4,
+        HatchPattern::LargeTiles => 3.6,
         p if p.texture().is_some() => 1.6,
         _ => 1.2,
     };
     let k = side / 24.0; // 24 mm of paper across
+                         // As tall as the card is, at the same scale (not squashed).
+    let tall = side * (rect.height() / rect.width().max(1.0)) as f64;
     let h = Hatch {
         loops: vec![Polyline::straight(
             vec![
                 Point2::new(0.0, 0.0),
                 Point2::new(side, 0.0),
-                Point2::new(side, side),
-                Point2::new(0.0, side),
+                Point2::new(side, tall),
+                Point2::new(0.0, tall),
             ],
             true,
         )],
@@ -44,7 +47,7 @@ pub fn paint_swatch(ui: &Ui, rect: Rect, pattern: HatchPattern, ink: Rgb, paper:
     let to = |p: Point2| {
         Pos2::new(
             rect.left() + (p.x / side) as f32 * rect.width(),
-            rect.bottom() - (p.y / side) as f32 * rect.height(),
+            rect.bottom() - (p.y / tall) as f32 * rect.height(),
         )
     };
     let ink = colour(ink);
@@ -211,9 +214,11 @@ fn pattern_grid(
                         for p in row {
                             let r = ui
                                 .vertical(|ui| {
-                                    ui.set_width(96.0);
-                                    let (rect, r) = ui
-                                        .allocate_exact_size(Vec2::new(96.0, 56.0), Sense::click());
+                                    ui.set_width(112.0);
+                                    let (rect, r) = ui.allocate_exact_size(
+                                        Vec2::new(112.0, 72.0),
+                                        Sense::click(),
+                                    );
                                     paint_swatch(ui, rect, *p, ink, paper);
                                     if *p == current {
                                         let pal = Palette::current(ui.ctx());

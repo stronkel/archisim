@@ -195,7 +195,7 @@ Uso:
       de la biblioteca al que sustituiría: taller.archisim, taller.ifc,
       axonometría y planta en SVG. Por defecto: ./out
   archisim tramas [carpeta]
-      Las tramas de presentación (madera, metal, hormigón y piedra), cada
+      Las tramas de presentación (madera, metal, hormigón, piedra, cerámica, jardín, fábrica y aislamiento), cada
       una en un cuadro con su nombre, a 1:20 y a 1:50: tramas.archisim,
       SVG, PDF y DXF. Por defecto: ./out
   archisim figuras [carpeta]

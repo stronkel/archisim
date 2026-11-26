@@ -632,6 +632,10 @@ pub struct PresentationStyle {
     /// of the palette, as a pencil drawing, and only the greys keep their
     /// tone by lightness. «Lápiz»: trees and plants white with their lines.
     pub washes: bool,
+    /// The cuts drawn with the texture of their material (version 124):
+    /// a section or a plan «Con tramas», as in Synaps; the materials
+    /// without one keep their fill.
+    pub cut_textures: bool,
 }
 
 /// A presentation style's own pens: one set for fine scales and one for
@@ -656,6 +660,7 @@ impl PresentationStyle {
             accent: None,
             accent_on: BTreeSet::new(),
             washes: false,
+            cut_textures: false,
         }
     }
 

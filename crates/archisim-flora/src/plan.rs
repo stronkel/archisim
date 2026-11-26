@@ -1480,27 +1480,20 @@ fn frond_mark(
             let mut outline = left.clone();
             outline.extend(right.iter().rev());
             if f.kind == FrondKind::Pinnate && crown_mm > leaflets {
-                // Leaflets as a zigzag along each side.
-                let mut zig = Vec::new();
-                for i in 0..m {
-                    zig.push(pts[i]);
-                    zig.push(left[i]);
+                // Leaflets: a dozen or so strokes a side, leaning out
+                // towards the tip, as a hand would draw them.
+                // None by the trunk, where all the fronds cross.
+                let step = (m / 14).max(1);
+                for i in ((m * 3 / 10).max(step)..m - 1).step_by(step) {
+                    let tip = (i + step / 2 + 1).min(m - 1);
+                    for edge in [&left, &right] {
+                        lines.push(Shape::Line {
+                            points: vec![pts[i], edge[tip]],
+                            closed: false,
+                            stroke: Stroke::Thin,
+                        });
+                    }
                 }
-                lines.push(Shape::Line {
-                    points: zig,
-                    closed: false,
-                    stroke: Stroke::Thin,
-                });
-                let mut zag = Vec::new();
-                for i in 0..m {
-                    zag.push(pts[i]);
-                    zag.push(right[i]);
-                }
-                lines.push(Shape::Line {
-                    points: zag,
-                    closed: false,
-                    stroke: Stroke::Thin,
-                });
             } else {
                 lines.push(Shape::Line {
                     points: outline.clone(),

@@ -1690,6 +1690,55 @@ mod tests {
         assert!(!svg.contains("<g id=\"heights\">"));
     }
 
+    /// «Lápiz con tramas» (W3): the cut layers of section A drawn with the
+    /// textures of their materials (brick in courses, wool, concrete,
+    /// earth), where «Lápiz» fills them solid; every starter material that
+    /// has a texture keeps it in the file.
+    #[test]
+    fn sections_cut_with_textures() {
+        let doc = super::build().unwrap();
+        let m = doc.model();
+        let a = m.sections().find(|s| s.title() == "Sección A").unwrap();
+        let d = archisim_plan::section::section_drawing(m, a);
+        let style = |name: &str| {
+            m.presentation_styles()
+                .find(|s| s.name == name)
+                .map(|s| s.id)
+        };
+        let draw = |name: &str| {
+            let mut o = archisim_plan::PlanOptions {
+                scale: 50.0,
+                ..Default::default()
+            };
+            o.style.presentation = style(name);
+            archisim_plan::section::render_section(m, &d, &o)
+        };
+        let plain = draw(archisim_library::standards::WORKING_LOOK);
+        let textured = draw(archisim_library::standards::TEXTURED_LOOK);
+        assert!(
+            textured.len() > plain.len() * 6 / 5,
+            "{} against {}",
+            textured.len(),
+            plain.len()
+        );
+        let brick = m
+            .materials()
+            .find(|x| x.name.starts_with("Ladrillo"))
+            .unwrap();
+        assert_eq!(
+            brick.texture,
+            Some(archisim_core::HatchPattern::BrickCourses)
+        );
+        let back = archisim_file::from_str(&archisim_file::to_string(m)).unwrap();
+        assert_eq!(
+            back.materials().filter(|x| x.texture.is_some()).count(),
+            m.materials().filter(|x| x.texture.is_some()).count()
+        );
+        assert!(back
+            .presentation_styles()
+            .any(|s| s.cut_textures && s.name == archisim_library::standards::TEXTURED_LOOK));
+    }
+
     /// A view can hide what phase 2 added: the furniture, the columns and
     /// beams, the terrain…, as it hides walls or dimensions.
     #[test]

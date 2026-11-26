@@ -94,6 +94,15 @@ pub fn dining(b: &mut Builder, p: &Params) {
     let h = p.get("height", 0.75).clamp(0.6, 1.1);
     let x0 = -w / 2.0;
     let c = [0.0, d / 2.0];
+    // A round one: the classic's top and pedestal, in the collection's
+    // top and frame.
+    if p.get("round", 0.0) > 0.5 {
+        let r = (w.min(d) / 2.0).max(0.4);
+        let c = [0.0, r];
+        round_top(b, "top", c, r, r, h, 0.035);
+        pedestal(b, c, h - 0.035, r * 0.42, 0.06);
+        return;
+    }
     match p.style() {
         // Mediterranean: whitewashed, a thick top over a deep apron, square
         // tapered legs.

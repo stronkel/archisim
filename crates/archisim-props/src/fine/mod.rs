@@ -410,6 +410,19 @@ pub const KINDS: &[(&str, &[&str])] = &[
         ],
     ),
     (
+        "fine_round_table",
+        &[
+            "Nórdico cálido",
+            "Mediterráneo",
+            "Años 50",
+            "Japandi",
+            "Contemporáneo",
+            "Rústica",
+            "Industrial",
+            "Clásica",
+        ],
+    ),
+    (
         "fine_dining_table",
         &[
             "Nórdico cálido",
@@ -584,7 +597,7 @@ fn chairs_around(b: &mut Builder, p: &Params) {
     // (x, y) of the chair's back and its turn: the chair looks along +y
     // before it is turned.
     let mut spots: Vec<(f64, f64, f64)> = Vec::new();
-    if p.style() == 8 {
+    if p.style() == 8 || p.get("round", 0.0) > 0.5 {
         // The classic table is round, on its pedestal.
         let r = (w.min(d) / 2.0).max(0.45);
         for k in 0..n {
@@ -723,6 +736,15 @@ pub fn make(kind: &str, b: &mut Builder, p: &Params) -> bool {
         "fine_dining_table" => {
             tables::dining(b, p);
             chairs_around(b, p);
+        }
+        // A round dining table of any collection, its chairs in a ring.
+        "fine_round_table" => {
+            let mut q = p.clone();
+            let d = p.get("width", 1.2);
+            q.set("depth", d);
+            q.set("round", 1.0);
+            tables::dining(b, &q);
+            chairs_around(b, &q);
         }
         "fine_coffee_table" => tables::coffee(b, p),
         "fine_side_table" => tables::side(b, p),

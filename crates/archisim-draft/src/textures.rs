@@ -50,6 +50,19 @@ pub fn is_texture(p: HatchPattern) -> bool {
             | RockyPath
             | Setts
             | Rubble
+            | WoodHerringbone
+            | WoodBasket
+            | HexTiles
+            | HydraulicTiles
+            | LargeTiles
+            | SubwayTiles
+            | Sand
+            | GrassTufts
+            | GroundCover
+            | BrickCourses
+            | Plaster
+            | MineralWool
+            | EarthStones
     )
 }
 
@@ -132,6 +145,19 @@ pub(crate) fn draw(
         RockyPath => rocky_path(&mut c),
         Setts => setts(&mut c),
         Rubble => rubble(&mut c),
+        WoodHerringbone => herringbone(&mut c),
+        WoodBasket => basket(&mut c),
+        HexTiles => hex_tiles(&mut c),
+        HydraulicTiles => hydraulic(&mut c),
+        LargeTiles => large_tiles(&mut c),
+        SubwayTiles => subway(&mut c),
+        Sand => sand(&mut c),
+        GrassTufts => grass_tufts(&mut c),
+        GroundCover => ground_cover(&mut c),
+        BrickCourses => brick_courses(&mut c),
+        Plaster => plaster(&mut c),
+        MineralWool => wool(&mut c),
+        EarthStones => earth_stones(&mut c),
         _ => {}
     }
     if c.full {
@@ -151,6 +177,12 @@ fn density(p: HatchPattern) -> f64 {
         Pebbles => 1500.0,
         ConcreteRough => 700.0,
         MetalMesh => 1100.0,
+        Sand => 900.0,
+        HydraulicTiles | SubwayTiles => 900.0,
+        GrassTufts | GroundCover => 700.0,
+        BrickCourses => 500.0,
+        Plaster | EarthStones => 800.0,
+        MineralWool => 3000.0,
         _ => 300.0,
     }
 }
@@ -1505,6 +1537,517 @@ fn rubble(c: &mut Canvas) {
     }
 }
 
+// ─── Parquet, tiles and garden (W3, as in the plans of Synaps) ────────────
+
+/// The pattern's box seen from axes turned 45°: points of the turned
+/// frame are `turned((x, y))` in the pattern's.
+fn turned(p: P) -> P {
+    let k = std::f64::consts::FRAC_1_SQRT_2;
+    ((p.0 - p.1) * k, (p.0 + p.1) * k)
+}
+
+/// The box (in the turned frame) that covers the pattern's area.
+fn turned_area(c: &Canvas) -> (f64, f64, f64, f64) {
+    let (x0, y0, x1, y1) = c.area;
+    let k = std::f64::consts::FRAC_1_SQRT_2;
+    // The inverse turn: (x, y) → ((x + y)k, (y − x)k).
+    let pts = [(x0, y0), (x0, y1), (x1, y0), (x1, y1)].map(|(x, y)| ((x + y) * k, (y - x) * k));
+    pts.iter().fold(
+        (
+            f64::INFINITY,
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+            f64::NEG_INFINITY,
+        ),
+        |(a, b, cc, d), &(x, y)| (a.min(x), b.min(y), cc.max(x), d.max(y)),
+    )
+}
+
+/// A few lines of grain along a board from `a` to `b` (its long side),
+/// `w` wide, `n` lines, some broken.
+fn board_grain(c: &mut Canvas, a: P, b: P, w: f64, n: usize, salt: (i64, i64)) {
+    let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+    let len = dx.hypot(dy);
+    if len < 1e-9 {
+        return;
+    }
+    let (nx, ny) = (-dy / len, dx / len);
+    for i in 0..n {
+        let r = |k: u64| noise(salt.0, salt.1 * 31 + i as i64, 2400 + k);
+        let off = w * (-0.32 + 0.64 * (i as f64 + 0.3 + 0.4 * r(0)) / n as f64);
+        let t0 = lerp(0.04, 0.35, r(1));
+        let t1 = lerp(0.6, 0.96, r(2));
+        let bend = w * 0.08 * (2.0 * r(3) - 1.0);
+        let steps = 6;
+        let pts: Vec<P> = (0..=steps)
+            .map(|j| {
+                let t = t0 + (t1 - t0) * j as f64 / steps as f64;
+                let o = off + bend * (t * PI * lerp(1.0, 2.5, r(4))).sin();
+                (a.0 + dx * t + nx * o, a.1 + dy * t + ny * o)
+            })
+            .collect();
+        c.curve(&pts, false);
+    }
+}
+
+/// Boards in herringbone (espiga): 7 × 50 cm, each leaning 45° to the
+/// zigzag, which runs along the pattern's x axis.
+fn herringbone(c: &mut Canvas) {
+    let a = 0.07;
+    let n = 7.0;
+    let (x0, y0, x1, y1) = turned_area(c);
+    // Bricks H(k + n m, k − n m) and V(k + n m, k − n m + 1), units of `a`.
+    let corners = [(x0, y0), (x0, y1), (x1, y0), (x1, y1)];
+    let ks = corners.iter().map(|(x, y)| (x + y) / (2.0 * a));
+    let ms = corners.iter().map(|(x, y)| (x - y) / (2.0 * n * a));
+    let span = |it: &mut dyn Iterator<Item = f64>| {
+        it.fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), v| {
+            (lo.min(v), hi.max(v))
+        })
+    };
+    let (k0, k1) = span(&mut ks.into_iter());
+    let (m0, m1) = span(&mut ms.into_iter());
+    if (k1 - k0) * (m1 - m0) > LIMIT as f64 / 4.0 {
+        c.full = true;
+        return;
+    }
+    for k in k0.floor() as i64 - (n as i64 + 1)..=k1.ceil() as i64 + 1 {
+        for m in m0.floor() as i64 - 1..=m1.ceil() as i64 + 1 {
+            let (ox, oy) = ((k as f64 + n * m as f64) * a, (k as f64 - n * m as f64) * a);
+            for (bx, by, w, h, along) in [(ox, oy, n * a, a, true), (ox, oy + a, a, n * a, false)] {
+                let r = [
+                    turned((bx, by)),
+                    turned((bx + w, by)),
+                    turned((bx + w, by + h)),
+                    turned((bx, by + h)),
+                ];
+                let (lo_x, hi_x) = r
+                    .iter()
+                    .fold((f64::INFINITY, f64::NEG_INFINITY), |(l, h), p| {
+                        (l.min(p.0), h.max(p.0))
+                    });
+                let (lo_y, hi_y) = r
+                    .iter()
+                    .fold((f64::INFINITY, f64::NEG_INFINITY), |(l, h), p| {
+                        (l.min(p.1), h.max(p.1))
+                    });
+                if !c.near(lo_x, lo_y, hi_x, hi_y) {
+                    continue;
+                }
+                // Two sides of each board: the others are its neighbours'.
+                c.line(r[0], r[1]);
+                c.line(r[0], r[3]);
+                let (s, e) = if along {
+                    (turned((bx, by + h * 0.5)), turned((bx + w, by + h * 0.5)))
+                } else {
+                    (turned((bx + w * 0.5, by)), turned((bx + w * 0.5, by + h)))
+                };
+                board_grain(c, s, e, a, 2, (k, m * 2 + along as i64));
+            }
+        }
+        if c.full {
+            return;
+        }
+    }
+}
+
+/// Parquet in a basket weave: squares of 30 cm, three boards in each,
+/// along x and along y in turn.
+fn basket(c: &mut Canvas) {
+    let (x0, y0, x1, y1) = c.area;
+    let s = 0.3;
+    for i in (x0 / s).floor() as i64..=(x1 / s).ceil() as i64 {
+        for j in (y0 / s).floor() as i64..=(y1 / s).ceil() as i64 {
+            let (bx, by) = (i as f64 * s, j as f64 * s);
+            if !c.near(bx, by, bx + s, by + s) {
+                continue;
+            }
+            c.line((bx, by), (bx + s, by));
+            c.line((bx, by), (bx, by + s));
+            let along = (i + j).rem_euclid(2) == 0;
+            for b in 0..3 {
+                let o = s * b as f64 / 3.0;
+                if b > 0 {
+                    if along {
+                        c.line((bx, by + o), (bx + s, by + o));
+                    } else {
+                        c.line((bx + o, by), (bx + o, by + s));
+                    }
+                }
+                let m = o + s / 6.0;
+                let (a, e) = if along {
+                    ((bx, by + m), (bx + s, by + m))
+                } else {
+                    ((bx + m, by), (bx + m, by + s))
+                };
+                board_grain(c, a, e, s / 3.0, 2, (i * 3 + b, j));
+            }
+        }
+        if c.full {
+            return;
+        }
+    }
+}
+
+/// Hexagonal tiles, 20 cm across the flats, with a speck or two.
+fn hex_tiles(c: &mut Canvas) {
+    let (x0, y0, x1, y1) = c.area;
+    let flat = 0.2;
+    let r = flat / 3f64.sqrt();
+    let (dx, dy) = (1.5 * r, flat);
+    for i in (x0 / dx).floor() as i64 - 1..=(x1 / dx).ceil() as i64 + 1 {
+        for j in (y0 / dy).floor() as i64 - 1..=(y1 / dy).ceil() as i64 + 1 {
+            let cx = i as f64 * dx;
+            let cy = j as f64 * dy + if i.rem_euclid(2) == 1 { dy * 0.5 } else { 0.0 };
+            if !c.near(cx - r, cy - r, cx + r, cy + r) {
+                continue;
+            }
+            let v = |k: i32| {
+                let a = k as f64 * PI / 3.0;
+                (cx + r * a.cos(), cy + r * a.sin())
+            };
+            // Three of the six sides: the others are drawn by the next tiles.
+            c.line(v(0), v(1));
+            c.line(v(1), v(2));
+            c.line(v(2), v(3));
+            let n = |k: u64| noise(i, j, 2500 + k);
+            if n(0) < 0.5 {
+                c.dot((cx + r * 0.5 * (n(1) - 0.5), cy + r * 0.5 * (n(2) - 0.5)));
+            }
+        }
+        if c.full {
+            return;
+        }
+    }
+}
+
+/// Encaustic tiles, 20 cm: a circle in the middle and a quarter circle in
+/// each corner, which make whole circles where four tiles meet.
+fn hydraulic(c: &mut Canvas) {
+    let (x0, y0, x1, y1) = c.area;
+    let s = 0.2;
+    let arc = |c: &mut Canvas, o: P, r: f64, a0: f64, a1: f64, n: usize| {
+        let pts: Vec<P> = (0..=n)
+            .map(|k| {
+                let a = a0 + (a1 - a0) * k as f64 / n as f64;
+                (o.0 + r * a.cos(), o.1 + r * a.sin())
+            })
+            .collect();
+        c.curve(&pts, false);
+    };
+    for i in (x0 / s).floor() as i64..=(x1 / s).ceil() as i64 {
+        for j in (y0 / s).floor() as i64..=(y1 / s).ceil() as i64 {
+            let (bx, by) = (i as f64 * s, j as f64 * s);
+            if !c.near(bx, by, bx + s, by + s) {
+                continue;
+            }
+            c.line((bx, by), (bx + s, by));
+            c.line((bx, by), (bx, by + s));
+            let m = (bx + s / 2.0, by + s / 2.0);
+            c.circle(m, s * 0.22, 20);
+            c.circle(m, s * 0.1, 12);
+            // The quarter at the lower left; the others come from the
+            // tiles around, but each draws its own four so a lone tile
+            // shows them too.
+            for (k, o) in [(bx, by), (bx + s, by), (bx + s, by + s), (bx, by + s)]
+                .into_iter()
+                .enumerate()
+            {
+                let a0 = k as f64 * FRAC_PI_2_;
+                arc(c, o, s * 0.28, a0, a0 + FRAC_PI_2_, 6);
+            }
+            // Petals between the circle and the corners.
+            for k in 0..4 {
+                let a = PI / 4.0 + k as f64 * FRAC_PI_2_;
+                let (u, v) = (a.cos(), a.sin());
+                let p0 = (m.0 + u * s * 0.24, m.1 + v * s * 0.24);
+                let p1 = (m.0 + u * s * 0.42, m.1 + v * s * 0.42);
+                c.line(p0, p1);
+            }
+        }
+        if c.full {
+            return;
+        }
+    }
+}
+
+const FRAC_PI_2_: f64 = std::f64::consts::FRAC_PI_2;
+
+/// Large porcelain tiles, 60 × 120 cm, staggered by a third, a few of
+/// them with a faint vein.
+fn large_tiles(c: &mut Canvas) {
+    let (x0, y0, x1, y1) = c.area;
+    let (w, h) = (1.2, 0.6);
+    for j in (y0 / h).floor() as i64..=(y1 / h).ceil() as i64 {
+        let shift = (j.rem_euclid(3)) as f64 * w / 3.0;
+        let by = j as f64 * h;
+        c.line((x0 - w, by), (x1 + w, by));
+        for i in ((x0 - shift) / w).floor() as i64..=((x1 - shift) / w).ceil() as i64 {
+            let bx = i as f64 * w + shift;
+            if !c.near(bx, by, bx + w, by + h) {
+                continue;
+            }
+            c.line((bx, by), (bx, by + h));
+            let n = |k: u64| noise(i, j, 2600 + k);
+            if n(0) < 0.35 {
+                let a = (
+                    bx + w * lerp(0.1, 0.4, n(1)),
+                    by + h * lerp(0.15, 0.85, n(2)),
+                );
+                let e = (
+                    bx + w * lerp(0.6, 0.9, n(3)),
+                    by + h * lerp(0.15, 0.85, n(4)),
+                );
+                let pts: Vec<P> = (0..=10)
+                    .map(|k| {
+                        let t = k as f64 / 10.0;
+                        let o = 0.03 * (t * PI * 3.0 + n(5) * 6.0).sin();
+                        (a.0 + (e.0 - a.0) * t, a.1 + (e.1 - a.1) * t + o)
+                    })
+                    .collect();
+                c.curve(&pts, false);
+            }
+        }
+        if c.full {
+            return;
+        }
+    }
+}
+
+/// Subway tiles, 7.5 × 15 cm, in running bond.
+fn subway(c: &mut Canvas) {
+    let (x0, y0, x1, y1) = c.area;
+    let (w, h) = (0.15, 0.075);
+    for j in (y0 / h).floor() as i64..=(y1 / h).ceil() as i64 {
+        let by = j as f64 * h;
+        c.line((x0 - w, by), (x1 + w, by));
+        let shift = if j.rem_euclid(2) == 1 { w / 2.0 } else { 0.0 };
+        for i in ((x0 - shift) / w).floor() as i64..=((x1 - shift) / w).ceil() as i64 {
+            let bx = i as f64 * w + shift;
+            c.raw((bx, by), (bx, by + h));
+        }
+        if c.full {
+            return;
+        }
+    }
+}
+
+/// Sand: grains, thicker in soft drifts, and now and then a ripple.
+fn sand(c: &mut Canvas) {
+    let (x0, y0, x1, y1) = c.area;
+    let cell = 0.045;
+    for i in (x0 / cell).floor() as i64..=(x1 / cell).ceil() as i64 {
+        for j in (y0 / cell).floor() as i64..=(y1 / cell).ceil() as i64 {
+            let (x, y) = (i as f64 * cell, j as f64 * cell);
+            // Drifts: a slow wave over the place.
+            let drift = 0.5 + 0.5 * ((x * 1.7 + 0.6 * (y * 2.3).sin()).sin() * (y * 1.3).cos());
+            let n = |k: u64| noise(i, j, 2700 + k);
+            // A grain: a speck a few millimetres long.
+            let grain = |c: &mut Canvas, a: f64, b: f64, t: f64| {
+                let p = (x + a * cell, y + b * cell);
+                let (dx, dy) = (0.003 * (t * TAU).cos(), 0.003 * (t * TAU).sin());
+                c.raw(p, (p.0 + dx, p.1 + dy));
+            };
+            if n(0) < 0.2 + 0.7 * drift {
+                grain(c, n(1), n(2), n(6));
+            }
+            if n(3) < 0.5 * drift {
+                grain(c, n(4), n(5), n(7));
+            }
+        }
+        if c.full {
+            return;
+        }
+    }
+    // Ripples.
+    let s = 0.9;
+    for i in (x0 / s).floor() as i64..=(x1 / s).ceil() as i64 {
+        for j in (y0 / s).floor() as i64..=(y1 / s).ceil() as i64 {
+            let n = |k: u64| noise(i, j, 2720 + k);
+            if n(0) > 0.75 {
+                continue;
+            }
+            let o = ((i as f64 + n(1)) * s, (j as f64 + n(2)) * s);
+            let len = lerp(0.25, 0.6, n(3));
+            let pts: Vec<P> = (0..=8)
+                .map(|k| {
+                    let t = k as f64 / 8.0 - 0.5;
+                    (o.0 + t * len, o.1 + 0.02 * (t * PI * 2.0).sin())
+                })
+                .collect();
+            c.curve(&pts, false);
+        }
+    }
+}
+
+/// Grass drawn tuft by tuft: three to five blades from a point, leaning
+/// different ways.
+fn grass_tufts(c: &mut Canvas) {
+    let (x0, y0, x1, y1) = c.area;
+    let cell = 0.075;
+    for i in (x0 / cell).floor() as i64 - 1..=(x1 / cell).ceil() as i64 + 1 {
+        for j in (y0 / cell).floor() as i64 - 1..=(y1 / cell).ceil() as i64 + 1 {
+            let n = |k: u64| noise(i, j, 2800 + k);
+            if n(0) < 0.08 {
+                continue;
+            }
+            let o = ((i as f64 + n(1)) * cell, (j as f64 + n(2)) * cell);
+            if !c.near(o.0 - 0.05, o.1 - 0.05, o.0 + 0.05, o.1 + 0.05) {
+                continue;
+            }
+            let lean = (n(3) - 0.5) * 1.2 + PI / 2.0;
+            let blades = 3 + (n(4) * 3.0) as usize;
+            for b in 0..blades {
+                let t = b as f64 / (blades - 1) as f64 - 0.5;
+                let a = lean + t * lerp(0.9, 1.5, n(5));
+                let l = lerp(0.035, 0.065, noise(i, j * 7 + b as i64, 2810));
+                let mid = (
+                    o.0 + a.cos() * l * 0.55 + t * 0.004,
+                    o.1 + a.sin() * l * 0.55,
+                );
+                let tip = (
+                    o.0 + (a + t * 0.25).cos() * l,
+                    o.1 + (a + t * 0.25).sin() * l,
+                );
+                c.raw(o, mid);
+                c.raw(mid, tip);
+            }
+        }
+        if c.full {
+            return;
+        }
+    }
+}
+
+/// Low planting: small leaves, each a narrow blob with its rib, among
+/// dots of soil.
+fn ground_cover(c: &mut Canvas) {
+    let (x0, y0, x1, y1) = c.area;
+    let cell = 0.075;
+    for i in (x0 / cell).floor() as i64 - 1..=(x1 / cell).ceil() as i64 + 1 {
+        for j in (y0 / cell).floor() as i64 - 1..=(y1 / cell).ceil() as i64 + 1 {
+            let n = |k: u64| noise(i, j, 2900 + k);
+            let o = ((i as f64 + n(1)) * cell, (j as f64 + n(2)) * cell);
+            if n(0) < 0.7 {
+                let a = n(3) * TAU;
+                let l = lerp(0.026, 0.042, n(4));
+                c.blob(o, l, 0.42, a, 8, 0.08, 2910);
+                let (u, v) = (a.cos() * l * 0.8, a.sin() * l * 0.8);
+                c.raw((o.0 - u, o.1 - v), (o.0 + u, o.1 + v));
+            } else {
+                c.dot(o);
+            }
+        }
+        if c.full {
+            return;
+        }
+    }
+}
+
+/// Brick in courses, 24 × 5 cm with 1 cm joints: each course and each
+/// head joint by hand, a few specks on some bricks (for cuts).
+fn brick_courses(c: &mut Canvas) {
+    let (x0, y0, x1, y1) = c.area;
+    let (w, h) = (0.25, 0.06);
+    for j in (y0 / h).floor() as i64..=(y1 / h).ceil() as i64 {
+        let by = j as f64 * h;
+        // The bed joint: two lines a centimetre apart.
+        c.line((x0 - w, by), (x1 + w, by));
+        c.line((x0 - w, by + 0.01), (x1 + w, by + 0.01));
+        let shift = if j.rem_euclid(2) == 1 { w / 2.0 } else { 0.0 };
+        for i in ((x0 - shift) / w).floor() as i64..=((x1 - shift) / w).ceil() as i64 {
+            let bx = i as f64 * w + shift;
+            if !c.near(bx, by, bx + w, by + h) {
+                continue;
+            }
+            c.line((bx, by + 0.01), (bx, by + h));
+            c.line((bx + 0.01, by + 0.01), (bx + 0.01, by + h));
+            let n = |k: u64| noise(i, j, 3000 + k);
+            if n(0) < 0.4 {
+                for k in 0..3 {
+                    c.dot((
+                        bx + 0.02 + (w - 0.03) * noise(i, j * 5 + k, 3010),
+                        by + 0.015 + (h - 0.02) * noise(i, j * 5 + k, 3011),
+                    ));
+                }
+            }
+        }
+        if c.full {
+            return;
+        }
+    }
+}
+
+/// Plaster or render: a fine, even stipple with a few short marks.
+fn plaster(c: &mut Canvas) {
+    c.stipple(700.0, 3100);
+    let (x0, y0, x1, y1) = c.area;
+    let cell = 0.12;
+    for i in (x0 / cell).floor() as i64..=(x1 / cell).ceil() as i64 {
+        for j in (y0 / cell).floor() as i64..=(y1 / cell).ceil() as i64 {
+            let n = |k: u64| noise(i, j, 3120 + k);
+            if n(0) < 0.5 {
+                let p = ((i as f64 + n(1)) * cell, (j as f64 + n(2)) * cell);
+                let a = n(3) * TAU;
+                c.raw(p, (p.0 + 0.006 * a.cos(), p.1 + 0.006 * a.sin()));
+            }
+        }
+    }
+}
+
+/// Mineral wool: short curled fibres lying every way.
+fn wool(c: &mut Canvas) {
+    let (x0, y0, x1, y1) = c.area;
+    let cell = 0.032;
+    for i in (x0 / cell).floor() as i64 - 1..=(x1 / cell).ceil() as i64 + 1 {
+        for j in (y0 / cell).floor() as i64 - 1..=(y1 / cell).ceil() as i64 + 1 {
+            let n = |k: u64| noise(i, j, 3200 + k);
+            let o = ((i as f64 + n(1)) * cell, (j as f64 + n(2)) * cell);
+            if !c.near(o.0 - 0.03, o.1 - 0.03, o.0 + 0.03, o.1 + 0.03) {
+                continue;
+            }
+            let a = n(3) * TAU;
+            let l = lerp(0.022, 0.04, n(4));
+            let bend = lerp(-0.9, 0.9, n(5));
+            let pts: Vec<P> = (0..=3)
+                .map(|k| {
+                    let t = k as f64 / 3.0 - 0.5;
+                    let ang = a + bend * t;
+                    (o.0 + t * l * ang.cos(), o.1 + t * l * ang.sin())
+                })
+                .collect();
+            c.curve(&pts, false);
+        }
+        if c.full {
+            return;
+        }
+    }
+}
+
+/// Earth: grains of soil and now and then a small stone.
+fn earth_stones(c: &mut Canvas) {
+    c.stipple(500.0, 3300);
+    let (x0, y0, x1, y1) = c.area;
+    let cell = 0.09;
+    for i in (x0 / cell).floor() as i64 - 1..=(x1 / cell).ceil() as i64 + 1 {
+        for j in (y0 / cell).floor() as i64 - 1..=(y1 / cell).ceil() as i64 + 1 {
+            let n = |k: u64| noise(i, j, 3310 + k);
+            if n(0) < 0.45 {
+                let p = ((i as f64 + n(1)) * cell, (j as f64 + n(2)) * cell);
+                let r = lerp(0.006, 0.018, n(3) * n(3));
+                c.blob(p, r, lerp(0.6, 0.95, n(4)), n(5) * PI, 6, 0.25, 3320);
+            } else if n(0) < 0.7 {
+                let p = ((i as f64 + n(1)) * cell, (j as f64 + n(2)) * cell);
+                let a = n(6) * TAU;
+                c.raw(p, (p.0 + 0.008 * a.cos(), p.1 + 0.008 * a.sin()));
+            }
+        }
+        if c.full {
+            return;
+        }
+    }
+}
+
 /// A closed polygon with its corners cut (Chaikin): rounder each time.
 fn chaikin(pts: &[P]) -> Vec<P> {
     let n = pts.len();
@@ -1582,6 +2125,10 @@ pub fn stand_in(p: HatchPattern) -> &'static [crate::hatch::Family] {
         ConcretePavers => HERRING_SI,
         Limestone | StoneBlocks | Ashlar | Rubble | Setts => COURSES_SI,
         Pebbles | RockyPath => PEBBLE_SI,
+        WoodHerringbone | WoodBasket => HERRING_SI,
+        HexTiles | HydraulicTiles | LargeTiles | SubwayTiles => COURSES_SI,
+        Sand | GrassTufts | GroundCover | Plaster | EarthStones | MineralWool => DOTS_SI,
+        BrickCourses => COURSES_SI,
         _ => &[],
     }
 }

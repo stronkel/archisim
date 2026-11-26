@@ -229,6 +229,16 @@ thread_local! {
     static POCHE: std::cell::Cell<Option<[u8; 3]>> = const { std::cell::Cell::new(None) };
 }
 
+thread_local! {
+    /// Cuts drawn with the textures of their materials (a presentation
+    /// style «con tramas»).
+    static TEXTURED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+fn textured() -> bool {
+    TEXTURED.with(|t| t.get())
+}
+
 fn poche() -> Option<[u8; 3]> {
     POCHE.with(|p| p.get())
 }
@@ -1340,6 +1350,21 @@ fn fill_cut(s: &mut String, mat: &archisim_core::Material, polygon: &[Point2], i
         num(pens().hatch * k)
     );
     if poche().is_some() {
+        return;
+    }
+    // In a presentation with textures, the material's texture over its
+    // fill (W3): brick in courses, wool, earth with its stones.
+    if let Some(t) = mat.texture.filter(|_| textured()) {
+        let h = archisim_core::Hatch {
+            loops: vec![archisim_core::Polyline::straight(polygon.to_vec(), true)],
+            pattern: t,
+            scale: 1.0,
+            angle: 0.0,
+            background: None,
+            opacity: 1.0,
+        };
+        let width = num(pens().hatch * k);
+        crate::drafting::draw_hatch(s, &h, "#707070", &width, k);
         return;
     }
     // Hatching is real geometry cut to the layer (not SVG patterns or clip
