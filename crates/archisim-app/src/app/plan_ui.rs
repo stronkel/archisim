@@ -16,12 +16,14 @@ impl ArchiSimApp {
 
         if self.fit_requested && rect.width() > 50.0 {
             self.fit_requested = false;
+            let area = self.fit_area(rect);
             match self.ed.level_bounds() {
-                Some((lo, hi)) => self.view.fit(rect, lo, hi, 40.0),
+                Some((lo, hi)) => self.view.fit(area, lo, hi, 40.0),
                 None => self
                     .view
-                    .fit(rect, Point2::new(-2.0, -2.0), Point2::new(18.0, 12.0), 20.0),
+                    .fit(area, Point2::new(-2.0, -2.0), Point2::new(18.0, 12.0), 20.0),
             }
+            self.view.shift_to(rect, area);
         }
 
         crate::profile::time("planta: navigate", || self.navigate(&ctx, &response, rect));
@@ -203,7 +205,9 @@ impl ArchiSimApp {
         crate::profile::time("planta: draw_overlays", || {
             self.draw_overlays(&ctx, &painter, rect)
         });
-        crate::profile::time("planta: template_pill", || self.template_pill(ui, rect));
+        crate::profile::time("planta: template_pill", || {
+            self.template_pill(ui, self.fit_area(rect))
+        });
         crate::profile::time("planta: temp_edit_ui", || self.temp_edit_ui(&ctx));
         crate::profile::time("planta: terrain_z_editor", || {
             self.terrain_z_editor(&ctx, rect)

@@ -62,7 +62,9 @@ impl ArchiSimApp {
                     ..Default::default()
                 },
             );
-            self.view.fit_exact(rect, lo, hi, 30.0);
+            let area = self.fit_area(rect);
+            self.view.fit_exact(area, lo, hi, 30.0);
+            self.view.shift_to(rect, area);
         }
         let before = self.view;
         self.touch_area = Some(crate::touch::Area {

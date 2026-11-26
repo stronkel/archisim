@@ -355,7 +355,9 @@ impl ArchiSimApp {
             // Room for the level names on the right.
             let k = self.plan_scale / 1000.0;
             let hi = Point2::new(d.hi.x + 1.0 + 30.0 * k, d.hi.y);
-            self.view.fit(rect, d.lo, hi, 40.0);
+            let area = self.fit_area(rect);
+            self.view.fit(area, d.lo, hi, 40.0);
+            self.view.shift_to(rect, area);
         }
         self.navigate(&ctx, &response, rect);
         self.draw_section(&ctx, &painter, rect);

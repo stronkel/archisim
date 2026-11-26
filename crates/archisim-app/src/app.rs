@@ -860,6 +860,10 @@ pub struct ArchiSimApp {
     /// Width of each side of the drawing: disciplines, tools and properties
     /// on the left, navigator on the right, so the drawing is centred.
     pub side_width: f32,
+    /// The floating cards (W10): their heights in the last frame, and
+    /// what they leave of the drawing free (None, side by side).
+    pub floating: floating::Measured,
+    pub free_area: Option<Rect>,
     /// Counts messages, to know when the last one appeared.
     message_serial: u64,
     /// The message last aged and when it appeared (seconds).
@@ -1203,6 +1207,8 @@ impl ArchiSimApp {
             nav_tab: navigator::NavTab::default(),
             command_search: None,
             side_width: SIDE_WIDTH,
+            floating: floating::Measured::default(),
+            free_area: None,
             message_serial: 0,
             message_seen: (0, 0.0),
             message_undo: None,
@@ -2580,6 +2586,11 @@ impl ArchiSimApp {
     /// The window of the technical environment: disciplines, tools and
     /// Properties on the left, the navigator on the right, tabs of views.
     fn technical_frame(&mut self, ui: &mut Ui) {
+        if self.prefs.floating_panels {
+            self.floating_frame(ui);
+            return;
+        }
+        self.free_area = None;
         let p = theme::Palette::current(ui.ctx());
         // Islands (concepto de interfaz del 24/10/2026): white rounded
         // cards with a soft shadow, a little apart, on warm paper.
@@ -2747,20 +2758,7 @@ impl ArchiSimApp {
                     )
                     .show(ui, |ui| self.command_line(ui));
             }
-            match self.mode {
-                ViewMode::Plan => crate::profile::time("planta", || self.plan_view(ui)),
-                ViewMode::ThreeD => crate::profile::time("3D", || self.view_3d(ui)),
-                ViewMode::Section => crate::profile::time("sección", || self.section_view(ui)),
-                ViewMode::Schedule => {
-                    if let Some(tabs::TabKind::Schedule(w)) =
-                        self.tabs.get(self.active_tab).map(|t| t.kind)
-                    {
-                        self.schedule_view(ui, w);
-                    }
-                }
-                ViewMode::Sheet(s) => self.sheet_view(ui, s),
-                ViewMode::Drafting(d) => self.drafting_view(ui, d),
-            }
+            self.active_view_ui(ui);
             if matches!(self.mode, ViewMode::Plan | ViewMode::ThreeD) {
                 let area = if self.mode == ViewMode::Plan {
                     self.canvas
@@ -3576,6 +3574,7 @@ mod env_building_ui;
 mod equip_ui;
 mod facade_ui;
 mod fix_ui;
+mod floating;
 mod floor_ui;
 mod foundation_ui;
 mod framing_ui;

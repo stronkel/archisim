@@ -6,6 +6,23 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-26 (198) · v0.116: W10, segunda tanda: el dibujo a toda la ventana
+
+Misma rama `bloque/w10-paneles` (PR #245). Sin cambios de formato ni de IFC. Además, la versión del programa sube por fin a 0.116.0 (la entrada anterior la anunciaba y faltaba en `Cargo.toml`).
+
+- **Hecho**:
+  - **Paneles flotantes** (`app/floating.rs`, `ArchiSimApp::floating_frame`): la planta, las secciones, el 3D, los planos y las vistas de dibujo ocupan toda la ventana, sobre la cuadrícula del papel, y encima flotan tarjetas de esquinas muy redondeadas con sombra suave y aire alrededor: la barra superior, la de disciplinas (estrecha y solo tan alta como sus botones), herramientas con Propiedades, el navegador, las pestañas con la cinta y su barra de opciones, la línea de órdenes cuando está fija, y la barra inferior. Las tablas y las mediciones se leen donde nada las tapa.
+  - Al ajustar la vista (Inicio, doble clic con la rueda, al abrir), el dibujo se encuadra en lo que dejan libre las tarjetas (`ArchiSimApp::free_area`, `fit_area`, `View::shift_to`), igual en plantas, secciones, planos y vistas de dibujo; el cubo de vistas, la barra de aspectos y los avisos del 3D, la pastilla de plantilla de la planta y la barra de calles también van ahí.
+  - Un clic en una tarjeta no la pone por encima de los diálogos abiertos (`keep_dialogs_above`).
+  - Vista → «Paneles flotantes» (preferencia `paneles_flotantes`, encendida por defecto) vuelve a la ventana de antes, con los paneles a los lados del dibujo. Las pruebas usan la de antes; `floating_panels_leave_the_drawing_whole` prueba la nueva.
+- **Pendiente** de W10: el ancho de la columna de herramientas no se arrastra con los paneles flotantes (vale el de antes); el 3D se centra en la ventana entera, no en lo libre. Pestañas de texto en cada panel, «Varios» con varios elementos, barra de herramientas estrecha y barra superior mínima. De ArchKit, lo mismo que en la 197.
+- **Qué debe probar Antonio**:
+  1. Abre un proyecto: el dibujo debe llegar a los bordes de la ventana y los paneles flotar encima con sombra. Pulsa Inicio: la planta se encuadra entre los paneles.
+  2. Dibuja muros cerca de un panel y pasa el ratón por encima de él: el panel manda (no se dibuja debajo).
+  3. Abre una sección, el 3D (el cubo y la barra de aspectos deben verse) y una tabla (debe quedar libre entre los paneles).
+  4. Pliega herramientas y navegador con ‹ y ›: el dibujo queda casi limpio.
+  5. Vista → apaga «Paneles flotantes» y vuelve a encenderla.
+
 ## 2026-11-26 (197) · v0.116: W10, primera tanda: tramas de ArchKit y paletas más limpias
 
 Rama `bloque/w10-paneles`, sobre `bloque/w3-bonito` (PR #244, sin unir). Antonio mandó su ArchKit Studio v2.2 (una biblioteca de tramas y bloques en HTML que hizo él) para adoptar sus tramas, estilos e interfaz, y pidió hacer W10 (`docs/WORKFEEL.md` §6, punto 19). Formato versión 125 (solo para que las anteriores avisen); sin cambios de IFC.
