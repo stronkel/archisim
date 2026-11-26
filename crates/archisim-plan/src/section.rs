@@ -97,6 +97,10 @@ struct Face {
     /// its band (`poly`, tinted) or its axis (`edges`) when it is thinner
     /// than a pen on paper; and whether it is a duct.
     service: Option<([u8; 3], bool)>,
+    /// The texture of its material, drawn over it in a presentation with
+    /// textures (a wall, slab, roof, column or beam seen from in front;
+    /// W3).
+    texture: Option<archisim_core::HatchPattern>,
 }
 
 /// A plant, a person or a car seen from the side in a section or
@@ -771,7 +775,18 @@ pub fn section_drawing(model: &Model, sec: &SectionLine) -> SectionDrawing {
         }
 
         // Beyond the cut: faces seen from the section, clipped to its
-        // depth.
+        // depth. The building's own faces with their material's texture
+        // (W3), when the view draws textures.
+        let texture = matches!(
+            solid.owner,
+            SolidOwner::Wall(_)
+                | SolidOwner::Slab(_)
+                | SolidOwner::Roof(_)
+                | SolidOwner::Column(_)
+                | SolidOwner::Beam(_)
+        )
+        .then(|| model.material(solid.material).and_then(|m| m.texture))
+        .flatten();
         for (i, t) in solid.triangles.iter().enumerate() {
             let n = normals[i];
             if dot(n, view) > -1e-3 {
@@ -806,6 +821,11 @@ pub fn section_drawing(model: &Model, sec: &SectionLine) -> SectionDrawing {
                 faces.push((
                     centre,
                     Face {
+                        texture: if glass || dot(n, view) > -0.5 {
+                            None
+                        } else {
+                            texture
+                        },
                         owner: solid.owner,
                         poly: poly2,
                         fill: if glass { GLASS } else { [255, 255, 255] },
@@ -838,6 +858,7 @@ pub fn section_drawing(model: &Model, sec: &SectionLine) -> SectionDrawing {
                             hidden: false,
                             fine: false,
                             service: None,
+                            texture: None,
                         },
                     ));
                 }
@@ -905,6 +926,7 @@ pub fn section_drawing(model: &Model, sec: &SectionLine) -> SectionDrawing {
                 hidden: false,
                 fine: false,
                 service: None,
+                texture: None,
             },
         ));
     }
@@ -952,6 +974,7 @@ pub fn section_drawing(model: &Model, sec: &SectionLine) -> SectionDrawing {
                 hidden: false,
                 fine: false,
                 service: None,
+                texture: None,
             },
         ));
     }
@@ -999,6 +1022,7 @@ pub fn section_drawing(model: &Model, sec: &SectionLine) -> SectionDrawing {
                 hidden: false,
                 fine: false,
                 service: None,
+                texture: None,
             },
         ));
     }
@@ -1028,6 +1052,7 @@ pub fn section_drawing(model: &Model, sec: &SectionLine) -> SectionDrawing {
                     hidden: false,
                     fine: false,
                     service: None,
+                    texture: None,
                 },
             ));
         }
@@ -1298,6 +1323,7 @@ fn service_lines(
                 hidden: false,
                 fine: false,
                 service: Some((colour, duct)),
+                texture: None,
             },
         ));
     };
@@ -1445,6 +1471,7 @@ fn facade_detail(
                         hidden: false,
                         fine: true,
                         service: None,
+                        texture: None,
                     },
                 ));
             }
@@ -2430,6 +2457,19 @@ fn render_section_inner(model: &Model, d: &SectionDrawing, options: &PlanOptions
             return;
         }
         edges.face(out, f.fill, &f.poly, k);
+        if let Some(t) = f.texture.filter(|_| crate::textured()) {
+            // Over its face, under whatever is nearer.
+            edges.flush(out, k);
+            let h = archisim_core::Hatch {
+                loops: vec![archisim_core::Polyline::straight(f.poly.clone(), true)],
+                pattern: t,
+                scale: 1.0,
+                angle: 0.0,
+                background: None,
+                opacity: 1.0,
+            };
+            crate::drafting::draw_hatch(out, &h, "#787878", &num(pens().hatch * k), k);
+        }
     };
     // Hidden faces stay out unless some elements are hidden from the
     // view: what hid them may be among those.

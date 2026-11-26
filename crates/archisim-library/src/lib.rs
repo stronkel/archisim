@@ -945,7 +945,7 @@ pub type CatalogueEntry = (&'static str, &'static str, &'static [(&'static str, 
 
 /// The object types of the library (v0.25, more in v0.26), in the order of
 /// the gallery.
-pub const OBJECT_CATALOGUE: [CatalogueEntry; 298] = [
+pub const OBJECT_CATALOGUE: [CatalogueEntry; 300] = [
     ("Mesa de comedor 160×90", "Mesa", &[]),
     // Dining sets ready to place (W3): the table with its chairs.
     (
@@ -971,6 +971,17 @@ pub const OBJECT_CATALOGUE: [CatalogueEntry; 298] = [
     ),
     ("Silla", "Silla", &[]),
     ("Sofá de 3 plazas", "Sofá", &[]),
+    // Living room sets ready to place (W3).
+    (
+        "Conjunto de salón con dos butacas",
+        "Conjunto de salón",
+        &[],
+    ),
+    (
+        "Conjunto de salón con una butaca",
+        "Conjunto de salón",
+        &[("width", 2.0), ("armchairs", 1.0)],
+    ),
     ("Sofá rinconera 260×170", "Sofá rinconera", &[]),
     (
         "Sofá rinconera 300×200",
