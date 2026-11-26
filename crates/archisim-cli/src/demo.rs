@@ -58,6 +58,9 @@ pub fn build() -> Result<Document, ModelError> {
         Point2::new(12.0, 0.0),
     ];
     doc.transact("Muros de fachada", |m| {
+        // From the bottom of the ground slab: its edge is covered by the
+        // façade's outer leaf, render and insulation (W3, «cantos»).
+        let ground = m.slab_type(solera).map_or(0.0, |t| t.thickness());
         for i in 0..4 {
             m.add_wall(NewWall {
                 wall_type: fachada,
@@ -65,8 +68,8 @@ pub fn build() -> Result<Document, ModelError> {
                 start: corners[i],
                 end: corners[(i + 1) % 4],
                 reference: ReferenceLine::ExteriorFace,
-                height: WALL_HEIGHT,
-                base_offset: 0.0,
+                height: WALL_HEIGHT + ground,
+                base_offset: -ground,
                 // Up to the roof level: the roof slab takes the top of it
                 // (junctions by priority), and the façade follows the roof
                 // level if it moves.
@@ -1791,8 +1794,9 @@ mod tests {
         let EndCut::Tee(t) = &g.start_cut else {
             panic!()
         };
-        // Plaster, inner leaf and insulation of the façade: 0.135 m.
-        assert!((t.reach[1] - 0.135).abs() < 1e-9, "{:?}", t.reach);
+        // Plaster and inner leaf of the façade: 0.085 m. Its insulation
+        // and outer leaf go on in front (they pass the slab edges, W3).
+        assert!((t.reach[1] - 0.085).abs() < 1e-9, "{:?}", t.reach);
     }
 
     /// The magic wand finds the four rooms of the demo house (doors in the

@@ -3167,28 +3167,31 @@ fn intersection_priorities_window() {
     h.app.show_priorities = true;
     h.frame();
     assert!(h.app.show_priorities);
-    let ids: Vec<_> = h.model().materials().map(|m| m.id).take(2).collect();
+    // The template's façade layers that pass the slab edges come with a
+    // priority of their own (W3).
+    let count = |h: &Harness| {
+        h.model()
+            .materials()
+            .filter(|m| m.priority.is_some())
+            .count()
+    };
+    let before = count(&h);
+    let ids: Vec<_> = h
+        .model()
+        .materials()
+        .filter(|m| m.priority.is_none())
+        .map(|m| m.id)
+        .take(2)
+        .collect();
     for id in &ids {
         h.app.ed.set_material_priority(*id, Some(950)).unwrap();
     }
     h.frame();
-    assert_eq!(
-        h.model()
-            .materials()
-            .filter(|m| m.priority.is_some())
-            .count(),
-        2
-    );
+    assert_eq!(count(&h), before + 2);
     h.app.ed.reset_material_priorities().unwrap();
     assert!(h.model().materials().all(|m| m.priority.is_none()));
     h.app.ed.undo();
-    assert_eq!(
-        h.model()
-            .materials()
-            .filter(|m| m.priority.is_some())
-            .count(),
-        2
-    );
+    assert_eq!(count(&h), before + 2);
     h.frame();
 }
 

@@ -193,6 +193,10 @@ pub fn presentation_styles() -> Vec<archisim_core::PresentationStyle> {
     ]
 }
 
+/// The intersection priority of the façade layers that go past the slab
+/// edges (above the slabs' structure, 900).
+pub const PASSING_PRIORITY: u16 = 950;
+
 /// Adds the starter materials and types to a model.
 pub fn add_library(m: &mut Model) -> Result<Library, ModelError> {
     let mut mat = |name: &str, category: &str, color: [u8; 3], pattern| -> MaterialId {
@@ -677,6 +681,39 @@ pub fn add_library(m: &mut Model) -> Result<Library, ModelError> {
         .collect();
     for (id, inserts) in layered {
         m.set_wall_type_wrap(id, archisim_core::Wrap::Both, inserts)?;
+    }
+    // Façades that go past the slab edges (W3, «cantos de forjado»): the
+    // render, the outer leaf and the insulation of the façade win over
+    // the slabs, so a façade wall up to the top of the slab (or down to
+    // the bottom of the ground slab) covers its edge, as built; the
+    // inner leaf and the plaster stop at the slab. The outer leaf is a
+    // material of its own, so the load-bearing walls of the same brick
+    // still carry the slabs.
+    let outer_leaf = m.add_material(
+        "Ladrillo perforado (hoja exterior)",
+        "brick",
+        [232, 196, 178],
+        CutPattern::Diagonal,
+    );
+    for id in [monocapa, lana, outer_leaf] {
+        m.set_material_priority(id, Some(PASSING_PRIORITY))?;
+    }
+    if let Some(t) = m.wall_type(facade).cloned() {
+        let layers = t
+            .layers
+            .iter()
+            .map(|l| {
+                if l.material == perforado {
+                    archisim_core::Layer {
+                        material: outer_leaf,
+                        ..l.clone()
+                    }
+                } else {
+                    l.clone()
+                }
+            })
+            .collect();
+        m.edit_wall_type(facade, t.name.clone(), t.function, layers)?;
     }
     // Each material with its texture for sections «con tramas» (W3).
     add_material_textures(m);
