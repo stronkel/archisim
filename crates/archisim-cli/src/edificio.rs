@@ -2648,6 +2648,7 @@ fn room_with(
                 background: Some([226, 206, 178]),
                 scale: 1.0,
                 angle: 0.0,
+                origin: None,
             }
         } else if floor.contains("adoquín") {
             FloorFill {
@@ -2656,6 +2657,7 @@ fn room_with(
                 background: Some([214, 210, 202]),
                 scale: 1.0,
                 angle: 0.0,
+                origin: None,
             }
         } else if floor.contains("Gres") {
             FloorFill {
@@ -2664,6 +2666,7 @@ fn room_with(
                 background: Some([238, 238, 234]),
                 scale: 1.0,
                 angle: 0.0,
+                origin: None,
             }
         } else {
             FloorFill {
@@ -2672,6 +2675,7 @@ fn room_with(
                 background: Some([222, 220, 214]),
                 scale: 1.0,
                 angle: 0.0,
+                origin: None,
             }
         });
         m.set_room(r)?;

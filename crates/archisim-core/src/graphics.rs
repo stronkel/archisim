@@ -700,8 +700,18 @@ impl PresentationStyle {
         Some(s)
     }
 
+    /// The tone of a line in this style: as [`tone`](Self::tone), but
+    /// never washed (the lines of a pale floor or tree still show).
+    pub fn line_tone(&self, c: crate::Rgb) -> crate::Rgb {
+        self.toned(c, false)
+    }
+
     /// The tone a colour is turned to, by its lightness.
     pub fn tone(&self, c: crate::Rgb) -> crate::Rgb {
+        self.toned(c, self.washes)
+    }
+
+    fn toned(&self, c: crate::Rgb, washes: bool) -> crate::Rgb {
         let p = &self.palette;
         if p.is_empty() {
             return c;
@@ -715,7 +725,7 @@ impl PresentationStyle {
         let mut tones = p.clone();
         tones.sort_by(|a, b| lum(*a).total_cmp(&lum(*b)));
         let mut l = lum(c);
-        if self.washes {
+        if washes {
             let (hi, lo) = (
                 c.iter().copied().max().unwrap_or(0) as f64,
                 c.iter().copied().min().unwrap_or(0) as f64,

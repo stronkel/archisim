@@ -1124,6 +1124,7 @@ pub fn build() -> Result<Document, ModelError> {
                         background: Some([236, 220, 194]),
                         scale: 1.0,
                         angle: 0.0,
+                        origin: None,
                     }
                 } else {
                     archisim_core::FloorFill {
@@ -1132,6 +1133,7 @@ pub fn build() -> Result<Document, ModelError> {
                         background: Some([238, 238, 234]),
                         scale: 2.0,
                         angle: 0.0,
+                        origin: None,
                     }
                 });
                 m.set_room(r)?;

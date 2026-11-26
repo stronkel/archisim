@@ -60,6 +60,9 @@ pub(crate) struct FloorFill {
     pub scale: f64,
     #[serde(default)]
     pub angle: f64,
+    /// Where the pattern starts (version 123); absent: at the origin.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub origin: Option<Xy>,
 }
 
 fn fill_out(f: &core::FloorFill) -> FloorFill {
@@ -70,6 +73,7 @@ fn fill_out(f: &core::FloorFill) -> FloorFill {
         background: f.background.map(hex),
         scale: f.scale,
         angle: f.angle,
+        origin: f.origin.map(|p| [p.x, p.y]),
     }
 }
 
@@ -84,6 +88,7 @@ fn fill_in(element: &str, f: FloorFill) -> Result<core::FloorFill, FileError> {
         background: f.background.map(|b| parse_hex(element, &b)).transpose()?,
         scale: f.scale,
         angle: f.angle,
+        origin: f.origin.map(|[x, y]| core::Point2::new(x, y)),
     })
 }
 

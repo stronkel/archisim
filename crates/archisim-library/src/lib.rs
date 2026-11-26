@@ -3174,6 +3174,7 @@ pub fn floor_fill_for(name: &str, usage: &str) -> Option<archisim_core::FloorFil
         background: None,
         scale: 1.0,
         angle: 0.0,
+        origin: None,
     })
 }
 

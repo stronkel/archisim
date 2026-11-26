@@ -1874,7 +1874,16 @@ pub fn with_auto_floor(
     old: Option<&archisim_core::Room>,
     mut room: archisim_core::Room,
 ) -> archisim_core::Room {
-    let auto = |r: &archisim_core::Room| archisim_library::floor_fill_for(&r.name, &r.usage);
+    // Laid from a corner of the room (the first joint of the tiles there).
+    let auto = |r: &archisim_core::Room| {
+        archisim_library::floor_fill_for(&r.name, &r.usage).map(|f| archisim_core::FloorFill {
+            origin: Some(crate::drag::fill_corner(r)),
+            ..f
+        })
+    };
+    let plain = |f: Option<archisim_core::FloorFill>| {
+        f.map(|f| archisim_core::FloorFill { origin: None, ..f })
+    };
     match old {
         None => {
             if room.floor_fill.is_none() {
@@ -1883,9 +1892,13 @@ pub fn with_auto_floor(
         }
         Some(o) => {
             let renamed = o.name != room.name || o.usage != room.usage;
-            let automatic = room.floor_fill.is_none() || room.floor_fill == auto(o);
+            let automatic = room.floor_fill.is_none() || plain(room.floor_fill) == plain(auto(o));
             if renamed && automatic {
-                room.floor_fill = auto(&room);
+                let kept = room.floor_fill.and_then(|f| f.origin);
+                room.floor_fill = auto(&room).map(|f| archisim_core::FloorFill {
+                    origin: kept.or(f.origin),
+                    ..f
+                });
             }
         }
     }

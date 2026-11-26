@@ -178,6 +178,7 @@ impl ArchiSimApp {
                             background: Some([236, 220, 194]),
                             scale: 1.0,
                             angle: 0.0,
+                            origin: Some(crate::drag::fill_corner(&r)),
                         });
                     }
                 },
@@ -237,6 +238,29 @@ impl ArchiSimApp {
                     f.angle = deg.to_radians();
                 }
             });
+            row(
+                ui,
+                "Inicio",
+                "Donde empieza la trama, y sobre lo que gira y crece. En planta: arrastra el círculo para moverla, el punto naranja para girarla y la flecha para cambiar su tamaño",
+                |ui, _| {
+                    ui.horizontal(|ui| {
+                        if ui
+                            .button("En la esquina")
+                            .on_hover_text("La primera junta en la esquina de abajo a la izquierda")
+                            .clicked()
+                        {
+                            f.origin = Some(crate::drag::fill_corner(&r));
+                        }
+                        if ui
+                            .button("En el centro")
+                            .on_hover_text("La trama centrada en el local")
+                            .clicked()
+                        {
+                            f.origin = Some(archisim_core::label_center(&r.outline));
+                        }
+                    });
+                },
+            );
             new.floor_fill = Some(f);
         });
         let center = archisim_core::label_center(&r.outline);

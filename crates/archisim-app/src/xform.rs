@@ -898,6 +898,13 @@ fn room(
             .map(|h| h.iter().map(|p| t.apply(*p)).collect())
             .collect(),
         label,
+        // Its floor pattern goes with it, as laid.
+        floor_fill: r.floor_fill.map(|f| archisim_core::FloorFill {
+            origin: Some(t.apply(f.start())),
+            angle: t.angle(f.angle),
+            scale: f.scale * t.factor(),
+            ..f
+        }),
         ..r.clone()
     };
     if copy {
@@ -914,7 +921,7 @@ fn room(
         if let Some(mut n) = model.room(new).cloned() {
             n.height = r.height;
             n.finishes = r.finishes.clone();
-            n.floor_fill = r.floor_fill;
+            n.floor_fill = whole.floor_fill;
             model.set_room(n)?;
         }
         return Ok(Element::Room(new));

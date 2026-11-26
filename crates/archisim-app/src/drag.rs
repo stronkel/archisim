@@ -33,13 +33,24 @@ pub enum Grip {
     /// The whole selection.
     Body,
     /// One end of a wall's drawn line.
-    WallEnd { wall: WallId, start: bool },
+    WallEnd {
+        wall: WallId,
+        start: bool,
+    },
     /// The middle of a curved wall's drawn line: bends it.
-    WallBend { wall: WallId },
+    WallBend {
+        wall: WallId,
+    },
     /// A corner of a slab, by its index in the outline.
-    SlabCorner { slab: SlabId, index: usize },
+    SlabCorner {
+        slab: SlabId,
+        index: usize,
+    },
     /// The edge of a slab from corner `index` to the next one.
-    SlabEdge { slab: SlabId, index: usize },
+    SlabEdge {
+        slab: SlabId,
+        index: usize,
+    },
     /// One end of a beam.
     BeamEnd {
         beam: archisim_core::BeamId,
@@ -47,7 +58,22 @@ pub enum Grip {
     },
     /// The stamp of a room (its name and area), moved on its own
     /// inside the room.
-    RoomLabel { room: archisim_core::RoomId },
+    RoomLabel {
+        room: archisim_core::RoomId,
+    },
+    /// The handles of a room's floor pattern (W3, as in Synaps): where it
+    /// starts (dragged, the tiles move with it), the dot on its ring
+    /// (dragged round, they turn about it) and the dot on its arm
+    /// (dragged in or out, they grow or shrink).
+    FillStart {
+        room: archisim_core::RoomId,
+    },
+    FillTurn {
+        room: archisim_core::RoomId,
+    },
+    FillScale {
+        room: archisim_core::RoomId,
+    },
     /// A survey point of a terrain.
     TerrainPoint {
         terrain: archisim_core::TerrainId,
@@ -105,7 +131,10 @@ pub enum Grip {
     },
     /// A corner of the outline of a plot or an urban surface (a square, a
     /// car park, a garden).
-    OutlineCorner { element: Element, index: usize },
+    OutlineCorner {
+        element: Element,
+        index: usize,
+    },
     /// A corner of a pool's outline (the edge of its water).
     PoolCorner {
         pool: archisim_core::PoolId,
@@ -120,7 +149,9 @@ pub enum Grip {
     },
     /// The turning handle of an object (the ring in front of it): dragged
     /// round its middle, in steps of 15° (1° when the cursor is far).
-    ObjectTurn { object: archisim_core::ObjectId },
+    ObjectTurn {
+        object: archisim_core::ObjectId,
+    },
     /// A jamb of a door or window (ArchiCAD's hotspots on its rough
     /// opening): dragged along the wall, it widens or narrows the opening
     /// with the other jamb staying put. `start`: the jamb nearer the wall's
@@ -157,7 +188,10 @@ pub enum Grip {
         index: usize,
     },
     /// One end of the slope arrow of an inclined slab.
-    SlopeEnd { slab: SlabId, start: bool },
+    SlopeEnd {
+        slab: SlabId,
+        start: bool,
+    },
     /// One end of a section or elevation line.
     SectionEnd {
         section: archisim_core::SectionId,
@@ -326,6 +360,20 @@ pub fn hotspots(model: &Model, selection: &BTreeSet<Element>) -> Vec<Hotspot> {
                         grip: Grip::RoomLabel { room: *id },
                         point: r.label,
                     });
+                    if let Some(h) = fill_handles(r) {
+                        v.push(Hotspot {
+                            grip: Grip::FillStart { room: *id },
+                            point: h.start,
+                        });
+                        v.push(Hotspot {
+                            grip: Grip::FillTurn { room: *id },
+                            point: h.turn,
+                        });
+                        v.push(Hotspot {
+                            grip: Grip::FillScale { room: *id },
+                            point: h.scale,
+                        });
+                    }
                 }
             }
             Element::Section(id) => {
@@ -635,7 +683,10 @@ pub fn moving(model: &Model, selection: &BTreeSet<Element>, grip: Grip) -> BTree
         | Grip::SlabEdge { slab, .. }
         | Grip::SlopeEnd { slab, .. } => [Element::Slab(slab)].into_iter().collect(),
         Grip::BeamEnd { beam, .. } => [Element::Beam(beam)].into_iter().collect(),
-        Grip::RoomLabel { room } => [Element::Room(room)].into_iter().collect(),
+        Grip::RoomLabel { room }
+        | Grip::FillStart { room }
+        | Grip::FillTurn { room }
+        | Grip::FillScale { room } => [Element::Room(room)].into_iter().collect(),
         Grip::SectionEnd { section, .. } => [Element::Section(section)].into_iter().collect(),
         Grip::RoofCorner { roof, .. } | Grip::RoofNode { roof, .. } => {
             [Element::Roof(roof)].into_iter().collect()
@@ -1042,6 +1093,9 @@ pub fn label(model: &Model, drag: &Drag) -> &'static str {
         Grip::SlabEdge { .. } => "Desplazar arista de forjado",
         Grip::BeamEnd { .. } => "Estirar viga",
         Grip::RoomLabel { .. } => "Mover rótulo de local",
+        Grip::FillStart { .. } => "Mover la trama del pavimento",
+        Grip::FillTurn { .. } => "Girar la trama del pavimento",
+        Grip::FillScale { .. } => "Escalar la trama del pavimento",
         Grip::SectionEnd { .. } => "Estirar sección",
         Grip::SlopeEnd { .. } => "Mover flecha de pendiente",
         Grip::RoofCorner { .. } => "Mover esquina de cubierta",
@@ -1128,6 +1182,17 @@ pub fn apply(
                 outline[index] = drag.to;
             }
             model.set_slab_outline(slab, outline).map(|_| None)
+        }
+        Grip::FillStart { room } | Grip::FillTurn { room } | Grip::FillScale { room } => {
+            let mut r = model
+                .room(room)
+                .ok_or(ModelError::UnknownRoom(room))?
+                .clone();
+            let (Some(f), Some(h)) = (r.floor_fill, fill_handles(&r)) else {
+                return Ok(None);
+            };
+            r.floor_fill = Some(dragged_fill(&r, f, &h, drag.grip, drag.from, drag.to));
+            model.set_room(r).map(|_| None)
         }
         Grip::RoomLabel { room } => {
             let mut r = model
@@ -2614,7 +2679,10 @@ fn level_of(
         | Grip::SlabEdge { slab, .. }
         | Grip::SlopeEnd { slab, .. } => model.slab(slab).map(|s| s.level),
         Grip::BeamEnd { beam, .. } => model.beam(beam).map(|b| b.level),
-        Grip::RoomLabel { room } => model.room(room).map(|r| r.level),
+        Grip::RoomLabel { room }
+        | Grip::FillStart { room }
+        | Grip::FillTurn { room }
+        | Grip::FillScale { room } => model.room(room).map(|r| r.level),
         Grip::SectionEnd { .. } => None,
         Grip::RoofCorner { roof, .. } | Grip::RoofNode { roof, .. } => {
             model.roof(roof).map(|r| r.level)
@@ -2709,6 +2777,116 @@ mod tests {
     /// Walls of the test room in drawing order: west, north, east, south.
     fn walls(m: &Model) -> Vec<WallId> {
         m.walls().map(|w| w.id).collect()
+    }
+
+    /// The floor pattern of a room laid by hand (W3, as in Synaps): its
+    /// handles on a corner of the room; dragging the circle moves the
+    /// tiles, the orange dot turns them (caught by the walls and every
+    /// 15°) and the arrow makes them bigger; the plan draws them from there.
+    #[test]
+    fn floor_patterns_are_laid_by_hand() {
+        let mut m = Model::new("Prueba");
+        let level = m.add_level("Planta baja", 0.0);
+        let outline = vec![p(0.0, 0.0), p(4.0, 0.0), p(4.0, 3.0), p(0.0, 3.0)];
+        let id = m
+            .add_room(archisim_core::NewRoom {
+                level,
+                number: "1".into(),
+                name: "Estar".into(),
+                outline,
+                holes: vec![],
+                label: p(2.0, 1.5),
+                bounded: false,
+            })
+            .unwrap();
+        let mut r = m.room(id).unwrap().clone();
+        r.floor_fill = Some(archisim_core::FloorFill {
+            pattern: archisim_core::HatchPattern::Tiles,
+            color: [120, 120, 120],
+            background: None,
+            scale: 1.0,
+            angle: 0.0,
+            origin: None,
+        });
+        m.set_room(r).unwrap();
+        let s = sel(&[Element::Room(id)]);
+        let h = fill_handles(m.room(id).unwrap()).unwrap();
+        // Without its own start, on the corner at the lower left.
+        assert!(h.start.approx_eq(p(0.0, 0.0)));
+        let spots = hotspots(&m, &s);
+        for g in [
+            Grip::FillStart { room: id },
+            Grip::FillTurn { room: id },
+            Grip::FillScale { room: id },
+        ] {
+            assert!(spots.iter().any(|x| x.grip == g), "{g:?}");
+        }
+        let fill = |m: &Model| m.room(id).unwrap().floor_fill.unwrap();
+        // Moved.
+        let mut a = m.clone();
+        apply(
+            &mut a,
+            &s,
+            &Drag {
+                grip: Grip::FillStart { room: id },
+                from: h.start,
+                to: p(0.3, 0.2),
+                variant: false,
+            },
+        )
+        .unwrap();
+        assert!(fill(&a).start().approx_eq(p(0.3, 0.2)));
+        // Turned: 31° is caught by 30°, 52° stays 52°.
+        for (deg, want) in [(31.0f64, 30.0f64), (52.0, 52.0), (88.0, 90.0)] {
+            let mut b = m.clone();
+            let to = h.start + p(deg.to_radians().cos(), deg.to_radians().sin()) * 2.0;
+            apply(
+                &mut b,
+                &s,
+                &Drag {
+                    grip: Grip::FillTurn { room: id },
+                    from: h.turn,
+                    to,
+                    variant: false,
+                },
+            )
+            .unwrap();
+            assert!((fill(&b).angle.to_degrees() - want).abs() < 1e-6, "{deg}");
+        }
+        // Twice as far out: twice as big.
+        let mut c = m.clone();
+        apply(
+            &mut c,
+            &s,
+            &Drag {
+                grip: Grip::FillScale { room: id },
+                from: h.scale,
+                to: h.start + (h.scale - h.start) * 2.0,
+                variant: false,
+            },
+        )
+        .unwrap();
+        assert!((fill(&c).scale - 2.0).abs() < 1e-9);
+        // The plan draws it from its start.
+        let options = archisim_plan::PlanOptions {
+            presented: true,
+            ..Default::default()
+        };
+        let svg = archisim_plan::render_plan(&a, level, &options);
+        assert!(
+            svg.contains("translate(0.3 -0.2)"),
+            "the pattern starts there"
+        );
+        // Moving the room takes its pattern with it.
+        let mut d = a.clone();
+        crate::xform::transform(
+            &mut d,
+            &s,
+            &archisim_draft::transform::Transform::translate(p(1.0, 0.0)),
+            false,
+        )
+        .unwrap();
+        assert!(fill(&d).start().approx_eq(p(1.3, 0.2)));
     }
 
     #[test]
@@ -3387,4 +3565,124 @@ mod tests {
         // The model itself is untouched.
         assert_eq!(m.wall(w[1]).unwrap().start, p(0.0, 4.0));
     }
+}
+
+/// Where the handles of a room's floor pattern are drawn.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct FillHandles {
+    /// Where the pattern starts.
+    pub start: Point2,
+    /// The dot on the ring, in the pattern's direction.
+    pub turn: Point2,
+    /// The dot on the arm, square to it.
+    pub scale: Point2,
+    /// The ring's radius, metres.
+    pub reach: f64,
+}
+
+/// The handles of a room's floor pattern, if it has one. Without its own
+/// start, they stand on the corner of the room nearest its lower left
+/// (dragging any of them gives it one there).
+pub fn fill_handles(r: &archisim_core::Room) -> Option<FillHandles> {
+    let f = r.floor_fill?;
+    let (lo, hi) = r.outline.iter().fold(
+        (
+            Point2::new(f64::INFINITY, f64::INFINITY),
+            Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY),
+        ),
+        |(lo, hi), p| {
+            (
+                Point2::new(lo.x.min(p.x), lo.y.min(p.y)),
+                Point2::new(hi.x.max(p.x), hi.y.max(p.y)),
+            )
+        },
+    );
+    if !lo.x.is_finite() {
+        return None;
+    }
+    let start = f.origin.unwrap_or_else(|| fill_corner(r));
+    let reach = ((hi.x - lo.x).min(hi.y - lo.y) * 0.25).clamp(0.35, 1.0);
+    let (s, c) = f.angle.sin_cos();
+    Some(FillHandles {
+        start,
+        turn: start + Point2::new(c, s) * reach,
+        scale: start + Point2::new(-s, c) * reach,
+        reach,
+    })
+}
+
+/// The corner of a room a floor pattern starts from by default: the one
+/// nearest its lower left (the first joint of the tiles in a corner).
+pub fn fill_corner(r: &archisim_core::Room) -> Point2 {
+    r.outline
+        .iter()
+        .copied()
+        .min_by(|a, b| (a.x + a.y).total_cmp(&(b.x + b.y)))
+        .unwrap_or(r.label)
+}
+
+/// A floor pattern after one of its handles is dragged from `from` to `to`.
+/// Turning keeps to whole degrees and catches the walls of the room and
+/// every 15°; growing keeps to hundredths.
+pub fn dragged_fill(
+    r: &archisim_core::Room,
+    f: archisim_core::FloorFill,
+    h: &FillHandles,
+    grip: Grip,
+    from: Point2,
+    to: Point2,
+) -> archisim_core::FloorFill {
+    let mut f = f;
+    match grip {
+        Grip::FillStart { .. } => f.origin = Some(h.start + (to - from)),
+        Grip::FillTurn { .. } => {
+            f.origin = Some(h.start);
+            let v = to - h.start;
+            if v.length() > 1e-6 {
+                f.angle = turned_fill(r, v.y.atan2(v.x));
+            }
+        }
+        Grip::FillScale { .. } => {
+            f.origin = Some(h.start);
+            let ratio = (to - h.start).length() / h.reach;
+            if ratio > 1e-3 {
+                f.scale = ((f.scale * ratio * 100.0).round() / 100.0).clamp(0.1, 20.0);
+            }
+        }
+        _ => {}
+    }
+    f
+}
+
+/// A turn of a floor pattern caught by the room's walls (square to or
+/// along any of them) and by every 15°, within 3°; otherwise in whole
+/// degrees.
+fn turned_fill(r: &archisim_core::Room, a: f64) -> f64 {
+    use std::f64::consts::FRAC_PI_2;
+    let catch = 3f64.to_radians();
+    let n = r.outline.len();
+    let walls = (0..n).filter_map(|i| {
+        let d = r.outline[(i + 1) % n] - r.outline[i];
+        (d.length() > 1e-6).then(|| d.y.atan2(d.x))
+    });
+    let fifteen = (0..24).map(|i| i as f64 * 15f64.to_radians());
+    let mut best: Option<(f64, f64)> = None;
+    for w in walls.chain(fifteen) {
+        // The pattern repeats every quarter turn in the commonest tiles,
+        // but a board has a way: catch the wall's own four directions.
+        for q in 0..4 {
+            let c = w + q as f64 * FRAC_PI_2;
+            let off = (a - c + std::f64::consts::PI).rem_euclid(std::f64::consts::TAU)
+                - std::f64::consts::PI;
+            if off.abs() <= catch && best.is_none_or(|(o, _)| off.abs() < o) {
+                best = Some((off.abs(), c));
+            }
+        }
+    }
+    let a = match best {
+        Some((_, c)) => c,
+        None => a.to_degrees().round().to_radians(),
+    };
+    // Kept between -180° and 180°.
+    (a + std::f64::consts::PI).rem_euclid(std::f64::consts::TAU) - std::f64::consts::PI
 }

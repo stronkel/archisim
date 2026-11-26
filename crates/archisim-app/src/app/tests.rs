@@ -5759,6 +5759,7 @@ fn presentation_styles_and_floor_fills() {
         background: Some([210, 205, 195]),
         scale: 1.0,
         angle: 0.0,
+        origin: None,
     });
     h.app.ed.set_room(r, "Pavimento").unwrap();
     h.app.ed.selection = [Element::Room(room)].into_iter().collect();

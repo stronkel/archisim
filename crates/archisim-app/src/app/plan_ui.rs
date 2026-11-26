@@ -2218,6 +2218,9 @@ impl ArchiSimApp {
                     });
                     super::handles::arrow(painter, c, dir, ACCENT, hot);
                 }
+                Grip::FillStart { room } | Grip::FillTurn { room } | Grip::FillScale { room } => {
+                    self.draw_fill_handle(painter, rect, room, h.grip, c, hot);
+                }
                 Grip::WallBend { .. } | Grip::RoadBend { .. } => {
                     let r = if hot { 7.5 } else { 6.0 };
                     let inside = if hot { ACCENT } else { Color32::WHITE };
@@ -2235,6 +2238,64 @@ impl ArchiSimApp {
                 }
             }
         }
+    }
+
+    /// A handle of a room's floor pattern (W3): its start, a white circle
+    /// with a cross; the orange dot on its ring to turn it; a blue arrow
+    /// on its arm to make it bigger or smaller. While one is dragged, the
+    /// pattern's turn or size beside it.
+    fn draw_fill_handle(
+        &self,
+        painter: &egui::Painter,
+        rect: Rect,
+        room: archisim_core::RoomId,
+        grip: Grip,
+        c: egui::Pos2,
+        hot: bool,
+    ) {
+        let model = self.ed.model();
+        let Some(r) = model.room(room) else { return };
+        let Some(h) = crate::drag::fill_handles(r) else {
+            return;
+        };
+        let start = self.view.to_screen(rect, h.start);
+        match grip {
+            Grip::FillStart { .. } => {
+                let k = if hot { 9.0 } else { 7.5 };
+                painter.circle(c, k, Color32::WHITE, Stroke::new(1.8, ACCENT));
+                let s = Stroke::new(1.6, ACCENT);
+                painter.line_segment(
+                    [c - Vec2::new(k - 2.5, 0.0), c + Vec2::new(k - 2.5, 0.0)],
+                    s,
+                );
+                painter.line_segment(
+                    [c - Vec2::new(0.0, k - 2.5), c + Vec2::new(0.0, k - 2.5)],
+                    s,
+                );
+            }
+            Grip::FillTurn { .. } => super::handles::turn(painter, start, c, hot),
+            _ => {
+                painter.line_segment(
+                    [start, c],
+                    Stroke::new(1.2, Color32::from_rgba_unmultiplied(40, 110, 220, 150)),
+                );
+                super::handles::arrow(painter, c, c - start, ACCENT, hot);
+            }
+        }
+        let Some(d) = self.drag.as_ref().filter(|d| d.grip == grip) else {
+            return;
+        };
+        let (Some(f), Some(cur)) = (r.floor_fill, self.cursor) else {
+            return;
+        };
+        let to = d.target(cur.point);
+        let after = crate::drag::dragged_fill(r, f, &h, grip, d.from, to);
+        let text = match grip {
+            Grip::FillTurn { .. } => format!("{:.0}°", after.angle.to_degrees()),
+            Grip::FillScale { .. } => format!("× {:.2}", after.scale),
+            _ => return,
+        };
+        super::handles::tag(painter, self.view.to_screen(rect, to), text, ACCENT);
     }
 
     /// The selection being dragged: the outlines it would have, the line
@@ -2273,6 +2334,9 @@ impl ArchiSimApp {
             (Grip::WallBend { .. }, _) => "Curvar",
             (Grip::BeamEnd { .. }, _) => "Estirar viga",
             (Grip::RoomLabel { .. }, _) => "Rótulo",
+            (Grip::FillStart { .. }, _) => "Mover la trama",
+            (Grip::FillTurn { .. }, _) => "Girar la trama",
+            (Grip::FillScale { .. }, _) => "Escalar la trama",
             (Grip::SectionEnd { .. }, _) => "Estirar sección",
             (Grip::SlopeEnd { .. }, _) => "Pendiente",
             (Grip::RoofCorner { .. }, _) => "Esquina",

@@ -89,11 +89,15 @@ pub fn apply(svg: &str, p: &PresentationStyle) -> String {
     } else {
         svg.to_string()
     };
-    let mut out = crate::dim::map_colours(&scaled, |c| {
+    let mut out = crate::dim::map_colours_by(&scaled, |c, line| {
         if c == [255, 255, 255] {
             p.background
         } else if Some(c) == p.poche {
             c
+        } else if line {
+            // Washes are for what is filled: the lines of a wooden floor,
+            // a tree, a stone keep their tone (W3).
+            p.line_tone(c)
         } else {
             p.tone(c)
         }
@@ -269,6 +273,7 @@ mod tests {
             background: Some([230, 210, 180]),
             scale: 1.0,
             angle: 0.0,
+            origin: None,
         });
         m.set_room(r).unwrap();
         let plain = crate::render_plan(&m, l, &crate::PlanOptions::default());

@@ -37,11 +37,26 @@ pub struct FloorFill {
     pub scale: f64,
     /// Turns the pattern, radians.
     pub angle: f64,
+    /// Where the pattern starts, and what it turns and grows about (the
+    /// first joint of the tiles, set by dragging it in plan); `None`: at
+    /// the project's origin, as a hatch.
+    pub origin: Option<crate::Point2>,
 }
 
 impl FloorFill {
     pub fn is_valid(&self) -> bool {
-        self.scale.is_finite() && self.scale > 0.0 && self.angle.is_finite()
+        self.scale.is_finite()
+            && self.scale > 0.0
+            && self.angle.is_finite()
+            && self
+                .origin
+                .is_none_or(|o| o.x.is_finite() && o.y.is_finite())
+    }
+
+    /// The point the pattern starts from: its origin or, without one, the
+    /// project's.
+    pub fn start(&self) -> crate::Point2 {
+        self.origin.unwrap_or(crate::Point2::new(0.0, 0.0))
     }
 }
 
