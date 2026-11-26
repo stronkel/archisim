@@ -63,6 +63,15 @@ pub fn is_texture(p: HatchPattern) -> bool {
             | Plaster
             | MineralWool
             | EarthStones
+            | FishScale
+            | OctagonTaco
+            | DotTiles
+            | FlemishBond
+            | StackBrick
+            | ConcreteSection
+            | RammedEarth
+            | WoolCurve
+            | Rhombs
     )
 }
 
@@ -79,6 +88,7 @@ pub(crate) fn draw(
     unit: f64,
     turn: f64,
     out: &mut Vec<(Point2, Point2)>,
+    tints: Option<&mut Vec<Vec<Point2>>>,
 ) -> Option<()> {
     let u = dir(turn);
     let v = u.perp_left();
@@ -108,6 +118,8 @@ pub(crate) fn draw(
         start,
         area: (x0, y0, x1, y1),
         full: false,
+        tints,
+        blob_tints: 0.0,
     };
     // A first guess of how many pieces the area would take: very large
     // areas go straight to the plain lines.
@@ -158,6 +170,15 @@ pub(crate) fn draw(
         Plaster => plaster(&mut c),
         MineralWool => wool(&mut c),
         EarthStones => earth_stones(&mut c),
+        FishScale => fish_scale(&mut c),
+        OctagonTaco => octagon_taco(&mut c),
+        DotTiles => dot_tiles(&mut c),
+        FlemishBond => flemish(&mut c),
+        StackBrick => stack_brick(&mut c),
+        ConcreteSection => concrete_section(&mut c),
+        RammedEarth => rammed_earth(&mut c),
+        WoolCurve => wool_curve(&mut c),
+        Rhombs => rhombs(&mut c),
         _ => {}
     }
     if c.full {
@@ -183,6 +204,8 @@ fn density(p: HatchPattern) -> f64 {
         BrickCourses => 500.0,
         Plaster | EarthStones => 800.0,
         MineralWool => 3000.0,
+        FishScale | FlemishBond | StackBrick | WoolCurve => 900.0,
+        ConcreteSection | RammedEarth => 700.0,
         _ => 300.0,
     }
 }
@@ -200,6 +223,10 @@ struct Canvas<'a> {
     area: (f64, f64, f64, f64),
     /// Too many segments: stop.
     full: bool,
+    /// The tinted pieces, when they are wanted (W10).
+    tints: Option<&'a mut Vec<Vec<Point2>>>,
+    /// The share of the blobs (stones, chips, leaves) that are tinted.
+    blob_tints: f64,
 }
 
 type P = (f64, f64);
@@ -227,6 +254,25 @@ impl Canvas<'_> {
     fn near(&self, x0: f64, y0: f64, x1: f64, y1: f64) -> bool {
         let (a0, b0, a1, b1) = self.area;
         x1 >= a0 && x0 <= a1 && y1 >= b0 && y0 <= b1
+    }
+
+    /// A piece tinted a shade darker (a stone, a board, a tile among
+    /// the others), if it is wholly inside the hatch.
+    fn tint(&mut self, pts: &[P]) {
+        if self.tints.is_none() || pts.len() < 3 {
+            return;
+        }
+        let w: Vec<Point2> = pts.iter().map(|p| self.world(*p)).collect();
+        if w.iter().all(|q| inside(self.polys, *q)) {
+            if let Some(t) = self.tints.as_mut() {
+                t.push(w);
+            }
+        }
+    }
+
+    /// A rectangle tinted.
+    fn tint_box(&mut self, x0: f64, y0: f64, x1: f64, y1: f64) {
+        self.tint(&[(x0, y0), (x1, y0), (x1, y1), (x0, y1)]);
     }
 
     fn raw(&mut self, a: P, b: P) {
@@ -333,6 +379,9 @@ impl Canvas<'_> {
                 (c.0 + x * co - y * s, c.1 + x * s + y * co)
             })
             .collect();
+        if self.blob_tints > 0.0 && at_noise(c, salt + 977) < self.blob_tints {
+            self.tint(&pts);
+        }
         self.curve(&pts, true);
     }
 
@@ -637,6 +686,9 @@ fn boards(c: &mut Canvas, w: &Wood) {
                 // The board's edge along it and its joint at the start.
                 c.line((p.x0, b1), (p.x1, b1));
                 c.line((p.x0, b0), (p.x0, b1));
+                if noise(p.id.0, p.id.1, w.salt + 77) < 0.2 {
+                    c.tint_box(p.x0, b0, p.x1, b1);
+                }
             }
             grain(c, w, &p, b0, b1);
             if c.full {
@@ -1093,6 +1145,9 @@ fn pavers(c: &mut Canvas) {
                     (bx + w - gap, by + h - gap),
                     (bx + gap, by + h - gap),
                 ];
+                if noise(k, m * 2 + (w > h) as i64, 1090) < 0.2 {
+                    c.tint(&r);
+                }
                 c.path(&r, true);
             }
         }
@@ -1148,6 +1203,7 @@ fn board_formed(c: &mut Canvas) {
 
 /// Gravel: small rounded stones of different sizes, packed loosely.
 fn pebbles(c: &mut Canvas) {
+    c.blob_tints = 0.25;
     let (x0, y0, x1, y1) = c.area;
     let cell = 0.05;
     for i in (x0 / cell).floor() as i64 - 1..=(x1 / cell).ceil() as i64 + 1 {
@@ -1199,6 +1255,9 @@ fn limestone(c: &mut Canvas) {
             c.line((p.x0, b0), (p.x0, b1));
             let r = |k: u64| noise(p.id.0, p.id.1, 1420 + k);
             let (w, h) = (p.x1 - p.x0, b1 - b0);
+            if r(40) < 0.22 {
+                c.tint_box(p.x0, b0, p.x1, b1);
+            }
             // A bedding streak, short and wavy.
             if r(0) < 0.5 {
                 let s = b0 + h * lerp(0.2, 0.8, r(1));
@@ -1277,6 +1336,9 @@ fn stone_blocks(c: &mut Canvas) {
                 pts.push(((a0 + a1) / 2.0, c1 + 0.006 * (r(5) - 0.5)));
                 pts.push((a0, c1));
             }
+            if r(7) < 0.28 {
+                c.tint(&pts);
+            }
             c.path(&pts, true);
             // Shade: a few short strokes along the bottom right.
             let strokes = 2 + (r(6) * 3.0) as usize;
@@ -1313,6 +1375,9 @@ fn ashlar(c: &mut Canvas) {
                 (a + w - m, b + h - m),
                 (a + m, b + h - m),
             ];
+            if noise(i, j, 1610) < 0.22 {
+                c.tint(&r);
+            }
             c.path(&r, true);
             // Tooling: fine upright strokes, uneven in length.
             if noise(i, j, 1600) < 0.3 {
@@ -1333,6 +1398,7 @@ fn ashlar(c: &mut Canvas) {
 
 /// Terrazzo: chips of marble of all sizes, and fine grains between.
 fn terrazzo(c: &mut Canvas) {
+    c.blob_tints = 0.4;
     let (x0, y0, x1, y1) = c.area;
     let cell = 0.045;
     for i in (x0 / cell).floor() as i64 - 1..=(x1 / cell).ceil() as i64 + 1 {
@@ -1404,6 +1470,9 @@ fn rocky_path(c: &mut Canvas) {
                     (p.0 + x * tc - y * ts, p.1 + x * ts + y * tc)
                 })
                 .collect();
+            if r(12) < 0.3 {
+                c.tint(&pts);
+            }
             c.path(&pts, true);
             // A crack across some stones.
             if r(6) < 0.15 {
@@ -1634,6 +1703,10 @@ fn herringbone(c: &mut Canvas) {
                 if !c.near(lo_x, lo_y, hi_x, hi_y) {
                     continue;
                 }
+                // One board in three a shade darker, by diagonals.
+                if (k + 2 * m + along as i64).rem_euclid(3) == 0 {
+                    c.tint(&r);
+                }
                 // Two sides of each board: the others are its neighbours'.
                 c.line(r[0], r[1]);
                 c.line(r[0], r[3]);
@@ -1665,6 +1738,9 @@ fn basket(c: &mut Canvas) {
             c.line((bx, by), (bx + s, by));
             c.line((bx, by), (bx, by + s));
             let along = (i + j).rem_euclid(2) == 0;
+            if along {
+                c.tint_box(bx, by, bx + s, by + s);
+            }
             for b in 0..3 {
                 let o = s * b as f64 / 3.0;
                 if b > 0 {
@@ -1706,6 +1782,10 @@ fn hex_tiles(c: &mut Canvas) {
                 let a = k as f64 * PI / 3.0;
                 (cx + r * a.cos(), cy + r * a.sin())
             };
+            if noise(i, j, 2590) < 0.18 {
+                let ring: Vec<P> = (0..6).map(v).collect();
+                c.tint(&ring);
+            }
             // Three of the six sides: the others are drawn by the next tiles.
             c.line(v(0), v(1));
             c.line(v(1), v(2));
@@ -1744,6 +1824,13 @@ fn hydraulic(c: &mut Canvas) {
             c.line((bx, by), (bx + s, by));
             c.line((bx, by), (bx, by + s));
             let m = (bx + s / 2.0, by + s / 2.0);
+            let ring: Vec<P> = (0..16)
+                .map(|q| {
+                    let a = q as f64 / 16.0 * TAU;
+                    (m.0 + s * 0.22 * a.cos(), m.1 + s * 0.22 * a.sin())
+                })
+                .collect();
+            c.tint(&ring);
             c.circle(m, s * 0.22, 20);
             c.circle(m, s * 0.1, 12);
             // The quarter at the lower left; the others come from the
@@ -1789,6 +1876,9 @@ fn large_tiles(c: &mut Canvas) {
             }
             c.line((bx, by), (bx, by + h));
             let n = |k: u64| noise(i, j, 2600 + k);
+            if n(9) < 0.18 {
+                c.tint_box(bx, by, bx + w, by + h);
+            }
             if n(0) < 0.35 {
                 let a = (
                     bx + w * lerp(0.1, 0.4, n(1)),
@@ -1922,6 +2012,7 @@ fn grass_tufts(c: &mut Canvas) {
 /// Low planting: small leaves, each a narrow blob with its rib, among
 /// dots of soil.
 fn ground_cover(c: &mut Canvas) {
+    c.blob_tints = 0.3;
     let (x0, y0, x1, y1) = c.area;
     let cell = 0.075;
     for i in (x0 / cell).floor() as i64 - 1..=(x1 / cell).ceil() as i64 + 1 {
@@ -1963,6 +2054,9 @@ fn brick_courses(c: &mut Canvas) {
             c.line((bx, by + 0.01), (bx, by + h));
             c.line((bx + 0.01, by + 0.01), (bx + 0.01, by + h));
             let n = |k: u64| noise(i, j, 3000 + k);
+            if n(5) < 0.2 {
+                c.tint_box(bx + 0.01, by + 0.01, bx + w, by + h);
+            }
             if n(0) < 0.4 {
                 for k in 0..3 {
                     c.dot((
@@ -2026,6 +2120,7 @@ fn wool(c: &mut Canvas) {
 
 /// Earth: grains of soil and now and then a small stone.
 fn earth_stones(c: &mut Canvas) {
+    c.blob_tints = 0.35;
     c.stipple(500.0, 3300);
     let (x0, y0, x1, y1) = c.area;
     let cell = 0.09;
@@ -2041,6 +2136,293 @@ fn earth_stones(c: &mut Canvas) {
                 let a = n(6) * TAU;
                 c.raw(p, (p.0 + 0.008 * a.cos(), p.1 + 0.008 * a.sin()));
             }
+        }
+        if c.full {
+            return;
+        }
+    }
+}
+
+// ─── From ArchKit Studio (Antonio's library, W10) ─────────────────────────
+
+/// An arc of `n` steps round `o`, radius `r`, from `a0` to `a1`.
+fn arc_pts(o: P, r: f64, a0: f64, a1: f64, n: usize) -> Vec<P> {
+    (0..=n)
+        .map(|k| {
+            let a = a0 + (a1 - a0) * k as f64 / n as f64;
+            (o.0 + r * a.cos(), o.1 + r * a.sin())
+        })
+        .collect()
+}
+
+/// Fish-scale tiles, 15 cm across: a row of half circles, the next row
+/// shifted half a scale; one in a few tinted.
+fn fish_scale(c: &mut Canvas) {
+    let (x0, y0, x1, y1) = c.area;
+    let (w, h) = (0.15, 0.075);
+    let r = w / 2.0;
+    for j in (y0 / h).floor() as i64 - 1..=(y1 / h).ceil() as i64 + 2 {
+        let shift = if j.rem_euclid(2) == 1 { r } else { 0.0 };
+        let cy = j as f64 * h;
+        for i in ((x0 - shift) / w).floor() as i64 - 1..=((x1 - shift) / w).ceil() as i64 + 1 {
+            let cx = i as f64 * w + shift + r;
+            if !c.near(cx - r, cy - r, cx + r, cy) {
+                continue;
+            }
+            let arc = arc_pts((cx, cy), r, PI, TAU, 12);
+            if noise(i, j, 3400) < 0.16 {
+                c.tint(&arc);
+            }
+            c.curve(&arc, false);
+        }
+        if c.full {
+            return;
+        }
+    }
+}
+
+/// Octagonal tiles of 30 cm with a small square tile, tinted, at each
+/// corner where four meet.
+fn octagon_taco(c: &mut Canvas) {
+    let (x0, y0, x1, y1) = c.area;
+    let s = 0.3;
+    let k = s * 0.29;
+    for i in (x0 / s).floor() as i64..=(x1 / s).ceil() as i64 {
+        for j in (y0 / s).floor() as i64..=(y1 / s).ceil() as i64 {
+            let (a, b) = (i as f64 * s, j as f64 * s);
+            if !c.near(a, b, a + s, b + s) {
+                continue;
+            }
+            let oct = [
+                (a + k, b),
+                (a + s - k, b),
+                (a + s, b + k),
+                (a + s, b + s - k),
+                (a + s - k, b + s),
+                (a + k, b + s),
+                (a, b + s - k),
+                (a, b + k),
+            ];
+            c.path(&oct, true);
+            // The taco round the corner at (a, b).
+            let taco = [(a + k, b), (a, b + k), (a - k, b), (a, b - k)];
+            c.tint(&taco);
+        }
+        if c.full {
+            return;
+        }
+    }
+}
+
+/// Square tiles of 30 cm with a small tinted circle in the middle and a
+/// dot at each corner.
+fn dot_tiles(c: &mut Canvas) {
+    let (x0, y0, x1, y1) = c.area;
+    let s = 0.3;
+    for i in (x0 / s).floor() as i64..=(x1 / s).ceil() as i64 {
+        for j in (y0 / s).floor() as i64..=(y1 / s).ceil() as i64 {
+            let (a, b) = (i as f64 * s, j as f64 * s);
+            if !c.near(a, b, a + s, b + s) {
+                continue;
+            }
+            c.line((a, b), (a + s, b));
+            c.line((a, b), (a, b + s));
+            let m = (a + s / 2.0, b + s / 2.0);
+            let ring = arc_pts(m, s * 0.055, 0.0, TAU, 12);
+            c.tint(&ring);
+            c.curve(&ring, true);
+            c.circle((a, b), s * 0.02, 8);
+        }
+        if c.full {
+            return;
+        }
+    }
+}
+
+/// Flemish bond: in every course a stretcher (24 cm) and a header (11,5)
+/// in turn, the courses shifted a quarter; the headers tinted.
+fn flemish(c: &mut Canvas) {
+    let (x0, y0, x1, y1) = c.area;
+    let (st, hd, j0, h) = (0.24, 0.115, 0.01, 0.06);
+    let period = st + hd + 2.0 * j0;
+    for j in (y0 / h).floor() as i64..=(y1 / h).ceil() as i64 {
+        let by = j as f64 * h;
+        c.line((x0 - period, by), (x1 + period, by));
+        let shift = if j.rem_euclid(2) == 1 {
+            (st + j0) * 0.5 + hd * 0.5
+        } else {
+            0.0
+        };
+        for i in ((x0 - shift) / period).floor() as i64 - 1..=((x1 - shift) / period).ceil() as i64
+        {
+            let a = i as f64 * period + shift;
+            let b = a + st + j0;
+            if !c.near(a, by, a + period, by + h) {
+                continue;
+            }
+            c.line((a, by + j0), (a, by + h));
+            c.line((b, by + j0), (b, by + h));
+            c.tint_box(b + j0 * 0.5, by + j0, b + j0 * 0.5 + hd, by + h);
+        }
+        if c.full {
+            return;
+        }
+    }
+}
+
+/// Bricks on end, 6 × 25 cm, each column shifted half a brick; one in a
+/// few tinted.
+fn stack_brick(c: &mut Canvas) {
+    let (x0, y0, x1, y1) = c.area;
+    let (w, h) = (0.06, 0.25);
+    for i in (x0 / w).floor() as i64..=(x1 / w).ceil() as i64 {
+        let a = i as f64 * w;
+        c.line((a, y0 - h), (a, y1 + h));
+        let shift = if i.rem_euclid(2) == 1 { h / 2.0 } else { 0.0 };
+        for j in ((y0 - shift) / h).floor() as i64..=((y1 - shift) / h).ceil() as i64 {
+            let b = j as f64 * h + shift;
+            if !c.near(a, b, a + w, b + h) {
+                continue;
+            }
+            c.raw((a, b), (a + w, b));
+            if noise(i, j, 3500) < 0.15 {
+                c.tint_box(a, b, a + w, b + h);
+            }
+        }
+        if c.full {
+            return;
+        }
+    }
+}
+
+/// Concrete cut, as drawn at 1:10: grains of aggregate (small triangles,
+/// some tinted), specks and faint diagonals.
+fn concrete_section(c: &mut Canvas) {
+    let (x0, y0, x1, y1) = c.area;
+    // The diagonals, 10 cm apart, broken.
+    let step = 0.1;
+    let lo = ((x0 - y1) / step).floor() as i64;
+    let hi = ((x1 - y0) / step).ceil() as i64;
+    for q in lo..=hi {
+        let off = q as f64 * step;
+        let mut t = y0 - 0.2;
+        while t < y1 + 0.2 {
+            let len = lerp(0.08, 0.2, noise(q, (t * 100.0) as i64, 3600));
+            if noise(q, (t * 100.0) as i64, 3601) < 0.6 {
+                c.raw((off + t, t), (off + t + len, t + len));
+            }
+            t += len + 0.05;
+        }
+    }
+    c.blob_tints = 0.4;
+    let cell = 0.06;
+    for i in (x0 / cell).floor() as i64 - 1..=(x1 / cell).ceil() as i64 + 1 {
+        for j in (y0 / cell).floor() as i64 - 1..=(y1 / cell).ceil() as i64 + 1 {
+            let n = |k: u64| noise(i, j, 3610 + k);
+            let p = ((i as f64 + n(1)) * cell, (j as f64 + n(2)) * cell);
+            if n(0) < 0.45 {
+                c.blob(
+                    p,
+                    lerp(0.006, 0.012, n(3)),
+                    lerp(0.7, 1.0, n(4)),
+                    n(5) * TAU,
+                    3,
+                    0.2,
+                    3620,
+                );
+            } else if n(0) < 0.8 {
+                c.dot(p);
+            }
+        }
+        if c.full {
+            return;
+        }
+    }
+}
+
+/// Rammed earth: layers of 8 to 12 cm, their joints dashed, broken strata
+/// inside, one layer in two lighter or darker.
+fn rammed_earth(c: &mut Canvas) {
+    let (x0, y0, x1, y1) = c.area;
+    for (b0, b1, row) in courses(y0, y1, 0.08, 0.12, 1.2, 3700) {
+        // The joint: long dashes.
+        let mut x = x0 - 0.3 + noise(row, 0, 3701) * 0.2;
+        while x < x1 {
+            c.raw((x, b0), (x + 0.14, b0));
+            x += 0.2;
+        }
+        // Strata: short broken lines, two or three to a layer.
+        let h = b1 - b0;
+        for s in 0..3 {
+            let y = b0 + h * (0.25 + 0.25 * s as f64);
+            let mut x = x0 - 0.3 + noise(row, s, 3702) * 0.3;
+            let mut n = 0;
+            while x < x1 {
+                let l = lerp(0.12, 0.35, noise(row, s * 100 + n, 3703));
+                if noise(row, s * 100 + n, 3704) < 0.75 {
+                    c.line((x, y), (x + l, y + 0.003 * (noise(row, n, 3705) - 0.5)));
+                }
+                x += l + lerp(0.03, 0.08, noise(row, s * 100 + n, 3706));
+                n += 1;
+            }
+        }
+        // One layer in two tinted, in pieces of 60 cm (whole pieces show).
+        if row.rem_euclid(2) == 0 {
+            let mut x = (x0 / 0.6).floor() * 0.6;
+            while x < x1 {
+                c.tint_box(x, b0, x + 0.6, b1);
+                x += 0.6;
+            }
+        }
+        if c.full {
+            return;
+        }
+    }
+}
+
+/// Insulation as the classic looping line, in bands of 10 cm.
+fn wool_curve(c: &mut Canvas) {
+    let (x0, y0, x1, y1) = c.area;
+    let (band, period) = (0.12, 0.09);
+    for j in (y0 / band).floor() as i64..=(y1 / band).ceil() as i64 {
+        let yc = (j as f64 + 0.5) * band;
+        let a = band * 0.42;
+        let t0 = ((x0 - 0.1) / period).floor() * TAU;
+        let t1 = ((x1 + 0.1) / period).ceil() * TAU;
+        let steps = (((t1 - t0) / TAU) * 16.0) as usize;
+        let pts: Vec<P> = (0..=steps)
+            .map(|k| {
+                let t = t0 + (t1 - t0) * k as f64 / steps as f64;
+                (period * t / TAU - 0.32 * period * t.sin(), yc + a * t.cos())
+            })
+            .collect();
+        c.curve(&pts, false);
+        if c.full {
+            return;
+        }
+    }
+}
+
+/// A diagonal lattice of rhombs 18 × 24 cm with a tinted dot at each
+/// crossing.
+fn rhombs(c: &mut Canvas) {
+    let (x0, y0, x1, y1) = c.area;
+    let (w, h) = (0.18, 0.24);
+    for i in (x0 / w).floor() as i64 - 1..=(x1 / w).ceil() as i64 + 1 {
+        for j in (2.0 * y0 / h).floor() as i64 - 1..=(2.0 * y1 / h).ceil() as i64 + 1 {
+            // Rhombs on a grid w × h/2: every other row shifted half.
+            let shift = if j.rem_euclid(2) == 1 { w / 2.0 } else { 0.0 };
+            let (cx, cy) = (i as f64 * w + shift, j as f64 * h / 2.0);
+            if !c.near(cx - w, cy - h, cx + w, cy + h) {
+                continue;
+            }
+            let top = (cx, cy + h / 2.0);
+            let right = (cx + w / 2.0, cy);
+            let (bottom, left) = ((cx, cy - h / 2.0), (cx - w / 2.0, cy));
+            c.path(&[top, right, bottom, left], true);
+            let dot = arc_pts(top, 0.012, 0.0, TAU, 10);
+            c.tint(&dot);
+            c.curve(&dot, true);
         }
         if c.full {
             return;
@@ -2128,7 +2510,9 @@ pub fn stand_in(p: HatchPattern) -> &'static [crate::hatch::Family] {
         WoodHerringbone | WoodBasket => HERRING_SI,
         HexTiles | HydraulicTiles | LargeTiles | SubwayTiles => COURSES_SI,
         Sand | GrassTufts | GroundCover | Plaster | EarthStones | MineralWool => DOTS_SI,
-        BrickCourses => COURSES_SI,
+        BrickCourses | FlemishBond | StackBrick | RammedEarth => COURSES_SI,
+        FishScale | OctagonTaco | DotTiles | Rhombs => COURSES_SI,
+        ConcreteSection | WoolCurve => DOTS_SI,
         _ => &[],
     }
 }

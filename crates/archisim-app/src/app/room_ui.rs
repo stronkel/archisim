@@ -216,28 +216,23 @@ impl ArchiSimApp {
             row(
                 ui,
                 "Escala",
-                "Multiplica el tamaño de la trama",
-                |ui, _| {
-                    ui.add(
-                        egui::DragValue::new(&mut f.scale)
-                            .range(0.1..=20.0)
-                            .speed(0.05),
-                    );
+                "Multiplica el tamaño de la trama (también con la flecha en planta)",
+                |ui, w| {
+                    super::props::slider_value(ui, &mut f.scale, 0.25..=4.0, " ×", 2, w);
+                    f.scale = f.scale.clamp(0.1, 20.0);
                 },
             );
-            row(ui, "Giro (°)", "", |ui, _| {
-                let mut deg = f.angle.to_degrees();
-                if ui
-                    .add(
-                        egui::DragValue::new(&mut deg)
-                            .range(-360.0..=360.0)
-                            .speed(1.0),
-                    )
-                    .changed()
-                {
-                    f.angle = deg.to_radians();
-                }
-            });
+            row(
+                ui,
+                "Giro",
+                "Gira la trama (también con el punto naranja en planta)",
+                |ui, w| {
+                    let mut deg = f.angle.to_degrees();
+                    if super::props::slider_value(ui, &mut deg, -180.0..=180.0, "°", 0, w) {
+                        f.angle = deg.to_radians();
+                    }
+                },
+            );
             row(
                 ui,
                 "Inicio",

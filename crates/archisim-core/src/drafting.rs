@@ -361,10 +361,28 @@ pub enum HatchPattern {
     MineralWool,
     /// Earth: grains and small stones.
     EarthStones,
+    /// Fish-scale tiles: half circles overlapping row on row.
+    FishScale,
+    /// Octagonal tiles with a small square tile at each corner.
+    OctagonTaco,
+    /// Square tiles with a dot in the middle and at the corners.
+    DotTiles,
+    /// Flemish bond: stretchers and headers in every course.
+    FlemishBond,
+    /// Bricks on end, shifted half a brick column to column.
+    StackBrick,
+    /// Concrete cut: aggregate, specks and faint diagonals.
+    ConcreteSection,
+    /// Rammed earth: its layers, broken strata between them.
+    RammedEarth,
+    /// Insulation drawn as the classic looping line.
+    WoolCurve,
+    /// A diagonal lattice with a dot at each crossing.
+    Rhombs,
 }
 
 impl HatchPattern {
-    pub const ALL: [HatchPattern; 63] = [
+    pub const ALL: [HatchPattern; 72] = [
         HatchPattern::Solid,
         HatchPattern::Lines,
         HatchPattern::Grid,
@@ -428,6 +446,15 @@ impl HatchPattern {
         HatchPattern::Plaster,
         HatchPattern::MineralWool,
         HatchPattern::EarthStones,
+        HatchPattern::FishScale,
+        HatchPattern::OctagonTaco,
+        HatchPattern::DotTiles,
+        HatchPattern::FlemishBond,
+        HatchPattern::StackBrick,
+        HatchPattern::ConcreteSection,
+        HatchPattern::RammedEarth,
+        HatchPattern::WoolCurve,
+        HatchPattern::Rhombs,
     ];
 
     pub fn code(self) -> &'static str {
@@ -495,6 +522,15 @@ impl HatchPattern {
             HatchPattern::Plaster => "plaster",
             HatchPattern::MineralWool => "mineral_wool",
             HatchPattern::EarthStones => "earth_stones",
+            HatchPattern::FishScale => "fish_scale",
+            HatchPattern::OctagonTaco => "octagon_taco",
+            HatchPattern::DotTiles => "dot_tiles",
+            HatchPattern::FlemishBond => "flemish_bond",
+            HatchPattern::StackBrick => "stack_brick",
+            HatchPattern::ConcreteSection => "concrete_section",
+            HatchPattern::RammedEarth => "rammed_earth",
+            HatchPattern::WoolCurve => "wool_curve",
+            HatchPattern::Rhombs => "rhombs",
         }
     }
 
@@ -567,6 +603,15 @@ impl HatchPattern {
             HatchPattern::Plaster => "Enlucido",
             HatchPattern::MineralWool => "Lana mineral",
             HatchPattern::EarthStones => "Tierra con piedras",
+            HatchPattern::FishScale => "Escama",
+            HatchPattern::OctagonTaco => "Octógono y taco",
+            HatchPattern::DotTiles => "Baldosa con puntos",
+            HatchPattern::FlemishBond => "Ladrillo flamenco",
+            HatchPattern::StackBrick => "Ladrillo vertical",
+            HatchPattern::ConcreteSection => "Hormigón en sección",
+            HatchPattern::RammedEarth => "Tapial",
+            HatchPattern::WoolCurve => "Aislante en serpentina",
+            HatchPattern::Rhombs => "Celosía de rombos",
         }
     }
 
@@ -593,14 +638,15 @@ impl HatchPattern {
         match self {
             WoodBoards | WoodVeins | WoodFinished | Pine | Oak | Maple | Birch | Ash | Walnut
             | Mahogany | WoodHerringbone | WoodBasket => Some("Madera"),
-            HexTiles | HydraulicTiles | LargeTiles | SubwayTiles => Some("Cerámica"),
+            HexTiles | HydraulicTiles | LargeTiles | SubwayTiles | FishScale | OctagonTaco
+            | DotTiles => Some("Cerámica"),
             Sand | GrassTufts | GroundCover | EarthStones => Some("Jardín"),
-            BrickCourses | Plaster => Some("Fábrica"),
-            MineralWool => Some("Aislamiento"),
+            BrickCourses | Plaster | FlemishBond | StackBrick | RammedEarth => Some("Fábrica"),
+            MineralWool | WoolCurve => Some("Aislamiento"),
+            Rhombs => Some("Diagramática"),
             MetalBrushed | MetalPerforated | DiamondPlate | Corrugated | MetalMesh => Some("Metal"),
-            ConcreteFinished | ConcreteRough | ConcreteBare | ConcretePavers | BoardFormed => {
-                Some("Hormigón")
-            }
+            ConcreteFinished | ConcreteRough | ConcreteBare | ConcretePavers | BoardFormed
+            | ConcreteSection => Some("Hormigón"),
             Pebbles | Limestone | StoneBlocks | Ashlar | Terrazzo | RockyPath | Setts | Rubble => {
                 Some("Piedra")
             }

@@ -4,6 +4,13 @@ Lo que cambia en cada versión, en pocas líneas. ArchiSim enseña la parte de s
 
 Cada versión empieza con una línea `## <versión>` (por ejemplo `## 0.81.0`): es la que busca la publicación.
 
+## 0.116.0
+
+- **Tramas con piezas teñidas**: como en ArchKit, algunas piedras, tablas, baldosas y ladrillos van un tono más oscuros, y el dibujo gana vida.
+- **Nueve tramas nuevas**: escama, octógono y taco, baldosa con puntos, ladrillo flamenco, ladrillo vertical, hormigón en sección, tapial, aislante en serpentina y celosía de rombos.
+- **Cinco estilos de presentación nuevos**: Editorial, Sol marengo, Terracota maximalista, Botánico y salvia y Cobalto y rosa.
+- **Paneles más limpios**: títulos de grupo en versalitas, columnas que se pliegan con ‹ y ›, deslizadores con su casilla para la escala y el giro de las tramas, y un selector de tramas con buscador y familias.
+
 ## 0.115.0
 
 - **La planta, bonita desde el principio**: un proyecto nuevo dibuja su planta con el estilo «Lápiz», con muros macizos en gris oscuro, líneas grises finas y rellenos muy claros, como una planta de presentación. **F7** o el botón «Presentada» de la barra inferior enseñan la planta técnica y vuelven.

@@ -106,7 +106,7 @@ impl ArchiSimApp {
                 if ui
                     .button("Estilos de partida")
                     .on_hover_text(
-                        "Añade Blanco y negro, Terracota, Bosque, Azul y Monocromo si faltan",
+                        "Añade los que falten: Blanco y negro, Terracota, Bosque, Azul, Monocromo, Lápiz, Lápiz con tramas y los de ArchKit (Editorial, Sol marengo, Terracota maximalista, Botánico y salvia, Cobalto y rosa)",
                     )
                     .clicked()
                 {

@@ -6,6 +6,26 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-26 (197) · v0.116: W10, primera tanda: tramas de ArchKit y paletas más limpias
+
+Rama `bloque/w10-paneles`, sobre `bloque/w3-bonito` (PR #244, sin unir). Antonio mandó su ArchKit Studio v2.2 (una biblioteca de tramas y bloques en HTML que hizo él) para adoptar sus tramas, estilos e interfaz, y pidió hacer W10 (`docs/WORKFEEL.md` §6, punto 19). Formato versión 125 (solo para que las anteriores avisen); sin cambios de IFC.
+
+- **Hecho**:
+  - **Piezas teñidas en las tramas** (como las piedras, tablas y baldosas «de acento» de ArchKit): `archisim_draft::hatch::hatch_lines_and_tints` da, además de las líneas, las piezas enteras dentro del sombreado que van un tono más oscuras (`Canvas::tint`, `tint_box`, `blob_tints`); la planta las pinta con el color de la trama al 16 % (`TINT_OPACITY` en `drafting::draw_hatch_paths`) y las tarjetas del selector también. Las llevan las tablas (una de cada cinco), espiga (una diagonal de cada tres), damero, piedras, sillería, caliza, guijarros, terrazo (sus lascas grandes), adoquín de hormigón, baldosa hexagonal, hidráulica (su círculo), gres, ladrillo, tierra y cubierta vegetal.
+  - **Nueve tramas de ArchKit** dibujadas a nuestra manera (pieza a pieza, a tamaño real): escama, octógono y taco (tacos teñidos), baldosa con puntos, ladrillo flamenco (tizones teñidos), ladrillo vertical, hormigón en sección (árido, motas y diagonales), tapial (tongadas con juntas a trazos, una de cada dos teñida), aislante en serpentina (la línea de bucles de siempre) y celosía de rombos; familia nueva «Diagramática». 50 texturas en total.
+  - **Cinco estilos de ArchKit** como estilos de presentación (`standards::EDITORIAL_LOOKS`, `editorial_looks`): Editorial, Sol marengo, Terracota maximalista, Botánico y salvia y Cobalto y rosa: papel, tinta, color de acento y muros cortados de cada uno, con aguadas. Vienen con los proyectos nuevos y en «Estilos de partida».
+  - **W10, paneles más limpios**:
+    - Los grupos de Propiedades con el título en versalitas grises espaciadas sobre una línea fina y la flecha a la derecha, sin la barra de color (`props::group`).
+    - Las columnas se pliegan: «‹» junto al nombre de la disciplina pliega herramientas y propiedades a una tira con «›»; «›» junto a «Navegador» lo pliega a una tira con «‹» (`fold_button`, `ArchiSimApp::tools_folded`, `FOLDED_WIDTH`).
+    - Deslizador con su casilla para la escala y el giro de las tramas de los locales y de los sombreados (`props::slider_value`).
+    - El selector de tramas con buscador y una píldora por familia, tarjetas con borde al pasar y títulos de familia en versalitas (`hatch_ui::pattern_grid`, `pill`).
+- **Pendiente** de W10: el dibujo a toda la ventana con los paneles flotando encima, pestañas de texto en lo alto de cada panel (Propiedades · Capas · Biblioteca), «Varios» cuando hay más de un elemento elegido, la barra de herramientas vertical estrecha y la barra superior mínima. De ArchKit: los bloques con más vida (cama con mesillas y lámparas, sofá capitoné con alfombra de flecos, isla con taburetes, armario con perchas…), la sombra editorial bajo los muebles y la leyenda numerada de la sección 1:10.
+- **Qué debe probar Antonio**:
+  1. Elige un local, abre su trama en Propiedades y mira el selector: buscador arriba, píldoras por familia, tarjetas con piezas teñidas. Prueba «Escama», «Octógono y taco», «Ladrillo flamenco» y «Tapial».
+  2. Mueve los deslizadores de escala y giro de esa trama.
+  3. Pliega las herramientas con «‹» y el navegador con «›»: el dibujo debe ganar el sitio; vuelve a abrirlos.
+  4. Pon a una planta el estilo «Editorial», «Terracota maximalista» o «Cobalto y rosa» (en un proyecto anterior, Gráficos → Estilos de presentación → «Estilos de partida»).
+
 ## 2026-11-25 (196) · v0.115: W3 ampliado, primera tanda: la planta bonita por defecto
 
 Rama `bloque/w3-bonito`, sobre `bloque/w2b-sin-friccion` (PR #243, sin unir). Puntos 5, 6 y parte del 8 de `docs/WORKFEEL.md` §6. Formato versiones 122 (las aguadas de los estilos de presentación), 123 (el inicio de la trama del pavimento) y 124 (trece tramas nuevas, la trama de cada material en las secciones y los estilos con tramas en los cortes); sin cambios de IFC. Los proyectos nuevos traen un estilo y una plantilla distintos; los existentes no cambian.

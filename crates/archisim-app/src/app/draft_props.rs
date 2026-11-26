@@ -159,19 +159,12 @@ impl ArchiSimApp {
                     st.hatch_opacity = v;
                 }
             });
-            row(ui, "Escala", "", |ui, _w| {
-                ui.add(
-                    egui::DragValue::new(&mut st.hatch_scale)
-                        .range(0.05..=100.0)
-                        .speed(0.05),
-                );
+            row(ui, "Escala", "", |ui, w| {
+                super::props::slider_value(ui, &mut st.hatch_scale, 0.25..=4.0, " ×", 2, w);
+                st.hatch_scale = st.hatch_scale.clamp(0.05, 100.0);
             });
-            row(ui, "Ángulo (°)", "", |ui, _w| {
-                ui.add(
-                    egui::DragValue::new(&mut st.hatch_angle)
-                        .range(-360.0..=360.0)
-                        .speed(1.0),
-                );
+            row(ui, "Ángulo", "", |ui, w| {
+                super::props::slider_value(ui, &mut st.hatch_angle, -180.0..=180.0, "°", 0, w);
             });
             if let Some(c) = Self::fill_row(ui, "cad-bg", st.hatch_background) {
                 st.hatch_background = c;
@@ -430,16 +423,13 @@ impl ArchiSimApp {
                             new.opacity = v;
                         }
                     });
-                    row(ui, "Escala", "", |ui, _w| {
-                        ui.add(
-                            egui::DragValue::new(&mut new.scale)
-                                .range(0.05..=100.0)
-                                .speed(0.05),
-                        );
+                    row(ui, "Escala", "", |ui, w| {
+                        super::props::slider_value(ui, &mut new.scale, 0.25..=4.0, " ×", 2, w);
+                        new.scale = new.scale.clamp(0.05, 100.0);
                     });
-                    row(ui, "Ángulo (°)", "", |ui, _w| {
+                    row(ui, "Ángulo", "", |ui, w| {
                         let mut deg = new.angle.to_degrees();
-                        if ui.add(egui::DragValue::new(&mut deg).speed(1.0)).changed() {
+                        if super::props::slider_value(ui, &mut deg, -180.0..=180.0, "°", 0, w) {
                             new.angle = deg.to_radians();
                         }
                     });

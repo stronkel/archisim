@@ -130,7 +130,7 @@ pub fn write(dir: &Path) -> Res {
         archisim_export::pdf::pdf(&pages, "Tramas de presentación")?,
     )?;
     let n: usize = families().iter().map(|(_, l)| l.len()).sum();
-    println!("Tramas: {n} tramas de presentación (madera, metal, hormigón, piedra, cerámica, jardín, fábrica y aislamiento).");
+    println!("Tramas: {n} tramas de presentación (madera, metal, hormigón, piedra, cerámica, jardín, fábrica, aislamiento y diagramáticas).");
     println!("  Proyecto: tramas.archisim (cuadros de 3 m)");
     println!("  Láminas: tramas-1-20.svg, tramas-1-50.svg, tramas.pdf; DXF: tramas.dxf");
     Ok(())
@@ -155,8 +155,8 @@ mod tests {
             true,
         );
         let fams = families();
-        assert_eq!(fams.len(), 8);
-        assert_eq!(fams.iter().map(|(_, l)| l.len()).sum::<usize>(), 41);
+        assert_eq!(fams.len(), 9);
+        assert_eq!(fams.iter().map(|(_, l)| l.len()).sum::<usize>(), 50);
         for (_, list) in fams {
             for p in list {
                 let h = Hatch {

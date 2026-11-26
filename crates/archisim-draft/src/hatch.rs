@@ -203,6 +203,27 @@ pub fn hatch_polygons(h: &Hatch) -> Vec<Vec<Point2>> {
 /// turns paper millimetres into drawing units. `None` if the pattern is
 /// too dense to draw line by line.
 pub fn hatch_lines(h: &Hatch, k: f64) -> Option<Vec<(Point2, Point2)>> {
+    hatch_drawing(h, k, None)
+}
+
+/// The pattern lines of a hatch and, for the textures that have them, its
+/// tinted pieces (W10, as in ArchKit and Synaps: one stone, board or
+/// tile in a few a shade darker), whole pieces inside the boundaries.
+#[allow(clippy::type_complexity)]
+pub fn hatch_lines_and_tints(
+    h: &Hatch,
+    k: f64,
+) -> (Option<Vec<(Point2, Point2)>>, Vec<Vec<Point2>>) {
+    let mut tints = Vec::new();
+    let lines = hatch_drawing(h, k, Some(&mut tints));
+    (lines, tints)
+}
+
+fn hatch_drawing(
+    h: &Hatch,
+    k: f64,
+    mut tints: Option<&mut Vec<Vec<Point2>>>,
+) -> Option<Vec<(Point2, Point2)>> {
     let polys = hatch_polygons(h);
     let unit = if h.pattern.is_model_scale() {
         h.scale
@@ -216,10 +237,22 @@ pub fn hatch_lines(h: &Hatch, k: f64) -> Option<Vec<(Point2, Point2)>> {
     }
     if crate::textures::is_texture(h.pattern) {
         // Piece by piece; too dense for that, with its plain lines.
-        if crate::textures::draw(&polys, h.pattern, unit, h.angle, &mut out).is_some() {
+        if crate::textures::draw(
+            &polys,
+            h.pattern,
+            unit,
+            h.angle,
+            &mut out,
+            tints.as_deref_mut(),
+        )
+        .is_some()
+        {
             return Some(out);
         }
         out.clear();
+        if let Some(t) = tints {
+            t.clear();
+        }
     }
     if procedural(h.pattern) && !crate::textures::is_texture(h.pattern) {
         draw_procedural(&polys, h.pattern, unit, h.angle, &mut out)?;

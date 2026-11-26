@@ -191,6 +191,9 @@ pub fn presentation_styles() -> Vec<archisim_core::PresentationStyle> {
         standards::working_look(),
         standards::textured_look(),
     ]
+    .into_iter()
+    .chain(standards::editorial_looks())
+    .collect()
 }
 
 /// The intersection priority of the façade layers that go past the slab

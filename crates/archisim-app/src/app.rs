@@ -828,6 +828,8 @@ pub struct ArchiSimApp {
     pub dark: bool,
     /// The properties palette (left, beside the tools) is shown.
     pub show_properties: bool,
+    /// The column of tools and properties folded to a strip (W10, ‹).
+    pub tools_folded: bool,
     /// The navigator (right) is shown.
     pub show_navigator: bool,
     /// Pictures of the types for the properties palette.
@@ -1186,6 +1188,7 @@ impl ArchiSimApp {
             snap_filter: SnapFilter::default(),
             dark: prefs.dark,
             show_properties: true,
+            tools_folded: false,
             show_navigator: true,
             thumbs: thumbs::Thumbs::default(),
             symbol_picker: None,
@@ -2642,16 +2645,45 @@ impl ArchiSimApp {
         // The tools of the discipline and, below them, Properties, as
         // Revit's palette: choosing a tool and its type is a short move of
         // the mouse.
-        let shown = egui::Panel::left("tools")
-            .resizable(true)
-            .default_size(SIDE_WIDTH - RAIL_WIDTH)
-            .min_size(MIN_SIDE_WIDTH - RAIL_WIDTH)
-            .max_size(MAX_SIDE_WIDTH - RAIL_WIDTH)
-            .frame(island(side(gap, gap)).inner_margin(egui::Margin::symmetric(10, 6)))
-            .show(ui, |ui| {
-                crate::profile::time("herramientas y propiedades", || self.tool_column(ui))
-            });
-        self.side_width = RAIL_WIDTH + shown.response.rect.width();
+        // Folded (W10, as the panels of Synaps and 1to10), a strip with ›
+        // to unfold it, and the drawing takes the room.
+        if self.tools_folded {
+            egui::Panel::left("tools-folded")
+                .resizable(false)
+                .exact_size(FOLDED_WIDTH)
+                .frame(island(side(gap, gap)).inner_margin(egui::Margin::symmetric(2, 8)))
+                .show(ui, |ui| {
+                    if fold_button(
+                        ui,
+                        icons::Icon::ChevronRight,
+                        "Mostrar las herramientas y las propiedades",
+                    ) {
+                        self.tools_folded = false;
+                    }
+                });
+        } else {
+            let shown = egui::Panel::left("tools")
+                .resizable(true)
+                .default_size(SIDE_WIDTH - RAIL_WIDTH)
+                .min_size(MIN_SIDE_WIDTH - RAIL_WIDTH)
+                .max_size(MAX_SIDE_WIDTH - RAIL_WIDTH)
+                .frame(island(side(gap, gap)).inner_margin(egui::Margin::symmetric(10, 6)))
+                .show(ui, |ui| {
+                    crate::profile::time("herramientas y propiedades", || self.tool_column(ui))
+                });
+            self.side_width = RAIL_WIDTH + shown.response.rect.width();
+        }
+        if !self.show_navigator {
+            egui::Panel::right("navigator-folded")
+                .resizable(false)
+                .exact_size(FOLDED_WIDTH)
+                .frame(island(side(gap, gap * 2)).inner_margin(egui::Margin::symmetric(2, 8)))
+                .show(ui, |ui| {
+                    if fold_button(ui, icons::Icon::ChevronLeft, "Mostrar el navegador") {
+                        self.show_navigator = true;
+                    }
+                });
+        }
         if self.show_navigator {
             let panel = egui::Panel::right("navigator")
                 .frame(island(side(gap, gap * 2)).inner_margin(egui::Margin::symmetric(10, 6)));
@@ -3662,4 +3694,24 @@ pub(crate) fn typing_in_text(ctx: &egui::Context) -> bool {
     // press it again.
     ctx.memory_mut(|m| m.surrender_focus(id));
     false
+}
+
+/// Width of a folded side panel: just its ‹ or ›.
+const FOLDED_WIDTH: f32 = 30.0;
+
+/// The small round button that folds or unfolds a side panel (W10).
+pub(crate) fn fold_button(ui: &mut Ui, icon: crate::app::icons::Icon, hint: &str) -> bool {
+    let p = crate::app::theme::Palette::current(ui.ctx());
+    let (rect, resp) = ui.allocate_exact_size(egui::Vec2::splat(22.0), egui::Sense::click());
+    if resp.hovered() {
+        ui.painter()
+            .rect_filled(rect, egui::CornerRadius::same(11), p.accent_soft);
+    }
+    crate::app::icons::paint(
+        ui.painter(),
+        egui::Rect::from_center_size(rect.center(), egui::Vec2::splat(14.0)),
+        icon,
+        if resp.hovered() { p.text } else { p.muted },
+    );
+    resp.on_hover_text(hint).clicked()
 }

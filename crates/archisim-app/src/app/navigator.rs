@@ -100,6 +100,11 @@ impl ArchiSimApp {
                     .font(strong_font(13.0))
                     .color(p.text),
             );
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if super::fold_button(ui, super::icons::Icon::ChevronRight, "Plegar el navegador") {
+                    self.show_navigator = false;
+                }
+            });
         });
         ui.add_space(4.0);
         // Two tabs: the model (what is built) and the project (its views,

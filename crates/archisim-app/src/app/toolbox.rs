@@ -1934,14 +1934,23 @@ impl ArchiSimApp {
                     .font(strong_font(12.5))
                     .color(hue.ink),
             );
-            ui.add(
-                egui::Label::new(
-                    egui::RichText::new(self.discipline.purpose())
-                        .small()
-                        .color(p.muted),
-                )
-                .truncate(),
-            );
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if super::fold_button(
+                    ui,
+                    super::icons::Icon::ChevronLeft,
+                    "Plegar las herramientas y las propiedades",
+                ) {
+                    self.tools_folded = true;
+                }
+                ui.add(
+                    egui::Label::new(
+                        egui::RichText::new(self.discipline.purpose())
+                            .small()
+                            .color(p.muted),
+                    )
+                    .truncate(),
+                );
+            });
         });
         ui.add_space(6.0);
         let full = ui.available_width();
