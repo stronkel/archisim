@@ -498,6 +498,29 @@ impl Builder {
 
     /// How many points there are: what [`Builder::transform_from`] moves
     /// starts here.
+    /// Adds what another builder made, its points moved by `f` and its
+    /// roles renamed as `rename` says (the others keep theirs): a set of
+    /// pieces, each made on its own, whose materials must not mix.
+    pub fn merge(&mut self, other: Builder, rename: &[(&str, &'static str)], f: impl Fn(P3) -> P3) {
+        let base = self.positions.len() as u32;
+        for p in &other.positions {
+            let q = f([p[0] as f64, p[1] as f64, p[2] as f64]);
+            self.positions.push([q[0] as f32, q[1] as f32, q[2] as f32]);
+        }
+        let name = |r: &'static str| -> &'static str {
+            rename
+                .iter()
+                .find(|(from, _)| *from == r)
+                .map_or(r, |(_, to)| *to)
+        };
+        for (role, tris) in other.parts {
+            let list = self.parts.entry(name(role)).or_default();
+            list.extend(tris.iter().map(|t| [t[0] + base, t[1] + base, t[2] + base]));
+        }
+        self.soft.extend(other.soft.into_iter().map(name));
+        self.fine.extend(other.fine.into_iter().map(name));
+    }
+
     pub fn mark(&self) -> usize {
         self.positions.len()
     }

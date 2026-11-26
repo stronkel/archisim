@@ -1,9 +1,11 @@
 family "Arbusto"
   category site
   host none
-  version 3
+  version 4
   description "Arbusto o mata redondeada; el punto de inserción es su centro"
   folder "Vegetación"
+
+include "muebles"
 
 type_params
   section "Dimensiones"
@@ -38,13 +40,20 @@ plan 1:50
   line (0, -r * 0.2) to (0, r * 0.2) pen thin
 
 plan presentation
+  # Leaf by leaf, as the trees: a fringe and a heart.
   let r = width / 2
-  let op = if look == "rellena" then 1 else 0.6
+  let turn = 6.283185307 * rand(seed * 7)
   if look == "contorno"
     cloud center (0, 0) radius r lobes 7 jitter 0.2 pen view
   else
-    cloud center (0, 0) radius r lobes 7 jitter 0.2 pen thin tint leaves opacity op
-    cloud center (-r * 0.15, r * 0.15) radius r * 0.45 lobes 5 jitter 0.15 pen thin tint leaves opacity 0.35
+    let n = min(40, max(12, round(r * 16)))
+    repeat i in 0..n
+      let a = turn + 6.283185307 * (i + 0.35 * rand(seed * 61 + i)) / n
+      let l = r * (0.45 + 0.15 * rand(seed * 67 + i))
+      use leaf(r * 0.5 * cos(a), r * 0.5 * sin(a), l, l * 0.26, a)
+    repeat i in 0..6
+      let a = turn + 0.5 + 6.283185307 * i / 6
+      use leaf(0, 0, r * 0.55, r * 0.15, a)
 
 outputs
   ifc_class = "IfcGeographicElement"

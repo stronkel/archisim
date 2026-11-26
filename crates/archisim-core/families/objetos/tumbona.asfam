@@ -1,9 +1,11 @@
 family "Tumbona"
   category street
   host none
-  version 2
+  version 3
   description "Tumbona como la hace cada colección"
   folder "Jardín y terraza"
+
+include "muebles"
 
 type_params
   section "Dimensiones"
@@ -33,7 +35,13 @@ body
   box (-width / 2, 0, 0) to (width / 2, depth, 0.4) material frame
 
 plan 1:50
-  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+  use soft_box(-width / 2, 0, width / 2, depth, 0.04)
+  if pad
+    use soft_pad(-width / 2 + 0.04, 0.04, width / 2 - 0.04, 0.62, 0.05)
+    use soft_pad(-width / 2 + 0.04, 0.64, width / 2 - 0.04, depth - 0.04, 0.05)
+  else
+    repeat i in 1..12
+      line (-width / 2 + 0.04, i * depth / 12) to (width / 2 - 0.04, i * depth / 12) pen thin
 
 outputs
   generator = "props:lounger"

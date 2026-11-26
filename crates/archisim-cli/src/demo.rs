@@ -58,6 +58,9 @@ pub fn build() -> Result<Document, ModelError> {
         Point2::new(12.0, 0.0),
     ];
     doc.transact("Muros de fachada", |m| {
+        // From the bottom of the ground slab: its edge is covered by the
+        // façade's outer leaf, render and insulation (W3, «cantos»).
+        let ground = m.slab_type(solera).map_or(0.0, |t| t.thickness());
         for i in 0..4 {
             m.add_wall(NewWall {
                 wall_type: fachada,
@@ -65,8 +68,8 @@ pub fn build() -> Result<Document, ModelError> {
                 start: corners[i],
                 end: corners[(i + 1) % 4],
                 reference: ReferenceLine::ExteriorFace,
-                height: WALL_HEIGHT,
-                base_offset: 0.0,
+                height: WALL_HEIGHT + ground,
+                base_offset: -ground,
                 // Up to the roof level: the roof slab takes the top of it
                 // (junctions by priority), and the façade follows the roof
                 // level if it moves.
@@ -1124,6 +1127,7 @@ pub fn build() -> Result<Document, ModelError> {
                         background: Some([236, 220, 194]),
                         scale: 1.0,
                         angle: 0.0,
+                        origin: None,
                     }
                 } else {
                     archisim_core::FloorFill {
@@ -1132,6 +1136,7 @@ pub fn build() -> Result<Document, ModelError> {
                         background: Some([238, 238, 234]),
                         scale: 2.0,
                         angle: 0.0,
+                        origin: None,
                     }
                 });
                 m.set_room(r)?;
@@ -1688,6 +1693,55 @@ mod tests {
         assert!(!svg.contains("<g id=\"heights\">"));
     }
 
+    /// «Lápiz con tramas» (W3): the cut layers of section A drawn with the
+    /// textures of their materials (brick in courses, wool, concrete,
+    /// earth), where «Lápiz» fills them solid; every starter material that
+    /// has a texture keeps it in the file.
+    #[test]
+    fn sections_cut_with_textures() {
+        let doc = super::build().unwrap();
+        let m = doc.model();
+        let a = m.sections().find(|s| s.title() == "Sección A").unwrap();
+        let d = archisim_plan::section::section_drawing(m, a);
+        let style = |name: &str| {
+            m.presentation_styles()
+                .find(|s| s.name == name)
+                .map(|s| s.id)
+        };
+        let draw = |name: &str| {
+            let mut o = archisim_plan::PlanOptions {
+                scale: 50.0,
+                ..Default::default()
+            };
+            o.style.presentation = style(name);
+            archisim_plan::section::render_section(m, &d, &o)
+        };
+        let plain = draw(archisim_library::standards::WORKING_LOOK);
+        let textured = draw(archisim_library::standards::TEXTURED_LOOK);
+        assert!(
+            textured.len() > plain.len() * 6 / 5,
+            "{} against {}",
+            textured.len(),
+            plain.len()
+        );
+        let brick = m
+            .materials()
+            .find(|x| x.name.starts_with("Ladrillo"))
+            .unwrap();
+        assert_eq!(
+            brick.texture,
+            Some(archisim_core::HatchPattern::BrickCourses)
+        );
+        let back = archisim_file::from_str(&archisim_file::to_string(m)).unwrap();
+        assert_eq!(
+            back.materials().filter(|x| x.texture.is_some()).count(),
+            m.materials().filter(|x| x.texture.is_some()).count()
+        );
+        assert!(back
+            .presentation_styles()
+            .any(|s| s.cut_textures && s.name == archisim_library::standards::TEXTURED_LOOK));
+    }
+
     /// A view can hide what phase 2 added: the furniture, the columns and
     /// beams, the terrain…, as it hides walls or dimensions.
     #[test]
@@ -1740,8 +1794,9 @@ mod tests {
         let EndCut::Tee(t) = &g.start_cut else {
             panic!()
         };
-        // Plaster, inner leaf and insulation of the façade: 0.135 m.
-        assert!((t.reach[1] - 0.135).abs() < 1e-9, "{:?}", t.reach);
+        // Plaster and inner leaf of the façade: 0.085 m. Its insulation
+        // and outer leaf go on in front (they pass the slab edges, W3).
+        assert!((t.reach[1] - 0.085).abs() < 1e-9, "{:?}", t.reach);
     }
 
     /// The magic wand finds the four rooms of the demo house (doors in the

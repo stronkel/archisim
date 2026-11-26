@@ -1,9 +1,11 @@
 family "Puestos de trabajo"
   category furniture
   host none
-  version 1
+  version 2
   description "Mesa bench de puestos enfrentados con mampara, monitor y teclado en cada puesto, como la hace cada colección"
   folder "Oficina"
+
+include "muebles"
 
 type_params
   section "Dimensiones"
@@ -27,8 +29,19 @@ body
   box (-width / 2, 0, 0) to (width / 2, depth, height) material top
 
 plan 1:50
-  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
-  line (-width / 2, depth / 2) to (width / 2, depth / 2) pen thin
+  let pw = width / places
+  repeat i in 0..places
+    let x = -width / 2 + (i + 0.5) * pw
+    use table_chair(x, depth + 0.05, 1)
+    use table_chair(x, -0.05, -1)
+  use soft_box(-width / 2, 0, width / 2, depth, 0.02)
+  line (-width / 2 + 0.02, depth / 2) to (width / 2 - 0.02, depth / 2) pen thin
+  repeat i in 1..places
+    line (-width / 2 + i * pw, 0.02) to (-width / 2 + i * pw, depth - 0.02) pen thin
+  repeat i in 0..places
+    let x = -width / 2 + (i + 0.5) * pw
+    use soft_pad(x - 0.25, depth / 2 - 0.06, x + 0.25, depth / 2 - 0.03, 0.01)
+    use soft_pad(x - 0.25, depth / 2 + 0.03, x + 0.25, depth / 2 + 0.06, 0.01)
 
 outputs
   generator = "props:fine_bench_desk"

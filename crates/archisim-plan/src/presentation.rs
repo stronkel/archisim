@@ -27,6 +27,7 @@ pub fn pens(model: &Model, look: Option<&PresentationStyle>, scale: f64) -> arch
 pub(crate) fn begin(p: Option<&PresentationStyle>) -> Guard {
     crate::POCHE.with(|c| c.set(p.and_then(|p| p.poche)));
     crate::PRESENTING.with(|c| c.set(p.is_some()));
+    crate::TEXTURED.with(|c| c.set(p.is_some_and(|p| p.cut_textures)));
     Guard
 }
 
@@ -36,6 +37,7 @@ impl Drop for Guard {
     fn drop(&mut self) {
         crate::POCHE.with(|c| c.set(None));
         crate::PRESENTING.with(|c| c.set(false));
+        crate::TEXTURED.with(|c| c.set(false));
     }
 }
 
@@ -89,11 +91,15 @@ pub fn apply(svg: &str, p: &PresentationStyle) -> String {
     } else {
         svg.to_string()
     };
-    let mut out = crate::dim::map_colours(&scaled, |c| {
+    let mut out = crate::dim::map_colours_by(&scaled, |c, line| {
         if c == [255, 255, 255] {
             p.background
         } else if Some(c) == p.poche {
             c
+        } else if line {
+            // Washes are for what is filled: the lines of a wooden floor,
+            // a tree, a stone keep their tone (W3).
+            p.line_tone(c)
         } else {
             p.tone(c)
         }
@@ -269,6 +275,7 @@ mod tests {
             background: Some([230, 210, 180]),
             scale: 1.0,
             angle: 0.0,
+            origin: None,
         });
         m.set_room(r).unwrap();
         let plain = crate::render_plan(&m, l, &crate::PlanOptions::default());

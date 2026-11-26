@@ -779,6 +779,9 @@ pub struct ArchiSimApp {
     pub cut_plane: f64,
     /// What the active plan shows (categories, layers, detail).
     pub view_style: archisim_core::ViewStyle,
+    /// F7 (W3): the plans on screen in their technical drawing, without
+    /// their presentation style, for this session (the views keep it).
+    pub technical_look: bool,
     /// The graphic standard dialog is open.
     pub show_graphics: bool,
     /// The «Estilos de presentación» window.
@@ -1158,6 +1161,7 @@ impl ArchiSimApp {
             plan_scale: archisim_plan::PlanOptions::default().scale,
             cut_plane: archisim_plan::PlanOptions::default().cut_plane,
             view_style: Default::default(),
+            technical_look: false,
             show_graphics: false,
             walk_return: None,
             presentation: Default::default(),
@@ -2199,6 +2203,30 @@ impl ArchiSimApp {
     }
 
     /// Builds the walls asked for by the wall tool.
+    /// F7: the plans on screen drawn technical (no presentation style) or
+    /// as their view presents them.
+    pub(crate) fn toggle_technical_look(&mut self) {
+        self.technical_look = !self.technical_look;
+        let presented = self.view_style.presentation.is_some();
+        self.say(match (self.technical_look, presented) {
+            (true, _) => "Planta técnica (F7 para verla presentada).",
+            (false, true) => "Planta presentada (F7 para verla técnica).",
+            (false, false) => {
+                "Esta vista no tiene estilo de presentación: elígelo en Representación."
+            }
+        });
+    }
+
+    /// The style the plan is drawn with on screen: the view's, without its
+    /// presentation while F7 asks for the technical drawing.
+    pub(crate) fn screen_style(&self) -> archisim_core::ViewStyle {
+        let mut s = self.view_style.clone();
+        if self.technical_look {
+            s.presentation = None;
+        }
+        s
+    }
+
     /// Space with the wall tool (Revit's): the walls being drawn, and the
     /// next ones, get their exterior face on the other side of the line.
     pub(crate) fn flip_wall_tool(&mut self) {
@@ -2835,6 +2863,10 @@ impl ArchiSimApp {
         if !in_text && consume(Modifiers::NONE, Key::F4) {
             let on = !self.maquette;
             self.set_maquette(on);
+        }
+        // F7: the plan as presented ↔ its technical drawing (W3).
+        if !in_text && consume(Modifiers::NONE, Key::F7) {
+            self.toggle_technical_look();
         }
         if typing {
             return;

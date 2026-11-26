@@ -1,9 +1,11 @@
 family "Columna de cocina"
   category kitchen
   host none
-  version 3
+  version 4
   description "Columna de cocina hecha en una de las ocho colecciones"
   folder "Cocina"
+
+include "muebles"
 
 type_params
   section "Dimensiones"
@@ -36,9 +38,10 @@ body
   box (-width / 2, 0, 0) to (width / 2, depth, height) material mat
 
 plan 1:50
-  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
-  line (-width / 2, 0) to (width / 2, depth) pen thin
-  line (width / 2, 0) to (-width / 2, depth) pen thin
+  use soft_box(-width / 2, 0, width / 2, depth, 0.02)
+  line (-width / 2 + 0.02, 0.02) to (width / 2 - 0.02, depth - 0.02) pen thin
+  line (width / 2 - 0.02, 0.02) to (-width / 2 + 0.02, depth - 0.02) pen thin
+  line (-width / 2, depth - 0.025) to (width / 2, depth - 0.025) pen thin
 
 outputs
   joins = "row"

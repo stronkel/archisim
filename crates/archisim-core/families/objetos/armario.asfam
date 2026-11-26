@@ -1,9 +1,11 @@
 family "Armario"
   category furniture
   host none
-  version 4
+  version 5
   description "Armario como lo hace cada colección: puertas, cajones abajo y lo que pisa"
   folder "Armarios"
+
+include "muebles"
 
 type_params
   section "Dimensiones"
@@ -30,15 +32,19 @@ body
   box (-width / 2, 0, 0) to (width / 2, depth, height) material frame
 
 plan 1:50
-  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
-  line (-width / 2, depth - 0.02) to (width / 2, depth - 0.02) pen thin
+  use soft_box(-width / 2, 0, width / 2, depth, 0.02)
+  line (-width / 2, depth - 0.025) to (width / 2, depth - 0.025) pen thin
   let dw = width / doors
   repeat i in 1..doors
-    line (-width / 2 + i * dw, depth - 0.02) to (-width / 2 + i * dw, depth) pen thin
-  line (-width / 2 + 0.05, depth / 2) to (width / 2 - 0.05, depth / 2) pen thin dashed
+    line (-width / 2 + i * dw, depth - 0.025) to (-width / 2 + i * dw, depth) pen thin
+  line (-width / 2 + 0.05, depth / 2 - 0.02) to (width / 2 - 0.05, depth / 2 - 0.02) pen thin
+  let hangers = max(2, floor(width / 0.09))
+  repeat i in 0..hangers
+    let x = -width / 2 + 0.06 + (i + 0.5) * (width - 0.12) / hangers
+    line (x - 0.02, 0.08) to (x + 0.02, depth - 0.1) pen thin
 
 plan 1:100
-  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+  use soft_box(-width / 2, 0, width / 2, depth, 0.02)
   line (-width / 2, 0) to (width / 2, depth) pen thin
 
 outputs

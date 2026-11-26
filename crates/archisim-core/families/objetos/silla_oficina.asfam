@@ -1,9 +1,11 @@
 family "Silla de oficina"
   category furniture
   host none
-  version 2
+  version 3
   description "Silla para el escritorio como la hace cada colección"
   folder "Despacho"
+
+include "muebles"
 
 type_params
   section "Dimensiones"
@@ -25,10 +27,12 @@ body
 
 plan 1:50
   let r = width / 2
-  repeat i in 0..16
-    let t0 = 6.283185307 * i / 16
-    let t1 = 6.283185307 * (i + 1) / 16
-    line (r * cos(t0), width / 2 + r * sin(t0)) to (r * cos(t1), width / 2 + r * sin(t1)) pen view
+  repeat i in 0..5
+    let a = 1.5708 + 6.283185307 * i / 5
+    line (0, r) to (r * 0.95 * cos(a), r + r * 0.95 * sin(a)) pen thin
+    use soft_oval_thin(r * 0.95 * cos(a), r + r * 0.95 * sin(a), 0.025, 0.025)
+  use soft_box(-r * 0.75, r * 0.4, r * 0.75, r * 1.75, 0.08)
+  use soft_pad(-r * 0.8, r * 0.2, r * 0.8, r * 0.45, 0.05)
 
 outputs
   generator = "props:office_chair"

@@ -199,6 +199,10 @@ pub struct Material {
     /// Fill colour when cut, RGB.
     pub cut_color: [u8; 3],
     pub cut_pattern: CutPattern,
+    /// Its texture where it is cut in a presentation with textures («Con
+    /// tramas», W3): brick in courses, wool, earth with stones; `None`:
+    /// its fill and hatch, as always (version 124).
+    pub texture: Option<crate::HatchPattern>,
     /// Intersection priority of its layers, 0 to 999 (ArchiCAD's
     /// "prioridad de intersección"): where walls meet in a T, a layer goes
     /// through the other wall's layers of lower priority. `None`: by the
@@ -2146,6 +2150,7 @@ impl Model {
                 cut_color,
                 cut_pattern,
                 priority: None,
+                texture: None,
             },
         );
         id
@@ -2202,6 +2207,20 @@ impl Model {
         m.category = category.into();
         m.cut_color = cut_color;
         m.cut_pattern = cut_pattern;
+        Ok(())
+    }
+
+    /// Changes the texture a material shows where it is cut in a
+    /// presentation with textures (`None`: its fill and hatch).
+    pub fn set_material_texture(
+        &mut self,
+        id: MaterialId,
+        texture: Option<crate::HatchPattern>,
+    ) -> Result<(), ModelError> {
+        self.materials
+            .get_mut(&id)
+            .ok_or(ModelError::UnknownMaterial(id))?
+            .texture = texture;
         Ok(())
     }
 

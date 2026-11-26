@@ -1,0 +1,67 @@
+# Piezas comunes del dibujo de planta de los muebles de ArchiSim.
+#
+# Ejes de las familias de objetos (metros): x a lo ancho, desde el centro;
+# y hacia delante, desde la espalda del mueble.
+
+# ---- Dibujo de planta de los muebles (W3, «símbolos», al estilo de las
+# plantas de Synaps): rectángulos de esquinas redondeadas, rellenos de
+# blanco para que tapen el pavimento. «r» es el radio de las esquinas
+# (como mucho la mitad del lado menor).
+
+# El contorno de un mueble, con la pluma de proyección.
+component soft_box(xa, ya, xb, yb, r)
+  polygon (xa + r - 1.0 * r, ya + r) (xa + r - 0.9239 * r, ya + r - 0.3827 * r) (xa + r - 0.7071 * r, ya + r - 0.7071 * r) (xa + r - 0.3827 * r, ya + r - 0.9239 * r) (xa + r, ya + r - 1.0 * r) (xb - r, ya + r - 1.0 * r) (xb - r + 0.3827 * r, ya + r - 0.9239 * r) (xb - r + 0.7071 * r, ya + r - 0.7071 * r) (xb - r + 0.9239 * r, ya + r - 0.3827 * r) (xb - r + 1.0 * r, ya + r) (xb - r + 1.0 * r, yb - r) (xb - r + 0.9239 * r, yb - r + 0.3827 * r) (xb - r + 0.7071 * r, yb - r + 0.7071 * r) (xb - r + 0.3827 * r, yb - r + 0.9239 * r) (xb - r, yb - r + 1.0 * r) (xa + r, yb - r + 1.0 * r) (xa + r - 0.3827 * r, yb - r + 0.9239 * r) (xa + r - 0.7071 * r, yb - r + 0.7071 * r) (xa + r - 0.9239 * r, yb - r + 0.3827 * r) (xa + r - 1.0 * r, yb - r) pen view filled
+
+# Una pieza dentro de él (cojín, almohada, colchón, tapa), más fina.
+component soft_pad(xa, ya, xb, yb, r)
+  polygon (xa + r - 1.0 * r, ya + r) (xa + r - 0.9239 * r, ya + r - 0.3827 * r) (xa + r - 0.7071 * r, ya + r - 0.7071 * r) (xa + r - 0.3827 * r, ya + r - 0.9239 * r) (xa + r, ya + r - 1.0 * r) (xb - r, ya + r - 1.0 * r) (xb - r + 0.3827 * r, ya + r - 0.9239 * r) (xb - r + 0.7071 * r, ya + r - 0.7071 * r) (xb - r + 0.9239 * r, ya + r - 0.3827 * r) (xb - r + 1.0 * r, ya + r) (xb - r + 1.0 * r, yb - r) (xb - r + 0.9239 * r, yb - r + 0.3827 * r) (xb - r + 0.7071 * r, yb - r + 0.7071 * r) (xb - r + 0.3827 * r, yb - r + 0.9239 * r) (xb - r, yb - r + 1.0 * r) (xa + r, yb - r + 1.0 * r) (xa + r - 0.3827 * r, yb - r + 0.9239 * r) (xa + r - 0.7071 * r, yb - r + 0.7071 * r) (xa + r - 0.9239 * r, yb - r + 0.3827 * r) (xa + r - 1.0 * r, yb - r) pen thin filled
+
+# Un óvalo (o un círculo, con a = b) de semiejes «a» y «b»: tazas,
+# lavabos, mesas redondas.
+component soft_oval(cx, cy, a, b)
+  polygon (cx + 1.0 * a, cy + 0.0 * b) (cx + 0.9659 * a, cy + 0.2588 * b) (cx + 0.866 * a, cy + 0.5 * b) (cx + 0.7071 * a, cy + 0.7071 * b) (cx + 0.5 * a, cy + 0.866 * b) (cx + 0.2588 * a, cy + 0.9659 * b) (cx + 0.0 * a, cy + 1.0 * b) (cx + -0.2588 * a, cy + 0.9659 * b) (cx + -0.5 * a, cy + 0.866 * b) (cx + -0.7071 * a, cy + 0.7071 * b) (cx + -0.866 * a, cy + 0.5 * b) (cx + -0.9659 * a, cy + 0.2588 * b) (cx + -1.0 * a, cy + 0.0 * b) (cx + -0.9659 * a, cy + -0.2588 * b) (cx + -0.866 * a, cy + -0.5 * b) (cx + -0.7071 * a, cy + -0.7071 * b) (cx + -0.5 * a, cy + -0.866 * b) (cx + -0.2588 * a, cy + -0.9659 * b) (cx + -0.0 * a, cy + -1.0 * b) (cx + 0.2588 * a, cy + -0.9659 * b) (cx + 0.5 * a, cy + -0.866 * b) (cx + 0.7071 * a, cy + -0.7071 * b) (cx + 0.866 * a, cy + -0.5 * b) (cx + 0.9659 * a, cy + -0.2588 * b) pen view filled
+
+component soft_oval_thin(cx, cy, a, b)
+  polygon (cx + 1.0 * a, cy + 0.0 * b) (cx + 0.9659 * a, cy + 0.2588 * b) (cx + 0.866 * a, cy + 0.5 * b) (cx + 0.7071 * a, cy + 0.7071 * b) (cx + 0.5 * a, cy + 0.866 * b) (cx + 0.2588 * a, cy + 0.9659 * b) (cx + 0.0 * a, cy + 1.0 * b) (cx + -0.2588 * a, cy + 0.9659 * b) (cx + -0.5 * a, cy + 0.866 * b) (cx + -0.7071 * a, cy + 0.7071 * b) (cx + -0.866 * a, cy + 0.5 * b) (cx + -0.9659 * a, cy + 0.2588 * b) (cx + -1.0 * a, cy + 0.0 * b) (cx + -0.9659 * a, cy + -0.2588 * b) (cx + -0.866 * a, cy + -0.5 * b) (cx + -0.7071 * a, cy + -0.7071 * b) (cx + -0.5 * a, cy + -0.866 * b) (cx + -0.2588 * a, cy + -0.9659 * b) (cx + -0.0 * a, cy + -1.0 * b) (cx + 0.2588 * a, cy + -0.9659 * b) (cx + 0.5 * a, cy + -0.866 * b) (cx + 0.7071 * a, cy + -0.7071 * b) (cx + 0.866 * a, cy + -0.5 * b) (cx + 0.9659 * a, cy + -0.2588 * b) pen thin filled
+
+# Una silla junto a una mesa, en x, desde el canto y0 del tablero: hacia
+# delante (dir 1) o hacia atrás (dir -1), metida un poco bajo él.
+component table_chair(x, y0, dir)
+  let ya = if dir > 0 then y0 - 0.1 else y0 - 0.34
+  let yb = if dir > 0 then y0 + 0.34 else y0 + 0.1
+  use soft_box(x - 0.2, ya, x + 0.2, yb, 0.06)
+  let r0 = if dir > 0 then yb - 0.06 else ya
+  let r1 = if dir > 0 then yb else ya + 0.06
+  use soft_pad(x - 0.21, r0, x + 0.21, r1, 0.03)
+
+# Una hoja de planta vista desde arriba: desde (cx, cy), larga «l» y de
+# ancho «w», con el ángulo «a»; rellena de blanco, con su nervio.
+component leaf(cx, cy, l, w, a)
+  let px = -sin(a)
+  let py = cos(a)
+  let ux = cos(a)
+  let uy = sin(a)
+  polygon (cx, cy) (cx + 0.3 * l * ux + 0.8 * w * px, cy + 0.3 * l * uy + 0.8 * w * py) (cx + 0.65 * l * ux + w * px, cy + 0.65 * l * uy + w * py) (cx + l * ux, cy + l * uy) (cx + 0.65 * l * ux - w * px, cy + 0.65 * l * uy - w * py) (cx + 0.3 * l * ux - 0.8 * w * px, cy + 0.3 * l * uy - 0.8 * w * py) pen thin filled
+  line (cx + 0.15 * l * ux, cy + 0.15 * l * uy) to (cx + 0.85 * l * ux, cy + 0.85 * l * uy) pen thin
+
+# Una almohada o un cojín mullido, de centro (cx, cy) y semilados «a» y
+# «b»: lados que se abomban y esquinas que se recogen, con sus pliegues.
+component pillow(cx, cy, a, b)
+  polygon (cx + 1.0256 * a, cy + 0.3875 * b) (cx + 0.993 * a, cy + 0.6016 * b) (cx + 0.9377 * a, cy + 0.7208 * b) (cx + 0.8726 * a, cy + 0.8031 * b) (cx + 0.8031 * a, cy + 0.8726 * b) (cx + 0.7208 * a, cy + 0.9377 * b) (cx + 0.6016 * a, cy + 0.993 * b) (cx + 0.3875 * a, cy + 1.0256 * b) (cx + -0.3875 * a, cy + 1.0256 * b) (cx + -0.6016 * a, cy + 0.993 * b) (cx + -0.7208 * a, cy + 0.9377 * b) (cx + -0.8031 * a, cy + 0.8726 * b) (cx + -0.8726 * a, cy + 0.8031 * b) (cx + -0.9377 * a, cy + 0.7208 * b) (cx + -0.993 * a, cy + 0.6016 * b) (cx + -1.0256 * a, cy + 0.3875 * b) (cx + -1.0256 * a, cy + -0.3875 * b) (cx + -0.993 * a, cy + -0.6016 * b) (cx + -0.9377 * a, cy + -0.7208 * b) (cx + -0.8726 * a, cy + -0.8031 * b) (cx + -0.8031 * a, cy + -0.8726 * b) (cx + -0.7208 * a, cy + -0.9377 * b) (cx + -0.6016 * a, cy + -0.993 * b) (cx + -0.3875 * a, cy + -1.0256 * b) (cx + 0.3875 * a, cy + -1.0256 * b) (cx + 0.6016 * a, cy + -0.993 * b) (cx + 0.7208 * a, cy + -0.9377 * b) (cx + 0.8031 * a, cy + -0.8726 * b) (cx + 0.8726 * a, cy + -0.8031 * b) (cx + 0.9377 * a, cy + -0.7208 * b) (cx + 0.993 * a, cy + -0.6016 * b) (cx + 1.0256 * a, cy + -0.3875 * b) pen thin filled
+  arc center (cx - a * 0.55, cy - b * 0.1) from (cx - a * 0.85, cy - b * 0.55) to (cx - a * 0.6, cy + b * 0.35) pen thin
+  arc center (cx + a * 0.5, cy + b * 0.2) from (cx + a * 0.85, cy + b * 0.55) to (cx + a * 0.62, cy - b * 0.3) pen thin
+  line (cx - a * 0.15, cy + b * 0.45) to (cx + a * 0.2, cy + b * 0.3) pen thin
+
+# Una silla alrededor de una mesa redonda de centro (cx, cy) y radio «r»,
+# en el ángulo «a», metida un poco bajo el tablero, con su respaldo.
+component ring_chair(cx, cy, r, a)
+  let ux = cos(a)
+  let uy = sin(a)
+  let px = -sin(a)
+  let py = cos(a)
+  let d0 = r - 0.1
+  let d1 = r + 0.34
+  let h = 0.2
+  let c = 0.05
+  polygon (cx + d0 * ux + (h - c) * px, cy + d0 * uy + (h - c) * py) (cx + (d0 + c) * ux + h * px, cy + (d0 + c) * uy + h * py) (cx + (d1 - c) * ux + h * px, cy + (d1 - c) * uy + h * py) (cx + d1 * ux + (h - c) * px, cy + d1 * uy + (h - c) * py) (cx + d1 * ux - (h - c) * px, cy + d1 * uy - (h - c) * py) (cx + (d1 - c) * ux - h * px, cy + (d1 - c) * uy - h * py) (cx + (d0 + c) * ux - h * px, cy + (d0 + c) * uy - h * py) (cx + d0 * ux - (h - c) * px, cy + d0 * uy - (h - c) * py) pen view filled
+  polygon (cx + (d1 - 0.06) * ux + 0.21 * px, cy + (d1 - 0.06) * uy + 0.21 * py) (cx + d1 * ux + 0.21 * px, cy + d1 * uy + 0.21 * py) (cx + d1 * ux - 0.21 * px, cy + d1 * uy - 0.21 * py) (cx + (d1 - 0.06) * ux - 0.21 * px, cy + (d1 - 0.06) * uy - 0.21 * py) pen thin filled

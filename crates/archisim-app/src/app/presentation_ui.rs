@@ -315,6 +315,21 @@ impl ArchiSimApp {
                 );
                 ui.end_row();
 
+                ui.label("Aguadas").on_hover_text(
+                    "Los colores propios (árboles, materiales, locales de color) pasan a tonos muy claros, como un dibujo a lápiz; las líneas conservan su tono",
+                );
+                ui.switch(&mut d.washes, "");
+                ui.end_row();
+
+                ui.label("Tramas en los cortes").on_hover_text(
+                    "Cada capa cortada con la trama de su material (ladrillo en hiladas, lana, hormigón, tierra…), en lugar del macizo o del rayado; se elige en Tipos y materiales → material → «Trama en las secciones»",
+                );
+                if ui.switch(&mut d.cut_textures, "").changed() && d.cut_textures {
+                    // The textures show only where the cut is not solid.
+                    d.poche = None;
+                }
+                ui.end_row();
+
                 ui.label("Color de acento")
                     .on_hover_text("Un color que resalta las anotaciones sobre la paleta: cotas y textos en rojo sobre un dibujo en grises, por ejemplo");
                 ui.vertical(|ui| {

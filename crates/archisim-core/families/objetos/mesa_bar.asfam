@@ -1,9 +1,11 @@
 family "Mesa de bar"
   category furniture
   host none
-  version 1
+  version 2
   description "Mesa de cafetería como la hace cada colección, baja o alta"
   folder "Hostelería"
+
+include "muebles"
 
 type_params
   section "Dimensiones"
@@ -23,11 +25,8 @@ body
   box (-width / 2, 0, 0) to (width / 2, width, height) material top
 
 plan 1:50
-  let r = width / 2
-  repeat i in 0..20
-    let t0 = 6.283185307 * i / 20
-    let t1 = 6.283185307 * (i + 1) / 20
-    line (r * cos(t0), r + r * sin(t0)) to (r * cos(t1), r + r * sin(t1)) pen view
+  use soft_oval(0, width / 2, width / 2, width / 2)
+  use soft_oval_thin(0, width / 2, width / 2 - 0.03, width / 2 - 0.03)
 
 outputs
   generator = "props:fine_bar_table"

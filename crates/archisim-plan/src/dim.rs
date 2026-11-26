@@ -116,12 +116,20 @@ pub fn grey(svg: &str) -> String {
 /// Every colour of an SVG fragment (`#rrggbb`, `#rgb`, `rgb(r,g,b)`,
 /// `"black"` and `"white"`) turned by `f`, written as `#rrggbb`.
 pub fn map_colours(svg: &str, f: impl Fn([u8; 3]) -> [u8; 3]) -> String {
+    map_colours_by(svg, |c, _| f(c))
+}
+
+/// The same, telling `f` whether each colour is a line's (`stroke`) or a
+/// fill's.
+pub fn map_colours_by(svg: &str, f: impl Fn([u8; 3], bool) -> [u8; 3]) -> String {
     let b = svg.as_bytes();
     let mut out = String::with_capacity(svg.len());
     let mut i = 0;
     let hex = |c: u8| (c as char).to_digit(16).map(|v| v as u8);
     let put = |out: &mut String, c: [u8; 3]| {
-        let [r, g, b] = f(c);
+        let tail = &out.as_bytes()[out.len().saturating_sub(8)..];
+        let stroke = tail.ends_with(b"stroke=\"") || tail.ends_with(b"stroke:");
+        let [r, g, b] = f(c, stroke);
         out.push_str(&format!("#{r:02x}{g:02x}{b:02x}"));
     };
     while i < b.len() {

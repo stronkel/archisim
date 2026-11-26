@@ -1,9 +1,11 @@
 family "Mesa auxiliar"
   category furniture
   host none
-  version 2
+  version 3
   description "Mesa auxiliar redonda de pie central, de tres patas o un par de mesas nido"
   folder "Salón"
+
+include "muebles"
 
 type_params
   section "Dimensiones"
@@ -25,13 +27,10 @@ body
 
 plan 1:50
   if model3d == "Contemporáneo" or model3d == "Industrial"
-    polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+    use soft_box(-width / 2, 0, width / 2, depth, 0.02)
   else
-    let r = width / 2
-    repeat i in 0..16
-      let t0 = 6.283185307 * i / 16
-      let t1 = 6.283185307 * (i + 1) / 16
-      line (r * cos(t0), r + r * sin(t0)) to (r * cos(t1), r + r * sin(t1)) pen view
+    use soft_oval(0, width / 2, width / 2, width / 2)
+    use soft_oval_thin(0, width / 2, width / 2 - 0.03, width / 2 - 0.03)
 
 outputs
   generator = "props:fine_side_table"

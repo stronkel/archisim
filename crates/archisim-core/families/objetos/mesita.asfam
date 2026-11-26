@@ -1,9 +1,11 @@
 family "Mesita de noche"
   category furniture
   host none
-  version 4
+  version 5
   description "Mesita de noche como la hace cada colección, con su lámpara"
   folder "Dormitorio"
+
+include "muebles"
 
 type_params
   section "Dimensiones"
@@ -34,17 +36,14 @@ body
   box (-width / 2, 0, 0) to (width / 2, depth, height) material frame
 
 plan 1:50
-  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
-  let r = 0.15
-  let xc = width * 0.06
-  let yc = depth * 0.45
-  repeat i in 0..20
-    let t0 = 6.283185307 * i / 20
-    let t1 = 6.283185307 * (i + 1) / 20
-    line (xc + r * cos(t0), yc + r * sin(t0)) to (xc + r * cos(t1), yc + r * sin(t1)) pen thin
+  use soft_box(-width / 2, 0, width / 2, depth, 0.03)
+  line (-width / 2 + 0.02, depth - 0.03) to (width / 2 - 0.02, depth - 0.03) pen thin
+  if lamp
+    use soft_oval_thin(width * 0.08, depth * 0.45, 0.12, 0.12)
+    use soft_oval_thin(width * 0.08, depth * 0.45, 0.03, 0.03)
 
 plan 1:100
-  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+  use soft_box(-width / 2, 0, width / 2, depth, 0.03)
 
 outputs
   generator = "props:nightstand"

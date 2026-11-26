@@ -1,9 +1,11 @@
 family "Mesa"
   category furniture
   host none
-  version 4
+  version 5
   description "Mesa rectangular de tablero y cuatro patas, con sillas alrededor si se quiere"
   folder "Mesas"
+
+include "muebles"
 
 # Ejes de los objetos: origen en el centro del lado de atrás, x hacia la
 # derecha, y hacia delante, z hacia arriba desde el suelo. Las sillas de
@@ -46,11 +48,13 @@ component chair(x, y0, dir, m)
   box (x + 0.17, la, 0) to (x + 0.21, la + 0.04, 0.41) material m
 
 component chair_plan(x, y0, dir)
-  let ya = if dir > 0 then y0 else y0 - 0.42
-  let yb = if dir > 0 then y0 + 0.42 else y0
-  polygon (x - 0.21, ya) (x + 0.21, ya) (x + 0.21, yb) (x - 0.21, yb) pen view
-  let r = if dir > 0 then yb - 0.04 else ya + 0.04
-  line (x - 0.21, r) to (x + 0.21, r) pen thin
+  # Tucked a little under the table, as chairs are.
+  let ya = if dir > 0 then y0 - 0.1 else y0 - 0.34
+  let yb = if dir > 0 then y0 + 0.34 else y0 + 0.1
+  use soft_box(x - 0.2, ya, x + 0.2, yb, 0.06)
+  let r0 = if dir > 0 then yb - 0.06 else ya
+  let r1 = if dir > 0 then yb else ya + 0.06
+  use soft_pad(x - 0.21, r0, x + 0.21, r1, 0.03)
 
 body
   let t = 0.04
@@ -66,11 +70,11 @@ body
     use chair(-width / 2 + (i + 0.5) * width / back, -0.02, -1, mat)
 
 plan 1:50
-  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
   repeat i in 0..front
     use chair_plan(-width / 2 + (i + 0.5) * width / front, depth + 0.02, 1)
   repeat i in 0..back
     use chair_plan(-width / 2 + (i + 0.5) * width / back, -0.02, -1)
+  use soft_box(-width / 2, 0, width / 2, depth, 0.03)
 
 outputs
   generator = "props:fine_dining_table"

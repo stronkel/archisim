@@ -1115,6 +1115,8 @@ impl Editor {
     }
 
     pub fn set_room(&mut self, room: archisim_core::Room, label: &str) -> EditResult {
+        let old = self.model().room(room.id).cloned();
+        let room = with_auto_floor(old.as_ref(), room);
         self.transact(label, |m| m.set_room(room))
     }
 
@@ -1862,6 +1864,45 @@ pub(crate) fn remove_items(m: &mut Model, items: &[Element]) -> Result<(), Model
         }
     }
     Ok(())
+}
+
+/// A room's floor as presented, chosen by its name or use (W3): a new
+/// room gets the one of its name; renamed, it gets the one of its new
+/// name while it kept the one chosen for the old name (or none). A floor
+/// chosen by hand stays.
+pub fn with_auto_floor(
+    old: Option<&archisim_core::Room>,
+    mut room: archisim_core::Room,
+) -> archisim_core::Room {
+    // Laid from a corner of the room (the first joint of the tiles there).
+    let auto = |r: &archisim_core::Room| {
+        archisim_library::floor_fill_for(&r.name, &r.usage).map(|f| archisim_core::FloorFill {
+            origin: Some(crate::drag::fill_corner(r)),
+            ..f
+        })
+    };
+    let plain = |f: Option<archisim_core::FloorFill>| {
+        f.map(|f| archisim_core::FloorFill { origin: None, ..f })
+    };
+    match old {
+        None => {
+            if room.floor_fill.is_none() {
+                room.floor_fill = auto(&room);
+            }
+        }
+        Some(o) => {
+            let renamed = o.name != room.name || o.usage != room.usage;
+            let automatic = room.floor_fill.is_none() || plain(room.floor_fill) == plain(auto(o));
+            if renamed && automatic {
+                let kept = room.floor_fill.and_then(|f| f.origin);
+                room.floor_fill = auto(&room).map(|f| archisim_core::FloorFill {
+                    origin: kept.or(f.origin),
+                    ..f
+                });
+            }
+        }
+    }
+    room
 }
 
 #[cfg(test)]

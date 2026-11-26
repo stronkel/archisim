@@ -335,10 +335,36 @@ pub enum HatchPattern {
     Setts,
     /// Rubble walling roughly in courses.
     Rubble,
+    /// Boards laid in herringbone, at 45° to the pattern's axis.
+    WoodHerringbone,
+    /// Parquet in squares of three boards, turned square to square.
+    WoodBasket,
+    /// Hexagonal tiles.
+    HexTiles,
+    /// Encaustic tiles with a circle and four quarters, 20 × 20 cm.
+    HydraulicTiles,
+    /// Large porcelain tiles, 60 × 120 cm, staggered, a few with a vein.
+    LargeTiles,
+    /// Subway tiles, 7.5 × 15 cm, in running bond.
+    SubwayTiles,
+    /// Sand: grains thicker in drifts, with a few ripples.
+    Sand,
+    /// Grass drawn tuft by tuft.
+    GrassTufts,
+    /// Low planting: small leaves among dots.
+    GroundCover,
+    /// Brick in courses with its joints, drawn by hand (cuts).
+    BrickCourses,
+    /// Plaster or render: a fine stipple.
+    Plaster,
+    /// Mineral wool: short curled fibres every way.
+    MineralWool,
+    /// Earth: grains and small stones.
+    EarthStones,
 }
 
 impl HatchPattern {
-    pub const ALL: [HatchPattern; 50] = [
+    pub const ALL: [HatchPattern; 63] = [
         HatchPattern::Solid,
         HatchPattern::Lines,
         HatchPattern::Grid,
@@ -389,6 +415,19 @@ impl HatchPattern {
         HatchPattern::RockyPath,
         HatchPattern::Setts,
         HatchPattern::Rubble,
+        HatchPattern::WoodHerringbone,
+        HatchPattern::WoodBasket,
+        HatchPattern::HexTiles,
+        HatchPattern::HydraulicTiles,
+        HatchPattern::LargeTiles,
+        HatchPattern::SubwayTiles,
+        HatchPattern::Sand,
+        HatchPattern::GrassTufts,
+        HatchPattern::GroundCover,
+        HatchPattern::BrickCourses,
+        HatchPattern::Plaster,
+        HatchPattern::MineralWool,
+        HatchPattern::EarthStones,
     ];
 
     pub fn code(self) -> &'static str {
@@ -443,6 +482,19 @@ impl HatchPattern {
             HatchPattern::RockyPath => "rocky_path",
             HatchPattern::Setts => "setts",
             HatchPattern::Rubble => "rubble",
+            HatchPattern::WoodHerringbone => "wood_herringbone",
+            HatchPattern::WoodBasket => "wood_basket",
+            HatchPattern::HexTiles => "hex_tiles",
+            HatchPattern::HydraulicTiles => "hydraulic_tiles",
+            HatchPattern::LargeTiles => "large_tiles",
+            HatchPattern::SubwayTiles => "subway_tiles",
+            HatchPattern::Sand => "sand",
+            HatchPattern::GrassTufts => "grass_tufts",
+            HatchPattern::GroundCover => "ground_cover",
+            HatchPattern::BrickCourses => "brick_courses",
+            HatchPattern::Plaster => "plaster",
+            HatchPattern::MineralWool => "mineral_wool",
+            HatchPattern::EarthStones => "earth_stones",
         }
     }
 
@@ -502,6 +554,19 @@ impl HatchPattern {
             HatchPattern::RockyPath => "Camino de piedras",
             HatchPattern::Setts => "Adoquín en abanico",
             HatchPattern::Rubble => "Mampostería",
+            HatchPattern::WoodHerringbone => "Tarima en espiga",
+            HatchPattern::WoodBasket => "Parqué en damero",
+            HatchPattern::HexTiles => "Baldosa hexagonal",
+            HatchPattern::HydraulicTiles => "Baldosa hidráulica",
+            HatchPattern::LargeTiles => "Gres gran formato",
+            HatchPattern::SubwayTiles => "Azulejo metro",
+            HatchPattern::Sand => "Arena",
+            HatchPattern::GrassTufts => "Césped dibujado",
+            HatchPattern::GroundCover => "Cubierta vegetal",
+            HatchPattern::BrickCourses => "Ladrillo en hiladas",
+            HatchPattern::Plaster => "Enlucido",
+            HatchPattern::MineralWool => "Lana mineral",
+            HatchPattern::EarthStones => "Tierra con piedras",
         }
     }
 
@@ -521,12 +586,17 @@ impl HatchPattern {
     }
 
     /// The family of a presentation texture, for lists: «Madera»,
-    /// «Metal», «Hormigón» or «Piedra»; `None` for the other patterns.
+    /// «Cerámica», «Metal», «Hormigón», «Piedra», «Jardín», «Fábrica» or
+    /// «Aislamiento»; `None` for the other patterns.
     pub fn texture(self) -> Option<&'static str> {
         use HatchPattern::*;
         match self {
             WoodBoards | WoodVeins | WoodFinished | Pine | Oak | Maple | Birch | Ash | Walnut
-            | Mahogany => Some("Madera"),
+            | Mahogany | WoodHerringbone | WoodBasket => Some("Madera"),
+            HexTiles | HydraulicTiles | LargeTiles | SubwayTiles => Some("Cerámica"),
+            Sand | GrassTufts | GroundCover | EarthStones => Some("Jardín"),
+            BrickCourses | Plaster => Some("Fábrica"),
+            MineralWool => Some("Aislamiento"),
             MetalBrushed | MetalPerforated | DiamondPlate | Corrugated | MetalMesh => Some("Metal"),
             ConcreteFinished | ConcreteRough | ConcreteBare | ConcretePavers | BoardFormed => {
                 Some("Hormigón")

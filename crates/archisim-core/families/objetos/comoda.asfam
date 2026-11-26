@@ -1,9 +1,11 @@
 family "Cómoda"
   category furniture
   host none
-  version 3
+  version 4
   description "Cómoda como la hace cada colección: cajones en una o varias columnas"
   folder "Dormitorio"
+
+include "muebles"
 
 type_params
   section "Dimensiones"
@@ -30,14 +32,14 @@ body
   box (-width / 2, 0, 0) to (width / 2, depth, height) material frame
 
 plan 1:50
-  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
-  line (-width / 2, depth - 0.02) to (width / 2, depth - 0.02) pen thin
+  use soft_box(-width / 2, 0, width / 2, depth, 0.02)
+  line (-width / 2, depth - 0.025) to (width / 2, depth - 0.025) pen thin
   let cw = width / columns
   repeat i in 1..columns
     line (-width / 2 + i * cw, 0) to (-width / 2 + i * cw, depth) pen thin
 
 plan 1:100
-  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+  use soft_box(-width / 2, 0, width / 2, depth, 0.02)
 
 outputs
   generator = "props:chest"

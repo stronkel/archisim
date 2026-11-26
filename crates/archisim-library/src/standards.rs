@@ -341,6 +341,73 @@ pub fn set_architecture_plans(m: &mut Model) {
     }
 }
 
+/// The name of the presentation style of the working plan of a new
+/// project (W3, `docs/WORKFEEL.md`): soft greys, walls cut in one dark
+/// grey, fine lines, as the plans of Synaps.
+pub const WORKING_LOOK: &str = "Lápiz";
+
+/// The «Lápiz» style: white paper, every line a mid grey, light fills,
+/// cut walls and columns solid in dark grey and fine lines (85 % of
+/// the pens: fine, but still dark enough on paper).
+pub fn working_look() -> archisim_core::PresentationStyle {
+    let mut s = archisim_core::PresentationStyle::new(WORKING_LOOK);
+    s.background = [255, 255, 255];
+    s.palette = vec![
+        [84, 84, 84],
+        [138, 138, 138],
+        [236, 236, 236],
+        [255, 255, 255],
+    ];
+    s.poche = Some([74, 74, 74]);
+    s.line_scale = 0.85;
+    s.washes = true;
+    s
+}
+
+/// The name of the «Lápiz» style with the textures of the materials in
+/// the cuts (W3): brick in its courses, wool, concrete, earth with its
+/// stones, as the sections of Synaps.
+pub const TEXTURED_LOOK: &str = "Lápiz con tramas";
+
+/// «Lápiz con tramas»: as «Lápiz», but the cuts are not one dark grey:
+/// each layer with its material's texture over a pale wash.
+pub fn textured_look() -> archisim_core::PresentationStyle {
+    let mut s = working_look();
+    s.name = TEXTURED_LOOK.into();
+    s.poche = None;
+    s.cut_textures = true;
+    s
+}
+
+/// A new project's plans drawn «bonito por defecto» (W3): the «Lápiz»
+/// style, added if missing, on the «Arquitectura» template they follow.
+pub fn set_working_look(m: &mut Model) {
+    let found = m
+        .presentation_styles()
+        .find(|s| s.name == WORKING_LOOK)
+        .map(|s| s.id);
+    let style = match found {
+        Some(id) => id,
+        None => match m.add_presentation_style(working_look()) {
+            Ok(id) => id,
+            Err(_) => return,
+        },
+    };
+    // Beside it, the same with the textures in the cuts, for sections.
+    if !m.presentation_styles().any(|s| s.name == TEXTURED_LOOK) {
+        let _ = m.add_presentation_style(textured_look());
+    }
+    let Some(mut t) = m
+        .view_templates()
+        .find(|t| t.name == "Arquitectura")
+        .cloned()
+    else {
+        return;
+    };
+    t.style.presentation = Some(style);
+    let _ = m.set_view_template(t);
+}
+
 /// The project's title block of a layout, by the layout's name; added
 /// as ArchiSim draws it if missing.
 pub fn title_block_of(m: &mut Model, design: TitleBlockDesign) -> Option<TitleBlockId> {

@@ -82,7 +82,10 @@ impl PartialEq for Family {
 }
 
 /// Shared pieces of the system families, by the name used in `include`.
-pub const SHARED_PIECES: [(&str, &str); 1] = [("piezas", include_str!("../families/piezas.asfam"))];
+pub const SHARED_PIECES: [(&str, &str); 2] = [
+    ("piezas", include_str!("../families/piezas.asfam")),
+    ("muebles", include_str!("../families/muebles.asfam")),
+];
 
 /// Recipes of the system families, as written (with their `include`s).
 const SYSTEM_SOURCES: [&str; 12] = [
@@ -102,10 +105,12 @@ const SYSTEM_SOURCES: [&str; 12] = [
 
 /// Recipes of the system object families (furniture, sanitary ware,
 /// kitchen, the site, people and vehicles), placed on a level with no wall.
-const OBJECT_SOURCES: [&str; 142] = [
+const OBJECT_SOURCES: [&str; 144] = [
     include_str!("../families/objetos/mesa.asfam"),
+    include_str!("../families/objetos/mesa_redonda.asfam"),
     include_str!("../families/objetos/silla.asfam"),
     include_str!("../families/objetos/sofa.asfam"),
+    include_str!("../families/objetos/conjunto_salon.asfam"),
     include_str!("../families/objetos/sofa_rinconera.asfam"),
     include_str!("../families/objetos/vitrina.asfam"),
     include_str!("../families/objetos/butaca.asfam"),

@@ -118,6 +118,17 @@ impl Editor {
 
     /// Sets a material's intersection priority (0–999), or back to that of
     /// each layer's function.
+    /// The texture a material shows in the cuts «con tramas».
+    pub fn set_material_texture(
+        &mut self,
+        id: MaterialId,
+        texture: Option<archisim_core::HatchPattern>,
+    ) -> EditResult {
+        self.transact("Trama de las secciones", |m| {
+            m.set_material_texture(id, texture)
+        })
+    }
+
     pub fn set_material_priority(&mut self, id: MaterialId, priority: Option<u16>) -> EditResult {
         self.transact("Prioridad de intersección", |m| {
             m.set_material_priority(id, priority)

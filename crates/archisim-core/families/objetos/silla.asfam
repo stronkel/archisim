@@ -1,9 +1,11 @@
 family "Silla"
   category furniture
   host none
-  version 2
+  version 3
   description "Silla de cuatro patas con respaldo"
   folder "Sillas"
+
+include "muebles"
 
 type_params
   section "Dimensiones"
@@ -31,8 +33,8 @@ body
   box (width / 2 - l, depth - l, 0) to (width / 2, depth, seat - 0.04) material mat
 
 plan 1:50
-  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
-  line (-width / 2, 0.04) to (width / 2, 0.04) pen thin
+  use soft_box(-width / 2, 0.02, width / 2, depth, 0.06)
+  use soft_pad(-width / 2 - 0.01, 0, width / 2 + 0.01, 0.06, 0.03)
 
 outputs
   generator = "props:fine_chair"

@@ -1,9 +1,11 @@
 family "Planta de interior"
   category furniture
   host none
-  version 2
+  version 3
   description "Planta de interior en la maceta de cada colección, hoja a hoja: ficus lira, limonero, costilla de Adán, sansevieria, ave del paraíso, helecho, potos o kentia"
   folder "Plantas de interior"
+
+include "muebles"
 
 type_params
   section "Dimensiones"
@@ -27,16 +29,30 @@ body
   box (-pot / 2, 0, 0) to (pot / 2, pot, height) material leaves
 
 plan 1:50
-  let r = pot / 2
-  let c = max(height * 0.3, r)
-  repeat i in 0..16
-    let t0 = 6.283185307 * i / 16
-    let t1 = 6.283185307 * (i + 1) / 16
-    line (r * cos(t0), r + r * sin(t0)) to (r * cos(t1), r + r * sin(t1)) pen view
-    line (c * cos(t0), r + c * sin(t0)) to (c * cos(t1), r + c * sin(t1)) pen thin
+  use soft_oval(0, pot / 2, pot / 2, pot / 2)
+  let r = max(height * 0.35, pot / 2)
+  let n = 9
+  let turn = 6.283185307 * rand(seed * 7)
+  repeat i in 0..n
+    let a = turn + 6.283185307 * (i + 0.3 * rand(seed * 13 + i)) / n
+    let l = r * (0.7 + 0.3 * rand(seed * 17 + i))
+    use leaf(0, pot / 2, l, l * 0.2, a)
+  repeat i in 0..5
+    let a = turn + 0.35 + 6.283185307 * i / 5
+    use leaf(0, pot / 2, r * 0.55, r * 0.13, a)
 
 plan presentation
-  cloud center (0, pot / 2) radius max(height * 0.35, pot / 2) lobes 9 jitter 0.2 pen thin tint leaves
+  use soft_oval(0, pot / 2, pot / 2, pot / 2)
+  let r = max(height * 0.35, pot / 2)
+  let n = 9
+  let turn = 6.283185307 * rand(seed * 7)
+  repeat i in 0..n
+    let a = turn + 6.283185307 * (i + 0.3 * rand(seed * 13 + i)) / n
+    let l = r * (0.7 + 0.3 * rand(seed * 17 + i))
+    use leaf(0, pot / 2, l, l * 0.2, a)
+  repeat i in 0..5
+    let a = turn + 0.35 + 6.283185307 * i / 5
+    use leaf(0, pot / 2, r * 0.55, r * 0.13, a)
 
 outputs
   generator = "props:potted_plant"

@@ -1,9 +1,11 @@
 family "Sofá rinconera"
   category furniture
   host none
-  version 1
+  version 2
   description "Sofá en L: un tramo a lo largo del respaldo y otro hacia delante, a la derecha o a la izquierda, con la plaza de la esquina"
   folder "Sofás y sillones"
+
+include "muebles"
 
 type_params
   section "Dimensiones"
@@ -33,30 +35,33 @@ body
     box (-width / 2, depth, 0) to (-width / 2 + depth, length2, height) material mat
 
 plan 1:50
+  let arm = 0.2
+  let pw = (width - 2 * arm) / places
+  let pl = (length2 - arm - depth) / places2
   if side == "Derecha"
-    polygon (-width / 2, 0) (width / 2, 0) (width / 2, length2) (width / 2 - depth, length2) (width / 2 - depth, depth) (-width / 2, depth) pen view
-    line (-width / 2 + 0.2, 0.2) to (width / 2 - 0.2, 0.2) pen thin
-    line (width / 2 - 0.2, 0.2) to (width / 2 - 0.2, length2 - 0.2) pen thin
-    line (-width / 2 + 0.2, 0.2) to (-width / 2 + 0.2, depth) pen thin
-    line (width / 2 - depth, length2 - 0.2) to (width / 2 - 0.2, length2 - 0.2) pen thin
-    let pw = (width - 0.4) / places
-    repeat i in 1..places
-      line (-width / 2 + 0.2 + i * pw, 0.2) to (-width / 2 + 0.2 + i * pw, depth) pen thin
-    let pl = (length2 - 0.2 - depth) / places2
+    use soft_box(-width / 2, 0, width / 2, depth, 0.08)
+    use soft_box(width / 2 - depth, depth - 0.1, width / 2, length2, 0.08)
+    use soft_pad(width / 2 - depth + 0.01, depth - 0.04, width / 2 - 0.02, length2 - 0.02, 0.06)
+    use soft_pad(-width / 2 + 0.02, 0.02, -width / 2 + arm - 0.01, depth - 0.02, 0.06)
+    use soft_pad(width / 2 - arm + 0.01, 0.03, width / 2 - 0.02, depth - 0.06, 0.05)
+    repeat i in 0..places
+      let a = -width / 2 + arm + i * pw
+      use soft_pad(a + 0.01, 0.03, a + pw - 0.01, 0.21, 0.05)
+      use soft_pad(a + 0.01, 0.22, a + pw - 0.01, depth - 0.04, 0.06)
     repeat i in 0..places2
-      line (width / 2 - depth, depth + i * pl) to (width / 2 - 0.2, depth + i * pl) pen thin
+      line (width / 2 - depth + 0.03, depth + i * pl) to (width / 2 - 0.22, depth + i * pl) pen thin
   if side == "Izquierda"
-    polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2 + depth, depth) (-width / 2 + depth, length2) (-width / 2, length2) pen view
-    line (-width / 2 + 0.2, 0.2) to (width / 2 - 0.2, 0.2) pen thin
-    line (-width / 2 + 0.2, 0.2) to (-width / 2 + 0.2, length2 - 0.2) pen thin
-    line (width / 2 - 0.2, 0.2) to (width / 2 - 0.2, depth) pen thin
-    line (-width / 2 + 0.2, length2 - 0.2) to (-width / 2 + depth, length2 - 0.2) pen thin
-    let pw = (width - 0.4) / places
-    repeat i in 1..places
-      line (width / 2 - 0.2 - i * pw, 0.2) to (width / 2 - 0.2 - i * pw, depth) pen thin
-    let pl = (length2 - 0.2 - depth) / places2
+    use soft_box(-width / 2, 0, width / 2, depth, 0.08)
+    use soft_box(-width / 2, depth - 0.1, -width / 2 + depth, length2, 0.08)
+    use soft_pad(-width / 2 + 0.02, depth - 0.04, -width / 2 + depth - 0.01, length2 - 0.02, 0.06)
+    use soft_pad(width / 2 - arm + 0.01, 0.02, width / 2 - 0.02, depth - 0.02, 0.06)
+    use soft_pad(-width / 2 + 0.02, 0.03, -width / 2 + arm - 0.01, depth - 0.06, 0.05)
+    repeat i in 0..places
+      let a = -width / 2 + arm + i * pw
+      use soft_pad(a + 0.01, 0.03, a + pw - 0.01, 0.21, 0.05)
+      use soft_pad(a + 0.01, 0.22, a + pw - 0.01, depth - 0.04, 0.06)
     repeat i in 0..places2
-      line (-width / 2 + 0.2, depth + i * pl) to (-width / 2 + depth, depth + i * pl) pen thin
+      line (-width / 2 + 0.22, depth + i * pl) to (-width / 2 + depth - 0.03, depth + i * pl) pen thin
 
 outputs
   generator = "props:corner_sofa"

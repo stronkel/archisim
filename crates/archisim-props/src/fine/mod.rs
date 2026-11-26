@@ -410,6 +410,32 @@ pub const KINDS: &[(&str, &[&str])] = &[
         ],
     ),
     (
+        "fine_living_set",
+        &[
+            "Nórdico cálido",
+            "Mediterráneo",
+            "Años 50",
+            "Japandi",
+            "Contemporáneo",
+            "Rústica",
+            "Industrial",
+            "Clásica",
+        ],
+    ),
+    (
+        "fine_round_table",
+        &[
+            "Nórdico cálido",
+            "Mediterráneo",
+            "Años 50",
+            "Japandi",
+            "Contemporáneo",
+            "Rústica",
+            "Industrial",
+            "Clásica",
+        ],
+    ),
+    (
         "fine_dining_table",
         &[
             "Nórdico cálido",
@@ -572,6 +598,76 @@ fn folded_throw(b: &mut Builder, s: &sofas::Sizes) {
 
 /// The chairs round a dining table (`chairs`, half on each long side, the
 /// odd one in front), in the table's collection; round tables, all round.
+/// A living room set of a collection (W3): its sofa against the back, a
+/// rug, a coffee table in front and up to two armchairs facing each
+/// other at its sides. Each piece is its collection's model; the rug's
+/// roles are its own (`rug`, `rug2`…), the others share the sofa's.
+fn living_set(b: &mut Builder, p: &Params) {
+    let w = p.get("width", 2.2).clamp(1.4, 3.6);
+    let n = p.get("armchairs", 2.0).round().clamp(0.0, 2.0) as usize;
+    let style = p.style() as f64;
+    let piece = |kind: &str, sizes: &[(&str, f64)]| {
+        let mut q = Params::default();
+        q.set("style", style);
+        for (k, v) in sizes {
+            q.set(k, *v);
+        }
+        let mut sub = Builder::default();
+        make(kind, &mut sub, &q);
+        sub
+    };
+    let places = ((w - 0.4) / 0.62).round().clamp(2.0, 4.0);
+    b.merge(
+        piece(
+            "fine_sofa",
+            &[
+                ("width", w),
+                ("depth", 0.92),
+                ("places", places),
+                ("pillows", 2.0),
+            ],
+        ),
+        &[],
+        |q| q,
+    );
+    let rug_d = if n > 0 { 2.2 } else { 1.8 };
+    b.merge(
+        piece("fine_rug", &[("width", w + 0.4), ("depth", rug_d)]),
+        &[
+            ("mat", "rug"),
+            ("mat2", "rug2"),
+            ("accent", "rug3"),
+            ("fringe", "rug_fringe"),
+            ("weave", "rug_weave"),
+        ],
+        |q| [q[0], q[1] + 0.55, q[2]],
+    );
+    let table_y = 0.92 + 0.42;
+    b.merge(
+        piece(
+            "fine_coffee_table",
+            &[("width", 1.1), ("depth", 0.6), ("height", 0.4)],
+        ),
+        &[],
+        |q| [q[0], q[1] + table_y, q[2]],
+    );
+    let yc = table_y + 0.3;
+    for k in 0..n {
+        let side = if k == 0 { -1.0 } else { 1.0 };
+        let x = side * (0.55 + 0.45 + 0.85);
+        b.merge(
+            piece("fine_armchair", &[("width", 0.85), ("depth", 0.85)]),
+            &[],
+            move |q| {
+                // Turned to face the table: its front (+y) towards −side·x.
+                let (dx, dy) = (q[0] - 0.0, q[1] - 0.425);
+                let (rx, ry) = if side < 0.0 { (dy, -dx) } else { (-dy, dx) };
+                [x + rx, yc + ry, q[2]]
+            },
+        );
+    }
+}
+
 fn chairs_around(b: &mut Builder, p: &Params) {
     let n = p.get("chairs", 0.0).round().clamp(0.0, 16.0) as usize;
     if n == 0 {
@@ -584,7 +680,7 @@ fn chairs_around(b: &mut Builder, p: &Params) {
     // (x, y) of the chair's back and its turn: the chair looks along +y
     // before it is turned.
     let mut spots: Vec<(f64, f64, f64)> = Vec::new();
-    if p.style() == 8 {
+    if p.style() == 8 || p.get("round", 0.0) > 0.5 {
         // The classic table is round, on its pedestal.
         let r = (w.min(d) / 2.0).max(0.45);
         for k in 0..n {
@@ -723,6 +819,16 @@ pub fn make(kind: &str, b: &mut Builder, p: &Params) -> bool {
         "fine_dining_table" => {
             tables::dining(b, p);
             chairs_around(b, p);
+        }
+        "fine_living_set" => living_set(b, p),
+        // A round dining table of any collection, its chairs in a ring.
+        "fine_round_table" => {
+            let mut q = p.clone();
+            let d = p.get("width", 1.2);
+            q.set("depth", d);
+            q.set("round", 1.0);
+            tables::dining(b, &q);
+            chairs_around(b, &q);
         }
         "fine_coffee_table" => tables::coffee(b, p),
         "fine_side_table" => tables::side(b, p),

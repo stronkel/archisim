@@ -1,9 +1,11 @@
 family "Isla de cocina"
   category kitchen
   host none
-  version 1
+  version 2
   description "Isla de cocina con voladizo para taburetes, mesa de trabajo con cestas o isla con fregadero"
   folder "Cocina"
+
+include "muebles"
 
 type_params
   section "Dimensiones"
@@ -27,11 +29,12 @@ body
   box (-width / 2, overhang, 0.1) to (width / 2, depth - 0.04, height - 0.04) material mat
 
 plan 1:50
-  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+  use soft_box(-width / 2, 0, width / 2, depth, 0.03)
   if model3d != "Mesa de trabajo"
-    line (-width / 2, overhang) to (width / 2, overhang) pen thin dashed
+    line (-width / 2 + 0.02, overhang) to (width / 2 - 0.02, overhang) pen thin dashed
   if model3d == "Con fregadero"
-    polygon (-width / 2 + 0.2, overhang + 0.12) (-width / 2 + 0.6, overhang + 0.12) (-width / 2 + 0.6, depth - 0.1) (-width / 2 + 0.2, depth - 0.1) pen thin
+    use soft_pad(-width / 2 + 0.2, overhang + 0.12, -width / 2 + 0.6, depth - 0.1, 0.05)
+    use soft_oval_thin(-width / 2 + 0.4, (overhang + depth) / 2 + 0.01, 0.025, 0.025)
 
 outputs
   generator = "props:island"

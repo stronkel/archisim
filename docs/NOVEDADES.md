@@ -4,6 +4,22 @@ Lo que cambia en cada versión, en pocas líneas. ArchiSim enseña la parte de s
 
 Cada versión empieza con una línea `## <versión>` (por ejemplo `## 0.81.0`): es la que busca la publicación.
 
+## 0.115.0
+
+- **La planta, bonita desde el principio**: un proyecto nuevo dibuja su planta con el estilo «Lápiz», con muros macizos en gris oscuro, líneas grises finas y rellenos muy claros, como una planta de presentación. **F7** o el botón «Presentada» de la barra inferior enseñan la planta técnica y vuelven.
+- **Árboles y camas con más vida**: los árboles de la plantilla salen con una copa dibujada hoja a hoja, con su borde de lóbulos, sus matas y sus trazos de hojas; las camas, con almohadas mullidas, edredón con su embozo y sus pliegues y una manta a los pies. Los árboles de la vegetación de la biblioteca (los del jardín y los que trae el entorno) estrenan el estilo «dibujada», con el mismo trazo cuidado.
+- **Árboles y plantas blancos** en la planta presentada: el estilo «Lápiz» pasa los colores a aguadas claras, así que la vegetación sale dibujada con sus líneas, sin manchas grises. El formato del fichero sube a la versión 122: los proyectos guardados con esta versión no se abren en las anteriores.
+- **Pavimentos colocados a mano**: con un local elegido, arrastra en planta el círculo para mover su trama, el punto naranja para girarla (se engancha a los muros y cada 15°) y la flecha para cambiar su tamaño. Los pavimentos empiezan en una esquina del local y lo acompañan al moverlo o girarlo; las tablas de la tarima se ven ya en la planta presentada. El formato del fichero sube a la versión 123.
+- **Trece tramas nuevas con trazo de dibujo**: tarima en espiga, parqué en damero, baldosa hexagonal, hidráulica, gres gran formato, azulejo metro, arena, césped dibujado, cubierta vegetal, ladrillo en hiladas, enlucido, lana mineral y tierra con piedras.
+- **Secciones y alzados con tramas**: el estilo «Lápiz con tramas» dibuja cada capa cortada, y cada fachada vista de frente, con la trama de su material (ladrillo, aislante, hormigón, tierra…). Cada material la elige en Tipos y materiales → «Trama en las secciones». El formato del fichero sube a la versión 124.
+- **Comedores y salones montados**: comedores de 4, 6 y 8 con sus sillas, mesas redondas con las sillas en corro y un conjunto de salón (sofá, alfombra, mesa de centro y butacas), en planta y en 3D.
+- **Pinos, coníferas, arbustos y palmeras** con el mismo trazo cuidado que los demás árboles.
+- **Cantos de forjado rematados**: en los proyectos nuevos, el revoco, la hoja exterior y el aislamiento de la fachada pasan por delante del canto de los forjados y de la solera, y la hoja interior se para en ellos, como se construye.
+- **Muros rematados**: los tipos de muro de la plantilla doblan sus revestimientos alrededor de los extremos libres, en lugar de enseñar todas las capas al final del muro.
+- **Muebles con mejor dibujo en planta**: sofás, butacas, camas, mesas con sus sillas, armarios, sanitarios, electrodomésticos, la cocina, estanterías, pianos, plantas de interior con sus hojas, el mobiliario de terraza, oficina, bares y tiendas, bancos y papeleras con esquinas redondeadas, cojines y almohadas, y rellenos de blanco que tapan el suelo. Las alfombras quedan debajo de los muebles. En los proyectos que ya tienes, cada familia se pone al día con su botón «Actualizar» de la ventana Biblioteca.
+- **Sofás y butacas limpios en alzados y secciones**: los cojines y las partes acolchadas se dibujan por su contorno y sus pliegues marcados, sin las decenas de líneas de sus caras redondeadas.
+- **Suelo según el local**: al nombrar un local, su pavimento sale solo en las plantas presentadas: tarima en dormitorios y estancias, baldosa en cocinas y baños, losas en terrazas, hormigón en garajes y trasteros. Si eliges otro a mano, se respeta.
+
 ## 0.114.0
 
 - **Espacio invierte el muro** mientras lo dibujas: la cara exterior pasa al otro lado de la línea, para ese muro y los siguientes, hasta pulsar Espacio otra vez.

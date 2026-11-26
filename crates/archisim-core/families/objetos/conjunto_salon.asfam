@@ -1,0 +1,83 @@
+family "Conjunto de salón"
+  category furniture
+  host none
+  version 1
+  description "Sofá, alfombra, mesa de centro y hasta dos butacas, ya colocados, como los hace cada colección"
+  folder "Sofás y sillones"
+
+include "muebles"
+
+# Ejes de los objetos: origen en el centro de la espalda del sofá, x hacia
+# la derecha, y hacia delante (hacia la mesa), z hacia arriba.
+
+type_params
+  section "Dimensiones"
+    width     length = 2.20 range 1.40..3.60 label "Largo del sofá"
+    armchairs integer = 2 range 0..2 label "Butacas"
+  section "Materiales"
+    mat        material = "Lino arena" label "Tapicería"
+    cushion    material = "Lino arena" label "Cojines"
+    pillow     material = "Terciopelo mostaza" label "Cojines sueltos"
+    frame      material = "Roble claro" label "Madera y patas"
+    metal      material = "Metal negro" label "Metal"
+    weave      material = "Ratán" label "Rejilla"
+    top        material = "Roble claro" label "Tablero de la mesa"
+    stone      material = "Mármol" label "Piedra"
+    ceramic    material = "Cerámica esmaltada" label "Cerámica"
+    dark       material = "Negro mate" label "Detalles oscuros"
+    rug        material = "Lana cruda" label "Alfombra"
+    rug2       material = "Lana teja" label "Dibujo de la alfombra"
+    rug3       material = "Lana oliva" label "Dibujo de la alfombra (2)"
+    rug_fringe material = "Lana cruda" label "Flecos"
+    rug_weave  material = "Paja" label "Fibra de la alfombra"
+  section "Modelo 3D"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Nórdico cálido" label "Modelo 3D"
+
+let ty = 1.34
+let yc = ty + 0.3
+let rd = if armchairs > 0 then 2.2 else 1.8
+let places = max(2, min(4, round((width - 0.4) / 0.62)))
+let arm = 0.2
+
+body
+  box (-width / 2, 0, 0) to (width / 2, 0.92, 0.8) material mat
+  box (-width / 2 - 0.2, 0.55, 0) to (width / 2 + 0.2, 0.55 + rd, 0.01) material rug
+  box (-0.55, ty, 0) to (0.55, ty + 0.6, 0.4) material top
+  repeat k in 0..armchairs
+    let x = if k == 0 then -1.85 else 1.85
+    box (x - 0.425, yc - 0.425, 0) to (x + 0.425, yc + 0.425, 0.75) material mat
+
+plan 1:50
+  # La alfombra, debajo: su borde fino.
+  polygon (-width / 2 - 0.2, 0.55) (width / 2 + 0.2, 0.55) (width / 2 + 0.2, 0.55 + rd) (-width / 2 - 0.2, 0.55 + rd) pen thin
+  line (-width / 2 - 0.12, 0.63) to (width / 2 + 0.12, 0.63) pen thin
+  line (-width / 2 - 0.12, 0.47 + rd) to (width / 2 + 0.12, 0.47 + rd) pen thin
+  # El sofá.
+  use soft_box(-width / 2, 0, width / 2, 0.92, 0.08)
+  use soft_pad(-width / 2 + 0.02, 0.02, -width / 2 + arm - 0.01, 0.9, 0.06)
+  use soft_pad(width / 2 - arm + 0.01, 0.02, width / 2 - 0.02, 0.9, 0.06)
+  let pw = (width - 2 * arm) / places
+  repeat i in 0..places
+    let a = -width / 2 + arm + i * pw
+    use soft_pad(a + 0.01, 0.03, a + pw - 0.01, 0.21, 0.05)
+    use soft_pad(a + 0.01, 0.22, a + pw - 0.01, 0.88, 0.06)
+  use pillow(-width / 2 + arm + 0.2, 0.28, 0.17, 0.08)
+  use pillow(width / 2 - arm - 0.2, 0.28, 0.17, 0.08)
+  # La mesa de centro.
+  use soft_box(-0.55, ty, 0.55, ty + 0.6, 0.04)
+  use soft_oval_thin(0.25, ty + 0.3, 0.08, 0.08)
+  # Las butacas, de cara a la mesa.
+  repeat k in 0..armchairs
+    let x = if k == 0 then -1.85 else 1.85
+    let s = if k == 0 then -1 else 1
+    use soft_box(x - 0.425, yc - 0.425, x + 0.425, yc + 0.425, 0.08)
+    use soft_pad(x - 0.4, yc - 0.405, x + 0.4, yc - 0.27, 0.05)
+    use soft_pad(x - 0.4, yc + 0.27, x + 0.4, yc + 0.405, 0.05)
+    let bx = x + s * 0.425
+    use soft_pad(min(bx, bx - s * 0.15), yc - 0.26, max(bx, bx - s * 0.15), yc + 0.26, 0.05)
+    use soft_pad(min(bx - s * 0.16, x - s * 0.4), yc - 0.25, max(bx - s * 0.16, x - s * 0.4), yc + 0.25, 0.06)
+
+outputs
+  generator = "props:fine_living_set"
+  ifc_class = "IfcFurniture"
+  ifc_type = "SOFA"

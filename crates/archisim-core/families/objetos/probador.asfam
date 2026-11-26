@@ -1,9 +1,11 @@
 family "Probador"
   category furniture
   host none
-  version 1
+  version 2
   description "Probador con espejo, perchas, taburete y cortina, como lo hace cada colección"
   folder "Comercio"
+
+include "muebles"
 
 type_params
   section "Dimensiones"
@@ -28,8 +30,12 @@ body
   box (-width / 2, 0, 0) to (width / 2, depth, height) material frame
 
 plan 1:50
-  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
-  line (-width / 2, depth - 0.05) to (width / 2, depth - 0.05) pen thin dashed
+  use soft_box(-width / 2, 0, width / 2, depth, 0.02)
+  use soft_pad(-width / 2 + 0.05, 0.05, width / 2 - 0.05, depth - 0.1, 0.02)
+  use soft_pad(-width / 2 + 0.1, 0.07, -width / 2 + 0.5, 0.35, 0.03)
+  repeat i in 0..8
+    let x = -width / 2 + (i + 0.5) * width / 8
+    arc center (x, depth - 0.05) from (x - width / 16, depth - 0.05) to (x + width / 16, depth - 0.05) pen thin
 
 outputs
   generator = "props:fine_fitting_room"

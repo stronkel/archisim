@@ -186,8 +186,16 @@ pub fn presentation_styles() -> Vec<archisim_core::PresentationStyle> {
             [64, 64, 64],
             0.9,
         ),
+        // The pencil look of the working plans and its textured version
+        // for sections (W3).
+        standards::working_look(),
+        standards::textured_look(),
     ]
 }
+
+/// The intersection priority of the façade layers that go past the slab
+/// edges (above the slabs' structure, 900).
+pub const PASSING_PRIORITY: u16 = 950;
 
 /// Adds the starter materials and types to a model.
 pub fn add_library(m: &mut Model) -> Result<Library, ModelError> {
@@ -661,6 +669,54 @@ pub fn add_library(m: &mut Model) -> Result<Library, ModelError> {
     // The plans of a new project without the installations, which have a
     // template each.
     standards::set_architecture_plans(m);
+    // And drawn as a presentation plan from the start (W3).
+    standards::set_working_look(m);
+    // Free ends finished (W3, «remates»): the outer layers of the
+    // starter wall types wrap round the end of a wall, as a finished wall
+    // ends, instead of showing every layer.
+    let layered: Vec<(archisim_core::WallTypeId, archisim_core::Wrap)> = m
+        .wall_types()
+        .filter(|t| t.layers.len() >= 2 && t.wrap_ends == archisim_core::Wrap::None)
+        .map(|t| (t.id, t.wrap_inserts))
+        .collect();
+    for (id, inserts) in layered {
+        m.set_wall_type_wrap(id, archisim_core::Wrap::Both, inserts)?;
+    }
+    // Façades that go past the slab edges (W3, «cantos de forjado»): the
+    // render, the outer leaf and the insulation of the façade win over
+    // the slabs, so a façade wall up to the top of the slab (or down to
+    // the bottom of the ground slab) covers its edge, as built; the
+    // inner leaf and the plaster stop at the slab. The outer leaf is a
+    // material of its own, so the load-bearing walls of the same brick
+    // still carry the slabs.
+    let outer_leaf = m.add_material(
+        "Ladrillo perforado (hoja exterior)",
+        "brick",
+        [232, 196, 178],
+        CutPattern::Diagonal,
+    );
+    for id in [monocapa, lana, outer_leaf] {
+        m.set_material_priority(id, Some(PASSING_PRIORITY))?;
+    }
+    if let Some(t) = m.wall_type(facade).cloned() {
+        let layers = t
+            .layers
+            .iter()
+            .map(|l| {
+                if l.material == perforado {
+                    archisim_core::Layer {
+                        material: outer_leaf,
+                        ..l.clone()
+                    }
+                } else {
+                    l.clone()
+                }
+            })
+            .collect();
+        m.edit_wall_type(facade, t.name.clone(), t.function, layers)?;
+    }
+    // Each material with its texture for sections «con tramas» (W3).
+    add_material_textures(m);
     Ok(Library {
         curtain,
         void,
@@ -926,10 +982,43 @@ pub type CatalogueEntry = (&'static str, &'static str, &'static [(&'static str, 
 
 /// The object types of the library (v0.25, more in v0.26), in the order of
 /// the gallery.
-pub const OBJECT_CATALOGUE: [CatalogueEntry; 293] = [
+pub const OBJECT_CATALOGUE: [CatalogueEntry; 300] = [
     ("Mesa de comedor 160×90", "Mesa", &[]),
+    // Dining sets ready to place (W3): the table with its chairs.
+    (
+        "Comedor de 4 · 140×80",
+        "Mesa",
+        &[("width", 1.4), ("depth", 0.8), ("chairs", 4.0)],
+    ),
+    (
+        "Comedor de 6 · 180×90",
+        "Mesa",
+        &[("width", 1.8), ("depth", 0.9), ("chairs", 6.0)],
+    ),
+    (
+        "Comedor de 8 · 240×100",
+        "Mesa",
+        &[("width", 2.4), ("depth", 1.0), ("chairs", 8.0)],
+    ),
+    ("Mesa redonda Ø120 · 4 sillas", "Mesa redonda", &[]),
+    (
+        "Mesa redonda Ø150 · 6 sillas",
+        "Mesa redonda",
+        &[("width", 1.5), ("chairs", 6.0)],
+    ),
     ("Silla", "Silla", &[]),
     ("Sofá de 3 plazas", "Sofá", &[]),
+    // Living room sets ready to place (W3).
+    (
+        "Conjunto de salón con dos butacas",
+        "Conjunto de salón",
+        &[],
+    ),
+    (
+        "Conjunto de salón con una butaca",
+        "Conjunto de salón",
+        &[("width", 2.0), ("armchairs", 1.0)],
+    ),
     ("Sofá rinconera 260×170", "Sofá rinconera", &[]),
     (
         "Sofá rinconera 300×200",
@@ -2111,17 +2200,12 @@ const MODELS: &[(&str, &str)] = &[
 /// how the canopy is drawn in presentation plans, where it is not the
 /// family's own.
 const SPECIES: &[(&str, &str, &str, &str)] = &[
-    ("Árbol grande 12 m", "Vegetación", "ramas", "transparente"),
+    ("Árbol grande 12 m", "Vegetación", "hojas", "transparente"),
     ("Palmera", "Copa clara", "palmera", "transparente"),
-    (
-        "Árbol en flor 5 m",
-        "Copa en flor",
-        "acuarela",
-        "transparente",
-    ),
-    ("Árbol otoñal 8 m", "Copa otoñal", "follaje", "transparente"),
+    ("Árbol en flor 5 m", "Copa en flor", "hojas", "transparente"),
+    ("Árbol otoñal 8 m", "Copa otoñal", "hojas", "transparente"),
     ("Pino 10 m", "Copa oscura", "conífera", "rellena"),
-    ("Olivo 5 m", "Copa olivo", "follaje", "transparente"),
+    ("Olivo 5 m", "Copa olivo", "hojas", "transparente"),
     ("Ciprés 8 m", "Copa oscura", "círculo", "rellena"),
 ];
 
@@ -3102,5 +3186,164 @@ mod tests {
         assert!((facade.thickness() - 0.265).abs() < 1e-12);
         assert_eq!(facade.function, WallFunction::Exterior);
         assert_eq!(m.curtain_types().count(), 5);
+    }
+}
+
+/// The texture of each material for the cuts of a presentation «con
+/// tramas» (W3), by its name and category, where it has none yet.
+pub fn add_material_textures(m: &mut Model) {
+    let found: Vec<(archisim_core::MaterialId, archisim_core::HatchPattern)> = m
+        .materials()
+        .filter(|x| x.texture.is_none())
+        .filter_map(|x| material_texture(&x.name, &x.category).map(|t| (x.id, t)))
+        .collect();
+    for (id, t) in found {
+        let _ = m.set_material_texture(id, Some(t));
+    }
+}
+
+/// The texture that fits a material, by the words of its name first and
+/// its category after: brick in courses, wool, concrete, earth, plaster,
+/// wood, stone.
+pub fn material_texture(name: &str, category: &str) -> Option<archisim_core::HatchPattern> {
+    use archisim_core::HatchPattern as H;
+    // Cloth, glass, metal and the like are not cut in a section's
+    // texture.
+    if matches!(
+        category,
+        "fabric" | "glass" | "metal" | "steel" | "aluminium" | "plastic" | "rubber" | "water"
+    ) {
+        return None;
+    }
+    let n = name.to_lowercase();
+    let words: Vec<&str> = n
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|w| !w.is_empty())
+        .collect();
+    // Whole words («lana», not «porcelana»; «fábrica», not
+    // «prefabricado»).
+    let has = |w: &[&str]| w.iter().any(|x| words.contains(x));
+    if has(&[
+        "lana",
+        "aislante",
+        "aislamiento",
+        "xps",
+        "eps",
+        "poliestireno",
+        "poliuretano",
+    ]) {
+        return Some(H::MineralWool);
+    }
+    if has(&["ladrillo", "termoarcilla", "fábrica", "fabrica"]) {
+        return Some(H::BrickCourses);
+    }
+    if has(&[
+        "enlucido",
+        "yeso",
+        "mortero",
+        "revoco",
+        "enfoscado",
+        "monocapa",
+    ]) {
+        return Some(H::Plaster);
+    }
+    if has(&["tierra", "relleno", "terreno"]) {
+        return Some(H::EarthStones);
+    }
+    if has(&["grava", "zahorra", "árido", "arido"]) {
+        return Some(H::Pebbles);
+    }
+    if has(&["hormigón", "hormigon", "bloque", "microcemento"]) {
+        return Some(H::ConcreteRough);
+    }
+    match category {
+        "insulation" => Some(H::MineralWool),
+        "brick" | "masonry" => Some(H::BrickCourses),
+        "concrete" => Some(H::ConcreteRough),
+        "plaster" => Some(H::Plaster),
+        "wood" => Some(H::WoodVeins),
+        "stone" => Some(H::Limestone),
+        "soil" | "earth" => Some(H::EarthStones),
+        _ => None,
+    }
+}
+
+/// The floor a room is drawn with in a presentation plan by its name or
+/// use (W3, «bonito por defecto»): tiles in kitchens and bathrooms,
+/// boards in the rooms to live in, slabs outside, concrete in garages
+/// and stores. `None` for anything else.
+pub fn floor_fill_for(name: &str, usage: &str) -> Option<archisim_core::FloorFill> {
+    use archisim_core::HatchPattern as H;
+    let text = format!("{name} {usage}").to_lowercase();
+    let has = |words: &[&str]| words.iter().any(|w| text.contains(w));
+    let living = [
+        "dormitorio",
+        "estar",
+        "salón",
+        "salon",
+        "comedor",
+        "estudio",
+        "despacho",
+        "oficina",
+        "pasillo",
+        "distribuidor",
+        "vestíbulo",
+        "vestibulo",
+        "recibidor",
+        "hall",
+        "habitación",
+        "habitacion",
+    ];
+    // A living room with its kitchen («Salón-cocina») is floored as the
+    // living room.
+    let (pattern, color) = if has(&living) {
+        (H::WoodBoards, [116, 116, 116])
+    } else if has(&["cocina", "lavadero"]) {
+        (H::LargeTiles, [112, 112, 112])
+    } else if has(&["baño", "bano", "aseo", "vestuario", "ducha"]) {
+        (H::Tiles, [112, 112, 112])
+    } else if has(&["jardín", "jardin"]) {
+        (H::GrassTufts, [112, 112, 112])
+    } else if has(&["terraza", "porche", "patio", "balc"]) {
+        (H::Slabs, [112, 112, 112])
+    } else if has(&[
+        "garaje",
+        "aparcamiento",
+        "trastero",
+        "almac",
+        "taller",
+        "instalac",
+        "cuarto de",
+    ]) {
+        (H::ConcreteBare, [120, 120, 120])
+    } else {
+        return None;
+    };
+    Some(archisim_core::FloorFill {
+        pattern,
+        color,
+        background: None,
+        scale: 1.0,
+        angle: 0.0,
+        origin: None,
+    })
+}
+
+#[cfg(test)]
+mod floor_tests {
+    use super::*;
+
+    #[test]
+    fn floors_by_the_name_of_the_room() {
+        use archisim_core::HatchPattern as H;
+        let p = |n: &str| floor_fill_for(n, "").map(|f| f.pattern);
+        assert_eq!(p("Baño"), Some(H::Tiles));
+        assert_eq!(p("Cocina"), Some(H::LargeTiles));
+        assert_eq!(p("Jardín"), Some(H::GrassTufts));
+        assert_eq!(p("Salón-cocina"), Some(H::WoodBoards));
+        assert_eq!(p("Dormitorio 2"), Some(H::WoodBoards));
+        assert_eq!(p("Terraza"), Some(H::Slabs));
+        assert_eq!(p("Garaje"), Some(H::ConcreteBare));
+        assert_eq!(p("Local"), None);
     }
 }

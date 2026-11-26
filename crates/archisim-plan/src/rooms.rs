@@ -224,7 +224,12 @@ pub fn draw_floor_fills(s: &mut String, model: &Model, level: archisim_core::Lev
     let width = num(pens().hatch * k);
     for r in rooms {
         let Some(f) = r.floor_fill else { continue };
-        let ring = |p: &[Point2]| archisim_core::Polyline::straight(p.to_vec(), true);
+        // The pattern starts at its origin: drawn about the project's
+        // origin with the room moved back by it, then moved there.
+        let o = f.start();
+        let ring = |p: &[Point2]| {
+            archisim_core::Polyline::straight(p.iter().map(|q| *q - o).collect(), true)
+        };
         let h = archisim_core::Hatch {
             loops: std::iter::once(ring(&r.outline))
                 .chain(r.holes.iter().map(|h| ring(h)))
@@ -236,7 +241,19 @@ pub fn draw_floor_fills(s: &mut String, model: &Model, level: archisim_core::Lev
             opacity: 1.0,
         };
         let color = format!("#{:02x}{:02x}{:02x}", f.color[0], f.color[1], f.color[2]);
+        let moved = o.x != 0.0 || o.y != 0.0;
+        if moved {
+            let _ = writeln!(
+                s,
+                r#"<g transform="translate({} {})">"#,
+                num(o.x),
+                num(-o.y)
+            );
+        }
         crate::drafting::draw_hatch(s, &h, &color, &width, k);
+        if moved {
+            s.push_str("</g>\n");
+        }
     }
     s.push_str("</g>\n");
 }

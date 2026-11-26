@@ -701,6 +701,7 @@ fn graphic_styles() {
         PlanStyle::Silhouette,
         PlanStyle::Sprigs,
         PlanStyle::BranchesEdge,
+        PlanStyle::Drawn,
     ] {
         assert_eq!(PlanStyle::from_name(s.name()), Some(s));
     }

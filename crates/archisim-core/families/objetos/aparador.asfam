@@ -1,9 +1,11 @@
 family "Aparador"
   category furniture
   host none
-  version 3
+  version 4
   description "Aparador bajo de patas con puertas y cajones, o con puertas de lamas"
   folder "Salón"
+
+include "muebles"
 
 type_params
   section "Dimensiones"
@@ -27,8 +29,8 @@ body
   box (-width / 2, 0, 0.18) to (width / 2, depth, height) material frame
 
 plan 1:50
-  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
-  line (-width / 2, depth - 0.02) to (width / 2, depth - 0.02) pen thin
+  use soft_box(-width / 2, 0, width / 2, depth, 0.02)
+  line (-width / 2, depth - 0.025) to (width / 2, depth - 0.025) pen thin
 
 outputs
   # Placed against another of its kind, in line: one, as wide as both.

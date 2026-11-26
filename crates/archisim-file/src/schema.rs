@@ -1861,6 +1861,12 @@ pub(crate) struct PresentationStyleOf {
     pub accent: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub accent_on: Vec<String>,
+    /// The colours as pale washes (version 122).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub washes: bool,
+    /// The cuts with the textures of their materials (version 124).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub cut_textures: bool,
 }
 
 impl PresentationStyleOf {
@@ -1882,6 +1888,8 @@ impl PresentationStyleOf {
             }),
             accent: s.accent.map(hex),
             accent_on: s.accent_on.iter().map(|c| c.code().to_string()).collect(),
+            washes: s.washes,
+            cut_textures: s.cut_textures,
         }
     }
 
@@ -1910,6 +1918,8 @@ impl PresentationStyleOf {
                 .iter()
                 .filter_map(|c| core::Category::from_code(c))
                 .collect(),
+            washes: self.washes,
+            cut_textures: self.cut_textures,
         })
     }
 }
@@ -2981,6 +2991,10 @@ pub(crate) struct Material {
     /// absent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub priority: Option<u16>,
+    /// Its texture where cut in a presentation «Con tramas» (version
+    /// 124), by the hatch pattern's code.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub texture: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -3552,6 +3566,7 @@ impl ProjectFile {
                         core::CutPattern::Dots => CutPattern::Dots,
                         core::CutPattern::Empty => CutPattern::Empty,
                     },
+                    texture: m.texture.map(|t| t.code().to_string()),
                 })
                 .collect(),
             wall_types: p
@@ -5417,6 +5432,7 @@ impl ProjectFile {
                     CutPattern::Dots => core::CutPattern::Dots,
                     CutPattern::Empty => core::CutPattern::Empty,
                 },
+                texture: m.texture.as_deref().and_then(core::HatchPattern::from_code),
             });
         }
         for t in self.wall_types {

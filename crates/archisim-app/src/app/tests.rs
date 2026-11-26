@@ -3167,28 +3167,31 @@ fn intersection_priorities_window() {
     h.app.show_priorities = true;
     h.frame();
     assert!(h.app.show_priorities);
-    let ids: Vec<_> = h.model().materials().map(|m| m.id).take(2).collect();
+    // The template's façade layers that pass the slab edges come with a
+    // priority of their own (W3).
+    let count = |h: &Harness| {
+        h.model()
+            .materials()
+            .filter(|m| m.priority.is_some())
+            .count()
+    };
+    let before = count(&h);
+    let ids: Vec<_> = h
+        .model()
+        .materials()
+        .filter(|m| m.priority.is_none())
+        .map(|m| m.id)
+        .take(2)
+        .collect();
     for id in &ids {
         h.app.ed.set_material_priority(*id, Some(950)).unwrap();
     }
     h.frame();
-    assert_eq!(
-        h.model()
-            .materials()
-            .filter(|m| m.priority.is_some())
-            .count(),
-        2
-    );
+    assert_eq!(count(&h), before + 2);
     h.app.ed.reset_material_priorities().unwrap();
     assert!(h.model().materials().all(|m| m.priority.is_none()));
     h.app.ed.undo();
-    assert_eq!(
-        h.model()
-            .materials()
-            .filter(|m| m.priority.is_some())
-            .count(),
-        2
-    );
+    assert_eq!(count(&h), before + 2);
     h.frame();
 }
 
@@ -5759,6 +5762,7 @@ fn presentation_styles_and_floor_fills() {
         background: Some([210, 205, 195]),
         scale: 1.0,
         angle: 0.0,
+        origin: None,
     });
     h.app.ed.set_room(r, "Pavimento").unwrap();
     h.app.ed.selection = [Element::Room(room)].into_iter().collect();
@@ -14106,6 +14110,15 @@ fn ten_minute_house() {
         None => std::env::temp_dir().join(format!("archisim-w0-{}", std::process::id())),
     };
     std::fs::create_dir_all(&dir).unwrap();
+    // The working plan as it is seen on screen (W3: presented by default).
+    let mut options = archisim_plan::PlanOptions {
+        scale: 50.0,
+        style: h.app.screen_style(),
+        ..Default::default()
+    };
+    options.style.template = None;
+    let svg = archisim_plan::render_plan(h.model(), h.app.ed.level, &options);
+    std::fs::write(dir.join("diez-minutos-planta.svg"), svg).unwrap();
     let pdf = dir.join("diez-minutos.pdf");
     h.app.ed.export_sheets(&pdf, &[sheet]).unwrap();
     t.panel(2);
@@ -14259,4 +14272,27 @@ fn fitting_the_surroundings_snaps_its_points() {
     assert!(c.kind.is_point(), "{c:?}");
     assert!(c.point.approx_eq(p(15.0, 5.0)), "{c:?}");
     assert!(h.app.snap_caption(c).is_some());
+}
+
+/// W3: a new project's plan is drawn presented from the start (the
+/// «Lápiz» style of the «Arquitectura» template), and F7 shows its
+/// technical drawing for the session without touching the view.
+#[test]
+fn a_new_plan_is_presented_and_f7_shows_it_technical() {
+    let mut h = Harness::new(Editor::new_project());
+    h.frame();
+    let id = h.app.view_style.presentation.expect("a presentation style");
+    let name = h
+        .model()
+        .presentation_style(id)
+        .map(|s| s.name.clone())
+        .unwrap_or_default();
+    assert_eq!(name, archisim_library::standards::WORKING_LOOK);
+    assert!(h.app.screen_style().presentation.is_some());
+    h.key(Key::F7);
+    assert!(h.app.technical_look);
+    assert!(h.app.screen_style().presentation.is_none());
+    assert_eq!(h.app.view_style.presentation, Some(id));
+    h.key(Key::F7);
+    assert!(h.app.screen_style().presentation.is_some());
 }
