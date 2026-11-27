@@ -13,6 +13,76 @@ pub fn strong_font(size: f32) -> FontId {
     FontId::new(size, FontFamily::Name(STRONG.into()))
 }
 
+/// Tabs of text at the top of a panel (W10, as Synaps): the names in a
+/// row, grey, the chosen one in ink with a line of the accent under it,
+/// over a hairline as wide as `width`. Returns whether the choice changed.
+pub fn text_tabs<T: PartialEq + Copy>(
+    ui: &mut Ui,
+    id_salt: impl std::hash::Hash + std::fmt::Debug,
+    value: &mut T,
+    options: &[(T, &str, &str)],
+    width: f32,
+) -> bool {
+    let p = Palette::current(ui.ctx());
+    let height = 28.0;
+    let (rect, _) = ui.allocate_exact_size(Vec2::new(width, height), Sense::hover());
+    let painter = ui.painter_at(rect.expand(1.0));
+    painter.hline(
+        rect.x_range(),
+        rect.bottom() - 0.5,
+        Stroke::new(1.0, p.line),
+    );
+    let base = ui.make_persistent_id(id_salt);
+    let mut x = rect.left() + 2.0;
+    let mut changed = false;
+    for (i, (v, label, hint)) in options.iter().enumerate() {
+        let on = *value == *v;
+        let font = if on {
+            strong_font(12.5)
+        } else {
+            FontId::proportional(12.5)
+        };
+        let galley = painter.layout_no_wrap(label.to_string(), font, p.text);
+        let w = galley.size().x;
+        let r = Rect::from_min_max(
+            Pos2::new(x - 4.0, rect.top()),
+            Pos2::new(x + w + 4.0, rect.bottom()),
+        );
+        let mut resp = ui.interact(r, base.with(i), Sense::click());
+        super::missions_ui::mark(ui.ctx(), format!("seg:{label}"), r);
+        if !hint.is_empty() {
+            resp = resp.on_hover_text(*hint);
+        }
+        let colour = if on {
+            p.text
+        } else if resp.hovered() {
+            p.accent
+        } else {
+            p.muted
+        };
+        painter.galley_with_override_text_color(
+            Pos2::new(x, rect.center().y - galley.size().y / 2.0 - 1.0),
+            galley,
+            colour,
+        );
+        if on {
+            painter.line_segment(
+                [
+                    Pos2::new(x, rect.bottom() - 1.0),
+                    Pos2::new(x + w, rect.bottom() - 1.0),
+                ],
+                Stroke::new(2.0, p.accent),
+            );
+        }
+        if resp.clicked() && !on {
+            *value = *v;
+            changed = true;
+        }
+        x += w + 18.0;
+    }
+    changed
+}
+
 /// One of several choices side by side, the chosen one raised. Returns
 /// whether the choice changed.
 pub fn segmented<T: PartialEq + Copy>(

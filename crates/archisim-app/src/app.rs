@@ -65,6 +65,14 @@ const COMMAND_LINE_HEIGHT: f32 = 62.0;
 /// The rail of disciplines, on the far left.
 const RAIL_WIDTH: f32 = 50.0;
 
+/// What the column under the tools shows (W10).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SideTab {
+    #[default]
+    Properties,
+    Layers,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tool {
     Arrow,
@@ -828,6 +836,8 @@ pub struct ArchiSimApp {
     pub dark: bool,
     /// The properties palette (left, beside the tools) is shown.
     pub show_properties: bool,
+    /// The tab under the tools: Properties or the drawing layers (W10).
+    pub side_tab: SideTab,
     /// The column of tools and properties folded to a strip (W10, ‹).
     pub tools_folded: bool,
     /// The navigator (right) is shown.
@@ -1192,6 +1202,7 @@ impl ArchiSimApp {
             snap_filter: SnapFilter::default(),
             dark: prefs.dark,
             show_properties: true,
+            side_tab: SideTab::Properties,
             tools_folded: false,
             show_navigator: true,
             thumbs: thumbs::Thumbs::default(),
@@ -3482,13 +3493,46 @@ pub fn length_field(ui: &mut Ui, id: Id, value: f64, width: f32) -> Option<f64> 
     }
 }
 
+/// A length shared by several elements (W10): their value, or «Varios»
+/// written faint when they differ; typing gives them all one value.
+pub fn length_field_mixed(ui: &mut Ui, id: Id, value: Option<f64>, width: f32) -> Option<f64> {
+    let Some(v) = value else {
+        let text = text_edit_committed_hint(ui, id, "", "Varios", width)?;
+        return match parse_length(&text) {
+            Some(v) => Some(v),
+            None => {
+                ui.ctx()
+                    .data_mut(|d| d.insert_temp(Id::unique("length-error"), text));
+                None
+            }
+        };
+    };
+    length_field(ui, id, v, width)
+}
+
 pub(super) fn text_edit_committed(ui: &mut Ui, id: Id, shown: &str, width: f32) -> Option<String> {
+    text_edit_committed_hint(ui, id, shown, "", width)
+}
+
+/// [`text_edit_committed`] with a faint text while it is empty.
+pub(super) fn text_edit_committed_hint(
+    ui: &mut Ui,
+    id: Id,
+    shown: &str,
+    hint: &str,
+    width: f32,
+) -> Option<String> {
     let buffer_id = id.with("buffer");
     let mut text = ui
         .ctx()
         .data(|d| d.get_temp::<String>(buffer_id))
         .unwrap_or_else(|| shown.to_string());
-    let response = ui.add(TextEdit::singleline(&mut text).id(id).desired_width(width));
+    let response = ui.add(
+        TextEdit::singleline(&mut text)
+            .id(id)
+            .hint_text(hint)
+            .desired_width(width),
+    );
     if response.has_focus() {
         ui.ctx().data_mut(|d| d.insert_temp(buffer_id, text));
         None
@@ -3558,6 +3602,7 @@ mod marking_ui;
 mod mass_grips3d;
 mod mesh_ui;
 mod methods_ui;
+mod mini_bar;
 mod missions_ui;
 mod module_ui;
 mod mouse3d;

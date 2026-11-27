@@ -288,7 +288,7 @@ pub fn type_card<T: PartialEq + Copy>(
         });
         ui.add_space(4.0);
         // The type: a large button that opens the gallery.
-        let shown = cur.map_or("(varios tipos)".to_string(), |c| c.name.clone());
+        let shown = cur.map_or("Varios".to_string(), |c| c.name.clone());
         let (rect, resp) =
             ui.allocate_exact_size(Vec2::new(ui.available_width(), 32.0), Sense::click());
         let resp = resp.on_hover_text("Elegir otro tipo");
@@ -674,37 +674,27 @@ fn hue(ctx: &egui::Context) -> Option<super::toolbox::Hue> {
     ctx.data(|d| d.get_temp(egui::Id::unique("props-hue")))
 }
 
-/// The palette's title: "Propiedades" and what it shows, on a band of the
-/// discipline's colour.
+/// The palette's title: what it shows, under the tab «Propiedades» (W10):
+/// a dot of the discipline's colour and the words, quiet, no band.
 pub fn title(ui: &mut Ui, what: &str) {
     let p = Palette::current(ui.ctx());
     let h = hue(ui.ctx());
     ui.add_space(8.0);
-    egui::Frame::new()
-        .fill(h.map_or(p.raised, |h| h.soft))
-        .corner_radius(CornerRadius::same(8))
-        .inner_margin(egui::Margin::symmetric(10, 7))
-        .show(ui, |ui| {
-            ui.set_width(ui.available_width());
-            ui.horizontal(|ui| {
-                ui.label(
-                    egui::RichText::new("Propiedades")
-                        .font(strong_font(13.0))
-                        .color(h.map_or(p.text, |h| h.ink)),
-                );
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    ui.add(
-                        egui::Label::new(
-                            egui::RichText::new(what)
-                                .small()
-                                .color(h.map_or(p.muted, |h| h.ink)),
-                        )
-                        .truncate(),
-                    );
-                });
-            });
-        });
-    ui.add_space(6.0);
+    ui.horizontal(|ui| {
+        ui.add_space(2.0);
+        let (dot, _) = ui.allocate_exact_size(egui::Vec2::splat(8.0), egui::Sense::hover());
+        ui.painter()
+            .circle_filled(dot.center(), 3.5, h.map_or(p.muted, |h| h.main));
+        ui.add(
+            egui::Label::new(
+                egui::RichText::new(what)
+                    .font(strong_font(12.5))
+                    .color(p.text),
+            )
+            .truncate(),
+        );
+    });
+    ui.add_space(4.0);
 }
 
 /// A measure shown big on a tile (§12.6): what it is, its value in metres,

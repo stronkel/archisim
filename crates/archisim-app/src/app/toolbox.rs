@@ -2010,14 +2010,36 @@ impl ArchiSimApp {
         }
         ui.add_space(8.0);
         if self.show_properties {
-            let (line, _) = ui.allocate_exact_size(Vec2::new(full, 1.0), Sense::hover());
-            ui.painter()
-                .hline(line.x_range(), line.center().y, Stroke::new(1.0, p.line));
+            // Tabs of text, as Synaps: Properties of what is chosen, or
+            // the drawing layers.
+            let mut tab = self.side_tab;
+            super::widgets::text_tabs(
+                ui,
+                "side-tab",
+                &mut tab,
+                &[
+                    (
+                        super::SideTab::Properties,
+                        "Propiedades",
+                        "Lo elegido, o la vista si no hay nada elegido",
+                    ),
+                    (
+                        super::SideTab::Layers,
+                        "Capas",
+                        "Las capas del dibujo 2D: la actual, mostrar y bloquear",
+                    ),
+                ],
+                full,
+            );
+            self.side_tab = tab;
             egui::ScrollArea::vertical()
                 .id_salt("properties")
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
-                    self.properties(ui);
+                    match self.side_tab {
+                        super::SideTab::Properties => self.properties(ui),
+                        super::SideTab::Layers => self.layers_list(ui),
+                    }
                     ui.add_space(12.0);
                 });
         }

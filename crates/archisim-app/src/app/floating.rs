@@ -283,6 +283,14 @@ impl ArchiSimApp {
             ViewMode::Sheet(s) => self.sheet_view(ui, s),
             ViewMode::Drafting(d) => self.drafting_view(ui, d),
         }
+        if matches!(
+            self.mode,
+            ViewMode::Plan | ViewMode::Section | ViewMode::Sheet(_) | ViewMode::Drafting(_)
+        ) {
+            let ctx = ui.ctx().clone();
+            let area = self.fit_area(self.canvas);
+            self.mini_bar(&ctx, area);
+        }
     }
 
     /// Where a view is fitted: the part of `rect` the floating cards

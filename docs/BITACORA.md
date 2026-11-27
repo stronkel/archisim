@@ -6,6 +6,23 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-27 (200) · v0.116: W10, pestañas de texto, Capas, «Varios» y mini barra
+
+Misma rama `bloque/w10-paneles` (PR #245). Sin cambios de formato ni de IFC. Antonio pidió seguir con W10 entero antes de juzgar las piezas por separado.
+
+- **Hecho**:
+  - **Pestañas de texto** (`widgets::text_tabs`): nombres en gris, el elegido en tinta con una línea del color de acento debajo, sobre una línea fina. En el navegador, «Modelo · Proyecto» con la flecha de plegar en la misma línea (sin el título «Navegador»); bajo las herramientas, «Propiedades · Capas» (`SideTab`).
+  - **Capas en la columna** (`layers_list`): las capas del dibujo 2D con su color, su número de elementos, ojo y candado; un clic hace actual la capa; «Todas las capas…» abre el panel completo de siempre.
+  - **Título de Propiedades más callado** (`props::title`): un punto del color de la disciplina y lo que se ve, sin la banda de color.
+  - **«Varios»** cuando varios elementos tienen valores distintos: la altura de varios muros sale vacía con «Varios» en gris (`length_field_mixed`), y el tipo, «Varios». Escribir un valor lo pone en todos.
+  - **Mini barra a la derecha del dibujo** (`app/mini_bar.rs`), en plantas, secciones, planos y vistas de dibujo: Cinta y Cota (en planta), Texto, Acercar, Alejar y Ajustar, en botones redondos.
+- **Pendiente** de W10: deslizador con casilla en más valores numéricos, barra superior más limpia. De ArchKit: bloques de muebles con más vida, sombra editorial bajo los muebles, leyenda numerada de la sección 1:10.
+- **Qué debe probar Antonio**:
+  1. Navegador: las pestañas «Modelo · Proyecto» y plegar con ›.
+  2. Bajo las herramientas, «Capas»: haz actual otra capa, ocúltala con el ojo y bloquéala; «Todas las capas…».
+  3. Elige dos muros de distinta altura: la altura dice «Varios»; escribe 2700 y Enter.
+  4. La mini barra de la derecha: Cinta, Cota, Texto, + y − y Ajustar.
+
 ## 2026-11-27 (199) · v0.116: W10, la ventana de una pieza
 
 Misma rama `bloque/w10-paneles` (PR #245). Sin cambios de formato ni de IFC. A Antonio no le convencieron los paneles flotantes (198): la estructura se ve débil y el sitio que se gana en las esquinas, detrás de los menús, no sirve. Quiere fijas la columna izquierda, la cinta y la barra superior, y eligió «una sola pieza».
