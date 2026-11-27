@@ -2299,9 +2299,220 @@ pub fn render_section(model: &Model, d: &SectionDrawing, options: &PlanOptions) 
     svg
 }
 
+/// From this scale down (1:20, 1:10, 1:5), a section is a construction
+/// detail: its cut materials numbered, with a legend (W10, as ArchKit).
+pub const LEGEND_SCALE: f64 = 20.0;
+
+/// A numbered material of a detail: its number, its name and the point of
+/// the cut its leader starts from.
+struct Callout {
+    number: usize,
+    name: String,
+    anchor: Point2,
+}
+
+/// The cut materials of a detail, numbered left to right as they are
+/// first met, each with a point inside its largest piece.
+/// A polygon clipped to the box `lo`–`hi` (Sutherland–Hodgman).
+fn clip_to_box(poly: &[Point2], lo: Point2, hi: Point2) -> Vec<Point2> {
+    let mut out: Vec<Point2> = poly.to_vec();
+    // Each side of the box: which side a point is on, and where a segment
+    // crosses it.
+    let sides: [(usize, f64, bool); 4] = [
+        (0, lo.x, true),
+        (0, hi.x, false),
+        (1, lo.y, true),
+        (1, hi.y, false),
+    ];
+    for (axis, at, keep_above) in sides {
+        let coord = |p: &Point2| if axis == 0 { p.x } else { p.y };
+        let inside = |p: &Point2| {
+            if keep_above {
+                coord(p) >= at
+            } else {
+                coord(p) <= at
+            }
+        };
+        let input = std::mem::take(&mut out);
+        let n = input.len();
+        for i in 0..n {
+            let (a, b) = (input[i], input[(i + 1) % n]);
+            let (ia, ib) = (inside(&a), inside(&b));
+            if ia {
+                out.push(a);
+            }
+            if ia != ib {
+                let t = (at - coord(&a)) / (coord(&b) - coord(&a));
+                out.push(Point2::new(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t));
+            }
+        }
+        if out.len() < 3 {
+            return Vec::new();
+        }
+    }
+    out
+}
+
+fn callouts(model: &Model, d: &SectionDrawing, frame: Option<(Point2, Point2)>) -> Vec<Callout> {
+    let mut best: HashMap<MaterialId, (f64, Point2)> = HashMap::new();
+    for (mat, loops, _, owner) in &d.cuts {
+        if crate::dim::is_hidden(owner.id()) {
+            continue;
+        }
+        for whole in loops {
+            let clipped;
+            let l: &[Point2] = match frame {
+                Some((lo, hi)) => {
+                    clipped = clip_to_box(whole, lo, hi);
+                    &clipped
+                }
+                None => whole,
+            };
+            if l.len() < 3 {
+                continue;
+            }
+            let area = twice_area(l).abs() / 2.0;
+            if area < 1e-6 {
+                continue;
+            }
+            let n = l.len() as f64;
+            let c = Point2::new(
+                l.iter().map(|p| p.x).sum::<f64>() / n,
+                l.iter().map(|p| p.y).sum::<f64>() / n,
+            );
+            let at = if inside(c, l) { c } else { l[0] };
+            let e = best.entry(*mat).or_insert((0.0, at));
+            if area > e.0 {
+                *e = (area, at);
+            }
+        }
+    }
+    let mut list: Vec<(MaterialId, Point2)> = best.into_iter().map(|(m, (_, p))| (m, p)).collect();
+    list.sort_by(|a, b| a.1.x.total_cmp(&b.1.x).then(b.1.y.total_cmp(&a.1.y)));
+    list.into_iter()
+        .filter_map(|(m, p)| Some((model.material(m)?.name.clone(), p)))
+        .take(40)
+        .enumerate()
+        .map(|(i, (name, anchor))| Callout {
+            number: i + 1,
+            name,
+            anchor,
+        })
+        .collect()
+}
+
+/// The radius of a detail's numbers (paper millimetres).
+const LEGEND_BALL_MM: f64 = 2.0;
+
+fn legend_width(callouts: &[Callout], k: f64) -> f64 {
+    let h = annotate::TEXT_HEIGHT * k;
+    callouts
+        .iter()
+        .map(|c| crate::lettering::text_width(&format!("{}  {}", c.number, c.name), h))
+        .fold(0.0, f64::max)
+        + 12.0 * k
+}
+
+/// The numbers beside their materials with their leaders, and the legend.
+fn draw_callouts(s: &mut String, callouts: &[Callout], legend_x: f64, legend_top: f64, k: f64) {
+    if callouts.is_empty() {
+        return;
+    }
+    s.push_str("<g id=\"legend\">\n");
+    let r = LEGEND_BALL_MM * k;
+    let h = annotate::TEXT_HEIGHT * k;
+    // The legend, on the right, top down, on white so it reads over the
+    // drawing of a detail.
+    let w = legend_width(callouts, k) - 6.0 * k;
+    let tall = callouts.len() as f64 * 1.7 * h + 1.6 * k;
+    let _ = writeln!(
+        s,
+        r#"<rect x="{}" y="{}" width="{}" height="{}" fill="white" fill-opacity="0.92" stroke="{INK}" stroke-width="{}"/>"#,
+        num(legend_x - 2.0 * k),
+        num(-(legend_top + 1.5 * k)),
+        num(w + 4.0 * k),
+        num(tall + 1.5 * k),
+        num(pens().thin * k)
+    );
+    let mut y = legend_top;
+    for c in callouts {
+        let _ = writeln!(
+            s,
+            r#"<path d="{}" {}/>"#,
+            text_path(
+                &format!("{}  {}", c.number, c.name),
+                Point2::new(legend_x, y - h),
+                Point2::new(1.0, 0.0),
+                h,
+                Align::Left
+            ),
+            crate::lettering::paint(h, INK)
+        );
+        y -= 1.7 * h;
+    }
+    // Each number a little up and to the right of its point, moved up
+    // until it is clear of those already placed.
+    let mut placed: Vec<Point2> = Vec::new();
+    for c in callouts {
+        let mut ball = Point2::new(c.anchor.x + 3.5 * k, c.anchor.y + 3.5 * k);
+        while placed.iter().any(|q| q.distance(ball) < 2.0 * r + 0.6 * k) {
+            ball.y += 2.0 * r + 0.8 * k;
+        }
+        placed.push(ball);
+        let toward = Point2::new(ball.x - c.anchor.x, ball.y - c.anchor.y);
+        let len = (toward.x * toward.x + toward.y * toward.y).sqrt().max(1e-9);
+        let edge = Point2::new(ball.x - toward.x / len * r, ball.y - toward.y / len * r);
+        let _ = writeln!(
+            s,
+            r#"<path class="callout" d="M{} L{}" fill="none" stroke="{INK}" stroke-width="{}"/>"#,
+            pt(c.anchor),
+            pt(edge),
+            num(pens().thin * k)
+        );
+        let _ = writeln!(
+            s,
+            r#"<circle cx="{}" cy="{}" r="{}" fill="{INK}"/>"#,
+            num(c.anchor.x),
+            num(-c.anchor.y),
+            num(0.45 * k)
+        );
+        let _ = writeln!(
+            s,
+            r#"<circle cx="{}" cy="{}" r="{}" fill="white" stroke="{INK}" stroke-width="{}"/>"#,
+            num(ball.x),
+            num(-ball.y),
+            num(r),
+            num(pens().thin * k)
+        );
+        let _ = writeln!(
+            s,
+            r#"<path d="{}" {}/>"#,
+            text_path(
+                &c.number.to_string(),
+                Point2::new(ball.x, ball.y - 0.45 * h),
+                Point2::new(1.0, 0.0),
+                0.9 * h,
+                Align::Centre
+            ),
+            crate::lettering::paint(0.9 * h, INK)
+        );
+    }
+    s.push_str("</g>\n");
+}
+
 fn render_section_inner(model: &Model, d: &SectionDrawing, options: &PlanOptions) -> String {
     let k = options.scale / 1000.0;
     let margin = options.margin_mm * k;
+    let callouts = if options.scale <= LEGEND_SCALE + 1e-9 {
+        callouts(model, d, options.viewport)
+    } else {
+        Vec::new()
+    };
+    let (legend_w, legend_h) = if callouts.is_empty() {
+        (0.0, 0.0)
+    } else {
+        (legend_width(&callouts, k), 2.0 * k)
+    };
     let (vb_x, vb_y, vb_w, vb_h) = match options.viewport {
         Some((lo, hi)) => (
             lo.x,
@@ -2313,9 +2524,9 @@ fn render_section_inner(model: &Model, d: &SectionDrawing, options: &PlanOptions
             let extra = d.labels_reach(options.scale); // the level labels
             (
                 d.lo.x - margin,
-                -d.hi.y - margin,
-                (d.hi.x - d.lo.x) + 2.0 * margin + extra,
-                (d.hi.y - d.lo.y) + 2.0 * margin + 4.0 * TEXT_SIZE * k,
+                -d.hi.y - margin - legend_h,
+                (d.hi.x - d.lo.x) + 2.0 * margin + extra + legend_w,
+                (d.hi.y - d.lo.y) + 2.0 * margin + 4.0 * TEXT_SIZE * k + legend_h,
             )
         }
     };
@@ -2655,6 +2866,37 @@ fn render_section_inner(model: &Model, d: &SectionDrawing, options: &PlanOptions
         );
     }
     s.push_str("</g>\n");
+    // The legend beside the drawing, or inside the frame of a detail.
+    // Inside a detail's frame, in the corner with fewest numbered points.
+    let (legend_x, legend_top) = match options.viewport {
+        Some((lo, hi)) => {
+            let w = legend_width(&callouts, k);
+            let tall = callouts.len() as f64 * 1.7 * annotate::TEXT_HEIGHT * k + 6.0 * k;
+            let corners = [
+                (hi.x - w, hi.y - 3.0 * k),
+                (lo.x + 4.0 * k, hi.y - 3.0 * k),
+                (hi.x - w, lo.y + tall),
+                (lo.x + 4.0 * k, lo.y + tall),
+            ];
+            let crowd = |(x, top): (f64, f64)| {
+                callouts
+                    .iter()
+                    .filter(|c| {
+                        c.anchor.x > x - 8.0 * k
+                            && c.anchor.x < x + w + 8.0 * k
+                            && c.anchor.y < top + 8.0 * k
+                            && c.anchor.y > top - tall - 8.0 * k
+                    })
+                    .count()
+            };
+            corners
+                .into_iter()
+                .min_by_key(|c| crowd(*c))
+                .unwrap_or(corners[0])
+        }
+        None => (d.hi.x + d.labels_reach(options.scale) + 4.0 * k, d.hi.y),
+    };
+    draw_callouts(&mut s, &callouts, legend_x, legend_top, k);
 
     if options.viewport.is_none() && options.title {
         // Title, in the technical lettering (no fonts needed).

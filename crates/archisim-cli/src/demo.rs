@@ -1693,6 +1693,52 @@ mod tests {
         assert!(!svg.contains("<g id=\"heights\">"));
     }
 
+    /// At 1:20 and finer, a section is a detail (W10, as ArchKit): its cut
+    /// materials numbered over the drawing, with a legend; at 1:50, none.
+    /// With `ARCHISIM_DETALLE_OUT=carpeta`, section A at 1:10.
+    #[test]
+    fn details_number_their_materials() {
+        let doc = super::build().unwrap();
+        let m = doc.model();
+        let a = m.sections().find(|s| s.title() == "Sección A").unwrap();
+        let d = archisim_plan::section::section_drawing(m, a);
+        let at = |scale: f64| {
+            archisim_plan::section::render_section(
+                m,
+                &d,
+                &archisim_plan::PlanOptions {
+                    scale,
+                    ..Default::default()
+                },
+            )
+        };
+        let fine = at(10.0);
+        assert!(fine.contains("<g id=\"legend\">"));
+        let n = fine.matches("class=\"callout\"").count();
+        assert!(n >= 4, "{n} materials numbered");
+        assert!(!at(50.0).contains("<g id=\"legend\">"));
+        // A detail of the eaves: only what is in its frame is numbered.
+        let detail = archisim_plan::section::render_section(
+            m,
+            &d,
+            &archisim_plan::PlanOptions {
+                scale: 10.0,
+                viewport: Some((
+                    archisim_core::Point2::new(12.2, 2.4),
+                    archisim_core::Point2::new(14.6, 4.4),
+                )),
+                ..Default::default()
+            },
+        );
+        let few = detail.matches("class=\"callout\"").count();
+        assert!((2..n).contains(&few), "{few} of {n}");
+        if let Ok(dir) = std::env::var("ARCHISIM_DETALLE_OUT") {
+            let dir = std::path::Path::new(&dir);
+            std::fs::write(dir.join("detalle.svg"), &fine).unwrap();
+            std::fs::write(dir.join("alero.svg"), &detail).unwrap();
+        }
+    }
+
     /// «Lápiz con tramas» (W3): the cut layers of section A drawn with the
     /// textures of their materials (brick in courses, wool, concrete,
     /// earth), where «Lápiz» fills them solid; every starter material that

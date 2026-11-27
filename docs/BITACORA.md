@@ -6,6 +6,16 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-27 (203) · v0.116: detalles numerados y deslizadores
+
+Misma rama `bloque/w10-paneles` (PR #245). Sin cambios de formato ni de IFC.
+
+- **Hecho**:
+  - **Detalles numerados, como ArchKit**: a 1:20 y más fino (`section::LEGEND_SCALE`), una sección es un detalle: cada material cortado lleva su número en un círculo junto a su pieza más grande, con su directriz, y una leyenda con los nombres en un recuadro blanco (`callouts`, `draw_callouts`). En una vista de detalle de un plano solo se numera lo que se ve en su marco (`clip_to_box`) y la leyenda va a la esquina con menos números. Prueba `details_number_their_materials` (con `ARCHISIM_DETALLE_OUT`, la sección A a 1:10 y el alero).
+  - **Deslizadores como los de Synaps** en toda la aplicación: carril fino relleno del color de acento hasta un botón redondo, con su casilla (`theme::apply`).
+- **Pendiente** de W10: barra superior más limpia, si Antonio la quiere distinta.
+- **Qué debe probar Antonio**: Sección A → «Vista de detalle de una zona» sobre un alero o un encuentro, a 1:10: los materiales numerados y su leyenda; y mira los deslizadores (escala y giro de una trama, Estilos de presentación).
+
 ## 2026-11-27 (202) · v0.116: muebles con más vida, como ArchKit
 
 Misma rama `bloque/w10-paneles` (PR #245). Formato 126 (el de la 201); sin cambios de IFC.
