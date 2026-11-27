@@ -410,6 +410,19 @@ pub const KINDS: &[(&str, &[&str])] = &[
         ],
     ),
     (
+        "fine_bedroom_set",
+        &[
+            "Nórdico cálido",
+            "Mediterráneo",
+            "Años 50",
+            "Japandi",
+            "Contemporáneo",
+            "Rústica",
+            "Industrial",
+            "Clásica",
+        ],
+    ),
+    (
         "fine_living_set",
         &[
             "Nórdico cálido",
@@ -668,6 +681,84 @@ fn living_set(b: &mut Builder, p: &Params) {
     }
 }
 
+/// A bed with its nightstands (each with its lamp and books) and a rug
+/// under it, of one collection: the bed's head against the wall at the
+/// origin, its foot towards +y.
+fn bedroom_set(b: &mut Builder, p: &Params) {
+    let w = p.get("width", 1.6).clamp(0.9, 2.0);
+    let d = p.get("depth", 2.05).clamp(1.9, 2.2);
+    let n = p.get("nightstands", 2.0).round().clamp(0.0, 2.0) as usize;
+    let c = p.style().clamp(1, 8);
+    let piece = |kind: &str, style: i32, sizes: &[(&str, f64)]| {
+        let mut q = Params::default();
+        q.set("style", style as f64);
+        for (k, v) in sizes {
+            q.set(k, *v);
+        }
+        let mut sub = Builder::default();
+        make(kind, &mut sub, &q);
+        sub
+    };
+    // The bed's own models come first in its list; then the collections.
+    b.merge(
+        piece(
+            "bed",
+            5 + c,
+            &[
+                ("width", w),
+                ("depth", d),
+                ("height", 0.52),
+                ("head", 1.1),
+                ("spread", 1.0),
+                ("cushions", 2.0),
+            ],
+        ),
+        &[],
+        |q| q,
+    );
+    // Four collections have a nightstand of their own; the others take
+    // the nearest one.
+    let night = match c {
+        2 | 6 => 6,
+        7 => 7,
+        8 => 8,
+        _ => 5,
+    };
+    let x = w / 2.0 + 0.31;
+    for k in 0..n {
+        let side = if k == 0 { -1.0 } else { 1.0 };
+        b.merge(
+            piece(
+                "nightstand",
+                night,
+                &[
+                    ("width", 0.45),
+                    ("depth", 0.4),
+                    ("height", 0.5),
+                    ("lamp", 1.0),
+                ],
+            ),
+            &[],
+            move |q| [q[0] + side * x, q[1], q[2]],
+        );
+    }
+    if p.get("rug_on", 1.0) > 0.5 {
+        let ry = 0.7;
+        let rd = d + 0.5 - ry;
+        b.merge(
+            piece("fine_rug", c, &[("width", w + 1.1), ("depth", rd)]),
+            &[
+                ("mat", "rug"),
+                ("mat2", "rug2"),
+                ("accent", "rug3"),
+                ("fringe", "rug_fringe"),
+                ("weave", "rug_weave"),
+            ],
+            move |q| [q[0], q[1] + ry, q[2]],
+        );
+    }
+}
+
 fn chairs_around(b: &mut Builder, p: &Params) {
     let n = p.get("chairs", 0.0).round().clamp(0.0, 16.0) as usize;
     if n == 0 {
@@ -821,6 +912,7 @@ pub fn make(kind: &str, b: &mut Builder, p: &Params) -> bool {
             chairs_around(b, p);
         }
         "fine_living_set" => living_set(b, p),
+        "fine_bedroom_set" => bedroom_set(b, p),
         // A round dining table of any collection, its chairs in a ring.
         "fine_round_table" => {
             let mut q = p.clone();

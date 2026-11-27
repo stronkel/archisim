@@ -985,7 +985,7 @@ pub type CatalogueEntry = (&'static str, &'static str, &'static [(&'static str, 
 
 /// The object types of the library (v0.25, more in v0.26), in the order of
 /// the gallery.
-pub const OBJECT_CATALOGUE: [CatalogueEntry; 300] = [
+pub const OBJECT_CATALOGUE: [CatalogueEntry; 303] = [
     ("Mesa de comedor 160×90", "Mesa", &[]),
     // Dining sets ready to place (W3): the table with its chairs.
     (
@@ -1021,6 +1021,23 @@ pub const OBJECT_CATALOGUE: [CatalogueEntry; 300] = [
         "Conjunto de salón con una butaca",
         "Conjunto de salón",
         &[("width", 2.0), ("armchairs", 1.0)],
+    ),
+    // Bedrooms ready to place (W10, as ArchKit): the bed with its
+    // nightstands, lamps and rug.
+    (
+        "Dormitorio de matrimonio 160",
+        "Conjunto de dormitorio",
+        &[],
+    ),
+    (
+        "Dormitorio de matrimonio 150",
+        "Conjunto de dormitorio",
+        &[("width", 1.5)],
+    ),
+    (
+        "Dormitorio individual 90",
+        "Conjunto de dormitorio",
+        &[("width", 0.9), ("depth", 1.9), ("nightstands", 1.0)],
     ),
     ("Sofá rinconera 260×170", "Sofá rinconera", &[]),
     (

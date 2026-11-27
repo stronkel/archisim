@@ -1773,6 +1773,57 @@ mod tests {
         assert!(!plain.contains("object-shadow"));
     }
 
+    /// The furniture with more life of W10 (as ArchKit): a bedroom set
+    /// with its nightstands and fringed rug, a tufted sofa with loose
+    /// cushions and a rug with fringes draw in plan. With
+    /// `ARCHISIM_MUEBLES_OUT=carpeta`, the plan in «Editorial».
+    #[test]
+    fn lively_furniture_draws_in_plan() {
+        use archisim_core::{NewObject, Point2, Value};
+        let mut m = archisim_library::new_project("Muebles");
+        let lvl = m.levels()[0].id;
+        let put = |m: &mut archisim_core::Model, name: &str, x: f64, y: f64, rot: f64| {
+            let t = archisim_library::add_object_entry(m, name).unwrap();
+            m.add_object(NewObject {
+                level: lvl,
+                object_type: t,
+                position: Point2::new(x, y),
+                rotation: rot,
+                base_offset: 0.0,
+            })
+            .unwrap();
+            t
+        };
+        put(
+            &mut m,
+            "Dormitorio de matrimonio 160",
+            0.0,
+            0.0,
+            std::f64::consts::PI,
+        );
+        let sofa = put(&mut m, "Sofá de 3 plazas", 5.0, -3.0, 0.0);
+        let mut v = m.object_type(sofa).unwrap().values.clone();
+        v.insert("tufted".into(), Value::Bool(true));
+        v.insert("pillows".into(), Value::Number(3.0));
+        m.set_object_type_values(sofa, v).unwrap();
+        put(&mut m, "Alfombra 200×140", 5.0, -1.8, 0.0);
+        let editorial = m
+            .presentation_styles()
+            .find(|s| s.name == "Editorial")
+            .unwrap()
+            .id;
+        let mut o = archisim_plan::PlanOptions {
+            scale: 50.0,
+            ..Default::default()
+        };
+        o.style.presentation = Some(editorial);
+        let svg = archisim_plan::render_plan(&m, lvl, &o);
+        assert!(svg.matches("object-shadow").count() >= 2);
+        if let Ok(dir) = std::env::var("ARCHISIM_MUEBLES_OUT") {
+            std::fs::write(std::path::Path::new(&dir).join("muebles.svg"), &svg).unwrap();
+        }
+    }
+
     /// A view can hide what phase 2 added: the furniture, the columns and
     /// beams, the terrain…, as it hides walls or dimensions.
     #[test]

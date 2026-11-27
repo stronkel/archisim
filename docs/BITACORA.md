@@ -6,6 +6,18 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-27 (202) · v0.116: muebles con más vida, como ArchKit
+
+Misma rama `bloque/w10-paneles` (PR #245). Formato 126 (el de la 201); sin cambios de IFC.
+
+- **Hecho**:
+  - **Conjunto de dormitorio** (familia nueva `conjunto_dormitorio.asfam`, generador `props:fine_bedroom_set`, `bedroom_set` en `archisim_props::fine`): la cama de la colección con sus dos mesitas (lámpara y libros) y la alfombra con flecos bajo los pies; en la biblioteca «Dormitorio de matrimonio 160», «… 150» e «Dormitorio individual 90» (con una mesita).
+  - **Sofá**: los cojines sueltos se ven también en planta, contra el respaldo, y la opción «Capitoné» pone los botones del respaldo (familia versión 7).
+  - **Alfombras con flecos** en los extremos cortos, en planta y en la planta presentada, con el ribete de dentro (familia versión 3).
+  - **La sombra editorial pieza a pieza**: ahora cada pieza rellena del dibujo del mueble arroja su sombra (`shadow_of`), no la caja entera; así los conjuntos no llevan un bloque gris debajo.
+- **Pendiente** de ArchKit: la leyenda numerada de la sección 1:10; isla con taburetes (los taburetes se ponen aparte, para que el 3D y las mediciones los cuenten).
+- **Qué debe probar Antonio**: en un proyecto con el estilo «Editorial», coloca «Dormitorio de matrimonio 160», un «Sofá de 3 plazas» con «Capitoné» y dos cojines sueltos, y una «Alfombra 200×140»; míralos en planta y en 3D.
+
 ## 2026-11-27 (201) · v0.116: la sombra editorial bajo los muebles
 
 Misma rama `bloque/w10-paneles` (PR #245). Formato versión 126; sin cambios de IFC.

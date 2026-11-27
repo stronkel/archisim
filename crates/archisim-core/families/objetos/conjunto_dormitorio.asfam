@@ -1,0 +1,109 @@
+family "Conjunto de dormitorio"
+  category furniture
+  host none
+  version 1
+  description "Cama con sus mesitas, sus lámparas y la alfombra debajo, ya colocadas, como las hace cada colección"
+  folder "Camas"
+
+include "muebles"
+
+# Ejes: origen en el centro del cabecero, contra la pared; x hacia la
+# derecha, y hacia los pies de la cama, z hacia arriba.
+
+type_params
+  section "Dimensiones"
+    width       length = 1.60 range 0.90..2.00 label "Ancho del colchón"
+    depth       length = 2.05 range 1.90..2.20 label "Largo"
+    nightstands integer = 2 range 0..2 label "Mesitas"
+    rug_on      bool = yes label "Alfombra"
+  section "Materiales"
+    frame      material = "Roble claro" label "Madera o estructura"
+    front      material = "Lacado blanco" label "Frentes"
+    top        material = "Roble claro" label "Encimera"
+    stone      material = "Mármol" label "Piedra"
+    plinth     material = "Roble claro" label "Zócalo"
+    metal      material = "Latón" label "Tiradores y metal"
+    glass      material = "Vidrio claro" label "Vidrio"
+    weave      material = "Enea" label "Rejilla o enea"
+    dark       material = "Fresno oscuro" label "Sombras y cuero"
+    cushion    material = "Bouclé crudo" label "Tapizado"
+    linen      material = "Lino blanco" label "Sábanas y almohadas"
+    duvet      material = "Lino arena" label "Edredón"
+    spread_mat material = "Terciopelo salvia" label "Manta"
+    pillow     material = "Terciopelo salvia" label "Cojines"
+    shade      material = "Pantalla de lino" label "Pantalla (se enciende)"
+    ceramic    material = "Cerámica blanca" label "Pie de la lámpara"
+    bulb       material = "Cristal esmerilado" label "Bombilla"
+    books      material = "Lomo crema" label "Libros"
+    books2     material = "Lomo azul" label "Libros (2)"
+    rug        material = "Lana cruda" label "Alfombra"
+    rug2       material = "Lana teja" label "Dibujo de la alfombra"
+    rug3       material = "Lana oliva" label "Dibujo de la alfombra (2)"
+    rug_fringe material = "Lana cruda" label "Flecos"
+    rug_weave  material = "Paja" label "Fibra de la alfombra"
+  section "Modelo 3D"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Nórdico cálido" label "Modelo 3D"
+
+# Las mesitas, a cada lado del cabecero; la alfombra, bajo los dos
+# tercios de los pies, asomando por los lados y a los pies.
+let nx = width / 2 + 0.31
+let rw = width + 1.1
+let ry = 0.7
+let rd = depth + 0.5 - ry
+
+body
+  box (-width / 2 - 0.06, 0, 0) to (width / 2 + 0.06, 0.08, 1.1) material frame
+  box (-width / 2 - 0.03, 0.08, 0) to (width / 2 + 0.03, depth + 0.08, 0.52) material linen
+  repeat k in 0..nightstands
+    let x = if k == 0 then -nx else nx
+    box (x - 0.225, 0, 0) to (x + 0.225, 0.4, 0.5) material frame
+  if rug_on
+    box (-rw / 2, ry, 0) to (rw / 2, ry + rd, 0.01) material rug
+
+plan 1:50
+  # La alfombra, debajo, con sus flecos en los extremos.
+  if rug_on
+    polygon (-rw / 2, ry) (rw / 2, ry) (rw / 2, ry + rd) (-rw / 2, ry + rd) pen thin
+    polygon (-rw / 2 + 0.08, ry + 0.08) (rw / 2 - 0.08, ry + 0.08) (rw / 2 - 0.08, ry + rd - 0.08) (-rw / 2 + 0.08, ry + rd - 0.08) pen thin dotted
+    let fringes = floor(rd / 0.05)
+    repeat i in 0..fringes
+      let y = ry + (i + 0.5) * rd / fringes
+      line (-rw / 2, y) to (-rw / 2 - 0.06, y) pen thin
+      line (rw / 2, y) to (rw / 2 + 0.06, y) pen thin
+  # Las mesitas, con la lámpara y un libro.
+  repeat k in 0..nightstands
+    let x = if k == 0 then -nx else nx
+    use soft_box(x - 0.225, 0, x + 0.225, 0.4, 0.03)
+    line (x - 0.205, 0.37) to (x + 0.205, 0.37) pen thin
+    use soft_oval_thin(x, 0.17, 0.12, 0.12)
+    use soft_oval_thin(x, 0.17, 0.03, 0.03)
+    polygon (x - 0.17, 0.26) (x - 0.05, 0.25) (x - 0.04, 0.35) (x - 0.16, 0.36) pen thin
+  # La cama: cabecero, colchón, almohadas, edredón con la sábana vuelta,
+  # una esquina doblada y la manta a los pies.
+  use soft_box(-width / 2 - 0.06, 0, width / 2 + 0.06, 0.08, 0.02)
+  use soft_box(-width / 2 - 0.03, 0.08, width / 2 + 0.03, depth + 0.08, 0.05)
+  let pillows = if width >= 1.2 then 2 else 1
+  let pw = (width - 0.12 - 0.06 * (pillows - 1)) / pillows
+  repeat i in 0..pillows
+    let a = -width / 2 + 0.06 + i * (pw + 0.06)
+    use pillow(a + pw / 2, 0.38 + 0.015 * i, pw / 2, 0.16)
+  polygon (-width / 2 - 0.05, 0.68) (width / 2 + 0.05, 0.67) (width / 2 + 0.05, depth + 0.06) (-width / 2 - 0.05, depth + 0.06) pen view filled
+  polygon (-width / 2 - 0.05, 0.68) (width / 2 + 0.05, 0.67) (width / 2 + 0.05, 0.87) (-width / 2 - 0.05, 0.88) pen thin filled
+  polygon (width / 2 - 0.4, 0.87) (width / 2 + 0.05, 0.87) (width / 2 + 0.05, 1.23) pen thin filled
+  arc center (width / 2 - 0.4, 1.38) from (width / 2 - 0.4, 0.87) to (width / 2 + 0.05, 1.23) pen thin
+  arc center (-width / 2 + 0.1, 1.38) from (-width / 2 + 0.1, 1.03) to (-width / 2 + 0.38, 1.2) pen thin
+  arc center (width * 0.05, 1.58) from (-width * 0.08, 1.1) to (width * 0.18, 1.14) pen thin
+  polygon (-width / 2 - 0.07, depth - 0.42) (width / 2 + 0.07, depth - 0.43) (width / 2 + 0.07, depth - 0.07) (-width / 2 - 0.07, depth - 0.06) pen thin filled
+  arc center (-width / 2 + 0.1, depth - 0.02) from (-width / 2 + 0.1, depth - 0.34) to (-width / 2 + 0.38, depth - 0.17) pen thin
+
+plan 1:100
+  use soft_box(-width / 2 - 0.06, 0, width / 2 + 0.06, depth + 0.08, 0.03)
+  line (-width / 2, 0.68) to (width / 2, 0.68) pen thin
+  repeat k in 0..nightstands
+    let x = if k == 0 then -nx else nx
+    use soft_box(x - 0.225, 0, x + 0.225, 0.4, 0.03)
+
+outputs
+  generator = "props:fine_bedroom_set"
+  ifc_class = "IfcFurniture"
+  ifc_type = "BED"
