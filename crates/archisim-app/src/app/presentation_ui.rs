@@ -106,7 +106,7 @@ impl ArchiSimApp {
                 if ui
                     .button("Estilos de partida")
                     .on_hover_text(
-                        "Añade Blanco y negro, Terracota, Bosque, Azul y Monocromo si faltan",
+                        "Añade los que falten: Blanco y negro, Terracota, Bosque, Azul, Monocromo, Lápiz, Lápiz con tramas y los de ArchKit (Editorial, Sol marengo, Terracota maximalista, Botánico y salvia, Cobalto y rosa)",
                     )
                     .clicked()
                 {
@@ -328,6 +328,12 @@ impl ArchiSimApp {
                     // The textures show only where the cut is not solid.
                     d.poche = None;
                 }
+                ui.end_row();
+
+                ui.label("Sombra bajo los muebles").on_hover_text(
+                    "Una sombra suave, un poco abajo y a la derecha, bajo muebles, sanitarios y coches de la planta, como los planos editoriales",
+                );
+                ui.switch(&mut d.object_shadows, "");
                 ui.end_row();
 
                 ui.label("Color de acento")

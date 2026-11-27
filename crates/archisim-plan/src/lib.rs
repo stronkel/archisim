@@ -239,6 +239,17 @@ fn textured() -> bool {
     TEXTURED.with(|t| t.get())
 }
 
+thread_local! {
+    /// A soft shadow under the furniture (a presentation style with
+    /// `object_shadows`).
+    static OBJECT_SHADOWS: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// How far the furniture's shadow falls, down and to the right, in paper
+/// millimetres, and how dark it is.
+const OBJECT_SHADOW_MM: f64 = 1.1;
+const OBJECT_SHADOW_OPACITY: f64 = 0.16;
+
 fn poche() -> Option<[u8; 3]> {
     POCHE.with(|p| p.get())
 }
@@ -2459,6 +2470,11 @@ fn draw_objects(
     let mut keyed: Vec<(f64, &archisim_core::Object)> =
         objects.drain(..).map(|o| (top(o), o)).collect();
     keyed.sort_by(|a, b| a.0.total_cmp(&b.0));
+    let tops_of: std::collections::HashMap<archisim_core::ObjectId, f64> = keyed
+        .iter()
+        .map(|(t, o)| (o.id, *t - o.base_offset))
+        .collect();
+    let top_of = |o: &archisim_core::Object| tops_of.get(&o.id).copied().unwrap_or(1.0);
     objects = keyed.into_iter().map(|(_, o)| o).collect();
     for o in objects {
         let r = *reach.entry(o.object_type).or_insert_with(|| {
@@ -2511,6 +2527,14 @@ fn draw_objects(
             model.object_plan_symbol(o.id, scale).map_err(|_| ())
         };
         overrides::open(s, category);
+        // The editorial shadow under the furniture (not under rugs and
+        // mats, which lie on the floor, nor under plants): each filled
+        // piece of its symbol, a little down and to the right.
+        let shadowed = presenting
+            && OBJECT_SHADOWS.with(|c| c.get())
+            && category == archisim_core::Category::Objects
+            && top_of(o) > 0.15;
+        let shadow_from = s.len();
         // In a presentation, a picture of its own, if it has one.
         let picture = model
             .object_type(o.object_type)
@@ -2528,6 +2552,7 @@ fn draw_objects(
             overrides::close(s);
             continue;
         }
+        let drawn_marks = marks.is_ok();
         dim::element(s, o.id.0, |s| match marks {
             Ok(marks) => draw_marks(s, model, marks, &|p| o.to_plan(p[0], p[1]), k),
             Err(()) => {
@@ -2539,9 +2564,54 @@ fn draw_objects(
                 );
             }
         });
+        if shadowed && drawn_marks {
+            let piece = s[shadow_from..].to_string();
+            let d = OBJECT_SHADOW_MM * k;
+            let shadow = format!(
+                "<g class=\"object-shadow\" transform=\"translate({},{})\" opacity=\"{OBJECT_SHADOW_OPACITY}\">\n{}</g>\n",
+                num(d),
+                num(d),
+                shadow_of(&piece)
+            );
+            s.insert_str(shadow_from, &shadow);
+        }
         overrides::close(s);
     }
     s.push_str("</g>\n");
+}
+
+/// The filled pieces of a drawn symbol as its shadow: every fill in the
+/// ink, no strokes (what is only lines casts none), no element ids.
+fn shadow_of(svg: &str) -> String {
+    let mut out = String::with_capacity(svg.len());
+    let mut rest = svg;
+    loop {
+        let fill = rest.find(" fill=\"");
+        let stroke = rest.find(" stroke=\"");
+        let id = rest.find(" data-id=\"");
+        let Some(at) = [fill, stroke, id].into_iter().flatten().min() else {
+            out.push_str(rest);
+            return out;
+        };
+        out.push_str(&rest[..at]);
+        let after = &rest[at..];
+        let name_end = after.find("=\"").map_or(after.len(), |i| i + 2);
+        let name = &after[..name_end];
+        let value_end = after[name_end..]
+            .find('"')
+            .map_or(after.len(), |i| name_end + i);
+        let value = &after[name_end..value_end];
+        if name == " fill=\"" {
+            if value == "none" {
+                out.push_str(" fill=\"none\"");
+            } else {
+                let _ = write!(out, " fill=\"{INK}\"");
+            }
+        } else if name == " stroke=\"" {
+            out.push_str(" stroke=\"none\"");
+        }
+        rest = &after[(value_end + 1).min(after.len())..];
+    }
 }
 
 /// An object's picture for presentation plans: in its type's plan box

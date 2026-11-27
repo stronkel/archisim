@@ -36,6 +36,7 @@ pub enum Icon {
     SidebarRight,
     Close,
     ChevronRight,
+    ChevronLeft,
     ChevronDown,
     Theme,
     Plus,
@@ -356,6 +357,7 @@ pub fn paint(painter: &Painter, rect: Rect, icon: Icon, color: Color32) {
             line(&[(18.0, 6.0), (6.0, 18.0)], st);
         }
         Icon::ChevronRight => line(&[(9.0, 6.0), (15.0, 12.0), (9.0, 18.0)], st),
+        Icon::ChevronLeft => line(&[(15.0, 6.0), (9.0, 12.0), (15.0, 18.0)], st),
         Icon::ChevronDown => line(&[(6.0, 9.0), (12.0, 15.0), (18.0, 9.0)], st),
         Icon::Theme => {
             circle(12.0, 12.0, 8.0, st);

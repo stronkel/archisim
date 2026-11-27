@@ -1693,6 +1693,52 @@ mod tests {
         assert!(!svg.contains("<g id=\"heights\">"));
     }
 
+    /// At 1:20 and finer, a section is a detail (W10, as ArchKit): its cut
+    /// materials numbered over the drawing, with a legend; at 1:50, none.
+    /// With `ARCHISIM_DETALLE_OUT=carpeta`, section A at 1:10.
+    #[test]
+    fn details_number_their_materials() {
+        let doc = super::build().unwrap();
+        let m = doc.model();
+        let a = m.sections().find(|s| s.title() == "Sección A").unwrap();
+        let d = archisim_plan::section::section_drawing(m, a);
+        let at = |scale: f64| {
+            archisim_plan::section::render_section(
+                m,
+                &d,
+                &archisim_plan::PlanOptions {
+                    scale,
+                    ..Default::default()
+                },
+            )
+        };
+        let fine = at(10.0);
+        assert!(fine.contains("<g id=\"legend\">"));
+        let n = fine.matches("class=\"callout\"").count();
+        assert!(n >= 4, "{n} materials numbered");
+        assert!(!at(50.0).contains("<g id=\"legend\">"));
+        // A detail of the eaves: only what is in its frame is numbered.
+        let detail = archisim_plan::section::render_section(
+            m,
+            &d,
+            &archisim_plan::PlanOptions {
+                scale: 10.0,
+                viewport: Some((
+                    archisim_core::Point2::new(12.2, 2.4),
+                    archisim_core::Point2::new(14.6, 4.4),
+                )),
+                ..Default::default()
+            },
+        );
+        let few = detail.matches("class=\"callout\"").count();
+        assert!((2..n).contains(&few), "{few} of {n}");
+        if let Ok(dir) = std::env::var("ARCHISIM_DETALLE_OUT") {
+            let dir = std::path::Path::new(&dir);
+            std::fs::write(dir.join("detalle.svg"), &fine).unwrap();
+            std::fs::write(dir.join("alero.svg"), &detail).unwrap();
+        }
+    }
+
     /// «Lápiz con tramas» (W3): the cut layers of section A drawn with the
     /// textures of their materials (brick in courses, wool, concrete,
     /// earth), where «Lápiz» fills them solid; every starter material that
@@ -1740,6 +1786,88 @@ mod tests {
         assert!(back
             .presentation_styles()
             .any(|s| s.cut_textures && s.name == archisim_library::standards::TEXTURED_LOOK));
+    }
+
+    /// The editorial styles of ArchKit put a soft shadow under the
+    /// furniture of the plan, and not the working one (W10). With
+    /// `ARCHISIM_EDITORIAL_OUT=carpeta`, the plan in «Editorial».
+    #[test]
+    fn editorial_plans_shadow_the_furniture() {
+        let doc = super::build().unwrap();
+        let m = doc.model();
+        let pb = m.levels()[0].id;
+        let editorial = m
+            .presentation_styles()
+            .find(|s| s.name == "Editorial")
+            .expect("the template brings «Editorial»");
+        assert!(editorial.object_shadows);
+        let mut o = archisim_plan::PlanOptions {
+            scale: 50.0,
+            ..Default::default()
+        };
+        o.style.presentation = Some(editorial.id);
+        let svg = archisim_plan::render_plan(m, pb, &o);
+        assert!(svg.matches("object-shadow").count() >= 5);
+        if let Ok(dir) = std::env::var("ARCHISIM_EDITORIAL_OUT") {
+            std::fs::write(std::path::Path::new(&dir).join("editorial.svg"), &svg).unwrap();
+        }
+        o.style.presentation = m
+            .presentation_styles()
+            .find(|s| !s.object_shadows)
+            .map(|s| s.id);
+        let plain = archisim_plan::render_plan(m, pb, &o);
+        assert!(!plain.contains("object-shadow"));
+    }
+
+    /// The furniture with more life of W10 (as ArchKit): a bedroom set
+    /// with its nightstands and fringed rug, a tufted sofa with loose
+    /// cushions and a rug with fringes draw in plan. With
+    /// `ARCHISIM_MUEBLES_OUT=carpeta`, the plan in «Editorial».
+    #[test]
+    fn lively_furniture_draws_in_plan() {
+        use archisim_core::{NewObject, Point2, Value};
+        let mut m = archisim_library::new_project("Muebles");
+        let lvl = m.levels()[0].id;
+        let put = |m: &mut archisim_core::Model, name: &str, x: f64, y: f64, rot: f64| {
+            let t = archisim_library::add_object_entry(m, name).unwrap();
+            m.add_object(NewObject {
+                level: lvl,
+                object_type: t,
+                position: Point2::new(x, y),
+                rotation: rot,
+                base_offset: 0.0,
+            })
+            .unwrap();
+            t
+        };
+        put(
+            &mut m,
+            "Dormitorio de matrimonio 160",
+            0.0,
+            0.0,
+            std::f64::consts::PI,
+        );
+        let sofa = put(&mut m, "Sofá de 3 plazas", 5.0, -3.0, 0.0);
+        let mut v = m.object_type(sofa).unwrap().values.clone();
+        v.insert("tufted".into(), Value::Bool(true));
+        v.insert("pillows".into(), Value::Number(3.0));
+        m.set_object_type_values(sofa, v).unwrap();
+        put(&mut m, "Alfombra 200×140", 5.0, -1.8, 0.0);
+        let editorial = m
+            .presentation_styles()
+            .find(|s| s.name == "Editorial")
+            .unwrap()
+            .id;
+        let mut o = archisim_plan::PlanOptions {
+            scale: 50.0,
+            ..Default::default()
+        };
+        o.style.presentation = Some(editorial);
+        let svg = archisim_plan::render_plan(&m, lvl, &o);
+        assert!(svg.matches("object-shadow").count() >= 2);
+        if let Ok(dir) = std::env::var("ARCHISIM_MUEBLES_OUT") {
+            std::fs::write(std::path::Path::new(&dir).join("muebles.svg"), &svg).unwrap();
+        }
     }
 
     /// A view can hide what phase 2 added: the furniture, the columns and

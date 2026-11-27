@@ -262,6 +262,10 @@ pub(crate) fn draw_hatch(
     draw_hatch_paths(s, h, color, width, k);
 }
 
+/// How dark the tinted pieces of a texture are: the share of the hatch's
+/// colour over the paper.
+const TINT_OPACITY: f64 = 0.16;
+
 fn draw_hatch_paths(s: &mut String, h: &archisim_core::Hatch, color: &str, width: &str, k: f64) {
     let polys = hatch::hatch_polygons(h);
     let mut outline = String::new();
@@ -290,11 +294,25 @@ fn draw_hatch_paths(s: &mut String, h: &archisim_core::Hatch, color: &str, width
             d.trim_end()
         );
     }
-    let lines = if h.pattern == archisim_core::HatchPattern::Solid {
-        None
+    let (lines, tints) = if h.pattern == archisim_core::HatchPattern::Solid {
+        (None, Vec::new())
     } else {
-        hatch::hatch_lines(h, k)
+        hatch::hatch_lines_and_tints(h, k)
     };
+    if !tints.is_empty() && lines.is_some() {
+        // One piece in a few a shade darker (W10): the colour of the
+        // hatch, light.
+        let mut d = String::new();
+        for t in &tints {
+            d.push_str(&points_path(t, true));
+            d.push(' ');
+        }
+        let _ = writeln!(
+            s,
+            r#"<path d="{}" fill="{color}" fill-opacity="{TINT_OPACITY}" stroke="none"/>"#,
+            d.trim_end()
+        );
+    }
     match lines {
         Some(lines) => {
             let mut path = String::new();

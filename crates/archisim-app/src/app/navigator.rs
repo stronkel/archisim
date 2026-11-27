@@ -92,36 +92,34 @@ impl SortedByFamily for Vec<TypeRow> {
 
 impl ArchiSimApp {
     pub(super) fn navigator(&mut self, ui: &mut Ui) {
-        let p = Palette::current(ui.ctx());
-        ui.add_space(8.0);
-        ui.horizontal(|ui| {
-            ui.label(
-                egui::RichText::new("Navegador")
-                    .font(strong_font(13.0))
-                    .color(p.text),
-            );
-        });
-        ui.add_space(4.0);
-        // Two tabs: the model (what is built) and the project (its views,
-        // sheets and tables).
+        ui.add_space(6.0);
+        // Two tabs of text, as Synaps: the model (what is built) and the
+        // project (its views, sheets and tables); the fold on the right.
         let mut tab = self.nav_tab;
-        super::widgets::segmented(
-            ui,
-            "navigator-tab",
-            &mut tab,
-            &[
-                (
-                    NavTab::Model,
-                    "Modelo",
-                    "Lo construido, por tipos, con el número de elementos",
-                ),
-                (
-                    NavTab::Project,
-                    "Proyecto",
-                    "Plantas, vistas, secciones, alzados, planos y tablas",
-                ),
-            ],
-        );
+        ui.horizontal(|ui| {
+            let w = ui.available_width() - 28.0;
+            super::widgets::text_tabs(
+                ui,
+                "navigator-tab",
+                &mut tab,
+                &[
+                    (
+                        NavTab::Model,
+                        "Modelo",
+                        "Lo construido, por tipos, con el número de elementos",
+                    ),
+                    (
+                        NavTab::Project,
+                        "Proyecto",
+                        "Plantas, vistas, secciones, alzados, planos y tablas",
+                    ),
+                ],
+                w,
+            );
+            if super::fold_button(ui, super::icons::Icon::ChevronRight, "Plegar el navegador") {
+                self.show_navigator = false;
+            }
+        });
         self.nav_tab = tab;
         ui.add_space(6.0);
         egui::ScrollArea::vertical()

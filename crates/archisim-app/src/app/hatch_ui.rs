@@ -58,7 +58,15 @@ pub fn paint_swatch(ui: &Ui, rect: Rect, pattern: HatchPattern, ink: Rgb, paper:
         let pts: Vec<Pos2> = band.iter().map(|p| to(*p)).collect();
         painter.add(egui::Shape::convex_polygon(pts, ink, Stroke::NONE));
     }
-    if let Some(lines) = archisim_draft::hatch::hatch_lines(&h, k) {
+    let (lines, tints) = archisim_draft::hatch::hatch_lines_and_tints(&h, k);
+    let tint = Color32::from_rgba_unmultiplied(ink.r(), ink.g(), ink.b(), 40);
+    for t in &tints {
+        let pts: Vec<Pos2> = t.iter().map(|p| to(*p)).collect();
+        // Tinted pieces may be concave (stones): drawn as a fan is close
+        // enough at this size.
+        painter.add(egui::Shape::convex_polygon(pts, tint, Stroke::NONE));
+    }
+    if let Some(lines) = lines {
         let stroke = Stroke::new(0.8, ink);
         for (a, b) in lines {
             if a.approx_eq(b) {
@@ -155,7 +163,7 @@ fn picker(
     let mut chosen = current;
     egui::Popup::menu(&response)
         .id(egui::Id::unique(("hatch-picker", salt.to_string())))
-        .width(420.0)
+        .width(520.0)
         .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
         .show(|ui| {
             if let Some(p) = pattern_grid(ui, current, ink, paper, 4) {
@@ -203,12 +211,60 @@ fn pattern_grid(
     columns: usize,
 ) -> Option<HatchPattern> {
     let mut chosen = None;
+    // W10, as ArchKit: a search box and a pill per family over the cards.
+    let search_id = egui::Id::unique("hatch-grid-search");
+    let family_id = egui::Id::unique("hatch-grid-family");
+    let mut query: String = ui.data(|d| d.get_temp(search_id)).unwrap_or_default();
+    let mut family: String = ui.data(|d| d.get_temp(family_id)).unwrap_or_default();
+    let sections = pattern_sections();
+    ui.add(
+        egui::TextEdit::singleline(&mut query)
+            .hint_text("Buscar trama: madera, piedra, baldosa…")
+            .desired_width(f32::INFINITY),
+    );
+    ui.add_space(4.0);
+    ui.horizontal_wrapped(|ui| {
+        ui.spacing_mut().item_spacing = Vec2::new(4.0, 4.0);
+        for name in std::iter::once("Todas").chain(sections.iter().map(|(t, _)| *t)) {
+            let on = family == name || (family.is_empty() && name == "Todas");
+            if pill(ui, name, on).clicked() {
+                family = if name == "Todas" {
+                    String::new()
+                } else {
+                    name.to_string()
+                };
+            }
+        }
+    });
+    ui.add_space(6.0);
+    let q = query.trim().to_lowercase();
     egui::ScrollArea::vertical()
-        .max_height(520.0)
+        .max_height(480.0)
         .auto_shrink([false, true])
         .show(ui, |ui| {
-            for (title, list) in pattern_sections() {
-                ui.label(egui::RichText::new(title).strong());
+            for (title, list) in &sections {
+                if !family.is_empty() && family != *title {
+                    continue;
+                }
+                let list: Vec<HatchPattern> = list
+                    .iter()
+                    .copied()
+                    .filter(|p| {
+                        q.is_empty()
+                            || p.label().to_lowercase().contains(&q)
+                            || title.to_lowercase().contains(&q)
+                    })
+                    .collect();
+                if list.is_empty() {
+                    continue;
+                }
+                let pal = Palette::current(ui.ctx());
+                ui.label(
+                    egui::RichText::new(title.to_uppercase())
+                        .small()
+                        .strong()
+                        .color(pal.muted),
+                );
                 for row in list.chunks(columns) {
                     ui.horizontal(|ui| {
                         for p in row {
@@ -220,12 +276,19 @@ fn pattern_grid(
                                         Sense::click(),
                                     );
                                     paint_swatch(ui, rect, *p, ink, paper);
+                                    let pal = Palette::current(ui.ctx());
                                     if *p == current {
-                                        let pal = Palette::current(ui.ctx());
                                         ui.painter().rect_stroke(
                                             rect,
-                                            3.0,
+                                            6.0,
                                             Stroke::new(2.0, pal.accent),
+                                            egui::StrokeKind::Outside,
+                                        );
+                                    } else if r.hovered() {
+                                        ui.painter().rect_stroke(
+                                            rect,
+                                            6.0,
+                                            Stroke::new(1.0, pal.muted),
                                             egui::StrokeKind::Outside,
                                         );
                                     }
@@ -242,7 +305,44 @@ fn pattern_grid(
                 }
             }
         });
+    ui.data_mut(|d| {
+        d.insert_temp(search_id, query);
+        d.insert_temp(family_id, family);
+    });
     chosen
+}
+
+/// A rounded pill to filter by, dark when on (W10, as ArchKit).
+pub fn pill(ui: &mut Ui, text: &str, on: bool) -> egui::Response {
+    let pal = Palette::current(ui.ctx());
+    let font = egui::FontId::proportional(11.5);
+    let g = ui.painter().layout_no_wrap(
+        text.to_string(),
+        font,
+        if on { Color32::WHITE } else { pal.muted },
+    );
+    let size = Vec2::new(g.size().x + 20.0, 22.0);
+    let (rect, r) = ui.allocate_exact_size(size, Sense::click());
+    let (fill, stroke) = if on {
+        (pal.text, pal.text)
+    } else if r.hovered() {
+        (pal.raised, pal.muted)
+    } else {
+        (pal.panel, pal.line)
+    };
+    ui.painter().rect(
+        rect,
+        11.0,
+        fill,
+        Stroke::new(1.0, stroke),
+        egui::StrokeKind::Inside,
+    );
+    ui.painter().galley(
+        rect.center() - g.size() / 2.0,
+        g,
+        if on { Color32::WHITE } else { pal.muted },
+    );
+    r
 }
 
 /// The patterns in the picker's sections, in order: technical, the

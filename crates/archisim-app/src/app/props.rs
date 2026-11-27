@@ -4,8 +4,8 @@
 //! name and value.
 
 use eframe::egui::{
-    self, collapsing_header::CollapsingState, Align2, ComboBox, CornerRadius, FontId, Pos2, Rect,
-    Sense, Stroke, StrokeKind, Ui, Vec2,
+    self, collapsing_header::CollapsingState, ComboBox, CornerRadius, FontId, Pos2, Rect, Sense,
+    Stroke, StrokeKind, Ui, Vec2,
 };
 
 use super::icons::{self, Icon};
@@ -44,18 +44,21 @@ pub fn group(ui: &mut Ui, id: &str, title: &str, add: impl FnOnce(&mut Ui)) {
     .any(|s| id.ends_with(s));
     let id = ui.make_persistent_id(("prop-group", id));
     let mut state = CollapsingState::load_with_default_open(ui.ctx(), id, !quiet);
-    ui.add_space(4.0);
+    ui.add_space(6.0);
+    // W10, as Synaps and 1to10: the title in small spaced capitals, grey,
+    // over a hairline; the chevron on the right.
     let (rect, resp) =
-        ui.allocate_exact_size(Vec2::new(ui.available_width(), 26.0), Sense::click());
+        ui.allocate_exact_size(Vec2::new(ui.available_width(), 24.0), Sense::click());
     let painter = ui.painter();
-    painter.rect_filled(
-        rect,
-        CornerRadius::same(6),
-        if resp.hovered() {
-            p.accent_soft
-        } else {
-            p.raised
-        },
+    if resp.hovered() {
+        painter.rect_filled(rect, CornerRadius::same(6), p.accent_soft);
+    }
+    painter.line_segment(
+        [
+            Pos2::new(rect.left() + 2.0, rect.bottom() - 0.5),
+            Pos2::new(rect.right() - 2.0, rect.bottom() - 0.5),
+        ],
+        Stroke::new(1.0, p.line),
     );
     let chevron = if state.is_open() {
         Icon::ChevronDown
@@ -65,18 +68,26 @@ pub fn group(ui: &mut Ui, id: &str, title: &str, add: impl FnOnce(&mut Ui)) {
     icons::paint(
         painter,
         Rect::from_center_size(
-            Pos2::new(rect.left() + 12.0, rect.center().y),
-            Vec2::splat(12.0),
+            Pos2::new(rect.right() - 12.0, rect.center().y),
+            Vec2::splat(11.0),
         ),
         chevron,
         p.muted,
     );
-    painter.text(
-        Pos2::new(rect.left() + 24.0, rect.center().y),
-        Align2::LEFT_CENTER,
-        title,
-        strong_font(12.0),
-        p.text,
+    let job = egui::text::LayoutJob::single_section(
+        title.to_uppercase(),
+        egui::TextFormat {
+            font_id: strong_font(10.5),
+            color: p.muted,
+            extra_letter_spacing: 0.9,
+            ..Default::default()
+        },
+    );
+    let g = painter.layout_job(job);
+    painter.galley(
+        Pos2::new(rect.left() + 4.0, rect.center().y - g.size().y / 2.0),
+        g,
+        p.muted,
     );
     if resp.clicked() {
         state.toggle(ui);
@@ -277,7 +288,7 @@ pub fn type_card<T: PartialEq + Copy>(
         });
         ui.add_space(4.0);
         // The type: a large button that opens the gallery.
-        let shown = cur.map_or("(varios tipos)".to_string(), |c| c.name.clone());
+        let shown = cur.map_or("Varios".to_string(), |c| c.name.clone());
         let (rect, resp) =
             ui.allocate_exact_size(Vec2::new(ui.available_width(), 32.0), Sense::click());
         let resp = resp.on_hover_text("Elegir otro tipo");
@@ -663,37 +674,27 @@ fn hue(ctx: &egui::Context) -> Option<super::toolbox::Hue> {
     ctx.data(|d| d.get_temp(egui::Id::unique("props-hue")))
 }
 
-/// The palette's title: "Propiedades" and what it shows, on a band of the
-/// discipline's colour.
+/// The palette's title: what it shows, under the tab «Propiedades» (W10):
+/// a dot of the discipline's colour and the words, quiet, no band.
 pub fn title(ui: &mut Ui, what: &str) {
     let p = Palette::current(ui.ctx());
     let h = hue(ui.ctx());
     ui.add_space(8.0);
-    egui::Frame::new()
-        .fill(h.map_or(p.raised, |h| h.soft))
-        .corner_radius(CornerRadius::same(8))
-        .inner_margin(egui::Margin::symmetric(10, 7))
-        .show(ui, |ui| {
-            ui.set_width(ui.available_width());
-            ui.horizontal(|ui| {
-                ui.label(
-                    egui::RichText::new("Propiedades")
-                        .font(strong_font(13.0))
-                        .color(h.map_or(p.text, |h| h.ink)),
-                );
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    ui.add(
-                        egui::Label::new(
-                            egui::RichText::new(what)
-                                .small()
-                                .color(h.map_or(p.muted, |h| h.ink)),
-                        )
-                        .truncate(),
-                    );
-                });
-            });
-        });
-    ui.add_space(6.0);
+    ui.horizontal(|ui| {
+        ui.add_space(2.0);
+        let (dot, _) = ui.allocate_exact_size(egui::Vec2::splat(8.0), egui::Sense::hover());
+        ui.painter()
+            .circle_filled(dot.center(), 3.5, h.map_or(p.muted, |h| h.main));
+        ui.add(
+            egui::Label::new(
+                egui::RichText::new(what)
+                    .font(strong_font(12.5))
+                    .color(p.text),
+            )
+            .truncate(),
+        );
+    });
+    ui.add_space(4.0);
 }
 
 /// A measure shown big on a tile (§12.6): what it is, its value in metres,
@@ -793,4 +794,24 @@ pub fn swatch(ui: &mut Ui, rgb: [u8; 3], size: f32) {
 pub fn note(ui: &mut Ui, text: &str) {
     let p = Palette::current(ui.ctx());
     ui.add(egui::Label::new(egui::RichText::new(text).small().color(p.muted)).wrap());
+}
+
+/// A number with its slider and its box beside it (W10, as Synaps and
+/// 1to10: «100 %», «259°»), as wide as `width`. Whether it changed.
+pub fn slider_value(
+    ui: &mut Ui,
+    value: &mut f64,
+    range: std::ops::RangeInclusive<f64>,
+    suffix: &str,
+    decimals: usize,
+    width: f32,
+) -> bool {
+    ui.spacing_mut().slider_width = (width - 78.0).max(40.0);
+    ui.add(
+        egui::Slider::new(value, range)
+            .suffix(suffix)
+            .fixed_decimals(decimals)
+            .clamping(egui::SliderClamping::Never),
+    )
+    .changed()
 }

@@ -65,6 +65,14 @@ const COMMAND_LINE_HEIGHT: f32 = 62.0;
 /// The rail of disciplines, on the far left.
 const RAIL_WIDTH: f32 = 50.0;
 
+/// What the column under the tools shows (W10).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SideTab {
+    #[default]
+    Properties,
+    Layers,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tool {
     Arrow,
@@ -828,6 +836,10 @@ pub struct ArchiSimApp {
     pub dark: bool,
     /// The properties palette (left, beside the tools) is shown.
     pub show_properties: bool,
+    /// The tab under the tools: Properties or the drawing layers (W10).
+    pub side_tab: SideTab,
+    /// The column of tools and properties folded to a strip (W10, ‹).
+    pub tools_folded: bool,
     /// The navigator (right) is shown.
     pub show_navigator: bool,
     /// Pictures of the types for the properties palette.
@@ -858,6 +870,10 @@ pub struct ArchiSimApp {
     /// Width of each side of the drawing: disciplines, tools and properties
     /// on the left, navigator on the right, so the drawing is centred.
     pub side_width: f32,
+    /// The floating cards (W10): their heights in the last frame, and
+    /// what they leave of the drawing free (None, side by side).
+    pub floating: floating::Measured,
+    pub free_area: Option<Rect>,
     /// Counts messages, to know when the last one appeared.
     message_serial: u64,
     /// The message last aged and when it appeared (seconds).
@@ -1186,6 +1202,8 @@ impl ArchiSimApp {
             snap_filter: SnapFilter::default(),
             dark: prefs.dark,
             show_properties: true,
+            side_tab: SideTab::Properties,
+            tools_folded: false,
             show_navigator: true,
             thumbs: thumbs::Thumbs::default(),
             symbol_picker: None,
@@ -1200,6 +1218,8 @@ impl ArchiSimApp {
             nav_tab: navigator::NavTab::default(),
             command_search: None,
             side_width: SIDE_WIDTH,
+            floating: floating::Measured::default(),
+            free_area: None,
             message_serial: 0,
             message_seen: (0, 0.0),
             message_undo: None,
@@ -2577,54 +2597,25 @@ impl ArchiSimApp {
     /// The window of the technical environment: disciplines, tools and
     /// Properties on the left, the navigator on the right, tabs of views.
     fn technical_frame(&mut self, ui: &mut Ui) {
+        if self.prefs.floating_panels {
+            self.floating_frame(ui);
+            return;
+        }
+        self.free_area = None;
         let p = theme::Palette::current(ui.ctx());
-        // Islands (concepto de interfaz del 24/10/2026): white rounded
-        // cards with a soft shadow, a little apart, on warm paper.
+        // One piece (Antonio, 27/11/2026): the bars and columns go edge to
+        // edge, square, parted only by thin lines, and the drawing is the
+        // one rounded card, set in the frame.
         ui.painter()
-            .rect_filled(ui.max_rect(), egui::CornerRadius::ZERO, p.ground);
-        let gap = 5;
-        let island = |m: egui::Margin| {
-            egui::Frame::new()
-                .fill(p.panel)
-                .corner_radius(egui::CornerRadius::same(14))
-                .stroke(Stroke::new(1.0, p.line))
-                .shadow(egui::epaint::Shadow {
-                    offset: [0, 2],
-                    blur: 10,
-                    spread: 0,
-                    color: Color32::from_black_alpha(14),
-                })
-                .outer_margin(m)
-        };
-        let side = |l: i8, r: i8| egui::Margin {
-            left: l,
-            right: r,
-            top: gap,
-            bottom: gap,
-        };
+            .rect_filled(ui.max_rect(), egui::CornerRadius::ZERO, p.panel);
+        let flat = |m: egui::Margin| egui::Frame::new().fill(p.panel).inner_margin(m);
         egui::Panel::top("top-bar")
-            .frame(
-                island(egui::Margin {
-                    left: gap * 2,
-                    right: gap * 2,
-                    top: gap * 2,
-                    bottom: gap,
-                })
-                .inner_margin(egui::Margin::symmetric(10, 3)),
-            )
+            .frame(flat(egui::Margin::symmetric(12, 5)))
             .show(ui, |ui| {
                 crate::profile::time("barra superior", || self.top_bar(ui))
             });
         egui::Panel::bottom("bottom-bar")
-            .frame(
-                island(egui::Margin {
-                    left: gap * 2,
-                    right: gap * 2,
-                    top: gap,
-                    bottom: gap * 2,
-                })
-                .inner_margin(egui::Margin::symmetric(10, 3)),
-            )
+            .frame(flat(egui::Margin::symmetric(12, 4)))
             .show(ui, |ui| {
                 crate::profile::time("barra inferior", || self.bottom_bar(ui))
             });
@@ -2634,111 +2625,126 @@ impl ArchiSimApp {
         // both sides.
         egui::Panel::left("disciplines")
             .resizable(false)
-            .exact_size(RAIL_WIDTH + (gap * 3) as f32)
-            .frame(island(side(gap * 2, gap)).inner_margin(egui::Margin::symmetric(4, 6)))
+            .exact_size(RAIL_WIDTH + 8.0)
+            .frame(flat(egui::Margin::symmetric(4, 6)))
             .show(ui, |ui| {
                 crate::profile::time("disciplinas", || self.discipline_rail(ui))
             });
         // The tools of the discipline and, below them, Properties, as
         // Revit's palette: choosing a tool and its type is a short move of
         // the mouse.
-        let shown = egui::Panel::left("tools")
-            .resizable(true)
-            .default_size(SIDE_WIDTH - RAIL_WIDTH)
-            .min_size(MIN_SIDE_WIDTH - RAIL_WIDTH)
-            .max_size(MAX_SIDE_WIDTH - RAIL_WIDTH)
-            .frame(island(side(gap, gap)).inner_margin(egui::Margin::symmetric(10, 6)))
-            .show(ui, |ui| {
-                crate::profile::time("herramientas y propiedades", || self.tool_column(ui))
-            });
-        self.side_width = RAIL_WIDTH + shown.response.rect.width();
+        // Folded (W10), a strip with › to unfold it, and the drawing takes
+        // the room.
+        if self.tools_folded {
+            egui::Panel::left("tools-folded")
+                .resizable(false)
+                .exact_size(FOLDED_WIDTH)
+                .frame(flat(egui::Margin::symmetric(2, 8)))
+                .show(ui, |ui| {
+                    if fold_button(
+                        ui,
+                        icons::Icon::ChevronRight,
+                        "Mostrar las herramientas y las propiedades",
+                    ) {
+                        self.tools_folded = false;
+                    }
+                });
+        } else {
+            let shown = egui::Panel::left("tools")
+                .resizable(true)
+                .default_size(SIDE_WIDTH - RAIL_WIDTH)
+                .min_size(MIN_SIDE_WIDTH - RAIL_WIDTH)
+                .max_size(MAX_SIDE_WIDTH - RAIL_WIDTH)
+                .frame(flat(egui::Margin::symmetric(12, 6)))
+                .show(ui, |ui| {
+                    crate::profile::time("herramientas y propiedades", || self.tool_column(ui))
+                });
+            self.side_width = RAIL_WIDTH + shown.response.rect.width();
+        }
+        if !self.show_navigator {
+            egui::Panel::right("navigator-folded")
+                .resizable(false)
+                .exact_size(FOLDED_WIDTH)
+                .frame(flat(egui::Margin::symmetric(2, 8)))
+                .show(ui, |ui| {
+                    if fold_button(ui, icons::Icon::ChevronLeft, "Mostrar el navegador") {
+                        self.show_navigator = true;
+                    }
+                });
+        }
         if self.show_navigator {
-            let panel = egui::Panel::right("navigator")
-                .frame(island(side(gap, gap * 2)).inner_margin(egui::Margin::symmetric(10, 6)));
             // Mirrors the left side.
-            panel
+            egui::Panel::right("navigator")
                 .resizable(false)
                 .exact_size(self.side_width)
+                .frame(flat(egui::Margin::symmetric(12, 6)))
                 .show(ui, |ui| {
                     crate::profile::time("navegador", || self.navigator(ui))
                 });
         }
-        let centre = egui::Frame::new()
-            .fill(p.panel)
-            .corner_radius(egui::CornerRadius::same(14))
-            .stroke(Stroke::new(1.0, p.line))
-            .outer_margin(side(gap, gap))
-            .inner_margin(egui::Margin::same(1));
-        egui::CentralPanel::default().frame(centre).show(ui, |ui| {
-            ui.spacing_mut().item_spacing.y = 0.0;
-            crate::profile::time("pestañas de vistas", || self.tab_strip(ui));
-            if self.mode != ViewMode::Schedule {
-                // Revit's ribbon and, under it, its options bar.
-                egui::Panel::top("ribbon")
-                    .resizable(false)
-                    .exact_size(if self.prefs.ribbon_compact {
-                        ribbon::RIBBON_COMPACT_HEIGHT
-                    } else {
-                        ribbon::RIBBON_HEIGHT
-                    })
-                    .frame(
-                        egui::Frame::new()
-                            .fill(p.panel)
-                            .inner_margin(egui::Margin::symmetric(6, 0))
-                            .stroke(Stroke::new(1.0, p.line)),
-                    )
-                    .show(ui, |ui| crate::profile::time("cinta", || self.ribbon(ui)));
-                egui::Panel::top("options-bar")
-                    .resizable(false)
-                    .exact_size(context_bar::OPTIONS_BAR_HEIGHT)
-                    .frame(
-                        egui::Frame::new()
-                            .fill(p.raised)
-                            .inner_margin(egui::Margin::symmetric(8, 0))
-                            .stroke(Stroke::new(1.0, p.line)),
-                    )
-                    .show(ui, |ui| {
-                        crate::profile::time("barra de opciones", || self.options_bar(ui))
-                    });
-            }
-            if !matches!(self.mode, ViewMode::ThreeD | ViewMode::Schedule)
-                && self.command_line_shown()
-            {
-                egui::Panel::bottom("command-line")
-                    .resizable(false)
-                    .exact_size(COMMAND_LINE_HEIGHT)
-                    .frame(
-                        egui::Frame::new()
-                            .fill(p.panel)
-                            .inner_margin(egui::Margin::symmetric(10, 3))
-                            .stroke(Stroke::new(1.0, p.line)),
-                    )
-                    .show(ui, |ui| self.command_line(ui));
-            }
-            match self.mode {
-                ViewMode::Plan => crate::profile::time("planta", || self.plan_view(ui)),
-                ViewMode::ThreeD => crate::profile::time("3D", || self.view_3d(ui)),
-                ViewMode::Section => crate::profile::time("sección", || self.section_view(ui)),
-                ViewMode::Schedule => {
-                    if let Some(tabs::TabKind::Schedule(w)) =
-                        self.tabs.get(self.active_tab).map(|t| t.kind)
-                    {
-                        self.schedule_view(ui, w);
-                    }
+        egui::CentralPanel::default()
+            .frame(egui::Frame::new().fill(p.panel))
+            .show(ui, |ui| {
+                ui.spacing_mut().item_spacing.y = 0.0;
+                crate::profile::time("pestañas de vistas", || self.tab_strip(ui));
+                if self.mode != ViewMode::Schedule {
+                    // Revit's ribbon and, under it, its options bar.
+                    egui::Panel::top("ribbon")
+                        .resizable(false)
+                        .exact_size(if self.prefs.ribbon_compact {
+                            ribbon::RIBBON_COMPACT_HEIGHT
+                        } else {
+                            ribbon::RIBBON_HEIGHT
+                        })
+                        .frame(flat(egui::Margin::symmetric(6, 0)))
+                        .show(ui, |ui| crate::profile::time("cinta", || self.ribbon(ui)));
+                    egui::Panel::top("options-bar")
+                        .resizable(false)
+                        .exact_size(context_bar::OPTIONS_BAR_HEIGHT)
+                        .frame(flat(egui::Margin::symmetric(8, 0)))
+                        .show(ui, |ui| {
+                            crate::profile::time("barra de opciones", || self.options_bar(ui))
+                        });
                 }
-                ViewMode::Sheet(s) => self.sheet_view(ui, s),
-                ViewMode::Drafting(d) => self.drafting_view(ui, d),
-            }
-            if matches!(self.mode, ViewMode::Plan | ViewMode::ThreeD) {
-                let area = if self.mode == ViewMode::Plan {
-                    self.canvas
-                } else {
-                    self.v3d.canvas
-                };
-                let ctx = ui.ctx().clone();
-                self.street_bar(&ctx, area);
-            }
-        });
+                // The drawing, the one card of the window, on a ground a
+                // shade darker than the frame.
+                let well = egui::Frame::new()
+                    .fill(p.ground)
+                    .inner_margin(egui::Margin::same(6));
+                let card = egui::Frame::new()
+                    .fill(p.panel)
+                    .corner_radius(egui::CornerRadius::same(12))
+                    .stroke(Stroke::new(1.0, p.line))
+                    .inner_margin(egui::Margin::same(1));
+                well.show(ui, |ui| {
+                    ui.set_min_size(ui.available_size());
+                    card.show(ui, |ui| {
+                        ui.set_min_size(ui.available_size());
+                        // The drawing is clipped to the rounded card.
+                        let inside = ui.max_rect().shrink(2.0);
+                        ui.set_clip_rect(inside.intersect(ui.clip_rect()));
+                        if !matches!(self.mode, ViewMode::ThreeD | ViewMode::Schedule)
+                            && self.command_line_shown()
+                        {
+                            egui::Panel::bottom("command-line")
+                                .resizable(false)
+                                .exact_size(COMMAND_LINE_HEIGHT)
+                                .frame(flat(egui::Margin::symmetric(10, 3)))
+                                .show(ui, |ui| self.command_line(ui));
+                        }
+                        self.active_view_ui(ui);
+                    });
+                });
+                if matches!(self.mode, ViewMode::Plan | ViewMode::ThreeD) {
+                    let area = if self.mode == ViewMode::Plan {
+                        self.canvas
+                    } else {
+                        self.v3d.canvas
+                    };
+                    let ctx = ui.ctx().clone();
+                    self.street_bar(&ctx, area);
+                }
+            });
     }
 
     /// What every frame does after the window: dialogs and windows.
@@ -3487,13 +3493,46 @@ pub fn length_field(ui: &mut Ui, id: Id, value: f64, width: f32) -> Option<f64> 
     }
 }
 
+/// A length shared by several elements (W10): their value, or «Varios»
+/// written faint when they differ; typing gives them all one value.
+pub fn length_field_mixed(ui: &mut Ui, id: Id, value: Option<f64>, width: f32) -> Option<f64> {
+    let Some(v) = value else {
+        let text = text_edit_committed_hint(ui, id, "", "Varios", width)?;
+        return match parse_length(&text) {
+            Some(v) => Some(v),
+            None => {
+                ui.ctx()
+                    .data_mut(|d| d.insert_temp(Id::unique("length-error"), text));
+                None
+            }
+        };
+    };
+    length_field(ui, id, v, width)
+}
+
 pub(super) fn text_edit_committed(ui: &mut Ui, id: Id, shown: &str, width: f32) -> Option<String> {
+    text_edit_committed_hint(ui, id, shown, "", width)
+}
+
+/// [`text_edit_committed`] with a faint text while it is empty.
+pub(super) fn text_edit_committed_hint(
+    ui: &mut Ui,
+    id: Id,
+    shown: &str,
+    hint: &str,
+    width: f32,
+) -> Option<String> {
     let buffer_id = id.with("buffer");
     let mut text = ui
         .ctx()
         .data(|d| d.get_temp::<String>(buffer_id))
         .unwrap_or_else(|| shown.to_string());
-    let response = ui.add(TextEdit::singleline(&mut text).id(id).desired_width(width));
+    let response = ui.add(
+        TextEdit::singleline(&mut text)
+            .id(id)
+            .hint_text(hint)
+            .desired_width(width),
+    );
     if response.has_focus() {
         ui.ctx().data_mut(|d| d.insert_temp(buffer_id, text));
         None
@@ -3544,6 +3583,7 @@ mod env_building_ui;
 mod equip_ui;
 mod facade_ui;
 mod fix_ui;
+mod floating;
 mod floor_ui;
 mod foundation_ui;
 mod framing_ui;
@@ -3562,6 +3602,7 @@ mod marking_ui;
 mod mass_grips3d;
 mod mesh_ui;
 mod methods_ui;
+mod mini_bar;
 mod missions_ui;
 mod module_ui;
 mod mouse3d;
@@ -3662,4 +3703,24 @@ pub(crate) fn typing_in_text(ctx: &egui::Context) -> bool {
     // press it again.
     ctx.memory_mut(|m| m.surrender_focus(id));
     false
+}
+
+/// Width of a folded side panel: just its ‹ or ›.
+const FOLDED_WIDTH: f32 = 30.0;
+
+/// The small round button that folds or unfolds a side panel (W10).
+pub(crate) fn fold_button(ui: &mut Ui, icon: crate::app::icons::Icon, hint: &str) -> bool {
+    let p = crate::app::theme::Palette::current(ui.ctx());
+    let (rect, resp) = ui.allocate_exact_size(egui::Vec2::splat(22.0), egui::Sense::click());
+    if resp.hovered() {
+        ui.painter()
+            .rect_filled(rect, egui::CornerRadius::same(11), p.accent_soft);
+    }
+    crate::app::icons::paint(
+        ui.painter(),
+        egui::Rect::from_center_size(rect.center(), egui::Vec2::splat(14.0)),
+        icon,
+        if resp.hovered() { p.text } else { p.muted },
+    );
+    resp.on_hover_text(hint).clicked()
 }

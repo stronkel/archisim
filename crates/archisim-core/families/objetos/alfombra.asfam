@@ -1,7 +1,7 @@
 family "Alfombra"
   category furniture
   host none
-  version 2
+  version 3
   description "Alfombra lisa, redonda, de rayas o bereber; se pisa, así que va en el suelo de la planta"
   folder "Alfombras"
 
@@ -32,9 +32,36 @@ plan 1:50
   else
     polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen thin dashed
     polygon (-width / 2 + 0.07, 0.07) (width / 2 - 0.07, 0.07) (width / 2 - 0.07, depth - 0.07) (-width / 2 + 0.07, depth - 0.07) pen thin dotted
+    # Its fringes, on the short ends.
+    if width >= depth
+      let n = floor(depth / 0.05)
+      repeat i in 0..n
+        let y = (i + 0.5) * depth / n
+        line (-width / 2, y) to (-width / 2 - 0.06, y) pen thin
+        line (width / 2, y) to (width / 2 + 0.06, y) pen thin
+    else
+      let n = floor(width / 0.05)
+      repeat i in 0..n
+        let x = -width / 2 + (i + 0.5) * width / n
+        line (x, 0) to (x, -0.06) pen thin
+        line (x, depth) to (x, depth + 0.06) pen thin
 
 plan presentation
   polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen thin tint mat opacity 0.8
+  polygon (-width / 2 + 0.08, 0.08) (width / 2 - 0.08, 0.08) (width / 2 - 0.08, depth - 0.08) (-width / 2 + 0.08, depth - 0.08) pen thin
+  if model3d != "Mediterráneo"
+    if width >= depth
+      let n = floor(depth / 0.05)
+      repeat i in 0..n
+        let y = (i + 0.5) * depth / n
+        line (-width / 2, y) to (-width / 2 - 0.06, y) pen thin
+        line (width / 2, y) to (width / 2 + 0.06, y) pen thin
+    else
+      let n = floor(width / 0.05)
+      repeat i in 0..n
+        let x = -width / 2 + (i + 0.5) * width / n
+        line (x, 0) to (x, -0.06) pen thin
+        line (x, depth) to (x, depth + 0.06) pen thin
 
 outputs
   generator = "props:fine_rug"

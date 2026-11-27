@@ -2170,15 +2170,13 @@ impl ArchiSimApp {
                 }
                 row(
                     ui,
-                    if same_height {
-                        "Altura (mm)"
-                    } else {
-                        "Altura (mm) · varias"
-                    },
+                    "Altura (mm)",
                     "Cambia la altura de todos los muros seleccionados",
                     |ui, w| {
-                        let shown = heights.first().copied().unwrap_or(0.0);
-                        if let Some(v) = length_field(ui, Id::unique("walls-h"), shown, w - 8.0) {
+                        let shown = heights.first().copied().filter(|_| same_height);
+                        if let Some(v) =
+                            length_field_mixed(ui, Id::unique("walls-h"), shown, w - 8.0)
+                        {
                             let r = self.ed.set_walls_height(&walls, v);
                             self.report(r, "Altura cambiada en los muros seleccionados.");
                         }

@@ -4,6 +4,20 @@ Lo que cambia en cada versión, en pocas líneas. ArchiSim enseña la parte de s
 
 Cada versión empieza con una línea `## <versión>` (por ejemplo `## 0.81.0`): es la que busca la publicación.
 
+## 0.116.0
+
+- **Tramas con piezas teñidas**: como en ArchKit, algunas piedras, tablas, baldosas y ladrillos van un tono más oscuros, y el dibujo gana vida.
+- **Nueve tramas nuevas**: escama, octógono y taco, baldosa con puntos, ladrillo flamenco, ladrillo vertical, hormigón en sección, tapial, aislante en serpentina y celosía de rombos.
+- **Cinco estilos de presentación nuevos**: Editorial, Sol marengo, Terracota maximalista, Botánico y salvia y Cobalto y rosa.
+- **Pestañas de texto y capas a mano**: «Modelo · Proyecto» en el navegador y «Propiedades · Capas» bajo las herramientas, con las capas del dibujo, su ojo y su candado. Con varios elementos de valores distintos, el campo dice «Varios».
+- **Detalles numerados**: a 1:20 y 1:10, las secciones y sus vistas de detalle numeran cada material cortado y llevan su leyenda.
+- **Muebles con más vida**: dormitorios montados (cama, mesitas con lámpara y alfombra con flecos), sofás con sus cojines y botones de capitoné en planta, y alfombras con flecos.
+- **Sombra editorial bajo los muebles**: los estilos de ArchKit dibujan una sombra suave bajo sofás, mesas, camas y cocinas; cualquier estilo puede llevarla. El formato del fichero sube a la versión 126.
+- **Mini barra junto al dibujo**: medir, acotar, escribir, acercar, alejar y ajustar, a la derecha de la planta.
+- **La ventana de una pieza**: barras, cinta y columnas van de borde a borde, separadas por líneas finas, y el dibujo es el único recuadro redondeado.
+- **Paneles flotantes, a prueba**: Vista → «Paneles flotantes» lleva el dibujo a toda la ventana con los paneles flotando encima. Por defecto, los paneles siguen a los lados.
+- **Paneles más limpios**: títulos de grupo en versalitas, columnas que se pliegan con ‹ y ›, deslizadores con su casilla para la escala y el giro de las tramas, y un selector de tramas con buscador y familias.
+
 ## 0.115.0
 
 - **La planta, bonita desde el principio**: un proyecto nuevo dibuja su planta con el estilo «Lápiz», con muros macizos en gris oscuro, líneas grises finas y rellenos muy claros, como una planta de presentación. **F7** o el botón «Presentada» de la barra inferior enseñan la planta técnica y vuelven.

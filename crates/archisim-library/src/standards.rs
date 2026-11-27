@@ -369,6 +369,78 @@ pub fn working_look() -> archisim_core::PresentationStyle {
 /// stones, as the sections of Synaps.
 pub const TEXTURED_LOOK: &str = "Lápiz con tramas";
 
+/// The looks of ArchKit Studio, Antonio's library of hatches (W10): the
+/// paper, the ink of the lines, the light colour of the tinted pieces
+/// and the cut walls; the drawing's tones go from the ink to the paper
+/// through them. Name, paper, ink, accent, walls.
+/// A look of ArchKit: name, paper, ink, accent, walls.
+pub type EditorialLook = (&'static str, [u8; 3], [u8; 3], [u8; 3], [u8; 3]);
+
+pub const EDITORIAL_LOOKS: [EditorialLook; 5] = [
+    (
+        "Editorial",
+        [248, 247, 244],
+        [59, 70, 80],
+        [230, 220, 207],
+        [74, 85, 96],
+    ),
+    (
+        "Sol marengo",
+        [253, 251, 247],
+        [90, 82, 72],
+        [217, 155, 120],
+        [61, 74, 82],
+    ),
+    (
+        "Terracota maximalista",
+        [251, 243, 238],
+        [140, 59, 43],
+        [232, 184, 109],
+        [92, 40, 30],
+    ),
+    (
+        "Botánico y salvia",
+        [243, 246, 242],
+        [45, 74, 62],
+        [163, 184, 153],
+        [35, 58, 49],
+    ),
+    (
+        "Cobalto y rosa",
+        [251, 242, 244],
+        [30, 58, 138],
+        [242, 132, 130],
+        [23, 37, 84],
+    ),
+];
+
+/// The presentation styles of [`EDITORIAL_LOOKS`]: with washes, textures
+/// in the cuts left out (the walls solid), lines at 85 %.
+pub fn editorial_looks() -> Vec<archisim_core::PresentationStyle> {
+    let mix = |a: [u8; 3], b: [u8; 3], t: f64| {
+        [0, 1, 2].map(|i| (a[i] as f64 + (b[i] as f64 - a[i] as f64) * t).round() as u8)
+    };
+    EDITORIAL_LOOKS
+        .iter()
+        .map(|(name, paper, ink, accent, walls)| {
+            let mut s = archisim_core::PresentationStyle::new(*name);
+            s.background = *paper;
+            s.palette = vec![
+                *ink,
+                mix(*ink, *paper, 0.45),
+                *accent,
+                mix(*accent, *paper, 0.6),
+                *paper,
+            ];
+            s.poche = Some(*walls);
+            s.line_scale = 0.85;
+            s.washes = true;
+            s.object_shadows = true;
+            s
+        })
+        .collect()
+}
+
 /// «Lápiz con tramas»: as «Lápiz», but the cuts are not one dark grey:
 /// each layer with its material's texture over a pale wash.
 pub fn textured_look() -> archisim_core::PresentationStyle {

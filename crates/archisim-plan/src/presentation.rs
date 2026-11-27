@@ -28,6 +28,7 @@ pub(crate) fn begin(p: Option<&PresentationStyle>) -> Guard {
     crate::POCHE.with(|c| c.set(p.and_then(|p| p.poche)));
     crate::PRESENTING.with(|c| c.set(p.is_some()));
     crate::TEXTURED.with(|c| c.set(p.is_some_and(|p| p.cut_textures)));
+    crate::OBJECT_SHADOWS.with(|c| c.set(p.is_some_and(|p| p.object_shadows)));
     Guard
 }
 
@@ -38,6 +39,7 @@ impl Drop for Guard {
         crate::POCHE.with(|c| c.set(None));
         crate::PRESENTING.with(|c| c.set(false));
         crate::TEXTURED.with(|c| c.set(false));
+        crate::OBJECT_SHADOWS.with(|c| c.set(false));
     }
 }
 

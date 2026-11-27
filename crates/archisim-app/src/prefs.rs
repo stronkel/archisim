@@ -86,6 +86,10 @@ pub struct Prefs {
     /// The ribbon folded: only the names of its panels, which open when
     /// pressed.
     pub ribbon_compact: bool,
+    /// The drawing over the whole window, with the bars and palettes
+    /// floating on it (W10, as Synaps and 1to10); off (by default, as
+    /// Antonio preferred on 27/11/2026), side by side.
+    pub floating_panels: bool,
     /// Look for a new version on GitHub when ArchiSim opens.
     pub check_updates: bool,
     /// A version the user chose not to be told about again.
@@ -162,6 +166,7 @@ impl Default for Prefs {
             water_3d: true,
             draw_aside: true,
             ribbon_compact: false,
+            floating_panels: false,
             check_updates: true,
             skipped_version: None,
             finger_draws: None,
@@ -218,6 +223,7 @@ impl Prefs {
             "agua_en_movimiento": self.water_3d,
             "dibujar_aparte": self.draw_aside,
             "cinta_recogida": self.ribbon_compact,
+            "paneles_flotantes": self.floating_panels,
             "buscar_actualizaciones": self.check_updates,
             "version_saltada": self.skipped_version,
             "dedo_dibuja": self.finger_draws,
@@ -308,6 +314,7 @@ impl Prefs {
             water_3d: flag("agua_en_movimiento", d.water_3d),
             draw_aside: flag("dibujar_aparte", d.draw_aside),
             ribbon_compact: flag("cinta_recogida", d.ribbon_compact),
+            floating_panels: flag("paneles_flotantes", d.floating_panels),
             check_updates: flag("buscar_actualizaciones", d.check_updates),
             skipped_version: v["version_saltada"].as_str().map(str::to_string),
             finger_draws: v["dedo_dibuja"].as_bool(),
@@ -324,6 +331,8 @@ impl Prefs {
             return Prefs {
                 welcomed: true,
                 units: crate::units::LengthUnit::Millimetre,
+                // The tests click where the plan was drawn side by side.
+                floating_panels: false,
                 ..Default::default()
             };
         }
@@ -400,6 +409,7 @@ mod tests {
             water_3d: false,
             draw_aside: true,
             ribbon_compact: true,
+            floating_panels: false,
             check_updates: false,
             skipped_version: Some("0.81.0".into()),
             finger_draws: Some(true),

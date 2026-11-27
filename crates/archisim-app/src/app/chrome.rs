@@ -690,6 +690,14 @@ impl ArchiSimApp {
             ui.switch(&mut self.show_reference_lines, "Líneas de referencia");
             ui.switch(&mut self.show_grid, "Rejilla");
             if ui
+                .switch(&mut self.prefs.floating_panels, "Paneles flotantes")
+                .on_hover_text("El dibujo ocupa toda la ventana y las barras y paletas flotan encima; apagado, van a los lados del dibujo")
+                .changed()
+            {
+                self.prefs.save();
+                self.fit_requested = true;
+            }
+            if ui
                 .switch(&mut self.prefs.draw_aside, "Dibujar aparte")
                 .on_hover_text("Plantas, secciones y alzados que tardan se dibujan en segundo plano, sin parar la ventana; apagado, se dibujan al momento, como antes de la 0.85")
                 .changed()

@@ -201,6 +201,39 @@ fn furnish(h: &mut Harness) {
     h.click_at(p(3.0, 8.8));
 }
 
+/// W10: the drawing over the whole window, the bars and palettes floating
+/// on it. The view is fitted where the cards leave it free, a wall is drawn
+/// there as always, and the pointer over a card is not over the plan.
+#[test]
+fn floating_panels_leave_the_drawing_whole() {
+    let mut h = Harness::new(Editor::new_project());
+    h.app.prefs.floating_panels = true;
+    h.app.fit_requested = true;
+    for _ in 0..4 {
+        h.frame();
+    }
+    let free = h.app.free_area.expect("the cards leave a part free");
+    let canvas = h.app.canvas;
+    assert_eq!(canvas.width(), SCREEN.0, "the plan takes the whole window");
+    assert!(free.width() > 300.0 && free.height() > 200.0, "{free:?}");
+    assert!(free.min.x > canvas.min.x + 200.0 && free.max.x < canvas.max.x - 200.0);
+    // The model is framed in the free part.
+    let c = h.screen(p(5.0, 5.0));
+    assert!(free.contains(c), "{c:?} outside {free:?}");
+    draw_outline(&mut h);
+    assert_eq!(h.model().walls().count(), 4);
+    // Over the navigator, on the right, the plan has no cursor.
+    h.pos = Pos2::new(SCREEN.0 - 60.0, 500.0);
+    h.events.push(Event::PointerMoved(h.pos));
+    h.frame();
+    h.frame();
+    assert!(h.app.cursor.is_none(), "{:?}", h.app.cursor);
+    // Side by side again: nothing floats.
+    h.app.prefs.floating_panels = false;
+    h.frame();
+    assert!(h.app.free_area.is_none());
+}
+
 #[test]
 fn slab_door_and_window_tools() {
     let mut h = Harness::new(Editor::new_project());

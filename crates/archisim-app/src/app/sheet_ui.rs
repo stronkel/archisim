@@ -168,8 +168,10 @@ impl ArchiSimApp {
         let (w, h) = (sheet.width * MM, sheet.height * MM);
         if self.fit_requested && rect.width() > 50.0 {
             self.fit_requested = false;
+            let area = self.fit_area(rect);
             self.view
-                .fit_exact(rect, Point2::new(0.0, 0.0), Point2::new(w, h), 30.0);
+                .fit_exact(area, Point2::new(0.0, 0.0), Point2::new(w, h), 30.0);
+            self.view.shift_to(rect, area);
         }
         // Pan and zoom as in plan.
         let before = self.view;

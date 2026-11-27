@@ -82,6 +82,15 @@ impl View {
         self.center = Point2::new((lo.x + hi.x) / 2.0, (lo.y + hi.y) / 2.0);
     }
 
+    /// After fitting in `area`, a part of `canvas`, moves the view so the
+    /// framed region is in `area` while the view draws in `canvas` (the
+    /// floating cards of W10 cover the rest).
+    pub fn shift_to(&mut self, canvas: Rect, area: Rect) {
+        let d = area.center() - canvas.center();
+        self.center.x -= d.x as f64 / self.zoom;
+        self.center.y += d.y as f64 / self.zoom;
+    }
+
     /// Frames the model region `lo`–`hi` in `rect` with a margin in points.
     pub fn fit(&mut self, rect: Rect, lo: Point2, hi: Point2, margin: f32) {
         let w = (hi.x - lo.x).max(1.0);
@@ -96,6 +105,17 @@ impl View {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_view_fitted_in_part_of_the_canvas_shows_it_there() {
+        let canvas = rect();
+        let area = Rect::from_min_max(Pos2::new(300.0, 100.0), canvas.max);
+        let mut v = View::default();
+        v.fit(area, Point2::new(0.0, 0.0), Point2::new(10.0, 10.0), 0.0);
+        v.shift_to(canvas, area);
+        let c = v.to_screen(canvas, Point2::new(5.0, 5.0));
+        assert!((c - area.center()).length() < 1e-3);
+    }
 
     fn rect() -> Rect {
         Rect::from_min_size(Pos2::new(100.0, 50.0), Vec2::new(800.0, 600.0))

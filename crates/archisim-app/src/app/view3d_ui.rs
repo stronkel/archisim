@@ -1527,6 +1527,7 @@ impl ArchiSimApp {
             }
         }
         if self.v3d.building() {
+            let rect = self.fit_area(rect);
             // Built aside: the one before stays; the first one says so.
             let first = self.v3d.scene.is_empty();
             let at = if first {
@@ -1560,9 +1561,11 @@ impl ArchiSimApp {
             self.draw_brush_3d(&painter, rect);
         }
         let turning = response.dragged_by(PointerButton::Secondary);
-        self.camera_hint(&painter, rect, turning);
-        self.view_cube(&ctx, rect);
-        self.look_bar(&ctx, rect);
+        // Over what the floating cards leave free (W10).
+        let free = self.fit_area(rect);
+        self.camera_hint(&painter, free, turning);
+        self.view_cube(&ctx, free);
+        self.look_bar(&ctx, free);
         let v = &mut self.v3d;
         let on_handle = v.section_hover.is_some()
             || v.section_drag.is_some()

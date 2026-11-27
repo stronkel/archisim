@@ -159,19 +159,12 @@ impl ArchiSimApp {
                     st.hatch_opacity = v;
                 }
             });
-            row(ui, "Escala", "", |ui, _w| {
-                ui.add(
-                    egui::DragValue::new(&mut st.hatch_scale)
-                        .range(0.05..=100.0)
-                        .speed(0.05),
-                );
+            row(ui, "Escala", "", |ui, w| {
+                super::props::slider_value(ui, &mut st.hatch_scale, 0.25..=4.0, " ×", 2, w);
+                st.hatch_scale = st.hatch_scale.clamp(0.05, 100.0);
             });
-            row(ui, "Ángulo (°)", "", |ui, _w| {
-                ui.add(
-                    egui::DragValue::new(&mut st.hatch_angle)
-                        .range(-360.0..=360.0)
-                        .speed(1.0),
-                );
+            row(ui, "Ángulo", "", |ui, w| {
+                super::props::slider_value(ui, &mut st.hatch_angle, -180.0..=180.0, "°", 0, w);
             });
             if let Some(c) = Self::fill_row(ui, "cad-bg", st.hatch_background) {
                 st.hatch_background = c;
@@ -430,16 +423,13 @@ impl ArchiSimApp {
                             new.opacity = v;
                         }
                     });
-                    row(ui, "Escala", "", |ui, _w| {
-                        ui.add(
-                            egui::DragValue::new(&mut new.scale)
-                                .range(0.05..=100.0)
-                                .speed(0.05),
-                        );
+                    row(ui, "Escala", "", |ui, w| {
+                        super::props::slider_value(ui, &mut new.scale, 0.25..=4.0, " ×", 2, w);
+                        new.scale = new.scale.clamp(0.05, 100.0);
                     });
-                    row(ui, "Ángulo (°)", "", |ui, _w| {
+                    row(ui, "Ángulo", "", |ui, w| {
                         let mut deg = new.angle.to_degrees();
-                        if ui.add(egui::DragValue::new(&mut deg).speed(1.0)).changed() {
+                        if super::props::slider_value(ui, &mut deg, -180.0..=180.0, "°", 0, w) {
                             new.angle = deg.to_radians();
                         }
                     });
@@ -507,6 +497,115 @@ impl ArchiSimApp {
 
     /// The drawing layers dialog: every layer with its switches, colour,
     /// weight and line style; the current one; new and delete.
+    /// The drawing layers in the column, under the tab «Capas» (W10, as
+    /// Synaps): the current one marked, its colour, its name, how many
+    /// elements it has, and an eye and a lock. Everything else of a layer
+    /// (weight, line, printing, renaming) is in «Todas las capas…».
+    pub(super) fn layers_list(&mut self, ui: &mut Ui) {
+        use super::glyphs::{self, Glyph};
+        let p = super::theme::Palette::current(ui.ctx());
+        let layers: Vec<DrawLayer> = self.ed.model().draw_layers().into_iter().cloned().collect();
+        let mut set: Option<DrawLayer> = None;
+        ui.add_space(6.0);
+        ui.label(
+            egui::RichText::new("Lo que dibujas en 2D va a la capa marcada.")
+                .small()
+                .color(p.muted),
+        );
+        ui.add_space(4.0);
+        for l in &layers {
+            let (rect, resp) =
+                ui.allocate_exact_size(Vec2::new(ui.available_width(), 28.0), Sense::click());
+            let current = self.cad_settings.layer == l.id;
+            if current {
+                ui.painter()
+                    .rect_filled(rect, CornerRadius::same(6), p.accent_soft);
+            } else if resp.hovered() {
+                ui.painter()
+                    .rect_filled(rect, CornerRadius::same(6), p.raised);
+            }
+            let [r, g, b] = l.color;
+            ui.painter().circle_filled(
+                rect.left_center() + Vec2::new(14.0, 0.0),
+                5.0,
+                Color32::from_rgb(r, g, b),
+            );
+            let name = if l.id == archisim_core::LAYER_ZERO {
+                "0".to_string()
+            } else {
+                l.name.clone()
+            };
+            ui.painter().text(
+                rect.left_center() + Vec2::new(28.0, 0.0),
+                Align2::LEFT_CENTER,
+                name,
+                egui::FontId::proportional(12.5),
+                if l.visible { p.text } else { p.faint },
+            );
+            ui.painter().text(
+                rect.right_center() - Vec2::new(62.0, 0.0),
+                Align2::RIGHT_CENTER,
+                self.ed.model().draw_layer_users(l.id).to_string(),
+                egui::FontId::monospace(10.5),
+                p.muted,
+            );
+            let eye = Rect::from_center_size(
+                rect.right_center() - Vec2::new(40.0, 0.0),
+                Vec2::splat(22.0),
+            );
+            let lock = Rect::from_center_size(
+                rect.right_center() - Vec2::new(14.0, 0.0),
+                Vec2::splat(22.0),
+            );
+            let re = ui
+                .interact(
+                    eye,
+                    ui.make_persistent_id(("layer-eye", l.id)),
+                    Sense::click(),
+                )
+                .on_hover_text(if l.visible { "Ocultar" } else { "Mostrar" });
+            let rl = ui
+                .interact(
+                    lock,
+                    ui.make_persistent_id(("layer-lock", l.id)),
+                    Sense::click(),
+                )
+                .on_hover_text(if l.locked {
+                    "Desbloquear"
+                } else {
+                    "Bloquear: se ve, pero no se puede seleccionar"
+                });
+            for (r, on, glyph) in [(&re, l.visible, Glyph::Eye), (&rl, l.locked, Glyph::Lock)] {
+                glyphs::paint(
+                    ui.painter(),
+                    r.rect.shrink(4.0),
+                    glyph,
+                    if on { p.accent } else { p.faint },
+                );
+            }
+            if re.clicked() {
+                let mut v = l.clone();
+                v.visible = !v.visible;
+                set = Some(v);
+            } else if rl.clicked() {
+                let mut v = l.clone();
+                v.locked = !v.locked;
+                set = Some(v);
+            } else if resp.clicked() {
+                self.cad_settings.layer = l.id;
+            }
+        }
+        ui.add_space(8.0);
+        if ui.button("Todas las capas…").clicked() {
+            self.show_layers = true;
+        }
+        if let Some(l) = set {
+            if let Err(e) = self.ed.set_draw_layer(l) {
+                self.complain(format!("No se puede: {e}."));
+            }
+        }
+    }
+
     pub(super) fn layers_dialog(&mut self, ctx: &egui::Context) {
         if !self.show_layers {
             return;

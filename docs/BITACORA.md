@@ -6,6 +6,100 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-27 (203) · v0.116: detalles numerados y deslizadores
+
+Misma rama `bloque/w10-paneles` (PR #245). Sin cambios de formato ni de IFC.
+
+- **Hecho**:
+  - **Detalles numerados, como ArchKit**: a 1:20 y más fino (`section::LEGEND_SCALE`), una sección es un detalle: cada material cortado lleva su número en un círculo junto a su pieza más grande, con su directriz, y una leyenda con los nombres en un recuadro blanco (`callouts`, `draw_callouts`). En una vista de detalle de un plano solo se numera lo que se ve en su marco (`clip_to_box`) y la leyenda va a la esquina con menos números. Prueba `details_number_their_materials` (con `ARCHISIM_DETALLE_OUT`, la sección A a 1:10 y el alero).
+  - **Deslizadores como los de Synaps** en toda la aplicación: carril fino relleno del color de acento hasta un botón redondo, con su casilla (`theme::apply`).
+- **Pendiente** de W10: barra superior más limpia, si Antonio la quiere distinta.
+- **Qué debe probar Antonio**: Sección A → «Vista de detalle de una zona» sobre un alero o un encuentro, a 1:10: los materiales numerados y su leyenda; y mira los deslizadores (escala y giro de una trama, Estilos de presentación).
+
+## 2026-11-27 (202) · v0.116: muebles con más vida, como ArchKit
+
+Misma rama `bloque/w10-paneles` (PR #245). Formato 126 (el de la 201); sin cambios de IFC.
+
+- **Hecho**:
+  - **Conjunto de dormitorio** (familia nueva `conjunto_dormitorio.asfam`, generador `props:fine_bedroom_set`, `bedroom_set` en `archisim_props::fine`): la cama de la colección con sus dos mesitas (lámpara y libros) y la alfombra con flecos bajo los pies; en la biblioteca «Dormitorio de matrimonio 160», «… 150» e «Dormitorio individual 90» (con una mesita).
+  - **Sofá**: los cojines sueltos se ven también en planta, contra el respaldo, y la opción «Capitoné» pone los botones del respaldo (familia versión 7).
+  - **Alfombras con flecos** en los extremos cortos, en planta y en la planta presentada, con el ribete de dentro (familia versión 3).
+  - **La sombra editorial pieza a pieza**: ahora cada pieza rellena del dibujo del mueble arroja su sombra (`shadow_of`), no la caja entera; así los conjuntos no llevan un bloque gris debajo.
+- **Pendiente** de ArchKit: la leyenda numerada de la sección 1:10; isla con taburetes (los taburetes se ponen aparte, para que el 3D y las mediciones los cuenten).
+- **Qué debe probar Antonio**: en un proyecto con el estilo «Editorial», coloca «Dormitorio de matrimonio 160», un «Sofá de 3 plazas» con «Capitoné» y dos cojines sueltos, y una «Alfombra 200×140»; míralos en planta y en 3D.
+
+## 2026-11-27 (201) · v0.116: la sombra editorial bajo los muebles
+
+Misma rama `bloque/w10-paneles` (PR #245). Formato versión 126; sin cambios de IFC.
+
+- **Hecho**: los estilos de presentación pueden llevar una sombra suave bajo los muebles de la planta, un poco abajo y a la derecha, como los planos editoriales de ArchKit (`PresentationStyle::object_shadows`; en `archisim-plan`, `OBJECT_SHADOWS`, `OBJECT_SHADOW_MM`, `OBJECT_SHADOW_OPACITY`, clase `object-shadow`; no bajo alfombras ni plantas). La llevan los cinco estilos de ArchKit; en cualquier estilo, Estilos de presentación → «Sombra bajo los muebles». Prueba `editorial_plans_shadow_the_furniture` (con `ARCHISIM_EDITORIAL_OUT`, la planta en «Editorial»).
+- **Pendiente** de ArchKit: bloques de muebles con más vida y la leyenda numerada de la sección 1:10.
+- **Qué debe probar Antonio**: pon a la planta el estilo «Editorial» y mira la sombra bajo sofá, mesa, camas y cocina; apágala o enciéndela en otro estilo desde Estilos de presentación.
+
+## 2026-11-27 (200) · v0.116: W10, pestañas de texto, Capas, «Varios» y mini barra
+
+Misma rama `bloque/w10-paneles` (PR #245). Sin cambios de formato ni de IFC. Antonio pidió seguir con W10 entero antes de juzgar las piezas por separado.
+
+- **Hecho**:
+  - **Pestañas de texto** (`widgets::text_tabs`): nombres en gris, el elegido en tinta con una línea del color de acento debajo, sobre una línea fina. En el navegador, «Modelo · Proyecto» con la flecha de plegar en la misma línea (sin el título «Navegador»); bajo las herramientas, «Propiedades · Capas» (`SideTab`).
+  - **Capas en la columna** (`layers_list`): las capas del dibujo 2D con su color, su número de elementos, ojo y candado; un clic hace actual la capa; «Todas las capas…» abre el panel completo de siempre.
+  - **Título de Propiedades más callado** (`props::title`): un punto del color de la disciplina y lo que se ve, sin la banda de color.
+  - **«Varios»** cuando varios elementos tienen valores distintos: la altura de varios muros sale vacía con «Varios» en gris (`length_field_mixed`), y el tipo, «Varios». Escribir un valor lo pone en todos.
+  - **Mini barra a la derecha del dibujo** (`app/mini_bar.rs`), en plantas, secciones, planos y vistas de dibujo: Cinta y Cota (en planta), Texto, Acercar, Alejar y Ajustar, en botones redondos.
+- **Pendiente** de W10: deslizador con casilla en más valores numéricos, barra superior más limpia. De ArchKit: bloques de muebles con más vida, sombra editorial bajo los muebles, leyenda numerada de la sección 1:10.
+- **Qué debe probar Antonio**:
+  1. Navegador: las pestañas «Modelo · Proyecto» y plegar con ›.
+  2. Bajo las herramientas, «Capas»: haz actual otra capa, ocúltala con el ojo y bloquéala; «Todas las capas…».
+  3. Elige dos muros de distinta altura: la altura dice «Varios»; escribe 2700 y Enter.
+  4. La mini barra de la derecha: Cinta, Cota, Texto, + y − y Ajustar.
+
+## 2026-11-27 (199) · v0.116: W10, la ventana de una pieza
+
+Misma rama `bloque/w10-paneles` (PR #245). Sin cambios de formato ni de IFC. A Antonio no le convencieron los paneles flotantes (198): la estructura se ve débil y el sitio que se gana en las esquinas, detrás de los menús, no sirve. Quiere fijas la columna izquierda, la cinta y la barra superior, y eligió «una sola pieza».
+
+- **Hecho**:
+  - Los paneles flotantes quedan apagados por defecto (Vista → «Paneles flotantes» los enciende).
+  - **La ventana de una pieza** (`technical_frame`): barra superior, disciplinas, herramientas con Propiedades, pestañas con la cinta y su barra de opciones, navegador y barra inferior van de borde a borde, rectos y del mismo color, separados solo por líneas finas; ya no son islas con huecos y sombras. El dibujo es la única tarjeta redondeada, metida en un fondo un tono más oscuro; la línea de órdenes, cuando está fija, va dentro de ella.
+- **Pendiente** de W10: pestañas de texto en cada panel, «Varios» con varios elementos, barra superior más limpia; los de ArchKit de la 197.
+- **Qué debe probar Antonio**: abrir un proyecto y mirar la ventana: una sola estructura, con la cinta pegada a la barra superior y a la columna izquierda, y el dibujo como un recuadro redondeado. Plegar herramientas y navegador con ‹ y ›, y arrastrar el borde de la columna de herramientas para ensancharla.
+
+## 2026-11-26 (198) · v0.116: W10, segunda tanda: el dibujo a toda la ventana
+
+Misma rama `bloque/w10-paneles` (PR #245). Sin cambios de formato ni de IFC. Además, la versión del programa sube por fin a 0.116.0 (la entrada anterior la anunciaba y faltaba en `Cargo.toml`).
+
+- **Hecho**:
+  - **Paneles flotantes** (`app/floating.rs`, `ArchiSimApp::floating_frame`): la planta, las secciones, el 3D, los planos y las vistas de dibujo ocupan toda la ventana, sobre la cuadrícula del papel, y encima flotan tarjetas de esquinas muy redondeadas con sombra suave y aire alrededor: la barra superior, la de disciplinas (estrecha y solo tan alta como sus botones), herramientas con Propiedades, el navegador, las pestañas con la cinta y su barra de opciones, la línea de órdenes cuando está fija, y la barra inferior. Las tablas y las mediciones se leen donde nada las tapa.
+  - Al ajustar la vista (Inicio, doble clic con la rueda, al abrir), el dibujo se encuadra en lo que dejan libre las tarjetas (`ArchiSimApp::free_area`, `fit_area`, `View::shift_to`), igual en plantas, secciones, planos y vistas de dibujo; el cubo de vistas, la barra de aspectos y los avisos del 3D, la pastilla de plantilla de la planta y la barra de calles también van ahí.
+  - Un clic en una tarjeta no la pone por encima de los diálogos abiertos (`keep_dialogs_above`).
+  - Vista → «Paneles flotantes» (preferencia `paneles_flotantes`; **apagada por defecto desde el 27/11**: a Antonio no le convenció, la estructura se ve más débil y el sitio ganado en las esquinas no sirve; quiere fijas la columna izquierda, la cinta y la barra superior) vuelve a la ventana de antes, con los paneles a los lados del dibujo. Las pruebas usan la de antes; `floating_panels_leave_the_drawing_whole` prueba la nueva.
+- **Pendiente** de W10: el ancho de la columna de herramientas no se arrastra con los paneles flotantes (vale el de antes); el 3D se centra en la ventana entera, no en lo libre. Pestañas de texto en cada panel, «Varios» con varios elementos, barra de herramientas estrecha y barra superior mínima. De ArchKit, lo mismo que en la 197.
+- **Qué debe probar Antonio**:
+  1. Abre un proyecto: el dibujo debe llegar a los bordes de la ventana y los paneles flotar encima con sombra. Pulsa Inicio: la planta se encuadra entre los paneles.
+  2. Dibuja muros cerca de un panel y pasa el ratón por encima de él: el panel manda (no se dibuja debajo).
+  3. Abre una sección, el 3D (el cubo y la barra de aspectos deben verse) y una tabla (debe quedar libre entre los paneles).
+  4. Pliega herramientas y navegador con ‹ y ›: el dibujo queda casi limpio.
+  5. Vista → apaga «Paneles flotantes» y vuelve a encenderla.
+
+## 2026-11-26 (197) · v0.116: W10, primera tanda: tramas de ArchKit y paletas más limpias
+
+Rama `bloque/w10-paneles`, sobre `bloque/w3-bonito` (PR #244, sin unir). Antonio mandó su ArchKit Studio v2.2 (una biblioteca de tramas y bloques en HTML que hizo él) para adoptar sus tramas, estilos e interfaz, y pidió hacer W10 (`docs/WORKFEEL.md` §6, punto 19). Formato versión 125 (solo para que las anteriores avisen); sin cambios de IFC.
+
+- **Hecho**:
+  - **Piezas teñidas en las tramas** (como las piedras, tablas y baldosas «de acento» de ArchKit): `archisim_draft::hatch::hatch_lines_and_tints` da, además de las líneas, las piezas enteras dentro del sombreado que van un tono más oscuras (`Canvas::tint`, `tint_box`, `blob_tints`); la planta las pinta con el color de la trama al 16 % (`TINT_OPACITY` en `drafting::draw_hatch_paths`) y las tarjetas del selector también. Las llevan las tablas (una de cada cinco), espiga (una diagonal de cada tres), damero, piedras, sillería, caliza, guijarros, terrazo (sus lascas grandes), adoquín de hormigón, baldosa hexagonal, hidráulica (su círculo), gres, ladrillo, tierra y cubierta vegetal.
+  - **Nueve tramas de ArchKit** dibujadas a nuestra manera (pieza a pieza, a tamaño real): escama, octógono y taco (tacos teñidos), baldosa con puntos, ladrillo flamenco (tizones teñidos), ladrillo vertical, hormigón en sección (árido, motas y diagonales), tapial (tongadas con juntas a trazos, una de cada dos teñida), aislante en serpentina (la línea de bucles de siempre) y celosía de rombos; familia nueva «Diagramática». 50 texturas en total.
+  - **Cinco estilos de ArchKit** como estilos de presentación (`standards::EDITORIAL_LOOKS`, `editorial_looks`): Editorial, Sol marengo, Terracota maximalista, Botánico y salvia y Cobalto y rosa: papel, tinta, color de acento y muros cortados de cada uno, con aguadas. Vienen con los proyectos nuevos y en «Estilos de partida».
+  - **W10, paneles más limpios**:
+    - Los grupos de Propiedades con el título en versalitas grises espaciadas sobre una línea fina y la flecha a la derecha, sin la barra de color (`props::group`).
+    - Las columnas se pliegan: «‹» junto al nombre de la disciplina pliega herramientas y propiedades a una tira con «›»; «›» junto a «Navegador» lo pliega a una tira con «‹» (`fold_button`, `ArchiSimApp::tools_folded`, `FOLDED_WIDTH`).
+    - Deslizador con su casilla para la escala y el giro de las tramas de los locales y de los sombreados (`props::slider_value`).
+    - El selector de tramas con buscador y una píldora por familia, tarjetas con borde al pasar y títulos de familia en versalitas (`hatch_ui::pattern_grid`, `pill`).
+- **Pendiente** de W10: el dibujo a toda la ventana con los paneles flotando encima, pestañas de texto en lo alto de cada panel (Propiedades · Capas · Biblioteca), «Varios» cuando hay más de un elemento elegido, la barra de herramientas vertical estrecha y la barra superior mínima. De ArchKit: los bloques con más vida (cama con mesillas y lámparas, sofá capitoné con alfombra de flecos, isla con taburetes, armario con perchas…), la sombra editorial bajo los muebles y la leyenda numerada de la sección 1:10.
+- **Qué debe probar Antonio**:
+  1. Elige un local, abre su trama en Propiedades y mira el selector: buscador arriba, píldoras por familia, tarjetas con piezas teñidas. Prueba «Escama», «Octógono y taco», «Ladrillo flamenco» y «Tapial».
+  2. Mueve los deslizadores de escala y giro de esa trama.
+  3. Pliega las herramientas con «‹» y el navegador con «›»: el dibujo debe ganar el sitio; vuelve a abrirlos.
+  4. Pon a una planta el estilo «Editorial», «Terracota maximalista» o «Cobalto y rosa» (en un proyecto anterior, Gráficos → Estilos de presentación → «Estilos de partida»).
+
 ## 2026-11-25 (196) · v0.115: W3 ampliado, primera tanda: la planta bonita por defecto
 
 Rama `bloque/w3-bonito`, sobre `bloque/w2b-sin-friccion` (PR #243, sin unir). Puntos 5, 6 y parte del 8 de `docs/WORKFEEL.md` §6. Formato versiones 122 (las aguadas de los estilos de presentación), 123 (el inicio de la trama del pavimento) y 124 (trece tramas nuevas, la trama de cada material en las secciones y los estilos con tramas en los cortes); sin cambios de IFC. Los proyectos nuevos traen un estilo y una plantilla distintos; los existentes no cambian.

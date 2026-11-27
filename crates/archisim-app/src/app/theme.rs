@@ -216,6 +216,10 @@ fn style(p: Palette, dark: bool, touch: bool) -> egui::Style {
     v.override_text_color = None;
     v.selection.bg_fill = p.accent_soft;
     v.selection.stroke = Stroke::new(1.0, p.accent);
+    // Sliders as Synaps's (W10): a thin rail filled in the accent up to a
+    // round knob; the value in its box beside it.
+    v.slider_trailing_fill = true;
+    v.handle_shape = egui::style::HandleShape::Circle;
 
     let w = &mut v.widgets;
     w.noninteractive.bg_fill = p.panel;
@@ -251,5 +255,6 @@ fn style(p: Palette, dark: bool, touch: bool) -> egui::Style {
     w.open.corner_radius = r6;
 
     s.visuals = v;
+    s.spacing.slider_rail_height = 4.0;
     s
 }
