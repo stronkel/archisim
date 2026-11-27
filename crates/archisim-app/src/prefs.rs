@@ -87,8 +87,8 @@ pub struct Prefs {
     /// pressed.
     pub ribbon_compact: bool,
     /// The drawing over the whole window, with the bars and palettes
-    /// floating on it (W10, as Synaps and 1to10); off, side by side as
-    /// before.
+    /// floating on it (W10, as Synaps and 1to10); off (by default, as
+    /// Antonio preferred on 27/11/2026), side by side.
     pub floating_panels: bool,
     /// Look for a new version on GitHub when ArchiSim opens.
     pub check_updates: bool,
@@ -166,7 +166,7 @@ impl Default for Prefs {
             water_3d: true,
             draw_aside: true,
             ribbon_compact: false,
-            floating_panels: true,
+            floating_panels: false,
             check_updates: true,
             skipped_version: None,
             finger_draws: None,
