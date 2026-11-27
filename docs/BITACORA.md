@@ -6,6 +6,16 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-27 (199) · v0.116: W10, la ventana de una pieza
+
+Misma rama `bloque/w10-paneles` (PR #245). Sin cambios de formato ni de IFC. A Antonio no le convencieron los paneles flotantes (198): la estructura se ve débil y el sitio que se gana en las esquinas, detrás de los menús, no sirve. Quiere fijas la columna izquierda, la cinta y la barra superior, y eligió «una sola pieza».
+
+- **Hecho**:
+  - Los paneles flotantes quedan apagados por defecto (Vista → «Paneles flotantes» los enciende).
+  - **La ventana de una pieza** (`technical_frame`): barra superior, disciplinas, herramientas con Propiedades, pestañas con la cinta y su barra de opciones, navegador y barra inferior van de borde a borde, rectos y del mismo color, separados solo por líneas finas; ya no son islas con huecos y sombras. El dibujo es la única tarjeta redondeada, metida en un fondo un tono más oscuro; la línea de órdenes, cuando está fija, va dentro de ella.
+- **Pendiente** de W10: pestañas de texto en cada panel, «Varios» con varios elementos, barra superior más limpia; los de ArchKit de la 197.
+- **Qué debe probar Antonio**: abrir un proyecto y mirar la ventana: una sola estructura, con la cinta pegada a la barra superior y a la columna izquierda, y el dibujo como un recuadro redondeado. Plegar herramientas y navegador con ‹ y ›, y arrastrar el borde de la columna de herramientas para ensancharla.
+
 ## 2026-11-26 (198) · v0.116: W10, segunda tanda: el dibujo a toda la ventana
 
 Misma rama `bloque/w10-paneles` (PR #245). Sin cambios de formato ni de IFC. Además, la versión del programa sube por fin a 0.116.0 (la entrada anterior la anunciaba y faltaba en `Cargo.toml`).

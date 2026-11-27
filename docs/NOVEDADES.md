@@ -9,6 +9,7 @@ Cada versión empieza con una línea `## <versión>` (por ejemplo `## 0.81.0`): 
 - **Tramas con piezas teñidas**: como en ArchKit, algunas piedras, tablas, baldosas y ladrillos van un tono más oscuros, y el dibujo gana vida.
 - **Nueve tramas nuevas**: escama, octógono y taco, baldosa con puntos, ladrillo flamenco, ladrillo vertical, hormigón en sección, tapial, aislante en serpentina y celosía de rombos.
 - **Cinco estilos de presentación nuevos**: Editorial, Sol marengo, Terracota maximalista, Botánico y salvia y Cobalto y rosa.
+- **La ventana de una pieza**: barras, cinta y columnas van de borde a borde, separadas por líneas finas, y el dibujo es el único recuadro redondeado.
 - **Paneles flotantes, a prueba**: Vista → «Paneles flotantes» lleva el dibujo a toda la ventana con los paneles flotando encima. Por defecto, los paneles siguen a los lados.
 - **Paneles más limpios**: títulos de grupo en versalitas, columnas que se pliegan con ‹ y ›, deslizadores con su casilla para la escala y el giro de las tramas, y un selector de tramas con buscador y familias.
 
