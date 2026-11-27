@@ -1867,6 +1867,9 @@ pub(crate) struct PresentationStyleOf {
     /// The cuts with the textures of their materials (version 124).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub cut_textures: bool,
+    /// A soft shadow under the furniture in plan (version 126).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub object_shadows: bool,
 }
 
 impl PresentationStyleOf {
@@ -1890,6 +1893,7 @@ impl PresentationStyleOf {
             accent_on: s.accent_on.iter().map(|c| c.code().to_string()).collect(),
             washes: s.washes,
             cut_textures: s.cut_textures,
+            object_shadows: s.object_shadows,
         }
     }
 
@@ -1920,6 +1924,7 @@ impl PresentationStyleOf {
                 .collect(),
             washes: self.washes,
             cut_textures: self.cut_textures,
+            object_shadows: self.object_shadows,
         })
     }
 }

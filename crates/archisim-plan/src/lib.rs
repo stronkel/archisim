@@ -239,6 +239,17 @@ fn textured() -> bool {
     TEXTURED.with(|t| t.get())
 }
 
+thread_local! {
+    /// A soft shadow under the furniture (a presentation style with
+    /// `object_shadows`).
+    static OBJECT_SHADOWS: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// How far the furniture's shadow falls, down and to the right, in paper
+/// millimetres, and how dark it is.
+const OBJECT_SHADOW_MM: f64 = 1.1;
+const OBJECT_SHADOW_OPACITY: f64 = 0.16;
+
 fn poche() -> Option<[u8; 3]> {
     POCHE.with(|p| p.get())
 }
@@ -2459,6 +2470,11 @@ fn draw_objects(
     let mut keyed: Vec<(f64, &archisim_core::Object)> =
         objects.drain(..).map(|o| (top(o), o)).collect();
     keyed.sort_by(|a, b| a.0.total_cmp(&b.0));
+    let tops_of: std::collections::HashMap<archisim_core::ObjectId, f64> = keyed
+        .iter()
+        .map(|(t, o)| (o.id, *t - o.base_offset))
+        .collect();
+    let top_of = |o: &archisim_core::Object| tops_of.get(&o.id).copied().unwrap_or(1.0);
     objects = keyed.into_iter().map(|(_, o)| o).collect();
     for o in objects {
         let r = *reach.entry(o.object_type).or_insert_with(|| {
@@ -2511,6 +2527,24 @@ fn draw_objects(
             model.object_plan_symbol(o.id, scale).map_err(|_| ())
         };
         overrides::open(s, category);
+        // The editorial shadow under the furniture (not under rugs and
+        // mats, which lie on the floor, nor under plants).
+        if presenting
+            && OBJECT_SHADOWS.with(|c| c.get())
+            && category == archisim_core::Category::Objects
+            && top_of(o) > 0.15
+        {
+            let d = OBJECT_SHADOW_MM * k;
+            let moved: Vec<Point2> = outline
+                .iter()
+                .map(|q| Point2::new(q.x + d, q.y - d))
+                .collect();
+            let _ = writeln!(
+                s,
+                r#"<path class="object-shadow" d="{}" fill="{INK}" fill-opacity="{OBJECT_SHADOW_OPACITY}" stroke="none"/>"#,
+                path(&moved)
+            );
+        }
         // In a presentation, a picture of its own, if it has one.
         let picture = model
             .object_type(o.object_type)

@@ -330,6 +330,12 @@ impl ArchiSimApp {
                 }
                 ui.end_row();
 
+                ui.label("Sombra bajo los muebles").on_hover_text(
+                    "Una sombra suave, un poco abajo y a la derecha, bajo muebles, sanitarios y coches de la planta, como los planos editoriales",
+                );
+                ui.switch(&mut d.object_shadows, "");
+                ui.end_row();
+
                 ui.label("Color de acento")
                     .on_hover_text("Un color que resalta las anotaciones sobre la paleta: cotas y textos en rojo sobre un dibujo en grises, por ejemplo");
                 ui.vertical(|ui| {

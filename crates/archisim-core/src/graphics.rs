@@ -636,6 +636,9 @@ pub struct PresentationStyle {
     /// a section or a plan «Con tramas», as in Synaps; the materials
     /// without one keep their fill.
     pub cut_textures: bool,
+    /// A soft shadow under the furniture in plan, a little down and to
+    /// the right, as the editorial plans of ArchKit (W10, version 126).
+    pub object_shadows: bool,
 }
 
 /// A presentation style's own pens: one set for fine scales and one for
@@ -661,6 +664,7 @@ impl PresentationStyle {
             accent_on: BTreeSet::new(),
             washes: false,
             cut_textures: false,
+            object_shadows: false,
         }
     }
 

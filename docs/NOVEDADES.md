@@ -10,6 +10,7 @@ Cada versión empieza con una línea `## <versión>` (por ejemplo `## 0.81.0`): 
 - **Nueve tramas nuevas**: escama, octógono y taco, baldosa con puntos, ladrillo flamenco, ladrillo vertical, hormigón en sección, tapial, aislante en serpentina y celosía de rombos.
 - **Cinco estilos de presentación nuevos**: Editorial, Sol marengo, Terracota maximalista, Botánico y salvia y Cobalto y rosa.
 - **Pestañas de texto y capas a mano**: «Modelo · Proyecto» en el navegador y «Propiedades · Capas» bajo las herramientas, con las capas del dibujo, su ojo y su candado. Con varios elementos de valores distintos, el campo dice «Varios».
+- **Sombra editorial bajo los muebles**: los estilos de ArchKit dibujan una sombra suave bajo sofás, mesas, camas y cocinas; cualquier estilo puede llevarla. El formato del fichero sube a la versión 126.
 - **Mini barra junto al dibujo**: medir, acotar, escribir, acercar, alejar y ajustar, a la derecha de la planta.
 - **La ventana de una pieza**: barras, cinta y columnas van de borde a borde, separadas por líneas finas, y el dibujo es el único recuadro redondeado.
 - **Paneles flotantes, a prueba**: Vista → «Paneles flotantes» lleva el dibujo a toda la ventana con los paneles flotando encima. Por defecto, los paneles siguen a los lados.

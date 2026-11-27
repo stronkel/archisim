@@ -435,6 +435,7 @@ pub fn editorial_looks() -> Vec<archisim_core::PresentationStyle> {
             s.poche = Some(*walls);
             s.line_scale = 0.85;
             s.washes = true;
+            s.object_shadows = true;
             s
         })
         .collect()

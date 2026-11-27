@@ -1742,6 +1742,37 @@ mod tests {
             .any(|s| s.cut_textures && s.name == archisim_library::standards::TEXTURED_LOOK));
     }
 
+    /// The editorial styles of ArchKit put a soft shadow under the
+    /// furniture of the plan, and not the working one (W10). With
+    /// `ARCHISIM_EDITORIAL_OUT=carpeta`, the plan in «Editorial».
+    #[test]
+    fn editorial_plans_shadow_the_furniture() {
+        let doc = super::build().unwrap();
+        let m = doc.model();
+        let pb = m.levels()[0].id;
+        let editorial = m
+            .presentation_styles()
+            .find(|s| s.name == "Editorial")
+            .expect("the template brings «Editorial»");
+        assert!(editorial.object_shadows);
+        let mut o = archisim_plan::PlanOptions {
+            scale: 50.0,
+            ..Default::default()
+        };
+        o.style.presentation = Some(editorial.id);
+        let svg = archisim_plan::render_plan(m, pb, &o);
+        assert!(svg.matches("object-shadow").count() >= 5);
+        if let Ok(dir) = std::env::var("ARCHISIM_EDITORIAL_OUT") {
+            std::fs::write(std::path::Path::new(&dir).join("editorial.svg"), &svg).unwrap();
+        }
+        o.style.presentation = m
+            .presentation_styles()
+            .find(|s| !s.object_shadows)
+            .map(|s| s.id);
+        let plain = archisim_plan::render_plan(m, pb, &o);
+        assert!(!plain.contains("object-shadow"));
+    }
+
     /// A view can hide what phase 2 added: the furniture, the columns and
     /// beams, the terrain…, as it hides walls or dimensions.
     #[test]

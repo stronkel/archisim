@@ -6,6 +6,14 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-11-27 (201) · v0.116: la sombra editorial bajo los muebles
+
+Misma rama `bloque/w10-paneles` (PR #245). Formato versión 126; sin cambios de IFC.
+
+- **Hecho**: los estilos de presentación pueden llevar una sombra suave bajo los muebles de la planta, un poco abajo y a la derecha, como los planos editoriales de ArchKit (`PresentationStyle::object_shadows`; en `archisim-plan`, `OBJECT_SHADOWS`, `OBJECT_SHADOW_MM`, `OBJECT_SHADOW_OPACITY`, clase `object-shadow`; no bajo alfombras ni plantas). La llevan los cinco estilos de ArchKit; en cualquier estilo, Estilos de presentación → «Sombra bajo los muebles». Prueba `editorial_plans_shadow_the_furniture` (con `ARCHISIM_EDITORIAL_OUT`, la planta en «Editorial»).
+- **Pendiente** de ArchKit: bloques de muebles con más vida y la leyenda numerada de la sección 1:10.
+- **Qué debe probar Antonio**: pon a la planta el estilo «Editorial» y mira la sombra bajo sofá, mesa, camas y cocina; apágala o enciéndela en otro estilo desde Estilos de presentación.
+
 ## 2026-11-27 (200) · v0.116: W10, pestañas de texto, Capas, «Varios» y mini barra
 
 Misma rama `bloque/w10-paneles` (PR #245). Sin cambios de formato ni de IFC. Antonio pidió seguir con W10 entero antes de juzgar las piezas por separado.
